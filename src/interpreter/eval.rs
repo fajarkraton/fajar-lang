@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::interpreter::env::Environment;
-use crate::interpreter::value::{FnValue, LayerValue, OptimizerValue, Value};
+use crate::interpreter::value::{FnValue, IteratorValue, LayerValue, OptimizerValue, Value};
 use crate::parser::ast::{
     AssignOp, BinOp, CallArg, Expr, FieldInit, Item, LiteralKind, MatchArm, ModDecl, Pattern,
     Program, Stmt, TypeExpr, UnaryOp, UseDecl, UseKind,
@@ -165,6 +165,10 @@ pub struct Interpreter {
     os: OsRuntime,
     /// Registry of impl methods: `(type_name, method_name)` → `FnValue`.
     impl_methods: HashMap<(String, String), FnValue>,
+    /// Trait definitions: `trait_name` → list of method names.
+    trait_defs: HashMap<String, Vec<String>>,
+    /// Trait impl registry: `(trait_name, type_name)` set.
+    trait_impls: HashSet<(String, String)>,
     /// Module symbol tables: `module_name` → { `symbol_name` → `Value` }.
     modules: HashMap<String, HashMap<String, Value>>,
     /// Public symbols per module: `module_name` → set of public symbol names.
@@ -192,6 +196,8 @@ impl Interpreter {
             capture_output: false,
             os: OsRuntime::new(),
             impl_methods: HashMap::new(),
+            trait_defs: HashMap::new(),
+            trait_impls: HashSet::new(),
             modules: HashMap::new(),
             module_pub_items: HashMap::new(),
             tape: Tape::new(),
@@ -215,6 +221,8 @@ impl Interpreter {
             capture_output: true,
             os: OsRuntime::new(),
             impl_methods: HashMap::new(),
+            trait_defs: HashMap::new(),
+            trait_impls: HashSet::new(),
             modules: HashMap::new(),
             module_pub_items: HashMap::new(),
             tape: Tape::new(),
@@ -606,9 +614,10 @@ impl Interpreter {
             }
             Item::ModDecl(mod_decl) => self.eval_mod_decl(mod_decl),
             Item::UseDecl(use_decl) => self.eval_use_decl(use_decl),
-            Item::TraitDef(_) => {
-                // Trait declarations are type-level only; no runtime effect.
-                // Validation happens in the analyzer (type_check.rs).
+            Item::TraitDef(td) => {
+                // Register trait method names for dynamic dispatch (dyn Trait).
+                let methods: Vec<String> = td.methods.iter().map(|m| m.name.clone()).collect();
+                self.trait_defs.insert(td.name.clone(), methods);
                 Ok(Value::Null)
             }
             Item::ExternFn(efn) => {
@@ -634,8 +643,19 @@ impl Interpreter {
     /// Evaluates a statement.
     fn eval_stmt(&mut self, stmt: &Stmt) -> EvalResult {
         match stmt {
-            Stmt::Let { name, value, .. } => {
+            Stmt::Let {
+                name, value, ty, ..
+            } => {
                 let val = self.eval_expr(value)?;
+                // Coerce to trait object if type annotation is `dyn Trait`
+                let val =
+                    if let Some(crate::parser::ast::TypeExpr::DynTrait { trait_name, .. }) =
+                        ty.as_ref()
+                    {
+                        self.coerce_to_trait_object(val, trait_name)?
+                    } else {
+                        val
+                    };
                 self.env.borrow_mut().define(name.clone(), val);
                 Ok(Value::Null)
             }
@@ -3222,6 +3242,12 @@ impl Interpreter {
     fn eval_for(&mut self, variable: &str, iterable: &Expr, body: &Expr) -> EvalResult {
         let iter_val = self.eval_expr(iterable)?;
 
+        // If iterable is already an Iterator, use iterator protocol
+        if let Value::Iterator(iter_rc) = iter_val {
+            return self.for_loop_iterator(variable, iter_rc, body);
+        }
+
+        // Convert value to iterator or eagerly collect
         let items: Vec<Value> = match iter_val {
             Value::Array(arr) => arr,
             Value::Tuple(t) => t,
@@ -3240,7 +3266,6 @@ impl Interpreter {
         };
 
         for item in items {
-            // Create loop body scope
             let loop_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
                 &self.env,
             ))));
@@ -3265,6 +3290,107 @@ impl Interpreter {
         }
 
         Ok(Value::Null)
+    }
+
+    /// Runs a for loop using the iterator protocol (call next() until None).
+    fn for_loop_iterator(
+        &mut self,
+        variable: &str,
+        iter_rc: Rc<RefCell<IteratorValue>>,
+        body: &Expr,
+    ) -> EvalResult {
+        loop {
+            let item = self.iter_next(&iter_rc)?;
+            let item = match item {
+                Some(v) => v,
+                None => break,
+            };
+
+            let loop_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                &self.env,
+            ))));
+            loop_env.borrow_mut().define(variable.to_string(), item);
+
+            let prev_env = Rc::clone(&self.env);
+            self.env = loop_env;
+
+            let result = self.eval_expr(body);
+
+            self.env = prev_env;
+
+            match result {
+                Ok(_) => {}
+                Err(EvalError::Control(cf)) => match *cf {
+                    ControlFlow::Break(v) => return Ok(v),
+                    ControlFlow::Continue => continue,
+                    cf => return Err(EvalError::Control(Box::new(cf))),
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    /// Advances an iterator, handling combinators that need function calls.
+    fn iter_next(
+        &mut self,
+        iter_rc: &Rc<RefCell<IteratorValue>>,
+    ) -> Result<Option<Value>, EvalError> {
+        let mut iter = iter_rc.borrow_mut();
+        match &mut *iter {
+            IteratorValue::MappedIter { inner, func } => {
+                let inner_clone = inner.clone();
+                let func_clone = func.clone();
+                drop(iter); // Release borrow before calling function
+                let inner_rc = Rc::new(RefCell::new(*inner_clone));
+                let val = self.iter_next(&inner_rc)?;
+                // Write back the advanced inner iterator
+                let advanced = inner_rc.borrow().clone();
+                let mut iter = iter_rc.borrow_mut();
+                if let IteratorValue::MappedIter { inner, .. } = &mut *iter {
+                    **inner = advanced;
+                }
+                match val {
+                    Some(v) => {
+                        drop(iter);
+                        let result = self.call_function(&func_clone, vec![v])?;
+                        Ok(Some(result))
+                    }
+                    None => Ok(None),
+                }
+            }
+            IteratorValue::FilterIter { inner, func } => {
+                let inner_clone = inner.clone();
+                let func_clone = func.clone();
+                drop(iter);
+                let inner_rc = Rc::new(RefCell::new(*inner_clone));
+                loop {
+                    let val = self.iter_next(&inner_rc)?;
+                    // Write back
+                    let advanced = inner_rc.borrow().clone();
+                    let mut iter = iter_rc.borrow_mut();
+                    if let IteratorValue::FilterIter { inner, .. } = &mut *iter {
+                        **inner = advanced.clone();
+                    }
+                    drop(iter);
+                    match val {
+                        Some(v) => {
+                            let pred = self.call_function(&func_clone, vec![v.clone()])?;
+                            if matches!(pred, Value::Bool(true)) {
+                                return Ok(Some(v));
+                            }
+                            // Update inner_rc for next iteration
+                            let iter = iter_rc.borrow();
+                            if let IteratorValue::FilterIter { inner, .. } = &*iter {
+                                *inner_rc.borrow_mut() = *inner.clone();
+                            }
+                        }
+                        None => return Ok(None),
+                    }
+                }
+            }
+            _ => Ok(iter.next_simple()),
+        }
     }
 
     /// Evaluates an assignment expression.
@@ -3944,6 +4070,11 @@ impl Interpreter {
     /// Evaluates an impl block: registers methods in the impl_methods registry.
     fn eval_impl_block(&mut self, impl_block: &crate::parser::ast::ImplBlock) -> EvalResult {
         let type_name = &impl_block.target_type;
+        // Track trait impls for dynamic dispatch
+        if let Some(ref trait_name) = impl_block.trait_name {
+            self.trait_impls
+                .insert((trait_name.clone(), type_name.clone()));
+        }
         for method in &impl_block.methods {
             let fn_val = FnValue {
                 name: method.name.clone(),
@@ -3966,6 +4097,202 @@ impl Interpreter {
                 .insert((type_name.clone(), method.name.clone()), fn_val);
         }
         Ok(Value::Null)
+    }
+
+    /// Evaluates a method call on an iterator value.
+    fn eval_iterator_method(
+        &mut self,
+        iter_rc: Rc<RefCell<IteratorValue>>,
+        method: &str,
+        args: Vec<Value>,
+    ) -> EvalResult {
+        match method {
+            "next" => {
+                let val = self.iter_next(&iter_rc)?;
+                Ok(match val {
+                    Some(v) => Value::Enum {
+                        variant: "Some".into(),
+                        data: Some(Box::new(v)),
+                    },
+                    None => Value::Enum {
+                        variant: "None".into(),
+                        data: None,
+                    },
+                })
+            }
+            "map" => {
+                let func = match args.into_iter().next() {
+                    Some(Value::Function(fv)) => fv,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            ".map() requires a function argument".into(),
+                        )
+                        .into());
+                    }
+                };
+                let inner = iter_rc.borrow().clone();
+                let mapped = IteratorValue::MappedIter {
+                    inner: Box::new(inner),
+                    func,
+                };
+                Ok(Value::Iterator(Rc::new(RefCell::new(mapped))))
+            }
+            "filter" => {
+                let func = match args.into_iter().next() {
+                    Some(Value::Function(fv)) => fv,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            ".filter() requires a function argument".into(),
+                        )
+                        .into());
+                    }
+                };
+                let inner = iter_rc.borrow().clone();
+                let filtered = IteratorValue::FilterIter {
+                    inner: Box::new(inner),
+                    func,
+                };
+                Ok(Value::Iterator(Rc::new(RefCell::new(filtered))))
+            }
+            "take" => {
+                let n = match args.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            ".take() requires an integer argument".into(),
+                        )
+                        .into());
+                    }
+                };
+                let inner = iter_rc.borrow().clone();
+                let taken = IteratorValue::TakeIter {
+                    inner: Box::new(inner),
+                    remaining: n,
+                };
+                Ok(Value::Iterator(Rc::new(RefCell::new(taken))))
+            }
+            "enumerate" => {
+                let inner = iter_rc.borrow().clone();
+                let enumerated = IteratorValue::EnumerateIter {
+                    inner: Box::new(inner),
+                    index: 0,
+                };
+                Ok(Value::Iterator(Rc::new(RefCell::new(enumerated))))
+            }
+            "collect" => {
+                let mut result = Vec::new();
+                while let Some(v) = self.iter_next(&iter_rc)? {
+                    result.push(v);
+                }
+                Ok(Value::Array(result))
+            }
+            "sum" => {
+                let mut total: i64 = 0;
+                while let Some(v) = self.iter_next(&iter_rc)? {
+                    match v {
+                        Value::Int(n) => total += n,
+                        Value::Float(f) => total += f as i64,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                ".sum() requires numeric iterator".into(),
+                            )
+                            .into());
+                        }
+                    }
+                }
+                Ok(Value::Int(total))
+            }
+            "count" => {
+                let mut n: i64 = 0;
+                while self.iter_next(&iter_rc)?.is_some() {
+                    n += 1;
+                }
+                Ok(Value::Int(n))
+            }
+            "fold" => {
+                if args.len() < 2 {
+                    return Err(RuntimeError::TypeError(
+                        ".fold() requires init value and function".into(),
+                    )
+                    .into());
+                }
+                let mut acc = args[0].clone();
+                let func = match &args[1] {
+                    Value::Function(fv) => fv.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            ".fold() second argument must be a function".into(),
+                        )
+                        .into());
+                    }
+                };
+                while let Some(v) = self.iter_next(&iter_rc)? {
+                    acc = self.call_function(&func, vec![acc, v])?;
+                }
+                Ok(acc)
+            }
+            _ => Err(RuntimeError::TypeError(format!("no method '{method}' on iterator")).into()),
+        }
+    }
+
+    /// Coerces a concrete value into a trait object (`dyn Trait`).
+    ///
+    /// Builds a vtable by looking up all trait methods in impl_methods for the
+    /// concrete type.
+    fn coerce_to_trait_object(&self, val: Value, trait_name: &str) -> EvalResult {
+        let concrete_type = match &val {
+            Value::Struct { name, .. } => name.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(format!(
+                    "cannot coerce {} to dyn {trait_name} (only structs can be trait objects)",
+                    match &val {
+                        Value::Int(_) => "int",
+                        Value::Float(_) => "float",
+                        Value::Bool(_) => "bool",
+                        Value::Str(_) => "str",
+                        _ => "value",
+                    }
+                ))
+                .into());
+            }
+        };
+
+        // Look up trait method names
+        let method_names = match self.trait_defs.get(trait_name) {
+            Some(names) => names.clone(),
+            None => {
+                return Err(
+                    RuntimeError::TypeError(format!("unknown trait '{trait_name}'")).into(),
+                );
+            }
+        };
+
+        // Verify this type implements the trait
+        if !self
+            .trait_impls
+            .contains(&(trait_name.to_string(), concrete_type.clone()))
+        {
+            return Err(RuntimeError::TypeError(format!(
+                "type '{concrete_type}' does not implement trait '{trait_name}'"
+            ))
+            .into());
+        }
+
+        // Build vtable from impl_methods
+        let mut vtable = HashMap::new();
+        for method in &method_names {
+            let key = (concrete_type.clone(), method.clone());
+            if let Some(fv) = self.impl_methods.get(&key) {
+                vtable.insert(method.clone(), fv.clone());
+            }
+        }
+
+        Ok(Value::TraitObject {
+            trait_name: trait_name.to_string(),
+            concrete: Box::new(val),
+            concrete_type,
+            vtable,
+        })
     }
 
     /// Evaluates a module declaration: `mod name { items }` or `mod name;`.
@@ -4277,6 +4604,55 @@ impl Interpreter {
                 };
                 return self.call_function(&fv, call_args);
             }
+        }
+
+        // Trait object dynamic dispatch — look up method in vtable
+        if let Value::TraitObject {
+            vtable, concrete, ..
+        } = &obj
+        {
+            if let Some(fv) = vtable.get(method).cloned() {
+                let has_self = fv.params.first().is_some_and(|p| p.name == "self");
+                let call_args = if has_self {
+                    let mut all = vec![*concrete.clone()];
+                    all.extend(arg_vals);
+                    all
+                } else {
+                    arg_vals
+                };
+                return self.call_function(&fv, call_args);
+            }
+            return Err(
+                RuntimeError::TypeError(format!("no method '{method}' on trait object")).into(),
+            );
+        }
+
+        // Iterator methods on collections: .iter()
+        if method == "iter" {
+            let iter_val = match obj {
+                Value::Array(arr) => IteratorValue::Array { items: arr, pos: 0 },
+                Value::Str(s) => IteratorValue::Chars {
+                    chars: s.chars().collect(),
+                    pos: 0,
+                },
+                Value::Map(m) => IteratorValue::Map {
+                    entries: m.into_iter().collect(),
+                    pos: 0,
+                },
+                _ => {
+                    return Err(RuntimeError::TypeError(format!(
+                        "cannot call .iter() on {}",
+                        obj.type_name()
+                    ))
+                    .into());
+                }
+            };
+            return Ok(Value::Iterator(Rc::new(RefCell::new(iter_val))));
+        }
+
+        // Iterator combinator/consumer methods
+        if let Value::Iterator(iter_rc) = obj {
+            return self.eval_iterator_method(iter_rc, method, arg_vals);
         }
 
         // Check impl methods for enum values

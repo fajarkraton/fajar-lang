@@ -1083,6 +1083,12 @@ fn format_value(v: &Value) -> String {
                 .collect();
             format!("{{{}}}", items.join(", "))
         }
+        Value::Iterator(_) => "<iterator>".to_string(),
+        Value::TraitObject {
+            trait_name,
+            concrete_type,
+            ..
+        } => format!("<dyn {trait_name} ({concrete_type})>"),
     }
 }
 

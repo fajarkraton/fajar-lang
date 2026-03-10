@@ -1155,6 +1155,14 @@ pub enum TypeExpr {
         /// Source span.
         span: Span,
     },
+
+    /// A trait object type: `dyn Trait`.
+    DynTrait {
+        /// Trait name.
+        trait_name: String,
+        /// Source span.
+        span: Span,
+    },
 }
 
 impl TypeExpr {
@@ -1170,7 +1178,8 @@ impl TypeExpr {
             | TypeExpr::Array { span, .. }
             | TypeExpr::Slice { span, .. }
             | TypeExpr::Fn { span, .. }
-            | TypeExpr::Path { span, .. } => *span,
+            | TypeExpr::Path { span, .. }
+            | TypeExpr::DynTrait { span, .. } => *span,
         }
     }
 }
@@ -1362,6 +1371,9 @@ impl fmt::Display for TypeExpr {
             }
             TypeExpr::Path { segments, .. } => {
                 write!(f, "{}", segments.join("::"))
+            }
+            TypeExpr::DynTrait { trait_name, .. } => {
+                write!(f, "dyn {trait_name}")
             }
         }
     }

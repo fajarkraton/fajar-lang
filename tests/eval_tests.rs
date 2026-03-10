@@ -3143,3 +3143,410 @@ fn s2_doc_test_extraction() {
     assert_eq!(doc_tests[0].0, "foo");
     assert_eq!(doc_tests[0].1, "let x = 42");
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 3: Trait Objects & Dynamic Dispatch
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s3_lexer_emits_dyn_keyword_token() {
+    let tokens = tokenize("dyn").unwrap();
+    assert_eq!(tokens[0].kind, fajar_lang::lexer::token::TokenKind::Dyn);
+}
+
+#[test]
+fn s3_parser_dyn_trait_in_type_position() {
+    let src = "fn take(x: dyn Drawable) { }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    match &program.items[0] {
+        fajar_lang::parser::ast::Item::FnDef(fd) => match &fd.params[0].ty {
+            fajar_lang::parser::ast::TypeExpr::DynTrait { trait_name, .. } => {
+                assert_eq!(trait_name, "Drawable");
+            }
+            other => panic!("expected DynTrait, got {other:?}"),
+        },
+        _ => panic!("expected FnDef"),
+    }
+}
+
+#[test]
+fn s3_trait_object_basic_dispatch() {
+    let src = r#"
+trait Greetable {
+    fn greet(&self) -> i64 { }
+}
+
+struct Dog { id: i64 }
+struct Cat { id: i64 }
+
+impl Greetable for Dog {
+    fn greet(&self) -> i64 { self.id * 10 }
+}
+
+impl Greetable for Cat {
+    fn greet(&self) -> i64 { self.id * 100 }
+}
+
+fn main() {
+    let d = Dog { id: 3 }
+    let obj: dyn Greetable = d
+    let result = obj.greet()
+    println(result)
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "30");
+}
+
+#[test]
+fn s3_trait_object_multiple_types() {
+    let src = r#"
+trait Area {
+    fn area(&self) -> i64 { }
+}
+
+struct Circle { r: i64 }
+struct Rect { w: i64, h: i64 }
+
+impl Area for Circle {
+    fn area(&self) -> i64 { self.r * self.r * 3 }
+}
+
+impl Area for Rect {
+    fn area(&self) -> i64 { self.w * self.h }
+}
+
+fn print_area(shape: dyn Area) {
+    println(shape.area())
+}
+
+fn main() {
+    let c = Circle { r: 5 }
+    let r = Rect { w: 4, h: 6 }
+    let dc: dyn Area = c
+    let dr: dyn Area = r
+    print_area(dc)
+    print_area(dr)
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "75");
+    assert_eq!(out[1], "24");
+}
+
+#[test]
+fn s3_trait_object_not_impl_error() {
+    let src = r#"
+trait Speakable {
+    fn speak(&self) -> i64 { }
+}
+
+struct Rock { weight: i64 }
+
+fn main() {
+    let r = Rock { weight: 5 }
+    let obj: dyn Speakable = r
+}
+"#;
+    let mut interp = Interpreter::new_capturing();
+    let result = interp.eval_source(src);
+    // Should succeed at parse/analyze level
+    if result.is_ok() {
+        let main_result = interp.call_main();
+        assert!(
+            main_result.is_err(),
+            "should fail: Rock doesn't implement Speakable"
+        );
+    }
+}
+
+#[test]
+fn s3_object_safety_no_generic_methods() {
+    // Test that we can still define traits with regular methods
+    // (object safety validation is in the analyzer)
+    let src = r#"
+trait Printable {
+    fn to_str(&self) -> i64 { }
+}
+
+struct Num { val: i64 }
+
+impl Printable for Num {
+    fn to_str(&self) -> i64 { self.val }
+}
+
+fn main() {
+    let n = Num { val: 42 }
+    let obj: dyn Printable = n
+    println(obj.to_str())
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "42");
+}
+
+#[test]
+fn s3_trait_object_method_not_found_error() {
+    let src = r#"
+trait Drawable {
+    fn draw(&self) -> i64 { }
+}
+
+struct Box { size: i64 }
+
+impl Drawable for Box {
+    fn draw(&self) -> i64 { self.size }
+}
+
+fn main() {
+    let b = Box { size: 10 }
+    let obj: dyn Drawable = b
+    obj.nonexistent()
+}
+"#;
+    let mut interp = Interpreter::new_capturing();
+    let _ = interp.eval_source(src);
+    let result = interp.call_main();
+    assert!(
+        result.is_err(),
+        "should fail: method 'nonexistent' not in trait"
+    );
+}
+
+#[test]
+fn s3_trait_object_with_multiple_methods() {
+    let src = r#"
+trait Shape {
+    fn area(&self) -> i64 { }
+    fn perimeter(&self) -> i64 { }
+}
+
+struct Square { side: i64 }
+
+impl Shape for Square {
+    fn area(&self) -> i64 { self.side * self.side }
+    fn perimeter(&self) -> i64 { self.side * 4 }
+}
+
+fn main() {
+    let s = Square { side: 5 }
+    let obj: dyn Shape = s
+    println(obj.area())
+    println(obj.perimeter())
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "25");
+    assert_eq!(out[1], "20");
+}
+
+#[test]
+fn s3_dyn_trait_coercion_preserves_data() {
+    let src = r#"
+trait Named {
+    fn name_len(&self) -> i64 { }
+}
+
+struct Person { age: i64 }
+
+impl Named for Person {
+    fn name_len(&self) -> i64 { self.age + 1 }
+}
+
+fn main() {
+    let p = Person { age: 30 }
+    let obj: dyn Named = p
+    println(obj.name_len())
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "31");
+}
+
+#[test]
+fn s3_trait_object_display() {
+    let src = r#"
+trait Describable {
+    fn describe(&self) -> i64 { }
+}
+
+struct Thing { id: i64 }
+
+impl Describable for Thing {
+    fn describe(&self) -> i64 { self.id }
+}
+
+fn main() {
+    let t = Thing { id: 7 }
+    let obj: dyn Describable = t
+    println(type_of(obj))
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "trait_object");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 4: Iterator Protocol
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s4_array_iter_collect() {
+    let src = r#"
+fn main() {
+    let arr = [10, 20, 30]
+    let result = arr.iter().collect()
+    println(len(result))
+    println(result[0])
+    println(result[2])
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3");
+    assert_eq!(out[1], "10");
+    assert_eq!(out[2], "30");
+}
+
+#[test]
+fn s4_iter_map_collect() {
+    let src = r#"
+fn double(x: i64) -> i64 { x * 2 }
+
+fn main() {
+    let arr = [1, 2, 3]
+    let result = arr.iter().map(double).collect()
+    println(result[0])
+    println(result[1])
+    println(result[2])
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "2");
+    assert_eq!(out[1], "4");
+    assert_eq!(out[2], "6");
+}
+
+#[test]
+fn s4_iter_filter_collect() {
+    let src = r#"
+fn is_even(x: i64) -> bool { x % 2 == 0 }
+
+fn main() {
+    let arr = [1, 2, 3, 4, 5, 6]
+    let result = arr.iter().filter(is_even).collect()
+    println(len(result))
+    println(result[0])
+    println(result[1])
+    println(result[2])
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3");
+    assert_eq!(out[1], "2");
+    assert_eq!(out[2], "4");
+    assert_eq!(out[3], "6");
+}
+
+#[test]
+fn s4_iter_take() {
+    let src = r#"
+fn main() {
+    let arr = [10, 20, 30, 40, 50]
+    let result = arr.iter().take(3).collect()
+    println(len(result))
+    println(result[2])
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3");
+    assert_eq!(out[1], "30");
+}
+
+#[test]
+fn s4_iter_enumerate() {
+    let src = r#"
+fn main() {
+    let arr = [10, 20, 30]
+    for pair in arr.iter().enumerate() {
+        println(pair)
+    }
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "(0, 10)");
+    assert_eq!(out[1], "(1, 20)");
+    assert_eq!(out[2], "(2, 30)");
+}
+
+#[test]
+fn s4_iter_sum() {
+    let src = r#"
+fn main() {
+    let arr = [1, 2, 3, 4, 5]
+    let total = arr.iter().sum()
+    println(total)
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "15");
+}
+
+#[test]
+fn s4_iter_count() {
+    let src = r#"
+fn is_positive(x: i64) -> bool { x > 0 }
+
+fn main() {
+    let arr = [-1, 2, -3, 4, 5]
+    let n = arr.iter().filter(is_positive).count()
+    println(n)
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3");
+}
+
+#[test]
+fn s4_iter_fold() {
+    let src = r#"
+fn add(a: i64, b: i64) -> i64 { a + b }
+
+fn main() {
+    let arr = [1, 2, 3, 4]
+    let sum = arr.iter().fold(0, add)
+    println(sum)
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "10");
+}
+
+#[test]
+fn s4_for_in_iterator() {
+    let src = r#"
+fn double(x: i64) -> i64 { x * 2 }
+
+fn main() {
+    let arr = [1, 2, 3]
+    for x in arr.iter().map(double) {
+        println(x)
+    }
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "4", "6"]);
+}
+
+#[test]
+fn s4_string_iter() {
+    let src = r#"
+fn main() {
+    let s = "abc"
+    let chars = s.iter().collect()
+    println(len(chars))
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3");
+}

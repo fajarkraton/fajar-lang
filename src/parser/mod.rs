@@ -2612,6 +2612,27 @@ impl Parser {
                 })
             }
 
+            // Trait object type: dyn Trait
+            TokenKind::Dyn => {
+                self.advance();
+                let name_tok = self.peek().clone();
+                let trait_name = match &name_tok.kind {
+                    TokenKind::Ident(n) => n.clone(),
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: "trait name".into(),
+                            found: format!("{}", name_tok.kind),
+                            line: name_tok.line,
+                            col: name_tok.col,
+                            span: name_tok.span,
+                        });
+                    }
+                };
+                self.advance();
+                let span = Span::new(token.span.start, self.prev_span().end);
+                Ok(TypeExpr::DynTrait { trait_name, span })
+            }
+
             // Never type: !
             TokenKind::Bang => {
                 self.advance();

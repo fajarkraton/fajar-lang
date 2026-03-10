@@ -12,6 +12,137 @@ use crate::interpreter::env::Environment;
 use crate::parser::ast::{Expr, Param};
 use crate::runtime::ml::TensorValue;
 
+/// A lazy iterator value for the iterator protocol.
+///
+/// Iterators are consumed by calling `next()` repeatedly until `None`.
+/// Combinators like `map`, `filter`, `take` wrap an inner iterator lazily.
+#[derive(Debug, Clone)]
+pub enum IteratorValue {
+    /// Iterates over array elements.
+    Array {
+        /// Remaining elements.
+        items: Vec<Value>,
+        /// Current position.
+        pos: usize,
+    },
+    /// Iterates over integer range.
+    Range {
+        /// Current value.
+        current: i64,
+        /// End value (exclusive).
+        end: i64,
+        /// Step (1 or -1).
+        step: i64,
+    },
+    /// Iterates over string characters.
+    Chars {
+        /// Characters to iterate.
+        chars: Vec<char>,
+        /// Current position.
+        pos: usize,
+    },
+    /// Iterates over map entries as (key, value) tuples.
+    Map {
+        /// Remaining entries.
+        entries: Vec<(String, Value)>,
+        /// Current position.
+        pos: usize,
+    },
+    /// Lazy map combinator: applies a function to each element.
+    MappedIter {
+        /// Inner iterator.
+        inner: Box<IteratorValue>,
+        /// Function to apply.
+        func: FnValue,
+    },
+    /// Lazy filter combinator: keeps elements matching predicate.
+    FilterIter {
+        /// Inner iterator.
+        inner: Box<IteratorValue>,
+        /// Predicate function.
+        func: FnValue,
+    },
+    /// Lazy take combinator: yields at most N elements.
+    TakeIter {
+        /// Inner iterator.
+        inner: Box<IteratorValue>,
+        /// Remaining count.
+        remaining: usize,
+    },
+    /// Lazy enumerate combinator: yields (index, element) tuples.
+    EnumerateIter {
+        /// Inner iterator.
+        inner: Box<IteratorValue>,
+        /// Current index.
+        index: usize,
+    },
+}
+
+impl IteratorValue {
+    /// Advances the iterator and returns the next value, or None if exhausted.
+    /// Note: combinators that need to call Fajar functions (map, filter)
+    /// return a "needs-eval" marker — the interpreter handles those.
+    pub fn next_simple(&mut self) -> Option<Value> {
+        match self {
+            IteratorValue::Array { items, pos } => {
+                if *pos < items.len() {
+                    let val = items[*pos].clone();
+                    *pos += 1;
+                    Some(val)
+                } else {
+                    None
+                }
+            }
+            IteratorValue::Range { current, end, step } => {
+                if (*step > 0 && *current < *end) || (*step < 0 && *current > *end) {
+                    let val = *current;
+                    *current += *step;
+                    Some(Value::Int(val))
+                } else {
+                    None
+                }
+            }
+            IteratorValue::Chars { chars, pos } => {
+                if *pos < chars.len() {
+                    let c = chars[*pos];
+                    *pos += 1;
+                    Some(Value::Char(c))
+                } else {
+                    None
+                }
+            }
+            IteratorValue::Map { entries, pos } => {
+                if *pos < entries.len() {
+                    let (k, v) = entries[*pos].clone();
+                    *pos += 1;
+                    Some(Value::Tuple(vec![Value::Str(k), v]))
+                } else {
+                    None
+                }
+            }
+            IteratorValue::TakeIter { inner, remaining } => {
+                if *remaining == 0 {
+                    return None;
+                }
+                *remaining -= 1;
+                inner.next_simple()
+            }
+            IteratorValue::EnumerateIter { inner, index } => {
+                if let Some(val) = inner.next_simple() {
+                    let idx = *index;
+                    *index += 1;
+                    Some(Value::Tuple(vec![Value::Int(idx as i64), val]))
+                } else {
+                    None
+                }
+            }
+            // MappedIter and FilterIter need the interpreter to call Fajar functions
+            // They return None here — handled by the interpreter's iter_next() method
+            IteratorValue::MappedIter { .. } | IteratorValue::FilterIter { .. } => None,
+        }
+    }
+}
+
 /// An opaque optimizer handle for SGD or Adam.
 #[derive(Debug, Clone)]
 pub enum OptimizerValue {
@@ -90,6 +221,19 @@ pub enum Value {
     Optimizer(OptimizerValue),
     /// A layer handle (ML runtime, boxed for size).
     Layer(Box<LayerValue>),
+    /// A lazy iterator value.
+    Iterator(Rc<RefCell<IteratorValue>>),
+    /// A trait object with dynamic dispatch via vtable.
+    TraitObject {
+        /// The trait name this object conforms to.
+        trait_name: String,
+        /// The concrete value wrapped as a trait object.
+        concrete: Box<Value>,
+        /// The concrete type name (for vtable lookup).
+        concrete_type: String,
+        /// Virtual method table: method name → function value.
+        vtable: HashMap<String, FnValue>,
+    },
 }
 
 /// A user-defined function value, capturing its closure environment.
@@ -142,6 +286,21 @@ impl PartialEq for Value {
             (Value::BuiltinFn(a), Value::BuiltinFn(b)) => a == b,
             (Value::Pointer(a), Value::Pointer(b)) => a == b,
             (Value::Tensor(a), Value::Tensor(b)) => a == b,
+            // Iterators are never equal (stateful)
+            (Value::Iterator(_), Value::Iterator(_)) => false,
+            // TraitObjects: compare by concrete value
+            (
+                Value::TraitObject {
+                    concrete: c1,
+                    trait_name: t1,
+                    ..
+                },
+                Value::TraitObject {
+                    concrete: c2,
+                    trait_name: t2,
+                    ..
+                },
+            ) => t1 == t2 && c1 == c2,
             // Functions, optimizers, layers are never equal (no structural comparison)
             (Value::Function(_), Value::Function(_)) => false,
             (Value::Optimizer(_), Value::Optimizer(_)) => false,
@@ -224,6 +383,12 @@ impl fmt::Display for Value {
             Value::Layer(l) => match l.as_ref() {
                 LayerValue::Dense(_) => write!(f, "<layer Dense>"),
             },
+            Value::Iterator(_) => write!(f, "<iterator>"),
+            Value::TraitObject {
+                trait_name,
+                concrete_type,
+                ..
+            } => write!(f, "<dyn {trait_name} ({concrete_type})>"),
         }
     }
 }
@@ -265,6 +430,8 @@ impl Value {
             Value::Tensor(_) => "tensor",
             Value::Optimizer(_) => "optimizer",
             Value::Layer(_) => "layer",
+            Value::Iterator(_) => "iterator",
+            Value::TraitObject { .. } => "trait_object",
         }
     }
 }

@@ -104,6 +104,8 @@ pub enum Type {
     Named(String),
     /// A type variable from generic parameters (e.g., `T` in `fn max<T>`).
     TypeVar(String),
+    /// A trait object type: `dyn Trait`.
+    DynTrait(String),
 }
 
 impl Type {
@@ -187,6 +189,8 @@ impl Type {
             Type::Tensor { .. } => true,
             // Futures: Send if inner is Send
             Type::Future { inner } => inner.is_send(),
+            // Trait objects: Send (concrete type was Send)
+            Type::DynTrait(_) => true,
             // Unknown/Named: assume Send (error recovery)
             Type::Unknown | Type::Named(_) | Type::TypeVar(_) => true,
         }
@@ -378,6 +382,7 @@ impl Type {
             Type::Unknown => "<unknown>".into(),
             Type::Named(n) => n.clone(),
             Type::TypeVar(n) => n.clone(),
+            Type::DynTrait(n) => format!("dyn {n}"),
         }
     }
 
@@ -474,6 +479,22 @@ impl Type {
             return pa.len() == pb.len()
                 && pa.iter().zip(pb.iter()).all(|(a, b)| a.is_compatible(b))
                 && ra.is_compatible(rb);
+        }
+        // dyn Trait compatibility: dyn T == dyn T
+        if let (Type::DynTrait(a), Type::DynTrait(b)) = (self, other) {
+            return a == b;
+        }
+        // A concrete struct/named type is compatible with dyn Trait
+        // (actual trait impl check happens at assignment site in the checker)
+        if matches!(other, Type::DynTrait(_))
+            && matches!(self, Type::Struct { .. } | Type::Named(_))
+        {
+            return true;
+        }
+        if matches!(self, Type::DynTrait(_))
+            && matches!(other, Type::Struct { .. } | Type::Named(_))
+        {
+            return true;
         }
         self == other
     }
@@ -3923,6 +3944,18 @@ impl TypeChecker {
                 }
             }
             TypeExpr::Pointer { .. } => Type::Unknown,
+            TypeExpr::DynTrait {
+                trait_name, span, ..
+            } => {
+                // Validate the trait exists
+                if !self.traits.contains_key(trait_name) {
+                    self.errors.push(SemanticError::UnknownTrait {
+                        name: trait_name.clone(),
+                        span: *span,
+                    });
+                }
+                Type::DynTrait(trait_name.clone())
+            }
         }
     }
 }

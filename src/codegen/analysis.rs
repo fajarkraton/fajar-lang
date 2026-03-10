@@ -110,6 +110,7 @@ fn estimate_type_size(ty: &TypeExpr) -> usize {
         | TypeExpr::Tensor { .. }
         | TypeExpr::Slice { .. }
         | TypeExpr::Path { .. } => PTR_SIZE,
+        TypeExpr::DynTrait { .. } => PTR_SIZE * 2, // fat pointer: data_ptr + vtable_ptr
     }
 }
 

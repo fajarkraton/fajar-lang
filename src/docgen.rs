@@ -258,6 +258,7 @@ fn type_to_string(ty: &TypeExpr) -> String {
                 dims_str.join(", ")
             )
         }
+        TypeExpr::DynTrait { trait_name, .. } => format!("dyn {trait_name}"),
         _ => "...".to_string(),
     }
 }

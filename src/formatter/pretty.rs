@@ -920,6 +920,9 @@ impl<'src> Formatter<'src> {
             TypeExpr::Path { segments, .. } => {
                 self.push(&segments.join("::"));
             }
+            TypeExpr::DynTrait { trait_name, .. } => {
+                self.push(&format!("dyn {trait_name}"));
+            }
         }
     }
 

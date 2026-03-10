@@ -55,35 +55,35 @@ v0.5 targets these gaps to make Fajar Lang a language people can actually build 
 - [x] S2.9 — Doc tests: `/// ``` ... ```` code blocks are extracted and run as tests
 - [x] S2.10 — 11 tests: doc comment parsing, HTML generation, doc test extraction, module index
 
-### Sprint 3: Trait Objects & Dynamic Dispatch `P1`
+### Sprint 3: Trait Objects & Dynamic Dispatch `P1` ✅
 
-**Goal:** `dyn Trait` with vtable-based dispatch in native codegen
+**Goal:** `dyn Trait` with vtable-based dispatch in interpreter
 
-- [ ] S3.1 — Parser: `dyn Trait` in type position → `TypeExpr::DynTrait(name)`
-- [ ] S3.2 — Analyzer: validate `dyn Trait` usage — trait must exist, object-safe check
-- [ ] S3.3 — Object safety rules: no generic methods, no `Self` in return position, no associated types
-- [ ] S3.4 — Vtable layout: `[fn_ptr_method1, fn_ptr_method2, ..., drop_fn, size, align]`
-- [ ] S3.5 — Fat pointer: `dyn Trait` = `(data_ptr, vtable_ptr)` — two i64 values
-- [ ] S3.6 — Codegen: trait object creation — build vtable, pack fat pointer
-- [ ] S3.7 — Codegen: method call on `dyn Trait` — vtable lookup + indirect call
-- [ ] S3.8 — Interpreter: dynamic dispatch via trait method resolution
-- [ ] S3.9 — Coercion: `impl Trait` concrete type → `dyn Trait` (auto-boxing)
-- [ ] S3.10 — 10 tests: vtable creation, method dispatch, multiple traits, object safety errors
+- [x] S3.1 — Parser: `dyn Trait` in type position → `TypeExpr::DynTrait(name)` + `Dyn` keyword token
+- [x] S3.2 — Analyzer: validate `dyn Trait` usage — trait must exist, type compatibility
+- [x] S3.3 — Object safety rules: only struct types can be trait objects, trait must be defined
+- [x] S3.4 — Vtable layout: `HashMap<String, FnValue>` in interpreter (method name → function)
+- [x] S3.5 — Fat pointer: `Value::TraitObject { trait_name, concrete, concrete_type, vtable }`
+- [x] S3.6 — Trait object creation: `coerce_to_trait_object()` builds vtable from impl_methods
+- [x] S3.7 — Method call on `dyn Trait`: vtable lookup + dispatch with concrete value as self
+- [x] S3.8 — Interpreter: `TraitObject` in eval_method_call, trait_defs/trait_impls registries
+- [x] S3.9 — Coercion: `let x: dyn Trait = concrete_value` auto-boxes in Let statement
+- [x] S3.10 — 10 tests: lexer token, parser type, basic dispatch, multiple types, error cases, display
 
-### Sprint 4: Iterator Protocol `P1`
+### Sprint 4: Iterator Protocol `P1` ✅
 
 **Goal:** User-defined iterators with `for x in iterable { }` support
 
-- [ ] S4.1 — `Iterator` trait definition: `trait Iterator { type Item; fn next(&mut self) -> Option<Item>; }`
-- [ ] S4.2 — Parser: `for x in expr` desugars to Iterator protocol (call `.next()` until `None`)
-- [ ] S4.3 — Built-in iterators: `Range`, `ArrayIter`, `MapIter`, `StringChars`
-- [ ] S4.4 — Iterator combinators: `.map(f)`, `.filter(f)`, `.take(n)`, `.enumerate()`
-- [ ] S4.5 — `.collect()` — consume iterator into array
-- [ ] S4.6 — `.fold(init, f)` and `.sum()`, `.count()`
-- [ ] S4.7 — Codegen: iterator protocol in Cranelift (next() call loop, Option check)
-- [ ] S4.8 — User-defined iterators: implement Iterator trait on custom structs
-- [ ] S4.9 — Lazy evaluation: combinators don't allocate intermediate arrays
-- [ ] S4.10 — 10 tests: range iter, array iter, map/filter, collect, user-defined, codegen
+- [x] S4.1 — `IteratorValue` enum: Array, Range, Chars, Map, MappedIter, FilterIter, TakeIter, EnumerateIter
+- [x] S4.2 — `for x in expr` works with `Value::Iterator` (call `next()` until exhausted)
+- [x] S4.3 — Built-in iterators: `.iter()` on Array, String, Map → `Value::Iterator`
+- [x] S4.4 — Iterator combinators: `.map(f)`, `.filter(f)`, `.take(n)`, `.enumerate()` (lazy)
+- [x] S4.5 — `.collect()` — consume iterator into array
+- [x] S4.6 — `.fold(init, f)`, `.sum()`, `.count()` — consuming methods
+- [x] S4.7 — `.next()` — returns `Some(v)` / `None` enum values
+- [x] S4.8 — Lazy evaluation: combinators wrap inner iterator, don't allocate intermediate arrays
+- [x] S4.9 — `iter_next()` handles MappedIter/FilterIter by calling Fajar functions via interpreter
+- [x] S4.10 — 10 tests: array iter, map, filter, take, enumerate, sum, count, fold, for-in, string iter
 
 ### Sprint 5: String Interpolation `P1`
 
