@@ -46,6 +46,7 @@ Every Claude Code session MUST follow this order:
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
+| `docs/V05_PLAN.md` | **Current sprint** | v0.5 "Ascendancy" plan (8 sprints, ~80 tasks) |
 | `docs/V04_PLAN.md` | Reference | v0.4 "Sovereignty" plan (6 sprints, COMPLETE) |
 | `docs/V03_TASKS.md` | Reference | v0.3 task checkboxes (739 tasks, ALL COMPLETE) |
 | `docs/V03_IMPLEMENTATION_PLAN.md` | Reference | 12-month plan: concurrency, OS, GPU, ML, self-hosting |
@@ -786,7 +787,8 @@ fajar-lang/
 
 | When You Need... | Read This |
 |---|---|
-| **Current task list** | **`docs/V03_TASKS.md`** (v0.3, all complete) + **`docs/V04_PLAN.md`** (v0.4, all complete) |
+| **v0.5 plan (NEXT)** | **`docs/V05_PLAN.md`** — 8 sprints, ~80 tasks |
+| **Completed task lists** | `docs/V03_TASKS.md` (v0.3) + `docs/V04_PLAN.md` (v0.4) |
 | **Coding rules** | **`docs/V1_RULES.md`** |
 | **Implementation patterns** | **`docs/V1_SKILLS.md`** + **`docs/V03_SKILLS.md`** |
 | **Development workflow** | **`docs/V03_WORKFLOW.md`** |
