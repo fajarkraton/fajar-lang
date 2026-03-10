@@ -364,6 +364,10 @@ pub enum TokenKind {
     /// `?`
     Question,
 
+    // ── Doc Comments ──────────────────────────────────────────────────
+    /// A `///` doc comment line (content after `///`, trimmed of leading space).
+    DocComment(String),
+
     // ── Literals ───────────────────────────────────────────────────────
     /// Integer literal (e.g. `42`, `0xFF`, `0b1010`, `0o17`).
     IntLit(i64),
@@ -524,6 +528,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Arrow => write!(f, "->"),
             TokenKind::FatArrow => write!(f, "=>"),
             TokenKind::Question => write!(f, "?"),
+            // Doc comments
+            TokenKind::DocComment(s) => write!(f, "/// {s}"),
             // Literals
             TokenKind::IntLit(v) => write!(f, "{v}"),
             TokenKind::FloatLit(v) => write!(f, "{v}"),

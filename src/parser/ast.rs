@@ -102,6 +102,8 @@ pub struct FnDef {
     pub should_panic: bool,
     /// Whether this test is ignored by default (`@ignore`).
     pub is_ignored: bool,
+    /// Doc comment lines (from `///` comments preceding the function).
+    pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `@kernel`, `@device`).
     pub annotation: Option<Annotation>,
     /// Function name.
@@ -212,6 +214,8 @@ pub struct TraitBound {
 pub struct StructDef {
     /// Whether the struct is declared `pub`.
     pub is_pub: bool,
+    /// Doc comment lines (from `///` comments preceding the struct).
+    pub doc_comment: Option<String>,
     /// Optional annotation.
     pub annotation: Option<Annotation>,
     /// Struct name.
@@ -244,6 +248,8 @@ pub struct Field {
 pub struct EnumDef {
     /// Whether the enum is declared `pub`.
     pub is_pub: bool,
+    /// Doc comment lines (from `///` comments preceding the enum).
+    pub doc_comment: Option<String>,
     /// Optional annotation.
     pub annotation: Option<Annotation>,
     /// Enum name.
@@ -265,6 +271,8 @@ pub struct EnumDef {
 pub struct UnionDef {
     /// Whether the union is declared `pub`.
     pub is_pub: bool,
+    /// Doc comment lines (from `///` comments preceding the union).
+    pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `#[repr(C)]`).
     pub annotation: Option<Annotation>,
     /// Union name.
@@ -293,6 +301,8 @@ pub struct Variant {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImplBlock {
+    /// Doc comment lines (from `///` comments preceding the impl block).
+    pub doc_comment: Option<String>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Trait being implemented (None for inherent impls).
@@ -314,6 +324,8 @@ pub struct ImplBlock {
 pub struct TraitDef {
     /// Whether the trait is declared `pub`.
     pub is_pub: bool,
+    /// Doc comment lines (from `///` comments preceding the trait).
+    pub doc_comment: Option<String>,
     /// Trait name.
     pub name: String,
     /// Generic type parameters.
@@ -329,6 +341,8 @@ pub struct TraitDef {
 pub struct ConstDef {
     /// Whether the const is declared `pub`.
     pub is_pub: bool,
+    /// Doc comment lines (from `///` comments preceding the const).
+    pub doc_comment: Option<String>,
     /// Optional annotation.
     pub annotation: Option<Annotation>,
     /// Constant name.
@@ -1820,6 +1834,7 @@ mod tests {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            doc_comment: None,
             annotation: Some(Annotation {
                 name: "kernel".into(),
                 param: None,
@@ -1858,6 +1873,7 @@ mod tests {
     fn structdef_construction() {
         let sd = StructDef {
             is_pub: false,
+            doc_comment: None,
             annotation: None,
             name: "Point".into(),
             generic_params: vec![],
@@ -1889,6 +1905,7 @@ mod tests {
     fn enumdef_construction() {
         let ed = EnumDef {
             is_pub: false,
+            doc_comment: None,
             annotation: None,
             name: "Shape".into(),
             generic_params: vec![],

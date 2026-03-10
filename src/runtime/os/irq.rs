@@ -266,7 +266,7 @@ impl IrqTable {
     /// Returns all registered IRQs sorted by priority (highest first).
     pub fn handlers_by_priority(&self) -> Vec<(u8, &IrqHandler)> {
         let mut entries: Vec<_> = self.handlers.iter().map(|(&irq, h)| (irq, h)).collect();
-        entries.sort_by(|a, b| b.1.priority.cmp(&a.1.priority));
+        entries.sort_by_key(|e| std::cmp::Reverse(e.1.priority));
         entries
     }
 }

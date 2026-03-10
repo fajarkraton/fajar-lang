@@ -102,6 +102,17 @@ enum Command {
         #[arg(short, long)]
         version: Option<String>,
     },
+    /// Generate HTML documentation from `///` doc comments.
+    Doc {
+        /// Path to the .fj source file. If omitted, uses fj.toml entry point.
+        file: Option<PathBuf>,
+        /// Output directory for generated docs (default: ./docs/api/).
+        #[arg(short, long, default_value = "docs/api")]
+        output: PathBuf,
+        /// Open the generated docs in a browser after generation.
+        #[arg(long)]
+        open: bool,
+    },
     /// Run tests in a Fajar Lang file (functions annotated with @test).
     Test {
         /// Path to the .fj source file. If omitted, uses fj.toml entry point.
@@ -171,6 +182,19 @@ fn main() -> ExitCode {
                 config.package.linker_script
             });
             cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref())
+        }
+        Command::Doc { file, output, open } => {
+            let path = match file {
+                Some(f) => f,
+                None => match resolve_project_entry() {
+                    Ok(p) => p,
+                    Err(msg) => {
+                        eprintln!("error: {msg}");
+                        return ExitCode::from(EXIT_USAGE);
+                    }
+                },
+            };
+            cmd_doc(&path, &output, open)
         }
         Command::Publish => cmd_publish(),
         Command::Add { package, version } => cmd_add(&package, version.as_deref()),
@@ -960,6 +984,98 @@ fn cmd_add(package: &str, version: Option<&str>) -> ExitCode {
     }
 
     println!("Added {package} = \"{constraint}\" to fj.toml");
+    ExitCode::SUCCESS
+}
+
+/// Generates HTML documentation from `///` doc comments.
+fn cmd_doc(path: &PathBuf, output_dir: &PathBuf, open: bool) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Extract module name from filename
+    let module_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module");
+
+    // Generate HTML
+    let html = fajar_lang::docgen::generate_docs(module_name, &program);
+    if html.is_empty() {
+        println!("no documented items found in {}", path.display());
+        return ExitCode::SUCCESS;
+    }
+
+    // Create output directory
+    if let Err(e) = std::fs::create_dir_all(output_dir) {
+        eprintln!(
+            "error: cannot create output directory '{}': {e}",
+            output_dir.display()
+        );
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    // Write HTML file
+    let output_file = output_dir.join(format!("{module_name}.html"));
+    if let Err(e) = std::fs::write(&output_file, &html) {
+        eprintln!("error: cannot write '{}': {e}", output_file.display());
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    let item_count = fajar_lang::docgen::extract_doc_items(&program).len();
+    println!(
+        "Generated documentation: {} ({} items)",
+        output_file.display(),
+        item_count
+    );
+
+    // Optionally open in browser
+    if open {
+        let abs_path = match std::fs::canonicalize(&output_file) {
+            Ok(p) => p,
+            Err(_) => output_file.clone(),
+        };
+        let url = format!("file://{}", abs_path.display());
+        #[cfg(target_os = "linux")]
+        {
+            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("open").arg(&url).spawn();
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", &url])
+                .spawn();
+        }
+    }
+
     ExitCode::SUCCESS
 }
 

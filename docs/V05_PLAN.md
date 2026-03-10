@@ -40,20 +40,20 @@ v0.5 targets these gaps to make Fajar Lang a language people can actually build 
 - [x] S1.9 — `@ignore` attribute — skip test unless `--include-ignored`
 - [x] S1.10 — 10 tests: test discovery, pass/fail, should_panic, filter, ignore, lexer tokens
 
-### Sprint 2: Doc Comments & Generation `P1`
+### Sprint 2: Doc Comments & Generation `P1` ✅
 
 **Goal:** `/// doc comments` + `fj doc` command
 
-- [ ] S2.1 — Lexer: `///` doc comment tokens (preserve content, attach to next item)
-- [ ] S2.2 — Parser: store doc comments on FnDef, StructDef, EnumDef, TraitDef, ImplBlock
-- [ ] S2.3 — CLI: `fj doc` subcommand — generate HTML from doc comments
-- [ ] S2.4 — Doc renderer: Markdown-in-doc-comments → HTML (headings, code blocks, lists)
-- [ ] S2.5 — Module index page: list all public functions, structs, enums, traits
-- [ ] S2.6 — Function signatures in output: `fn name(params) -> ReturnType`
-- [ ] S2.7 — Cross-references: `[`OtherType`]` links within docs
-- [ ] S2.8 — `fj doc --open` — generate and open in browser
-- [ ] S2.9 — Doc tests: `/// ``` ... ```` code blocks are extracted and run as tests
-- [ ] S2.10 — 8 tests: doc comment parsing, HTML generation, doc test extraction, module index
+- [x] S2.1 — Lexer: `///` doc comment tokens (preserve content, attach to next item)
+- [x] S2.2 — Parser: store doc comments on FnDef, StructDef, EnumDef, TraitDef, ImplBlock
+- [x] S2.3 — CLI: `fj doc` subcommand — generate HTML from doc comments
+- [x] S2.4 — Doc renderer: Markdown-in-doc-comments → HTML (headings, code blocks, lists)
+- [x] S2.5 — Module index page: list all public functions, structs, enums, traits
+- [x] S2.6 — Function signatures in output: `fn name(params) -> ReturnType`
+- [x] S2.7 — Cross-references: `[`OtherType`]` links within docs
+- [x] S2.8 — `fj doc --open` — generate and open in browser
+- [x] S2.9 — Doc tests: `/// ``` ... ```` code blocks are extracted and run as tests
+- [x] S2.10 — 11 tests: doc comment parsing, HTML generation, doc test extraction, module index
 
 ### Sprint 3: Trait Objects & Dynamic Dispatch `P1`
 

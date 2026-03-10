@@ -73,6 +73,17 @@ impl<'src> Cursor<'src> {
         iter.next()
     }
 
+    /// Peeks at the nth character ahead without advancing.
+    ///
+    /// `peek_nth(0)` = `peek()`, `peek_nth(1)` = `peek_second()`.
+    pub fn peek_nth(&self, n: usize) -> Option<char> {
+        let mut iter = self.chars.clone();
+        for _ in 0..n {
+            iter.next();
+        }
+        iter.next()
+    }
+
     /// Advances the cursor by one character and returns it.
     ///
     /// Returns `None` if at end of file.

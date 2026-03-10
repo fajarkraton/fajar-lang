@@ -268,10 +268,8 @@ fn collect_type_vars(params: &[Type], ret: &Type, names: &mut Vec<String>) {
 
 fn collect_type_vars_from(ty: &Type, names: &mut Vec<String>) {
     match ty {
-        Type::TypeVar(n) => {
-            if !names.contains(n) {
-                names.push(n.clone());
-            }
+        Type::TypeVar(n) if !names.contains(n) => {
+            names.push(n.clone());
         }
         Type::Array(inner) | Type::Ref(inner) | Type::RefMut(inner) => {
             collect_type_vars_from(inner, names);

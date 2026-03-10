@@ -124,7 +124,7 @@ impl Tape {
             let input_grads = (entry.grad_fn)(&grad_output);
 
             // Accumulate into each input
-            for (input_id, input_grad) in entry.input_ids.iter().zip(input_grads.into_iter()) {
+            for (input_id, input_grad) in entry.input_ids.iter().zip(input_grads) {
                 grads
                     .entry(*input_id)
                     .and_modify(|existing| *existing += &input_grad)

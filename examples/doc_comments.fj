@@ -1,0 +1,63 @@
+// Doc Comments Demo — Fajar Lang v0.5
+//
+// Run: fj doc examples/doc_comments.fj
+// Or:  fj doc examples/doc_comments.fj --open
+
+/// Adds two integers.
+///
+/// # Examples
+///
+/// ```
+/// let result = add(2, 3)
+/// assert_eq(result, 5)
+/// ```
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+/// Computes the factorial of `n`.
+///
+/// Returns 1 for n <= 1.
+/// Uses recursive implementation.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq(factorial(5), 120)
+/// ```
+fn factorial(n: i64) -> i64 {
+    if n <= 1 {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}
+
+/// A point in 2D space.
+///
+/// Stores x and y coordinates as `f64` values.
+///
+/// - Use [`add`] to combine values
+/// - Fields: **x** and **y**
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+/// Geometric shapes with area calculation.
+///
+/// Variants:
+/// - `Circle(radius)` — a circle with given radius
+/// - `Rect(width, height)` — a rectangle
+enum Shape {
+    Circle(f64),
+    Rect(f64, f64),
+}
+
+/// Maximum number of iterations.
+const MAX_ITER: i64 = 1000
+
+fn main() {
+    println("Use 'fj doc examples/doc_comments.fj' to generate HTML docs")
+    println("Or 'fj doc examples/doc_comments.fj --open' to open in browser")
+}

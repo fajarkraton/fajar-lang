@@ -194,6 +194,34 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, Vec<LexError>> {
         let start_line = cursor.line();
         let start_col = cursor.col();
 
+        // Check for doc comment: `///` (not `////`)
+        if cursor.peek() == Some('/')
+            && cursor.peek_nth(1) == Some('/')
+            && cursor.peek_nth(2) == Some('/')
+            && cursor.peek_nth(3) != Some('/')
+        {
+            // Consume `///`
+            cursor.advance();
+            cursor.advance();
+            cursor.advance();
+            // Strip optional leading space
+            if cursor.peek() == Some(' ') {
+                cursor.advance();
+            }
+            // Read to end of line
+            let content_start = cursor.pos();
+            cursor.eat_while(|c| c != '\n');
+            let content = cursor.slice(content_start, cursor.pos()).to_string();
+            let span = Span::new(start_pos, cursor.pos());
+            tokens.push(Token::new(
+                TokenKind::DocComment(content),
+                span,
+                start_line,
+                start_col,
+            ));
+            continue;
+        }
+
         match scan_token(&mut cursor, &mut errors) {
             Some(kind) => {
                 let span = Span::new(start_pos, cursor.pos());
@@ -246,6 +274,31 @@ pub fn tokenize_with_comments(source: &str) -> Result<(Vec<Token>, Vec<Comment>)
         let start_line = cursor.line();
         let start_col = cursor.col();
 
+        // Check for doc comment: `///` (not `////`)
+        if cursor.peek() == Some('/')
+            && cursor.peek_nth(1) == Some('/')
+            && cursor.peek_nth(2) == Some('/')
+            && cursor.peek_nth(3) != Some('/')
+        {
+            cursor.advance();
+            cursor.advance();
+            cursor.advance();
+            if cursor.peek() == Some(' ') {
+                cursor.advance();
+            }
+            let content_start = cursor.pos();
+            cursor.eat_while(|c| c != '\n');
+            let content = cursor.slice(content_start, cursor.pos()).to_string();
+            let span = Span::new(start_pos, cursor.pos());
+            tokens.push(Token::new(
+                TokenKind::DocComment(content),
+                span,
+                start_line,
+                start_col,
+            ));
+            continue;
+        }
+
         if let Some(kind) = scan_token(&mut cursor, &mut errors) {
             let span = Span::new(start_pos, cursor.pos());
             tokens.push(Token::new(kind, span, start_line, start_col));
@@ -283,16 +336,20 @@ fn collect_whitespace_and_comments(
         if cursor.peek() == Some('/') {
             match cursor.peek_second() {
                 Some('/') => {
+                    // Check for doc comment: exactly `///` (not `////`)
+                    if cursor.peek_nth(2) == Some('/') && cursor.peek_nth(3) != Some('/') {
+                        // Doc comment — don't skip, let tokenize_with_comments handle it
+                        return;
+                    }
                     let start_pos = cursor.pos();
                     let comment_start = cursor.pos();
                     cursor.eat_while(|c| c != '\n');
                     let end_pos = cursor.pos();
                     let text = cursor.slice(comment_start, end_pos);
-                    let is_doc = text.starts_with("///") || text.starts_with("//!");
                     comments.push(Comment {
                         pos: start_pos,
                         text: text.to_string(),
-                        is_doc,
+                        is_doc: false,
                         is_block: false,
                     });
                     continue;
@@ -357,7 +414,12 @@ fn skip_whitespace_and_comments(cursor: &mut Cursor<'_>, errors: &mut Vec<LexErr
         if cursor.peek() == Some('/') {
             match cursor.peek_second() {
                 Some('/') => {
-                    // Single-line comment (including /// doc comments and //! module docs)
+                    // Check for doc comment: exactly `///` (not `////`)
+                    if cursor.peek_nth(2) == Some('/') && cursor.peek_nth(3) != Some('/') {
+                        // Doc comment — don't skip, let tokenize() handle it
+                        return;
+                    }
+                    // Regular single-line comment
                     cursor.eat_while(|c| c != '\n');
                     continue;
                 }
@@ -1332,9 +1394,20 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_skips_doc_comments() {
+    fn tokenize_emits_doc_comments() {
         assert_tokens!(
             "/// doc comment\nlet x",
+            TokenKind::DocComment("doc comment".into()),
+            TokenKind::Let,
+            TokenKind::Ident("x".into())
+        );
+    }
+
+    #[test]
+    fn tokenize_skips_quad_slash_comments() {
+        // //// is NOT a doc comment — it's a regular comment
+        assert_tokens!(
+            "//// not a doc\nlet x",
             TokenKind::Let,
             TokenKind::Ident("x".into())
         );

@@ -20,6 +20,7 @@
 
 pub mod analyzer;
 pub mod codegen;
+pub mod docgen;
 pub mod formatter;
 pub mod interpreter;
 pub mod lexer;

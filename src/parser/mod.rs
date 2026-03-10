@@ -401,8 +401,25 @@ impl Parser {
 
     // ── Items ──────────────────────────────────────────────────────────
 
+    /// Collects consecutive `///` doc comment tokens into a single string.
+    fn collect_doc_comments(&mut self) -> Option<String> {
+        let mut lines: Vec<String> = Vec::new();
+        while let TokenKind::DocComment(content) = self.peek_kind() {
+            lines.push(content.clone());
+            self.advance();
+        }
+        if lines.is_empty() {
+            None
+        } else {
+            Some(lines.join("\n"))
+        }
+    }
+
     /// Parses an item or a statement at the top level.
     fn parse_item_or_stmt(&mut self) -> Result<Item, ParseError> {
+        // Collect leading doc comments (consecutive `///` lines)
+        let doc_comment = self.collect_doc_comments();
+
         // Check for `pub` modifier
         let is_pub = if matches!(self.peek_kind(), TokenKind::Pub) {
             self.advance();
@@ -444,6 +461,7 @@ impl Parser {
                 fndef.is_test = is_test;
                 fndef.should_panic = should_panic;
                 fndef.is_ignored = is_ignored;
+                fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }
             TokenKind::Async => {
@@ -455,6 +473,7 @@ impl Parser {
                     fndef.is_test = is_test;
                     fndef.should_panic = should_panic;
                     fndef.is_ignored = is_ignored;
+                    fndef.doc_comment = doc_comment;
                     Ok(Item::FnDef(fndef))
                 } else {
                     // Fall through to expression statement (async block)
@@ -462,13 +481,34 @@ impl Parser {
                     Ok(Item::Stmt(stmt))
                 }
             }
-            TokenKind::Struct => Ok(Item::StructDef(self.parse_struct_def(is_pub, annotation)?)),
-            TokenKind::Union => Ok(Item::UnionDef(self.parse_union_def(is_pub, annotation)?)),
-            TokenKind::Enum => Ok(Item::EnumDef(self.parse_enum_def(is_pub, annotation)?)),
-            TokenKind::Impl => Ok(Item::ImplBlock(self.parse_impl_block()?)),
-            TokenKind::Trait => Ok(Item::TraitDef(self.parse_trait_def(is_pub)?)),
+            TokenKind::Struct => {
+                let mut sd = self.parse_struct_def(is_pub, annotation)?;
+                sd.doc_comment = doc_comment;
+                Ok(Item::StructDef(sd))
+            }
+            TokenKind::Union => {
+                let mut ud = self.parse_union_def(is_pub, annotation)?;
+                ud.doc_comment = doc_comment;
+                Ok(Item::UnionDef(ud))
+            }
+            TokenKind::Enum => {
+                let mut ed = self.parse_enum_def(is_pub, annotation)?;
+                ed.doc_comment = doc_comment;
+                Ok(Item::EnumDef(ed))
+            }
+            TokenKind::Impl => {
+                let mut ib = self.parse_impl_block()?;
+                ib.doc_comment = doc_comment;
+                Ok(Item::ImplBlock(ib))
+            }
+            TokenKind::Trait => {
+                let mut td = self.parse_trait_def(is_pub)?;
+                td.doc_comment = doc_comment;
+                Ok(Item::TraitDef(td))
+            }
             TokenKind::Const => {
-                let cd = self.parse_const_def(is_pub, annotation)?;
+                let mut cd = self.parse_const_def(is_pub, annotation)?;
+                cd.doc_comment = doc_comment;
                 Ok(Item::ConstDef(cd))
             }
             TokenKind::Use => Ok(Item::UseDecl(self.parse_use_decl()?)),
@@ -610,6 +650,7 @@ impl Parser {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            doc_comment: None,
             annotation,
             name,
             generic_params,
@@ -935,6 +976,7 @@ impl Parser {
 
         Ok(StructDef {
             is_pub,
+            doc_comment: None,
             annotation,
             name,
             generic_params,
@@ -979,6 +1021,7 @@ impl Parser {
 
         Ok(UnionDef {
             is_pub,
+            doc_comment: None,
             annotation,
             name,
             fields,
@@ -1033,6 +1076,7 @@ impl Parser {
 
         Ok(EnumDef {
             is_pub,
+            doc_comment: None,
             annotation,
             name,
             generic_params,
@@ -1074,6 +1118,7 @@ impl Parser {
         let end_tok = self.expect(&TokenKind::RBrace)?;
 
         Ok(ImplBlock {
+            doc_comment: None,
             generic_params,
             trait_name,
             target_type,
@@ -1100,6 +1145,7 @@ impl Parser {
 
         Ok(TraitDef {
             is_pub,
+            doc_comment: None,
             name,
             generic_params,
             methods,
@@ -1156,6 +1202,7 @@ impl Parser {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            doc_comment: None,
             annotation,
             name,
             generic_params,
@@ -1190,6 +1237,7 @@ impl Parser {
 
         Ok(ConstDef {
             is_pub,
+            doc_comment: None,
             annotation,
             name,
             ty,

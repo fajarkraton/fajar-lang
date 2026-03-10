@@ -240,6 +240,7 @@ fn build_closure_info(
         is_test: false,
         should_panic: false,
         is_ignored: false,
+        doc_comment: None,
         annotation: None,
         name: fn_name.clone(),
         generic_params: Vec::new(),

@@ -3003,3 +3003,143 @@ fn s1_lexer_tokenizes_test_annotations() {
     assert_eq!(tokens[2].kind, TokenKind::AtIgnore);
     assert_eq!(tokens[3].kind, TokenKind::Fn);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 2: Doc Comments & Generation
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s2_lexer_emits_doc_comment_token() {
+    use fajar_lang::lexer::token::TokenKind;
+    let src = "/// This is a doc comment\nfn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    assert_eq!(
+        tokens[0].kind,
+        TokenKind::DocComment("This is a doc comment".into())
+    );
+    assert_eq!(tokens[1].kind, TokenKind::Fn);
+}
+
+#[test]
+fn s2_lexer_consecutive_doc_comments() {
+    use fajar_lang::lexer::token::TokenKind;
+    let src = "/// Line 1\n/// Line 2\nfn bar() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    assert_eq!(tokens[0].kind, TokenKind::DocComment("Line 1".into()));
+    assert_eq!(tokens[1].kind, TokenKind::DocComment("Line 2".into()));
+    assert_eq!(tokens[2].kind, TokenKind::Fn);
+}
+
+#[test]
+fn s2_quad_slash_not_doc_comment() {
+    use fajar_lang::lexer::token::TokenKind;
+    let src = "//// Not a doc comment\nfn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    // //// is a regular comment, so first token should be Fn
+    assert_eq!(tokens[0].kind, TokenKind::Fn);
+}
+
+#[test]
+fn s2_parser_attaches_doc_to_fn() {
+    let src = "/// Adds two numbers\nfn add(a: i64, b: i64) -> i64 { a + b }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    if let fajar_lang::parser::ast::Item::FnDef(f) = &program.items[0] {
+        assert_eq!(f.doc_comment.as_deref(), Some("Adds two numbers"));
+        assert_eq!(f.name, "add");
+    } else {
+        panic!("expected FnDef");
+    }
+}
+
+#[test]
+fn s2_parser_attaches_multiline_doc_to_fn() {
+    let src = "/// Line 1\n/// Line 2\nfn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    if let fajar_lang::parser::ast::Item::FnDef(f) = &program.items[0] {
+        assert_eq!(f.doc_comment.as_deref(), Some("Line 1\nLine 2"));
+    } else {
+        panic!("expected FnDef");
+    }
+}
+
+#[test]
+fn s2_parser_attaches_doc_to_struct() {
+    let src = "/// A 2D point\nstruct Point { x: f64, y: f64 }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    if let fajar_lang::parser::ast::Item::StructDef(s) = &program.items[0] {
+        assert_eq!(s.doc_comment.as_deref(), Some("A 2D point"));
+        assert_eq!(s.name, "Point");
+    } else {
+        panic!("expected StructDef");
+    }
+}
+
+#[test]
+fn s2_parser_attaches_doc_to_enum() {
+    let src = "/// Shape variants\nenum Shape { Circle(f64), Rect(f64, f64) }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    if let fajar_lang::parser::ast::Item::EnumDef(e) = &program.items[0] {
+        assert_eq!(e.doc_comment.as_deref(), Some("Shape variants"));
+        assert_eq!(e.name, "Shape");
+    } else {
+        panic!("expected EnumDef");
+    }
+}
+
+#[test]
+fn s2_fn_without_doc_has_none() {
+    let src = "fn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    if let fajar_lang::parser::ast::Item::FnDef(f) = &program.items[0] {
+        assert!(f.doc_comment.is_none());
+    } else {
+        panic!("expected FnDef");
+    }
+}
+
+#[test]
+fn s2_doc_generation_extracts_items() {
+    let src = r#"
+/// Adds two numbers
+fn add(a: i64, b: i64) -> i64 { a + b }
+
+/// A point in 2D space
+struct Point { x: f64, y: f64 }
+
+fn no_doc() { 1 }
+"#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let items = fajar_lang::docgen::extract_doc_items(&program);
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].name, "add");
+    assert_eq!(items[1].name, "Point");
+}
+
+#[test]
+fn s2_doc_html_generation() {
+    let src = "/// Adds two numbers\nfn add(a: i64, b: i64) -> i64 { a + b }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let html = fajar_lang::docgen::generate_docs("test", &program);
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("add"));
+    assert!(html.contains("Adds two numbers"));
+    assert!(html.contains("fn add(a: i64, b: i64) -&gt; i64"));
+}
+
+#[test]
+fn s2_doc_test_extraction() {
+    let src = "/// Example:\n/// ```\n/// let x = 42\n/// ```\nfn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let doc_tests = fajar_lang::docgen::extract_doc_tests(&program);
+    assert_eq!(doc_tests.len(), 1);
+    assert_eq!(doc_tests[0].0, "foo");
+    assert_eq!(doc_tests[0].1, "let x = 42");
+}
