@@ -20,7 +20,7 @@ jobs:
         rust: [stable, nightly]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@master
@@ -29,7 +29,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry & build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -58,7 +58,7 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -67,7 +67,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Cache cargo registry & build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -81,7 +81,7 @@ jobs:
         run: cargo tarpaulin --out xml --output-dir coverage/
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage/cobertura.xml
           fail_ci_if_error: false
