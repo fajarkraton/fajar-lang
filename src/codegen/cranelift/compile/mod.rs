@@ -5280,7 +5280,8 @@ fn compile_map_method<M: Module>(
             Ok(arr_ptr)
         }
         "keys" => {
-            // map.keys() → fj_rt_map_keys(map, &count) → heap array of (ptr, len) pairs
+            // map.keys() → fj_rt_map_keys(map, &count) → Box<Vec<i64>> of (ptr, len) pairs
+            // Compatible with fj_rt_split_len / fj_rt_split_get for iteration
             let count_slot =
                 builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
                     cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
@@ -5298,8 +5299,9 @@ fn compile_map_method<M: Module>(
             let local = cx.module.declare_func_in_func(func_id, builder.func);
             let call = builder.ins().call(local, &[map_ptr, count_addr]);
             let arr_ptr = builder.inst_results(call)[0];
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            cx.last_heap_array = true;
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            // Mark as split result so `let k = map.keys()` enters split_vars
+            cx.last_split_result = Some(arr_ptr);
             Ok(arr_ptr)
         }
         _ => Err(CodegenError::NotImplemented(format!(
@@ -5348,21 +5350,30 @@ pub(crate) fn compile_inline_asm<M: Module>(
 
     for op in operands {
         match op {
-            AsmOperand::In { expr, .. } => {
+            AsmOperand::In { constraint, expr } => {
                 let val = compile_expr(builder, cx, expr)?;
+                validate_asm_operand_type(builder, constraint, val, "in")?;
                 input_vals.push(val);
                 out_names.push(None);
             }
-            AsmOperand::Out { expr, .. } => {
+            AsmOperand::Out { constraint, expr } => {
                 // Output operand: the expr should be an identifier (variable to write to)
                 let var_name = extract_ident_name(expr);
+                // For out operands, validate the constraint against the variable's
+                // declared Cranelift type if tracked in var_types.
+                if let Some(ref name) = var_name {
+                    if let Some(&clif_ty) = cx.var_types.get(name) {
+                        validate_asm_register_class(constraint, clif_ty, "out")?;
+                    }
+                }
                 input_vals.push(builder.ins().iconst(clif_types::default_int_type(), 0));
                 out_names.push(var_name);
             }
-            AsmOperand::InOut { expr, .. } => {
+            AsmOperand::InOut { constraint, expr } => {
                 // InOut: read current value and mark for output
                 let var_name = extract_ident_name(expr);
                 let val = compile_expr(builder, cx, expr)?;
+                validate_asm_operand_type(builder, constraint, val, "inout")?;
                 input_vals.push(val);
                 out_names.push(var_name);
             }
@@ -5481,6 +5492,84 @@ pub(crate) fn compile_inline_asm<M: Module>(
     };
 
     Ok(result)
+}
+
+/// Validates that an asm operand value's Cranelift type matches the declared register class.
+///
+/// - `"reg"` (general-purpose register): requires integer type, rejects float
+/// - `"freg"` (floating-point register): requires float type, rejects integer
+/// - Specific register names (e.g., `"rax"`, `"xmm0"`): validated by convention
+/// - Empty or unrecognized constraints: accepted without restriction
+fn validate_asm_operand_type(
+    builder: &FunctionBuilder,
+    constraint: &str,
+    val: ClifValue,
+    direction: &str,
+) -> Result<(), CodegenError> {
+    let val_ty = builder.func.dfg.value_type(val);
+    validate_asm_register_class(constraint, val_ty, direction)
+}
+
+/// Validates a Cranelift type against an asm register class constraint string.
+fn validate_asm_register_class(
+    constraint: &str,
+    val_ty: cranelift_codegen::ir::Type,
+    direction: &str,
+) -> Result<(), CodegenError> {
+    let is_float = clif_types::is_float(val_ty);
+
+    match constraint {
+        // General-purpose integer register — reject float values
+        "reg" => {
+            if is_float {
+                return Err(CodegenError::NotImplemented(format!(
+                    "asm: float value in integer register ({direction}(reg) operand has type {val_ty})"
+                )));
+            }
+        }
+        // Floating-point register — reject integer values
+        "freg" => {
+            if !is_float {
+                return Err(CodegenError::NotImplemented(format!(
+                    "asm: integer value in float register ({direction}(freg) operand has type {val_ty})"
+                )));
+            }
+        }
+        // Specific x86 GP registers — reject float values
+        c if matches!(
+            c,
+            "rax"
+                | "rbx"
+                | "rcx"
+                | "rdx"
+                | "rsi"
+                | "rdi"
+                | "rsp"
+                | "rbp"
+                | "eax"
+                | "ebx"
+                | "ecx"
+                | "edx"
+        ) =>
+        {
+            if is_float {
+                return Err(CodegenError::NotImplemented(format!(
+                    "asm: float value in integer register ({direction}(\"{c}\") operand has type {val_ty})"
+                )));
+            }
+        }
+        // Specific x86 SSE/AVX registers — reject integer values
+        c if c.starts_with("xmm") || c.starts_with("ymm") || c.starts_with("zmm") => {
+            if !is_float {
+                return Err(CodegenError::NotImplemented(format!(
+                    "asm: integer value in float register ({direction}(\"{c}\") operand has type {val_ty})"
+                )));
+            }
+        }
+        // All other constraints (empty, unknown, or platform-specific): accept any type
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Extracts the identifier name from an expression (for asm output operands).

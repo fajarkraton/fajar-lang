@@ -10805,6 +10805,42 @@ fn native_asm_sym_operand() {
     assert_eq!(compile_and_run(src), 1);
 }
 
+// ── S14.3: asm operand type validation ──
+
+#[test]
+fn native_asm_operand_valid() {
+    // Integer operands in reg constraint should compile and run correctly
+    let src = r#"
+        fn main() -> i64 {
+            let mut x: i64 = 10
+            asm!("add {0}, {0}, {1}", inout(reg) x, in(reg) 32)
+            x
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_asm_operand_type_mismatch() {
+    // Float value in in(reg) should produce a codegen error
+    let src = r#"
+        fn main() -> i64 {
+            let x: f64 = 3.14
+            let result: i64 = 0
+            asm!("mov {0}, {1}", out(reg) result, in(reg) x)
+            result
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    let result = compiler.compile_program(&program);
+    assert!(
+        result.is_err(),
+        "float in integer register should produce error"
+    );
+}
+
 // =====================================================================
 // S3.2 — HashMap get string values
 // =====================================================================
@@ -11238,6 +11274,68 @@ fn native_map_values_empty() {
         }
     "#;
     assert_eq!(compile_and_run(src), 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S3.4 — for-in loop over HashMap keys
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_map_for_in_keys() {
+    // Iterate over map keys via variable, count them
+    let src = r#"
+        fn main() -> i64 {
+            let m = HashMap::new()
+            m.insert("alpha", 1)
+            m.insert("beta", 2)
+            m.insert("gamma", 3)
+            let keys = m.keys()
+            let count: i64 = 0
+            for k in keys {
+                count = count + 1
+            }
+            count
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 3);
+}
+
+#[test]
+fn native_map_for_in_keys_inline() {
+    // Iterate over map.keys() inline (no temp variable), count keys
+    let src = r#"
+        fn main() -> i64 {
+            let m = HashMap::new()
+            m.insert("x", 10)
+            m.insert("y", 20)
+            let count: i64 = 0
+            for k in m.keys() {
+                count = count + 1
+            }
+            count
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 2);
+}
+
+#[test]
+fn native_map_for_in_keys_use_len() {
+    // Iterate keys and use len() on each key string
+    let src = r#"
+        fn main() -> i64 {
+            let m = HashMap::new()
+            m.insert("ab", 1)
+            m.insert("cde", 2)
+            let keys = m.keys()
+            let total_len: i64 = 0
+            for k in keys {
+                total_len = total_len + len(k)
+            }
+            total_len
+        }
+    "#;
+    // "ab" = 2, "cde" = 3, total = 5
+    assert_eq!(compile_and_run(src), 5);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

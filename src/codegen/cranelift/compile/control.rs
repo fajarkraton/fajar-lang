@@ -822,6 +822,22 @@ pub(in crate::codegen::cranelift) fn compile_for<M: Module>(
         Expr::Ident { name: arr_name, .. } if cx.split_vars.contains(arr_name) => {
             return compile_for_in_split(builder, cx, variable, arr_name, body);
         }
+        // Inline map.keys() iteration: for k in map.keys() { ... }
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+            ..
+        } if method == "keys" && args.is_empty() => {
+            if let Expr::Ident { name: map_name, .. } = receiver.as_ref() {
+                if cx.heap_maps.contains(map_name) {
+                    return compile_for_in_map_keys(builder, cx, variable, map_name, body);
+                }
+            }
+            return Err(CodegenError::NotImplemented(
+                "for-in over non-map .keys()".into(),
+            ));
+        }
         // Heap array iteration: for x in heap_arr { ... }
         Expr::Ident { name: arr_name, .. } if cx.heap_arrays.contains(arr_name) => {
             return compile_for_in_heap_array(builder, cx, variable, arr_name, body);
@@ -1213,6 +1229,57 @@ pub(in crate::codegen::cranelift) fn compile_for_in_split<M: Module>(
     // Clean up loop variable from string_lens
     cx.string_lens.remove(variable);
     Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+}
+
+/// Compiles `for k in map.keys() { body }`.
+///
+/// Calls `fj_rt_map_keys` to produce a split-compatible `Box<Vec<i64>>` of (ptr, len) pairs,
+/// stores the result in a temporary variable, then delegates to `compile_for_in_split`.
+pub(in crate::codegen::cranelift) fn compile_for_in_map_keys<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    variable: &str,
+    map_name: &str,
+    body: &Expr,
+) -> Result<ClifValue, CodegenError> {
+    let map_var = *cx
+        .var_map
+        .get(map_name)
+        .ok_or_else(|| CodegenError::UndefinedVariable(map_name.to_string()))?;
+    let map_ptr = builder.use_var(map_var);
+
+    // Allocate a stack slot for the count output (required by fj_rt_map_keys signature)
+    let count_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+        8,
+        0,
+    ));
+    let count_addr = builder
+        .ins()
+        .stack_addr(clif_types::default_int_type(), count_slot, 0);
+
+    let func_id = *cx
+        .functions
+        .get("__map_keys")
+        .ok_or_else(|| CodegenError::Internal("__map_keys not declared".into()))?;
+    let callee = cx.module.declare_func_in_func(func_id, builder.func);
+    let call = builder.ins().call(callee, &[map_ptr, count_addr]);
+    let keys_ptr = builder.inst_results(call)[0];
+
+    // Store the keys array in a temp variable and register as split_vars
+    let temp_name = format!("__map_keys_tmp_{map_name}");
+    let temp_var = builder.declare_var(clif_types::pointer_type());
+    builder.def_var(temp_var, keys_ptr);
+    cx.var_map.insert(temp_name.clone(), temp_var);
+    cx.split_vars.insert(temp_name.clone());
+
+    let result = compile_for_in_split(builder, cx, variable, &temp_name, body)?;
+
+    // Clean up the temporary
+    cx.split_vars.remove(&temp_name);
+    cx.var_map.remove(&temp_name);
+
+    Ok(result)
 }
 
 /// Compiles `for x in [1, 2, 3] { body }` with an inline array literal.

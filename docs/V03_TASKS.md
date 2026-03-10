@@ -3,7 +3,7 @@
 > Granular task list for all 52 sprints across 12 months.
 > Reference: `V03_IMPLEMENTATION_PLAN.md` for context, `V03_WORKFLOW.md` for process.
 > Baseline: v0.2 complete (1,991 tests, 59,419 LOC, Phases A-F + E done)
-> Current (2026-03-10): 2,568 tests (2,185 lib + 383 integration), ~80K LOC, 0 failures
+> Current (2026-03-10): 2,573 tests (2,190 lib + 383 integration), ~80K LOC, 0 failures
 > Gap audit: most gaps closed — see bottom of file for remaining deferred subtasks
 
 ---
@@ -215,7 +215,7 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] `compile_method_call` dispatch for HashMap methods via `compile_map_method`
 - [x] Track HashMap variables in `heap_maps: HashSet<String>` + `OwnedKind::Map`
 - [x] `emit_owned_cleanup`: free HashMap on scope exit via `fj_rt_map_free`
-- [ ] ⏳ For-in loop over HashMap keys — deferred (needs keys() runtime)
+- [x] For-in loop over HashMap keys — via variable and inline `for k in m.keys()` (3 tests)
 - [x] 4 tests: create_insert_get, cleanup (in_function), overwrite, get_missing
 
 ---
@@ -762,7 +762,7 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] `asm!` only allowed in `@kernel` or `@unsafe` context
 - [x] Error KE005: "inline assembly not allowed in @safe context"
 - [x] Error KE006: "inline assembly not allowed in @device context"
-- [ ] Validate operand types match register class (deferred — needs codegen integration)
+- [x] Validate operand types match register class (reg rejects float, freg rejects int, 2 tests)
 - [x] 4 tests: safe_rejects, device_rejects, kernel_allows, unsafe_allows
 
 **S14.4 — Cranelift codegen** `P0` ✅

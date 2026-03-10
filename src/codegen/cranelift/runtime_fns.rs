@@ -1312,43 +1312,35 @@ pub extern "C" fn fj_rt_map_free(map_ptr: *mut u8) {
 
 /// Runtime: returns a heap-allocated array of all keys in the HashMap.
 ///
-/// Returns a pointer to a `Vec<(ptr, len)>` where each key is a heap-copied string.
-/// The caller receives the array as an opaque heap array handle.
+/// Returns a `Box<Vec<i64>>` with interleaved `[ptr_as_i64, len_as_i64, ...]` pairs,
+/// compatible with `fj_rt_split_len` / `fj_rt_split_get` for iteration.
 /// `count_out` receives the number of keys.
 pub extern "C" fn fj_rt_map_keys(map_ptr: *mut u8, count_out: *mut i64) -> *mut u8 {
     // SAFETY: caller guarantees valid HashMap pointer
     let map = unsafe { &*(map_ptr as *const HashMap<String, i64>) };
     let count = map.len();
+    // SAFETY: count_out is a valid stack slot pointer from the caller
     unsafe {
         *count_out = count as i64;
     }
-    if count == 0 {
-        return std::ptr::null_mut();
-    }
-    // Allocate array of (ptr, len) pairs — each pair is 2 * 8 = 16 bytes
-    let layout =
-        std::alloc::Layout::from_size_align(count * 16, 8).expect("valid keys array layout");
-    // SAFETY: layout is valid (count > 0, aligned to 8)
-    let buf = unsafe { std::alloc::alloc(layout) };
-    for (i, key) in map.keys().enumerate() {
+    // Build a Vec<i64> with interleaved (ptr, len) pairs — same format as fj_rt_str_split
+    let mut flat: Vec<i64> = Vec::with_capacity(count * 2);
+    for key in map.keys() {
         let key_bytes = key.as_bytes();
         let key_len = key_bytes.len();
-        // Allocate a copy of the key string on the heap
+        // Allocate a heap copy of the key string
         let key_layout =
             std::alloc::Layout::from_size_align(key_len.max(1), 1).expect("valid key layout");
-        // SAFETY: layout is valid
+        // SAFETY: layout is valid (max(1) ensures non-zero size)
         let key_buf = unsafe { std::alloc::alloc(key_layout) };
+        // SAFETY: key_buf is valid for key_len bytes
         unsafe {
             std::ptr::copy_nonoverlapping(key_bytes.as_ptr(), key_buf, key_len);
         }
-        // Store (ptr, len) pair
-        let offset = i * 16;
-        unsafe {
-            *(buf.add(offset) as *mut *mut u8) = key_buf;
-            *(buf.add(offset + 8) as *mut i64) = key_len as i64;
-        }
+        flat.push(key_buf as i64);
+        flat.push(key_len as i64);
     }
-    buf
+    Box::into_raw(Box::new(flat)) as *mut u8
 }
 
 /// Runtime: returns a heap-allocated Vec of all values in the HashMap.
