@@ -1,0 +1,47 @@
+// Test Framework Demo — Fajar Lang v0.5
+//
+// Run: fj test examples/test_framework.fj
+
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+fn factorial(n: i64) -> i64 {
+    if n <= 1 {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}
+
+@test
+fn test_add_basic() {
+    assert_eq(add(2, 3), 5)
+}
+
+@test
+fn test_add_negative() {
+    assert_eq(add(-1, 1), 0)
+}
+
+@test
+fn test_factorial() {
+    assert_eq(factorial(5), 120)
+    assert_eq(factorial(0), 1)
+    assert_eq(factorial(1), 1)
+}
+
+@test @should_panic
+fn test_division_by_zero() {
+    let x = 1 / 0
+}
+
+@test @ignore
+fn test_slow_computation() {
+    // This test is slow, skip by default
+    assert_eq(factorial(10), 3628800)
+}
+
+fn main() {
+    println("Use 'fj test examples/test_framework.fj' to run tests")
+}

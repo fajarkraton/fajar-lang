@@ -239,6 +239,12 @@ pub enum TokenKind {
     AtSimd,
     /// `@section`
     AtSection,
+    /// `@test`
+    AtTest,
+    /// `@should_panic`
+    AtShouldPanic,
+    /// `@ignore`
+    AtIgnore,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -461,6 +467,9 @@ impl fmt::Display for TokenKind {
             TokenKind::AtReprC => write!(f, "@repr_c"),
             TokenKind::AtReprPacked => write!(f, "@repr_packed"),
             TokenKind::AtSimd => write!(f, "@simd"),
+            TokenKind::AtTest => write!(f, "@test"),
+            TokenKind::AtShouldPanic => write!(f, "@should_panic"),
+            TokenKind::AtIgnore => write!(f, "@ignore"),
             TokenKind::AtSection => write!(f, "@section"),
             // Operators
             TokenKind::Plus => write!(f, "+"),
@@ -624,6 +633,9 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("repr_c", TokenKind::AtReprC);
     m.insert("repr_packed", TokenKind::AtReprPacked);
     m.insert("simd", TokenKind::AtSimd);
+    m.insert("test", TokenKind::AtTest);
+    m.insert("should_panic", TokenKind::AtShouldPanic);
+    m.insert("ignore", TokenKind::AtIgnore);
     m.insert("section", TokenKind::AtSection);
     m
 });
@@ -734,6 +746,12 @@ mod tests {
         assert_eq!(lookup_annotation("safe"), Some(TokenKind::AtSafe));
         assert_eq!(lookup_annotation("unsafe"), Some(TokenKind::AtUnsafe));
         assert_eq!(lookup_annotation("ffi"), Some(TokenKind::AtFfi));
+        assert_eq!(lookup_annotation("test"), Some(TokenKind::AtTest));
+        assert_eq!(
+            lookup_annotation("should_panic"),
+            Some(TokenKind::AtShouldPanic)
+        );
+        assert_eq!(lookup_annotation("ignore"), Some(TokenKind::AtIgnore));
     }
 
     #[test]

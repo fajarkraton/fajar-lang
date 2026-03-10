@@ -2770,3 +2770,236 @@ fn s44_string_copy_in_loop() {
     let output = eval_output(src);
     assert_eq!(output, vec!["hi", "hi", "hi"]);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// v0.5 S1: Test Framework (@test, @should_panic, @ignore)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s1_test_annotation_parsed() {
+    let src = r#"
+        @test
+        fn test_one() {
+            assert_eq(1 + 1, 2)
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    // Find the test function
+    let test_fn = program.items.iter().find_map(|item| {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.name == "test_one" {
+                return Some(fndef);
+            }
+        }
+        None
+    });
+    assert!(test_fn.is_some(), "should find @test fn");
+    let fndef = test_fn.unwrap();
+    assert!(fndef.is_test, "is_test should be true");
+    assert!(!fndef.should_panic, "should_panic should be false");
+    assert!(!fndef.is_ignored, "is_ignored should be false");
+}
+
+#[test]
+fn s1_should_panic_annotation_parsed() {
+    let src = r#"
+        @test @should_panic
+        fn test_panic() {
+            let x = 1 / 0
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program
+        .items
+        .iter()
+        .find_map(|item| {
+            if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+                if f.name == "test_panic" {
+                    return Some(f);
+                }
+            }
+            None
+        })
+        .unwrap();
+    assert!(fndef.is_test);
+    assert!(fndef.should_panic);
+}
+
+#[test]
+fn s1_ignore_annotation_parsed() {
+    let src = r#"
+        @test @ignore
+        fn test_slow() {
+            assert_eq(1, 1)
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program
+        .items
+        .iter()
+        .find_map(|item| {
+            if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+                if f.name == "test_slow" {
+                    return Some(f);
+                }
+            }
+            None
+        })
+        .unwrap();
+    assert!(fndef.is_test);
+    assert!(fndef.is_ignored);
+    assert!(!fndef.should_panic);
+}
+
+#[test]
+fn s1_test_fn_callable() {
+    let src = r#"
+        @test
+        fn test_add() {
+            assert_eq(2 + 3, 5)
+        }
+        fn main() {}
+    "#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(src).unwrap();
+    // Test function should be callable
+    let result = interp.call_fn("test_add", vec![]);
+    assert!(result.is_ok(), "test fn should succeed");
+}
+
+#[test]
+fn s1_test_fn_detects_failure() {
+    let src = r#"
+        @test
+        fn test_bad() {
+            assert_eq(1, 2)
+        }
+        fn main() {}
+    "#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(src).unwrap();
+    let result = interp.call_fn("test_bad", vec![]);
+    assert!(result.is_err(), "failing assert_eq should error");
+}
+
+#[test]
+fn s1_multiple_annotations_order() {
+    // @should_panic @test @ignore — all three in any order
+    let src = r#"
+        @should_panic @test @ignore
+        fn test_combo() {
+            let x = 1 / 0
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program
+        .items
+        .iter()
+        .find_map(|item| {
+            if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+                if f.name == "test_combo" {
+                    return Some(f);
+                }
+            }
+            None
+        })
+        .unwrap();
+    assert!(fndef.is_test);
+    assert!(fndef.should_panic);
+    assert!(fndef.is_ignored);
+}
+
+#[test]
+fn s1_non_test_fn_has_default_flags() {
+    let src = r#"
+        fn regular() {
+            let x = 1
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program
+        .items
+        .iter()
+        .find_map(|item| {
+            if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+                if f.name == "regular" {
+                    return Some(f);
+                }
+            }
+            None
+        })
+        .unwrap();
+    assert!(!fndef.is_test);
+    assert!(!fndef.should_panic);
+    assert!(!fndef.is_ignored);
+}
+
+#[test]
+fn s1_test_with_kernel_annotation() {
+    // @test with @kernel should both parse
+    let src = r#"
+        @test @kernel
+        fn test_kernel_fn() {
+            let x = 42
+        }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program
+        .items
+        .iter()
+        .find_map(|item| {
+            if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+                if f.name == "test_kernel_fn" {
+                    return Some(f);
+                }
+            }
+            None
+        })
+        .unwrap();
+    assert!(fndef.is_test);
+    assert!(fndef.annotation.is_some());
+    assert_eq!(fndef.annotation.as_ref().unwrap().name, "kernel");
+}
+
+#[test]
+fn s1_test_discovery_count() {
+    let src = r#"
+        fn helper() -> i64 { 42 }
+        @test fn test_a() { assert_eq(helper(), 42) }
+        @test fn test_b() { assert_eq(1, 1) }
+        @test @ignore fn test_c() { assert_eq(2, 2) }
+        fn not_a_test() { let x = 1 }
+        fn main() {}
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let test_count = program
+        .items
+        .iter()
+        .filter(|item| matches!(item, fajar_lang::parser::ast::Item::FnDef(f) if f.is_test))
+        .count();
+    assert_eq!(test_count, 3, "should discover 3 @test functions");
+}
+
+#[test]
+fn s1_lexer_tokenizes_test_annotations() {
+    use fajar_lang::lexer::token::TokenKind;
+    let src = "@test @should_panic @ignore fn foo() { 1 }";
+    let tokens = tokenize(src).unwrap();
+    assert_eq!(tokens[0].kind, TokenKind::AtTest);
+    assert_eq!(tokens[1].kind, TokenKind::AtShouldPanic);
+    assert_eq!(tokens[2].kind, TokenKind::AtIgnore);
+    assert_eq!(tokens[3].kind, TokenKind::Fn);
+}

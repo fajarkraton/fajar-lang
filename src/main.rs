@@ -23,7 +23,7 @@ use fajar_lang::FjDiagnostic;
 
 /// Fajar Lang — A systems programming language for OS and AI/ML.
 #[derive(Parser)]
-#[command(name = "fj", version = "0.3.0", about)]
+#[command(name = "fj", version = "0.5.0", about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -102,6 +102,17 @@ enum Command {
         #[arg(short, long)]
         version: Option<String>,
     },
+    /// Run tests in a Fajar Lang file (functions annotated with @test).
+    Test {
+        /// Path to the .fj source file. If omitted, uses fj.toml entry point.
+        file: Option<PathBuf>,
+        /// Run only tests matching this pattern.
+        #[arg(long)]
+        filter: Option<String>,
+        /// Include @ignore tests.
+        #[arg(long)]
+        include_ignored: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -163,6 +174,23 @@ fn main() -> ExitCode {
         }
         Command::Publish => cmd_publish(),
         Command::Add { package, version } => cmd_add(&package, version.as_deref()),
+        Command::Test {
+            file,
+            filter,
+            include_ignored,
+        } => {
+            let path = match file {
+                Some(f) => f,
+                None => match resolve_project_entry() {
+                    Ok(p) => p,
+                    Err(msg) => {
+                        eprintln!("error: {msg}");
+                        return ExitCode::from(EXIT_USAGE);
+                    }
+                },
+            };
+            cmd_test(&path, filter.as_deref(), include_ignored)
+        }
     }
 }
 
@@ -933,6 +961,157 @@ fn cmd_add(package: &str, version: Option<&str>) -> ExitCode {
 
     println!("Added {package} = \"{constraint}\" to fj.toml");
     ExitCode::SUCCESS
+}
+
+/// Runs @test functions in a Fajar Lang source file.
+fn cmd_test(path: &PathBuf, filter: Option<&str>, include_ignored: bool) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Analyze
+    if let Err(errors) = analyze(&program) {
+        let hard_errors: Vec<_> = errors.iter().filter(|e| !e.is_warning()).collect();
+        if !hard_errors.is_empty() {
+            for e in &hard_errors {
+                FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    }
+
+    // Discover @test functions
+    let mut tests: Vec<&fajar_lang::parser::ast::FnDef> = Vec::new();
+    for item in &program.items {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.is_test {
+                // Apply filter
+                if let Some(pattern) = filter {
+                    if !fndef.name.contains(pattern) {
+                        continue;
+                    }
+                }
+                tests.push(fndef);
+            }
+        }
+    }
+
+    if tests.is_empty() {
+        println!("no tests found in {}", path.display());
+        return ExitCode::SUCCESS;
+    }
+
+    println!(
+        "\nrunning {} test(s) from {}\n",
+        tests.len(),
+        path.display()
+    );
+
+    let mut passed = 0u32;
+    let mut failed = 0u32;
+    let mut ignored = 0u32;
+    let mut failures: Vec<String> = Vec::new();
+
+    for test_fn in &tests {
+        let name = &test_fn.name;
+
+        // Check @ignore
+        if test_fn.is_ignored && !include_ignored {
+            println!("  test {} ... \x1b[33mignored\x1b[0m", name);
+            ignored += 1;
+            continue;
+        }
+
+        // Create a fresh interpreter and load all non-test functions
+        let mut interp = Interpreter::new();
+        if let Some(parent) = path.parent() {
+            interp.set_source_dir(parent.to_path_buf());
+        }
+        // Load all program definitions (functions, structs, etc.)
+        let _ = interp.eval_program(&program);
+
+        // Call the test function
+        let result = interp.call_fn(name, vec![]);
+
+        if test_fn.should_panic {
+            // @should_panic: expect an error
+            match result {
+                Err(_) => {
+                    println!(
+                        "  test {} ... \x1b[32mok\x1b[0m (panicked as expected)",
+                        name
+                    );
+                    passed += 1;
+                }
+                Ok(_) => {
+                    println!(
+                        "  test {} ... \x1b[31mFAILED\x1b[0m (expected panic but succeeded)",
+                        name
+                    );
+                    failures.push(format!("{}: expected panic but test succeeded", name));
+                    failed += 1;
+                }
+            }
+        } else {
+            // Normal test: expect success
+            match result {
+                Ok(_) => {
+                    println!("  test {} ... \x1b[32mok\x1b[0m", name);
+                    passed += 1;
+                }
+                Err(e) => {
+                    println!("  test {} ... \x1b[31mFAILED\x1b[0m", name);
+                    failures.push(format!("{}: {}", name, e));
+                    failed += 1;
+                }
+            }
+        }
+    }
+
+    // Summary
+    println!();
+    if failures.is_empty() {
+        println!(
+            "test result: \x1b[32mok\x1b[0m. {} passed; {} failed; {} ignored",
+            passed, failed, ignored
+        );
+        ExitCode::SUCCESS
+    } else {
+        println!("failures:");
+        for f in &failures {
+            println!("  {}", f);
+        }
+        println!();
+        println!(
+            "test result: \x1b[31mFAILED\x1b[0m. {} passed; {} failed; {} ignored",
+            passed, failed, ignored
+        );
+        ExitCode::from(EXIT_RUNTIME)
+    }
 }
 
 /// Validates and publishes the current project to the local registry.

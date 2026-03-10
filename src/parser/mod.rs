@@ -411,17 +411,51 @@ impl Parser {
             false
         };
 
-        // Check for annotation
-        let annotation = self.try_parse_annotation();
+        // Collect all annotations (supports multiple: @test @should_panic fn ...)
+        let mut is_test = false;
+        let mut should_panic = false;
+        let mut is_ignored = false;
+        let annotation;
+        loop {
+            match self.peek_kind() {
+                TokenKind::AtTest => {
+                    self.advance();
+                    is_test = true;
+                }
+                TokenKind::AtShouldPanic => {
+                    self.advance();
+                    should_panic = true;
+                }
+                TokenKind::AtIgnore => {
+                    self.advance();
+                    is_ignored = true;
+                }
+                _ => {
+                    // Try non-test annotation (only one allowed)
+                    annotation = self.try_parse_annotation();
+                    break;
+                }
+            }
+        }
 
         match self.peek_kind() {
-            TokenKind::Fn => Ok(Item::FnDef(self.parse_fn_def(is_pub, annotation)?)),
+            TokenKind::Fn => {
+                let mut fndef = self.parse_fn_def(is_pub, annotation)?;
+                fndef.is_test = is_test;
+                fndef.should_panic = should_panic;
+                fndef.is_ignored = is_ignored;
+                Ok(Item::FnDef(fndef))
+            }
             TokenKind::Async => {
                 // Peek ahead: `async fn` → function def, `async {` → expression statement
                 if self.pos + 1 < self.tokens.len()
                     && self.tokens[self.pos + 1].kind == TokenKind::Fn
                 {
-                    Ok(Item::FnDef(self.parse_fn_def(is_pub, annotation)?))
+                    let mut fndef = self.parse_fn_def(is_pub, annotation)?;
+                    fndef.is_test = is_test;
+                    fndef.should_panic = should_panic;
+                    fndef.is_ignored = is_ignored;
+                    Ok(Item::FnDef(fndef))
                 } else {
                     // Fall through to expression statement (async block)
                     let stmt = self.parse_stmt()?;
@@ -478,7 +512,10 @@ impl Parser {
             | TokenKind::AtReprC
             | TokenKind::AtReprPacked
             | TokenKind::AtSimd
-            | TokenKind::AtSection => {
+            | TokenKind::AtSection
+            | TokenKind::AtTest
+            | TokenKind::AtShouldPanic
+            | TokenKind::AtIgnore => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -492,6 +529,9 @@ impl Parser {
                     TokenKind::AtReprC => ("repr", Some("C".to_string())),
                     TokenKind::AtReprPacked => ("repr", Some("packed".to_string())),
                     TokenKind::AtSimd => ("simd", None),
+                    TokenKind::AtTest => ("test", None),
+                    TokenKind::AtShouldPanic => ("should_panic", None),
+                    TokenKind::AtIgnore => ("ignore", None),
                     TokenKind::AtSection => {
                         // Parse @section("section_name")
                         let section_name = if matches!(self.peek_kind(), TokenKind::LParen) {
@@ -567,6 +607,9 @@ impl Parser {
         Ok(FnDef {
             is_pub,
             is_async,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
             annotation,
             name,
             generic_params,
@@ -1110,6 +1153,9 @@ impl Parser {
         Ok(FnDef {
             is_pub: false,
             is_async,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
             annotation,
             name,
             generic_params,

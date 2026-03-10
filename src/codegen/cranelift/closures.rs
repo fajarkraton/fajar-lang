@@ -237,6 +237,9 @@ fn build_closure_info(
     let fndef = FnDef {
         is_pub: false,
         is_async: false,
+        is_test: false,
+        should_panic: false,
+        is_ignored: false,
         annotation: None,
         name: fn_name.clone(),
         generic_params: Vec::new(),

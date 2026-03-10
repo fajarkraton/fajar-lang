@@ -96,6 +96,12 @@ pub struct FnDef {
     pub is_pub: bool,
     /// Whether the function is declared `async`.
     pub is_async: bool,
+    /// Whether this function is a test (`@test`).
+    pub is_test: bool,
+    /// Whether this test should expect a panic (`@should_panic`).
+    pub should_panic: bool,
+    /// Whether this test is ignored by default (`@ignore`).
+    pub is_ignored: bool,
     /// Optional annotation (e.g., `@kernel`, `@device`).
     pub annotation: Option<Annotation>,
     /// Function name.
@@ -1811,6 +1817,9 @@ mod tests {
         let fndef = FnDef {
             is_pub: false,
             is_async: false,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
             annotation: Some(Annotation {
                 name: "kernel".into(),
                 param: None,

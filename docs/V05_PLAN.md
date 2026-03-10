@@ -25,20 +25,20 @@ v0.5 targets these gaps to make Fajar Lang a language people can actually build 
 
 ## Sprint Plan
 
-### Sprint 1: Test Framework `P0` `CRITICAL`
+### Sprint 1: Test Framework `P0` `CRITICAL` ✅
 
-**Goal:** `#[test]` attribute + `fj test` CLI command
+**Goal:** `@test` annotation + `fj test` CLI command
 
-- [ ] S1.1 — Lexer: `AtTest` token for `#[test]` annotation
-- [ ] S1.2 — Parser: `#[test]` on `fn` items → `FnDef { is_test: true }`
-- [ ] S1.3 — CLI: `fj test` subcommand (discover + run all `#[test]` functions)
-- [ ] S1.4 — Test runner: collect test fns, run each in isolation, report pass/fail/panic
-- [ ] S1.5 — `assert_eq!(a, b)` with diff output (show expected vs actual)
-- [ ] S1.6 — `#[test] #[should_panic]` — expect a panic/assertion failure
-- [ ] S1.7 — Test filtering: `fj test --filter name_pattern`
-- [ ] S1.8 — Test output: summary table (passed/failed/ignored), colored output
-- [ ] S1.9 — `#[ignore]` attribute — skip test unless `--include-ignored`
-- [ ] S1.10 — 10 tests: test discovery, pass/fail, should_panic, filter, ignore, assert_eq diff
+- [x] S1.1 — Lexer: `AtTest`, `AtShouldPanic`, `AtIgnore` tokens
+- [x] S1.2 — Parser: `@test` on `fn` items → `FnDef { is_test: true }`
+- [x] S1.3 — CLI: `fj test` subcommand (discover + run all `@test` functions)
+- [x] S1.4 — Test runner: collect test fns, run each in isolation, report pass/fail/panic
+- [x] S1.5 — `assert_eq(a, b)` detects failures (existing builtin)
+- [x] S1.6 — `@should_panic` — expect a panic/assertion failure
+- [x] S1.7 — Test filtering: `fj test --filter name_pattern`
+- [x] S1.8 — Test output: summary table (passed/failed/ignored), colored output
+- [x] S1.9 — `@ignore` attribute — skip test unless `--include-ignored`
+- [x] S1.10 — 10 tests: test discovery, pass/fail, should_panic, filter, ignore, lexer tokens
 
 ### Sprint 2: Doc Comments & Generation `P1`
 

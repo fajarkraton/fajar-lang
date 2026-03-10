@@ -549,6 +549,9 @@ mod tests {
         FnDef {
             is_pub: false,
             is_async: false,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
             annotation: None,
             name: name.into(),
             generic_params: vec![],
