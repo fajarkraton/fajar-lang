@@ -1283,8 +1283,8 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] S52.2 — Comprehensive CHANGELOG
 - [x] S52.3 — Binary releases: Linux x86_64, macOS arm64, Windows (release.yml + Windows target)
 - [x] S52.4 — Homebrew / APT packages (packaging/homebrew/fajar-lang.rb formula)
-- [ ] S52.5 — GitHub Release (push v0.3.0 tag to trigger)
-- [ ] S52.6 — Announcement post
+- [x] S52.5 — GitHub Release (push v0.3.0 tag to trigger)
+- [x] S52.6 — Announcement post (GitHub Release notes)
 
 ---
 
