@@ -66,6 +66,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub last_map_new: bool,
     /// Enum definitions: enum name → list of variant names (index = tag).
     pub enum_defs: &'a HashMap<String, Vec<String>>,
+    /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
+    /// Will be used for type-aware payload extraction in v0.4 generic enum codegen.
+    #[allow(dead_code)]
+    pub enum_variant_types: &'a HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
     /// Tracks variables that hold enum values: name → (tag_var, payload_var, payload_type).
     pub enum_vars: &'a mut HashMap<String, (Variable, Variable, cranelift_codegen::ir::Type)>,
     /// Payload of the last compiled enum constructor expression.

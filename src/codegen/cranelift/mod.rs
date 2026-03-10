@@ -108,6 +108,8 @@ pub struct CraneliftCompiler {
     fn_return_types: HashMap<String, cranelift_codegen::ir::Type>,
     /// Enum definitions: enum name → list of variant names (index = tag).
     enum_defs: HashMap<String, Vec<String>>,
+    /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
+    enum_variant_types: HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
     /// Struct definitions: struct name → ordered list of (field_name, clif_type).
     struct_defs: HashMap<String, Vec<(String, cranelift_codegen::ir::Type)>>,
     /// Set of type names that are unions (all fields at offset 0).
@@ -225,6 +227,7 @@ impl CraneliftCompiler {
             mono_map: HashMap::new(),
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
+            enum_variant_types: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -4166,10 +4169,20 @@ impl CraneliftCompiler {
         for item in &program.items {
             match item {
                 Item::EnumDef(edef) => {
-                    // NOTE: Native codegen currently supports single-field enum payloads only.
-                    // Multi-field variants (e.g., Rect(f64, f64)) are deferred to v0.2 Phase A.
                     let variants: Vec<String> =
                         edef.variants.iter().map(|v| v.name.clone()).collect();
+                    // Track payload types for each variant
+                    for v in &edef.variants {
+                        let payload_types: Vec<cranelift_codegen::ir::Type> = v
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                clif_types::lower_type(f).unwrap_or(clif_types::default_int_type())
+                            })
+                            .collect();
+                        self.enum_variant_types
+                            .insert((edef.name.clone(), v.name.clone()), payload_types);
+                    }
                     self.enum_defs.insert(edef.name.clone(), variants);
                 }
                 Item::StructDef(sdef) => {
@@ -4962,6 +4975,7 @@ impl CraneliftCompiler {
                 map_str_values: HashSet::new(),
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
+                enum_variant_types: &self.enum_variant_types,
                 enum_vars: &mut enum_vars,
                 last_enum_payload: None,
                 last_enum_payload_type: None,
@@ -5254,6 +5268,8 @@ pub struct ObjectCompiler {
     fn_return_types: HashMap<String, cranelift_codegen::ir::Type>,
     /// Enum definitions: enum name → list of variant names (index = tag).
     enum_defs: HashMap<String, Vec<String>>,
+    /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
+    enum_variant_types: HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
     /// Struct definitions: struct name → ordered list of (field_name, clif_type).
     struct_defs: HashMap<String, Vec<(String, cranelift_codegen::ir::Type)>>,
     /// Set of type names that are unions (all fields at offset 0).
@@ -5341,6 +5357,7 @@ impl ObjectCompiler {
             mono_map: HashMap::new(),
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
+            enum_variant_types: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -5396,6 +5413,7 @@ impl ObjectCompiler {
             mono_map: HashMap::new(),
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
+            enum_variant_types: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -8778,10 +8796,20 @@ impl ObjectCompiler {
         for item in &program.items {
             match item {
                 Item::EnumDef(edef) => {
-                    // NOTE: Native codegen currently supports single-field enum payloads only.
-                    // Multi-field variants (e.g., Rect(f64, f64)) are deferred to v0.2 Phase A.
                     let variants: Vec<String> =
                         edef.variants.iter().map(|v| v.name.clone()).collect();
+                    // Track payload types for each variant
+                    for v in &edef.variants {
+                        let payload_types: Vec<cranelift_codegen::ir::Type> = v
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                clif_types::lower_type(f).unwrap_or(clif_types::default_int_type())
+                            })
+                            .collect();
+                        self.enum_variant_types
+                            .insert((edef.name.clone(), v.name.clone()), payload_types);
+                    }
                     self.enum_defs.insert(edef.name.clone(), variants);
                 }
                 Item::StructDef(sdef) => {
@@ -9572,6 +9600,7 @@ impl ObjectCompiler {
                 map_str_values: HashSet::new(),
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
+                enum_variant_types: &self.enum_variant_types,
                 enum_vars: &mut enum_vars,
                 last_enum_payload: None,
                 last_enum_payload_type: None,

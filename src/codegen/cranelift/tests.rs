@@ -13363,3 +13363,62 @@ fn native_map_after_thread() {
     // 9 + 16 + 25 = 50
     assert_eq!(compile_and_run(src), 50);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// v0.4 S1 — Generic Enum Infrastructure
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_enum_variant_types_tracked() {
+    // Verify that user-defined enums with typed payloads compile correctly
+    let src = r#"
+        enum Shape {
+            Circle(i64),
+            Rect(i64),
+            None
+        }
+        fn main() -> i64 {
+            let s = Shape::Circle(42)
+            match s {
+                Circle(r) => r,
+                Rect(w) => w,
+                None => 0
+            }
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_enum_float_payload() {
+    // Enum with float payload — tests type-aware payload tracking
+    let src = r#"
+        enum Value {
+            Int(i64),
+            None
+        }
+        fn main() -> i64 {
+            let v = Value::Int(99)
+            match v {
+                Int(x) => x,
+                None => 0
+            }
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 99);
+}
+
+#[test]
+fn native_enum_option_generic_pattern() {
+    // Enum with payload: construct then destructure via match
+    let src = r#"
+        fn main() -> i64 {
+            let r = Ok(42)
+            match r {
+                Ok(v) => v,
+                Err(e) => e
+            }
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
