@@ -722,6 +722,10 @@ pub enum Expr {
         template: String,
         /// Operands (direction, constraint, expr).
         operands: Vec<AsmOperand>,
+        /// Assembly options (`options(nomem, nostack)`).
+        options: Vec<AsmOption>,
+        /// Clobber ABI specification (`clobber_abi("C")`).
+        clobber_abi: Option<String>,
         /// Source span.
         span: Span,
     },
@@ -740,6 +744,23 @@ pub enum AsmOperand {
     Const { expr: Box<Expr> },
     /// `sym name` — symbol reference (function pointer address).
     Sym { name: String },
+}
+
+/// Inline assembly option flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsmOption {
+    /// `nomem` — no memory reads or writes.
+    Nomem,
+    /// `nostack` — does not use the stack.
+    Nostack,
+    /// `readonly` — only reads memory, does not write.
+    Readonly,
+    /// `preserves_flags` — does not modify condition flags.
+    PreservesFlags,
+    /// `pure` — no side effects (implies nomem + nostack).
+    Pure,
+    /// `att_syntax` — use AT&T syntax instead of Intel.
+    AttSyntax,
 }
 
 impl Expr {

@@ -211,19 +211,23 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 }
                 cx.last_mmio_new = false;
             }
-            // If RHS was a BumpAllocator::new(), register for method dispatch
+            // If RHS was a BumpAllocator::new(), register for method dispatch + cleanup
             if cx.last_bump_alloc_new {
                 cx.bump_alloc_handles.insert(name.clone());
+                cx.owned_ptrs.push((name.clone(), OwnedKind::BumpAllocator));
                 cx.last_bump_alloc_new = false;
             }
-            // If RHS was a FreeListAllocator::new(), register for method dispatch
+            // If RHS was a FreeListAllocator::new(), register for method dispatch + cleanup
             if cx.last_freelist_alloc_new {
                 cx.freelist_alloc_handles.insert(name.clone());
+                cx.owned_ptrs
+                    .push((name.clone(), OwnedKind::FreeListAllocator));
                 cx.last_freelist_alloc_new = false;
             }
-            // If RHS was a PoolAllocator::new(), register for method dispatch
+            // If RHS was a PoolAllocator::new(), register for method dispatch + cleanup
             if cx.last_pool_alloc_new {
                 cx.pool_alloc_handles.insert(name.clone());
+                cx.owned_ptrs.push((name.clone(), OwnedKind::PoolAllocator));
                 cx.last_pool_alloc_new = false;
             }
             // If RHS was an Executor::new(), register for method dispatch

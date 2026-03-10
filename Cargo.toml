@@ -23,6 +23,9 @@ serde = { version = "1.0", features = ["derive"] }  # Phase 5.4: toml deserializ
 toml = "0.8"                  # Phase 5.4: parse fj.toml
 libloading = "0.8"            # Phase 7: FFI dynamic library loading
 
+# GPU compute (feature-gated)
+wgpu = { version = "28.0", optional = true }
+
 # Cranelift native codegen (feature-gated)
 cranelift-codegen = { version = "0.129.1", optional = true, features = ["x86", "arm64", "riscv64"] }
 cranelift-frontend = { version = "0.129.1", optional = true }
@@ -34,6 +37,8 @@ target-lexicon = { version = "0.13.5", optional = true }
 
 [features]
 default = []
+gpu = ["wgpu"]
+cuda = []
 native = [
     "cranelift-codegen",
     "cranelift-frontend",

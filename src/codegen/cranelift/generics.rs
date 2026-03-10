@@ -17,6 +17,10 @@ pub(crate) fn infer_prescan_type(expr: &Expr, param_types: &HashMap<String, Stri
             kind: LiteralKind::Float(_),
             ..
         } => "f64".to_string(),
+        Expr::Literal {
+            kind: LiteralKind::String(_),
+            ..
+        } => "str".to_string(),
         Expr::Literal { .. } => "i64".to_string(),
         Expr::Ident { name, .. } => param_types
             .get(name)
@@ -25,6 +29,7 @@ pub(crate) fn infer_prescan_type(expr: &Expr, param_types: &HashMap<String, Stri
         Expr::Unary { operand, .. } => infer_prescan_type(operand, param_types),
         Expr::Grouped { expr: inner, .. } => infer_prescan_type(inner, param_types),
         Expr::Binary { left, .. } => infer_prescan_type(left, param_types),
+        Expr::MethodCall { receiver, .. } => infer_prescan_type(receiver, param_types),
         _ => "i64".to_string(),
     }
 }

@@ -1638,6 +1638,51 @@ pub extern "C" fn fj_rt_channel_free(handle: *mut u8) {
     }
 }
 
+/// Runtime: select from two channels. Returns the value from whichever is ready first.
+///
+/// Returns a packed result: `channel_index * 1_000_000_000 + value`.
+/// Channel index is 1 or 2. If both are closed/empty after polling, returns 0.
+///
+/// # Safety
+///
+/// Both handles must be valid channel pointers from `fj_rt_channel_new`.
+pub extern "C" fn fj_rt_channel_select2(ch1: *mut u8, ch2: *mut u8) -> i64 {
+    // SAFETY: caller guarantees valid channel handles
+    let handle1 = unsafe { &*(ch1 as *const ChannelHandle) };
+    let handle2 = unsafe { &*(ch2 as *const ChannelHandle) };
+
+    // Spin-poll both channels, first one with data wins
+    for _ in 0..10_000 {
+        // Try ch1
+        {
+            let guard = handle1.receiver.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref rx) = *guard {
+                if let Ok(val) = rx.try_recv() {
+                    return 1_000_000_000 + val;
+                }
+            }
+        }
+        // Try ch2
+        {
+            let guard = handle2.receiver.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref rx) = *guard {
+                if let Ok(val) = rx.try_recv() {
+                    return 2_000_000_000 + val;
+                }
+            }
+        }
+        std::hint::spin_loop();
+    }
+    // Timeout: block on ch1 as fallback
+    let guard = handle1.receiver.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref rx) = *guard {
+        if let Ok(val) = rx.recv() {
+            return 1_000_000_000 + val;
+        }
+    }
+    0
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Bounded Channel primitives
 // ═══════════════════════════════════════════════════════════════════════
@@ -1919,6 +1964,50 @@ pub extern "C" fn fj_rt_atomic_store(ptr: *mut u8, value: i64) {
     atomic.store(value, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Runtime: atomically loads with Relaxed ordering.
+///
+/// # Safety
+///
+/// The caller must ensure `ptr` was produced by `fj_rt_atomic_new`.
+pub extern "C" fn fj_rt_atomic_load_relaxed(ptr: *mut u8) -> i64 {
+    // SAFETY: caller guarantees valid atomic pointer
+    let atomic = unsafe { &*(ptr as *const std::sync::atomic::AtomicI64) };
+    atomic.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Runtime: atomically loads with Acquire ordering.
+///
+/// # Safety
+///
+/// The caller must ensure `ptr` was produced by `fj_rt_atomic_new`.
+pub extern "C" fn fj_rt_atomic_load_acquire(ptr: *mut u8) -> i64 {
+    // SAFETY: caller guarantees valid atomic pointer
+    let atomic = unsafe { &*(ptr as *const std::sync::atomic::AtomicI64) };
+    atomic.load(std::sync::atomic::Ordering::Acquire)
+}
+
+/// Runtime: atomically stores with Relaxed ordering.
+///
+/// # Safety
+///
+/// The caller must ensure `ptr` was produced by `fj_rt_atomic_new`.
+pub extern "C" fn fj_rt_atomic_store_relaxed(ptr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid atomic pointer
+    let atomic = unsafe { &*(ptr as *const std::sync::atomic::AtomicI64) };
+    atomic.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Runtime: atomically stores with Release ordering.
+///
+/// # Safety
+///
+/// The caller must ensure `ptr` was produced by `fj_rt_atomic_new`.
+pub extern "C" fn fj_rt_atomic_store_release(ptr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid atomic pointer
+    let atomic = unsafe { &*(ptr as *const std::sync::atomic::AtomicI64) };
+    atomic.store(value, std::sync::atomic::Ordering::Release);
+}
+
 /// Runtime: atomically adds to the value and returns the previous value.
 ///
 /// # Safety
@@ -2098,6 +2187,25 @@ pub extern "C" fn fj_rt_atomic_bool_free(ptr: *mut u8) {
     unsafe {
         let _ = Box::from_raw(ptr as *mut std::sync::atomic::AtomicBool);
     }
+}
+
+// ── Thread-Local Storage ──
+
+std::thread_local! {
+    static TLS_SLOTS: std::cell::RefCell<std::collections::HashMap<i64, i64>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Runtime: set a thread-local value by key.
+pub extern "C" fn fj_rt_tls_set(key: i64, value: i64) {
+    TLS_SLOTS.with(|slots| {
+        slots.borrow_mut().insert(key, value);
+    });
+}
+
+/// Runtime: get a thread-local value by key. Returns 0 if not set.
+pub extern "C" fn fj_rt_tls_get(key: i64) -> i64 {
+    TLS_SLOTS.with(|slots| slots.borrow().get(&key).copied().unwrap_or(0))
 }
 
 // ── Volatile Intrinsics ──
@@ -6509,9 +6617,13 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_atomic_i32_new" => Some(fj_rt_atomic_i32_new as *const u8),
         "fj_rt_atomic_i32_store" => Some(fj_rt_atomic_i32_store as *const u8),
         "fj_rt_atomic_load" => Some(fj_rt_atomic_load as *const u8),
+        "fj_rt_atomic_load_acquire" => Some(fj_rt_atomic_load_acquire as *const u8),
+        "fj_rt_atomic_load_relaxed" => Some(fj_rt_atomic_load_relaxed as *const u8),
         "fj_rt_atomic_new" => Some(fj_rt_atomic_new as *const u8),
         "fj_rt_atomic_or" => Some(fj_rt_atomic_or as *const u8),
         "fj_rt_atomic_store" => Some(fj_rt_atomic_store as *const u8),
+        "fj_rt_atomic_store_relaxed" => Some(fj_rt_atomic_store_relaxed as *const u8),
+        "fj_rt_atomic_store_release" => Some(fj_rt_atomic_store_release as *const u8),
         "fj_rt_atomic_sub" => Some(fj_rt_atomic_sub as *const u8),
         "fj_rt_atomic_xor" => Some(fj_rt_atomic_xor as *const u8),
         "fj_rt_barrier_free" => Some(fj_rt_barrier_free as *const u8),
@@ -6530,6 +6642,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_channel_free" => Some(fj_rt_channel_free as *const u8),
         "fj_rt_channel_new" => Some(fj_rt_channel_new as *const u8),
         "fj_rt_channel_recv" => Some(fj_rt_channel_recv as *const u8),
+        "fj_rt_channel_select2" => Some(fj_rt_channel_select2 as *const u8),
         "fj_rt_channel_send" => Some(fj_rt_channel_send as *const u8),
         "fj_rt_channel_try_recv" => Some(fj_rt_channel_try_recv as *const u8),
         "fj_rt_channel_try_send" => Some(fj_rt_channel_try_send as *const u8),
@@ -6815,6 +6928,8 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_timer_pending" => Some(fj_rt_timer_pending as *const u8),
         "fj_rt_timer_schedule" => Some(fj_rt_timer_schedule as *const u8),
         "fj_rt_timer_tick" => Some(fj_rt_timer_tick as *const u8),
+        "fj_rt_tls_get" => Some(fj_rt_tls_get as *const u8),
+        "fj_rt_tls_set" => Some(fj_rt_tls_set as *const u8),
         "fj_rt_volatile_read" => Some(fj_rt_volatile_read as *const u8),
         "fj_rt_volatile_write" => Some(fj_rt_volatile_write as *const u8),
         "fj_rt_waker_clone" => Some(fj_rt_waker_clone as *const u8),

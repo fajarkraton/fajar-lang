@@ -2,17 +2,37 @@
 //!
 //! Only accessible from `@kernel` or `@unsafe` context.
 
+pub mod aarch64;
+pub mod bus;
 pub mod dma;
+pub mod gdt;
+pub mod idt;
+pub mod intrinsics;
 pub mod irq;
+pub mod keyboard;
 pub mod memory;
+pub mod paging;
+pub mod pit;
+pub mod riscv;
+pub mod serial;
+pub mod shell;
 pub mod syscall;
 pub mod timer;
+pub mod vga;
 
 pub use dma::{DmaController, DmaError};
+pub use gdt::{GdtError, GlobalDescriptorTable};
+pub use idt::{IdtError, InterruptDescriptorTable, InterruptStackFrame};
 pub use irq::{IrqError, IrqTable};
+pub use keyboard::Keyboard;
 pub use memory::{MemoryError, MemoryManager, PageFlags, PageTable, PhysAddr, VirtAddr};
+pub use paging::{FourLevelPageTable, PageTableFlags, PagingError};
+pub use pit::PitTimer;
+pub use serial::SerialPort;
+pub use shell::MiniShell;
 pub use syscall::{SyscallError, SyscallTable};
 pub use timer::{TimerController, TimerError};
+pub use vga::VgaBuffer;
 
 /// Combined OS runtime state.
 ///

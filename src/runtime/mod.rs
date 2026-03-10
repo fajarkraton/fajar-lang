@@ -1,4 +1,5 @@
-//! Fajar Lang runtime — OS and ML execution backends.
+//! Fajar Lang runtime — OS, ML, and GPU execution backends.
 
+pub mod gpu;
 pub mod ml;
 pub mod os;

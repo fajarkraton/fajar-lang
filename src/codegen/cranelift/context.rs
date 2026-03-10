@@ -20,6 +20,12 @@ pub(crate) enum OwnedKind {
     Array,
     /// Heap-allocated HashMap (fj_rt_map_new result). Free with fj_rt_map_free(ptr).
     Map,
+    /// BumpAllocator handle. Destroy with fj_rt_bump_destroy(ptr).
+    BumpAllocator,
+    /// FreeListAllocator handle. Destroy with fj_rt_freelist_destroy(ptr).
+    FreeListAllocator,
+    /// PoolAllocator handle. Destroy with fj_rt_pool_destroy(ptr).
+    PoolAllocator,
 }
 
 /// Bundles shared codegen state passed to all free-standing compile functions.
@@ -329,6 +335,24 @@ pub(crate) fn emit_owned_cleanup<M: Module>(
                     .ok_or_else(|| CodegenError::Internal("__map_free not declared".into()))?;
                 let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
                 builder.ins().call(local_callee, &[ptr]);
+            }
+            OwnedKind::BumpAllocator => {
+                if let Some(&free_id) = cx.functions.get("__bump_destroy") {
+                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                    builder.ins().call(local_callee, &[ptr]);
+                }
+            }
+            OwnedKind::FreeListAllocator => {
+                if let Some(&free_id) = cx.functions.get("__freelist_destroy") {
+                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                    builder.ins().call(local_callee, &[ptr]);
+                }
+            }
+            OwnedKind::PoolAllocator => {
+                if let Some(&free_id) = cx.functions.get("__pool_destroy") {
+                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                    builder.ins().call(local_callee, &[ptr]);
+                }
             }
         }
     }

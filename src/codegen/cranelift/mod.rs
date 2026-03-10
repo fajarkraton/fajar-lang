@@ -1702,6 +1702,42 @@ impl CraneliftCompiler {
         self.functions
             .insert("__thread_is_finished".to_string(), thread_is_finished_id);
 
+        // fj_rt_tls_set(key: i64, value: i64) -> void
+        let mut sig_tls_set = self.module.make_signature();
+        sig_tls_set
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_tls_set
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let tls_set_id = self
+            .module
+            .declare_function("fj_rt_tls_set", Linkage::Import, &sig_tls_set)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__tls_set".to_string(), tls_set_id);
+
+        // fj_rt_tls_get(key: i64) -> i64
+        let mut sig_tls_get = self.module.make_signature();
+        sig_tls_get
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_tls_get
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let tls_get_id = self
+            .module
+            .declare_function("fj_rt_tls_get", Linkage::Import, &sig_tls_get)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__tls_get".to_string(), tls_get_id);
+
         // fj_rt_thread_free(handle) -> void (same sig as map_clear/map_free)
         let thread_free_id = self
             .module
@@ -1813,6 +1849,34 @@ impl CraneliftCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__channel_free".to_string(), channel_free_id);
+
+        // fj_rt_channel_select2(ch1, ch2) -> i64 (packed: channel_index * 1e9 + value)
+        let mut sig_channel_select2 = self.module.make_signature();
+        sig_channel_select2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_channel_select2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_channel_select2
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let channel_select2_id = self
+            .module
+            .declare_function(
+                "fj_rt_channel_select2",
+                Linkage::Import,
+                &sig_channel_select2,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__channel_select2".to_string(), channel_select2_id);
 
         // ── Bounded channel primitives ──────────────────────────────────
 
@@ -1932,6 +1996,55 @@ impl CraneliftCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__atomic_store".to_string(), atomic_store_id);
+
+        // Ordering-parameterized atomic operations
+        let atomic_load_relaxed_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_load_relaxed",
+                Linkage::Import,
+                &sig_thread_join,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__atomic_load_relaxed".to_string(), atomic_load_relaxed_id);
+
+        let atomic_load_acquire_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_load_acquire",
+                Linkage::Import,
+                &sig_thread_join,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__atomic_load_acquire".to_string(), atomic_load_acquire_id);
+
+        let atomic_store_relaxed_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_store_relaxed",
+                Linkage::Import,
+                &sig_mutex_store,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert(
+            "__atomic_store_relaxed".to_string(),
+            atomic_store_relaxed_id,
+        );
+
+        let atomic_store_release_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_store_release",
+                Linkage::Import,
+                &sig_mutex_store,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert(
+            "__atomic_store_release".to_string(),
+            atomic_store_release_id,
+        );
 
         // fj_rt_atomic_add(handle, value) -> i64 (ptr + i64 -> i64)
         let mut sig_atomic_add = self.module.make_signature();
@@ -6691,6 +6804,42 @@ impl ObjectCompiler {
         self.functions
             .insert("__thread_is_finished".to_string(), thread_is_finished_id);
 
+        // fj_rt_tls_set(key: i64, value: i64) -> void
+        let mut sig_tls_set = self.module.make_signature();
+        sig_tls_set
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_tls_set
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let tls_set_id = self
+            .module
+            .declare_function("fj_rt_tls_set", Linkage::Import, &sig_tls_set)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__tls_set".to_string(), tls_set_id);
+
+        // fj_rt_tls_get(key: i64) -> i64
+        let mut sig_tls_get = self.module.make_signature();
+        sig_tls_get
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_tls_get
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let tls_get_id = self
+            .module
+            .declare_function("fj_rt_tls_get", Linkage::Import, &sig_tls_get)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__tls_get".to_string(), tls_get_id);
+
         // fj_rt_thread_free(handle) -> void
         let thread_free_id = self
             .module
@@ -6802,6 +6951,34 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__channel_free".to_string(), channel_free_id);
+
+        // fj_rt_channel_select2(ch1, ch2) -> i64 (packed: channel_index * 1e9 + value)
+        let mut sig_channel_select2 = self.module.make_signature();
+        sig_channel_select2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_channel_select2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_channel_select2
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let channel_select2_id = self
+            .module
+            .declare_function(
+                "fj_rt_channel_select2",
+                Linkage::Import,
+                &sig_channel_select2,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__channel_select2".to_string(), channel_select2_id);
 
         // ── Bounded channel primitives ──────────────────────────────────
 
@@ -6921,6 +7098,55 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__atomic_store".to_string(), atomic_store_id);
+
+        // Ordering-parameterized atomic operations
+        let atomic_load_relaxed_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_load_relaxed",
+                Linkage::Import,
+                &sig_thread_join,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__atomic_load_relaxed".to_string(), atomic_load_relaxed_id);
+
+        let atomic_load_acquire_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_load_acquire",
+                Linkage::Import,
+                &sig_thread_join,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__atomic_load_acquire".to_string(), atomic_load_acquire_id);
+
+        let atomic_store_relaxed_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_store_relaxed",
+                Linkage::Import,
+                &sig_mutex_store,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert(
+            "__atomic_store_relaxed".to_string(),
+            atomic_store_relaxed_id,
+        );
+
+        let atomic_store_release_id = self
+            .module
+            .declare_function(
+                "fj_rt_atomic_store_release",
+                Linkage::Import,
+                &sig_mutex_store,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert(
+            "__atomic_store_release".to_string(),
+            atomic_store_release_id,
+        );
 
         // fj_rt_atomic_add(handle, value) -> i64 (ptr + i64 -> i64)
         let mut sig_atomic_add = self.module.make_signature();
@@ -8809,6 +9035,53 @@ impl ObjectCompiler {
         }
         if !errors.is_empty() {
             return Err(errors);
+        }
+
+        // Emit `_start` symbol as alias for @entry function (bare metal entry point)
+        for fndef in &concrete_fns {
+            if let Some(ref ann) = fndef.annotation {
+                if ann.name == "entry" && fndef.name != "_start" {
+                    // Declare _start as an exported function with same signature
+                    let sig = cranelift_codegen::ir::Signature {
+                        params: vec![],
+                        returns: vec![],
+                        call_conv: self.module.isa().default_call_conv(),
+                    };
+                    if let Ok(start_id) =
+                        self.module
+                            .declare_function("_start", Linkage::Export, &sig)
+                    {
+                        // Define _start as a wrapper that calls the entry function
+                        let mut ctx = self.module.make_context();
+                        ctx.func.signature = sig;
+                        let mut builder_ctx = FunctionBuilderContext::new();
+                        {
+                            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_ctx);
+                            let block = builder.create_block();
+                            builder.switch_to_block(block);
+                            builder.seal_block(block);
+                            if let Some(&entry_id) = self.functions.get(&fndef.name) {
+                                let entry_ref =
+                                    self.module.declare_func_in_func(entry_id, builder.func);
+                                let call_sig = builder.func.import_signature(
+                                    cranelift_codegen::ir::Signature {
+                                        params: vec![],
+                                        returns: vec![],
+                                        call_conv: self.module.isa().default_call_conv(),
+                                    },
+                                );
+                                builder.ins().call(entry_ref, &[]);
+                                let _ = call_sig;
+                            }
+                            builder.ins().return_(&[]);
+                            builder.finalize();
+                        }
+                        let _ = self.module.define_function(start_id, &mut ctx);
+                        self.module.clear_context(&mut ctx);
+                    }
+                    break;
+                }
+            }
         }
 
         // Create global data objects for section-annotated consts (AOT: placed in specified sections)

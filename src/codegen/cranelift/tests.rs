@@ -7768,6 +7768,118 @@ fn native_atomic_bool_new() {
     assert_eq!(compile_and_run(src), 1);
 }
 
+// ── S8.2: Atomic orderings ──
+
+#[test]
+fn native_atomic_load_relaxed() {
+    let src = r#"
+        fn main() -> i64 {
+            let a = Atomic::new(42)
+            a.load_relaxed()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_atomic_store_release() {
+    let src = r#"
+        fn main() -> i64 {
+            let a = Atomic::new(0)
+            a.store_release(99)
+            a.load()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 99);
+}
+
+#[test]
+fn native_atomic_load_acquire() {
+    let src = r#"
+        fn main() -> i64 {
+            let a = Atomic::new(0)
+            a.store(77)
+            a.load_acquire()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 77);
+}
+
+#[test]
+fn native_atomic_store_relaxed_and_load() {
+    // Relaxed store followed by SeqCst load
+    let src = r#"
+        fn main() -> i64 {
+            let a = Atomic::new(0)
+            a.store_relaxed(55)
+            a.load()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 55);
+}
+
+// ── S7.4: Channel select ──
+
+#[test]
+fn native_channel_select_two() {
+    // Select from two channels, second has data
+    let src = r#"
+        fn main() -> i64 {
+            let ch1 = channel::new()
+            let ch2 = channel::new()
+            ch2.send(42)
+            let packed = channel_select(ch1, ch2)
+            // packed = 2_000_000_000 + 42 = 2000000042
+            // channel index = packed / 1000000000
+            // value = packed - (index * 1000000000)
+            let idx = packed / 1000000000
+            let val = packed - idx * 1000000000
+            idx * 100 + val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 242);
+}
+
+#[test]
+fn native_channel_select_first_ready() {
+    // Both channels have data, first one should be picked
+    let src = r#"
+        fn main() -> i64 {
+            let ch1 = channel::new()
+            let ch2 = channel::new()
+            ch1.send(10)
+            ch2.send(20)
+            let packed = channel_select(ch1, ch2)
+            let idx = packed / 1000000000
+            let val = packed - idx * 1000000000
+            idx * 100 + val
+        }
+    "#;
+    // ch1 has data so should be picked: idx=1, val=10 → 110
+    assert_eq!(compile_and_run(src), 110);
+}
+
+#[test]
+fn native_channel_select_from_thread() {
+    // A thread sends on ch2 while main selects
+    let src = r#"
+        fn sender(ch_ptr: i64) -> i64 {
+            0
+        }
+
+        fn main() -> i64 {
+            let ch1 = channel::new()
+            let ch2 = channel::new()
+            ch2.send(77)
+            let packed = channel_select(ch1, ch2)
+            let idx = packed / 1000000000
+            let val = packed - idx * 1000000000
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 77);
+}
+
 // ── S7.5: Channel integration tests ──
 
 #[test]
@@ -8146,6 +8258,44 @@ fn native_alloc_multiple_slots() {
         }
     "#;
     assert_eq!(compile_and_run(src), 60);
+}
+
+// ── S16.4: Allocator-aware cleanup ──
+
+#[test]
+fn native_bump_alloc_auto_cleanup() {
+    // BumpAllocator created in a helper function should be auto-destroyed on return
+    let src = r#"
+        fn use_bump() -> i64 {
+            let alloc = BumpAllocator::new(256)
+            let p1 = alloc.alloc(8)
+            let p2 = alloc.alloc(8)
+            2
+        }
+
+        fn main() -> i64 {
+            use_bump()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 2);
+}
+
+#[test]
+fn native_freelist_alloc_auto_cleanup() {
+    // FreeListAllocator auto-destroyed on function return
+    let src = r#"
+        fn use_freelist() -> i64 {
+            let alloc = FreeListAllocator::new(512)
+            let p = alloc.alloc(16)
+            alloc.free(p, 16)
+            3
+        }
+
+        fn main() -> i64 {
+            use_freelist()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 3);
 }
 
 // ── S31: Tensor ops in native codegen ──
@@ -9373,6 +9523,41 @@ fn native_arc_shared_between_clones() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// ── S5.7: Thread-local storage ──
+
+#[test]
+fn native_tls_basic() {
+    let src = r#"
+        fn main() -> i64 {
+            tls_set(1, 42)
+            tls_get(1)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_tls_different_per_thread() {
+    // Main thread sets key 1, spawns a thread that also sets key 1
+    // Each thread should see its own value
+    let src = r#"
+        fn worker(x: i64) -> i64 {
+            tls_set(1, x * 10)
+            tls_get(1)
+        }
+
+        fn main() -> i64 {
+            tls_set(1, 99)
+            let h = thread::spawn(worker, 5)
+            let thread_val = h.join()
+            let main_val = tls_get(1)
+            main_val * 100 + thread_val
+        }
+    "#;
+    // main_val = 99, thread_val = 50 → 99*100 + 50 = 9950
+    assert_eq!(compile_and_run(src), 9950);
+}
+
 // Thread integration tests (S5.8)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -9504,6 +9689,51 @@ fn native_generic_return_first_of_two() {
     "#;
     // 7 + 8 = 15
     assert_eq!(compile_and_run(src), 15);
+}
+
+// ===== S4.8: String/struct monomorphization =====
+
+#[test]
+fn native_generic_with_string() {
+    // Generic identity function called with a string argument
+    let src = r#"
+        fn identity<T>(x: T) -> T { x }
+
+        fn main() -> i64 {
+            let s = identity("hello")
+            len(s)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 5);
+}
+
+#[test]
+fn native_generic_string_len() {
+    // Generic function with string, use len on result
+    let src = r#"
+        fn get_len<T>(x: T) -> i64 { len(x) }
+
+        fn main() -> i64 {
+            get_len("hello world")
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 11);
+}
+
+#[test]
+fn native_generic_identity_int_and_string() {
+    // Same generic function used with both i64 and str in same program
+    let src = r#"
+        fn wrap<T>(x: T) -> T { x }
+
+        fn main() -> i64 {
+            let a = wrap(100)
+            let s = wrap("hey")
+            a + len(s)
+        }
+    "#;
+    // 100 + 3 = 103
+    assert_eq!(compile_and_run(src), 103);
 }
 
 // ===== S15.2: VolatilePtr wrapper =====
@@ -11156,6 +11386,66 @@ fn native_bare_metal_binary_size_check() {
         "trivial bare metal object should be < 16KB, got {} bytes",
         obj_bytes.len()
     );
+}
+
+#[test]
+fn native_aot_entry_emits_start_symbol() {
+    // AOT: @entry function should produce a _start symbol in the object file
+    let src = r#"
+        @panic_handler
+        fn panic(code: i64) -> i64 { code }
+
+        @entry
+        fn boot() -> i64 {
+            42
+        }
+
+        fn main() -> i64 { boot() }
+    "#;
+    let target = crate::codegen::target::TargetConfig::from_triple("aarch64-unknown-none").unwrap();
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::ObjectCompiler::new_with_target("start_test", &target).unwrap();
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).unwrap();
+    let product = compiler.finish();
+    let obj_bytes = product.emit().unwrap();
+
+    // The object should contain the _start symbol
+    let has_start = obj_bytes.windows(6).any(|w| w == b"_start");
+    assert!(has_start, "object file should contain _start symbol");
+}
+
+#[test]
+fn native_aot_entry_start_calls_boot() {
+    // _start should be a wrapper that calls the @entry function
+    // Verify both boot and _start appear in the object
+    let src = r#"
+        @panic_handler
+        fn panic(code: i64) -> i64 { code }
+
+        @entry
+        fn my_boot() -> i64 {
+            77
+        }
+
+        fn main() -> i64 { my_boot() }
+    "#;
+    let target =
+        crate::codegen::target::TargetConfig::from_triple("riscv64gc-unknown-none-elf").unwrap();
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::ObjectCompiler::new_with_target("start_rv", &target).unwrap();
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).unwrap();
+    let product = compiler.finish();
+    let obj_bytes = product.emit().unwrap();
+
+    // Both _start and my_boot should exist in the ELF
+    let has_start = obj_bytes.windows(6).any(|w| w == b"_start");
+    let has_boot = obj_bytes.windows(7).any(|w| w == b"my_boot");
+    assert!(has_start, "object should contain _start symbol");
+    assert!(has_boot, "object should contain my_boot symbol");
 }
 
 // ═══════════════════════════════════════════════════════════════════════

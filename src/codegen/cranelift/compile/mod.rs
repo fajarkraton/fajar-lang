@@ -25,9 +25,9 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::clif_types;
-use super::context::CodegenCtx;
+use super::context::{CodegenCtx, OwnedKind};
 use crate::codegen::CodegenError;
-use crate::parser::ast::{CallArg, Expr};
+use crate::parser::ast::{CallArg, Expr, LiteralKind};
 
 // NOTE: compile_stmt has been extracted to stmt.rs.
 // NOTE: compile_expr, compile_tuple, compile_cast, compile_literal,
@@ -177,6 +177,57 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 builder.ins().call(callee, &[millis]);
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+            }
+            "channel_select" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "channel_select requires 2 channel arguments".into(),
+                    ));
+                }
+                let ch1 = compile_expr(builder, cx, &args[0].value)?;
+                let ch2 = compile_expr(builder, cx, &args[1].value)?;
+                let fn_id = *cx.functions.get("__channel_select2").ok_or_else(|| {
+                    CodegenError::Internal("__channel_select2 not declared".into())
+                })?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[ch1, ch2]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "tls_set" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "tls_set requires 2 arguments (key, value)".into(),
+                    ));
+                }
+                let key = compile_expr(builder, cx, &args[0].value)?;
+                let value = compile_expr(builder, cx, &args[1].value)?;
+                let fn_id = *cx
+                    .functions
+                    .get("__tls_set")
+                    .ok_or_else(|| CodegenError::Internal("__tls_set not declared".into()))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                builder.ins().call(callee, &[key, value]);
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+            }
+            "tls_get" => {
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(
+                        "tls_get requires 1 argument (key)".into(),
+                    ));
+                }
+                let key = compile_expr(builder, cx, &args[0].value)?;
+                let fn_id = *cx
+                    .functions
+                    .get("__tls_get")
+                    .ok_or_else(|| CodegenError::Internal("__tls_get not declared".into()))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[key]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
             }
             "volatile_read" => {
                 if args.is_empty() {
@@ -2610,7 +2661,7 @@ fn compile_generic_call<M: Module>(
 /// Infers composite type suffix for a generic function call.
 ///
 /// For multi-param generics like `fn foo<T, U>(a: T, b: U)` called with `foo(1, 3.14)`,
-/// returns `"i64_f64"`. For single-param generics, returns `"i64"` or `"f64"`.
+/// returns `"i64_f64"`. For single-param generics, returns `"i64"`, `"f64"`, or `"str"`.
 pub(crate) fn infer_generic_call_suffix<M: Module>(
     cx: &CodegenCtx<'_, M>,
     fn_name: &str,
@@ -2626,12 +2677,7 @@ pub(crate) fn infer_generic_call_suffix<M: Module>(
                 }
                 seen_params.push(gp_name.clone());
                 let suffix = if let Some(arg) = args.get(arg_idx) {
-                    let inferred = infer_expr_type(cx, &arg.value);
-                    if clif_types::is_float(inferred) {
-                        "f64".to_string()
-                    } else {
-                        "i64".to_string()
-                    }
+                    infer_semantic_type(cx, &arg.value)
                 } else {
                     "i64".to_string()
                 };
@@ -2642,14 +2688,60 @@ pub(crate) fn infer_generic_call_suffix<M: Module>(
     }
     // Single-param fallback
     if let Some(first_arg) = args.first() {
-        let inferred = infer_expr_type(cx, &first_arg.value);
-        if clif_types::is_float(inferred) {
-            "f64".to_string()
-        } else {
-            "i64".to_string()
-        }
+        infer_semantic_type(cx, &first_arg.value)
     } else {
         "i64".to_string()
+    }
+}
+
+/// Infers the semantic type name of an expression for generic dispatch.
+///
+/// Returns `"str"` for string literals/variables, `"f64"` for floats, `"i64"` otherwise.
+/// This works at the AST level (unlike `infer_expr_type` which returns Cranelift IR types
+/// where both i64 and str map to the same `I64` pointer type on x86_64).
+fn infer_semantic_type<M: Module>(cx: &CodegenCtx<'_, M>, expr: &Expr) -> String {
+    match expr {
+        Expr::Literal {
+            kind: LiteralKind::String(_) | LiteralKind::RawString(_),
+            ..
+        } => "str".to_string(),
+        Expr::Literal {
+            kind: LiteralKind::Float(_),
+            ..
+        } => "f64".to_string(),
+        Expr::Ident { name, .. } => {
+            // Check if this variable is known to be a string from ownership tracking
+            if cx
+                .owned_ptrs
+                .iter()
+                .any(|(n, k)| n == name && matches!(k, OwnedKind::String))
+            {
+                return "str".to_string();
+            }
+            // Check Cranelift type for float detection
+            let clif_ty = cx
+                .var_types
+                .get(name)
+                .copied()
+                .unwrap_or(clif_types::default_int_type());
+            if clif_types::is_float(clif_ty) {
+                "f64".to_string()
+            } else {
+                "i64".to_string()
+            }
+        }
+        Expr::Grouped { expr: inner, .. } | Expr::Unary { operand: inner, .. } => {
+            infer_semantic_type(cx, inner)
+        }
+        _ => {
+            // Fallback: use Cranelift type inference for float detection
+            let inferred = infer_expr_type(cx, expr);
+            if clif_types::is_float(inferred) {
+                "f64".to_string()
+            } else {
+                "i64".to_string()
+            }
+        }
     }
 }
 
@@ -2967,6 +3059,58 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                         .functions
                         .get(fn_name)
                         .ok_or_else(|| CodegenError::Internal(format!("{fn_name} not declared")))?;
+                    let callee = cx.module.declare_func_in_func(store_id, builder.func);
+                    builder.ins().call(callee, &[a_ptr, val]);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+                }
+                "load_relaxed" => {
+                    let load_id = *cx.functions.get("__atomic_load_relaxed").ok_or_else(|| {
+                        CodegenError::Internal("__atomic_load_relaxed not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(load_id, builder.func);
+                    let call = builder.ins().call(callee, &[a_ptr]);
+                    let results = builder.inst_results(call);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(results[0]);
+                }
+                "load_acquire" => {
+                    let load_id = *cx.functions.get("__atomic_load_acquire").ok_or_else(|| {
+                        CodegenError::Internal("__atomic_load_acquire not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(load_id, builder.func);
+                    let call = builder.ins().call(callee, &[a_ptr]);
+                    let results = builder.inst_results(call);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(results[0]);
+                }
+                "store_relaxed" => {
+                    if args.is_empty() {
+                        return Err(CodegenError::NotImplemented(
+                            "atomic.store_relaxed requires a value argument".into(),
+                        ));
+                    }
+                    let val = compile_expr(builder, cx, &args[0].value)?;
+                    let store_id =
+                        *cx.functions.get("__atomic_store_relaxed").ok_or_else(|| {
+                            CodegenError::Internal("__atomic_store_relaxed not declared".into())
+                        })?;
+                    let callee = cx.module.declare_func_in_func(store_id, builder.func);
+                    builder.ins().call(callee, &[a_ptr, val]);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+                }
+                "store_release" => {
+                    if args.is_empty() {
+                        return Err(CodegenError::NotImplemented(
+                            "atomic.store_release requires a value argument".into(),
+                        ));
+                    }
+                    let val = compile_expr(builder, cx, &args[0].value)?;
+                    let store_id =
+                        *cx.functions.get("__atomic_store_release").ok_or_else(|| {
+                            CodegenError::Internal("__atomic_store_release not declared".into())
+                        })?;
                     let callee = cx.module.declare_func_in_func(store_id, builder.func);
                     builder.ins().call(callee, &[a_ptr, val]);
                     cx.last_expr_type = Some(clif_types::default_int_type());
@@ -3309,6 +3453,8 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     })?;
                     let callee = cx.module.declare_func_in_func(fn_id, builder.func);
                     builder.ins().call(callee, &[handle]);
+                    // Remove from auto-cleanup to prevent double-free
+                    cx.owned_ptrs.retain(|(n, _)| n != name);
                     cx.last_expr_type = Some(clif_types::default_int_type());
                     return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
                 }
@@ -3368,6 +3514,7 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     })?;
                     let callee = cx.module.declare_func_in_func(fn_id, builder.func);
                     builder.ins().call(callee, &[handle]);
+                    cx.owned_ptrs.retain(|(n, _)| n != name);
                     cx.last_expr_type = Some(clif_types::default_int_type());
                     return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
                 }
@@ -3421,6 +3568,7 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     })?;
                     let callee = cx.module.declare_func_in_func(fn_id, builder.func);
                     builder.ins().call(callee, &[handle]);
+                    cx.owned_ptrs.retain(|(n, _)| n != name);
                     cx.last_expr_type = Some(clif_types::default_int_type());
                     return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
                 }

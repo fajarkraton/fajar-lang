@@ -2001,11 +2001,67 @@ impl Parser {
             }
         };
 
-        // Parse optional operands after comma
+        // Parse optional operands, options, and clobber_abi after comma
         let mut operands = Vec::new();
+        let mut options = Vec::new();
+        let mut clobber_abi = None;
         while self.eat(&TokenKind::Comma) {
             if self.at(&TokenKind::RParen) {
                 break;
+            }
+            // Check for `options(...)` or `clobber_abi("...")`
+            if let TokenKind::Ident(name) = self.peek_kind() {
+                if name == "options" {
+                    self.advance();
+                    self.expect(&TokenKind::LParen)?;
+                    while !self.at(&TokenKind::RParen) {
+                        if let TokenKind::Ident(opt) = self.peek_kind() {
+                            let opt = opt.clone();
+                            self.advance();
+                            match opt.as_str() {
+                                "nomem" => options.push(AsmOption::Nomem),
+                                "nostack" => options.push(AsmOption::Nostack),
+                                "readonly" => options.push(AsmOption::Readonly),
+                                "preserves_flags" => options.push(AsmOption::PreservesFlags),
+                                "pure" => options.push(AsmOption::Pure),
+                                "att_syntax" => options.push(AsmOption::AttSyntax),
+                                _ => {
+                                    return Err(ParseError::UnexpectedToken {
+                                        expected: "asm option (nomem, nostack, readonly, preserves_flags, pure, att_syntax)".into(),
+                                        found: opt,
+                                        line: self.peek().line,
+                                        col: self.peek().col,
+                                        span: self.peek().span,
+                                    });
+                                }
+                            }
+                            // Eat optional comma between options
+                            self.eat(&TokenKind::Comma);
+                        } else {
+                            break;
+                        }
+                    }
+                    self.expect(&TokenKind::RParen)?;
+                    continue;
+                } else if name == "clobber_abi" {
+                    self.advance();
+                    self.expect(&TokenKind::LParen)?;
+                    if let TokenKind::StringLit(abi) = self.peek_kind() {
+                        clobber_abi = Some(abi.clone());
+                        self.advance();
+                    } else {
+                        let tok = self.peek().clone();
+                        return Err(ParseError::UnexpectedToken {
+                            expected: "ABI string (e.g. \"C\")".into(),
+                            found: format!("{}", tok.kind),
+                            line: tok.line,
+                            col: tok.col,
+                            span: tok.span,
+                        });
+                    }
+                    self.expect(&TokenKind::RParen)?;
+                    continue;
+                }
             }
             // Parse operand: in(reg) expr | out(reg) expr | inout(reg) expr | const expr
             let op = self.parse_asm_operand()?;
@@ -2016,6 +2072,8 @@ impl Parser {
         Ok(Expr::InlineAsm {
             template,
             operands,
+            options,
+            clobber_abi,
             span: Span::new(start, end_tok.span.end),
         })
     }
@@ -4322,6 +4380,86 @@ mod tests {
             Expr::InlineAsm { operands, .. } => {
                 assert_eq!(operands.len(), 1);
                 assert!(matches!(&operands[0], AsmOperand::Const { .. }));
+            }
+            _ => panic!("expected InlineAsm"),
+        }
+    }
+
+    #[test]
+    fn parse_asm_options_nomem_nostack() {
+        let expr = parse_expr_ok("asm!(\"nop\", options(nomem, nostack))");
+        match expr {
+            Expr::InlineAsm { options, .. } => {
+                assert_eq!(options.len(), 2);
+                assert_eq!(options[0], AsmOption::Nomem);
+                assert_eq!(options[1], AsmOption::Nostack);
+            }
+            _ => panic!("expected InlineAsm"),
+        }
+    }
+
+    #[test]
+    fn parse_asm_clobber_abi() {
+        let expr = parse_expr_ok("asm!(\"syscall\", clobber_abi(\"C\"))");
+        match expr {
+            Expr::InlineAsm { clobber_abi, .. } => {
+                assert_eq!(clobber_abi, Some("C".to_string()));
+            }
+            _ => panic!("expected InlineAsm"),
+        }
+    }
+
+    #[test]
+    fn parse_asm_options_with_operands() {
+        let expr =
+            parse_expr_ok("asm!(\"add {}, {}\", out(reg) r, in(reg) x, options(pure, nomem))");
+        match expr {
+            Expr::InlineAsm {
+                operands, options, ..
+            } => {
+                assert_eq!(operands.len(), 2);
+                assert_eq!(options.len(), 2);
+                assert_eq!(options[0], AsmOption::Pure);
+                assert_eq!(options[1], AsmOption::Nomem);
+            }
+            _ => panic!("expected InlineAsm"),
+        }
+    }
+
+    #[test]
+    fn parse_asm_all_option_kinds() {
+        let expr = parse_expr_ok(
+            "asm!(\"nop\", options(nomem, nostack, readonly, preserves_flags, pure, att_syntax))",
+        );
+        match expr {
+            Expr::InlineAsm { options, .. } => {
+                assert_eq!(options.len(), 6);
+                assert_eq!(options[0], AsmOption::Nomem);
+                assert_eq!(options[1], AsmOption::Nostack);
+                assert_eq!(options[2], AsmOption::Readonly);
+                assert_eq!(options[3], AsmOption::PreservesFlags);
+                assert_eq!(options[4], AsmOption::Pure);
+                assert_eq!(options[5], AsmOption::AttSyntax);
+            }
+            _ => panic!("expected InlineAsm"),
+        }
+    }
+
+    #[test]
+    fn parse_asm_clobber_and_options_combined() {
+        let expr =
+            parse_expr_ok("asm!(\"int 0x80\", in(reg) x, clobber_abi(\"C\"), options(nostack))");
+        match expr {
+            Expr::InlineAsm {
+                operands,
+                options,
+                clobber_abi,
+                ..
+            } => {
+                assert_eq!(operands.len(), 1);
+                assert_eq!(clobber_abi, Some("C".to_string()));
+                assert_eq!(options.len(), 1);
+                assert_eq!(options[0], AsmOption::Nostack);
             }
             _ => panic!("expected InlineAsm"),
         }
