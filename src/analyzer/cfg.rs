@@ -212,6 +212,9 @@ impl UseCollector {
             | Expr::Await { expr, .. } => {
                 self.visit_expr(expr);
             }
+            Expr::AsyncBlock { body, .. } => {
+                self.visit_expr(body);
+            }
             Expr::InlineAsm { operands, .. } => {
                 for op in operands {
                     match op {

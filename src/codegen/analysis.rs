@@ -232,6 +232,9 @@ fn analyze_expr(
         | Expr::Await { expr, .. } => {
             analyze_expr(expr, local_count, frame_bytes, calls);
         }
+        Expr::AsyncBlock { body, .. } => {
+            analyze_expr(body, local_count, frame_bytes, calls);
+        }
         Expr::StructInit { fields, .. } => {
             for f in fields {
                 analyze_expr(&f.value, local_count, frame_bytes, calls);

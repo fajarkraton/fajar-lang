@@ -26,6 +26,11 @@ pub(crate) enum OwnedKind {
     FreeListAllocator,
     /// PoolAllocator handle. Destroy with fj_rt_pool_destroy(ptr).
     PoolAllocator,
+    /// Struct with Drop trait impl. Calls the mangled drop function with the struct pointer.
+    /// The String is the mangled drop function name (e.g., "MyStruct_drop").
+    Droppable(String),
+    /// MutexGuard handle. Auto-unlock via fj_rt_mutex_guard_free(ptr) on scope exit.
+    MutexGuard,
 }
 
 /// Bundles shared codegen state passed to all free-standing compile functions.
@@ -67,15 +72,23 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Enum definitions: enum name → list of variant names (index = tag).
     pub enum_defs: &'a HashMap<String, Vec<String>>,
     /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
-    /// Will be used for type-aware payload extraction in v0.4 generic enum codegen.
-    #[allow(dead_code)]
+    /// Used for type-aware payload extraction during pattern matching (v0.4 S1.3).
     pub enum_variant_types: &'a HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
+    /// Generic enum definitions: enum_name → list of generic param names.
+    /// E.g., `enum Option<T>` → `("Option", ["T"])`.
+    /// Used by S1.5 for generic enum function signatures.
+    #[allow(dead_code)]
+    pub generic_enum_defs: &'a HashMap<String, Vec<String>>,
     /// Tracks variables that hold enum values: name → (tag_var, payload_var, payload_type).
     pub enum_vars: &'a mut HashMap<String, (Variable, Variable, cranelift_codegen::ir::Type)>,
     /// Payload of the last compiled enum constructor expression.
     pub last_enum_payload: Option<ClifValue>,
     /// Type of the last enum payload (for type-aware destructuring).
     pub last_enum_payload_type: Option<cranelift_codegen::ir::Type>,
+    /// Multi-field enum payload: (stack_slot, field_types) for variants with 2+ fields.
+    pub last_enum_multi_payload: Option<(StackSlot, Vec<cranelift_codegen::ir::Type>)>,
+    /// Tracks multi-field enum variables: var_name → (stack_slot, field_types).
+    pub enum_multi_vars: HashMap<String, (StackSlot, Vec<cranelift_codegen::ir::Type>)>,
     /// Struct definitions: struct name → ordered list of (field_name, clif_type).
     pub struct_defs: &'a HashMap<String, Vec<(String, cranelift_codegen::ir::Type)>>,
     /// Set of type names that are unions (all fields at offset 0).
@@ -100,6 +113,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub trait_impls: &'a HashMap<(String, String), Vec<String>>,
     /// Tracks heap-allocated resources that need cleanup at function exit.
     pub owned_ptrs: Vec<(String, OwnedKind)>,
+    /// Scope stack for block-level RAII cleanup. Each entry is a list of
+    /// (variable_name, OwnedKind) allocated in that scope.
+    /// Push on block entry, pop+cleanup on block exit.
+    pub scope_stack: Vec<Vec<(String, OwnedKind)>>,
     /// Current impl block's target type (set when compiling impl methods).
     /// Used by compile_field_access to resolve `self.field` without scanning all impl_methods.
     pub current_impl_type: Option<String>,
@@ -113,6 +130,8 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub split_vars: HashSet<String>,
     /// Functions that return strings (two return values: ptr, len).
     pub fn_returns_string: &'a HashSet<String>,
+    /// Functions that return an enum type (two return values: tag, payload).
+    pub fn_returns_enum: &'a HashSet<String>,
     /// Functions that return a heap-allocated dynamic array (Slice type).
     pub fn_returns_heap_array: &'a HashSet<String>,
     /// Functions that return a closure handle (closure with captures).
@@ -167,6 +186,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub barrier_handles: HashSet<String>,
     /// True when the last expression was a Barrier::new() call.
     pub last_barrier_new: bool,
+    /// Names of variables that hold MutexGuard handles.
+    pub mutex_guard_handles: HashSet<String>,
+    /// True when the last expression was a mutex.lock_guard() call.
+    pub last_mutex_guard_new: bool,
     /// Names of variables that hold Condvar handles.
     pub condvar_handles: HashSet<String>,
     /// True when the last expression was a Condvar::new() call.
@@ -277,6 +300,156 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub last_heap_array_return: bool,
     /// Declared return type of the current function (for return value coercion).
     pub fn_ret_type: Option<cranelift_codegen::ir::Type>,
+    /// True when the current function returns an enum type (tag + payload).
+    pub is_enum_return_fn: bool,
+}
+
+/// Pushes a new owned resource to both `owned_ptrs` and the current scope (if any).
+pub(crate) fn push_owned<M: Module>(cx: &mut CodegenCtx<'_, M>, name: String, kind: OwnedKind) {
+    cx.owned_ptrs.push((name.clone(), kind.clone()));
+    if let Some(scope) = cx.scope_stack.last_mut() {
+        scope.push((name, kind));
+    }
+}
+
+/// Emits cleanup code for resources allocated in the current (topmost) scope.
+///
+/// Removes those entries from `owned_ptrs` so they won't be double-freed at
+/// function exit. If `returned_val` is `Some(v)`, skips freeing resources whose
+/// pointer equals `v` (ownership transferred out of the scope).
+/// Also skips freeing resources that "escaped" — whose pointer is referenced
+/// by an outer-scope variable (e.g., `values = new_vals` assigns inner to outer).
+pub(crate) fn emit_scope_cleanup<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    returned_val: Option<ClifValue>,
+) -> Result<(), CodegenError> {
+    let scope = match cx.scope_stack.pop() {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+    if scope.is_empty() {
+        return Ok(());
+    }
+    let scope_names: std::collections::HashSet<String> =
+        scope.iter().map(|(n, _)| n.clone()).collect();
+
+    // Collect all SSA values referenced by variables OUTSIDE this scope.
+    // If a scope variable's pointer matches an outer variable, it "escaped".
+    let mut outer_vals = Vec::new();
+    for (vname, vvar) in cx.var_map.iter() {
+        if !scope_names.contains(vname) {
+            outer_vals.push(builder.use_var(*vvar));
+        }
+    }
+
+    let mut freed_vals = Vec::new();
+    let mut actually_freed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (name, kind) in &scope {
+        let var = match cx.var_map.get(name) {
+            Some(v) => *v,
+            None => continue,
+        };
+        let ptr = builder.use_var(var);
+        // Skip if this is the returned value (ownership transferred to caller)
+        if let Some(ret_val) = returned_val {
+            if ptr == ret_val {
+                continue;
+            }
+        }
+        // Skip if this pointer escaped to an outer-scope variable
+        if outer_vals.contains(&ptr) {
+            continue;
+        }
+        if freed_vals.contains(&ptr) {
+            continue;
+        }
+        freed_vals.push(ptr);
+        emit_free_for_kind(builder, cx, name, kind, ptr)?;
+        actually_freed.insert(name.clone());
+    }
+    // Only remove freed entries from owned_ptrs; escaped resources stay for function-level cleanup
+    cx.owned_ptrs.retain(|(n, _)| !actually_freed.contains(n));
+    Ok(())
+}
+
+/// Emits a single free call for the given resource kind.
+fn emit_free_for_kind<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    name: &str,
+    kind: &OwnedKind,
+    ptr: ClifValue,
+) -> Result<(), CodegenError> {
+    match kind {
+        OwnedKind::String => {
+            if let Some(len_var) = cx.string_lens.get(name) {
+                let len = builder.use_var(*len_var);
+                let free_id = cx
+                    .functions
+                    .get("__free")
+                    .ok_or_else(|| CodegenError::Internal("__free not declared".into()))?;
+                let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
+                builder.ins().call(local_callee, &[ptr, len]);
+            }
+        }
+        OwnedKind::Array => {
+            let free_id = cx
+                .functions
+                .get("__array_free")
+                .ok_or_else(|| CodegenError::Internal("__array_free not declared".into()))?;
+            let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
+            builder.ins().call(local_callee, &[ptr]);
+        }
+        OwnedKind::Map => {
+            let free_id = cx
+                .functions
+                .get("__map_free")
+                .ok_or_else(|| CodegenError::Internal("__map_free not declared".into()))?;
+            let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
+            builder.ins().call(local_callee, &[ptr]);
+        }
+        OwnedKind::BumpAllocator => {
+            if let Some(&free_id) = cx.functions.get("__bump_destroy") {
+                let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                builder.ins().call(local_callee, &[ptr]);
+            }
+        }
+        OwnedKind::FreeListAllocator => {
+            if let Some(&free_id) = cx.functions.get("__freelist_destroy") {
+                let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                builder.ins().call(local_callee, &[ptr]);
+            }
+        }
+        OwnedKind::PoolAllocator => {
+            if let Some(&free_id) = cx.functions.get("__pool_destroy") {
+                let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                builder.ins().call(local_callee, &[ptr]);
+            }
+        }
+        OwnedKind::Droppable(drop_fn_name) => {
+            // Call the struct's Drop::drop method with the struct's stack address.
+            if let Some(&drop_id) = cx.functions.get(drop_fn_name) {
+                // For stack-allocated structs, get the stack_addr from struct_slots
+                let struct_ptr = if let Some((slot, _)) = cx.struct_slots.get(name) {
+                    builder
+                        .ins()
+                        .stack_addr(cranelift_codegen::ir::types::I64, *slot, 0)
+                } else {
+                    ptr // fallback to variable value
+                };
+                let local_callee = cx.module.declare_func_in_func(drop_id, builder.func);
+                builder.ins().call(local_callee, &[struct_ptr]);
+            }
+        }
+        OwnedKind::MutexGuard => {
+            if let Some(&free_id) = cx.functions.get("__mutex_guard_free") {
+                let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
+                builder.ins().call(local_callee, &[ptr]);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Emits cleanup code (free calls) for all owned heap resources.
@@ -313,54 +486,7 @@ pub(crate) fn emit_owned_cleanup<M: Module>(
         }
         freed_vals.push(ptr);
 
-        match kind {
-            OwnedKind::String => {
-                // Need the length to call fj_rt_free(ptr, len)
-                if let Some(len_var) = cx.string_lens.get(name) {
-                    let len = builder.use_var(*len_var);
-                    let free_id = cx
-                        .functions
-                        .get("__free")
-                        .ok_or_else(|| CodegenError::Internal("__free not declared".into()))?;
-                    let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
-                    builder.ins().call(local_callee, &[ptr, len]);
-                }
-            }
-            OwnedKind::Array => {
-                let free_id = cx
-                    .functions
-                    .get("__array_free")
-                    .ok_or_else(|| CodegenError::Internal("__array_free not declared".into()))?;
-                let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
-                builder.ins().call(local_callee, &[ptr]);
-            }
-            OwnedKind::Map => {
-                let free_id = cx
-                    .functions
-                    .get("__map_free")
-                    .ok_or_else(|| CodegenError::Internal("__map_free not declared".into()))?;
-                let local_callee = cx.module.declare_func_in_func(*free_id, builder.func);
-                builder.ins().call(local_callee, &[ptr]);
-            }
-            OwnedKind::BumpAllocator => {
-                if let Some(&free_id) = cx.functions.get("__bump_destroy") {
-                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
-                    builder.ins().call(local_callee, &[ptr]);
-                }
-            }
-            OwnedKind::FreeListAllocator => {
-                if let Some(&free_id) = cx.functions.get("__freelist_destroy") {
-                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
-                    builder.ins().call(local_callee, &[ptr]);
-                }
-            }
-            OwnedKind::PoolAllocator => {
-                if let Some(&free_id) = cx.functions.get("__pool_destroy") {
-                    let local_callee = cx.module.declare_func_in_func(free_id, builder.func);
-                    builder.ins().call(local_callee, &[ptr]);
-                }
-            }
-        }
+        emit_free_for_kind(builder, cx, name, kind, ptr)?;
     }
     cx.owned_ptrs = owned;
     Ok(())

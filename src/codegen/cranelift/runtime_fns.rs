@@ -1532,6 +1532,83 @@ pub extern "C" fn fj_rt_mutex_free(handle: *mut u8) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// MutexGuard (RAII lock wrapper)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Opaque guard handle that holds a mutex lock.
+///
+/// SAFETY: The guard MUST be dropped (via `fj_rt_mutex_guard_free`)
+/// before the underlying mutex is freed. Fajar Lang's scope-based cleanup
+/// guarantees this: guards are block-scoped, mutexes are function-scoped.
+struct MutexGuardHandle {
+    /// Boxed MutexGuard, type-erased to avoid lifetime in struct.
+    /// Actually stores `Box<std::sync::MutexGuard<'a, i64>>` (transmuted).
+    guard_raw: *mut (),
+    /// Pointer to the mutex handle (for diagnostics only).
+    #[allow(dead_code)]
+    mutex_ptr: *const MutexHandle,
+}
+
+/// Runtime: locks a mutex and returns an opaque guard handle.
+///
+/// The guard holds the lock until `fj_rt_mutex_guard_free` is called.
+///
+/// # Safety
+///
+/// The caller must ensure `mutex_handle` is a valid pointer from `fj_rt_mutex_new`.
+pub extern "C" fn fj_rt_mutex_guard_lock(mutex_handle: *mut u8) -> *mut u8 {
+    // SAFETY: caller guarantees valid mutex handle pointer
+    let mh = unsafe { &*(mutex_handle as *const MutexHandle) };
+    let guard = mh.inner.lock().unwrap_or_else(|e| e.into_inner());
+    let boxed = Box::new(guard);
+    let guard_raw = Box::into_raw(boxed) as *mut ();
+    let gh = Box::new(MutexGuardHandle {
+        guard_raw,
+        mutex_ptr: mutex_handle as *const MutexHandle,
+    });
+    Box::into_raw(gh) as *mut u8
+}
+
+/// Runtime: reads the current value through a guard (lock held).
+///
+/// # Safety
+///
+/// The caller must ensure `guard` is a valid pointer from `fj_rt_mutex_guard_lock`.
+pub extern "C" fn fj_rt_mutex_guard_get(guard: *mut u8) -> i64 {
+    // SAFETY: caller guarantees valid guard handle pointer
+    let gh = unsafe { &*(guard as *const MutexGuardHandle) };
+    let guard_ref = unsafe { &*(gh.guard_raw as *const std::sync::MutexGuard<'_, i64>) };
+    **guard_ref
+}
+
+/// Runtime: writes a value through a guard (lock held).
+///
+/// # Safety
+///
+/// The caller must ensure `guard` is a valid pointer from `fj_rt_mutex_guard_lock`.
+pub extern "C" fn fj_rt_mutex_guard_set(guard: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid guard handle pointer
+    let gh = unsafe { &*(guard as *const MutexGuardHandle) };
+    let guard_ref = unsafe { &mut *(gh.guard_raw as *mut std::sync::MutexGuard<'_, i64>) };
+    **guard_ref = value;
+}
+
+/// Runtime: drops a guard, releasing the mutex lock.
+///
+/// # Safety
+///
+/// The caller must ensure `guard` is a valid pointer from `fj_rt_mutex_guard_lock`.
+/// After this call, the guard handle is invalid.
+pub extern "C" fn fj_rt_mutex_guard_free(guard: *mut u8) {
+    // SAFETY: caller guarantees valid guard handle pointer
+    unsafe {
+        let gh = Box::from_raw(guard as *mut MutexGuardHandle);
+        // Drop the boxed MutexGuard to release the lock
+        let _ = Box::from_raw(gh.guard_raw as *mut std::sync::MutexGuard<'_, i64>);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Channel primitives (MPSC — multi-producer, single-consumer)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -3313,6 +3390,64 @@ pub extern "C" fn fj_rt_tensor_rand(rows: i64, cols: i64) -> *mut u8 {
     );
     let handle: Box<TensorHandle> = Box::new(arr);
     Box::into_raw(handle) as *mut u8
+}
+
+/// Xavier initialization: random values in [-limit, limit] where limit = sqrt(6 / (rows+cols)).
+pub extern "C" fn fj_rt_tensor_xavier(rows: i64, cols: i64) -> *mut u8 {
+    use ndarray_rand::rand_distr::Uniform;
+    use ndarray_rand::RandomExt;
+    let r = rows.max(1) as usize;
+    let c = cols.max(1) as usize;
+    let limit = (6.0 / (r + c) as f64).sqrt();
+    let arr = Array2::random((r, c), Uniform::new(-limit, limit));
+    let handle: Box<TensorHandle> = Box::new(arr);
+    Box::into_raw(handle) as *mut u8
+}
+
+/// Creates a tensor from a flat data buffer. data_ptr points to N f64-bit values.
+/// Returns a (rows, cols) tensor. If rows*cols != n_elems, uses min(rows*cols, n_elems).
+pub extern "C" fn fj_rt_tensor_from_data(
+    data_ptr: *const i64,
+    n_elems: i64,
+    rows: i64,
+    cols: i64,
+) -> *mut u8 {
+    if data_ptr.is_null() || n_elems <= 0 {
+        return fj_rt_tensor_zeros(rows.max(1), cols.max(1));
+    }
+    let r = rows.max(1) as usize;
+    let c = cols.max(1) as usize;
+    let n = n_elems as usize;
+    let total = r * c;
+    // SAFETY: caller guarantees data_ptr is valid for n_elems i64 values
+    let slice = unsafe { std::slice::from_raw_parts(data_ptr, n) };
+    let mut values: Vec<f64> = slice
+        .iter()
+        .take(total)
+        .map(|&v| f64::from_bits(v as u64))
+        .collect();
+    values.resize(total, 0.0);
+    let arr = Array2::from_shape_vec((r, c), values).unwrap_or_else(|_| Array2::zeros((r, c)));
+    let handle: Box<TensorHandle> = Box::new(arr);
+    Box::into_raw(handle) as *mut u8
+}
+
+/// Returns the index of the maximum element in the tensor (flattened).
+pub extern "C" fn fj_rt_tensor_argmax(ptr: *mut u8) -> i64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    // SAFETY: caller guarantees valid TensorHandle pointer
+    let t = unsafe { &*(ptr as *const TensorHandle) };
+    let mut best_idx = 0usize;
+    let mut best_val = f64::NEG_INFINITY;
+    for (i, &v) in t.iter().enumerate() {
+        if v > best_val {
+            best_val = v;
+            best_idx = i;
+        }
+    }
+    best_idx as i64
 }
 
 /// Scales all elements in a tensor by a scalar (f64 bits). Returns new tensor.
@@ -6786,6 +6921,10 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_mutex_new" => Some(fj_rt_mutex_new as *const u8),
         "fj_rt_mutex_store" => Some(fj_rt_mutex_store as *const u8),
         "fj_rt_mutex_try_lock" => Some(fj_rt_mutex_try_lock as *const u8),
+        "fj_rt_mutex_guard_lock" => Some(fj_rt_mutex_guard_lock as *const u8),
+        "fj_rt_mutex_guard_get" => Some(fj_rt_mutex_guard_get as *const u8),
+        "fj_rt_mutex_guard_set" => Some(fj_rt_mutex_guard_set as *const u8),
+        "fj_rt_mutex_guard_free" => Some(fj_rt_mutex_guard_free as *const u8),
         "fj_rt_onnx_add_dense" => Some(fj_rt_onnx_add_dense as *const u8),
         "fj_rt_onnx_add_relu" => Some(fj_rt_onnx_add_relu as *const u8),
         "fj_rt_onnx_export" => Some(fj_rt_onnx_export as *const u8),
@@ -6896,9 +7035,11 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_str_trim_start" => Some(fj_rt_str_trim_start as *const u8),
         "fj_rt_tensor_abs" => Some(fj_rt_tensor_abs as *const u8),
         "fj_rt_tensor_add" => Some(fj_rt_tensor_add as *const u8),
+        "fj_rt_tensor_argmax" => Some(fj_rt_tensor_argmax as *const u8),
         "fj_rt_tensor_cols" => Some(fj_rt_tensor_cols as *const u8),
         "fj_rt_tensor_fill" => Some(fj_rt_tensor_fill as *const u8),
         "fj_rt_tensor_free" => Some(fj_rt_tensor_free as *const u8),
+        "fj_rt_tensor_from_data" => Some(fj_rt_tensor_from_data as *const u8),
         "fj_rt_tensor_get" => Some(fj_rt_tensor_get as *const u8),
         "fj_rt_tensor_grad" => Some(fj_rt_tensor_grad as *const u8),
         "fj_rt_tensor_load" => Some(fj_rt_tensor_load as *const u8),
@@ -6921,6 +7062,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_tensor_sum" => Some(fj_rt_tensor_sum as *const u8),
         "fj_rt_tensor_to_f16" => Some(fj_rt_tensor_to_f16 as *const u8),
         "fj_rt_tensor_transpose" => Some(fj_rt_tensor_transpose as *const u8),
+        "fj_rt_tensor_xavier" => Some(fj_rt_tensor_xavier as *const u8),
         "fj_rt_tensor_reshape" => Some(fj_rt_tensor_reshape as *const u8),
         "fj_rt_tensor_flatten" => Some(fj_rt_tensor_flatten as *const u8),
         // Loss scaling & quantization (S39.3-S39.4)

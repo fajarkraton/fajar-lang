@@ -1,50 +1,176 @@
-// Bare-Metal Hello World — Fajar Lang
+// Bare-Metal Hardware Abstraction Demo — Fajar Lang
 //
-// Runs without OS, without libc, on QEMU aarch64 virt platform.
-// Writes directly to PL011 UART (memory-mapped I/O at 0x09000000).
+// Demonstrates the CONCEPT of memory-mapped I/O (MMIO) using a simulated
+// register file backed by HashMap. In real bare-metal code, these would be
+// volatile reads/writes to physical addresses. Here we model the pattern
+// so native codegen can compile and run it.
 //
-// Target: aarch64-unknown-none-elf
-// Run: qemu-system-aarch64 -M virt -nographic -kernel bare_metal.elf
+// Simulated hardware: PL011 UART + GPIO peripheral
 
-// PL011 UART Data Register address on QEMU virt
-const uart_base: i64 = 150994944  // 0x09000000
+// ═══════════════════════════════════════════════════════════════
+// UART character output (byte-at-a-time, like real UART TX)
+// ═══════════════════════════════════════════════════════════════
 
-// Write a single byte to UART
-fn uart_putc(c: i64) -> void {
-    // In native codegen: this would be a volatile store to uart_base
-    // For now: placeholder for the memory-mapped I/O pattern
-    port_write(uart_base, c)
+fn ascii_char(code: i64) -> str {
+    // Map common ASCII codes to single-character strings
+    if code == 10 { "\n" }
+    else if code == 32 { " " }
+    else if code == 70 { "F" }
+    else if code == 72 { "H" }
+    else if code == 76 { "L" }
+    else if code == 97 { "a" }
+    else if code == 101 { "e" }
+    else if code == 103 { "g" }
+    else if code == 104 { "h" }
+    else if code == 106 { "j" }
+    else if code == 108 { "l" }
+    else if code == 110 { "n" }
+    else if code == 111 { "o" }
+    else if code == 114 { "r" }
+    else { "?" }
 }
 
-// Write a string character by character
-fn uart_puts(msg: i64) -> void {
-    // Write 'H', 'e', 'l', 'l', 'o' one char at a time
-    uart_putc(72)   // 'H'
-    uart_putc(101)  // 'e'
-    uart_putc(108)  // 'l'
-    uart_putc(108)  // 'l'
-    uart_putc(111)  // 'o'
-    uart_putc(32)   // ' '
-}
+// ═══════════════════════════════════════════════════════════════
+// Entry Point — all register operations use the HashMap directly
+// ═══════════════════════════════════════════════════════════════
 
-// Write "Fajar Lang" to UART
-fn uart_write_name() -> void {
-    uart_putc(70)   // 'F'
-    uart_putc(97)   // 'a'
-    uart_putc(106)  // 'j'
-    uart_putc(97)   // 'a'
-    uart_putc(114)  // 'r'
-    uart_putc(32)   // ' '
-    uart_putc(76)   // 'L'
-    uart_putc(97)   // 'a'
-    uart_putc(110)  // 'n'
-    uart_putc(103)  // 'g'
-}
-
-// Bare-metal entry point
 fn main() -> i64 {
-    uart_puts(0)          // "Hello "
-    uart_write_name()     // "Fajar Lang"
-    uart_putc(10)         // newline
-    0                     // success
+    println("=== Bare-Metal Hardware Abstraction Demo ===")
+    println("Simulating MMIO register access patterns")
+    println("")
+
+    // Create register file (simulates hardware address space)
+    let regs = HashMap::new()
+
+    // ── UART PL011 Initialization ──────────────────────────────
+    println("--- UART PL011 Init ---")
+    // UARTCR (control register) — enable TX and UART
+    regs.insert("UART_CR", 769)
+    // UARTIBRD (integer baud rate divisor) — 115200 baud
+    regs.insert("UART_IBRD", 1)
+    // UARTFBRD (fractional baud rate divisor)
+    regs.insert("UART_FBRD", 40)
+    // UARTLCR_H (line control) — 8N1, FIFO enabled
+    regs.insert("UART_LCR_H", 112)
+    // UARTFR (flag register) — TX FIFO not full
+    regs.insert("UART_FR", 0)
+    // Data register starts empty
+    regs.insert("UART_DR", 0)
+    // Byte counter for output tracking
+    regs.insert("TX_COUNT", 0)
+
+    let cr = regs.get("UART_CR")
+    let ibrd = regs.get("UART_IBRD")
+    let lcr = regs.get("UART_LCR_H")
+    let msg_cr = format("  Control Register:  {}", cr)
+    println(msg_cr)
+    let msg_baud = format("  Baud Rate Divisor: {}", ibrd)
+    println(msg_baud)
+    let msg_lcr = format("  Line Control:      {}", lcr)
+    println(msg_lcr)
+    println("")
+
+    // ── UART Transmit "Hello Fajar Lang" ───────────────────────
+    println("--- UART Transmit ---")
+
+    // Transmit 'H','e','l','l','o',' ' via data register
+    regs.insert("UART_DR", 72)
+    regs.insert("TX_COUNT", 1)
+    regs.insert("UART_DR", 101)
+    regs.insert("TX_COUNT", 2)
+    regs.insert("UART_DR", 108)
+    regs.insert("TX_COUNT", 3)
+    regs.insert("UART_DR", 108)
+    regs.insert("TX_COUNT", 4)
+    regs.insert("UART_DR", 111)
+    regs.insert("TX_COUNT", 5)
+    regs.insert("UART_DR", 32)
+    regs.insert("TX_COUNT", 6)
+
+    // Transmit 'F','a','j','a','r',' ','L','a','n','g'
+    regs.insert("UART_DR", 70)
+    regs.insert("TX_COUNT", 7)
+    regs.insert("UART_DR", 97)
+    regs.insert("TX_COUNT", 8)
+    regs.insert("UART_DR", 106)
+    regs.insert("TX_COUNT", 9)
+    regs.insert("UART_DR", 97)
+    regs.insert("TX_COUNT", 10)
+    regs.insert("UART_DR", 114)
+    regs.insert("TX_COUNT", 11)
+    regs.insert("UART_DR", 32)
+    regs.insert("TX_COUNT", 12)
+    regs.insert("UART_DR", 76)
+    regs.insert("TX_COUNT", 13)
+    regs.insert("UART_DR", 97)
+    regs.insert("TX_COUNT", 14)
+    regs.insert("UART_DR", 110)
+    regs.insert("TX_COUNT", 15)
+    regs.insert("UART_DR", 103)
+    regs.insert("TX_COUNT", 16)
+
+    let tx_count = regs.get("TX_COUNT")
+    let last_byte = regs.get("UART_DR")
+    let msg_tx = format("  Bytes transmitted: {}", tx_count)
+    println(msg_tx)
+    let msg_last = format("  Last byte in DR:   {} (g)", last_byte)
+    println(msg_last)
+
+    // Verify TX by reading back character representations
+    print("  Decoded message:   ")
+    print(ascii_char(72))
+    print(ascii_char(101))
+    print(ascii_char(108))
+    print(ascii_char(108))
+    print(ascii_char(111))
+    print(ascii_char(32))
+    print(ascii_char(70))
+    print(ascii_char(97))
+    print(ascii_char(106))
+    print(ascii_char(97))
+    print(ascii_char(114))
+    print(ascii_char(32))
+    print(ascii_char(76))
+    print(ascii_char(97))
+    print(ascii_char(110))
+    print(ascii_char(103))
+    println("")
+    println("")
+
+    // ── GPIO Peripheral ────────────────────────────────────────
+    println("--- GPIO Peripheral ---")
+    // Direction register: 0 = input, 1 = output per pin
+    regs.insert("GPIO_DIR", 0)
+    // Output data register
+    regs.insert("GPIO_OUT", 0)
+    // Input data register (simulated sensor reading)
+    regs.insert("GPIO_IN", 42)
+
+    // Configure pins 0-3 as output (mask 0x0F = 15)
+    regs.insert("GPIO_DIR", 15)
+    let dir = regs.get("GPIO_DIR")
+    let msg_dir = format("  Direction mask: {}", dir)
+    println(msg_dir)
+
+    // Write output value
+    regs.insert("GPIO_OUT", 255)
+    let out = regs.get("GPIO_OUT")
+    let msg_out = format("  Output value:   {}", out)
+    println(msg_out)
+
+    // Read sensor input
+    let sensor = regs.get("GPIO_IN")
+    let msg_sensor = format("  Sensor input:   {}", sensor)
+    println(msg_sensor)
+    println("")
+
+    // ── Register dump ──────────────────────────────────────────
+    println("--- Register File Summary ---")
+    let total = regs.len()
+    let msg_total = format("  Total registers: {}", total)
+    println(msg_total)
+    println("")
+
+    println("=== Demo Complete ===")
+    0
 }

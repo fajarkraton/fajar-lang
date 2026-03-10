@@ -1,37 +1,176 @@
-// Memory Map Example — Fajar Lang OS Runtime
-// Demonstrates: alloc, write, read, page mapping, and free
+// Memory Management Demo — Fajar Lang
+//
+// Demonstrates OS memory management CONCEPTS using HashMap as a simulated
+// page table and memory store. In a real OS kernel, these would use
+// mem_alloc/mem_free/page_map with physical addresses. Here we model the
+// full lifecycle: allocate, map pages, read/write, unmap, free.
 
-fn main() {
+// ═══════════════════════════════════════════════════════════════
+// Helper: extract frame and flags from a page table entry
+// Entry encoding: phys_frame * 16 + flags
+// ═══════════════════════════════════════════════════════════════
+
+fn pt_get_frame(entry: i64) -> i64 {
+    entry / 16
+}
+
+fn pt_get_flags(entry: i64) -> i64 {
+    entry - (entry / 16) * 16
+}
+
+fn flags_name(flags: i64) -> str {
+    if flags == 1 { "R" }
+    else if flags == 2 { "W" }
+    else if flags == 3 { "RW" }
+    else if flags == 5 { "R+X" }
+    else if flags == 7 { "RWX" }
+    else { "??" }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Demo: Full Memory Management Lifecycle
+// ═══════════════════════════════════════════════════════════════
+
+fn main() -> i64 {
     println("=== Fajar Lang Memory Manager ===")
+    println("")
 
-    // Allocate 256 bytes aligned to 8
-    let mem = mem_alloc(256, 8)
-    println("Allocated 256 bytes")
+    // ── Page Table (maps virtual page -> physical frame + flags) ──
+    let page_table = HashMap::new()
 
-    // Write data
-    mem_write_u32(mem, 42)
-    mem_write_u8(mem, 171)
+    // ── Physical Memory (simulated byte-addressable RAM) ──
+    let memory = HashMap::new()
 
-    // Read it back
-    let v = mem_read_u8(mem)
-    println(v)
+    // ── Allocator State (bump allocator) ──
+    let alloc = HashMap::new()
+    alloc.insert("next_addr", 4096)
+    alloc.insert("total_alloc", 0)
+    alloc.insert("active_count", 0)
 
-    // Page table: map virtual 0x1000 → physical 0x2000 with RW flags (3)
-    page_map(4096, 8192, 3)
-    println("Page mapped: 0x1000 -> 0x2000 (RW)")
+    // ── Allocate memory regions ────────────────────────────────
+    println("--- Allocating Memory ---")
 
-    // Unmap
-    page_unmap(4096)
-    println("Page unmapped")
+    // Region A: 2 pages (8192 bytes)
+    let region_a = alloc.get("next_addr")
+    alloc.insert("next_addr", region_a + 8192)
+    alloc.insert("total_alloc", 8192)
+    alloc.insert("active_count", 1)
+    let msg_a = format("  Region A: addr={} (2 pages, 8192 bytes)", region_a)
+    println(msg_a)
 
-    // Port I/O
-    port_write(128, 66)
-    let pv = port_read(128)
-    println(pv)
+    // Region B: 1 page (4096 bytes)
+    let region_b = alloc.get("next_addr")
+    alloc.insert("next_addr", region_b + 4096)
+    alloc.insert("total_alloc", 12288)
+    alloc.insert("active_count", 2)
+    let msg_b = format("  Region B: addr={} (1 page, 4096 bytes)", region_b)
+    println(msg_b)
 
-    // Free memory
-    mem_free(mem)
-    println("Memory freed")
+    // Region C: 4 pages (16384 bytes)
+    let region_c = alloc.get("next_addr")
+    alloc.insert("next_addr", region_c + 16384)
+    alloc.insert("total_alloc", 28672)
+    alloc.insert("active_count", 3)
+    let msg_c = format("  Region C: addr={} (4 pages, 16384 bytes)", region_c)
+    println(msg_c)
+
+    let active = alloc.get("active_count")
+    let total = alloc.get("total_alloc")
+    let msg_active = format("  Active allocations: {}", active)
+    println(msg_active)
+    let msg_total = format("  Total allocated: {} bytes", total)
+    println(msg_total)
+    println("")
+
+    // ── Map virtual pages to physical frames ───────────────────
+    println("--- Page Table Setup ---")
+    // flags: 1=read, 2=write, 3=RW, 5=read+exec, 7=RWX
+    // Entry = frame * 16 + flags
+    page_table.insert("0", 100 * 16 + 3)
+    println("  Mapped: virt 0 -> frame 100 (RW)")
+
+    page_table.insert("1", 101 * 16 + 3)
+    println("  Mapped: virt 1 -> frame 101 (RW)")
+
+    page_table.insert("2", 200 * 16 + 5)
+    println("  Mapped: virt 2 -> frame 200 (R+X)")
+
+    page_table.insert("3", 201 * 16 + 7)
+    println("  Mapped: virt 3 -> frame 201 (RWX)")
+
+    let pt_size = page_table.len()
+    let msg_pt = format("  Page table entries: {}", pt_size)
+    println(msg_pt)
+    println("")
+
+    // ── Write and read through simulated memory ────────────────
+    println("--- Memory Read/Write ---")
+    memory.insert("0", 42)
+    memory.insert("4", 137)
+    memory.insert("8", 255)
+    memory.insert("12", 1024)
+
+    let v0 = memory.get("0")
+    let msg_v0 = format("  [addr 0]  = {}", v0)
+    println(msg_v0)
+
+    let v4 = memory.get("4")
+    let msg_v4 = format("  [addr 4]  = {}", v4)
+    println(msg_v4)
+
+    let v8 = memory.get("8")
+    let msg_v8 = format("  [addr 8]  = {}", v8)
+    println(msg_v8)
+
+    let v12 = memory.get("12")
+    let msg_v12 = format("  [addr 12] = {}", v12)
+    println(msg_v12)
+    println("")
+
+    // ── Page table lookups ─────────────────────────────────────
+    println("--- Page Table Lookups ---")
+    let entry0 = page_table.get("0")
+    let frame0 = pt_get_frame(entry0)
+    let flags0 = pt_get_flags(entry0)
+    let fn0 = flags_name(flags0)
+    let msg_e0 = format("  Virt 0: frame={}, flags={}", frame0, fn0)
+    println(msg_e0)
+
+    let entry2 = page_table.get("2")
+    let frame2 = pt_get_frame(entry2)
+    let flags2 = pt_get_flags(entry2)
+    let fn2 = flags_name(flags2)
+    let msg_e2 = format("  Virt 2: frame={}, flags={}", frame2, fn2)
+    println(msg_e2)
+
+    let mapped1 = page_table.contains_key("1")
+    let mapped9 = page_table.contains_key("9")
+    let msg_m1 = format("  Page 1 mapped: {}", mapped1)
+    println(msg_m1)
+    let msg_m9 = format("  Page 9 mapped: {}", mapped9)
+    println(msg_m9)
+    println("")
+
+    // ── Unmap and free ─────────────────────────────────────────
+    println("--- Cleanup ---")
+    page_table.remove("0")
+    println("  Unmapped: virt page 0")
+
+    page_table.remove("1")
+    println("  Unmapped: virt page 1")
+
+    let remaining = page_table.len()
+    let msg_rem = format("  Remaining page entries: {}", remaining)
+    println(msg_rem)
+
+    // Free regions A and B
+    let count_before = alloc.get("active_count")
+    alloc.insert("active_count", count_before - 2)
+    let active_after = alloc.get("active_count")
+    let msg_af = format("  Active allocations after free: {}", active_after)
+    println(msg_af)
+    println("")
 
     println("=== Done ===")
+    0
 }

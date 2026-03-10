@@ -6,7 +6,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{CodegenCtx, OwnedKind};
+use super::super::context::{push_owned, CodegenCtx, OwnedKind};
 use super::compile_expr;
 use crate::codegen::CodegenError;
 use crate::parser::ast::{CallArg, Expr};
@@ -76,7 +76,7 @@ pub(in crate::codegen::cranelift) fn compile_heap_array_init<M: Module>(
     cx.var_types
         .insert(name.to_string(), clif_types::pointer_type());
     cx.heap_arrays.insert(name.to_string());
-    cx.owned_ptrs.push((name.to_string(), OwnedKind::Array));
+    push_owned(cx, name.to_string(), OwnedKind::Array);
     Ok(None)
 }
 

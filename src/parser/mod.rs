@@ -415,8 +415,18 @@ impl Parser {
         let annotation = self.try_parse_annotation();
 
         match self.peek_kind() {
-            TokenKind::Fn | TokenKind::Async => {
-                Ok(Item::FnDef(self.parse_fn_def(is_pub, annotation)?))
+            TokenKind::Fn => Ok(Item::FnDef(self.parse_fn_def(is_pub, annotation)?)),
+            TokenKind::Async => {
+                // Peek ahead: `async fn` → function def, `async {` → expression statement
+                if self.pos + 1 < self.tokens.len()
+                    && self.tokens[self.pos + 1].kind == TokenKind::Fn
+                {
+                    Ok(Item::FnDef(self.parse_fn_def(is_pub, annotation)?))
+                } else {
+                    // Fall through to expression statement (async block)
+                    let stmt = self.parse_stmt()?;
+                    Ok(Item::Stmt(stmt))
+                }
             }
             TokenKind::Struct => Ok(Item::StructDef(self.parse_struct_def(is_pub, annotation)?)),
             TokenKind::Union => Ok(Item::UnionDef(self.parse_union_def(is_pub, annotation)?)),
@@ -1617,6 +1627,18 @@ impl Parser {
 
             // Array literal: [a, b, c]
             TokenKind::LBracket => self.parse_array_expr(),
+
+            // Async block: async { body }
+            TokenKind::Async => {
+                let start = token.span.start;
+                self.advance(); // eat `async`
+                let body = self.parse_block_expr()?;
+                let end = body.span().end;
+                Ok(Expr::AsyncBlock {
+                    body: Box::new(body),
+                    span: Span::new(start, end),
+                })
+            }
 
             // Closure: |params| body
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_closure_expr(),
@@ -4322,6 +4344,12 @@ mod tests {
     fn parse_await_expr() {
         let expr = parse_expr_ok("x.await");
         assert!(matches!(expr, Expr::Await { .. }));
+    }
+
+    #[test]
+    fn parse_async_block_expr() {
+        let expr = parse_expr_ok("async { 42 }");
+        assert!(matches!(expr, Expr::AsyncBlock { .. }));
     }
 
     #[test]

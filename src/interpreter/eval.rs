@@ -730,6 +730,10 @@ impl Interpreter {
                 "await is not supported in interpreter mode".into(),
             )
             .into()),
+            Expr::AsyncBlock { .. } => Err(RuntimeError::TypeError(
+                "async blocks are not supported in interpreter mode".into(),
+            )
+            .into()),
             Expr::InlineAsm { .. } => Err(RuntimeError::TypeError(
                 "inline assembly is not supported in interpreter mode".into(),
             )

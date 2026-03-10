@@ -8,7 +8,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{emit_owned_cleanup, CodegenCtx, OwnedKind};
+use super::super::context::{emit_owned_cleanup, push_owned, CodegenCtx, OwnedKind};
 use crate::codegen::CodegenError;
 use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt};
 
@@ -111,7 +111,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                         cx.string_lens.insert(name.clone(), len_var);
                         // Track heap-allocated strings for cleanup
                         if cx.last_string_owned {
-                            cx.owned_ptrs.push((name.clone(), OwnedKind::String));
+                            push_owned(cx, name.clone(), OwnedKind::String);
                             cx.last_string_owned = false;
                         }
                     }
@@ -120,7 +120,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             // If RHS returned a heap array (e.g., str.chars()), register it
             if cx.last_heap_array {
                 cx.heap_arrays.insert(name.clone());
-                cx.owned_ptrs.push((name.clone(), OwnedKind::Array));
+                push_owned(cx, name.clone(), OwnedKind::Array);
                 cx.last_heap_array = false;
             }
             // If RHS was a call to a function returning a heap array (Slice type)
@@ -142,7 +142,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             // If RHS was a HashMap::new(), register for cleanup
             if cx.last_map_new {
                 cx.heap_maps.insert(name.clone());
-                cx.owned_ptrs.push((name.clone(), OwnedKind::Map));
+                push_owned(cx, name.clone(), OwnedKind::Map);
                 cx.last_map_new = false;
             }
             // If RHS was a thread::spawn(), register handle for method dispatch
@@ -154,6 +154,12 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             if cx.last_mutex_new {
                 cx.mutex_handles.insert(name.clone());
                 cx.last_mutex_new = false;
+            }
+            // If RHS was a mutex.lock_guard(), register for auto-cleanup
+            if cx.last_mutex_guard_new {
+                cx.mutex_guard_handles.insert(name.clone());
+                push_owned(cx, name.clone(), OwnedKind::MutexGuard);
+                cx.last_mutex_guard_new = false;
             }
             // If RHS was a channel::new(), register for method dispatch
             if cx.last_channel_new {
@@ -214,20 +220,19 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             // If RHS was a BumpAllocator::new(), register for method dispatch + cleanup
             if cx.last_bump_alloc_new {
                 cx.bump_alloc_handles.insert(name.clone());
-                cx.owned_ptrs.push((name.clone(), OwnedKind::BumpAllocator));
+                push_owned(cx, name.clone(), OwnedKind::BumpAllocator);
                 cx.last_bump_alloc_new = false;
             }
             // If RHS was a FreeListAllocator::new(), register for method dispatch + cleanup
             if cx.last_freelist_alloc_new {
                 cx.freelist_alloc_handles.insert(name.clone());
-                cx.owned_ptrs
-                    .push((name.clone(), OwnedKind::FreeListAllocator));
+                push_owned(cx, name.clone(), OwnedKind::FreeListAllocator);
                 cx.last_freelist_alloc_new = false;
             }
             // If RHS was a PoolAllocator::new(), register for method dispatch + cleanup
             if cx.last_pool_alloc_new {
                 cx.pool_alloc_handles.insert(name.clone());
-                cx.owned_ptrs.push((name.clone(), OwnedKind::PoolAllocator));
+                push_owned(cx, name.clone(), OwnedKind::PoolAllocator);
                 cx.last_pool_alloc_new = false;
             }
             // If RHS was an Executor::new(), register for method dispatch
@@ -312,8 +317,18 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 cx.enum_vars
                     .insert(name.clone(), (var, payload_var, payload_type));
             }
+            // If RHS was a multi-field enum constructor, track the stack slot + field types
+            if let Some((slot, field_types)) = cx.last_enum_multi_payload.take() {
+                cx.enum_multi_vars.insert(name.clone(), (slot, field_types));
+            }
             // If RHS was a struct init, associate the stack slot with this variable
             if let Some((slot, struct_name)) = cx.last_struct_init.take() {
+                // S3.4: If this struct implements Drop, register for auto-cleanup
+                let drop_key = ("Drop".to_string(), struct_name.clone());
+                if cx.trait_impls.contains_key(&drop_key) {
+                    let drop_fn = format!("{}_drop", struct_name);
+                    push_owned(cx, name.clone(), OwnedKind::Droppable(drop_fn));
+                }
                 cx.struct_slots.insert(name.clone(), (slot, struct_name));
             }
             // If RHS was a tuple, save element types for type-aware index access
@@ -355,13 +370,13 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 builder.def_var(len_var, len_val);
                 cx.string_lens.insert(name.clone(), len_var);
                 if cx.last_string_owned {
-                    cx.owned_ptrs.push((name.clone(), OwnedKind::String));
+                    push_owned(cx, name.clone(), OwnedKind::String);
                     cx.last_string_owned = false;
                 }
             }
             if cx.last_heap_array {
                 cx.heap_arrays.insert(name.clone());
-                cx.owned_ptrs.push((name.clone(), OwnedKind::Array));
+                push_owned(cx, name.clone(), OwnedKind::Array);
                 cx.last_heap_array = false;
             }
             if let Some(payload_val) = cx.last_enum_payload.take() {
@@ -374,7 +389,16 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 cx.enum_vars
                     .insert(name.clone(), (var, payload_var, payload_type));
             }
+            if let Some((slot, field_types)) = cx.last_enum_multi_payload.take() {
+                cx.enum_multi_vars.insert(name.clone(), (slot, field_types));
+            }
             if let Some((slot, struct_name)) = cx.last_struct_init.take() {
+                // S3.4: If this struct implements Drop, register for auto-cleanup
+                let drop_key = ("Drop".to_string(), struct_name.clone());
+                if cx.trait_impls.contains_key(&drop_key) {
+                    let drop_fn = format!("{}_drop", struct_name);
+                    push_owned(cx, name.clone(), OwnedKind::Droppable(drop_fn));
+                }
                 cx.struct_slots.insert(name.clone(), (slot, struct_name));
             }
             if let Some(elem_types) = cx.last_tuple_elem_types.take() {
@@ -400,6 +424,15 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                         emit_owned_cleanup(builder, cx, Some(val))?;
                         builder.ins().return_(&[val]);
                     }
+                } else if cx.is_enum_return_fn {
+                    // Enum-returning function: return both tag and payload
+                    let payload = cx
+                        .last_enum_payload
+                        .take()
+                        .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+                    cx.last_enum_payload_type.take();
+                    emit_owned_cleanup(builder, cx, Some(val))?;
+                    builder.ins().return_(&[val, payload]);
                 } else {
                     emit_owned_cleanup(builder, cx, Some(val))?;
                     // Coerce return value to match declared return type

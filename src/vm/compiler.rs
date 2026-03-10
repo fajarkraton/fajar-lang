@@ -513,6 +513,10 @@ impl Compiler {
                 // Await is not supported in VM mode; compile inner expr
                 self.compile_expr(expr);
             }
+            Expr::AsyncBlock { body, .. } => {
+                // Async block not supported in VM mode; compile body
+                self.compile_expr(body);
+            }
             Expr::InlineAsm { .. } => {
                 // Inline assembly is not supported in VM mode
             }

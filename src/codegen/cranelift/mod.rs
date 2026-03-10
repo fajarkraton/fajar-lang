@@ -110,6 +110,8 @@ pub struct CraneliftCompiler {
     enum_defs: HashMap<String, Vec<String>>,
     /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
     enum_variant_types: HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
+    /// Generic enum definitions: enum_name → list of generic param names.
+    generic_enum_defs: HashMap<String, Vec<String>>,
     /// Struct definitions: struct name → ordered list of (field_name, clif_type).
     struct_defs: HashMap<String, Vec<(String, cranelift_codegen::ir::Type)>>,
     /// Set of type names that are unions (all fields at offset 0).
@@ -134,6 +136,8 @@ pub struct CraneliftCompiler {
     fn_returns_closure_handle: HashSet<String>,
     /// Functions that return a struct type: fn_name → struct_name.
     fn_returns_struct: HashMap<String, String>,
+    /// Functions that return an enum type (two return values: tag, payload).
+    fn_returns_enum: HashSet<String>,
     /// Maps closure variable names to their generated function names.
     closure_fn_map: HashMap<String, String>,
     /// Maps closure function names to their list of captured variable names.
@@ -228,6 +232,7 @@ impl CraneliftCompiler {
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
             enum_variant_types: HashMap::new(),
+            generic_enum_defs: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -240,6 +245,7 @@ impl CraneliftCompiler {
             fn_returns_heap_array: HashSet::new(),
             fn_returns_closure_handle: HashSet::new(),
             fn_returns_struct: HashMap::new(),
+            fn_returns_enum: HashSet::new(),
             closure_fn_map: HashMap::new(),
             closure_captures: HashMap::new(),
             closure_span_to_fn: HashMap::new(),
@@ -1862,6 +1868,40 @@ impl CraneliftCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__mutex_try_lock".to_string(), mutex_try_lock_id);
+
+        // ── MutexGuard (RAII lock) ──────────────────────────────────────
+
+        // fj_rt_mutex_guard_lock(mutex_handle) -> guard_handle (ptr -> ptr)
+        let guard_lock_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_lock", Linkage::Import, &sig_thread_join)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_lock".to_string(), guard_lock_id);
+
+        // fj_rt_mutex_guard_get(guard) -> i64 (ptr -> i64)
+        let guard_get_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_get", Linkage::Import, &sig_thread_join)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_get".to_string(), guard_get_id);
+
+        // fj_rt_mutex_guard_set(guard, value) -> void
+        let guard_set_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_set", Linkage::Import, &sig_mutex_store)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_set".to_string(), guard_set_id);
+
+        // fj_rt_mutex_guard_free(guard) -> void
+        let guard_free_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_free", Linkage::Import, &sig_map_clear)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_free".to_string(), guard_free_id);
 
         // ── Channel primitives ───────────────────────────────────────────
 
@@ -4117,6 +4157,50 @@ impl CraneliftCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__tensor_rand".to_string(), trand_id);
 
+        // tensor_xavier(i64, i64) -> i64 — reuse sig_ii_i
+        let txavier_id = self
+            .module
+            .declare_function("fj_rt_tensor_xavier", Linkage::Import, &sig_ii_i)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_xavier".to_string(), txavier_id);
+
+        // tensor_argmax(ptr) -> i64 — reuse sig_thread_spawn_noarg (ptr -> i64)
+        let targmax_id = self
+            .module
+            .declare_function(
+                "fj_rt_tensor_argmax",
+                Linkage::Import,
+                &sig_thread_spawn_noarg,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_argmax".to_string(), targmax_id);
+
+        // tensor_from_data(ptr, i64, i64, i64) -> ptr — 4 args, 1 return
+        let mut sig_iiii_i = self.module.make_signature();
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        let tfromdata_id = self
+            .module
+            .declare_function("fj_rt_tensor_from_data", Linkage::Import, &sig_iiii_i)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_from_data".to_string(), tfromdata_id);
+
         // tensor_scale(ptr, i64) -> ptr — reuse sig_tload (ptr, i64 → ptr)
         let tscale_id = self
             .module
@@ -4165,6 +4249,18 @@ impl CraneliftCompiler {
             return Err(errors);
         }
 
+        // Register built-in Poll<T> enum: Ready(T)=0, Pending=1 (S4.1)
+        self.enum_defs.insert(
+            "Poll".to_string(),
+            vec!["Ready".to_string(), "Pending".to_string()],
+        );
+        self.enum_variant_types.insert(
+            ("Poll".to_string(), "Ready".to_string()),
+            vec![clif_types::default_int_type()],
+        );
+        self.generic_enum_defs
+            .insert("Poll".to_string(), vec!["T".to_string()]);
+
         // Collect enum and struct definitions
         for item in &program.items {
             match item {
@@ -4182,6 +4278,16 @@ impl CraneliftCompiler {
                             .collect();
                         self.enum_variant_types
                             .insert((edef.name.clone(), v.name.clone()), payload_types);
+                    }
+                    // Track generic enum definitions (S1.2)
+                    if !edef.generic_params.is_empty() {
+                        let param_names: Vec<String> = edef
+                            .generic_params
+                            .iter()
+                            .map(|gp| gp.name.clone())
+                            .collect();
+                        self.generic_enum_defs
+                            .insert(edef.name.clone(), param_names);
                     }
                     self.enum_defs.insert(edef.name.clone(), variants);
                 }
@@ -4688,6 +4794,15 @@ impl CraneliftCompiler {
         fndef.return_type.as_ref().and_then(clif_types::lower_type)
     }
 
+    /// Returns true if the function returns an enum type.
+    fn is_enum_return(&self, fndef: &crate::parser::ast::FnDef) -> bool {
+        if let Some(crate::parser::ast::TypeExpr::Simple { name, .. }) = &fndef.return_type {
+            self.enum_defs.contains_key(name)
+        } else {
+            false
+        }
+    }
+
     /// Returns true if the function definition returns `str`.
     fn is_string_return(fndef: &crate::parser::ast::FnDef) -> bool {
         fndef.return_type.as_ref().is_some_and(
@@ -4713,7 +4828,15 @@ impl CraneliftCompiler {
             }
         });
 
-        let ret_type = Self::get_return_clif_type(fndef);
+        let is_enum_ret = self.is_enum_return(fndef);
+        // For enum returns, force ret_type to I64 (tag) since lower_type("EnumName") is None
+        let ret_type = if is_enum_ret {
+            Some(clif_types::default_int_type())
+        } else {
+            Self::get_return_clif_type(fndef)
+        };
+        // For enum returns, has_return must be true
+        let has_return = has_return || is_enum_ret;
 
         let mut sig = if let Some(ref sname) = struct_ret_name {
             // Struct-returning: no default return value in build_signature
@@ -4746,6 +4869,12 @@ impl CraneliftCompiler {
                 clif_types::default_int_type(),
             ));
         }
+        // Enum-returning functions use two return values: (tag, payload)
+        if is_enum_ret {
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        }
 
         let func_id = self
             .module
@@ -4758,6 +4887,9 @@ impl CraneliftCompiler {
         }
         if is_str_ret {
             self.fn_returns_string.insert(fndef.name.clone());
+        }
+        if is_enum_ret {
+            self.fn_returns_enum.insert(fndef.name.clone());
         }
         // Track array return metadata
         if let Some(TypeExpr::Array {
@@ -4813,8 +4945,13 @@ impl CraneliftCompiler {
             .get(&fndef.name)
             .ok_or_else(|| CodegenError::UndefinedFunction(fndef.name.clone()))?;
 
-        let has_return = !Self::is_void_return(fndef);
-        let ret_type = Self::get_return_clif_type(fndef);
+        let is_enum_ret = self.fn_returns_enum.contains(&fndef.name);
+        let has_return = !Self::is_void_return(fndef) || is_enum_ret;
+        let ret_type = if is_enum_ret {
+            Some(clif_types::default_int_type())
+        } else {
+            Self::get_return_clif_type(fndef)
+        };
         let call_conv = self.module.target_config().default_call_conv;
         let is_struct_ret = self.fn_returns_struct.contains_key(&fndef.name);
 
@@ -4843,6 +4980,12 @@ impl CraneliftCompiler {
         // String-returning functions use two return values: (ptr, len)
         let is_str_ret = self.fn_returns_string.contains(&fndef.name);
         if is_str_ret {
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        }
+        // Enum-returning functions use two return values: (tag, payload)
+        if is_enum_ret {
             sig.returns.push(cranelift_codegen::ir::AbiParam::new(
                 clif_types::default_int_type(),
             ));
@@ -4928,6 +5071,44 @@ impl CraneliftCompiler {
                 }
             }
 
+            // Struct parameter setup: copy from pointer into local stack slot (S4.8)
+            for param in &fndef.params {
+                if let TypeExpr::Simple {
+                    name: ref type_name,
+                    ..
+                } = param.ty
+                {
+                    if let Some(fields) = self.struct_defs.get(type_name) {
+                        let num_fields = fields.len();
+                        let slot = builder.create_sized_stack_slot(
+                            cranelift_codegen::ir::StackSlotData::new(
+                                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                                (num_fields as u32) * 8,
+                                3, // 8-byte alignment
+                            ),
+                        );
+                        // Copy fields from pointer parameter to local stack slot
+                        let param_ptr_var = var_map[&param.name];
+                        let src_ptr = builder.use_var(param_ptr_var);
+                        for (idx, field) in fields.iter().enumerate().take(num_fields) {
+                            let field_type = field.1;
+                            let src_offset = builder
+                                .ins()
+                                .iconst(clif_types::default_int_type(), (idx as i64) * 8);
+                            let src_addr = builder.ins().iadd(src_ptr, src_offset);
+                            let val = builder.ins().load(
+                                field_type,
+                                cranelift_codegen::ir::MemFlags::new(),
+                                src_addr,
+                                0,
+                            );
+                            builder.ins().stack_store(val, slot, (idx as i32) * 8);
+                        }
+                        struct_slots.insert(param.name.clone(), (slot, type_name.clone()));
+                    }
+                }
+            }
+
             // Function pointer parameter setup: track signature for call_indirect
             let mut fn_ptr_sigs = HashMap::new();
             for param in &fndef.params {
@@ -4976,9 +5157,12 @@ impl CraneliftCompiler {
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
                 enum_variant_types: &self.enum_variant_types,
+                generic_enum_defs: &self.generic_enum_defs,
                 enum_vars: &mut enum_vars,
                 last_enum_payload: None,
                 last_enum_payload_type: None,
+                last_enum_multi_payload: None,
+                enum_multi_vars: HashMap::new(),
                 struct_defs: &self.struct_defs,
                 union_names: &self.union_names,
                 bitfield_layouts: &self.bitfield_layouts,
@@ -4990,12 +5174,14 @@ impl CraneliftCompiler {
                 trait_defs: &self.trait_defs,
                 trait_impls: &self.trait_impls,
                 owned_ptrs: Vec::new(),
+                scope_stack: Vec::new(),
                 current_impl_type: impl_type_for_fn,
                 fn_array_returns: &self.fn_array_returns,
                 last_heap_array: false,
                 last_split_result: None,
                 split_vars: HashSet::new(),
                 fn_returns_string: &self.fn_returns_string,
+                fn_returns_enum: &self.fn_returns_enum,
                 fn_returns_heap_array: &self.fn_returns_heap_array,
                 fn_returns_closure_handle: &self.fn_returns_closure_handle,
                 fn_returns_struct: &self.fn_returns_struct,
@@ -5019,6 +5205,8 @@ impl CraneliftCompiler {
                 rwlock_handles: HashSet::new(),
                 last_rwlock_new: false,
                 barrier_handles: HashSet::new(),
+                mutex_guard_handles: HashSet::new(),
+                last_mutex_guard_new: false,
                 condvar_handles: HashSet::new(),
                 last_condvar_new: false,
                 bounded_channel_handles: HashSet::new(),
@@ -5073,6 +5261,7 @@ impl CraneliftCompiler {
                 last_async_io_new: false,
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
+                is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
             };
             // Inject top-level const definitions as variables
             for (cname, cexpr, cty) in &self.const_defs {
@@ -5187,6 +5376,13 @@ impl CraneliftCompiler {
                                 builder.ins().iconst(clif_types::default_int_type(), 0)
                             });
                             builder.ins().return_(&[ret_val, len_val]);
+                        } else if cx.is_enum_return_fn {
+                            // Enum return: (tag, payload)
+                            let payload = cx.last_enum_payload.take().unwrap_or_else(|| {
+                                builder.ins().iconst(clif_types::default_int_type(), 0)
+                            });
+                            cx.last_enum_payload_type.take();
+                            builder.ins().return_(&[ret_val, payload]);
                         } else {
                             // Coerce return value to match declared return type
                             let ret_val = coerce_ret(&mut builder, ret_val, ret_type);
@@ -5270,6 +5466,8 @@ pub struct ObjectCompiler {
     enum_defs: HashMap<String, Vec<String>>,
     /// Enum variant payload types: (enum_name, variant_name) → list of Cranelift types.
     enum_variant_types: HashMap<(String, String), Vec<cranelift_codegen::ir::Type>>,
+    /// Generic enum definitions: enum_name → list of generic param names.
+    generic_enum_defs: HashMap<String, Vec<String>>,
     /// Struct definitions: struct name → ordered list of (field_name, clif_type).
     struct_defs: HashMap<String, Vec<(String, cranelift_codegen::ir::Type)>>,
     /// Set of type names that are unions (all fields at offset 0).
@@ -5294,6 +5492,8 @@ pub struct ObjectCompiler {
     fn_returns_closure_handle: HashSet<String>,
     /// Functions that return a struct type: fn_name → struct_name.
     fn_returns_struct: HashMap<String, String>,
+    /// Functions that return an enum type (two return values: tag, payload).
+    fn_returns_enum: HashSet<String>,
     /// Maps closure variable names to their generated function names.
     closure_fn_map: HashMap<String, String>,
     /// Maps closure function names to their list of captured variable names.
@@ -5358,6 +5558,7 @@ impl ObjectCompiler {
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
             enum_variant_types: HashMap::new(),
+            generic_enum_defs: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -5370,6 +5571,7 @@ impl ObjectCompiler {
             fn_returns_heap_array: HashSet::new(),
             fn_returns_closure_handle: HashSet::new(),
             fn_returns_struct: HashMap::new(),
+            fn_returns_enum: HashSet::new(),
             closure_fn_map: HashMap::new(),
             closure_captures: HashMap::new(),
             closure_span_to_fn: HashMap::new(),
@@ -5414,6 +5616,7 @@ impl ObjectCompiler {
             fn_return_types: HashMap::new(),
             enum_defs: HashMap::new(),
             enum_variant_types: HashMap::new(),
+            generic_enum_defs: HashMap::new(),
             struct_defs: HashMap::new(),
             union_names: HashSet::new(),
             bitfield_layouts: HashMap::new(),
@@ -5426,6 +5629,7 @@ impl ObjectCompiler {
             fn_returns_heap_array: HashSet::new(),
             fn_returns_closure_handle: HashSet::new(),
             fn_returns_struct: HashMap::new(),
+            fn_returns_enum: HashSet::new(),
             closure_fn_map: HashMap::new(),
             closure_captures: HashMap::new(),
             closure_span_to_fn: HashMap::new(),
@@ -7038,6 +7242,40 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__mutex_try_lock".to_string(), mutex_try_lock_id);
+
+        // ── MutexGuard (RAII lock) ──────────────────────────────────────
+
+        // fj_rt_mutex_guard_lock(mutex_handle) -> guard_handle (ptr -> ptr)
+        let guard_lock_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_lock", Linkage::Import, &sig_thread_join)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_lock".to_string(), guard_lock_id);
+
+        // fj_rt_mutex_guard_get(guard) -> i64 (ptr -> i64)
+        let guard_get_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_get", Linkage::Import, &sig_thread_join)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_get".to_string(), guard_get_id);
+
+        // fj_rt_mutex_guard_set(guard, value) -> void
+        let guard_set_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_set", Linkage::Import, &sig_mutex_store)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_set".to_string(), guard_set_id);
+
+        // fj_rt_mutex_guard_free(guard) -> void
+        let guard_free_id = self
+            .module
+            .declare_function("fj_rt_mutex_guard_free", Linkage::Import, &sig_map_clear)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_guard_free".to_string(), guard_free_id);
 
         // ── Channel primitives ───────────────────────────────────────────
 
@@ -8722,6 +8960,50 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__tensor_rand".to_string(), trand_id);
 
+        // tensor_xavier(i64, i64) -> i64 — reuse sig_ii_i
+        let txavier_id = self
+            .module
+            .declare_function("fj_rt_tensor_xavier", Linkage::Import, &sig_ii_i)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_xavier".to_string(), txavier_id);
+
+        // tensor_argmax(ptr) -> i64 — reuse sig_thread_spawn_noarg (ptr -> i64)
+        let targmax_id = self
+            .module
+            .declare_function(
+                "fj_rt_tensor_argmax",
+                Linkage::Import,
+                &sig_thread_spawn_noarg,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_argmax".to_string(), targmax_id);
+
+        // tensor_from_data(ptr, i64, i64, i64) -> ptr — 4 args, 1 return
+        let mut sig_iiii_i = self.module.make_signature();
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        sig_iiii_i
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(i64_ty));
+        let tfromdata_id = self
+            .module
+            .declare_function("fj_rt_tensor_from_data", Linkage::Import, &sig_iiii_i)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__tensor_from_data".to_string(), tfromdata_id);
+
         // tensor_scale(ptr, i64) -> ptr — reuse sig_tload (ptr, i64 → ptr)
         let tscale_id = self
             .module
@@ -8792,6 +9074,18 @@ impl ObjectCompiler {
             return Err(errors);
         }
 
+        // Register built-in Poll<T> enum: Ready(T)=0, Pending=1 (S4.1)
+        self.enum_defs.insert(
+            "Poll".to_string(),
+            vec!["Ready".to_string(), "Pending".to_string()],
+        );
+        self.enum_variant_types.insert(
+            ("Poll".to_string(), "Ready".to_string()),
+            vec![clif_types::default_int_type()],
+        );
+        self.generic_enum_defs
+            .insert("Poll".to_string(), vec!["T".to_string()]);
+
         // Collect enum and struct definitions
         for item in &program.items {
             match item {
@@ -8809,6 +9103,16 @@ impl ObjectCompiler {
                             .collect();
                         self.enum_variant_types
                             .insert((edef.name.clone(), v.name.clone()), payload_types);
+                    }
+                    // Track generic enum definitions (S1.2)
+                    if !edef.generic_params.is_empty() {
+                        let param_names: Vec<String> = edef
+                            .generic_params
+                            .iter()
+                            .map(|gp| gp.name.clone())
+                            .collect();
+                        self.generic_enum_defs
+                            .insert(edef.name.clone(), param_names);
                     }
                     self.enum_defs.insert(edef.name.clone(), variants);
                 }
@@ -9371,7 +9675,18 @@ impl ObjectCompiler {
             }
         });
 
-        let ret_type = CraneliftCompiler::get_return_clif_type(fndef);
+        let is_enum_ret =
+            if let Some(crate::parser::ast::TypeExpr::Simple { name, .. }) = &fndef.return_type {
+                self.enum_defs.contains_key(name)
+            } else {
+                false
+            };
+        let ret_type = if is_enum_ret {
+            Some(clif_types::default_int_type())
+        } else {
+            CraneliftCompiler::get_return_clif_type(fndef)
+        };
+        let has_return = has_return || is_enum_ret;
 
         let mut sig = if let Some(ref sname) = struct_ret_name {
             let mut s = super::abi::build_signature_with_return_type(
@@ -9401,6 +9716,12 @@ impl ObjectCompiler {
                 clif_types::default_int_type(),
             ));
         }
+        // Enum-returning functions use two return values: (tag, payload)
+        if is_enum_ret {
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        }
 
         let func_id = self
             .module
@@ -9413,6 +9734,9 @@ impl ObjectCompiler {
         }
         if is_str_ret {
             self.fn_returns_string.insert(fndef.name.clone());
+        }
+        if is_enum_ret {
+            self.fn_returns_enum.insert(fndef.name.clone());
         }
         // Track array return metadata
         if let Some(TypeExpr::Array {
@@ -9442,8 +9766,13 @@ impl ObjectCompiler {
             .get(&fndef.name)
             .ok_or_else(|| CodegenError::UndefinedFunction(fndef.name.clone()))?;
 
-        let has_return = !CraneliftCompiler::is_void_return(fndef);
-        let ret_type = CraneliftCompiler::get_return_clif_type(fndef);
+        let is_enum_ret = self.fn_returns_enum.contains(&fndef.name);
+        let has_return = !CraneliftCompiler::is_void_return(fndef) || is_enum_ret;
+        let ret_type = if is_enum_ret {
+            Some(clif_types::default_int_type())
+        } else {
+            CraneliftCompiler::get_return_clif_type(fndef)
+        };
         let call_conv = self.module.target_config().default_call_conv;
         let is_struct_ret = self.fn_returns_struct.contains_key(&fndef.name);
 
@@ -9471,6 +9800,12 @@ impl ObjectCompiler {
         // String-returning functions use two return values: (ptr, len)
         let is_str_ret = self.fn_returns_string.contains(&fndef.name);
         if is_str_ret {
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        }
+        // Enum-returning functions use two return values: (tag, payload)
+        if is_enum_ret {
             sig.returns.push(cranelift_codegen::ir::AbiParam::new(
                 clif_types::default_int_type(),
             ));
@@ -9554,6 +9889,44 @@ impl ObjectCompiler {
                 }
             }
 
+            // Struct parameter setup: copy from pointer into local stack slot (S4.8)
+            for param in &fndef.params {
+                if let TypeExpr::Simple {
+                    name: ref type_name,
+                    ..
+                } = param.ty
+                {
+                    if let Some(fields) = self.struct_defs.get(type_name) {
+                        let num_fields = fields.len();
+                        let slot = builder.create_sized_stack_slot(
+                            cranelift_codegen::ir::StackSlotData::new(
+                                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                                (num_fields as u32) * 8,
+                                3, // 8-byte alignment
+                            ),
+                        );
+                        // Copy fields from pointer parameter to local stack slot
+                        let param_ptr_var = var_map[&param.name];
+                        let src_ptr = builder.use_var(param_ptr_var);
+                        for (idx, field) in fields.iter().enumerate().take(num_fields) {
+                            let field_type = field.1;
+                            let src_offset = builder
+                                .ins()
+                                .iconst(clif_types::default_int_type(), (idx as i64) * 8);
+                            let src_addr = builder.ins().iadd(src_ptr, src_offset);
+                            let val = builder.ins().load(
+                                field_type,
+                                cranelift_codegen::ir::MemFlags::new(),
+                                src_addr,
+                                0,
+                            );
+                            builder.ins().stack_store(val, slot, (idx as i32) * 8);
+                        }
+                        struct_slots.insert(param.name.clone(), (slot, type_name.clone()));
+                    }
+                }
+            }
+
             // Function pointer parameter setup: track signature for call_indirect
             let mut fn_ptr_sigs = HashMap::new();
             for param in &fndef.params {
@@ -9601,9 +9974,12 @@ impl ObjectCompiler {
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
                 enum_variant_types: &self.enum_variant_types,
+                generic_enum_defs: &self.generic_enum_defs,
                 enum_vars: &mut enum_vars,
                 last_enum_payload: None,
                 last_enum_payload_type: None,
+                last_enum_multi_payload: None,
+                enum_multi_vars: HashMap::new(),
                 struct_defs: &self.struct_defs,
                 union_names: &self.union_names,
                 bitfield_layouts: &self.bitfield_layouts,
@@ -9615,12 +9991,14 @@ impl ObjectCompiler {
                 trait_defs: &self.trait_defs,
                 trait_impls: &self.trait_impls,
                 owned_ptrs: Vec::new(),
+                scope_stack: Vec::new(),
                 current_impl_type: impl_type_for_fn,
                 fn_array_returns: &self.fn_array_returns,
                 last_heap_array: false,
                 last_split_result: None,
                 split_vars: HashSet::new(),
                 fn_returns_string: &self.fn_returns_string,
+                fn_returns_enum: &self.fn_returns_enum,
                 fn_returns_heap_array: &self.fn_returns_heap_array,
                 fn_returns_closure_handle: &self.fn_returns_closure_handle,
                 fn_returns_struct: &self.fn_returns_struct,
@@ -9644,6 +10022,8 @@ impl ObjectCompiler {
                 rwlock_handles: HashSet::new(),
                 last_rwlock_new: false,
                 barrier_handles: HashSet::new(),
+                mutex_guard_handles: HashSet::new(),
+                last_mutex_guard_new: false,
                 condvar_handles: HashSet::new(),
                 last_condvar_new: false,
                 bounded_channel_handles: HashSet::new(),
@@ -9698,6 +10078,7 @@ impl ObjectCompiler {
                 last_async_io_new: false,
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
+                is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
             };
             // Inject top-level const definitions as variables
             for (cname, cexpr, cty) in &self.const_defs {
@@ -9807,6 +10188,12 @@ impl ObjectCompiler {
                                 builder.ins().iconst(clif_types::default_int_type(), 0)
                             });
                             builder.ins().return_(&[ret_val, len_val]);
+                        } else if cx.is_enum_return_fn {
+                            let payload = cx.last_enum_payload.take().unwrap_or_else(|| {
+                                builder.ins().iconst(clif_types::default_int_type(), 0)
+                            });
+                            cx.last_enum_payload_type.take();
+                            builder.ins().return_(&[ret_val, payload]);
                         } else {
                             let ret_val = coerce_ret(&mut builder, ret_val, ret_type);
                             builder.ins().return_(&[ret_val]);

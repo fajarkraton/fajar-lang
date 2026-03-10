@@ -2,7 +2,7 @@
 
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::instructions::BlockArg;
-use cranelift_codegen::ir::{InstBuilder, Value as ClifValue};
+use cranelift_codegen::ir::{InstBuilder, MemFlags, Value as ClifValue};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -451,6 +451,8 @@ pub(in crate::codegen::cranelift) fn compile_match<M: Module>(
     let payload_val = cx
         .last_enum_payload
         .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+    // Capture multi-field payload info from the subject (if any)
+    let multi_payload = cx.last_enum_multi_payload.take();
     // Capture subject's tuple types for type-aware tuple pattern destructuring.
     // For ident subjects, look up from tuple_types; for literal tuple subjects,
     // use last_tuple_elem_types set by compile_tuple.
@@ -564,14 +566,45 @@ pub(in crate::codegen::cranelift) fn compile_match<M: Module>(
                 // Bind pattern fields in the body block
                 builder.switch_to_block(body_block);
                 builder.seal_block(body_block);
-                if let Some(Pattern::Ident { name, .. }) = fields.first() {
-                    // Use the actual Cranelift type of the payload value, which is
-                    // fixed for all arms (it's the subject's stored payload type).
-                    let payload_type = builder.func.dfg.value_type(payload_val);
-                    let bind_var = builder.declare_var(payload_type);
-                    builder.def_var(bind_var, payload_val);
+                if fields.len() > 1 {
+                    // S1.4: Multi-field variant destructuring
+                    // Load each field from the stack slot at 8-byte offsets.
+                    if let Some((slot, ref field_types)) = multi_payload {
+                        for (i, field_pat) in fields.iter().enumerate() {
+                            if let Pattern::Ident { name, .. } = field_pat {
+                                let ft = field_types
+                                    .get(i)
+                                    .copied()
+                                    .unwrap_or(clif_types::default_int_type());
+                                let offset = (i * 8) as i32;
+                                let val = builder.ins().stack_load(ft, slot, offset);
+                                let bind_var = builder.declare_var(ft);
+                                builder.def_var(bind_var, val);
+                                cx.var_map.insert(name.clone(), bind_var);
+                                cx.var_types.insert(name.clone(), ft);
+                            }
+                        }
+                    }
+                } else if let Some(Pattern::Ident { name, .. }) = fields.first() {
+                    // S1.3: Type-aware payload binding — use enum_variant_types
+                    // to determine the declared type for this variant's payload.
+                    // If it differs from the stored payload type, bitcast.
+                    let actual_type = builder.func.dfg.value_type(payload_val);
+                    let expected_type =
+                        resolve_variant_payload_type(cx, variant).unwrap_or(actual_type);
+                    let typed_payload = if actual_type != expected_type
+                        && actual_type.bits() == expected_type.bits()
+                    {
+                        builder
+                            .ins()
+                            .bitcast(expected_type, MemFlags::new(), payload_val)
+                    } else {
+                        payload_val
+                    };
+                    let bind_var = builder.declare_var(expected_type);
+                    builder.def_var(bind_var, typed_payload);
                     cx.var_map.insert(name.clone(), bind_var);
-                    cx.var_types.insert(name.clone(), payload_type);
+                    cx.var_types.insert(name.clone(), expected_type);
                 }
                 let result = compile_expr(builder, cx, &arm.body)?;
                 if !builder.is_unreachable() {
@@ -780,7 +813,13 @@ pub(in crate::codegen::cranelift) fn resolve_variant_tag<M: Module>(
     cx: &CodegenCtx<'_, M>,
     variant: &str,
 ) -> Result<i64, CodegenError> {
-    // Built-in Option/Result
+    // User-defined enums take priority over built-in names
+    for variants in cx.enum_defs.values() {
+        if let Some(idx) = variants.iter().position(|v| v == variant) {
+            return Ok(idx as i64);
+        }
+    }
+    // Built-in Option/Result (when no user-defined enum contains these variants)
     match variant {
         "None" => return Ok(0),
         "Some" => return Ok(1),
@@ -788,15 +827,31 @@ pub(in crate::codegen::cranelift) fn resolve_variant_tag<M: Module>(
         "Err" => return Ok(1),
         _ => {}
     }
-    // User-defined enums
-    for variants in cx.enum_defs.values() {
-        if let Some(idx) = variants.iter().position(|v| v == variant) {
-            return Ok(idx as i64);
-        }
-    }
     Err(CodegenError::UndefinedVariable(format!(
         "unknown enum variant '{variant}'"
     )))
+}
+
+/// Resolves a variant name to its expected payload Cranelift type.
+///
+/// Looks up the variant in `enum_variant_types` to determine the declared
+/// payload type. Returns `None` if the variant has no payload, is unknown,
+/// or belongs to a generic enum (where the type is inferred at construction).
+fn resolve_variant_payload_type<M: Module>(
+    cx: &CodegenCtx<'_, M>,
+    variant: &str,
+) -> Option<cranelift_codegen::ir::Type> {
+    for ((enum_name, var_name), types) in cx.enum_variant_types.iter() {
+        if var_name == variant {
+            // Generic enums have unresolved type params (T → I64 default).
+            // Don't override — the actual type is inferred from construction.
+            if cx.generic_enum_defs.contains_key(enum_name) {
+                return None;
+            }
+            return types.first().copied();
+        }
+    }
+    None
 }
 
 /// Compiles a for-in-range loop.

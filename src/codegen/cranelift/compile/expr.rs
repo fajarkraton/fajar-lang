@@ -9,7 +9,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{emit_owned_cleanup, CodegenCtx};
+use super::super::context::{emit_owned_cleanup, emit_scope_cleanup, CodegenCtx};
 use crate::codegen::CodegenError;
 use crate::parser::ast::{BinOp, Expr, LiteralKind, UnaryOp};
 
@@ -59,6 +59,12 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
         Expr::Block {
             stmts, expr: tail, ..
         } => {
+            // S3.2: Push a new scope for block-level RAII cleanup.
+            // The function body's sentinel scope (depth 0) is pushed in define_function
+            // and is NOT cleaned up here — function-level cleanup uses emit_owned_cleanup.
+            // Only nested blocks (depth > 0) get scope cleanup.
+            let depth_before = cx.scope_stack.len();
+            cx.scope_stack.push(Vec::new());
             let mut last = builder.ins().iconst(clif_types::default_int_type(), 0);
             for stmt in stmts {
                 if let Some(val) = compile_stmt(builder, cx, stmt)? {
@@ -67,6 +73,14 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
             }
             if let Some(tail_expr) = tail {
                 last = compile_expr(builder, cx, tail_expr)?;
+            }
+            // S3.3: Cleanup scope-local resources (skip freeing the tail value).
+            // Only clean up nested scopes (depth > 1 means we're inside the fn body).
+            if depth_before >= 1 {
+                emit_scope_cleanup(builder, cx, Some(last))?;
+            } else {
+                // Function body scope — just pop without cleanup
+                cx.scope_stack.pop();
             }
             Ok(last)
         }
@@ -256,12 +270,17 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
             let err_block = builder.create_block();
             builder.ins().brif(is_err, err_block, &[], ok_block, &[]);
 
-            // Err block: emit cleanup and return the error payload
+            // Err block: emit cleanup and return the error
             builder.switch_to_block(err_block);
             builder.seal_block(err_block);
             emit_owned_cleanup(builder, cx, None)?;
-            // Return the error payload (MVP: single return value)
-            builder.ins().return_(&[payload]);
+            if cx.is_enum_return_fn {
+                // Typed Result propagation: return (tag, payload) so caller gets proper Result
+                builder.ins().return_(&[tag_val, payload]);
+            } else {
+                // Simple error propagation: return just the error value
+                builder.ins().return_(&[payload]);
+            }
 
             // Ok block: continue with the unwrapped payload
             builder.switch_to_block(ok_block);
@@ -330,8 +349,12 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
             Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
         }
         Expr::InlineAsm {
-            template, operands, ..
-        } => compile_inline_asm(builder, cx, template, operands),
+            template,
+            operands,
+            options,
+            clobber_abi,
+            ..
+        } => compile_inline_asm(builder, cx, template, operands, options, clobber_abi),
         Expr::Await { expr: inner, .. } => {
             // Compile the inner expression (produces a future handle pointer)
             let future_ptr = compile_expr(builder, cx, inner)?;
@@ -382,6 +405,28 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
             builder.ins().call(free_callee, &[future_ptr]);
 
             Ok(result)
+        }
+        Expr::AsyncBlock { body, .. } => {
+            // async { body } → create future, compile body, set result, return future_ptr
+            let new_id = cx
+                .functions
+                .get("__future_new")
+                .ok_or_else(|| CodegenError::Internal("__future_new not declared".into()))?;
+            let new_callee = cx.module.declare_func_in_func(*new_id, builder.func);
+            let new_call = builder.ins().call(new_callee, &[]);
+            let future_ptr = builder.inst_results(new_call)[0];
+
+            let result = compile_expr(builder, cx, body)?;
+
+            let set_id = cx
+                .functions
+                .get("__future_set_result")
+                .ok_or_else(|| CodegenError::Internal("__future_set_result not declared".into()))?;
+            let set_callee = cx.module.declare_func_in_func(*set_id, builder.func);
+            builder.ins().call(set_callee, &[future_ptr, result]);
+
+            cx.last_future_new = true;
+            Ok(future_ptr)
         }
         _ => Err(CodegenError::UnsupportedExpr(format!(
             "{:?}",
@@ -639,6 +684,10 @@ pub(in crate::codegen::cranelift) fn compile_ident<M: Module>(
     if let Some((_, payload_var, payload_type)) = cx.enum_vars.get(name) {
         cx.last_enum_payload = Some(builder.use_var(*payload_var));
         cx.last_enum_payload_type = Some(*payload_type);
+    }
+    // Propagate multi-field enum tracking
+    if let Some((slot, field_types)) = cx.enum_multi_vars.get(name) {
+        cx.last_enum_multi_payload = Some((*slot, field_types.clone()));
     }
     // Propagate struct slot tracking
     if let Some((slot, sname)) = cx.struct_slots.get(name) {

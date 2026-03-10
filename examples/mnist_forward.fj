@@ -1,33 +1,92 @@
-// MNIST Forward Pass Example
+// MNIST Forward Pass — Fajar Lang Native Codegen
 //
-// Demonstrates a simple feedforward neural network for MNIST digit classification.
+// Demonstrates a feedforward neural network for MNIST digit classification.
 // Architecture: 784 -> 128 (ReLU) -> 10 (Softmax)
 //
-// Run: fj run examples/mnist_forward.fj
+// Run: fj run --native examples/mnist_forward.fj
 
-// Layer 1: Dense(784 -> 128)
-let w1 = tensor_xavier(784, 128)
-let b1 = tensor_zeros([1, 128])
+fn dense_relu(input: Tensor, weights: Tensor, bias: Tensor) -> Tensor {
+    let z = tensor_add(tensor_matmul(input, weights), bias)
+    tensor_relu(z)
+}
 
-// Layer 2: Dense(128 -> 10)
-let w2 = tensor_xavier(128, 10)
-let b2 = tensor_zeros([1, 10])
+fn dense_softmax(input: Tensor, weights: Tensor, bias: Tensor) -> Tensor {
+    let z = tensor_add(tensor_matmul(input, weights), bias)
+    tensor_softmax(z)
+}
 
-// Simulated input: batch of 1, 784 features (28x28 flattened)
-let input = tensor_randn([1, 784])
+fn main() -> i64 {
+    println("=== MNIST Forward Pass (Native Codegen) ===")
+    println("Architecture: 784 -> 128 (ReLU) -> 10 (Softmax)")
+    println("")
 
-// Forward pass
-let z1 = tensor_add(tensor_matmul(input, w1), b1)
-let a1 = tensor_relu(z1)
-let z2 = tensor_add(tensor_matmul(a1, w2), b2)
-let output = tensor_softmax(z2)
+    // Layer 1: Dense(784 -> 128) with Xavier init
+    let w1 = tensor_xavier(784, 128)
+    let b1 = tensor_zeros(1, 128)
 
-// Output analysis
-println("MNIST Forward Pass")
-println("==================")
-println("Input shape:  [1, 784]")
-let out_shape = tensor_shape(output)
-println(out_shape)
-let predicted = tensor_argmax(output)
-println(predicted)
-println("Done!")
+    // Layer 2: Dense(128 -> 10)
+    let w2 = tensor_xavier(128, 10)
+    let b2 = tensor_zeros(1, 10)
+
+    println("Weights initialized (Xavier)")
+    print("  W1: 784 x 128 = ")
+    let w1_rows = tensor_rows(w1)
+    let w1_cols = tensor_cols(w1)
+    print(w1_rows)
+    print(" x ")
+    println(w1_cols)
+    print("  W2: 128 x 10  = ")
+    let w2_rows = tensor_rows(w2)
+    let w2_cols = tensor_cols(w2)
+    print(w2_rows)
+    print(" x ")
+    println(w2_cols)
+    println("")
+
+    // Simulated input: 1 sample, 784 features (28x28 flattened)
+    let input = tensor_rand(1, 784)
+    println("Input: 1 x 784 (random, simulating flattened 28x28 image)")
+    println("")
+
+    // Forward pass
+    println("Running forward pass...")
+    let hidden = dense_relu(input, w1, b1)
+    let output = dense_softmax(hidden, w2, b2)
+
+    // Output analysis
+    let out_rows = tensor_rows(output)
+    let out_cols = tensor_cols(output)
+    print("Output shape: ")
+    print(out_rows)
+    print(" x ")
+    println(out_cols)
+
+    let predicted = tensor_argmax(output)
+    print("Predicted digit: ")
+    println(predicted)
+
+    // Sum of softmax outputs (should be ~1.0)
+    let prob_sum = tensor_sum(output)
+    print("Softmax sum: ")
+    println(prob_sum)
+
+    // Show output statistics
+    let out_mean = tensor_mean(output)
+    print("Output mean: ")
+    println(out_mean)
+
+    println("")
+    println("=== Forward Pass Complete ===")
+    println("In production: weights loaded from .fjmodel file, input from dataset.")
+
+    // Cleanup
+    tensor_free(input)
+    tensor_free(w1)
+    tensor_free(b1)
+    tensor_free(w2)
+    tensor_free(b2)
+    tensor_free(hidden)
+    tensor_free(output)
+
+    predicted
+}

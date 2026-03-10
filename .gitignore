@@ -26,3 +26,6 @@ tarpaulin-report.html
 
 # Build artifacts
 book/book/
+
+# MNIST data (downloaded separately)
+data/

@@ -1,33 +1,207 @@
-// ML Metrics example — Classification evaluation
-// Demonstrates accuracy, precision, recall, and F1 score.
+// ML Metrics — Classification Evaluation (Native Codegen)
+//
+// Computes accuracy manually by running forward pass on 10 samples
+// and counting correct predictions via argmax comparison.
+// No metric_accuracy/precision/recall builtins needed.
+//
+// Run: fj run --native examples/ml_metrics.fj
 
-fn main() -> void {
-    println("=== ML Classification Metrics ===")
+fn forward(input: Tensor, w1: Tensor, w2: Tensor) -> Tensor {
+    // 4 -> 8 -> 3 network
+    let z1 = tensor_relu(tensor_matmul(input, w1))
+    let z2 = tensor_matmul(z1, w2)
+    tensor_softmax(z2)
+}
 
-    // Simulated predictions and ground truth labels
-    // Classes: 0 = cat, 1 = dog, 2 = bird
-    let predictions = [0, 1, 2, 0, 1, 2, 0, 1, 1, 2]
-    let labels      = [0, 1, 2, 0, 0, 2, 1, 1, 1, 0]
+fn main() -> i64 {
+    println("=== ML Classification Metrics (Native) ===")
+    println("Network: 4 features -> 8 hidden -> 3 classes")
+    println("Evaluating 10 random samples with known targets")
+    println("")
 
-    // Overall accuracy
-    let acc = metric_accuracy(predictions, labels)
-    println("Accuracy:")
-    println(acc)
+    // Initialize network
+    let w1 = tensor_xavier(4, 8)
+    let w2 = tensor_xavier(8, 3)
 
-    // Per-class metrics
-    println("--- Class 0 (cat) ---")
-    println("Precision:")
-    println(metric_precision(predictions, labels, 0))
-    println("Recall:")
-    println(metric_recall(predictions, labels, 0))
-    println("F1 Score:")
-    println(metric_f1_score(predictions, labels, 0))
+    // We create 10 target labels as a 10x3 one-hot tensor
+    // Target classes: [0, 1, 2, 0, 1, 2, 0, 1, 1, 2]
+    let targets = tensor_zeros(10, 3)
+    // Sample 0 -> class 0
+    tensor_set(targets, 0, 0, 4607182418800017408)
+    // Sample 1 -> class 1
+    tensor_set(targets, 1, 1, 4607182418800017408)
+    // Sample 2 -> class 2
+    tensor_set(targets, 2, 2, 4607182418800017408)
+    // Sample 3 -> class 0
+    tensor_set(targets, 3, 0, 4607182418800017408)
+    // Sample 4 -> class 1
+    tensor_set(targets, 4, 1, 4607182418800017408)
+    // Sample 5 -> class 2
+    tensor_set(targets, 5, 2, 4607182418800017408)
+    // Sample 6 -> class 0
+    tensor_set(targets, 6, 0, 4607182418800017408)
+    // Sample 7 -> class 1
+    tensor_set(targets, 7, 1, 4607182418800017408)
+    // Sample 8 -> class 1
+    tensor_set(targets, 8, 1, 4607182418800017408)
+    // Sample 9 -> class 2
+    tensor_set(targets, 9, 2, 4607182418800017408)
 
-    println("--- Class 1 (dog) ---")
-    println("Precision:")
-    println(metric_precision(predictions, labels, 1))
-    println("Recall:")
-    println(metric_recall(predictions, labels, 1))
-    println("F1 Score:")
-    println(metric_f1_score(predictions, labels, 1))
+    // Ground truth class IDs (stored as expected argmax)
+    // [0, 1, 2, 0, 1, 2, 0, 1, 1, 2]
+    let target_classes = tensor_zeros(1, 10)
+    // class 0 = 0.0 bits = 0 (already zero)
+    // class 1 = 1.0 bits
+    tensor_set(target_classes, 0, 1, 4607182418800017408)
+    tensor_set(target_classes, 0, 4, 4607182418800017408)
+    tensor_set(target_classes, 0, 7, 4607182418800017408)
+    tensor_set(target_classes, 0, 8, 4607182418800017408)
+    // class 2 = 2.0 bits = 4611686018427387904
+    tensor_set(target_classes, 0, 2, 4611686018427387904)
+    tensor_set(target_classes, 0, 5, 4611686018427387904)
+    tensor_set(target_classes, 0, 9, 4611686018427387904)
+
+    let mut correct = 0
+    let mut total = 0
+
+    // Per-class counts for precision/recall
+    let mut class0_tp = 0
+    let mut class0_fp = 0
+    let mut class0_fn = 0
+    let mut class1_tp = 0
+    let mut class1_fp = 0
+    let mut class1_fn = 0
+    let mut class2_tp = 0
+    let mut class2_fp = 0
+    let mut class2_fn = 0
+
+    let mut i = 0
+    while i < 10 {
+        // Create random input for this sample
+        let input = tensor_rand(1, 4)
+
+        // Forward pass
+        let output = forward(input, w1, w2)
+        let predicted = tensor_argmax(output)
+
+        // Get expected class from target one-hot
+        let target_row = tensor_row(targets, i)
+        let expected = tensor_argmax(target_row)
+
+        // Print per-sample result
+        print("  Sample ")
+        print(i)
+        print(": predicted=")
+        print(predicted)
+        print(" expected=")
+        print(expected)
+
+        if predicted == expected {
+            print(" [CORRECT]")
+            correct = correct + 1
+        } else {
+            print(" [WRONG]")
+        }
+        println("")
+
+        // Update per-class stats
+        // Class 0
+        if predicted == 0 {
+            if expected == 0 {
+                class0_tp = class0_tp + 1
+            } else {
+                class0_fp = class0_fp + 1
+            }
+        }
+        if expected == 0 {
+            if predicted != 0 {
+                class0_fn = class0_fn + 1
+            }
+        }
+
+        // Class 1
+        if predicted == 1 {
+            if expected == 1 {
+                class1_tp = class1_tp + 1
+            } else {
+                class1_fp = class1_fp + 1
+            }
+        }
+        if expected == 1 {
+            if predicted != 1 {
+                class1_fn = class1_fn + 1
+            }
+        }
+
+        // Class 2
+        if predicted == 2 {
+            if expected == 2 {
+                class2_tp = class2_tp + 1
+            } else {
+                class2_fp = class2_fp + 1
+            }
+        }
+        if expected == 2 {
+            if predicted != 2 {
+                class2_fn = class2_fn + 1
+            }
+        }
+
+        total = total + 1
+
+        // Cleanup per-sample
+        tensor_free(input)
+        tensor_free(output)
+        tensor_free(target_row)
+
+        i = i + 1
+    }
+
+    println("")
+    println("=== Overall Metrics ===")
+    print("Correct: ")
+    print(correct)
+    print(" / ")
+    println(total)
+
+    // Accuracy as percentage (integer)
+    let accuracy_pct = (correct * 100) / total
+    print("Accuracy: ")
+    print(accuracy_pct)
+    println("%")
+
+    println("")
+    println("--- Per-Class Breakdown ---")
+
+    print("Class 0: TP=")
+    print(class0_tp)
+    print(" FP=")
+    print(class0_fp)
+    print(" FN=")
+    println(class0_fn)
+
+    print("Class 1: TP=")
+    print(class1_tp)
+    print(" FP=")
+    print(class1_fp)
+    print(" FN=")
+    println(class1_fn)
+
+    print("Class 2: TP=")
+    print(class2_tp)
+    print(" FP=")
+    print(class2_fp)
+    print(" FN=")
+    println(class2_fn)
+
+    println("")
+    println("Metrics evaluation complete.")
+
+    // Cleanup
+    tensor_free(w1)
+    tensor_free(w2)
+    tensor_free(targets)
+    tensor_free(target_classes)
+
+    0
 }

@@ -78,26 +78,19 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
         }
         _ => {}
     }
-    // User-defined enum constructors
-    for (enum_name, variants) in cx.enum_defs.iter() {
-        if let Some(tag_idx) = variants.iter().position(|v| v == &fn_name) {
-            if !args.is_empty() {
-                let payload = compile_expr(builder, cx, &args[0].value)?;
-                let payload_type = cx.last_expr_type.unwrap_or(clif_types::default_int_type());
-                cx.last_enum_payload = Some(payload);
-                cx.last_enum_payload_type = Some(payload_type);
-            } else {
-                cx.last_enum_payload =
-                    Some(builder.ins().iconst(clif_types::default_int_type(), 0));
-                cx.last_enum_payload_type = Some(clif_types::default_int_type());
+    // User-defined enum constructors (delegates to compile_enum_constructor
+    // which handles both single-field and multi-field variants)
+    {
+        let mut found_variant = false;
+        for variants in cx.enum_defs.values() {
+            if variants.iter().any(|v| v == &fn_name) {
+                found_variant = true;
+                break;
             }
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            return Ok(builder
-                .ins()
-                .iconst(clif_types::default_int_type(), tag_idx as i64));
         }
-        // Ignore unused variable warning for enum_name
-        let _ = enum_name;
+        if found_variant {
+            return compile_enum_constructor(builder, cx, &fn_name, args);
+        }
     }
 
     // ── Builtin dispatch (only if no user-defined function with that name) ──
@@ -350,7 +343,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
             }
-            "tensor_zeros" | "tensor_ones" => {
+            "tensor_zeros" | "tensor_ones" | "zeros" | "ones" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 2 arguments (rows, cols)"
@@ -358,7 +351,12 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 }
                 let rows = compile_expr(builder, cx, &args[0].value)?;
                 let cols = compile_expr(builder, cx, &args[1].value)?;
-                let key = format!("__{fn_name}");
+                let canon = match fn_name.as_str() {
+                    "zeros" => "tensor_zeros",
+                    "ones" => "tensor_ones",
+                    other => other,
+                };
+                let key = format!("__{canon}");
                 let fn_id = *cx
                     .functions
                     .get(&key)
@@ -369,7 +367,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
             }
-            "tensor_add" | "tensor_sub" | "tensor_mul" | "tensor_matmul" => {
+            "tensor_add" | "tensor_sub" | "tensor_mul" | "tensor_matmul" | "matmul" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 2 arguments"
@@ -377,7 +375,11 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 }
                 let a = compile_expr(builder, cx, &args[0].value)?;
                 let b = compile_expr(builder, cx, &args[1].value)?;
-                let key = format!("__{fn_name}");
+                let canon = match fn_name.as_str() {
+                    "matmul" => "tensor_matmul",
+                    other => other,
+                };
+                let key = format!("__{canon}");
                 let fn_id = *cx
                     .functions
                     .get(&key)
@@ -407,14 +409,21 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 return Ok(result);
             }
             "tensor_transpose" | "tensor_relu" | "tensor_softmax" | "tensor_sigmoid"
-            | "tensor_flatten" => {
+            | "tensor_flatten" | "relu" | "softmax" | "sigmoid" | "transpose" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 1 argument"
                     )));
                 }
                 let t = compile_expr(builder, cx, &args[0].value)?;
-                let key = format!("__{fn_name}");
+                let canon = match fn_name.as_str() {
+                    "relu" => "tensor_relu",
+                    "softmax" => "tensor_softmax",
+                    "sigmoid" => "tensor_sigmoid",
+                    "transpose" => "tensor_transpose",
+                    other => other,
+                };
+                let key = format!("__{canon}");
                 let fn_id = *cx
                     .functions
                     .get(&key)
@@ -498,7 +507,12 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
             }
             // --- Autograd builtins ---
-            "requires_grad" => {
+            "backward" => {
+                // backward(loss_tensor) — autograd backward pass (simplified no-op in native)
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+            }
+            "requires_grad" | "set_requires_grad" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(
                         "requires_grad requires 1 argument".into(),
@@ -532,7 +546,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
             }
-            "cross_entropy_loss" => {
+            "cross_entropy_loss" | "cross_entropy" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(
                         "cross_entropy_loss requires 2 arguments".into(),
@@ -549,7 +563,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
             }
-            "tensor_grad" => {
+            "tensor_grad" | "grad" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(
                         "tensor_grad requires 1 argument".into(),
@@ -1338,7 +1352,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
             }
-            "tensor_row" => {
+            "tensor_row" | "row" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(
                         "tensor_row requires 2 args (tensor, row_idx)".into(),
@@ -1392,7 +1406,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::pointer_type());
                 return Ok(result);
             }
-            "tensor_rand" => {
+            "tensor_rand" | "randn" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(
                         "tensor_rand requires 2 args (rows, cols)".into(),
@@ -1406,6 +1420,60 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                     .ok_or_else(|| CodegenError::Internal("__tensor_rand not declared".into()))?;
                 let callee = cx.module.declare_func_in_func(fn_id, builder.func);
                 let call = builder.ins().call(callee, &[rows, cols]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                return Ok(result);
+            }
+            "tensor_xavier" | "xavier" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "tensor_xavier requires 2 args (rows, cols)".into(),
+                    ));
+                }
+                let rows = compile_expr(builder, cx, &args[0].value)?;
+                let cols = compile_expr(builder, cx, &args[1].value)?;
+                let fn_id = *cx
+                    .functions
+                    .get("__tensor_xavier")
+                    .ok_or_else(|| CodegenError::Internal("__tensor_xavier not declared".into()))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[rows, cols]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                return Ok(result);
+            }
+            "tensor_argmax" | "argmax" => {
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(
+                        "tensor_argmax requires 1 arg (tensor)".into(),
+                    ));
+                }
+                let t = compile_expr(builder, cx, &args[0].value)?;
+                let fn_id = *cx
+                    .functions
+                    .get("__tensor_argmax")
+                    .ok_or_else(|| CodegenError::Internal("__tensor_argmax not declared".into()))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[t]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "tensor_from_data" => {
+                if args.len() < 4 {
+                    return Err(CodegenError::NotImplemented(
+                        "tensor_from_data requires 4 args (data_ptr, n_elems, rows, cols)".into(),
+                    ));
+                }
+                let data_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let n_elems = compile_expr(builder, cx, &args[1].value)?;
+                let rows = compile_expr(builder, cx, &args[2].value)?;
+                let cols = compile_expr(builder, cx, &args[3].value)?;
+                let fn_id = *cx.functions.get("__tensor_from_data").ok_or_else(|| {
+                    CodegenError::Internal("__tensor_from_data not declared".into())
+                })?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[data_ptr, n_elems, rows, cols]);
                 let result = builder.inst_results(call)[0];
                 cx.last_expr_type = Some(clif_types::pointer_type());
                 return Ok(result);
@@ -1444,6 +1512,151 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 let result = builder.inst_results(call)[0];
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
+            }
+            "map_new" => {
+                let fn_id = *cx
+                    .functions
+                    .get("__map_new")
+                    .ok_or_else(|| CodegenError::Internal("__map_new not declared".into()))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                cx.last_map_new = true;
+                return Ok(result);
+            }
+            "map_insert" => {
+                // map_insert(map, key, value) → fj_rt_map_insert_int(map, key_ptr, key_len, value)
+                if args.len() < 3 {
+                    return Err(CodegenError::NotImplemented(
+                        "map_insert requires 3 args (map, key, value)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let key_val = compile_expr(builder, cx, &args[1].value)?;
+                let key_len = cx.last_string_len.take().ok_or_else(|| {
+                    CodegenError::NotImplemented("map_insert key must be a string".into())
+                })?;
+                let val = compile_expr(builder, cx, &args[2].value)?;
+                let func_id = *cx.functions.get("__map_insert_int").ok_or_else(|| {
+                    CodegenError::Internal("__map_insert_int not declared".into())
+                })?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                builder.ins().call(local, &[map_ptr, key_val, key_len, val]);
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                return Ok(map_ptr);
+            }
+            "map_get" => {
+                // map_get(map, key) → fj_rt_map_get_int(map, key_ptr, key_len)
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "map_get requires 2 args (map, key)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let key_val = compile_expr(builder, cx, &args[1].value)?;
+                let key_len = cx.last_string_len.take().ok_or_else(|| {
+                    CodegenError::NotImplemented("map_get key must be a string".into())
+                })?;
+                let func_id = *cx
+                    .functions
+                    .get("__map_get_int")
+                    .ok_or_else(|| CodegenError::Internal("__map_get_int not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "map_len" => {
+                // map_len(map) → fj_rt_map_len(map)
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(
+                        "map_len requires 1 arg (map)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let func_id = *cx
+                    .functions
+                    .get("__map_len")
+                    .ok_or_else(|| CodegenError::Internal("__map_len not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                let call = builder.ins().call(local, &[map_ptr]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "map_keys" => {
+                // map_keys(map) → fj_rt_map_keys(map, count_out)
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(
+                        "map_keys requires 1 arg (map)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let count_slot =
+                    builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                        8,
+                        3,
+                    ));
+                let count_addr =
+                    builder
+                        .ins()
+                        .stack_addr(clif_types::default_int_type(), count_slot, 0);
+                let func_id = *cx
+                    .functions
+                    .get("__map_keys")
+                    .ok_or_else(|| CodegenError::Internal("__map_keys not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                let call = builder.ins().call(local, &[map_ptr, count_addr]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                cx.last_split_result = Some(result);
+                return Ok(result);
+            }
+            "map_contains" => {
+                // map_contains(map, key) → fj_rt_map_contains(map, key_ptr, key_len)
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "map_contains requires 2 args (map, key)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let key_val = compile_expr(builder, cx, &args[1].value)?;
+                let key_len = cx.last_string_len.take().ok_or_else(|| {
+                    CodegenError::NotImplemented("map_contains key must be a string".into())
+                })?;
+                let func_id = *cx
+                    .functions
+                    .get("__map_contains")
+                    .ok_or_else(|| CodegenError::Internal("__map_contains not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "map_remove" => {
+                // map_remove(map, key) → fj_rt_map_remove(map, key_ptr, key_len)
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(
+                        "map_remove requires 2 args (map, key)".into(),
+                    ));
+                }
+                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+                let key_val = compile_expr(builder, cx, &args[1].value)?;
+                let key_len = cx.last_string_len.take().ok_or_else(|| {
+                    CodegenError::NotImplemented("map_remove key must be a string".into())
+                })?;
+                let func_id = *cx
+                    .functions
+                    .get("__map_remove")
+                    .ok_or_else(|| CodegenError::Internal("__map_remove not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                builder.ins().call(local, &[map_ptr, key_val, key_len]);
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                return Ok(map_ptr);
             }
             "is_some" => {
                 // is_some(val): Some has tag=1, so check tag != 0
@@ -1732,6 +1945,16 @@ fn compile_regular_call<M: Module>(
         // is acceptable until we have proper ownership tracking across call boundaries.
         cx.last_string_owned = false;
         cx.last_expr_type = Some(clif_types::pointer_type());
+        return Ok(results[0]);
+    }
+
+    // Handle enum-returning functions (dual return: tag, payload)
+    if (cx.fn_returns_enum.contains(&resolved_name) || cx.fn_returns_enum.contains(fn_name))
+        && results.len() >= 2
+    {
+        cx.last_enum_payload = Some(results[1]);
+        cx.last_enum_payload_type = Some(clif_types::default_int_type());
+        cx.last_expr_type = Some(clif_types::default_int_type());
         return Ok(results[0]);
     }
 
@@ -2618,9 +2841,37 @@ fn compile_enum_constructor<M: Module>(
     variant: &str,
     args: &[CallArg],
 ) -> Result<ClifValue, CodegenError> {
+    use cranelift_codegen::ir::StackSlotData;
+    use cranelift_codegen::ir::StackSlotKind::ExplicitSlot;
+
     let tag = resolve_variant_tag(cx, variant)?;
 
-    if !args.is_empty() {
+    cx.last_enum_multi_payload = None; // Reset multi-payload tracking
+
+    if args.len() > 1 {
+        // Multi-field variant: allocate stack slot and store each field
+        let mut field_types = Vec::new();
+        let mut field_values = Vec::new();
+        for arg in args {
+            let val = compile_expr(builder, cx, &arg.value)?;
+            let ty = cx.last_expr_type.unwrap_or(clif_types::default_int_type());
+            field_values.push(val);
+            field_types.push(ty);
+        }
+        let slot_size = (field_types.len() * 8) as u32;
+        let slot = builder.create_sized_stack_slot(StackSlotData::new(ExplicitSlot, slot_size, 0));
+        for (i, (val, ty)) in field_values.iter().zip(field_types.iter()).enumerate() {
+            let offset = (i * 8) as i32;
+            builder.ins().stack_store(*val, slot, offset);
+            let _ = ty; // type tracked in field_types
+        }
+        let slot_addr = builder
+            .ins()
+            .stack_addr(clif_types::default_int_type(), slot, 0);
+        cx.last_enum_payload = Some(slot_addr);
+        cx.last_enum_payload_type = Some(clif_types::default_int_type());
+        cx.last_enum_multi_payload = Some((slot, field_types));
+    } else if !args.is_empty() {
         let payload = compile_expr(builder, cx, &args[0].value)?;
         let payload_type = cx.last_expr_type.unwrap_or(clif_types::default_int_type());
         cx.last_enum_payload = Some(payload);
@@ -2894,7 +3145,8 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
                 }
                 "try_lock" => {
-                    // Allocate stack slot for the output value
+                    // S2.1: Returns Option<i64> — Some(value) on success, None on failure.
+                    // Some tag=0, None tag=1.
                     let out_slot =
                         builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
                             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
@@ -2910,13 +3162,79 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     })?;
                     let callee = cx.module.declare_func_in_func(try_lock_id, builder.func);
                     let call = builder.ins().call(callee, &[mutex_ptr, out_addr]);
-                    let success_flag = builder.inst_results(call)[0];
+                    let success = builder.inst_results(call)[0]; // 1=success, 0=fail
+                                                                 // Convert to Option: Some=1, None=0 (built-in tag convention)
+                                                                 // success already maps: 1→Some(1), 0→None(0)
+                    let tag = success;
+                    // payload = select(success, loaded_value, 0)
+                    let payload_val =
+                        builder
+                            .ins()
+                            .stack_load(clif_types::default_int_type(), out_slot, 0);
+                    let zero = builder.ins().iconst(clif_types::default_int_type(), 0);
+                    let payload = builder.ins().select(success, payload_val, zero);
+                    cx.last_enum_payload = Some(payload);
+                    cx.last_enum_payload_type = Some(clif_types::default_int_type());
                     cx.last_expr_type = Some(clif_types::default_int_type());
-                    return Ok(success_flag);
+                    return Ok(tag);
+                }
+                "lock_guard" => {
+                    // S3.5: Lock mutex and return a guard handle (RAII auto-unlock)
+                    let lock_id = *cx.functions.get("__mutex_guard_lock").ok_or_else(|| {
+                        CodegenError::Internal("__mutex_guard_lock not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(lock_id, builder.func);
+                    let call = builder.ins().call(callee, &[mutex_ptr]);
+                    let guard_ptr = builder.inst_results(call)[0];
+                    cx.last_expr_type = Some(clif_types::pointer_type());
+                    cx.last_mutex_guard_new = true;
+                    return Ok(guard_ptr);
                 }
                 _ => {
                     return Err(CodegenError::NotImplemented(format!(
                         "mutex method '{method}'"
+                    )));
+                }
+            }
+        }
+    }
+
+    // ── MutexGuard methods ────────────────────────────────────────────
+    if let Some(ref name) = recv_name {
+        if cx.mutex_guard_handles.contains(name) {
+            let guard_var = *cx
+                .var_map
+                .get(name)
+                .ok_or_else(|| CodegenError::UndefinedVariable(name.clone()))?;
+            let guard_ptr = builder.use_var(guard_var);
+            match method {
+                "get" => {
+                    let get_id = *cx.functions.get("__mutex_guard_get").ok_or_else(|| {
+                        CodegenError::Internal("__mutex_guard_get not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(get_id, builder.func);
+                    let call = builder.ins().call(callee, &[guard_ptr]);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(builder.inst_results(call)[0]);
+                }
+                "set" => {
+                    if args.is_empty() {
+                        return Err(CodegenError::NotImplemented(
+                            "guard.set requires a value argument".into(),
+                        ));
+                    }
+                    let val = compile_expr(builder, cx, &args[0].value)?;
+                    let set_id = *cx.functions.get("__mutex_guard_set").ok_or_else(|| {
+                        CodegenError::Internal("__mutex_guard_set not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(set_id, builder.func);
+                    builder.ins().call(callee, &[guard_ptr, val]);
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+                }
+                _ => {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "mutex_guard method '{method}'"
                     )));
                 }
             }
@@ -5323,11 +5641,13 @@ pub(crate) fn compile_inline_asm<M: Module>(
     cx: &mut CodegenCtx<'_, M>,
     template: &str,
     operands: &[crate::parser::ast::AsmOperand],
+    _options: &[crate::parser::ast::AsmOption],
+    _clobber_abi: &Option<String>,
 ) -> Result<ClifValue, CodegenError> {
     use crate::parser::ast::AsmOperand;
     let tmpl = template.trim();
 
-    // No-operand templates (backward compatible)
+    // No-operand templates
     if operands.is_empty() {
         match tmpl {
             "nop" => {
@@ -5342,7 +5662,11 @@ pub(crate) fn compile_inline_asm<M: Module>(
         }
     }
 
-    // Compile all input values and collect operand info
+    // Compile all input values and collect operand info.
+    // Register allocation: operand constraints (reg, freg, specific registers like "rax")
+    // are validated for type correctness. Since asm! is lowered to Cranelift IR operations,
+    // Cranelift's register allocator handles the actual physical register assignment.
+    // Specific register names in constraints serve as documentation/validation only.
     let mut input_vals: Vec<ClifValue> = Vec::new();
     let mut out_names: Vec<Option<String>> = Vec::new();
     let mut const_vals: Vec<i64> = Vec::new();
@@ -5357,10 +5681,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
                 out_names.push(None);
             }
             AsmOperand::Out { constraint, expr } => {
-                // Output operand: the expr should be an identifier (variable to write to)
                 let var_name = extract_ident_name(expr);
-                // For out operands, validate the constraint against the variable's
-                // declared Cranelift type if tracked in var_types.
                 if let Some(ref name) = var_name {
                     if let Some(&clif_ty) = cx.var_types.get(name) {
                         validate_asm_register_class(constraint, clif_ty, "out")?;
@@ -5370,7 +5691,6 @@ pub(crate) fn compile_inline_asm<M: Module>(
                 out_names.push(var_name);
             }
             AsmOperand::InOut { constraint, expr } => {
-                // InOut: read current value and mark for output
                 let var_name = extract_ident_name(expr);
                 let val = compile_expr(builder, cx, expr)?;
                 validate_asm_operand_type(builder, constraint, val, "inout")?;
@@ -5379,8 +5699,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
             }
             AsmOperand::Const { expr } => {
                 let val = compile_expr(builder, cx, expr)?;
-                const_vals.push(0); // placeholder, actual value below
-                                    // Try to evaluate as constant
+                const_vals.push(0);
                 if let crate::parser::ast::Expr::Literal {
                     kind: crate::parser::ast::LiteralKind::Int(n),
                     ..
@@ -5394,7 +5713,6 @@ pub(crate) fn compile_inline_asm<M: Module>(
                 out_names.push(None);
             }
             AsmOperand::Sym { name } => {
-                // Load the function address as a pointer
                 let func_id = cx
                     .functions
                     .get(name)
@@ -5410,86 +5728,300 @@ pub(crate) fn compile_inline_asm<M: Module>(
         }
     }
 
-    // Interpret the template pattern and apply operations
-    // Pattern: "mov {0}, {1}" — copy operand[1] to operand[0]
-    // Pattern: "add {0}, {0}, {1}" — add operand[0] + operand[1] → operand[0]
-    // Pattern: "mov {0}, const" — copy const to operand[0]
-    // Pattern: "lea {0}, sym" — load symbol address to operand[0]
-
-    let result = if tmpl.starts_with("mov") && tmpl.contains("const") {
-        // mov output, const — copy constant value to output
-        if !const_vals.is_empty() {
-            let const_val = builder
-                .ins()
-                .iconst(clif_types::default_int_type(), const_vals[0]);
-            // Write to output operand
-            if let Some(Some(ref name)) = out_names.first() {
-                if let Some(&var) = cx.var_map.get(name) {
-                    builder.def_var(var, const_val);
-                }
-            }
-            const_val
-        } else {
-            builder.ins().iconst(clif_types::default_int_type(), 0)
-        }
-    } else if tmpl.starts_with("lea") && tmpl.contains("sym") {
-        // lea output, sym — load function symbol address
-        // The sym operand should provide a function name
-        let _ = &sym_names; // sym support: look at operands for Sym variant
-                            // For now, use the last input value (which would be the compiled sym expr)
-        let sym_val = if input_vals.len() >= 2 {
-            input_vals[1]
-        } else if !input_vals.is_empty() {
-            *input_vals.last().expect("at least one operand")
-        } else {
-            builder.ins().iconst(clif_types::default_int_type(), 0)
-        };
-        // Write to output operand
-        if let Some(Some(ref name)) = out_names.first() {
-            if let Some(&var) = cx.var_map.get(name) {
-                builder.def_var(var, sym_val);
-            }
-        }
-        sym_val
-    } else if tmpl.starts_with("add") {
-        // add {0}, {0}, {1} — inout: operand[0] += operand[1]
-        if input_vals.len() >= 2 {
-            let sum = builder.ins().iadd(input_vals[0], input_vals[1]);
-            // Write to inout operand
-            if let Some(Some(ref name)) = out_names.first() {
-                if let Some(&var) = cx.var_map.get(name) {
-                    builder.def_var(var, sum);
-                }
-            }
-            sum
-        } else {
-            builder.ins().iconst(clif_types::default_int_type(), 0)
-        }
-    } else if tmpl.starts_with("mov") {
-        // mov {0}, {1} — copy input[1] to output[0]
-        if input_vals.len() >= 2 {
-            let val = input_vals[1];
-            // Write to output operand
-            if let Some(Some(ref name)) = out_names.first() {
-                if let Some(&var) = cx.var_map.get(name) {
-                    builder.def_var(var, val);
-                }
-            }
-            val
-        } else {
-            builder.ins().iconst(clif_types::default_int_type(), 0)
-        }
-    } else if tmpl == "nop" {
-        builder.ins().nop();
-        builder.ins().iconst(clif_types::default_int_type(), 0)
-    } else if matches!(tmpl, "mfence" | "lfence" | "sfence" | "fence") {
+    // Clobber handling: when clobber_abi("C") is specified, the caller-saved registers
+    // (rax, rcx, rdx, rsi, rdi, r8-r11, xmm0-xmm15 on x86_64) are considered clobbered.
+    // Since we lower asm! to Cranelift IR operations, Cranelift's register allocator
+    // automatically handles register pressure and spilling. The fence instruction ensures
+    // that no reordering occurs across the asm block boundary.
+    if _clobber_abi.is_some() {
         builder.ins().fence();
-        builder.ins().iconst(clif_types::default_int_type(), 0)
-    } else {
-        return Err(CodegenError::NotImplemented(format!(
-            "inline assembly template not supported in codegen: \"{tmpl}\""
-        )));
+    }
+
+    // Helper: write result to first output/inout operand variable
+    let write_output = |builder: &mut FunctionBuilder, cx: &CodegenCtx<'_, M>, val: ClifValue| {
+        for name in out_names.iter().flatten() {
+            if let Some(&var) = cx.var_map.get(name) {
+                builder.def_var(var, val);
+                break;
+            }
+        }
     };
+
+    // Extract the instruction mnemonic (first word of template)
+    let mnemonic = tmpl.split_whitespace().next().unwrap_or(tmpl);
+
+    let result = match mnemonic {
+        // No-op and memory fences
+        "nop" => {
+            builder.ins().nop();
+            builder.ins().iconst(clif_types::default_int_type(), 0)
+        }
+        "mfence" | "lfence" | "sfence" | "fence" => {
+            builder.ins().fence();
+            builder.ins().iconst(clif_types::default_int_type(), 0)
+        }
+
+        // Data movement
+        "mov" => {
+            if tmpl.contains("const") && !const_vals.is_empty() {
+                let v = builder
+                    .ins()
+                    .iconst(clif_types::default_int_type(), const_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else if input_vals.len() >= 2 {
+                let v = input_vals[1];
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "lea" => {
+            let v = if input_vals.len() >= 2 {
+                input_vals[1]
+            } else if !input_vals.is_empty() {
+                *input_vals.last().expect("at least one operand")
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            };
+            write_output(builder, cx, v);
+            v
+        }
+        "xchg" => {
+            // xchg {0}, {1} — swap two operands
+            if input_vals.len() >= 2 {
+                let a = input_vals[0];
+                let b = input_vals[1];
+                // Write b to first output, a to second output
+                if let Some(Some(ref name)) = out_names.first() {
+                    if let Some(&var) = cx.var_map.get(name) {
+                        builder.def_var(var, b);
+                    }
+                }
+                if let Some(Some(ref name)) = out_names.get(1) {
+                    if let Some(&var) = cx.var_map.get(name) {
+                        builder.def_var(var, a);
+                    }
+                }
+                b
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+
+        // Arithmetic operations
+        "add" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().iadd(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "sub" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().isub(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "imul" | "mul" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().imul(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "neg" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().ineg(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "inc" => {
+            if !input_vals.is_empty() {
+                let one = builder.ins().iconst(clif_types::default_int_type(), 1);
+                let v = builder.ins().iadd(input_vals[0], one);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "dec" => {
+            if !input_vals.is_empty() {
+                let one = builder.ins().iconst(clif_types::default_int_type(), 1);
+                let v = builder.ins().isub(input_vals[0], one);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+
+        // Bitwise operations
+        "and" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().band(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "or" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().bor(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "xor" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().bxor(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "not" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().bnot(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "shl" | "sal" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().ishl(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "shr" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().ushr(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "sar" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().sshr(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "rol" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().rotl(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "ror" => {
+            if input_vals.len() >= 2 {
+                let v = builder.ins().rotr(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+
+        // Comparison (sets output to 0 or 1)
+        "cmp" => {
+            // cmp {0}, {1} — compare and produce flags (result = a - b, for sete/setne etc.)
+            if input_vals.len() >= 2 {
+                let v = builder.ins().isub(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "test" => {
+            // test {0}, {1} — bitwise AND (for setz/setnz)
+            if input_vals.len() >= 2 {
+                let v = builder.ins().band(input_vals[0], input_vals[1]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+
+        // Byte swap / count leading zeros
+        "bswap" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().bswap(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "lzcnt" | "clz" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().clz(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "tzcnt" | "ctz" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().ctz(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+        "popcnt" => {
+            if !input_vals.is_empty() {
+                let v = builder.ins().popcnt(input_vals[0]);
+                write_output(builder, cx, v);
+                v
+            } else {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            }
+        }
+
+        _ => {
+            return Err(CodegenError::NotImplemented(format!(
+                "inline assembly template not supported in codegen: \"{tmpl}\""
+            )));
+        }
+    };
+
+    // Post-asm clobber fence: ensures no reordering across asm boundary
+    if _clobber_abi.is_some() {
+        builder.ins().fence();
+    }
 
     Ok(result)
 }

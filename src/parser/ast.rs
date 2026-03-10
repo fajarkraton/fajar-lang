@@ -528,6 +528,14 @@ pub enum Expr {
         span: Span,
     },
 
+    /// Async block expression: `async { body }`.
+    AsyncBlock {
+        /// The block body.
+        body: Box<Expr>,
+        /// Source span.
+        span: Span,
+    },
+
     /// Field access: `obj.field`.
     Field {
         /// The object.
@@ -774,6 +782,7 @@ impl Expr {
             | Expr::Call { span, .. }
             | Expr::MethodCall { span, .. }
             | Expr::Await { span, .. }
+            | Expr::AsyncBlock { span, .. }
             | Expr::Field { span, .. }
             | Expr::Index { span, .. }
             | Expr::Block { span, .. }

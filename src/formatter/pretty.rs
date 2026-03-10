@@ -672,6 +672,10 @@ impl<'src> Formatter<'src> {
                 self.format_expr(expr);
                 self.push(".await");
             }
+            Expr::AsyncBlock { body, .. } => {
+                self.push("async ");
+                self.format_expr(body);
+            }
             Expr::InlineAsm { template, .. } => {
                 self.push("asm!(\"");
                 self.push(template);

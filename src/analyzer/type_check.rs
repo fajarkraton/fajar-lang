@@ -886,6 +886,8 @@ pub struct TypeChecker {
     moves: super::borrow_lite::MoveTracker,
     /// NLL liveness info for the current function body (None outside functions).
     nll_info: Option<super::cfg::NllInfo>,
+    /// Enum definitions: enum name → list of variant names (for exhaustiveness).
+    enum_variants: HashMap<String, Vec<String>>,
 }
 
 /// A trait method signature for validation.
@@ -988,9 +990,23 @@ impl TypeChecker {
             type_aliases: HashMap::new(),
             moves: super::borrow_lite::MoveTracker::new(),
             nll_info: None,
+            enum_variants: HashMap::new(),
         };
         tc.register_builtins();
         tc.register_builtin_traits();
+        // Register built-in enum variants for exhaustiveness checking
+        tc.enum_variants.insert(
+            "Option".to_string(),
+            vec!["Some".to_string(), "None".to_string()],
+        );
+        tc.enum_variants.insert(
+            "Result".to_string(),
+            vec!["Ok".to_string(), "Err".to_string()],
+        );
+        tc.enum_variants.insert(
+            "Poll".to_string(),
+            vec!["Ready".to_string(), "Pending".to_string()],
+        );
         tc
     }
 
@@ -1263,7 +1279,7 @@ impl TypeChecker {
             });
         }
 
-        // Built-in enum constructors (Some, None, Ok, Err)
+        // Built-in enum constructors (Some, None, Ok, Err, Ready, Pending)
         let enum_constructors: Vec<(&str, Type)> = vec![
             (
                 "Some",
@@ -1285,6 +1301,21 @@ impl TypeChecker {
                 Type::Function {
                     params: vec![Type::Unknown],
                     ret: Box::new(Type::Unknown),
+                },
+            ),
+            (
+                "Ready",
+                Type::Function {
+                    params: vec![Type::Unknown],
+                    ret: Box::new(Type::Enum {
+                        name: "Poll".to_string(),
+                    }),
+                },
+            ),
+            (
+                "Pending",
+                Type::Enum {
+                    name: "Poll".to_string(),
                 },
             ),
         ];
@@ -1594,6 +1625,21 @@ impl TypeChecker {
             self.trait_impls
                 .insert((tr.to_string(), "String".to_string()));
         }
+
+        // Built-in Future<T> trait: fn poll(&mut self) -> Poll<T> (S4.2)
+        self.traits.insert(
+            "Future".to_string(),
+            vec![TraitMethodSig {
+                name: "poll".to_string(),
+                param_types: vec![],
+                ret_type: Type::Enum {
+                    name: "Poll".to_string(),
+                },
+            }],
+        );
+
+        // Built-in Drop trait (already handled elsewhere, register name)
+        self.traits.entry("Drop".to_string()).or_default();
     }
 
     /// Checks whether a concrete type satisfies a trait bound.
@@ -1776,6 +1822,10 @@ impl TypeChecker {
                     span: edef.span,
                     used: false,
                 });
+                // Track variant names for exhaustiveness checking
+                let variant_names: Vec<String> =
+                    edef.variants.iter().map(|v| v.name.clone()).collect();
+                self.enum_variants.insert(edef.name.clone(), variant_names);
                 // Register variants
                 for variant in &edef.variants {
                     if variant.fields.is_empty() {
@@ -2768,6 +2818,16 @@ impl TypeChecker {
                     _ => Type::Unknown,
                 }
             }
+            Expr::AsyncBlock { body, .. } => {
+                // async { body } is effectively an async context
+                self.symbols
+                    .push_scope_kind(super::scope::ScopeKind::AsyncFn);
+                let inner_ty = self.check_expr(body);
+                let _ = self.symbols.pop_scope_unused();
+                Type::Future {
+                    inner: Box::new(inner_ty),
+                }
+            }
             Expr::InlineAsm { span, .. } => {
                 // KE005/KE006: asm! only allowed in @kernel or @unsafe context
                 let in_kernel = self.symbols.is_inside_kernel();
@@ -3413,7 +3473,8 @@ impl TypeChecker {
         let subject_ty = self.check_expr(subject);
         let mut result_ty: Option<Type> = None;
         let mut has_wildcard_or_catch_all = false;
-        let mut has_enum_variants = false;
+        let mut matched_variants: Vec<String> = Vec::new();
+        let mut matched_enum_name: Option<String> = None;
 
         // Move tracking: if the subject is a move-type variable and any arm
         // destructures it (Enum/Tuple/Struct pattern), mark it as moved.
@@ -3447,10 +3508,41 @@ impl TypeChecker {
             if arm.guard.is_none() {
                 match &arm.pattern {
                     Pattern::Wildcard { .. } => has_wildcard_or_catch_all = true,
-                    Pattern::Ident { .. } => has_wildcard_or_catch_all = true,
-                    // Enum variant patterns (Ok/Err, Some/None, etc.)
-                    Pattern::Enum { .. } => {
-                        has_enum_variants = true;
+                    Pattern::Ident { name, .. } => {
+                        // Check if this ident is a known enum variant (e.g. "None")
+                        let is_variant = self.enum_variants.values().any(|vs| vs.contains(name));
+                        if is_variant {
+                            matched_variants.push(name.clone());
+                            // Infer enum name from variant
+                            if matched_enum_name.is_none() {
+                                for (ename, vs) in &self.enum_variants {
+                                    if vs.contains(name) {
+                                        matched_enum_name = Some(ename.clone());
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            has_wildcard_or_catch_all = true;
+                        }
+                    }
+                    Pattern::Enum {
+                        enum_name, variant, ..
+                    } => {
+                        matched_variants.push(variant.clone());
+                        if matched_enum_name.is_none() {
+                            if !enum_name.is_empty() {
+                                matched_enum_name = Some(enum_name.clone());
+                            } else {
+                                // Infer enum name from variant
+                                for (ename, vs) in &self.enum_variants {
+                                    if vs.contains(variant) {
+                                        matched_enum_name = Some(ename.clone());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -3469,10 +3561,20 @@ impl TypeChecker {
         }
 
         // SE011: Non-exhaustive match
-        // Skip if we have enum variants (proper exhaustiveness checking requires
-        // knowing all variants, which we don't track yet — defer to runtime)
-        if !has_wildcard_or_catch_all && !has_enum_variants && !arms.is_empty() {
-            self.errors.push(SemanticError::NonExhaustiveMatch { span });
+        if !has_wildcard_or_catch_all && !arms.is_empty() {
+            if let Some(ref ename) = matched_enum_name {
+                // Check if all variants of the known enum are covered
+                if let Some(all_variants) = self.enum_variants.get(ename) {
+                    let all_covered = all_variants.iter().all(|v| matched_variants.contains(v));
+                    if !all_covered {
+                        self.errors.push(SemanticError::NonExhaustiveMatch { span });
+                    }
+                }
+                // Unknown enum — skip (can't verify)
+            } else if matched_variants.is_empty() {
+                // No enum variants and no wildcard — definitely non-exhaustive
+                self.errors.push(SemanticError::NonExhaustiveMatch { span });
+            }
         }
 
         result_ty.unwrap_or(Type::Void)
@@ -4875,6 +4977,169 @@ mod tests {
                     1 => 10,
                     _ => 0
                 }
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    // ── v0.4 S2.4: Match exhaustiveness for generic enums ──
+
+    #[test]
+    fn exhaustive_option_match_all_variants() {
+        // Match on Option with both Some and None → exhaustive, no error
+        let src = r#"
+            enum Option<T> { Some(T), None }
+            fn check(x: i64) -> i64 {
+                let opt = Some(x)
+                match opt {
+                    Some(v) => v,
+                    None => 0
+                }
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn non_exhaustive_option_match_missing_none() {
+        // Match on Option with only Some → non-exhaustive
+        let src = r#"
+            enum Option<T> { Some(T), None }
+            fn check(x: i64) -> i64 {
+                let opt = Some(x)
+                match opt {
+                    Some(v) => v
+                }
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+    }
+
+    #[test]
+    fn exhaustive_result_match_ok_err() {
+        // Match on Result with Ok and Err → exhaustive
+        let src = r#"
+            enum Result<T, E> { Ok(T), Err(E) }
+            fn check(x: i64) -> i64 {
+                let r = Ok(x)
+                match r {
+                    Ok(v) => v,
+                    Err(e) => 0
+                }
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn non_exhaustive_result_match_missing_err() {
+        // Match on Result with only Ok → non-exhaustive
+        let src = r#"
+            enum Result<T, E> { Ok(T), Err(E) }
+            fn check(x: i64) -> i64 {
+                let r = Ok(x)
+                match r {
+                    Ok(v) => v
+                }
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+    }
+
+    #[test]
+    fn exhaustive_user_enum_all_variants() {
+        // User-defined enum with all variants matched
+        let src = r#"
+            enum Color { Red, Green, Blue }
+            fn name(c: i64) -> i64 {
+                match c {
+                    Color::Red => 1,
+                    Color::Green => 2,
+                    Color::Blue => 3
+                }
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn non_exhaustive_user_enum_missing_variant() {
+        // User-defined enum missing Blue → non-exhaustive
+        let src = r#"
+            enum Color { Red, Green, Blue }
+            fn name(c: i64) -> i64 {
+                match c {
+                    Color::Red => 1,
+                    Color::Green => 2
+                }
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+    }
+
+    // ── v0.4 S4: Future/Poll type system ──
+
+    #[test]
+    fn poll_enum_exhaustive_ready_pending() {
+        // Poll<T> is a built-in enum — matching Ready + Pending is exhaustive
+        let src = r#"
+            fn check(x: i64) -> i64 {
+                match x {
+                    Ready(v) => v,
+                    Pending => 0
+                }
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn poll_enum_non_exhaustive_missing_pending() {
+        // Missing Pending → non-exhaustive
+        let src = r#"
+            fn check(x: i64) -> i64 {
+                match x {
+                    Ready(v) => v
+                }
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+    }
+
+    #[test]
+    fn await_outside_async_is_error() {
+        // .await outside async fn → SE017
+        let src = r#"
+            fn not_async() -> i64 {
+                let x = 42
+                x.await
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })));
+    }
+
+    #[test]
+    fn await_inside_async_is_ok() {
+        // .await inside async fn is valid
+        let src = r#"
+            async fn inner() -> i64 { 42 }
+            async fn outer() -> i64 {
+                inner().await
             }
         "#;
         assert!(check(src).is_ok());

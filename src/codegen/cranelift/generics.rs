@@ -394,6 +394,9 @@ pub(crate) fn collect_called_fns(expr: &Expr, called: &mut HashSet<String>) {
         Expr::Try { expr: inner, .. } => {
             collect_called_fns(inner, called);
         }
+        Expr::AsyncBlock { body, .. } => {
+            collect_called_fns(body, called);
+        }
         Expr::InlineAsm { operands, .. } => {
             for op in operands {
                 match op {
