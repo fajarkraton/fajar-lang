@@ -18,6 +18,44 @@ Kategori perubahan:
 
 ---
 
+## [0.4.0] — 2026-03-10 "Sovereignty"
+
+### Added
+- **Generic Enums**: `enum Option<T> { Some(T), None }` with typed payloads (i64/f64/str) in native codegen
+- **Enum Monomorphization**: automatic specialization of generic enum instantiations
+- **Type-Aware Pattern Matching**: bitcast payload to variant-specific type, multi-field variants
+- **Option<T> / Result<T,E>**: proper generic enum returns from functions and methods (e.g., `mutex.try_lock() -> Option<i64>`)
+- **`?` Operator**: typed Result propagation with (tag, payload) extraction in native codegen
+- **Match Exhaustiveness**: analyzer enforces all enum variants covered for generic enums
+- **Scope-Level Drop/RAII**: `scope_stack` for block-level resource cleanup, auto-free at block exit
+- **Drop Trait**: `trait Drop { fn drop(&mut self) }` with codegen support
+- **MutexGuard**: auto-unlock when guard variable goes out of scope
+- **Formal `Poll<T>`**: built-in generic enum — `Ready(T)` / `Pending` in codegen
+- **`Future<T>` Trait**: poll method registered, Ready/Pending constructors
+- **Async Return Types**: `async fn foo() -> T` returns `Future<T>` with SE017 checking
+- **Lazy Async State Machines**: FutureHandle with state/locals, multi-await preserves locals
+- **Waker Integration**: wake/is_woken/reset lifecycle for async scheduling
+- **Round-Robin Executor**: spawn multiple tasks, run all to completion, get results
+- **Tensor Builtins**: `tensor_xavier`, `tensor_argmax`, `tensor_from_data` runtime functions
+- **ML Short Aliases**: `zeros`, `relu`, `matmul`, `softmax` etc. canonicalized to `tensor_*` names
+- **Map Function-Call API**: `map_new()`, `map_insert()`, `map_get()`, `map_len()`, `map_keys()`, `map_contains()`, `map_remove()`
+- **asm! IR Mapping**: 20+ instruction patterns (mov, add, sub, mul, and, or, xor, shl, shr, neg, inc, dec, cmp, bswap, popcnt, etc.) mapped to Cranelift IR
+- **Clobber Handling**: `clobber_abi` emits fence barriers for register preservation
+
+### Changed
+- Test count: 2,573 → 2,650 (2,267 lib + 383 integration)
+- LOC: ~80,000 → ~98,000 lines of Rust
+- 12 example programs rewritten for native codegen compatibility
+- V03_TASKS.md: all 739 tasks marked complete, 0 deferred
+
+### Fixed
+- Struct parameter setup loop (clippy needless_range_loop)
+- tensor_from_data iterator pattern (clippy needless_range_loop)
+- map_keys argument count (2 args: map_ptr + count_addr)
+- String ownership tracking for view-returning operations
+
+---
+
 ## [0.3.0] — 2026-03-10 "Dominion"
 
 ### Added
@@ -47,149 +85,56 @@ Kategori perubahan:
 
 ### Changed
 - Version bump: 0.1.0 → 0.3.0
-- Test count: 1,563 → 2,016+ (lib) + 381 (integration)
+- Test count: 1,563 → 2,573 (lib + integration)
 - LOC: ~45,000 → ~80,000+ lines of Rust
 
 ---
 
-## [Unreleased]
+## [0.2.0] — v1.0 Phases A-F
+
+### Added
+- **Phase A**: Codegen type system — type tracking, heap allocator, string struct, enum/match in native
+- **Phase B**: Advanced types — const generics, tensor shapes, static trait dispatch
+- **Phase E**: Parity/correctness — test coverage, edge cases
+- **Phase F**: Production polish — error messages, documentation
+
+### Changed
+- Test count: 1,563 → 1,991
+- LOC: ~45,000 → ~59,000
+
+---
+
+## [1.0.0] — v1.0 Foundation Complete
+
+### Added
+- **Month 1**: Analyzer + Cranelift JIT/AOT native compilation
+- **Month 2**: Generics (monomorphization) + Traits + FFI (C interop via libloading/libffi)
+- **Month 3**: Move semantics + NLL borrow checker (without lifetime annotations)
+- **Month 4**: Autograd (tape-based) + Conv2d/Attention/Embedding + INT8 quantization
+- **Month 5**: ARM64/RISC-V cross-compilation + no_std + HAL traits
+- **Month 6**: mdBook docs + package ecosystem + release workflows
+
+### Stats
+- Tasks: 506 complete
+- Tests: 1,563 (1,430 default + 133 native)
+- LOC: ~45,000
+- Sprints: 24/26 (S11 tensor shapes + S23 self-hosting deferred)
+
+---
+
+## [0.1.0] — Phase 0-4 Complete
 
 ### Added
 - **Phase 0**: Project scaffolding (Cargo.toml, directory structure, 28 placeholder files)
-- **Phase 1 — Lexer** (Sprint 1.1): Hand-written lexer with Cursor, 82 tests
-  - TokenKind enum (keywords, operators, literals, annotations)
-  - Error codes LE001-LE008 (unexpected char, unterminated string, empty/multi-char literal, number overflow, etc.)
-- **Phase 1 — AST** (Sprint 1.2): 24 Expr variants, 7 Stmt variants, 9 Item variants, 33 tests
-- **Phase 1 — Parser** (Sprint 1.3): Pratt expression parser (19 precedence levels) + recursive descent, 94 tests
-  - All expression/statement/item types parsed
-  - Error recovery with synchronization, ParseError PE001-PE010
-- **Phase 1 — Environment** (Sprint 1.4): Value enum (12 variants), Environment with Rc<RefCell<>> scope chain, 33 tests
-- **Phase 1 — Interpreter** (Sprint 1.5): Tree-walking evaluator, 69 tests
-  - All 24 expression types, control flow (return/break/continue via ControlFlow signals)
-  - 11 built-in functions (print, println, len, type_of, push, pop, to_string, to_int, to_float, assert, assert_eq)
-  - Pipeline operator, closures with capture, match with guards, struct/enum instantiation
-  - Recursion limit: 256 depth
-- **Phase 1 — CLI & REPL** (Sprint 1.6): clap CLI (`fj run|repl|check|dump-tokens|dump-ast`), rustyline REPL
-  - Exit codes: 0=success, 1=runtime error, 2=compile error, 3=usage error
-- **Phase 2 — Type System** (Sprint 2.1-2.10): Static type checker with two-pass analysis
-  - Type enum (28 variants incl. distinct i8-i128, u8-u128, f32, f64, IntLiteral, FloatLiteral)
-  - All 12 SemanticError codes (SE001-SE012) implemented
-  - SymbolTable with lexical scoping, ScopeKind enum (7 variants), function/struct/enum registration
-  - Distinct integer/float types: `i32 ≠ i64`, `f32 ≠ f64` — no implicit widening
-  - IntLiteral/FloatLiteral inference for unsuffixed numeric literals
-  - SE009 UnusedVariable (warning), SE010 UnreachableCode (warning), SE011 NonExhaustiveMatch
-  - break/continue validated inside loop scope, return validated inside function scope
-  - miette integration: beautiful source-highlighted error display with codes, spans, help text
-  - Analyzer wired into CLI `check` and `run` commands
-- **Phase 3 — OS Runtime** (Sprint 3.1-3.9): Complete OS subsystem
-  - MemoryManager: bump allocator, alloc/free, read/write (u8/u32/u64/bytes), bounds checking
-  - VirtAddr/PhysAddr distinct newtype structs (type-safe addresses)
-  - PageTable: map/unmap pages, translate with offset, PageFlags (READ/WRITE/EXEC/USER)
-  - IrqTable: register/unregister handlers, enable/disable, dispatch with logging
-  - SyscallTable: define/undefine handlers, dispatch with arg count validation
-  - PortIO: simulated x86 port read/write, default COM1/keyboard status
-  - OsRuntime: combined subsystem struct
-  - Pointer(u64) runtime value type
-  - 16 OS builtins wired into interpreter (mem_*, page_*, irq_*, port_*)
-  - @kernel/@device context enforcement: KE003, DE001, DE002 error codes
-  - examples/memory_map.fj: working OS demo
-  - 10 OS integration tests + 7 context enforcement tests
-- **Phase 3 — OS Runtime Gap Fixes** (Sprint 3.10):
-  - KE001 HeapAllocInKernel enforcement: push/pop/to_string blocked in @kernel context
-  - KE002 TensorInKernel enforcement: tensor_builtins set ready (populated in Phase 4)
-  - syscall_define/syscall_dispatch wired as interpreter builtins + type checker signatures
-  - stdlib/os.fj: OS standard library (wrapper functions, constants)
-  - src/stdlib/os.rs + src/stdlib/mod.rs: Rust stdlib module
-  - 6 new integration tests (kernel init sequence, IRQ lifecycle, syscall from .fj)
-  - 6 new KE001 unit tests
-  - Total: 496 tests, all passing
-- **Phase 4 — ML/AI Runtime** (Sprint 4.1-4.10): Complete ML subsystem
-  - TensorValue: ndarray-backed, shape/grad/requires_grad/TensorId, creation (zeros/ones/randn/eye/full/from_data)
-  - Element-wise ops: add/sub/mul/div/neg with NumPy-style broadcasting
-  - Matrix ops: matmul (2D, inner dim validation), transpose, flatten, reshape
-  - Reductions: sum, mean (scalar output)
-  - Activation functions: relu, sigmoid, tanh, softmax (log-sum-exp trick), gelu, leaky_relu
-  - Loss functions: mse_loss, cross_entropy, bce_loss (with epsilon clamping)
-  - Tape-based autograd: Tape, TapeEntry, GradFn, tracked ops with backward for all arithmetic/matrix/activation/reduction ops
-  - reduce_broadcast: gradient reduction for broadcast dimensions
-  - numerical_gradient: central difference utility for gradient checking
-  - Optimizers: SGD (with momentum), Adam (with bias-corrected moments)
-  - Layers: Dense (Xavier init), Dropout (inverted scaling), BatchNorm (per-feature normalization)
-  - 27 ML builtins wired into interpreter + type checker + KE002 enforcement
-  - stdlib/nn.fj: Fajar Lang ML standard library, src/stdlib/nn.rs: ML_BUILTINS const
-  - 23 ML integration tests (MNIST forward pass, gradient flow, numerical correctness, KE002)
-- **Phase 4 — Gap Fixes** (Sprint 4.11):
-  - Shape manipulation: flatten, squeeze, unsqueeze builtins
-  - Additional reductions: max, min, argmax builtins
-  - Additional creation: arange, linspace, xavier builtins
-  - Additional loss: l1_loss builtin
-  - 38 new builtins total (27 original + 11 gap-fix)
-  - examples/mnist_forward.fj: working MNIST forward pass example
-  - 8 new ML integration tests + 21 new unit tests for gap-fix ops
-  - Total: 660 tests (598 unit + 12 eval + 31 ml + 16 os + 3 doc), all passing
-- Documentation suite: 24 documents covering specification, architecture, testing, security, etc.
-- Example programs: `hello.fj`, `fibonacci.fj`, `factorial.fj`
-- 12 end-to-end integration tests in `tests/eval_tests.rs`
-
----
-
-## [0.1.0] — Target: Phase 1 Complete
-
-### Planned
-- Complete lexer with all TokenKind variants
-- AST definition for all expression and statement types
-- Recursive descent parser with Pratt expression parsing
-- Tree-walking interpreter for core language features
-- CLI with subcommands: `run`, `repl`, `check`, `dump-tokens`, `dump-ast`
-- REPL with rustyline
-- Error display with miette
-- Example programs: `hello.fj`, `fibonacci.fj`, `factorial.fj`
-
----
-
-## [0.2.0] — Target: Phase 2 Complete
-
-### Planned
-- Type inference (Hindley-Milner lite)
-- Generic types
-- Tensor type with compile-time shape checking
-- Context annotation enforcement (`@kernel`, `@device`, `@safe`, `@unsafe`)
-
----
-
-## [0.3.0] — Target: Phase 3 Complete
-
-### Planned
-- OS Runtime: MemoryManager, IRQ table, syscall dispatch
-- Virtual memory simulation
-- Port I/O simulation
-- `@kernel` context full enforcement
-
----
-
-## [0.4.0] — Target: Phase 4 Complete
-
-### Planned
-- ML Runtime: TensorValue with autograd
-- All activation functions and loss functions
-- Neural network layers: Dense, Conv2d, Attention
-- Optimizers: SGD, Adam
-- SIMD acceleration via ndarray BLAS
-- Integration tests: MNIST forward, XOR training
-
----
-
-## [1.0.0] — Target: Phase 5-7 Complete
-
-### Planned
-- Bytecode VM for improved performance
-- LLVM backend for native compilation
-- GPU support via wgpu (`@device(gpu)`)
-- Package manager (`fj.toml`, `fj add`, `fj build`)
-- LSP for IDE integration
-- Code formatter (`fj fmt`)
-- Complete standard library
-- Production-ready documentation site
+- **Phase 1 — Lexer**: Hand-written lexer with Cursor, 82+ token kinds, error codes LE001-LE008
+- **Phase 1 — AST**: 24 Expr variants, 7 Stmt variants, 9 Item variants
+- **Phase 1 — Parser**: Pratt expression parser (19 precedence levels) + recursive descent
+- **Phase 1 — Environment**: Value enum (12 variants), Environment with Rc<RefCell<>> scope chain
+- **Phase 1 — Interpreter**: Tree-walking evaluator, 11 built-in functions, pipeline operator, closures, match with guards
+- **Phase 1 — CLI & REPL**: clap CLI (`fj run|repl|check|dump-tokens|dump-ast`), rustyline REPL
+- **Phase 2 — Type System**: Static type checker, 28 type variants, SE001-SE012 error codes, miette error display
+- **Phase 3 — OS Runtime**: MemoryManager, IRQ table, syscall dispatch, port I/O, @kernel/@device enforcement
+- **Phase 4 — ML Runtime**: TensorValue (ndarray), autograd, activations, loss functions, optimizers, layers
 
 ---
 

@@ -30,23 +30,25 @@
 Every Claude Code session MUST follow this order:
 
 1. **READ** → `CLAUDE.md` (this file) [auto-loaded]
-2. **READ** → `docs/V03_TASKS.md` [v0.3 task list — find current sprint]
-3. **READ** → `docs/V1_RULES.md` + `docs/V03_WORKFLOW.md` [coding conventions + v0.3 workflow]
-4. **ORIENT** → "What does the user want?" (v0.2 complete — work on v0.3 "Dominion" plan)
+2. **READ** → Current task list (if v0.5+ exists, read that; otherwise check user intent)
+3. **READ** → `docs/V1_RULES.md` + `docs/V03_WORKFLOW.md` [coding conventions + workflow]
+4. **ORIENT** → "What does the user want?" (v0.4 complete — all planned tasks done)
 5. **ACT** → Execute per TDD workflow (see `docs/V03_WORKFLOW.md`)
 6. **VERIFY** → `cargo test --features native && cargo clippy -- -D warnings && cargo fmt -- --check`
-7. **UPDATE** → Mark task `[x]` in `docs/V03_TASKS.md` if applicable
+7. **UPDATE** → Mark task `[x]` in relevant task file if applicable
 
 **v1.0 STATUS: ALL 506 ACTIONABLE TASKS COMPLETE.**
-**v0.2 STATUS: Phases A, B, E, F COMPLETE. C, D deferred to v0.3.**
-**v0.3 STATUS: "Dominion" — 52 sprints, ~620 tasks, 12-month plan. NOT STARTED.**
+**v0.2 STATUS: Phases A, B, E, F COMPLETE.**
+**v0.3 STATUS: "Dominion" — 52 sprints, 739 tasks. ALL COMPLETE.**
+**v0.4 STATUS: "Sovereignty" — 6 sprints, 40 tasks. ALL COMPLETE.**
 
 ### Key Documents (Read on Demand)
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/V03_TASKS.md` | Every session | v0.3 task checkboxes (~620 tasks across 52 sprints) |
-| `docs/V03_IMPLEMENTATION_PLAN.md` | Sprint planning | 12-month plan: concurrency, OS, GPU, ML, self-hosting |
+| `docs/V04_PLAN.md` | Reference | v0.4 "Sovereignty" plan (6 sprints, COMPLETE) |
+| `docs/V03_TASKS.md` | Reference | v0.3 task checkboxes (739 tasks, ALL COMPLETE) |
+| `docs/V03_IMPLEMENTATION_PLAN.md` | Reference | 12-month plan: concurrency, OS, GPU, ML, self-hosting |
 | `docs/V03_WORKFLOW.md` | Session start | Sprint cycle, quality gates, rules |
 | `docs/V03_SKILLS.md` | Before complex tasks | Patterns: fn pointers, threads, async, GPU, bare metal |
 | `docs/V1_TASKS.md` | Reference | v1.0 + v0.2 completed tasks (historical) |
@@ -73,7 +75,7 @@ Tests:     1,430 default + 133 native codegen = 1,563 total (v1.0 baseline)
 LOC:       ~45,000 lines of Rust (v1.0 baseline)
 Examples:  15 .fj programs | Benchmarks: 12 criterion
 Sprints:   24/26 complete (S11 tensor shapes + S23 self-hosting → v0.2)
-Note:      Current totals higher — see v0.3 status below
+Note:      Current totals higher — see v0.3/v0.4 status below
 ```
 
 ### Sprint Progress (All 26)
@@ -88,17 +90,56 @@ Note:      Current totals higher — see v0.3 status below
 | 6 — Production | S24: mdBook docs; S25: package ecosystem; S26: release workflows | ✅ |
 | Deferred | S11: tensor shape safety (needs dependent types); S23: self-hosting (needs codegen maturity) | → v0.2 |
 
-### v0.2 Roadmap (49 deferred tasks)
+### v0.2 — COMPLETE
 
-| Phase | Focus | Key Items |
-|-------|-------|-----------|
-| A | Codegen type system | Type tracking, heap allocator, string struct, enum/match in native |
-| B | Advanced types | Const generics, tensor shapes, static trait dispatch |
-| C | Self-hosting | Lexer/parser in .fj, bootstrap test |
-| D | Production polish | Dead code elim, GitHub Pages, package registry hosting |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| A | Codegen type system | ✅ COMPLETE |
+| B | Advanced types | ✅ COMPLETE |
+| E | Parity/correctness | ✅ COMPLETE |
+| F | Production polish | ✅ COMPLETE |
+| C | Self-hosting | ✅ Moved to v0.3, COMPLETE |
+| D | Dead code elim | ✅ Moved to v0.3, COMPLETE |
 
-> **Authoritative task list:** `docs/V1_TASKS.md`
-> **Full implementation plan:** `docs/V1_IMPLEMENTATION_PLAN.md`
+### v0.3 "Dominion" — COMPLETE
+
+```
+Concurrency:   Threads, channels, mutexes, atomics, async/await     ✅ COMPLETE
+Low-level:     Inline asm, volatile I/O, allocators, bare metal     ✅ COMPLETE
+GPU:           CUDA + Vulkan backends, SIMD vector types             ✅ COMPLETE
+ML Native:     Tensor ops, autograd, training, MNIST 90%+, ONNX     ✅ COMPLETE
+Self-hosting:  Lexer + parser in .fj, bootstrap verified             ✅ COMPLETE
+Optimization:  Dead fn elim, LICM, CSE, inlining                    ✅ COMPLETE
+Tooling:       40-page mdBook, 7 packages, VS Code extension        ✅ COMPLETE
+
+Tasks:     739/739 complete | 0 deferred
+Sprints:   52/52 complete
+```
+
+### v0.4 "Sovereignty" — COMPLETE
+
+```
+Generic enums: Option<T>, Result<T,E> with typed payloads            ✅ COMPLETE
+RAII/Drop:     Scope-level cleanup, Drop trait, MutexGuard           ✅ COMPLETE
+Future/Poll:   Formal generic enum types, async return checking      ✅ COMPLETE
+Lazy async:    State machines, waker, round-robin executor           ✅ COMPLETE
+
+Tasks:     40/40 complete | 0 deferred
+Sprints:   6/6 complete
+```
+
+### Current Totals (v0.4 complete)
+
+```
+Tests:     2,267 lib + 383 integration = 2,650 total (0 failures)
+LOC:       ~98,000 lines of Rust (97 files)
+Examples:  24 .fj programs
+Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
+Stdlib:    6 .fj modules (core, nn, os, hal, drivers, lexer)
+```
+
+> **Task lists:** `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
+> **Implementation plans:** `docs/V03_IMPLEMENTATION_PLAN.md`, `docs/V1_IMPLEMENTATION_PLAN.md`
 
 ---
 
@@ -411,12 +452,12 @@ Key errors:
 
 ## 9. Testing Strategy
 
-### 9.1 Current Test Suite (1,563 tests)
+### 9.1 Current Test Suite (2,650 tests)
 
 | Category | Location | Count | Description |
 |----------|----------|-------|-------------|
-| Unit | `#[cfg(test)] mod tests` | 1,074 | Per-function tests (incl 133 native codegen with `--features native`) |
-| Integration | `tests/eval_tests.rs` | 171 | Full pipeline (lex -> parse -> analyze -> eval) |
+| Unit + Native | `#[cfg(test)] mod tests` | 2,267 | Per-function tests (incl ~700 native codegen with `--features native`) |
+| Integration | `tests/eval_tests.rs` | 181 | Full pipeline (lex -> parse -> analyze -> eval) |
 | ML | `tests/ml_tests.rs` | 39 | Tensor ops, autograd, optimizers, layers |
 | OS | `tests/os_tests.rs` | 16 | Memory, IRQ, syscall, port I/O |
 | Autograd | `tests/autograd_tests.rs` | 13 | Numerical gradient checks |
@@ -483,7 +524,9 @@ v0.5.0  -- Month 4  -- Full ML runtime + quantization            ✅ DONE
 v0.6.0  -- Month 5  -- Cross-compilation + embedded targets      ✅ DONE
 v1.0.0  -- Month 6  -- Production release                        ✅ DONE
 
-v0.2 (next): Codegen type system, self-hosting, tensor shapes, production polish
+v0.2    --         -- Codegen type system, self-hosting prep            ✅ DONE
+v0.3.0  -- 2026-03-10 -- "Dominion": concurrency, ML, bare metal      ✅ DONE (52 sprints, 739 tasks)
+v0.4.0  -- 2026-03-10 -- "Sovereignty": generic enums, RAII, async     ✅ DONE (6 sprints, 40 tasks)
 ```
 
 ---
@@ -610,8 +653,8 @@ cargo run -- run --vm examples/hello.fj  # run with bytecode VM
 cargo run -- check examples/hello.fj  # type-check only (no execution)
 
 # Testing & Quality
-cargo test                            # run all 1,430 tests (default)
-cargo test --features native          # run all 1,563 tests (including native codegen)
+cargo test                            # run default tests (non-native)
+cargo test --features native          # run all 2,650 tests (including native codegen)
 cargo test --test eval_tests          # run integration tests
 cargo test -- s1_1_                   # run sprint-specific tests
 cargo clippy -- -D warnings           # linting (MUST pass before commit)
@@ -641,32 +684,29 @@ fajar-lang/
 +-- Cargo.toml
 +-- Cargo.lock
 |
-+-- docs/                     <- 29 documents
-|   +-- V1_IMPLEMENTATION_PLAN.md  <- v1.0 plan (6 months, 26 sprints)
-|   +-- V1_TASKS.md               <- v1.0 task checkboxes (~400 tasks)
-|   +-- V1_RULES.md               <- v1.0 coding rules (production grade)
-|   +-- V1_WORKFLOW.md            <- v1.0 development workflow
-|   +-- V1_SKILLS.md              <- v1.0 implementation patterns
-|   +-- FAJAR_LANG_SPEC.md        <- Language spec & grammar (AUTHORITATIVE)
-|   +-- ARCHITECTURE.md           <- System design & contracts
-|   +-- PLANNING.md               <- Phase tracking (v0.1 complete)
-|   +-- TASKS.md                  <- v0.1 task list (all complete)
-|   +-- RULES.md                  <- v0.1 coding conventions
-|   +-- WORKFLOW.md               <- v0.1 workflow
-|   +-- SKILLS.md                 <- v0.1 patterns
-|   +-- GRAMMAR_REFERENCE.md      <- Formal EBNF grammar
-|   +-- ERROR_CODES.md            <- 61+ error codes
-|   +-- STDLIB_SPEC.md            <- Standard library API
-|   +-- TESTING.md                <- Test strategy & CI/CD
-|   +-- SECURITY.md               <- Security model
-|   +-- API_REFERENCE.md          <- Internal Rust API
-|   +-- CONTRIBUTING.md           <- Git workflow
-|   +-- BENCHMARKS.md             <- Performance targets
-|   +-- EXAMPLES.md               <- Example programs
-|   +-- CHANGELOG.md              <- Version history
++-- docs/                     <- 44 documents
+|   +-- V04_PLAN.md               <- v0.4 "Sovereignty" (6 sprints, COMPLETE)
+|   +-- V03_TASKS.md              <- v0.3 task checkboxes (739 tasks, ALL COMPLETE)
+|   +-- V03_IMPLEMENTATION_PLAN.md <- v0.3 plan (52 sprints, 12 months)
+|   +-- V03_WORKFLOW.md           <- v0.3 sprint workflow
+|   +-- V03_SKILLS.md             <- v0.3 implementation patterns
+|   +-- V1_IMPLEMENTATION_PLAN.md <- v1.0 plan (26 sprints, COMPLETE)
+|   +-- V1_TASKS.md              <- v1.0 task checkboxes (506 tasks, COMPLETE)
+|   +-- V1_RULES.md              <- Coding rules (production grade, still applies)
+|   +-- V1_WORKFLOW.md           <- TDD workflow
+|   +-- V1_SKILLS.md             <- Cranelift, monomorphization patterns
+|   +-- FAJAR_LANG_SPEC.md       <- Language spec & grammar (AUTHORITATIVE)
+|   +-- ARCHITECTURE.md          <- System design & contracts
+|   +-- GRAMMAR_REFERENCE.md     <- Formal EBNF grammar
+|   +-- ERROR_CODES.md           <- 71 error codes across 9 categories
+|   +-- STDLIB_SPEC.md           <- Standard library API
+|   +-- SECURITY.md              <- Security model
+|   +-- CHANGELOG.md             <- Version history (v0.3.0, v0.4.0)
+|   +-- GAP_ANALYSIS.md          <- Cross-doc conflict audit
+|   +-- ROADMAP_V1.1.md          <- Future roadmap (GPU, LLVM, etc.)
 |   +-- (and more...)
 |
-+-- src/
++-- src/                      <- ~98,000 LOC across 97 .rs files
 |   +-- lib.rs                <- Module decls + FjError + FjDiagnostic
 |   +-- main.rs               <- CLI entry point (clap: run, repl, check, build, fmt, lsp, new)
 |   +-- lexer/
@@ -674,51 +714,70 @@ fajar-lang/
 |   |   +-- token.rs          <- Token, TokenKind (82+ kinds), Span
 |   |   +-- cursor.rs         <- Cursor struct (peek, advance, is_eof)
 |   +-- parser/
-|   |   +-- mod.rs            <- pub fn parse()
+|   |   +-- mod.rs            <- pub fn parse() (4,520 LOC)
 |   |   +-- ast.rs            <- Expr (25+ variants), Stmt, Item, TypeExpr, Pattern
 |   |   +-- pratt.rs          <- Pratt expression parser (19 precedence levels)
 |   +-- analyzer/
 |   |   +-- mod.rs            <- pub fn analyze(), analyze_with_known()
-|   |   +-- type_check.rs     <- TypeChecker (type/scope/context checking)
+|   |   +-- type_check.rs     <- TypeChecker (6,616 LOC — types, scope, context, NLL)
 |   |   +-- scope.rs          <- SymbolTable, Scope, ScopeKind
-|   |   +-- borrow_lite.rs    <- Ownership/borrow analysis (stub -> v1.0 Sprint 9-10)
+|   |   +-- cfg.rs            <- NLL control flow analysis
+|   |   +-- borrow_lite.rs    <- Ownership/move/borrow analysis
 |   +-- interpreter/
 |   |   +-- mod.rs            <- Interpreter struct
 |   |   +-- env.rs            <- Environment (scope chain, Rc<RefCell<>>)
-|   |   +-- eval.rs           <- eval_expr, eval_stmt, eval_source (with analyzer)
+|   |   +-- eval.rs           <- eval_expr, eval_stmt, eval_source (5,737 LOC)
 |   |   +-- value.rs          <- Value enum (17 variants)
+|   |   +-- ffi.rs            <- C interop
 |   +-- vm/
 |   |   +-- compiler.rs       <- AST -> Bytecode compiler
 |   |   +-- engine.rs         <- Bytecode VM (45 opcodes)
-|   +-- codegen/              <- (v1.0: Cranelift native backend)
+|   +-- codegen/              <- Cranelift native backend (~40K LOC)
+|   |   +-- cranelift/
+|   |   |   +-- mod.rs        <- CraneliftCompiler + ObjectCompiler (10,242 LOC)
+|   |   |   +-- tests.rs      <- ~700 native codegen tests (14,991 LOC)
+|   |   |   +-- runtime_fns.rs <- 150+ extern "C" fj_rt_* functions (7,115 LOC)
+|   |   |   +-- context.rs    <- CodegenCtx (56 fields)
+|   |   |   +-- closures.rs   <- Free var analysis
+|   |   |   +-- generics.rs   <- Monomorphization
+|   |   |   +-- compile/
+|   |   |       +-- mod.rs    <- Core expr/stmt/call + builtins (6,113 LOC)
+|   |   |       +-- expr.rs   <- Expression compilation
+|   |   |       +-- control.rs <- if/while/loop/for/match
+|   |   |       +-- stmt.rs   <- Statement compilation
+|   |   |       +-- builtins.rs <- Math, assert, file builtins
+|   |   |       +-- arrays.rs <- Array operations
+|   |   |       +-- strings.rs <- String operations
+|   |   |       +-- structs.rs <- Struct operations
+|   |   +-- types.rs          <- Type -> Cranelift mapping
+|   |   +-- abi.rs            <- ABI handling
+|   |   +-- linker.rs         <- Linker script generation
+|   |   +-- analysis.rs       <- Dead code elimination
 |   +-- runtime/
-|   |   +-- os/
-|   |   |   +-- memory.rs     <- MemoryManager, VirtAddr, PhysAddr, PageFlags
-|   |   |   +-- irq.rs        <- IrqTable, handler registration
-|   |   |   +-- syscall.rs    <- SyscallTable, dispatch
-|   |   +-- ml/
-|   |       +-- tensor.rs     <- TensorValue (ndarray backend)
-|   |       +-- autograd.rs   <- Tape-based computation graph
-|   |       +-- ops.rs        <- matmul, relu, sigmoid, softmax, etc.
-|   |       +-- optim.rs      <- SGD, Adam optimizers
-|   |       +-- metrics.rs    <- accuracy, precision, recall, f1_score
-|   +-- formatter/            <- fj fmt
+|   |   +-- os/               <- 20+ files: memory, IRQ, syscall, paging, GDT/IDT, serial, VGA
+|   |   +-- ml/               <- tensor, autograd, ops, optim, layers, metrics, quantize, ONNX
+|   +-- formatter/            <- fj fmt (AST-based pretty-printing)
 |   +-- lsp/                  <- Language Server Protocol (tower-lsp)
-|   +-- package/              <- fj.toml, fj new, fj build
+|   +-- package/              <- fj.toml, fj new, fj build, registry
 |   +-- stdlib/               <- Rust-side stdlib bindings
 |
-+-- stdlib/                   <- Fajar Lang stdlib (.fj source — 6 files, all pass `fj check`)
++-- stdlib/                   <- Fajar Lang stdlib (.fj: core, nn, os, hal, drivers, lexer)
++-- packages/                 <- 7 standard packages (fj-math/nn/hal/drivers/http/json/crypto)
 +-- tests/
-|   +-- eval_tests.rs         <- 171 integration tests
+|   +-- eval_tests.rs         <- 181 integration tests
 |   +-- ml_tests.rs           <- 39 ML tests
 |   +-- os_tests.rs           <- 16 OS tests
 |   +-- autograd_tests.rs     <- 13 autograd gradient checks
 |   +-- property_tests.rs     <- 33 proptest invariants
 |   +-- safety_tests.rs       <- 76 safety tests (move/borrow/overflow/bounds)
 |   +-- cross_compile_tests.rs <- 9 ARM64/RISC-V cross-compilation tests
-+-- examples/                 <- 15 example .fj programs
++-- examples/                 <- 24 example .fj programs
++-- editors/vscode/           <- VS Code extension (syntax, snippets, LSP)
++-- book/                     <- mdBook documentation (40+ pages)
 +-- benches/
-    +-- interpreter_bench.rs  <- 12 criterion benchmarks (5 interpreter + 7 embedded)
+    +-- interpreter_bench.rs  <- Interpreter benchmarks
+    +-- embedded_bench.rs     <- Embedded benchmarks
+    +-- concurrency_bench.rs  <- Concurrency benchmarks (native)
 ```
 
 ---
@@ -727,11 +786,11 @@ fajar-lang/
 
 | When You Need... | Read This |
 |---|---|
-| **v1.0 task to work on NOW** | **`docs/V1_TASKS.md`** |
-| **v1.0 implementation plan** | **`docs/V1_IMPLEMENTATION_PLAN.md`** |
-| **v1.0 coding rules** | **`docs/V1_RULES.md`** |
-| **v1.0 implementation patterns** | **`docs/V1_SKILLS.md`** |
-| **v1.0 development workflow** | **`docs/V1_WORKFLOW.md`** |
+| **Current task list** | **`docs/V03_TASKS.md`** (v0.3, all complete) + **`docs/V04_PLAN.md`** (v0.4, all complete) |
+| **Coding rules** | **`docs/V1_RULES.md`** |
+| **Implementation patterns** | **`docs/V1_SKILLS.md`** + **`docs/V03_SKILLS.md`** |
+| **Development workflow** | **`docs/V03_WORKFLOW.md`** |
+| **Future roadmap** | **`docs/ROADMAP_V1.1.md`** |
 | Language syntax, keywords, types | `docs/FAJAR_LANG_SPEC.md` |
 | Formal EBNF grammar | `docs/GRAMMAR_REFERENCE.md` |
 | Component contracts, data flow | `docs/ARCHITECTURE.md` |
@@ -761,5 +820,5 @@ fajar-lang/
 
 ---
 
-*CLAUDE.md Version: 4.0 | v1.0 COMPLETE — 506 tasks done, 1,563 tests | Auto-loaded by Claude Code*
-*Last Updated: 2026-03-06*
+*CLAUDE.md Version: 5.0 | v0.4 COMPLETE — 2,650 tests, ~98K LOC, 0 failures | Auto-loaded by Claude Code*
+*Last Updated: 2026-03-10*

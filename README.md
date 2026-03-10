@@ -4,18 +4,22 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 **The only language where an OS kernel and a neural network can share the same codebase, type system, and compiler.**
 
-[![CI](https://github.com/primecore-id/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/primecore-id/fajar-lang/actions/workflows/ci.yml)
+[![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
 
 ## Features
 
 - **Dual-context safety** -- `@kernel` disables heap/tensor, `@device` disables raw pointers. Compiler enforces domain isolation.
 - **Native tensor types** -- `Tensor` is a first-class citizen in the type system with shape checking.
 - **Rust-inspired syntax** -- Familiar to Rust/C developers, but simpler (no lifetime annotations).
+- **Native compilation** -- Cranelift JIT + AOT backend, cross-compilation to ARM64 and RISC-V.
+- **Concurrency** -- Threads, channels, mutexes, atomics, async/await with work-stealing executor.
 - **Pipeline operator** -- `x |> f |> g` for functional-style data flow.
-- **Pattern matching** -- Exhaustive `match` on enums, structs, tuples.
+- **Pattern matching** -- Exhaustive `match` on enums, structs, tuples with generic `Option<T>` / `Result<T,E>`.
 - **Context annotations** -- `@safe`, `@kernel`, `@device`, `@unsafe` for compile-time safety guarantees.
-- **Built-in ML runtime** -- Autograd, tensor ops, optimizers (SGD, Adam), loss functions.
-- **OS primitives** -- Memory management, IRQ handling, syscall dispatch for kernel development.
+- **Built-in ML runtime** -- Autograd, tensor ops, optimizers (SGD, Adam), loss functions, MNIST training.
+- **OS primitives** -- Memory management, IRQ handling, syscall dispatch, inline assembly, bare metal output.
+- **Self-hosting** -- Lexer and parser written in Fajar Lang itself, bootstrapped and verified.
 - **Beautiful errors** -- Rust-style diagnostics with source highlighting via miette.
 
 ## Quickstart
@@ -23,23 +27,24 @@ A statically-typed systems programming language for embedded ML and OS integrati
 ### Build from source
 
 ```bash
-git clone https://github.com/primecore-id/fajar-lang.git
+git clone https://github.com/fajarkraton/fajar-lang.git
 cd fajar-lang
 cargo build --release
 ```
 
 The binary is at `target/release/fj`.
 
-### Install via Cargo
-
-```bash
-cargo install fajar-lang
-```
-
 ### Run a program
 
 ```bash
+# Tree-walking interpreter (default)
 fj run examples/hello.fj
+
+# Native JIT compilation (380x faster)
+fj run --native examples/native_hello.fj
+
+# Bytecode VM
+fj run --vm examples/hello.fj
 ```
 
 ### Start the REPL
@@ -53,18 +58,14 @@ fj repl
 ### Hello World
 
 ```fajar
-// hello.fj
-use std::io::println
-
-fn main() -> void {
+fn main() {
     println("Hello from Fajar Lang!")
 }
 ```
 
-### Fibonacci
+### Fibonacci (Native Codegen)
 
 ```fajar
-// fibonacci.fj
 fn fibonacci(n: i64) -> i64 {
     if n <= 1 {
         n
@@ -73,14 +74,35 @@ fn fibonacci(n: i64) -> i64 {
     }
 }
 
-fn main() -> void {
-    for i in 0..10 {
-        println(fibonacci(i))
+fn main() -> i64 {
+    fibonacci(30)
+}
+```
+
+### MNIST Training
+
+```fajar
+fn forward(input: Tensor, w1: Tensor, w2: Tensor) -> Tensor {
+    let hidden = tensor_relu(tensor_matmul(input, w1))
+    tensor_softmax(tensor_matmul(hidden, w2))
+}
+
+fn main() {
+    let w1 = tensor_xavier(4, 8)
+    let w2 = tensor_xavier(8, 3)
+
+    let mut epoch = 0
+    while epoch < 5 {
+        let input = tensor_rand(1, 4)
+        let output = forward(input, w1, w2)
+        let predicted = tensor_argmax(output)
+        println("Predicted: " + to_string(predicted))
+        epoch = epoch + 1
     }
 }
 ```
 
-### Context Annotations
+### Context Annotations (Dual-Domain Safety)
 
 ```fajar
 @kernel fn collect_sensor() -> [f32; 4] {
@@ -104,12 +126,29 @@ fn main() -> void {
 }
 ```
 
+### Concurrency
+
+```fajar
+fn main() -> i64 {
+    let m = Mutex::new(0)
+    let t1 = thread_spawn(fn() -> i64 {
+        mutex_lock(m)
+        mutex_store(m, mutex_load(m) + 1)
+        mutex_unlock(m)
+        0
+    })
+    thread_join(t1)
+    mutex_load(m)
+}
+```
+
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `fj run <file.fj>` | Execute a Fajar Lang program |
-| `fj run` | Run project entry point (from `fj.toml`) |
+| `fj run <file.fj>` | Execute a Fajar Lang program (interpreter) |
+| `fj run --native <file.fj>` | Execute with native JIT compilation |
+| `fj run --vm <file.fj>` | Execute with bytecode VM |
 | `fj repl` | Start interactive REPL |
 | `fj check <file.fj>` | Parse and type-check (no execution) |
 | `fj build` | Build current project |
@@ -121,50 +160,102 @@ fn main() -> void {
 
 ## Feature Matrix
 
-| Feature | Status |
-|---------|--------|
-| Lexer (tokenization) | Working |
-| Parser (Pratt + recursive descent) | Working |
-| Semantic analyzer (types, scope, context) | Working |
-| Tree-walking interpreter | Working |
-| Bytecode VM (45 opcodes) | Working |
-| REPL | Working |
-| Pattern matching (`match`) | Working |
-| Closures & first-class functions | Working |
-| Pipeline operator (`\|>`) | Working |
-| Context annotations (@safe/@kernel/@device) | Working |
-| OS runtime (memory, IRQ, syscall) | Working |
-| ML runtime (tensor, autograd, ops) | Working |
-| Formatter (`fj fmt`) | Working |
-| LSP server | Working |
-| Package manager (`fj.toml`) | Working |
-| Native compiler (Cranelift) | Planned (v1.0) |
-| Generics & traits | Planned (v1.0) |
-| Borrow checker | Planned (v1.0) |
-| FFI (C interop) | Planned (v1.0) |
-| Cross-compilation (ARM, RISC-V) | Planned (v1.0) |
+| Category | Feature | Status |
+|----------|---------|--------|
+| **Frontend** | Lexer (82+ token kinds) | Working |
+| | Parser (Pratt + recursive descent, 19 precedence levels) | Working |
+| | Semantic analyzer (types, scope, context, NLL borrow) | Working |
+| **Execution** | Tree-walking interpreter | Working |
+| | Bytecode VM (45 opcodes) | Working |
+| | Native compiler (Cranelift JIT + AOT) | Working |
+| | Cross-compilation (ARM64, RISC-V) | Working |
+| **Type System** | Generics & monomorphization | Working |
+| | Traits & static dispatch | Working |
+| | Generic enums (`Option<T>`, `Result<T,E>`) | Working |
+| | Move semantics & NLL borrow checker | Working |
+| | Pattern matching (exhaustive `match`) | Working |
+| **Concurrency** | Threads (spawn, join, Arc) | Working |
+| | Channels (unbounded, bounded, close) | Working |
+| | Synchronization (Mutex, RwLock, Condvar, Barrier) | Working |
+| | Atomics (load, store, CAS, fence) | Working |
+| | Async/await with work-stealing executor | Working |
+| | Streams with map/filter/take combinators | Working |
+| **ML Runtime** | Tensor ops (matmul, relu, softmax, etc.) | Working |
+| | Autograd (tape-based reverse-mode) | Working |
+| | Optimizers (SGD, Adam) | Working |
+| | Layers (Dense, Conv2d, Attention, BatchNorm) | Working |
+| | MNIST training (90%+ accuracy) | Working |
+| | ONNX export, mixed precision (f16/bf16), INT8 quant | Working |
+| | Distributed training (all_reduce, data parallelism) | Working |
+| **OS Runtime** | Memory management (virtual/physical) | Working |
+| | IRQ handling, syscall dispatch | Working |
+| | Inline assembly (`asm!`, `global_asm!`) | Working |
+| | Bare metal (`#[no_std]`, `@entry`, linker scripts) | Working |
+| | Paging (x86_64, ARM64, RISC-V) | Working |
+| **Safety** | Context annotations (@safe/@kernel/@device/@unsafe) | Working |
+| | Ownership & move semantics | Working |
+| | RAII / Drop trait (scope-level cleanup) | Working |
+| | Integer overflow checking | Working |
+| **FFI** | C interop (libloading, libffi) | Working |
+| | SIMD (f32x4/f32x8/i32x4/i32x8) | Working |
+| | Union/repr (@repr_c, @repr_packed, bitfields) | Working |
+| **Tools** | REPL | Working |
+| | Formatter (`fj fmt`) | Working |
+| | LSP server (diagnostics, symbols, code actions) | Working |
+| | Package manager (`fj.toml`, registry, `fj add`) | Working |
+| | VS Code extension (syntax, snippets, LSP) | Working |
+| **Self-Hosting** | Self-hosted lexer (stdlib/lexer.fj) | Working |
+| | Self-hosted parser (shunting-yard) | Working |
+| | Bootstrap verification (interpreter vs native) | Working |
 
 ## Project Structure
 
 ```
 src/
-  lib.rs            -- Module declarations + FjError
-  main.rs           -- CLI entry point (clap)
-  lexer/            -- Tokenization
-  parser/           -- AST generation (Pratt + recursive descent)
-  analyzer/         -- Semantic analysis (types, scope, context)
-  interpreter/      -- Tree-walking evaluator
-  vm/               -- Bytecode compiler + virtual machine
+  lib.rs              -- Module declarations + FjError
+  main.rs             -- CLI entry point (clap)
+  lexer/              -- Tokenization (82+ token kinds)
+  parser/             -- AST generation (Pratt + recursive descent)
+  analyzer/           -- Semantic analysis (types, scope, context, NLL borrow)
+  interpreter/        -- Tree-walking evaluator
+  vm/                 -- Bytecode compiler + virtual machine (45 opcodes)
+  codegen/
+    cranelift/        -- Native compiler (JIT + AOT, 150+ runtime fns)
+      compile/        -- Expression, statement, control flow compilation
   runtime/
-    os/             -- Memory, IRQ, syscall primitives
-    ml/             -- Tensor, autograd, ops, optimizers
-  formatter/        -- Code formatter
-  lsp/              -- Language Server Protocol
-  package/          -- Project manifest (fj.toml)
-examples/           -- Example .fj programs
-tests/              -- Integration tests
-docs/               -- Documentation
+    os/               -- Memory, IRQ, syscall, paging, GDT/IDT, serial, VGA
+    ml/               -- Tensor, autograd, ops, optimizers, layers, ONNX
+  formatter/          -- Code formatter
+  lsp/                -- Language Server Protocol (tower-lsp)
+  package/            -- Project manifest (fj.toml), registry
+  stdlib/             -- Rust-side stdlib bindings
+stdlib/               -- Fajar Lang stdlib (.fj source: core, nn, os, hal, drivers, lexer)
+examples/             -- 24 example .fj programs
+tests/                -- Integration tests (eval, ML, OS, autograd, property, safety, cross-compile)
+benches/              -- Criterion benchmarks (interpreter, embedded, concurrency)
+packages/             -- 7 standard packages (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
+editors/vscode/       -- VS Code extension
+book/                 -- mdBook documentation (40+ pages)
+docs/                 -- 44 reference documents
 ```
+
+## Stats
+
+| Metric | Value |
+|--------|-------|
+| Rust LOC | ~98,000 |
+| Tests | 2,650 (2,267 lib + 383 integration), 0 failures |
+| Examples | 24 `.fj` programs |
+| Error codes | 71 across 9 categories |
+| Documentation | 44 docs + 40-page mdBook |
+| Standard packages | 7 |
+
+## Releases
+
+| Version | Codename | Highlights |
+|---------|----------|------------|
+| [v0.4.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.4.0) | Sovereignty | Generic enums, RAII/Drop, Future/Poll, lazy async |
+| [v0.3.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.3.0) | Dominion | Concurrency, async/await, ML native, self-hosting, bare metal |
 
 ## License
 
@@ -174,4 +265,4 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
 
-Commit format: `<type>(<scope>): <description>` (e.g., `feat(lexer): add string interpolation`)
+Commit format: `<type>(<scope>): <description>` (e.g., `feat(codegen): add generic enum support`)
