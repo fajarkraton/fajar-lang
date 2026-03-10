@@ -1,0 +1,49 @@
+{
+  "name": "fajar-lang",
+  "displayName": "Fajar Lang",
+  "description": "Language support for Fajar Lang (.fj) — syntax highlighting and LSP integration",
+  "version": "0.1.0",
+  "publisher": "primecore",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:fajar"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "fajar",
+        "aliases": ["Fajar Lang", "fajar", "fj"],
+        "extensions": [".fj"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "fajar",
+        "scopeName": "source.fajar",
+        "path": "./syntaxes/fajar-lang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "fajar",
+        "path": "./snippets/fajar.json"
+      }
+    ],
+    "configuration": {
+      "title": "Fajar Lang",
+      "properties": {
+        "fajarLang.server.path": {
+          "type": "string",
+          "default": "fj",
+          "description": "Path to the Fajar Lang binary (fj)"
+        }
+      }
+    }
+  }
+}

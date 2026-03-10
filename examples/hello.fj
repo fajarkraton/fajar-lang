@@ -1,0 +1,6 @@
+// Hello World in Fajar Lang
+use std::io::println
+
+fn main() -> void {
+    println("Hello from Fajar Lang!")
+}

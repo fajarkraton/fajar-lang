@@ -1,0 +1,54 @@
+// stdlib/core.fj — Core standard library for Fajar Lang
+//
+// Basic utilities available to all programs.
+// Math functions and constants are registered as builtins.
+
+// ── Comparison Utilities ─────────────────────────────────────────────
+
+fn clamp_int(value: i64, lo: i64, hi: i64) -> i64 {
+    if value < lo { lo }
+    else if value > hi { hi }
+    else { value }
+}
+
+fn clamp_float(value: f64, lo: f64, hi: f64) -> f64 {
+    clamp(value, lo, hi)
+}
+
+// ── Boolean Utilities ────────────────────────────────────────────────
+
+fn not(b: bool) -> bool {
+    if b { false } else { true }
+}
+
+// ── Numeric Utilities ────────────────────────────────────────────────
+
+fn is_even(n: i64) -> bool {
+    n % 2 == 0
+}
+
+fn is_odd(n: i64) -> bool {
+    n % 2 != 0
+}
+
+fn sign(n: i64) -> i64 {
+    if n > 0 { 1 }
+    else if n < 0 { 0 - 1 }
+    else { 0 }
+}
+
+fn sign_f(n: f64) -> f64 {
+    if n > 0.0 { 1.0 }
+    else if n < 0.0 { 0.0 - 1.0 }
+    else { 0.0 }
+}
+
+// ── Range Utilities ──────────────────────────────────────────────────
+
+fn range_sum(start: i64, end: i64) -> i64 {
+    let mut sum = 0
+    for i in start..end {
+        sum = sum + i
+    }
+    sum
+}

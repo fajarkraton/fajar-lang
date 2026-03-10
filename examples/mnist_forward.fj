@@ -1,0 +1,33 @@
+// MNIST Forward Pass Example
+//
+// Demonstrates a simple feedforward neural network for MNIST digit classification.
+// Architecture: 784 -> 128 (ReLU) -> 10 (Softmax)
+//
+// Run: fj run examples/mnist_forward.fj
+
+// Layer 1: Dense(784 -> 128)
+let w1 = tensor_xavier(784, 128)
+let b1 = tensor_zeros([1, 128])
+
+// Layer 2: Dense(128 -> 10)
+let w2 = tensor_xavier(128, 10)
+let b2 = tensor_zeros([1, 10])
+
+// Simulated input: batch of 1, 784 features (28x28 flattened)
+let input = tensor_randn([1, 784])
+
+// Forward pass
+let z1 = tensor_add(tensor_matmul(input, w1), b1)
+let a1 = tensor_relu(z1)
+let z2 = tensor_add(tensor_matmul(a1, w2), b2)
+let output = tensor_softmax(z2)
+
+// Output analysis
+println("MNIST Forward Pass")
+println("==================")
+println("Input shape:  [1, 784]")
+let out_shape = tensor_shape(output)
+println(out_shape)
+let predicted = tensor_argmax(output)
+println(predicted)
+println("Done!")

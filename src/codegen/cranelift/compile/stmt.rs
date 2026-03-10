@@ -1,0 +1,443 @@
+//! Statement compilation for Fajar Lang native codegen.
+//!
+//! Contains `compile_stmt` — the main dispatch for Let, Const, Return,
+//! Break, Continue, and expression statements.
+
+use cranelift_codegen::ir::{InstBuilder, Value as ClifValue};
+use cranelift_frontend::FunctionBuilder;
+use cranelift_module::Module;
+
+use super::super::clif_types;
+use super::super::context::{emit_owned_cleanup, CodegenCtx, OwnedKind};
+use crate::codegen::CodegenError;
+use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt};
+
+// Re-use sibling functions via the parent module's re-exports.
+use super::{compile_expr, compile_heap_array_init};
+
+/// Coerces a return value to match the declared function return type.
+/// Handles i64→i8 (bool), i8→i64, etc.
+fn coerce_return_value(
+    builder: &mut FunctionBuilder,
+    val: ClifValue,
+    expected: Option<cranelift_codegen::ir::Type>,
+) -> ClifValue {
+    let Some(expected_ty) = expected else {
+        return val;
+    };
+    let actual_ty = builder.func.dfg.value_type(val);
+    if actual_ty == expected_ty {
+        return val;
+    }
+    if clif_types::is_float(actual_ty) || clif_types::is_float(expected_ty) {
+        return val;
+    }
+    if actual_ty.bits() > expected_ty.bits() {
+        builder.ins().ireduce(expected_ty, val)
+    } else {
+        builder.ins().uextend(expected_ty, val)
+    }
+}
+
+/// Compiles a single statement.
+pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    stmt: &Stmt,
+) -> Result<Option<ClifValue>, CodegenError> {
+    match stmt {
+        Stmt::Expr { expr, .. } => {
+            let val = compile_expr(builder, cx, expr)?;
+            Ok(Some(val))
+        }
+        Stmt::Let {
+            name, value, ty, ..
+        } => {
+            // Detect empty array literal → create heap-backed dynamic array
+            if let Expr::Array { elements, .. } = value.as_ref() {
+                if elements.is_empty() {
+                    return compile_heap_array_init(builder, cx, name, elements);
+                }
+            }
+
+            let val = compile_expr(builder, cx, value)?;
+            // Track element type before overriding for array pointer storage
+            let elem_type_for_array = cx.last_expr_type;
+            let var_type = if let Some(ty_expr) = ty {
+                clif_types::lower_type(ty_expr).unwrap_or(clif_types::default_int_type())
+            } else if cx.last_array.is_some() {
+                clif_types::pointer_type()
+            } else {
+                // Infer type from the last compiled expression
+                cx.last_expr_type.unwrap_or(clif_types::default_int_type())
+            };
+            let var = builder.declare_var(var_type);
+            builder.def_var(var, val);
+            cx.var_map.insert(name.clone(), var);
+
+            // If RHS was an array literal, associate metadata with this variable
+            // and store element type (not pointer type) in var_types for indexing
+            if let Some(meta) = cx.last_array.take() {
+                cx.array_meta.insert(name.clone(), meta);
+                cx.var_types.insert(
+                    name.clone(),
+                    elem_type_for_array.unwrap_or(clif_types::default_int_type()),
+                );
+            } else {
+                cx.var_types.insert(name.clone(), var_type);
+            }
+            // If RHS was a string, save the length variable.
+            // Only register as string if the variable actually holds a pointer
+            // (not a comparison result or other non-string value).
+            if let Some(len_val) = cx.last_string_len.take() {
+                if var_type == clif_types::pointer_type()
+                    || var_type == clif_types::default_int_type()
+                {
+                    // Check that the expression actually produces a string (not a comparison, etc.)
+                    let is_string_rhs = matches!(
+                        value.as_ref(),
+                        Expr::Literal {
+                            kind: LiteralKind::String(_) | LiteralKind::RawString(_),
+                            ..
+                        } | Expr::Call { .. }
+                            | Expr::MethodCall { .. }
+                            | Expr::If { .. }
+                            | Expr::Index { .. }
+                    ) || matches!(value.as_ref(), Expr::Ident { name: ref vn, .. } if cx.string_lens.contains_key(vn))
+                        || matches!(value.as_ref(), Expr::Binary { op: BinOp::Add, .. });
+                    if is_string_rhs {
+                        let len_var = builder.declare_var(clif_types::default_int_type());
+                        builder.def_var(len_var, len_val);
+                        cx.string_lens.insert(name.clone(), len_var);
+                        // Track heap-allocated strings for cleanup
+                        if cx.last_string_owned {
+                            cx.owned_ptrs.push((name.clone(), OwnedKind::String));
+                            cx.last_string_owned = false;
+                        }
+                    }
+                }
+            }
+            // If RHS returned a heap array (e.g., str.chars()), register it
+            if cx.last_heap_array {
+                cx.heap_arrays.insert(name.clone());
+                cx.owned_ptrs.push((name.clone(), OwnedKind::Array));
+                cx.last_heap_array = false;
+            }
+            // If RHS was a call to a function returning a heap array (Slice type)
+            // Note: we do NOT add to owned_ptrs here because the returned pointer
+            // may alias the caller's existing heap array (ownership not transferred).
+            if cx.last_heap_array_return {
+                cx.heap_arrays.insert(name.clone());
+                cx.last_heap_array_return = false;
+            }
+            // If RHS is an identifier that's a heap array, propagate (e.g., let out = arr)
+            if let Expr::Ident {
+                name: ref rhs_name, ..
+            } = value.as_ref()
+            {
+                if cx.heap_arrays.contains(rhs_name) {
+                    cx.heap_arrays.insert(name.clone());
+                }
+            }
+            // If RHS was a HashMap::new(), register for cleanup
+            if cx.last_map_new {
+                cx.heap_maps.insert(name.clone());
+                cx.owned_ptrs.push((name.clone(), OwnedKind::Map));
+                cx.last_map_new = false;
+            }
+            // If RHS was a thread::spawn(), register handle for method dispatch
+            if cx.last_thread_spawn {
+                cx.thread_handles.insert(name.clone());
+                cx.last_thread_spawn = false;
+            }
+            // If RHS was a Mutex::new(), register for method dispatch
+            if cx.last_mutex_new {
+                cx.mutex_handles.insert(name.clone());
+                cx.last_mutex_new = false;
+            }
+            // If RHS was a channel::new(), register for method dispatch
+            if cx.last_channel_new {
+                cx.channel_handles.insert(name.clone());
+                cx.last_channel_new = false;
+            }
+            // If RHS was an Atomic::new(), register for method dispatch
+            if cx.last_atomic_new {
+                cx.atomic_handles.insert(name.clone());
+                cx.atomic_subtypes
+                    .insert(name.clone(), cx.last_atomic_subtype.clone());
+                cx.last_atomic_new = false;
+            }
+            // If RHS was a closure handle, register for handle-based dispatch
+            if cx.last_closure_handle {
+                cx.closure_handle_vars.insert(name.clone());
+                cx.last_closure_handle = false;
+            }
+            // If RHS was a RwLock::new(), register for method dispatch
+            if cx.last_rwlock_new {
+                cx.rwlock_handles.insert(name.clone());
+                cx.last_rwlock_new = false;
+            }
+            // If RHS was a Barrier::new(), register for method dispatch
+            if cx.last_barrier_new {
+                cx.barrier_handles.insert(name.clone());
+                cx.last_barrier_new = false;
+            }
+            // If RHS was a Condvar::new(), register for method dispatch
+            if cx.last_condvar_new {
+                cx.condvar_handles.insert(name.clone());
+                cx.last_condvar_new = false;
+            }
+            // If RHS was a channel::bounded(), register for method dispatch
+            if cx.last_bounded_channel {
+                cx.bounded_channel_handles.insert(name.clone());
+                cx.last_bounded_channel = false;
+            }
+            // If RHS was an Arc::new(), register for method dispatch
+            if cx.last_arc_new {
+                cx.arc_handles.insert(name.clone());
+                cx.last_arc_new = false;
+            }
+            // If RHS was a VolatilePtr::new(), register for method dispatch
+            if cx.last_volatile_ptr_new {
+                cx.volatile_ptr_handles.insert(name.clone());
+                cx.last_volatile_ptr_new = false;
+            }
+            // If RHS was an MmioRegion::new(), register base+size vars
+            if cx.last_mmio_new {
+                if let Some((_base_val, size_val)) = cx.last_mmio_vals.take() {
+                    let size_var = builder.declare_var(clif_types::default_int_type());
+                    builder.def_var(size_var, size_val);
+                    cx.mmio_regions.insert(name.clone(), (var, size_var));
+                }
+                cx.last_mmio_new = false;
+            }
+            // If RHS was a BumpAllocator::new(), register for method dispatch
+            if cx.last_bump_alloc_new {
+                cx.bump_alloc_handles.insert(name.clone());
+                cx.last_bump_alloc_new = false;
+            }
+            // If RHS was a FreeListAllocator::new(), register for method dispatch
+            if cx.last_freelist_alloc_new {
+                cx.freelist_alloc_handles.insert(name.clone());
+                cx.last_freelist_alloc_new = false;
+            }
+            // If RHS was a PoolAllocator::new(), register for method dispatch
+            if cx.last_pool_alloc_new {
+                cx.pool_alloc_handles.insert(name.clone());
+                cx.last_pool_alloc_new = false;
+            }
+            // If RHS was an Executor::new(), register for method dispatch
+            if cx.last_executor_new {
+                cx.executor_handles.insert(name.clone());
+                cx.last_executor_new = false;
+            }
+            // If RHS was a Waker::new(), register for method dispatch
+            if cx.last_waker_new {
+                cx.waker_handles.insert(name.clone());
+                cx.last_waker_new = false;
+            }
+            // If RHS was a Timer::new(), register for method dispatch
+            if cx.last_timer_new {
+                cx.timer_handles.insert(name.clone());
+                cx.last_timer_new = false;
+            }
+            // If RHS was a ThreadPool::new(), register for method dispatch
+            if cx.last_threadpool_new {
+                cx.threadpool_handles.insert(name.clone());
+                cx.last_threadpool_new = false;
+            }
+            // If RHS was a spawn_join(), register for JoinHandle method dispatch
+            if cx.last_joinhandle_new {
+                cx.joinhandle_handles.insert(name.clone());
+                cx.last_joinhandle_new = false;
+            }
+            // If RHS was an AsyncChannel::new(), register for method dispatch
+            if cx.last_async_channel_new {
+                cx.async_channel_handles.insert(name.clone());
+                cx.last_async_channel_new = false;
+            }
+            // If RHS was an AsyncChannel::bounded(), register for method dispatch
+            if cx.last_async_bchannel_new {
+                cx.async_bchannel_handles.insert(name.clone());
+                cx.last_async_bchannel_new = false;
+            }
+            // If RHS was a Stream constructor/combinator, register for method dispatch
+            if cx.last_stream_new {
+                cx.stream_handles.insert(name.clone());
+                cx.last_stream_new = false;
+            }
+            // ONNX handle tracking
+            if cx.last_onnx_new {
+                cx.onnx_handles.insert(name.clone());
+                cx.last_onnx_new = false;
+            }
+            // SIMD handle tracking
+            if cx.last_simd_f32x4_new {
+                cx.simd_f32x4_handles.insert(name.clone());
+                cx.last_simd_f32x4_new = false;
+            }
+            if cx.last_simd_i32x4_new {
+                cx.simd_i32x4_handles.insert(name.clone());
+                cx.last_simd_i32x4_new = false;
+            }
+            if cx.last_simd_f32x8_new {
+                cx.simd_f32x8_handles.insert(name.clone());
+                cx.last_simd_f32x8_new = false;
+            }
+            if cx.last_simd_i32x8_new {
+                cx.simd_i32x8_handles.insert(name.clone());
+                cx.last_simd_i32x8_new = false;
+            }
+            // Async I/O handle tracking
+            if cx.last_async_io_new {
+                cx.async_io_handles.insert(name.clone());
+                cx.last_async_io_new = false;
+            }
+            // If RHS was a split() result, track it
+            if cx.last_split_result.take().is_some() {
+                cx.split_vars.insert(name.clone());
+            }
+            // If RHS was an enum constructor, save the payload variable + type
+            if let Some(payload_val) = cx.last_enum_payload.take() {
+                let payload_type = cx
+                    .last_enum_payload_type
+                    .take()
+                    .unwrap_or(clif_types::default_int_type());
+                let payload_var = builder.declare_var(payload_type);
+                builder.def_var(payload_var, payload_val);
+                cx.enum_vars
+                    .insert(name.clone(), (var, payload_var, payload_type));
+            }
+            // If RHS was a struct init, associate the stack slot with this variable
+            if let Some((slot, struct_name)) = cx.last_struct_init.take() {
+                cx.struct_slots.insert(name.clone(), (slot, struct_name));
+            }
+            // If RHS was a tuple, save element types for type-aware index access
+            if let Some(elem_types) = cx.last_tuple_elem_types.take() {
+                cx.tuple_types.insert(name.clone(), elem_types);
+            }
+            // If type annotation is a fn pointer, record signature for call_indirect
+            if let Some(crate::parser::ast::TypeExpr::Fn {
+                params,
+                return_type,
+                ..
+            }) = ty
+            {
+                let param_types: Vec<_> = params
+                    .iter()
+                    .map(|p| clif_types::lower_type(p).unwrap_or(clif_types::default_int_type()))
+                    .collect();
+                let ret_type = clif_types::lower_type(return_type);
+                cx.fn_ptr_sigs.insert(name.clone(), (param_types, ret_type));
+            }
+            Ok(None)
+        }
+        Stmt::Const {
+            name, value, ty, ..
+        } => {
+            let val = compile_expr(builder, cx, value)?;
+            let var_type = clif_types::lower_type(ty)
+                .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
+            let var = builder.declare_var(var_type);
+            builder.def_var(var, val);
+            cx.var_map.insert(name.clone(), var);
+            cx.var_types.insert(name.clone(), var_type);
+            // Handle string/array/enum/struct metadata (same as Let)
+            if let Some(meta) = cx.last_array.take() {
+                cx.array_meta.insert(name.clone(), meta);
+            }
+            if let Some(len_val) = cx.last_string_len.take() {
+                let len_var = builder.declare_var(clif_types::default_int_type());
+                builder.def_var(len_var, len_val);
+                cx.string_lens.insert(name.clone(), len_var);
+                if cx.last_string_owned {
+                    cx.owned_ptrs.push((name.clone(), OwnedKind::String));
+                    cx.last_string_owned = false;
+                }
+            }
+            if cx.last_heap_array {
+                cx.heap_arrays.insert(name.clone());
+                cx.owned_ptrs.push((name.clone(), OwnedKind::Array));
+                cx.last_heap_array = false;
+            }
+            if let Some(payload_val) = cx.last_enum_payload.take() {
+                let payload_type = cx
+                    .last_enum_payload_type
+                    .take()
+                    .unwrap_or(clif_types::default_int_type());
+                let payload_var = builder.declare_var(payload_type);
+                builder.def_var(payload_var, payload_val);
+                cx.enum_vars
+                    .insert(name.clone(), (var, payload_var, payload_type));
+            }
+            if let Some((slot, struct_name)) = cx.last_struct_init.take() {
+                cx.struct_slots.insert(name.clone(), (slot, struct_name));
+            }
+            if let Some(elem_types) = cx.last_tuple_elem_types.take() {
+                cx.tuple_types.insert(name.clone(), elem_types);
+            }
+            Ok(None)
+        }
+        Stmt::Return { value, .. } => {
+            if let Some(expr) = value {
+                let val = compile_expr(builder, cx, expr)?;
+                // Check if this function returns a struct
+                if let Some((slot, ref sname)) = cx.last_struct_init {
+                    if let Some(fields) = cx.struct_defs.get(sname).cloned() {
+                        let mut ret_vals = Vec::new();
+                        for (i, (_fname, ftype)) in fields.iter().enumerate() {
+                            let fv = builder.ins().stack_load(*ftype, slot, (i as i32) * 8);
+                            ret_vals.push(fv);
+                        }
+                        cx.last_struct_init = None;
+                        emit_owned_cleanup(builder, cx, None)?;
+                        builder.ins().return_(&ret_vals);
+                    } else {
+                        emit_owned_cleanup(builder, cx, Some(val))?;
+                        builder.ins().return_(&[val]);
+                    }
+                } else {
+                    emit_owned_cleanup(builder, cx, Some(val))?;
+                    // Coerce return value to match declared return type
+                    let val = coerce_return_value(builder, val, cx.fn_ret_type);
+                    builder.ins().return_(&[val]);
+                }
+            } else {
+                emit_owned_cleanup(builder, cx, None)?;
+                builder.ins().return_(&[]);
+            }
+            // Switch to a new unreachable block so subsequent instructions
+            // don't try to add to the already-terminated block.
+            let after_return = builder.create_block();
+            builder.switch_to_block(after_return);
+            builder.seal_block(after_return);
+            Ok(None)
+        }
+        Stmt::Break { .. } => {
+            let exit_block = cx
+                .loop_exit
+                .ok_or_else(|| CodegenError::NotImplemented("break outside loop".into()))?;
+            builder.ins().jump(exit_block, &[]);
+            // Switch to an unreachable block so subsequent stmts don't panic.
+            let after = builder.create_block();
+            builder.switch_to_block(after);
+            builder.seal_block(after);
+            Ok(None)
+        }
+        Stmt::Continue { .. } => {
+            let header = cx
+                .loop_header
+                .ok_or_else(|| CodegenError::NotImplemented("continue outside loop".into()))?;
+            builder.ins().jump(header, &[]);
+            // Switch to an unreachable block so subsequent stmts don't panic.
+            let after = builder.create_block();
+            builder.switch_to_block(after);
+            builder.seal_block(after);
+            Ok(None)
+        }
+        _ => Err(CodegenError::UnsupportedStmt(format!(
+            "{:?}",
+            std::mem::discriminant(stmt)
+        ))),
+    }
+}

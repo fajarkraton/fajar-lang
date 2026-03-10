@@ -1,0 +1,56 @@
+// Collections example — HashMap and Array operations
+// Demonstrates Fajar Lang's standard library collections.
+
+fn main() -> void {
+    // === HashMap ===
+    println("=== HashMap Demo ===")
+    let mut scores = map_new()
+    scores = map_insert(scores, "alice", 95)
+    scores = map_insert(scores, "bob", 82)
+    scores = map_insert(scores, "charlie", 91)
+
+    println("Number of students:")
+    println(map_len(scores))
+
+    // Lookup
+    let alice_score = map_get(scores, "alice")
+    match alice_score {
+        Some(s) => {
+            println("Alice's score:")
+            println(s)
+        },
+        _ => println("Not found"),
+    }
+
+    // Keys iteration
+    println("All students:")
+    let keys = map_keys(scores)
+    for name in keys {
+        println(name)
+    }
+
+    // === Array operations ===
+    println("=== Array Demo ===")
+    let fruits = ["apple", "banana", "cherry", "date"]
+    println("Fruits joined:")
+    println(fruits.join(", "))
+
+    let reversed = fruits.reverse()
+    println("Reversed:")
+    println(reversed.join(" -> "))
+
+    println("Contains 'banana'?")
+    println(fruits.contains("banana"))
+
+    // === String operations ===
+    println("=== String Demo ===")
+    let msg = "  Hello, Fajar Lang!  "
+    println(msg.trim())
+    println(msg.to_uppercase())
+
+    let csv = "name,age,city"
+    let fields = csv.split(",")
+    for field in fields {
+        println(field)
+    }
+}

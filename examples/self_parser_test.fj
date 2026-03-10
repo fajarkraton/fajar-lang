@@ -1,0 +1,457 @@
+// Self-hosted expression parser test — iterative Pratt parser
+// Parses simple expressions (integer arithmetic) and evaluates them.
+// Uses an operand stack + operator stack instead of recursion.
+// AST stored as flat array: each node uses 4 entries [kind, value, left, right].
+
+// ========== Character helpers ==========
+
+fn is_digit(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn char_to_digit(c: str) -> i64 {
+    if c == "0" { return 0 }
+    if c == "1" { return 1 }
+    if c == "2" { return 2 }
+    if c == "3" { return 3 }
+    if c == "4" { return 4 }
+    if c == "5" { return 5 }
+    if c == "6" { return 6 }
+    if c == "7" { return 7 }
+    if c == "8" { return 8 }
+    return 9
+}
+
+// ========== Tokenizer ==========
+// Tokens: pairs [kind, value]. 130=IntLit, 70=+, 71=-, 72=*, 73=/, 74=%,
+// 76===, 77=!=, 78=<, 79=>, 110=(, 111=), 0=EOF
+
+fn tokenize(source: str) -> [i64] {
+    let n = to_int(len(source))
+    let mut pos = 0
+    let mut result: [i64] = []
+
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+
+        if c == " " || c == "\t" || c == "\n" {
+            pos = pos + 1
+            continue
+        }
+
+        if is_digit(c) {
+            let mut val = 0
+            while pos < n && is_digit(source.substring(pos, pos + 1)) {
+                val = val * 10 + char_to_digit(source.substring(pos, pos + 1))
+                pos = pos + 1
+            }
+            result = result.push(130)
+            result = result.push(val)
+            continue
+        }
+
+        // Two-char operators
+        if pos + 1 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            if c == "=" && c2 == "=" { result = result.push(76); result = result.push(0); pos = pos + 2; continue }
+            if c == "!" && c2 == "=" { result = result.push(77); result = result.push(0); pos = pos + 2; continue }
+        }
+
+        if c == "+" { result = result.push(70); result = result.push(0); pos = pos + 1; continue }
+        if c == "-" { result = result.push(71); result = result.push(0); pos = pos + 1; continue }
+        if c == "*" { result = result.push(72); result = result.push(0); pos = pos + 1; continue }
+        if c == "/" { result = result.push(73); result = result.push(0); pos = pos + 1; continue }
+        if c == "%" { result = result.push(74); result = result.push(0); pos = pos + 1; continue }
+        if c == "<" { result = result.push(78); result = result.push(0); pos = pos + 1; continue }
+        if c == ">" { result = result.push(79); result = result.push(0); pos = pos + 1; continue }
+        if c == "(" { result = result.push(110); result = result.push(0); pos = pos + 1; continue }
+        if c == ")" { result = result.push(111); result = result.push(0); pos = pos + 1; continue }
+
+        pos = pos + 1
+    }
+
+    result = result.push(0)
+    result = result.push(0)
+    result
+}
+
+// ========== AST construction helpers ==========
+// AST nodes stored as flat array: [kind, value, left, right] per node.
+// 200 = IntLit, 202 = Binary, 203 = Unary
+
+fn ast_make_int(ast: [i64], val: i64) -> [i64] {
+    let mut out = ast
+    out = out.push(200)
+    out = out.push(val)
+    out = out.push(0)
+    out = out.push(0)
+    out
+}
+
+fn ast_make_binary(ast: [i64], op: i64, left: i64, right: i64) -> [i64] {
+    let mut out = ast
+    out = out.push(202)
+    out = out.push(op)
+    out = out.push(left)
+    out = out.push(right)
+    out
+}
+
+fn ast_make_unary(ast: [i64], op: i64, operand: i64) -> [i64] {
+    let mut out = ast
+    out = out.push(203)
+    out = out.push(op)
+    out = out.push(0)
+    out = out.push(operand)
+    out
+}
+
+// ========== Operator precedence ==========
+fn precedence(kind: i64) -> i64 {
+    if kind == 76 { return 6 }   // ==
+    if kind == 77 { return 6 }   // !=
+    if kind == 78 { return 8 }   // <
+    if kind == 79 { return 8 }   // >
+    if kind == 70 { return 10 }  // +
+    if kind == 71 { return 10 }  // -
+    if kind == 72 { return 12 }  // *
+    if kind == 73 { return 12 }  // /
+    if kind == 74 { return 12 }  // %
+    return 0
+}
+
+fn is_op(kind: i64) -> bool {
+    kind == 70 || kind == 71 || kind == 72 || kind == 73 || kind == 74 ||
+    kind == 76 || kind == 77 || kind == 78 || kind == 79
+}
+
+// ========== Iterative shunting-yard parser ==========
+// Uses two stacks: operand_stack (AST node indices) and op_stack (operator kinds).
+// Builds AST nodes incrementally.
+fn parse_and_eval(source: str) -> i64 {
+    let tokens = tokenize(source)
+    let num_tokens = to_int(len(tokens)) / 2
+
+    // AST array, operand stack, operator stack
+    let mut ast: [i64] = []
+    let mut operands: [i64] = []
+    let mut ops: [i64] = []
+
+    let mut pos = 0
+    let mut expect_operand = true
+
+    while pos < num_tokens {
+        let idx = pos * 2
+        let kind = tokens[idx]
+        let val = tokens[idx + 1]
+
+        if kind == 0 {
+            // EOF — done
+            pos = num_tokens
+            continue
+        }
+
+        if kind == 130 && expect_operand {
+            // Integer literal → create AST node, push index to operand stack
+            let node_idx = to_int(len(ast)) / 4
+            ast = ast_make_int(ast, val)
+            operands = operands.push(node_idx)
+            expect_operand = false
+            pos = pos + 1
+            continue
+        }
+
+        // Unary minus: '-' when expecting an operand
+        if kind == 71 && expect_operand {
+            // Push unary minus sentinel (use -71 to distinguish from binary)
+            ops = ops.push(-71)
+            pos = pos + 1
+            continue
+        }
+
+        if kind == 110 && expect_operand {
+            // '(' — push sentinel
+            ops = ops.push(110)
+            pos = pos + 1
+            continue
+        }
+
+        if kind == 111 {
+            // ')' — pop operators until '('
+            let mut popping = true
+            while popping {
+                let ops_len = to_int(len(ops))
+                if ops_len == 0 {
+                    popping = false
+                } else {
+                    let top_op = ops[ops_len - 1]
+                    if top_op == 110 {
+                        // Remove the '(' sentinel
+                        let mut new_ops: [i64] = []
+                        let mut k = 0
+                        while k < ops_len - 1 {
+                            new_ops = new_ops.push(ops[k])
+                            k = k + 1
+                        }
+                        ops = new_ops
+                        popping = false
+                    } else {
+                        // Pop operator and create binary/unary node
+                        let operands_len = to_int(len(operands))
+                        if top_op == -71 {
+                            // Unary minus
+                            let operand_idx = operands[operands_len - 1]
+                            let node_idx = to_int(len(ast)) / 4
+                            ast = ast_make_unary(ast, 71, operand_idx)
+                            // Replace top of operand stack
+                            let mut new_operands: [i64] = []
+                            let mut j = 0
+                            while j < operands_len - 1 {
+                                new_operands = new_operands.push(operands[j])
+                                j = j + 1
+                            }
+                            new_operands = new_operands.push(node_idx)
+                            operands = new_operands
+                        } else {
+                            // Binary op
+                            let rhs_idx = operands[operands_len - 1]
+                            let lhs_idx = operands[operands_len - 2]
+                            let node_idx = to_int(len(ast)) / 4
+                            ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
+                            let mut new_operands: [i64] = []
+                            let mut j = 0
+                            while j < operands_len - 2 {
+                                new_operands = new_operands.push(operands[j])
+                                j = j + 1
+                            }
+                            new_operands = new_operands.push(node_idx)
+                            operands = new_operands
+                        }
+                        // Pop op
+                        let mut new_ops: [i64] = []
+                        let mut k = 0
+                        while k < ops_len - 1 {
+                            new_ops = new_ops.push(ops[k])
+                            k = k + 1
+                        }
+                        ops = new_ops
+                    }
+                }
+            }
+            expect_operand = false
+            pos = pos + 1
+            continue
+        }
+
+        if is_op(kind) && expect_operand == false {
+            // Infix operator
+            let prec = precedence(kind)
+            // Pop higher-precedence operators from stack
+            let mut popping = true
+            while popping {
+                let ops_len = to_int(len(ops))
+                if ops_len == 0 {
+                    popping = false
+                } else {
+                    let top_op = ops[ops_len - 1]
+                    if top_op == 110 {
+                        popping = false
+                    } else {
+                        let top_prec = precedence(top_op)
+                        if top_op == -71 {
+                            // Unary minus has higher precedence than any binary op
+                            let operands_len = to_int(len(operands))
+                            let operand_idx = operands[operands_len - 1]
+                            let node_idx = to_int(len(ast)) / 4
+                            ast = ast_make_unary(ast, 71, operand_idx)
+                            let mut new_operands: [i64] = []
+                            let mut j = 0
+                            while j < operands_len - 1 {
+                                new_operands = new_operands.push(operands[j])
+                                j = j + 1
+                            }
+                            new_operands = new_operands.push(node_idx)
+                            operands = new_operands
+                            let mut new_ops: [i64] = []
+                            let mut k = 0
+                            while k < ops_len - 1 {
+                                new_ops = new_ops.push(ops[k])
+                                k = k + 1
+                            }
+                            ops = new_ops
+                        } else {
+                            if top_prec >= prec {
+                                // Pop binary operator
+                                let operands_len = to_int(len(operands))
+                                let rhs_idx = operands[operands_len - 1]
+                                let lhs_idx = operands[operands_len - 2]
+                                let node_idx = to_int(len(ast)) / 4
+                                ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
+                                let mut new_operands: [i64] = []
+                                let mut j = 0
+                                while j < operands_len - 2 {
+                                    new_operands = new_operands.push(operands[j])
+                                    j = j + 1
+                                }
+                                new_operands = new_operands.push(node_idx)
+                                operands = new_operands
+                                let mut new_ops: [i64] = []
+                                let mut k = 0
+                                while k < ops_len - 1 {
+                                    new_ops = new_ops.push(ops[k])
+                                    k = k + 1
+                                }
+                                ops = new_ops
+                            } else {
+                                popping = false
+                            }
+                        }
+                    }
+                }
+            }
+            ops = ops.push(kind)
+            expect_operand = true
+            pos = pos + 1
+            continue
+        }
+
+        // Skip unknown
+        pos = pos + 1
+    }
+
+    // Pop remaining operators
+    let mut finishing = true
+    while finishing {
+        let ops_len = to_int(len(ops))
+        if ops_len == 0 {
+            finishing = false
+        } else {
+            let top_op = ops[ops_len - 1]
+            let operands_len = to_int(len(operands))
+            if top_op == -71 {
+                let operand_idx = operands[operands_len - 1]
+                let node_idx = to_int(len(ast)) / 4
+                ast = ast_make_unary(ast, 71, operand_idx)
+                let mut new_operands: [i64] = []
+                let mut j = 0
+                while j < operands_len - 1 {
+                    new_operands = new_operands.push(operands[j])
+                    j = j + 1
+                }
+                new_operands = new_operands.push(node_idx)
+                operands = new_operands
+            } else {
+                let rhs_idx = operands[operands_len - 1]
+                let lhs_idx = operands[operands_len - 2]
+                let node_idx = to_int(len(ast)) / 4
+                ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
+                let mut new_operands: [i64] = []
+                let mut j = 0
+                while j < operands_len - 2 {
+                    new_operands = new_operands.push(operands[j])
+                    j = j + 1
+                }
+                new_operands = new_operands.push(node_idx)
+                operands = new_operands
+            }
+            let mut new_ops: [i64] = []
+            let mut k = 0
+            while k < ops_len - 1 {
+                new_ops = new_ops.push(ops[k])
+                k = k + 1
+            }
+            ops = new_ops
+        }
+    }
+
+    // Get root node and evaluate
+    let root = operands[0]
+    eval_ast(ast, root)
+}
+
+// ========== AST Evaluator ==========
+fn eval_ast(ast: [i64], idx: i64) -> i64 {
+    let base = idx * 4
+    let kind = ast[base]
+
+    if kind == 200 { return ast[base + 1] }
+
+    if kind == 203 {
+        let operand = eval_ast(ast, ast[base + 3])
+        return 0 - operand
+    }
+
+    if kind == 202 {
+        let op = ast[base + 1]
+        let lv = eval_ast(ast, ast[base + 2])
+        let rv = eval_ast(ast, ast[base + 3])
+        if op == 70 { return lv + rv }
+        if op == 71 { return lv - rv }
+        if op == 72 { return lv * rv }
+        if op == 73 { return lv / rv }
+        if op == 74 { return lv % rv }
+        if op == 76 {
+            if lv == rv { return 1 }
+            return 0
+        }
+        if op == 77 {
+            if lv != rv { return 1 }
+            return 0
+        }
+        if op == 78 {
+            if lv < rv { return 1 }
+            return 0
+        }
+        if op == 79 {
+            if lv > rv { return 1 }
+            return 0
+        }
+        return 0
+    }
+    return 0
+}
+
+fn main() -> void {
+    // Test 1: Integer literal
+    assert_eq(parse_and_eval("42"), 42)
+    println("Test 1 passed: integer literal (42)")
+
+    // Test 2: Addition
+    assert_eq(parse_and_eval("3 + 4"), 7)
+    println("Test 2 passed: addition (3 + 4 = 7)")
+
+    // Test 3: Multiplication precedence
+    assert_eq(parse_and_eval("2 + 3 * 4"), 14)
+    println("Test 3 passed: precedence (2 + 3 * 4 = 14)")
+
+    // Test 4: Left-associative subtraction
+    assert_eq(parse_and_eval("10 - 3 - 2"), 5)
+    println("Test 4 passed: left-assoc subtraction (10 - 3 - 2 = 5)")
+
+    // Test 5: Left-associative division
+    assert_eq(parse_and_eval("100 / 5 / 4"), 5)
+    println("Test 5 passed: left-assoc division (100 / 5 / 4 = 5)")
+
+    // Test 6: Parentheses override precedence
+    assert_eq(parse_and_eval("(2 + 3) * 4"), 20)
+    println("Test 6 passed: parentheses ((2 + 3) * 4 = 20)")
+
+    // Test 7: Unary minus
+    assert_eq(parse_and_eval("-5 + 8"), 3)
+    println("Test 7 passed: unary minus (-5 + 8 = 3)")
+
+    // Test 8: Comparison
+    assert_eq(parse_and_eval("3 < 5"), 1)
+    println("Test 8 passed: comparison (3 < 5 = true)")
+
+    // Test 9: Complex expression with mixed precedence
+    assert_eq(parse_and_eval("2 * 3 + 4 * 5"), 26)
+    println("Test 9 passed: complex (2 * 3 + 4 * 5 = 26)")
+
+    // Test 10: Equality
+    assert_eq(parse_and_eval("7 == 7"), 1)
+    println("Test 10 passed: equality (7 == 7 = true)")
+
+    println("All 10 self-hosted parser tests passed!")
+}

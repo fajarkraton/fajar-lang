@@ -1,0 +1,169 @@
+// Mini OS Kernel — VGA text mode + keyboard + timer + shell
+//
+// Demonstrates @kernel context for OS development:
+// - VGA framebuffer at 0xB8000 (text mode 80x25)
+// - PS/2 keyboard via port 0x60
+// - PIT timer interrupt at IRQ 0x20
+// - Simple command shell
+//
+// NOTE: This is a design reference. Run with: fj run examples/mini_os.fj
+// For bare-metal: fj build --target x86_64-unknown-none --no-std
+
+// ═══════════════════════════════════════════════════════════════
+// VGA Text Mode Driver
+// ═══════════════════════════════════════════════════════════════
+
+fn vga_put_char(x: i64, y: i64, _ch: i64, _color: i64) -> void {
+    let _offset = 0xB8000 + (y * 80 + x) * 2
+    // In bare-metal: mem_write(_offset, 0, _ch)
+    // In hosted mode: simulate
+}
+
+fn vga_write_at(x: i64, y: i64, msg: str, color: i64) -> void {
+    let l = to_int(len(msg))
+    let mut i = 0
+    while i < l {
+        vga_put_char(x + i, y, 0, color)
+        i = i + 1
+    }
+}
+
+fn vga_clear() -> void {
+    let total = 80 * 25
+    let mut i = 0
+    while i < total {
+        vga_put_char(i % 80, i / 80, 0x20, 0x0F)
+        i = i + 1
+    }
+}
+
+fn vga_scroll() -> void {
+    // In a real kernel: copy VGA rows up by one
+    // For demo: just clear
+    vga_clear()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Keyboard Driver (PS/2 scancode mapping)
+// ═══════════════════════════════════════════════════════════════
+
+fn scancode_to_ascii(scancode: i64) -> i64 {
+    // Simplified US keyboard layout (key down only)
+    if scancode == 0x1E { 0x61 }       // 'a'
+    else if scancode == 0x30 { 0x62 }  // 'b'
+    else if scancode == 0x2E { 0x63 }  // 'c'
+    else if scancode == 0x20 { 0x64 }  // 'd'
+    else if scancode == 0x12 { 0x65 }  // 'e'
+    else if scancode == 0x21 { 0x66 }  // 'f'
+    else if scancode == 0x22 { 0x67 }  // 'g'
+    else if scancode == 0x23 { 0x68 }  // 'h'
+    else if scancode == 0x17 { 0x69 }  // 'i'
+    else if scancode == 0x24 { 0x6A }  // 'j'
+    else if scancode == 0x25 { 0x6B }  // 'k'
+    else if scancode == 0x26 { 0x6C }  // 'l'
+    else if scancode == 0x32 { 0x6D }  // 'm'
+    else if scancode == 0x31 { 0x6E }  // 'n'
+    else if scancode == 0x18 { 0x6F }  // 'o'
+    else if scancode == 0x19 { 0x70 }  // 'p'
+    else if scancode == 0x10 { 0x71 }  // 'q'
+    else if scancode == 0x13 { 0x72 }  // 'r'
+    else if scancode == 0x1F { 0x73 }  // 's'
+    else if scancode == 0x14 { 0x74 }  // 't'
+    else if scancode == 0x16 { 0x75 }  // 'u'
+    else if scancode == 0x2F { 0x76 }  // 'v'
+    else if scancode == 0x11 { 0x77 }  // 'w'
+    else if scancode == 0x2D { 0x78 }  // 'x'
+    else if scancode == 0x15 { 0x79 }  // 'y'
+    else if scancode == 0x2C { 0x7A }  // 'z'
+    else if scancode == 0x39 { 0x20 }  // space
+    else if scancode == 0x1C { 0x0A }  // enter
+    else if scancode == 0x0E { 0x08 }  // backspace
+    else { 0 }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Timer (PIT — Programmable Interval Timer)
+// ═══════════════════════════════════════════════════════════════
+
+fn timer_init(hz: i64) -> void {
+    let divisor = 1193180 / hz
+    // In bare-metal: port_write(0x43, 0x36)
+    // port_write(0x40, divisor & 0xFF)
+    // port_write(0x40, (divisor >> 8) & 0xFF)
+    println("PIT initialized at " + to_string(hz) + " Hz (divisor: " + to_string(divisor) + ")")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Shell
+// ═══════════════════════════════════════════════════════════════
+
+fn shell_execute(cmd: str) -> str {
+    if cmd == "help" {
+        "Commands: help, version, clear, uptime, mem, halt"
+    } else if cmd == "version" {
+        "Fajar OS v0.3.0 (Dominion)"
+    } else if cmd == "clear" {
+        "Screen cleared."
+    } else if cmd == "mem" {
+        "Memory: 128 MB available"
+    } else if cmd == "uptime" {
+        "Uptime: running since boot"
+    } else if cmd == "halt" {
+        "System halted."
+    } else {
+        "Unknown command. Type 'help'."
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Kernel Main
+// ═══════════════════════════════════════════════════════════════
+
+fn main() -> void {
+    println("=== Fajar OS v0.3 ===")
+    println("A mini kernel written in Fajar Lang")
+    println("Type 'help' for available commands.")
+    println("----------------------------------------")
+
+    // Initialize timer
+    timer_init(100)
+
+    // Simulated keyboard input for demo
+    let commands = ["help", "version", "mem", "uptime", "halt"]
+    let n = to_int(len(commands))
+    let mut i = 0
+
+    while i < n {
+        let cmd = commands[i]
+        println("fj> " + cmd)
+        let result = shell_execute(cmd)
+        println(result)
+        println("")
+        i = i + 1
+    }
+
+    println("Shell session complete.")
+    println("")
+    println("=== OS Kernel Architecture ===")
+    println("VGA Driver:    0xB8000 (text mode 80x25)")
+    println("Keyboard:      PS/2 port 0x60/0x64")
+    println("Timer:         PIT channel 0 at 100 Hz")
+    println("Interrupts:    IRQ 0x20 (timer), 0x21 (keyboard)")
+    println("Shell:         5 built-in commands")
+
+    // Demonstrate scancode mapping
+    println("")
+    println("=== Scancode Test ===")
+    let test_scancodes = [0x1E, 0x30, 0x2E, 0x20, 0x12]
+    let expected = [0x61, 0x62, 0x63, 0x64, 0x65]
+    let mut j = 0
+    while j < 5 {
+        let ascii = scancode_to_ascii(test_scancodes[j])
+        if ascii == expected[j] {
+            println("Scancode 0x" + to_string(test_scancodes[j]) + " -> ASCII " + to_string(ascii) + " OK")
+        } else {
+            println("Scancode MISMATCH!")
+        }
+        j = j + 1
+    }
+}

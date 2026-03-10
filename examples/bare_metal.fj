@@ -1,0 +1,50 @@
+// Bare-Metal Hello World — Fajar Lang
+//
+// Runs without OS, without libc, on QEMU aarch64 virt platform.
+// Writes directly to PL011 UART (memory-mapped I/O at 0x09000000).
+//
+// Target: aarch64-unknown-none-elf
+// Run: qemu-system-aarch64 -M virt -nographic -kernel bare_metal.elf
+
+// PL011 UART Data Register address on QEMU virt
+const uart_base: i64 = 150994944  // 0x09000000
+
+// Write a single byte to UART
+fn uart_putc(c: i64) -> void {
+    // In native codegen: this would be a volatile store to uart_base
+    // For now: placeholder for the memory-mapped I/O pattern
+    port_write(uart_base, c)
+}
+
+// Write a string character by character
+fn uart_puts(msg: i64) -> void {
+    // Write 'H', 'e', 'l', 'l', 'o' one char at a time
+    uart_putc(72)   // 'H'
+    uart_putc(101)  // 'e'
+    uart_putc(108)  // 'l'
+    uart_putc(108)  // 'l'
+    uart_putc(111)  // 'o'
+    uart_putc(32)   // ' '
+}
+
+// Write "Fajar Lang" to UART
+fn uart_write_name() -> void {
+    uart_putc(70)   // 'F'
+    uart_putc(97)   // 'a'
+    uart_putc(106)  // 'j'
+    uart_putc(97)   // 'a'
+    uart_putc(114)  // 'r'
+    uart_putc(32)   // ' '
+    uart_putc(76)   // 'L'
+    uart_putc(97)   // 'a'
+    uart_putc(110)  // 'n'
+    uart_putc(103)  // 'g'
+}
+
+// Bare-metal entry point
+fn main() -> i64 {
+    uart_puts(0)          // "Hello "
+    uart_write_name()     // "Fajar Lang"
+    uart_putc(10)         // newline
+    0                     // success
+}

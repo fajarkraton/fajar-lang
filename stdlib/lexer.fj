@@ -1,0 +1,381 @@
+// Self-hosted lexer for Fajar Lang
+// Sprint S44 — ports the Rust lexer to Fajar Lang itself.
+//
+// Token kinds as integer tags:
+//   0    = EOF
+//   1-12 = Control flow keywords (if, else, match, while, for, loop, in, return, break, continue, async, await)
+//  13-22 = Declaration keywords (let, mut, fn, struct, enum, union, impl, trait, type, const)
+//  23-28 = Module keywords (use, mod, pub, extern, as, where)
+//  29-31 = Literal keywords (true, false, null)
+//  32-52 = Type keywords (bool, i8..u128, usize, f16..f64, str, char, void, never)
+//  53-57 = ML keywords (tensor, grad, loss, layer, model)
+//  58-63 = OS keywords (ptr, addr, page, region, irq, syscall)
+//  70-79 = Operators (+, -, *, /, %, **, ==, !=, <, >)
+//  80-90 = More operators (<=, >=, &&, ||, !, &, |, ^, ~, <<, >>)
+//  91-99 = Assignment (=, +=, -=, *=, /=, %=, &=, |=, ^=)
+// 100-105= More assign/range/pipeline (<<=, >>=, .., ..=, |>, @)
+// 110-115= Delimiters ( ) { } [ ]
+// 116-123= Punctuation (; :: : , . -> => ?)
+// 130    = IntLit
+// 131    = FloatLit
+// 132    = StringLit
+// 133    = Ident
+
+fn is_digit_str(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn is_alpha_str(c: str) -> bool {
+    c == "_" ||
+    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" ||
+    c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" ||
+    c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" ||
+    c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" ||
+    c == "y" || c == "z" ||
+    c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" ||
+    c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" ||
+    c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" ||
+    c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" ||
+    c == "Y" || c == "Z"
+}
+
+fn is_alnum_str(c: str) -> bool {
+    is_alpha_str(c) || is_digit_str(c)
+}
+
+fn lookup_keyword(word: str) -> i64 {
+    // Control flow
+    if word == "if" { return 1 }
+    if word == "else" { return 2 }
+    if word == "match" { return 3 }
+    if word == "while" { return 4 }
+    if word == "for" { return 5 }
+    if word == "loop" { return 6 }
+    if word == "in" { return 7 }
+    if word == "return" { return 8 }
+    if word == "break" { return 9 }
+    if word == "continue" { return 10 }
+    if word == "async" { return 11 }
+    if word == "await" { return 12 }
+    // Declarations
+    if word == "let" { return 13 }
+    if word == "mut" { return 14 }
+    if word == "fn" { return 15 }
+    if word == "struct" { return 16 }
+    if word == "enum" { return 17 }
+    if word == "union" { return 18 }
+    if word == "impl" { return 19 }
+    if word == "trait" { return 20 }
+    if word == "type" { return 21 }
+    if word == "const" { return 22 }
+    // Module
+    if word == "use" { return 23 }
+    if word == "mod" { return 24 }
+    if word == "pub" { return 25 }
+    if word == "extern" { return 26 }
+    if word == "as" { return 27 }
+    if word == "where" { return 28 }
+    // Literal keywords
+    if word == "true" { return 29 }
+    if word == "false" { return 30 }
+    if word == "null" { return 31 }
+    // Type keywords
+    if word == "bool" { return 32 }
+    if word == "i8" { return 33 }
+    if word == "i16" { return 34 }
+    if word == "i32" { return 35 }
+    if word == "i64" { return 36 }
+    if word == "i128" { return 37 }
+    if word == "isize" { return 38 }
+    if word == "u8" { return 39 }
+    if word == "u16" { return 40 }
+    if word == "u32" { return 41 }
+    if word == "u64" { return 42 }
+    if word == "u128" { return 43 }
+    if word == "usize" { return 44 }
+    if word == "f16" { return 45 }
+    if word == "bf16" { return 46 }
+    if word == "f32" { return 47 }
+    if word == "f64" { return 48 }
+    if word == "str" { return 49 }
+    if word == "char" { return 50 }
+    if word == "void" { return 51 }
+    if word == "never" { return 52 }
+    // ML keywords
+    if word == "tensor" { return 53 }
+    if word == "grad" { return 54 }
+    if word == "loss" { return 55 }
+    if word == "layer" { return 56 }
+    if word == "model" { return 57 }
+    // OS keywords
+    if word == "ptr" { return 58 }
+    if word == "addr" { return 59 }
+    if word == "page" { return 60 }
+    if word == "region" { return 61 }
+    if word == "irq" { return 62 }
+    if word == "syscall" { return 63 }
+    // Not a keyword
+    return 0
+}
+
+// Tokenize source code into an array of token kind tags.
+// Uses substring(pos, pos+1) for char access (ownership-safe).
+pub fn tokenize(source: str) -> [i64] {
+    let n = to_int(len(source))
+    let mut pos = 0
+    let mut tokens: [i64] = []
+
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+
+        // Skip whitespace
+        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+            pos = pos + 1
+            continue
+        }
+
+        // Skip line comments
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+            pos = pos + 2
+            while pos < n && source.substring(pos, pos + 1) != "\n" {
+                pos = pos + 1
+            }
+            continue
+        }
+
+        // Skip block comments (nested)
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+            pos = pos + 2
+            let mut depth = 1
+            while pos < n && depth > 0 {
+                if source.substring(pos, pos + 1) == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+                    depth = depth + 1
+                    pos = pos + 2
+                } else if source.substring(pos, pos + 1) == "*" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+                    depth = depth - 1
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            continue
+        }
+
+        // Numbers (integer and float)
+        if is_digit_str(c) {
+            let mut is_float = false
+            pos = pos + 1
+            while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            // Check for decimal point
+            if pos < n && source.substring(pos, pos + 1) == "." {
+                if pos + 1 < n && is_digit_str(source.substring(pos + 1, pos + 2)) {
+                    is_float = true
+                    pos = pos + 1
+                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                        pos = pos + 1
+                    }
+                }
+            }
+            if is_float {
+                tokens = tokens.push(131)
+            } else {
+                tokens = tokens.push(130)
+            }
+            continue
+        }
+
+        // Identifiers and keywords
+        if is_alpha_str(c) {
+            let start = pos
+            pos = pos + 1
+            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            let word = source.substring(start, pos)
+            let kw = lookup_keyword(word)
+            if kw > 0 {
+                tokens = tokens.push(kw)
+            } else {
+                tokens = tokens.push(133)
+            }
+            continue
+        }
+
+        // String literals
+        if c == "\"" {
+            pos = pos + 1
+            while pos < n && source.substring(pos, pos + 1) != "\"" {
+                if source.substring(pos, pos + 1) == "\\" {
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            if pos < n {
+                pos = pos + 1
+            }
+            tokens = tokens.push(132)
+            continue
+        }
+
+        // Three-character operators
+        if pos + 2 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            let c3 = source.substring(pos + 2, pos + 3)
+            if c == "<" && c2 == "<" && c3 == "=" { tokens = tokens.push(100); pos = pos + 3; continue }
+            if c == ">" && c2 == ">" && c3 == "=" { tokens = tokens.push(101); pos = pos + 3; continue }
+            if c == "." && c2 == "." && c3 == "=" { tokens = tokens.push(103); pos = pos + 3; continue }
+        }
+
+        // Two-character operators
+        if pos + 1 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; continue }
+            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; continue }
+            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; continue }
+            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; continue }
+            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; continue }
+            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; continue }
+            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; continue }
+            if c == "<" && c2 == "<" { tokens = tokens.push(89); pos = pos + 2; continue }
+            if c == ">" && c2 == ">" { tokens = tokens.push(90); pos = pos + 2; continue }
+            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; continue }
+            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; continue }
+            if c == "*" && c2 == "=" { tokens = tokens.push(94); pos = pos + 2; continue }
+            if c == "/" && c2 == "=" { tokens = tokens.push(95); pos = pos + 2; continue }
+            if c == "%" && c2 == "=" { tokens = tokens.push(96); pos = pos + 2; continue }
+            if c == "&" && c2 == "=" { tokens = tokens.push(97); pos = pos + 2; continue }
+            if c == "|" && c2 == "=" { tokens = tokens.push(98); pos = pos + 2; continue }
+            if c == "^" && c2 == "=" { tokens = tokens.push(99); pos = pos + 2; continue }
+            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; continue }
+            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; continue }
+            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; continue }
+            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; continue }
+            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; continue }
+        }
+
+        // Single-character tokens
+        if c == "+" { tokens = tokens.push(70); pos = pos + 1; continue }
+        if c == "-" { tokens = tokens.push(71); pos = pos + 1; continue }
+        if c == "*" { tokens = tokens.push(72); pos = pos + 1; continue }
+        if c == "/" { tokens = tokens.push(73); pos = pos + 1; continue }
+        if c == "%" { tokens = tokens.push(74); pos = pos + 1; continue }
+        if c == "<" { tokens = tokens.push(78); pos = pos + 1; continue }
+        if c == ">" { tokens = tokens.push(79); pos = pos + 1; continue }
+        if c == "!" { tokens = tokens.push(84); pos = pos + 1; continue }
+        if c == "&" { tokens = tokens.push(85); pos = pos + 1; continue }
+        if c == "|" { tokens = tokens.push(86); pos = pos + 1; continue }
+        if c == "^" { tokens = tokens.push(87); pos = pos + 1; continue }
+        if c == "~" { tokens = tokens.push(88); pos = pos + 1; continue }
+        if c == "=" { tokens = tokens.push(91); pos = pos + 1; continue }
+        if c == "@" { tokens = tokens.push(105); pos = pos + 1; continue }
+        if c == "(" { tokens = tokens.push(110); pos = pos + 1; continue }
+        if c == ")" { tokens = tokens.push(111); pos = pos + 1; continue }
+        if c == "{" { tokens = tokens.push(112); pos = pos + 1; continue }
+        if c == "}" { tokens = tokens.push(113); pos = pos + 1; continue }
+        if c == "[" { tokens = tokens.push(114); pos = pos + 1; continue }
+        if c == "]" { tokens = tokens.push(115); pos = pos + 1; continue }
+        if c == ";" { tokens = tokens.push(116); pos = pos + 1; continue }
+        if c == ":" { tokens = tokens.push(118); pos = pos + 1; continue }
+        if c == "," { tokens = tokens.push(119); pos = pos + 1; continue }
+        if c == "." { tokens = tokens.push(120); pos = pos + 1; continue }
+        if c == "?" { tokens = tokens.push(123); pos = pos + 1; continue }
+
+        // Unknown character — skip
+        pos = pos + 1
+    }
+
+    // Append EOF
+    tokens = tokens.push(0)
+    tokens
+}
+
+// Map token kind tag to string name (for debugging/comparison)
+pub fn kind_name(tag: i64) -> str {
+    if tag == 0 { return "EOF" }
+    if tag == 1 { return "If" }
+    if tag == 2 { return "Else" }
+    if tag == 3 { return "Match" }
+    if tag == 4 { return "While" }
+    if tag == 5 { return "For" }
+    if tag == 6 { return "Loop" }
+    if tag == 7 { return "In" }
+    if tag == 8 { return "Return" }
+    if tag == 9 { return "Break" }
+    if tag == 10 { return "Continue" }
+    if tag == 11 { return "Async" }
+    if tag == 12 { return "Await" }
+    if tag == 13 { return "Let" }
+    if tag == 14 { return "Mut" }
+    if tag == 15 { return "Fn" }
+    if tag == 16 { return "Struct" }
+    if tag == 17 { return "Enum" }
+    if tag == 18 { return "Union" }
+    if tag == 19 { return "Impl" }
+    if tag == 20 { return "Trait" }
+    if tag == 21 { return "Type" }
+    if tag == 22 { return "Const" }
+    if tag == 23 { return "Use" }
+    if tag == 24 { return "Mod" }
+    if tag == 25 { return "Pub" }
+    if tag == 26 { return "Extern" }
+    if tag == 27 { return "As" }
+    if tag == 28 { return "Where" }
+    if tag == 29 { return "True" }
+    if tag == 30 { return "False" }
+    if tag == 31 { return "Null" }
+    if tag == 32 { return "BoolType" }
+    if tag == 53 { return "Tensor" }
+    if tag == 70 { return "Plus" }
+    if tag == 71 { return "Minus" }
+    if tag == 72 { return "Star" }
+    if tag == 73 { return "Slash" }
+    if tag == 74 { return "Percent" }
+    if tag == 75 { return "StarStar" }
+    if tag == 76 { return "EqEq" }
+    if tag == 77 { return "BangEq" }
+    if tag == 78 { return "Lt" }
+    if tag == 79 { return "Gt" }
+    if tag == 80 { return "LtEq" }
+    if tag == 81 { return "GtEq" }
+    if tag == 82 { return "AmpAmp" }
+    if tag == 83 { return "PipePipe" }
+    if tag == 84 { return "Bang" }
+    if tag == 85 { return "Amp" }
+    if tag == 86 { return "Pipe" }
+    if tag == 87 { return "Caret" }
+    if tag == 88 { return "Tilde" }
+    if tag == 89 { return "LtLt" }
+    if tag == 90 { return "GtGt" }
+    if tag == 91 { return "Eq" }
+    if tag == 92 { return "PlusEq" }
+    if tag == 93 { return "MinusEq" }
+    if tag == 100 { return "LtLtEq" }
+    if tag == 101 { return "GtGtEq" }
+    if tag == 102 { return "DotDot" }
+    if tag == 103 { return "DotDotEq" }
+    if tag == 104 { return "PipeGt" }
+    if tag == 105 { return "At" }
+    if tag == 110 { return "LParen" }
+    if tag == 111 { return "RParen" }
+    if tag == 112 { return "LBrace" }
+    if tag == 113 { return "RBrace" }
+    if tag == 114 { return "LBracket" }
+    if tag == 115 { return "RBracket" }
+    if tag == 116 { return "Semi" }
+    if tag == 117 { return "ColonColon" }
+    if tag == 118 { return "Colon" }
+    if tag == 119 { return "Comma" }
+    if tag == 120 { return "Dot" }
+    if tag == 121 { return "Arrow" }
+    if tag == 122 { return "FatArrow" }
+    if tag == 123 { return "Question" }
+    if tag == 130 { return "IntLit" }
+    if tag == 131 { return "FloatLit" }
+    if tag == 132 { return "StringLit" }
+    if tag == 133 { return "Ident" }
+    "Unknown"
+}

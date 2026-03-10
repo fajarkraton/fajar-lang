@@ -1,0 +1,150 @@
+// fj-nn — Neural Network Layers for Fajar Lang
+//
+// High-level neural network building blocks built on Fajar's native tensor type.
+// All layers support autograd for training and can be quantized for deployment.
+
+/// A dense (fully-connected) layer.
+struct Dense {
+    weights: Tensor<f64>,
+    bias: Tensor<f64>,
+    in_features: usize,
+    out_features: usize,
+}
+
+impl Dense {
+    /// Create a new dense layer with Xavier initialization.
+    fn new(in_features: usize, out_features: usize) -> Dense {
+        let weights = xavier(in_features, out_features)
+        let bias = zeros(1, out_features)
+        Dense { weights, bias, in_features, out_features }
+    }
+
+    /// Forward pass: output = input @ weights + bias.
+    fn forward(&self, input: Tensor<f64>) -> Tensor<f64> {
+        input @ self.weights + self.bias
+    }
+}
+
+/// A 2D convolutional layer.
+struct Conv2d {
+    kernel: Tensor<f64>,
+    bias: Tensor<f64>,
+    in_channels: usize,
+    out_channels: usize,
+    kernel_size: usize,
+    stride: usize,
+    padding: usize,
+}
+
+impl Conv2d {
+    /// Create a new Conv2d layer.
+    fn new(in_channels: usize, out_channels: usize, kernel_size: usize) -> Conv2d {
+        let kernel = xavier(out_channels * in_channels, kernel_size * kernel_size)
+        let bias = zeros(1, out_channels)
+        Conv2d {
+            kernel, bias, in_channels, out_channels,
+            kernel_size, stride: 1, padding: 0,
+        }
+    }
+
+    /// Set stride and return self for builder pattern.
+    fn with_stride(mut self, stride: usize) -> Conv2d {
+        self.stride = stride
+        self
+    }
+
+    /// Set padding and return self for builder pattern.
+    fn with_padding(mut self, padding: usize) -> Conv2d {
+        self.padding = padding
+        self
+    }
+}
+
+/// Multi-head self-attention layer.
+struct MultiHeadAttention {
+    num_heads: usize,
+    embed_dim: usize,
+    head_dim: usize,
+    wq: Dense,
+    wk: Dense,
+    wv: Dense,
+    wo: Dense,
+}
+
+impl MultiHeadAttention {
+    /// Create a new multi-head attention layer.
+    fn new(embed_dim: usize, num_heads: usize) -> MultiHeadAttention {
+        let head_dim = embed_dim / num_heads
+        MultiHeadAttention {
+            num_heads, embed_dim, head_dim,
+            wq: Dense::new(embed_dim, embed_dim),
+            wk: Dense::new(embed_dim, embed_dim),
+            wv: Dense::new(embed_dim, embed_dim),
+            wo: Dense::new(embed_dim, embed_dim),
+        }
+    }
+}
+
+/// Batch normalization layer.
+struct BatchNorm {
+    num_features: usize,
+    gamma: Tensor<f64>,
+    beta: Tensor<f64>,
+    running_mean: Tensor<f64>,
+    running_var: Tensor<f64>,
+    eps: f64,
+    momentum: f64,
+}
+
+impl BatchNorm {
+    /// Create a new batch norm layer.
+    fn new(num_features: usize) -> BatchNorm {
+        BatchNorm {
+            num_features,
+            gamma: ones(1, num_features),
+            beta: zeros(1, num_features),
+            running_mean: zeros(1, num_features),
+            running_var: ones(1, num_features),
+            eps: 1e-5,
+            momentum: 0.1,
+        }
+    }
+}
+
+/// Dropout layer for regularization.
+struct Dropout {
+    rate: f64,
+    training: bool,
+}
+
+impl Dropout {
+    /// Create a dropout layer with the given drop rate.
+    fn new(rate: f64) -> Dropout {
+        Dropout { rate, training: true }
+    }
+
+    /// Set training mode.
+    fn train(&mut self) -> void {
+        self.training = true
+    }
+
+    /// Set evaluation mode (no dropout).
+    fn eval(&mut self) -> void {
+        self.training = false
+    }
+}
+
+/// Embedding layer for integer token → dense vector mapping.
+struct Embedding {
+    num_embeddings: usize,
+    embedding_dim: usize,
+    weight: Tensor<f64>,
+}
+
+impl Embedding {
+    /// Create a new embedding layer.
+    fn new(num_embeddings: usize, embedding_dim: usize) -> Embedding {
+        let weight = randn(num_embeddings, embedding_dim)
+        Embedding { num_embeddings, embedding_dim, weight }
+    }
+}

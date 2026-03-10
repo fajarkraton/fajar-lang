@@ -1,0 +1,28 @@
+/target
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.elf
+*.bin
+*.img
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+*.profraw
+*.profdata
+tarpaulin-report.html
+
+# Build artifacts
+book/book/

@@ -1,0 +1,130 @@
+// stdlib/hal.fj — Hardware Abstraction Layer for Fajar Lang
+//
+// Standard trait definitions for embedded hardware peripherals.
+// Target-specific implementations provide actual hardware access.
+// All HAL functions require @kernel or @unsafe context.
+
+// ── GPIO ─────────────────────────────────────────────────────────────
+
+/// GPIO pin modes.
+enum PinMode {
+    Input,
+    Output,
+    InputPullUp,
+    InputPullDown,
+    Analog,
+}
+
+/// GPIO pin trait — all GPIO pins implement this.
+trait Gpio {
+    /// Set pin output high.
+    fn set_high(&mut self) -> void
+
+    /// Set pin output low.
+    fn set_low(&mut self) -> void
+
+    /// Read pin input state.
+    fn read(&self) -> bool
+
+    /// Toggle pin output.
+    fn toggle(&mut self) -> void
+}
+
+// ── UART ─────────────────────────────────────────────────────────────
+
+/// Baud rate presets.
+const BAUD_9600: u32 = 9600
+const BAUD_115200: u32 = 115200
+
+/// UART serial communication trait.
+trait Uart {
+    /// Write a byte buffer to the UART.
+    fn write(&mut self, data: &[u8]) -> void
+
+    /// Read a single byte (blocking).
+    fn read_byte(&mut self) -> u8
+
+    /// Check if data is available to read.
+    fn available(&self) -> bool
+}
+
+// ── SPI ──────────────────────────────────────────────────────────────
+
+/// SPI bus communication trait.
+trait Spi {
+    /// Transfer data over SPI (simultaneous read/write).
+    fn transfer(&mut self, data: &[u8]) -> [u8]
+
+    /// Write data without reading.
+    fn write(&mut self, data: &[u8]) -> void
+}
+
+// ── I2C ──────────────────────────────────────────────────────────────
+
+/// I2C bus communication trait.
+trait I2c {
+    /// Write data to a device at the given address.
+    fn write(&mut self, addr: u8, data: &[u8]) -> void
+
+    /// Read data from a device at the given address.
+    fn read(&mut self, addr: u8, len: usize) -> [u8]
+
+    /// Write then read (common I2C pattern).
+    fn write_read(&mut self, addr: u8, write_data: &[u8], read_len: usize) -> [u8]
+}
+
+// ── Timer ────────────────────────────────────────────────────────────
+
+/// Timer trait — periodic and one-shot timers.
+trait Timer {
+    /// Start the timer with a period in microseconds.
+    fn start(&mut self, period_us: u64) -> void
+
+    /// Stop the timer.
+    fn stop(&mut self) -> void
+
+    /// Check if the timer has elapsed.
+    fn elapsed(&self) -> bool
+
+    /// Get current counter value.
+    fn count(&self) -> u64
+}
+
+// ── PWM ──────────────────────────────────────────────────────────────
+
+/// PWM output trait — for motor control, LED dimming, etc.
+trait Pwm {
+    /// Set the duty cycle (0.0 to 1.0).
+    fn set_duty(&mut self, duty: f64) -> void
+
+    /// Set the frequency in Hz.
+    fn set_frequency(&mut self, freq: u32) -> void
+
+    /// Enable PWM output.
+    fn enable(&mut self) -> void
+
+    /// Disable PWM output.
+    fn disable(&mut self) -> void
+}
+
+// ── ADC ──────────────────────────────────────────────────────────────
+
+/// ADC (Analog-to-Digital Converter) trait.
+trait Adc {
+    /// Read analog value (0 to max resolution).
+    fn read(&mut self) -> u16
+
+    /// Read as voltage (calibrated).
+    fn read_voltage(&mut self) -> f64
+}
+
+// ── Watchdog ─────────────────────────────────────────────────────────
+
+/// Watchdog timer trait — system reset on timeout.
+trait Watchdog {
+    /// Start watchdog with timeout in milliseconds.
+    fn start(&mut self, timeout_ms: u32) -> void
+
+    /// Feed the watchdog to prevent reset.
+    fn feed(&mut self) -> void
+}

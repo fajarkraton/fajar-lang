@@ -1,0 +1,37 @@
+// Memory Map Example — Fajar Lang OS Runtime
+// Demonstrates: alloc, write, read, page mapping, and free
+
+fn main() {
+    println("=== Fajar Lang Memory Manager ===")
+
+    // Allocate 256 bytes aligned to 8
+    let mem = mem_alloc(256, 8)
+    println("Allocated 256 bytes")
+
+    // Write data
+    mem_write_u32(mem, 42)
+    mem_write_u8(mem, 171)
+
+    // Read it back
+    let v = mem_read_u8(mem)
+    println(v)
+
+    // Page table: map virtual 0x1000 → physical 0x2000 with RW flags (3)
+    page_map(4096, 8192, 3)
+    println("Page mapped: 0x1000 -> 0x2000 (RW)")
+
+    // Unmap
+    page_unmap(4096)
+    println("Page unmapped")
+
+    // Port I/O
+    port_write(128, 66)
+    let pv = port_read(128)
+    println(pv)
+
+    // Free memory
+    mem_free(mem)
+    println("Memory freed")
+
+    println("=== Done ===")
+}

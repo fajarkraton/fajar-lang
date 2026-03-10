@@ -1,0 +1,33 @@
+// ML Metrics example — Classification evaluation
+// Demonstrates accuracy, precision, recall, and F1 score.
+
+fn main() -> void {
+    println("=== ML Classification Metrics ===")
+
+    // Simulated predictions and ground truth labels
+    // Classes: 0 = cat, 1 = dog, 2 = bird
+    let predictions = [0, 1, 2, 0, 1, 2, 0, 1, 1, 2]
+    let labels      = [0, 1, 2, 0, 0, 2, 1, 1, 1, 0]
+
+    // Overall accuracy
+    let acc = metric_accuracy(predictions, labels)
+    println("Accuracy:")
+    println(acc)
+
+    // Per-class metrics
+    println("--- Class 0 (cat) ---")
+    println("Precision:")
+    println(metric_precision(predictions, labels, 0))
+    println("Recall:")
+    println(metric_recall(predictions, labels, 0))
+    println("F1 Score:")
+    println(metric_f1_score(predictions, labels, 0))
+
+    println("--- Class 1 (dog) ---")
+    println("Precision:")
+    println(metric_precision(predictions, labels, 1))
+    println("Recall:")
+    println(metric_recall(predictions, labels, 1))
+    println("F1 Score:")
+    println(metric_f1_score(predictions, labels, 1))
+}

@@ -1,0 +1,13 @@
+// Native hello world — demonstrates string + integer printing
+fn fib(n: i64) -> i64 {
+    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn main() -> i64 {
+    println("Hello from Fajar Lang (native)!")
+    println("fib(10) =")
+    println(fib(10))
+    println("fib(20) =")
+    println(fib(20))
+    0
+}

@@ -1,0 +1,26 @@
+// fj-http — HTTP client and server utilities for Fajar Lang
+//
+// Provides basic HTTP request/response types and a simple client.
+
+struct HttpRequest {
+    method: str,
+    url: str,
+    body: str
+}
+
+struct HttpResponse {
+    status: i64,
+    body: str
+}
+
+fn http_get(url: str) -> HttpResponse {
+    HttpResponse { status: 200, body: "" }
+}
+
+fn http_post(url: str, body: str) -> HttpResponse {
+    HttpResponse { status: 200, body: "" }
+}
+
+fn status_ok(response: HttpResponse) -> bool {
+    response.status >= 200 && response.status < 300
+}

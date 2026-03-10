@@ -1,0 +1,17 @@
+// SIMD vector operations in Fajar Lang (native codegen)
+// Demonstrates f32x4 and i32x4 SIMD types with arithmetic and horizontal ops.
+
+fn main() -> i64 {
+    // f32x4: 4-lane float vector
+    let a = f32x4::new(1.0, 2.0, 3.0, 4.0)
+    let b = f32x4::new(10.0, 20.0, 30.0, 40.0)
+    let c = a.add(b)
+
+    // i32x4: 4-lane integer vector
+    let x = i32x4::new(1, 2, 3, 4)
+    let y = i32x4::new(5, 6, 7, 8)
+    let dot = x.mul(y)
+
+    // Dot product: 1*5 + 2*6 + 3*7 + 4*8 = 5+12+21+32 = 70
+    dot.sum()
+}

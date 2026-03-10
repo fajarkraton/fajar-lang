@@ -1,0 +1,185 @@
+// Fajar Lang Neural Network Standard Library
+//
+// Provides wrappers and documentation for ML runtime primitives.
+// All functions here require @device or @unsafe context.
+
+// ── Tensor Creation ──
+
+/// Creates a tensor filled with zeros.
+@device fn zeros(shape: [i64]) -> tensor {
+    tensor_zeros(shape)
+}
+
+/// Creates a tensor filled with ones.
+@device fn ones(shape: [i64]) -> tensor {
+    tensor_ones(shape)
+}
+
+/// Creates a tensor with random standard normal values.
+@device fn randn(shape: [i64]) -> tensor {
+    tensor_randn(shape)
+}
+
+/// Creates an identity matrix of size n x n.
+@device fn eye(n: i64) -> tensor {
+    tensor_eye(n)
+}
+
+/// Creates a tensor filled with a constant value.
+@device fn full(shape: [i64], value: f64) -> tensor {
+    tensor_full(shape, value)
+}
+
+/// Creates a tensor from data and shape.
+@device fn from_data(data: [f64], shape: [i64]) -> tensor {
+    tensor_from_data(data, shape)
+}
+
+// ── Tensor Operations ──
+
+/// Element-wise addition.
+@device fn add(a: tensor, b: tensor) -> tensor {
+    tensor_add(a, b)
+}
+
+/// Element-wise subtraction.
+@device fn sub(a: tensor, b: tensor) -> tensor {
+    tensor_sub(a, b)
+}
+
+/// Element-wise multiplication.
+@device fn mul(a: tensor, b: tensor) -> tensor {
+    tensor_mul(a, b)
+}
+
+/// Element-wise division.
+@device fn div(a: tensor, b: tensor) -> tensor {
+    tensor_div(a, b)
+}
+
+/// Matrix multiplication (2D tensors).
+@device fn matmul(a: tensor, b: tensor) -> tensor {
+    tensor_matmul(a, b)
+}
+
+/// Transpose (swap last two dimensions).
+@device fn transpose(a: tensor) -> tensor {
+    tensor_transpose(a)
+}
+
+// ── Activation Functions ──
+
+/// ReLU: max(0, x) element-wise.
+@device fn relu(x: tensor) -> tensor {
+    tensor_relu(x)
+}
+
+/// Sigmoid: 1/(1+exp(-x)) element-wise.
+@device fn sigmoid(x: tensor) -> tensor {
+    tensor_sigmoid(x)
+}
+
+/// Tanh: element-wise hyperbolic tangent.
+@device fn tanh(x: tensor) -> tensor {
+    tensor_tanh(x)
+}
+
+/// Softmax: exp(x)/sum(exp(x)) with numerical stability.
+@device fn softmax(x: tensor) -> tensor {
+    tensor_softmax(x)
+}
+
+/// GELU: Gaussian Error Linear Unit.
+@device fn gelu(x: tensor) -> tensor {
+    tensor_gelu(x)
+}
+
+/// Leaky ReLU: max(alpha*x, x) element-wise.
+@device fn leaky_relu(x: tensor, alpha: f64) -> tensor {
+    tensor_leaky_relu(x, alpha)
+}
+
+// ── Loss Functions ──
+
+/// Mean Squared Error: mean((pred - target)^2).
+@device fn mse_loss(pred: tensor, target: tensor) -> tensor {
+    tensor_mse_loss(pred, target)
+}
+
+/// Cross-entropy: -sum(target * log(pred)).
+@device fn cross_entropy(pred: tensor, target: tensor) -> tensor {
+    tensor_cross_entropy(pred, target)
+}
+
+/// Binary cross-entropy: -mean(t*log(p) + (1-t)*log(1-p)).
+@device fn bce_loss(pred: tensor, target: tensor) -> tensor {
+    tensor_bce_loss(pred, target)
+}
+
+// ── Reductions ──
+
+/// Sum of all elements (scalar).
+@device fn sum(x: tensor) -> tensor {
+    tensor_sum(x)
+}
+
+/// Mean of all elements (scalar).
+@device fn mean(x: tensor) -> tensor {
+    tensor_mean(x)
+}
+
+/// Max of all elements (scalar).
+@device fn max(x: tensor) -> tensor {
+    tensor_max(x)
+}
+
+/// Min of all elements (scalar).
+@device fn min(x: tensor) -> tensor {
+    tensor_min(x)
+}
+
+/// Index of maximum element (scalar).
+@device fn argmax(x: tensor) -> tensor {
+    tensor_argmax(x)
+}
+
+// ── Shape Manipulation ──
+
+/// Flatten tensor to 1D.
+@device fn flatten(x: tensor) -> tensor {
+    tensor_flatten(x)
+}
+
+/// Remove dimension of size 1 at given axis.
+@device fn squeeze(x: tensor, axis: i64) -> tensor {
+    tensor_squeeze(x, axis)
+}
+
+/// Insert dimension of size 1 at given axis.
+@device fn unsqueeze(x: tensor, axis: i64) -> tensor {
+    tensor_unsqueeze(x, axis)
+}
+
+// ── Additional Creation ──
+
+/// Create 1D tensor with values [start, start+step, ..., end).
+@device fn arange(start: f64, end: f64, step: f64) -> tensor {
+    tensor_arange(start, end, step)
+}
+
+/// Create 1D tensor with `steps` evenly spaced values from start to end.
+@device fn linspace(start: f64, end: f64, steps: i64) -> tensor {
+    tensor_linspace(start, end, steps)
+}
+
+/// Xavier/Glorot uniform initialization for weight matrix.
+@device fn xavier(rows: i64, cols: i64) -> tensor {
+    tensor_xavier(rows, cols)
+}
+
+// ── Additional Loss ──
+
+/// L1 Loss: mean(|pred - target|).
+@device fn l1_loss(pred: tensor, target: tensor) -> tensor {
+    tensor_l1_loss(pred, target)
+}

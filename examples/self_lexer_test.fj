@@ -1,0 +1,295 @@
+// Self-hosted lexer test — ownership-safe version
+// All array access is done inline (no passing arrays to helper functions).
+
+fn lookup_keyword(word: str) -> i64 {
+    if word == "if" { return 1 }
+    if word == "else" { return 2 }
+    if word == "match" { return 3 }
+    if word == "while" { return 4 }
+    if word == "for" { return 5 }
+    if word == "loop" { return 6 }
+    if word == "in" { return 7 }
+    if word == "return" { return 8 }
+    if word == "break" { return 9 }
+    if word == "continue" { return 10 }
+    if word == "async" { return 11 }
+    if word == "await" { return 12 }
+    if word == "let" { return 13 }
+    if word == "mut" { return 14 }
+    if word == "fn" { return 15 }
+    if word == "struct" { return 16 }
+    if word == "enum" { return 17 }
+    if word == "union" { return 18 }
+    if word == "impl" { return 19 }
+    if word == "trait" { return 20 }
+    if word == "type" { return 21 }
+    if word == "const" { return 22 }
+    if word == "use" { return 23 }
+    if word == "mod" { return 24 }
+    if word == "pub" { return 25 }
+    if word == "extern" { return 26 }
+    if word == "as" { return 27 }
+    if word == "where" { return 28 }
+    if word == "true" { return 29 }
+    if word == "false" { return 30 }
+    if word == "null" { return 31 }
+    if word == "bool" { return 32 }
+    if word == "i32" { return 35 }
+    if word == "i64" { return 36 }
+    if word == "f64" { return 48 }
+    if word == "str" { return 49 }
+    if word == "void" { return 51 }
+    return 0
+}
+
+fn is_digit_str(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn is_alpha_str(c: str) -> bool {
+    c == "_" ||
+    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" ||
+    c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" ||
+    c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" ||
+    c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" ||
+    c == "y" || c == "z" ||
+    c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" ||
+    c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" ||
+    c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" ||
+    c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" ||
+    c == "Y" || c == "Z"
+}
+
+fn is_alnum_str(c: str) -> bool {
+    is_alpha_str(c) || is_digit_str(c)
+}
+
+// Tokenize using substring for char access (avoids array move issues)
+fn fj_tokenize(source: str) -> [i64] {
+    let n = to_int(len(source))
+    let mut pos = 0
+    let mut tokens: [i64] = []
+
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+
+        // Skip whitespace
+        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+            pos = pos + 1
+            continue
+        }
+
+        // Line comments
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+            pos = pos + 2
+            while pos < n && source.substring(pos, pos + 1) != "\n" {
+                pos = pos + 1
+            }
+            continue
+        }
+
+        // Block comments
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+            pos = pos + 2
+            let mut depth = 1
+            while pos < n && depth > 0 {
+                if source.substring(pos, pos + 1) == "*" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+                    depth = depth - 1
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            continue
+        }
+
+        // Numbers
+        if is_digit_str(c) {
+            let mut is_float = false
+            pos = pos + 1
+            while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            if pos < n && source.substring(pos, pos + 1) == "." {
+                if pos + 1 < n && is_digit_str(source.substring(pos + 1, pos + 2)) {
+                    is_float = true
+                    pos = pos + 1
+                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                        pos = pos + 1
+                    }
+                }
+            }
+            if is_float {
+                tokens = tokens.push(131)
+            } else {
+                tokens = tokens.push(130)
+            }
+            continue
+        }
+
+        // Identifiers and keywords
+        if is_alpha_str(c) {
+            let start = pos
+            pos = pos + 1
+            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            let word = source.substring(start, pos)
+            let kw = lookup_keyword(word)
+            if kw > 0 {
+                tokens = tokens.push(kw)
+            } else {
+                tokens = tokens.push(133)
+            }
+            continue
+        }
+
+        // String literals
+        if c == "\"" {
+            pos = pos + 1
+            while pos < n && source.substring(pos, pos + 1) != "\"" {
+                if source.substring(pos, pos + 1) == "\\" {
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            if pos < n {
+                pos = pos + 1
+            }
+            tokens = tokens.push(132)
+            continue
+        }
+
+        // Two-char operators
+        if pos + 1 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; continue }
+            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; continue }
+            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; continue }
+            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; continue }
+            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; continue }
+            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; continue }
+            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; continue }
+            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; continue }
+            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; continue }
+            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; continue }
+            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; continue }
+            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; continue }
+            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; continue }
+            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; continue }
+        }
+
+        // Single-char tokens
+        if c == "+" { tokens = tokens.push(70); pos = pos + 1; continue }
+        if c == "-" { tokens = tokens.push(71); pos = pos + 1; continue }
+        if c == "*" { tokens = tokens.push(72); pos = pos + 1; continue }
+        if c == "/" { tokens = tokens.push(73); pos = pos + 1; continue }
+        if c == "%" { tokens = tokens.push(74); pos = pos + 1; continue }
+        if c == "<" { tokens = tokens.push(78); pos = pos + 1; continue }
+        if c == ">" { tokens = tokens.push(79); pos = pos + 1; continue }
+        if c == "!" { tokens = tokens.push(84); pos = pos + 1; continue }
+        if c == "&" { tokens = tokens.push(85); pos = pos + 1; continue }
+        if c == "|" { tokens = tokens.push(86); pos = pos + 1; continue }
+        if c == "^" { tokens = tokens.push(87); pos = pos + 1; continue }
+        if c == "~" { tokens = tokens.push(88); pos = pos + 1; continue }
+        if c == "=" { tokens = tokens.push(91); pos = pos + 1; continue }
+        if c == "(" { tokens = tokens.push(110); pos = pos + 1; continue }
+        if c == ")" { tokens = tokens.push(111); pos = pos + 1; continue }
+        if c == "{" { tokens = tokens.push(112); pos = pos + 1; continue }
+        if c == "}" { tokens = tokens.push(113); pos = pos + 1; continue }
+        if c == "[" { tokens = tokens.push(114); pos = pos + 1; continue }
+        if c == "]" { tokens = tokens.push(115); pos = pos + 1; continue }
+        if c == ";" { tokens = tokens.push(116); pos = pos + 1; continue }
+        if c == ":" { tokens = tokens.push(118); pos = pos + 1; continue }
+        if c == "," { tokens = tokens.push(119); pos = pos + 1; continue }
+        if c == "." { tokens = tokens.push(120); pos = pos + 1; continue }
+        if c == "?" { tokens = tokens.push(123); pos = pos + 1; continue }
+        if c == "@" { tokens = tokens.push(105); pos = pos + 1; continue }
+
+        // Unknown — skip
+        pos = pos + 1
+    }
+
+    tokens = tokens.push(0)
+    tokens
+}
+
+fn main() -> void {
+    // Test 1: let x = 42
+    let t1 = fj_tokenize("let x = 42")
+    assert_eq(to_int(len(t1)), 5)
+    assert_eq(t1[0], 13)
+    assert_eq(t1[1], 133)
+    assert_eq(t1[2], 91)
+    assert_eq(t1[3], 130)
+    assert_eq(t1[4], 0)
+    println("Test 1 passed: let x = 42")
+
+    // Test 2: fn definition
+    let t2 = fj_tokenize("fn add(a: i32, b: i32) -> i32 { a + b }")
+    assert_eq(to_int(len(t2)), 19)
+    assert_eq(t2[0], 15)
+    assert_eq(t2[11], 121)
+    assert_eq(t2[12], 35)
+    assert_eq(t2[15], 70)
+    println("Test 2 passed: fn definition")
+
+    // Test 3: Comments skipped
+    let t3 = fj_tokenize("// skip this\nlet y = 10")
+    assert_eq(to_int(len(t3)), 5)
+    println("Test 3 passed: line comments")
+
+    // Test 4: Block comments
+    let t4 = fj_tokenize("a /* block */ b")
+    assert_eq(to_int(len(t4)), 3)
+    assert_eq(t4[0], 133)
+    assert_eq(t4[1], 133)
+    assert_eq(t4[2], 0)
+    println("Test 4 passed: block comments")
+
+    // Test 5: String literal
+    let t5 = fj_tokenize("let s = \"hello\"")
+    assert_eq(to_int(len(t5)), 5)
+    assert_eq(t5[3], 132)
+    println("Test 5 passed: string literal")
+
+    // Test 6: Multi-char operators
+    let t6 = fj_tokenize("a == b && c != d")
+    assert_eq(t6[1], 76)
+    assert_eq(t6[3], 82)
+    assert_eq(t6[5], 77)
+    println("Test 6 passed: multi-char operators")
+
+    // Test 7: Keywords
+    let t7 = fj_tokenize("if else while for fn let mut return struct enum")
+    assert_eq(t7[0], 1)
+    assert_eq(t7[1], 2)
+    assert_eq(t7[2], 4)
+    assert_eq(t7[3], 5)
+    assert_eq(t7[4], 15)
+    assert_eq(t7[5], 13)
+    assert_eq(t7[6], 14)
+    assert_eq(t7[7], 8)
+    assert_eq(t7[8], 16)
+    assert_eq(t7[9], 17)
+    println("Test 7 passed: keywords")
+
+    // Test 8: Float literal
+    let t8 = fj_tokenize("3.14")
+    assert_eq(t8[0], 131)
+    println("Test 8 passed: float literal")
+
+    // Test 9: Pipeline
+    let t9 = fj_tokenize("x |> f")
+    assert_eq(t9[1], 104)
+    println("Test 9 passed: pipeline operator")
+
+    // Test 10: Fat arrow
+    let t10 = fj_tokenize("x => y")
+    assert_eq(t10[1], 122)
+    println("Test 10 passed: fat arrow")
+
+    println("All 10 self-hosted lexer tests passed!")
+}

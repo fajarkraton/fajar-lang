@@ -1,0 +1,67 @@
+[package]
+name = "fajar-lang"
+version = "0.3.0"
+edition = "2021"
+description = "Fajar Lang — Systems programming language for OS and AI/ML"
+license = "MIT"
+
+[[bin]]
+name = "fj"
+path = "src/main.rs"
+
+[dependencies]
+thiserror = "2.0"
+miette = { version = "7.0", features = ["fancy"] }
+clap = { version = "4.5", features = ["derive"] }
+rustyline = "14.0"
+ndarray = "0.16"              # Phase 4: tensor backend
+ndarray-rand = "0.15"         # Phase 4: random tensor creation
+rand = "0.8"                  # Phase 4: RNG for randn/xavier
+tower-lsp = "0.20"            # Phase 5.3: LSP server
+tokio = { version = "1", features = ["full"] }  # Phase 5.3: async runtime for LSP
+serde = { version = "1.0", features = ["derive"] }  # Phase 5.4: toml deserialization
+toml = "0.8"                  # Phase 5.4: parse fj.toml
+libloading = "0.8"            # Phase 7: FFI dynamic library loading
+
+# Cranelift native codegen (feature-gated)
+cranelift-codegen = { version = "0.129.1", optional = true, features = ["x86", "arm64", "riscv64"] }
+cranelift-frontend = { version = "0.129.1", optional = true }
+cranelift-module = { version = "0.129.1", optional = true }
+cranelift-jit = { version = "0.129.1", optional = true }
+cranelift-object = { version = "0.129.1", optional = true }
+cranelift-native = { version = "0.129.1", optional = true }
+target-lexicon = { version = "0.13.5", optional = true }
+
+[features]
+default = []
+native = [
+    "cranelift-codegen",
+    "cranelift-frontend",
+    "cranelift-module",
+    "cranelift-jit",
+    "cranelift-object",
+    "cranelift-native",
+    "target-lexicon",
+]
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+proptest = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "interpreter_bench"
+harness = false
+
+[[bench]]
+name = "embedded_bench"
+harness = false
+
+[[bench]]
+name = "concurrency_bench"
+harness = false
+required-features = ["native"]
+
+[profile.release]
+opt-level = 3
+lto = true

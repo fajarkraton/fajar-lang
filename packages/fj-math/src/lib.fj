@@ -1,0 +1,175 @@
+// fj-math — Extended Math Functions for Fajar Lang
+//
+// Provides mathematical constants, functions, and utilities
+// beyond the built-in arithmetic operators.
+
+// ── Constants ──
+
+const PI: f64 = 3.141592653589793
+const E: f64 = 2.718281828459045
+const TAU: f64 = 6.283185307179586
+const SQRT_2: f64 = 1.4142135623730951
+const LN_2: f64 = 0.6931471805599453
+const LN_10: f64 = 2.302585092994046
+
+// ── Basic functions ──
+
+/// Absolute value.
+fn abs(x: f64) -> f64 {
+    if x < 0.0 { -x } else { x }
+}
+
+/// Integer absolute value.
+fn abs_i(x: i64) -> i64 {
+    if x < 0 { -x } else { x }
+}
+
+/// Minimum of two values.
+fn min(a: f64, b: f64) -> f64 {
+    if a < b { a } else { b }
+}
+
+/// Maximum of two values.
+fn max(a: f64, b: f64) -> f64 {
+    if a > b { a } else { b }
+}
+
+/// Clamp value to range [lo, hi].
+fn clamp(x: f64, lo: f64, hi: f64) -> f64 {
+    if x < lo { lo }
+    else if x > hi { hi }
+    else { x }
+}
+
+/// Sign function: -1.0, 0.0, or 1.0.
+fn sign(x: f64) -> f64 {
+    if x > 0.0 { 1.0 }
+    else if x < 0.0 { -1.0 }
+    else { 0.0 }
+}
+
+// ── Power & root ──
+
+/// Square root (Newton's method).
+fn sqrt(x: f64) -> f64 {
+    if x < 0.0 { return 0.0 / 0.0 }  // NaN
+    if x == 0.0 { return 0.0 }
+    let mut guess = x / 2.0
+    for _ in 0..64 {
+        guess = (guess + x / guess) / 2.0
+    }
+    guess
+}
+
+/// Integer power.
+fn pow_i(base: i64, exp: u32) -> i64 {
+    let mut result: i64 = 1
+    let mut b = base
+    let mut e = exp
+    while e > 0 {
+        if e % 2 == 1 {
+            result = result * b
+        }
+        b = b * b
+        e = e / 2
+    }
+    result
+}
+
+// ── Trigonometry (Taylor series) ──
+
+/// Sine function (radians).
+fn sin(x: f64) -> f64 {
+    // Normalize to [-PI, PI]
+    let mut t = x
+    while t > PI { t = t - TAU }
+    while t < -PI { t = t + TAU }
+
+    let mut sum = 0.0
+    let mut term = t
+    for n in 0..12 {
+        sum = sum + term
+        term = -term * t * t / ((2 * n + 2) * (2 * n + 3)) as f64
+    }
+    sum
+}
+
+/// Cosine function (radians).
+fn cos(x: f64) -> f64 {
+    sin(x + PI / 2.0)
+}
+
+/// Tangent function (radians).
+fn tan(x: f64) -> f64 {
+    sin(x) / cos(x)
+}
+
+// ── Conversion ──
+
+/// Degrees to radians.
+fn to_radians(degrees: f64) -> f64 {
+    degrees * PI / 180.0
+}
+
+/// Radians to degrees.
+fn to_degrees(radians: f64) -> f64 {
+    radians * 180.0 / PI
+}
+
+// ── Linear algebra helpers ──
+
+/// Dot product of two vectors.
+fn dot(a: [f64], b: [f64]) -> f64 {
+    let mut sum = 0.0
+    for i in 0..len(a) {
+        sum = sum + a[i] * b[i]
+    }
+    sum
+}
+
+/// Euclidean norm (L2 norm) of a vector.
+fn norm(v: [f64]) -> f64 {
+    sqrt(dot(v, v))
+}
+
+/// Normalize a vector to unit length.
+fn normalize(v: [f64]) -> [f64] {
+    let n = norm(v)
+    let mut result = v
+    for i in 0..len(result) {
+        result[i] = result[i] / n
+    }
+    result
+}
+
+/// Linear interpolation between a and b.
+fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    a + (b - a) * t
+}
+
+// ── Statistics ──
+
+/// Mean of a float array.
+fn mean(data: [f64]) -> f64 {
+    let mut sum = 0.0
+    for x in data {
+        sum = sum + x
+    }
+    sum / len(data) as f64
+}
+
+/// Variance of a float array.
+fn variance(data: [f64]) -> f64 {
+    let m = mean(data)
+    let mut sum = 0.0
+    for x in data {
+        let diff = x - m
+        sum = sum + diff * diff
+    }
+    sum / len(data) as f64
+}
+
+/// Standard deviation of a float array.
+fn std_dev(data: [f64]) -> f64 {
+    sqrt(variance(data))
+}

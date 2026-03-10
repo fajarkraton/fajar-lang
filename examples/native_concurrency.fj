@@ -1,0 +1,25 @@
+// Concurrency in Fajar Lang (native codegen)
+// Demonstrates mutex, atomic, and channel primitives.
+
+fn main() -> i64 {
+    // Atomic counter
+    let counter = Atomic::new(0)
+    counter.add(10)
+    counter.add(20)
+    counter.add(12)
+    let total = counter.load()
+
+    // Mutex-protected value
+    let mtx = Mutex::new(100)
+    mtx.lock()
+    mtx.store(200)
+    let val = mtx.lock()
+
+    // Channel communication
+    let ch = channel::new()
+    ch.send(42)
+    let received = ch.recv()
+
+    // total=42, val=200, received=42 → 42+200+42 = 284
+    total + val + received
+}

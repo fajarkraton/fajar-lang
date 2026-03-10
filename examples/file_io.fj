@@ -1,0 +1,43 @@
+// File I/O example — Read, write, and append files.
+// Demonstrates Fajar Lang's Result-based error handling for I/O.
+
+fn main() -> void {
+    let path = "/tmp/fajar_example.txt"
+
+    // Write a file
+    let write_result = write_file(path, "Hello from Fajar Lang!\n")
+    match write_result {
+        Ok(_) => println("File written successfully"),
+        Err(e) => println(e),
+        _ => println("unknown"),
+    }
+
+    // Append to the file
+    append_file(path, "This line was appended.\n")
+
+    // Read the file
+    let content = read_file(path)
+    match content {
+        Ok(text) => {
+            println("File contents:")
+            println(text)
+        },
+        Err(e) => {
+            println("Error reading file:")
+            println(e)
+        },
+        _ => println("unknown"),
+    }
+
+    // Check existence
+    println("File exists?")
+    println(file_exists(path))
+
+    // Try to read a non-existent file
+    let bad = read_file("/tmp/does_not_exist_12345.txt")
+    match bad {
+        Ok(_) => println("unexpected success"),
+        Err(_) => println("Expected error: file not found"),
+        _ => println("unknown"),
+    }
+}

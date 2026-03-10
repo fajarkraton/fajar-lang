@@ -1,0 +1,94 @@
+// Fajar Lang OS Standard Library
+//
+// Provides wrappers and documentation for OS runtime primitives.
+// All functions here require @kernel or @unsafe context.
+
+// ── Memory Management ──
+
+/// Allocates `size` bytes aligned to `align`. Returns a pointer.
+@kernel fn alloc(size: i64, align: i64) -> ptr {
+    mem_alloc(size, align)
+}
+
+/// Frees a previously allocated pointer.
+@kernel fn free(p: ptr) {
+    mem_free(p)
+}
+
+// ── Page Table ──
+
+/// Maps virtual address to physical address with flags.
+/// Flags: READ=1, WRITE=2, EXEC=4, USER=8
+@kernel fn map_page(virt: i64, phys: i64, flags: i64) {
+    page_map(virt, phys, flags)
+}
+
+/// Unmaps a virtual address.
+@kernel fn unmap_page(virt: i64) {
+    page_unmap(virt)
+}
+
+// ── Interrupts ──
+
+/// Registers an IRQ handler by number and function name.
+@kernel fn register_irq(num: i64, handler: str) {
+    irq_register(num, handler)
+}
+
+/// Unregisters an IRQ handler.
+@kernel fn unregister_irq(num: i64) {
+    irq_unregister(num)
+}
+
+/// Enables interrupt processing.
+@kernel fn enable_interrupts() {
+    irq_enable()
+}
+
+/// Disables interrupt processing.
+@kernel fn disable_interrupts() {
+    irq_disable()
+}
+
+// ── System Calls ──
+
+/// Defines a syscall handler: maps syscall number to a handler function.
+@kernel fn define_syscall(num: i64, handler: str, arg_count: i64) {
+    syscall_define(num, handler, arg_count)
+}
+
+// ── Port I/O ──
+
+/// Reads a byte from an I/O port.
+@kernel fn inb(port: i64) -> i64 {
+    port_read(port)
+}
+
+/// Writes a byte to an I/O port.
+@kernel fn outb(port: i64, value: i64) {
+    port_write(port, value)
+}
+
+// ── Standard IRQ Numbers ──
+const IRQ_TIMER: i64 = 32
+const IRQ_KEYBOARD: i64 = 33
+const IRQ_CASCADE: i64 = 34
+const IRQ_COM2: i64 = 35
+const IRQ_COM1: i64 = 36
+
+// ── Standard Syscall Numbers ──
+const SYS_READ: i64 = 0
+const SYS_WRITE: i64 = 1
+const SYS_OPEN: i64 = 2
+const SYS_CLOSE: i64 = 3
+const SYS_MMAP: i64 = 9
+const SYS_MPROTECT: i64 = 10
+const SYS_MUNMAP: i64 = 11
+const SYS_EXIT: i64 = 60
+const SYS_GETPID: i64 = 39
+
+// ── Standard Port Numbers ──
+const PORT_COM1_DATA: i64 = 1016
+const PORT_COM1_STATUS: i64 = 1021
+const PORT_KEYBOARD_DATA: i64 = 96
+const PORT_KEYBOARD_STATUS: i64 = 100

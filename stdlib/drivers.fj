@@ -1,0 +1,89 @@
+// stdlib/drivers.fj — Sensor & Actuator Driver Abstractions for Fajar Lang
+//
+// Provides standard traits and common driver patterns for embedded peripherals.
+// All drivers use the HAL traits for hardware access.
+
+// ── Sensor Trait ─────────────────────────────────────────────────────
+
+/// Generic sensor trait — all sensors implement this.
+trait Sensor {
+    /// Read sensor data as an array of f32 values.
+    /// Returns up to 4 channels (e.g., [accel_x, accel_y, accel_z, temp]).
+    fn read_data(&mut self) -> [f32; 4]
+
+    /// Check if the sensor is ready for reading.
+    fn ready(&self) -> bool
+
+    /// Calibrate the sensor (device-specific).
+    fn calibrate(&mut self) -> void
+}
+
+/// IMU-specific sensor trait (accelerometer + gyroscope).
+trait Imu {
+    /// Read accelerometer data [x, y, z] in m/s^2.
+    fn read_accel(&mut self) -> [f32; 3]
+
+    /// Read gyroscope data [x, y, z] in rad/s.
+    fn read_gyro(&mut self) -> [f32; 3]
+
+    /// Read temperature in degrees Celsius.
+    fn read_temp(&mut self) -> f32
+}
+
+/// Barometric sensor trait (pressure + temperature).
+trait Barometer {
+    /// Read pressure in Pascals.
+    fn read_pressure(&mut self) -> f32
+
+    /// Read temperature in degrees Celsius.
+    fn read_temperature(&mut self) -> f32
+
+    /// Estimate altitude from pressure (using standard atmosphere).
+    fn read_altitude(&mut self) -> f32
+}
+
+// ── Actuator Trait ───────────────────────────────────────────────────
+
+/// Generic actuator trait — all actuators implement this.
+trait Actuator {
+    /// Set actuator output value (normalized 0.0 to 1.0).
+    fn set(&mut self, value: f32) -> void
+
+    /// Emergency stop — disable actuator immediately.
+    fn stop(&mut self) -> void
+}
+
+/// Motor control trait.
+trait Motor {
+    /// Set motor speed (-1.0 = full reverse, 1.0 = full forward).
+    fn set_speed(&mut self, speed: f32) -> void
+
+    /// Brake the motor (active stop).
+    fn brake(&mut self) -> void
+
+    /// Coast the motor (passive stop).
+    fn coast(&mut self) -> void
+}
+
+/// Servo control trait.
+trait ServoControl {
+    /// Set servo angle (0.0 to 180.0 degrees).
+    fn set_angle(&mut self, angle: f32) -> void
+
+    /// Set servo pulse width in microseconds.
+    fn set_pulse(&mut self, pulse_us: u32) -> void
+}
+
+// ── Display Trait ────────────────────────────────────────────────────
+
+/// Display/LED output trait.
+trait Display {
+    /// Clear the display.
+    fn clear(&mut self) -> void
+
+    /// Set a pixel at (x, y) with given value.
+    fn set_pixel(&mut self, x: u32, y: u32, value: u8) -> void
+
+    /// Flush the display buffer to hardware.
+    fn flush(&mut self) -> void
+}

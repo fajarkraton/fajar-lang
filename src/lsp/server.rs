@@ -1,0 +1,1149 @@
+//! LSP server implementation using tower-lsp.
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use tower_lsp::jsonrpc::Result;
+use tower_lsp::lsp_types::*;
+use tower_lsp::{Client, LanguageServer, LspService, Server};
+
+use crate::analyzer::{analyze, SemanticError};
+use crate::lexer::token::Span;
+use crate::lexer::{tokenize, LexError};
+use crate::parser::{parse, ParseError};
+
+/// Per-document state cached by the server.
+struct DocumentState {
+    /// Full source text.
+    source: String,
+    /// Line start offsets (byte offset of each line start).
+    line_starts: Vec<usize>,
+}
+
+impl DocumentState {
+    fn new(source: String) -> Self {
+        let line_starts = std::iter::once(0)
+            .chain(source.match_indices('\n').map(|(i, _)| i + 1))
+            .collect();
+        Self {
+            source,
+            line_starts,
+        }
+    }
+
+    /// Converts a byte offset to an LSP Position (0-based line, 0-based UTF-16 char).
+    fn offset_to_position(&self, offset: usize) -> Position {
+        let line = self
+            .line_starts
+            .partition_point(|&start| start <= offset)
+            .saturating_sub(1);
+        let line_start = self.line_starts[line];
+        let col = offset.saturating_sub(line_start);
+        Position::new(line as u32, col as u32)
+    }
+
+    /// Converts a Fajar Span to an LSP Range.
+    fn span_to_range(&self, span: Span) -> Range {
+        Range::new(
+            self.offset_to_position(span.start),
+            self.offset_to_position(span.end),
+        )
+    }
+}
+
+/// The Fajar Lang LSP backend.
+struct FajarLspBackend {
+    client: Client,
+    documents: Mutex<HashMap<Url, DocumentState>>,
+}
+
+impl FajarLspBackend {
+    fn new(client: Client) -> Self {
+        Self {
+            client,
+            documents: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Runs the full analysis pipeline and publishes diagnostics.
+    async fn publish_diagnostics(&self, uri: Url) {
+        // Collect diagnostics synchronously under the lock, then publish async after dropping it.
+        let diagnostics = {
+            let docs = self.documents.lock().unwrap();
+            let doc = match docs.get(&uri) {
+                Some(d) => d,
+                None => return,
+            };
+            collect_diagnostics(&doc.source, doc)
+        };
+
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
+    }
+}
+
+#[tower_lsp::async_trait]
+impl LanguageServer for FajarLspBackend {
+    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+        Ok(InitializeResult {
+            capabilities: ServerCapabilities {
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::FULL,
+                )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![".".into(), ":".into()]),
+                    ..Default::default()
+                }),
+                definition_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".into(), ",".into()]),
+                    retrigger_characters: None,
+                    work_done_progress_options: Default::default(),
+                }),
+                ..Default::default()
+            },
+            server_info: Some(ServerInfo {
+                name: "fajar-lang-lsp".into(),
+                version: Some("0.3.0".into()),
+            }),
+        })
+    }
+
+    async fn initialized(&self, _: InitializedParams) {
+        self.client
+            .log_message(MessageType::INFO, "Fajar Lang LSP server initialized")
+            .await;
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
+        let doc = DocumentState::new(params.text_document.text);
+        self.documents.lock().unwrap().insert(uri.clone(), doc);
+        self.publish_diagnostics(uri).await;
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
+        if let Some(change) = params.content_changes.into_iter().last() {
+            let doc = DocumentState::new(change.text);
+            self.documents.lock().unwrap().insert(uri.clone(), doc);
+            self.publish_diagnostics(uri).await;
+        }
+    }
+
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
+        self.documents.lock().unwrap().remove(&uri);
+        // Clear diagnostics
+        self.client.publish_diagnostics(uri, Vec::new(), None).await;
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        // Find the word at the cursor position
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        // Check if it's a keyword, builtin, or type
+        if let Some(info) = keyword_info(&word) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: info,
+                }),
+                range: None,
+            }));
+        }
+
+        if let Some(info) = builtin_info(&word) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: info,
+                }),
+                range: None,
+            }));
+        }
+
+        if let Some(info) = type_info(&word) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: info,
+                }),
+                range: None,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let mut items = Vec::new();
+
+        // Keywords
+        for kw in KEYWORDS {
+            items.push(CompletionItem {
+                label: kw.to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("keyword".into()),
+                ..Default::default()
+            });
+        }
+
+        // Built-in functions
+        for (name, sig) in BUILTINS {
+            items.push(CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some(sig.to_string()),
+                ..Default::default()
+            });
+        }
+
+        // Types
+        for ty in TYPES {
+            items.push(CompletionItem {
+                label: ty.to_string(),
+                kind: Some(CompletionItemKind::TYPE_PARAMETER),
+                detail: Some("type".into()),
+                ..Default::default()
+            });
+        }
+
+        // Annotations
+        for ann in ANNOTATIONS {
+            items.push(CompletionItem {
+                label: ann.to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some("context annotation".into()),
+                ..Default::default()
+            });
+        }
+
+        Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        // Search for definition patterns: fn <name>, let <name>, struct <name>, enum <name>
+        let patterns = [
+            format!("fn {word}"),
+            format!("let {word}"),
+            format!("let mut {word}"),
+            format!("struct {word}"),
+            format!("enum {word}"),
+            format!("const {word}"),
+            format!("trait {word}"),
+        ];
+
+        for pat in &patterns {
+            if let Some(offset) = doc.source.find(pat.as_str()) {
+                // Point to the name, not the keyword
+                let name_offset = offset + pat.len() - word.len();
+                let start = doc.offset_to_position(name_offset);
+                let end = doc.offset_to_position(name_offset + word.len());
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range: Range::new(start, end),
+                })));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let symbols = extract_symbols(&doc.source, doc);
+        Ok(Some(DocumentSymbolResponse::Flat(symbols)))
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let mut actions = Vec::new();
+
+        for diag in &params.context.diagnostics {
+            let code = match &diag.code {
+                Some(NumberOrString::String(c)) => c.as_str(),
+                _ => continue,
+            };
+
+            match code {
+                "SE007" => {
+                    // ImmutableAssignment — suggest adding mut
+                    let line = diag.range.start.line as usize;
+                    if line < doc.line_starts.len() {
+                        let line_start = doc.line_starts[line];
+                        let line_end = if line + 1 < doc.line_starts.len() {
+                            doc.line_starts[line + 1]
+                        } else {
+                            doc.source.len()
+                        };
+                        let line_text = &doc.source[line_start..line_end];
+                        if let Some(pos) = line_text.find("let ") {
+                            let insert_pos = Position::new(diag.range.start.line, (pos + 4) as u32);
+                            let edit =
+                                TextEdit::new(Range::new(insert_pos, insert_pos), "mut ".into());
+                            let mut changes = HashMap::new();
+                            changes.insert(uri.clone(), vec![edit]);
+                            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                title: "Add `mut` to make variable mutable".into(),
+                                kind: Some(CodeActionKind::QUICKFIX),
+                                diagnostics: Some(vec![diag.clone()]),
+                                edit: Some(WorkspaceEdit::new(changes)),
+                                ..Default::default()
+                            }));
+                        }
+                    }
+                }
+                "SE009" => {
+                    // UnusedVariable — suggest prefixing with _
+                    let start = diag.range.start;
+                    let end = diag.range.end;
+                    let start_offset =
+                        doc.line_starts[start.line as usize] + start.character as usize;
+                    let end_offset = doc.line_starts[end.line as usize] + end.character as usize;
+                    if end_offset <= doc.source.len() {
+                        let var_name = &doc.source[start_offset..end_offset];
+                        if !var_name.starts_with('_') {
+                            let edit = TextEdit::new(diag.range, format!("_{var_name}"));
+                            let mut changes = HashMap::new();
+                            changes.insert(uri.clone(), vec![edit]);
+                            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                title: "Prefix with `_` to suppress warning".to_string(),
+                                kind: Some(CodeActionKind::QUICKFIX),
+                                diagnostics: Some(vec![diag.clone()]),
+                                edit: Some(WorkspaceEdit::new(changes)),
+                                ..Default::default()
+                            }));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
+    }
+
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        // Find the function name before the cursor (look back for identifier before '(')
+        let line = pos.line as usize;
+        if line >= doc.line_starts.len() {
+            return Ok(None);
+        }
+        let line_start = doc.line_starts[line];
+        let col = pos.character as usize;
+        let line_text = &doc.source[line_start..];
+        let before_cursor = if col <= line_text.len() {
+            &line_text[..col]
+        } else {
+            line_text
+        };
+
+        // Find the matching function call — look for last "name(" pattern
+        let fn_name = extract_fn_name_before_paren(before_cursor);
+        if fn_name.is_empty() {
+            return Ok(None);
+        }
+
+        // Look up the builtin signature
+        if let Some((_, sig)) = BUILTINS.iter().find(|(n, _)| *n == fn_name) {
+            return Ok(Some(SignatureHelp {
+                signatures: vec![SignatureInformation {
+                    label: sig.to_string(),
+                    documentation: None,
+                    parameters: None,
+                    active_parameter: None,
+                }],
+                active_signature: Some(0),
+                active_parameter: None,
+            }));
+        }
+
+        // Search for user-defined function signatures
+        if let Some(sig) = find_fn_signature(&doc.source, &fn_name) {
+            return Ok(Some(SignatureHelp {
+                signatures: vec![SignatureInformation {
+                    label: sig,
+                    documentation: None,
+                    parameters: None,
+                    active_parameter: None,
+                }],
+                active_signature: Some(0),
+                active_parameter: None,
+            }));
+        }
+
+        Ok(None)
+    }
+}
+
+// ── Diagnostic pipeline ─────────────────────────────────────────────
+
+/// Run lex + parse + analyze and collect all diagnostics.
+fn collect_diagnostics(source: &str, doc: &DocumentState) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+
+    // Lex
+    let tokens = match tokenize(source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                diagnostics.push(lex_error_to_diagnostic(e, doc));
+            }
+            return diagnostics;
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                diagnostics.push(parse_error_to_diagnostic(e, doc));
+            }
+            return diagnostics;
+        }
+    };
+
+    // Analyze
+    if let Err(errors) = analyze(&program) {
+        for e in &errors {
+            diagnostics.push(semantic_error_to_diagnostic(e, doc));
+        }
+    }
+
+    diagnostics
+}
+
+// ── Diagnostic converters ───────────────────────────────────────────
+
+fn lex_error_to_diagnostic(e: &LexError, doc: &DocumentState) -> Diagnostic {
+    let span = e.span();
+    let range = doc.span_to_range(span);
+    let code = match e {
+        LexError::UnexpectedChar { .. } => "LE001",
+        LexError::UnterminatedString { .. } => "LE002",
+        LexError::UnterminatedBlockComment { .. } => "LE003",
+        LexError::InvalidNumber { .. } => "LE004",
+        LexError::InvalidEscape { .. } => "LE005",
+        LexError::NumberOverflow { .. } => "LE006",
+        LexError::EmptyCharLiteral { .. } => "LE007",
+        LexError::MultiCharLiteral { .. } => "LE008",
+        LexError::InvalidCharLiteral { .. } => "LE004",
+        LexError::UnknownAnnotation { .. } => "LE001",
+    };
+    Diagnostic {
+        range,
+        severity: Some(DiagnosticSeverity::ERROR),
+        code: Some(NumberOrString::String(code.into())),
+        source: Some("fajar-lang".into()),
+        message: e.to_string(),
+        ..Default::default()
+    }
+}
+
+fn parse_error_to_diagnostic(e: &ParseError, doc: &DocumentState) -> Diagnostic {
+    let span = e.span();
+    let range = doc.span_to_range(span);
+    let code = match e {
+        ParseError::UnexpectedToken { .. } => "PE001",
+        ParseError::ExpectedExpression { .. } => "PE002",
+        ParseError::ExpectedType { .. } => "PE003",
+        ParseError::ExpectedPattern { .. } => "PE004",
+        ParseError::ExpectedIdentifier { .. } => "PE005",
+        ParseError::UnexpectedEof { .. } => "PE006",
+        ParseError::InvalidPattern { .. } => "PE007",
+        ParseError::DuplicateField { .. } => "PE008",
+        ParseError::TrailingSeparator { .. } => "PE009",
+        ParseError::InvalidAnnotation { .. } => "PE010",
+        ParseError::ModuleFileNotFound { .. } => "PE011",
+    };
+    Diagnostic {
+        range,
+        severity: Some(DiagnosticSeverity::ERROR),
+        code: Some(NumberOrString::String(code.into())),
+        source: Some("fajar-lang".into()),
+        message: e.to_string(),
+        ..Default::default()
+    }
+}
+
+fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagnostic {
+    let span = e.span();
+    let range = doc.span_to_range(span);
+    let severity = if e.is_warning() {
+        DiagnosticSeverity::WARNING
+    } else {
+        DiagnosticSeverity::ERROR
+    };
+    let code = match e {
+        SemanticError::UndefinedVariable { .. } => "SE001",
+        SemanticError::UndefinedFunction { .. } => "SE002",
+        SemanticError::UndefinedType { .. } => "SE003",
+        SemanticError::TypeMismatch { .. } => "SE004",
+        SemanticError::ArgumentCountMismatch { .. } => "SE005",
+        SemanticError::DuplicateDefinition { .. } => "SE006",
+        SemanticError::ImmutableAssignment { .. } => "SE007",
+        SemanticError::MissingReturn { .. } => "SE008",
+        SemanticError::UnusedVariable { .. } => "SE009",
+        SemanticError::UnreachableCode { .. } => "SE010",
+        SemanticError::NonExhaustiveMatch { .. } => "SE011",
+        SemanticError::MissingField { .. } => "SE012",
+        SemanticError::BreakOutsideLoop { .. } => "SE007",
+        SemanticError::ReturnOutsideFunction { .. } => "SE007",
+        SemanticError::HeapAllocInKernel { .. } => "KE001",
+        SemanticError::TensorInKernel { .. } => "KE002",
+        SemanticError::DeviceCallInKernel { .. } => "KE003",
+        SemanticError::RawPointerInDevice { .. } => "DE001",
+        SemanticError::KernelCallInDevice { .. } => "DE002",
+        SemanticError::FfiUnsafeType { .. } => "SE013",
+        SemanticError::UseAfterMove { .. } => "ME001",
+        SemanticError::MoveWhileBorrowed { .. } => "ME003",
+        SemanticError::MutBorrowConflict { .. } => "ME004",
+        SemanticError::ImmBorrowConflict { .. } => "ME005",
+        SemanticError::TraitBoundNotSatisfied { .. } => "SE014",
+        SemanticError::UnknownTrait { .. } => "SE015",
+        SemanticError::CannotInferType { .. } => "SE013",
+        SemanticError::TraitMethodSignatureMismatch { .. } => "SE016",
+        SemanticError::TensorShapeMismatch { .. } => "TE001",
+        SemanticError::AsmInSafeContext { .. } => "KE005",
+        SemanticError::AsmInDeviceContext { .. } => "KE006",
+        SemanticError::AwaitOutsideAsync { .. } => "SE017",
+        SemanticError::NotSendType { .. } => "SE018",
+    };
+    Diagnostic {
+        range,
+        severity: Some(severity),
+        code: Some(NumberOrString::String(code.into())),
+        source: Some("fajar-lang".into()),
+        message: e.to_string(),
+        ..Default::default()
+    }
+}
+
+// ── Hover helpers ───────────────────────────────────────────────────
+
+/// Extracts the word at the given cursor position.
+fn word_at_position(source: &str, line_starts: &[usize], pos: Position) -> String {
+    let line = pos.line as usize;
+    if line >= line_starts.len() {
+        return String::new();
+    }
+    let line_start = line_starts[line];
+    let col = pos.character as usize;
+    let offset = line_start + col;
+    if offset >= source.len() {
+        return String::new();
+    }
+
+    let bytes = source.as_bytes();
+    // Walk backward to find word start
+    let mut start = offset;
+    while start > 0 && is_ident_char(bytes[start - 1]) {
+        start -= 1;
+    }
+    // Handle @ prefix for annotations
+    if start > 0 && bytes[start - 1] == b'@' {
+        start -= 1;
+    }
+    // Walk forward to find word end
+    let mut end = offset;
+    while end < bytes.len() && is_ident_char(bytes[end]) {
+        end += 1;
+    }
+    source[start..end].to_string()
+}
+
+fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn keyword_info(word: &str) -> Option<String> {
+    let info = match word {
+        "let" => "**let** — Variable binding\n```fajar\nlet x: i32 = 42\nlet mut y = 0\n```",
+        "mut" => "**mut** — Mutable variable modifier\n```fajar\nlet mut counter = 0\ncounter = counter + 1\n```",
+        "fn" => "**fn** — Function definition\n```fajar\nfn add(a: i32, b: i32) -> i32 { a + b }\n```",
+        "if" => "**if** — Conditional expression\n```fajar\nlet max = if a > b { a } else { b }\n```",
+        "else" => "**else** — Alternative branch of if expression",
+        "while" => "**while** — Loop while condition is true\n```fajar\nwhile x < 10 { x = x + 1 }\n```",
+        "for" => "**for** — Iterate over a range or collection\n```fajar\nfor i in 0..10 { println(i) }\n```",
+        "match" => "**match** — Pattern matching expression\n```fajar\nmatch x { 0 => \"zero\", _ => \"other\" }\n```",
+        "return" => "**return** — Return a value from a function",
+        "break" => "**break** — Exit a loop, optionally with a value",
+        "continue" => "**continue** — Skip to next loop iteration",
+        "struct" => "**struct** — Define a data structure\n```fajar\nstruct Point { x: f64, y: f64 }\n```",
+        "enum" => "**enum** — Define a sum type\n```fajar\nenum Shape { Circle(f64), Rect(f64, f64) }\n```",
+        "impl" => "**impl** — Implement methods on a type\n```fajar\nimpl Point { fn origin() -> Point { ... } }\n```",
+        "trait" => "**trait** — Define a shared interface",
+        "const" => "**const** — Compile-time constant\n```fajar\nconst MAX: usize = 1024\n```",
+        "use" => "**use** — Import items from a module\n```fajar\nuse math::sqrt\n```",
+        "mod" => "**mod** — Define a module",
+        "pub" => "**pub** — Make item publicly visible",
+        "as" => "**as** — Type cast\n```fajar\nlet y = x as f64\n```",
+        "loop" => "**loop** — Infinite loop (exit with break)\n```fajar\nloop { if done { break } }\n```",
+        "in" => "**in** — Part of for-in loop syntax",
+        "true" | "false" => &format!("**{word}** — Boolean literal (`bool`)"),
+        "null" => "**null** — Null value (void type)",
+        "@kernel" => "**@kernel** — Kernel context: OS primitives, no heap, no tensor",
+        "@device" => "**@device** — Device context: tensor ops, no raw pointer, no IRQ",
+        "@safe" => "**@safe** — Safe context (default): no hardware, no raw pointer",
+        "@unsafe" => "**@unsafe** — Unsafe context: full access to all features",
+        "@ffi" => "**@ffi** — Foreign function interface annotation",
+        _ => return None,
+    };
+    Some(info.to_string())
+}
+
+fn builtin_info(name: &str) -> Option<String> {
+    let info = match name {
+        "print" => "```fajar\nfn print(value: any) -> void\n```\nPrint a value without newline.",
+        "println" => "```fajar\nfn println(value: any) -> void\n```\nPrint a value with newline.",
+        "len" => "```fajar\nfn len(collection: Array | Str) -> i64\n```\nReturn the length of an array or string.",
+        "type_of" => "```fajar\nfn type_of(value: any) -> str\n```\nReturn the type name of a value as a string.",
+        "to_string" => "```fajar\nfn to_string(value: any) -> str\n```\nConvert any value to its string representation.",
+        "to_int" => "```fajar\nfn to_int(value: any) -> i64\n```\nConvert to integer (from float, string, bool).",
+        "to_float" => "```fajar\nfn to_float(value: any) -> f64\n```\nConvert to float (from int, string).",
+        "abs" => "```fajar\nfn abs(x: i64 | f64) -> i64 | f64\n```\nAbsolute value.",
+        "sqrt" => "```fajar\nfn sqrt(x: f64) -> f64\n```\nSquare root.",
+        "pow" => "```fajar\nfn pow(base: f64, exp: f64) -> f64\n```\nRaise base to power.",
+        "log" | "log2" | "log10" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nLogarithm function."),
+        "sin" | "cos" | "tan" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nTrigonometric function (radians)."),
+        "floor" | "ceil" | "round" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nRounding function."),
+        "min" => "```fajar\nfn min(a: f64, b: f64) -> f64\n```\nReturn the smaller value.",
+        "max" => "```fajar\nfn max(a: f64, b: f64) -> f64\n```\nReturn the larger value.",
+        "clamp" => "```fajar\nfn clamp(x: f64, lo: f64, hi: f64) -> f64\n```\nClamp value to range [lo, hi].",
+        "assert" => "```fajar\nfn assert(condition: bool) -> void\n```\nPanic if condition is false.",
+        "assert_eq" => "```fajar\nfn assert_eq(a: any, b: any) -> void\n```\nPanic if a != b.",
+        "panic" => "```fajar\nfn panic(msg: str) -> never\n```\nAbort with error message.",
+        "todo" => "```fajar\nfn todo(msg: str) -> never\n```\nMark unimplemented code.",
+        "dbg" => "```fajar\nfn dbg(value: any) -> any\n```\nDebug-print and return the value.",
+        "push" => "```fajar\nfn push(arr: Array, value: any) -> void\n```\nAppend element to array.",
+        "pop" => "```fajar\nfn pop(arr: Array) -> any\n```\nRemove and return last element.",
+        "PI" => "**PI** — `3.141592653589793` (`f64`)",
+        "E" => "**E** — `2.718281828459045` (`f64`)",
+        _ => return None,
+    };
+    Some(info.to_string())
+}
+
+fn type_info(name: &str) -> Option<String> {
+    let info = match name {
+        "i8" | "i16" | "i32" | "i64" | "i128" => {
+            &format!("**{name}** — Signed integer type ({} bits)", &name[1..])
+        }
+        "u8" | "u16" | "u32" | "u64" | "u128" => {
+            &format!("**{name}** — Unsigned integer type ({} bits)", &name[1..])
+        }
+        "isize" => "**isize** — Pointer-sized signed integer",
+        "usize" => "**usize** — Pointer-sized unsigned integer",
+        "f32" => "**f32** — 32-bit floating point",
+        "f64" => "**f64** — 64-bit floating point",
+        "bool" => "**bool** — Boolean type (`true` or `false`)",
+        "str" => "**str** — String type",
+        "char" => "**char** — Unicode character",
+        "void" => "**void** — Unit type (no value)",
+        "never" => "**never** — Bottom type (function never returns)",
+        _ => return None,
+    };
+    Some(info.to_string())
+}
+
+// ── Document symbol extraction ──────────────────────────────────────
+
+/// Extracts document symbols (functions, structs, enums) from source.
+fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> {
+    let mut symbols = Vec::new();
+
+    for (i, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Strip annotation prefix
+        let trimmed = if trimmed.starts_with('@') {
+            if let Some(rest) = trimmed.split_whitespace().nth(1) {
+                &trimmed[trimmed.find(rest).unwrap_or(0)..]
+            } else {
+                trimmed
+            }
+        } else {
+            trimmed
+        };
+
+        if let Some(name) = extract_def_name(trimmed, "fn ") {
+            let offset = doc.line_starts[i];
+            symbols.push(SymbolInformation {
+                name: name.to_string(),
+                kind: SymbolKind::FUNCTION,
+                #[allow(deprecated)]
+                deprecated: None,
+                location: Location {
+                    uri: Url::parse("file:///")
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                    range: Range::new(
+                        Position::new(i as u32, 0),
+                        doc.offset_to_position(offset + line.len()),
+                    ),
+                },
+                tags: None,
+                container_name: None,
+            });
+        } else if let Some(name) = extract_def_name(trimmed, "struct ") {
+            let offset = doc.line_starts[i];
+            symbols.push(SymbolInformation {
+                name: name.to_string(),
+                kind: SymbolKind::STRUCT,
+                #[allow(deprecated)]
+                deprecated: None,
+                location: Location {
+                    uri: Url::parse("file:///")
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                    range: Range::new(
+                        Position::new(i as u32, 0),
+                        doc.offset_to_position(offset + line.len()),
+                    ),
+                },
+                tags: None,
+                container_name: None,
+            });
+        } else if let Some(name) = extract_def_name(trimmed, "enum ") {
+            let offset = doc.line_starts[i];
+            symbols.push(SymbolInformation {
+                name: name.to_string(),
+                kind: SymbolKind::ENUM,
+                #[allow(deprecated)]
+                deprecated: None,
+                location: Location {
+                    uri: Url::parse("file:///")
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                    range: Range::new(
+                        Position::new(i as u32, 0),
+                        doc.offset_to_position(offset + line.len()),
+                    ),
+                },
+                tags: None,
+                container_name: None,
+            });
+        } else if let Some(name) = extract_def_name(trimmed, "trait ") {
+            let offset = doc.line_starts[i];
+            symbols.push(SymbolInformation {
+                name: name.to_string(),
+                kind: SymbolKind::INTERFACE,
+                #[allow(deprecated)]
+                deprecated: None,
+                location: Location {
+                    uri: Url::parse("file:///")
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                    range: Range::new(
+                        Position::new(i as u32, 0),
+                        doc.offset_to_position(offset + line.len()),
+                    ),
+                },
+                tags: None,
+                container_name: None,
+            });
+        } else if let Some(name) = extract_def_name(trimmed, "const ") {
+            let offset = doc.line_starts[i];
+            symbols.push(SymbolInformation {
+                name: name.to_string(),
+                kind: SymbolKind::CONSTANT,
+                #[allow(deprecated)]
+                deprecated: None,
+                location: Location {
+                    uri: Url::parse("file:///")
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                    range: Range::new(
+                        Position::new(i as u32, 0),
+                        doc.offset_to_position(offset + line.len()),
+                    ),
+                },
+                tags: None,
+                container_name: None,
+            });
+        }
+    }
+
+    symbols
+}
+
+/// Extracts a definition name from a line starting with a keyword prefix.
+fn extract_def_name<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(prefix)?;
+    let end = rest.find(|c: char| !c.is_ascii_alphanumeric() && c != '_')?;
+    if end == 0 {
+        return None;
+    }
+    Some(&rest[..end])
+}
+
+// ── Signature help helpers ──────────────────────────────────────────
+
+/// Extracts the function name immediately before the last `(`.
+fn extract_fn_name_before_paren(text: &str) -> String {
+    // Find the last '(' in text
+    let paren_pos = match text.rfind('(') {
+        Some(p) => p,
+        None => return String::new(),
+    };
+    // Walk backward from paren to find the identifier
+    let before = &text[..paren_pos];
+    let trimmed = before.trim_end();
+    let name_start = trimmed
+        .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .map(|p| p + 1)
+        .unwrap_or(0);
+    trimmed[name_start..].to_string()
+}
+
+/// Finds a function signature in the source code by name.
+fn find_fn_signature(source: &str, name: &str) -> Option<String> {
+    let pattern = format!("fn {name}(");
+    let pos = source.find(&pattern)?;
+    // Extract from "fn" to the end of the signature (closing paren + return type)
+    let rest = &source[pos..];
+    // Find the closing `{` or end of line
+    let end = rest
+        .find('{')
+        .or_else(|| rest.find('\n'))
+        .unwrap_or(rest.len());
+    Some(rest[..end].trim().to_string())
+}
+
+// ── Static data ─────────────────────────────────────────────────────
+
+const KEYWORDS: &[&str] = &[
+    "let", "mut", "fn", "if", "else", "while", "for", "in", "match", "return", "break", "continue",
+    "struct", "enum", "impl", "trait", "type", "const", "use", "mod", "pub", "extern", "as",
+    "loop", "true", "false", "null",
+];
+
+const BUILTINS: &[(&str, &str)] = &[
+    ("print", "fn print(value: any) -> void"),
+    ("println", "fn println(value: any) -> void"),
+    ("len", "fn len(collection) -> i64"),
+    ("type_of", "fn type_of(value) -> str"),
+    ("to_string", "fn to_string(value) -> str"),
+    ("to_int", "fn to_int(value) -> i64"),
+    ("to_float", "fn to_float(value) -> f64"),
+    ("abs", "fn abs(x) -> i64 | f64"),
+    ("sqrt", "fn sqrt(x: f64) -> f64"),
+    ("pow", "fn pow(base: f64, exp: f64) -> f64"),
+    ("log", "fn log(x: f64) -> f64"),
+    ("log2", "fn log2(x: f64) -> f64"),
+    ("log10", "fn log10(x: f64) -> f64"),
+    ("sin", "fn sin(x: f64) -> f64"),
+    ("cos", "fn cos(x: f64) -> f64"),
+    ("tan", "fn tan(x: f64) -> f64"),
+    ("floor", "fn floor(x: f64) -> f64"),
+    ("ceil", "fn ceil(x: f64) -> f64"),
+    ("round", "fn round(x: f64) -> f64"),
+    ("min", "fn min(a: f64, b: f64) -> f64"),
+    ("max", "fn max(a: f64, b: f64) -> f64"),
+    ("clamp", "fn clamp(x: f64, lo: f64, hi: f64) -> f64"),
+    ("assert", "fn assert(condition: bool) -> void"),
+    ("assert_eq", "fn assert_eq(a: any, b: any) -> void"),
+    ("panic", "fn panic(msg: str) -> never"),
+    ("todo", "fn todo(msg: str) -> never"),
+    ("dbg", "fn dbg(value: any) -> any"),
+    ("push", "fn push(arr: Array, value: any) -> void"),
+    ("pop", "fn pop(arr: Array) -> any"),
+];
+
+const TYPES: &[&str] = &[
+    "bool", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize",
+    "f32", "f64", "str", "char", "void", "never",
+];
+
+const ANNOTATIONS: &[&str] = &["@kernel", "@device", "@safe", "@unsafe", "@ffi"];
+
+// ── LexError/ParseError span helpers ────────────────────────────────
+
+trait HasSpan {
+    fn span(&self) -> Span;
+}
+
+impl HasSpan for LexError {
+    fn span(&self) -> Span {
+        match self {
+            LexError::UnexpectedChar { span, .. }
+            | LexError::UnterminatedString { span, .. }
+            | LexError::UnterminatedBlockComment { span, .. }
+            | LexError::InvalidNumber { span, .. }
+            | LexError::InvalidEscape { span, .. }
+            | LexError::NumberOverflow { span, .. }
+            | LexError::EmptyCharLiteral { span, .. }
+            | LexError::MultiCharLiteral { span, .. }
+            | LexError::InvalidCharLiteral { span, .. }
+            | LexError::UnknownAnnotation { span, .. } => *span,
+        }
+    }
+}
+
+impl HasSpan for ParseError {
+    fn span(&self) -> Span {
+        match self {
+            ParseError::UnexpectedToken { span, .. }
+            | ParseError::ExpectedExpression { span, .. }
+            | ParseError::ExpectedType { span, .. }
+            | ParseError::ExpectedPattern { span, .. }
+            | ParseError::ExpectedIdentifier { span, .. }
+            | ParseError::UnexpectedEof { span }
+            | ParseError::InvalidPattern { span, .. }
+            | ParseError::DuplicateField { span, .. }
+            | ParseError::TrailingSeparator { span, .. }
+            | ParseError::InvalidAnnotation { span, .. }
+            | ParseError::ModuleFileNotFound { span, .. } => *span,
+        }
+    }
+}
+
+// ── Public entry point ──────────────────────────────────────────────
+
+/// Starts the LSP server on stdin/stdout.
+pub async fn run_lsp() {
+    let stdin = tokio::io::stdin();
+    let stdout = tokio::io::stdout();
+
+    let (service, socket) = LspService::new(FajarLspBackend::new);
+    Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_state_offset_to_position_first_line() {
+        let doc = DocumentState::new("hello world".into());
+        let pos = doc.offset_to_position(6);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 6);
+    }
+
+    #[test]
+    fn document_state_offset_to_position_second_line() {
+        let doc = DocumentState::new("line1\nline2\nline3".into());
+        // 'l' of line2 is at offset 6
+        let pos = doc.offset_to_position(6);
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 0);
+        // 'n' of line2 is at offset 8
+        let pos = doc.offset_to_position(8);
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 2);
+    }
+
+    #[test]
+    fn document_state_span_to_range() {
+        let doc = DocumentState::new("let x = 42\nlet y = 10".into());
+        let span = Span::new(4, 5); // 'x'
+        let range = doc.span_to_range(span);
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 4);
+        assert_eq!(range.end.line, 0);
+        assert_eq!(range.end.character, 5);
+    }
+
+    #[test]
+    fn collect_diagnostics_clean_source() {
+        let source = "let x: i64 = 42";
+        let doc = DocumentState::new(source.into());
+        let diags = collect_diagnostics(source, &doc);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn collect_diagnostics_lex_error() {
+        let source = "let x = \"unterminated";
+        let doc = DocumentState::new(source.into());
+        let diags = collect_diagnostics(source, &doc);
+        assert!(!diags.is_empty());
+        assert_eq!(diags[0].code, Some(NumberOrString::String("LE002".into())));
+    }
+
+    #[test]
+    fn collect_diagnostics_parse_error() {
+        let source = "let = 42";
+        let doc = DocumentState::new(source.into());
+        let diags = collect_diagnostics(source, &doc);
+        assert!(!diags.is_empty());
+    }
+
+    #[test]
+    fn collect_diagnostics_semantic_error() {
+        let source = "fn main() -> i64 { unknown_var }";
+        let doc = DocumentState::new(source.into());
+        let diags = collect_diagnostics(source, &doc);
+        assert!(diags
+            .iter()
+            .any(|d| { d.code == Some(NumberOrString::String("SE001".into())) }));
+    }
+
+    #[test]
+    fn word_at_position_simple() {
+        let source = "let counter = 42";
+        let line_starts = vec![0];
+        let word = word_at_position(source, &line_starts, Position::new(0, 5));
+        assert_eq!(word, "counter");
+    }
+
+    #[test]
+    fn word_at_position_annotation() {
+        let source = "@kernel fn main() {}";
+        let line_starts = vec![0];
+        let word = word_at_position(source, &line_starts, Position::new(0, 3));
+        assert_eq!(word, "@kernel");
+    }
+
+    #[test]
+    fn keyword_info_returns_some_for_keywords() {
+        assert!(keyword_info("fn").is_some());
+        assert!(keyword_info("let").is_some());
+        assert!(keyword_info("@kernel").is_some());
+    }
+
+    #[test]
+    fn keyword_info_returns_none_for_non_keywords() {
+        assert!(keyword_info("myvar").is_none());
+        assert!(keyword_info("xyz").is_none());
+    }
+
+    #[test]
+    fn builtin_info_returns_some_for_builtins() {
+        assert!(builtin_info("println").is_some());
+        assert!(builtin_info("len").is_some());
+        assert!(builtin_info("PI").is_some());
+    }
+
+    #[test]
+    fn type_info_returns_some_for_types() {
+        assert!(type_info("i64").is_some());
+        assert!(type_info("bool").is_some());
+        assert!(type_info("f32").is_some());
+    }
+
+    #[test]
+    fn type_info_returns_none_for_non_types() {
+        assert!(type_info("mytype").is_none());
+    }
+
+    // ── Document symbols ──
+
+    #[test]
+    fn extract_symbols_finds_functions() {
+        let source = "fn add(a: i64, b: i64) -> i64 { a + b }\nfn main() -> void {}";
+        let doc = DocumentState::new(source.into());
+        let symbols = extract_symbols(source, &doc);
+        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols[0].name, "add");
+        assert_eq!(symbols[0].kind, SymbolKind::FUNCTION);
+        assert_eq!(symbols[1].name, "main");
+    }
+
+    #[test]
+    fn extract_symbols_finds_structs_enums() {
+        let source = "struct Point { x: f64, y: f64 }\nenum Shape { Circle(f64) }";
+        let doc = DocumentState::new(source.into());
+        let symbols = extract_symbols(source, &doc);
+        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols[0].name, "Point");
+        assert_eq!(symbols[0].kind, SymbolKind::STRUCT);
+        assert_eq!(symbols[1].name, "Shape");
+        assert_eq!(symbols[1].kind, SymbolKind::ENUM);
+    }
+
+    #[test]
+    fn extract_symbols_with_annotations() {
+        let source = "@kernel fn init() -> void {}";
+        let doc = DocumentState::new(source.into());
+        let symbols = extract_symbols(source, &doc);
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].name, "init");
+    }
+
+    // ── Signature help ──
+
+    #[test]
+    fn extract_fn_name_before_paren_simple() {
+        assert_eq!(extract_fn_name_before_paren("println("), "println");
+        assert_eq!(extract_fn_name_before_paren("  add(1, "), "add");
+        assert_eq!(extract_fn_name_before_paren("let x = sqrt("), "sqrt");
+        assert_eq!(extract_fn_name_before_paren(""), "");
+    }
+
+    #[test]
+    fn find_fn_signature_in_source() {
+        let source = "fn greet(name: str) -> void {\n    println(name)\n}";
+        let sig = find_fn_signature(source, "greet");
+        assert!(sig.is_some());
+        assert!(sig.unwrap().contains("fn greet(name: str) -> void"));
+    }
+
+    #[test]
+    fn find_fn_signature_not_found() {
+        let source = "fn main() -> void {}";
+        assert!(find_fn_signature(source, "nonexistent").is_none());
+    }
+}

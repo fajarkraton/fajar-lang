@@ -1,0 +1,139 @@
+// fj-drivers — Common Sensor & Actuator Drivers for Fajar Lang
+//
+// Provides driver implementations for common embedded peripherals.
+// All drivers use the fj-hal traits for hardware access.
+
+use fj_hal::{I2c, Spi, Gpio}
+
+/// Generic sensor trait — all sensors implement this.
+trait Sensor {
+    /// Read sensor data as an array of f32 values.
+    fn read(&mut self) -> [f32; 4]
+
+    /// Check if the sensor is ready for reading.
+    fn ready(&self) -> bool
+
+    /// Calibrate the sensor (device-specific).
+    fn calibrate(&mut self) -> void
+}
+
+/// Generic actuator trait — all actuators implement this.
+trait Actuator {
+    /// Set actuator output value (normalized 0.0 to 1.0).
+    fn set(&mut self, value: f32) -> void
+
+    /// Emergency stop — disable actuator immediately.
+    fn stop(&mut self) -> void
+}
+
+/// MPU6050 6-axis IMU (accelerometer + gyroscope).
+struct Mpu6050<I: I2c> {
+    i2c: I,
+    addr: u8,
+    accel_scale: f32,
+    gyro_scale: f32,
+}
+
+impl<I: I2c> Mpu6050<I> {
+    /// Create a new MPU6050 driver with default address (0x68).
+    fn new(i2c: I) -> Mpu6050<I> {
+        Mpu6050 {
+            i2c,
+            addr: 0x68,
+            accel_scale: 16384.0,
+            gyro_scale: 131.0,
+        }
+    }
+
+    /// Initialize the sensor (wake from sleep, set scales).
+    fn init(&mut self) -> void {
+        self.i2c.write(self.addr, &[0x6B, 0x00])
+    }
+}
+
+/// BMP280 temperature & pressure sensor.
+struct Bmp280<I: I2c> {
+    i2c: I,
+    addr: u8,
+}
+
+impl<I: I2c> Bmp280<I> {
+    /// Create a new BMP280 driver.
+    fn new(i2c: I) -> Bmp280<I> {
+        Bmp280 { i2c, addr: 0x76 }
+    }
+
+    /// Read temperature in degrees Celsius.
+    fn read_temperature(&mut self) -> f32 {
+        let raw = self.i2c.read(self.addr, 3)
+        // Compensation formula applied to raw data
+        0.0 // placeholder
+    }
+
+    /// Read pressure in Pascals.
+    fn read_pressure(&mut self) -> f32 {
+        let raw = self.i2c.read(self.addr, 3)
+        0.0 // placeholder
+    }
+}
+
+/// Generic servo motor driver (PWM-based).
+struct Servo<P: Gpio> {
+    pin: P,
+    min_pulse_us: u32,
+    max_pulse_us: u32,
+    current_angle: f32,
+}
+
+impl<P: Gpio> Servo<P> {
+    /// Create a new servo driver with default pulse range.
+    fn new(pin: P) -> Servo<P> {
+        Servo {
+            pin,
+            min_pulse_us: 500,
+            max_pulse_us: 2500,
+            current_angle: 0.0,
+        }
+    }
+
+    /// Set servo angle (0.0 to 180.0 degrees).
+    fn set_angle(&mut self, angle: f32) -> void {
+        self.current_angle = angle
+    }
+}
+
+/// DC motor driver (H-bridge based).
+struct DcMotor<A: Gpio, B: Gpio> {
+    pin_a: A,
+    pin_b: B,
+    speed: f32,
+}
+
+impl<A: Gpio, B: Gpio> DcMotor<A, B> {
+    /// Create a new DC motor driver.
+    fn new(pin_a: A, pin_b: B) -> DcMotor<A, B> {
+        DcMotor { pin_a, pin_b, speed: 0.0 }
+    }
+
+    /// Set motor speed (-1.0 = full reverse, 1.0 = full forward).
+    fn set_speed(&mut self, speed: f32) -> void {
+        self.speed = speed
+        if speed > 0.0 {
+            self.pin_a.set_high()
+            self.pin_b.set_low()
+        } else if speed < 0.0 {
+            self.pin_a.set_low()
+            self.pin_b.set_high()
+        } else {
+            self.pin_a.set_low()
+            self.pin_b.set_low()
+        }
+    }
+
+    /// Emergency stop.
+    fn stop(&mut self) -> void {
+        self.speed = 0.0
+        self.pin_a.set_low()
+        self.pin_b.set_low()
+    }
+}

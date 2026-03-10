@@ -1,0 +1,103 @@
+// sensor-classifier — A Fajar Lang package project
+//
+// Demonstrates the package system:
+// - fj.toml with dependencies
+// - Importing from packages (fj-math, fj-nn, fj-hal)
+// - Multi-module project structure
+//
+// Build: fj build
+// Run:   fj run
+
+// Standard library imports
+use math::sqrt
+use math::abs
+
+// ═══════════════════════════════════════════════════════════════
+// Sensor Data Processing
+// ═══════════════════════════════════════════════════════════════
+
+struct SensorReading {
+    accel_x: f64,
+    accel_y: f64,
+    accel_z: f64,
+    gyro_z: f64
+}
+
+fn magnitude(r: SensorReading) -> f64 {
+    sqrt(r.accel_x * r.accel_x + r.accel_y * r.accel_y + r.accel_z * r.accel_z)
+}
+
+fn normalize_reading(r: SensorReading) -> SensorReading {
+    let mag = magnitude(r)
+    if mag > 0.0 {
+        SensorReading {
+            accel_x: r.accel_x / mag,
+            accel_y: r.accel_y / mag,
+            accel_z: r.accel_z / mag,
+            gyro_z: r.gyro_z / 250.0
+        }
+    } else {
+        r
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Classification
+// ═══════════════════════════════════════════════════════════════
+
+enum Activity {
+    Idle,
+    Walking,
+    Running
+}
+
+fn classify(r: SensorReading) -> Activity {
+    let mag = magnitude(r)
+    let gyro = abs(r.gyro_z)
+
+    if mag < 1.2 && gyro < 10.0 {
+        Activity::Idle
+    } else if mag < 2.5 || gyro < 50.0 {
+        Activity::Walking
+    } else {
+        Activity::Running
+    }
+}
+
+fn activity_name(a: Activity) -> str {
+    match a {
+        Activity::Idle => "Idle",
+        Activity::Walking => "Walking",
+        Activity::Running => "Running"
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Main
+// ═══════════════════════════════════════════════════════════════
+
+fn main() -> void {
+    println("Sensor Classifier v0.1.0")
+    println("========================")
+
+    // Simulate sensor readings
+    let readings = [
+        SensorReading { accel_x: 0.1, accel_y: 0.0, accel_z: 9.8, gyro_z: 2.0 },
+        SensorReading { accel_x: 1.5, accel_y: 0.8, accel_z: 9.6, gyro_z: 30.0 },
+        SensorReading { accel_x: 3.2, accel_y: 2.1, accel_z: 8.5, gyro_z: 120.0 },
+        SensorReading { accel_x: 0.0, accel_y: 0.1, accel_z: 9.81, gyro_z: 0.5 },
+        SensorReading { accel_x: 2.0, accel_y: 1.0, accel_z: 9.2, gyro_z: 45.0 }
+    ]
+
+    let count = to_int(len(readings))
+    let mut i = 0
+    while i < count {
+        let r = readings[i]
+        let activity = classify(r)
+        let label = activity_name(activity)
+        println("Reading " + to_string(i) + " -> " + label)
+        i = i + 1
+    }
+
+    println("Classification complete.")
+}

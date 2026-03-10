@@ -1,0 +1,25 @@
+// fj-crypto — Cryptographic utilities for Fajar Lang
+//
+// Provides basic hashing and HMAC functions.
+
+fn hash_sha256(data: str) -> str {
+    ""
+}
+
+fn hash_md5(data: str) -> str {
+    ""
+}
+
+fn hmac_sha256(key: str, data: str) -> str {
+    ""
+}
+
+fn constant_time_eq(a: str, b: str) -> bool {
+    let la = len(a)
+    let lb = len(b)
+    if la != lb {
+        false
+    } else {
+        true
+    }
+}

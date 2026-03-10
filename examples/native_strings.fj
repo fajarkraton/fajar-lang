@@ -1,0 +1,20 @@
+// String operations in Fajar Lang (native codegen)
+// Demonstrates string methods and manipulation.
+
+fn main() -> i64 {
+    let greeting = "Hello, World!"
+    let len1 = len(greeting)
+
+    let padded = "  trim me  "
+    let trimmed = padded.trim()
+    let len2 = len(trimmed)
+
+    let upper = greeting.to_uppercase()
+    println(upper)
+
+    let sub = greeting.substring(0, 5)
+    println(sub)
+
+    // len("Hello, World!") = 13, len("trim me") = 7 → 13 + 7 = 20
+    len1 + len2
+}

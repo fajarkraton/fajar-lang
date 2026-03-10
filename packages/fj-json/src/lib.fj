@@ -1,0 +1,27 @@
+// fj-json — JSON parsing and serialization for Fajar Lang
+//
+// Provides types and functions for working with JSON data.
+
+enum JsonValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    Str(str),
+    Array(i64),
+    Object(i64)
+}
+
+fn json_parse(input: str) -> JsonValue {
+    JsonValue::Null
+}
+
+fn json_stringify(value: JsonValue) -> str {
+    "null"
+}
+
+fn json_is_null(value: JsonValue) -> bool {
+    match value {
+        JsonValue::Null => true,
+        _ => false
+    }
+}

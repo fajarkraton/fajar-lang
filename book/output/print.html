@@ -1,0 +1,2379 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Fajar Lang Documentation</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Systems programming language for embedded ML + OS integration">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-6d283402.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-9dbcca0a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fajar Lang Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/primecore-id/fajar-lang" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="fajar-lang"><a class="header" href="#fajar-lang">Fajar Lang</a></h1>
+<p><strong>The systems programming language for embedded ML + OS integration.</strong></p>
+<p>Fajar Lang (<code>fj</code>) is a statically-typed systems programming language designed for the unique intersection of embedded systems and machine learning. It’s the only language where an OS kernel and a neural network can share the same codebase, type system, and compiler — with safety guarantees that no existing language provides.</p>
+<h2 id="why-fajar-lang"><a class="header" href="#why-fajar-lang">Why Fajar Lang?</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Challenge</th><th>Other Languages</th><th>Fajar Lang</th></tr>
+</thead>
+<tbody>
+<tr><td>Embedded ML inference</td><td>Python (too slow), C (unsafe)</td><td>First-class tensor types, no heap at inference</td></tr>
+<tr><td>OS + ML in one binary</td><td>Separate languages, FFI glue</td><td><code>@kernel</code> + <code>@device</code> contexts, compiler-enforced isolation</td></tr>
+<tr><td>Safety on hardware</td><td>Runtime checks or nothing</td><td>Compile-time context checking, move semantics</td></tr>
+<tr><td>Cross-compilation</td><td>Complex toolchain setup</td><td><code>fj build --target aarch64-unknown-none-elf</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="design-principles"><a class="header" href="#design-principles">Design Principles</a></h2>
+<ol>
+<li><strong>Explicitness over magic</strong> — no hidden allocation or hidden cost</li>
+<li><strong>Dual-context safety</strong> — <code>@kernel</code> disables heap+tensor; <code>@device</code> disables raw pointers</li>
+<li><strong>Rust-inspired but simpler</strong> — ownership lite without lifetime annotations</li>
+<li><strong>Native tensor types</strong> — <code>Tensor</code> is a first-class citizen in the type system</li>
+</ol>
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre><code class="language-fajar">// Classify sensor data using a pre-trained neural network
+fn classify(sensor: Tensor, w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor) -&gt; i64 {
+    let z1 = tensor_add(tensor_matmul(sensor, w1), b1)
+    let a1 = tensor_relu(z1)
+    let z2 = tensor_add(tensor_matmul(a1, w2), b2)
+    let output = tensor_softmax(z2)
+    tensor_argmax(output)
+}
+
+fn main() {
+    let sensor = read_imu()
+    let class = classify(sensor, w1, b1, w2, b2)
+    if class == 2 {
+        activate_alert()
+    }
+}
+</code></pre>
+<h2 id="target-audience"><a class="header" href="#target-audience">Target Audience</a></h2>
+<ul>
+<li><strong>Embedded AI engineers</strong> — drone, robot, IoT</li>
+<li><strong>OS research teams</strong> — AI-integrated kernels</li>
+<li><strong>Safety-critical ML systems</strong> — automotive, aerospace, medical</li>
+</ul>
+<h2 id="current-status"><a class="header" href="#current-status">Current Status</a></h2>
+<p>Fajar Lang v1.0 includes:</p>
+<ul>
+<li>Full compiler pipeline (lexer, parser, type checker, interpreter, native codegen)</li>
+<li>Cranelift-based JIT and AOT compilation for x86_64, aarch64, and riscv64</li>
+<li>Complete ML runtime (tensors, autograd, optimizers, layers, quantization)</li>
+<li>OS runtime (memory management, interrupts, syscalls, DMA, timers)</li>
+<li>QEMU-based testing for cross-compiled binaries</li>
+<li>1300+ tests, 15 examples, 12 benchmarks</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<h2 id="from-source-recommended"><a class="header" href="#from-source-recommended">From Source (Recommended)</a></h2>
+<pre><code class="language-bash">git clone https://github.com/primecore-id/fajar-lang.git
+cd fajar-lang
+cargo build --release
+</code></pre>
+<p>The binary will be at <code>target/release/fj</code>.</p>
+<h3 id="with-native-codegen-cranelift"><a class="header" href="#with-native-codegen-cranelift">With Native Codegen (Cranelift)</a></h3>
+<pre><code class="language-bash">cargo build --release --features native
+</code></pre>
+<p>This enables <code>fj run --native</code> for JIT compilation and <code>fj build</code> for AOT compilation.</p>
+<h2 id="verify-installation"><a class="header" href="#verify-installation">Verify Installation</a></h2>
+<pre><code class="language-bash">fj --version
+# fajar-lang 0.1.0
+
+fj run examples/hello.fj
+# Hello, Fajar Lang!
+</code></pre>
+<h2 id="system-requirements"><a class="header" href="#system-requirements">System Requirements</a></h2>
+<ul>
+<li><strong>Rust</strong> 1.75+ (for building from source)</li>
+<li><strong>OS</strong>: Linux, macOS, Windows (WSL2)</li>
+<li><strong>Optional</strong>: QEMU for cross-compilation testing</li>
+<li><strong>Optional</strong>: Cross-compilers for embedded targets</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="hello-world"><a class="header" href="#hello-world">Hello World</a></h1>
+<p>Create a file called <code>hello.fj</code>:</p>
+<pre><code class="language-fajar">fn main() {
+    println("Hello, Fajar Lang!")
+}
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">fj run hello.fj
+</code></pre>
+<p>Output:</p>
+<pre><code>Hello, Fajar Lang!
+</code></pre>
+<h2 id="whats-happening"><a class="header" href="#whats-happening">What’s Happening</a></h2>
+<ol>
+<li><code>fn main()</code> — entry point, just like C or Rust</li>
+<li><code>println("...")</code> — built-in function to print a line</li>
+<li>No semicolons needed — newlines separate statements</li>
+<li>No explicit return type — <code>void</code> is the default</li>
+</ol>
+<h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
+<pre><code class="language-fajar">fn main() {
+    let name = "Fajar"
+    let version = 1
+    let pi = 3.14159
+
+    print("Language: ")
+    println(name)
+    print("Version: ")
+    println(version)
+}
+</code></pre>
+<h2 id="functions"><a class="header" href="#functions">Functions</a></h2>
+<pre><code class="language-fajar">fn add(a: i64, b: i64) -&gt; i64 {
+    a + b
+}
+
+fn main() {
+    let result = add(3, 4)
+    println(result)  // 7
+}
+</code></pre>
+<p>The last expression in a block is its return value — no <code>return</code> keyword needed.</p>
+<h2 id="repl"><a class="header" href="#repl">REPL</a></h2>
+<p>Start an interactive session:</p>
+<pre><code class="language-bash">fj repl
+</code></pre>
+<pre><code>fj&gt; let x = 42
+fj&gt; x * 2
+84
+fj&gt; fn square(n: i64) -&gt; i64 { n * n }
+fj&gt; square(7)
+49
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="language-tour"><a class="header" href="#language-tour">Language Tour</a></h1>
+<p>A quick overview of Fajar Lang’s key features.</p>
+<h2 id="variables-and-types"><a class="header" href="#variables-and-types">Variables and Types</a></h2>
+<pre><code class="language-fajar">let name = "Fajar"        // immutable string
+let mut count = 0          // mutable integer
+const MAX: i64 = 100       // compile-time constant
+</code></pre>
+<h2 id="functions-1"><a class="header" href="#functions-1">Functions</a></h2>
+<pre><code class="language-fajar">fn fibonacci(n: i64) -&gt; i64 {
+    if n &lt;= 1 { return n }
+    fibonacci(n - 1) + fibonacci(n - 2)
+}
+</code></pre>
+<h2 id="structs-and-methods"><a class="header" href="#structs-and-methods">Structs and Methods</a></h2>
+<pre><code class="language-fajar">struct Point { x: f64, y: f64 }
+
+impl Point {
+    fn distance(self, other: Point) -&gt; f64 {
+        let dx = self.x - other.x
+        let dy = self.y - other.y
+        sqrt(dx * dx + dy * dy)
+    }
+}
+</code></pre>
+<h2 id="enums-and-pattern-matching"><a class="header" href="#enums-and-pattern-matching">Enums and Pattern Matching</a></h2>
+<pre><code class="language-fajar">enum Shape {
+    Circle(f64),
+    Rect(f64, f64)
+}
+
+fn area(s: Shape) -&gt; f64 {
+    match s {
+        Shape::Circle(r) =&gt; 3.14159 * r * r,
+        Shape::Rect(w, h) =&gt; w * h
+    }
+}
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<pre><code class="language-fajar">fn safe_divide(a: i64, b: i64) -&gt; Result&lt;i64, str&gt; {
+    if b == 0 { return Err("division by zero") }
+    Ok(a / b)
+}
+
+let result = safe_divide(10, 3)?   // propagate with ?
+</code></pre>
+<h2 id="pipeline-operator"><a class="header" href="#pipeline-operator">Pipeline Operator</a></h2>
+<pre><code class="language-fajar">fn double(x: i64) -&gt; i64 { x * 2 }
+fn add_one(x: i64) -&gt; i64 { x + 1 }
+
+let result = 5 |&gt; double |&gt; add_one   // 11
+</code></pre>
+<h2 id="context-annotations-unique-feature"><a class="header" href="#context-annotations-unique-feature">Context Annotations (Unique Feature)</a></h2>
+<p>Fajar enforces domain isolation at compile time:</p>
+<pre><code class="language-fajar">@kernel fn read_port() -&gt; i64 {
+    port_read(0x60)       // OK: hardware access allowed
+    // zeros(3, 3)        // ERROR: no tensor in @kernel
+}
+
+@device fn infer(input: Tensor) -&gt; Tensor {
+    relu(matmul(input, weights))  // OK: tensor ops allowed
+    // port_read(0x60)            // ERROR: no hardware in @device
+}
+</code></pre>
+<h2 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h2>
+<pre><code class="language-fajar">let handle = Thread::spawn(fn() -&gt; i64 { 42 })
+let result = handle.join()    // 42
+
+let (tx, rx) = Channel::new()
+tx.send(100)
+let val = rx.recv()           // 100
+</code></pre>
+<h2 id="embedded-ml"><a class="header" href="#embedded-ml">Embedded ML</a></h2>
+<pre><code class="language-fajar">let x = zeros(3, 3)           // 3x3 zero tensor
+let w = xavier(3, 3)          // Xavier initialization
+let y = relu(matmul(x, w))    // forward pass
+backward(y)                    // compute gradients
+</code></pre>
+<h2 id="native-compilation"><a class="header" href="#native-compilation">Native Compilation</a></h2>
+<p>Fajar compiles to native machine code via Cranelift, achieving 100-400x speedup over the interpreter:</p>
+<pre><code class="language-bash">fj run --native program.fj    # JIT compilation
+fj build --release program.fj # AOT compilation to binary
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="variables--types"><a class="header" href="#variables--types">Variables &amp; Types</a></h1>
+<h2 id="variable-declaration"><a class="header" href="#variable-declaration">Variable Declaration</a></h2>
+<p>Use <code>let</code> to declare variables. All variables are immutable by default.</p>
+<pre><code class="language-fajar">let x = 42           // type inferred as i64
+let name = "Fajar"   // type inferred as str
+let pi = 3.14159     // type inferred as f64
+let active = true    // type inferred as bool
+</code></pre>
+<p>Use <code>mut</code> for mutable variables:</p>
+<pre><code class="language-fajar">let mut counter = 0
+counter = counter + 1
+</code></pre>
+<h2 id="type-annotations"><a class="header" href="#type-annotations">Type Annotations</a></h2>
+<p>Explicit types with colon syntax:</p>
+<pre><code class="language-fajar">let x: i64 = 42
+let ratio: f64 = 0.75
+let flag: bool = true
+let msg: str = "hello"
+</code></pre>
+<h2 id="integer-types"><a class="header" href="#integer-types">Integer Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Size</th><th>Range</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i8</code></td><td>8-bit</td><td>-128 to 127</td></tr>
+<tr><td><code>i16</code></td><td>16-bit</td><td>-32,768 to 32,767</td></tr>
+<tr><td><code>i32</code></td><td>32-bit</td><td>-2^31 to 2^31-1</td></tr>
+<tr><td><code>i64</code></td><td>64-bit</td><td>-2^63 to 2^63-1 (default)</td></tr>
+<tr><td><code>i128</code></td><td>128-bit</td><td>-2^127 to 2^127-1</td></tr>
+<tr><td><code>u8</code></td><td>8-bit</td><td>0 to 255</td></tr>
+<tr><td><code>u16</code></td><td>16-bit</td><td>0 to 65,535</td></tr>
+<tr><td><code>u32</code></td><td>32-bit</td><td>0 to 2^32-1</td></tr>
+<tr><td><code>u64</code></td><td>64-bit</td><td>0 to 2^64-1</td></tr>
+<tr><td><code>u128</code></td><td>128-bit</td><td>0 to 2^128-1</td></tr>
+<tr><td><code>isize</code></td><td>pointer-sized</td><td>platform dependent</td></tr>
+<tr><td><code>usize</code></td><td>pointer-sized</td><td>platform dependent</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="float-types"><a class="header" href="#float-types">Float Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Size</th><th>Precision</th></tr>
+</thead>
+<tbody>
+<tr><td><code>f32</code></td><td>32-bit</td><td>~7 decimal digits</td></tr>
+<tr><td><code>f64</code></td><td>64-bit</td><td>~15 decimal digits (default)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="constants"><a class="header" href="#constants">Constants</a></h2>
+<p>Constants are always immutable and must have a type annotation:</p>
+<pre><code class="language-fajar">const MAX_SIZE: usize = 1024
+const PI: f64 = 3.14159265358979
+</code></pre>
+<h2 id="type-casting"><a class="header" href="#type-casting">Type Casting</a></h2>
+<p>Use <code>as</code> for explicit type conversion:</p>
+<pre><code class="language-fajar">let x: i64 = 42
+let y: f64 = x as f64      // 42.0
+let z: i32 = x as i32      // narrowing cast
+</code></pre>
+<h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
+<p>Stack-allocated arrays with fixed size:</p>
+<pre><code class="language-fajar">let nums = [1, 2, 3, 4, 5]
+let first = nums[0]         // 1
+</code></pre>
+<p>Dynamic heap-allocated arrays:</p>
+<pre><code class="language-fajar">let mut arr: [i64] = []
+arr = arr.push(10)
+arr = arr.push(20)
+let length = len(arr)       // 2
+</code></pre>
+<h2 id="tuples"><a class="header" href="#tuples">Tuples</a></h2>
+<pre><code class="language-fajar">let pair = (42, "hello")
+let x = pair.0              // 42
+let y = pair.1              // "hello"
+</code></pre>
+<h2 id="strings"><a class="header" href="#strings">Strings</a></h2>
+<p>Strings are UTF-8 encoded:</p>
+<pre><code class="language-fajar">let greeting = "Hello, World!"
+let length = len(greeting)          // 13
+let upper = greeting.to_uppercase() // "HELLO, WORLD!"
+let trimmed = "  hi  ".trim()       // "hi"
+</code></pre>
+<h2 id="option-type"><a class="header" href="#option-type">Option Type</a></h2>
+<p>Null-safe programming with <code>Option</code>:</p>
+<pre><code class="language-fajar">let x: i64 = 42
+let some_val = Some(x)      // wraps value
+let no_val = None            // no value
+</code></pre>
+<h2 id="ownership"><a class="header" href="#ownership">Ownership</a></h2>
+<p>Variables follow move semantics for non-copy types. Copy types (integers, floats, booleans, strings) are implicitly copied:</p>
+<pre><code class="language-fajar">let a = [1, 2, 3]
+let b = a            // a is moved, cannot use a after this
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="functions-2"><a class="header" href="#functions-2">Functions</a></h1>
+<h2 id="basic-functions"><a class="header" href="#basic-functions">Basic Functions</a></h2>
+<pre><code class="language-fajar">fn add(a: i64, b: i64) -&gt; i64 {
+    a + b
+}
+
+fn greet(name: str) {
+    println("Hello, " + name)
+}
+</code></pre>
+<p>The last expression in a function body is the return value (no semicolon needed).</p>
+<h2 id="explicit-return"><a class="header" href="#explicit-return">Explicit Return</a></h2>
+<p>Use <code>return</code> for early exit:</p>
+<pre><code class="language-fajar">fn abs(x: i64) -&gt; i64 {
+    if x &lt; 0 { return -x }
+    x
+}
+</code></pre>
+<h2 id="recursion"><a class="header" href="#recursion">Recursion</a></h2>
+<pre><code class="language-fajar">fn factorial(n: i64) -&gt; i64 {
+    if n &lt;= 1 { return 1 }
+    n * factorial(n - 1)
+}
+</code></pre>
+<h2 id="generics"><a class="header" href="#generics">Generics</a></h2>
+<p>Functions can be generic over types:</p>
+<pre><code class="language-fajar">fn identity&lt;T&gt;(x: T) -&gt; T {
+    x
+}
+
+let n = identity(42)       // i64
+let s = identity("hello")  // str
+</code></pre>
+<h2 id="function-pointers"><a class="header" href="#function-pointers">Function Pointers</a></h2>
+<p>Functions are first-class values:</p>
+<pre><code class="language-fajar">fn double(x: i64) -&gt; i64 { x * 2 }
+fn apply(f: fn(i64) -&gt; i64, x: i64) -&gt; i64 { f(x) }
+
+let result = apply(double, 5)  // 10
+</code></pre>
+<h2 id="higher-order-functions"><a class="header" href="#higher-order-functions">Higher-Order Functions</a></h2>
+<p>Arrays support <code>map</code>, <code>filter</code>, and <code>reduce</code>:</p>
+<pre><code class="language-fajar">fn double(x: i64) -&gt; i64 { x * 2 }
+fn is_even(x: i64) -&gt; bool { x % 2 == 0 }
+fn sum(a: i64, b: i64) -&gt; i64 { a + b }
+
+let nums: [i64] = [1, 2, 3, 4]
+let doubled = nums.map(double)         // [2, 4, 6, 8]
+let evens = nums.filter(is_even)       // [2, 4]
+let total = nums.reduce(sum, 0)        // 10
+</code></pre>
+<h2 id="pipeline-operator-1"><a class="header" href="#pipeline-operator-1">Pipeline Operator</a></h2>
+<p>Chain function calls with <code>|&gt;</code>:</p>
+<pre><code class="language-fajar">fn double(x: i64) -&gt; i64 { x * 2 }
+fn add_one(x: i64) -&gt; i64 { x + 1 }
+
+let result = 5 |&gt; double |&gt; add_one   // 11
+</code></pre>
+<h2 id="context-annotations"><a class="header" href="#context-annotations">Context Annotations</a></h2>
+<p>Functions can be annotated with execution contexts:</p>
+<pre><code class="language-fajar">@kernel fn read_sensor() -&gt; i64 {
+    // Has access to hardware, no heap, no tensor
+    port_read(0x40)
+}
+
+@device fn inference(data: Tensor) -&gt; Tensor {
+    // Has access to tensors, no raw pointers
+    relu(matmul(data, weights))
+}
+
+@safe fn process() -&gt; i64 {
+    // Default: no hardware, no raw pointers
+    42
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h1>
+<h2 id="ifelse"><a class="header" href="#ifelse">If/Else</a></h2>
+<p><code>if</code>/<code>else</code> are expressions that return values:</p>
+<pre><code class="language-fajar">let max = if a &gt; b { a } else { b }
+</code></pre>
+<p>Multi-branch:</p>
+<pre><code class="language-fajar">if score &gt;= 90 {
+    println("A")
+} else if score &gt;= 80 {
+    println("B")
+} else {
+    println("C")
+}
+</code></pre>
+<h2 id="while-loops"><a class="header" href="#while-loops">While Loops</a></h2>
+<pre><code class="language-fajar">let mut i = 0
+while i &lt; 10 {
+    println(i)
+    i = i + 1
+}
+</code></pre>
+<h2 id="for-loops"><a class="header" href="#for-loops">For Loops</a></h2>
+<p>Iterate over ranges:</p>
+<pre><code class="language-fajar">for i in 0..10 {
+    println(i)     // 0, 1, 2, ..., 9
+}
+
+for i in 0..=10 {
+    println(i)     // 0, 1, 2, ..., 10 (inclusive)
+}
+</code></pre>
+<h2 id="loop"><a class="header" href="#loop">Loop</a></h2>
+<p>Infinite loop, exit with <code>break</code>:</p>
+<pre><code class="language-fajar">let mut count = 0
+loop {
+    count = count + 1
+    if count &gt;= 5 { break }
+}
+</code></pre>
+<h2 id="break-and-continue"><a class="header" href="#break-and-continue">Break and Continue</a></h2>
+<pre><code class="language-fajar">for i in 0..100 {
+    if i % 2 == 0 { continue }   // skip even numbers
+    if i &gt; 10 { break }          // stop at 10
+    println(i)                     // 1, 3, 5, 7, 9
+}
+</code></pre>
+<h2 id="match-expressions"><a class="header" href="#match-expressions">Match Expressions</a></h2>
+<p>Pattern matching on values:</p>
+<pre><code class="language-fajar">let label = match x {
+    0 =&gt; "zero",
+    1 =&gt; "one",
+    _ =&gt; "other"
+}
+</code></pre>
+<p>Match on enums:</p>
+<pre><code class="language-fajar">match result {
+    Some(value) =&gt; println(value),
+    None =&gt; println("nothing")
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="structs--enums"><a class="header" href="#structs--enums">Structs &amp; Enums</a></h1>
+<h2 id="structs"><a class="header" href="#structs">Structs</a></h2>
+<p>Define custom data types:</p>
+<pre><code class="language-fajar">struct Point {
+    x: f64,
+    y: f64
+}
+
+let p = Point { x: 3.0, y: 4.0 }
+println(p.x)   // 3.0
+</code></pre>
+<h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
+<p>Implement methods with <code>impl</code>:</p>
+<pre><code class="language-fajar">struct Circle {
+    radius: f64
+}
+
+impl Circle {
+    fn area(self) -&gt; f64 {
+        3.14159 * self.radius * self.radius
+    }
+
+    fn scale(self, factor: f64) -&gt; Circle {
+        Circle { radius: self.radius * factor }
+    }
+}
+
+let c = Circle { radius: 5.0 }
+println(c.area())    // 78.53975
+</code></pre>
+<h2 id="enums"><a class="header" href="#enums">Enums</a></h2>
+<p>Define algebraic data types:</p>
+<pre><code class="language-fajar">enum Color {
+    Red,
+    Green,
+    Blue,
+    Custom(i64)
+}
+
+let c = Color::Red
+</code></pre>
+<h2 id="enums-with-data"><a class="header" href="#enums-with-data">Enums with Data</a></h2>
+<pre><code class="language-fajar">enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64)
+}
+
+let s = Shape::Circle(5.0)
+</code></pre>
+<h2 id="option-and-result"><a class="header" href="#option-and-result">Option and Result</a></h2>
+<p>Built-in enum types for null-safety and error handling:</p>
+<pre><code class="language-fajar">// Option&lt;T&gt; for nullable values
+let x = Some(42)
+let y = None
+
+// Result&lt;T, E&gt; for fallible operations
+let ok = Ok(42)
+let err = Err("something went wrong")
+</code></pre>
+<h2 id="pattern-matching-on-enums"><a class="header" href="#pattern-matching-on-enums">Pattern Matching on Enums</a></h2>
+<pre><code class="language-fajar">match shape {
+    Shape::Circle(r) =&gt; println("Circle with radius " + to_string(r)),
+    Shape::Rectangle(w, h) =&gt; println("Rectangle " + to_string(w) + "x" + to_string(h))
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="pattern-matching"><a class="header" href="#pattern-matching">Pattern Matching</a></h1>
+<h2 id="basic-match"><a class="header" href="#basic-match">Basic Match</a></h2>
+<p>Match on integers:</p>
+<pre><code class="language-fajar">let day = match n {
+    1 =&gt; "Monday",
+    2 =&gt; "Tuesday",
+    3 =&gt; "Wednesday",
+    _ =&gt; "other"
+}
+</code></pre>
+<h2 id="enum-patterns"><a class="header" href="#enum-patterns">Enum Patterns</a></h2>
+<p>Destructure enum variants:</p>
+<pre><code class="language-fajar">enum Result {
+    Ok(i64),
+    Err(str)
+}
+
+match result {
+    Ok(value) =&gt; println("Success: " + to_string(value)),
+    Err(msg) =&gt; println("Error: " + msg)
+}
+</code></pre>
+<h2 id="wildcard-pattern"><a class="header" href="#wildcard-pattern">Wildcard Pattern</a></h2>
+<p><code>_</code> matches anything:</p>
+<pre><code class="language-fajar">match x {
+    0 =&gt; println("zero"),
+    _ =&gt; println("non-zero")
+}
+</code></pre>
+<h2 id="variable-binding"><a class="header" href="#variable-binding">Variable Binding</a></h2>
+<p>Bind matched value to a name:</p>
+<pre><code class="language-fajar">match x {
+    0 =&gt; println("zero"),
+    n =&gt; println("got: " + to_string(n))
+}
+</code></pre>
+<h2 id="exhaustiveness"><a class="header" href="#exhaustiveness">Exhaustiveness</a></h2>
+<p>Match must cover all cases. The compiler warns about non-exhaustive patterns:</p>
+<pre><code class="language-fajar">enum Direction { North, South, East, West }
+
+match dir {
+    Direction::North =&gt; println("up"),
+    Direction::South =&gt; println("down"),
+    // Missing East and West would produce a warning
+    _ =&gt; println("sideways")
+}
+</code></pre>
+<h2 id="match-as-expression"><a class="header" href="#match-as-expression">Match as Expression</a></h2>
+<p>Match returns a value:</p>
+<pre><code class="language-fajar">let label = match score / 10 {
+    10 =&gt; "perfect",
+    9 =&gt; "excellent",
+    8 =&gt; "good",
+    _ =&gt; "keep trying"
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h1>
+<h2 id="result-type"><a class="header" href="#result-type">Result Type</a></h2>
+<p>Functions that can fail return <code>Result</code>:</p>
+<pre><code class="language-fajar">fn divide(a: i64, b: i64) -&gt; Result&lt;i64, str&gt; {
+    if b == 0 {
+        return Err("division by zero")
+    }
+    Ok(a / b)
+}
+</code></pre>
+<h2 id="pattern-matching-on-results"><a class="header" href="#pattern-matching-on-results">Pattern Matching on Results</a></h2>
+<pre><code class="language-fajar">match divide(10, 3) {
+    Ok(value) =&gt; println("Result: " + to_string(value)),
+    Err(msg) =&gt; println("Error: " + msg)
+}
+</code></pre>
+<h2 id="the--operator"><a class="header" href="#the--operator">The ? Operator</a></h2>
+<p>Propagate errors up the call stack:</p>
+<pre><code class="language-fajar">fn safe_calc(a: i64, b: i64) -&gt; Result&lt;i64, str&gt; {
+    let x = divide(a, b)?    // returns Err early if divide fails
+    Ok(x + 1)
+}
+</code></pre>
+<h2 id="option-type-1"><a class="header" href="#option-type-1">Option Type</a></h2>
+<p>For values that may be absent:</p>
+<pre><code class="language-fajar">fn find(arr: [i64], target: i64) -&gt; Option&lt;i64&gt; {
+    // returns Some(index) or None
+}
+
+match find(data, 42) {
+    Some(idx) =&gt; println("Found at " + to_string(idx)),
+    None =&gt; println("Not found")
+}
+</code></pre>
+<h2 id="string-parsing"><a class="header" href="#string-parsing">String Parsing</a></h2>
+<p><code>parse_int</code> and <code>parse_float</code> return Result-like enum values:</p>
+<pre><code class="language-fajar">let result = parse_int("42")
+match result {
+    Ok(n) =&gt; println(n),
+    Err(e) =&gt; println("Parse error: " + e)
+}
+</code></pre>
+<h2 id="assertions"><a class="header" href="#assertions">Assertions</a></h2>
+<p>For invariant checking:</p>
+<pre><code class="language-fajar">assert(x &gt; 0)                  // panics if false
+assert_eq(actual, expected)    // panics if not equal
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="generics--traits"><a class="header" href="#generics--traits">Generics &amp; Traits</a></h1>
+<h2 id="generic-functions"><a class="header" href="#generic-functions">Generic Functions</a></h2>
+<pre><code class="language-fajar">fn max&lt;T&gt;(a: T, b: T) -&gt; T {
+    if a &gt; b { a } else { b }
+}
+
+let m = max(10, 20)          // i64
+let f = max(1.5, 2.7)        // f64
+</code></pre>
+<p>Fajar uses monomorphization: each generic instantiation generates specialized code with no runtime overhead.</p>
+<h2 id="multiple-type-parameters"><a class="header" href="#multiple-type-parameters">Multiple Type Parameters</a></h2>
+<pre><code class="language-fajar">fn pair&lt;A, B&gt;(a: A, b: B) -&gt; (A, B) {
+    (a, b)
+}
+</code></pre>
+<h2 id="traits"><a class="header" href="#traits">Traits</a></h2>
+<p>Define shared behavior:</p>
+<pre><code class="language-fajar">trait Display {
+    fn to_string(self) -&gt; str
+}
+
+trait Area {
+    fn area(self) -&gt; f64
+}
+</code></pre>
+<h2 id="implementing-traits"><a class="header" href="#implementing-traits">Implementing Traits</a></h2>
+<pre><code class="language-fajar">struct Circle {
+    radius: f64
+}
+
+impl Area for Circle {
+    fn area(self) -&gt; f64 {
+        3.14159 * self.radius * self.radius
+    }
+}
+
+impl Display for Circle {
+    fn to_string(self) -&gt; str {
+        "Circle(r=" + to_string(self.radius) + ")"
+    }
+}
+</code></pre>
+<h2 id="trait-bounds"><a class="header" href="#trait-bounds">Trait Bounds</a></h2>
+<p>Constrain generic types:</p>
+<pre><code class="language-fajar">fn print_area&lt;T: Area&gt;(shape: T) {
+    println(shape.area())
+}
+</code></pre>
+<h2 id="const-generics"><a class="header" href="#const-generics">Const Generics</a></h2>
+<p>Parameterize by compile-time constants:</p>
+<pre><code class="language-fajar">fn zeros&lt;const N: usize&gt;() -&gt; [f64; N] {
+    // array of N zeros
+}
+</code></pre>
+<h2 id="static-dispatch"><a class="header" href="#static-dispatch">Static Dispatch</a></h2>
+<p>All trait dispatch in Fajar is static (monomorphized). There are no vtables or dynamic dispatch, making it suitable for embedded systems where every byte counts.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="modules"><a class="header" href="#modules">Modules</a></h1>
+<h2 id="module-declaration"><a class="header" href="#module-declaration">Module Declaration</a></h2>
+<p>Organize code into modules:</p>
+<pre><code class="language-fajar">mod math {
+    pub fn square(x: i64) -&gt; i64 { x * x }
+    pub fn cube(x: i64) -&gt; i64 { x * x * x }
+
+    fn helper() { /* private */ }
+}
+</code></pre>
+<h2 id="using-module-items"><a class="header" href="#using-module-items">Using Module Items</a></h2>
+<pre><code class="language-fajar">use math::square
+
+let result = square(5)         // 25
+let result2 = math::cube(3)   // 27 (qualified path)
+</code></pre>
+<h2 id="visibility"><a class="header" href="#visibility">Visibility</a></h2>
+<p>Items are private by default. Use <code>pub</code> to make them public:</p>
+<pre><code class="language-fajar">mod shapes {
+    pub struct Circle {
+        pub radius: f64        // public field
+    }
+
+    pub fn new_circle(r: f64) -&gt; Circle {
+        Circle { radius: r }
+    }
+
+    fn internal_helper() {     // private function
+        // only accessible within this module
+    }
+}
+</code></pre>
+<h2 id="standard-library-modules"><a class="header" href="#standard-library-modules">Standard Library Modules</a></h2>
+<p>Fajar’s standard library is organized into modules:</p>
+<pre><code class="language-fajar">use std::math    // PI, E, sqrt, sin, cos, etc.
+use std::io      // print, println, read_file, write_file
+use std::string  // trim, split, replace, contains, etc.
+</code></pre>
+<h2 id="the-extern-keyword"><a class="header" href="#the-extern-keyword">The <code>extern</code> Keyword</a></h2>
+<p>Interface with C code via FFI:</p>
+<pre><code class="language-fajar">extern "C" {
+    fn printf(format: *const u8, ...) -&gt; i32
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="threads"><a class="header" href="#threads">Threads</a></h1>
+<p>Fajar Lang provides native thread support for parallel computation. Threads run OS-level threads via <code>Thread::spawn()</code>.</p>
+<h2 id="spawning-threads"><a class="header" href="#spawning-threads">Spawning Threads</a></h2>
+<pre><code class="language-fajar">let handle = Thread::spawn(fn(arg) -&gt; i64 { arg * 2 }, 21)
+let result = handle.join()  // blocks until thread completes → 42
+</code></pre>
+<p>Threads accept a function pointer and an argument. The function runs on a new OS thread.</p>
+<h3 id="no-argument-threads"><a class="header" href="#no-argument-threads">No-Argument Threads</a></h3>
+<pre><code class="language-fajar">let handle = Thread::spawn_noarg(fn() -&gt; i64 { 100 })
+let result = handle.join()  // → 100
+</code></pre>
+<h2 id="thread-safety-send-and-sync"><a class="header" href="#thread-safety-send-and-sync">Thread Safety: Send and Sync</a></h2>
+<p>Fajar Lang enforces thread safety at compile time:</p>
+<ul>
+<li><strong>Send</strong> types can be transferred across thread boundaries</li>
+<li><strong>Sync</strong> types can be shared between threads via references</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Send</th><th>Sync</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i64</code>, <code>f64</code>, <code>bool</code></td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>String</code></td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>Arc&lt;T&gt;</code></td><td>Yes (if T: Send+Sync)</td><td>Yes</td></tr>
+<tr><td><code>Mutex&lt;T&gt;</code></td><td>Yes (if T: Send)</td><td>Yes</td></tr>
+<tr><td><code>&amp;mut T</code></td><td>No</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+<p>Attempting to send a non-Send type across threads produces a compile error:</p>
+<pre><code class="language-fajar">// ERROR SE018: type &amp;mut i64 is not Send
+let handle = Thread::spawn(fn(r: &amp;mut i64) -&gt; i64 { *r }, &amp;mut x)
+</code></pre>
+<h2 id="checking-thread-status"><a class="header" href="#checking-thread-status">Checking Thread Status</a></h2>
+<pre><code class="language-fajar">let handle = Thread::spawn(worker, 0)
+let done = handle.is_finished()  // non-blocking: 1 if done, 0 if running
+let result = handle.join()       // blocking: waits for completion
+</code></pre>
+<h2 id="arc-shared-ownership-across-threads"><a class="header" href="#arc-shared-ownership-across-threads">Arc: Shared Ownership Across Threads</a></h2>
+<p><code>Arc</code> (Atomic Reference Counted) allows multiple threads to share data:</p>
+<pre><code class="language-fajar">let shared = Arc::new(42)
+let clone1 = Arc::clone(shared)
+let clone2 = Arc::clone(shared)
+
+let h1 = Thread::spawn(fn(a) -&gt; i64 { Arc::load(a) }, clone1)
+let h2 = Thread::spawn(fn(a) -&gt; i64 { Arc::load(a) }, clone2)
+
+h1.join()  // → 42
+h2.join()  // → 42
+Arc::drop(shared)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="channels"><a class="header" href="#channels">Channels</a></h1>
+<p>Channels provide message-passing concurrency, inspired by Go’s channels and Rust’s <code>mpsc</code>. Fajar Lang supports both unbounded and bounded channels.</p>
+<h2 id="unbounded-channels"><a class="header" href="#unbounded-channels">Unbounded Channels</a></h2>
+<p>Unbounded channels have no capacity limit. Sends never block.</p>
+<pre><code class="language-fajar">let ch = Channel::new()
+
+// Producer thread
+let producer = Thread::spawn(fn(ch) -&gt; i64 {
+    Channel::send(ch, 1)
+    Channel::send(ch, 2)
+    Channel::send(ch, 3)
+    0
+}, ch)
+
+// Consumer
+let a = Channel::recv(ch)  // → 1
+let b = Channel::recv(ch)  // → 2
+let c = Channel::recv(ch)  // → 3
+
+producer.join()
+Channel::free(ch)
+</code></pre>
+<h2 id="bounded-channels"><a class="header" href="#bounded-channels">Bounded Channels</a></h2>
+<p>Bounded channels have a fixed capacity. Sends block when full.</p>
+<pre><code class="language-fajar">let ch = Channel::bounded(2)  // capacity = 2
+
+Channel::send(ch, 10)   // succeeds immediately
+Channel::send(ch, 20)   // succeeds immediately
+// Channel::send(ch, 30) would block until a recv
+
+let val = Channel::recv(ch)  // → 10 (FIFO order)
+</code></pre>
+<h3 id="try-send"><a class="header" href="#try-send">Try-Send</a></h3>
+<p>Non-blocking send attempt. Returns 1 on success, 0 if channel is full.</p>
+<pre><code class="language-fajar">let ch = Channel::bounded(1)
+Channel::send(ch, 42)
+let ok = Channel::try_send(ch, 99)  // → 0 (full)
+</code></pre>
+<h2 id="closing-channels"><a class="header" href="#closing-channels">Closing Channels</a></h2>
+<p>Close a channel to signal no more messages will be sent. Receivers get 0 after the channel is drained.</p>
+<pre><code class="language-fajar">let ch = Channel::new()
+Channel::send(ch, 42)
+ch.close()
+
+let val = Channel::recv(ch)  // → 42
+let end = Channel::recv(ch)  // → 0 (closed, no more data)
+</code></pre>
+<h2 id="pipeline-pattern"><a class="header" href="#pipeline-pattern">Pipeline Pattern</a></h2>
+<p>Chain channels together for multi-stage processing:</p>
+<pre><code class="language-fajar">let ch1 = Channel::new()
+let ch2 = Channel::new()
+
+// Stage 1: produce data
+let p = Thread::spawn(fn(ch) -&gt; i64 {
+    Channel::send(ch, 10)
+    Channel::send(ch, 20)
+    0
+}, ch1)
+
+// Stage 2: transform
+let t = Thread::spawn(fn(arg) -&gt; i64 {
+    let val = Channel::recv(ch1)
+    Channel::send(ch2, val * 2)
+    let val = Channel::recv(ch1)
+    Channel::send(ch2, val * 2)
+    0
+}, 0)
+
+let a = Channel::recv(ch2)  // → 20
+let b = Channel::recv(ch2)  // → 40
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mutexes-and-synchronization"><a class="header" href="#mutexes-and-synchronization">Mutexes and Synchronization</a></h1>
+<p>Fajar Lang provides several synchronization primitives for protecting shared state.</p>
+<h2 id="mutex"><a class="header" href="#mutex">Mutex</a></h2>
+<p>A Mutex (mutual exclusion lock) protects shared data from concurrent access.</p>
+<pre><code class="language-fajar">let m = Mutex::new(0)
+
+// Lock returns the current value
+let val = Mutex::lock(m)     // → 0
+Mutex::store(m, val + 1)     // update protected value
+
+let val2 = Mutex::lock(m)    // → 1
+Mutex::free(m)
+</code></pre>
+<h3 id="try-lock"><a class="header" href="#try-lock">Try-Lock</a></h3>
+<p>Non-blocking lock attempt:</p>
+<pre><code class="language-fajar">let m = Mutex::new(42)
+let result = Mutex::try_lock(m)  // → 42 (success)
+// If another thread holds the lock, try_lock returns 0 with failure flag
+</code></pre>
+<h2 id="rwlock"><a class="header" href="#rwlock">RwLock</a></h2>
+<p>A reader-writer lock allows multiple concurrent readers OR one exclusive writer.</p>
+<pre><code class="language-fajar">let rw = RwLock::new(100)
+
+// Multiple readers can read simultaneously
+let val = RwLock::read(rw)    // → 100
+// Another thread can also read at the same time
+
+// Writers get exclusive access
+RwLock::write(rw, 200)
+let val = RwLock::read(rw)    // → 200
+
+RwLock::free(rw)
+</code></pre>
+<h2 id="condition-variables"><a class="header" href="#condition-variables">Condition Variables</a></h2>
+<p>Condvars allow threads to wait for a condition to become true.</p>
+<pre><code class="language-fajar">let m = Mutex::new(0)
+let cv = Condvar::new()
+
+// Worker thread: wait for signal
+let worker = Thread::spawn(fn(arg) -&gt; i64 {
+    Condvar::wait(cv, m)  // releases mutex, waits, re-acquires
+    Mutex::lock(m)
+}, 0)
+
+// Signal the worker
+Mutex::store(m, 42)
+Condvar::notify_one(cv)   // wake one waiting thread
+// Condvar::notify_all(cv)  // wake ALL waiting threads
+
+worker.join()
+</code></pre>
+<h2 id="barrier"><a class="header" href="#barrier">Barrier</a></h2>
+<p>A Barrier synchronizes multiple threads at a rendezvous point.</p>
+<pre><code class="language-fajar">let barrier = Barrier::new(3)  // 3 threads must arrive
+
+// Each thread calls wait — blocks until all 3 arrive
+let h1 = Thread::spawn(fn(b) -&gt; i64 { Barrier::wait(b) }, barrier)
+let h2 = Thread::spawn(fn(b) -&gt; i64 { Barrier::wait(b) }, barrier)
+Barrier::wait(barrier)  // this thread is the 3rd — all proceed
+
+h1.join()
+h2.join()
+Barrier::free(barrier)
+</code></pre>
+<h2 id="pattern-thread-safe-counter"><a class="header" href="#pattern-thread-safe-counter">Pattern: Thread-Safe Counter</a></h2>
+<pre><code class="language-fajar">let counter = Mutex::new(0)
+
+let h1 = Thread::spawn(fn(m) -&gt; i64 {
+    let val = Mutex::lock(m)
+    Mutex::store(m, val + 1)
+    0
+}, counter)
+
+let h2 = Thread::spawn(fn(m) -&gt; i64 {
+    let val = Mutex::lock(m)
+    Mutex::store(m, val + 1)
+    0
+}, counter)
+
+h1.join()
+h2.join()
+let final_val = Mutex::lock(counter)  // → 2
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="atomic-operations"><a class="header" href="#atomic-operations">Atomic Operations</a></h1>
+<p>Atomics provide lock-free concurrent access to shared integers. They are the lowest-level synchronization primitive and the building block for higher-level abstractions.</p>
+<h2 id="creating-and-using-atomics"><a class="header" href="#creating-and-using-atomics">Creating and Using Atomics</a></h2>
+<pre><code class="language-fajar">let counter = Atomic::new(0)
+
+Atomic::store(counter, 42)
+let val = Atomic::load(counter)  // → 42
+
+Atomic::free(counter)
+</code></pre>
+<h2 id="arithmetic-operations"><a class="header" href="#arithmetic-operations">Arithmetic Operations</a></h2>
+<p>All arithmetic operations are atomic and return the <strong>previous</strong> value:</p>
+<pre><code class="language-fajar">let a = Atomic::new(10)
+
+let prev = Atomic::add(a, 5)    // prev = 10, new value = 15
+let prev = Atomic::sub(a, 3)    // prev = 15, new value = 12
+</code></pre>
+<h2 id="bitwise-operations"><a class="header" href="#bitwise-operations">Bitwise Operations</a></h2>
+<pre><code class="language-fajar">let a = Atomic::new(0xFF)
+
+let prev = Atomic::and(a, 0x0F)  // prev = 0xFF, new = 0x0F
+let prev = Atomic::or(a, 0xF0)   // prev = 0x0F, new = 0xFF
+let prev = Atomic::xor(a, 0xFF)  // prev = 0xFF, new = 0x00
+</code></pre>
+<h2 id="compare-and-swap-cas"><a class="header" href="#compare-and-swap-cas">Compare-and-Swap (CAS)</a></h2>
+<p>CAS is the fundamental atomic operation. It atomically compares the current value with <code>expected</code> and, if equal, replaces it with <code>desired</code>. Returns the value that was found.</p>
+<pre><code class="language-fajar">let a = Atomic::new(42)
+
+// CAS succeeds: old value (42) matches expected (42)
+let old = Atomic::cas(a, 42, 100)  // old = 42, new value = 100
+
+// CAS fails: old value (100) doesn't match expected (42)
+let old = Atomic::cas(a, 42, 200)  // old = 100, value unchanged
+</code></pre>
+<h2 id="memory-fences"><a class="header" href="#memory-fences">Memory Fences</a></h2>
+<p>Memory fences enforce ordering of memory operations:</p>
+<pre><code class="language-fajar">Atomic::fence()  // full memory barrier (SeqCst)
+</code></pre>
+<h2 id="pattern-spinlock"><a class="header" href="#pattern-spinlock">Pattern: Spinlock</a></h2>
+<p>Build a simple spinlock using CAS:</p>
+<pre><code class="language-fajar">let lock = Atomic::new(0)  // 0 = unlocked, 1 = locked
+
+// Acquire: spin until CAS succeeds
+fn acquire(lock) {
+    loop {
+        let old = Atomic::cas(lock, 0, 1)
+        if old == 0 { break }  // acquired
+    }
+}
+
+// Release
+Atomic::store(lock, 0)
+</code></pre>
+<h2 id="pattern-lock-free-counter"><a class="header" href="#pattern-lock-free-counter">Pattern: Lock-Free Counter</a></h2>
+<p>Multiple threads incrementing without locks:</p>
+<pre><code class="language-fajar">let counter = Atomic::new(0)
+
+let h1 = Thread::spawn(fn(c) -&gt; i64 {
+    let mut i = 0
+    while i &lt; 1000 {
+        Atomic::add(c, 1)
+        i = i + 1
+    }
+    0
+}, counter)
+
+let h2 = Thread::spawn(fn(c) -&gt; i64 {
+    let mut i = 0
+    while i &lt; 1000 {
+        Atomic::add(c, 1)
+        i = i + 1
+    }
+    0
+}, counter)
+
+h1.join()
+h2.join()
+let total = Atomic::load(counter)  // → 2000 (always correct)
+</code></pre>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<p>Atomics are significantly faster than mutex-based synchronization for simple operations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Throughput</th></tr>
+</thead>
+<tbody>
+<tr><td>Atomic add</td><td>~309M ops/sec</td></tr>
+<tr><td>Atomic CAS</td><td>~290M ops/sec</td></tr>
+<tr><td>Mutex lock/unlock</td><td>~70M ops/sec</td></tr>
+</tbody>
+</table>
+</div>
+<p>Use atomics for counters, flags, and simple shared state. Use mutexes when you need to protect complex data structures.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="asyncawait"><a class="header" href="#asyncawait">Async/Await</a></h1>
+<p>Fajar Lang supports asynchronous programming with <code>async</code> functions and <code>.await</code> for non-blocking execution.</p>
+<h2 id="async-functions"><a class="header" href="#async-functions">Async Functions</a></h2>
+<p>Mark a function <code>async</code> to make it return a Future:</p>
+<pre><code class="language-fajar">async fn fetch_data() -&gt; i64 {
+    sleep(10)  // non-blocking delay
+    42
+}
+</code></pre>
+<h2 id="awaiting-futures"><a class="header" href="#awaiting-futures">Awaiting Futures</a></h2>
+<p>Use <code>.await</code> to suspend execution until a future completes:</p>
+<pre><code class="language-fajar">async fn compute() -&gt; i64 {
+    let a = fetch_data().await   // suspends here
+    let b = fetch_data().await   // then suspends here
+    a + b
+}
+</code></pre>
+<h2 id="executor"><a class="header" href="#executor">Executor</a></h2>
+<p>The executor runs async tasks to completion:</p>
+<pre><code class="language-fajar">let exec = Executor::new()
+
+// block_on: run a single future to completion
+let result = Executor::block_on(future)
+
+// spawn: queue a future for execution
+Executor::spawn(exec, my_future)
+
+// run: execute all spawned futures, returns count completed
+let completed = Executor::run(exec)
+
+Executor::free(exec)
+</code></pre>
+<h2 id="sequential-awaits"><a class="header" href="#sequential-awaits">Sequential Awaits</a></h2>
+<p>Multiple <code>.await</code> points execute sequentially. Local variables are preserved across await points:</p>
+<pre><code class="language-fajar">async fn pipeline() -&gt; i64 {
+    let x = step1().await      // x = result of step1
+    let y = step2(x).await     // y = result of step2(x)
+    x + y                      // both values available
+}
+</code></pre>
+<h2 id="timers-and-sleep"><a class="header" href="#timers-and-sleep">Timers and Sleep</a></h2>
+<p>The <code>sleep()</code> builtin provides a simple delay:</p>
+<pre><code class="language-fajar">sleep(100)  // pause for 100 milliseconds
+</code></pre>
+<p>For more control, use the Timer wheel:</p>
+<pre><code class="language-fajar">let timer = Timer::new()
+let waker = Waker::new()
+
+timer.schedule(100, waker)  // fire after 100ms
+timer.tick()                // check and fire expired timers
+let remaining = timer.pending()  // count of unfired timers
+
+timer.free()
+waker.free()
+</code></pre>
+<h2 id="comparison-with-rust-and-go"><a class="header" href="#comparison-with-rust-and-go">Comparison with Rust and Go</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Fajar Lang</th><th>Rust</th><th>Go</th></tr>
+</thead>
+<tbody>
+<tr><td>Async model</td><td>Eager (future runs immediately)</td><td>Lazy (needs .await to start)</td><td>Goroutines (implicit scheduling)</td></tr>
+<tr><td>Runtime</td><td>Minimal executor</td><td>tokio/async-std</td><td>Built-in goroutine scheduler</td></tr>
+<tr><td>Cancellation</td><td>Manual (free future)</td><td>Drop-based</td><td>Context cancellation</td></tr>
+<tr><td>Thread safety</td><td>Send/Sync at compile time</td><td>Send/Sync at compile time</td><td>Race detector (runtime)</td></tr>
+<tr><td>Channels</td><td>Typed, bounded/unbounded</td><td>mpsc/crossbeam</td><td>Built-in, typed</td></tr>
+<tr><td>Syntax</td><td><code>async fn</code> + <code>.await</code></td><td><code>async fn</code> + <code>.await</code></td><td><code>go func()</code> + <code>&lt;-chan</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="key-differences"><a class="header" href="#key-differences">Key Differences</a></h3>
+<p><strong>vs Rust:</strong> Fajar Lang uses an eager execution model (futures start executing when created) and has a simpler executor without the complexity of pinning or wakers. No lifetime annotations needed.</p>
+<p><strong>vs Go:</strong> Fajar Lang provides compile-time thread safety (Send/Sync) instead of Go’s runtime race detector. Channels are explicit with bounded/unbounded variants rather than Go’s single buffered channel type.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tensor-operations"><a class="header" href="#tensor-operations">Tensor Operations</a></h1>
+<p>Tensors are first-class types in Fajar Lang, backed by ndarray for efficient computation.</p>
+<h2 id="creating-tensors"><a class="header" href="#creating-tensors">Creating Tensors</a></h2>
+<pre><code class="language-fajar">let z = zeros(3, 4)          // 3x4 zero tensor
+let o = ones(2, 2)           // 2x2 ones tensor
+let r = randn(5, 5)          // 5x5 random normal
+let e = eye(3)               // 3x3 identity matrix
+let w = xavier(4, 8)         // Xavier-initialized weights
+</code></pre>
+<h2 id="from-data"><a class="header" href="#from-data">From Data</a></h2>
+<pre><code class="language-fajar">let t = from_data([1.0, 2.0, 3.0, 4.0], [2, 2])  // 2x2 tensor
+let s = arange(0.0, 10.0, 1.0)                     // [0, 1, ..., 9]
+let l = linspace(0.0, 1.0, 5)                      // [0, 0.25, 0.5, 0.75, 1.0]
+</code></pre>
+<h2 id="arithmetic"><a class="header" href="#arithmetic">Arithmetic</a></h2>
+<pre><code class="language-fajar">let a = ones(3, 3)
+let b = ones(3, 3)
+let sum = add(a, b)         // element-wise addition
+let diff = sub(a, b)        // element-wise subtraction
+let prod = mul(a, b)        // element-wise multiplication
+let quot = div(a, b)        // element-wise division
+</code></pre>
+<h2 id="matrix-operations"><a class="header" href="#matrix-operations">Matrix Operations</a></h2>
+<pre><code class="language-fajar">let c = matmul(a, b)        // matrix multiplication
+let t = transpose(a)        // transpose
+let r = reshape(a, [1, 9])  // reshape to 1x9
+let f = flatten(a)          // flatten to 1D
+</code></pre>
+<h2 id="activation-functions"><a class="header" href="#activation-functions">Activation Functions</a></h2>
+<pre><code class="language-fajar">let y = relu(x)             // max(0, x)
+let y = sigmoid(x)          // 1 / (1 + exp(-x))
+let y = tanh_act(x)         // hyperbolic tangent
+let y = softmax(x)          // normalized exponential
+let y = gelu(x)             // Gaussian error linear unit
+let y = leaky_relu(x)       // max(0.01x, x)
+</code></pre>
+<h2 id="tensor-properties"><a class="header" href="#tensor-properties">Tensor Properties</a></h2>
+<pre><code class="language-fajar">let shape = tensor_shape(t)  // dimensions
+let size = tensor_size(t)    // total elements
+</code></pre>
+<h2 id="gradient-tracking"><a class="header" href="#gradient-tracking">Gradient Tracking</a></h2>
+<pre><code class="language-fajar">set_requires_grad(t, true)  // enable gradient tracking
+backward(loss)               // compute gradients
+let g = grad(t)              // access gradient
+zero_grad(t)                 // reset gradients
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="neural-networks"><a class="header" href="#neural-networks">Neural Networks</a></h1>
+<h2 id="layers"><a class="header" href="#layers">Layers</a></h2>
+<p>Fajar provides built-in neural network layers:</p>
+<pre><code class="language-fajar">let dense = Dense(784, 128)              // fully connected
+let conv = Conv2d(3, 16, 3)              // convolution
+let attn = MultiHeadAttention(512, 8)    // attention
+let bn = BatchNorm(128)                  // batch normalization
+let drop = Dropout(0.5)                  // dropout
+let emb = Embedding(10000, 256)          // word embeddings
+</code></pre>
+<h2 id="forward-pass"><a class="header" href="#forward-pass">Forward Pass</a></h2>
+<pre><code class="language-fajar">@device fn forward(x: Tensor) -&gt; Tensor {
+    let h1 = relu(dense1.forward(x))
+    let h2 = relu(dense2.forward(h1))
+    softmax(output_layer.forward(h2))
+}
+</code></pre>
+<h2 id="loss-functions"><a class="header" href="#loss-functions">Loss Functions</a></h2>
+<pre><code class="language-fajar">let l = mse_loss(predicted, target)         // mean squared error
+let l = cross_entropy(predicted, target)    // cross-entropy
+let l = bce_loss(predicted, target)         // binary cross-entropy
+let l = l1_loss(predicted, target)          // L1 (MAE)
+</code></pre>
+<h2 id="optimizers"><a class="header" href="#optimizers">Optimizers</a></h2>
+<pre><code class="language-fajar">let sgd = SGD::new(0.01)                   // learning rate 0.01
+let adam = Adam::new(0.001)                 // Adam optimizer
+
+// Training step
+optimizer.step()
+optimizer.zero_grad()
+</code></pre>
+<h2 id="metrics"><a class="header" href="#metrics">Metrics</a></h2>
+<pre><code class="language-fajar">let acc = accuracy(predicted, labels)
+let prec = precision(predicted, labels)
+let rec = recall(predicted, labels)
+let f1 = f1_score(predicted, labels)
+</code></pre>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><code class="language-fajar">@device fn train_step(x: Tensor, y: Tensor, w: Tensor) -&gt; f64 {
+    let pred = sigmoid(matmul(x, w))
+    let loss = mse_loss(pred, y)
+    backward(loss)
+    loss
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="training"><a class="header" href="#training">Training</a></h1>
+<h2 id="training-loop"><a class="header" href="#training-loop">Training Loop</a></h2>
+<pre><code class="language-fajar">let optimizer = Adam::new(0.001)
+
+for epoch in 0..100 {
+    let pred = forward(x_train, weights)
+    let loss = cross_entropy(pred, y_train)
+    backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
+
+    if epoch % 10 == 0 {
+        println("Epoch " + to_string(epoch) + " loss: " + to_string(loss))
+    }
+}
+</code></pre>
+<h2 id="data-loading"><a class="header" href="#data-loading">Data Loading</a></h2>
+<pre><code class="language-fajar">let loader = DataLoader::new(data, labels, 32)  // batch size 32
+loader.shuffle()
+
+while loader.has_next() {
+    let batch = loader.next_batch()
+    let batch_labels = loader.next_labels()
+    // ... training step
+}
+loader.reset()
+</code></pre>
+<h2 id="model-checkpointing"><a class="header" href="#model-checkpointing">Model Checkpointing</a></h2>
+<pre><code class="language-fajar">// Save
+checkpoint_save("model.ckpt", weights, epoch, loss)
+
+// Load
+let (weights, epoch, loss) = checkpoint_load("model.ckpt")
+</code></pre>
+<h2 id="mnist-example"><a class="header" href="#mnist-example">MNIST Example</a></h2>
+<pre><code class="language-fajar">// Load MNIST data
+let images = parse_idx_images("train-images.idx")
+let labels = parse_idx_labels("train-labels.idx")
+
+// Simple neural network
+let w1 = xavier(784, 128)
+let w2 = xavier(128, 10)
+
+for epoch in 0..10 {
+    let h = relu(matmul(images, w1))
+    let out = softmax(matmul(h, w2))
+    let loss = cross_entropy(out, labels)
+    backward(loss)
+    // update weights...
+}
+</code></pre>
+<h2 id="int8-quantization"><a class="header" href="#int8-quantization">INT8 Quantization</a></h2>
+<p>For embedded deployment:</p>
+<pre><code class="language-fajar">let w_q = quantize_int8(weights)     // float32 -&gt; int8
+let w_f = dequantize(w_q)            // int8 -&gt; float32
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="embedded-inference"><a class="header" href="#embedded-inference">Embedded Inference</a></h1>
+<h2 id="quantized-models"><a class="header" href="#quantized-models">Quantized Models</a></h2>
+<p>Fajar supports INT8 quantization for inference without a floating-point unit:</p>
+<pre><code class="language-fajar">// Quantize trained weights
+let w1_q = quantize_int8(w1)
+let w2_q = quantize_int8(w2)
+
+// INT8 inference uses only integer arithmetic
+@device fn inference(input: Tensor) -&gt; Tensor {
+    let h = relu(matmul(input, w1_q))
+    sigmoid(matmul(h, w2_q))
+}
+</code></pre>
+<h2 id="cross-compilation"><a class="header" href="#cross-compilation">Cross-Compilation</a></h2>
+<p>Build for embedded targets:</p>
+<pre><code class="language-bash">fj build --target aarch64 --release model.fj   # ARM Cortex-A
+fj build --target riscv64 --release model.fj   # RISC-V
+</code></pre>
+<h2 id="no-fpu-targets"><a class="header" href="#no-fpu-targets">No-FPU Targets</a></h2>
+<p>INT8 quantized models work on processors without floating-point hardware. The quantization converts:</p>
+<ul>
+<li>Weights: <code>f32</code> -&gt; <code>i8</code> (256 levels)</li>
+<li>Activations: <code>f32</code> -&gt; <code>i8</code></li>
+<li>All arithmetic: integer multiply-accumulate</li>
+</ul>
+<h2 id="memory-footprint"><a class="header" href="#memory-footprint">Memory Footprint</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Model</th><th>Float32</th><th>INT8</th><th>Savings</th></tr>
+</thead>
+<tbody>
+<tr><td>Dense(784,128)</td><td>392 KB</td><td>98 KB</td><td>4x</td></tr>
+<tr><td>Dense(128,10)</td><td>5 KB</td><td>1.3 KB</td><td>4x</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="bare-metal-deployment"><a class="header" href="#bare-metal-deployment">Bare-Metal Deployment</a></h2>
+<pre><code class="language-fajar">#[no_std]
+@entry
+@kernel fn main() {
+    let input = read_sensor_data()
+    let result = inference(Tensor::from_slice(input))
+    if result &gt; 0.5 {
+        activate_output()
+    }
+}
+</code></pre>
+<h2 id="onnx-export"><a class="header" href="#onnx-export">ONNX Export</a></h2>
+<p>Export models for deployment on other platforms:</p>
+<pre><code class="language-fajar">let model = build_onnx_model(layers)
+onnx_save("model.onnx", model)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="context-annotations-1"><a class="header" href="#context-annotations-1">Context Annotations</a></h1>
+<p>Fajar’s unique context annotation system enforces domain isolation at compile time.</p>
+<h2 id="the-four-contexts"><a class="header" href="#the-four-contexts">The Four Contexts</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Context</th><th>Heap</th><th>Tensors</th><th>Raw Pointers</th><th>IRQ/Syscall</th></tr>
+</thead>
+<tbody>
+<tr><td><code>@safe</code></td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><code>@kernel</code></td><td>No</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>@device</code></td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+<tr><td><code>@unsafe</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="safe-default"><a class="header" href="#safe-default">@safe (Default)</a></h2>
+<p>The safest context. No hardware access, no raw pointers:</p>
+<pre><code class="language-fajar">@safe fn process(data: str) -&gt; i64 {
+    let result = parse_int(data)?
+    result * 2
+}
+</code></pre>
+<h2 id="kernel"><a class="header" href="#kernel">@kernel</a></h2>
+<p>For OS-level code. Access to hardware, no heap allocation:</p>
+<pre><code class="language-fajar">@kernel fn interrupt_handler() {
+    let key = port_read(0x60)
+    // String::new()  -&gt; KE001: heap not allowed
+    // zeros(3,3)     -&gt; KE002: tensor not allowed
+}
+</code></pre>
+<h2 id="device"><a class="header" href="#device">@device</a></h2>
+<p>For ML/compute code. Access to tensors, no hardware:</p>
+<pre><code class="language-fajar">@device fn forward(x: Tensor) -&gt; Tensor {
+    relu(matmul(x, weights))
+    // port_read(0x60)  -&gt; DE001: hardware not allowed
+}
+</code></pre>
+<h2 id="unsafe"><a class="header" href="#unsafe">@unsafe</a></h2>
+<p>Full access (escape hatch):</p>
+<pre><code class="language-fajar">@unsafe fn raw_access() {
+    let ptr = mem_alloc(4096)
+    let t = zeros(3, 3)
+    port_write(0x64, 0xFE)
+}
+</code></pre>
+<h2 id="cross-context-calls"><a class="header" href="#cross-context-calls">Cross-Context Calls</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Caller</th><th>Can call @safe</th><th>Can call @kernel</th><th>Can call @device</th></tr>
+</thead>
+<tbody>
+<tr><td>@safe</td><td>Yes</td><td>No</td><td>No</td></tr>
+<tr><td>@kernel</td><td>Yes</td><td>Yes</td><td>No (KE003)</td></tr>
+<tr><td>@device</td><td>Yes</td><td>No (DE002)</td><td>Yes</td></tr>
+<tr><td>@unsafe</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="why-this-matters"><a class="header" href="#why-this-matters">Why This Matters</a></h2>
+<p>Context annotations prevent entire classes of bugs:</p>
+<ul>
+<li><strong>No accidental hardware access from ML code</strong> (buffer overflows, memory corruption)</li>
+<li><strong>No accidental tensor ops in kernel</strong> (heap fragmentation, unpredictable latency)</li>
+<li><strong>Compile-time enforcement</strong> (not runtime checks)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h1>
+<h2 id="physical-memory"><a class="header" href="#physical-memory">Physical Memory</a></h2>
+<pre><code class="language-fajar">@kernel fn setup() {
+    let ptr = mem_alloc(4096)           // allocate 4KB
+    mem_write(ptr, 0, 0xDEADBEEF)      // write at offset 0
+    let val = mem_read(ptr, 0)          // read back
+    mem_free(ptr)                        // deallocate
+}
+</code></pre>
+<h2 id="page-tables"><a class="header" href="#page-tables">Page Tables</a></h2>
+<pre><code class="language-fajar">@kernel fn map_video() {
+    page_map(0xB8000, PageFlags::ReadWrite)
+    page_map(0xB9000, PageFlags::ReadOnly)
+    page_unmap(0xB8000)
+}
+</code></pre>
+<h2 id="memory-operations"><a class="header" href="#memory-operations">Memory Operations</a></h2>
+<pre><code class="language-fajar">@kernel fn copy_data() {
+    memory_copy(dest, src, 256)          // memcpy
+    memory_set(buffer, 0, 4096)          // memset
+    let eq = memory_compare(a, b, 16)    // memcmp
+}
+</code></pre>
+<h2 id="custom-allocators"><a class="header" href="#custom-allocators">Custom Allocators</a></h2>
+<p>Fajar includes three built-in allocator strategies:</p>
+<pre><code class="language-fajar">// Bump allocator (fast, no dealloc)
+let bump = BumpAllocator::new(heap_start, heap_size)
+
+// Free-list allocator (general purpose)
+let freelist = FreeListAllocator::new(heap_start, heap_size)
+
+// Pool allocator (fixed-size blocks)
+let pool = PoolAllocator::new(heap_start, block_size, count)
+</code></pre>
+<h2 id="type-safe-addresses"><a class="header" href="#type-safe-addresses">Type-Safe Addresses</a></h2>
+<pre><code class="language-fajar">@kernel fn safe_addressing() {
+    let phys: PhysAddr = PhysAddr(0x1000)
+    let virt: VirtAddr = VirtAddr(0xFFFF_8000_0000_0000)
+    // PhysAddr and VirtAddr are distinct types -- cannot be mixed
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="interrupts"><a class="header" href="#interrupts">Interrupts</a></h1>
+<h2 id="registering-handlers"><a class="header" href="#registering-handlers">Registering Handlers</a></h2>
+<pre><code class="language-fajar">@kernel fn init_interrupts() {
+    irq_register(0x20, timer_handler)      // timer
+    irq_register(0x21, keyboard_handler)   // keyboard
+    irq_enable(0x20)
+    irq_enable(0x21)
+}
+</code></pre>
+<h2 id="interrupt-handler"><a class="header" href="#interrupt-handler">Interrupt Handler</a></h2>
+<pre><code class="language-fajar">@kernel fn keyboard_handler() {
+    let scancode = port_read(0x60)
+    // Process scancode...
+}
+
+@kernel fn timer_handler() {
+    // Called on each timer tick
+}
+</code></pre>
+<h2 id="enablingdisabling"><a class="header" href="#enablingdisabling">Enabling/Disabling</a></h2>
+<pre><code class="language-fajar">@kernel fn critical_section() {
+    irq_disable(0x21)    // disable keyboard interrupt
+    // ... do critical work ...
+    irq_enable(0x21)     // re-enable
+}
+</code></pre>
+<h2 id="unregistering"><a class="header" href="#unregistering">Unregistering</a></h2>
+<pre><code class="language-fajar">@kernel fn cleanup() {
+    irq_disable(0x21)
+    irq_unregister(0x21)
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="system-calls"><a class="header" href="#system-calls">System Calls</a></h1>
+<h2 id="defining-system-calls"><a class="header" href="#defining-system-calls">Defining System Calls</a></h2>
+<pre><code class="language-fajar">@kernel fn init_syscalls() {
+    syscall_define(1, sys_write)
+    syscall_define(2, sys_read)
+    syscall_define(3, sys_exit)
+}
+</code></pre>
+<h2 id="system-call-handlers"><a class="header" href="#system-call-handlers">System Call Handlers</a></h2>
+<pre><code class="language-fajar">@kernel fn sys_write(fd: i64, buf: ptr, len: i64) -&gt; i64 {
+    if fd == 1 {
+        // Write to stdout
+    }
+    len
+}
+
+@kernel fn sys_read(fd: i64, buf: ptr, len: i64) -&gt; i64 {
+    if fd == 0 {
+        // Read from stdin
+    }
+    0
+}
+</code></pre>
+<h2 id="dispatching"><a class="header" href="#dispatching">Dispatching</a></h2>
+<pre><code class="language-fajar">@kernel fn syscall_entry(num: i64, arg1: i64, arg2: i64, arg3: i64) -&gt; i64 {
+    syscall_dispatch(num, arg1, arg2, arg3)
+}
+</code></pre>
+<h2 id="port-io"><a class="header" href="#port-io">Port I/O</a></h2>
+<p>Direct hardware port access:</p>
+<pre><code class="language-fajar">@kernel fn port_operations() {
+    port_write(0x64, 0xFE)    // write to port
+    let val = port_read(0x60) // read from port
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cross-domain-bridges"><a class="header" href="#cross-domain-bridges">Cross-Domain Bridges</a></h1>
+<p>The bridge pattern connects <code>@kernel</code> (hardware) and <code>@device</code> (ML) contexts through <code>@safe</code> code.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Kernel code needs sensor data. ML code needs that data as tensors. But:</p>
+<ul>
+<li><code>@kernel</code> cannot create tensors (KE002)</li>
+<li><code>@device</code> cannot access hardware (DE001)</li>
+</ul>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<pre><code class="language-fajar">@kernel fn read_sensors() -&gt; [f32; 4] {
+    [
+        port_read(0x40) as f32,
+        port_read(0x41) as f32,
+        port_read(0x42) as f32,
+        port_read(0x43) as f32
+    ]
+}
+
+@device fn infer(input: Tensor) -&gt; Tensor {
+    let hidden = relu(matmul(input, weights))
+    sigmoid(matmul(hidden, output_weights))
+}
+
+@safe fn control_loop() {
+    let raw = read_sensors()                    // @kernel -&gt; raw data
+    let tensor = Tensor::from_slice(raw)        // convert to tensor
+    let prediction = infer(tensor)              // @device -&gt; ML inference
+    let action = Action::from_prediction(prediction)
+    execute(action)                              // back to @kernel
+}
+</code></pre>
+<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<pre><code>@kernel (hardware)
+    |
+    | raw sensor data [f32; 4]
+    v
+@safe (bridge)
+    |
+    | Tensor::from_slice()
+    v
+@device (ML inference)
+    |
+    | prediction result
+    v
+@safe (bridge)
+    |
+    | convert to action
+    v
+@kernel (actuator control)
+</code></pre>
+<h2 id="why-bridges-matter"><a class="header" href="#why-bridges-matter">Why Bridges Matter</a></h2>
+<ul>
+<li><strong>Type-safe</strong>: The compiler verifies each context only uses allowed operations</li>
+<li><strong>Zero overhead</strong>: Context annotations are compile-time only, no runtime checks</li>
+<li><strong>Clear data flow</strong>: The bridge pattern makes domain boundaries explicit</li>
+<li><strong>Testable</strong>: Each context can be unit-tested independently</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="your-first-ml-model-on-bare-metal"><a class="header" href="#your-first-ml-model-on-bare-metal">Your First ML Model on Bare Metal</a></h1>
+<p>This tutorial walks through building a simple neural network that runs on embedded hardware using Fajar Lang.</p>
+<h2 id="step-1-define-the-model"><a class="header" href="#step-1-define-the-model">Step 1: Define the Model</a></h2>
+<pre><code class="language-fajar">@device fn forward(input: Tensor, w1: Tensor, w2: Tensor) -&gt; Tensor {
+    let hidden = relu(matmul(input, w1))
+    let output = sigmoid(matmul(hidden, w2))
+    output
+}
+</code></pre>
+<h2 id="step-2-initialize-weights"><a class="header" href="#step-2-initialize-weights">Step 2: Initialize Weights</a></h2>
+<pre><code class="language-fajar">let w1 = xavier(4, 8)     // 4 inputs -&gt; 8 hidden
+let w2 = xavier(8, 1)     // 8 hidden -&gt; 1 output
+</code></pre>
+<h2 id="step-3-training-loop"><a class="header" href="#step-3-training-loop">Step 3: Training Loop</a></h2>
+<pre><code class="language-fajar">let lr = 0.01
+let optimizer = SGD::new(lr)
+
+for epoch in 0..100 {
+    let pred = forward(x_train, w1, w2)
+    let loss = mse_loss(pred, y_train)
+    backward(loss)
+    optimizer.step()
+    optimizer.zero_grad()
+}
+</code></pre>
+<h2 id="step-4-quantize-for-embedded"><a class="header" href="#step-4-quantize-for-embedded">Step 4: Quantize for Embedded</a></h2>
+<pre><code class="language-fajar">let w1_q = quantize_int8(w1)
+let w2_q = quantize_int8(w2)
+// INT8 inference uses integer-only arithmetic (no FPU needed)
+</code></pre>
+<h2 id="step-5-deploy-to-bare-metal"><a class="header" href="#step-5-deploy-to-bare-metal">Step 5: Deploy to Bare Metal</a></h2>
+<pre><code class="language-fajar">@kernel fn main() {
+    let sensor_data = read_sensors()
+    let input = Tensor::from_slice(sensor_data)
+    let result = forward(input, w1_q, w2_q)
+    if result &gt; 0.5 {
+        activate_motor()
+    }
+}
+</code></pre>
+<h2 id="cross-domain-bridge"><a class="header" href="#cross-domain-bridge">Cross-Domain Bridge</a></h2>
+<p>The <code>@safe</code> context bridges <code>@kernel</code> (hardware) and <code>@device</code> (ML):</p>
+<pre><code class="language-fajar">@kernel fn read_sensors() -&gt; [f32; 4] { /* hardware access */ }
+@device fn predict(x: Tensor) -&gt; Tensor { /* ML inference */ }
+
+@safe fn control_loop() {
+    let raw = read_sensors()
+    let tensor = Tensor::from_slice(raw)
+    let action = predict(tensor)
+    execute_action(action)
+}
+</code></pre>
+<p>The compiler enforces that <code>@kernel</code> code never touches tensors, and <code>@device</code> code never touches raw hardware. Violations are compile-time errors, not runtime crashes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="write-a-kernel-module"><a class="header" href="#write-a-kernel-module">Write a Kernel Module</a></h1>
+<p>This tutorial shows how to write bare-metal code with Fajar Lang’s <code>@kernel</code> context.</p>
+<h2 id="kernel-context"><a class="header" href="#kernel-context">Kernel Context</a></h2>
+<p>The <code>@kernel</code> annotation restricts code to safe OS primitives only:</p>
+<pre><code class="language-fajar">@kernel fn init_system() {
+    // Allowed: memory management, IRQ, syscalls, port I/O
+    let page = page_map(0x1000, PageFlags::ReadWrite)
+    irq_register(0x21, keyboard_handler)
+
+    // Forbidden (compile-time error):
+    // let s = String::new()     // KE001: no heap in kernel
+    // let t = zeros(3, 3)       // KE002: no tensor in kernel
+}
+</code></pre>
+<h2 id="memory-management-1"><a class="header" href="#memory-management-1">Memory Management</a></h2>
+<pre><code class="language-fajar">@kernel fn setup_memory() {
+    // Allocate physical page
+    let ptr = mem_alloc(4096)
+
+    // Map virtual address
+    page_map(0xB8000, PageFlags::ReadWrite)
+
+    // Direct memory access
+    mem_write(ptr, 0, 0xDEADBEEF)
+    let val = mem_read(ptr, 0)
+}
+</code></pre>
+<h2 id="interrupt-handlers"><a class="header" href="#interrupt-handlers">Interrupt Handlers</a></h2>
+<pre><code class="language-fajar">@kernel fn keyboard_handler() {
+    let scancode = port_read(0x60)
+    // Process key press
+}
+
+@kernel fn init() {
+    irq_register(0x21, keyboard_handler)
+    irq_enable(0x21)
+}
+</code></pre>
+<h2 id="system-calls-1"><a class="header" href="#system-calls-1">System Calls</a></h2>
+<pre><code class="language-fajar">@kernel fn setup_syscalls() {
+    syscall_define(1, sys_write)
+    syscall_define(2, sys_read)
+}
+
+@kernel fn sys_write(fd: i64, buf: ptr, len: i64) -&gt; i64 {
+    // Write to file descriptor
+    len
+}
+</code></pre>
+<h2 id="bare-metal-entry-point"><a class="header" href="#bare-metal-entry-point">Bare Metal Entry Point</a></h2>
+<pre><code class="language-fajar">#[no_std]
+#[panic_handler]
+fn panic_handler() { loop {} }
+
+@entry
+@kernel fn _start() {
+    // First code to run after boot
+    setup_memory()
+    init_interrupts()
+    main_loop()
+}
+</code></pre>
+<h2 id="cross-compilation-1"><a class="header" href="#cross-compilation-1">Cross-Compilation</a></h2>
+<p>Build for embedded targets:</p>
+<pre><code class="language-bash">fj build --target aarch64 --no-std kernel.fj   # ARM64
+fj build --target riscv64 --no-std kernel.fj   # RISC-V
+</code></pre>
+<h2 id="linker-scripts"><a class="header" href="#linker-scripts">Linker Scripts</a></h2>
+<p>Control memory layout:</p>
+<pre><code class="language-fajar">@section(".text.boot")
+@entry
+@kernel fn _start() {
+    // Placed at boot address
+}
+
+@section(".bss")
+const STACK_SIZE: usize = 4096
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<pre><code>fj &lt;command&gt; [options] [file]
+</code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="run--execute-a-program"><a class="header" href="#run--execute-a-program"><code>run</code> — Execute a program</a></h3>
+<pre><code class="language-bash">fj run program.fj           # interpreter (tree-walking)
+fj run --vm program.fj      # bytecode VM
+fj run --native program.fj  # native JIT compilation (fastest)
+</code></pre>
+<h3 id="check--type-check-without-running"><a class="header" href="#check--type-check-without-running"><code>check</code> — Type-check without running</a></h3>
+<pre><code class="language-bash">fj check program.fj         # report errors without execution
+</code></pre>
+<h3 id="build--compile-to-binary"><a class="header" href="#build--compile-to-binary"><code>build</code> — Compile to binary</a></h3>
+<pre><code class="language-bash">fj build program.fj                   # debug build
+fj build --release program.fj         # optimized build
+fj build --target aarch64 program.fj  # cross-compile for ARM64
+fj build --target riscv64 program.fj  # cross-compile for RISC-V
+</code></pre>
+<h3 id="repl--interactive-shell"><a class="header" href="#repl--interactive-shell"><code>repl</code> — Interactive shell</a></h3>
+<pre><code class="language-bash">fj repl                     # start REPL with analyzer
+</code></pre>
+<h3 id="new--create-a-project"><a class="header" href="#new--create-a-project"><code>new</code> — Create a project</a></h3>
+<pre><code class="language-bash">fj new my_project           # creates directory with fj.toml
+</code></pre>
+<h3 id="fmt--format-source-code"><a class="header" href="#fmt--format-source-code"><code>fmt</code> — Format source code</a></h3>
+<pre><code class="language-bash">fj fmt program.fj           # format in place
+</code></pre>
+<h3 id="lsp--start-language-server"><a class="header" href="#lsp--start-language-server"><code>lsp</code> — Start Language Server</a></h3>
+<pre><code class="language-bash">fj lsp                      # LSP for editor integration
+</code></pre>
+<h3 id="diagnostic-commands"><a class="header" href="#diagnostic-commands">Diagnostic Commands</a></h3>
+<pre><code class="language-bash">fj dump-tokens program.fj   # show lexer output
+fj dump-ast program.fj      # show parser AST
+</code></pre>
+<h2 id="project-configuration"><a class="header" href="#project-configuration">Project Configuration</a></h2>
+<p>Projects use <code>fj.toml</code>:</p>
+<pre><code class="language-toml">[package]
+name = "my_project"
+version = "0.1.0"
+
+[build]
+target = "x86_64"
+opt_level = "speed"
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="formatter"><a class="header" href="#formatter">Formatter</a></h1>
+<h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
+<pre><code class="language-bash">fj fmt file.fj           # format a file in place
+fj fmt --check file.fj   # check formatting without modifying
+</code></pre>
+<h2 id="formatting-rules"><a class="header" href="#formatting-rules">Formatting Rules</a></h2>
+<p>The Fajar formatter enforces consistent style:</p>
+<ul>
+<li>4-space indentation</li>
+<li>No trailing whitespace</li>
+<li>Single blank line between top-level items</li>
+<li>Consistent brace placement</li>
+<li>Aligned struct field types</li>
+</ul>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>Before:</p>
+<pre><code class="language-fajar">fn add( a:i64,b:i64 )-&gt;i64{
+a+b
+}
+struct Point{x:f64,y:f64}
+</code></pre>
+<p>After:</p>
+<pre><code class="language-fajar">fn add(a: i64, b: i64) -&gt; i64 {
+    a + b
+}
+
+struct Point {
+    x: f64,
+    y: f64
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="lsp-server"><a class="header" href="#lsp-server">LSP Server</a></h1>
+<p>Fajar Lang includes a Language Server Protocol implementation for editor integration.</p>
+<h2 id="starting-the-server"><a class="header" href="#starting-the-server">Starting the Server</a></h2>
+<pre><code class="language-bash">fj lsp
+</code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><strong>Diagnostics</strong>: Real-time error highlighting (lex, parse, semantic errors)</li>
+<li><strong>Go-to-definition</strong>: Jump to function and type definitions</li>
+<li><strong>Hover</strong>: Type information on hover</li>
+<li><strong>Auto-completion</strong>: Suggest function names, keywords, and types</li>
+</ul>
+<h2 id="vs-code-setup"><a class="header" href="#vs-code-setup">VS Code Setup</a></h2>
+<ol>
+<li>Install the Fajar Lang extension</li>
+<li>The extension automatically starts <code>fj lsp</code> in the background</li>
+<li>Open any <code>.fj</code> file to see diagnostics</li>
+</ol>
+<h2 id="editor-support"><a class="header" href="#editor-support">Editor Support</a></h2>
+<p>The LSP server works with any editor that supports the Language Server Protocol:</p>
+<ul>
+<li>VS Code</li>
+<li>Neovim (via nvim-lspconfig)</li>
+<li>Emacs (via lsp-mode)</li>
+<li>Helix</li>
+<li>Sublime Text (via LSP package)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="package-manager"><a class="header" href="#package-manager">Package Manager</a></h1>
+<h2 id="project-configuration-1"><a class="header" href="#project-configuration-1">Project Configuration</a></h2>
+<p>Every Fajar project has a <code>fj.toml</code>:</p>
+<pre><code class="language-toml">[package]
+name = "my_project"
+version = "0.1.0"
+edition = "2026"
+
+[build]
+target = "x86_64"
+opt_level = "speed"
+
+[dependencies]
+# future: dependency resolution
+</code></pre>
+<h2 id="creating-a-project"><a class="header" href="#creating-a-project">Creating a Project</a></h2>
+<pre><code class="language-bash">fj new my_project
+</code></pre>
+<p>Creates:</p>
+<pre><code>my_project/
+  fj.toml
+  src/
+    main.fj
+</code></pre>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<pre><code class="language-bash">cd my_project
+fj build              # debug build
+fj build --release    # optimized build
+fj run                # build and run
+</code></pre>
+<h2 id="standard-library"><a class="header" href="#standard-library">Standard Library</a></h2>
+<p>Fajar includes built-in modules:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Module</th><th>Contents</th></tr>
+</thead>
+<tbody>
+<tr><td><code>std::io</code></td><td>print, println, read_file, write_file</td></tr>
+<tr><td><code>std::math</code></td><td>PI, E, sqrt, sin, cos, abs, pow</td></tr>
+<tr><td><code>std::string</code></td><td>trim, split, replace, contains</td></tr>
+<tr><td><code>std::collections</code></td><td>Array methods, HashMap</td></tr>
+<tr><td><code>nn::tensor</code></td><td>zeros, ones, randn, xavier</td></tr>
+<tr><td><code>nn::ops</code></td><td>matmul, relu, sigmoid, softmax</td></tr>
+<tr><td><code>os::memory</code></td><td>mem_alloc, page_map</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="error-codes"><a class="header" href="#error-codes">Error Codes</a></h1>
+<h2 id="lex-errors-le"><a class="header" href="#lex-errors-le">Lex Errors (LE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>LE001</td><td>UnterminatedString</td><td>String literal missing closing quote</td></tr>
+<tr><td>LE002</td><td>InvalidChar</td><td>Unrecognized character in source</td></tr>
+<tr><td>LE003</td><td>UnterminatedComment</td><td>Block comment missing <code>*/</code></td></tr>
+<tr><td>LE004</td><td>InvalidNumber</td><td>Malformed numeric literal</td></tr>
+<tr><td>LE005</td><td>InvalidEscape</td><td>Unknown escape sequence in string</td></tr>
+<tr><td>LE006</td><td>UnterminatedChar</td><td>Character literal missing closing quote</td></tr>
+<tr><td>LE007</td><td>EmptyChar</td><td>Empty character literal</td></tr>
+<tr><td>LE008</td><td>MultiChar</td><td>Character literal with multiple characters</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="parse-errors-pe"><a class="header" href="#parse-errors-pe">Parse Errors (PE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>PE001</td><td>UnexpectedToken</td><td>Token not expected at this position</td></tr>
+<tr><td>PE002</td><td>ExpectedExpression</td><td>Expression expected but not found</td></tr>
+<tr><td>PE003</td><td>ExpectedType</td><td>Type annotation expected</td></tr>
+<tr><td>PE004</td><td>UnmatchedParen</td><td>Mismatched parentheses or brackets</td></tr>
+<tr><td>PE005</td><td>ExpectedBlock</td><td>Block <code>{ }</code> expected</td></tr>
+<tr><td>PE006</td><td>InvalidPattern</td><td>Invalid pattern in match arm</td></tr>
+<tr><td>PE007</td><td>ExpectedIdentifier</td><td>Identifier name expected</td></tr>
+<tr><td>PE008</td><td>DuplicateField</td><td>Duplicate field in struct</td></tr>
+<tr><td>PE009</td><td>InvalidAssignment</td><td>Invalid left-hand side of assignment</td></tr>
+<tr><td>PE010</td><td>ExpectedSemicolon</td><td>Statement separator expected</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="semantic-errors-se"><a class="header" href="#semantic-errors-se">Semantic Errors (SE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>SE001</td><td>UndefinedVariable</td><td>Variable not defined in scope</td></tr>
+<tr><td>SE002</td><td>UndefinedFunction</td><td>Function not defined</td></tr>
+<tr><td>SE003</td><td>UndefinedType</td><td>Type not defined</td></tr>
+<tr><td>SE004</td><td>TypeMismatch</td><td>Expected type does not match actual type</td></tr>
+<tr><td>SE005</td><td>ArityMismatch</td><td>Wrong number of arguments</td></tr>
+<tr><td>SE006</td><td>ImmutableAssign</td><td>Cannot assign to immutable variable</td></tr>
+<tr><td>SE007</td><td>DuplicateDefinition</td><td>Name already defined in scope</td></tr>
+<tr><td>SE008</td><td>ReturnOutsideFunction</td><td><code>return</code> outside function body</td></tr>
+<tr><td>SE009</td><td>UnusedVariable</td><td>Variable declared but never used (warning)</td></tr>
+<tr><td>SE010</td><td>UnreachableCode</td><td>Code after <code>return</code> or <code>break</code> (warning)</td></tr>
+<tr><td>SE011</td><td>MissingReturn</td><td>Function may not return a value</td></tr>
+<tr><td>SE012</td><td>InvalidContext</td><td>Operation invalid in current context</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="kernel-errors-ke"><a class="header" href="#kernel-errors-ke">Kernel Errors (KE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>KE001</td><td>HeapAllocInKernel</td><td>Heap allocation in <code>@kernel</code> context</td></tr>
+<tr><td>KE002</td><td>TensorInKernel</td><td>Tensor operation in <code>@kernel</code> context</td></tr>
+<tr><td>KE003</td><td>DeviceCallInKernel</td><td>Calling <code>@device</code> function from <code>@kernel</code></td></tr>
+<tr><td>KE004</td><td>InvalidKernelOp</td><td>Operation not allowed in <code>@kernel</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="device-errors-de"><a class="header" href="#device-errors-de">Device Errors (DE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>DE001</td><td>RawPointerInDevice</td><td>Raw pointer in <code>@device</code> context</td></tr>
+<tr><td>DE002</td><td>HardwareInDevice</td><td>Hardware access in <code>@device</code> context</td></tr>
+<tr><td>DE003</td><td>InvalidDeviceOp</td><td>Operation not allowed in <code>@device</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="memory-errors-me"><a class="header" href="#memory-errors-me">Memory Errors (ME)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>ME001</td><td>UseAfterMove</td><td>Variable used after ownership transfer</td></tr>
+<tr><td>ME002</td><td>DoubleFree</td><td>Value freed more than once</td></tr>
+<tr><td>ME003</td><td>BorrowConflict</td><td>Mutable and immutable borrows conflict</td></tr>
+<tr><td>ME004</td><td>DanglingReference</td><td>Reference outlives its target</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="codegen-errors-ce"><a class="header" href="#codegen-errors-ce">Codegen Errors (CE)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Name</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>CE001</td><td>UnsupportedTarget</td><td>Target architecture not supported</td></tr>
+<tr><td>CE002</td><td>LinkError</td><td>Linker failed</td></tr>
+<tr><td>CE003</td><td>NotImplemented</td><td>Feature not yet in native codegen</td></tr>
+<tr><td>CE004</td><td>FunctionError</td><td>Cranelift verification error</td></tr>
+<tr><td>CE006</td><td>UndefinedFunction</td><td>Function not available in native mode</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="operator-precedence"><a class="header" href="#operator-precedence">Operator Precedence</a></h1>
+<p>Operators listed from lowest to highest precedence.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Level</th><th>Name</th><th>Operators</th><th>Associativity</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Assignment</td><td><code>= += -= *= /= %= &amp;= |= ^= &lt;&lt;= &gt;&gt;=</code></td><td>Right</td></tr>
+<tr><td>2</td><td>Pipeline</td><td><code>|&gt;</code></td><td>Left</td></tr>
+<tr><td>3</td><td>Logical OR</td><td><code>||</code></td><td>Left</td></tr>
+<tr><td>4</td><td>Logical AND</td><td><code>&amp;&amp;</code></td><td>Left</td></tr>
+<tr><td>5</td><td>Bitwise OR</td><td><code>|</code></td><td>Left</td></tr>
+<tr><td>6</td><td>Bitwise XOR</td><td><code>^</code></td><td>Left</td></tr>
+<tr><td>7</td><td>Bitwise AND</td><td><code>&amp;</code></td><td>Left</td></tr>
+<tr><td>8</td><td>Equality</td><td><code>== !=</code></td><td>Left</td></tr>
+<tr><td>9</td><td>Comparison</td><td><code>&lt; &gt; &lt;= &gt;=</code></td><td>Left</td></tr>
+<tr><td>10</td><td>Range</td><td><code>.. ..=</code></td><td>None</td></tr>
+<tr><td>11</td><td>Bit Shift</td><td><code>&lt;&lt; &gt;&gt;</code></td><td>Left</td></tr>
+<tr><td>12</td><td>Addition</td><td><code>+ -</code></td><td>Left</td></tr>
+<tr><td>13</td><td>Multiply</td><td><code>* / % @</code></td><td>Left</td></tr>
+<tr><td>14</td><td>Power</td><td><code>**</code></td><td>Right</td></tr>
+<tr><td>15</td><td>Type Cast</td><td><code>as</code></td><td>Left</td></tr>
+<tr><td>16</td><td>Unary</td><td><code>! - ~ &amp; &amp;mut</code></td><td>Right</td></tr>
+<tr><td>17</td><td>Try</td><td><code>?</code></td><td>Postfix</td></tr>
+<tr><td>18</td><td>Postfix</td><td><code>. () [] .method()</code></td><td>Left</td></tr>
+<tr><td>19</td><td>Primary</td><td>Literals, identifiers</td><td>-</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<pre><code class="language-fajar">// Precedence: * before +
+2 + 3 * 4          // 14, not 20
+
+// Right-associative power
+2 ** 3 ** 2         // 512 (= 2^(3^2) = 2^9)
+
+// Pipeline (lowest non-assignment)
+5 |&gt; double |&gt; add_one
+
+// Comparison returns bool
+let ok = x &gt; 0 &amp;&amp; x &lt; 100
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="keywords"><a class="header" href="#keywords">Keywords</a></h1>
+<h2 id="control-flow-1"><a class="header" href="#control-flow-1">Control Flow</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>if</code></td><td>Conditional branch</td></tr>
+<tr><td><code>else</code></td><td>Alternative branch</td></tr>
+<tr><td><code>match</code></td><td>Pattern matching</td></tr>
+<tr><td><code>while</code></td><td>Conditional loop</td></tr>
+<tr><td><code>for</code></td><td>Iterator loop</td></tr>
+<tr><td><code>in</code></td><td>Iterator binding</td></tr>
+<tr><td><code>loop</code></td><td>Infinite loop</td></tr>
+<tr><td><code>break</code></td><td>Exit loop</td></tr>
+<tr><td><code>continue</code></td><td>Skip to next iteration</td></tr>
+<tr><td><code>return</code></td><td>Return from function</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="declarations"><a class="header" href="#declarations">Declarations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>let</code></td><td>Variable binding</td></tr>
+<tr><td><code>mut</code></td><td>Mutable binding</td></tr>
+<tr><td><code>fn</code></td><td>Function definition</td></tr>
+<tr><td><code>struct</code></td><td>Struct type</td></tr>
+<tr><td><code>enum</code></td><td>Enum type</td></tr>
+<tr><td><code>impl</code></td><td>Implementation block</td></tr>
+<tr><td><code>trait</code></td><td>Trait definition</td></tr>
+<tr><td><code>type</code></td><td>Type alias</td></tr>
+<tr><td><code>const</code></td><td>Constant</td></tr>
+<tr><td><code>union</code></td><td>Union type</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="types"><a class="header" href="#types">Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bool</code></td><td>Boolean (true/false)</td></tr>
+<tr><td><code>i8</code>-<code>i128</code></td><td>Signed integers</td></tr>
+<tr><td><code>u8</code>-<code>u128</code></td><td>Unsigned integers</td></tr>
+<tr><td><code>isize</code>, <code>usize</code></td><td>Pointer-sized integers</td></tr>
+<tr><td><code>f32</code>, <code>f64</code></td><td>Floating point</td></tr>
+<tr><td><code>str</code></td><td>String</td></tr>
+<tr><td><code>char</code></td><td>Character</td></tr>
+<tr><td><code>void</code></td><td>No value</td></tr>
+<tr><td><code>never</code></td><td>Never returns</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="ml-keywords"><a class="header" href="#ml-keywords">ML Keywords</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>tensor</code></td><td>Tensor type</td></tr>
+<tr><td><code>grad</code></td><td>Gradient access</td></tr>
+<tr><td><code>loss</code></td><td>Loss value</td></tr>
+<tr><td><code>layer</code></td><td>Neural network layer</td></tr>
+<tr><td><code>model</code></td><td>ML model</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="os-keywords"><a class="header" href="#os-keywords">OS Keywords</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ptr</code></td><td>Raw pointer</td></tr>
+<tr><td><code>addr</code></td><td>Memory address</td></tr>
+<tr><td><code>page</code></td><td>Memory page</td></tr>
+<tr><td><code>region</code></td><td>Memory region</td></tr>
+<tr><td><code>irq</code></td><td>Interrupt request</td></tr>
+<tr><td><code>syscall</code></td><td>System call</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="module-keywords"><a class="header" href="#module-keywords">Module Keywords</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>use</code></td><td>Import</td></tr>
+<tr><td><code>mod</code></td><td>Module declaration</td></tr>
+<tr><td><code>pub</code></td><td>Public visibility</td></tr>
+<tr><td><code>extern</code></td><td>External linkage</td></tr>
+<tr><td><code>as</code></td><td>Type cast / rename</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>true</code></td><td>Boolean true</td></tr>
+<tr><td><code>false</code></td><td>Boolean false</td></tr>
+<tr><td><code>null</code></td><td>Null value</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="context-annotations-2"><a class="header" href="#context-annotations-2">Context Annotations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Annotation</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>@kernel</code></td><td>OS kernel context (no heap, no tensor)</td></tr>
+<tr><td><code>@device</code></td><td>ML device context (no raw pointer, no IRQ)</td></tr>
+<tr><td><code>@safe</code></td><td>Default safe context</td></tr>
+<tr><td><code>@unsafe</code></td><td>Full access (all features)</td></tr>
+<tr><td><code>@ffi</code></td><td>Foreign function interface</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="concurrency-1"><a class="header" href="#concurrency-1">Concurrency</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Keyword</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>async</code></td><td>Asynchronous function</td></tr>
+<tr><td><code>await</code></td><td>Wait for async result</td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

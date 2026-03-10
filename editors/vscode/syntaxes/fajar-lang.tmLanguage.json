@@ -1,0 +1,196 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Fajar Lang",
+  "scopeName": "source.fajar",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#annotations" },
+    { "include": "#strings" },
+    { "include": "#characters" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#functions" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.fajar",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.fajar",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "storage.modifier.annotation.fajar",
+          "match": "@(kernel|device|safe|unsafe|ffi)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.fajar",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.fajar",
+              "match": "\\\\[nrt\\\\'\"/0]"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.fajar",
+          "begin": "r\"",
+          "end": "\""
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.fajar",
+          "match": "'(\\\\[nrt\\\\'\"/0]|[^\\\\'])'?"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.fajar",
+          "match": "\\b0x[0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.fajar",
+          "match": "\\b0b[01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.fajar",
+          "match": "\\b0o[0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.fajar",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9_]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.fajar",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.fajar",
+          "match": "\\b(if|else|match|while|for|in|return|break|continue|loop)\\b"
+        },
+        {
+          "name": "keyword.declaration.fajar",
+          "match": "\\b(let|mut|fn|struct|enum|impl|trait|type|const)\\b"
+        },
+        {
+          "name": "keyword.other.fajar",
+          "match": "\\b(use|mod|pub|extern|as)\\b"
+        },
+        {
+          "name": "keyword.ml.fajar",
+          "match": "\\b(tensor|grad|loss|layer|model)\\b"
+        },
+        {
+          "name": "keyword.os.fajar",
+          "match": "\\b(ptr|addr|page|region|irq|syscall)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.fajar",
+          "match": "\\b(bool|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|isize|usize|f32|f64|str|char|void|never)\\b"
+        },
+        {
+          "name": "entity.name.type.fajar",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.fajar",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.fajar",
+          "match": "\\bnull\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.fajar",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.pipe.fajar",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.comparison.fajar",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.fajar",
+          "match": "\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>="
+        },
+        {
+          "name": "keyword.operator.logical.fajar",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.fajar",
+          "match": "\\*\\*|\\+|-|\\*|/|%|@"
+        },
+        {
+          "name": "keyword.operator.range.fajar",
+          "match": "\\.\\.\\.|\\.\\.|\\.\\.="
+        },
+        {
+          "name": "keyword.operator.namespace.fajar",
+          "match": "::"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.fajar",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.fajar",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}
