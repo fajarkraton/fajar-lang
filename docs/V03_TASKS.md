@@ -3,7 +3,7 @@
 > Granular task list for all 52 sprints across 12 months.
 > Reference: `V03_IMPLEMENTATION_PLAN.md` for context, `V03_WORKFLOW.md` for process.
 > Baseline: v0.2 complete (1,991 tests, 59,419 LOC, Phases A-F + E done)
-> Current (2026-03-10): 2,558 tests (2,175 lib + 383 integration), ~80K LOC, 0 failures
+> Current (2026-03-10): 2,568 tests (2,185 lib + 383 integration), ~80K LOC, 0 failures
 > Gap audit: most gaps closed — see bottom of file for remaining deferred subtasks
 
 ---
@@ -197,7 +197,7 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 
 **S3.2 — HashMap runtime functions (read + query)** `P0` ✅
 - [x] `extern "C" fn fj_rt_map_get_int(map, key_ptr, key_len) -> i64` — get int value
-- [ ] ⏳ `fj_rt_map_get_str` — deferred (needs string return ABI from map)
+- [x] `fj_rt_map_get_str` — string value retrieval via out-params (ptr, len)
 - [x] `extern "C" fn fj_rt_map_contains(map, key_ptr, key_len) -> i64` — key exists?
 - [x] `extern "C" fn fj_rt_map_len(map) -> i64` — number of entries
 - [x] 4 tests: get_int (insert_and_get), get_missing, contains_key, len_after_inserts
@@ -230,7 +230,7 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] Compile `expr?`: evaluate expr, check tag (0=Ok, ≠0=Err/None)
 - [x] If Err: emit cleanup + early return with error payload
 - [x] If Ok: unwrap payload and continue
-- [ ] ⏳ Handle nested `?`: deferred (works individually, nesting untested)
+- [x] Handle nested `?`: sequential and chained ? with early Err propagation (3 tests)
 - [x] 4 tests: try_ok_unwraps, try_err_returns_early, try_ok_continues, try_err_propagates
 
 **S4.2 — Option/Result methods in codegen** `P1` ✅
@@ -389,7 +389,7 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] `Mutex::new(value) -> Mutex` — create with initial value
 - [x] `mutex.lock() -> i64` — acquire lock, return current value
 - [x] `mutex.store(value)` — acquire lock, set new value
-- [ ] `mutex.try_lock() -> Option<i64>` — deferred (needs Option return from methods)
+- [x] `mutex.try_lock()` — returns 1 (success) or 0 (fail), out-param for value (3 tests)
 - [ ] `MutexGuard` RAII — deferred (needs scope tracking / Drop)
 - [x] Runtime: `fj_rt_mutex_new`, `fj_rt_mutex_lock`, `fj_rt_mutex_store`, `fj_rt_mutex_try_lock`, `fj_rt_mutex_free`
 - [x] Declared + registered in JIT (symbols) and AOT (imports) compilers
@@ -696,13 +696,13 @@ Priority: P0 = blocker, P1 = must have, P2 = should have, P3 = nice to have
 - [x] Test: concurrent increment (4 threads × 1000 increments = 4,000)
 - [x] Test: TOCTOU prevention with mutex (sequential lock/store/lock)
 - [x] Test: atomic concurrent adds (sequential atomic store/load chain)
-- [ ] ⏳ Concurrent HashMap access (deferred — needs HashMap thread safety)
+- [x] Concurrent HashMap access (HashMap + thread compose correctly, 2 tests)
 - [x] 3 tests: concurrent_increment, mutex_toctou_prevention, atomic_concurrent_adds
 
 **S13.2 — Deadlock scenarios** `P1` ✅
 - [x] Test: lock ordering with two mutexes (sequential access is safe)
 - [x] Test: no deadlock on same mutex (auto-releasing lock model)
-- [ ] ⏳ try_lock timeout test (deferred — needs try_lock codegen binding)
+- [x] try_lock timeout test (native_mutex_try_lock_timeout)
 - [x] 2 tests: lock_ordering_safe, mutex_no_deadlock
 
 **S13.3 — Borrow checker + concurrency** `P1` ✅

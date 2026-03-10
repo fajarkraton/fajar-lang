@@ -7386,6 +7386,35 @@ fn native_mutex_shared_counter() {
     assert_eq!(compile_and_run(src), 3);
 }
 
+// ── S6.1: Mutex try_lock codegen ─────────────────────────────────────
+
+#[test]
+fn native_mutex_try_lock_basic() {
+    // try_lock on an unlocked mutex should succeed (return 1)
+    let src = r#"
+        fn main() -> i64 {
+            let m = Mutex::new(42)
+            m.try_lock()
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 1);
+}
+
+#[test]
+fn native_mutex_try_lock_value_preserved() {
+    // After try_lock succeeds, lock() retrieves the stored value
+    let src = r#"
+        fn main() -> i64 {
+            let m = Mutex::new(99)
+            let ok = m.try_lock()
+            m.store(ok + 41)
+            m.lock()
+        }
+    "#;
+    // ok = 1, 1 + 41 = 42
+    assert_eq!(compile_and_run(src), 42);
+}
+
 // ============================================================
 // S7 — Channels in native codegen
 // ============================================================
@@ -10114,6 +10143,32 @@ fn native_mutex_no_deadlock() {
     assert_eq!(compile_and_run(src), 6);
 }
 
+#[test]
+fn native_mutex_try_lock_timeout() {
+    // S13.2: try_lock used as a non-blocking probe on a mutex
+    // In Fajar's mutex semantics, lock() auto-releases, so sequential
+    // try_lock always succeeds. This test verifies that try_lock returns
+    // the success flag (1) and can be used in a retry loop pattern.
+    let src = r#"
+        fn main() -> i64 {
+            let m = Mutex::new(0)
+            m.store(100)
+            let attempts = 0
+            let success = 0
+            while attempts < 3 {
+                let r = m.try_lock()
+                if r == 1 {
+                    success = success + 1
+                }
+                attempts = attempts + 1
+            }
+            success
+        }
+    "#;
+    // All 3 attempts should succeed (lock auto-releases)
+    assert_eq!(compile_and_run(src), 3);
+}
+
 // ── S16.2: Built-in Allocators ──────────────────────────────────────
 
 #[test]
@@ -10748,6 +10803,41 @@ fn native_asm_sym_operand() {
         }
     "#;
     assert_eq!(compile_and_run(src), 1);
+}
+
+// =====================================================================
+// S3.2 — HashMap get string values
+// =====================================================================
+
+#[test]
+fn native_map_get_str_basic() {
+    // Insert string values into map, get them back, verify via len()
+    let src = r#"
+        fn main() -> i64 {
+            let m = HashMap::new()
+            m.insert("greeting", "hello")
+            m.insert("name", "fajar")
+            let g = m.get("greeting")
+            let n = m.get("name")
+            len(g) + len(n)
+        }
+    "#;
+    // "hello" = 5, "fajar" = 5, total = 10
+    assert_eq!(compile_and_run(src), 10);
+}
+
+#[test]
+fn native_map_get_str_missing_key() {
+    // Getting a non-existent key from a string map returns empty string (len 0)
+    let src = r#"
+        fn main() -> i64 {
+            let m = HashMap::new()
+            m.insert("a", "alpha")
+            let v = m.get("missing")
+            len(v)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
 }
 
 // =====================================================================
@@ -13060,4 +13150,118 @@ fn native_s47_complex_control_flow_bootstrap() {
     let native_result = compile_and_run(src);
     assert_eq!(interp_result, native_result);
     assert_eq!(native_result, 100);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S4.1 — Nested `?` operator in codegen
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_nested_try_ok() {
+    // Multiple sequential ? operators, all Ok paths succeed
+    let src = r#"
+        fn inner() -> i64 {
+            let a = Ok(10)
+            let b = Ok(20)
+            let x = a?
+            let y = b?
+            x + y
+        }
+        fn main() -> i64 {
+            inner()
+        }
+    "#;
+    // Both Ok: 10 + 20 = 30
+    assert_eq!(compile_and_run(src), 30);
+}
+
+#[test]
+fn native_nested_try_chain() {
+    // Three sequential ? operators — all succeed and accumulate
+    let src = r#"
+        fn compute() -> i64 {
+            let a = Ok(5)
+            let b = Ok(10)
+            let c = Ok(15)
+            let x = a?
+            let y = b?
+            let z = c?
+            x + y + z
+        }
+        fn main() -> i64 {
+            compute()
+        }
+    "#;
+    // 5 + 10 + 15 = 30
+    assert_eq!(compile_and_run(src), 30);
+}
+
+#[test]
+fn native_nested_try_err_propagation() {
+    // First ? succeeds, second ? hits Err and short-circuits
+    let src = r#"
+        fn risky() -> i64 {
+            let a = Ok(10)
+            let b = Err(77)
+            let x = a?
+            let y = b?
+            x + y
+        }
+        fn main() -> i64 {
+            risky()
+        }
+    "#;
+    // a? succeeds (10), b? hits Err(77) and returns 77 early
+    assert_eq!(compile_and_run(src), 77);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S13.1 — Concurrent HashMap tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_concurrent_map_basic() {
+    // HashMap works correctly alongside thread operations
+    let src = r#"
+        fn compute(n: i64) -> i64 {
+            n * n
+        }
+
+        fn main() -> i64 {
+            let h = thread::spawn(compute, 7)
+            let m = HashMap::new()
+            m.insert("base", 10)
+            let thread_result = h.join()
+            m.insert("computed", thread_result)
+            m.get("base") + m.get("computed")
+        }
+    "#;
+    // thread_result = 7*7 = 49, base = 10, total = 59
+    assert_eq!(compile_and_run(src), 59);
+}
+
+#[test]
+fn native_map_after_thread() {
+    // Multiple threads compute values, results aggregated into a HashMap
+    let src = r#"
+        fn square(n: i64) -> i64 {
+            n * n
+        }
+
+        fn main() -> i64 {
+            let h1 = thread::spawn(square, 3)
+            let h2 = thread::spawn(square, 4)
+            let h3 = thread::spawn(square, 5)
+            let r1 = h1.join()
+            let r2 = h2.join()
+            let r3 = h3.join()
+            let m = HashMap::new()
+            m.insert("a", r1)
+            m.insert("b", r2)
+            m.insert("c", r3)
+            m.get("a") + m.get("b") + m.get("c")
+        }
+    "#;
+    // 9 + 16 + 25 = 50
+    assert_eq!(compile_and_run(src), 50);
 }

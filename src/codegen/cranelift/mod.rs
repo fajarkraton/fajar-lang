@@ -1528,6 +1528,40 @@ impl CraneliftCompiler {
         self.functions
             .insert("__map_get_int".to_string(), map_get_int_id);
 
+        // fj_rt_map_get_str(map, key_ptr, key_len, out_ptr, out_len) -> void
+        let mut sig_map_get_str = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        let map_get_str_id = self
+            .module
+            .declare_function("fj_rt_map_get_str", Linkage::Import, &sig_map_get_str)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__map_get_str".to_string(), map_get_str_id);
+
         // fj_rt_map_contains(map, key_ptr, key_len) -> i64
         let map_contains_id = self
             .module
@@ -1801,6 +1835,30 @@ impl CraneliftCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__mutex_free".to_string(), mutex_free_id);
+
+        // fj_rt_mutex_try_lock(handle, out_val_ptr) -> i64 (1=success, 0=fail)
+        let mut sig_mutex_try_lock = self.module.make_signature();
+        sig_mutex_try_lock
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_mutex_try_lock
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_mutex_try_lock
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let mutex_try_lock_id = self
+            .module
+            .declare_function("fj_rt_mutex_try_lock", Linkage::Import, &sig_mutex_try_lock)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_try_lock".to_string(), mutex_try_lock_id);
 
         // ── Channel primitives ───────────────────────────────────────────
 
@@ -4901,6 +4959,7 @@ impl CraneliftCompiler {
                 last_string_owned: false,
                 heap_arrays: &mut heap_arrays,
                 heap_maps: HashSet::new(),
+                map_str_values: HashSet::new(),
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
                 enum_vars: &mut enum_vars,
@@ -6630,6 +6689,40 @@ impl ObjectCompiler {
         self.functions
             .insert("__map_get_int".to_string(), map_get_int_id);
 
+        // fj_rt_map_get_str(map, key_ptr, key_len, out_ptr, out_len) -> void
+        let mut sig_map_get_str = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_map_get_str
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        let map_get_str_id = self
+            .module
+            .declare_function("fj_rt_map_get_str", Linkage::Import, &sig_map_get_str)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__map_get_str".to_string(), map_get_str_id);
+
         // fj_rt_map_contains (same sig as get_int)
         let map_contains_id = self
             .module
@@ -6903,6 +6996,30 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("__mutex_free".to_string(), mutex_free_id);
+
+        // fj_rt_mutex_try_lock(handle, out_val_ptr) -> i64 (1=success, 0=fail)
+        let mut sig_mutex_try_lock = self.module.make_signature();
+        sig_mutex_try_lock
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_mutex_try_lock
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_mutex_try_lock
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let mutex_try_lock_id = self
+            .module
+            .declare_function("fj_rt_mutex_try_lock", Linkage::Import, &sig_mutex_try_lock)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__mutex_try_lock".to_string(), mutex_try_lock_id);
 
         // ── Channel primitives ───────────────────────────────────────────
 
@@ -9452,6 +9569,7 @@ impl ObjectCompiler {
                 last_string_owned: false,
                 heap_arrays: &mut heap_arrays,
                 heap_maps: HashSet::new(),
+                map_str_values: HashSet::new(),
                 last_map_new: false,
                 enum_defs: &self.enum_defs,
                 enum_vars: &mut enum_vars,

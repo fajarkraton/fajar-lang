@@ -60,6 +60,8 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub heap_arrays: &'a mut HashSet<String>,
     /// Names of variables that hold heap-allocated HashMaps.
     pub heap_maps: HashSet<String>,
+    /// Names of map variables that store string values (inserted via map_insert_str).
+    pub map_str_values: HashSet<String>,
     /// True when the last expression produced a HashMap (fj_rt_map_new).
     pub last_map_new: bool,
     /// Enum definitions: enum name → list of variant names (index = tag).

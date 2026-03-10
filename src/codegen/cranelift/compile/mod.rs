@@ -2893,6 +2893,27 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     cx.last_expr_type = Some(clif_types::default_int_type());
                     return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
                 }
+                "try_lock" => {
+                    // Allocate stack slot for the output value
+                    let out_slot =
+                        builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                            8,
+                            0,
+                        ));
+                    let out_addr =
+                        builder
+                            .ins()
+                            .stack_addr(clif_types::pointer_type(), out_slot, 0);
+                    let try_lock_id = *cx.functions.get("__mutex_try_lock").ok_or_else(|| {
+                        CodegenError::Internal("__mutex_try_lock not declared".into())
+                    })?;
+                    let callee = cx.module.declare_func_in_func(try_lock_id, builder.func);
+                    let call = builder.ins().call(callee, &[mutex_ptr, out_addr]);
+                    let success_flag = builder.inst_results(call)[0];
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(success_flag);
+                }
                 _ => {
                     return Err(CodegenError::NotImplemented(format!(
                         "mutex method '{method}'"
@@ -5083,7 +5104,8 @@ fn compile_map_method<M: Module>(
                 },
             ) || cx.last_string_len.is_some()
             {
-                // String value
+                // String value — track this map as containing strings
+                cx.map_str_values.insert(map_name.to_string());
                 let str_len = cx.last_string_len.take().unwrap_or(key_len);
                 let func_id = *cx.functions.get("__map_insert_str").ok_or_else(|| {
                     CodegenError::Internal("__map_insert_str not declared".into())
@@ -5103,7 +5125,7 @@ fn compile_map_method<M: Module>(
             Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
         }
         "get" => {
-            // map.get("key") → fj_rt_map_get_int(map, key_ptr, key_len) -> i64
+            // map.get("key") → dispatch to string or int variant
             if args.is_empty() {
                 return Err(CodegenError::NotImplemented(
                     "map.get requires 1 argument".into(),
@@ -5114,15 +5136,68 @@ fn compile_map_method<M: Module>(
                 .last_string_len
                 .take()
                 .ok_or_else(|| CodegenError::NotImplemented("map key must be a string".into()))?;
-            let func_id = *cx
-                .functions
-                .get("__map_get_int")
-                .ok_or_else(|| CodegenError::Internal("__map_get_int not declared".into()))?;
-            let local = cx.module.declare_func_in_func(func_id, builder.func);
-            let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
-            let results = builder.inst_results(call);
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(results[0])
+
+            if cx.map_str_values.contains(map_name) {
+                // String map: use out-param pattern
+                let out_ptr_slot =
+                    builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                        8,
+                        0,
+                    ));
+                let out_len_slot =
+                    builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                        8,
+                        0,
+                    ));
+                let out_ptr_addr =
+                    builder
+                        .ins()
+                        .stack_addr(clif_types::pointer_type(), out_ptr_slot, 0);
+                let out_len_addr =
+                    builder
+                        .ins()
+                        .stack_addr(clif_types::pointer_type(), out_len_slot, 0);
+
+                let func_id = *cx
+                    .functions
+                    .get("__map_get_str")
+                    .ok_or_else(|| CodegenError::Internal("__map_get_str not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                builder.ins().call(
+                    local,
+                    &[map_ptr, key_val, key_len, out_ptr_addr, out_len_addr],
+                );
+
+                let result_ptr = builder.ins().load(
+                    clif_types::pointer_type(),
+                    cranelift_codegen::ir::MemFlags::new(),
+                    out_ptr_addr,
+                    0,
+                );
+                let result_len = builder.ins().load(
+                    clif_types::default_int_type(),
+                    cranelift_codegen::ir::MemFlags::new(),
+                    out_len_addr,
+                    0,
+                );
+                cx.last_string_len = Some(result_len);
+                cx.last_string_owned = false;
+                cx.last_expr_type = Some(clif_types::pointer_type());
+                Ok(result_ptr)
+            } else {
+                // Integer/float map: return i64 directly
+                let func_id = *cx
+                    .functions
+                    .get("__map_get_int")
+                    .ok_or_else(|| CodegenError::Internal("__map_get_int not declared".into()))?;
+                let local = cx.module.declare_func_in_func(func_id, builder.func);
+                let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
+                let results = builder.inst_results(call);
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                Ok(results[0])
+            }
         }
         "contains_key" => {
             // map.contains_key("key") → fj_rt_map_contains(map, key_ptr, key_len) -> i64

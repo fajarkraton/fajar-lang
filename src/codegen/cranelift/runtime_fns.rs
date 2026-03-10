@@ -1226,6 +1226,34 @@ pub extern "C" fn fj_rt_map_get_int(map_ptr: *mut u8, key_ptr: *const u8, key_le
     }
 }
 
+/// Runtime: gets a string value from a HashMap via out-params.
+///
+/// The i64 value stored in the map is interpreted as a `*const String` (from `fj_rt_map_insert_str`).
+/// Writes the string's data pointer and length to `out_ptr`/`out_len`.
+/// If the key is not found, writes null ptr and len 0.
+pub extern "C" fn fj_rt_map_get_str(
+    map_ptr: *mut u8,
+    key_ptr: *const u8,
+    key_len: i64,
+    out_ptr: *mut *const u8,
+    out_len: *mut i64,
+) {
+    // SAFETY: caller guarantees valid map pointer, string slice, and out-param pointers
+    unsafe {
+        let map = &*(map_ptr as *const HashMap<String, i64>);
+        let key =
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(key_ptr, key_len as usize));
+        if let Some(&raw) = map.get(key) {
+            let s = &*(raw as *const String);
+            *out_ptr = s.as_ptr();
+            *out_len = s.len() as i64;
+        } else {
+            *out_ptr = std::ptr::null();
+            *out_len = 0;
+        }
+    }
+}
+
 /// Runtime: checks if a key exists in the HashMap. Returns 1 if yes, 0 if no.
 pub extern "C" fn fj_rt_map_contains(map_ptr: *mut u8, key_ptr: *const u8, key_len: i64) -> i64 {
     // SAFETY: caller guarantees valid map pointer and string slice
@@ -6737,6 +6765,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_map_contains" => Some(fj_rt_map_contains as *const u8),
         "fj_rt_map_free" => Some(fj_rt_map_free as *const u8),
         "fj_rt_map_get_int" => Some(fj_rt_map_get_int as *const u8),
+        "fj_rt_map_get_str" => Some(fj_rt_map_get_str as *const u8),
         "fj_rt_map_insert_float" => Some(fj_rt_map_insert_float as *const u8),
         "fj_rt_map_insert_int" => Some(fj_rt_map_insert_int as *const u8),
         "fj_rt_map_insert_str" => Some(fj_rt_map_insert_str as *const u8),
