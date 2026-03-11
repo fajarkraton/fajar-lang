@@ -72,62 +72,62 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** inkwell setup, type mapping, module creation
 
-- [ ] S1.1 — Add `inkwell` dependency with `llvm18-0` feature, gated under `[features] llvm`
-- [ ] S1.2 — `src/codegen/llvm/mod.rs`: `LlvmCompiler` struct with Context, Module, Builder
-- [ ] S1.3 — `src/codegen/llvm/types.rs`: map Fajar types → LLVM types (i8-i128, f32, f64, bool, str, void)
+- [x] S1.1 — Add `inkwell` dependency with `llvm18-1` feature, gated under `[features] llvm`
+- [x] S1.2 — `src/codegen/llvm/mod.rs`: `LlvmCompiler` struct with Context, Module, Builder
+- [x] S1.3 — `src/codegen/llvm/types.rs`: map Fajar types → LLVM types (i8-i128, f32, f64, bool, str, void)
 - [ ] S1.4 — `src/codegen/mod.rs`: `CodegenBackend` trait (compile_program, get_fn_ptr, emit_object, emit_assembly)
 - [ ] S1.5 — `LlvmCompiler` implements `CodegenBackend` (skeleton)
-- [ ] S1.6 — LLVM target initialization: x86_64, aarch64, riscv64, arm
-- [ ] S1.7 — `TargetMachine` creation with CPU features, optimization level, reloc mode
-- [ ] S1.8 — Module setup: set triple, data layout from target machine
-- [ ] S1.9 — LLVM IR printing: `module.print_to_string()` for debugging
-- [ ] S1.10 — 10 tests: context creation, type mapping, module creation, IR output
+- [x] S1.6 — LLVM target initialization: x86_64, aarch64, riscv64, arm
+- [x] S1.7 — `TargetMachine` creation with CPU features, optimization level, reloc mode
+- [x] S1.8 — Module setup: set triple, data layout from target machine
+- [x] S1.9 — LLVM IR printing: `module.print_to_string()` for debugging
+- [x] S1.10 — 10 tests: context creation, type mapping, module creation, IR output
 
 #### Sprint 2: Expression Compilation `P0`
 
 **Goal:** Compile all expression types to LLVM IR
 
-- [ ] S2.1 — Integer literals → `i64_type.const_int()`
-- [ ] S2.2 — Float literals → `f64_type.const_float()`
-- [ ] S2.3 — Bool literals → `i1_type.const_int(0/1)`
-- [ ] S2.4 — String literals → global string pointers + length
-- [ ] S2.5 — Arithmetic: `build_int_add/sub/mul/sdiv`, `build_float_add/sub/mul/fdiv`
-- [ ] S2.6 — Comparison: `build_int_compare`, `build_float_compare` (all 6 predicates)
-- [ ] S2.7 — Logical: `build_and`, `build_or`, `build_not`
-- [ ] S2.8 — Bitwise: `build_and/or/xor/shl/ashr`, `build_not`
-- [ ] S2.9 — Unary: negation, bitwise not, boolean not
-- [ ] S2.10 — Type cast: `build_int_cast`, `build_float_cast`, `build_int_to_float`, `build_float_to_int`
-- [ ] S2.11 — 10 tests: each expression type compiles and produces correct IR
+- [x] S2.1 — Integer literals → `i64_type.const_int()`
+- [x] S2.2 — Float literals → `f64_type.const_float()`
+- [x] S2.3 — Bool literals → `i1_type.const_int(0/1)`
+- [x] S2.4 — String literals → global string pointers + length
+- [x] S2.5 — Arithmetic: `build_int_add/sub/mul/sdiv`, `build_float_add/sub/mul/fdiv`
+- [x] S2.6 — Comparison: `build_int_compare`, `build_float_compare` (all 6 predicates)
+- [x] S2.7 — Logical: `build_and`, `build_or`, `build_not`
+- [x] S2.8 — Bitwise: `build_and/or/xor/shl/ashr`, `build_not`
+- [x] S2.9 — Unary: negation, bitwise not, boolean not
+- [x] S2.10 — Type cast: `build_int_cast`, `build_float_cast`, `build_int_to_float`, `build_float_to_int`
+- [x] S2.11 — 10 tests: each expression type compiles and produces correct IR
 
 #### Sprint 3: Statements & Control Flow `P0`
 
 **Goal:** Let/mut, assignments, if/else, while, for, match, loop
 
-- [ ] S3.1 — Let binding: `build_alloca` + `build_store`, mutable via alloca
-- [ ] S3.2 — Assignment: `build_store` to existing alloca
-- [ ] S3.3 — If/else: `build_conditional_branch` + phi nodes at merge block
-- [ ] S3.4 — While loop: condition BB → body BB → back-edge, break/continue labels
-- [ ] S3.5 — For-in range: induction variable phi, step, comparison, branch
-- [ ] S3.6 — Loop: unconditional back-edge with break support
-- [ ] S3.7 — Match: cascading if-else or switch instruction for integer patterns
-- [ ] S3.8 — Block expressions: last expression is block value (phi at exit)
-- [ ] S3.9 — Return statement: `build_return` with value
-- [ ] S3.10 — 10 tests: all control flow patterns produce correct results
+- [x] S3.1 — Let binding: `build_alloca` + `build_store`, mutable via alloca
+- [x] S3.2 — Assignment: `build_store` to existing alloca
+- [x] S3.3 — If/else: `build_conditional_branch` + phi nodes at merge block
+- [x] S3.4 — While loop: condition BB → body BB → back-edge, break/continue labels
+- [x] S3.5 — For-in range: induction variable phi, step, comparison, branch
+- [x] S3.6 — Loop: unconditional back-edge with break support
+- [x] S3.7 — Match: cascading if-else or switch instruction for integer patterns
+- [x] S3.8 — Block expressions: last expression is block value (phi at exit)
+- [x] S3.9 — Return statement: `build_return` with value
+- [x] S3.10 — 10 tests: all control flow patterns produce correct results
 
 #### Sprint 4: Functions & Closures `P0`
 
 **Goal:** Function definitions, calls, closures, generics monomorphization
 
-- [ ] S4.1 — Function definition: `module.add_function()` with correct fn_type
-- [ ] S4.2 — Function parameters: `function.get_nth_param()` mapping
-- [ ] S4.3 — Function calls: `build_call` with argument marshaling
-- [ ] S4.4 — Recursive functions: forward declaration then body fill
-- [ ] S4.5 — Runtime function registration: `fj_rt_*` as external declarations
+- [x] S4.1 — Function definition: `module.add_function()` with correct fn_type
+- [x] S4.2 — Function parameters: `function.get_nth_param()` mapping
+- [x] S4.3 — Function calls: `build_call` with argument marshaling
+- [x] S4.4 — Recursive functions: forward declaration then body fill
+- [x] S4.5 — Runtime function registration: `fj_rt_*` as external declarations
 - [ ] S4.6 — Closures: environment struct + fat pointer (fn_ptr, env_ptr)
 - [ ] S4.7 — Free variable capture: `build_struct_gep` for environment access
 - [ ] S4.8 — Generic monomorphization: reuse existing `generics.rs` logic, emit specialized LLVM functions
-- [ ] S4.9 — Builtin functions: print, println, len, assert, assert_eq mapped to runtime
-- [ ] S4.10 — 10 tests: functions, recursion, closures, generics, builtins
+- [x] S4.9 — Builtin functions: print, println, len, assert, assert_eq mapped to runtime
+- [x] S4.10 — 10 tests: functions, recursion, closures, generics, builtins
 
 #### Sprint 5: Data Structures `P0`
 

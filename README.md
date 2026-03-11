@@ -12,7 +12,7 @@ A statically-typed systems programming language for embedded ML and OS integrati
 - **Dual-context safety** -- `@kernel` disables heap/tensor, `@device` disables raw pointers. Compiler enforces domain isolation.
 - **Native tensor types** -- `Tensor` is a first-class citizen in the type system with shape checking.
 - **Rust-inspired syntax** -- Familiar to Rust/C developers, but simpler (no lifetime annotations).
-- **Native compilation** -- Cranelift JIT + AOT backend, cross-compilation to ARM64 and RISC-V.
+- **Dual compilation backends** -- Cranelift JIT/AOT + LLVM backend (O0-O3 optimization, JIT, object/assembly emission).
 - **Concurrency** -- Threads, channels, mutexes, atomics, async/await with work-stealing executor.
 - **Pipeline operator** -- `x |> f |> g` for functional-style data flow.
 - **Pattern matching** -- Exhaustive `match` on enums, structs, tuples with generic `Option<T>` / `Result<T,E>`.
@@ -40,11 +40,27 @@ The binary is at `target/release/fj`.
 # Tree-walking interpreter (default)
 fj run examples/hello.fj
 
-# Native JIT compilation (380x faster)
+# Native JIT compilation — Cranelift (380x faster)
 fj run --native examples/native_hello.fj
+
+# Native JIT compilation — LLVM (requires llvm-18-dev)
+fj run --llvm examples/native_hello.fj
 
 # Bytecode VM
 fj run --vm examples/hello.fj
+```
+
+### Build with LLVM backend
+
+```bash
+# LLVM backend requires llvm-18-dev
+sudo apt-get install llvm-18-dev libpolly-18-dev libzstd-dev
+
+# Build with LLVM feature
+cargo build --release --features llvm
+
+# Run tests with LLVM
+cargo test --features llvm
 ```
 
 ### Start the REPL
@@ -171,7 +187,8 @@ fn main() -> i64 {
 | | Semantic analyzer (types, scope, context, NLL borrow) | Working |
 | **Execution** | Tree-walking interpreter | Working |
 | | Bytecode VM (45 opcodes) | Working |
-| | Native compiler (Cranelift JIT + AOT) | Working |
+| | Native compiler — Cranelift (JIT + AOT) | Working |
+| | Native compiler — LLVM (JIT + AOT, O0-O3) | Working |
 | | Cross-compilation (ARM64, RISC-V) | Working |
 | **Type System** | Generics & monomorphization | Working |
 | | Traits & static dispatch | Working |
@@ -209,6 +226,11 @@ fn main() -> i64 {
 | | Iterator protocol (`.map()`, `.filter()`, `.collect()`, etc.) | Working |
 | | String interpolation (`f"Hello {name}"`) | Working |
 | | Error recovery (multi-error, suggestions, hints) | Working |
+| | `fj watch` (auto-run on file change) | Working |
+| | `fj bench` (micro-benchmarks) | Working |
+| **v0.6** | LLVM backend (inkwell, expressions, control flow, functions) | In Progress |
+| | LLVM JIT execution + AOT object/assembly emission | Working |
+| | LLVM optimization passes (O0-O3 via new pass manager) | Working |
 | **Tools** | REPL (multi-line, `:type`, `:help`) | Working |
 | | Formatter (`fj fmt`) | Working |
 | | LSP server (diagnostics, completion, hover, rename) | Working |
@@ -230,8 +252,9 @@ src/
   interpreter/        -- Tree-walking evaluator
   vm/                 -- Bytecode compiler + virtual machine (45 opcodes)
   codegen/
-    cranelift/        -- Native compiler (JIT + AOT, 150+ runtime fns)
+    cranelift/        -- Cranelift backend (JIT + AOT, 150+ runtime fns)
       compile/        -- Expression, statement, control flow compilation
+    llvm/             -- LLVM backend (inkwell, JIT + AOT, O0-O3)
   runtime/
     os/               -- Memory, IRQ, syscall, paging, GDT/IDT, serial, VGA
     ml/               -- Tensor, autograd, ops, optimizers, layers, ONNX
@@ -253,17 +276,20 @@ docs/                 -- 44 reference documents
 
 | Metric | Value |
 |--------|-------|
-| Rust LOC | ~98,000 |
-| Tests | 2,650 (2,267 lib + 383 integration), 0 failures |
+| Rust LOC | ~101,000 |
+| Tests | 1,767 default + 36 LLVM = 1,803+ (0 failures) |
 | Examples | 24 `.fj` programs |
 | Error codes | 71 across 9 categories |
-| Documentation | 44 docs + 40-page mdBook |
+| Documentation | 47 docs + 40-page mdBook |
 | Standard packages | 7 |
+| Codegen backends | 2 (Cranelift + LLVM) |
 
 ## Releases
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
+| v0.6.0 | Horizon | LLVM backend, debugger, BSP, registry, lifetimes, RTOS, advanced ML *(in progress)* |
+| [v0.5.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.5.0) | Ascendancy | Test framework, doc comments, trait objects, iterators, string interpolation, error recovery |
 | [v0.4.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.4.0) | Sovereignty | Generic enums, RAII/Drop, Future/Poll, lazy async |
 | [v0.3.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.3.0) | Dominion | Concurrency, async/await, ML native, self-hosting, bare metal |
 

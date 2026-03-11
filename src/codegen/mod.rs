@@ -32,6 +32,9 @@ pub mod target;
 #[cfg(feature = "native")]
 pub mod types;
 
+#[cfg(feature = "llvm")]
+pub mod llvm;
+
 /// Error type for code generation.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum CodegenError {
