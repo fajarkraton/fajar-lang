@@ -24,6 +24,7 @@
 //! ```
 
 pub mod dap_server;
+pub mod dwarf;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};

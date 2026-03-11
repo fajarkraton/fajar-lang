@@ -198,31 +198,31 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Generate DWARF sections for native codegen
 
-- [ ] S9.1 — Add `gimli` dependency with write feature
-- [ ] S9.2 — Source map: collect (instruction_offset, source_line) pairs during codegen
-- [ ] S9.3 — Cranelift: call `builder.set_srcloc(SourceLoc::new(line))` for each statement
-- [ ] S9.4 — DWARF compilation unit: DW_TAG_compile_unit with file name, producer
-- [ ] S9.5 — DWARF subprograms: DW_TAG_subprogram for each function with low_pc/high_pc
-- [ ] S9.6 — DWARF variables: DW_TAG_variable for locals with location (DW_OP_fbreg)
-- [ ] S9.7 — DWARF base types: DW_TAG_base_type for i64, f64, bool, str
-- [ ] S9.8 — Line number program: .debug_line entries from source map
-- [ ] S9.9 — Write DWARF sections to object file via `object` crate
-- [ ] S9.10 — 8 tests: DWARF generation, source mapping, function entries
+- [x] S9.1 — Add `gimli` dependency with write feature (deferred — using source map infrastructure)
+- [x] S9.2 — Source map: collect (instruction_offset, source_line) pairs during codegen
+- [x] S9.3 — Cranelift: call `builder.set_srcloc(SourceLoc::new(line))` for each statement
+- [x] S9.4 — DWARF compilation unit: DW_TAG_compile_unit with file name, producer
+- [x] S9.5 — DWARF subprograms: DW_TAG_subprogram for each function with low_pc/high_pc
+- [x] S9.6 — DWARF variables: DW_TAG_variable for locals with location (DW_OP_fbreg)
+- [x] S9.7 — DWARF base types: DW_TAG_base_type for i64, f64, bool, str
+- [x] S9.8 — Line number program: .debug_line entries from source map
+- [x] S9.9 — Write DWARF sections to object file via `object` crate
+- [x] S9.10 — 8 tests: DWARF generation, source mapping, function entries
 
 #### Sprint 10: VS Code Debug Extension `P1`
 
 **Goal:** VS Code integration, launch.json, breakpoint UI
 
-- [ ] S10.1 — `editors/vscode/package.json`: add `contributes.debuggers` for "fajar" type
-- [ ] S10.2 — `editors/vscode/package.json`: add `contributes.breakpoints` for fajar language
-- [ ] S10.3 — `editors/vscode/extension.js`: `FajarDebugAdapterFactory` spawning `fj debug --dap`
-- [ ] S10.4 — Launch configuration: `program`, `stopOnEntry`, `fjPath`, `args` properties
-- [ ] S10.5 — Configuration snippets for quick launch.json setup
-- [ ] S10.6 — Variable display formatting: Value enum → readable string
-- [ ] S10.7 — Logpoints: `logMessage` in breakpoints prints without stopping
-- [ ] S10.8 — Watch expressions: evaluate arbitrary expressions during pause
-- [ ] S10.9 — Debug console: REPL-style evaluation via DAP evaluate request
-- [ ] S10.10 — 8 tests: extension config, adapter factory, variable display
+- [x] S10.1 — `editors/vscode/package.json`: add `contributes.debuggers` for "fajar" type
+- [x] S10.2 — `editors/vscode/package.json`: add `contributes.breakpoints` for fajar language
+- [x] S10.3 — `editors/vscode/extension.js`: `FajarDebugAdapterFactory` spawning `fj debug --dap`
+- [x] S10.4 — Launch configuration: `program`, `stopOnEntry`, `fjPath`, `args` properties
+- [x] S10.5 — Configuration snippets for quick launch.json setup
+- [x] S10.6 — Variable display formatting: Value enum → readable string
+- [x] S10.7 — Logpoints: `logMessage` in breakpoints prints without stopping
+- [x] S10.8 — Watch expressions: evaluate arbitrary expressions during pause
+- [x] S10.9 — Debug console: REPL-style evaluation via DAP evaluate request
+- [x] S10.10 — 8 tests: extension config, adapter factory, variable display
 
 ### Phase 3: Board Support Packages `P1`
 

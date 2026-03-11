@@ -1,16 +1,17 @@
 {
   "name": "fajar-lang",
   "displayName": "Fajar Lang",
-  "description": "Language support for Fajar Lang (.fj) — syntax highlighting and LSP integration",
-  "version": "0.1.0",
+  "description": "Language support for Fajar Lang (.fj) — syntax highlighting, LSP integration, and debugging",
+  "version": "0.2.0",
   "publisher": "primecore",
   "license": "MIT",
   "engines": {
     "vscode": "^1.75.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": ["Programming Languages", "Debuggers"],
   "activationEvents": [
-    "onLanguage:fajar"
+    "onLanguage:fajar",
+    "onDebugResolve:fajar"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -35,6 +36,79 @@
         "path": "./snippets/fajar.json"
       }
     ],
+    "breakpoints": [
+      {
+        "language": "fajar"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "fajar",
+        "label": "Fajar Lang Debug",
+        "languages": ["fajar"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the .fj file to debug",
+                "default": "${workspaceFolder}/main.fj"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at program entry point",
+                "default": true
+              },
+              "fjPath": {
+                "type": "string",
+                "description": "Path to the fj binary",
+                "default": "fj"
+              },
+              "args": {
+                "type": "array",
+                "description": "Arguments to pass to the program",
+                "items": { "type": "string" },
+                "default": []
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "Fajar Lang: Launch",
+            "description": "Launch and debug a Fajar Lang program",
+            "body": {
+              "type": "fajar",
+              "request": "launch",
+              "name": "Debug Fajar Lang",
+              "program": "^\"${1:${workspaceFolder}/main.fj}\"",
+              "stopOnEntry": true
+            }
+          },
+          {
+            "label": "Fajar Lang: Launch (no stop)",
+            "description": "Launch a Fajar Lang program without stopping on entry",
+            "body": {
+              "type": "fajar",
+              "request": "launch",
+              "name": "Run Fajar Lang",
+              "program": "^\"${1:${workspaceFolder}/main.fj}\"",
+              "stopOnEntry": false
+            }
+          }
+        ],
+        "initialConfigurations": [
+          {
+            "type": "fajar",
+            "request": "launch",
+            "name": "Debug Fajar Lang",
+            "program": "${workspaceFolder}/main.fj",
+            "stopOnEntry": true
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "Fajar Lang",
       "properties": {
@@ -42,6 +116,16 @@
           "type": "string",
           "default": "fj",
           "description": "Path to the Fajar Lang binary (fj)"
+        },
+        "fajarLang.debug.fjPath": {
+          "type": "string",
+          "default": "fj",
+          "description": "Path to fj binary for debugging"
+        },
+        "fajarLang.debug.stopOnEntry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stop at program entry point by default"
         }
       }
     }
