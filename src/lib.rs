@@ -41,6 +41,7 @@ pub mod rtos;
 pub mod runtime;
 pub mod stdlib;
 pub mod testing;
+pub mod verification;
 pub mod vm;
 
 use analyzer::SemanticError;

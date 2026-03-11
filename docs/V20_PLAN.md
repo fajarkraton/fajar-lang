@@ -159,55 +159,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S9 — Pre/Post Conditions
 
-- [ ] S9.1 — Requires Syntax: Parse `requires(expr)` annotation before function body, attach to AST FnDecl node
-- [ ] S9.2 — Ensures Syntax: Parse `ensures(result, expr)` annotation after return type, bind `result` to return value
-- [ ] S9.3 — Invariant Syntax: Parse `invariant(expr)` annotation on loop constructs (while, for, loop)
-- [ ] S9.4 — Assert Distinction: Differentiate `assert(x)` (runtime) from `requires(x)` (contract) in analyzer
-- [ ] S9.5 — Runtime Fallback: When verification is disabled (`--no-verify`), lower requires/ensures to runtime assertions
-- [ ] S9.6 — Contract Inheritance: Trait method contracts propagate to impl methods — impl must satisfy trait's contracts
-- [ ] S9.7 — Old Value Capture: `ensures(result > old(x))` captures parameter value at function entry for postcondition
-- [ ] S9.8 — Multiple Contracts: Allow stacking multiple requires/ensures on a single function, all must hold
-- [ ] S9.9 — Contract Error Codes: Define VE001-VE008 (VerificationError) for contract violations with miette diagnostics
-- [ ] S9.10 — Unit Tests: 15+ tests for parsing, runtime fallback, contract inheritance, old() capture, error reporting
+- [x] S9.1 — Requires Syntax: Parse `requires(expr)` annotation before function body, attach to AST FnDecl node
+- [x] S9.2 — Ensures Syntax: Parse `ensures(result, expr)` annotation after return type, bind `result` to return value
+- [x] S9.3 — Invariant Syntax: Parse `invariant(expr)` annotation on loop constructs (while, for, loop)
+- [x] S9.4 — Assert Distinction: Differentiate `assert(x)` (runtime) from `requires(x)` (contract) in analyzer
+- [x] S9.5 — Runtime Fallback: When verification is disabled (`--no-verify`), lower requires/ensures to runtime assertions
+- [x] S9.6 — Contract Inheritance: Trait method contracts propagate to impl methods — impl must satisfy trait's contracts
+- [x] S9.7 — Old Value Capture: `ensures(result > old(x))` captures parameter value at function entry for postcondition
+- [x] S9.8 — Multiple Contracts: Allow stacking multiple requires/ensures on a single function, all must hold
+- [x] S9.9 — Contract Error Codes: Define VE001-VE008 (VerificationError) for contract violations with miette diagnostics
+- [x] S9.10 — Unit Tests: 15+ tests for parsing, runtime fallback, contract inheritance, old() capture, error reporting
 
 ### Sprint S10 — SMT Integration
 
-- [ ] S10.1 — Z3 Bindings: Integrate z3-sys crate, create safe Rust wrapper for Z3 context, solver, and assertions
-- [ ] S10.2 — CVC5 Alternative: Implement CVC5 backend as alternative solver, selectable via `--smt-solver=cvc5`
-- [ ] S10.3 — Expression Encoding: Translate Fajar Lang expressions (arithmetic, comparison, boolean) to SMT-LIB format
-- [ ] S10.4 — Integer Theory: Encode integer operations with overflow semantics (wrapping, saturating, checked) in QF_BV
-- [ ] S10.5 — Array Theory: Encode array access patterns using SMT array theory for bounds verification
-- [ ] S10.6 — Sat/Unsat Reporting: Map solver result to compiler diagnostic — sat = property holds, unsat = violation found
-- [ ] S10.7 — Counterexample Extraction: When verification fails, extract concrete counterexample values from SMT model
-- [ ] S10.8 — Timeout Configuration: Set solver timeout (default 5s per function), report "unknown" on timeout
-- [ ] S10.9 — Incremental Solving: Use solver push/pop for checking multiple conditions without full re-encoding
-- [ ] S10.10 — Unit Tests: 15+ tests for expression encoding, integer arithmetic proofs, array bounds, counterexamples
+- [x] S10.1 — Z3 Bindings: Integrate z3-sys crate, create safe Rust wrapper for Z3 context, solver, and assertions
+- [x] S10.2 — CVC5 Alternative: Implement CVC5 backend as alternative solver, selectable via `--smt-solver=cvc5`
+- [x] S10.3 — Expression Encoding: Translate Fajar Lang expressions (arithmetic, comparison, boolean) to SMT-LIB format
+- [x] S10.4 — Integer Theory: Encode integer operations with overflow semantics (wrapping, saturating, checked) in QF_BV
+- [x] S10.5 — Array Theory: Encode array access patterns using SMT array theory for bounds verification
+- [x] S10.6 — Sat/Unsat Reporting: Map solver result to compiler diagnostic — sat = property holds, unsat = violation found
+- [x] S10.7 — Counterexample Extraction: When verification fails, extract concrete counterexample values from SMT model
+- [x] S10.8 — Timeout Configuration: Set solver timeout (default 5s per function), report "unknown" on timeout
+- [x] S10.9 — Incremental Solving: Use solver push/pop for checking multiple conditions without full re-encoding
+- [x] S10.10 — Unit Tests: 15+ tests for expression encoding, integer arithmetic proofs, array bounds, counterexamples
 
 ### Sprint S11 — @verified Functions
 
-- [ ] S11.1 — @verified Annotation: Parse `@verified fn ...` context annotation, enable static verification for function
-- [ ] S11.2 — Verification Pipeline: After type checking, run SMT verification pass on @verified functions only
-- [ ] S11.3 — Automatic Bounds Proof: For @verified functions, prove all array accesses are within bounds without runtime checks
-- [ ] S11.4 — Overflow Proof: Prove arithmetic operations in @verified functions cannot overflow for given preconditions
-- [ ] S11.5 — Null Safety Proof: Prove all Option unwraps in @verified functions are preceded by Some checks
-- [ ] S11.6 — Loop Termination Hints: `@verified fn` with loops requires explicit `decreases(expr)` for termination argument
-- [ ] S11.7 — Verification Cache: Cache successful verification results keyed by function hash, skip re-verification
-- [ ] S11.8 — Partial Verification: If only some conditions are provable, report proved/unproved separately
-- [ ] S11.9 — Verification Report: `fj verify src.fj` outputs human-readable report of all @verified function proofs
-- [ ] S11.10 — Unit Tests: 15+ tests for full verification pipeline, bounds proofs, overflow proofs, cache hits, partial results
+- [x] S11.1 — @verified Annotation: Parse `@verified fn ...` context annotation, enable static verification for function
+- [x] S11.2 — Verification Pipeline: After type checking, run SMT verification pass on @verified functions only
+- [x] S11.3 — Automatic Bounds Proof: For @verified functions, prove all array accesses are within bounds without runtime checks
+- [x] S11.4 — Overflow Proof: Prove arithmetic operations in @verified functions cannot overflow for given preconditions
+- [x] S11.5 — Null Safety Proof: Prove all Option unwraps in @verified functions are preceded by Some checks
+- [x] S11.6 — Loop Termination Hints: `@verified fn` with loops requires explicit `decreases(expr)` for termination argument
+- [x] S11.7 — Verification Cache: Cache successful verification results keyed by function hash, skip re-verification
+- [x] S11.8 — Partial Verification: If only some conditions are provable, report proved/unproved separately
+- [x] S11.9 — Verification Report: `fj verify src.fj` outputs human-readable report of all @verified function proofs
+- [x] S11.10 — Unit Tests: 15+ tests for full verification pipeline, bounds proofs, overflow proofs, cache hits, partial results
 
 ### Sprint S12 — Kernel Verification
 
-- [ ] S12.1 — @kernel + @verified Composition: Allow `@kernel @verified fn` for maximum safety — context + formal proof
-- [ ] S12.2 — Page Table Bounds: Prove @kernel @verified functions never index beyond page table entry count (512 for 4-level)
-- [ ] S12.3 — Stack Depth Proof: Verify @kernel functions have bounded recursion depth, proving no stack overflow
-- [ ] S12.4 — Memory Region Safety: Prove MMIO reads/writes stay within declared region bounds
-- [ ] S12.5 — IRQ Latency Bound: Verify @kernel IRQ handlers have bounded execution time (no unbounded loops)
-- [ ] S12.6 — Allocation-Free Proof: Statically verify @kernel @verified functions perform zero heap allocations
-- [ ] S12.7 — Register Preservation: Prove that @kernel functions save/restore callee-saved registers correctly
-- [ ] S12.8 — Interrupt Safety: Verify that @kernel functions called from interrupt context are reentrant-safe
-- [ ] S12.9 — Cross-Context Verification: Verify @safe bridge functions correctly mediate between @kernel and @device
-- [ ] S12.10 — Unit Tests: 15+ tests for page table bounds, stack depth, memory regions, IRQ latency, allocation-free proof
+- [x] S12.1 — @kernel + @verified Composition: Allow `@kernel @verified fn` for maximum safety — context + formal proof
+- [x] S12.2 — Page Table Bounds: Prove @kernel @verified functions never index beyond page table entry count (512 for 4-level)
+- [x] S12.3 — Stack Depth Proof: Verify @kernel functions have bounded recursion depth, proving no stack overflow
+- [x] S12.4 — Memory Region Safety: Prove MMIO reads/writes stay within declared region bounds
+- [x] S12.5 — IRQ Latency Bound: Verify @kernel IRQ handlers have bounded execution time (no unbounded loops)
+- [x] S12.6 — Allocation-Free Proof: Statically verify @kernel @verified functions perform zero heap allocations
+- [x] S12.7 — Register Preservation: Prove that @kernel functions save/restore callee-saved registers correctly
+- [x] S12.8 — Interrupt Safety: Verify that @kernel functions called from interrupt context are reentrant-safe
+- [x] S12.9 — Cross-Context Verification: Verify @safe bridge functions correctly mediate between @kernel and @device
+- [x] S12.10 — Unit Tests: 15+ tests for page table bounds, stack depth, memory regions, IRQ latency, allocation-free proof
 
 ---
 
