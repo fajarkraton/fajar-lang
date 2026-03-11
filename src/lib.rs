@@ -27,6 +27,7 @@ pub mod debugger;
 pub mod demos;
 pub mod dependent;
 pub mod docgen;
+pub mod effects;
 pub mod formatter;
 pub mod hw;
 pub mod interpreter;

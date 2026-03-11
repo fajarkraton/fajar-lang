@@ -275,55 +275,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S17 — Effect Inference
 
-- [ ] S17.1 — Effect Annotation Syntax: Parse `fn foo() -> i32 with IO, Alloc` effect list on function signatures
-- [ ] S17.2 — Effect Set Type: Define `EffectSet` as a set of effect labels, attached to function types in the type system
-- [ ] S17.3 — Automatic Inference: Infer effects from function body — `print()` implies `IO`, `alloc()` implies `Alloc`
-- [ ] S17.4 — Effect Propagation: Calling a function with effects `{IO}` adds `IO` to the caller's effect set
-- [ ] S17.5 — Effect Annotation Optional: When effects are fully inferable, annotation is optional (inferred from body)
-- [ ] S17.6 — Effect Mismatch Error: Error when annotated effects are narrower than inferred effects (missing effect)
-- [ ] S17.7 — Pure Functions: Functions with empty effect set (`with {}` or inferred) are guaranteed pure — no side effects
-- [ ] S17.8 — Built-in Effects: Define standard effects: `IO`, `Alloc`, `Panic`, `Async`, `Unsafe`, `Network`, `FileSystem`
-- [ ] S17.9 — Effect Display: Show inferred effects in error messages and `fj check` output for developer visibility
-- [ ] S17.10 — Unit Tests: 15+ tests for inference accuracy, propagation chains, mismatch errors, pure function detection
+- [x] S17.1 — Effect Annotation Syntax: Parse `fn foo() -> i32 with IO, Alloc` effect list on function signatures
+- [x] S17.2 — Effect Set Type: Define `EffectSet` as a set of effect labels, attached to function types in the type system
+- [x] S17.3 — Automatic Inference: Infer effects from function body — `print()` implies `IO`, `alloc()` implies `Alloc`
+- [x] S17.4 — Effect Propagation: Calling a function with effects `{IO}` adds `IO` to the caller's effect set
+- [x] S17.5 — Effect Annotation Optional: When effects are fully inferable, annotation is optional (inferred from body)
+- [x] S17.6 — Effect Mismatch Error: Error when annotated effects are narrower than inferred effects (missing effect)
+- [x] S17.7 — Pure Functions: Functions with empty effect set (`with {}` or inferred) are guaranteed pure — no side effects
+- [x] S17.8 — Built-in Effects: Define standard effects: `IO`, `Alloc`, `Panic`, `Async`, `Unsafe`, `Network`, `FileSystem`
+- [x] S17.9 — Effect Display: Show inferred effects in error messages and `fj check` output for developer visibility
+- [x] S17.10 — Unit Tests: 15+ tests for inference accuracy, propagation chains, mismatch errors, pure function detection
 
 ### Sprint S18 — Effect Polymorphism
 
-- [ ] S18.1 — Effect Variables: Parse `fn map<T, U, eff E>(f: fn(T) -> U with E, xs: [T]) -> [U] with E` syntax
-- [ ] S18.2 — Effect Bounds: `fn foo<eff E: IO + Alloc>()` constraining effect variables to include specific effects
-- [ ] S18.3 — Effect Unification: Unify effect variables during type inference — `E` resolved to concrete effect set at call site
-- [ ] S18.4 — Higher-Order Effects: Functions taking effectful callbacks correctly propagate callback's effects to caller
-- [ ] S18.5 — Effect Subtyping: `{IO} <: {IO, Alloc}` — a function with fewer effects is substitutable for one with more
-- [ ] S18.6 — Effect Row Polymorphism: `fn foo<eff E>(f: fn() -> T with {IO | E}) -> T with {IO | E}` open rows
-- [ ] S18.7 — Effect Instantiation: At monomorphization, substitute concrete effect sets for effect variables
-- [ ] S18.8 — Effect Constraints in Traits: `trait Pure { fn compute(&self) -> i32 with {} }` enforcing purity in trait methods
-- [ ] S18.9 — Effect Variance: Covariant effect sets in return position, contravariant in argument position
-- [ ] S18.10 — Unit Tests: 15+ tests for polymorphic effects, bounds, unification, higher-order, subtyping, row polymorphism
+- [x] S18.1 — Effect Variables: Parse `fn map<T, U, eff E>(f: fn(T) -> U with E, xs: [T]) -> [U] with E` syntax
+- [x] S18.2 — Effect Bounds: `fn foo<eff E: IO + Alloc>()` constraining effect variables to include specific effects
+- [x] S18.3 — Effect Unification: Unify effect variables during type inference — `E` resolved to concrete effect set at call site
+- [x] S18.4 — Higher-Order Effects: Functions taking effectful callbacks correctly propagate callback's effects to caller
+- [x] S18.5 — Effect Subtyping: `{IO} <: {IO, Alloc}` — a function with fewer effects is substitutable for one with more
+- [x] S18.6 — Effect Row Polymorphism: `fn foo<eff E>(f: fn() -> T with {IO | E}) -> T with {IO | E}` open rows
+- [x] S18.7 — Effect Instantiation: At monomorphization, substitute concrete effect sets for effect variables
+- [x] S18.8 — Effect Constraints in Traits: `trait Pure { fn compute(&self) -> i32 with {} }` enforcing purity in trait methods
+- [x] S18.9 — Effect Variance: Covariant effect sets in return position, contravariant in argument position
+- [x] S18.10 — Unit Tests: 15+ tests for polymorphic effects, bounds, unification, higher-order, subtyping, row polymorphism
 
 ### Sprint S19 — Handler Composition
 
-- [ ] S19.1 — Effect Handler Syntax: Parse `handle expr { effect Op(args) -> resume(value) }` handler blocks
-- [ ] S19.2 — Resume Continuation: `resume(value)` continues the effectful computation with the provided value
-- [ ] S19.3 — Handler Semantics: Handler intercepts effect operations, decides how to resume or abort computation
-- [ ] S19.4 — Nested Handlers: Multiple handlers can be nested, inner handler has priority for matching effects
-- [ ] S19.5 — Handler Composition: `handler1 >> handler2` composes two handlers, effects flow through both
-- [ ] S19.6 — Effect Tunneling: Unhandled effects pass through to outer handlers without explicit forwarding
-- [ ] S19.7 — State Effect: Implement `State<S>` effect with `get() -> S` and `set(S)` operations as library pattern
-- [ ] S19.8 — Exception Effect: Implement `Exception<E>` effect with `raise(E)` as alternative to Result/panic
-- [ ] S19.9 — Handler Return Type: Handler block has its own return type, may differ from the handled computation's type
-- [ ] S19.10 — Unit Tests: 15+ tests for handler matching, resume semantics, nesting, composition, tunneling, state/exception
+- [x] S19.1 — Effect Handler Syntax: Parse `handle expr { effect Op(args) -> resume(value) }` handler blocks
+- [x] S19.2 — Resume Continuation: `resume(value)` continues the effectful computation with the provided value
+- [x] S19.3 — Handler Semantics: Handler intercepts effect operations, decides how to resume or abort computation
+- [x] S19.4 — Nested Handlers: Multiple handlers can be nested, inner handler has priority for matching effects
+- [x] S19.5 — Handler Composition: `handler1 >> handler2` composes two handlers, effects flow through both
+- [x] S19.6 — Effect Tunneling: Unhandled effects pass through to outer handlers without explicit forwarding
+- [x] S19.7 — State Effect: Implement `State<S>` effect with `get() -> S` and `set(S)` operations as library pattern
+- [x] S19.8 — Exception Effect: Implement `Exception<E>` effect with `raise(E)` as alternative to Result/panic
+- [x] S19.9 — Handler Return Type: Handler block has its own return type, may differ from the handled computation's type
+- [x] S19.10 — Unit Tests: 15+ tests for handler matching, resume semantics, nesting, composition, tunneling, state/exception
 
 ### Sprint S20 — Effect Interop
 
-- [ ] S20.1 — Effects + Async: Map `Async` effect to existing async/await machinery — await is an effect operation
-- [ ] S20.2 — Effects + @kernel: @kernel context implies `with {!IO, !Alloc}` — absence of IO and Alloc effects
-- [ ] S20.3 — Effects + @device: @device context implies `with {Tensor, !Unsafe}` — tensor ops allowed, unsafe forbidden
-- [ ] S20.4 — Effects + Linear Types: Linear values in effect handlers must be consumed exactly once across resume paths
-- [ ] S20.5 — Effect Erasure: At native codegen, erase effect types — zero runtime overhead for effect tracking
-- [ ] S20.6 — Effect-Guided Optimization: Pure functions (empty effect set) eligible for aggressive CSE, reordering, memoization
-- [ ] S20.7 — Effect Documentation: Effects shown in `cargo doc` output, `fj check` reports, and LSP hover information
-- [ ] S20.8 — Migration Guide: Document how to add effect annotations to existing code incrementally (backward compatible)
-- [ ] S20.9 — Standard Library Effects: Annotate all stdlib functions with their effect sets (IO, Alloc, Panic, etc.)
-- [ ] S20.10 — Unit Tests: 15+ tests for async interop, context annotation mapping, linear interaction, erasure, optimization
+- [x] S20.1 — Effects + Async: Map `Async` effect to existing async/await machinery — await is an effect operation
+- [x] S20.2 — Effects + @kernel: @kernel context implies `with {!IO, !Alloc}` — absence of IO and Alloc effects
+- [x] S20.3 — Effects + @device: @device context implies `with {Tensor, !Unsafe}` — tensor ops allowed, unsafe forbidden
+- [x] S20.4 — Effects + Linear Types: Linear values in effect handlers must be consumed exactly once across resume paths
+- [x] S20.5 — Effect Erasure: At native codegen, erase effect types — zero runtime overhead for effect tracking
+- [x] S20.6 — Effect-Guided Optimization: Pure functions (empty effect set) eligible for aggressive CSE, reordering, memoization
+- [x] S20.7 — Effect Documentation: Effects shown in `cargo doc` output, `fj check` reports, and LSP hover information
+- [x] S20.8 — Migration Guide: Document how to add effect annotations to existing code incrementally (backward compatible)
+- [x] S20.9 — Standard Library Effects: Annotate all stdlib functions with their effect sets (IO, Alloc, Panic, etc.)
+- [x] S20.10 — Unit Tests: 15+ tests for async interop, context annotation mapping, linear interaction, erasure, optimization
 
 ---
 
