@@ -570,55 +570,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S37 — Drone Firmware Demo
 
-- [ ] S37.1 — Flight Controller Skeleton: Fajar Lang program with main loop: read sensors → infer → actuate
-- [ ] S37.2 — Sensor Fusion: IMU (accelerometer + gyroscope) data fusion using complementary filter in .fj
-- [ ] S37.3 — Real-Time Inference: Obstacle avoidance model running at 30Hz on Jetson Thor GPU
-- [ ] S37.4 — Motor Control: PWM output generation for 4 brushless motors via HAL trait implementation
-- [ ] S37.5 — Failsafe Logic: Watchdog timer, low-battery cutoff, GPS fence violation handling
-- [ ] S37.6 — Telemetry: Serial UART output of flight state (attitude, altitude, battery, GPS) at 10Hz
-- [ ] S37.7 — Cross-Compile for Thor: Build drone firmware targeting aarch64 Jetson Thor with JetPack 7.1
-- [ ] S37.8 — Simulation Mode: Run same firmware in QEMU aarch64 with simulated sensor inputs
-- [ ] S37.9 — Demo Script: Step-by-step reproduction guide: build, flash, boot, observe telemetry
-- [ ] S37.10 — Demo Video Script: Outline for 3-minute video showing build, deploy, and flight simulation
+- [x] S37.1 — Flight Controller Skeleton: Fajar Lang program with main loop: read sensors → infer → actuate
+- [x] S37.2 — Sensor Fusion: IMU (accelerometer + gyroscope) data fusion using complementary filter in .fj
+- [x] S37.3 — Real-Time Inference: Obstacle avoidance model running at 30Hz on Jetson Thor GPU
+- [x] S37.4 — Motor Control: PWM output generation for 4 brushless motors via HAL trait implementation
+- [x] S37.5 — Failsafe Logic: Watchdog timer, low-battery cutoff, GPS fence violation handling
+- [x] S37.6 — Telemetry: Serial UART output of flight state (attitude, altitude, battery, GPS) at 10Hz
+- [x] S37.7 — Cross-Compile for Thor: Build drone firmware targeting aarch64 Jetson Thor with JetPack 7.1
+- [x] S37.8 — Simulation Mode: Run same firmware in QEMU aarch64 with simulated sensor inputs
+- [x] S37.9 — Demo Script: Step-by-step reproduction guide: build, flash, boot, observe telemetry
+- [x] S37.10 — Demo Video Script: Outline for 3-minute video showing build, deploy, and flight simulation
 
 ### Sprint S38 — MNIST on Real GPU
 
-- [ ] S38.1 — MNIST Data Loader: Load MNIST dataset from IDX files into Fajar Lang tensors
-- [ ] S38.2 — LeNet-5 Model: Define LeNet-5 (Conv2d → ReLU → Pool → Conv2d → ReLU → Pool → Dense → Dense) in .fj
-- [ ] S38.3 — GPU Training Loop: Train LeNet-5 on real RTX 5090/4090 GPU with CUDA backend, 10 epochs
-- [ ] S38.4 — FP32 Baseline: Establish baseline accuracy (>98%) and training time in FP32
-- [ ] S38.5 — BF16 Mixed Precision: Re-train with BF16 mixed precision, compare accuracy and speedup
-- [ ] S38.6 — FP8 Quantized Inference: Post-training quantization to FP8 (E4M3), measure accuracy retention
-- [ ] S38.7 — FP4 Quantized Inference: Aggressive quantization to FP4, measure accuracy vs latency tradeoff
-- [ ] S38.8 — PyTorch Comparison: Benchmark identical LeNet-5 in PyTorch, compare training time and inference latency
-- [ ] S38.9 — Results Table: Generate markdown table with accuracy, training time, inference latency across formats
-- [ ] S38.10 — Demo Video Script: Outline for 3-minute video showing training, accuracy curves, benchmark results
+- [x] S38.1 — MNIST Data Loader: Load MNIST dataset from IDX files into Fajar Lang tensors
+- [x] S38.2 — LeNet-5 Model: Define LeNet-5 (Conv2d → ReLU → Pool → Conv2d → ReLU → Pool → Dense → Dense) in .fj
+- [x] S38.3 — GPU Training Loop: Train LeNet-5 on real RTX 5090/4090 GPU with CUDA backend, 10 epochs
+- [x] S38.4 — FP32 Baseline: Establish baseline accuracy (>98%) and training time in FP32
+- [x] S38.5 — BF16 Mixed Precision: Re-train with BF16 mixed precision, compare accuracy and speedup
+- [x] S38.6 — FP8 Quantized Inference: Post-training quantization to FP8 (E4M3), measure accuracy retention
+- [x] S38.7 — FP4 Quantized Inference: Aggressive quantization to FP4, measure accuracy vs latency tradeoff
+- [x] S38.8 — PyTorch Comparison: Benchmark identical LeNet-5 in PyTorch, compare training time and inference latency
+- [x] S38.9 — Results Table: Generate markdown table with accuracy, training time, inference latency across formats
+- [x] S38.10 — Demo Video Script: Outline for 3-minute video showing training, accuracy curves, benchmark results
 
 ### Sprint S39 — Mini OS on QEMU
 
-- [ ] S39.1 — x86_64 Boot: Boot bare-metal Fajar Lang kernel on QEMU x86_64, reach protected mode
-- [ ] S39.2 — Page Table Setup: 4-level page table initialization, identity-map first 4GB, higher-half kernel
-- [ ] S39.3 — Interrupt Handler: IDT setup, handle divide-by-zero, page fault, double fault, keyboard IRQ
-- [ ] S39.4 — Serial Console: UART 16550 driver for serial output, kernel log to serial port
-- [ ] S39.5 — VGA Text Mode: 80x25 VGA text buffer with color attributes, scroll support
-- [ ] S39.6 — Kernel Panic Display: Panic handler showing register dump, stack trace, error message on VGA
-- [ ] S39.7 — ARM64 Boot: Boot on QEMU aarch64 (virt machine), reach EL1, set up MMU
-- [ ] S39.8 — Simple Shell: Keyboard input → command parser → execute built-in commands (help, info, reboot)
-- [ ] S39.9 — Build System: `fj build --target bare-x86_64` produces bootable ISO image via GRUB/Limine
-- [ ] S39.10 — Demo Video Script: Outline for 3-minute video showing boot sequence, shell interaction, panic handling
+- [x] S39.1 — x86_64 Boot: Boot bare-metal Fajar Lang kernel on QEMU x86_64, reach protected mode
+- [x] S39.2 — Page Table Setup: 4-level page table initialization, identity-map first 4GB, higher-half kernel
+- [x] S39.3 — Interrupt Handler: IDT setup, handle divide-by-zero, page fault, double fault, keyboard IRQ
+- [x] S39.4 — Serial Console: UART 16550 driver for serial output, kernel log to serial port
+- [x] S39.5 — VGA Text Mode: 80x25 VGA text buffer with color attributes, scroll support
+- [x] S39.6 — Kernel Panic Display: Panic handler showing register dump, stack trace, error message on VGA
+- [x] S39.7 — ARM64 Boot: Boot on QEMU aarch64 (virt machine), reach EL1, set up MMU
+- [x] S39.8 — Simple Shell: Keyboard input → command parser → execute built-in commands (help, info, reboot)
+- [x] S39.9 — Build System: `fj build --target bare-x86_64` produces bootable ISO image via GRUB/Limine
+- [x] S39.10 — Demo Video Script: Outline for 3-minute video showing boot sequence, shell interaction, panic handling
 
 ### Sprint S40 — Integration Showcase
 
-- [ ] S40.1 — End-to-End Demo: Single Fajar Lang project combining OS kernel + ML inference + hardware dispatch
-- [ ] S40.2 — Scenario: Sensor Read to Prediction: @kernel reads sensor → @device preprocesses → @infer predicts → @kernel actuates
-- [ ] S40.3 — Context Safety Demo: Show compiler rejecting @kernel code using tensor ops, @device using raw pointers
-- [ ] S40.4 — Multi-Format Demo: Same model inferred in FP32, BF16, FP8, FP4 with accuracy comparison table
-- [ ] S40.5 — Playground Integration: All demo code runnable in online playground (interpreter-mode subset)
-- [ ] S40.6 — Tutorial Documentation: 20-page tutorial walking through building the end-to-end demo from scratch
-- [ ] S40.7 — Benchmark Suite: Publish all benchmark results: training time, inference latency, binary size, memory usage
-- [ ] S40.8 — Blog Post Draft: 2000-word announcement post: "Fajar Lang v1.1: From Simulation to Silicon"
-- [ ] S40.9 — Video Script: 10-minute video script covering all 3 demos + playground + ecosystem
-- [ ] S40.10 — Release Checklist: Final verification of all 400 tasks, test suite, documentation, release notes
+- [x] S40.1 — End-to-End Demo: Single Fajar Lang project combining OS kernel + ML inference + hardware dispatch
+- [x] S40.2 — Scenario: Sensor Read to Prediction: @kernel reads sensor → @device preprocesses → @infer predicts → @kernel actuates
+- [x] S40.3 — Context Safety Demo: Show compiler rejecting @kernel code using tensor ops, @device using raw pointers
+- [x] S40.4 — Multi-Format Demo: Same model inferred in FP32, BF16, FP8, FP4 with accuracy comparison table
+- [x] S40.5 — Playground Integration: All demo code runnable in online playground (interpreter-mode subset)
+- [x] S40.6 — Tutorial Documentation: 20-page tutorial walking through building the end-to-end demo from scratch
+- [x] S40.7 — Benchmark Suite: Publish all benchmark results: training time, inference latency, binary size, memory usage
+- [x] S40.8 — Blog Post Draft: 2000-word announcement post: "Fajar Lang v1.1: From Simulation to Silicon"
+- [x] S40.9 — Video Script: 10-minute video script covering all 3 demos + playground + ecosystem
+- [x] S40.10 — Release Checklist: Final verification of all 400 tasks, test suite, documentation, release notes
 
 ---
 
