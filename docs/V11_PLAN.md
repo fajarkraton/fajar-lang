@@ -87,16 +87,16 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S4 — Accelerator Registry
 
-- [ ] S4.1 — HardwareProfile Struct: Unified `HardwareProfile { cpus: Vec<CpuFeatures>, gpus: Vec<GpuDevice>, npus: Vec<NpuDevice> }`
-- [ ] S4.2 — Accelerator Ranking: Score each accelerator by TOPS/FLOPS, sort by capability for dispatch priority
-- [ ] S4.3 — Fallback Chain: Define CPU-only → NPU → GPU fallback chain with user-overridable priority config
-- [ ] S4.4 — Profile Serialization: Serialize HardwareProfile to JSON for caching and remote reporting
-- [ ] S4.5 — CLI Command `fj --hw-info`: Implement CLI flag that prints full hardware profile in human-readable format
-- [ ] S4.6 — CLI Command `fj --hw-json`: Implement CLI flag that outputs hardware profile as machine-readable JSON
-- [ ] S4.7 — Accelerator Selection API: `hw::select_best(task_type) -> Accelerator` returns optimal device for workload
-- [ ] S4.8 — Environment Override: `FJ_ACCELERATOR=cpu|npu|gpu` env var to force specific accelerator in dispatch
-- [ ] S4.9 — Integration with Interpreter: Wire HardwareProfile into Interpreter/Compiler context for runtime dispatch
-- [ ] S4.10 — Integration Tests: End-to-end test: detect hardware, serialize profile, select accelerator, verify fallback
+- [x] S4.1 — HardwareProfile Struct: Unified `HardwareProfile { cpus: Vec<CpuFeatures>, gpus: Vec<GpuDevice>, npus: Vec<NpuDevice> }`
+- [x] S4.2 — Accelerator Ranking: Score each accelerator by TOPS/FLOPS, sort by capability for dispatch priority
+- [x] S4.3 — Fallback Chain: Define CPU-only → NPU → GPU fallback chain with user-overridable priority config
+- [x] S4.4 — Profile Serialization: Serialize HardwareProfile to JSON for caching and remote reporting
+- [x] S4.5 — CLI Command `fj --hw-info`: Implement CLI flag that prints full hardware profile in human-readable format
+- [x] S4.6 — CLI Command `fj --hw-json`: Implement CLI flag that outputs hardware profile as machine-readable JSON
+- [x] S4.7 — Accelerator Selection API: `hw::select_best(task_type) -> Accelerator` returns optimal device for workload
+- [x] S4.8 — Environment Override: `FJ_ACCELERATOR=cpu|npu|gpu` env var to force specific accelerator in dispatch
+- [x] S4.9 — Integration with Interpreter: Wire HardwareProfile into Interpreter/Compiler context for runtime dispatch
+- [x] S4.10 — Integration Tests: End-to-end test: detect hardware, serialize profile, select accelerator, verify fallback
 
 ---
 

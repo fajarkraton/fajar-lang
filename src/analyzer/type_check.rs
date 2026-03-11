@@ -1737,6 +1737,10 @@ impl TypeChecker {
             ("hw_has_neon", vec![], Type::Bool),
             ("hw_has_sve", vec![], Type::Bool),
             ("hw_simd_width", vec![], Type::I64),
+            // Accelerator registry builtins (v1.1 S4)
+            ("hw_gpu_count", vec![], Type::I64),
+            ("hw_npu_count", vec![], Type::I64),
+            ("hw_best_accelerator", vec![], Type::Str),
         ];
         for (name, params, ret) in hw_fns {
             self.symbols.define(Symbol {

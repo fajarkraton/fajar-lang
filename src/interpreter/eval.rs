@@ -465,6 +465,10 @@ impl Interpreter {
             "hw_has_neon",
             "hw_has_sve",
             "hw_simd_width",
+            // Accelerator registry builtins (v1.1 S4)
+            "hw_gpu_count",
+            "hw_npu_count",
+            "hw_best_accelerator",
         ];
         for name in &builtins {
             self.env
@@ -2260,6 +2264,20 @@ impl Interpreter {
             "hw_simd_width" => {
                 let cpu = crate::hw::CpuFeatures::cached();
                 Ok(Value::Int(cpu.best_simd_width() as i64))
+            }
+            // Accelerator registry builtins (v1.1 S4)
+            "hw_gpu_count" => {
+                let profile = crate::hw::HardwareProfile::detect();
+                Ok(Value::Int(profile.gpu.devices.len() as i64))
+            }
+            "hw_npu_count" => {
+                let profile = crate::hw::HardwareProfile::detect();
+                Ok(Value::Int(profile.npu.devices.len() as i64))
+            }
+            "hw_best_accelerator" => {
+                let profile = crate::hw::HardwareProfile::detect();
+                let best = profile.select_best(crate::hw::TaskType::General);
+                Ok(Value::Str(best.to_string()))
             }
             _ => {
                 // Check for enum constructor builtins
