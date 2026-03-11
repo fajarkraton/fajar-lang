@@ -228,7 +228,7 @@ fn main() -> i64 {
 | | Error recovery (multi-error, suggestions, hints) | Working |
 | | `fj watch` (auto-run on file change) | Working |
 | | `fj bench` (micro-benchmarks) | Working |
-| **v0.6** | LLVM backend (inkwell, expressions, control flow, functions) | In Progress |
+| **v0.6** | LLVM backend (inkwell, expressions, control flow, functions) | Working |
 | | LLVM JIT execution + AOT object/assembly emission | Working |
 | | LLVM optimization passes (O0-O3 via new pass manager) | Working |
 | **Tools** | REPL (multi-line, `:type`, `:help`) | Working |
@@ -277,7 +277,7 @@ docs/                 -- 44 reference documents
 | Metric | Value |
 |--------|-------|
 | Rust LOC | ~101,000 |
-| Tests | 1,767 default + 36 LLVM = 1,803+ (0 failures) |
+| Tests | 1,770 default + 49 LLVM = 1,819+ (0 failures) |
 | Examples | 24 `.fj` programs |
 | Error codes | 71 across 9 categories |
 | Documentation | 47 docs + 40-page mdBook |

@@ -42,6 +42,9 @@ enum Command {
         /// Use Cranelift JIT native compilation (requires `native` feature).
         #[arg(long)]
         native: bool,
+        /// Use LLVM JIT native compilation (requires `llvm` feature).
+        #[arg(long)]
+        llvm: bool,
     },
     /// Start an interactive REPL.
     Repl,
@@ -91,6 +94,12 @@ enum Command {
         /// Linker script path (for bare-metal targets).
         #[arg(long, name = "linker-script")]
         linker_script: Option<String>,
+        /// Backend: "cranelift" (default) or "llvm".
+        #[arg(long, default_value = "cranelift")]
+        backend: String,
+        /// LLVM optimization level (0-3). Only used with --backend llvm.
+        #[arg(long, name = "opt-level", default_value = "0")]
+        opt_level: u8,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -146,7 +155,12 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Run { file, vm, native } => {
+        Command::Run {
+            file,
+            vm,
+            native,
+            llvm,
+        } => {
             let path = match file {
                 Some(f) => f,
                 None => match resolve_project_entry() {
@@ -157,7 +171,9 @@ fn main() -> ExitCode {
                     }
                 },
             };
-            if native {
+            if llvm {
+                cmd_run_llvm(&path)
+            } else if native {
                 cmd_run_native(&path)
             } else if vm {
                 cmd_run_vm(&path)
@@ -178,6 +194,8 @@ fn main() -> ExitCode {
             output,
             no_std,
             linker_script,
+            backend,
+            opt_level,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -197,7 +215,11 @@ fn main() -> ExitCode {
                     fajar_lang::package::ProjectConfig::from_file(&root.join("fj.toml")).ok()?;
                 config.package.linker_script
             });
-            cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref())
+            if backend == "llvm" {
+                cmd_build_llvm(&path, output.as_deref(), opt_level)
+            } else {
+                cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref())
+            }
         }
         Command::Doc { file, output, open } => {
             let path = match file {
@@ -667,6 +689,76 @@ fn cmd_run_native(_path: &PathBuf) -> ExitCode {
     ExitCode::from(EXIT_COMPILE)
 }
 
+/// Executes a Fajar Lang program using LLVM JIT compilation.
+#[cfg(feature = "llvm")]
+fn cmd_run_llvm(path: &PathBuf) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Initialize LLVM native target
+    if let Err(e) = fajar_lang::codegen::llvm::LlvmCompiler::init_native_target() {
+        eprintln!("error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Compile via LLVM
+    let context = inkwell::context::Context::create();
+    let mut compiler = fajar_lang::codegen::llvm::LlvmCompiler::new(&context, "fj_main");
+
+    if let Err(e) = compiler.compile_program(&program) {
+        eprintln!("codegen error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // JIT execute main()
+    match compiler.jit_execute() {
+        Ok(result) => {
+            if result != 0 {
+                println!("{result}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            eprintln!("hint: LLVM execution requires a `fn main()` entry point returning i64");
+            ExitCode::from(EXIT_RUNTIME)
+        }
+    }
+}
+
+/// Stub for when llvm feature is not enabled.
+#[cfg(not(feature = "llvm"))]
+fn cmd_run_llvm(_path: &PathBuf) -> ExitCode {
+    eprintln!("error: LLVM backend not available");
+    eprintln!("hint: rebuild with `cargo build --features llvm`");
+    ExitCode::from(EXIT_COMPILE)
+}
+
 /// Formats a Fajar Lang source file.
 fn cmd_fmt(path: &PathBuf, check: bool) -> ExitCode {
     let source = match read_source(path) {
@@ -766,6 +858,119 @@ fn cmd_build(
     eprintln!("error: native compilation not available");
     eprintln!("hint: rebuild with `cargo build --features native`");
     let _ = path;
+    ExitCode::from(EXIT_COMPILE)
+}
+
+/// Builds a Fajar Lang program to a native object/binary via LLVM backend.
+#[cfg(feature = "llvm")]
+fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u8) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Initialize LLVM native target
+    if let Err(e) = fajar_lang::codegen::llvm::LlvmCompiler::init_native_target() {
+        eprintln!("error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Compile via LLVM
+    let context = inkwell::context::Context::create();
+    let mut compiler = fajar_lang::codegen::llvm::LlvmCompiler::new(&context, "fj_main");
+
+    // Set optimization level
+    let level = match opt_level {
+        0 => fajar_lang::codegen::llvm::LlvmOptLevel::O0,
+        1 => fajar_lang::codegen::llvm::LlvmOptLevel::O1,
+        2 => fajar_lang::codegen::llvm::LlvmOptLevel::O2,
+        _ => fajar_lang::codegen::llvm::LlvmOptLevel::O3,
+    };
+    compiler.set_opt_level(level);
+
+    if let Err(e) = compiler.compile_program(&program) {
+        eprintln!("codegen error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Optimize
+    if let Err(e) = compiler.optimize() {
+        eprintln!("error: LLVM optimization failed: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Emit object file
+    let obj_path = path.with_extension("o");
+    if let Err(e) = compiler.emit_object(&obj_path) {
+        eprintln!("error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Link to binary
+    let bin_path = output
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| path.with_extension(""));
+
+    let mut link_cmd = std::process::Command::new("cc");
+    link_cmd.arg(&obj_path).arg("-o").arg(&bin_path).arg("-lm");
+    if cfg!(target_os = "macos") {
+        link_cmd.arg("-Wl,-dead_strip");
+    } else {
+        link_cmd.arg("-Wl,--gc-sections");
+    }
+    let status = link_cmd.status();
+
+    // Clean up object file
+    let _ = std::fs::remove_file(&obj_path);
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("Built: {} (LLVM O{})", bin_path.display(), opt_level);
+            ExitCode::SUCCESS
+        }
+        Ok(s) => {
+            eprintln!(
+                "error: linker failed with exit code {}",
+                s.code().unwrap_or(-1)
+            );
+            ExitCode::from(EXIT_COMPILE)
+        }
+        Err(e) => {
+            eprintln!("error: cannot run linker: {e}");
+            eprintln!("hint: ensure a C compiler is installed (gcc, clang)");
+            ExitCode::from(EXIT_USAGE)
+        }
+    }
+}
+
+/// Stub when llvm feature is not enabled.
+#[cfg(not(feature = "llvm"))]
+fn cmd_build_llvm(_path: &PathBuf, _output: Option<&std::path::Path>, _opt_level: u8) -> ExitCode {
+    eprintln!("error: LLVM backend not available");
+    eprintln!("hint: rebuild with `cargo build --features llvm`");
     ExitCode::from(EXIT_COMPILE)
 }
 

@@ -149,13 +149,13 @@ half = "2.4"             # f16/bf16 types
 **Goal:** Optimization passes, LTO, AOT/JIT, CLI integration
 
 - [x] S6.1 — Optimization levels: `default<O0>`, `default<O1>`, `default<O2>`, `default<O3>`
-- [ ] S6.2 — Size optimization: `default<Os>`, `default<Oz>`
+- [x] S6.2 — Size optimization: `default<Os>`, `default<Oz>`
 - [x] S6.3 — Pass manager: new pass manager via `module.run_passes()`
-- [ ] S6.4 — LTO: `module.write_bitcode_to_path()` for link-time optimization
+- [x] S6.4 — LTO: `module.write_bitcode_to_path()` for link-time optimization
 - [x] S6.5 — JIT: `ExecutionEngine` with `get_function()` typed pointer
 - [x] S6.6 — AOT: `target_machine.write_to_file(Object)` → `.o` file
 - [x] S6.7 — Assembly output: `target_machine.write_to_file(Assembly)` → `.s` file
-- [ ] S6.8 — CLI: `fj build --backend llvm --opt-level 3` flag
+- [x] S6.8 — CLI: `fj build --backend llvm --opt-level 3` flag
 - [x] S6.9 — Cross-compilation: target init for x86_64, aarch64, riscv64, arm
 - [x] S6.10 — Tests: optimization, JIT, target machine creation
 

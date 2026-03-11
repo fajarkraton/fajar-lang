@@ -52,6 +52,10 @@ pub enum LlvmOptLevel {
     O2,
     /// Aggressive optimization.
     O3,
+    /// Optimize for size.
+    Os,
+    /// Optimize aggressively for size.
+    Oz,
 }
 
 impl LlvmOptLevel {
@@ -60,7 +64,7 @@ impl LlvmOptLevel {
         match self {
             LlvmOptLevel::O0 => OptimizationLevel::None,
             LlvmOptLevel::O1 => OptimizationLevel::Less,
-            LlvmOptLevel::O2 => OptimizationLevel::Default,
+            LlvmOptLevel::O2 | LlvmOptLevel::Os | LlvmOptLevel::Oz => OptimizationLevel::Default,
             LlvmOptLevel::O3 => OptimizationLevel::Aggressive,
         }
     }
@@ -72,6 +76,8 @@ impl LlvmOptLevel {
             LlvmOptLevel::O1 => "default<O1>",
             LlvmOptLevel::O2 => "default<O2>",
             LlvmOptLevel::O3 => "default<O3>",
+            LlvmOptLevel::Os => "default<Os>",
+            LlvmOptLevel::Oz => "default<Oz>",
         }
     }
 }
@@ -1868,6 +1874,11 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .map_err(|e| CodegenError::Internal(format!("LLVM emit assembly error: {e}")))
     }
 
+    /// Writes the compiled module to a bitcode file (for LTO).
+    pub fn emit_bitcode(&self, path: &Path) -> bool {
+        self.module.write_bitcode_to_path(path)
+    }
+
     /// JIT-executes the `main` function and returns its i64 result.
     pub fn jit_execute(&self) -> Result<i64, CodegenError> {
         let ee = self
@@ -3563,5 +3574,42 @@ mod tests {
         assert_eq!(LlvmOptLevel::O1.pass_string(), "default<O1>");
         assert_eq!(LlvmOptLevel::O2.pass_string(), "default<O2>");
         assert_eq!(LlvmOptLevel::O3.pass_string(), "default<O3>");
+        assert_eq!(LlvmOptLevel::Os.pass_string(), "default<Os>");
+        assert_eq!(LlvmOptLevel::Oz.pass_string(), "default<Oz>");
+    }
+
+    #[test]
+    fn llvm_size_optimization_os_oz() {
+        LlvmCompiler::init_native_target().unwrap();
+
+        for level in [LlvmOptLevel::Os, LlvmOptLevel::Oz] {
+            let ctx = Context::create();
+            let mut compiler = LlvmCompiler::new(&ctx, "test_size_opt");
+            compiler.set_opt_level(level);
+
+            let body = make_binop(make_int_lit(10), BinOp::Add, make_int_lit(32));
+            let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+            compiler.compile_program(&program).unwrap();
+            compiler.optimize().unwrap();
+            assert!(compiler.verify().is_ok());
+        }
+    }
+
+    #[test]
+    fn llvm_emit_bitcode() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_bitcode");
+
+        let body = make_int_lit(42);
+        let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+        compiler.compile_program(&program).unwrap();
+
+        let path = std::path::Path::new("/tmp/fj_test_bitcode.bc");
+        assert!(compiler.emit_bitcode(path));
+        assert!(path.exists());
+        let metadata = std::fs::metadata(path).unwrap();
+        assert!(metadata.len() > 0, "bitcode file should not be empty");
+        let _ = std::fs::remove_file(path);
     }
 }
