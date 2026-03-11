@@ -68,6 +68,15 @@ impl Token {
     }
 }
 
+/// A part of an f-string literal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FStringPart {
+    /// Literal text segment.
+    Literal(String),
+    /// Expression source code to be parsed and evaluated.
+    Expr(String),
+}
+
 /// All possible token kinds in the Fajar Lang lexer.
 ///
 /// Organized into: keywords, type keywords, ML keywords, OS keywords,
@@ -370,6 +379,10 @@ pub enum TokenKind {
     /// A `///` doc comment line (content after `///`, trimmed of leading space).
     DocComment(String),
 
+    /// An f-string literal: `f"Hello {name}"`.
+    /// Parts alternate between literal text and expression source code.
+    FStringLit(Vec<FStringPart>),
+
     // ── Literals ───────────────────────────────────────────────────────
     /// Integer literal (e.g. `42`, `0xFF`, `0b1010`, `0o17`).
     IntLit(i64),
@@ -533,6 +546,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Question => write!(f, "?"),
             // Doc comments
             TokenKind::DocComment(s) => write!(f, "/// {s}"),
+            TokenKind::FStringLit(_) => write!(f, "f\"...\""),
             // Literals
             TokenKind::IntLit(v) => write!(f, "{v}"),
             TokenKind::FloatLit(v) => write!(f, "{v}"),

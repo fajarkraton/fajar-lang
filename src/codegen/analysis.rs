@@ -246,7 +246,8 @@ fn analyze_expr(
         | Expr::Ident { .. }
         | Expr::Range { .. }
         | Expr::Path { .. }
-        | Expr::InlineAsm { .. } => {}
+        | Expr::InlineAsm { .. }
+        | Expr::FString { .. } => {}
     }
 }
 

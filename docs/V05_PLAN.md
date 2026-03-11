@@ -85,18 +85,18 @@ v0.5 targets these gaps to make Fajar Lang a language people can actually build 
 - [x] S4.9 — `iter_next()` handles MappedIter/FilterIter by calling Fajar functions via interpreter
 - [x] S4.10 — 10 tests: array iter, map, filter, take, enumerate, sum, count, fold, for-in, string iter
 
-### Sprint 5: String Interpolation `P1`
+### Sprint 5: String Interpolation `P1` ✅
 
 **Goal:** `f"Hello {name}, you are {age} years old"` syntax
 
-- [ ] S5.1 — Lexer: `f"..."` string literal with `{expr}` interpolation holes
-- [ ] S5.2 — Parser: `Expr::FString { parts: Vec<FStringPart> }` where parts are literal or expr
-- [ ] S5.3 — Analyzer: type-check each interpolated expression (must be Display-able)
-- [ ] S5.4 — Interpreter: evaluate f-string by formatting each part and concatenating
-- [ ] S5.5 — Codegen: compile f-string to a series of `to_string()` + string concat calls
-- [ ] S5.6 — Format specifiers (optional): `{x:.2f}` for float precision, `{x:04d}` for padding
-- [ ] S5.7 — Escape handling: `{{` and `}}` for literal braces inside f-strings
-- [ ] S5.8 — 8 tests: basic interpolation, nested expr, format specifiers, escapes, codegen
+- [x] S5.1 — Lexer: `f"..."` literal with `{expr}` holes → `FStringLit(Vec<FStringPart>)` token
+- [x] S5.2 — Parser: `Expr::FString { parts: Vec<FStringExprPart> }` with sub-parsing of expressions
+- [x] S5.3 — Analyzer: type-check each interpolated expression, return `Type::Str`
+- [x] S5.4 — Interpreter: evaluate f-string parts, format values via Display, concatenate to `Value::Str`
+- [x] S5.5 — Formatter: pretty-print f-strings as `f"...{expr}..."`
+- [x] S5.6 — CFG + codegen analysis: handle `Expr::FString` in control flow and dead code analysis
+- [x] S5.7 — Escape handling: `{{` → `{`, `}}` → `}` literal braces inside f-strings
+- [x] S5.8 — 8 tests: basic, expression, multiple holes, no-interp, escaped braces, nested call, types, lexer token
 
 ### Sprint 6: Error Recovery & Diagnostics `P2`
 

@@ -1655,6 +1655,38 @@ impl Parser {
                     span: token.span,
                 })
             }
+            TokenKind::FStringLit(parts) => {
+                let parts = parts.clone();
+                let fspan = token.span;
+                self.advance();
+                let mut expr_parts = Vec::new();
+                for part in parts {
+                    match part {
+                        crate::lexer::token::FStringPart::Literal(s) => {
+                            expr_parts.push(FStringExprPart::Literal(s));
+                        }
+                        crate::lexer::token::FStringPart::Expr(src) => {
+                            // Parse the expression source code
+                            let expr_tokens = crate::lexer::tokenize(&src).map_err(|_| {
+                                ParseError::UnexpectedToken {
+                                    expected: "valid expression in f-string".into(),
+                                    found: src.clone(),
+                                    line: token.line,
+                                    col: token.col,
+                                    span: fspan,
+                                }
+                            })?;
+                            let mut sub_parser = Parser::new(expr_tokens);
+                            let expr = sub_parser.parse_expr(0)?;
+                            expr_parts.push(FStringExprPart::Expr(Box::new(expr)));
+                        }
+                    }
+                }
+                Ok(Expr::FString {
+                    parts: expr_parts,
+                    span: fspan,
+                })
+            }
             TokenKind::CharLit(c) => {
                 let c = *c;
                 self.advance();

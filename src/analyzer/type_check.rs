@@ -7,8 +7,9 @@ use std::collections::HashMap;
 
 use crate::lexer::token::Span;
 use crate::parser::ast::{
-    AssignOp, BinOp, CallArg, ConstDef, Expr, ExternFn, FnDef, ImplBlock, Item, LiteralKind,
-    MatchArm, ModDecl, Pattern, Program, Stmt, TypeAlias, TypeExpr, UnaryOp, UseDecl, UseKind,
+    AssignOp, BinOp, CallArg, ConstDef, Expr, ExternFn, FStringExprPart, FnDef, ImplBlock, Item,
+    LiteralKind, MatchArm, ModDecl, Pattern, Program, Stmt, TypeAlias, TypeExpr, UnaryOp, UseDecl,
+    UseKind,
 };
 
 use super::scope::{Symbol, SymbolTable};
@@ -2848,6 +2849,14 @@ impl TypeChecker {
                 Type::Future {
                     inner: Box::new(inner_ty),
                 }
+            }
+            Expr::FString { parts, .. } => {
+                for part in parts {
+                    if let FStringExprPart::Expr(expr) = part {
+                        self.check_expr(expr);
+                    }
+                }
+                Type::Str
             }
             Expr::InlineAsm { span, .. } => {
                 // KE005/KE006: asm! only allowed in @kernel or @unsafe context

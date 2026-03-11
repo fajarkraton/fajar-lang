@@ -215,6 +215,13 @@ impl UseCollector {
             Expr::AsyncBlock { body, .. } => {
                 self.visit_expr(body);
             }
+            Expr::FString { parts, .. } => {
+                for part in parts {
+                    if let FStringExprPart::Expr(expr) = part {
+                        self.visit_expr(expr);
+                    }
+                }
+            }
             Expr::InlineAsm { operands, .. } => {
                 for op in operands {
                     match op {

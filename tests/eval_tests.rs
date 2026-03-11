@@ -3550,3 +3550,113 @@ fn main() {
     let out = eval_output(src);
     assert_eq!(out[0], "3");
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 5: String Interpolation (f-strings)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s5_fstring_basic() {
+    let src = r#"
+fn main() {
+    let name = "world"
+    println(f"Hello {name}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "Hello world");
+}
+
+#[test]
+fn s5_fstring_expression() {
+    let src = r#"
+fn main() {
+    let x = 10
+    let y = 20
+    println(f"sum = {x + y}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "sum = 30");
+}
+
+#[test]
+fn s5_fstring_multiple_interpolations() {
+    let src = r#"
+fn main() {
+    let a = 3
+    let b = 4
+    println(f"{a} + {b} = {a + b}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "3 + 4 = 7");
+}
+
+#[test]
+fn s5_fstring_no_interpolation() {
+    let src = r#"
+fn main() {
+    println(f"just a plain string")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "just a plain string");
+}
+
+#[test]
+fn s5_fstring_escaped_braces() {
+    let src = r#"
+fn main() {
+    println(f"use {{braces}}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "use {braces}");
+}
+
+#[test]
+fn s5_fstring_nested_call() {
+    let src = r#"
+fn double(x: i64) -> i64 { x * 2 }
+
+fn main() {
+    let n = 5
+    println(f"double of {n} is {double(n)}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "double of 5 is 10");
+}
+
+#[test]
+fn s5_fstring_bool_and_float() {
+    let src = r#"
+fn main() {
+    let flag = true
+    let pi = 3.14
+    println(f"flag={flag}, pi={pi}")
+}
+"#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "flag=true, pi=3.14");
+}
+
+#[test]
+fn s5_lexer_fstring_token() {
+    let tokens = tokenize(r#"f"hello {x}""#).unwrap();
+    match &tokens[0].kind {
+        fajar_lang::lexer::token::TokenKind::FStringLit(parts) => {
+            assert_eq!(parts.len(), 2);
+            assert_eq!(
+                parts[0],
+                fajar_lang::lexer::token::FStringPart::Literal("hello ".into())
+            );
+            assert_eq!(
+                parts[1],
+                fajar_lang::lexer::token::FStringPart::Expr("x".into())
+            );
+        }
+        other => panic!("expected FStringLit, got {other:?}"),
+    }
+}

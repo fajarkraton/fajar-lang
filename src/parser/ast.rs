@@ -757,6 +757,23 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// An f-string expression: `f"Hello {name}, {x + 1}"`.
+    FString {
+        /// Parts: literal text or parsed expressions.
+        parts: Vec<FStringExprPart>,
+        /// Source span.
+        span: Span,
+    },
+}
+
+/// A part of an f-string expression (post-parsing).
+#[derive(Debug, Clone, PartialEq)]
+pub enum FStringExprPart {
+    /// Literal text segment.
+    Literal(String),
+    /// A parsed expression.
+    Expr(Box<Expr>),
 }
 
 /// Direction and constraint for an inline assembly operand.
@@ -822,7 +839,8 @@ impl Expr {
             | Expr::StructInit { span, .. }
             | Expr::Grouped { span, .. }
             | Expr::Path { span, .. }
-            | Expr::InlineAsm { span, .. } => *span,
+            | Expr::InlineAsm { span, .. }
+            | Expr::FString { span, .. } => *span,
         }
     }
 }

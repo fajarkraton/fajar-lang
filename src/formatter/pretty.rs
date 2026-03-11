@@ -681,6 +681,20 @@ impl<'src> Formatter<'src> {
                 self.push(template);
                 self.push("\")");
             }
+            Expr::FString { parts, .. } => {
+                self.push("f\"");
+                for part in parts {
+                    match part {
+                        FStringExprPart::Literal(s) => self.push(s),
+                        FStringExprPart::Expr(expr) => {
+                            self.push_char('{');
+                            self.format_expr(expr);
+                            self.push_char('}');
+                        }
+                    }
+                }
+                self.push_char('"');
+            }
             Expr::Closure {
                 params,
                 return_type,

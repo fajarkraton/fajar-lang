@@ -520,6 +520,9 @@ impl Compiler {
             Expr::InlineAsm { .. } => {
                 // Inline assembly is not supported in VM mode
             }
+            Expr::FString { .. } => {
+                // F-strings are not supported in VM mode
+            }
         }
     }
 

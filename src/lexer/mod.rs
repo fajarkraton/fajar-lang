@@ -514,6 +514,107 @@ fn is_ident_continue(c: char) -> bool {
 fn scan_identifier_or_keyword(cursor: &mut Cursor<'_>) -> TokenKind {
     let start = cursor.pos();
 
+    // Check for f-string: f"..."
+    if cursor.peek() == Some('f') && cursor.peek_second() == Some('"') {
+        cursor.advance(); // consume 'f'
+        cursor.advance(); // consume '"'
+        let mut parts = Vec::new();
+        let mut current_lit = String::new();
+        loop {
+            match cursor.peek() {
+                Some('"') => {
+                    cursor.advance();
+                    break;
+                }
+                Some('{') => {
+                    // Check for {{ escape
+                    if cursor.peek_second() == Some('{') {
+                        cursor.advance();
+                        cursor.advance();
+                        current_lit.push('{');
+                        continue;
+                    }
+                    // Flush literal
+                    if !current_lit.is_empty() {
+                        parts.push(token::FStringPart::Literal(std::mem::take(
+                            &mut current_lit,
+                        )));
+                    }
+                    cursor.advance(); // consume '{'
+                                      // Read expression until '}'
+                    let mut expr_src = String::new();
+                    let mut depth = 1;
+                    while !cursor.is_eof() {
+                        match cursor.peek() {
+                            Some('{') => {
+                                depth += 1;
+                                expr_src.push('{');
+                                cursor.advance();
+                            }
+                            Some('}') => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    cursor.advance();
+                                    break;
+                                }
+                                expr_src.push('}');
+                                cursor.advance();
+                            }
+                            Some(c) => {
+                                expr_src.push(c);
+                                cursor.advance();
+                            }
+                            None => break,
+                        }
+                    }
+                    parts.push(token::FStringPart::Expr(expr_src));
+                }
+                Some('}') => {
+                    // Check for }} escape
+                    if cursor.peek_second() == Some('}') {
+                        cursor.advance();
+                        cursor.advance();
+                        current_lit.push('}');
+                        continue;
+                    }
+                    cursor.advance();
+                    current_lit.push('}');
+                }
+                Some('\\') => {
+                    cursor.advance();
+                    match cursor.peek() {
+                        Some('n') => {
+                            current_lit.push('\n');
+                            cursor.advance();
+                        }
+                        Some('t') => {
+                            current_lit.push('\t');
+                            cursor.advance();
+                        }
+                        Some('"') => {
+                            current_lit.push('"');
+                            cursor.advance();
+                        }
+                        Some('\\') => {
+                            current_lit.push('\\');
+                            cursor.advance();
+                        }
+                        _ => current_lit.push('\\'),
+                    }
+                }
+                Some(c) => {
+                    current_lit.push(c);
+                    cursor.advance();
+                }
+                None => break,
+            }
+        }
+        if !current_lit.is_empty() {
+            parts.push(token::FStringPart::Literal(current_lit));
+        }
+        return TokenKind::FStringLit(parts);
+    }
+
     // Check for raw string: r"..."
     if cursor.peek() == Some('r') && cursor.peek_second() == Some('"') {
         cursor.advance(); // consume 'r'

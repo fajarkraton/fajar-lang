@@ -11,8 +11,8 @@ use std::rc::Rc;
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, IteratorValue, LayerValue, OptimizerValue, Value};
 use crate::parser::ast::{
-    AssignOp, BinOp, CallArg, Expr, FieldInit, Item, LiteralKind, MatchArm, ModDecl, Pattern,
-    Program, Stmt, TypeExpr, UnaryOp, UseDecl, UseKind,
+    AssignOp, BinOp, CallArg, Expr, FStringExprPart, FieldInit, Item, LiteralKind, MatchArm,
+    ModDecl, Pattern, Program, Stmt, TypeExpr, UnaryOp, UseDecl, UseKind,
 };
 use crate::runtime::ml::{tensor_ops, Tape, TensorValue};
 use crate::runtime::os::OsRuntime;
@@ -758,6 +758,19 @@ impl Interpreter {
                 "inline assembly is not supported in interpreter mode".into(),
             )
             .into()),
+            Expr::FString { parts, .. } => {
+                let mut result = String::new();
+                for part in parts {
+                    match part {
+                        FStringExprPart::Literal(s) => result.push_str(s),
+                        FStringExprPart::Expr(expr) => {
+                            let val = self.eval_expr(expr)?;
+                            result.push_str(&val.to_string());
+                        }
+                    }
+                }
+                Ok(Value::Str(result))
+            }
         }
     }
 
