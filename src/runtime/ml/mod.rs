@@ -5,6 +5,7 @@
 pub mod autograd;
 pub mod data;
 pub mod dataloader;
+pub mod distributed;
 pub mod export;
 pub mod fixed_point;
 pub mod layers;
@@ -17,6 +18,8 @@ pub mod rnn;
 pub mod serialize;
 pub mod stack_tensor;
 pub mod tensor;
+pub mod tflite;
+pub mod transformer;
 
 pub use autograd::{Tape, TensorId};
 pub use ops as tensor_ops;

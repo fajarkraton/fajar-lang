@@ -1,21 +1,18 @@
-//! Native code generation via Cranelift.
+//! Code generation backends for Fajar Lang.
 //!
-//! Feature-gated behind `native`. When enabled, provides JIT compilation
-//! of Fajar Lang programs to native machine code.
+//! Multiple backends are available, each feature-gated:
+//! - `native` — Cranelift JIT/AOT compilation to native machine code
+//! - `llvm` — LLVM-based compilation via inkwell
+//! - `wasm` — WebAssembly compilation (WASI + browser targets)
 //!
 //! # Architecture
 //!
 //! ```text
 //! AST (Program)
 //!     │
-//!     ▼
-//! CraneliftCompiler
-//!     ├── types.rs    — Fajar types → Cranelift types
-//!     ├── abi.rs      — calling convention, value layout
-//!     └── cranelift.rs — IR generation, function compilation
-//!     │
-//!     ▼
-//! JIT execution (cranelift-jit)
+//!     ├──► CraneliftCompiler  (native)   → JIT / .o file
+//!     ├──► LlvmCompiler       (llvm)     → JIT / .o file
+//!     └──► WasmCompiler       (wasm)     → .wasm binary
 //! ```
 
 pub mod analysis;
@@ -34,6 +31,9 @@ pub mod types;
 
 #[cfg(feature = "llvm")]
 pub mod llvm;
+
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 /// Error type for code generation.
 #[derive(Debug, Clone, thiserror::Error)]

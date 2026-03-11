@@ -86,61 +86,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** wasm-encoder integration, module skeleton, type mapping
 
-- [ ] S1.1 — Add `wasm-encoder` dependency gated under `[features] wasm`, `src/codegen/wasm/mod.rs` module declaration
-- [ ] S1.2 — `WasmCompiler` struct: module builder, type section, function section, export section, current function index
-- [ ] S1.3 — Type mapping: Fajar `i32`→`ValType::I32`, `i64`→`ValType::I64`, `f32`→`ValType::F32`, `f64`→`ValType::F64`, `bool`→`ValType::I32`
-- [ ] S1.4 — String representation: pointer+length pair as `(i32, i32)` in linear memory
-- [ ] S1.5 — Function signature encoding: `TypeSection` entries for each `fn` in program
-- [ ] S1.6 — Module structure: type section, import section (for host functions), function section, memory section, export section
-- [ ] S1.7 — Memory section: 1 page (64KB) initial, 256 pages max, linear memory for stack + heap
-- [ ] S1.8 — Export main function as `_start` entry point (WASI convention)
-- [ ] S1.9 — `module.finish()` → `Vec<u8>` binary output, validate with `wasmparser`
-- [ ] S1.10 — 10 tests: module creation, type mapping, function signatures, memory section, binary validation
+- [x] S1.1 — Add `wasm-encoder` dependency gated under `[features] wasm`, `src/codegen/wasm/mod.rs` module declaration
+- [x] S1.2 — `WasmCompiler` struct: module builder, type section, function section, export section, current function index
+- [x] S1.3 — Type mapping: Fajar `i32`→`ValType::I32`, `i64`→`ValType::I64`, `f32`→`ValType::F32`, `f64`→`ValType::F64`, `bool`→`ValType::I32`
+- [x] S1.4 — String representation: pointer+length pair as `(i32, i32)` in linear memory
+- [x] S1.5 — Function signature encoding: `TypeSection` entries for each `fn` in program
+- [x] S1.6 — Module structure: type section, import section (for host functions), function section, memory section, export section
+- [x] S1.7 — Memory section: 1 page (64KB) initial, 256 pages max, linear memory for stack + heap
+- [x] S1.8 — Export main function as `_start` entry point (WASI convention)
+- [x] S1.9 — `module.finish()` → `Vec<u8>` binary output, validate with `wasmparser`
+- [x] S1.10 — 10 tests: module creation, type mapping, function signatures, memory section, binary validation
 
 #### Sprint 2: Wasm Expression & Statement Compilation `P0`
 
 **Goal:** Compile all expression and statement types to Wasm bytecode
 
-- [ ] S2.1 — Integer literals: `Instruction::I64Const(n)` push to operand stack
-- [ ] S2.2 — Float literals: `Instruction::F64Const(n)` push to operand stack
-- [ ] S2.3 — Arithmetic ops: `i64.add/sub/mul/div_s`, `f64.add/sub/mul/div` instruction emission
-- [ ] S2.4 — Comparison ops: `i64.eq/ne/lt_s/gt_s/le_s/ge_s`, `f64.eq/ne/lt/gt/le/ge`
-- [ ] S2.5 — Logical ops: `i32.and/or`, `i32.eqz` (not), short-circuit via `if/else` blocks
-- [ ] S2.6 — Let bindings: `local.set`/`local.get` with local index tracking
-- [ ] S2.7 — Assignment: `local.set` for mutable variables
-- [ ] S2.8 — If/else: `Instruction::If` with `BlockType`, then/else branches, `End`
-- [ ] S2.9 — While loop: `block`+`loop` pair, `br_if` for condition, `br` for back-edge
-- [ ] S2.10 — 10 tests: arithmetic, comparison, let/mut, if/else, while loop — validate output via wasmtime execution
+- [x] S2.1 — Integer literals: `Instruction::I64Const(n)` push to operand stack
+- [x] S2.2 — Float literals: `Instruction::F64Const(n)` push to operand stack
+- [x] S2.3 — Arithmetic ops: `i64.add/sub/mul/div_s`, `f64.add/sub/mul/div` instruction emission
+- [x] S2.4 — Comparison ops: `i64.eq/ne/lt_s/gt_s/le_s/ge_s`, `f64.eq/ne/lt/gt/le/ge`
+- [x] S2.5 — Logical ops: `i32.and/or`, `i32.eqz` (not), short-circuit via `if/else` blocks
+- [x] S2.6 — Let bindings: `local.set`/`local.get` with local index tracking
+- [x] S2.7 — Assignment: `local.set` for mutable variables
+- [x] S2.8 — If/else: `Instruction::If` with `BlockType`, then/else branches, `End`
+- [x] S2.9 — While loop: `block`+`loop` pair, `br_if` for condition, `br` for back-edge
+- [x] S2.10 — 10 tests: arithmetic, comparison, let/mut, if/else, while loop — validate output via wasmtime execution
 
 #### Sprint 3: Wasm Memory Model `P0`
 
 **Goal:** Linear memory management — stack, heap, string storage
 
-- [ ] S3.1 — Stack allocator: bump pointer in linear memory for local arrays and structs, grows downward from high address
-- [ ] S3.2 — Heap allocator: simple free-list allocator in linear memory, `__wasm_malloc(size) -> ptr` and `__wasm_free(ptr)`
-- [ ] S3.3 — String storage: UTF-8 bytes in linear memory, `(ptr, len)` tuple representation
-- [ ] S3.4 — String literals: store in data section via `DataSection`, return `(offset, len)` at compile time
-- [ ] S3.5 — Array representation: `(ptr, len, capacity)` triple in linear memory, element access via `i32.load` with offset
-- [ ] S3.6 — Struct layout: field offsets computed at compile time, access via `i32.load` at `base + offset`
-- [ ] S3.7 — Function calls: `call` instruction with function index, arguments passed via operand stack
-- [ ] S3.8 — Recursive functions: natural stack via Wasm call stack, no special handling needed
-- [ ] S3.9 — Global variables: `GlobalSection` entries with `global.get`/`global.set` instructions
-- [ ] S3.10 — 10 tests: malloc/free roundtrip, string storage/retrieval, array element access, struct field access, global vars
+- [x] S3.1 — Stack allocator: bump pointer in linear memory for local arrays and structs, grows downward from high address
+- [x] S3.2 — Heap allocator: simple free-list allocator in linear memory, `__wasm_malloc(size) -> ptr` and `__wasm_free(ptr)`
+- [x] S3.3 — String storage: UTF-8 bytes in linear memory, `(ptr, len)` tuple representation
+- [x] S3.4 — String literals: store in data section via `DataSection`, return `(offset, len)` at compile time
+- [x] S3.5 — Array representation: `(ptr, len, capacity)` triple in linear memory, element access via `i32.load` with offset
+- [x] S3.6 — Struct layout: field offsets computed at compile time, access via `i32.load` at `base + offset`
+- [x] S3.7 — Function calls: `call` instruction with function index, arguments passed via operand stack
+- [x] S3.8 — Recursive functions: natural stack via Wasm call stack, no special handling needed
+- [x] S3.9 — Global variables: `GlobalSection` entries with `global.get`/`global.set` instructions
+- [x] S3.10 — 10 tests: malloc/free roundtrip, string storage/retrieval, array element access, struct field access, global vars
 
 #### Sprint 4: Wasm Integration & CLI `P0`
 
 **Goal:** WASI support, browser runtime, CLI integration, end-to-end compilation
 
-- [ ] S4.1 — WASI imports: `fd_write` (stdout), `proc_exit` (exit code), `clock_time_get` (timing)
-- [ ] S4.2 — `println` builtin → WASI `fd_write` with iovec construction in linear memory
-- [ ] S4.3 — Host function imports: `ImportSection` entries for runtime functions (print, assert, math)
-- [ ] S4.4 — `fj build --target wasm` CLI flag: compile .fj → .wasm binary output
-- [ ] S4.5 — `fj build --target wasi` CLI flag: compile with WASI imports for server-side execution
-- [ ] S4.6 — `fj run --wasm` CLI flag: execute .wasm via embedded wasmtime runtime
-- [ ] S4.7 — Browser runtime stub: generate minimal HTML+JS loader that instantiates .wasm module
-- [ ] S4.8 — Wasm optimization: remove dead code, merge identical function types, minimize binary size
-- [ ] S4.9 — `examples/wasm_hello.fj`: hello world compiling to .wasm, runnable via wasmtime and browser
-- [ ] S4.10 — 10 tests: WASI fd_write, println output, CLI flags, end-to-end compile+run, binary size < 10KB for hello world
+- [x] S4.1 — WASI imports: `fd_write` (stdout), `proc_exit` (exit code), `clock_time_get` (timing)
+- [x] S4.2 — `println` builtin → WASI `fd_write` with iovec construction in linear memory
+- [x] S4.3 — Host function imports: `ImportSection` entries for runtime functions (print, assert, math)
+- [x] S4.4 — `fj build --target wasm` CLI flag: compile .fj → .wasm binary output
+- [x] S4.5 — `fj build --target wasi` CLI flag: compile with WASI imports for server-side execution
+- [x] S4.6 — `fj run --wasm` CLI flag: execute .wasm via embedded wasmtime runtime
+- [x] S4.7 — Browser runtime stub: generate minimal HTML+JS loader that instantiates .wasm module
+- [x] S4.8 — Wasm optimization: remove dead code, merge identical function types, minimize binary size
+- [x] S4.9 — `examples/wasm_hello.fj`: hello world compiling to .wasm, runnable via wasmtime and browser
+- [x] S4.10 — 10 tests: WASI fd_write, println output, CLI flags, end-to-end compile+run, binary size < 10KB for hello world
 
 ### Phase 2: ESP32 WiFi/BLE & IoT `P1`
 
@@ -148,61 +148,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** WiFi station and AP mode via esp-idf C FFI
 
-- [ ] S5.1 — `src/iot/mod.rs`: IoT module declaration, `src/iot/wifi.rs` WiFi submodule
-- [ ] S5.2 — `WifiConfig` struct: ssid (max 32 bytes), password (max 64 bytes), auth_mode (Open/WPA2/WPA3), channel, max_connections
-- [ ] S5.3 — `wifi_init()` → initialize NVS flash, netif, event loop, WiFi driver (esp-idf sequence)
-- [ ] S5.4 — `wifi_connect_sta(ssid, password) -> Result<IpInfo>`: station mode, blocking until DHCP acquired or timeout
-- [ ] S5.5 — `wifi_start_ap(ssid, password, channel) -> Result<()>`: soft-AP mode with DHCP server
-- [ ] S5.6 — `wifi_scan() -> Vec<AccessPoint>`: scan nearby APs, return SSID + RSSI + channel + auth_mode
-- [ ] S5.7 — `wifi_disconnect()` and `wifi_stop()`: clean teardown of WiFi driver
-- [ ] S5.8 — `WifiEvent` enum: Connected, Disconnected, GotIp, LostIp — event callback registration
-- [ ] S5.9 — `IpInfo` struct: ip_addr, netmask, gateway as `[u8; 4]` tuples
-- [ ] S5.10 — 10 tests: config validation, ssid length check, auth mode mapping, event enum variants, IP parsing (simulation stubs)
+- [x] S5.1 — `src/iot/mod.rs`: IoT module declaration, `src/iot/wifi.rs` WiFi submodule
+- [x] S5.2 — `WifiConfig` struct: ssid (max 32 bytes), password (max 64 bytes), auth_mode (Open/WPA2/WPA3), channel, max_connections
+- [x] S5.3 — `wifi_init()` → initialize NVS flash, netif, event loop, WiFi driver (esp-idf sequence)
+- [x] S5.4 — `wifi_connect_sta(ssid, password) -> Result<IpInfo>`: station mode, blocking until DHCP acquired or timeout
+- [x] S5.5 — `wifi_start_ap(ssid, password, channel) -> Result<()>`: soft-AP mode with DHCP server
+- [x] S5.6 — `wifi_scan() -> Vec<AccessPoint>`: scan nearby APs, return SSID + RSSI + channel + auth_mode
+- [x] S5.7 — `wifi_disconnect()` and `wifi_stop()`: clean teardown of WiFi driver
+- [x] S5.8 — `WifiEvent` enum: Connected, Disconnected, GotIp, LostIp — event callback registration
+- [x] S5.9 — `IpInfo` struct: ip_addr, netmask, gateway as `[u8; 4]` tuples
+- [x] S5.10 — 10 tests: config validation, ssid length check, auth mode mapping, event enum variants, IP parsing (simulation stubs)
 
 #### Sprint 6: BLE GATT Server & Client `P1`
 
 **Goal:** Bluetooth Low Energy support for sensor data exchange
 
-- [ ] S6.1 — `src/iot/ble.rs`: BLE module with `BleConfig` struct (device_name, appearance, adv_interval)
-- [ ] S6.2 — `ble_init(config) -> Result<()>`: initialize BLE controller + Bluedroid host stack via esp-idf
-- [ ] S6.3 — `GattService` struct: uuid (128-bit), characteristics vector, service handle
-- [ ] S6.4 — `GattCharacteristic` struct: uuid, properties (Read|Write|Notify), permissions, value buffer
-- [ ] S6.5 — `ble_register_service(service) -> Result<ServiceHandle>`: register GATT service with ESP-IDF BLE stack
-- [ ] S6.6 — `ble_start_advertising(adv_data) -> Result<()>`: BLE advertising with device name + service UUIDs
-- [ ] S6.7 — `ble_notify(handle, conn_id, data) -> Result<()>`: send notification to connected client
-- [ ] S6.8 — `BleEvent` enum: Connected(conn_id), Disconnected(conn_id), WriteRequest(handle, data), ReadRequest(handle)
-- [ ] S6.9 — `ble_scan(duration_ms) -> Vec<BleDevice>`: scan for nearby BLE peripherals, return name + addr + RSSI
-- [ ] S6.10 — 10 tests: UUID construction, characteristic properties bitmask, advertising data format, event dispatch, GATT service layout
+- [x] S6.1 — `src/iot/ble.rs`: BLE module with `BleConfig` struct (device_name, appearance, adv_interval)
+- [x] S6.2 — `ble_init(config) -> Result<()>`: initialize BLE controller + Bluedroid host stack via esp-idf
+- [x] S6.3 — `GattService` struct: uuid (128-bit), characteristics vector, service handle
+- [x] S6.4 — `GattCharacteristic` struct: uuid, properties (Read|Write|Notify), permissions, value buffer
+- [x] S6.5 — `ble_register_service(service) -> Result<ServiceHandle>`: register GATT service with ESP-IDF BLE stack
+- [x] S6.6 — `ble_start_advertising(adv_data) -> Result<()>`: BLE advertising with device name + service UUIDs
+- [x] S6.7 — `ble_notify(handle, conn_id, data) -> Result<()>`: send notification to connected client
+- [x] S6.8 — `BleEvent` enum: Connected(conn_id), Disconnected(conn_id), WriteRequest(handle, data), ReadRequest(handle)
+- [x] S6.9 — `ble_scan(duration_ms) -> Vec<BleDevice>`: scan for nearby BLE peripherals, return name + addr + RSSI
+- [x] S6.10 — 10 tests: UUID construction, characteristic properties bitmask, advertising data format, event dispatch, GATT service layout
 
 #### Sprint 7: MQTT Client for IoT Telemetry `P1`
 
 **Goal:** Publish sensor data and receive commands via MQTT broker
 
-- [ ] S7.1 — `src/iot/mqtt.rs`: MQTT module with `MqttConfig` struct (broker_url, client_id, keepalive_secs, clean_session)
-- [ ] S7.2 — `MqttClient::connect(config) -> Result<MqttClient>`: TCP connection to broker, CONNECT packet, CONNACK handling
-- [ ] S7.3 — `mqtt_publish(topic, payload, qos) -> Result<()>`: publish message with QoS 0 (at most once) or QoS 1 (at least once)
-- [ ] S7.4 — `mqtt_subscribe(topic, qos) -> Result<()>`: subscribe to topic with wildcard support (`+` single-level, `#` multi-level)
-- [ ] S7.5 — `MqttMessage` struct: topic, payload (bytes), qos, retain flag, message_id
-- [ ] S7.6 — `mqtt_on_message(callback)`: register callback for incoming messages on subscribed topics
-- [ ] S7.7 — `mqtt_disconnect()`: send DISCONNECT packet, close TCP socket, release resources
-- [ ] S7.8 — Auto-reconnect: exponential backoff (1s, 2s, 4s, ... 60s max) on connection loss
-- [ ] S7.9 — Last Will and Testament (LWT): configure message sent by broker if client disconnects unexpectedly
-- [ ] S7.10 — 10 tests: config validation, topic parsing, QoS level enforcement, wildcard matching, LWT configuration, reconnect backoff timing
+- [x] S7.1 — `src/iot/mqtt.rs`: MQTT module with `MqttConfig` struct (broker_url, client_id, keepalive_secs, clean_session)
+- [x] S7.2 — `MqttClient::connect(config) -> Result<MqttClient>`: TCP connection to broker, CONNECT packet, CONNACK handling
+- [x] S7.3 — `mqtt_publish(topic, payload, qos) -> Result<()>`: publish message with QoS 0 (at most once) or QoS 1 (at least once)
+- [x] S7.4 — `mqtt_subscribe(topic, qos) -> Result<()>`: subscribe to topic with wildcard support (`+` single-level, `#` multi-level)
+- [x] S7.5 — `MqttMessage` struct: topic, payload (bytes), qos, retain flag, message_id
+- [x] S7.6 — `mqtt_on_message(callback)`: register callback for incoming messages on subscribed topics
+- [x] S7.7 — `mqtt_disconnect()`: send DISCONNECT packet, close TCP socket, release resources
+- [x] S7.8 — Auto-reconnect: exponential backoff (1s, 2s, 4s, ... 60s max) on connection loss
+- [x] S7.9 — Last Will and Testament (LWT): configure message sent by broker if client disconnects unexpectedly
+- [x] S7.10 — 10 tests: config validation, topic parsing, QoS level enforcement, wildcard matching, LWT configuration, reconnect backoff timing
 
 #### Sprint 8: OTA Firmware & Model Update `P1`
 
 **Goal:** Over-the-air update for firmware and ML models on deployed devices
 
-- [ ] S8.1 — `src/iot/ota.rs`: OTA module with `OtaConfig` struct (server_url, check_interval_secs, verify_signature, rollback_on_failure)
-- [ ] S8.2 — `ota_check_update(url) -> Result<Option<UpdateInfo>>`: HTTP HEAD request to check firmware version, compare with running version
-- [ ] S8.3 — `UpdateInfo` struct: version, size_bytes, sha256, signature, download_url, release_notes
-- [ ] S8.4 — `ota_download_firmware(url) -> Result<Vec<u8>>`: chunked HTTP GET download with progress callback, resume on failure
-- [ ] S8.5 — `ota_verify(firmware, expected_sha256) -> Result<()>`: SHA-256 integrity check before flashing
-- [ ] S8.6 — `ota_flash(firmware) -> Result<()>`: write to inactive OTA partition (ESP32 dual-partition A/B scheme), set boot flag
-- [ ] S8.7 — `ota_rollback()`: revert to previous partition if new firmware fails health check within first 60 seconds
-- [ ] S8.8 — ML model OTA: `ota_update_model(url, model_path) -> Result<()>`: download new model weights, hot-swap in running inference pipeline
-- [ ] S8.9 — Version manifest: JSON endpoint `{version, firmware_url, model_url, min_hw_version, changelog}` for fleet management
-- [ ] S8.10 — 10 tests: version comparison, SHA-256 verification, partition selection logic, rollback trigger, model hot-swap stub, manifest parsing
+- [x] S8.1 — `src/iot/ota.rs`: OTA module with `OtaConfig` struct (server_url, check_interval_secs, verify_signature, rollback_on_failure)
+- [x] S8.2 — `ota_check_update(url) -> Result<Option<UpdateInfo>>`: HTTP HEAD request to check firmware version, compare with running version
+- [x] S8.3 — `UpdateInfo` struct: version, size_bytes, sha256, signature, download_url, release_notes
+- [x] S8.4 — `ota_download_firmware(url) -> Result<Vec<u8>>`: chunked HTTP GET download with progress callback, resume on failure
+- [x] S8.5 — `ota_verify(firmware, expected_sha256) -> Result<()>`: SHA-256 integrity check before flashing
+- [x] S8.6 — `ota_flash(firmware) -> Result<()>`: write to inactive OTA partition (ESP32 dual-partition A/B scheme), set boot flag
+- [x] S8.7 — `ota_rollback()`: revert to previous partition if new firmware fails health check within first 60 seconds
+- [x] S8.8 — ML model OTA: `ota_update_model(url, model_path) -> Result<()>`: download new model weights, hot-swap in running inference pipeline
+- [x] S8.9 — Version manifest: JSON endpoint `{version, firmware_url, model_url, min_hw_version, changelog}` for fleet management
+- [x] S8.10 — 10 tests: version comparison, SHA-256 verification, partition selection logic, rollback trigger, model hot-swap stub, manifest parsing
 
 ### Phase 3: Advanced Borrow Checker `P0`
 
@@ -210,61 +210,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** Generate origin, loan, and point facts from AST for Datalog analysis
 
-- [ ] S9.1 — `src/analyzer/polonius/mod.rs`: Polonius module with `PoloniusFacts` struct (origins, loans, points, cfg_edges)
-- [ ] S9.2 — `Origin` type: unique identifier per reference/borrow expression, tracks where a reference was created
-- [ ] S9.3 — `Loan` type: unique identifier per borrow (`&x`, `&mut x`), records borrowed place and mutability
-- [ ] S9.4 — `Point` type: unique program point (statement index within basic block), mid-point and start-point variants
-- [ ] S9.5 — Fact: `loan_issued_at(origin, loan, point)` — emitted at each `&x` or `&mut x` expression
-- [ ] S9.6 — Fact: `origin_contains_loan_on_entry(origin, loan, point)` — initial containment from loan site
-- [ ] S9.7 — Fact: `loan_invalidated_at(loan, point)` — emitted when borrowed place is written or moved
-- [ ] S9.8 — Fact: `origin_live_on_entry(origin, point)` — computed from liveness analysis of references
-- [ ] S9.9 — CFG edge facts: `cfg_edge(point_a, point_b)` from existing CFG infrastructure in `cfg.rs`
-- [ ] S9.10 — 10 tests: fact generation for simple borrows, mutable borrows, reborrow chains, function returns, struct fields
+- [x] S9.1 — `src/analyzer/polonius/mod.rs`: Polonius module with `PoloniusFacts` struct (origins, loans, points, cfg_edges)
+- [x] S9.2 — `Origin` type: unique identifier per reference/borrow expression, tracks where a reference was created
+- [x] S9.3 — `Loan` type: unique identifier per borrow (`&x`, `&mut x`), records borrowed place and mutability
+- [x] S9.4 — `Point` type: unique program point (statement index within basic block), mid-point and start-point variants
+- [x] S9.5 — Fact: `loan_issued_at(origin, loan, point)` — emitted at each `&x` or `&mut x` expression
+- [x] S9.6 — Fact: `origin_contains_loan_on_entry(origin, loan, point)` — initial containment from loan site
+- [x] S9.7 — Fact: `loan_invalidated_at(loan, point)` — emitted when borrowed place is written or moved
+- [x] S9.8 — Fact: `origin_live_on_entry(origin, point)` — computed from liveness analysis of references
+- [x] S9.9 — CFG edge facts: `cfg_edge(point_a, point_b)` from existing CFG infrastructure in `cfg.rs`
+- [x] S9.10 — 10 tests: fact generation for simple borrows, mutable borrows, reborrow chains, function returns, struct fields
 
 #### Sprint 10: Datalog Solver for Borrow Constraints `P0`
 
 **Goal:** Solve Polonius constraints using Datalog to compute borrow errors
 
-- [ ] S10.1 — Add `crepe` dependency, define Datalog relations: `Origin`, `Loan`, `Point`, `CfgEdge`
-- [ ] S10.2 — Rule: `origin_contains_loan_on_entry(O, L, P2) :- origin_contains_loan_on_entry(O, L, P1), cfg_edge(P1, P2), !loan_killed_at(L, P1)`
-- [ ] S10.3 — Rule: `loan_live_at(L, P) :- origin_contains_loan_on_entry(O, L, P), origin_live_on_entry(O, P)`
-- [ ] S10.4 — Rule: `errors(L, P) :- loan_live_at(L, P), loan_invalidated_at(L, P)` — core error detection
-- [ ] S10.5 — Subset relation: `subset(O1, O2, P)` for origin assignment (ref_a = ref_b)
-- [ ] S10.6 — Subset propagation: `origin_contains_loan_on_entry(O2, L, P) :- subset(O1, O2, P), origin_contains_loan_on_entry(O1, L, P)`
-- [ ] S10.7 — Kill facts: `loan_killed_at(L, P)` when storage backing a loan goes out of scope or is reassigned
-- [ ] S10.8 — Placeholder origins for function boundaries: caller/callee origin mapping
-- [ ] S10.9 — Integration: run Datalog solver after fact generation, collect `errors` relation as `Vec<BorrowError>`
-- [ ] S10.10 — 10 tests: use-after-move detection, dangling reference, conflicting borrows, correct code acceptance, cross-block borrows
+- [x] S10.1 — Add `crepe` dependency, define Datalog relations: `Origin`, `Loan`, `Point`, `CfgEdge`
+- [x] S10.2 — Rule: `origin_contains_loan_on_entry(O, L, P2) :- origin_contains_loan_on_entry(O, L, P1), cfg_edge(P1, P2), !loan_killed_at(L, P1)`
+- [x] S10.3 — Rule: `loan_live_at(L, P) :- origin_contains_loan_on_entry(O, L, P), origin_live_on_entry(O, P)`
+- [x] S10.4 — Rule: `errors(L, P) :- loan_live_at(L, P), loan_invalidated_at(L, P)` — core error detection
+- [x] S10.5 — Subset relation: `subset(O1, O2, P)` for origin assignment (ref_a = ref_b)
+- [x] S10.6 — Subset propagation: `origin_contains_loan_on_entry(O2, L, P) :- subset(O1, O2, P), origin_contains_loan_on_entry(O1, L, P)`
+- [x] S10.7 — Kill facts: `loan_killed_at(L, P)` when storage backing a loan goes out of scope or is reassigned
+- [x] S10.8 — Placeholder origins for function boundaries: caller/callee origin mapping
+- [x] S10.9 — Integration: run Datalog solver after fact generation, collect `errors` relation as `Vec<BorrowError>`
+- [x] S10.10 — 10 tests: use-after-move detection, dangling reference, conflicting borrows, correct code acceptance, cross-block borrows
 
 #### Sprint 11: Two-Phase Borrowing & Reborrowing `P1`
 
 **Goal:** Support two-phase borrows and implicit reborrowing for ergonomic code
 
-- [ ] S11.1 — Two-phase borrow detection: `vec.push(vec.len())` pattern — reservation phase + activation phase
-- [ ] S11.2 — Reservation fact: `loan_reserved_at(loan, point)` — mutable borrow exists but not yet used mutably
-- [ ] S11.3 — Activation fact: `loan_activated_at(loan, point)` — first mutable use of reserved borrow
-- [ ] S11.4 — Rule: reserved loans allow shared access until activation point
-- [ ] S11.5 — Reborrowing: `let r2 = &*r1` creates new loan with subset relationship to original
-- [ ] S11.6 — Reborrow chain tracking: `reborrow_of(new_loan, original_loan)` for error message context
-- [ ] S11.7 — Mutable reborrow: `let r2 = &mut *r1` temporarily suspends original borrow
-- [ ] S11.8 — Nested borrow support: `&self.field` borrows `self` at field granularity (place projection)
-- [ ] S11.9 — Place projection facts: `field_of(place, field_name)` and `index_of(place, index_origin)` for fine-grained tracking
-- [ ] S11.10 — 10 tests: two-phase push pattern, reborrow chain, nested field borrow, place projection, mutable reborrow suspension
+- [x] S11.1 — Two-phase borrow detection: `vec.push(vec.len())` pattern — reservation phase + activation phase
+- [x] S11.2 — Reservation fact: `loan_reserved_at(loan, point)` — mutable borrow exists but not yet used mutably
+- [x] S11.3 — Activation fact: `loan_activated_at(loan, point)` — first mutable use of reserved borrow
+- [x] S11.4 — Rule: reserved loans allow shared access until activation point
+- [x] S11.5 — Reborrowing: `let r2 = &*r1` creates new loan with subset relationship to original
+- [x] S11.6 — Reborrow chain tracking: `reborrow_of(new_loan, original_loan)` for error message context
+- [x] S11.7 — Mutable reborrow: `let r2 = &mut *r1` temporarily suspends original borrow
+- [x] S11.8 — Nested borrow support: `&self.field` borrows `self` at field granularity (place projection)
+- [x] S11.9 — Place projection facts: `field_of(place, field_name)` and `index_of(place, index_origin)` for fine-grained tracking
+- [x] S11.10 — 10 tests: two-phase push pattern, reborrow chain, nested field borrow, place projection, mutable reborrow suspension
 
 #### Sprint 12: Borrow Checker Error Improvements `P1`
 
 **Goal:** Human-readable error messages with suggestions and migration path from NLL
 
-- [ ] S12.1 — Error template: "cannot borrow `X` as mutable because it is also borrowed as immutable" with source span highlights
-- [ ] S12.2 — Error template: "cannot move out of `X` because it is borrowed" with borrow location annotation
-- [ ] S12.3 — Error template: "`X` does not live long enough — borrowed value dropped while still in use" with lifetime visualization
-- [ ] S12.4 — Suggestion engine: "consider cloning the value", "consider using a reference", "try moving the borrow earlier"
-- [ ] S12.5 — Loan timeline visualization: ASCII art showing borrow ranges on code lines (like `|--- borrow of x starts here`)
-- [ ] S12.6 — Error code integration: ME011 TwoPhaseConflict, ME012 ReborrowConflict, ME013 PlaceConflict
-- [ ] S12.7 — Feature flag: `--polonius` enables Polonius checker, `--nll` uses existing NLL (default remains NLL until Polonius stable)
-- [ ] S12.8 — Polonius vs NLL comparison mode: `--borrow-check=compare` runs both, reports differences
-- [ ] S12.9 — Performance: Polonius solver completes in < 100ms for programs up to 10K LOC
-- [ ] S12.10 — 10 tests: all error templates render correctly, suggestions are appropriate, feature flags work, comparison mode output
+- [x] S12.1 — Error template: "cannot borrow `X` as mutable because it is also borrowed as immutable" with source span highlights
+- [x] S12.2 — Error template: "cannot move out of `X` because it is borrowed" with borrow location annotation
+- [x] S12.3 — Error template: "`X` does not live long enough — borrowed value dropped while still in use" with lifetime visualization
+- [x] S12.4 — Suggestion engine: "consider cloning the value", "consider using a reference", "try moving the borrow earlier"
+- [x] S12.5 — Loan timeline visualization: ASCII art showing borrow ranges on code lines (like `|--- borrow of x starts here`)
+- [x] S12.6 — Error code integration: ME011 TwoPhaseConflict, ME012 ReborrowConflict, ME013 PlaceConflict
+- [x] S12.7 — Feature flag: `--polonius` enables Polonius checker, `--nll` uses existing NLL (default remains NLL until Polonius stable)
+- [x] S12.8 — Polonius vs NLL comparison mode: `--borrow-check=compare` runs both, reports differences
+- [x] S12.9 — Performance: Polonius solver completes in < 100ms for programs up to 10K LOC
+- [x] S12.10 — 10 tests: all error templates render correctly, suggestions are appropriate, feature flags work, comparison mode output
 
 ### Phase 4: Transformer & Distributed ML `P1`
 
@@ -272,61 +272,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** Core Transformer building blocks — attention mechanism and position encoding
 
-- [ ] S13.1 — `ScaledDotProductAttention`: Q*K^T / sqrt(d_k), softmax, matmul with V — operates on (batch, heads, seq_len, d_k) tensors
-- [ ] S13.2 — Attention mask: causal mask (upper triangular -inf) for autoregressive decoding, padding mask for variable-length sequences
-- [ ] S13.3 — `MultiHeadAttention` layer: split Q/K/V into `n_heads`, parallel attention, concatenate, linear projection
-- [ ] S13.4 — MHA forward: `fn forward(query, key, value, mask) -> Tensor` with `W_q`, `W_k`, `W_v`, `W_o` weight matrices
-- [ ] S13.5 — MHA backward: gradient through concat, per-head attention, Q/K/V projections
-- [ ] S13.6 — `SinusoidalPositionalEncoding`: PE(pos, 2i) = sin(pos / 10000^(2i/d_model)), PE(pos, 2i+1) = cos(...)
-- [ ] S13.7 — `LearnedPositionalEncoding`: trainable embedding table of shape (max_seq_len, d_model) with gradient
-- [ ] S13.8 — `LayerNorm` layer: normalize across feature dimension, learnable gamma and beta parameters
-- [ ] S13.9 — LayerNorm backward: gradient through normalization, gamma, beta updates
-- [ ] S13.10 — 10 tests: attention scores shape, causal mask, MHA output shape, positional encoding values, LayerNorm normalization
+- [x] S13.1 — `ScaledDotProductAttention`: Q*K^T / sqrt(d_k), softmax, matmul with V — operates on (batch, heads, seq_len, d_k) tensors
+- [x] S13.2 — Attention mask: causal mask (upper triangular -inf) for autoregressive decoding, padding mask for variable-length sequences
+- [x] S13.3 — `MultiHeadAttention` layer: split Q/K/V into `n_heads`, parallel attention, concatenate, linear projection
+- [x] S13.4 — MHA forward: `fn forward(query, key, value, mask) -> Tensor` with `W_q`, `W_k`, `W_v`, `W_o` weight matrices
+- [x] S13.5 — MHA backward: gradient through concat, per-head attention, Q/K/V projections
+- [x] S13.6 — `SinusoidalPositionalEncoding`: PE(pos, 2i) = sin(pos / 10000^(2i/d_model)), PE(pos, 2i+1) = cos(...)
+- [x] S13.7 — `LearnedPositionalEncoding`: trainable embedding table of shape (max_seq_len, d_model) with gradient
+- [x] S13.8 — `LayerNorm` layer: normalize across feature dimension, learnable gamma and beta parameters
+- [x] S13.9 — LayerNorm backward: gradient through normalization, gamma, beta updates
+- [x] S13.10 — 10 tests: attention scores shape, causal mask, MHA output shape, positional encoding values, LayerNorm normalization
 
 #### Sprint 14: Transformer Encoder & Decoder Blocks `P1`
 
 **Goal:** Full Transformer encoder and decoder with residual connections
 
-- [ ] S14.1 — `FeedForward` layer: Linear(d_model, d_ff) → GELU → Dropout → Linear(d_ff, d_model), expansion ratio typically 4x
-- [ ] S14.2 — FeedForward backward: gradient through both linear layers and activation
-- [ ] S14.3 — `TransformerEncoderLayer`: self-attention → add&norm → feedforward → add&norm (pre-norm or post-norm configurable)
-- [ ] S14.4 — `TransformerDecoderLayer`: masked self-attention → add&norm → cross-attention(Q=decoder, KV=encoder) → add&norm → FFN → add&norm
-- [ ] S14.5 — `TransformerEncoder`: stack of N encoder layers, optional final LayerNorm
-- [ ] S14.6 — `TransformerDecoder`: stack of N decoder layers with encoder output (memory) input
-- [ ] S14.7 — `Transformer` struct: encoder + decoder + src/tgt embedding + positional encoding + output linear projection
-- [ ] S14.8 — `TransformerConfig` struct: d_model, n_heads, n_layers, d_ff, dropout, max_seq_len, vocab_size, pre_norm flag
-- [ ] S14.9 — `examples/transformer_seq2seq.fj`: sequence-to-sequence translation with tiny vocabulary (< 100 tokens)
-- [ ] S14.10 — 10 tests: encoder output shape, decoder output shape, residual connection values, full transformer forward pass, gradient flow
+- [x] S14.1 — `FeedForward` layer: Linear(d_model, d_ff) → GELU → Dropout → Linear(d_ff, d_model), expansion ratio typically 4x
+- [x] S14.2 — FeedForward backward: gradient through both linear layers and activation
+- [x] S14.3 — `TransformerEncoderLayer`: self-attention → add&norm → feedforward → add&norm (pre-norm or post-norm configurable)
+- [x] S14.4 — `TransformerDecoderLayer`: masked self-attention → add&norm → cross-attention(Q=decoder, KV=encoder) → add&norm → FFN → add&norm
+- [x] S14.5 — `TransformerEncoder`: stack of N encoder layers, optional final LayerNorm
+- [x] S14.6 — `TransformerDecoder`: stack of N decoder layers with encoder output (memory) input
+- [x] S14.7 — `Transformer` struct: encoder + decoder + src/tgt embedding + positional encoding + output linear projection
+- [x] S14.8 — `TransformerConfig` struct: d_model, n_heads, n_layers, d_ff, dropout, max_seq_len, vocab_size, pre_norm flag
+- [x] S14.9 — `examples/transformer_seq2seq.fj`: sequence-to-sequence translation with tiny vocabulary (< 100 tokens)
+- [x] S14.10 — 10 tests: encoder output shape, decoder output shape, residual connection values, full transformer forward pass, gradient flow
 
 #### Sprint 15: TFLite Model Import `P1`
 
 **Goal:** Parse TensorFlow Lite .tflite files and map operations to Fajar ML runtime
 
-- [ ] S15.1 — Add `flatbuffers` dependency, `src/runtime/ml/tflite/mod.rs` module declaration
-- [ ] S15.2 — TFLite schema: FlatBuffer schema structs (Model, SubGraph, Tensor, Operator, Buffer, QuantizationParameters)
-- [ ] S15.3 — `tflite_load(path) -> Result<TfLiteModel>`: read .tflite file, parse FlatBuffer root table
-- [ ] S15.4 — Tensor mapping: TFLite TensorType (FLOAT32, INT8, UINT8) → Fajar `DType` (F32, I8, U8)
-- [ ] S15.5 — Op mapping: Conv2D → `fj_conv2d`, DepthwiseConv2D → `fj_depthwise_conv2d`, FullyConnected → `fj_dense`
-- [ ] S15.6 — Op mapping: Reshape, Softmax, ReLU, ReLU6, Add, Mul, MaxPool2D, AveragePool2D → corresponding Fajar ops
-- [ ] S15.7 — Quantization import: per-tensor and per-axis scales + zero_points → Fajar INT8 quantization format
-- [ ] S15.8 — `tflite_infer(model, input) -> Result<Tensor>`: run imported model graph sequentially through mapped operators
-- [ ] S15.9 — MobileNet-v2 test: import pre-trained TFLite MobileNet, run inference on 224x224 dummy input, verify output shape (1, 1000)
-- [ ] S15.10 — 10 tests: FlatBuffer parsing, tensor type mapping, Conv2D op, quantized model load, MobileNet output shape, invalid model error
+- [x] S15.1 — Add `flatbuffers` dependency, `src/runtime/ml/tflite/mod.rs` module declaration
+- [x] S15.2 — TFLite schema: FlatBuffer schema structs (Model, SubGraph, Tensor, Operator, Buffer, QuantizationParameters)
+- [x] S15.3 — `tflite_load(path) -> Result<TfLiteModel>`: read .tflite file, parse FlatBuffer root table
+- [x] S15.4 — Tensor mapping: TFLite TensorType (FLOAT32, INT8, UINT8) → Fajar `DType` (F32, I8, U8)
+- [x] S15.5 — Op mapping: Conv2D → `fj_conv2d`, DepthwiseConv2D → `fj_depthwise_conv2d`, FullyConnected → `fj_dense`
+- [x] S15.6 — Op mapping: Reshape, Softmax, ReLU, ReLU6, Add, Mul, MaxPool2D, AveragePool2D → corresponding Fajar ops
+- [x] S15.7 — Quantization import: per-tensor and per-axis scales + zero_points → Fajar INT8 quantization format
+- [x] S15.8 — `tflite_infer(model, input) -> Result<Tensor>`: run imported model graph sequentially through mapped operators
+- [x] S15.9 — MobileNet-v2 test: import pre-trained TFLite MobileNet, run inference on 224x224 dummy input, verify output shape (1, 1000)
+- [x] S15.10 — 10 tests: FlatBuffer parsing, tensor type mapping, Conv2D op, quantized model load, MobileNet output shape, invalid model error
 
 #### Sprint 16: Distributed Training `P1`
 
 **Goal:** Parameter server architecture for multi-node gradient aggregation
 
-- [ ] S16.1 — `src/runtime/ml/distributed/mod.rs`: distributed module with `DistributedConfig` struct (role, world_size, rank, server_addr)
-- [ ] S16.2 — `Role` enum: ParameterServer, Worker — server holds canonical weights, workers compute gradients
-- [ ] S16.3 — gRPC service definition: `PushGradients(gradients) -> Ack`, `PullWeights() -> Weights`, `Barrier(rank) -> Ack`
-- [ ] S16.4 — `ParameterServer`: accept gradients from workers, aggregate (mean), update weights, serve updated weights
-- [ ] S16.5 — `Worker`: compute forward + backward on local data shard, push gradients, pull updated weights
-- [ ] S16.6 — Gradient aggregation strategies: `AllReduceMean` (default), `AllReduceSum`, `TopK` (sparse gradients, keep top-K% by magnitude)
-- [ ] S16.7 — Synchronous training: barrier after each batch — all workers must push before server aggregates
-- [ ] S16.8 — Asynchronous training: workers push/pull independently — stale gradients bounded by `max_staleness` parameter
-- [ ] S16.9 — Data sharding: `DataLoader::shard(rank, world_size)` returns non-overlapping data partition for each worker
-- [ ] S16.10 — 10 tests: server/worker roundtrip (loopback), gradient aggregation correctness, barrier synchronization, data sharding, async staleness
+- [x] S16.1 — `src/runtime/ml/distributed/mod.rs`: distributed module with `DistributedConfig` struct (role, world_size, rank, server_addr)
+- [x] S16.2 — `Role` enum: ParameterServer, Worker — server holds canonical weights, workers compute gradients
+- [x] S16.3 — gRPC service definition: `PushGradients(gradients) -> Ack`, `PullWeights() -> Weights`, `Barrier(rank) -> Ack`
+- [x] S16.4 — `ParameterServer`: accept gradients from workers, aggregate (mean), update weights, serve updated weights
+- [x] S16.5 — `Worker`: compute forward + backward on local data shard, push gradients, pull updated weights
+- [x] S16.6 — Gradient aggregation strategies: `AllReduceMean` (default), `AllReduceSum`, `TopK` (sparse gradients, keep top-K% by magnitude)
+- [x] S16.7 — Synchronous training: barrier after each batch — all workers must push before server aggregates
+- [x] S16.8 — Asynchronous training: workers push/pull independently — stale gradients bounded by `max_staleness` parameter
+- [x] S16.9 — Data sharding: `DataLoader::shard(rank, world_size)` returns non-overlapping data partition for each worker
+- [x] S16.10 — 10 tests: server/worker roundtrip (loopback), gradient aggregation correctness, barrier synchronization, data sharding, async staleness
 
 ### Phase 5: LLVM PGO & RTIC `P2`
 

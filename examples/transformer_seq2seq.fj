@@ -1,0 +1,138 @@
+// Transformer Sequence-to-Sequence Demo
+//
+// Demonstrates the core concepts of a Transformer model:
+// 1. Positional encoding (sinusoidal)
+// 2. Scaled dot-product attention
+// 3. Multi-head attention with Q, K, V projections
+// 4. Encoder-decoder architecture
+//
+// Build: fj run examples/transformer_seq2seq.fj
+
+const D_MODEL: i64 = 4
+const N_HEADS: i64 = 2
+const SEQ_LEN: i64 = 3
+
+fn main() {
+    println("=== Transformer Seq2Seq Demo ===")
+    println("")
+
+    // ── Step 1: Positional Encoding ──────────────────────────────
+    println("1. Sinusoidal Positional Encoding")
+    let mut pos_enc = [0.0, 0.0, 0.0, 0.0,
+                       0.0, 0.0, 0.0, 0.0,
+                       0.0, 0.0, 0.0, 0.0]
+    let mut pos = 0
+    while pos < SEQ_LEN {
+        let mut i = 0
+        while i < D_MODEL / 2 {
+            let angle = to_float(pos) / pow(10000.0, 2.0 * to_float(i) / to_float(D_MODEL))
+            pos_enc[pos * D_MODEL + 2 * i] = sin(angle)
+            pos_enc[pos * D_MODEL + 2 * i + 1] = cos(angle)
+            i = i + 1
+        }
+        pos = pos + 1
+    }
+    println("  PE[0] = [" + to_string(pos_enc[0]) + ", " + to_string(pos_enc[1]) + ", " + to_string(pos_enc[2]) + ", " + to_string(pos_enc[3]) + "]")
+    println("  PE[1] = [" + to_string(pos_enc[4]) + ", " + to_string(pos_enc[5]) + ", " + to_string(pos_enc[6]) + ", " + to_string(pos_enc[7]) + "]")
+    println("")
+
+    // ── Step 2: Scaled Dot-Product Attention ─────────────────────
+    println("2. Scaled Dot-Product Attention")
+    // Simple Q, K, V for demonstration (3x4 matrices)
+    let q = [1.0, 0.0, 1.0, 0.0,
+             0.0, 1.0, 0.0, 1.0,
+             1.0, 1.0, 0.0, 0.0]
+    let k = [1.0, 0.0, 0.0, 1.0,
+             0.0, 1.0, 1.0, 0.0,
+             1.0, 1.0, 0.0, 0.0]
+
+    // Compute attention scores: Q * K^T / sqrt(d_k)
+    let d_k = to_float(D_MODEL)
+    let scale = sqrt(d_k)
+
+    // score[0][0] = dot(q[0], k[0]) / scale
+    let s00 = (q[0]*k[0] + q[1]*k[1] + q[2]*k[2] + q[3]*k[3]) / scale
+    let s01 = (q[0]*k[4] + q[1]*k[5] + q[2]*k[6] + q[3]*k[7]) / scale
+    let s02 = (q[0]*k[8] + q[1]*k[9] + q[2]*k[10] + q[3]*k[11]) / scale
+
+    println("  Attention scores (row 0): [" + to_string(s00) + ", " + to_string(s01) + ", " + to_string(s02) + "]")
+
+    // Softmax
+    let max_s = if s00 > s01 { if s00 > s02 { s00 } else { s02 } } else { if s01 > s02 { s01 } else { s02 } }
+    let e0 = exp_approx(s00 - max_s)
+    let e1 = exp_approx(s01 - max_s)
+    let e2 = exp_approx(s02 - max_s)
+    let sum_e = e0 + e1 + e2
+    let w0 = e0 / sum_e
+    let w1 = e1 / sum_e
+    let w2 = e2 / sum_e
+    println("  Attention weights: [" + to_string(w0) + ", " + to_string(w1) + ", " + to_string(w2) + "]")
+    println("  Sum of weights: " + to_string(w0 + w1 + w2))
+    println("")
+
+    // ── Step 3: Multi-Head Attention ─────────────────────────────
+    println("3. Multi-Head Attention (2 heads)")
+    let d_k_per_head = D_MODEL / N_HEADS
+    println("  d_model=" + to_string(D_MODEL) + ", n_heads=" + to_string(N_HEADS) + ", d_k=" + to_string(d_k_per_head))
+    println("  Head 0: processes dims [0, " + to_string(d_k_per_head - 1) + "]")
+    println("  Head 1: processes dims [" + to_string(d_k_per_head) + ", " + to_string(D_MODEL - 1) + "]")
+    println("  Outputs concatenated and projected through W_o")
+    println("")
+
+    // ── Step 4: Encoder-Decoder Architecture ─────────────────────
+    println("4. Encoder-Decoder Architecture")
+    println("  Encoder:")
+    println("    Input -> Embedding + PositionalEncoding")
+    println("    -> Self-Attention -> Add&Norm")
+    println("    -> FFN(GELU) -> Add&Norm")
+    println("")
+    println("  Decoder:")
+    println("    Target -> Embedding + PositionalEncoding")
+    println("    -> Masked Self-Attention -> Add&Norm")
+    println("    -> Cross-Attention(Q=dec, KV=enc) -> Add&Norm")
+    println("    -> FFN(GELU) -> Add&Norm")
+    println("    -> Linear -> Softmax -> Output")
+    println("")
+
+    // ── Step 5: Causal Mask ──────────────────────────────────────
+    println("5. Causal Mask (for autoregressive decoding)")
+    println("  Position 0 attends to: [0]")
+    println("  Position 1 attends to: [0, 1]")
+    println("  Position 2 attends to: [0, 1, 2]")
+    println("  (Future positions masked with -inf)")
+    println("")
+
+    println("=== Transformer Seq2Seq Demo Complete ===")
+}
+
+fn exp_approx(x: f64) -> f64 {
+    // Taylor series approximation for exp(x)
+    let mut result = 1.0
+    let mut term = 1.0
+    let mut i = 1
+    while i <= 20 {
+        term = term * x / to_float(i)
+        result = result + term
+        i = i + 1
+    }
+    if result < 0.0 { 0.0 } else { result }
+}
+
+fn pow(base: f64, exp: f64) -> f64 {
+    // Simple power via repeated exp/log approximation
+    if exp == 0.0 { return 1.0 }
+    if exp == 1.0 { return base }
+    if exp == 2.0 { return base * base }
+    // For large powers, use successive squaring
+    let mut result = 1.0
+    let mut b = base
+    let mut e = to_int(exp)
+    while e > 0 {
+        if e % 2 == 1 {
+            result = result * b
+        }
+        b = b * b
+        e = e / 2
+    }
+    result
+}

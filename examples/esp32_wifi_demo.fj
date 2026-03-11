@@ -1,0 +1,77 @@
+// ESP32 WiFi + MQTT IoT Demo
+// Demonstrates WiFi connection, MQTT publish/subscribe, and OTA update check
+//
+// This example shows how a Fajar Lang program would interact with
+// ESP32 IoT peripherals using the iot:: module APIs.
+
+// WiFi configuration
+let ssid: str = "HomeNetwork"
+let password: str = "securepassword123"
+
+// Connect to WiFi
+println("=== ESP32 WiFi Demo ===")
+println("Connecting to WiFi...")
+
+// In real ESP32 deployment, these would call the iot::wifi API:
+//   let wifi = wifi_init()
+//   let ip = wifi_connect_sta(wifi, ssid, password)
+//   println(f"Connected! IP: {ip}")
+
+let ip_addr: str = "192.168.4.2"
+println("Connected to " + ssid)
+println("IP Address: " + ip_addr)
+
+// MQTT setup
+let broker: str = "mqtt://192.168.4.1:1883"
+let client_id: str = "fj-esp32-sensor-1"
+
+println("")
+println("=== MQTT Client ===")
+println("Connecting to broker: " + broker)
+println("Client ID: " + client_id)
+
+// Simulate sensor readings
+let temperature: f64 = 25.3
+let humidity: f64 = 60.5
+let pressure: f64 = 1013.25
+
+// In real deployment:
+//   let client = mqtt_connect(config)
+//   mqtt_subscribe(client, "sensor/+/command", QoS::AtLeastOnce)
+//   mqtt_publish(client, "sensor/1/temperature", to_string(temperature), QoS::AtMostOnce)
+
+println("Publishing sensor data:")
+println("  topic: sensor/1/temperature  payload: " + to_string(temperature))
+println("  topic: sensor/1/humidity     payload: " + to_string(humidity))
+println("  topic: sensor/1/pressure     payload: " + to_string(pressure))
+
+// BLE beacon
+println("")
+println("=== BLE Beacon ===")
+let device_name: str = "FajarSensor-1"
+println("Starting BLE advertising: " + device_name)
+println("Service: Environmental Sensing (0x181A)")
+
+// OTA update check
+println("")
+println("=== OTA Update Check ===")
+let current_version: str = "1.0.0"
+println("Current firmware: v" + current_version)
+println("Checking for updates...")
+
+// In real deployment:
+//   let info = ota_check_update(manager)
+//   if info.version > current_version {
+//     let fw = ota_download_firmware(info.download_url)
+//     ota_verify(fw, info.sha256)
+//     ota_flash(fw)
+//   }
+
+let new_version: str = "1.0.1"
+println("Update available: v" + new_version)
+println("Downloading and verifying...")
+println("Flashing to partition B...")
+println("Update complete! Reboot to apply.")
+
+println("")
+println("=== Demo Complete ===")

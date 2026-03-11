@@ -51,8 +51,10 @@ native = [
     "target-lexicon",
 ]
 llvm = ["dep:inkwell"]
+wasm = []
 freertos = []
 zephyr = []
+esp32 = []
 
 [dev-dependencies]
 pretty_assertions = "1.4"

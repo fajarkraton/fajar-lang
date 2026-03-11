@@ -6,6 +6,7 @@
 pub mod borrow_lite;
 pub mod cfg;
 pub mod inference;
+pub mod polonius;
 pub mod scope;
 pub mod type_check;
 
