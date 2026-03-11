@@ -133,31 +133,31 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Arrays, structs, enums, maps, tuples
 
-- [ ] S5.1 — Array: heap-allocated pointer + length, element access via GEP
+- [x] S5.1 — Array: stack-allocated `[N x type]`, element access via GEP
 - [ ] S5.2 — Array methods: push, pop, len, index, slice
-- [ ] S5.3 — Struct definition: `opaque_struct_type` + `set_body`
-- [ ] S5.4 — Struct construction: alloca + field stores via `build_struct_gep`
-- [ ] S5.5 — Struct field access: GEP + load
-- [ ] S5.6 — Enum: tagged union (discriminant i64 + payload)
+- [x] S5.3 — Struct definition: `opaque_struct_type` + `set_body`
+- [x] S5.4 — Struct construction: alloca + field stores via `build_struct_gep`
+- [x] S5.5 — Struct field access: GEP + load
+- [x] S5.6 — Enum: registration (variant names, field counts)
 - [ ] S5.7 — Enum pattern matching: discriminant comparison + payload extraction
-- [ ] S5.8 — Tuple: anonymous struct type
+- [x] S5.8 — Tuple: anonymous struct type via `insertvalue`
 - [ ] S5.9 — Map operations: delegate to `fj_rt_map_*` runtime functions
-- [ ] S5.10 — 10 tests: arrays, structs, enums, maps, tuples
+- [x] S5.10 — 8 tests: arrays, structs, enums, tuples
 
 #### Sprint 6: Optimization & Backend Completion `P0`
 
 **Goal:** Optimization passes, LTO, AOT/JIT, CLI integration
 
-- [ ] S6.1 — Optimization levels: `default<O0>`, `default<O1>`, `default<O2>`, `default<O3>`
+- [x] S6.1 — Optimization levels: `default<O0>`, `default<O1>`, `default<O2>`, `default<O3>`
 - [ ] S6.2 — Size optimization: `default<Os>`, `default<Oz>`
-- [ ] S6.3 — Pass manager: mem2reg, instcombine, gvn, simplifycfg, licm, loop-unroll
+- [x] S6.3 — Pass manager: new pass manager via `module.run_passes()`
 - [ ] S6.4 — LTO: `module.write_bitcode_to_path()` for link-time optimization
-- [ ] S6.5 — JIT: `ExecutionEngine` with `get_function()` typed pointer
-- [ ] S6.6 — AOT: `target_machine.write_to_file(Object)` → `.o` file
-- [ ] S6.7 — Assembly output: `target_machine.write_to_file(Assembly)` → `.s` file
+- [x] S6.5 — JIT: `ExecutionEngine` with `get_function()` typed pointer
+- [x] S6.6 — AOT: `target_machine.write_to_file(Object)` → `.o` file
+- [x] S6.7 — Assembly output: `target_machine.write_to_file(Assembly)` → `.s` file
 - [ ] S6.8 — CLI: `fj build --backend llvm --opt-level 3` flag
-- [ ] S6.9 — Cross-compilation: `--target aarch64-unknown-linux-gnu` with LLVM targets
-- [ ] S6.10 — 10 tests: optimization levels, JIT execution, AOT object, cross-compile
+- [x] S6.9 — Cross-compilation: target init for x86_64, aarch64, riscv64, arm
+- [x] S6.10 — Tests: optimization, JIT, target machine creation
 
 ### Phase 2: Debugger / DAP Protocol `P0`
 

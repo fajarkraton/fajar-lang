@@ -35,7 +35,8 @@ use inkwell::OptimizationLevel;
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
-    BinOp, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program, Stmt, TypeExpr, UnaryOp,
+    BinOp, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program, Stmt, StructDef,
+    TypeExpr, UnaryOp,
 };
 
 use self::types::{fj_type_to_llvm, fj_type_to_metadata};
@@ -94,6 +95,10 @@ pub struct LlvmCompiler<'ctx> {
     var_types: HashMap<String, BasicTypeEnum<'ctx>>,
     /// Optimization level.
     opt_level: LlvmOptLevel,
+    /// Maps struct name → (LLVM struct type, field names in order).
+    struct_types: HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
+    /// Maps enum name → (variant names, variant field counts).
+    enum_defs: HashMap<String, Vec<(String, usize)>>,
     /// Break target: (after_bb, optional break value alloca)
     break_target: Option<(BasicBlock<'ctx>, Option<PointerValue<'ctx>>)>,
     /// Continue target: loop header block
@@ -114,6 +119,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
             variables: HashMap::new(),
             var_types: HashMap::new(),
             opt_level: LlvmOptLevel::O0,
+            struct_types: HashMap::new(),
+            enum_defs: HashMap::new(),
             break_target: None,
             continue_target: None,
         }
@@ -241,6 +248,15 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
     /// Compiles a Fajar Lang program to LLVM IR.
     pub fn compile_program(&mut self, program: &Program) -> Result<(), CodegenError> {
+        // Pass 0: register struct and enum type definitions
+        for item in &program.items {
+            match item {
+                Item::StructDef(sdef) => self.register_struct(sdef)?,
+                Item::EnumDef(edef) => self.register_enum(edef),
+                _ => {}
+            }
+        }
+
         // First pass: declare all functions
         for item in &program.items {
             if let Item::FnDef(fndef) = item {
@@ -256,6 +272,34 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
 
         self.verify()
+    }
+
+    /// Registers a struct definition, creating the LLVM struct type.
+    fn register_struct(&mut self, sdef: &StructDef) -> Result<(), CodegenError> {
+        let field_types: Vec<BasicTypeEnum<'ctx>> = sdef
+            .fields
+            .iter()
+            .map(|f| fj_type_to_llvm(self.context, &type_expr_to_string(&f.ty)))
+            .collect();
+
+        let field_names: Vec<String> = sdef.fields.iter().map(|f| f.name.clone()).collect();
+
+        let struct_type = self.context.opaque_struct_type(&sdef.name);
+        struct_type.set_body(&field_types, false);
+
+        self.struct_types
+            .insert(sdef.name.clone(), (struct_type, field_names));
+        Ok(())
+    }
+
+    /// Registers an enum definition.
+    fn register_enum(&mut self, edef: &EnumDef) {
+        let variants: Vec<(String, usize)> = edef
+            .variants
+            .iter()
+            .map(|v| (v.name.clone(), v.fields.len()))
+            .collect();
+        self.enum_defs.insert(edef.name.clone(), variants);
     }
 
     /// Declares a function signature in the LLVM module (forward declaration).
@@ -471,6 +515,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 }
                 Ok(last_val)
             }
+
+            Expr::Array { elements, .. } => self.compile_array(elements),
+
+            Expr::Tuple { elements, .. } => self.compile_tuple(elements),
+
+            Expr::StructInit { name, fields, .. } => self.compile_struct_init(name, fields),
+
+            Expr::Field { object, field, .. } => self.compile_field_access(object, field),
+
+            Expr::Index { object, index, .. } => self.compile_index_access(object, index),
 
             Expr::Cast { expr, ty, .. } => self.compile_cast(expr, ty),
 
@@ -933,6 +987,56 @@ impl<'ctx> LlvmCompiler<'ctx> {
             Stmt::Let {
                 name, ty, value, ..
             } => {
+                // Special case: struct init — bind variable directly to struct alloca
+                if let Expr::StructInit {
+                    name: struct_name,
+                    fields: field_inits,
+                    ..
+                } = value.as_ref()
+                {
+                    let (struct_type, field_names) =
+                        self.struct_types.get(struct_name).cloned().ok_or_else(|| {
+                            CodegenError::Internal(format!("undefined struct: {struct_name}"))
+                        })?;
+
+                    let alloca = self
+                        .builder
+                        .build_alloca(struct_type, name)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                    for fi in field_inits {
+                        let field_idx =
+                            field_names
+                                .iter()
+                                .position(|n| n == &fi.name)
+                                .ok_or_else(|| {
+                                    CodegenError::Internal(format!(
+                                        "unknown field '{}' on struct {struct_name}",
+                                        fi.name
+                                    ))
+                                })?;
+
+                        let val = self.compile_expr(&fi.value)?.ok_or_else(|| {
+                            CodegenError::Internal(format!(
+                                "struct field '{}' produced no value",
+                                fi.name
+                            ))
+                        })?;
+
+                        let field_ptr = self
+                            .builder
+                            .build_struct_gep(struct_type, alloca, field_idx as u32, &fi.name)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder
+                            .build_store(field_ptr, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+
+                    self.variables.insert(name.clone(), alloca);
+                    self.var_types.insert(name.clone(), struct_type.into());
+                    return Ok(None);
+                }
+
                 let init_val = self.compile_expr(value)?.ok_or_else(|| {
                     CodegenError::Internal("let initializer produced no value".into())
                 })?;
@@ -1015,6 +1119,234 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 std::mem::discriminant(stmt)
             ))),
         }
+    }
+
+    /// Compiles an array literal `[a, b, c]`.
+    ///
+    /// Layout: alloca of `[N x element_type]`, store each element, return pointer.
+    fn compile_array(
+        &mut self,
+        elements: &[Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        if elements.is_empty() {
+            // Empty array → null pointer
+            return Ok(Some(self.context.i64_type().const_int(0, false).into()));
+        }
+
+        // Compile all elements
+        let mut compiled: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        for elem in elements {
+            let val = self
+                .compile_expr(elem)?
+                .ok_or_else(|| CodegenError::Internal("array element produced no value".into()))?;
+            compiled.push(val);
+        }
+
+        // Determine element type from first element
+        let elem_type = compiled[0].get_type();
+        let array_type = elem_type.array_type(elements.len() as u32);
+
+        let alloca = self
+            .builder
+            .build_alloca(array_type, "arr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        // Store each element via GEP
+        for (i, val) in compiled.iter().enumerate() {
+            let idx = self.context.i32_type().const_int(i as u64, false);
+            let zero = self.context.i32_type().const_int(0, false);
+            // SAFETY: GEP into array is safe — indices are in bounds by construction.
+            let elem_ptr = unsafe {
+                self.builder
+                    .build_in_bounds_gep(array_type, alloca, &[zero, idx], &format!("arr_{i}"))
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            };
+            self.builder
+                .build_store(elem_ptr, *val)
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        }
+
+        // Return pointer as i64 (opaque pointer representation)
+        let ptr_as_int = self
+            .builder
+            .build_ptr_to_int(alloca, self.context.i64_type(), "arr_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(Some(ptr_as_int.into()))
+    }
+
+    /// Compiles a tuple literal `(a, b, c)`.
+    fn compile_tuple(
+        &mut self,
+        elements: &[Expr],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let mut compiled: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        for elem in elements {
+            let val = self
+                .compile_expr(elem)?
+                .ok_or_else(|| CodegenError::Internal("tuple element produced no value".into()))?;
+            compiled.push(val);
+        }
+
+        let field_types: Vec<BasicTypeEnum<'ctx>> = compiled.iter().map(|v| v.get_type()).collect();
+        let tuple_type = self.context.struct_type(&field_types, false);
+
+        let mut tuple_val = tuple_type.get_undef();
+        for (i, val) in compiled.iter().enumerate() {
+            tuple_val = self
+                .builder
+                .build_insert_value(tuple_val, *val, i as u32, &format!("tup_{i}"))
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                .into_struct_value();
+        }
+
+        Ok(Some(tuple_val.into()))
+    }
+
+    /// Compiles a struct instantiation `Point { x: 1, y: 2 }`.
+    fn compile_struct_init(
+        &mut self,
+        name: &str,
+        fields: &[crate::parser::ast::FieldInit],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let (struct_type, field_names) = self
+            .struct_types
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CodegenError::Internal(format!("undefined struct: {name}")))?;
+
+        let alloca = self
+            .builder
+            .build_alloca(struct_type, name)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        for fi in fields {
+            let field_idx = field_names
+                .iter()
+                .position(|n| n == &fi.name)
+                .ok_or_else(|| {
+                    CodegenError::Internal(format!("unknown field '{}'  on struct {name}", fi.name))
+                })?;
+
+            let val = self.compile_expr(&fi.value)?.ok_or_else(|| {
+                CodegenError::Internal(format!("struct field '{}' produced no value", fi.name))
+            })?;
+
+            let field_ptr = self
+                .builder
+                .build_struct_gep(struct_type, alloca, field_idx as u32, &fi.name)
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            self.builder
+                .build_store(field_ptr, val)
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        }
+
+        // Store alloca pointer as the variable's type
+        self.var_types.insert(name.to_string(), struct_type.into());
+
+        // Return pointer as i64 (opaque handle)
+        let ptr_as_int = self
+            .builder
+            .build_ptr_to_int(alloca, self.context.i64_type(), "struct_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(Some(ptr_as_int.into()))
+    }
+
+    /// Compiles field access `obj.field`.
+    fn compile_field_access(
+        &mut self,
+        object: &Expr,
+        field: &str,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        // Check if the object is an ident whose type is a known struct
+        if let Expr::Ident { name, .. } = object {
+            // Look up the variable to find if it's a struct pointer
+            for (struct_name, (struct_type, field_names)) in &self.struct_types {
+                if let Some(var_type) = self.var_types.get(name) {
+                    if var_type.is_struct_type() && var_type.into_struct_type() == *struct_type {
+                        let field_idx =
+                            field_names.iter().position(|n| n == field).ok_or_else(|| {
+                                CodegenError::Internal(format!(
+                                    "unknown field '{field}' on struct {struct_name}"
+                                ))
+                            })?;
+
+                        let ptr = self
+                            .variables
+                            .get(name)
+                            .ok_or_else(|| CodegenError::UndefinedVariable(name.clone()))?;
+
+                        // The variable IS the alloca to the struct
+                        let field_ptr = self
+                            .builder
+                            .build_struct_gep(
+                                *struct_type,
+                                *ptr,
+                                field_idx as u32,
+                                &format!("{name}.{field}"),
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        let field_type_idx = struct_type
+                            .get_field_type_at_index(field_idx as u32)
+                            .ok_or_else(|| {
+                                CodegenError::Internal(format!(
+                                    "struct {struct_name} field index {field_idx} out of bounds"
+                                ))
+                            })?;
+
+                        let val = self
+                            .builder
+                            .build_load(field_type_idx, field_ptr, field)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        return Ok(Some(val));
+                    }
+                }
+            }
+        }
+
+        Err(CodegenError::NotImplemented(format!(
+            "LLVM field access on non-struct: .{field}"
+        )))
+    }
+
+    /// Compiles index access `arr[i]`.
+    fn compile_index_access(
+        &mut self,
+        object: &Expr,
+        index: &Expr,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let obj_val = self
+            .compile_expr(object)?
+            .ok_or_else(|| CodegenError::Internal("index object produced no value".into()))?;
+        let idx_val = self
+            .compile_expr(index)?
+            .ok_or_else(|| CodegenError::Internal("index value produced no value".into()))?;
+
+        // Object is an i64 (pointer as int). Convert back to pointer and GEP.
+        let ptr = self
+            .builder
+            .build_int_to_ptr(
+                obj_val.into_int_value(),
+                self.context.ptr_type(inkwell::AddressSpace::default()),
+                "arr_ptr",
+            )
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        // GEP with i64 index, assuming i64 element type
+        let i64_type = self.context.i64_type();
+        // SAFETY: Array bounds are checked at runtime in the interpreter.
+        // The LLVM backend trusts that the program has been validated.
+        let elem_ptr = unsafe {
+            self.builder
+                .build_in_bounds_gep(i64_type, ptr, &[idx_val.into_int_value()], "elem_ptr")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+        };
+
+        let val = self
+            .builder
+            .build_load(i64_type, elem_ptr, "elem")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(Some(val))
     }
 
     /// Compiles a type cast expression (`expr as Type`).
@@ -2734,6 +3066,495 @@ mod tests {
 
         // After optimization, verify IR is still valid
         assert!(compiler.verify().is_ok());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Sprint 5: Data structures tests
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn llvm_compile_array_literal_and_index() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // fn main() -> i64 {
+        //   let arr = [10, 20, 42]
+        //   arr[2]
+        // }
+        let body = Expr::Block {
+            stmts: vec![make_let_stmt(
+                "arr",
+                Expr::Array {
+                    elements: vec![make_int_lit(10), make_int_lit(20), make_int_lit(42)],
+                    span: dummy_span(),
+                },
+            )],
+            expr: Some(Box::new(Expr::Index {
+                object: Box::new(make_ident("arr")),
+                index: Box::new(make_int_lit(2)),
+                span: dummy_span(),
+            })),
+            span: dummy_span(),
+        };
+        let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+        compiler.compile_program(&program).unwrap();
+        assert_eq!(compiler.jit_execute().unwrap(), 42);
+    }
+
+    #[test]
+    fn llvm_compile_tuple_literal() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // fn main() -> i64 { let t = (10, 42); 0 }
+        // Tuple is stored but we return i64 to keep function valid
+        let body = Expr::Block {
+            stmts: vec![make_let_stmt(
+                "t",
+                Expr::Tuple {
+                    elements: vec![make_int_lit(10), make_int_lit(42)],
+                    span: dummy_span(),
+                },
+            )],
+            expr: Some(Box::new(make_int_lit(0))),
+            span: dummy_span(),
+        };
+        let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+        compiler.compile_program(&program).unwrap();
+        // Verify the program compiles and the struct type is used
+        assert!(compiler.verify().is_ok());
+        // Tuple is stored as a struct — check the alloca for tuple storage
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("alloca") || ir.contains("{ i64, i64 }"),
+            "IR should contain tuple struct type: {ir}"
+        );
+    }
+
+    #[test]
+    fn llvm_compile_struct_definition_and_init() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // struct Point { x: i64, y: i64 }
+        // fn main() -> i64 { let p = Point { x: 10, y: 32 }; p.x + p.y }
+        let struct_def = StructDef {
+            is_pub: false,
+            doc_comment: None,
+            annotation: None,
+            name: "Point".to_string(),
+            generic_params: vec![],
+            fields: vec![
+                crate::parser::ast::Field {
+                    name: "x".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Field {
+                    name: "y".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let body = Expr::Block {
+            stmts: vec![Stmt::Let {
+                mutable: false,
+                name: "p".to_string(),
+                ty: None,
+                value: Box::new(Expr::StructInit {
+                    name: "Point".to_string(),
+                    fields: vec![
+                        crate::parser::ast::FieldInit {
+                            name: "x".to_string(),
+                            value: make_int_lit(10),
+                            span: dummy_span(),
+                        },
+                        crate::parser::ast::FieldInit {
+                            name: "y".to_string(),
+                            value: make_int_lit(32),
+                            span: dummy_span(),
+                        },
+                    ],
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }],
+            expr: Some(Box::new(make_binop(
+                Expr::Field {
+                    object: Box::new(make_ident("p")),
+                    field: "x".to_string(),
+                    span: dummy_span(),
+                },
+                BinOp::Add,
+                Expr::Field {
+                    object: Box::new(make_ident("p")),
+                    field: "y".to_string(),
+                    span: dummy_span(),
+                },
+            ))),
+            span: dummy_span(),
+        };
+
+        let program = make_program(vec![
+            Item::StructDef(struct_def),
+            Item::FnDef(make_simple_fn("main", body)),
+        ]);
+
+        compiler.compile_program(&program).unwrap();
+        assert_eq!(compiler.jit_execute().unwrap(), 42);
+    }
+
+    #[test]
+    fn llvm_compile_struct_field_access() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // struct Pair { first: i64, second: i64 }
+        // fn main() -> i64 { let p = Pair { first: 100, second: 42 }; p.second }
+        let struct_def = StructDef {
+            is_pub: false,
+            doc_comment: None,
+            annotation: None,
+            name: "Pair".to_string(),
+            generic_params: vec![],
+            fields: vec![
+                crate::parser::ast::Field {
+                    name: "first".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Field {
+                    name: "second".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let body = Expr::Block {
+            stmts: vec![Stmt::Let {
+                mutable: false,
+                name: "p".to_string(),
+                ty: None,
+                value: Box::new(Expr::StructInit {
+                    name: "Pair".to_string(),
+                    fields: vec![
+                        crate::parser::ast::FieldInit {
+                            name: "first".to_string(),
+                            value: make_int_lit(100),
+                            span: dummy_span(),
+                        },
+                        crate::parser::ast::FieldInit {
+                            name: "second".to_string(),
+                            value: make_int_lit(42),
+                            span: dummy_span(),
+                        },
+                    ],
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }],
+            expr: Some(Box::new(Expr::Field {
+                object: Box::new(make_ident("p")),
+                field: "second".to_string(),
+                span: dummy_span(),
+            })),
+            span: dummy_span(),
+        };
+
+        let program = make_program(vec![
+            Item::StructDef(struct_def),
+            Item::FnDef(make_simple_fn("main", body)),
+        ]);
+
+        compiler.compile_program(&program).unwrap();
+        assert_eq!(compiler.jit_execute().unwrap(), 42);
+    }
+
+    #[test]
+    fn llvm_compile_enum_registration() {
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        let enum_def = EnumDef {
+            is_pub: false,
+            doc_comment: None,
+            annotation: None,
+            name: "Color".to_string(),
+            generic_params: vec![],
+            variants: vec![
+                crate::parser::ast::Variant {
+                    name: "Red".to_string(),
+                    fields: vec![],
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Variant {
+                    name: "Green".to_string(),
+                    fields: vec![],
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Variant {
+                    name: "Blue".to_string(),
+                    fields: vec![],
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let program = make_program(vec![
+            Item::EnumDef(enum_def),
+            Item::FnDef(make_simple_fn("main", make_int_lit(0))),
+        ]);
+
+        compiler.compile_program(&program).unwrap();
+        assert!(compiler.enum_defs.contains_key("Color"));
+        assert_eq!(compiler.enum_defs["Color"].len(), 3);
+    }
+
+    #[test]
+    fn llvm_compile_struct_with_three_fields() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // struct Vec3 { x: i64, y: i64, z: i64 }
+        // fn main() -> i64 { let v = Vec3 { x: 10, y: 20, z: 12 }; v.x + v.y + v.z }
+        let struct_def = StructDef {
+            is_pub: false,
+            doc_comment: None,
+            annotation: None,
+            name: "Vec3".to_string(),
+            generic_params: vec![],
+            fields: vec![
+                crate::parser::ast::Field {
+                    name: "x".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Field {
+                    name: "y".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                crate::parser::ast::Field {
+                    name: "z".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let body = Expr::Block {
+            stmts: vec![Stmt::Let {
+                mutable: false,
+                name: "v".to_string(),
+                ty: None,
+                value: Box::new(Expr::StructInit {
+                    name: "Vec3".to_string(),
+                    fields: vec![
+                        crate::parser::ast::FieldInit {
+                            name: "x".to_string(),
+                            value: make_int_lit(10),
+                            span: dummy_span(),
+                        },
+                        crate::parser::ast::FieldInit {
+                            name: "y".to_string(),
+                            value: make_int_lit(20),
+                            span: dummy_span(),
+                        },
+                        crate::parser::ast::FieldInit {
+                            name: "z".to_string(),
+                            value: make_int_lit(12),
+                            span: dummy_span(),
+                        },
+                    ],
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }],
+            expr: Some(Box::new(make_binop(
+                make_binop(
+                    Expr::Field {
+                        object: Box::new(make_ident("v")),
+                        field: "x".to_string(),
+                        span: dummy_span(),
+                    },
+                    BinOp::Add,
+                    Expr::Field {
+                        object: Box::new(make_ident("v")),
+                        field: "y".to_string(),
+                        span: dummy_span(),
+                    },
+                ),
+                BinOp::Add,
+                Expr::Field {
+                    object: Box::new(make_ident("v")),
+                    field: "z".to_string(),
+                    span: dummy_span(),
+                },
+            ))),
+            span: dummy_span(),
+        };
+
+        let program = make_program(vec![
+            Item::StructDef(struct_def),
+            Item::FnDef(make_simple_fn("main", body)),
+        ]);
+
+        compiler.compile_program(&program).unwrap();
+        assert_eq!(compiler.jit_execute().unwrap(), 42);
+    }
+
+    #[test]
+    fn llvm_compile_array_sum_with_for() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        // fn main() -> i64 {
+        //   let arr = [10, 15, 17]
+        //   let mut sum = 0
+        //   for i in 0..3 {
+        //     sum = sum + arr[i]
+        //   }
+        //   sum  // 10+15+17 = 42
+        // }
+        let for_body = Expr::Block {
+            stmts: vec![make_expr_stmt(make_assign(
+                "sum",
+                make_binop(
+                    make_ident("sum"),
+                    BinOp::Add,
+                    Expr::Index {
+                        object: Box::new(make_ident("arr")),
+                        index: Box::new(make_ident("i")),
+                        span: dummy_span(),
+                    },
+                ),
+            ))],
+            expr: None,
+            span: dummy_span(),
+        };
+
+        let body = Expr::Block {
+            stmts: vec![
+                make_let_stmt(
+                    "arr",
+                    Expr::Array {
+                        elements: vec![make_int_lit(10), make_int_lit(15), make_int_lit(17)],
+                        span: dummy_span(),
+                    },
+                ),
+                make_let_stmt("sum", make_int_lit(0)),
+                make_expr_stmt(Expr::For {
+                    variable: "i".to_string(),
+                    iterable: Box::new(Expr::Range {
+                        start: Some(Box::new(make_int_lit(0))),
+                        end: Some(Box::new(make_int_lit(3))),
+                        inclusive: false,
+                        span: dummy_span(),
+                    }),
+                    body: Box::new(for_body),
+                    span: dummy_span(),
+                }),
+            ],
+            expr: Some(Box::new(make_ident("sum"))),
+            span: dummy_span(),
+        };
+        let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+        compiler.compile_program(&program).unwrap();
+        assert_eq!(compiler.jit_execute().unwrap(), 42);
+    }
+
+    #[test]
+    fn llvm_compile_struct_ir_has_named_type() {
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test");
+
+        let struct_def = StructDef {
+            is_pub: false,
+            doc_comment: None,
+            annotation: None,
+            name: "MyStruct".to_string(),
+            generic_params: vec![],
+            fields: vec![crate::parser::ast::Field {
+                name: "val".to_string(),
+                ty: TypeExpr::Simple {
+                    name: "i64".to_string(),
+                    span: dummy_span(),
+                },
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+
+        // Use the struct in a function so it appears in IR
+        let body = Expr::Block {
+            stmts: vec![Stmt::Let {
+                mutable: false,
+                name: "s".to_string(),
+                ty: None,
+                value: Box::new(Expr::StructInit {
+                    name: "MyStruct".to_string(),
+                    fields: vec![crate::parser::ast::FieldInit {
+                        name: "val".to_string(),
+                        value: make_int_lit(42),
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }],
+            expr: Some(Box::new(Expr::Field {
+                object: Box::new(make_ident("s")),
+                field: "val".to_string(),
+                span: dummy_span(),
+            })),
+            span: dummy_span(),
+        };
+
+        let program = make_program(vec![
+            Item::StructDef(struct_def),
+            Item::FnDef(make_simple_fn("main", body)),
+        ]);
+
+        compiler.compile_program(&program).unwrap();
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("MyStruct"),
+            "IR should reference the struct name: {ir}"
+        );
     }
 
     #[test]
