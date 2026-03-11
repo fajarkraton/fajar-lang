@@ -1,0 +1,71 @@
+// Trait Objects Demo — Fajar Lang v0.5
+//
+// Demonstrates dyn Trait with vtable-based dynamic dispatch.
+//
+// Run: fj run examples/trait_objects.fj
+
+trait Shape {
+    fn area() -> f64
+    fn name() -> str
+}
+
+struct Circle {
+    radius: f64,
+}
+
+impl Shape for Circle {
+    fn area() -> f64 {
+        3.14159 * self.radius * self.radius
+    }
+    fn name() -> str {
+        "Circle"
+    }
+}
+
+struct Rectangle {
+    width: f64,
+    height: f64,
+}
+
+impl Shape for Rectangle {
+    fn area() -> f64 {
+        self.width * self.height
+    }
+    fn name() -> str {
+        "Rectangle"
+    }
+}
+
+struct Triangle {
+    base: f64,
+    height: f64,
+}
+
+impl Shape for Triangle {
+    fn area() -> f64 {
+        0.5 * self.base * self.height
+    }
+    fn name() -> str {
+        "Triangle"
+    }
+}
+
+/// Prints shape info using dynamic dispatch
+fn print_shape(s: dyn Shape) {
+    println(f"{s.name()}: area = {s.area()}")
+}
+
+fn main() {
+    let c = Circle { radius: 5.0 }
+    let r = Rectangle { width: 4.0, height: 6.0 }
+    let t = Triangle { base: 3.0, height: 8.0 }
+
+    // Dynamic dispatch via dyn Trait
+    print_shape(c)
+    print_shape(r)
+    print_shape(t)
+
+    // Trait object in variable
+    let shape: dyn Shape = Circle { radius: 10.0 }
+    println(f"Dynamic shape area: {shape.area()}")
+}

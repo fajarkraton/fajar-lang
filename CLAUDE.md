@@ -41,6 +41,7 @@ Every Claude Code session MUST follow this order:
 **v0.2 STATUS: Phases A, B, E, F COMPLETE.**
 **v0.3 STATUS: "Dominion" — 52 sprints, 739 tasks. ALL COMPLETE.**
 **v0.4 STATUS: "Sovereignty" — 6 sprints, 40 tasks. ALL COMPLETE.**
+**v0.5 STATUS: "Ascendancy" — 8 sprints, 80 tasks. ALL COMPLETE.**
 
 ### Key Documents (Read on Demand)
 
@@ -129,17 +130,33 @@ Tasks:     40/40 complete | 0 deferred
 Sprints:   6/6 complete
 ```
 
-### Current Totals (v0.4 complete)
+### v0.5 "Ascendancy" — COMPLETE
 
 ```
-Tests:     2,267 lib + 383 integration = 2,650 total (0 failures)
-LOC:       ~98,000 lines of Rust (97 files)
-Examples:  24 .fj programs
+Test Framework:    @test/@should_panic/@ignore + fj test CLI          ✅ COMPLETE
+Doc Generation:    /// doc comments + fj doc HTML generation          ✅ COMPLETE
+Trait Objects:     dyn Trait, vtable dispatch, object safety          ✅ COMPLETE
+Iterators:         .iter()/.map()/.filter()/.collect() protocol       ✅ COMPLETE
+String Interp:     f"Hello {name}" with expression evaluation         ✅ COMPLETE
+Error Recovery:    Multi-error parser, suggestions, type hints        ✅ COMPLETE
+Developer Tools:   fj watch, fj bench, REPL multi-line, LSP rename   ✅ COMPLETE
+
+Tasks:     80/80 complete | 0 deferred
+Sprints:   8/8 complete
+```
+
+### Current Totals (v0.5 complete)
+
+```
+Tests:     ~1,774 lib + 399 integration = ~2,173 total (0 failures, non-native)
+LOC:       ~101,000 lines of Rust (100+ files)
+Examples:  28 .fj programs
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
 Stdlib:    6 .fj modules (core, nn, os, hal, drivers, lexer)
+mdBook:    44+ pages
 ```
 
-> **Task lists:** `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
+> **Task lists:** `docs/V05_PLAN.md` (v0.5), `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
 > **Implementation plans:** `docs/V03_IMPLEMENTATION_PLAN.md`, `docs/V1_IMPLEMENTATION_PLAN.md`
 
 ---

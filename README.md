@@ -156,6 +156,10 @@ fn main() -> i64 {
 | `fj fmt <file.fj>` | Format source code |
 | `fj dump-tokens <file.fj>` | Show lexer output |
 | `fj dump-ast <file.fj>` | Show parser AST output |
+| `fj test <file.fj>` | Run `@test` annotated functions |
+| `fj doc <file.fj>` | Generate HTML documentation from `///` comments |
+| `fj watch <file.fj>` | Watch files and auto-run on change |
+| `fj bench <file.fj>` | Run micro-benchmarks on parameterless functions |
 | `fj lsp` | Start Language Server Protocol server |
 
 ## Feature Matrix
@@ -199,9 +203,15 @@ fn main() -> i64 {
 | **FFI** | C interop (libloading, libffi) | Working |
 | | SIMD (f32x4/f32x8/i32x4/i32x8) | Working |
 | | Union/repr (@repr_c, @repr_packed, bitfields) | Working |
-| **Tools** | REPL | Working |
+| **v0.5** | Test framework (`@test`, `@should_panic`, `@ignore`) | Working |
+| | Doc comments (`///`) + `fj doc` HTML generation | Working |
+| | Trait objects (`dyn Trait`, vtable dispatch) | Working |
+| | Iterator protocol (`.map()`, `.filter()`, `.collect()`, etc.) | Working |
+| | String interpolation (`f"Hello {name}"`) | Working |
+| | Error recovery (multi-error, suggestions, hints) | Working |
+| **Tools** | REPL (multi-line, `:type`, `:help`) | Working |
 | | Formatter (`fj fmt`) | Working |
-| | LSP server (diagnostics, symbols, code actions) | Working |
+| | LSP server (diagnostics, completion, hover, rename) | Working |
 | | Package manager (`fj.toml`, registry, `fj add`) | Working |
 | | VS Code extension (syntax, snippets, LSP) | Working |
 | **Self-Hosting** | Self-hosted lexer (stdlib/lexer.fj) | Working |

@@ -1,0 +1,56 @@
+// Iterator Demo — Fajar Lang v0.5
+//
+// Demonstrates the iterator protocol: .iter(), .map(), .filter(),
+// .take(), .enumerate(), .fold(), .sum(), .collect()
+//
+// Run: fj run examples/iterator_demo.fj
+
+fn main() {
+    // Array iterator with map and collect
+    let nums = [1, 2, 3, 4, 5]
+    let doubled = nums.iter().map(|x| x * 2).collect()
+    println(f"Doubled: {doubled}")
+
+    // Filter: keep only even numbers
+    let evens = [1, 2, 3, 4, 5, 6, 7, 8].iter().filter(|x| x % 2 == 0).collect()
+    println(f"Evens: {evens}")
+
+    // Take first 3 elements
+    let first3 = [10, 20, 30, 40, 50].iter().take(3).collect()
+    println(f"First 3: {first3}")
+
+    // Enumerate: (index, value) pairs
+    let names = ["alice", "bob", "charlie"]
+    let indexed = names.iter().enumerate().collect()
+    println(f"Indexed: {indexed}")
+
+    // Sum and count
+    let total = [1, 2, 3, 4, 5].iter().sum()
+    println(f"Sum: {total}")
+
+    let count = [10, 20, 30].iter().count()
+    println(f"Count: {count}")
+
+    // Fold: accumulate with custom operation
+    let product = [1, 2, 3, 4, 5].iter().fold(1, |acc, x| acc * x)
+    println(f"Product: {product}")
+
+    // Chaining: filter then map then collect
+    let result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        .iter()
+        .filter(|x| x % 3 == 0)
+        .map(|x| x * x)
+        .collect()
+    println(f"Squares of multiples of 3: {result}")
+
+    // String iterator
+    let chars = "hello".iter().collect()
+    println(f"Chars: {chars}")
+
+    // Range with for-in
+    let mut sum: i64 = 0
+    for i in 0..10 {
+        sum = sum + i
+    }
+    println(f"Sum 0..10: {sum}")
+}

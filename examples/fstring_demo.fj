@@ -1,0 +1,39 @@
+// F-String Demo — Fajar Lang v0.5
+//
+// Demonstrates string interpolation with f"..." syntax.
+//
+// Run: fj run examples/fstring_demo.fj
+
+fn greet(name: str) -> str {
+    f"Hello, {name}!"
+}
+
+fn main() {
+    // Basic interpolation
+    let name = "Fajar"
+    println(f"Welcome to {name} Lang!")
+
+    // Expression interpolation
+    let x: i64 = 10
+    let y: i64 = 20
+    println(f"{x} + {y} = {x + y}")
+
+    // Function call in interpolation
+    println(greet("World"))
+
+    // Multiple types
+    let pi = 3.14159
+    let flag = true
+    println(f"pi = {pi}, flag = {flag}")
+
+    // Nested function calls
+    let nums = [1, 2, 3, 4, 5]
+    println(f"Array has {len(nums)} elements")
+
+    // Escaped braces
+    println(f"Use {{braces}} for literal braces")
+
+    // String methods in interpolation
+    let msg = "  hello world  "
+    println(f"Trimmed: '{msg.trim()}'")
+}

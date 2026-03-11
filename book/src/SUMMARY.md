@@ -17,6 +17,10 @@
 - [Pattern Matching](./reference/pattern-matching.md)
 - [Error Handling](./reference/error-handling.md)
 - [Generics & Traits](./reference/generics-traits.md)
+- [Trait Objects](./reference/trait-objects.md)
+- [Iterators](./reference/iterators.md)
+- [String Interpolation](./reference/fstrings.md)
+- [Test Framework](./reference/testing.md)
 - [Modules](./reference/modules.md)
 
 # Concurrency

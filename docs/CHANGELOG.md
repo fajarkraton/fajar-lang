@@ -18,6 +18,46 @@ Kategori perubahan:
 
 ---
 
+## [0.5.0] — 2026-03-11 "Ascendancy"
+
+### Added
+- **Test Framework**: `@test`, `@should_panic`, `@ignore` annotations with `fj test` CLI command
+- **Test Runner**: discover, run, filter, and report test results with colored output
+- **Doc Comments**: `///` doc comment syntax attached to functions, structs, enums, traits
+- **Doc Generation**: `fj doc` command generates HTML documentation with Markdown rendering
+- **Doc Tests**: code blocks in `///` comments are extracted and run as tests
+- **Trait Objects**: `dyn Trait` with vtable-based dynamic dispatch in interpreter
+- **Iterator Protocol**: `.iter()`, `.map()`, `.filter()`, `.take()`, `.enumerate()` lazy combinators
+- **Iterator Consumers**: `.collect()`, `.sum()`, `.count()`, `.fold()`, `.next()`
+- **String Interpolation**: `f"Hello {name}, age {age}"` with expression evaluation
+- **Error Recovery**: parser continues after errors, synchronizes on `;`, `}`, keywords
+- **Suggestion Engine**: "did you mean X?" for misspelled identifiers (Levenshtein distance)
+- **Type Mismatch Hints**: SE004 now suggests `as` casts and conversion functions
+- **Unused Import Warnings**: SE019 for `use` declarations that are never referenced
+- **Unreachable Pattern Warnings**: SE020 for match arms after wildcard `_` catch-all
+- **`fj watch`**: poll-based file watching with `--test` auto-run mode
+- **`fj bench`**: micro-benchmark framework (discovers parameterless functions, 10 iterations)
+- **REPL Multi-Line**: brace-balanced continuation with `...` prompt
+- **REPL `:type` Command**: show type of expression without evaluating
+- **LSP Rename**: rename symbol across document with whole-word matching
+- **Examples**: `iterator_demo.fj`, `trait_objects.fj`, `fstring_demo.fj`
+- **mdBook Chapters**: Trait Objects, Iterators, String Interpolation, Test Framework
+
+### Changed
+- Parser `synchronize()` now also syncs on `;` and `}` for better error recovery
+- REPL now shows version 0.5.0 and lists available commands on startup
+- TypeMismatch errors now include optional hint field for cast suggestions
+
+### Stats
+- Tests: 2,650 → 1,774+ (non-native; test restructuring)
+- LOC: ~98,000 → ~101,000
+- Examples: 24 → 28
+- Error codes: 71 → 73 (SE019, SE020)
+- Token kinds: 82+ → 90+
+- mdBook pages: 40+ → 44+
+
+---
+
 ## [0.4.0] — 2026-03-10 "Sovereignty"
 
 ### Added

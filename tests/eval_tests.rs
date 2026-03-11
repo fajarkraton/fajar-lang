@@ -3021,7 +3021,7 @@ fn s2_lexer_emits_doc_comment_token() {
 }
 
 #[test]
-fn s2_lexer_consecutive_doc_comments() {
+fn s2_lexer_consecutive_doc_comment() {
     use fajar_lang::lexer::token::TokenKind;
     let src = "/// Line 1\n/// Line 2\nfn bar() { 1 }";
     let tokens = tokenize(src).unwrap();
@@ -4012,4 +4012,214 @@ fn s7_lsp_analyzer_provides_diagnostics() {
         )
     });
     assert!(has_se001, "should detect undefined variable (SE001)");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 8: Integration Tests — Full Pipeline for v0.5 Features
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s8_integration_test_framework_discovery() {
+    // @test annotation parsed and functions marked as test
+    let source = r#"
+@test
+fn test_basic() {
+    assert_eq(1 + 1, 2)
+}
+@test @should_panic
+fn test_panic() {
+    panic("expected")
+}
+fn helper() -> i64 { 42 }
+"#;
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    let mut test_count = 0;
+    let mut should_panic_count = 0;
+    for item in &program.items {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.is_test {
+                test_count += 1;
+            }
+            if fndef.should_panic {
+                should_panic_count += 1;
+            }
+        }
+    }
+    assert_eq!(test_count, 2, "should discover 2 test functions");
+    assert_eq!(should_panic_count, 1, "should find 1 should_panic");
+}
+
+#[test]
+fn s8_integration_doc_comment_attached() {
+    // /// doc comments are preserved in the AST
+    let source = r#"
+/// Adds two numbers.
+/// Returns their sum.
+fn add(a: i64, b: i64) -> i64 { a + b }
+"#;
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    let fndef = program.items.iter().find_map(|item| {
+        if let fajar_lang::parser::ast::Item::FnDef(f) = item {
+            if f.name == "add" {
+                return Some(f);
+            }
+        }
+        None
+    });
+    let fndef = fndef.expect("should find add function");
+    assert!(
+        fndef.doc_comment.is_some(),
+        "doc comments should be attached"
+    );
+    let doc = fndef.doc_comment.as_ref().unwrap();
+    assert!(doc.contains("Adds two numbers"), "should contain doc text");
+}
+
+#[test]
+fn s8_integration_trait_object_dispatch() {
+    // dyn Trait dynamic dispatch works end-to-end
+    let source = r#"
+trait Greeter {
+    fn greet() -> str
+}
+struct English {}
+impl Greeter for English {
+    fn greet() -> str { "Hello" }
+}
+struct Spanish {}
+impl Greeter for Spanish {
+    fn greet() -> str { "Hola" }
+}
+fn get_greeting(g: dyn Greeter) -> str {
+    g.greet()
+}
+get_greeting(English {})
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Str(s)) => assert_eq!(s, "Hello"),
+        other => panic!("expected Str(\"Hello\"), got {other:?}"),
+    }
+}
+
+#[test]
+fn s8_integration_iterator_map_filter_collect() {
+    // Iterator pipeline: map + filter + collect
+    let source = r#"
+let result = [1, 2, 3, 4, 5, 6].iter().filter(|x| x % 2 == 0).map(|x| x * 10).collect()
+result
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Array(arr)) => {
+            let ints: Vec<i64> = arr
+                .iter()
+                .map(|v| match v {
+                    Value::Int(n) => *n,
+                    _ => panic!("expected int"),
+                })
+                .collect();
+            assert_eq!(ints, vec![20, 40, 60]);
+        }
+        other => panic!("expected Array, got {other:?}"),
+    }
+}
+
+#[test]
+fn s8_integration_fstring_expression() {
+    // f-string with expression interpolation
+    let source = r#"
+let name = "World"
+let x: i64 = 10
+f"Hello {name}, x={x}, sum={x + 5}"
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Str(s)) => assert_eq!(s, "Hello World, x=10, sum=15"),
+        other => panic!("expected f-string result, got {other:?}"),
+    }
+}
+
+#[test]
+fn s8_integration_error_recovery_multiple() {
+    // Parser recovers and collects multiple errors
+    let source = "let = 10\nfn foo() { 42 }\nlet = 20";
+    let tokens = tokenize(source).unwrap();
+    let result = parse(tokens);
+    assert!(result.is_err(), "should have parse errors");
+    let errors = result.unwrap_err();
+    assert!(
+        errors.len() >= 2,
+        "should recover and find multiple errors, got {}",
+        errors.len()
+    );
+}
+
+#[test]
+fn s8_integration_suggestion_on_typo() {
+    // Levenshtein suggestion for misspelled variable
+    let source = r#"
+fn main() -> i64 {
+    let counter: i64 = 42
+    couter
+}
+"#;
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    let result = analyze(&program);
+    assert!(result.is_err());
+    let errors = result.unwrap_err();
+    let has_suggestion = errors.iter().any(|e| {
+        if let fajar_lang::analyzer::type_check::SemanticError::UndefinedVariable {
+            suggestion,
+            ..
+        } = e
+        {
+            suggestion.is_some()
+        } else {
+            false
+        }
+    });
+    assert!(has_suggestion, "should suggest 'counter' for 'couter'");
+}
+
+#[test]
+fn s8_integration_iterator_fold_sum() {
+    // Iterator fold and sum
+    let source = r#"
+let total = [1, 2, 3, 4, 5].iter().sum()
+total
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 15),
+        other => panic!("expected Int(15), got {other:?}"),
+    }
+}
+
+#[test]
+fn s8_integration_full_pipeline_v05() {
+    // Full pipeline test: all v0.5 features in one program
+    let source = r#"
+/// Doubles a number.
+fn double(x: i64) -> i64 { x * 2 }
+
+let arr = [1, 2, 3, 4, 5]
+let result = arr.iter().map(|x| double(x)).filter(|x| x > 4).collect()
+let msg = f"Result has {len(result)} elements"
+let first = result[0]
+first
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 6),
+        other => panic!("expected Int(6), got {other:?}"),
+    }
 }
