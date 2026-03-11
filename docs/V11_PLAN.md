@@ -106,55 +106,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S5 — FP8 Types
 
-- [ ] S5.1 — E5M2 Format: Implement 8-bit float with 5-bit exponent, 2-bit mantissa (IEEE 754 proposal), bit layout
-- [ ] S5.2 — E4M3 Format: Implement 8-bit float with 4-bit exponent, 3-bit mantissa, NaN handling (single NaN encoding)
-- [ ] S5.3 — FP8 Arithmetic: Add, subtract, multiply, divide for E5M2 and E4M3 with correct rounding (RNE)
-- [ ] S5.4 — FP8-to-F32 Conversion: Lossless upcast from E5M2/E4M3 to f32 via exponent bias adjustment
-- [ ] S5.5 — F32-to-FP8 Conversion: Downcasting with saturation, rounding modes (RNE, stochastic rounding)
-- [ ] S5.6 — FP8 Tensor Integration: Extend TensorValue to hold FP8 data, storage as packed u8 arrays
-- [ ] S5.7 — FP8 Quantization Pipeline: `tensor.quantize_fp8(format="e4m3")` with calibration statistics
-- [ ] S5.8 — FP8 Dequantization: `tensor.dequantize()` restores f32 with scale factor application
-- [ ] S5.9 — Type System Integration: Add `fp8e5m2` and `fp8e4m3` as primitive types in lexer, parser, and analyzer
-- [ ] S5.10 — Unit Tests: 15+ tests covering conversion accuracy, overflow saturation, NaN propagation, round-trip fidelity
+- [x] S5.1 — E5M2 Format: Implement 8-bit float with 5-bit exponent, 2-bit mantissa (IEEE 754 proposal), bit layout
+- [x] S5.2 — E4M3 Format: Implement 8-bit float with 4-bit exponent, 3-bit mantissa, NaN handling (single NaN encoding)
+- [x] S5.3 — FP8 Arithmetic: Add, subtract, multiply, divide for E5M2 and E4M3 with correct rounding (RNE)
+- [x] S5.4 — FP8-to-F32 Conversion: Lossless upcast from E5M2/E4M3 to f32 via exponent bias adjustment
+- [x] S5.5 — F32-to-FP8 Conversion: Downcasting with saturation, rounding modes (RNE, stochastic rounding)
+- [x] S5.6 — FP8 Tensor Integration: Extend TensorValue to hold FP8 data, storage as packed u8 arrays
+- [x] S5.7 — FP8 Quantization Pipeline: `tensor.quantize_fp8(format="e4m3")` with calibration statistics
+- [x] S5.8 — FP8 Dequantization: `tensor.dequantize()` restores f32 with scale factor application
+- [x] S5.9 — Type System Integration: Add `fp8e5m2` and `fp8e4m3` as primitive types in lexer, parser, and analyzer
+- [x] S5.10 — Unit Tests: 15+ tests covering conversion accuracy, overflow saturation, NaN propagation, round-trip fidelity
 
 ### Sprint S6 — FP4 Types
 
-- [ ] S6.1 — E2M1 Format: Implement 4-bit float with 2-bit exponent, 1-bit mantissa, value range [-6.0, 6.0]
-- [ ] S6.2 — NVFP4 Two-Level Scaling: Implement NVIDIA's block-level scale (per-32 elements) + tensor-level scale
-- [ ] S6.3 — Packing 8 Values per u32: Pack/unpack 8 FP4 values into a single u32 for memory-efficient storage
-- [ ] S6.4 — FP4 Arithmetic: Multiply-accumulate in f32 after upcast, store result back as FP4 with scaling
-- [ ] S6.5 — FP4-to-F32 Conversion: Upcast with two-level scale application: `value * block_scale * tensor_scale`
-- [ ] S6.6 — F32-to-FP4 Conversion: Downcasting with optimal scale computation via absmax calibration
-- [ ] S6.7 — FP4 Tensor Storage: Extend tensor backend to store FP4 data as packed u32 arrays with scale metadata
-- [ ] S6.8 — FP4 Quantization API: `tensor.quantize_fp4(block_size=32)` returns quantized tensor + scales
-- [ ] S6.9 — Type System Integration: Add `fp4` as primitive type, enforce no direct arithmetic (must dequantize first)
-- [ ] S6.10 — Unit Tests: 12+ tests for packing, conversion accuracy, scale computation, quantization round-trip
+- [x] S6.1 — E2M1 Format: Implement 4-bit float with 2-bit exponent, 1-bit mantissa, value range [-6.0, 6.0]
+- [x] S6.2 — NVFP4 Two-Level Scaling: Implement NVIDIA's block-level scale (per-32 elements) + tensor-level scale
+- [x] S6.3 — Packing 8 Values per u32: Pack/unpack 8 FP4 values into a single u32 for memory-efficient storage
+- [x] S6.4 — FP4 Arithmetic: Multiply-accumulate in f32 after upcast, store result back as FP4 with scaling
+- [x] S6.5 — FP4-to-F32 Conversion: Upcast with two-level scale application: `value * block_scale * tensor_scale`
+- [x] S6.6 — F32-to-FP4 Conversion: Downcasting with optimal scale computation via absmax calibration
+- [x] S6.7 — FP4 Tensor Storage: Extend tensor backend to store FP4 data as packed u32 arrays with scale metadata
+- [x] S6.8 — FP4 Quantization API: `tensor.quantize_fp4(block_size=32)` returns quantized tensor + scales
+- [x] S6.9 — Type System Integration: Add `fp4` as primitive type, enforce no direct arithmetic (must dequantize first)
+- [x] S6.10 — Unit Tests: 12+ tests for packing, conversion accuracy, scale computation, quantization round-trip
 
 ### Sprint S7 — BF16 Support
 
-- [ ] S7.1 — BF16 Format: Implement bfloat16 (1 sign, 8 exponent, 7 mantissa) using u16 storage
-- [ ] S7.2 — BF16 Arithmetic: Add, sub, mul, div via f32 upcasting with truncation back to bf16
-- [ ] S7.3 — F32-to-BF16 Conversion: Truncation-based (fast) and round-to-nearest-even (accurate) modes
-- [ ] S7.4 — BF16-to-F32 Conversion: Zero-extend lower 16 mantissa bits, no precision loss on exponent
-- [ ] S7.5 — BF16 Tensor Ops: matmul, element-wise ops, reductions operating on bf16 tensor data
-- [ ] S7.6 — Mixed-Precision Training: Forward pass in bf16, loss computation in f32, backward in bf16, master weights in f32
-- [ ] S7.7 — Loss Scaling: Dynamic loss scaling for bf16 training — scale up gradients, skip step on overflow
-- [ ] S7.8 — BF16 Type in Language: Add `bf16` as primitive type with implicit promotion rules to f32
-- [ ] S7.9 — Cranelift BF16 Lowering: Lower bf16 ops to f32 ops with conversion instructions in native codegen
-- [ ] S7.10 — Unit Tests: 15+ tests for arithmetic accuracy, mixed-precision training convergence, loss scaling
+- [x] S7.1 — BF16 Format: Implement bfloat16 (1 sign, 8 exponent, 7 mantissa) using u16 storage
+- [x] S7.2 — BF16 Arithmetic: Add, sub, mul, div via f32 upcasting with truncation back to bf16
+- [x] S7.3 — F32-to-BF16 Conversion: Truncation-based (fast) and round-to-nearest-even (accurate) modes
+- [x] S7.4 — BF16-to-F32 Conversion: Zero-extend lower 16 mantissa bits, no precision loss on exponent
+- [x] S7.5 — BF16 Tensor Ops: matmul, element-wise ops, reductions operating on bf16 tensor data
+- [x] S7.6 — Mixed-Precision Training: Forward pass in bf16, loss computation in f32, backward in bf16, master weights in f32
+- [x] S7.7 — Loss Scaling: Dynamic loss scaling for bf16 training — scale up gradients, skip step on overflow
+- [x] S7.8 — BF16 Type in Language: Add `bf16` as primitive type with implicit promotion rules to f32
+- [x] S7.9 — Cranelift BF16 Lowering: Lower bf16 ops to f32 ops with conversion instructions in native codegen
+- [x] S7.10 — Unit Tests: 15+ tests for arithmetic accuracy, mixed-precision training convergence, loss scaling
 
 ### Sprint S8 — Structured Sparsity
 
-- [ ] S8.1 — 4:2 Sparsity Pattern: Implement detection and enforcement of 4:2 pattern (2 zeros per 4 elements)
-- [ ] S8.2 — Sparse Metadata Format: Store sparsity mask as 2-bit indices per group of 4 elements (NVIDIA format)
-- [ ] S8.3 — CSR Storage: Implement Compressed Sparse Row format for general sparse tensors
-- [ ] S8.4 — CSC Storage: Implement Compressed Sparse Column format for column-major sparse access
-- [ ] S8.5 — Sparse-Dense MatMul: Multiply sparse matrix (4:2 or CSR) by dense matrix with 2x throughput path
-- [ ] S8.6 — Pruning API: `model.prune(sparsity=0.5, pattern="4:2")` with magnitude-based weight selection
-- [ ] S8.7 — Pruning Schedule: Gradual pruning during training — ramp sparsity from 0 to target over N steps
-- [ ] S8.8 — Sparse Tensor Type: `SparseTensor { data, indices, indptr, format, shape }` in runtime value system
-- [ ] S8.9 — Sparsity Analysis: `tensor.sparsity()` returns fraction of zeros, `tensor.is_structured_sparse()` check
-- [ ] S8.10 — Unit Tests: 12+ tests for pattern detection, CSR/CSC correctness, sparse matmul accuracy, pruning
+- [x] S8.1 — 4:2 Sparsity Pattern: Implement detection and enforcement of 4:2 pattern (2 zeros per 4 elements)
+- [x] S8.2 — Sparse Metadata Format: Store sparsity mask as 2-bit indices per group of 4 elements (NVIDIA format)
+- [x] S8.3 — CSR Storage: Implement Compressed Sparse Row format for general sparse tensors
+- [x] S8.4 — CSC Storage: Implement Compressed Sparse Column format for column-major sparse access
+- [x] S8.5 — Sparse-Dense MatMul: Multiply sparse matrix (4:2 or CSR) by dense matrix with 2x throughput path
+- [x] S8.6 — Pruning API: `model.prune(sparsity=0.5, pattern="4:2")` with magnitude-based weight selection
+- [x] S8.7 — Pruning Schedule: Gradual pruning during training — ramp sparsity from 0 to target over N steps
+- [x] S8.8 — Sparse Tensor Type: `SparseTensor { data, indices, indptr, format, shape }` in runtime value system
+- [x] S8.9 — Sparsity Analysis: `tensor.sparsity()` returns fraction of zeros, `tensor.is_structured_sparse()` check
+- [x] S8.10 — Unit Tests: 12+ tests for pattern detection, CSR/CSC correctness, sparse matmul accuracy, pruning
 
 ---
 

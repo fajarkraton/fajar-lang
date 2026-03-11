@@ -3,6 +3,7 @@
 //! Only accessible from `@device` or `@unsafe` context.
 
 pub mod autograd;
+pub mod bf16;
 pub mod compression;
 pub mod custom_grad;
 pub mod data;
@@ -11,6 +12,8 @@ pub mod distillation;
 pub mod distributed;
 pub mod export;
 pub mod fixed_point;
+pub mod fp4;
+pub mod fp8;
 pub mod gpu;
 pub mod layers;
 pub mod metrics;
@@ -21,6 +24,7 @@ pub mod pruning;
 pub mod quantize;
 pub mod rnn;
 pub mod serialize;
+pub mod sparsity;
 pub mod stack_tensor;
 pub mod tensor;
 pub mod tflite;
