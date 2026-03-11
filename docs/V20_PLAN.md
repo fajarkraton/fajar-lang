@@ -449,55 +449,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S29 — Trait Resolution
 
-- [ ] S29.1 — Full Trait Impl Index: Build index of all trait implementations in workspace, updated incrementally
-- [ ] S29.2 — Go-to-Implementation: Click on trait method call, navigate to concrete impl for known receiver type
-- [ ] S29.3 — Blanket Impl Display: Show applicable blanket impls in hover information (`impl<T: Display> ToString for T`)
-- [ ] S29.4 — Trait Bound Checking: Real-time display of unsatisfied trait bounds as user types generic constraints
-- [ ] S29.5 — Associated Type Resolution: Resolve associated types in hover (`<T as Iterator>::Item = i32`)
-- [ ] S29.6 — Trait Object Info: Display vtable layout and available methods for `dyn Trait` types on hover
-- [ ] S29.7 — Impl Suggestions: When trait bound is unsatisfied, suggest adding `impl TraitName for Type` with skeleton
-- [ ] S29.8 — Orphan Rule Checking: Real-time orphan rule validation for trait implementations as user types
-- [ ] S29.9 — Trait Hierarchy View: Tree visualization of trait inheritance (`Display: Debug + Serialize`) in sidebar
-- [ ] S29.10 — Unit Tests: 15+ tests for impl index accuracy, go-to-impl, blanket resolution, associated types, suggestions
+- [x] S29.1 — Full Trait Impl Index: Build index of all trait implementations in workspace, updated incrementally
+- [x] S29.2 — Go-to-Implementation: Click on trait method call, navigate to concrete impl for known receiver type
+- [x] S29.3 — Blanket Impl Display: Show applicable blanket impls in hover information (`impl<T: Display> ToString for T`)
+- [x] S29.4 — Trait Bound Checking: Real-time display of unsatisfied trait bounds as user types generic constraints
+- [x] S29.5 — Associated Type Resolution: Resolve associated types in hover (`<T as Iterator>::Item = i32`)
+- [x] S29.6 — Trait Object Info: Display vtable layout and available methods for `dyn Trait` types on hover
+- [x] S29.7 — Impl Suggestions: When trait bound is unsatisfied, suggest adding `impl TraitName for Type` with skeleton
+- [x] S29.8 — Orphan Rule Checking: Real-time orphan rule validation for trait implementations as user types
+- [x] S29.9 — Trait Hierarchy View: Tree visualization of trait inheritance (`Display: Debug + Serialize`) in sidebar
+- [x] S29.10 — Unit Tests: 15+ tests for impl index accuracy, go-to-impl, blanket resolution, associated types, suggestions
 
 ### Sprint S30 — Macro Expansion
 
-- [ ] S30.1 — Macro System Design: Define declarative macro syntax `macro_rules! name { (pattern) => { expansion } }` in parser
-- [ ] S30.2 — Macro Expansion Engine: Implement pattern matching and template substitution for declarative macros
-- [ ] S30.3 — Expansion Preview: LSP command to show expanded macro output in a virtual document
-- [ ] S30.4 — Step-Through Expansion: Interactive step-by-step macro expansion visualization in IDE
-- [ ] S30.5 — Macro Hygiene: Implement hygienic macros — macro-generated identifiers do not clash with user identifiers
-- [ ] S30.6 — Error Locations: Map errors in expanded code back to original macro definition or invocation site
-- [ ] S30.7 — Macro Completion: Auto-complete macro invocations based on defined macro_rules patterns
-- [ ] S30.8 — Macro Documentation: Show macro documentation, pattern arms, and example expansions in hover
-- [ ] S30.9 — Recursive Macros: Support recursive macro expansion with configurable depth limit (default: 128)
-- [ ] S30.10 — Unit Tests: 15+ tests for expansion correctness, hygiene, error mapping, completion, recursive depth limit
+- [x] S30.1 — Macro System Design: Define declarative macro syntax `macro_rules! name { (pattern) => { expansion } }` in parser
+- [x] S30.2 — Macro Expansion Engine: Implement pattern matching and template substitution for declarative macros
+- [x] S30.3 — Expansion Preview: LSP command to show expanded macro output in a virtual document
+- [x] S30.4 — Step-Through Expansion: Interactive step-by-step macro expansion visualization in IDE
+- [x] S30.5 — Macro Hygiene: Implement hygienic macros — macro-generated identifiers do not clash with user identifiers
+- [x] S30.6 — Error Locations: Map errors in expanded code back to original macro definition or invocation site
+- [x] S30.7 — Macro Completion: Auto-complete macro invocations based on defined macro_rules patterns
+- [x] S30.8 — Macro Documentation: Show macro documentation, pattern arms, and example expansions in hover
+- [x] S30.9 — Recursive Macros: Support recursive macro expansion with configurable depth limit (default: 128)
+- [x] S30.10 — Unit Tests: 15+ tests for expansion correctness, hygiene, error mapping, completion, recursive depth limit
 
 ### Sprint S31 — Type-Driven Completion
 
-- [ ] S31.1 — Expected Type Analysis: Determine expected type at cursor position from surrounding context
-- [ ] S31.2 — Expression Synthesis: Suggest complete expressions that produce the expected type (e.g., `Ok(value)` for Result)
-- [ ] S31.3 — Fill-in-the-Blank: When typing `let x: Vec<i32> = `, suggest `Vec::new()`, `vec![]`, `Vec::with_capacity()`
-- [ ] S31.4 — Argument Completion: In function call, suggest values of the correct parameter type from scope
-- [ ] S31.5 — Pattern Completion: In match arm, generate exhaustive pattern skeleton based on matched enum type
-- [ ] S31.6 — Import Suggestions: When completing unresolved name, suggest `use` imports for matching items
-- [ ] S31.7 — Postfix Completion: Type `.if` after boolean expr to get `if expr { }`, `.match` after enum for match block
-- [ ] S31.8 — Snippet Templates: Context-aware snippets (for loop over iterable, error handling boilerplate, test function)
-- [ ] S31.9 — Completion Ranking: Rank suggestions by relevance — type match > name similarity > recency > alphabetical
-- [ ] S31.10 — Unit Tests: 15+ tests for expected type analysis, expression synthesis, pattern completion, import suggestions
+- [x] S31.1 — Expected Type Analysis: Determine expected type at cursor position from surrounding context
+- [x] S31.2 — Expression Synthesis: Suggest complete expressions that produce the expected type (e.g., `Ok(value)` for Result)
+- [x] S31.3 — Fill-in-the-Blank: When typing `let x: Vec<i32> = `, suggest `Vec::new()`, `vec![]`, `Vec::with_capacity()`
+- [x] S31.4 — Argument Completion: In function call, suggest values of the correct parameter type from scope
+- [x] S31.5 — Pattern Completion: In match arm, generate exhaustive pattern skeleton based on matched enum type
+- [x] S31.6 — Import Suggestions: When completing unresolved name, suggest `use` imports for matching items
+- [x] S31.7 — Postfix Completion: Type `.if` after boolean expr to get `if expr { }`, `.match` after enum for match block
+- [x] S31.8 — Snippet Templates: Context-aware snippets (for loop over iterable, error handling boilerplate, test function)
+- [x] S31.9 — Completion Ranking: Rank suggestions by relevance — type match > name similarity > recency > alphabetical
+- [x] S31.10 — Unit Tests: 15+ tests for expected type analysis, expression synthesis, pattern completion, import suggestions
 
 ### Sprint S32 — Refactoring Suite
 
-- [ ] S32.1 — Extract Function: Select code region, extract into new function with correct parameters and return type
-- [ ] S32.2 — Extract Variable: Select expression, replace with `let` binding, maintain all other occurrences
-- [ ] S32.3 — Inline Function: Replace function call with function body, substituting arguments for parameters
-- [ ] S32.4 — Inline Variable: Replace all occurrences of a variable with its initializer expression
-- [ ] S32.5 — Rename Symbol: Rename variable/function/type/trait across entire workspace with preview
-- [ ] S32.6 — Move Module: Move module to different file/directory, update all `use` imports automatically
-- [ ] S32.7 — Extract Trait: Select methods from impl block, create new trait with those method signatures
-- [ ] S32.8 — Change Signature: Add/remove/reorder function parameters, update all call sites
-- [ ] S32.9 — Convert to/from Method: Convert free function to method (add self param) or method to free function
-- [ ] S32.10 — Unit Tests: 15+ tests for extract function/variable, inline, rename across files, move module, change signature
+- [x] S32.1 — Extract Function: Select code region, extract into new function with correct parameters and return type
+- [x] S32.2 — Extract Variable: Select expression, replace with `let` binding, maintain all other occurrences
+- [x] S32.3 — Inline Function: Replace function call with function body, substituting arguments for parameters
+- [x] S32.4 — Inline Variable: Replace all occurrences of a variable with its initializer expression
+- [x] S32.5 — Rename Symbol: Rename variable/function/type/trait across entire workspace with preview
+- [x] S32.6 — Move Module: Move module to different file/directory, update all `use` imports automatically
+- [x] S32.7 — Extract Trait: Select methods from impl block, create new trait with those method signatures
+- [x] S32.8 — Change Signature: Add/remove/reorder function parameters, update all call sites
+- [x] S32.9 — Convert to/from Method: Convert free function to method (add self param) or method to free function
+- [x] S32.10 — Unit Tests: 15+ tests for extract function/variable, inline, rename across files, move module, change signature
 
 ---
 

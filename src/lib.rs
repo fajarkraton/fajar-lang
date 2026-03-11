@@ -37,6 +37,7 @@ pub mod jit;
 pub mod lexer;
 pub mod linear;
 pub mod lsp;
+pub mod lsp_v2;
 pub mod package;
 pub mod parser;
 pub mod playground;
