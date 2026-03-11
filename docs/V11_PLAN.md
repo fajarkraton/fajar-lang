@@ -74,16 +74,16 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S3 — NPU Detection
 
-- [ ] S3.1 — Intel NPU Discovery: Detect Intel Meteor Lake / Lunar Lake NPU via /sys/class/accel or OpenVINO API
-- [ ] S3.2 — AMD XDNA Discovery: Detect AMD XDNA 2 NPU via amdxdna kernel driver in /dev/accel/accel*
-- [ ] S3.3 — Capability Negotiation: Query NPU supported operations (INT8, FP16, BF16) and max batch size
-- [ ] S3.4 — TOPS Reporting: Calculate and report peak TOPS (tera operations per second) for each detected NPU
-- [ ] S3.5 — NPU Feature Struct: Define `NpuDevice { vendor, model, tops, supported_dtypes, max_batch, driver_version }`
-- [ ] S3.6 — Qualcomm Hexagon Stub: Stub detection for Qualcomm Hexagon DSP (Snapdragon X Elite) for future support
-- [ ] S3.7 — Apple ANE Stub: Stub detection for Apple Neural Engine via IOKit for macOS (placeholder, not fully implemented)
-- [ ] S3.8 — NPU Health Check: Verify NPU is responsive with a trivial inference test (identity matrix multiply)
-- [ ] S3.9 — NPU Info Display: Format NPU details for `fj --hw-info` output (vendor, TOPS, dtypes)
-- [ ] S3.10 — Unit Tests: Test NPU detection with mock sysfs/driver, test graceful absence on non-NPU machines
+- [x] S3.1 — Intel NPU Discovery: Detect Intel Meteor Lake / Lunar Lake NPU via /sys/class/accel or OpenVINO API
+- [x] S3.2 — AMD XDNA Discovery: Detect AMD XDNA 2 NPU via amdxdna kernel driver in /dev/accel/accel*
+- [x] S3.3 — Capability Negotiation: Query NPU supported operations (INT8, FP16, BF16) and max batch size
+- [x] S3.4 — TOPS Reporting: Calculate and report peak TOPS (tera operations per second) for each detected NPU
+- [x] S3.5 — NPU Feature Struct: Define `NpuDevice { vendor, model, tops, supported_dtypes, max_batch, driver_version }`
+- [x] S3.6 — Qualcomm Hexagon Stub: Stub detection for Qualcomm Hexagon DSP (Snapdragon X Elite) for future support
+- [x] S3.7 — Apple ANE Stub: Stub detection for Apple Neural Engine via IOKit for macOS (placeholder, not fully implemented)
+- [x] S3.8 — NPU Health Check: Verify NPU is responsive with a trivial inference test (identity matrix multiply)
+- [x] S3.9 — NPU Info Display: Format NPU details for `fj --hw-info` output (vendor, TOPS, dtypes)
+- [x] S3.10 — Unit Tests: Test NPU detection with mock sysfs/driver, test graceful absence on non-NPU machines
 
 ### Sprint S4 — Accelerator Registry
 

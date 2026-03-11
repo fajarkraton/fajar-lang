@@ -14,9 +14,11 @@
 
 pub mod cpu;
 pub mod gpu;
+pub mod npu;
 
 pub use cpu::CpuFeatures;
 pub use gpu::{GpuDevice, GpuDiscovery, TensorCoreGen};
+pub use npu::{NpuDevice, NpuDiscovery, NpuVendor};
 
 use serde::Serialize;
 
@@ -34,7 +36,8 @@ pub struct HardwareProfile {
     pub cpu: CpuFeatures,
     /// Detected GPU devices and CUDA driver info.
     pub gpu: GpuDiscovery,
-    // pub npus: Vec<NpuDevice>,  // Phase 1 S3
+    /// Detected NPU devices (Intel VPU, AMD XDNA, Qualcomm Hexagon, Apple ANE).
+    pub npu: NpuDiscovery,
 }
 
 impl HardwareProfile {
@@ -43,6 +46,7 @@ impl HardwareProfile {
         Self {
             cpu: CpuFeatures::detect(),
             gpu: GpuDiscovery::detect(),
+            npu: NpuDiscovery::detect(),
         }
     }
 
@@ -51,6 +55,7 @@ impl HardwareProfile {
         Self {
             cpu: CpuFeatures::default(),
             gpu: GpuDiscovery::default(),
+            npu: NpuDiscovery::default(),
         }
     }
 
@@ -61,6 +66,8 @@ impl HardwareProfile {
         out.push_str(&self.cpu.display_info());
         out.push('\n');
         out.push_str(&self.gpu.display_info());
+        out.push('\n');
+        out.push_str(&self.npu.display_info());
         out
     }
 
@@ -80,6 +87,7 @@ mod tests {
         let info = profile.display_info();
         assert!(info.contains("CPU"));
         assert!(info.contains("GPU"));
+        assert!(info.contains("NPU"));
     }
 
     #[test]
@@ -89,6 +97,7 @@ mod tests {
         assert!(!profile.cpu.amx_bf16);
         assert!(!profile.gpu.cuda_available);
         assert!(profile.gpu.devices.is_empty());
+        assert!(profile.npu.devices.is_empty());
     }
 
     #[test]
@@ -106,5 +115,6 @@ mod tests {
         assert!(info.contains("Hardware Profile"));
         assert!(info.contains("── CPU"));
         assert!(info.contains("── GPU"));
+        assert!(info.contains("── NPU"));
     }
 }
