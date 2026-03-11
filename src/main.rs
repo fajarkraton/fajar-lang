@@ -149,6 +149,14 @@ enum Command {
         #[arg(long)]
         filter: Option<String>,
     },
+    /// Start a debug session (DAP protocol on stdin/stdout).
+    Debug {
+        /// Path to the .fj source file. If omitted, uses fj.toml entry point.
+        file: Option<PathBuf>,
+        /// Use DAP protocol (for IDE integration).
+        #[arg(long)]
+        dap: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -278,6 +286,28 @@ fn main() -> ExitCode {
                 },
             };
             cmd_bench(&path, filter.as_deref())
+        }
+        Command::Debug { file, dap } => {
+            if dap {
+                cmd_debug_dap()
+            } else {
+                let path = match file {
+                    Some(f) => f,
+                    None => match resolve_project_entry() {
+                        Ok(p) => p,
+                        Err(msg) => {
+                            eprintln!("error: {msg}");
+                            return ExitCode::from(EXIT_USAGE);
+                        }
+                    },
+                };
+                eprintln!(
+                    "Interactive debugger for '{}' not yet implemented.",
+                    path.display()
+                );
+                eprintln!("hint: use `fj debug --dap` for IDE integration via DAP protocol");
+                ExitCode::from(EXIT_USAGE)
+            }
         }
     }
 }
@@ -1206,6 +1236,12 @@ fn cross_linker(target: &fajar_lang::codegen::target::TargetConfig) -> String {
 fn cmd_lsp() -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
     rt.block_on(fajar_lang::lsp::run_lsp());
+    ExitCode::SUCCESS
+}
+
+/// Starts the DAP (Debug Adapter Protocol) server on stdin/stdout.
+fn cmd_debug_dap() -> ExitCode {
+    fajar_lang::debugger::dap_server::run_dap_server(std::io::stdin(), std::io::stdout());
     ExitCode::SUCCESS
 }
 

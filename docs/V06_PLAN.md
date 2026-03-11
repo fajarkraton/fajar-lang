@@ -165,34 +165,34 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Breakpoints, stepping, debug hooks in interpreter
 
-- [ ] S7.1 — `src/debugger/mod.rs`: module declaration, `DebugState` struct
-- [ ] S7.2 — `DebugState`: breakpoints HashMap, step_mode enum, current location
-- [ ] S7.3 — `StepMode` enum: Continue, StepIn, StepOver, StepOut, Paused
-- [ ] S7.4 — `Breakpoint` struct: id, file, line, condition, hit_count, log_message
-- [ ] S7.5 — `debug_hook()` in `eval_stmt()`: check breakpoints and step mode
-- [ ] S7.6 — Step-in: stop at every statement including function body
-- [ ] S7.7 — Step-over: stop at next statement at same or lower call depth
-- [ ] S7.8 — Step-out: stop when call depth decreases
-- [ ] S7.9 — Conditional breakpoints: evaluate condition expression in current scope
-- [ ] S7.10 — 10 tests: breakpoint hit, step-in/over/out, conditional, hit count
+- [x] S7.1 — `src/debugger/mod.rs`: module declaration, `DebugState` struct
+- [x] S7.2 — `DebugState`: breakpoints HashMap, step_mode enum, current location
+- [x] S7.3 — `StepMode` enum: Continue, StepIn, StepOver, StepOut, Paused
+- [x] S7.4 — `Breakpoint` struct: id, file, line, condition, hit_count, log_message
+- [x] S7.5 — `debug_hook()` in `eval_stmt()`: check breakpoints and step mode
+- [x] S7.6 — Step-in: stop at every statement including function body
+- [x] S7.7 — Step-over: stop at next statement at same or lower call depth
+- [x] S7.8 — Step-out: stop when call depth decreases
+- [x] S7.9 — Conditional breakpoints: evaluate condition expression in current scope
+- [x] S7.10 — 10 tests: breakpoint hit, step-in/over/out, conditional, hit count
 
 #### Sprint 8: DAP Server `P0`
 
 **Goal:** Full DAP protocol server on stdin/stdout
 
-- [ ] S8.1 — Add `dap` crate dependency
-- [ ] S8.2 — `src/debugger/dap_server.rs`: Server loop with `poll_request()`
-- [ ] S8.3 — Initialize request: return capabilities (breakpoints, stepping, evaluate)
-- [ ] S8.4 — Launch request: spawn interpreter thread with debug state
-- [ ] S8.5 — SetBreakpoints: register file+line breakpoints, return verified status
-- [ ] S8.6 — ConfigurationDone: start execution
-- [ ] S8.7 — Threads/StackTrace: return thread list and call frames
-- [ ] S8.8 — Scopes/Variables: return locals and globals with variablesReference
-- [ ] S8.9 — Continue/Next/StepIn/StepOut: send command to interpreter thread
-- [ ] S8.10 — Evaluate: run expression in current scope via `eval_source()`
-- [ ] S8.11 — Stopped/Terminated events: fire from interpreter thread via channel
-- [ ] S8.12 — `fj debug --dap` CLI subcommand
-- [ ] S8.13 — 10 tests: DAP message handling, breakpoint protocol, step sequence
+- [x] S8.1 — Add `dap` crate dependency
+- [x] S8.2 — `src/debugger/dap_server.rs`: Server loop with `poll_request()`
+- [x] S8.3 — Initialize request: return capabilities (breakpoints, stepping, evaluate)
+- [x] S8.4 — Launch request: spawn interpreter thread with debug state
+- [x] S8.5 — SetBreakpoints: register file+line breakpoints, return verified status
+- [x] S8.6 — ConfigurationDone: start execution
+- [x] S8.7 — Threads/StackTrace: return thread list and call frames
+- [x] S8.8 — Scopes/Variables: return locals and globals with variablesReference
+- [x] S8.9 — Continue/Next/StepIn/StepOut: send command to interpreter thread
+- [x] S8.10 — Evaluate: run expression in current scope via `eval_source()`
+- [x] S8.11 — Stopped/Terminated events: fire from interpreter thread via channel
+- [x] S8.12 — `fj debug --dap` CLI subcommand
+- [x] S8.13 — 10 tests: DAP message handling, breakpoint protocol, step sequence
 
 #### Sprint 9: DWARF Debug Info `P1`
 

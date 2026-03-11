@@ -181,6 +181,12 @@ pub struct Interpreter {
     source_dir: Option<PathBuf>,
     /// Set of module names currently being loaded (for circular dependency detection).
     loading_modules: HashSet<String>,
+    /// Debug state for breakpoints and stepping (None = no debugging).
+    debug_state: Option<crate::debugger::DebugState>,
+    /// Source code for debug hook location tracking.
+    debug_source: String,
+    /// Source file name for debug hook.
+    debug_file: String,
 }
 
 impl Interpreter {
@@ -204,6 +210,9 @@ impl Interpreter {
             last_grads: HashMap::new(),
             source_dir: None,
             loading_modules: HashSet::new(),
+            debug_state: None,
+            debug_source: String::new(),
+            debug_file: String::new(),
         };
         interp.register_builtins();
         interp
@@ -229,9 +238,27 @@ impl Interpreter {
             last_grads: HashMap::new(),
             source_dir: None,
             loading_modules: HashSet::new(),
+            debug_state: None,
+            debug_source: String::new(),
+            debug_file: String::new(),
         };
         interp.register_builtins();
         interp
+    }
+
+    /// Attaches a debug state to enable debugging (breakpoints, stepping).
+    pub fn set_debug_state(&mut self, state: crate::debugger::DebugState) {
+        self.debug_state = Some(state);
+    }
+
+    /// Returns a mutable reference to the debug state (if debugging is enabled).
+    pub fn debug_state_mut(&mut self) -> Option<&mut crate::debugger::DebugState> {
+        self.debug_state.as_mut()
+    }
+
+    /// Returns the current call depth (for debug step-over/step-out).
+    pub fn call_depth(&self) -> usize {
+        self.call_depth
     }
 
     /// Sets the maximum recursion depth (default: 64).
@@ -517,6 +544,10 @@ impl Interpreter {
                 return Err(crate::FjError::Semantic(real_errors));
             }
         }
+        // Store source for debug hooks
+        if self.debug_state.is_some() {
+            self.debug_source = source.to_string();
+        }
         self.eval_program(&program).map_err(crate::FjError::from)
     }
 
@@ -642,6 +673,26 @@ impl Interpreter {
 
     /// Evaluates a statement.
     fn eval_stmt(&mut self, stmt: &Stmt) -> EvalResult {
+        // Debug hook: check breakpoints and stepping before execution
+        if self.debug_state.is_some() {
+            let span_start = match stmt {
+                Stmt::Let { span, .. }
+                | Stmt::Const { span, .. }
+                | Stmt::Expr { span, .. }
+                | Stmt::Return { span, .. }
+                | Stmt::Break { span, .. }
+                | Stmt::Continue { span, .. } => span.start,
+                Stmt::Item(_) => 0, // Items don't need debug hooks
+            };
+            if !matches!(stmt, Stmt::Item(_)) {
+                let file = self.debug_file.clone();
+                let source = self.debug_source.clone();
+                let depth = self.call_depth;
+                if let Some(ref mut ds) = self.debug_state {
+                    ds.debug_hook(&file, &source, span_start, depth);
+                }
+            }
+        }
         match stmt {
             Stmt::Let {
                 name, value, ty, ..
