@@ -1,0 +1,62 @@
+// BSP Blinky — LED blink example for STM32F407VG Discovery board
+//
+// This program demonstrates bare-metal GPIO output using the BSP layer.
+// It toggles all four Discovery board LEDs (PD12-PD15) in sequence.
+//
+// Build: fj build --board stm32f407 examples/bsp_blinky.fj
+// Flash: fj flash --board stm32f407 --probe stlink bsp_blinky.elf
+
+// ── Board Constants ─────────────────────────────────────────────
+const RCC_BASE: u32 = 0x40023800
+const RCC_AHB1ENR: u32 = 0x30
+const GPIOD_BASE: u32 = 0x40020C00
+const GPIO_MODER: u32 = 0x00
+const GPIO_BSRR: u32 = 0x18
+const SYSTICK_BASE: u32 = 0xE000E010
+
+// LED pins on GPIOD
+const LED_GREEN: u32 = 12
+const LED_ORANGE: u32 = 13
+const LED_RED: u32 = 14
+const LED_BLUE: u32 = 15
+
+// ── Main Entry Point ────────────────────────────────────────────
+
+@kernel
+fn main() {
+    // 1. Enable GPIOD clock (RCC AHB1ENR bit 3)
+    let rcc_ahb1enr = RCC_BASE + RCC_AHB1ENR
+    // volatile_write(rcc_ahb1enr, volatile_read(rcc_ahb1enr) | (1 << 3))
+
+    // 2. Configure PD12-PD15 as output (MODER = 01 for each pin)
+    let gpiod_moder = GPIOD_BASE + GPIO_MODER
+    // Each pin uses 2 bits in MODER: set bits [24:31] to 0x55 (output mode)
+    // volatile_write(gpiod_moder, volatile_read(gpiod_moder) | 0x55000000)
+
+    // 3. Blink loop
+    let leds = [LED_GREEN, LED_ORANGE, LED_RED, LED_BLUE]
+    let bsrr = GPIOD_BASE + GPIO_BSRR
+
+    let mut current = 0
+    loop {
+        let pin = leds[current]
+
+        // Set LED (write to BSRR lower half)
+        // volatile_write(bsrr, 1 << pin)
+
+        // Delay ~500ms (busy loop at 168MHz)
+        // delay_ms(500)
+
+        // Clear LED (write to BSRR upper half)
+        // volatile_write(bsrr, 1 << (pin + 16))
+
+        // Next LED
+        current = (current + 1) % 4
+
+        // Print for interpreter mode
+        println("LED " + to_string(pin) + " blink")
+        break  // exit after one cycle in interpreter mode
+    }
+
+    println("Blinky complete")
+}

@@ -1,0 +1,112 @@
+// STM32F407VG Discovery Board Support Package
+//
+// Pin definitions, peripheral base addresses, and clock constants
+// for the STM32F407VG Discovery board (Cortex-M4F @ 168MHz).
+
+// ── Clock Constants ──────────────────────────────────────────────
+
+const HSE_FREQ: u32 = 8_000_000        // External crystal: 8 MHz
+const SYSCLK: u32 = 168_000_000        // System clock: 168 MHz
+const AHB_CLK: u32 = 168_000_000       // AHB bus: 168 MHz
+const APB1_CLK: u32 = 42_000_000       // APB1 bus: 42 MHz (max)
+const APB2_CLK: u32 = 84_000_000       // APB2 bus: 84 MHz (max)
+
+// ── Memory Map ──────────────────────────────────────────────────
+
+const FLASH_BASE: u32 = 0x08000000
+const FLASH_SIZE: u32 = 1048576         // 1 MB
+const SRAM1_BASE: u32 = 0x20000000
+const SRAM1_SIZE: u32 = 114688          // 112 KB
+const SRAM2_BASE: u32 = 0x2001C000
+const SRAM2_SIZE: u32 = 16384           // 16 KB
+const CCM_BASE: u32 = 0x10000000
+const CCM_SIZE: u32 = 65536             // 64 KB
+
+// ── GPIO Base Addresses ─────────────────────────────────────────
+
+const GPIOA_BASE: u32 = 0x40020000
+const GPIOB_BASE: u32 = 0x40020400
+const GPIOC_BASE: u32 = 0x40020800
+const GPIOD_BASE: u32 = 0x40020C00
+const GPIOE_BASE: u32 = 0x40021000
+
+// ── GPIO Register Offsets ───────────────────────────────────────
+
+const GPIO_MODER: u32 = 0x00
+const GPIO_OTYPER: u32 = 0x04
+const GPIO_OSPEEDR: u32 = 0x08
+const GPIO_PUPDR: u32 = 0x0C
+const GPIO_IDR: u32 = 0x10
+const GPIO_ODR: u32 = 0x14
+const GPIO_BSRR: u32 = 0x18
+
+// ── GPIO Pin Modes ──────────────────────────────────────────────
+
+const GPIO_MODE_INPUT: u32 = 0
+const GPIO_MODE_OUTPUT: u32 = 1
+const GPIO_MODE_ALT: u32 = 2
+const GPIO_MODE_ANALOG: u32 = 3
+
+// ── Discovery Board LEDs ────────────────────────────────────────
+
+const LED_GREEN_PORT: u32 = 0x40020C00   // GPIOD
+const LED_GREEN_PIN: u32 = 12
+const LED_ORANGE_PORT: u32 = 0x40020C00  // GPIOD
+const LED_ORANGE_PIN: u32 = 13
+const LED_RED_PORT: u32 = 0x40020C00     // GPIOD
+const LED_RED_PIN: u32 = 14
+const LED_BLUE_PORT: u32 = 0x40020C00    // GPIOD
+const LED_BLUE_PIN: u32 = 15
+
+// ── USART Base Addresses ────────────────────────────────────────
+
+const USART1_BASE: u32 = 0x40011000
+const USART2_BASE: u32 = 0x40004400
+const USART3_BASE: u32 = 0x40004800
+const USART6_BASE: u32 = 0x40011400
+
+// ── USART Register Offsets ──────────────────────────────────────
+
+const USART_SR: u32 = 0x00
+const USART_DR: u32 = 0x04
+const USART_BRR: u32 = 0x08
+const USART_CR1: u32 = 0x0C
+
+// ── SPI Base Addresses ──────────────────────────────────────────
+
+const SPI1_BASE: u32 = 0x40013000
+const SPI2_BASE: u32 = 0x40003800
+const SPI3_BASE: u32 = 0x40003C00
+
+// ── RCC (Reset and Clock Control) ───────────────────────────────
+
+const RCC_BASE: u32 = 0x40023800
+const RCC_CR: u32 = 0x00
+const RCC_PLLCFGR: u32 = 0x04
+const RCC_CFGR: u32 = 0x08
+const RCC_AHB1ENR: u32 = 0x30
+const RCC_APB1ENR: u32 = 0x40
+const RCC_APB2ENR: u32 = 0x44
+
+// ── SysTick ─────────────────────────────────────────────────────
+
+const SYSTICK_BASE: u32 = 0xE000E010
+const SYSTICK_CTRL: u32 = 0x00
+const SYSTICK_LOAD: u32 = 0x04
+const SYSTICK_VAL: u32 = 0x08
+
+// ── IRQ Numbers ─────────────────────────────────────────────────
+
+const IRQ_USART1: u32 = 37
+const IRQ_USART2: u32 = 38
+const IRQ_USART3: u32 = 39
+const IRQ_SPI1: u32 = 35
+const IRQ_SPI2: u32 = 36
+const IRQ_TIM2: u32 = 28
+const IRQ_TIM3: u32 = 29
+const IRQ_TIM4: u32 = 30
+const IRQ_EXTI0: u32 = 6
+const IRQ_EXTI1: u32 = 7
+const IRQ_EXTI2: u32 = 8
+const IRQ_EXTI3: u32 = 9
+const IRQ_EXTI4: u32 = 10

@@ -19,6 +19,7 @@
 //! - [`runtime`] — OS and ML execution backends
 
 pub mod analyzer;
+pub mod bsp;
 pub mod codegen;
 pub mod debugger;
 pub mod docgen;

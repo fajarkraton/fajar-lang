@@ -230,61 +230,61 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Board trait, memory regions, startup code generation
 
-- [ ] S11.1 — `src/bsp/mod.rs`: BSP module with Board trait
-- [ ] S11.2 — `Board` trait: name, arch, memory_regions, peripherals, vector_table_size
-- [ ] S11.3 — `MemoryRegion` struct: name, origin, length, attributes (rx/rwx)
-- [ ] S11.4 — `Peripheral` struct: name, base_address, registers
-- [ ] S11.5 — Linker script generation: extend `linker.rs` with board-specific sections (.isr_vector, .data AT>FLASH)
-- [ ] S11.6 — Startup code generation: Reset_Handler (.data copy, .bss zero, FPU enable, main call)
-- [ ] S11.7 — Vector table generation: initial MSP + handler entries
-- [ ] S11.8 — `Arch` enum extension: Thumbv7em, Thumbv6m, Xtensa, Riscv32
-- [ ] S11.9 — `fj build --board stm32f407` CLI flag
-- [ ] S11.10 — 10 tests: board trait, memory regions, linker script output, startup code
+- [x] S11.1 — `src/bsp/mod.rs`: BSP module with Board trait
+- [x] S11.2 — `Board` trait: name, arch, memory_regions, peripherals, vector_table_size
+- [x] S11.3 — `MemoryRegion` struct: name, origin, length, attributes (rx/rwx)
+- [x] S11.4 — `Peripheral` struct: name, base_address, registers
+- [x] S11.5 — Linker script generation: extend `linker.rs` with board-specific sections (.isr_vector, .data AT>FLASH)
+- [x] S11.6 — Startup code generation: Reset_Handler (.data copy, .bss zero, FPU enable, main call)
+- [x] S11.7 — Vector table generation: initial MSP + handler entries
+- [x] S11.8 — `Arch` enum extension: Thumbv7em, Thumbv6m, Xtensa, Riscv32
+- [x] S11.9 — `fj build --board stm32f407` CLI flag
+- [x] S11.10 — 10 tests: board trait, memory regions, linker script output, startup code
 
 #### Sprint 12: STM32F407 BSP `P1`
 
 **Goal:** Full BSP for STM32F407VG Discovery board
 
-- [ ] S12.1 — `src/bsp/stm32f407.rs`: Board impl with memory map (1MB Flash, 192KB SRAM, CCM)
-- [ ] S12.2 — GPIO register definitions: MODER, OTYPER, ODR, IDR, BSRR per port
-- [ ] S12.3 — GPIO HAL: `gpio_set_mode()`, `gpio_write()`, `gpio_read()`, `gpio_toggle()`
-- [ ] S12.4 — USART register definitions: SR, DR, BRR, CR1-3
-- [ ] S12.5 — UART HAL: `uart_init()`, `uart_write_byte()`, `uart_read_byte()`
-- [ ] S12.6 — RCC clock configuration: HSE, PLL, AHB/APB prescalers for 168MHz
-- [ ] S12.7 — SysTick timer: 1ms tick, `delay_ms()` implementation
-- [ ] S12.8 — Linker script: `stm32f407.ld` with Flash/SRAM1/SRAM2/CCM regions
-- [ ] S12.9 — `stdlib/bsp/stm32f407.fj`: pin definitions, peripheral instances
-- [ ] S12.10 — 10 tests: GPIO config, UART init, clock setup, linker script output
+- [x] S12.1 — `src/bsp/stm32f407.rs`: Board impl with memory map (1MB Flash, 192KB SRAM, CCM)
+- [x] S12.2 — GPIO register definitions: MODER, OTYPER, ODR, IDR, BSRR per port
+- [x] S12.3 — GPIO HAL: `gpio_set_mode()`, `gpio_write()`, `gpio_read()`, `gpio_toggle()`
+- [x] S12.4 — USART register definitions: SR, DR, BRR, CR1-3
+- [x] S12.5 — UART HAL: `uart_init()`, `uart_write_byte()`, `uart_read_byte()`
+- [x] S12.6 — RCC clock configuration: HSE, PLL, AHB/APB prescalers for 168MHz
+- [x] S12.7 — SysTick timer: 1ms tick, `delay_ms()` implementation
+- [x] S12.8 — Linker script: `stm32f407.ld` with Flash/SRAM1/SRAM2/CCM regions
+- [x] S12.9 — `stdlib/bsp/stm32f407.fj`: pin definitions, peripheral instances
+- [x] S12.10 — 10 tests: GPIO config, UART init, clock setup, linker script output
 
 #### Sprint 13: ESP32 & RP2040 BSP `P1`
 
 **Goal:** BSP for ESP32 and Raspberry Pi Pico
 
-- [ ] S13.1 — `src/bsp/esp32.rs`: Board impl with memory map (520KB DRAM, 4MB Flash)
-- [ ] S13.2 — ESP32 GPIO: register definitions, pin mux configuration
-- [ ] S13.3 — ESP32 UART: peripheral registers, initialization
-- [ ] S13.4 — ESP32 partition table generation for firmware image
-- [ ] S13.5 — `src/bsp/rp2040.rs`: Board impl with memory map (264KB SRAM, 2MB Flash)
-- [ ] S13.6 — RP2040 GPIO: SIO register-based GPIO (single-cycle I/O)
-- [ ] S13.7 — RP2040 UART: peripheral registers, initialization
-- [ ] S13.8 — RP2040 two-stage boot: stage2 bootloader (256 bytes QSPI config)
-- [ ] S13.9 — UF2 output format for RP2040 drag-and-drop flashing
-- [ ] S13.10 — 10 tests: ESP32 memory map, RP2040 GPIO, UF2 generation
+- [x] S13.1 — `src/bsp/esp32.rs`: Board impl with memory map (520KB DRAM, 4MB Flash)
+- [x] S13.2 — ESP32 GPIO: register definitions, pin mux configuration
+- [x] S13.3 — ESP32 UART: peripheral registers, initialization
+- [x] S13.4 — ESP32 partition table generation for firmware image
+- [x] S13.5 — `src/bsp/rp2040.rs`: Board impl with memory map (264KB SRAM, 2MB Flash)
+- [x] S13.6 — RP2040 GPIO: SIO register-based GPIO (single-cycle I/O)
+- [x] S13.7 — RP2040 UART: peripheral registers, initialization
+- [x] S13.8 — RP2040 two-stage boot: stage2 bootloader (256 bytes QSPI config)
+- [x] S13.9 — UF2 output format for RP2040 drag-and-drop flashing
+- [x] S13.10 — 10 tests: ESP32 memory map, RP2040 GPIO, UF2 generation
 
 #### Sprint 14: HAL & Embedded CI `P1`
 
 **Goal:** Unified HAL, QEMU testing, flashing tools
 
-- [ ] S14.1 — Unified HAL trait implementations for all 3 boards (GPIO, UART, SPI, I2C)
-- [ ] S14.2 — `fj flash --board stm32f407 --probe stlink` via probe-rs
-- [ ] S14.3 — `fj flash --board rp2040 --uf2` for drag-and-drop
-- [ ] S14.4 — `fj flash --board esp32 --port /dev/ttyUSB0` via esptool
-- [ ] S14.5 — QEMU Cortex-M testing: `qemu-system-arm -machine lm3s6965evb` for CI
-- [ ] S14.6 — Semihosting output: print to host console from QEMU
-- [ ] S14.7 — Binary format conversion: ELF → BIN, ELF → HEX, ELF → UF2
-- [ ] S14.8 — Memory budget analyzer: report Flash/SRAM usage vs board limits
-- [ ] S14.9 — `examples/bsp_blinky.fj`: LED blink for STM32F407
-- [ ] S14.10 — 10 tests: HAL trait compliance, QEMU smoke test, format conversion
+- [x] S14.1 — Unified HAL trait implementations for all 3 boards (GPIO, UART, SPI, I2C)
+- [x] S14.2 — `fj flash --board stm32f407 --probe stlink` via probe-rs
+- [x] S14.3 — `fj flash --board rp2040 --uf2` for drag-and-drop
+- [x] S14.4 — `fj flash --board esp32 --port /dev/ttyUSB0` via esptool
+- [x] S14.5 — QEMU Cortex-M testing: `qemu-system-arm -machine lm3s6965evb` for CI
+- [x] S14.6 — Semihosting output: print to host console from QEMU
+- [x] S14.7 — Binary format conversion: ELF → BIN, ELF → HEX, ELF → UF2
+- [x] S14.8 — Memory budget analyzer: report Flash/SRAM usage vs board limits
+- [x] S14.9 — `examples/bsp_blinky.fj`: LED blink for STM32F407
+- [x] S14.10 — 10 tests: HAL trait compliance, QEMU smoke test, format conversion
 
 ### Phase 4: Package Registry `P1`
 

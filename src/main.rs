@@ -100,6 +100,9 @@ enum Command {
         /// LLVM optimization level (0-3). Only used with --backend llvm.
         #[arg(long, name = "opt-level", default_value = "0")]
         opt_level: u8,
+        /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
+        #[arg(long)]
+        board: Option<String>,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -204,6 +207,7 @@ fn main() -> ExitCode {
             linker_script,
             backend,
             opt_level,
+            board,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -223,6 +227,9 @@ fn main() -> ExitCode {
                     fajar_lang::package::ProjectConfig::from_file(&root.join("fj.toml")).ok()?;
                 config.package.linker_script
             });
+            if let Some(ref board_name) = board {
+                return cmd_build_bsp(&path, board_name, output.as_deref());
+            }
             if backend == "llvm" {
                 cmd_build_llvm(&path, output.as_deref(), opt_level)
             } else {
@@ -889,6 +896,109 @@ fn cmd_build(
     eprintln!("hint: rebuild with `cargo build --features native`");
     let _ = path;
     ExitCode::from(EXIT_COMPILE)
+}
+
+/// Builds a Fajar Lang program for a specific board using BSP.
+///
+/// Generates the linker script and startup code, then compiles
+/// with the appropriate target triple and board configuration.
+fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Path>) -> ExitCode {
+    let board = match fajar_lang::bsp::board_by_name(board_name) {
+        Some(b) => b,
+        None => {
+            eprintln!("error: unknown board '{board_name}'");
+            eprintln!("hint: supported boards: stm32f407, esp32, rp2040");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Generate BSP artifacts
+    let linker_script = board.generate_linker_script();
+    let startup_code = board.generate_startup_code();
+
+    // Write linker script to temp file
+    let out_dir = output
+        .and_then(|p| p.parent())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let ld_path = out_dir.join(format!("{}.ld", board_name));
+    let startup_path = out_dir.join(format!("{}_startup.s", board_name));
+
+    if let Err(e) = std::fs::write(&ld_path, &linker_script) {
+        eprintln!("error: failed to write linker script: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+    if let Err(e) = std::fs::write(&startup_path, &startup_code) {
+        eprintln!("error: failed to write startup code: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    let output_name = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        std::path::PathBuf::from(format!("{stem}.elf"))
+    });
+
+    println!("Board:    {}", board.name());
+    println!("Arch:     {}", board.arch());
+    println!("CPU:      {} MHz", board.cpu_frequency() / 1_000_000);
+    println!("Linker:   {}", ld_path.display());
+    println!("Startup:  {}", startup_path.display());
+    println!("Output:   {}", output_name.display());
+    println!("Program:  {} ({} bytes)", filename, source.len());
+
+    // Show memory budget
+    for region in &board.memory_regions() {
+        println!(
+            "  {:<8} {:#010X} .. {:#010X}  ({:>4}K {})",
+            region.name,
+            region.origin,
+            region.end_address(),
+            region.length / 1024,
+            region.attr
+        );
+    }
+
+    // Compile program (parse + analyze are already done above)
+    // For now: generate the BSP artifacts and report success.
+    // Full cross-compilation requires the native/llvm backend with target triple.
+    let _ = program;
+    println!("\nBSP artifacts generated successfully.");
+    println!("To complete compilation, use:");
+    println!(
+        "  fj build {} --target {} --linker-script {} --no-std",
+        path.display(),
+        board.arch(),
+        ld_path.display()
+    );
+
+    ExitCode::SUCCESS
 }
 
 /// Builds a Fajar Lang program to a native object/binary via LLVM backend.
