@@ -26,6 +26,8 @@ pub enum ScopeKind {
     Kernel,
     /// `@device` annotated function scope.
     Device,
+    /// `@npu` annotated function scope.
+    Npu,
     /// `@unsafe` annotated block/function scope.
     Unsafe,
     /// `async fn` body scope.
@@ -188,7 +190,11 @@ impl SymbolTable {
         self.scopes.iter().rev().any(|s| {
             matches!(
                 s.kind,
-                ScopeKind::Function | ScopeKind::Kernel | ScopeKind::Device | ScopeKind::AsyncFn
+                ScopeKind::Function
+                    | ScopeKind::Kernel
+                    | ScopeKind::Device
+                    | ScopeKind::Npu
+                    | ScopeKind::AsyncFn
             )
         })
     }
@@ -207,6 +213,11 @@ impl SymbolTable {
             .iter()
             .rev()
             .any(|s| s.kind == ScopeKind::Device)
+    }
+
+    /// Returns `true` if currently inside a `@npu` scope.
+    pub fn is_inside_npu(&self) -> bool {
+        self.scopes.iter().rev().any(|s| s.kind == ScopeKind::Npu)
     }
 
     /// Returns `true` if currently inside a `@unsafe` scope.

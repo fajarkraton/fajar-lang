@@ -553,6 +553,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::AtKernel
             | TokenKind::AtDevice
+            | TokenKind::AtNpu
             | TokenKind::AtSafe
             | TokenKind::AtUnsafe
             | TokenKind::AtFfi
@@ -570,6 +571,7 @@ impl Parser {
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
                     TokenKind::AtDevice => ("device", None),
+                    TokenKind::AtNpu => ("npu", None),
                     TokenKind::AtSafe => ("safe", None),
                     TokenKind::AtUnsafe => ("unsafe", None),
                     TokenKind::AtFfi => ("ffi", None),

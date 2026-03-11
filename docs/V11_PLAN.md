@@ -164,55 +164,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S9 — @npu Context
 
-- [ ] S9.1 — Lexer Token: Add `Npu` as context annotation token, recognized after `@` prefix
-- [ ] S9.2 — Parser Support: Parse `@npu fn ...` and `@npu { ... }` blocks, attach NpuContext to AST nodes
-- [ ] S9.3 — Analyzer Rules: @npu disallows raw pointers, heap allocation, and direct OS primitives (tensor-only)
-- [ ] S9.4 — Type Checking: Enforce that @npu functions only accept/return tensor types and scalar numerics
-- [ ] S9.5 — Context Isolation: @npu cannot call @kernel functions; @kernel cannot call @npu functions
-- [ ] S9.6 — @npu + @device Interaction: @device functions can call @npu functions (both tensor-friendly)
-- [ ] S9.7 — Error Codes: Define NE001-NE004 (NpuError) for context violations in @npu
-- [ ] S9.8 — Diagnostic Messages: miette-powered error messages with @npu context violation explanations
-- [ ] S9.9 — Documentation: Add @npu to language spec, context annotation table, and security model
-- [ ] S9.10 — Unit Tests: 15+ tests covering @npu allowed/disallowed operations, cross-context calls, error codes
+- [x] S9.1 — Lexer Token: Add `Npu` as context annotation token, recognized after `@` prefix
+- [x] S9.2 — Parser Support: Parse `@npu fn ...` and `@npu { ... }` blocks, attach NpuContext to AST nodes
+- [x] S9.3 — Analyzer Rules: @npu disallows raw pointers, heap allocation, and direct OS primitives (tensor-only)
+- [x] S9.4 — Type Checking: Enforce that @npu functions only accept/return tensor types and scalar numerics
+- [x] S9.5 — Context Isolation: @npu cannot call @kernel functions; @kernel cannot call @npu functions
+- [x] S9.6 — @npu + @device Interaction: @device functions can call @npu functions (both tensor-friendly)
+- [x] S9.7 — Error Codes: Define NE001-NE004 (NpuError) for context violations in @npu
+- [x] S9.8 — Diagnostic Messages: miette-powered error messages with @npu context violation explanations
+- [x] S9.9 — Documentation: Add @npu to language spec, context annotation table, and security model
+- [x] S9.10 — Unit Tests: 15+ tests covering @npu allowed/disallowed operations, cross-context calls, error codes
 
 ### Sprint S10 — Intel OpenVINO Backend
 
-- [ ] S10.1 — OpenVINO C API Bindings: Generate safe Rust wrappers for ov_core, ov_model, ov_infer_request
-- [ ] S10.2 — Model Compilation: Load ONNX model via `ov_core_compile_model()`, target "NPU" device plugin
-- [ ] S10.3 — Inference Request: Create infer request, set input tensors, run synchronous inference, read output
-- [ ] S10.4 — Async Execution: `ov_infer_request_start_async()` with callback-based completion notification
-- [ ] S10.5 — INT8 Optimization: Enable NPU INT8 inference via `ov_core_set_property()` with quantization hints
-- [ ] S10.6 — FP16 Optimization: Enable NPU FP16 mode for higher throughput on supported models
-- [ ] S10.7 — Tensor Bridge: Convert Fajar Lang TensorValue to OpenVINO ov_tensor and back without data copy
-- [ ] S10.8 — Error Handling: Map OpenVINO status codes to Fajar Lang NpuError with meaningful diagnostics
-- [ ] S10.9 — Feature Gate: Gate behind `--features openvino` to avoid hard dependency on OpenVINO runtime
-- [ ] S10.10 — Unit Tests: 10+ tests with mock OpenVINO API, integration test on real NPU hardware if available
+- [x] S10.1 — OpenVINO C API Bindings: Generate safe Rust wrappers for ov_core, ov_model, ov_infer_request
+- [x] S10.2 — Model Compilation: Load ONNX model via `ov_core_compile_model()`, target "NPU" device plugin
+- [x] S10.3 — Inference Request: Create infer request, set input tensors, run synchronous inference, read output
+- [x] S10.4 — Async Execution: `ov_infer_request_start_async()` with callback-based completion notification
+- [x] S10.5 — INT8 Optimization: Enable NPU INT8 inference via `ov_core_set_property()` with quantization hints
+- [x] S10.6 — FP16 Optimization: Enable NPU FP16 mode for higher throughput on supported models
+- [x] S10.7 — Tensor Bridge: Convert Fajar Lang TensorValue to OpenVINO ov_tensor and back without data copy
+- [x] S10.8 — Error Handling: Map OpenVINO status codes to Fajar Lang NpuError with meaningful diagnostics
+- [x] S10.9 — Feature Gate: Gate behind `--features openvino` to avoid hard dependency on OpenVINO runtime
+- [x] S10.10 — Unit Tests: 10+ tests with mock OpenVINO API, integration test on real NPU hardware if available
 
 ### Sprint S11 — AMD XDNA Backend
 
-- [ ] S11.1 — XDNA Driver Interface: Open /dev/accel/accel0 via ioctl, query XDNA 2 NPU capabilities
-- [ ] S11.2 — AIE Tile Programming: Submit computation graph to AI Engine tiles via XDNA runtime API
-- [ ] S11.3 — Vitis AI Runtime: Integrate Vitis AI runtime library for model loading and execution on XDNA
-- [ ] S11.4 — 50 TOPS Dispatch: Benchmark and validate throughput targeting 50 TOPS on AMD Ryzen AI 300 series
-- [ ] S11.5 — INT8 Inference Path: Quantized INT8 model execution on XDNA with per-tensor scaling
-- [ ] S11.6 — Memory Management: Allocate/free device buffers via XDNA DMA, zero-copy where possible
-- [ ] S11.7 — Tensor Bridge: Convert Fajar Lang TensorValue to XDNA buffer format and back
-- [ ] S11.8 — Error Handling: Map XDNA error codes to Fajar Lang NpuError, handle device-busy gracefully
-- [ ] S11.9 — Feature Gate: Gate behind `--features xdna` to avoid hard dependency on AMD driver stack
-- [ ] S11.10 — Unit Tests: 10+ tests with mock XDNA driver, integration test on real AMD NPU if available
+- [x] S11.1 — XDNA Driver Interface: Open /dev/accel/accel0 via ioctl, query XDNA 2 NPU capabilities
+- [x] S11.2 — AIE Tile Programming: Submit computation graph to AI Engine tiles via XDNA runtime API
+- [x] S11.3 — Vitis AI Runtime: Integrate Vitis AI runtime library for model loading and execution on XDNA
+- [x] S11.4 — 50 TOPS Dispatch: Benchmark and validate throughput targeting 50 TOPS on AMD Ryzen AI 300 series
+- [x] S11.5 — INT8 Inference Path: Quantized INT8 model execution on XDNA with per-tensor scaling
+- [x] S11.6 — Memory Management: Allocate/free device buffers via XDNA DMA, zero-copy where possible
+- [x] S11.7 — Tensor Bridge: Convert Fajar Lang TensorValue to XDNA buffer format and back
+- [x] S11.8 — Error Handling: Map XDNA error codes to Fajar Lang NpuError, handle device-busy gracefully
+- [x] S11.9 — Feature Gate: Gate behind `--features xdna` to avoid hard dependency on AMD driver stack
+- [x] S11.10 — Unit Tests: 10+ tests with mock XDNA driver, integration test on real AMD NPU if available
 
 ### Sprint S12 — ONNX-to-NPU Pipeline
 
-- [ ] S12.1 — ONNX Model Loading: Parse ONNX protobuf format, build computation graph in memory
-- [ ] S12.2 — Graph Optimization: Constant folding, dead node elimination, shape inference on ONNX graph
-- [ ] S12.3 — Operator Fusion: Fuse Conv+BN+ReLU, MatMul+Add, and other common patterns for NPU efficiency
-- [ ] S12.4 — NPU-Specific Quantization: Calibration-based INT8 quantization targeting NPU operator support
-- [ ] S12.5 — Model Partitioning: Split graph into NPU-executable and CPU-fallback subgraphs automatically
-- [ ] S12.6 — Pipeline Assembly: Chain load→optimize→quantize→partition→compile into single `npu_compile()` API
-- [ ] S12.7 — Caching Compiled Models: Cache compiled NPU blobs to disk, skip recompilation on repeat inference
-- [ ] S12.8 — Benchmarking Harness: Measure latency (p50/p99), throughput (inferences/sec), memory usage per model
-- [ ] S12.9 — Example: ResNet-18 inference on NPU via ONNX pipeline, end-to-end from .onnx file to prediction
-- [ ] S12.10 — Unit Tests: 12+ tests for graph optimization correctness, fusion patterns, quantization accuracy
+- [x] S12.1 — ONNX Model Loading: Parse ONNX protobuf format, build computation graph in memory
+- [x] S12.2 — Graph Optimization: Constant folding, dead node elimination, shape inference on ONNX graph
+- [x] S12.3 — Operator Fusion: Fuse Conv+BN+ReLU, MatMul+Add, and other common patterns for NPU efficiency
+- [x] S12.4 — NPU-Specific Quantization: Calibration-based INT8 quantization targeting NPU operator support
+- [x] S12.5 — Model Partitioning: Split graph into NPU-executable and CPU-fallback subgraphs automatically
+- [x] S12.6 — Pipeline Assembly: Chain load→optimize→quantize→partition→compile into single `npu_compile()` API
+- [x] S12.7 — Caching Compiled Models: Cache compiled NPU blobs to disk, skip recompilation on repeat inference
+- [x] S12.8 — Benchmarking Harness: Measure latency (p50/p99), throughput (inferences/sec), memory usage per model
+- [x] S12.9 — Example: ResNet-18 inference on NPU via ONNX pipeline, end-to-end from .onnx file to prediction
+- [x] S12.10 — Unit Tests: 12+ tests for graph optimization correctness, fusion patterns, quantization accuracy
 
 ---
 

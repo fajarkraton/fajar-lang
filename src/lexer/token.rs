@@ -230,6 +230,8 @@ pub enum TokenKind {
     AtKernel,
     /// `@device`
     AtDevice,
+    /// `@npu`
+    AtNpu,
     /// `@safe`
     AtSafe,
     /// `@unsafe`
@@ -482,6 +484,7 @@ impl fmt::Display for TokenKind {
             // Annotations
             TokenKind::AtKernel => write!(f, "@kernel"),
             TokenKind::AtDevice => write!(f, "@device"),
+            TokenKind::AtNpu => write!(f, "@npu"),
             TokenKind::AtSafe => write!(f, "@safe"),
             TokenKind::AtUnsafe => write!(f, "@unsafe"),
             TokenKind::AtFfi => write!(f, "@ffi"),
@@ -654,6 +657,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     let mut m = HashMap::new();
     m.insert("kernel", TokenKind::AtKernel);
     m.insert("device", TokenKind::AtDevice);
+    m.insert("npu", TokenKind::AtNpu);
     m.insert("safe", TokenKind::AtSafe);
     m.insert("unsafe", TokenKind::AtUnsafe);
     m.insert("ffi", TokenKind::AtFfi);
@@ -773,6 +777,7 @@ mod tests {
     fn lookup_annotation_returns_annotation_for_known_names() {
         assert_eq!(lookup_annotation("kernel"), Some(TokenKind::AtKernel));
         assert_eq!(lookup_annotation("device"), Some(TokenKind::AtDevice));
+        assert_eq!(lookup_annotation("npu"), Some(TokenKind::AtNpu));
         assert_eq!(lookup_annotation("safe"), Some(TokenKind::AtSafe));
         assert_eq!(lookup_annotation("unsafe"), Some(TokenKind::AtUnsafe));
         assert_eq!(lookup_annotation("ffi"), Some(TokenKind::AtFfi));

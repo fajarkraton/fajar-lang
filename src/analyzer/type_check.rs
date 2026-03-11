@@ -754,6 +754,34 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// NE001: Raw pointer operation in @npu context.
+    #[error("NE001: raw pointer operations not allowed in @npu context")]
+    RawPointerInNpu {
+        /// Source location.
+        span: Span,
+    },
+
+    /// NE002: Heap allocation in @npu context.
+    #[error("NE002: heap allocation not allowed in @npu context")]
+    HeapAllocInNpu {
+        /// Source location.
+        span: Span,
+    },
+
+    /// NE003: OS primitive in @npu context.
+    #[error("NE003: OS primitives not allowed in @npu context")]
+    OsPrimitiveInNpu {
+        /// Source location.
+        span: Span,
+    },
+
+    /// NE004: Calling @kernel function from @npu context.
+    #[error("NE004: cannot call @kernel function from @npu context")]
+    KernelCallInNpu {
+        /// Source location.
+        span: Span,
+    },
+
     /// KE005: Inline assembly in @safe context.
     #[error("KE005: inline assembly not allowed in @safe context")]
     AsmInSafeContext {
@@ -985,7 +1013,11 @@ impl SemanticError {
             | SemanticError::UnreachablePattern { span, .. }
             | SemanticError::LifetimeMismatch { span, .. }
             | SemanticError::LifetimeConflict { span, .. }
-            | SemanticError::DanglingReference { span, .. } => *span,
+            | SemanticError::DanglingReference { span, .. }
+            | SemanticError::RawPointerInNpu { span, .. }
+            | SemanticError::HeapAllocInNpu { span, .. }
+            | SemanticError::OsPrimitiveInNpu { span, .. }
+            | SemanticError::KernelCallInNpu { span, .. } => *span,
         }
     }
 
@@ -1026,6 +1058,8 @@ pub struct TypeChecker {
     kernel_fns: std::collections::HashSet<String>,
     /// Functions annotated with `@device`.
     device_fns: std::collections::HashSet<String>,
+    /// Functions annotated with `@npu`.
+    npu_fns: std::collections::HashSet<String>,
     /// Functions that are OS builtins (only callable from @kernel/@unsafe).
     os_builtins: std::collections::HashSet<String>,
     /// Builtins that perform heap allocation (forbidden in @kernel).
@@ -1140,6 +1174,7 @@ impl TypeChecker {
             errors: Vec::new(),
             kernel_fns: std::collections::HashSet::new(),
             device_fns: std::collections::HashSet::new(),
+            npu_fns: std::collections::HashSet::new(),
             os_builtins,
             heap_builtins,
             tensor_builtins,
@@ -1967,6 +2002,9 @@ impl TypeChecker {
                         "device" => {
                             self.device_fns.insert(fndef.name.clone());
                         }
+                        "npu" => {
+                            self.npu_fns.insert(fndef.name.clone());
+                        }
                         _ => {}
                     }
                 }
@@ -2551,6 +2589,7 @@ impl TypeChecker {
         let scope_kind = match &fndef.annotation {
             Some(ann) if ann.name == "kernel" => super::scope::ScopeKind::Kernel,
             Some(ann) if ann.name == "device" => super::scope::ScopeKind::Device,
+            Some(ann) if ann.name == "npu" => super::scope::ScopeKind::Npu,
             Some(ann) if ann.name == "unsafe" => super::scope::ScopeKind::Unsafe,
             _ if fndef.is_async => super::scope::ScopeKind::AsyncFn,
             _ => super::scope::ScopeKind::Function,
@@ -3561,6 +3600,33 @@ impl TypeChecker {
             // @device cannot use OS builtins (raw pointer operations)
             if self.os_builtins.contains(callee_name) {
                 self.errors.push(SemanticError::RawPointerInDevice { span });
+            }
+        }
+
+        let in_npu = self.symbols.is_inside_npu();
+        if in_npu {
+            // NE001: @npu cannot use raw pointer/OS builtins
+            if self.os_builtins.contains(callee_name) {
+                self.errors.push(SemanticError::RawPointerInNpu { span });
+            }
+            // NE002: @npu cannot use heap-allocating builtins
+            if self.heap_builtins.contains(callee_name) {
+                self.errors.push(SemanticError::HeapAllocInNpu { span });
+            }
+            // NE003: @npu cannot use OS primitives
+            if self.os_builtins.contains(callee_name) {
+                self.errors.push(SemanticError::OsPrimitiveInNpu { span });
+            }
+            // NE004: @npu cannot call @kernel functions
+            if self.kernel_fns.contains(callee_name) {
+                self.errors.push(SemanticError::KernelCallInNpu { span });
+            }
+        }
+
+        if in_kernel {
+            // @kernel cannot call @npu functions
+            if self.npu_fns.contains(callee_name) {
+                self.errors.push(SemanticError::DeviceCallInKernel { span });
             }
         }
     }
