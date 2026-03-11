@@ -280,55 +280,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S17 — AVX-512 Codegen
 
-- [ ] S17.1 — Cranelift AVX-512 Backend: Enable AVX-512F instruction emission in Cranelift ISA settings
-- [ ] S17.2 — 512-bit Vector Type: Map `simd16xf32` to ZMM registers in Cranelift IR for 16-wide f32 ops
-- [ ] S17.3 — VNNI INT8 Dot Product: Emit VPDPBUSD instruction for INT8 dot product (4x throughput over scalar)
-- [ ] S17.4 — Masked Operations: Emit masked load/store/arithmetic using AVX-512 opmask registers (k1-k7)
-- [ ] S17.5 — Broadcast Operations: Emit VBROADCASTSS/SD for scalar-to-vector broadcast in inner loops
-- [ ] S17.6 — Gather/Scatter: Emit VGATHERDPS/VSCATTERDPS for indirect memory access patterns
-- [ ] S17.7 — Reduction Operations: Emit horizontal add/max/min using AVX-512 reduce instructions
-- [ ] S17.8 — Auto-Vectorization Hints: Detect tensor inner loops amenable to AVX-512 and emit vector code
-- [ ] S17.9 — Fallback to AVX2: Generate AVX2 fallback when AVX-512 is not available, runtime dispatch
-- [ ] S17.10 — Unit Tests: 15+ tests validating AVX-512 instruction emission, correctness vs scalar reference
+- [x] S17.1 — Cranelift AVX-512 Backend: Enable AVX-512F instruction emission in Cranelift ISA settings
+- [x] S17.2 — 512-bit Vector Type: Map `simd16xf32` to ZMM registers in Cranelift IR for 16-wide f32 ops
+- [x] S17.3 — VNNI INT8 Dot Product: Emit VPDPBUSD instruction for INT8 dot product (4x throughput over scalar)
+- [x] S17.4 — Masked Operations: Emit masked load/store/arithmetic using AVX-512 opmask registers (k1-k7)
+- [x] S17.5 — Broadcast Operations: Emit VBROADCASTSS/SD for scalar-to-vector broadcast in inner loops
+- [x] S17.6 — Gather/Scatter: Emit VGATHERDPS/VSCATTERDPS for indirect memory access patterns
+- [x] S17.7 — Reduction Operations: Emit horizontal add/max/min using AVX-512 reduce instructions
+- [x] S17.8 — Auto-Vectorization Hints: Detect tensor inner loops amenable to AVX-512 and emit vector code
+- [x] S17.9 — Fallback to AVX2: Generate AVX2 fallback when AVX-512 is not available, runtime dispatch
+- [x] S17.10 — Unit Tests: 15+ tests validating AVX-512 instruction emission, correctness vs scalar reference
 
 ### Sprint S18 — Intel AMX Integration
 
-- [ ] S18.1 — TILECFG Instruction: Emit LDTILECFG to configure AMX tile registers (rows, cols per tile)
-- [ ] S18.2 — TDPBF16PS Instruction: Emit BF16 tile matrix multiply-accumulate into FP32 accumulator
-- [ ] S18.3 — TDPBSSD Instruction: Emit INT8 signed tile matrix multiply-accumulate (16x64 * 64x16 per op)
-- [ ] S18.4 — TDPFP16PS Instruction: Emit FP16 tile matrix multiply-accumulate (AMX-FP16 extension)
-- [ ] S18.5 — Tile Load/Store: Emit TILELOADD/TILESTORED for moving data between memory and tile registers
-- [ ] S18.6 — Tile Register Allocation: Manage 8 tile registers (TMM0-TMM7) in Cranelift register allocator
-- [ ] S18.7 — 1KB Tile MatMul: Demonstrate 1024-byte tile multiply: 16x64 BF16 * 64x16 BF16 → 16x16 FP32
-- [ ] S18.8 — AMX Kernel for Dense Layer: Compile Fajar Lang Dense layer forward pass using AMX tile ops
-- [ ] S18.9 — AMX Context Save/Restore: Handle XSAVE/XRSTOR for AMX state across function calls
-- [ ] S18.10 — Unit Tests: 12+ tests for TILECFG, tile matmul correctness, register allocation, context switch
+- [x] S18.1 — TILECFG Instruction: Emit LDTILECFG to configure AMX tile registers (rows, cols per tile)
+- [x] S18.2 — TDPBF16PS Instruction: Emit BF16 tile matrix multiply-accumulate into FP32 accumulator
+- [x] S18.3 — TDPBSSD Instruction: Emit INT8 signed tile matrix multiply-accumulate (16x64 * 64x16 per op)
+- [x] S18.4 — TDPFP16PS Instruction: Emit FP16 tile matrix multiply-accumulate (AMX-FP16 extension)
+- [x] S18.5 — Tile Load/Store: Emit TILELOADD/TILESTORED for moving data between memory and tile registers
+- [x] S18.6 — Tile Register Allocation: Manage 8 tile registers (TMM0-TMM7) in Cranelift register allocator
+- [x] S18.7 — 1KB Tile MatMul: Demonstrate 1024-byte tile multiply: 16x64 BF16 * 64x16 BF16 → 16x16 FP32
+- [x] S18.8 — AMX Kernel for Dense Layer: Compile Fajar Lang Dense layer forward pass using AMX tile ops
+- [x] S18.9 — AMX Context Save/Restore: Handle XSAVE/XRSTOR for AMX state across function calls
+- [x] S18.10 — Unit Tests: 12+ tests for TILECFG, tile matmul correctness, register allocation, context switch
 
 ### Sprint S19 — AVX10.2 + APX
 
-- [ ] S19.1 — AVX10.2 Detection: Detect AVX10.2 support via CPUID leaf 24H, version and vector length
-- [ ] S19.2 — AVX10.2 New Instructions: Emit new comparison, conversion, and minmax instructions from AVX10.2
-- [ ] S19.3 — YMM Promotion: Use 256-bit YMM encodings for AVX10.2 where AVX-512 ZMM is unavailable
-- [ ] S19.4 — APX Detection: Detect Advanced Performance Extensions (APX) via CPUID for 32-GPR support
-- [ ] S19.5 — 32 GPR Register Allocation: Extend Cranelift x86_64 register allocator to use R16-R31 (APX)
-- [ ] S19.6 — EGPR Encoding: Emit REX2 prefix for Extended General Purpose Registers in instruction encoding
-- [ ] S19.7 — NDD Instructions: Emit Non-Destructive Destination forms (3-operand) enabled by APX
-- [ ] S19.8 — Reduced Register Pressure: Benchmark register spill reduction with 32 GPRs vs 16 GPRs
-- [ ] S19.9 — Combined AVX10.2+APX: Test combined codegen path using both extensions simultaneously
-- [ ] S19.10 — Unit Tests: 12+ tests for AVX10.2 instruction emission, APX register allocation, NDD encoding
+- [x] S19.1 — AVX10.2 Detection: Detect AVX10.2 support via CPUID leaf 24H, version and vector length
+- [x] S19.2 — AVX10.2 New Instructions: Emit new comparison, conversion, and minmax instructions from AVX10.2
+- [x] S19.3 — YMM Promotion: Use 256-bit YMM encodings for AVX10.2 where AVX-512 ZMM is unavailable
+- [x] S19.4 — APX Detection: Detect Advanced Performance Extensions (APX) via CPUID for 32-GPR support
+- [x] S19.5 — 32 GPR Register Allocation: Extend Cranelift x86_64 register allocator to use R16-R31 (APX)
+- [x] S19.6 — EGPR Encoding: Emit REX2 prefix for Extended General Purpose Registers in instruction encoding
+- [x] S19.7 — NDD Instructions: Emit Non-Destructive Destination forms (3-operand) enabled by APX
+- [x] S19.8 — Reduced Register Pressure: Benchmark register spill reduction with 32 GPRs vs 16 GPRs
+- [x] S19.9 — Combined AVX10.2+APX: Test combined codegen path using both extensions simultaneously
+- [x] S19.10 — Unit Tests: 12+ tests for AVX10.2 instruction emission, APX register allocation, NDD encoding
 
 ### Sprint S20 — Blackwell PTX
 
-- [ ] S20.1 — PTX Emission Framework: Build PTX text assembly emitter for sm_100 and sm_101 targets
-- [ ] S20.2 — tcgen05.mma Instruction: Emit 5th-gen Tensor Core MMA (matrix multiply-accumulate) warp-level ops
-- [ ] S20.3 — TMEM Access: Emit Tensor Memory (TMEM) 256KB access instructions for warp-private storage
-- [ ] S20.4 — FP4 Tensor Core Dispatch: Emit tcgen05.mma.fp4 for 4-bit Tensor Core matrix multiply
-- [ ] S20.5 — FP8 Tensor Core Dispatch: Emit tcgen05.mma.e4m3/e5m2 for 8-bit Tensor Core operations
-- [ ] S20.6 — BF16 Tensor Core Dispatch: Emit tcgen05.mma.bf16 for BF16 matrix operations on Blackwell
-- [ ] S20.7 — TMA (Tensor Memory Accelerator): Emit TMA bulk copy instructions for efficient data movement
-- [ ] S20.8 — Cluster Launch: Emit cooperative_groups cluster launch for multi-SM coordination
-- [ ] S20.9 — PTX-to-CUBIN: Invoke ptxas to compile emitted PTX to device binary (CUBIN) for loading
-- [ ] S20.10 — Unit Tests: 12+ tests for PTX correctness, Tensor Core output validation, CUBIN compilation
+- [x] S20.1 — PTX Emission Framework: Build PTX text assembly emitter for sm_100 and sm_101 targets
+- [x] S20.2 — tcgen05.mma Instruction: Emit 5th-gen Tensor Core MMA (matrix multiply-accumulate) warp-level ops
+- [x] S20.3 — TMEM Access: Emit Tensor Memory (TMEM) 256KB access instructions for warp-private storage
+- [x] S20.4 — FP4 Tensor Core Dispatch: Emit tcgen05.mma.fp4 for 4-bit Tensor Core matrix multiply
+- [x] S20.5 — FP8 Tensor Core Dispatch: Emit tcgen05.mma.e4m3/e5m2 for 8-bit Tensor Core operations
+- [x] S20.6 — BF16 Tensor Core Dispatch: Emit tcgen05.mma.bf16 for BF16 matrix operations on Blackwell
+- [x] S20.7 — TMA (Tensor Memory Accelerator): Emit TMA bulk copy instructions for efficient data movement
+- [x] S20.8 — Cluster Launch: Emit cooperative_groups cluster launch for multi-SM coordination
+- [x] S20.9 — PTX-to-CUBIN: Invoke ptxas to compile emitted PTX to device binary (CUBIN) for loading
+- [x] S20.10 — Unit Tests: 12+ tests for PTX correctness, Tensor Core output validation, CUBIN compilation
 
 ---
 

@@ -15,10 +15,14 @@
 //!     └──► WasmCompiler       (wasm)     → .wasm binary
 //! ```
 
+pub mod amx;
 pub mod analysis;
+pub mod avx10;
+pub mod avx512;
 pub mod interop;
 pub mod nostd;
 pub mod pgo;
+pub mod ptx;
 
 #[cfg(feature = "native")]
 pub mod abi;
