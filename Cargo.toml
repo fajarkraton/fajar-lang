@@ -51,6 +51,7 @@ native = [
     "target-lexicon",
 ]
 llvm = ["dep:inkwell"]
+freertos = []
 
 [dev-dependencies]
 pretty_assertions = "1.4"

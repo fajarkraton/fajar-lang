@@ -1,0 +1,109 @@
+// RTOS ML Pipeline — sensor → inference → actuator with real-time tasks
+//
+// Demonstrates an embedded ML inference pipeline using RTOS concepts:
+// - Periodic sensor reading task (10ms period)
+// - ML inference task (processes sensor buffer)
+// - Actuator control task (applies inference result)
+//
+// Build: fj build --board stm32f407 examples/rtos_ml_pipeline.fj
+
+// ── Constants ─────────────────────────────────────────────────────
+const SENSOR_PERIOD_MS: i64 = 10
+const INFERENCE_PERIOD_MS: i64 = 50
+const BUFFER_SIZE: i64 = 5
+const THRESHOLD: f64 = 0.7
+
+// ── Simulated Sensor Data ─────────────────────────────────────────
+
+fn read_sensor() -> f64 {
+    // In real hardware: ADC read from accelerometer
+    // Here we simulate with a pattern
+    0.6
+}
+
+// ── Simple Neural Network (2-layer) ───────────────────────────────
+
+fn relu(x: f64) -> f64 {
+    if x > 0.0 { x } else { 0.0 }
+}
+
+fn inference(readings: [f64; 5]) -> f64 {
+    // Layer 1: weighted sum + ReLU
+    let w1 = [0.3, -0.2, 0.5, 0.1, -0.4]
+    let b1 = 0.1
+
+    let mut sum1 = b1
+    let mut i = 0
+    while i < 5 {
+        sum1 = sum1 + readings[i] * w1[i]
+        i = i + 1
+    }
+    let h1 = relu(sum1)
+
+    // Layer 2: single output (probability of anomaly)
+    let w2 = 0.8
+    let b2 = -0.1
+    let output = h1 * w2 + b2
+
+    // Sigmoid activation for probability
+    1.0 / (1.0 + exp(-output))
+}
+
+fn exp(x: f64) -> f64 {
+    let mut result = 1.0
+    let mut term = 1.0
+    let mut i = 1
+    while i <= 15 {
+        term = term * x / to_float(i)
+        result = result + term
+        i = i + 1
+    }
+    result
+}
+
+// ── Actuator Control ──────────────────────────────────────────────
+
+fn actuator_control(anomaly_prob: f64) {
+    if anomaly_prob > THRESHOLD {
+        println("[ACTUATOR] ALERT: Anomaly detected (p=" + to_string(anomaly_prob) + ") -> Emergency stop")
+    } else {
+        println("[ACTUATOR] Normal operation (p=" + to_string(anomaly_prob) + ")")
+    }
+}
+
+// ── Main Pipeline ─────────────────────────────────────────────────
+
+fn main() {
+    println("=== RTOS ML Pipeline Demo ===")
+    println("Sensor period: " + to_string(SENSOR_PERIOD_MS) + "ms")
+    println("Inference period: " + to_string(INFERENCE_PERIOD_MS) + "ms")
+    println("")
+
+    // Simulate 3 inference cycles
+    let sensor_patterns = [
+        [0.5, 0.6, 0.4, 0.5, 0.6],
+        [0.9, 0.8, 0.95, 0.85, 0.9],
+        [0.3, 0.2, 0.4, 0.1, 0.3]
+    ]
+
+    let mut cycle = 0
+    while cycle < 3 {
+        println("--- Cycle " + to_string(cycle + 1) + " ---")
+
+        // Task 1: Sensor reading (would be @periodic in real RTOS)
+        let readings = sensor_patterns[cycle]
+        println("[SENSOR] Read 5 samples: " + to_string(readings[0]) + ", " + to_string(readings[1]) + ", ...")
+
+        // Task 2: ML Inference
+        let prob = inference(readings)
+        println("[INFERENCE] Anomaly probability: " + to_string(prob))
+
+        // Task 3: Actuator response
+        actuator_control(prob)
+
+        println("")
+        cycle = cycle + 1
+    }
+
+    println("Pipeline demo complete")
+}

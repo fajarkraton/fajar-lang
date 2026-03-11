@@ -401,46 +401,46 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** C FFI wrappers for FreeRTOS API
 
-- [ ] S22.1 — `src/rtos/mod.rs`: RTOS module declaration
-- [ ] S22.2 — `src/rtos/freertos.rs`: FFI function declarations (extern "C")
-- [ ] S22.3 — Task API: `fj_rt_task_create`, `fj_rt_task_delete`, `fj_rt_task_delay`
-- [ ] S22.4 — Queue API: `fj_rt_queue_create`, `fj_rt_queue_send`, `fj_rt_queue_receive`
-- [ ] S22.5 — Mutex API: `fj_rt_mutex_create`, `fj_rt_mutex_lock`, `fj_rt_mutex_unlock`
-- [ ] S22.6 — Semaphore API: `fj_rt_sem_create`, `fj_rt_sem_give`, `fj_rt_sem_take`
-- [ ] S22.7 — Timer API: `fj_rt_timer_create`, `fj_rt_timer_start`, `fj_rt_timer_stop`
-- [ ] S22.8 — ISR-safe variants: `_from_isr` versions of queue/semaphore ops
-- [ ] S22.9 — FreeRTOSConfig.h template generation for each BSP board
-- [ ] S22.10 — 10 tests: FFI bindings compile, API signatures correct
+- [x] S22.1 — `src/rtos/mod.rs`: RTOS module declaration
+- [x] S22.2 — `src/rtos/freertos.rs`: FFI function declarations (extern "C")
+- [x] S22.3 — Task API: `fj_rt_task_create`, `fj_rt_task_delete`, `fj_rt_task_delay`
+- [x] S22.4 — Queue API: `fj_rt_queue_create`, `fj_rt_queue_send`, `fj_rt_queue_receive`
+- [x] S22.5 — Mutex API: `fj_rt_mutex_create`, `fj_rt_mutex_lock`, `fj_rt_mutex_unlock`
+- [x] S22.6 — Semaphore API: `fj_rt_sem_create`, `fj_rt_sem_give`, `fj_rt_sem_take`
+- [x] S22.7 — Timer API: `fj_rt_timer_create`, `fj_rt_timer_start`, `fj_rt_timer_stop`
+- [x] S22.8 — ISR-safe variants: `_from_isr` versions of queue/semaphore ops
+- [x] S22.9 — FreeRTOSConfig.h template generation for each BSP board
+- [x] S22.10 — 10 tests: FFI bindings compile, API signatures correct
 
 #### Sprint 23: Language-Level RTOS Abstractions `P1`
 
 **Goal:** Fajar Lang syntax for tasks, queues, mutexes
 
-- [ ] S23.1 — `task_spawn(priority, stack_size, fn)` builtin function
-- [ ] S23.2 — `task_delay_ms(ms)` and `task_delay_until(ticks)` builtins
-- [ ] S23.3 — `Queue<T, N>` generic type with send/receive methods
-- [ ] S23.4 — `Queue::send_from_isr()` ISR-safe variant (enforced in @kernel context)
-- [ ] S23.5 — `Mutex<T>` with lock/unlock and priority inheritance
-- [ ] S23.6 — `Semaphore` binary and counting variants
-- [ ] S23.7 — `EventGroup` with set_bits/wait_bits/sync
-- [ ] S23.8 — `scheduler_start()` to begin RTOS scheduling
-- [ ] S23.9 — Static task allocation in `@kernel`/`@safe` contexts
-- [ ] S23.10 — 10 tests: task spawn, queue send/recv, mutex, event group
+- [x] S23.1 — `task_spawn(priority, stack_size, fn)` builtin function
+- [x] S23.2 — `task_delay_ms(ms)` and `task_delay_until(ticks)` builtins
+- [x] S23.3 — `Queue<T, N>` generic type with send/receive methods
+- [x] S23.4 — `Queue::send_from_isr()` ISR-safe variant (enforced in @kernel context)
+- [x] S23.5 — `Mutex<T>` with lock/unlock and priority inheritance
+- [x] S23.6 — `Semaphore` binary and counting variants
+- [x] S23.7 — `EventGroup` with set_bits/wait_bits/sync
+- [x] S23.8 — `scheduler_start()` to begin RTOS scheduling
+- [x] S23.9 — Static task allocation in `@kernel`/`@safe` contexts
+- [x] S23.10 — 10 tests: task spawn, queue send/recv, mutex, event group
 
 #### Sprint 24: Real-Time Annotations `P2`
 
 **Goal:** @realtime, @periodic, @wcet, timing constraints
 
-- [ ] S24.1 — `@periodic(period: 10ms)` annotation: generate vTaskDelayUntil pattern
-- [ ] S24.2 — `@realtime(deadline: 5ms)` annotation: analyzer restricts heap alloc + unbounded loops
-- [ ] S24.3 — `@wcet(max: 500us)` annotation: compiler estimates instruction count
-- [ ] S24.4 — `@idle_hook` annotation: emit `vApplicationIdleHook` implementation
-- [ ] S24.5 — `@tick_hook` annotation: emit `vApplicationTickHook` implementation
-- [ ] S24.6 — Stack size estimation: call graph analysis for task stack requirements
-- [ ] S24.7 — `uxTaskGetStackHighWaterMark()` wrapper for debug builds
-- [ ] S24.8 — Priority inversion detection: warn if high-priority task accesses low-priority mutex
-- [ ] S24.9 — Tickless idle support: `configUSE_TICKLESS_IDLE` integration
-- [ ] S24.10 — 10 tests: periodic task, realtime constraints, idle hook, stack estimation
+- [x] S24.1 — `@periodic(period: 10ms)` annotation: generate vTaskDelayUntil pattern
+- [x] S24.2 — `@realtime(deadline: 5ms)` annotation: analyzer restricts heap alloc + unbounded loops
+- [x] S24.3 — `@wcet(max: 500us)` annotation: compiler estimates instruction count
+- [x] S24.4 — `@idle_hook` annotation: emit `vApplicationIdleHook` implementation
+- [x] S24.5 — `@tick_hook` annotation: emit `vApplicationTickHook` implementation
+- [x] S24.6 — Stack size estimation: call graph analysis for task stack requirements
+- [x] S24.7 — `uxTaskGetStackHighWaterMark()` wrapper for debug builds
+- [x] S24.8 — Priority inversion detection: warn if high-priority task accesses low-priority mutex
+- [x] S24.9 — Tickless idle support: `configUSE_TICKLESS_IDLE` integration
+- [x] S24.10 — 10 tests: periodic task, realtime constraints, idle hook, stack estimation
 
 ### Phase 7: Advanced ML `P2`
 
@@ -448,61 +448,61 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Recurrent neural network layers with BPTT
 
-- [ ] S25.1 — `LSTMCell` struct: w_ih, w_hh, b_ih, b_hh (concatenated 4H weights)
-- [ ] S25.2 — LSTM forward: gates computation (forget, input, output, candidate)
-- [ ] S25.3 — LSTM cell state update: `c_t = f_t * c_{t-1} + i_t * c~_t`
-- [ ] S25.4 — LSTM hidden state: `h_t = o_t * tanh(c_t)`
-- [ ] S25.5 — LSTM sequence forward: iterate timesteps, collect hidden states
-- [ ] S25.6 — LSTM backward (BPTT): gradient flow through gates and time
-- [ ] S25.7 — `GRUCell` struct: w_ih, w_hh, b_ih, b_hh (concatenated 3H weights)
-- [ ] S25.8 — GRU forward: reset gate, update gate, candidate, interpolation
-- [ ] S25.9 — GRU backward (BPTT): gradient through gates and time
-- [ ] S25.10 — 10 tests: LSTM forward/backward, GRU forward/backward, sequence processing
+- [x] S25.1 — `LSTMCell` struct: w_ih, w_hh, b_ih, b_hh (concatenated 4H weights)
+- [x] S25.2 — LSTM forward: gates computation (forget, input, output, candidate)
+- [x] S25.3 — LSTM cell state update: `c_t = f_t * c_{t-1} + i_t * c~_t`
+- [x] S25.4 — LSTM hidden state: `h_t = o_t * tanh(c_t)`
+- [x] S25.5 — LSTM sequence forward: iterate timesteps, collect hidden states
+- [x] S25.6 — LSTM backward (BPTT): gradient flow through gates and time
+- [x] S25.7 — `GRUCell` struct: w_ih, w_hh, b_ih, b_hh (concatenated 3H weights)
+- [x] S25.8 — GRU forward: reset gate, update gate, candidate, interpolation
+- [x] S25.9 — GRU backward (BPTT): gradient through gates and time
+- [x] S25.10 — 10 tests: LSTM forward/backward, GRU forward/backward, sequence processing
 
 #### Sprint 26: Learning Rate Scheduling & AdamW `P2`
 
 **Goal:** Advanced optimizers and LR schedulers
 
-- [ ] S26.1 — `AdamW` optimizer: decoupled weight decay (separate from gradient)
-- [ ] S26.2 — Gradient clipping by norm: global norm computation + scaling
-- [ ] S26.3 — LR warmup: linear ramp from 0 to base_lr over warmup_steps
-- [ ] S26.4 — ReduceOnPlateau scheduler: reduce LR when metric stops improving
-- [ ] S26.5 — OneCycleLR: three-phase schedule (warmup → anneal → cooldown)
-- [ ] S26.6 — Cosine annealing with warm restarts: `T_mult` cycle growth
-- [ ] S26.7 — LRScheduler trait: `get_lr(step)`, `step_with_metric(metric)`
-- [ ] S26.8 — Optimizer::set_lr(): dynamically update learning rate
-- [ ] S26.9 — Weight decay parameter on all optimizers (SGD, Adam, AdamW)
-- [ ] S26.10 — 10 tests: AdamW step, warmup, plateau, one-cycle, cosine restart
+- [x] S26.1 — `AdamW` optimizer: decoupled weight decay (separate from gradient)
+- [x] S26.2 — Gradient clipping by norm: global norm computation + scaling
+- [x] S26.3 — LR warmup: linear ramp from 0 to base_lr over warmup_steps
+- [x] S26.4 — ReduceOnPlateau scheduler: reduce LR when metric stops improving
+- [x] S26.5 — OneCycleLR: three-phase schedule (warmup → anneal → cooldown)
+- [x] S26.6 — Cosine annealing with warm restarts: `T_mult` cycle growth
+- [x] S26.7 — LRScheduler trait: `get_lr(step)`, `step_with_metric(metric)`
+- [x] S26.8 — Optimizer::set_lr(): dynamically update learning rate
+- [x] S26.9 — Weight decay parameter on all optimizers (SGD, Adam, AdamW)
+- [x] S26.10 — 10 tests: AdamW step, warmup, plateau, one-cycle, cosine restart
 
 #### Sprint 27: DataLoader & Training Utilities `P2`
 
 **Goal:** Multi-threaded data loading, checkpoints, early stopping
 
-- [ ] S27.1 — `Dataset` trait: `len()`, `get(index)` → (features, labels)
-- [ ] S27.2 — Collate function: stack samples into batch tensors
-- [ ] S27.3 — `ThreadedDataLoader`: worker threads prefetch batches via channels
-- [ ] S27.4 — Fisher-Yates shuffle per epoch with seed control
-- [ ] S27.5 — `EarlyStopping`: patience, min_delta, best_metric tracking
-- [ ] S27.6 — Checkpoint save: model params + optimizer state + epoch + lr
-- [ ] S27.7 — Checkpoint load: restore training from saved state
-- [ ] S27.8 — Dropout train/eval mode: `model.train()` / `model.eval()` toggle
-- [ ] S27.9 — BatchNorm running statistics: exponential moving average
-- [ ] S27.10 — 10 tests: dataloader iteration, shuffle, early stopping, checkpoint save/load
+- [x] S27.1 — `Dataset` trait: `len()`, `get(index)` → (features, labels)
+- [x] S27.2 — Collate function: stack samples into batch tensors
+- [x] S27.3 — `ThreadedDataLoader`: worker threads prefetch batches via channels
+- [x] S27.4 — Fisher-Yates shuffle per epoch with seed control
+- [x] S27.5 — `EarlyStopping`: patience, min_delta, best_metric tracking
+- [x] S27.6 — Checkpoint save: model params + optimizer state + epoch + lr
+- [x] S27.7 — Checkpoint load: restore training from saved state
+- [x] S27.8 — Dropout train/eval mode: `model.train()` / `model.eval()` toggle
+- [x] S27.9 — BatchNorm running statistics: exponential moving average
+- [x] S27.10 — 10 tests: dataloader iteration, shuffle, early stopping, checkpoint save/load
 
 #### Sprint 28: Mixed Precision & Polish `P2`
 
 **Goal:** f16/bf16 support, training pipeline, examples
 
-- [ ] S28.1 — Add `half` crate dependency
-- [ ] S28.2 — `DType` enum on TensorValue: F64, F32, F16, BF16
-- [ ] S28.3 — `to_dtype()` conversion: f64 ↔ f32 ↔ f16 ↔ bf16
-- [ ] S28.4 — `LossScaler`: dynamic loss scaling for FP16 gradient underflow prevention
-- [ ] S28.5 — Mixed precision forward: model weights in FP16, accumulation in FP32
-- [ ] S28.6 — Loss computation always in FP64 (prevent precision loss)
-- [ ] S28.7 — `examples/lstm_sequence.fj`: LSTM sequence classification demo
-- [ ] S28.8 — `examples/rtos_ml_pipeline.fj`: sensor → inference → actuator with RTOS
-- [ ] S28.9 — Update mdBook: LLVM backend, debugger, BSP, registry, RTOS, ML chapters
-- [ ] S28.10 — 10 tests: dtype conversion, loss scaling, mixed precision forward
+- [x] S28.1 — Add `half` crate dependency
+- [x] S28.2 — `DType` enum on TensorValue: F64, F32, F16, BF16
+- [x] S28.3 — `to_dtype()` conversion: f64 ↔ f32 ↔ f16 ↔ bf16
+- [x] S28.4 — `LossScaler`: dynamic loss scaling for FP16 gradient underflow prevention
+- [x] S28.5 — Mixed precision forward: model weights in FP16, accumulation in FP32
+- [x] S28.6 — Loss computation always in FP64 (prevent precision loss)
+- [x] S28.7 — `examples/lstm_sequence.fj`: LSTM sequence classification demo
+- [x] S28.8 — `examples/rtos_ml_pipeline.fj`: sensor → inference → actuator with RTOS
+- [x] S28.9 — Update mdBook: LLVM backend, debugger, BSP, registry, RTOS, ML chapters
+- [x] S28.10 — 10 tests: dtype conversion, loss scaling, mixed precision forward
 
 ---
 
