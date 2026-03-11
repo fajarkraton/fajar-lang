@@ -23,6 +23,7 @@ pub mod analyzer;
 pub mod bsp;
 pub mod codegen;
 pub mod compiler;
+pub mod concurrency_v2;
 pub mod debugger;
 pub mod demos;
 pub mod dependent;

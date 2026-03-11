@@ -100,55 +100,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S5 — Async Scopes
 
-- [ ] S5.1 — Scope Primitive: `async_scope { |s| s.spawn(task1); s.spawn(task2); }` — scope waits for all spawned tasks
-- [ ] S5.2 — Scope Lifetime: Scope owns all spawned tasks — when scope ends, all tasks are joined or cancelled
-- [ ] S5.3 — Scope Error Propagation: If any task in a scope panics, cancel siblings and propagate error to parent
-- [ ] S5.4 — Nested Scopes: Support `async_scope { |s| s.spawn(async_scope { |s2| ... }); }` with correct nesting
-- [ ] S5.5 — Scope Return Values: Scope collects return values from all spawned tasks into a Vec
-- [ ] S5.6 — Concurrency Limit: `async_scope_with(max_concurrent: 4) { ... }` — limit parallel task count
-- [ ] S5.7 — Scope Timeout: `async_scope_with(timeout: Duration) { ... }` — cancel all tasks on timeout
-- [ ] S5.8 — Task Priority: `s.spawn_with_priority(High, task)` — priority-based scheduling within scope
-- [ ] S5.9 — Scope Metrics: Track task count, completion time, cancellation count per scope
-- [ ] S5.10 — Unit Tests: 15+ tests for scope lifecycle, error propagation, nesting, limits, timeout, metrics
+- [x] S5.1 — Scope Primitive: `async_scope { |s| s.spawn(task1); s.spawn(task2); }` — scope waits for all spawned tasks
+- [x] S5.2 — Scope Lifetime: Scope owns all spawned tasks — when scope ends, all tasks are joined or cancelled
+- [x] S5.3 — Scope Error Propagation: If any task in a scope panics, cancel siblings and propagate error to parent
+- [x] S5.4 — Nested Scopes: Support `async_scope { |s| s.spawn(async_scope { |s2| ... }); }` with correct nesting
+- [x] S5.5 — Scope Return Values: Scope collects return values from all spawned tasks into a Vec
+- [x] S5.6 — Concurrency Limit: `async_scope_with(max_concurrent: 4) { ... }` — limit parallel task count
+- [x] S5.7 — Scope Timeout: `async_scope_with(timeout: Duration) { ... }` — cancel all tasks on timeout
+- [x] S5.8 — Task Priority: `s.spawn_with_priority(High, task)` — priority-based scheduling within scope
+- [x] S5.9 — Scope Metrics: Track task count, completion time, cancellation count per scope
+- [x] S5.10 — Unit Tests: 15+ tests for scope lifecycle, error propagation, nesting, limits, timeout, metrics
 
 ### Sprint S6 — Cancellation & Graceful Shutdown
 
-- [ ] S6.1 — Cancellation Token: `CancellationToken` shared across tasks, cooperative cancellation via `token.is_cancelled()`
-- [ ] S6.2 — Cancel Propagation: Parent cancellation automatically cancels all child tasks/scopes
-- [ ] S6.3 — Cancel-Safe Operations: Mark I/O operations as cancel-safe or cancel-unsafe, lint for unsafe cancellation
-- [ ] S6.4 — Cleanup Handlers: `defer { cleanup_code }` runs on both normal completion and cancellation
-- [ ] S6.5 — Graceful Shutdown: `shutdown_signal()` returns a future that resolves on SIGTERM/SIGINT
-- [ ] S6.6 — Drain Mode: On shutdown, stop accepting new work, finish in-progress tasks, then exit
-- [ ] S6.7 — Shutdown Timeout: Force-kill tasks that don't finish within shutdown timeout (default: 30s)
-- [ ] S6.8 — Cancellation Reasons: `token.cancel_with_reason("timeout")` — attach context to cancellation
-- [ ] S6.9 — Select with Cancel: `select { task1.await, task2.await, token.cancelled() }` — first-to-complete with cancel
-- [ ] S6.10 — Unit Tests: 15+ tests for token lifecycle, propagation, cleanup, shutdown, drain, select
+- [x] S6.1 — Cancellation Token: `CancellationToken` shared across tasks, cooperative cancellation via `token.is_cancelled()`
+- [x] S6.2 — Cancel Propagation: Parent cancellation automatically cancels all child tasks/scopes
+- [x] S6.3 — Cancel-Safe Operations: Mark I/O operations as cancel-safe or cancel-unsafe, lint for unsafe cancellation
+- [x] S6.4 — Cleanup Handlers: `defer { cleanup_code }` runs on both normal completion and cancellation
+- [x] S6.5 — Graceful Shutdown: `shutdown_signal()` returns a future that resolves on SIGTERM/SIGINT
+- [x] S6.6 — Drain Mode: On shutdown, stop accepting new work, finish in-progress tasks, then exit
+- [x] S6.7 — Shutdown Timeout: Force-kill tasks that don't finish within shutdown timeout (default: 30s)
+- [x] S6.8 — Cancellation Reasons: `token.cancel_with_reason("timeout")` — attach context to cancellation
+- [x] S6.9 — Select with Cancel: `select { task1.await, task2.await, token.cancelled() }` — first-to-complete with cancel
+- [x] S6.10 — Unit Tests: 15+ tests for token lifecycle, propagation, cleanup, shutdown, drain, select
 
 ### Sprint S7 — Actor Model
 
-- [ ] S7.1 — Actor Trait: `trait Actor { type Message; fn handle(&mut self, msg: Self::Message) -> Action; }`
-- [ ] S7.2 — Actor Spawn: `let addr = spawn_actor(MyActor::new())` — returns typed address for sending messages
-- [ ] S7.3 — Message Send: `addr.send(msg).await` — async message delivery with backpressure
-- [ ] S7.4 — Actor Mailbox: Bounded MPSC channel per actor, configurable capacity (default: 1024)
-- [ ] S7.5 — Actor Lifecycle: `fn started(&mut self)`, `fn stopped(&mut self)` lifecycle hooks
-- [ ] S7.6 — Supervision Strategy: `OneForOne` (restart failed actor), `AllForOne` (restart all siblings), `RestForOne`
-- [ ] S7.7 — Actor Registry: Named actors accessible via `registry.get::<MyActor>("name")`
-- [ ] S7.8 — Request-Response: `let resp = addr.ask(request).await` — typed request/response pattern
-- [ ] S7.9 — Actor State Persistence: `trait PersistentActor { fn snapshot(&self) -> Bytes; fn restore(bytes: Bytes) -> Self; }`
-- [ ] S7.10 — Unit Tests: 15+ tests for spawn, send, ask, supervision, lifecycle, registry, persistence
+- [x] S7.1 — Actor Trait: `trait Actor { type Message; fn handle(&mut self, msg: Self::Message) -> Action; }`
+- [x] S7.2 — Actor Spawn: `let addr = spawn_actor(MyActor::new())` — returns typed address for sending messages
+- [x] S7.3 — Message Send: `addr.send(msg).await` — async message delivery with backpressure
+- [x] S7.4 — Actor Mailbox: Bounded MPSC channel per actor, configurable capacity (default: 1024)
+- [x] S7.5 — Actor Lifecycle: `fn started(&mut self)`, `fn stopped(&mut self)` lifecycle hooks
+- [x] S7.6 — Supervision Strategy: `OneForOne` (restart failed actor), `AllForOne` (restart all siblings), `RestForOne`
+- [x] S7.7 — Actor Registry: Named actors accessible via `registry.get::<MyActor>("name")`
+- [x] S7.8 — Request-Response: `let resp = addr.ask(request).await` — typed request/response pattern
+- [x] S7.9 — Actor State Persistence: `trait PersistentActor { fn snapshot(&self) -> Bytes; fn restore(bytes: Bytes) -> Self; }`
+- [x] S7.10 — Unit Tests: 15+ tests for spawn, send, ask, supervision, lifecycle, registry, persistence
 
 ### Sprint S8 — Software Transactional Memory
 
-- [ ] S8.1 — TVar Primitive: `TVar<T>` — transactional variable, read/write only within `atomically { ... }`
-- [ ] S8.2 — STM Transaction: `atomically { let x = tvar.read(); tvar.write(x + 1); }` — atomic, isolated, consistent
-- [ ] S8.3 — Retry Semantics: `retry` blocks until any read TVar changes, then re-executes transaction
-- [ ] S8.4 — OrElse Combinator: `atomically { tx1.or_else(tx2) }` — try tx1, if it retries, try tx2
-- [ ] S8.5 — Conflict Detection: Optimistic concurrency — detect read/write conflicts, retry on conflict
-- [ ] S8.6 — Nested Transactions: Support nested `atomically` blocks with correct rollback semantics
-- [ ] S8.7 — STM + Async: Allow STM transactions within async contexts, integrate with async runtime
-- [ ] S8.8 — TVar Collections: `TMap<K, V>` and `TQueue<T>` — transactional HashMap and queue
-- [ ] S8.9 — STM Metrics: Track commit/retry/conflict counts per transaction for performance tuning
-- [ ] S8.10 — Unit Tests: 15+ tests for atomicity, isolation, retry, orElse, conflicts, nested, async integration
+- [x] S8.1 — TVar Primitive: `TVar<T>` — transactional variable, read/write only within `atomically { ... }`
+- [x] S8.2 — STM Transaction: `atomically { let x = tvar.read(); tvar.write(x + 1); }` — atomic, isolated, consistent
+- [x] S8.3 — Retry Semantics: `retry` blocks until any read TVar changes, then re-executes transaction
+- [x] S8.4 — OrElse Combinator: `atomically { tx1.or_else(tx2) }` — try tx1, if it retries, try tx2
+- [x] S8.5 — Conflict Detection: Optimistic concurrency — detect read/write conflicts, retry on conflict
+- [x] S8.6 — Nested Transactions: Support nested `atomically` blocks with correct rollback semantics
+- [x] S8.7 — STM + Async: Allow STM transactions within async contexts, integrate with async runtime
+- [x] S8.8 — TVar Collections: `TMap<K, V>` and `TQueue<T>` — transactional HashMap and queue
+- [x] S8.9 — STM Metrics: Track commit/retry/conflict counts per transaction for performance tuning
+- [x] S8.10 — Unit Tests: 15+ tests for atomicity, isolation, retry, orElse, conflicts, nested, async integration
 
 ---
 
