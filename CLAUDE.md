@@ -30,10 +30,10 @@
 Every Claude Code session MUST follow this order:
 
 1. **READ** → `CLAUDE.md` (this file) [auto-loaded]
-2. **READ** → Current task list (if v0.5+ exists, read that; otherwise check user intent)
-3. **READ** → `docs/V1_RULES.md` + `docs/V03_WORKFLOW.md` [coding conventions + workflow]
-4. **ORIENT** → "What does the user want?" (v0.4 complete — all planned tasks done)
-5. **ACT** → Execute per TDD workflow (see `docs/V03_WORKFLOW.md`)
+2. **READ** → Current task list (`docs/V06_PLAN.md` for v0.6; check user intent)
+3. **READ** → `docs/V1_RULES.md` + `docs/V06_WORKFLOW.md` [coding conventions + workflow]
+4. **ORIENT** → "What does the user want?" (v0.5 complete — all planned tasks done)
+5. **ACT** → Execute per TDD workflow (see `docs/V06_WORKFLOW.md`)
 6. **VERIFY** → `cargo test --features native && cargo clippy -- -D warnings && cargo fmt -- --check`
 7. **UPDATE** → Mark task `[x]` in relevant task file if applicable
 
@@ -42,17 +42,21 @@ Every Claude Code session MUST follow this order:
 **v0.3 STATUS: "Dominion" — 52 sprints, 739 tasks. ALL COMPLETE.**
 **v0.4 STATUS: "Sovereignty" — 6 sprints, 40 tasks. ALL COMPLETE.**
 **v0.5 STATUS: "Ascendancy" — 8 sprints, 80 tasks. ALL COMPLETE.**
+**v0.6 STATUS: "Horizon" — 28 sprints, ~280 tasks. PLANNING COMPLETE, implementation not started.**
 
 ### Key Documents (Read on Demand)
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/V05_PLAN.md` | **Current sprint** | v0.5 "Ascendancy" plan (8 sprints, ~80 tasks) |
+| `docs/V06_PLAN.md` | **Current sprint** | v0.6 "Horizon" plan (28 sprints, ~280 tasks) |
+| `docs/V06_WORKFLOW.md` | Session start | Sprint cycle, quality gates, feature gate rules |
+| `docs/V06_SKILLS.md` | Before complex tasks | Patterns: LLVM, DAP, BSP, PubGrub, lifetimes, RTOS, LSTM |
+| `docs/V05_PLAN.md` | Reference | v0.5 "Ascendancy" plan (8 sprints, COMPLETE) |
 | `docs/V04_PLAN.md` | Reference | v0.4 "Sovereignty" plan (6 sprints, COMPLETE) |
 | `docs/V03_TASKS.md` | Reference | v0.3 task checkboxes (739 tasks, ALL COMPLETE) |
 | `docs/V03_IMPLEMENTATION_PLAN.md` | Reference | 12-month plan: concurrency, OS, GPU, ML, self-hosting |
-| `docs/V03_WORKFLOW.md` | Session start | Sprint cycle, quality gates, rules |
-| `docs/V03_SKILLS.md` | Before complex tasks | Patterns: fn pointers, threads, async, GPU, bare metal |
+| `docs/V03_WORKFLOW.md` | Reference | v0.3 sprint cycle, quality gates, rules |
+| `docs/V03_SKILLS.md` | Reference | Patterns: fn pointers, threads, async, GPU, bare metal |
 | `docs/V1_TASKS.md` | Reference | v1.0 + v0.2 completed tasks (historical) |
 | `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules (still applies) |
 | `docs/V1_SKILLS.md` | Reference | Cranelift, monomorphization, borrow checker patterns |
@@ -804,11 +808,12 @@ fajar-lang/
 
 | When You Need... | Read This |
 |---|---|
-| **v0.5 plan (NEXT)** | **`docs/V05_PLAN.md`** — 8 sprints, ~80 tasks |
-| **Completed task lists** | `docs/V03_TASKS.md` (v0.3) + `docs/V04_PLAN.md` (v0.4) |
+| **v0.6 plan (CURRENT)** | **`docs/V06_PLAN.md`** — 28 sprints, ~280 tasks, 7 phases |
+| **v0.6 implementation patterns** | **`docs/V06_SKILLS.md`** — LLVM, DAP, BSP, PubGrub, lifetimes, RTOS, LSTM |
+| **v0.6 development workflow** | **`docs/V06_WORKFLOW.md`** — sprint cycle, quality gates, feature gates |
+| **Completed task lists** | `docs/V05_PLAN.md` (v0.5) + `docs/V04_PLAN.md` (v0.4) + `docs/V03_TASKS.md` (v0.3) |
 | **Coding rules** | **`docs/V1_RULES.md`** |
-| **Implementation patterns** | **`docs/V1_SKILLS.md`** + **`docs/V03_SKILLS.md`** |
-| **Development workflow** | **`docs/V03_WORKFLOW.md`** |
+| **Previous patterns** | `docs/V03_SKILLS.md` + `docs/V1_SKILLS.md` |
 | **Future roadmap** | **`docs/ROADMAP_V1.1.md`** |
 | Language syntax, keywords, types | `docs/FAJAR_LANG_SPEC.md` |
 | Formal EBNF grammar | `docs/GRAMMAR_REFERENCE.md` |
