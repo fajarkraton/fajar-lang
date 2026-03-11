@@ -5,6 +5,7 @@
 
 pub mod audit;
 pub mod docgen;
+pub mod documentation;
 pub mod manifest;
 pub mod publish;
 pub mod registry;

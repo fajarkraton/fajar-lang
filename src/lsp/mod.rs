@@ -6,6 +6,7 @@
 //! - Go-to-definition
 //! - Completions (keywords, builtins, variables)
 
+pub mod advanced;
 pub mod completion;
 mod server;
 

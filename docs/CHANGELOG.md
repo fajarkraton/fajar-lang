@@ -18,6 +18,25 @@ Kategori perubahan:
 
 ---
 
+## [1.0.0] — 2026-03-11 "Genesis"
+
+### Added
+- **Phase 1 — Stability & Conformance Testing** (`src/testing/stability.rs`): `FuzzHarness` with `FuzzTarget` (Lexer/Parser/Analyzer/Interpreter/Formatter/Vm), `FuzzConfig`, grammar-aware input generation (`GrammarGen`), `CorpusManager` with delta-debugging minimization, `ConformanceRunner` with `// expect:`/`// expect-error:` annotation parsing, `ConformanceCategory` (8 categories), `RegressionHarness` with snapshot management (`Snapshot`/`SnapshotManager`), `BaselineRecorder`/`BaselineComparator` for performance regression detection, `BisectHelper` for commit bisection, `ErrorPolisher` with `ErrorQuality` scoring (0-100), `ErrorCatalog` (78 error codes across 9 categories), `ErrorAudit` with quality bar checking
+- **Phase 2 — Performance Engineering** (`src/compiler/performance.rs`): `StringInterner` with `Symbol` indices and `SyncInterner` (thread-safe), `InlineCache` (monomorphic/polymorphic/megamorphic), `DispatchTable` for fast binary operation dispatch via pre-computed 2D type-tag table, `TailCallOptimizer` detecting self-recursive tail calls and transforming to loops, `ConstFolder` for compile-time expression evaluation (arithmetic, comparison, string concat), `CompilationTimer` with per-phase timing breakdown and `--timings` output format, `ValueOptimizer` with `SmallString` (22-byte SSO) and `CompactValue` (16-byte tagged union)
+- **Phase 3 — Cross-Platform & Distribution** (`src/runtime/crossplatform.rs`): `PlatformDetector` with runtime OS/arch/CPU feature detection, `PathNormalizer` with `to_uri`/`from_uri` (Windows drive letter handling), `LineEndingHandler` (LF/CRLF/CR detection and normalization), `BinaryDistributor` with `DistProfile` (LTO=fat, strip, codegen-units=1), `InstallerGenerator` (shell/PowerShell/Homebrew/Debian/completions for bash/zsh/fish/PowerShell), `VersionInfo` (short/long/JSON formats), `PlatformOptimizer` (I/O backend selection, SIMD width, thread pool, memory config)
+- **Phase 4 — Language Server Completion** (`src/lsp/advanced.rs`): `SymbolIndex` with cross-scope resolution (fn/let/const/struct/enum/trait/impl), `ReferencesFinder` with read/write/definition/import classification, `CodeActionProvider` (7 actions: make mutable, add type annotation, extract function, inline variable, convert if/else to match, add missing import, add missing fields), `SemanticTokenizer` (16 token types, 8 modifier flags, context annotation highlighting), `SignatureHelper` with 16+ built-in signatures and active parameter tracking, `CallHierarchyProvider` with incoming/outgoing call graph
+- **Phase 5 — Documentation & Learning** (`src/package/documentation.rs`): `ReferenceGenerator` with cross-reference resolution and HTML generation, `TutorialBuilder` (10 progressive tutorials, exercises, prev/next navigation), `DocEnhancer` with `SearchIndex` (JSON), `DocTheme` (dark/light/auto CSS), `BreadcrumbTrail`, `DeprecationBanner`, `PlaygroundCompiler` with `PlaygroundSandbox`, `ShareEncoder` (base64 URL), `ExampleLibrary`, `DocValidator` with coverage reporting, `SiteGenerator` with sidebar navigation and version selector
+- **Phase 6 — Ecosystem & Interop** (`src/codegen/interop.rs`): `CBindgen` (C/C++ header generation with include guards, `extern "C"`, stdint.h types, packed structs, variadic functions), `PyBindgen` (Python `__init__.py` + `.pyi` type stubs, NumPy ndarray tensor bridge, enum.Enum wrappers), `WasmComponent` (WIT interface/world generation, record/variant/resource types), `PackageAuditor` (vulnerability scanning, license compliance, `SbomGenerator` CycloneDX JSON, `YankManager`), `InteropTypeMapper` (5 target languages × 19 Fajar types)
+- **Phase 7 — Release Engineering** (`src/compiler/release.rs`): `ReleasePipeline` (6 stages: Test→Build→Sign→Publish→Verify→Announce), `BinarySizeOptimizer` (section/function/crate size analysis, optimization suggestions, debug/release/dist profiles), `StabilityChecker` (API snapshot/diff, breaking change detection, SemVer validation), `ChangelogGenerator` (conventional commit parsing, 7 categories, migration guide generation), `QualityGateRunner` (8 quality checks: tests, clippy, fmt, coverage, benchmarks, binary size), `ReleaseNotes` (GitHub release, blog post, tweet generators)
+
+### Stats
+- New files: 7 source modules (`testing/stability.rs`, `compiler/performance.rs`, `runtime/crossplatform.rs`, `lsp/advanced.rs`, `package/documentation.rs`, `codegen/interop.rs`, `compiler/release.rs`)
+- New tests: 280 (40 per module)
+- Sprints: 28 (7 phases × 4 sprints)
+- Total: 280 tasks, all complete
+
+---
+
 ## [0.9.0] — 2026-03-11 "Convergence"
 
 ### Added

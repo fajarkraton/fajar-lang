@@ -6,8 +6,8 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-3%2C107_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-178K_Rust-blue)]()
+[![Tests](https://img.shields.io/badge/tests-3%2C392_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-194K_Rust-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Fajar Lang?
@@ -298,9 +298,9 @@ docs/                 -- 44+ reference documents
 
 | Metric | Value |
 |--------|-------|
-| Rust LOC | ~178,000 |
-| Source files | 177 `.rs` files |
-| Tests | 3,107 (0 failures) |
+| Rust LOC | ~194,000 |
+| Source files | 185 `.rs` files |
+| Tests | 3,392 (0 failures) |
 | Examples | 49 `.fj` programs |
 | Error codes | 71+ across 9 categories |
 | Documentation | 44+ docs + 40-page mdBook |
@@ -311,7 +311,8 @@ docs/                 -- 44+ reference documents
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| v0.9.0 | **Convergence** | Effect system, compile-time eval, macros, SIMD, security hardening, async I/O, editions |
+| **v1.0.0** | **Genesis** | **First stable release** — fuzzing, conformance testing, string interning, cross-platform distribution, LSP completion, documentation site, C/Python/Wasm interop, release engineering |
+| v0.9.0 | Convergence | Effect system, compile-time eval, macros, SIMD, security hardening, async I/O, editions |
 | v0.8.0 | Apex | GPU training, GAT, incremental compilation, model optimization, DAP debugger, LoRaWAN |
 | v0.7.0 | Zenith | Wasm, ESP32 IoT, Polonius borrow checker, Transformer, PGO, RTIC, package signing |
 | v0.6.0 | Horizon | LLVM backend, debugger, BSP, registry, lifetimes, RTOS, LSTM/GRU, VENTUNO Q |

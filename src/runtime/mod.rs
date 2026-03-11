@@ -1,6 +1,7 @@
 //! Fajar Lang runtime — OS, ML, and GPU execution backends.
 
 pub mod async_io;
+pub mod crossplatform;
 pub mod gpu;
 pub mod ml;
 pub mod os;

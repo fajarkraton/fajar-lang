@@ -16,6 +16,7 @@
 //! ```
 
 pub mod analysis;
+pub mod interop;
 pub mod nostd;
 pub mod pgo;
 
