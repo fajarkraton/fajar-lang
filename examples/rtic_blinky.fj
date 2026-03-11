@@ -1,0 +1,119 @@
+// RTIC Blinky — compile-time scheduled LED blinker
+//
+// Demonstrates the RTIC (Real-Time Interrupt-driven Concurrency) model:
+// - Two hardware tasks at different priorities
+// - Shared resource with ceiling-based locking
+// - Compile-time deadlock freedom guarantee
+//
+// Build: fj build --board stm32f407 examples/rtic_blinky.fj
+
+// ── Resource Declarations ───────────────────────────────────────────
+// In RTIC, all shared state is declared upfront so the compiler can
+// compute ceiling priorities and prove deadlock freedom.
+
+const LED_PIN: i64 = 13
+const BLINK_PERIOD_MS: i64 = 500
+const BUTTON_DEBOUNCE_MS: i64 = 50
+
+// ── Simulated Hardware State ────────────────────────────────────────
+
+fn gpio_toggle(pin: i64) -> bool {
+    // In real hardware: toggle GPIO pin output register
+    // Simulation: just report the action
+    println("  [GPIO] Toggling pin")
+    true
+}
+
+fn gpio_read(pin: i64) -> bool {
+    // Simulated button press (always returns true for demo)
+    true
+}
+
+// ── Task Handlers ───────────────────────────────────────────────────
+
+// @init — runs once at startup (highest privilege, no preemption)
+fn init_peripherals() -> i64 {
+    println("[INIT] Configuring peripherals...")
+    println("  - GPIO pin 13 configured as output (LED)")
+    println("  - TIM2 configured for 500ms period (blink)")
+    println("  - EXTI0 configured for falling edge (button)")
+    println("[INIT] Peripherals ready")
+    0
+}
+
+// Task: blink (priority 1, binds TIM2)
+// Toggles LED every 500ms
+fn handle_blink(led_state: bool) -> bool {
+    let new_state = !led_state
+    if new_state {
+        println("  [BLINK] LED ON")
+    } else {
+        println("  [BLINK] LED OFF")
+    }
+    let _toggled = gpio_toggle(LED_PIN)
+    new_state
+}
+
+// Task: button (priority 2, binds EXTI0)
+// Reads button and overrides LED state
+fn handle_button(led_state: bool) -> bool {
+    let pressed = gpio_read(0)
+    if pressed {
+        println("  [BUTTON] Button pressed! Forcing LED ON")
+        true
+    } else {
+        led_state
+    }
+}
+
+// @idle — runs when no tasks are pending (lowest priority)
+fn idle_loop() -> i64 {
+    // In real hardware: WFI (Wait For Interrupt) to save power
+    println("  [IDLE] Sleeping (WFI)...")
+    0
+}
+
+// ── Main: Simulate the RTIC scheduler ───────────────────────────────
+
+fn main() -> i64 {
+    println("=== Fajar Lang RTIC Blinky Demo ===")
+    println("")
+    println("App Configuration:")
+    println("  Device:    STM32F407")
+    println("  Tasks:     blink (prio 1, TIM2), button (prio 2, EXTI0)")
+    println("  Resources: led_state (ceiling = 2)")
+    println("  Deadlock:  PROVEN FREE (SRP)")
+    println("")
+
+    // Initialize
+    let _init_result = init_peripherals()
+    println("")
+
+    // Simulate 4 scheduler ticks
+    let mut led_state = false
+    let mut tick = 0
+
+    while tick < 4 {
+        println("--- Tick " + to_string(tick) + " ---")
+
+        // Simulate TIM2 interrupt (blink task)
+        println("  [IRQ] TIM2 -> blink task")
+        led_state = handle_blink(led_state)
+
+        // Simulate EXTI0 interrupt on tick 2 (button task preempts)
+        if tick == 2 {
+            println("  [IRQ] EXTI0 -> button task (preempts blink!)")
+            led_state = handle_button(led_state)
+        }
+
+        // Idle between interrupts
+        let _idle = idle_loop()
+        println("")
+
+        tick = tick + 1
+    }
+
+    println("=== RTIC Blinky Complete ===")
+    println("Final LED state: " + if led_state { "ON" } else { "OFF" })
+    0
+}

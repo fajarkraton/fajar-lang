@@ -17,6 +17,7 @@
 
 pub mod analysis;
 pub mod nostd;
+pub mod pgo;
 
 #[cfg(feature = "native")]
 pub mod abi;

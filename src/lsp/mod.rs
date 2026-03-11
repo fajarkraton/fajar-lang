@@ -6,6 +6,7 @@
 //! - Go-to-definition
 //! - Completions (keywords, builtins, variables)
 
+pub mod completion;
 mod server;
 
 pub use server::run_lsp;

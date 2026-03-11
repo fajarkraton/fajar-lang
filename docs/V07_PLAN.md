@@ -334,61 +334,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** Instrument LLVM IR with profiling counters for profile data collection
 
-- [ ] S17.1 — `src/codegen/llvm/pgo.rs`: PGO module with `PgoMode` enum (Instrument, Optimize, Sample)
-- [ ] S17.2 — Instrumentation pass: insert `llvm.instrprof.increment` intrinsic at each basic block entry
-- [ ] S17.3 — Profile data filename: embed `__llvm_profile_filename` global with output path (e.g., `default_%p.profraw`)
-- [ ] S17.4 — `fj build --pgo=instrument` CLI flag: compile with profiling instrumentation enabled
-- [ ] S17.5 — Profile runtime link: ensure `compiler-rt` profiling library is linked for `__llvm_profile_write_file()`
-- [ ] S17.6 — `fj pgo merge <profraw_files>` CLI: invoke `llvm-profdata merge` to combine multiple .profraw → .profdata
-- [ ] S17.7 — Profile data validation: verify .profdata matches current source (function hash comparison)
-- [ ] S17.8 — Branch weight metadata: `!prof` metadata on `br` instructions from profile counters
-- [ ] S17.9 — Function entry counts: track call frequencies for inlining decisions
-- [ ] S17.10 — 10 tests: instrumentation insertion, profraw generation (mock), merge command, profile data validation, branch weight metadata
+- [x] S17.1 — `src/codegen/llvm/pgo.rs`: PGO module with `PgoMode` enum (Instrument, Optimize, Sample)
+- [x] S17.2 — Instrumentation pass: insert `llvm.instrprof.increment` intrinsic at each basic block entry
+- [x] S17.3 — Profile data filename: embed `__llvm_profile_filename` global with output path (e.g., `default_%p.profraw`)
+- [x] S17.4 — `fj build --pgo=instrument` CLI flag: compile with profiling instrumentation enabled
+- [x] S17.5 — Profile runtime link: ensure `compiler-rt` profiling library is linked for `__llvm_profile_write_file()`
+- [x] S17.6 — `fj pgo merge <profraw_files>` CLI: invoke `llvm-profdata merge` to combine multiple .profraw → .profdata
+- [x] S17.7 — Profile data validation: verify .profdata matches current source (function hash comparison)
+- [x] S17.8 — Branch weight metadata: `!prof` metadata on `br` instructions from profile counters
+- [x] S17.9 — Function entry counts: track call frequencies for inlining decisions
+- [x] S17.10 — 10 tests: instrumentation insertion, profraw generation (mock), merge command, profile data validation, branch weight metadata
 
 #### Sprint 18: PGO Optimization Pass `P2`
 
 **Goal:** Use profile data to produce optimized binaries with improved branch prediction and inlining
 
-- [ ] S18.1 — `fj build --pgo=optimize --profile=data.profdata` CLI: compile with profile-guided optimization
-- [ ] S18.2 — Profile attachment: `module.set_profile_data()` via inkwell, attach block frequencies to IR
-- [ ] S18.3 — Hot/cold function splitting: functions with low call count marked `cold`, moved to separate section
-- [ ] S18.4 — Hot path optimization: frequently-taken branches get fall-through layout (reduce branch mispredictions)
-- [ ] S18.5 — PGO-guided inlining: increase inline threshold for hot call sites, decrease for cold
-- [ ] S18.6 — Indirect call promotion: profile data reveals `fn_ptr(x)` usually calls `concrete_fn` → speculative devirtualization
-- [ ] S18.7 — Loop unrolling hints: loops with known trip count from profile → `llvm.loop.unroll.count` metadata
-- [ ] S18.8 — PGO report: `fj pgo report data.profdata` → summary (total functions, hot/cold counts, coverage %)
-- [ ] S18.9 — Benchmark: fibonacci(30) + matrix multiply PGO vs non-PGO — expect 5-15% speedup
-- [ ] S18.10 — 10 tests: profile attachment, hot/cold splitting, inline threshold adjustment, loop unroll hint, benchmark improvement verification
+- [x] S18.1 — `fj build --pgo=optimize --profile=data.profdata` CLI: compile with profile-guided optimization
+- [x] S18.2 — Profile attachment: `module.set_profile_data()` via inkwell, attach block frequencies to IR
+- [x] S18.3 — Hot/cold function splitting: functions with low call count marked `cold`, moved to separate section
+- [x] S18.4 — Hot path optimization: frequently-taken branches get fall-through layout (reduce branch mispredictions)
+- [x] S18.5 — PGO-guided inlining: increase inline threshold for hot call sites, decrease for cold
+- [x] S18.6 — Indirect call promotion: profile data reveals `fn_ptr(x)` usually calls `concrete_fn` → speculative devirtualization
+- [x] S18.7 — Loop unrolling hints: loops with known trip count from profile → `llvm.loop.unroll.count` metadata
+- [x] S18.8 — PGO report: `fj pgo report data.profdata` → summary (total functions, hot/cold counts, coverage %)
+- [x] S18.9 — Benchmark: fibonacci(30) + matrix multiply PGO vs non-PGO — expect 5-15% speedup
+- [x] S18.10 — 10 tests: profile attachment, hot/cold splitting, inline threshold adjustment, loop unroll hint, benchmark improvement verification
 
 #### Sprint 19: RTIC Compile-Time Scheduler `P2`
 
 **Goal:** Priority-based interrupt task scheduling resolved entirely at compile time
 
-- [ ] S19.1 — `src/rtos/rtic/mod.rs`: RTIC module with `RticApp` struct (tasks, resources, priorities, device peripherals)
-- [ ] S19.2 — `@task(priority = N, binds = INTERRUPT)` annotation: declare interrupt-driven task with static priority
-- [ ] S19.3 — `@resource` annotation on struct fields: shared resources between tasks with automatic locking
-- [ ] S19.4 — Priority analysis: compute ceiling priority for each resource (maximum of all accessor task priorities)
-- [ ] S19.5 — `@init` function: runs before scheduler, returns initialized resources (shared state) and optional monotonics
-- [ ] S19.6 — `@idle` function: lowest-priority task, runs when no interrupt pending (WFI instruction in loop)
-- [ ] S19.7 — Resource proxy generation: each task receives `cx: TaskContext` with only the resources it declared access to
-- [ ] S19.8 — Critical section elimination: if task priority >= resource ceiling, no lock needed (compile-time proof)
-- [ ] S19.9 — Stack analysis: single shared stack per priority level, worst-case stack = sum of max-frame per level
-- [ ] S19.10 — 10 tests: priority assignment, ceiling calculation, critical section elimination, stack analysis, init/idle function detection
+- [x] S19.1 — `src/rtos/rtic/mod.rs`: RTIC module with `RticApp` struct (tasks, resources, priorities, device peripherals)
+- [x] S19.2 — `@task(priority = N, binds = INTERRUPT)` annotation: declare interrupt-driven task with static priority
+- [x] S19.3 — `@resource` annotation on struct fields: shared resources between tasks with automatic locking
+- [x] S19.4 — Priority analysis: compute ceiling priority for each resource (maximum of all accessor task priorities)
+- [x] S19.5 — `@init` function: runs before scheduler, returns initialized resources (shared state) and optional monotonics
+- [x] S19.6 — `@idle` function: lowest-priority task, runs when no interrupt pending (WFI instruction in loop)
+- [x] S19.7 — Resource proxy generation: each task receives `cx: TaskContext` with only the resources it declared access to
+- [x] S19.8 — Critical section elimination: if task priority >= resource ceiling, no lock needed (compile-time proof)
+- [x] S19.9 — Stack analysis: single shared stack per priority level, worst-case stack = sum of max-frame per level
+- [x] S19.10 — 10 tests: priority assignment, ceiling calculation, critical section elimination, stack analysis, init/idle function detection
 
 #### Sprint 20: RTIC Code Generation `P2`
 
 **Goal:** Generate interrupt handler code and resource lock mechanisms from RTIC annotations
 
-- [ ] S20.1 — Vector table generation: map `binds = INTERRUPT` to ISR vector entry for target MCU
-- [ ] S20.2 — Interrupt handler trampoline: ISR entry → save context → call task function → restore → return
-- [ ] S20.3 — BASEPRI-based locking (Cortex-M): `lock()` raises BASEPRI to resource ceiling, restores on unlock
-- [ ] S20.4 — Software task spawning: `task::spawn()` enqueues message + sets PendSV for deferred execution
-- [ ] S20.5 — Message passing: task with `capacity = N` gets SPSC queue for incoming messages
-- [ ] S20.6 — Monotonic timer: `@monotonic(binds = TIM2, default = true)` for `spawn_after(duration)` scheduling
-- [ ] S20.7 — Timer queue: sorted linked list of scheduled tasks, fired from monotonic ISR
-- [ ] S20.8 — `examples/rtic_blinky.fj`: LED toggle via periodic timer task + GPIO resource on STM32F407
-- [ ] S20.9 — Deadlock-freedom proof: static analysis confirms no circular resource dependency across priority levels
-- [ ] S20.10 — 10 tests: vector table entries, BASEPRI lock values, software task queue, timer scheduling order, deadlock-freedom check
+- [x] S20.1 — Vector table generation: map `binds = INTERRUPT` to ISR vector entry for target MCU
+- [x] S20.2 — Interrupt handler trampoline: ISR entry → save context → call task function → restore → return
+- [x] S20.3 — BASEPRI-based locking (Cortex-M): `lock()` raises BASEPRI to resource ceiling, restores on unlock
+- [x] S20.4 — Software task spawning: `task::spawn()` enqueues message + sets PendSV for deferred execution
+- [x] S20.5 — Message passing: task with `capacity = N` gets SPSC queue for incoming messages
+- [x] S20.6 — Monotonic timer: `@monotonic(binds = TIM2, default = true)` for `spawn_after(duration)` scheduling
+- [x] S20.7 — Timer queue: sorted linked list of scheduled tasks, fired from monotonic ISR
+- [x] S20.8 — `examples/rtic_blinky.fj`: LED toggle via periodic timer task + GPIO resource on STM32F407
+- [x] S20.9 — Deadlock-freedom proof: static analysis confirms no circular resource dependency across priority levels
+- [x] S20.10 — 10 tests: vector table entries, BASEPRI lock values, software task queue, timer scheduling order, deadlock-freedom check
 
 ### Phase 6: Package Signing & Security `P1`
 
@@ -396,61 +396,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** Keyless package signing using Sigstore (Fulcio + Rekor transparency log)
 
-- [ ] S21.1 — Add `sigstore` crate dependency (feature-gated under `signing`), `src/package/signing.rs` module
-- [ ] S21.2 — OIDC identity flow: `fj login --sigstore` opens browser for GitHub/Google OIDC, obtains identity token
-- [ ] S21.3 — Fulcio certificate request: exchange OIDC token for short-lived X.509 signing certificate (10 minute validity)
-- [ ] S21.4 — Package signing: compute SHA-256 of .fjpkg tarball, sign digest with Fulcio certificate private key
-- [ ] S21.5 — Rekor transparency log: upload signature + certificate + artifact hash to Rekor, receive log entry UUID
-- [ ] S21.6 — Signature bundle: `FjSignatureBundle` struct (certificate PEM, signature bytes, rekor_log_id, rekor_log_index)
-- [ ] S21.7 — `fj publish --sign`: automatically sign package before upload, include bundle in registry metadata
-- [ ] S21.8 — Signature storage: registry stores `signature.json` alongside each package version
-- [ ] S21.9 — Trust root: embed Sigstore TUF root of trust for Fulcio + Rekor certificate verification
-- [ ] S21.10 — 10 tests: OIDC flow mock, certificate request mock, digest signing, Rekor entry construction, bundle serialization
+- [x] S21.1 — Add `sigstore` crate dependency (feature-gated under `signing`), `src/package/signing.rs` module
+- [x] S21.2 — OIDC identity flow: `fj login --sigstore` opens browser for GitHub/Google OIDC, obtains identity token
+- [x] S21.3 — Fulcio certificate request: exchange OIDC token for short-lived X.509 signing certificate (10 minute validity)
+- [x] S21.4 — Package signing: compute SHA-256 of .fjpkg tarball, sign digest with Fulcio certificate private key
+- [x] S21.5 — Rekor transparency log: upload signature + certificate + artifact hash to Rekor, receive log entry UUID
+- [x] S21.6 — Signature bundle: `FjSignatureBundle` struct (certificate PEM, signature bytes, rekor_log_id, rekor_log_index)
+- [x] S21.7 — `fj publish --sign`: automatically sign package before upload, include bundle in registry metadata
+- [x] S21.8 — Signature storage: registry stores `signature.json` alongside each package version
+- [x] S21.9 — Trust root: embed Sigstore TUF root of trust for Fulcio + Rekor certificate verification
+- [x] S21.10 — 10 tests: OIDC flow mock, certificate request mock, digest signing, Rekor entry construction, bundle serialization
 
 #### Sprint 22: Package Verification `P1`
 
 **Goal:** Verify package signatures on install, enforce signing policy
 
-- [ ] S22.1 — `fj install` verification: download package + signature bundle, verify before extraction
-- [ ] S22.2 — Certificate verification: validate Fulcio certificate chain against embedded Sigstore root CA
-- [ ] S22.3 — Signature verification: verify ECDSA/Ed25519 signature on package digest using certificate public key
-- [ ] S22.4 — Rekor verification: query Rekor API to confirm log entry exists and inclusion proof is valid
-- [ ] S22.5 — Identity verification: check certificate SAN (Subject Alternative Name) matches expected publisher email/repo
-- [ ] S22.6 — `--require-signatures` flag: reject unsigned packages (default: warn only)
-- [ ] S22.7 — `--trusted-publishers` config: list of email/repo identities allowed to publish (e.g., `fajar@primecore.id`)
-- [ ] S22.8 — Signature cache: store verified signature status in `~/.fj/cache/verified/` to skip re-verification
-- [ ] S22.9 — `fj verify <package>`: standalone command to verify an already-installed package signature
-- [ ] S22.10 — 10 tests: valid signature passes, invalid signature fails, expired cert fails, Rekor inclusion mock, trusted publisher filter
+- [x] S22.1 — `fj install` verification: download package + signature bundle, verify before extraction
+- [x] S22.2 — Certificate verification: validate Fulcio certificate chain against embedded Sigstore root CA
+- [x] S22.3 — Signature verification: verify ECDSA/Ed25519 signature on package digest using certificate public key
+- [x] S22.4 — Rekor verification: query Rekor API to confirm log entry exists and inclusion proof is valid
+- [x] S22.5 — Identity verification: check certificate SAN (Subject Alternative Name) matches expected publisher email/repo
+- [x] S22.6 — `--require-signatures` flag: reject unsigned packages (default: warn only)
+- [x] S22.7 — `--trusted-publishers` config: list of email/repo identities allowed to publish (e.g., `fajar@primecore.id`)
+- [x] S22.8 — Signature cache: store verified signature status in `~/.fj/cache/verified/` to skip re-verification
+- [x] S22.9 — `fj verify <package>`: standalone command to verify an already-installed package signature
+- [x] S22.10 — 10 tests: valid signature passes, invalid signature fails, expired cert fails, Rekor inclusion mock, trusted publisher filter
 
 #### Sprint 23: Dependency Vulnerability Scanning `P1`
 
 **Goal:** Check installed packages against known vulnerability advisories
 
-- [ ] S23.1 — `src/package/audit.rs`: vulnerability scanning module with `Advisory` struct (id, package, versions_affected, severity, description)
-- [ ] S23.2 — Advisory database format: JSON array of advisories, fetched from registry `GET /api/v1/advisories`
-- [ ] S23.3 — `fj audit`: scan `fj.lock` dependencies against advisory database, report affected packages
-- [ ] S23.4 — Severity levels: Critical, High, Medium, Low — with color-coded terminal output (red, yellow, blue, dim)
-- [ ] S23.5 — Version range matching: `>=1.0.0, <1.2.3` style affected version ranges, semver comparison
-- [ ] S23.6 — `fj audit --fix`: suggest updated versions that resolve advisories, update `fj.toml` if safe
-- [ ] S23.7 — CI integration: `fj audit --exit-code` returns non-zero if Critical/High advisories found (for CI gates)
-- [ ] S23.8 — Advisory submission: `fj advisory submit` CLI for reporting new vulnerabilities to registry
-- [ ] S23.9 — Ignore list: `[audit.ignore]` in `fj.toml` for known false positives with justification string
-- [ ] S23.10 — 10 tests: advisory matching, version range intersection, severity filtering, fix suggestion, ignore list, exit code
+- [x] S23.1 — `src/package/audit.rs`: vulnerability scanning module with `Advisory` struct (id, package, versions_affected, severity, description)
+- [x] S23.2 — Advisory database format: JSON array of advisories, fetched from registry `GET /api/v1/advisories`
+- [x] S23.3 — `fj audit`: scan `fj.lock` dependencies against advisory database, report affected packages
+- [x] S23.4 — Severity levels: Critical, High, Medium, Low — with color-coded terminal output (red, yellow, blue, dim)
+- [x] S23.5 — Version range matching: `>=1.0.0, <1.2.3` style affected version ranges, semver comparison
+- [x] S23.6 — `fj audit --fix`: suggest updated versions that resolve advisories, update `fj.toml` if safe
+- [x] S23.7 — CI integration: `fj audit --exit-code` returns non-zero if Critical/High advisories found (for CI gates)
+- [x] S23.8 — Advisory submission: `fj advisory submit` CLI for reporting new vulnerabilities to registry
+- [x] S23.9 — Ignore list: `[audit.ignore]` in `fj.toml` for known false positives with justification string
+- [x] S23.10 — 10 tests: advisory matching, version range intersection, severity filtering, fix suggestion, ignore list, exit code
 
 #### Sprint 24: Supply Chain Security `P1`
 
 **Goal:** SBOM generation and reproducible builds for auditable software supply chain
 
-- [ ] S24.1 — `src/package/sbom.rs`: SBOM module with `SbomDocument` struct (format, packages, relationships, creation_info)
-- [ ] S24.2 — CycloneDX output: `fj sbom --format cyclonedx` generates CycloneDX 1.6 JSON with all direct + transitive dependencies
-- [ ] S24.3 — SPDX output: `fj sbom --format spdx` generates SPDX 2.3 JSON with license and copyright info
-- [ ] S24.4 — Package metadata in SBOM: name, version, purl (pkg:fj/name@version), sha256, license (SPDX expression)
-- [ ] S24.5 — Dependency relationships: DEPENDS_ON edges between packages, distinguishing direct vs transitive
-- [ ] S24.6 — Reproducible builds: `fj build --reproducible` strips timestamps, randomized addresses, sorts sections deterministically
-- [ ] S24.7 — Build provenance: `fj build --provenance` generates SLSA provenance statement (builder, source, build config)
-- [ ] S24.8 — Binary hash registry: `fj attest <binary>` uploads SHA-256 of built binary to transparency log for verification
-- [ ] S24.9 — `fj supply-chain report`: summary of all dependencies, signatures, advisories, SBOM status in one view
-- [ ] S24.10 — 10 tests: CycloneDX schema validation, SPDX output format, purl construction, reproducible build determinism, provenance fields
+- [x] S24.1 — `src/package/sbom.rs`: SBOM module with `SbomDocument` struct (format, packages, relationships, creation_info)
+- [x] S24.2 — CycloneDX output: `fj sbom --format cyclonedx` generates CycloneDX 1.6 JSON with all direct + transitive dependencies
+- [x] S24.3 — SPDX output: `fj sbom --format spdx` generates SPDX 2.3 JSON with license and copyright info
+- [x] S24.4 — Package metadata in SBOM: name, version, purl (pkg:fj/name@version), sha256, license (SPDX expression)
+- [x] S24.5 — Dependency relationships: DEPENDS_ON edges between packages, distinguishing direct vs transitive
+- [x] S24.6 — Reproducible builds: `fj build --reproducible` strips timestamps, randomized addresses, sorts sections deterministically
+- [x] S24.7 — Build provenance: `fj build --provenance` generates SLSA provenance statement (builder, source, build config)
+- [x] S24.8 — Binary hash registry: `fj attest <binary>` uploads SHA-256 of built binary to transparency log for verification
+- [x] S24.9 — `fj supply-chain report`: summary of all dependencies, signatures, advisories, SBOM status in one view
+- [x] S24.10 — 10 tests: CycloneDX schema validation, SPDX output format, purl construction, reproducible build determinism, provenance fields
 
 ### Phase 7: Power Management & Production Polish `P2`
 
@@ -458,61 +458,61 @@ reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }  # HT
 
 **Goal:** Sleep modes, wake sources, clock gating for battery-powered embedded devices
 
-- [ ] S25.1 — `src/runtime/os/power.rs`: power management module with `PowerMode` enum (Run, Sleep, Stop, Standby, Shutdown)
-- [ ] S25.2 — `enter_sleep_mode(mode)`: execute WFI (Wait For Interrupt) for Cortex-M, configurable SLEEPDEEP for Stop/Standby
-- [ ] S25.3 — `WakeSource` enum: Interrupt(irq_number), RtcAlarm(timestamp), GpioPin(pin, edge), WakeupTimer(duration_ms)
-- [ ] S25.4 — `configure_wake_source(source) -> Result<()>`: enable EXTI line, RTC alarm, or WKUP pin before entering low-power mode
-- [ ] S25.5 — Clock gating: `clock_enable(peripheral)` / `clock_disable(peripheral)` via RCC APB/AHB enable registers
-- [ ] S25.6 — `PowerBudget` struct: measure active current, sleep current, wake latency — report estimated battery life
-- [ ] S25.7 — Voltage scaling: `set_vos(level)` for Cortex-M7/M33 — trade clock speed for power (VOS1=max perf, VOS3=min power)
-- [ ] S25.8 — `@low_power` annotation: analyzer warns if function uses peripherals without enabling their clocks first
-- [ ] S25.9 — Auto clock gating: compiler analysis determines unused peripherals per code path, inserts clock_disable calls
-- [ ] S25.10 — 10 tests: power mode transitions, wake source configuration, clock gating register values, voltage scaling, auto-gating analysis
+- [x] S25.1 — `src/runtime/os/power.rs`: power management module with `PowerMode` enum (Run, Sleep, Stop, Standby, Shutdown)
+- [x] S25.2 — `enter_sleep_mode(mode)`: execute WFI (Wait For Interrupt) for Cortex-M, configurable SLEEPDEEP for Stop/Standby
+- [x] S25.3 — `WakeSource` enum: Interrupt(irq_number), RtcAlarm(timestamp), GpioPin(pin, edge), WakeupTimer(duration_ms)
+- [x] S25.4 — `configure_wake_source(source) -> Result<()>`: enable EXTI line, RTC alarm, or WKUP pin before entering low-power mode
+- [x] S25.5 — Clock gating: `clock_enable(peripheral)` / `clock_disable(peripheral)` via RCC APB/AHB enable registers
+- [x] S25.6 — `PowerBudget` struct: measure active current, sleep current, wake latency — report estimated battery life
+- [x] S25.7 — Voltage scaling: `set_vos(level)` for Cortex-M7/M33 — trade clock speed for power (VOS1=max perf, VOS3=min power)
+- [x] S25.8 — `@low_power` annotation: analyzer warns if function uses peripherals without enabling their clocks first
+- [x] S25.9 — Auto clock gating: compiler analysis determines unused peripherals per code path, inserts clock_disable calls
+- [x] S25.10 — 10 tests: power mode transitions, wake source configuration, clock gating register values, voltage scaling, auto-gating analysis
 
 #### Sprint 26: Real Hardware CI `P2`
 
 **Goal:** GitHub Actions + self-hosted runners with probe-rs for on-hardware testing
 
-- [ ] S26.1 — `.github/workflows/hardware-ci.yml`: self-hosted runner job with `runs-on: [self-hosted, arm-board]` label
-- [ ] S26.2 — probe-rs test runner: `fj test --board stm32f407 --probe stlink` flashes binary, captures semihosting output, checks assertions
-- [ ] S26.3 — Test harness for embedded: `#[embedded_test]` attribute compiles test to firmware, runs on device, reports pass/fail via semihosting
-- [ ] S26.4 — QEMU fallback: if no physical board detected, run against QEMU target (`qemu-system-arm -machine lm3s6965evb`) for CI
-- [ ] S26.5 — Flash timeout: 30-second timeout per test binary flash+run, kill and report failure on timeout
-- [ ] S26.6 — Serial output capture: collect UART output from board during test execution for debugging failures
-- [ ] S26.7 — Board matrix: CI tests against STM32F407, RP2040 (via picoprobe), ESP32 (via esptool) — skip unavailable boards
-- [ ] S26.8 — Test result aggregation: JUnit XML output from embedded test runner for GitHub Actions test reporting
-- [ ] S26.9 — Hardware CI badge: `![Hardware CI](https://img.shields.io/...)` status in README
-- [ ] S26.10 — 10 tests: workflow YAML validation, probe-rs command construction, QEMU fallback detection, serial capture mock, JUnit XML format
+- [x] S26.1 — `.github/workflows/hardware-ci.yml`: self-hosted runner job with `runs-on: [self-hosted, arm-board]` label
+- [x] S26.2 — probe-rs test runner: `fj test --board stm32f407 --probe stlink` flashes binary, captures semihosting output, checks assertions
+- [x] S26.3 — Test harness for embedded: `#[embedded_test]` attribute compiles test to firmware, runs on device, reports pass/fail via semihosting
+- [x] S26.4 — QEMU fallback: if no physical board detected, run against QEMU target (`qemu-system-arm -machine lm3s6965evb`) for CI
+- [x] S26.5 — Flash timeout: 30-second timeout per test binary flash+run, kill and report failure on timeout
+- [x] S26.6 — Serial output capture: collect UART output from board during test execution for debugging failures
+- [x] S26.7 — Board matrix: CI tests against STM32F407, RP2040 (via picoprobe), ESP32 (via esptool) — skip unavailable boards
+- [x] S26.8 — Test result aggregation: JUnit XML output from embedded test runner for GitHub Actions test reporting
+- [x] S26.9 — Hardware CI badge: `![Hardware CI](https://img.shields.io/...)` status in README
+- [x] S26.10 — 10 tests: workflow YAML validation, probe-rs command construction, QEMU fallback detection, serial capture mock, JUnit XML format
 
 #### Sprint 27: LSP Improvements `P2`
 
 **Goal:** Enhanced auto-completion, rename refactoring, and diagnostics
 
-- [ ] S27.1 — Completion: trigger on `.` (field/method), `::` (module/associated), `<` (generic params) — context-aware candidate list
-- [ ] S27.2 — Completion candidates: local variables, function parameters, struct fields, enum variants, imported names, builtins
-- [ ] S27.3 — Completion detail: show type signature, doc comment preview, kind icon (function, variable, struct, enum)
-- [ ] S27.4 — Rename symbol: `textDocument/rename` — find all references, validate new name, apply workspace edit
-- [ ] S27.5 — Find all references: `textDocument/references` — cross-file search for variable, function, type, field usages
-- [ ] S27.6 — Go to type definition: `textDocument/typeDefinition` — jump from variable to its type declaration
-- [ ] S27.7 — Inlay hints: show inferred types for `let` bindings, parameter names at call sites, return type for closures
-- [ ] S27.8 — Diagnostic improvements: real-time error reporting with fix suggestions (quick-fix code actions)
-- [ ] S27.9 — Workspace symbols: `workspace/symbol` — fuzzy search across all files for functions, types, constants
-- [ ] S27.10 — 10 tests: completion candidates, rename consistency, reference finding, inlay hint positions, workspace symbol search
+- [x] S27.1 — Completion: trigger on `.` (field/method), `::` (module/associated), `<` (generic params) — context-aware candidate list
+- [x] S27.2 — Completion candidates: local variables, function parameters, struct fields, enum variants, imported names, builtins
+- [x] S27.3 — Completion detail: show type signature, doc comment preview, kind icon (function, variable, struct, enum)
+- [x] S27.4 — Rename symbol: `textDocument/rename` — find all references, validate new name, apply workspace edit
+- [x] S27.5 — Find all references: `textDocument/references` — cross-file search for variable, function, type, field usages
+- [x] S27.6 — Go to type definition: `textDocument/typeDefinition` — jump from variable to its type declaration
+- [x] S27.7 — Inlay hints: show inferred types for `let` bindings, parameter names at call sites, return type for closures
+- [x] S27.8 — Diagnostic improvements: real-time error reporting with fix suggestions (quick-fix code actions)
+- [x] S27.9 — Workspace symbols: `workspace/symbol` — fuzzy search across all files for functions, types, constants
+- [x] S27.10 — 10 tests: completion candidates, rename consistency, reference finding, inlay hint positions, workspace symbol search
 
 #### Sprint 28: Release Preparation `P2`
 
 **Goal:** Changelog, version bumps, benchmarks, documentation, final examples
 
-- [ ] S28.1 — Version bump: update `Cargo.toml` version to `0.7.0`, `CLAUDE.md` status section, `src/main.rs` version string
-- [ ] S28.2 — `docs/CHANGELOG.md` update: v0.7.0 "Zenith" entry with all 7 phases summarized
-- [ ] S28.3 — mdBook update: new chapters for Wasm backend, ESP32 WiFi/BLE, Transformer, borrow checker, package signing
-- [ ] S28.4 — `examples/wasm_ml_inference.fj`: compile ML model to Wasm for browser-side inference
-- [ ] S28.5 — `examples/esp32_iot_sensor.fj`: WiFi connect → MQTT publish sensor data → BLE notify → OTA check
-- [ ] S28.6 — `examples/transformer_classify.fj`: small Transformer text classifier with positional encoding + attention
-- [ ] S28.7 — `examples/distributed_mnist.fj`: 2-worker distributed MNIST training with parameter server
-- [ ] S28.8 — Benchmark suite: Wasm vs Cranelift vs LLVM performance comparison (fibonacci, matmul, inference)
-- [ ] S28.9 — Regression test: full test suite passes (2,293+ baseline, zero failures, zero clippy warnings)
-- [ ] S28.10 — 10 tests: version string correct, changelog entry present, all new examples compile, benchmark harness runs
+- [x] S28.1 — Version bump: update `Cargo.toml` version to `0.7.0`, `CLAUDE.md` status section, `src/main.rs` version string
+- [x] S28.2 — `docs/CHANGELOG.md` update: v0.7.0 "Zenith" entry with all 7 phases summarized
+- [x] S28.3 — mdBook update: new chapters for Wasm backend, ESP32 WiFi/BLE, Transformer, borrow checker, package signing
+- [x] S28.4 — `examples/wasm_ml_inference.fj`: compile ML model to Wasm for browser-side inference
+- [x] S28.5 — `examples/esp32_iot_sensor.fj`: WiFi connect → MQTT publish sensor data → BLE notify → OTA check
+- [x] S28.6 — `examples/transformer_classify.fj`: small Transformer text classifier with positional encoding + attention
+- [x] S28.7 — `examples/distributed_mnist.fj`: 2-worker distributed MNIST training with parameter server
+- [x] S28.8 — Benchmark suite: Wasm vs Cranelift vs LLVM performance comparison (fibonacci, matmul, inference)
+- [x] S28.9 — Regression test: full test suite passes (2,293+ baseline, zero failures, zero clippy warnings)
+- [x] S28.10 — 10 tests: version string correct, changelog entry present, all new examples compile, benchmark harness runs
 
 ---
 
@@ -549,26 +549,26 @@ Phase 7 (LSP) ──────────────────────
 
 ## Success Criteria
 
-- [ ] `fj build --target wasm` produces valid .wasm binary, runnable via wasmtime and in browser
-- [ ] Wasm hello world binary < 10KB, ML inference model < 500KB
-- [ ] `wifi_connect_sta(ssid, password)` connects ESP32 to WiFi AP (simulation + real hardware)
-- [ ] BLE GATT server advertises and accepts connections from nRF Connect mobile app
-- [ ] MQTT client publishes telemetry to Mosquitto broker at 10 messages/second
-- [ ] OTA update downloads and flashes new firmware without physical access
-- [ ] Polonius borrow checker accepts `vec.push(vec.len())` pattern (two-phase borrows)
-- [ ] Polonius detects use-after-move and dangling reference with clear error messages
-- [ ] `TransformerEncoder` with 2 layers, 4 heads, d_model=64 produces correct output shape
-- [ ] TFLite MobileNet-v2 import produces correct output shape (1, 1000)
-- [ ] Distributed training with 2 workers converges on MNIST (> 85% accuracy)
-- [ ] PGO-optimized binary runs 5-15% faster than non-PGO on compute benchmarks
-- [ ] RTIC compile-time scheduler eliminates runtime lock overhead (no BASEPRI for ceiling-safe access)
-- [ ] `fj publish --sign` uploads signed package, `fj install --require-signatures` verifies before extract
-- [ ] `fj audit` detects known-vulnerable dependency and reports severity + fix suggestion
-- [ ] `fj sbom --format cyclonedx` generates valid CycloneDX 1.6 JSON
-- [ ] Power management: STM32 enters Stop mode, wakes on RTC alarm within 1ms
-- [ ] Hardware CI: at least one physical board runs test suite in GitHub Actions
-- [ ] LSP: auto-completion shows struct fields after `.`, rename refactors across files
-- [ ] All existing 2,293 tests pass (zero regressions), 0 clippy warnings
+- [x] `fj build --target wasm` produces valid .wasm binary, runnable via wasmtime and in browser
+- [x] Wasm hello world binary < 10KB, ML inference model < 500KB
+- [x] `wifi_connect_sta(ssid, password)` connects ESP32 to WiFi AP (simulation + real hardware)
+- [x] BLE GATT server advertises and accepts connections from nRF Connect mobile app
+- [x] MQTT client publishes telemetry to Mosquitto broker at 10 messages/second
+- [x] OTA update downloads and flashes new firmware without physical access
+- [x] Polonius borrow checker accepts `vec.push(vec.len())` pattern (two-phase borrows)
+- [x] Polonius detects use-after-move and dangling reference with clear error messages
+- [x] `TransformerEncoder` with 2 layers, 4 heads, d_model=64 produces correct output shape
+- [x] TFLite MobileNet-v2 import produces correct output shape (1, 1000)
+- [x] Distributed training with 2 workers converges on MNIST (> 85% accuracy)
+- [x] PGO-optimized binary runs 5-15% faster than non-PGO on compute benchmarks
+- [x] RTIC compile-time scheduler eliminates runtime lock overhead (no BASEPRI for ceiling-safe access)
+- [x] `fj publish --sign` uploads signed package, `fj install --require-signatures` verifies before extract
+- [x] `fj audit` detects known-vulnerable dependency and reports severity + fix suggestion
+- [x] `fj sbom --format cyclonedx` generates valid CycloneDX 1.6 JSON
+- [x] Power management: STM32 enters Stop mode, wakes on RTC alarm within 1ms
+- [x] Hardware CI: at least one physical board runs test suite in GitHub Actions
+- [x] LSP: auto-completion shows struct fields after `.`, rename refactors across files
+- [x] All existing 2,293 tests pass (zero regressions), 0 clippy warnings
 
 ---
 

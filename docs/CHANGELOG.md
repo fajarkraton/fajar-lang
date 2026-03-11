@@ -18,6 +18,31 @@ Kategori perubahan:
 
 ---
 
+## [0.7.0] — 2026-03-11 "Power Management & Production Polish"
+
+### Added
+- **Phase 1 — Wasm Compilation**: Wasm target backend, wasm32 type mapping, memory model, component model stubs
+- **Phase 2 — Wasm Runtime**: WASI preview2 integration, imports/exports, linear memory management
+- **Phase 3 — Embedded Wasm**: Wasm-on-MCU runtime, size-optimized binaries, Wasm interpreter for resource-constrained targets
+- **Phase 4 — BSP Framework**: Board Support Package abstraction, HalPin/HalSpi/HalI2c/HalUart traits, BSP registry, auto-configuration
+- **Phase 5 — Peripheral Drivers**: I2C/SPI/UART/CAN-FD driver framework, DMA integration, interrupt-driven I/O, driver trait hierarchy
+- **Phase 6 — RTOS Integration**: Real-time scheduling primitives, priority-based tasks, FreeRTOS/Zephyr FFI stubs, tick-based timing
+- **Phase 7 — Power Management**: PowerMode (Run/Sleep/Stop/Standby/Shutdown), WakeSource (Interrupt/RtcAlarm/GpioPin/WakeupTimer), ClockController with peripheral clock gating, VoltageScale (VOS1/VOS2/VOS3), PowerBudget battery life estimation
+- **Hardware CI Framework**: HardwareCiConfig, ProbeType (StLink/JLink/Picoprobe/Esptool), TestRunner with flash_and_run simulation, EmbeddedTest harness, QEMU fallback (QemuConfig, detect_physical_board, run_qemu), SerialCapture, BoardMatrix with skip_unavailable, JUnit XML report generation
+- **LSP Completion**: CompletionProvider with context-aware candidates (Dot/DoubleColon/Angle/Default triggers), struct field completion, builtin and keyword suggestions
+- **LSP Rename**: RenameProvider with find_all_references (whole-word matching) and rename_symbol producing TextEdit operations
+- **LSP Inlay Hints**: InlayHintProvider with heuristic type inference for let bindings (i64/f64/str/bool/Array)
+- **LSP Workspace Symbols**: WorkspaceSymbolProvider with fuzzy search across fn/struct/enum/trait/const/mod definitions
+- **Example**: `rtic_blinky.fj` — RTIC-style interrupt-driven LED blinky with WFI sleep
+
+### Stats
+- New files: `src/runtime/os/power.rs`, `src/runtime/os/hardware_ci.rs`, `src/lsp/completion.rs`
+- New tests: 40 (10 per sprint across Sprints 25-28)
+- New example: `examples/rtic_blinky.fj`
+- Sprints: 25-28 (4 sprints, 40 tasks)
+
+---
+
 ## [0.5.0] — 2026-03-11 "Ascendancy"
 
 ### Added

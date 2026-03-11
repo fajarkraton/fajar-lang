@@ -33,6 +33,7 @@ pub mod abstractions;
 pub mod arduino_compat;
 pub mod freertos;
 pub mod realtime;
+pub mod rtic;
 pub mod zephyr;
 pub mod zephyr_abstractions;
 

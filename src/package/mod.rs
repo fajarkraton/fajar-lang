@@ -3,10 +3,14 @@
 //! Handles `fj.toml` project manifests, project scaffolding (`fj new`),
 //! and project builds (`fj build`).
 
+pub mod audit;
 pub mod manifest;
 pub mod publish;
 pub mod registry;
 pub mod resolver;
+pub mod sbom;
+pub mod signing;
+pub mod verification;
 
 pub use manifest::{find_project_root, ProjectConfig};
 pub use publish::{publish_to_registry, validate_package};
