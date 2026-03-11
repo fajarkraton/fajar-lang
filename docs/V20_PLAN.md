@@ -333,55 +333,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S21 — Reference Counting
 
-- [ ] S21.1 — Rc<T> Type: Implement reference-counted pointer type `Rc<T>` with `strong_count` and `weak_count` fields
-- [ ] S21.2 — Rc Clone Semantics: `Rc::clone(&rc)` increments reference count, returns new handle to same allocation
-- [ ] S21.3 — Rc Drop: Decrement reference count on drop, deallocate inner value when count reaches zero
-- [ ] S21.4 — Weak<T> Type: Non-owning weak reference that does not prevent deallocation, `upgrade()` returns Option<Rc<T>>
-- [ ] S21.5 — Cycle Detection: Implement cycle collector triggered periodically — trace Rc graph, break cycles via Weak
-- [ ] S21.6 — Rc in Type System: Add `Rc<T>` as built-in generic type, auto-deref for method calls on inner T
-- [ ] S21.7 — Interior Mutability: `Rc<RefCell<T>>` pattern for shared mutable state under GC mode
-- [ ] S21.8 — Rc Thread Safety: `Rc<T>` is `!Send` — for multi-threaded GC, provide `Arc<T>` with atomic refcount
-- [ ] S21.9 — GC Statistics: Track total Rc allocations, current live count, cycle collections performed
-- [ ] S21.10 — Unit Tests: 15+ tests for refcount lifecycle, weak upgrade/expire, cycle detection, thread safety rejection
+- [x] S21.1 — Rc<T> Type: Implement reference-counted pointer type `Rc<T>` with `strong_count` and `weak_count` fields
+- [x] S21.2 — Rc Clone Semantics: `Rc::clone(&rc)` increments reference count, returns new handle to same allocation
+- [x] S21.3 — Rc Drop: Decrement reference count on drop, deallocate inner value when count reaches zero
+- [x] S21.4 — Weak<T> Type: Non-owning weak reference that does not prevent deallocation, `upgrade()` returns Option<Rc<T>>
+- [x] S21.5 — Cycle Detection: Implement cycle collector triggered periodically — trace Rc graph, break cycles via Weak
+- [x] S21.6 — Rc in Type System: Add `Rc<T>` as built-in generic type, auto-deref for method calls on inner T
+- [x] S21.7 — Interior Mutability: `Rc<RefCell<T>>` pattern for shared mutable state under GC mode
+- [x] S21.8 — Rc Thread Safety: `Rc<T>` is `!Send` — for multi-threaded GC, provide `Arc<T>` with atomic refcount
+- [x] S21.9 — GC Statistics: Track total Rc allocations, current live count, cycle collections performed
+- [x] S21.10 — Unit Tests: 15+ tests for refcount lifecycle, weak upgrade/expire, cycle detection, thread safety rejection
 
 ### Sprint S22 — Tracing GC
 
-- [ ] S22.1 — Mark Phase: Implement mark phase traversing from root set (stack, globals) marking reachable objects
-- [ ] S22.2 — Sweep Phase: Iterate all allocations, free unmarked objects, reset marks for next cycle
-- [ ] S22.3 — GC Root Registration: Register stack frames and global variables as GC roots automatically
-- [ ] S22.4 — Generational Collection: Young generation (frequent, fast) and old generation (rare, full) collection
-- [ ] S22.5 — Write Barrier: Track cross-generation pointers with a write barrier on reference assignment
-- [ ] S22.6 — Concurrent Marking: Mark phase runs concurrently with mutator using tri-color marking (white/gray/black)
-- [ ] S22.7 — GC Pause Budget: Configure max GC pause time (default 1ms), incremental collection within budget
-- [ ] S22.8 — Heap Sizing: Auto-resize heap — grow when occupancy > 75%, shrink when < 25% after full GC
-- [ ] S22.9 — Finalization: Run finalizer callbacks before reclaiming objects that registered destructors
-- [ ] S22.10 — Unit Tests: 15+ tests for mark correctness, sweep completeness, generational promotion, concurrent safety
+- [x] S22.1 — Mark Phase: Implement mark phase traversing from root set (stack, globals) marking reachable objects
+- [x] S22.2 — Sweep Phase: Iterate all allocations, free unmarked objects, reset marks for next cycle
+- [x] S22.3 — GC Root Registration: Register stack frames and global variables as GC roots automatically
+- [x] S22.4 — Generational Collection: Young generation (frequent, fast) and old generation (rare, full) collection
+- [x] S22.5 — Write Barrier: Track cross-generation pointers with a write barrier on reference assignment
+- [x] S22.6 — Concurrent Marking: Mark phase runs concurrently with mutator using tri-color marking (white/gray/black)
+- [x] S22.7 — GC Pause Budget: Configure max GC pause time (default 1ms), incremental collection within budget
+- [x] S22.8 — Heap Sizing: Auto-resize heap — grow when occupancy > 75%, shrink when < 25% after full GC
+- [x] S22.9 — Finalization: Run finalizer callbacks before reclaiming objects that registered destructors
+- [x] S22.10 — Unit Tests: 15+ tests for mark correctness, sweep completeness, generational promotion, concurrent safety
 
 ### Sprint S23 — GC Integration
 
-- [ ] S23.1 — --gc Compiler Flag: `fj run --gc program.fj` enables GC mode, `--no-gc` (default) uses ownership
-- [ ] S23.2 — Automatic Rc Insertion: In GC mode, compiler wraps all heap allocations in Rc<T> automatically
-- [ ] S23.3 — Ownership System Bypass: In GC mode, move/borrow checker is relaxed — values can be freely shared
-- [ ] S23.4 — @kernel GC Prohibition: @kernel context always forbids GC regardless of --gc flag (embedded safety)
-- [ ] S23.5 — Mixed-Mode Modules: Allow `@gc mod prototyping { ... }` alongside non-GC modules in same project
-- [ ] S23.6 — GC-to-Owned Migration: `fj migrate --remove-gc src.fj` tool that adds explicit ownership annotations
-- [ ] S23.7 — GC Mode Warnings: Warn when GC mode code calls non-GC functions expecting ownership semantics
-- [ ] S23.8 — Performance Mode Switch: Same source compiles to GC (development) or owned (production) with flag
-- [ ] S23.9 — GC Mode in REPL: REPL defaults to GC mode for interactive convenience, `--no-gc` for strict mode
-- [ ] S23.10 — Unit Tests: 15+ tests for flag parsing, auto-Rc insertion, @kernel prohibition, mixed-mode, migration tool
+- [x] S23.1 — --gc Compiler Flag: `fj run --gc program.fj` enables GC mode, `--no-gc` (default) uses ownership
+- [x] S23.2 — Automatic Rc Insertion: In GC mode, compiler wraps all heap allocations in Rc<T> automatically
+- [x] S23.3 — Ownership System Bypass: In GC mode, move/borrow checker is relaxed — values can be freely shared
+- [x] S23.4 — @kernel GC Prohibition: @kernel context always forbids GC regardless of --gc flag (embedded safety)
+- [x] S23.5 — Mixed-Mode Modules: Allow `@gc mod prototyping { ... }` alongside non-GC modules in same project
+- [x] S23.6 — GC-to-Owned Migration: `fj migrate --remove-gc src.fj` tool that adds explicit ownership annotations
+- [x] S23.7 — GC Mode Warnings: Warn when GC mode code calls non-GC functions expecting ownership semantics
+- [x] S23.8 — Performance Mode Switch: Same source compiles to GC (development) or owned (production) with flag
+- [x] S23.9 — GC Mode in REPL: REPL defaults to GC mode for interactive convenience, `--no-gc` for strict mode
+- [x] S23.10 — Unit Tests: 15+ tests for flag parsing, auto-Rc insertion, @kernel prohibition, mixed-mode, migration tool
 
 ### Sprint S24 — GC Benchmarks
 
-- [ ] S24.1 — Throughput Benchmark: Measure operations/second for identical workload under GC vs ownership mode
-- [ ] S24.2 — Latency Benchmark: Measure p50/p99 response time for request-processing workload under both modes
-- [ ] S24.3 — Pause Time Benchmark: Record GC pause distribution (min, max, p50, p99) across sustained workload
-- [ ] S24.4 — Memory Overhead: Measure peak memory usage ratio (GC / ownership) for identical programs
-- [ ] S24.5 — Collection Frequency: Profile collection events per second under various allocation rates
-- [ ] S24.6 — Generational Effectiveness: Measure young-gen vs old-gen collection rates, promotion frequency
-- [ ] S24.7 — Comparison with Rust: Benchmark equivalent program in Rust (no GC) and Fajar Lang (both modes)
-- [ ] S24.8 — Comparison with Go: Benchmark equivalent program in Go (GC) and Fajar Lang GC mode
-- [ ] S24.9 — Benchmark Report: Generate criterion-style HTML report with graphs for all GC benchmarks
-- [ ] S24.10 — Unit Tests: 10+ tests for benchmark harness correctness, metric collection accuracy, report generation
+- [x] S24.1 — Throughput Benchmark: Measure operations/second for identical workload under GC vs ownership mode
+- [x] S24.2 — Latency Benchmark: Measure p50/p99 response time for request-processing workload under both modes
+- [x] S24.3 — Pause Time Benchmark: Record GC pause distribution (min, max, p50, p99) across sustained workload
+- [x] S24.4 — Memory Overhead: Measure peak memory usage ratio (GC / ownership) for identical programs
+- [x] S24.5 — Collection Frequency: Profile collection events per second under various allocation rates
+- [x] S24.6 — Generational Effectiveness: Measure young-gen vs old-gen collection rates, promotion frequency
+- [x] S24.7 — Comparison with Rust: Benchmark equivalent program in Rust (no GC) and Fajar Lang (both modes)
+- [x] S24.8 — Comparison with Go: Benchmark equivalent program in Go (GC) and Fajar Lang GC mode
+- [x] S24.9 — Benchmark Report: Generate criterion-style HTML report with graphs for all GC benchmarks
+- [x] S24.10 — Unit Tests: 10+ tests for benchmark harness correctness, metric collection accuracy, report generation
 
 ---
 
