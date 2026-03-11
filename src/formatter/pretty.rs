@@ -162,7 +162,7 @@ impl<'src> Formatter<'src> {
         self.write_indent();
         self.push("fn ");
         self.push(&f.name);
-        self.format_generic_params(&f.generic_params);
+        self.format_generic_params_with_lifetimes(&f.lifetime_params, &f.generic_params);
         self.push_char('(');
         for (i, p) in f.params.iter().enumerate() {
             if i > 0 {
@@ -226,7 +226,7 @@ impl<'src> Formatter<'src> {
         self.write_indent();
         self.push("struct ");
         self.push(&s.name);
-        self.format_generic_params(&s.generic_params);
+        self.format_generic_params_with_lifetimes(&s.lifetime_params, &s.generic_params);
         self.push(" {");
         self.newline();
         self.indent += 1;
@@ -252,7 +252,7 @@ impl<'src> Formatter<'src> {
         self.write_indent();
         self.push("enum ");
         self.push(&e.name);
-        self.format_generic_params(&e.generic_params);
+        self.format_generic_params_with_lifetimes(&e.lifetime_params, &e.generic_params);
         self.push(" {");
         self.newline();
         self.indent += 1;
@@ -282,7 +282,7 @@ impl<'src> Formatter<'src> {
     fn format_impl_block(&mut self, imp: &ImplBlock) {
         self.write_indent();
         self.push("impl");
-        self.format_generic_params(&imp.generic_params);
+        self.format_generic_params_with_lifetimes(&imp.lifetime_params, &imp.generic_params);
         if let Some(trait_name) = &imp.trait_name {
             self.push(" ");
             self.push(trait_name);
@@ -310,7 +310,7 @@ impl<'src> Formatter<'src> {
         self.write_indent();
         self.push("trait ");
         self.push(&t.name);
-        self.format_generic_params(&t.generic_params);
+        self.format_generic_params_with_lifetimes(&t.lifetime_params, &t.generic_params);
         self.push(" {");
         self.newline();
         self.indent += 1;
@@ -382,15 +382,29 @@ impl<'src> Formatter<'src> {
         self.newline();
     }
 
-    fn format_generic_params(&mut self, params: &[GenericParam]) {
-        if params.is_empty() {
+    fn format_generic_params_with_lifetimes(
+        &mut self,
+        lifetime_params: &[LifetimeParam],
+        params: &[GenericParam],
+    ) {
+        if lifetime_params.is_empty() && params.is_empty() {
             return;
         }
         self.push_char('<');
-        for (i, p) in params.iter().enumerate() {
-            if i > 0 {
+        let mut first = true;
+        for lp in lifetime_params {
+            if !first {
                 self.push(", ");
             }
+            first = false;
+            self.push("'");
+            self.push(&lp.name);
+        }
+        for p in params {
+            if !first {
+                self.push(", ");
+            }
+            first = false;
             self.push(&p.name);
             if !p.bounds.is_empty() {
                 self.push(": ");
@@ -886,11 +900,20 @@ impl<'src> Formatter<'src> {
                 }
                 self.format_type_expr(inner);
             }
-            TypeExpr::Reference { mutable, inner, .. } => {
+            TypeExpr::Reference {
+                lifetime,
+                mutable,
+                inner,
+                ..
+            } => {
+                self.push("&");
+                if let Some(lt) = lifetime {
+                    self.push("'");
+                    self.push(lt);
+                    self.push(" ");
+                }
                 if *mutable {
-                    self.push("&mut ");
-                } else {
-                    self.push("&");
+                    self.push("mut ");
                 }
                 self.format_type_expr(inner);
             }

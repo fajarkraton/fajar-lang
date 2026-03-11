@@ -243,6 +243,7 @@ fn build_closure_info(
         doc_comment: None,
         annotation: None,
         name: fn_name.clone(),
+        lifetime_params: Vec::new(),
         generic_params: Vec::new(),
         params: all_params,
         return_type: return_type.as_deref().cloned(),

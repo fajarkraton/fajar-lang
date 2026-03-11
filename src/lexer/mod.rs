@@ -487,8 +487,8 @@ fn scan_token(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<Tok
             unreachable!("'r' is caught by identifier branch")
         }
 
-        // Character literals
-        '\'' => scan_char(cursor, errors),
+        // Character literals or lifetime annotations
+        '\'' => scan_char_or_lifetime(cursor, errors),
 
         // Annotation @
         '@' => scan_annotation(cursor, errors),
@@ -847,6 +847,89 @@ fn scan_string(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<To
             }
         }
     }
+}
+
+/// Disambiguates between a character literal and a lifetime annotation.
+///
+/// A lifetime starts with `'` followed by an identifier (e.g., `'a`, `'static`, `'_`),
+/// and the identifier is NOT terminated by a closing `'`. A char literal is `'c'`.
+///
+/// Strategy: peek ahead to check if this is `'<ident>` without a closing `'` after one char,
+/// or `'_` / `'<multi-char-ident>` which can only be a lifetime.
+fn scan_char_or_lifetime(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<TokenKind> {
+    // Look at what follows the `'`
+    let next = cursor.peek_second();
+    match next {
+        // `'_` is always a lifetime (wildcard lifetime)
+        Some('_') => {
+            // Check if it's `'_'` (char literal for underscore)
+            if cursor.peek_nth(2) == Some('\'') {
+                scan_char(cursor, errors)
+            } else {
+                scan_lifetime(cursor)
+            }
+        }
+        // `'<letter>` — could be char literal or lifetime
+        Some(c) if c.is_alphabetic() => {
+            // Look further: if char after the letter is `'`, it's a char literal like `'a'`
+            // If it's another ident char (letter/digit/_), check if there's a closing `'`
+            match cursor.peek_nth(2) {
+                // Pattern: `'X'` — char literal
+                Some('\'') => scan_char(cursor, errors),
+                // Pattern: `'ab...` — could be lifetime OR multi-char literal attempt
+                Some(c3) if is_ident_continue(c3) => {
+                    // Scan ahead through ident chars to see if a closing `'` follows
+                    // If pattern is `'ident'`, it's a char literal (multi-char error)
+                    // If pattern is `'ident<non-quote>`, it's a lifetime
+                    let mut n = 3;
+                    while let Some(cn) = cursor.peek_nth(n) {
+                        if is_ident_continue(cn) {
+                            n += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    // Check what's after the ident
+                    if cursor.peek_nth(n) == Some('\'') {
+                        // Pattern: `'abc'` — multi-char literal (delegated to scan_char)
+                        scan_char(cursor, errors)
+                    } else {
+                        // Pattern: `'abc` without closing quote — lifetime
+                        scan_lifetime(cursor)
+                    }
+                }
+                // Pattern: `'a<non-ident>` — lifetime like `'a,` or `'a>`
+                _ => scan_lifetime(cursor),
+            }
+        }
+        // `'\\` — escape sequence, must be a char literal
+        // `''` — empty char literal (error case)
+        // Everything else: delegate to char scanner (will error if invalid)
+        _ => scan_char(cursor, errors),
+    }
+}
+
+/// Scans a lifetime token: `'a`, `'static`, `'_`.
+fn scan_lifetime(cursor: &mut Cursor<'_>) -> Option<TokenKind> {
+    let start = cursor.pos();
+    cursor.advance(); // consume `'`
+
+    // Consume the identifier part
+    let name = if cursor.peek() == Some('_') {
+        cursor.advance();
+        "_".to_string()
+    } else {
+        cursor.eat_while(is_ident_continue).to_string()
+    };
+
+    if name.is_empty() {
+        // Should not happen given our disambiguation, but be safe
+        return None;
+    }
+
+    let _end = cursor.pos();
+    let _ = start; // span is tracked by the caller
+    Some(TokenKind::Lifetime(name))
 }
 
 /// Scans a character literal (single-quoted).
@@ -1690,5 +1773,70 @@ mod tests {
     fn tokenize_collects_multiple_errors() {
         let err = tokenize(r#"# $ %"#).unwrap_err();
         assert!(err.len() >= 2);
+    }
+
+    // ── Lifetime tokenization tests ─────────────────────────────────────
+
+    #[test]
+    fn tokenize_lifetime_simple() {
+        assert_tokens!("'a", TokenKind::Lifetime("a".into()));
+    }
+
+    #[test]
+    fn tokenize_lifetime_static() {
+        assert_tokens!("'static", TokenKind::Lifetime("static".into()));
+    }
+
+    #[test]
+    fn tokenize_lifetime_wildcard() {
+        assert_tokens!("'_", TokenKind::Lifetime("_".into()));
+    }
+
+    #[test]
+    fn tokenize_lifetime_multi_char_name() {
+        assert_tokens!("'buf", TokenKind::Lifetime("buf".into()));
+    }
+
+    #[test]
+    fn tokenize_char_literal_not_confused_with_lifetime() {
+        assert_tokens!("'a'", TokenKind::CharLit('a'));
+    }
+
+    #[test]
+    fn tokenize_underscore_char_literal_not_confused_with_lifetime() {
+        assert_tokens!("'_'", TokenKind::CharLit('_'));
+    }
+
+    #[test]
+    fn tokenize_lifetime_followed_by_comma() {
+        assert_tokens!("'a,", TokenKind::Lifetime("a".into()), TokenKind::Comma);
+    }
+
+    #[test]
+    fn tokenize_lifetime_followed_by_gt() {
+        assert_tokens!("'a>", TokenKind::Lifetime("a".into()), TokenKind::Gt);
+    }
+
+    #[test]
+    fn tokenize_multiple_lifetimes_in_angle_brackets() {
+        assert_tokens!(
+            "<'a, 'b>",
+            TokenKind::Lt,
+            TokenKind::Lifetime("a".into()),
+            TokenKind::Comma,
+            TokenKind::Lifetime("b".into()),
+            TokenKind::Gt
+        );
+    }
+
+    #[test]
+    fn tokenize_lifetime_in_reference_type() {
+        // &'a T
+        assert_tokens!(
+            "&'a T",
+            TokenKind::Amp,
+            TokenKind::Lifetime("a".into()),
+            TokenKind::Ident("T".into())
+        );
     }
 }

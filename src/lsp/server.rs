@@ -639,6 +639,9 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::NotSendType { .. } => "SE018",
         SemanticError::UnusedImport { .. } => "SE019",
         SemanticError::UnreachablePattern { .. } => "SE020",
+        SemanticError::LifetimeMismatch { .. } => "SE021",
+        SemanticError::LifetimeConflict { .. } => "ME009",
+        SemanticError::DanglingReference { .. } => "ME010",
     };
     Diagnostic {
         range,

@@ -216,11 +216,20 @@ fn type_to_string(ty: &TypeExpr) -> String {
             let parts: Vec<String> = elements.iter().map(type_to_string).collect();
             format!("({})", parts.join(", "))
         }
-        TypeExpr::Reference { mutable, inner, .. } => {
+        TypeExpr::Reference {
+            lifetime,
+            mutable,
+            inner,
+            ..
+        } => {
+            let lt_str = lifetime
+                .as_ref()
+                .map(|lt| format!("'{lt} "))
+                .unwrap_or_default();
             if *mutable {
-                format!("&mut {}", type_to_string(inner))
+                format!("&{lt_str}mut {}", type_to_string(inner))
             } else {
-                format!("&{}", type_to_string(inner))
+                format!("&{lt_str}{}", type_to_string(inner))
             }
         }
         TypeExpr::Pointer { mutable, inner, .. } => {

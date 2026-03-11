@@ -303,6 +303,9 @@ impl FjDiagnostic {
             SemanticError::NotSendType { .. } => "SE018",
             SemanticError::UnusedImport { .. } => "SE019",
             SemanticError::UnreachablePattern { .. } => "SE020",
+            SemanticError::LifetimeMismatch { .. } => "SE021",
+            SemanticError::LifetimeConflict { .. } => "ME009",
+            SemanticError::DanglingReference { .. } => "ME010",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

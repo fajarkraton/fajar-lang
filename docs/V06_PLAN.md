@@ -354,46 +354,46 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Lifetime syntax in parser and AST
 
-- [ ] S19.1 — Lexer: `'a`, `'static`, `'_` lifetime tokens (Apostrophe + Ident)
-- [ ] S19.2 — Parser: lifetime parameters on function definitions `fn foo<'a>(...)`
-- [ ] S19.3 — Parser: lifetime parameters on struct definitions `struct Foo<'a> { ... }`
-- [ ] S19.4 — Parser: lifetime annotations on references `&'a T`, `&'a mut T`
-- [ ] S19.5 — AST: `LifetimeParam` struct, add to FnDef, StructDef, ImplBlock
-- [ ] S19.6 — AST: `TypeExpr::Ref` extended with optional lifetime
-- [ ] S19.7 — Formatter: pretty-print lifetime annotations
-- [ ] S19.8 — Lifetime elision: apply 3 rules to infer omitted lifetimes
-- [ ] S19.9 — `'static` lifetime: built-in, outlives everything
-- [ ] S19.10 — 10 tests: lexer tokens, parser AST, elision rules, formatter
+- [x] S19.1 — Lexer: `'a`, `'static`, `'_` lifetime tokens (Apostrophe + Ident)
+- [x] S19.2 — Parser: lifetime parameters on function definitions `fn foo<'a>(...)`
+- [x] S19.3 — Parser: lifetime parameters on struct definitions `struct Foo<'a> { ... }`
+- [x] S19.4 — Parser: lifetime annotations on references `&'a T`, `&'a mut T`
+- [x] S19.5 — AST: `LifetimeParam` struct, add to FnDef, StructDef, ImplBlock
+- [x] S19.6 — AST: `TypeExpr::Ref` extended with optional lifetime
+- [x] S19.7 — Formatter: pretty-print lifetime annotations
+- [x] S19.8 — Lifetime elision: apply 3 rules to infer omitted lifetimes
+- [x] S19.9 — `'static` lifetime: built-in, outlives everything
+- [x] S19.10 — 10 tests: lexer tokens, parser AST, elision rules, formatter
 
 #### Sprint 20: CFG-Based Region Inference `P2`
 
 **Goal:** Upgrade borrow checker from span-based to CFG-based
 
-- [ ] S20.1 — Build proper CFG from AST: basic blocks with predecessors/successors
-- [ ] S20.2 — CFG nodes: Entry, Statement, Branch, Merge, Exit
-- [ ] S20.3 — Backward dataflow analysis: compute liveness sets per CFG node
-- [ ] S20.4 — Region variables: assign fresh region to each borrow expression
-- [ ] S20.5 — Liveness constraints: region must include points where reference is live
-- [ ] S20.6 — Outlives constraints: assignment `ref_a = ref_b` generates `'b: 'a`
-- [ ] S20.7 — SCC computation: merge regions in cycles (strongly connected components)
-- [ ] S20.8 — Fixed-point iteration: propagate constraints until stable
-- [ ] S20.9 — Integration with existing `borrow_lite.rs`: replace span-based with CFG-based
-- [ ] S20.10 — 10 tests: CFG construction, liveness, region inference, constraint solving
+- [x] S20.1 — Build proper CFG from AST: basic blocks with predecessors/successors
+- [x] S20.2 — CFG nodes: Entry, Statement, Branch, Merge, Exit
+- [x] S20.3 — Backward dataflow analysis: compute liveness sets per CFG node
+- [x] S20.4 — Region variables: assign fresh region to each borrow expression
+- [x] S20.5 — Liveness constraints: region must include points where reference is live
+- [x] S20.6 — Outlives constraints: assignment `ref_a = ref_b` generates `'b: 'a`
+- [x] S20.7 — SCC computation: merge regions in cycles (strongly connected components)
+- [x] S20.8 — Fixed-point iteration: propagate constraints until stable
+- [x] S20.9 — Integration with existing `borrow_lite.rs`: replace span-based with CFG-based
+- [x] S20.10 — 10 tests: CFG construction, liveness, region inference, constraint solving
 
 #### Sprint 21: Constraint Solving & Errors `P2`
 
 **Goal:** Full lifetime checking with error reporting
 
-- [ ] S21.1 — Struct lifetime checking: struct with `&'a T` field requires `'a` parameter
-- [ ] S21.2 — Function lifetime checking: return reference requires matching input lifetime
-- [ ] S21.3 — Lifetime mismatch error: "borrowed value does not live long enough"
-- [ ] S21.4 — Dangling reference detection: borrow outlives borrowed data
-- [ ] S21.5 — Multiple borrow checking: enforce exclusive `&mut` or shared `&` rules via CFG
-- [ ] S21.6 — Error suggestions: "consider adding lifetime parameter" or "try cloning"
-- [ ] S21.7 — Error code: ME009 LifetimeMismatch, ME010 DanglingReference
-- [ ] S21.8 — Lifetime bounds: `T: 'a` constraint (all references in T outlive 'a)
-- [ ] S21.9 — Analyzer integration: run lifetime check after existing borrow analysis
-- [ ] S21.10 — 10 tests: lifetime errors, suggestions, struct lifetimes, function lifetimes
+- [x] S21.1 — Struct lifetime checking: struct with `&'a T` field requires `'a` parameter
+- [x] S21.2 — Function lifetime checking: return reference requires matching input lifetime
+- [x] S21.3 — Lifetime mismatch error: "borrowed value does not live long enough"
+- [x] S21.4 — Dangling reference detection: borrow outlives borrowed data
+- [x] S21.5 — Multiple borrow checking: enforce exclusive `&mut` or shared `&` rules via CFG
+- [x] S21.6 — Error suggestions: "consider adding lifetime parameter" or "try cloning"
+- [x] S21.7 — Error code: ME009 LifetimeMismatch, ME010 DanglingReference
+- [x] S21.8 — Lifetime bounds: `T: 'a` constraint (all references in T outlive 'a)
+- [x] S21.9 — Analyzer integration: run lifetime check after existing borrow analysis
+- [x] S21.10 — 10 tests: lifetime errors, suggestions, struct lifetimes, function lifetimes
 
 ### Phase 6: RTOS Integration `P1`
 

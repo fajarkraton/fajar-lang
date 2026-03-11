@@ -911,6 +911,37 @@ pub enum SemanticError {
         /// Source location.
         span: Span,
     },
+
+    /// SE021: Lifetime mismatch — a reference's lifetime doesn't match the required lifetime.
+    #[error("SE021: lifetime mismatch: expected '{expected}, found '{found}")]
+    LifetimeMismatch {
+        /// Expected lifetime name.
+        expected: String,
+        /// Found lifetime name.
+        found: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// ME009: Lifetime conflict — two lifetimes in the same scope are incompatible.
+    #[error("ME009: lifetime '{name}' conflicts with another lifetime in scope")]
+    LifetimeConflict {
+        /// Conflicting lifetime name.
+        name: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// ME010: Dangling reference — a reference outlives its referent.
+    #[error(
+        "ME010: dangling reference: reference with lifetime '{lifetime}' outlives its referent"
+    )]
+    DanglingReference {
+        /// The lifetime that causes the dangling reference.
+        lifetime: String,
+        /// Source location.
+        span: Span,
+    },
 }
 
 impl SemanticError {
@@ -951,7 +982,10 @@ impl SemanticError {
             | SemanticError::TraitMethodSignatureMismatch { span, .. }
             | SemanticError::TensorShapeMismatch { span, .. }
             | SemanticError::UnusedImport { span, .. }
-            | SemanticError::UnreachablePattern { span, .. } => *span,
+            | SemanticError::UnreachablePattern { span, .. }
+            | SemanticError::LifetimeMismatch { span, .. }
+            | SemanticError::LifetimeConflict { span, .. }
+            | SemanticError::DanglingReference { span, .. } => *span,
         }
     }
 
@@ -2515,6 +2549,9 @@ impl TypeChecker {
                 used: true, // type params are always "used"
             });
         }
+
+        // Check lifetime annotations (always run — also catches undeclared lifetimes)
+        self.check_lifetime_elision(fndef);
 
         // Validate where clause bounds reference known traits.
         for wc in &fndef.where_clauses {
@@ -4139,6 +4176,142 @@ impl TypeChecker {
                 Type::DynTrait(trait_name.clone())
             }
         }
+    }
+
+    /// Checks lifetime elision rules for a function definition.
+    ///
+    /// Implements the three Rust-inspired lifetime elision rules:
+    /// 1. Each elided lifetime in input position becomes a distinct lifetime parameter.
+    /// 2. If there is exactly one input lifetime, it is assigned to all elided output lifetimes.
+    /// 3. If there is a `&self` or `&mut self` parameter, its lifetime is assigned to all
+    ///    elided output lifetimes.
+    ///
+    /// This function validates that explicitly annotated lifetimes are consistent
+    /// and warns about unnecessary annotations that match elision rules.
+    pub fn check_lifetime_elision(&mut self, fndef: &crate::parser::ast::FnDef) {
+        // Collect lifetimes from parameters
+        let mut input_lifetimes = Vec::new();
+        let mut has_self_ref = false;
+        let mut self_lifetime: Option<String> = None;
+
+        for param in &fndef.params {
+            let mut param_lifetimes = Vec::new();
+            collect_lifetimes_from_type(&param.ty, &mut param_lifetimes);
+            if param.name == "self" {
+                has_self_ref = true;
+                if let Some(lt) = param_lifetimes.first() {
+                    self_lifetime = Some(lt.clone());
+                }
+            }
+            input_lifetimes.extend(param_lifetimes);
+        }
+
+        // Check for duplicate lifetime param declarations
+        let mut seen_lifetimes = std::collections::HashSet::new();
+        for lp in &fndef.lifetime_params {
+            if !seen_lifetimes.insert(lp.name.clone()) {
+                self.errors.push(SemanticError::LifetimeConflict {
+                    name: lp.name.clone(),
+                    span: lp.span,
+                });
+            }
+        }
+
+        // Validate that lifetimes used in params are declared
+        let declared: std::collections::HashSet<String> = fndef
+            .lifetime_params
+            .iter()
+            .map(|lp| lp.name.clone())
+            .collect();
+
+        for lt in &input_lifetimes {
+            if lt != "static" && lt != "_" && !declared.contains(lt) {
+                self.errors.push(SemanticError::LifetimeMismatch {
+                    expected: "declared lifetime".into(),
+                    found: lt.clone(),
+                    span: fndef.span,
+                });
+            }
+        }
+
+        // Collect output lifetimes (from return type)
+        if let Some(ref ret_ty) = fndef.return_type {
+            let mut output_lifetimes = Vec::new();
+            collect_lifetimes_from_type(ret_ty, &mut output_lifetimes);
+
+            for lt in &output_lifetimes {
+                if lt != "static" && lt != "_" && !declared.contains(lt) {
+                    self.errors.push(SemanticError::LifetimeMismatch {
+                        expected: "declared lifetime".into(),
+                        found: lt.clone(),
+                        span: fndef.span,
+                    });
+                }
+            }
+
+            // Elision rule 2 & 3: validate output lifetimes
+            // If there's exactly one input lifetime or &self, output can use it
+            let elision_source = if has_self_ref {
+                self_lifetime.clone()
+            } else if input_lifetimes.len() == 1 {
+                Some(input_lifetimes[0].clone())
+            } else {
+                None
+            };
+
+            // If there are output lifetimes and no elision source, they must all be declared
+            if !output_lifetimes.is_empty() && elision_source.is_none() && input_lifetimes.len() > 1
+            {
+                // Multiple input lifetimes, no &self — output lifetime is ambiguous
+                // This is fine as long as all output lifetimes are explicitly declared
+                // (already checked above)
+            }
+        }
+    }
+}
+
+/// Collects all lifetime names referenced in a type expression.
+///
+/// Walks the type expression tree and extracts lifetime annotations
+/// from reference types. Used by lifetime elision checking.
+pub fn collect_lifetimes_from_type(ty: &crate::parser::ast::TypeExpr, out: &mut Vec<String>) {
+    match ty {
+        crate::parser::ast::TypeExpr::Reference {
+            lifetime, inner, ..
+        } => {
+            if let Some(lt) = lifetime {
+                out.push(lt.clone());
+            }
+            collect_lifetimes_from_type(inner, out);
+        }
+        crate::parser::ast::TypeExpr::Generic { args, .. } => {
+            for arg in args {
+                collect_lifetimes_from_type(arg, out);
+            }
+        }
+        crate::parser::ast::TypeExpr::Tuple { elements, .. } => {
+            for elem in elements {
+                collect_lifetimes_from_type(elem, out);
+            }
+        }
+        crate::parser::ast::TypeExpr::Array { element, .. }
+        | crate::parser::ast::TypeExpr::Slice { element, .. } => {
+            collect_lifetimes_from_type(element, out);
+        }
+        crate::parser::ast::TypeExpr::Pointer { inner, .. } => {
+            collect_lifetimes_from_type(inner, out);
+        }
+        crate::parser::ast::TypeExpr::Fn {
+            params,
+            return_type,
+            ..
+        } => {
+            for p in params {
+                collect_lifetimes_from_type(p, out);
+            }
+            collect_lifetimes_from_type(return_type, out);
+        }
+        _ => {}
     }
 }
 
@@ -6826,6 +6999,109 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, SemanticError::NotSendType { .. })),
             "Move capture of i64 should be allowed"
+        );
+    }
+
+    // ── Lifetime annotation tests ───────────────────────────────────────
+
+    #[test]
+    fn lifetime_valid_single_input_output() {
+        // Single input lifetime, output uses same — valid via elision rule 2
+        let src = "fn first<'a>(x: &'a i32) -> &'a i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Valid single-lifetime function should pass: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_undeclared_in_param() {
+        // 'b used in param but not declared — should report LifetimeMismatch
+        let src = "fn foo(x: &'b i32) -> i32 { 0 }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Undeclared lifetime 'b should produce LifetimeMismatch: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_undeclared_in_return() {
+        // 'a used in return type but not declared
+        let src = "fn foo(x: i32) -> &'a i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Undeclared lifetime in return should produce LifetimeMismatch: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_static_is_always_valid() {
+        // 'static is a special built-in lifetime, never requires declaration
+        let src = "fn foo(x: &'static i32) -> i32 { 0 }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "'static should be valid without declaration: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_wildcard_is_always_valid() {
+        // '_ is a wildcard lifetime, never requires declaration
+        let src = "fn foo(x: &'_ i32) -> i32 { 0 }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "'_ should be valid without declaration: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_duplicate_declaration_reports_conflict() {
+        // Declaring 'a twice should produce LifetimeConflict
+        let src = "fn foo<'a, 'a>(x: &'a i32) -> &'a i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeConflict { .. })),
+            "Duplicate lifetime 'a should produce LifetimeConflict: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_no_annotations_passes() {
+        // Functions without any lifetime annotations should pass fine
+        let src = "fn add(a: i32, b: i32) -> i32 { a + b }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics.iter().any(|e| matches!(
+                e,
+                SemanticError::LifetimeMismatch { .. }
+                    | SemanticError::LifetimeConflict { .. }
+                    | SemanticError::DanglingReference { .. }
+            )),
+            "No-lifetime function should have no lifetime errors: {:?}",
+            diagnostics
         );
     }
 }

@@ -399,6 +399,10 @@ pub enum TokenKind {
     /// An identifier (e.g. `foo`, `my_var`, `MyStruct`).
     Ident(String),
 
+    // ── Lifetime ─────────────────────────────────────────────────────
+    /// A lifetime annotation (e.g. `'a`, `'static`, `'_`).
+    Lifetime(String),
+
     // ── Special ────────────────────────────────────────────────────────
     /// End of file marker. Always the last token in the stream.
     Eof,
@@ -555,6 +559,8 @@ impl fmt::Display for TokenKind {
             TokenKind::CharLit(c) => write!(f, "'{c}'"),
             // Identifier
             TokenKind::Ident(name) => write!(f, "{name}"),
+            // Lifetime
+            TokenKind::Lifetime(name) => write!(f, "'{name}"),
             // Special
             TokenKind::Eof => write!(f, "EOF"),
         }
@@ -806,6 +812,16 @@ mod tests {
         assert_eq!(format!("{}", TokenKind::FloatLit(3.14)), "3.14");
         assert_eq!(format!("{}", TokenKind::StringLit("hi".into())), "\"hi\"");
         assert_eq!(format!("{}", TokenKind::CharLit('a')), "'a'");
+    }
+
+    #[test]
+    fn token_kind_display_lifetime() {
+        assert_eq!(format!("{}", TokenKind::Lifetime("a".into())), "'a");
+        assert_eq!(
+            format!("{}", TokenKind::Lifetime("static".into())),
+            "'static"
+        );
+        assert_eq!(format!("{}", TokenKind::Lifetime("_".into())), "'_");
     }
 
     #[test]

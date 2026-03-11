@@ -557,6 +557,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: name.into(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params,
             return_type: None,

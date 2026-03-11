@@ -108,6 +108,8 @@ pub struct FnDef {
     pub annotation: Option<Annotation>,
     /// Function name.
     pub name: String,
+    /// Lifetime parameters (e.g., `'a`, `'b`).
+    pub lifetime_params: Vec<LifetimeParam>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Function parameters.
@@ -194,6 +196,15 @@ pub struct GenericParam {
     pub span: Span,
 }
 
+/// A lifetime parameter in a generic list: `'a`, `'static`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LifetimeParam {
+    /// Lifetime name (without the leading `'`).
+    pub name: String,
+    /// Source span.
+    pub span: Span,
+}
+
 /// A trait bound: `TraitName<TypeArgs>`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitBound {
@@ -220,6 +231,8 @@ pub struct StructDef {
     pub annotation: Option<Annotation>,
     /// Struct name.
     pub name: String,
+    /// Lifetime parameters (e.g., `'a`, `'b`).
+    pub lifetime_params: Vec<LifetimeParam>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Struct fields.
@@ -254,6 +267,8 @@ pub struct EnumDef {
     pub annotation: Option<Annotation>,
     /// Enum name.
     pub name: String,
+    /// Lifetime parameters (e.g., `'a`, `'b`).
+    pub lifetime_params: Vec<LifetimeParam>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Enum variants.
@@ -303,6 +318,8 @@ pub struct Variant {
 pub struct ImplBlock {
     /// Doc comment lines (from `///` comments preceding the impl block).
     pub doc_comment: Option<String>,
+    /// Lifetime parameters (e.g., `'a`, `'b`).
+    pub lifetime_params: Vec<LifetimeParam>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Trait being implemented (None for inherent impls).
@@ -328,6 +345,8 @@ pub struct TraitDef {
     pub doc_comment: Option<String>,
     /// Trait name.
     pub name: String,
+    /// Lifetime parameters (e.g., `'a`, `'b`).
+    pub lifetime_params: Vec<LifetimeParam>,
     /// Generic type parameters.
     pub generic_params: Vec<GenericParam>,
     /// Trait methods (body is optional for default impls).
@@ -1120,8 +1139,10 @@ pub enum TypeExpr {
         span: Span,
     },
 
-    /// A reference type: `&T` or `&mut T`.
+    /// A reference type: `&T`, `&mut T`, `&'a T`, or `&'a mut T`.
     Reference {
+        /// Optional lifetime annotation (e.g., `"a"` for `'a`).
+        lifetime: Option<String>,
         /// Whether the reference is mutable.
         mutable: bool,
         /// Referenced type.
@@ -1354,11 +1375,20 @@ impl fmt::Display for TypeExpr {
                     write!(f, "*const {inner}")
                 }
             }
-            TypeExpr::Reference { mutable, inner, .. } => {
+            TypeExpr::Reference {
+                lifetime,
+                mutable,
+                inner,
+                ..
+            } => {
+                write!(f, "&")?;
+                if let Some(lt) = lifetime {
+                    write!(f, "'{lt} ")?;
+                }
                 if *mutable {
-                    write!(f, "&mut {inner}")
+                    write!(f, "mut {inner}")
                 } else {
-                    write!(f, "&{inner}")
+                    write!(f, "{inner}")
                 }
             }
             TypeExpr::Tuple { elements, .. } => {
@@ -1696,6 +1726,7 @@ mod tests {
     #[test]
     fn type_expr_reference_display() {
         let ty = TypeExpr::Reference {
+            lifetime: None,
             mutable: false,
             inner: Box::new(TypeExpr::Simple {
                 name: "str".into(),
@@ -1704,6 +1735,34 @@ mod tests {
             span: dummy_span(),
         };
         assert_eq!(format!("{ty}"), "&str");
+    }
+
+    #[test]
+    fn type_expr_reference_with_lifetime_display() {
+        let ty = TypeExpr::Reference {
+            lifetime: Some("a".into()),
+            mutable: false,
+            inner: Box::new(TypeExpr::Simple {
+                name: "str".into(),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert_eq!(format!("{ty}"), "&'a str");
+    }
+
+    #[test]
+    fn type_expr_mut_reference_with_lifetime_display() {
+        let ty = TypeExpr::Reference {
+            lifetime: Some("b".into()),
+            mutable: true,
+            inner: Box::new(TypeExpr::Simple {
+                name: "i32".into(),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert_eq!(format!("{ty}"), "&'b mut i32");
     }
 
     #[test]
@@ -1871,6 +1930,7 @@ mod tests {
                 span: dummy_span(),
             }),
             name: "init".into(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![Param {
                 name: "x".into(),
@@ -1906,6 +1966,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Point".into(),
+            lifetime_params: vec![],
             generic_params: vec![],
             fields: vec![
                 Field {
@@ -1938,6 +1999,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Shape".into(),
+            lifetime_params: vec![],
             generic_params: vec![],
             variants: vec![
                 Variant {

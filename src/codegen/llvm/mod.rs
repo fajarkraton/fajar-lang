@@ -1954,6 +1954,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![],
             return_type: Some(TypeExpr::Simple {
@@ -2063,6 +2064,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![Param {
                 name: "x".to_string(),
@@ -2164,6 +2166,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![],
             return_type: Some(TypeExpr::Simple {
@@ -2213,6 +2216,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![],
             return_type: Some(TypeExpr::Simple {
@@ -2346,6 +2350,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![],
             return_type: Some(TypeExpr::Simple {
@@ -2815,6 +2820,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "fib".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![Param {
                 name: "n".to_string(),
@@ -2867,6 +2873,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "add3".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![
                 Param {
@@ -2967,6 +2974,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "is_even".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![Param {
                 name: "n".to_string(),
@@ -3010,6 +3018,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "is_odd".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             params: vec![Param {
                 name: "n".to_string(),
@@ -3157,6 +3166,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Point".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             fields: vec![
                 crate::parser::ast::Field {
@@ -3240,6 +3250,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Pair".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             fields: vec![
                 crate::parser::ast::Field {
@@ -3312,6 +3323,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Color".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             variants: vec![
                 crate::parser::ast::Variant {
@@ -3356,6 +3368,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "Vec3".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             fields: vec![
                 crate::parser::ast::Field {
@@ -3518,6 +3531,7 @@ mod tests {
             doc_comment: None,
             annotation: None,
             name: "MyStruct".to_string(),
+            lifetime_params: vec![],
             generic_params: vec![],
             fields: vec![crate::parser::ast::Field {
                 name: "val".to_string(),

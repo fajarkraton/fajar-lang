@@ -630,8 +630,8 @@ impl Parser {
         self.expect(&TokenKind::Fn)?;
         let (name, _) = self.expect_ident()?;
 
-        // Optional generic params
-        let generic_params = self.try_parse_generic_params()?;
+        // Optional generic params (lifetimes + type params)
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         // Parameters
         self.expect(&TokenKind::LParen)?;
@@ -661,6 +661,7 @@ impl Parser {
             doc_comment: None,
             annotation,
             name,
+            lifetime_params,
             generic_params,
             params,
             return_type,
@@ -826,6 +827,7 @@ impl Parser {
                     span: Span::new(start, end),
                 };
                 let ty = TypeExpr::Reference {
+                    lifetime: None,
                     mutable,
                     inner: Box::new(self_type),
                     span: Span::new(start, end),
@@ -844,12 +846,39 @@ impl Parser {
     }
 
     /// Tries to parse generic parameters: `<T, U: Bound>`.
-    fn try_parse_generic_params(&mut self) -> Result<Vec<GenericParam>, ParseError> {
+    /// Parses optional generic parameters, including lifetime parameters.
+    ///
+    /// Lifetime parameters (e.g., `'a`, `'b`) must appear before type parameters.
+    /// Returns `(lifetime_params, generic_params)`.
+    fn try_parse_lifetime_and_generic_params(
+        &mut self,
+    ) -> Result<(Vec<LifetimeParam>, Vec<GenericParam>), ParseError> {
         if !self.eat(&TokenKind::Lt) {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         }
 
-        let mut params = Vec::new();
+        let mut lifetime_params = Vec::new();
+        let mut generic_params = Vec::new();
+
+        // Parse lifetime params first (they come before type params)
+        while let TokenKind::Lifetime(name) = self.peek_kind().clone() {
+            let start = self.peek().span.start;
+            let end = self.peek().span.end;
+            self.advance(); // consume lifetime token
+            lifetime_params.push(LifetimeParam {
+                name,
+                span: Span::new(start, end),
+            });
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+            // If the next token is `>`, stop
+            if self.at(&TokenKind::Gt) {
+                break;
+            }
+        }
+
+        // Parse type params
         while !self.at(&TokenKind::Gt) && !self.at_eof() {
             let start = self.peek().span.start;
             let (name, _) = self.expect_ident()?;
@@ -866,7 +895,7 @@ impl Parser {
             }
 
             let end = self.prev_span().end;
-            params.push(GenericParam {
+            generic_params.push(GenericParam {
                 name,
                 bounds,
                 span: Span::new(start, end),
@@ -878,7 +907,7 @@ impl Parser {
         }
 
         self.expect(&TokenKind::Gt)?;
-        Ok(params)
+        Ok((lifetime_params, generic_params))
     }
 
     /// Parses a trait bound: `TraitName<TypeArgs>`.
@@ -961,7 +990,7 @@ impl Parser {
 
         self.expect(&TokenKind::Struct)?;
         let (name, _) = self.expect_ident()?;
-        let generic_params = self.try_parse_generic_params()?;
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         self.expect(&TokenKind::LBrace)?;
         let mut fields = Vec::new();
@@ -987,6 +1016,7 @@ impl Parser {
             doc_comment: None,
             annotation,
             name,
+            lifetime_params,
             generic_params,
             fields,
             span: Span::new(start, end_tok.span.end),
@@ -1051,7 +1081,7 @@ impl Parser {
 
         self.expect(&TokenKind::Enum)?;
         let (name, _) = self.expect_ident()?;
-        let generic_params = self.try_parse_generic_params()?;
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         self.expect(&TokenKind::LBrace)?;
         let mut variants = Vec::new();
@@ -1087,6 +1117,7 @@ impl Parser {
             doc_comment: None,
             annotation,
             name,
+            lifetime_params,
             generic_params,
             variants,
             span: Span::new(start, end_tok.span.end),
@@ -1098,7 +1129,7 @@ impl Parser {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Impl)?;
 
-        let generic_params = self.try_parse_generic_params()?;
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         let (first_name, _) = self.expect_ident()?;
 
@@ -1127,6 +1158,7 @@ impl Parser {
 
         Ok(ImplBlock {
             doc_comment: None,
+            lifetime_params,
             generic_params,
             trait_name,
             target_type,
@@ -1140,7 +1172,7 @@ impl Parser {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Trait)?;
         let (name, _) = self.expect_ident()?;
-        let generic_params = self.try_parse_generic_params()?;
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         self.expect(&TokenKind::LBrace)?;
         let mut methods = Vec::new();
@@ -1155,6 +1187,7 @@ impl Parser {
             is_pub,
             doc_comment: None,
             name,
+            lifetime_params,
             generic_params,
             methods,
             span: Span::new(start, end_tok.span.end),
@@ -1175,7 +1208,7 @@ impl Parser {
 
         self.expect(&TokenKind::Fn)?;
         let (name, _) = self.expect_ident()?;
-        let generic_params = self.try_parse_generic_params()?;
+        let (lifetime_params, generic_params) = self.try_parse_lifetime_and_generic_params()?;
 
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_params()?;
@@ -1213,6 +1246,7 @@ impl Parser {
             doc_comment: None,
             annotation,
             name,
+            lifetime_params,
             generic_params,
             params,
             return_type,
@@ -2547,13 +2581,21 @@ impl Parser {
         let token = self.peek().clone();
 
         match &token.kind {
-            // Reference type: &T or &mut T
+            // Reference type: &T, &mut T, &'a T, &'a mut T
             TokenKind::Amp => {
                 self.advance();
+                // Check for optional lifetime annotation
+                let lifetime = if let TokenKind::Lifetime(name) = self.peek_kind().clone() {
+                    self.advance();
+                    Some(name)
+                } else {
+                    None
+                };
                 let mutable = self.eat(&TokenKind::Mut);
                 let inner = self.parse_type_expr()?;
                 let span = Span::new(token.span.start, inner.span().end);
                 Ok(TypeExpr::Reference {
+                    lifetime,
                     mutable,
                     inner: Box::new(inner),
                     span,
@@ -4670,6 +4712,178 @@ mod tests {
                 assert!(matches!(*expr, Expr::Call { .. }));
             }
             _ => panic!("expected Await wrapping Call"),
+        }
+    }
+
+    // ── Lifetime annotation tests ───────────────────────────────────────
+
+    #[test]
+    fn parse_fn_with_single_lifetime() {
+        let item = first_item("fn foo<'a>(x: &'a i32) -> &'a i32 { x }");
+        match item {
+            Item::FnDef(f) => {
+                assert_eq!(f.lifetime_params.len(), 1);
+                assert_eq!(f.lifetime_params[0].name, "a");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_fn_with_multiple_lifetimes() {
+        let item = first_item("fn foo<'a, 'b>(x: &'a i32, y: &'b i32) -> &'a i32 { x }");
+        match item {
+            Item::FnDef(f) => {
+                assert_eq!(f.lifetime_params.len(), 2);
+                assert_eq!(f.lifetime_params[0].name, "a");
+                assert_eq!(f.lifetime_params[1].name, "b");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_fn_with_lifetime_and_generics() {
+        let item = first_item("fn foo<'a, T>(x: &'a T) -> &'a T { x }");
+        match item {
+            Item::FnDef(f) => {
+                assert_eq!(f.lifetime_params.len(), 1);
+                assert_eq!(f.lifetime_params[0].name, "a");
+                assert_eq!(f.generic_params.len(), 1);
+                assert_eq!(f.generic_params[0].name, "T");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_fn_with_no_lifetimes() {
+        let item = first_item("fn foo(x: i32) -> i32 { x }");
+        match item {
+            Item::FnDef(f) => {
+                assert!(f.lifetime_params.is_empty());
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_struct_with_lifetime() {
+        let item = first_item("struct Ref<'a> { val: &'a i32 }");
+        match item {
+            Item::StructDef(s) => {
+                assert_eq!(s.lifetime_params.len(), 1);
+                assert_eq!(s.lifetime_params[0].name, "a");
+            }
+            _ => panic!("expected StructDef"),
+        }
+    }
+
+    #[test]
+    fn parse_enum_with_lifetime() {
+        let item = first_item("enum Cow<'a> { Borrowed(&'a i32), Owned(i32) }");
+        match item {
+            Item::EnumDef(e) => {
+                assert_eq!(e.lifetime_params.len(), 1);
+                assert_eq!(e.lifetime_params[0].name, "a");
+            }
+            _ => panic!("expected EnumDef"),
+        }
+    }
+
+    #[test]
+    fn parse_trait_with_lifetime() {
+        let item = first_item("trait Readable<'a> { fn read(&self) -> &'a i32 }");
+        match item {
+            Item::TraitDef(t) => {
+                assert_eq!(t.lifetime_params.len(), 1);
+                assert_eq!(t.lifetime_params[0].name, "a");
+            }
+            _ => panic!("expected TraitDef"),
+        }
+    }
+
+    #[test]
+    fn parse_impl_with_lifetime() {
+        let item = first_item("impl<'a> Ref { fn get(&self) -> i32 { 0 } }");
+        match item {
+            Item::ImplBlock(i) => {
+                assert_eq!(i.lifetime_params.len(), 1);
+                assert_eq!(i.lifetime_params[0].name, "a");
+            }
+            _ => panic!("expected ImplBlock"),
+        }
+    }
+
+    #[test]
+    fn parse_reference_type_with_lifetime() {
+        let item = first_item("fn foo<'a>(x: &'a i32) -> i32 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                // Check the param type has a lifetime
+                let param_type = &f.params[0].ty;
+                match param_type {
+                    TypeExpr::Reference { lifetime, .. } => {
+                        assert_eq!(lifetime.as_deref(), Some("a"));
+                    }
+                    _ => panic!("expected Reference type with lifetime"),
+                }
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_reference_type_without_lifetime() {
+        let item = first_item("fn foo(x: &i32) -> i32 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                let param_type = &f.params[0].ty;
+                match param_type {
+                    TypeExpr::Reference { lifetime, .. } => {
+                        assert!(lifetime.is_none());
+                    }
+                    _ => panic!("expected Reference type without lifetime"),
+                }
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_mutable_reference_with_lifetime() {
+        let item = first_item("fn foo<'a>(x: &'a mut i32) -> &'a mut i32 { x }");
+        match item {
+            Item::FnDef(f) => {
+                let param_type = &f.params[0].ty;
+                match param_type {
+                    TypeExpr::Reference {
+                        lifetime, mutable, ..
+                    } => {
+                        assert_eq!(lifetime.as_deref(), Some("a"));
+                        assert!(*mutable);
+                    }
+                    _ => panic!("expected mutable Reference type with lifetime"),
+                }
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_static_lifetime_reference() {
+        let item = first_item("fn foo(x: &'static str) -> i32 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                let param_type = &f.params[0].ty;
+                match param_type {
+                    TypeExpr::Reference { lifetime, .. } => {
+                        assert_eq!(lifetime.as_deref(), Some("static"));
+                    }
+                    _ => panic!("expected Reference type with 'static lifetime"),
+                }
+            }
+            _ => panic!("expected FnDef"),
         }
     }
 }
