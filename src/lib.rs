@@ -44,6 +44,7 @@ pub mod lsp;
 pub mod lsp_v2;
 pub mod ml_advanced;
 pub mod package;
+pub mod package_v2;
 pub mod parser;
 pub mod playground;
 pub mod rtos;

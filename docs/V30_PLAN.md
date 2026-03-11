@@ -332,55 +332,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S21 — Workspaces
 
-- [ ] S21.1 — Workspace Definition: `[workspace]` in root `fj.toml` listing member packages
-- [ ] S21.2 — Shared Dependencies: Workspace-level dependency resolution — all members share versions
-- [ ] S21.3 — Workspace Build: `fj build --workspace` builds all members in dependency order
-- [ ] S21.4 — Workspace Test: `fj test --workspace` runs tests for all members
-- [ ] S21.5 — Inter-Package Dependencies: Members can depend on sibling packages via `path = "../sibling"`
-- [ ] S21.6 — Workspace Inheritance: Members inherit `[package.edition]`, `[package.license]` from workspace
-- [ ] S21.7 — Selective Build: `fj build -p package-name` builds only specified member and its deps
-- [ ] S21.8 — Workspace Metadata: `[workspace.metadata]` for custom keys used by tooling
-- [ ] S21.9 — Virtual Workspace: Workspace without a root package — just coordinates members
-- [ ] S21.10 — Unit Tests: 15+ tests for workspace parsing, shared deps, build order, inheritance, selective build
+- [x] S21.1 — Workspace Definition: `[workspace]` in root `fj.toml` listing member packages
+- [x] S21.2 — Shared Dependencies: Workspace-level dependency resolution — all members share versions
+- [x] S21.3 — Workspace Build: `fj build --workspace` builds all members in dependency order
+- [x] S21.4 — Workspace Test: `fj test --workspace` runs tests for all members
+- [x] S21.5 — Inter-Package Dependencies: Members can depend on sibling packages via `path = "../sibling"`
+- [x] S21.6 — Workspace Inheritance: Members inherit `[package.edition]`, `[package.license]` from workspace
+- [x] S21.7 — Selective Build: `fj build -p package-name` builds only specified member and its deps
+- [x] S21.8 — Workspace Metadata: `[workspace.metadata]` for custom keys used by tooling
+- [x] S21.9 — Virtual Workspace: Workspace without a root package — just coordinates members
+- [x] S21.10 — Unit Tests: 15+ tests for workspace parsing, shared deps, build order, inheritance, selective build
 
 ### Sprint S22 — Build Scripts
 
-- [ ] S22.1 — Build Script Support: `build = "build.fj"` in fj.toml — runs before compilation
-- [ ] S22.2 — Environment Variables: Build script can set `FJ_CFG_*` variables for conditional compilation
-- [ ] S22.3 — Native Library Detection: `fj_build::find_library("openssl")` — pkg-config integration
-- [ ] S22.4 — Code Generation: Build script can generate .fj source files in `OUT_DIR`
-- [ ] S22.5 — Rerun Triggers: `println!("fj:rerun-if-changed=path")` for incremental build script execution
-- [ ] S22.6 — Link Flags: `println!("fj:rustc-link-lib=ssl")` to pass linker flags
-- [ ] S22.7 — Feature Detection: Probe for system capabilities (SIMD, GPU, OS features) at build time
-- [ ] S22.8 — Proto/Schema Compilation: Build script compiles .proto/.fbs schema files to .fj source
-- [ ] S22.9 — Build Script Dependencies: Separate `[build-dependencies]` section in fj.toml
-- [ ] S22.10 — Unit Tests: 15+ tests for script execution, env vars, code gen, rerun triggers, link flags
+- [x] S22.1 — Build Script Support: `build = "build.fj"` in fj.toml — runs before compilation
+- [x] S22.2 — Environment Variables: Build script can set `FJ_CFG_*` variables for conditional compilation
+- [x] S22.3 — Native Library Detection: `fj_build::find_library("openssl")` — pkg-config integration
+- [x] S22.4 — Code Generation: Build script can generate .fj source files in `OUT_DIR`
+- [x] S22.5 — Rerun Triggers: `println!("fj:rerun-if-changed=path")` for incremental build script execution
+- [x] S22.6 — Link Flags: `println!("fj:rustc-link-lib=ssl")` to pass linker flags
+- [x] S22.7 — Feature Detection: Probe for system capabilities (SIMD, GPU, OS features) at build time
+- [x] S22.8 — Proto/Schema Compilation: Build script compiles .proto/.fbs schema files to .fj source
+- [x] S22.9 — Build Script Dependencies: Separate `[build-dependencies]` section in fj.toml
+- [x] S22.10 — Unit Tests: 15+ tests for script execution, env vars, code gen, rerun triggers, link flags
 
 ### Sprint S23 — Conditional Compilation
 
-- [ ] S23.1 — Cfg Attributes: `@cfg(target_os = "linux")` on functions, structs, modules
-- [ ] S23.2 — Feature Flags: `@cfg(feature = "gpu")` — user-selectable features in fj.toml
-- [ ] S23.3 — Target Architecture: `@cfg(target_arch = "aarch64")` for architecture-specific code
-- [ ] S23.4 — Cfg Combinators: `@cfg(all(linux, feature="gpu"))`, `@cfg(any(...))`, `@cfg(not(...))`
-- [ ] S23.5 — Platform Modules: Entire module conditional on platform (`@cfg(windows) mod win_impl;`)
-- [ ] S23.6 — Cfg in Tests: `@cfg(test)` for test-only code, `@cfg(bench)` for benchmark-only code
-- [ ] S23.7 — Cfg Checking: Warn on unknown cfg keys to catch typos (`@cfg(taget_os)` → did you mean `target_os`?)
-- [ ] S23.8 — Default Features: `[features] default = ["std"]` — default-on features
-- [ ] S23.9 — Feature Dependencies: `[features] gpu = ["cuda", "driver"]` — features that enable other features
-- [ ] S23.10 — Unit Tests: 15+ tests for cfg parsing, feature flags, combinators, platform modules, checking
+- [x] S23.1 — Cfg Attributes: `@cfg(target_os = "linux")` on functions, structs, modules
+- [x] S23.2 — Feature Flags: `@cfg(feature = "gpu")` — user-selectable features in fj.toml
+- [x] S23.3 — Target Architecture: `@cfg(target_arch = "aarch64")` for architecture-specific code
+- [x] S23.4 — Cfg Combinators: `@cfg(all(linux, feature="gpu"))`, `@cfg(any(...))`, `@cfg(not(...))`
+- [x] S23.5 — Platform Modules: Entire module conditional on platform (`@cfg(windows) mod win_impl;`)
+- [x] S23.6 — Cfg in Tests: `@cfg(test)` for test-only code, `@cfg(bench)` for benchmark-only code
+- [x] S23.7 — Cfg Checking: Warn on unknown cfg keys to catch typos (`@cfg(taget_os)` → did you mean `target_os`?)
+- [x] S23.8 — Default Features: `[features] default = ["std"]` — default-on features
+- [x] S23.9 — Feature Dependencies: `[features] gpu = ["cuda", "driver"]` — features that enable other features
+- [x] S23.10 — Unit Tests: 15+ tests for cfg parsing, feature flags, combinators, platform modules, checking
 
 ### Sprint S24 — Cross-Compilation Matrix
 
-- [ ] S24.1 — Target Triple: Parse `<arch>-<vendor>-<os>-<abi>` target triples (e.g., `aarch64-unknown-linux-gnu`)
-- [ ] S24.2 — Sysroot Management: Download and cache target sysroots for cross-compilation
-- [ ] S24.3 — Cross Linker: Detect and configure cross-linker (e.g., `aarch64-linux-gnu-gcc`)
-- [ ] S24.4 — Build Matrix: `fj build --target=aarch64,riscv64,wasm32` — build for multiple targets
-- [ ] S24.5 — Target Feature Detection: Detect available CPU features for target (e.g., NEON for aarch64)
-- [ ] S24.6 — QEMU Testing: `fj test --target=aarch64 --runner=qemu` — run cross-compiled tests under QEMU
-- [ ] S24.7 — Docker Cross-Build: Generate Dockerfiles for cross-compilation environments
-- [ ] S24.8 — Release Matrix: Build release binaries for all supported targets in CI
-- [ ] S24.9 — Platform Support Tiers: Tier 1 (CI tested), Tier 2 (cross-compiles), Tier 3 (best-effort)
-- [ ] S24.10 — Unit Tests: 15+ tests for triple parsing, sysroot paths, linker detection, matrix generation, tiers
+- [x] S24.1 — Target Triple: Parse `<arch>-<vendor>-<os>-<abi>` target triples (e.g., `aarch64-unknown-linux-gnu`)
+- [x] S24.2 — Sysroot Management: Download and cache target sysroots for cross-compilation
+- [x] S24.3 — Cross Linker: Detect and configure cross-linker (e.g., `aarch64-linux-gnu-gcc`)
+- [x] S24.4 — Build Matrix: `fj build --target=aarch64,riscv64,wasm32` — build for multiple targets
+- [x] S24.5 — Target Feature Detection: Detect available CPU features for target (e.g., NEON for aarch64)
+- [x] S24.6 — QEMU Testing: `fj test --target=aarch64 --runner=qemu` — run cross-compiled tests under QEMU
+- [x] S24.7 — Docker Cross-Build: Generate Dockerfiles for cross-compilation environments
+- [x] S24.8 — Release Matrix: Build release binaries for all supported targets in CI
+- [x] S24.9 — Platform Support Tiers: Tier 1 (CI tested), Tier 2 (cross-compiles), Tier 3 (best-effort)
+- [x] S24.10 — Unit Tests: 15+ tests for triple parsing, sysroot paths, linker detection, matrix generation, tiers
 
 ---
 
