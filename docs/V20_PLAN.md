@@ -43,55 +43,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S1 — Type-Level Integers
 
-- [ ] S1.1 — Nat Kind in Type System: Introduce `Nat` kind representing compile-time natural numbers, distinct from runtime integers
-- [ ] S1.2 — Const Generic Syntax: Parse `fn foo<const N: usize>()` and `struct Array<T, const N: usize>` in parser
-- [ ] S1.3 — Const Generic AST Node: Add `ConstGenericParam { name, ty }` to AST GenericParam enum
-- [ ] S1.4 — Type-Level Literal: Resolve integer literals in type position (`Array<i32, 4>`) to Nat values during analysis
-- [ ] S1.5 — Type Arithmetic Addition: Implement `N + M` at type level, evaluating to concrete Nat when both operands are known
-- [ ] S1.6 — Type Arithmetic Multiplication: Implement `N * M` at type level for shape computation (reshape, flatten)
-- [ ] S1.7 — Type-Level Equality: Implement `N == M` constraint checking, emit SE-level error when Nat values mismatch
-- [ ] S1.8 — Const Generic Monomorphization: Extend monomorphization pass to substitute Nat values into const generic positions
-- [ ] S1.9 — Cranelift Lowering: Lower const generic values to immediate constants in native codegen, no runtime overhead
-- [ ] S1.10 — Unit Tests: 15+ tests for const generic parsing, Nat arithmetic, monomorphization, and type mismatch errors
+- [x] S1.1 — Nat Kind in Type System: Introduce `Nat` kind representing compile-time natural numbers, distinct from runtime integers
+- [x] S1.2 — Const Generic Syntax: Parse `fn foo<const N: usize>()` and `struct Array<T, const N: usize>` in parser
+- [x] S1.3 — Const Generic AST Node: Add `ConstGenericParam { name, ty }` to AST GenericParam enum
+- [x] S1.4 — Type-Level Literal: Resolve integer literals in type position (`Array<i32, 4>`) to Nat values during analysis
+- [x] S1.5 — Type Arithmetic Addition: Implement `N + M` at type level, evaluating to concrete Nat when both operands are known
+- [x] S1.6 — Type Arithmetic Multiplication: Implement `N * M` at type level for shape computation (reshape, flatten)
+- [x] S1.7 — Type-Level Equality: Implement `N == M` constraint checking, emit SE-level error when Nat values mismatch
+- [x] S1.8 — Const Generic Monomorphization: Extend monomorphization pass to substitute Nat values into const generic positions
+- [x] S1.9 — Cranelift Lowering: Lower const generic values to immediate constants in native codegen, no runtime overhead
+- [x] S1.10 — Unit Tests: 15+ tests for const generic parsing, Nat arithmetic, monomorphization, and type mismatch errors
 
 ### Sprint S2 — Dependent Arrays
 
-- [ ] S2.1 — Array<T, N> Type: Define built-in `Array<T, const N: usize>` with compile-time length tracking in type system
-- [ ] S2.2 — Array Literal Inference: Infer `N` from array literal length (`let a: Array<i32, _> = [1, 2, 3]` resolves N=3)
-- [ ] S2.3 — Bounds Check Elimination: When index is a const < N, elide runtime bounds check in both interpreter and codegen
-- [ ] S2.4 — Length Propagation: `fn concat<T, const A: usize, const B: usize>(x: Array<T,A>, y: Array<T,B>) -> Array<T, A+B>`
-- [ ] S2.5 — Slice-to-Array Conversion: `slice.try_into_array::<N>()` returns `Result<Array<T,N>, LengthError>` with runtime check
-- [ ] S2.6 — Fixed-Size Window: `array.windows::<W>()` yields `Array<T, W>` views with compile-time window size validation
-- [ ] S2.7 — Split at Index: `array.split_at::<K>() -> (Array<T,K>, Array<T, N-K>)` with compile-time subtraction
-- [ ] S2.8 — Type Error Messages: Emit clear diagnostics on length mismatch (`expected Array<i32, 4>, found Array<i32, 3>`)
-- [ ] S2.9 — Interop with Vec: `Array<T,N>.to_vec()` and `Vec<T>.try_into_array::<N>()` bridging functions
-- [ ] S2.10 — Unit Tests: 15+ tests covering literal inference, bounds elimination, length propagation, split/concat types
+- [x] S2.1 — Array<T, N> Type: Define built-in `Array<T, const N: usize>` with compile-time length tracking in type system
+- [x] S2.2 — Array Literal Inference: Infer `N` from array literal length (`let a: Array<i32, _> = [1, 2, 3]` resolves N=3)
+- [x] S2.3 — Bounds Check Elimination: When index is a const < N, elide runtime bounds check in both interpreter and codegen
+- [x] S2.4 — Length Propagation: `fn concat<T, const A: usize, const B: usize>(x: Array<T,A>, y: Array<T,B>) -> Array<T, A+B>`
+- [x] S2.5 — Slice-to-Array Conversion: `slice.try_into_array::<N>()` returns `Result<Array<T,N>, LengthError>` with runtime check
+- [x] S2.6 — Fixed-Size Window: `array.windows::<W>()` yields `Array<T, W>` views with compile-time window size validation
+- [x] S2.7 — Split at Index: `array.split_at::<K>() -> (Array<T,K>, Array<T, N-K>)` with compile-time subtraction
+- [x] S2.8 — Type Error Messages: Emit clear diagnostics on length mismatch (`expected Array<i32, 4>, found Array<i32, 3>`)
+- [x] S2.9 — Interop with Vec: `Array<T,N>.to_vec()` and `Vec<T>.try_into_array::<N>()` bridging functions
+- [x] S2.10 — Unit Tests: 15+ tests covering literal inference, bounds elimination, length propagation, split/concat types
 
 ### Sprint S3 — Tensor Shape Types
 
-- [ ] S3.1 — Tensor<N,M> Type: Extend tensor type to carry compile-time dimensions `Tensor<const ROWS: usize, const COLS: usize>`
-- [ ] S3.2 — Shape Inference from Construction: `zeros(3, 4)` infers `Tensor<3, 4>`, `ones(5, 5)` infers `Tensor<5, 5>`
-- [ ] S3.3 — Matmul Shape Checking: Enforce `Tensor<A,B> * Tensor<B,C> -> Tensor<A,C>`, error if inner dimensions mismatch
-- [ ] S3.4 — Transpose Shape Flip: `Tensor<A,B>.transpose() -> Tensor<B,A>` verified at compile time
-- [ ] S3.5 — Reshape Validation: `Tensor<A,B>.reshape::<C,D>()` requires compile-time proof that `A*B == C*D`
-- [ ] S3.6 — Flatten Type: `Tensor<A,B>.flatten() -> Tensor<1, A*B>` using type-level multiplication
-- [ ] S3.7 — Broadcast Rules: Compile-time broadcast compatibility check for element-wise ops on mismatched shapes
-- [ ] S3.8 — Higher-Rank Tensors: Extend to `Tensor<D1, D2, D3, ...>` via variadic const generics (up to rank 4)
-- [ ] S3.9 — Shape Error Diagnostics: Rich error messages showing expected vs actual dimensions with operation context
-- [ ] S3.10 — Unit Tests: 20+ tests proving matmul compatibility, reshape validation, transpose, broadcast, and rank-N shapes
+- [x] S3.1 — Tensor<N,M> Type: Extend tensor type to carry compile-time dimensions `Tensor<const ROWS: usize, const COLS: usize>`
+- [x] S3.2 — Shape Inference from Construction: `zeros(3, 4)` infers `Tensor<3, 4>`, `ones(5, 5)` infers `Tensor<5, 5>`
+- [x] S3.3 — Matmul Shape Checking: Enforce `Tensor<A,B> * Tensor<B,C> -> Tensor<A,C>`, error if inner dimensions mismatch
+- [x] S3.4 — Transpose Shape Flip: `Tensor<A,B>.transpose() -> Tensor<B,A>` verified at compile time
+- [x] S3.5 — Reshape Validation: `Tensor<A,B>.reshape::<C,D>()` requires compile-time proof that `A*B == C*D`
+- [x] S3.6 — Flatten Type: `Tensor<A,B>.flatten() -> Tensor<1, A*B>` using type-level multiplication
+- [x] S3.7 — Broadcast Rules: Compile-time broadcast compatibility check for element-wise ops on mismatched shapes
+- [x] S3.8 — Higher-Rank Tensors: Extend to `Tensor<D1, D2, D3, ...>` via variadic const generics (up to rank 4)
+- [x] S3.9 — Shape Error Diagnostics: Rich error messages showing expected vs actual dimensions with operation context
+- [x] S3.10 — Unit Tests: 20+ tests proving matmul compatibility, reshape validation, transpose, broadcast, and rank-N shapes
 
 ### Sprint S4 — Dependent Pattern Matching
 
-- [ ] S4.1 — Type-Level Value Patterns: Match on Nat values in type position (`match N { 0 => ..., 1 => ..., _ => ... }`)
-- [ ] S4.2 — Exhaustiveness with Nats: Verify exhaustive coverage for bounded Nat ranges in match expressions
-- [ ] S4.3 — Proof Witnesses: Generate compile-time witness values proving a constraint holds (e.g., `N > 0`)
-- [ ] S4.4 — Type-Safe Indexing: `array.get::<I>()` where `I < N` is proven at compile time, returns `T` not `Option<T>`
-- [ ] S4.5 — Dependent If-Else: `if N == 0 { ... } else { ... }` where branches have different return types based on Nat value
-- [ ] S4.6 — Where Clauses on Nats: `fn foo<const N: usize>() where N > 0` constraint syntax, checked at instantiation
-- [ ] S4.7 — Nat Range Type: `Nat<1..=10>` bounded natural number type for constrained generic parameters
-- [ ] S4.8 — Inductive Proofs: Support simple inductive reasoning (`if N works, N+1 works`) for recursive functions
-- [ ] S4.9 — Dependent Return Types: Function return type can depend on const generic parameter value
-- [ ] S4.10 — Unit Tests: 15+ tests for exhaustiveness, proof witnesses, safe indexing, where clauses, and dependent returns
+- [x] S4.1 — Type-Level Value Patterns: Match on Nat values in type position (`match N { 0 => ..., 1 => ..., _ => ... }`)
+- [x] S4.2 — Exhaustiveness with Nats: Verify exhaustive coverage for bounded Nat ranges in match expressions
+- [x] S4.3 — Proof Witnesses: Generate compile-time witness values proving a constraint holds (e.g., `N > 0`)
+- [x] S4.4 — Type-Safe Indexing: `array.get::<I>()` where `I < N` is proven at compile time, returns `T` not `Option<T>`
+- [x] S4.5 — Dependent If-Else: `if N == 0 { ... } else { ... }` where branches have different return types based on Nat value
+- [x] S4.6 — Where Clauses on Nats: `fn foo<const N: usize>() where N > 0` constraint syntax, checked at instantiation
+- [x] S4.7 — Nat Range Type: `Nat<1..=10>` bounded natural number type for constrained generic parameters
+- [x] S4.8 — Inductive Proofs: Support simple inductive reasoning (`if N works, N+1 works`) for recursive functions
+- [x] S4.9 — Dependent Return Types: Function return type can depend on const generic parameter value
+- [x] S4.10 — Unit Tests: 15+ tests for exhaustiveness, proof witnesses, safe indexing, where clauses, and dependent returns
 
 ---
 
