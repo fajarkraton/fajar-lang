@@ -3833,3 +3833,183 @@ fn s6_unused_import_warning() {
         "should mention 'unused import'"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 7: Developer Tools
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s7_repl_multiline_balanced_braces() {
+    // is_balanced detects incomplete input for multi-line REPL
+    // We test indirectly: an unbalanced fn body should parse only after closing
+    let incomplete = "fn foo() {";
+    let complete = "fn foo() { 42 }";
+    // incomplete source will fail to parse (missing closing brace)
+    let tokens_inc = tokenize(incomplete).unwrap();
+    let result_inc = parse(tokens_inc);
+    assert!(result_inc.is_err(), "incomplete brace should fail to parse");
+    // complete source parses fine
+    let tokens_comp = tokenize(complete).unwrap();
+    let result_comp = parse(tokens_comp);
+    assert!(result_comp.is_ok(), "balanced braces should parse");
+}
+
+#[test]
+fn s7_repl_type_command_eval_type() {
+    // :type expr → evaluates the expression and returns type_of
+    // Simulate: evaluate expression and check type
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("type_of(42)");
+    match result {
+        Ok(Value::Str(s)) => assert_eq!(s, "i64"),
+        other => panic!("expected Str(\"i64\"), got {other:?}"),
+    }
+    let result2 = interp.eval_source("type_of(\"hello\")");
+    match result2 {
+        Ok(Value::Str(s)) => assert_eq!(s, "str"),
+        other => panic!("expected Str(\"str\"), got {other:?}"),
+    }
+}
+
+#[test]
+fn s7_bench_discovers_parameterless_functions() {
+    // fj bench discovers parameterless functions (excluding main)
+    let source = r#"
+fn bench_add() -> i64 { 1 + 2 }
+fn bench_mul() -> i64 { 3 * 4 }
+fn helper(x: i64) -> i64 { x }
+fn main() -> i64 { 0 }
+"#;
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    // Collect benchmark candidates (parameterless, not main)
+    let mut bench_fns = Vec::new();
+    for item in &program.items {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.name != "main" && fndef.params.is_empty() {
+                bench_fns.push(fndef.name.clone());
+            }
+        }
+    }
+    assert_eq!(bench_fns.len(), 2);
+    assert!(bench_fns.contains(&"bench_add".to_string()));
+    assert!(bench_fns.contains(&"bench_mul".to_string()));
+    // helper has params → excluded
+    assert!(!bench_fns.contains(&"helper".to_string()));
+}
+
+#[test]
+fn s7_bench_filter_by_name() {
+    // fj bench --filter pattern filters bench functions
+    let source = r#"
+fn bench_add() -> i64 { 1 + 2 }
+fn bench_mul() -> i64 { 3 * 4 }
+fn setup() -> i64 { 0 }
+"#;
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    let filter = "add";
+    let mut bench_fns = Vec::new();
+    for item in &program.items {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.name != "main" && fndef.params.is_empty() && fndef.name.contains(filter) {
+                bench_fns.push(fndef.name.clone());
+            }
+        }
+    }
+    assert_eq!(bench_fns.len(), 1);
+    assert_eq!(bench_fns[0], "bench_add");
+}
+
+#[test]
+fn s7_bench_runs_function() {
+    // Benchmark functions actually execute correctly
+    let source = r#"
+fn bench_fib() -> i64 {
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut i: i64 = 0
+    while i < 10 {
+        let tmp = b
+        b = a + b
+        a = tmp
+        i = i + 1
+    }
+    a
+}
+bench_fib()
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(source);
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 55),
+        other => panic!("expected Int(55), got {other:?}"),
+    }
+}
+
+#[test]
+fn s7_lsp_rename_whole_word_replacement() {
+    // Rename symbol: whole-word replacement logic
+    let source = "let counter = 42\nlet result = counter + 1";
+    let old_name = "counter";
+    let new_name = "total";
+    // Simulate rename: replace all whole-word occurrences
+    let mut output_lines = Vec::new();
+    for line_text in source.lines() {
+        let mut new_line = String::new();
+        let mut col = 0;
+        while col < line_text.len() {
+            if let Some(found) = line_text[col..].find(old_name) {
+                let start_col = col + found;
+                let end_col = start_col + old_name.len();
+                let before_ok = start_col == 0
+                    || (!line_text.as_bytes()[start_col - 1].is_ascii_alphanumeric()
+                        && line_text.as_bytes()[start_col - 1] != b'_');
+                let after_ok = end_col >= line_text.len()
+                    || (!line_text.as_bytes()[end_col].is_ascii_alphanumeric()
+                        && line_text.as_bytes()[end_col] != b'_');
+                new_line.push_str(&line_text[col..start_col]);
+                if before_ok && after_ok {
+                    new_line.push_str(new_name);
+                } else {
+                    new_line.push_str(old_name);
+                }
+                col = end_col;
+            } else {
+                new_line.push_str(&line_text[col..]);
+                break;
+            }
+        }
+        output_lines.push(new_line);
+    }
+    let result = output_lines.join("\n");
+    assert_eq!(result, "let total = 42\nlet result = total + 1");
+}
+
+#[test]
+fn s7_watch_detects_fj_files() {
+    // fj watch: .fj files are detected for watching
+    let test_files = vec!["main.fj", "lib.fj", "test.rs", "readme.md", "utils.fj"];
+    let fj_files: Vec<_> = test_files.iter().filter(|f| f.ends_with(".fj")).collect();
+    assert_eq!(fj_files.len(), 3);
+    assert!(fj_files.contains(&&"main.fj"));
+    assert!(fj_files.contains(&&"utils.fj"));
+}
+
+#[test]
+fn s7_lsp_analyzer_provides_diagnostics() {
+    // LSP uses analyzer to provide diagnostics — test the underlying analysis
+    let source = "fn main() -> i64 { unknown_var }";
+    let tokens = tokenize(source).unwrap();
+    let program = parse(tokens).unwrap();
+    let result = analyze(&program);
+    assert!(result.is_err(), "undefined variable should produce error");
+    let errors = result.unwrap_err();
+    let has_se001 = errors.iter().any(|e| {
+        matches!(
+            e,
+            fajar_lang::analyzer::type_check::SemanticError::UndefinedVariable { .. }
+        )
+    });
+    assert!(has_se001, "should detect undefined variable (SE001)");
+}

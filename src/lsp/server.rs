@@ -104,6 +104,7 @@ impl LanguageServer for FajarLspBackend {
                     retrigger_characters: None,
                     work_done_progress_options: Default::default(),
                 }),
+                rename_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -439,6 +440,67 @@ impl LanguageServer for FajarLspBackend {
         }
 
         Ok(None)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let new_name = &params.new_name;
+
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        // Find all occurrences of the word in the document
+        let mut edits = Vec::new();
+        for (i, line_text) in doc.source.lines().enumerate() {
+            let mut col = 0;
+            while let Some(found) = line_text[col..].find(&word) {
+                let start_col = col + found;
+                let end_col = start_col + word.len();
+                // Verify it's a whole word match (not part of a larger identifier)
+                let before_ok = start_col == 0
+                    || !line_text.as_bytes()[start_col - 1].is_ascii_alphanumeric()
+                        && line_text.as_bytes()[start_col - 1] != b'_';
+                let after_ok = end_col >= line_text.len()
+                    || !line_text.as_bytes()[end_col].is_ascii_alphanumeric()
+                        && line_text.as_bytes()[end_col] != b'_';
+                if before_ok && after_ok {
+                    edits.push(TextEdit {
+                        range: Range {
+                            start: Position {
+                                line: i as u32,
+                                character: start_col as u32,
+                            },
+                            end: Position {
+                                line: i as u32,
+                                character: end_col as u32,
+                            },
+                        },
+                        new_text: new_name.clone(),
+                    });
+                }
+                col = end_col;
+            }
+        }
+
+        if edits.is_empty() {
+            return Ok(None);
+        }
+
+        let mut changes = HashMap::new();
+        changes.insert(uri.clone(), edits);
+        Ok(Some(WorkspaceEdit {
+            changes: Some(changes),
+            ..Default::default()
+        }))
     }
 }
 

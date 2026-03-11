@@ -124,6 +124,22 @@ enum Command {
         #[arg(long)]
         include_ignored: bool,
     },
+    /// Watch .fj files and re-run on change.
+    Watch {
+        /// Path to the .fj source file. If omitted, uses fj.toml entry point.
+        file: Option<PathBuf>,
+        /// Auto-run tests instead of the program.
+        #[arg(long)]
+        test: bool,
+    },
+    /// Run benchmarks on a Fajar Lang program.
+    Bench {
+        /// Path to the .fj source file. If omitted, uses fj.toml entry point.
+        file: Option<PathBuf>,
+        /// Filter benchmark names.
+        #[arg(long)]
+        filter: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -215,6 +231,32 @@ fn main() -> ExitCode {
             };
             cmd_test(&path, filter.as_deref(), include_ignored)
         }
+        Command::Watch { file, test } => {
+            let path = match file {
+                Some(f) => f,
+                None => match resolve_project_entry() {
+                    Ok(p) => p,
+                    Err(msg) => {
+                        eprintln!("error: {msg}");
+                        return ExitCode::from(EXIT_USAGE);
+                    }
+                },
+            };
+            cmd_watch(&path, test)
+        }
+        Command::Bench { file, filter } => {
+            let path = match file {
+                Some(f) => f,
+                None => match resolve_project_entry() {
+                    Ok(p) => p,
+                    Err(msg) => {
+                        eprintln!("error: {msg}");
+                        return ExitCode::from(EXIT_USAGE);
+                    }
+                },
+            };
+            cmd_bench(&path, filter.as_deref())
+        }
     }
 }
 
@@ -291,10 +333,34 @@ fn cmd_run(path: &PathBuf) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Starts an interactive REPL.
+/// Checks if a source string has balanced braces/parens (for multi-line input).
+fn is_balanced(source: &str) -> bool {
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut prev = '\0';
+    for ch in source.chars() {
+        if in_string {
+            if ch == '"' && prev != '\\' {
+                in_string = false;
+            }
+        } else {
+            match ch {
+                '"' => in_string = true,
+                '{' | '(' | '[' => depth += 1,
+                '}' | ')' | ']' => depth -= 1,
+                _ => {}
+            }
+        }
+        prev = ch;
+    }
+    depth <= 0
+}
+
+/// Starts an interactive REPL with multi-line input and REPL commands.
 fn cmd_repl() -> ExitCode {
-    println!("Fajar Lang v0.3.0 — Interactive REPL");
+    println!("Fajar Lang v0.5.0 — Interactive REPL");
     println!("Type expressions to evaluate. Type 'exit' or Ctrl-D to quit.");
+    println!("Commands: :type <expr>, :help");
     println!();
 
     let mut rl = match rustyline::DefaultEditor::new() {
@@ -306,9 +372,11 @@ fn cmd_repl() -> ExitCode {
     };
 
     let mut interp = Interpreter::new();
+    let mut buffer = String::new();
 
     loop {
-        let line = match rl.readline("fj> ") {
+        let prompt = if buffer.is_empty() { "fj> " } else { "... " };
+        let line = match rl.readline(prompt) {
             Ok(line) => line,
             Err(
                 rustyline::error::ReadlineError::Eof | rustyline::error::ReadlineError::Interrupted,
@@ -323,7 +391,7 @@ fn cmd_repl() -> ExitCode {
         };
 
         let trimmed = line.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() && buffer.is_empty() {
             continue;
         }
         if trimmed == "exit" || trimmed == "quit" {
@@ -333,8 +401,70 @@ fn cmd_repl() -> ExitCode {
 
         let _ = rl.add_history_entry(&line);
 
+        // REPL commands
+        if buffer.is_empty() {
+            if trimmed == ":help" {
+                println!("  :type <expr>  — show type of expression without evaluating");
+                println!("  :help         — show this help");
+                println!("  exit / quit   — exit REPL");
+                continue;
+            }
+            if let Some(expr_src) = trimmed.strip_prefix(":type ") {
+                // :type command — type-check without evaluating
+                match tokenize(expr_src) {
+                    Ok(tokens) => match parse(tokens) {
+                        Ok(program) => {
+                            let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new();
+                            let _ = tc.analyze(&program);
+                            // Check the last expression/statement type
+                            if let Some(item) = program.items.last() {
+                                let ty = match item {
+                                    fajar_lang::parser::ast::Item::Stmt(
+                                        fajar_lang::parser::ast::Stmt::Expr { expr, .. },
+                                    ) => {
+                                        let mut tc2 =
+                                            fajar_lang::analyzer::type_check::TypeChecker::new();
+                                        let ty = tc2.check_expr(expr);
+                                        ty.display_name()
+                                    }
+                                    _ => "void".to_string(),
+                                };
+                                println!("  : {ty}");
+                            } else {
+                                println!("  : void");
+                            }
+                        }
+                        Err(errors) => {
+                            for e in &errors {
+                                eprintln!("  parse error: {e}");
+                            }
+                        }
+                    },
+                    Err(errors) => {
+                        for e in &errors {
+                            eprintln!("  lex error: {e}");
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+
+        // Multi-line input: buffer incomplete expressions
+        if !buffer.is_empty() {
+            buffer.push('\n');
+        }
+        buffer.push_str(&line);
+
+        if !is_balanced(&buffer) {
+            continue;
+        }
+
+        let source = buffer.clone();
+        buffer.clear();
+
         // Lex → Parse → Analyze → Eval (via eval_source)
-        match interp.eval_source(trimmed) {
+        match interp.eval_source(&source) {
             Ok(val) => {
                 if !matches!(val, fajar_lang::interpreter::Value::Null) {
                     println!("{val}");
@@ -1323,5 +1453,152 @@ fn cmd_publish() -> ExitCode {
     }
 
     println!("Published {} v{} (local registry)", name, version);
+    ExitCode::SUCCESS
+}
+
+/// Watches .fj files and re-runs on change.
+fn cmd_watch(path: &PathBuf, test_mode: bool) -> ExitCode {
+    let watch_dir = path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_path_buf();
+
+    println!(
+        "\x1b[36m[watch]\x1b[0m Watching {} for changes...",
+        watch_dir.display()
+    );
+    if test_mode {
+        println!("\x1b[36m[watch]\x1b[0m Mode: auto-test on change");
+    } else {
+        println!("\x1b[36m[watch]\x1b[0m Mode: auto-run on change");
+    }
+    println!("\x1b[36m[watch]\x1b[0m Press Ctrl-C to stop.\n");
+
+    // Initial run
+    if test_mode {
+        let _ = cmd_test(path, None, false);
+    } else {
+        let _ = cmd_run(path);
+    }
+
+    // Poll-based file watching (no external crate dependency)
+    let mut last_modified = get_last_modified(&watch_dir);
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let current = get_last_modified(&watch_dir);
+        if current > last_modified {
+            last_modified = current;
+            println!("\n\x1b[36m[watch]\x1b[0m File change detected, re-running...\n");
+            if test_mode {
+                let _ = cmd_test(path, None, false);
+            } else {
+                let _ = cmd_run(path);
+            }
+        }
+    }
+}
+
+/// Returns the most recent modification time of any .fj file in the directory.
+fn get_last_modified(dir: &std::path::Path) -> std::time::SystemTime {
+    let mut latest = std::time::SystemTime::UNIX_EPOCH;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "fj") {
+                if let Ok(metadata) = path.metadata() {
+                    if let Ok(modified) = metadata.modified() {
+                        if modified > latest {
+                            latest = modified;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    latest
+}
+
+/// Runs micro-benchmarks on a Fajar Lang program.
+fn cmd_bench(path: &PathBuf, filter: Option<&str>) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Find all functions (benchmark candidates)
+    let mut bench_fns: Vec<String> = Vec::new();
+    for item in &program.items {
+        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
+            if fndef.name != "main" && fndef.params.is_empty() {
+                if let Some(pat) = filter {
+                    if fndef.name.contains(pat) {
+                        bench_fns.push(fndef.name.clone());
+                    }
+                } else {
+                    bench_fns.push(fndef.name.clone());
+                }
+            }
+        }
+    }
+
+    if bench_fns.is_empty() {
+        println!("No benchmark functions found (functions with no parameters, excluding main).");
+        return ExitCode::SUCCESS;
+    }
+
+    println!(
+        "\nrunning {} benchmark{}",
+        bench_fns.len(),
+        if bench_fns.len() == 1 { "" } else { "s" }
+    );
+
+    for name in &bench_fns {
+        // Warm up (1 iteration)
+        let warmup_source = format!("{source}\n{name}()");
+        let mut warmup_interp = Interpreter::new();
+        let _ = warmup_interp.eval_source(&warmup_source);
+
+        // Benchmark (10 iterations)
+        let iterations = 10;
+        let start = std::time::Instant::now();
+        for _ in 0..iterations {
+            let bench_source = format!("{source}\n{name}()");
+            let mut bench_interp = Interpreter::new();
+            let _ = bench_interp.eval_source(&bench_source);
+        }
+        let elapsed = start.elapsed();
+        let avg = elapsed / iterations;
+
+        println!(
+            "bench {:<40} ... \x1b[33m{:>12?}\x1b[0m/iter ({iterations} iters, {elapsed:.2?} total)",
+            name, avg
+        );
+    }
+
+    println!();
     ExitCode::SUCCESS
 }

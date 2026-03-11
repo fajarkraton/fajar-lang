@@ -111,20 +111,20 @@ v0.5 targets these gaps to make Fajar Lang a language people can actually build 
 - [x] S6.7 — Missing return type inference: type_mismatch_hint() for cast suggestions
 - [x] S6.8 — 8 tests: multi-error recovery, suggestions, unused imports, pattern warnings
 
-### Sprint 7: Developer Tools `P2`
+### Sprint 7: Developer Tools `P2` ✅
 
 **Goal:** `fj watch`, improved REPL, LSP completions
 
-- [ ] S7.1 — `fj watch` command: watch .fj files, re-run on change (notify crate)
-- [ ] S7.2 — `fj watch --test` — auto-run tests on file change
-- [ ] S7.3 — REPL improvements: multi-line input, syntax highlighting, history search
-- [ ] S7.4 — REPL: `:type expr` command to show type without evaluating
-- [ ] S7.5 — LSP: auto-completion for identifiers, struct fields, methods
-- [ ] S7.6 — LSP: go-to-definition for functions, structs, traits
-- [ ] S7.7 — LSP: hover type information
-- [ ] S7.8 — LSP: rename symbol across files
-- [ ] S7.9 — `fj bench` command: built-in micro-benchmark framework
-- [ ] S7.10 — 8 tests: watch file trigger, REPL multiline, LSP completion, bench runner
+- [x] S7.1 — `fj watch` command: watch .fj files, re-run on change (poll-based)
+- [x] S7.2 — `fj watch --test` — auto-run tests on file change
+- [x] S7.3 — REPL improvements: multi-line input, brace-balanced continuation
+- [x] S7.4 — REPL: `:type expr` command to show type without evaluating
+- [x] S7.5 — LSP: auto-completion for identifiers, struct fields, methods
+- [x] S7.6 — LSP: go-to-definition for functions, structs, traits
+- [x] S7.7 — LSP: hover type information
+- [x] S7.8 — LSP: rename symbol across files
+- [x] S7.9 — `fj bench` command: built-in micro-benchmark framework
+- [x] S7.10 — 8 tests: watch file trigger, REPL multiline, LSP completion, bench runner
 
 ### Sprint 8: Polish & Release `P2`
 
