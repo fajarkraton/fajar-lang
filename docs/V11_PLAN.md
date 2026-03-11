@@ -454,55 +454,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S29 — Wasm Compiler Target
 
-- [ ] S29.1 — Wasm Build Target: Configure Cargo for wasm32-unknown-unknown target, exclude native-only crates
-- [ ] S29.2 — Lexer in Wasm: Compile lexer module to Wasm, expose `tokenize()` via wasm-bindgen
-- [ ] S29.3 — Parser in Wasm: Compile parser module to Wasm, expose `parse()` via wasm-bindgen
-- [ ] S29.4 — Interpreter in Wasm: Compile tree-walking interpreter to Wasm, expose `eval_source()` via wasm-bindgen
-- [ ] S29.5 — Memory Sandbox: Limit Wasm linear memory to 64MB, implement OOM handling for runaway programs
-- [ ] S29.6 — Execution Timeout: Implement instruction counter in Wasm interpreter, abort after 10M instructions
-- [ ] S29.7 — Print Capture: Redirect `print`/`println` output to a string buffer returned to JavaScript
-- [ ] S29.8 — Error Formatting: Format miette diagnostics as plain text (no ANSI codes) for browser display
-- [ ] S29.9 — Wasm Bundle Size: Optimize Wasm binary size with wasm-opt, target < 5MB compressed
-- [ ] S29.10 — Unit Tests: Verify Wasm compilation, test eval_source in Node.js/wasm-pack test environment
+- [x] S29.1 — Wasm Build Target: Configure Cargo for wasm32-unknown-unknown target, exclude native-only crates
+- [x] S29.2 — Lexer in Wasm: Compile lexer module to Wasm, expose `tokenize()` via wasm-bindgen
+- [x] S29.3 — Parser in Wasm: Compile parser module to Wasm, expose `parse()` via wasm-bindgen
+- [x] S29.4 — Interpreter in Wasm: Compile tree-walking interpreter to Wasm, expose `eval_source()` via wasm-bindgen
+- [x] S29.5 — Memory Sandbox: Limit Wasm linear memory to 64MB, implement OOM handling for runaway programs
+- [x] S29.6 — Execution Timeout: Implement instruction counter in Wasm interpreter, abort after 10M instructions
+- [x] S29.7 — Print Capture: Redirect `print`/`println` output to a string buffer returned to JavaScript
+- [x] S29.8 — Error Formatting: Format miette diagnostics as plain text (no ANSI codes) for browser display
+- [x] S29.9 — Wasm Bundle Size: Optimize Wasm binary size with wasm-opt, target < 5MB compressed
+- [x] S29.10 — Unit Tests: Verify Wasm compilation, test eval_source in Node.js/wasm-pack test environment
 
 ### Sprint S30 — Playground UI
 
-- [ ] S30.1 — Monaco Editor: Integrate Monaco Editor (VS Code engine) with Fajar Lang syntax highlighting
-- [ ] S30.2 — Syntax Theme: Create custom Fajar Lang theme for Monaco matching docs site color scheme
-- [ ] S30.3 — Run Button: "Run" button that sends editor content to Wasm eval_source(), displays result
-- [ ] S30.4 — Output Panel: Split-pane output panel showing stdout, return value, and execution time
-- [ ] S30.5 — Error Display: Show miette-style error messages with line highlights in editor gutter
-- [ ] S30.6 — Loading State: Show spinner during Wasm initialization and execution, handle timeout gracefully
-- [ ] S30.7 — Keyboard Shortcuts: Ctrl+Enter to run, Ctrl+S to save (to localStorage), Ctrl+L to clear output
-- [ ] S30.8 — Responsive Layout: Editor and output panels stack vertically on mobile, side-by-side on desktop
-- [ ] S30.9 — Local Storage: Auto-save editor content to localStorage, restore on page load
-- [ ] S30.10 — Unit Tests: Playwright/Cypress end-to-end tests for run flow, error display, keyboard shortcuts
+- [x] S30.1 — Monaco Editor: Integrate Monaco Editor (VS Code engine) with Fajar Lang syntax highlighting
+- [x] S30.2 — Syntax Theme: Create custom Fajar Lang theme for Monaco matching docs site color scheme
+- [x] S30.3 — Run Button: "Run" button that sends editor content to Wasm eval_source(), displays result
+- [x] S30.4 — Output Panel: Split-pane output panel showing stdout, return value, and execution time
+- [x] S30.5 — Error Display: Show miette-style error messages with line highlights in editor gutter
+- [x] S30.6 — Loading State: Show spinner during Wasm initialization and execution, handle timeout gracefully
+- [x] S30.7 — Keyboard Shortcuts: Ctrl+Enter to run, Ctrl+S to save (to localStorage), Ctrl+L to clear output
+- [x] S30.8 — Responsive Layout: Editor and output panels stack vertically on mobile, side-by-side on desktop
+- [x] S30.9 — Local Storage: Auto-save editor content to localStorage, restore on page load
+- [x] S30.10 — Unit Tests: Playwright/Cypress end-to-end tests for run flow, error display, keyboard shortcuts
 
 ### Sprint S31 — Share & Embed
 
-- [ ] S31.1 — URL-Encoded Sharing: Compress code with lz-string, encode in URL fragment (#code=...) for sharing
-- [ ] S31.2 — Short URLs: Generate short URLs via Cloudflare KV (play.fajarlang.dev/s/{id}) for long programs
-- [ ] S31.3 — Copy Share Link: "Share" button copies URL to clipboard with toast notification
-- [ ] S31.4 — oEmbed Endpoint: Implement oEmbed provider at fajarlang.dev/oembed for rich embeds in docs/blogs
-- [ ] S31.5 — iframe Embed API: `<iframe src="play.fajarlang.dev/embed?code=...">` for embedding in external sites
-- [ ] S31.6 — Embed Options: URL params for embed: `theme=dark|light`, `readonly=true`, `autorun=true`
-- [ ] S31.7 — Social Preview Cards: Generate OpenGraph image with code preview for shared playground links
-- [ ] S31.8 — Twitter/X Card: Twitter card meta tags showing code snippet and language name when shared
-- [ ] S31.9 — Embed in mdBook: Add "Try it" buttons in documentation that open playground with pre-filled code
-- [ ] S31.10 — Unit Tests: Test URL encoding/decoding, short URL generation, oEmbed response format
+- [x] S31.1 — URL-Encoded Sharing: Compress code with lz-string, encode in URL fragment (#code=...) for sharing
+- [x] S31.2 — Short URLs: Generate short URLs via Cloudflare KV (play.fajarlang.dev/s/{id}) for long programs
+- [x] S31.3 — Copy Share Link: "Share" button copies URL to clipboard with toast notification
+- [x] S31.4 — oEmbed Endpoint: Implement oEmbed provider at fajarlang.dev/oembed for rich embeds in docs/blogs
+- [x] S31.5 — iframe Embed API: `<iframe src="play.fajarlang.dev/embed?code=...">` for embedding in external sites
+- [x] S31.6 — Embed Options: URL params for embed: `theme=dark|light`, `readonly=true`, `autorun=true`
+- [x] S31.7 — Social Preview Cards: Generate OpenGraph image with code preview for shared playground links
+- [x] S31.8 — Twitter/X Card: Twitter card meta tags showing code snippet and language name when shared
+- [x] S31.9 — Embed in mdBook: Add "Try it" buttons in documentation that open playground with pre-filled code
+- [x] S31.10 — Unit Tests: Test URL encoding/decoding, short URL generation, oEmbed response format
 
 ### Sprint S32 — Example Gallery
 
-- [ ] S32.1 — Gallery Page: Grid layout page listing all playground examples with title, description, difficulty
-- [ ] S32.2 — Difficulty Levels: Tag examples as Beginner (green), Intermediate (yellow), Advanced (red)
-- [ ] S32.3 — Hello World Example: Basic hello world with variable declaration, function call, print output
-- [ ] S32.4 — Pattern Matching Example: Enum definition, match expression, exhaustive pattern coverage
-- [ ] S32.5 — Struct & Methods Example: Point struct, impl block, method calls, operator use
-- [ ] S32.6 — Error Handling Example: Result type, `?` operator, match on Ok/Err, error propagation
-- [ ] S32.7 — Tensor Operations Example: Create tensor, matmul, activation function, shape manipulation
-- [ ] S32.8 — ML Training Example: Simple linear regression with autograd, optimizer, training loop
-- [ ] S32.9 — Pipeline Operator Example: Chain transformations with `|>`, demonstrate functional style
-- [ ] S32.10 — Guided Tutorial: Step-by-step tutorial with 5 incremental examples building a calculator
+- [x] S32.1 — Gallery Page: Grid layout page listing all playground examples with title, description, difficulty
+- [x] S32.2 — Difficulty Levels: Tag examples as Beginner (green), Intermediate (yellow), Advanced (red)
+- [x] S32.3 — Hello World Example: Basic hello world with variable declaration, function call, print output
+- [x] S32.4 — Pattern Matching Example: Enum definition, match expression, exhaustive pattern coverage
+- [x] S32.5 — Struct & Methods Example: Point struct, impl block, method calls, operator use
+- [x] S32.6 — Error Handling Example: Result type, `?` operator, match on Ok/Err, error propagation
+- [x] S32.7 — Tensor Operations Example: Create tensor, matmul, activation function, shape manipulation
+- [x] S32.8 — ML Training Example: Simple linear regression with autograd, optimizer, training loop
+- [x] S32.9 — Pipeline Operator Example: Chain transformations with `|>`, demonstrate functional style
+- [x] S32.10 — Guided Tutorial: Step-by-step tutorial with 5 incremental examples building a calculator
 
 ---
 

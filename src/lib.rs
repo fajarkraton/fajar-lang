@@ -32,6 +32,7 @@ pub mod lexer;
 pub mod lsp;
 pub mod package;
 pub mod parser;
+pub mod playground;
 pub mod rtos;
 pub mod runtime;
 pub mod stdlib;
