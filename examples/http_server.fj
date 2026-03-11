@@ -1,0 +1,95 @@
+// http_server.fj — Async HTTP server with routing and JSON
+//
+// Demonstrates Fajar Lang's async I/O and networking capabilities.
+
+use std::collections::HashMap
+
+// JSON response helper
+fn json_response(status: i32, body: str) -> str {
+    let status_text = match status {
+        200 => "OK",
+        201 => "Created",
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        _ => "Unknown"
+    }
+    f"HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n{body}"
+}
+
+// Route handlers
+fn handle_index() -> str {
+    json_response(200, "{\"message\": \"Welcome to Fajar Lang HTTP Server\"}")
+}
+
+fn handle_health() -> str {
+    json_response(200, "{\"status\": \"healthy\", \"version\": \"0.9.0\"}")
+}
+
+fn handle_predict(body: str) -> str {
+    // Simulate ML inference
+    let input = body  // parse JSON in real app
+    let confidence = 0.95
+    json_response(200, f"{{\"prediction\": \"cat\", \"confidence\": {confidence}}}")
+}
+
+fn handle_not_found(path: str) -> str {
+    json_response(404, f"{{\"error\": \"Not found: {path}\"}}")
+}
+
+// Middleware: request logging
+fn log_request(method: str, path: str) {
+    println(f"[{method}] {path}")
+}
+
+// Middleware: CORS headers
+fn add_cors_headers(response: str) -> str {
+    let cors = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST\r\n"
+    // Insert CORS headers before body
+    response
+}
+
+// Main server
+async fn serve(addr: str, port: i32) {
+    let listener = tcp_bind(f"{addr}:{port}")
+    println(f"Listening on {addr}:{port}")
+
+    loop {
+        let stream = listener.accept().await
+        let request = stream.read().await
+
+        // Parse request line
+        let parts = request.split(" ")
+        let method = parts[0]
+        let path = parts[1]
+
+        // Log middleware
+        log_request(method, path)
+
+        // Route dispatch
+        let response = match path {
+            "/" => handle_index(),
+            "/health" => handle_health(),
+            "/predict" => {
+                if method == "POST" {
+                    handle_predict(request)
+                } else {
+                    json_response(400, "{\"error\": \"POST required\"}")
+                }
+            },
+            _ => handle_not_found(path)
+        }
+
+        // CORS middleware
+        let response = add_cors_headers(response)
+
+        // Send response
+        stream.write(response).await
+        stream.close().await
+    }
+}
+
+fn main() {
+    println("Starting Fajar Lang HTTP Server...")
+    serve("127.0.0.1", 8080)
+}

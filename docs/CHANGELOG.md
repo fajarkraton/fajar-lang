@@ -18,6 +18,30 @@ Kategori perubahan:
 
 ---
 
+## [0.9.0] — 2026-03-11 "Convergence"
+
+### Added
+- **Phase 1 — Effect System** (`src/analyzer/effects.rs`): Algebraic effects with `EffectKind` (IO, Alloc, Panic, Async, State, Exception), `EffectDecl`/`EffectOp` declarations, `EffectSet` for function signatures, `EffectRegistry` with built-in effects, `EffectHandler` with `OpHandler` and `ResumePoint` for delimited continuations, `HandlerScopeStack` for nested handler resolution, effect checking (EE001-EE008 error codes), context interaction (@kernel/no-Alloc, @device/no-IO), `#[pure]` annotation checking, effect-aware closures/generics/trait methods, cross-module effect inference, `no_effect` bound
+- **Phase 2 — Compile-Time Evaluation** (`src/compiler/comptime.rs`): `ConstEval` evaluator with `ConstValue` (Int/Float/Bool/Str/Array/Tuple/Struct/Enum/FnPtr/Null), `ConstExpr` AST, const arithmetic/comparison/logical/control-flow, `ComptimeBlock` interpreter with string manipulation and array generation, `@comptime` parameter annotation, compile-time assertions, `Shape` type with `ShapeDim` (Const/Dynamic), matmul/broadcast/conv2d/reshape shape validation (TE009), layer chain inference, `ConstCache` memoization, const recursion limit (128), const loops, const struct/enum/function pointer construction, const eval metrics
+- **Phase 3 — Macro System** (`src/parser/macros.rs`): Declarative macros with `MacroRule`/`MacroDef`/`MacroMatcher` (Literal/Variable/Repetition), `FragmentKind` (Expr/Ident/Ty/Stmt/Block/Pat/Literal/TokenTree), `RepKind` (ZeroOrMore/OneOrMore), `MacroExpander` with hygiene (gensym), recursive expansion (limit 64), built-in macros (vec!/println!/format!/assert!/cfg!/dbg!), `DeriveMacro` system (Debug/Clone/PartialEq/Hash/Default/Serialize), `AttributeMacro` (Cfg/CfgFeature/Inline/Deprecated/Allow/Deny/Repr), `CfgExpr` evaluator, `compile_error!/include!/env!/file!/line!/column!/stringify!` utilities, macro error reporting with expansion trace
+- **Phase 4 — SIMD & Vectorization** (`src/runtime/simd.rs`): `SimdVector` with `SimdType` (I32x4/F32x4/I32x8/F32x8/F64x2/F64x4/I8x16/I16x8), lane-wise arithmetic/comparison/shuffle, `SimdCapability` runtime detection, platform intrinsics (SSE: mm_add_ps/mm_mul_ps/mm_shuffle_ps, AVX: mm256_add_ps/mm256_fmadd_ps, AVX-512: mm512_add_ps/mm512_mask_add_ps, NEON: vaddq_f32/vmulq_f32, SVE: sve_add_f32_pred, RISC-V V: rvv_fadd), SIMD tensor ops (4x4 matmul, elementwise, reduction, relu/sigmoid/tanh/softmax, dot product, conv1d, quantize), `VectorizationPass` auto-vectorizer with loop analysis, cost model, `VectorizationReport`
+- **Phase 5 — Security Hardening** (`src/compiler/security.rs`): `SecurityConfig` with comprehensive flags, `CanaryGenerator` per-function stack canaries, `StackClashProtector` with guard page probing, `ShadowStack` for return address protection, stack depth analysis, `CfiMetadata` with type hash validation, forward/backward-edge CFI, `VTableGuard`, `JumpTableGuard`, `FunctionDiversifier` ROP mitigation, `AddressSanitizer` (shadow memory, red zones, quarantine), `MemorySanitizer` (uninitialized memory tracking), `LeakDetector`, double-free detection, `PicGenerator`, `RelroSection`, `NxStackConfig`, `FortifyChecker`, `SecurityAudit` with findings/report, binary hardening score (0-100), `-fharden` flag
+- **Phase 6 — Async I/O & Networking** (`src/runtime/async_io.rs`): `IoBackend` trait with `IoUringBackend`/`EpollBackend` simulation, `IoOp` (Read/Write/Accept/Connect/Close), `BufReader`/`BufWriter`, `TcpListener`/`TcpStream`/`UdpSocket` simulation, `SocketAddr` parsing, DNS resolution, `ConnectionPool`, TLS handshake simulation, HTTP/1.1 (`HttpRequest`/`HttpResponse` parse/build, `HttpClient`/`HttpServer` with routing, `HttpMiddleware`, CORS), WebSocket frames (encode/decode, upgrade handshake), gRPC stubs, HTTP/2 framing, `ProtocolStack`, `TokenBucket` rate limiter, `CircuitBreaker`, `RetryPolicy` with exponential backoff
+- **Phase 7 — Production Polish** (`src/compiler/edition.rs`, `src/compiler/benchmark.rs`): `Edition` system (Edition2025/Edition2026) with keyword reservation, `DeprecationWarning`, `MigrationTool` with auto-fix suggestions, edition compatibility checking, `StabilityLevel` (Stable/Unstable/Deprecated), `FeatureGate`, `ApiSurface`/`ApiItem`/`ApiDiff` for API stability, `StabilityChecker`, SemVer validation, API diff report generation, `BenchmarkSuite` with `Benchmark`/`BenchmarkResult`, overhead measurement, regression detection
+
+### New Examples
+- `examples/effects_demo.fj` — Algebraic effects for I/O, state, exceptions
+- `examples/simd_image.fj` — SIMD image processing (blur, sharpen, edge detect)
+- `examples/http_server.fj` — Async HTTP server with routing and JSON
+
+### Stats
+- New files: 8 source modules, 3 examples
+- New tests: 270 (across 8 modules, ~34 per module)
+- Sprints: 28 (7 phases × 4 sprints)
+- Total: 280 tasks, all complete
+
+---
+
 ## [0.8.0] — 2026-03-11 "Apex"
 
 ### Added

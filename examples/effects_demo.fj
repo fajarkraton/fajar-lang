@@ -1,0 +1,75 @@
+// effects_demo.fj — Algebraic effects for I/O, state, and exceptions
+//
+// Demonstrates Fajar Lang's effect system for structured side-effect control.
+
+// Declare custom effects
+effect Console {
+    fn read_line() -> str
+    fn write_line(msg: str) -> void
+}
+
+effect State<T> {
+    fn get() -> T
+    fn put(value: T) -> void
+}
+
+effect Exception<E> {
+    fn throw(err: E) -> never
+}
+
+// Pure function — no effects
+#[pure]
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+// Function with IO effect
+fn greet(name: str) -> void / Console {
+    perform Console.write_line(f"Hello, {name}!")
+}
+
+// Function with State effect
+fn counter() -> i32 / State<i32> {
+    let current = perform State.get()
+    perform State.put(current + 1)
+    current
+}
+
+// Function with Exception effect
+fn safe_divide(a: f64, b: f64) -> f64 / Exception<str> {
+    if b == 0.0 {
+        perform Exception.throw("division by zero")
+    }
+    a / b
+}
+
+// Handler that provides Console implementation
+fn main() {
+    // Handle Console effect with mock I/O
+    let result = handle greet("Fajar") {
+        Console.write_line(msg) => {
+            println(msg)
+            resume
+        }
+        Console.read_line() => {
+            resume("user input")
+        }
+    }
+
+    // Handle State effect with initial value
+    let count = handle counter() {
+        State.get() => resume(0),
+        State.put(v) => resume
+    }
+
+    // Handle Exception effect with recovery
+    let div = handle safe_divide(10.0, 0.0) {
+        Exception.throw(err) => {
+            println(f"Caught: {err}")
+            0.0  // default value
+        }
+    }
+
+    println(f"Counter: {count}")
+    println(f"Division result: {div}")
+}

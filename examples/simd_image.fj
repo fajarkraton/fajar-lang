@@ -1,0 +1,100 @@
+// simd_image.fj — SIMD image processing (blur, sharpen, edge detect)
+//
+// Demonstrates Fajar Lang's SIMD vector types for parallel pixel operations.
+
+// Image represented as flat array of f32 (grayscale, 0.0-1.0)
+struct Image {
+    width: i32,
+    height: i32,
+    pixels: [f32]
+}
+
+// 3x3 convolution kernels
+const BLUR_KERNEL: [f32; 9] = [
+    0.111, 0.111, 0.111,
+    0.111, 0.111, 0.111,
+    0.111, 0.111, 0.111
+]
+
+const SHARPEN_KERNEL: [f32; 9] = [
+     0.0, -1.0,  0.0,
+    -1.0,  5.0, -1.0,
+     0.0, -1.0,  0.0
+]
+
+const EDGE_KERNEL: [f32; 9] = [
+    -1.0, -1.0, -1.0,
+    -1.0,  8.0, -1.0,
+    -1.0, -1.0, -1.0
+]
+
+// SIMD-accelerated 3x3 convolution
+@simd
+fn convolve_3x3(img: &Image, kernel: &[f32; 9]) -> Image {
+    let w = img.width
+    let h = img.height
+    let mut out = [0.0; w * h]
+
+    for y in 1..(h - 1) {
+        // Process 4 pixels at a time using f32x4
+        let x = 1
+        while x < w - 5 {
+            let sum = f32x4::splat(0.0)
+
+            // Accumulate 3x3 neighborhood
+            for ky in -1..=1 {
+                for kx in -1..=1 {
+                    let ki = (ky + 1) * 3 + (kx + 1)
+                    let weight = f32x4::splat(kernel[ki])
+                    let row = (y + ky) * w + x + kx
+                    let pixels = f32x4(
+                        img.pixels[row],
+                        img.pixels[row + 1],
+                        img.pixels[row + 2],
+                        img.pixels[row + 3]
+                    )
+                    sum = sum + pixels * weight
+                }
+            }
+
+            // Clamp to [0, 1]
+            let zero = f32x4::splat(0.0)
+            let one = f32x4::splat(1.0)
+            sum = max(zero, min(one, sum))
+
+            // Store 4 results
+            let idx = y * w + x
+            out[idx] = sum[0]
+            out[idx + 1] = sum[1]
+            out[idx + 2] = sum[2]
+            out[idx + 3] = sum[3]
+
+            x = x + 4
+        }
+    }
+
+    Image { width: w, height: h, pixels: out }
+}
+
+fn main() {
+    // Create test image (8x8 checkerboard)
+    let w = 8
+    let h = 8
+    let mut pixels = [0.0; 64]
+    for y in 0..h {
+        for x in 0..w {
+            pixels[y * w + x] = if (x + y) % 2 == 0 { 1.0 } else { 0.0 }
+        }
+    }
+    let img = Image { width: w, height: h, pixels: pixels }
+
+    // Apply filters
+    let blurred = convolve_3x3(&img, &BLUR_KERNEL)
+    let sharpened = convolve_3x3(&img, &SHARPEN_KERNEL)
+    let edges = convolve_3x3(&img, &EDGE_KERNEL)
+
+    println("SIMD image processing complete")
+    println(f"Blurred center pixel: {blurred.pixels[27]}")
+    println(f"Sharpened center pixel: {sharpened.pixels[27]}")
+    println(f"Edge center pixel: {edges.pixels[27]}")
+}
