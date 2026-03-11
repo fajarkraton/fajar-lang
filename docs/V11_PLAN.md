@@ -512,55 +512,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S33 — @infer Context
 
-- [ ] S33.1 — Lexer Token: Add `Infer` as context annotation token, recognized after `@` prefix
-- [ ] S33.2 — Parser Support: Parse `@infer fn ...` and `@infer { ... }` blocks, attach InferContext to AST
-- [ ] S33.3 — Analyzer Rules: @infer allows tensor ops and scalar compute, disallows raw pointers and OS primitives
-- [ ] S33.4 — Type Checking: @infer functions must return tensor or scalar, input types auto-dispatched
-- [ ] S33.5 — Compile-Time Hints: `@infer(prefer=gpu)` or `@infer(prefer=npu)` to hint preferred accelerator
-- [ ] S33.6 — Context Compatibility: @infer can call @device and @npu functions, cannot call @kernel
-- [ ] S33.7 — Error Codes: Define IE001-IE004 (InferError) for @infer context violations
-- [ ] S33.8 — Diagnostic Messages: miette-powered error messages for @infer misuse with suggested fixes
-- [ ] S33.9 — Documentation: Add @infer to language spec, context table, examples in playground
-- [ ] S33.10 — Unit Tests: 15+ tests for @infer allowed/disallowed ops, hint parsing, cross-context calls
+- [x] S33.1 — Lexer Token: Add `Infer` as context annotation token, recognized after `@` prefix
+- [x] S33.2 — Parser Support: Parse `@infer fn ...` and `@infer { ... }` blocks, attach InferContext to AST
+- [x] S33.3 — Analyzer Rules: @infer allows tensor ops and scalar compute, disallows raw pointers and OS primitives
+- [x] S33.4 — Type Checking: @infer functions must return tensor or scalar, input types auto-dispatched
+- [x] S33.5 — Compile-Time Hints: `@infer(prefer=gpu)` or `@infer(prefer=npu)` to hint preferred accelerator
+- [x] S33.6 — Context Compatibility: @infer can call @device and @npu functions, cannot call @kernel
+- [x] S33.7 — Error Codes: Define IE001-IE004 (InferError) for @infer context violations
+- [x] S33.8 — Diagnostic Messages: miette-powered error messages for @infer misuse with suggested fixes
+- [x] S33.9 — Documentation: Add @infer to language spec, context table, examples in playground
+- [x] S33.10 — Unit Tests: 15+ tests for @infer allowed/disallowed ops, hint parsing, cross-context calls
 
 ### Sprint S34 — Dispatch Runtime
 
-- [ ] S34.1 — Dispatch Decision Engine: Score available accelerators for given workload (matmul size, dtype, batch)
-- [ ] S34.2 — CPU Fallback Path: Always-available CPU execution path for any @infer function
-- [ ] S34.3 — NPU Dispatch Path: Route to NPU when model fits NPU constraints (INT8/FP16, supported ops)
-- [ ] S34.4 — GPU Dispatch Path: Route to GPU for large matmuls, training, and FP4/FP8 inference
-- [ ] S34.5 — Automatic Fallback: If preferred accelerator fails (OOM, unsupported op), fall back to next in chain
-- [ ] S34.6 — Latency Profiling: First-run calibration measures actual latency per accelerator, caches results
-- [ ] S34.7 — Workload Classification: Classify workloads as compute-bound, memory-bound, or latency-sensitive
-- [ ] S34.8 — Dispatch Cache: Cache dispatch decisions per (model_hash, input_shape, available_hw) tuple
-- [ ] S34.9 — Dispatch Logging: Log dispatch decisions at debug level for user visibility into hardware selection
-- [ ] S34.10 — Unit Tests: 12+ tests for dispatch scoring, fallback chain, caching, latency profiling mock
+- [x] S34.1 — Dispatch Decision Engine: Score available accelerators for given workload (matmul size, dtype, batch)
+- [x] S34.2 — CPU Fallback Path: Always-available CPU execution path for any @infer function
+- [x] S34.3 — NPU Dispatch Path: Route to NPU when model fits NPU constraints (INT8/FP16, supported ops)
+- [x] S34.4 — GPU Dispatch Path: Route to GPU for large matmuls, training, and FP4/FP8 inference
+- [x] S34.5 — Automatic Fallback: If preferred accelerator fails (OOM, unsupported op), fall back to next in chain
+- [x] S34.6 — Latency Profiling: First-run calibration measures actual latency per accelerator, caches results
+- [x] S34.7 — Workload Classification: Classify workloads as compute-bound, memory-bound, or latency-sensitive
+- [x] S34.8 — Dispatch Cache: Cache dispatch decisions per (model_hash, input_shape, available_hw) tuple
+- [x] S34.9 — Dispatch Logging: Log dispatch decisions at debug level for user visibility into hardware selection
+- [x] S34.10 — Unit Tests: 12+ tests for dispatch scoring, fallback chain, caching, latency profiling mock
 
 ### Sprint S35 — Heterogeneous Execution
 
-- [ ] S35.1 — Graph Partitioning: Split computation graph into subgraphs per device (CPU, NPU, GPU)
-- [ ] S35.2 — Data Transfer: Implement host-to-device and device-to-host tensor transfer with pinned memory
-- [ ] S35.3 — Transfer Optimization: Overlap computation and data transfer using double-buffering
-- [ ] S35.4 — Pipeline Parallelism: Execute subgraphs on different devices in pipeline (layer N on GPU, N+1 on NPU)
-- [ ] S35.5 — Synchronization: Barrier-based synchronization between devices at subgraph boundaries
-- [ ] S35.6 — Memory Pool: Pre-allocate device memory pools to avoid per-inference allocation overhead
-- [ ] S35.7 — Multi-GPU Split: Distribute large models across multiple GPUs (tensor parallel or pipeline parallel)
-- [ ] S35.8 — Heterogeneous Batch: Process different batch items on different accelerators simultaneously
-- [ ] S35.9 — Execution Plan Visualization: Generate DOT graph showing which subgraph runs on which device
-- [ ] S35.10 — Unit Tests: 12+ tests for graph partitioning, data transfer correctness, pipeline parallelism
+- [x] S35.1 — Graph Partitioning: Split computation graph into subgraphs per device (CPU, NPU, GPU)
+- [x] S35.2 — Data Transfer: Implement host-to-device and device-to-host tensor transfer with pinned memory
+- [x] S35.3 — Transfer Optimization: Overlap computation and data transfer using double-buffering
+- [x] S35.4 — Pipeline Parallelism: Execute subgraphs on different devices in pipeline (layer N on GPU, N+1 on NPU)
+- [x] S35.5 — Synchronization: Barrier-based synchronization between devices at subgraph boundaries
+- [x] S35.6 — Memory Pool: Pre-allocate device memory pools to avoid per-inference allocation overhead
+- [x] S35.7 — Multi-GPU Split: Distribute large models across multiple GPUs (tensor parallel or pipeline parallel)
+- [x] S35.8 — Heterogeneous Batch: Process different batch items on different accelerators simultaneously
+- [x] S35.9 — Execution Plan Visualization: Generate DOT graph showing which subgraph runs on which device
+- [x] S35.10 — Unit Tests: 12+ tests for graph partitioning, data transfer correctness, pipeline parallelism
 
 ### Sprint S36 — Profiler & Visualizer
 
-- [ ] S36.1 — Per-Device Timer: Record wall-clock time per device per subgraph execution
-- [ ] S36.2 — Memory Transfer Overhead: Measure and report bytes transferred between host and each device
-- [ ] S36.3 — Roofline Model: Compute operational intensity and plot against device peak for bottleneck analysis
-- [ ] S36.4 — Flame Graph Output: Generate flame graph SVG from profiling data (compatible with inferno)
-- [ ] S36.5 — CLI Profiler: `fj profile run model.fj` outputs per-device timing breakdown to stdout
-- [ ] S36.6 — JSON Profile Export: Export profiling data as Chrome Trace Event format for chrome://tracing
-- [ ] S36.7 — Throughput Metrics: Report inferences/second, tokens/second, samples/second for common workloads
-- [ ] S36.8 — Memory Watermark: Track peak memory usage per device across entire inference run
-- [ ] S36.9 — Comparison Mode: `fj profile --compare cpu,gpu model.fj` runs on both and shows side-by-side
-- [ ] S36.10 — Unit Tests: 10+ tests for timer accuracy, roofline computation, flame graph generation, JSON export
+- [x] S36.1 — Per-Device Timer: Record wall-clock time per device per subgraph execution
+- [x] S36.2 — Memory Transfer Overhead: Measure and report bytes transferred between host and each device
+- [x] S36.3 — Roofline Model: Compute operational intensity and plot against device peak for bottleneck analysis
+- [x] S36.4 — Flame Graph Output: Generate flame graph SVG from profiling data (compatible with inferno)
+- [x] S36.5 — CLI Profiler: `fj profile run model.fj` outputs per-device timing breakdown to stdout
+- [x] S36.6 — JSON Profile Export: Export profiling data as Chrome Trace Event format for chrome://tracing
+- [x] S36.7 — Throughput Metrics: Report inferences/second, tokens/second, samples/second for common workloads
+- [x] S36.8 — Memory Watermark: Track peak memory usage per device across entire inference run
+- [x] S36.9 — Comparison Mode: `fj profile --compare cpu,gpu model.fj` runs on both and shows side-by-side
+- [x] S36.10 — Unit Tests: 10+ tests for timer accuracy, roofline computation, flame graph generation, JSON export
 
 ---
 

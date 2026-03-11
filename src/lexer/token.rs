@@ -258,6 +258,8 @@ pub enum TokenKind {
     AtShouldPanic,
     /// `@ignore`
     AtIgnore,
+    /// `@infer`
+    AtInfer,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -565,6 +567,7 @@ impl fmt::Display for TokenKind {
             // Lifetime
             TokenKind::Lifetime(name) => write!(f, "'{name}"),
             // Special
+            TokenKind::AtInfer => write!(f, "@infer"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -671,6 +674,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("should_panic", TokenKind::AtShouldPanic);
     m.insert("ignore", TokenKind::AtIgnore);
     m.insert("section", TokenKind::AtSection);
+    m.insert("infer", TokenKind::AtInfer);
     m
 });
 

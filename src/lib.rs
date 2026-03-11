@@ -18,6 +18,7 @@
 //! - [`interpreter`] — Tree-walking evaluation
 //! - [`runtime`] — OS and ML execution backends
 
+pub mod accelerator;
 pub mod analyzer;
 pub mod bsp;
 pub mod codegen;
