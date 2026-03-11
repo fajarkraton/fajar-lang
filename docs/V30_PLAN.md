@@ -158,55 +158,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S9 — RPC Framework
 
-- [ ] S9.1 — Service Definition: `@rpc trait UserService { fn get_user(id: u64) -> Result<User, Error>; }`
-- [ ] S9.2 — Code Generation: Generate client stub and server skeleton from `@rpc` trait definition
-- [ ] S9.3 — Serialization: Binary serialization format for RPC messages (compact, zero-copy where possible)
-- [ ] S9.4 — Transport Layer: TCP transport with connection pooling and multiplexing
-- [ ] S9.5 — Service Discovery: `Registry` for service name → address resolution
-- [ ] S9.6 — Load Balancing: Round-robin, least-connections, weighted strategies for multi-server targets
-- [ ] S9.7 — Retry Policy: Configurable retry with exponential backoff and circuit breaker
-- [ ] S9.8 — Streaming RPC: `fn stream_data(query: Query) -> Stream<DataChunk>` — server-side streaming
-- [ ] S9.9 — Bidirectional Streaming: Client and server both stream messages concurrently
-- [ ] S9.10 — Unit Tests: 15+ tests for service generation, serialization roundtrip, discovery, load balancing, retry
+- [x] S9.1 — Service Definition: `@rpc trait UserService { fn get_user(id: u64) -> Result<User, Error>; }`
+- [x] S9.2 — Code Generation: Generate client stub and server skeleton from `@rpc` trait definition
+- [x] S9.3 — Serialization: Binary serialization format for RPC messages (compact, zero-copy where possible)
+- [x] S9.4 — Transport Layer: TCP transport with connection pooling and multiplexing
+- [x] S9.5 — Service Discovery: `Registry` for service name → address resolution
+- [x] S9.6 — Load Balancing: Round-robin, least-connections, weighted strategies for multi-server targets
+- [x] S9.7 — Retry Policy: Configurable retry with exponential backoff and circuit breaker
+- [x] S9.8 — Streaming RPC: `fn stream_data(query: Query) -> Stream<DataChunk>` — server-side streaming
+- [x] S9.9 — Bidirectional Streaming: Client and server both stream messages concurrently
+- [x] S9.10 — Unit Tests: 15+ tests for service generation, serialization roundtrip, discovery, load balancing, retry
 
 ### Sprint S10 — Distributed Tensors
 
-- [ ] S10.1 — Tensor Sharding: `tensor.shard(dim=0, num_shards=4)` — split tensor across nodes
-- [ ] S10.2 — Shard Placement: Placement strategy — round-robin, locality-aware, memory-balanced
-- [ ] S10.3 — Distributed MatMul: Parallel matrix multiplication across shards with result aggregation
-- [ ] S10.4 — AllReduce: Sum/average gradients across all nodes for synchronized training
-- [ ] S10.5 — Ring AllReduce: Bandwidth-optimal ring-based all-reduce for large tensors
-- [ ] S10.6 — Parameter Server: Centralized parameter storage with async gradient updates
-- [ ] S10.7 — Data Parallelism: Automatic batch splitting across GPU nodes with gradient sync
-- [ ] S10.8 — Model Parallelism: Split large model layers across nodes (pipeline parallelism)
-- [ ] S10.9 — Communication Backend: NCCL-style collectives over TCP/shared memory
-- [ ] S10.10 — Unit Tests: 15+ tests for sharding, placement, allreduce, ring topology, data/model parallelism
+- [x] S10.1 — Tensor Sharding: `tensor.shard(dim=0, num_shards=4)` — split tensor across nodes
+- [x] S10.2 — Shard Placement: Placement strategy — round-robin, locality-aware, memory-balanced
+- [x] S10.3 — Distributed MatMul: Parallel matrix multiplication across shards with result aggregation
+- [x] S10.4 — AllReduce: Sum/average gradients across all nodes for synchronized training
+- [x] S10.5 — Ring AllReduce: Bandwidth-optimal ring-based all-reduce for large tensors
+- [x] S10.6 — Parameter Server: Centralized parameter storage with async gradient updates
+- [x] S10.7 — Data Parallelism: Automatic batch splitting across GPU nodes with gradient sync
+- [x] S10.8 — Model Parallelism: Split large model layers across nodes (pipeline parallelism)
+- [x] S10.9 — Communication Backend: NCCL-style collectives over TCP/shared memory
+- [x] S10.10 — Unit Tests: 15+ tests for sharding, placement, allreduce, ring topology, data/model parallelism
 
 ### Sprint S11 — Cluster Scheduling
 
-- [ ] S11.1 — Node Discovery: Automatic peer discovery via multicast or seed nodes
-- [ ] S11.2 — Resource Advertisement: Each node advertises CPU cores, GPU count, memory, network bandwidth
-- [ ] S11.3 — Task Placement: Schedule tasks to nodes based on resource requirements and availability
-- [ ] S11.4 — Fault Detection: Heartbeat-based failure detection with configurable timeout (default: 10s)
-- [ ] S11.5 — Task Migration: Move running task to another node on failure (checkpoint + restore)
-- [ ] S11.6 — Work Stealing: Idle nodes steal tasks from overloaded nodes for load balancing
-- [ ] S11.7 — Barrier Synchronization: Global barrier across all cluster nodes for synchronized phases
-- [ ] S11.8 — Cluster Topology: Aware of rack/datacenter topology for locality-optimized scheduling
-- [ ] S11.9 — Resource Quotas: Per-user/per-project resource limits and fair scheduling
-- [ ] S11.10 — Unit Tests: 15+ tests for discovery, placement, fault detection, migration, work stealing, barriers
+- [x] S11.1 — Node Discovery: Automatic peer discovery via multicast or seed nodes
+- [x] S11.2 — Resource Advertisement: Each node advertises CPU cores, GPU count, memory, network bandwidth
+- [x] S11.3 — Task Placement: Schedule tasks to nodes based on resource requirements and availability
+- [x] S11.4 — Fault Detection: Heartbeat-based failure detection with configurable timeout (default: 10s)
+- [x] S11.5 — Task Migration: Move running task to another node on failure (checkpoint + restore)
+- [x] S11.6 — Work Stealing: Idle nodes steal tasks from overloaded nodes for load balancing
+- [x] S11.7 — Barrier Synchronization: Global barrier across all cluster nodes for synchronized phases
+- [x] S11.8 — Cluster Topology: Aware of rack/datacenter topology for locality-optimized scheduling
+- [x] S11.9 — Resource Quotas: Per-user/per-project resource limits and fair scheduling
+- [x] S11.10 — Unit Tests: 15+ tests for discovery, placement, fault detection, migration, work stealing, barriers
 
 ### Sprint S12 — Fault Tolerance
 
-- [ ] S12.1 — Checkpointing: Periodic state snapshots for long-running distributed computations
-- [ ] S12.2 — Checkpoint Storage: Local disk, NFS, or object storage backends for checkpoints
-- [ ] S12.3 — Recovery: Restart failed computation from latest checkpoint, skip completed work
-- [ ] S12.4 — Exactly-Once Semantics: Idempotent operations + deduplication for exactly-once message delivery
-- [ ] S12.5 — Saga Pattern: Distributed transaction with compensating actions for each step
-- [ ] S12.6 — Dead Letter Queue: Failed messages routed to DLQ for manual inspection/retry
-- [ ] S12.7 — Circuit Breaker: Per-service circuit breaker (closed → open → half-open) with configurable thresholds
-- [ ] S12.8 — Bulkhead Isolation: Isolate failure domains — one failing service doesn't take down the system
-- [ ] S12.9 — Chaos Engineering: `@chaos` annotation to inject random failures for resilience testing
-- [ ] S12.10 — Unit Tests: 15+ tests for checkpointing, recovery, exactly-once, saga, circuit breaker, bulkhead
+- [x] S12.1 — Checkpointing: Periodic state snapshots for long-running distributed computations
+- [x] S12.2 — Checkpoint Storage: Local disk, NFS, or object storage backends for checkpoints
+- [x] S12.3 — Recovery: Restart failed computation from latest checkpoint, skip completed work
+- [x] S12.4 — Exactly-Once Semantics: Idempotent operations + deduplication for exactly-once message delivery
+- [x] S12.5 — Saga Pattern: Distributed transaction with compensating actions for each step
+- [x] S12.6 — Dead Letter Queue: Failed messages routed to DLQ for manual inspection/retry
+- [x] S12.7 — Circuit Breaker: Per-service circuit breaker (closed → open → half-open) with configurable thresholds
+- [x] S12.8 — Bulkhead Isolation: Isolate failure domains — one failing service doesn't take down the system
+- [x] S12.9 — Chaos Engineering: `@chaos` annotation to inject random failures for resilience testing
+- [x] S12.10 — Unit Tests: 15+ tests for checkpointing, recovery, exactly-once, saga, circuit breaker, bulkhead
 
 ---
 

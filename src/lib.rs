@@ -27,6 +27,7 @@ pub mod concurrency_v2;
 pub mod debugger;
 pub mod demos;
 pub mod dependent;
+pub mod distributed;
 pub mod docgen;
 pub mod effects;
 pub mod formatter;
