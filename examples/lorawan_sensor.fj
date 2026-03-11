@@ -1,0 +1,68 @@
+// LoRaWAN Sensor Node Demo
+// Demonstrates LoRaWAN OTAA join and periodic uplink of sensor data
+//
+// This example shows how a Fajar Lang program would interact with
+// a LoRaWAN radio using the iot::lorawan module APIs.
+
+// Device configuration
+let plan: str = "EU868"
+let dev_eui: str = "00:11:22:33:44:55:66:77"
+
+println("=== LoRaWAN Sensor Node ===")
+println("Frequency plan: " + plan)
+println("DevEUI: " + dev_eui)
+
+// In real deployment, these would call the iot::lorawan API:
+//   let config = LoRaConfig::new(FrequencyPlan::EU868)
+//   let device = LoRaDevice::new(config)
+
+// OTAA Join
+println("")
+println("Performing OTAA join...")
+// let accept = device.join_otaa()
+// println(f"Joined! DevAddr: {accept.dev_addr:08X}")
+let dev_addr: str = "44556677"
+println("Joined! DevAddr: " + dev_addr)
+
+// Read sensor data
+let temperature: f64 = 23.7
+let humidity: f64 = 58.2
+let battery_mv: i32 = 3300
+
+println("")
+println("=== Sensor Readings ===")
+println("Temperature: " + to_string(temperature) + " C")
+println("Humidity: " + to_string(humidity) + " %")
+println("Battery: " + to_string(battery_mv) + " mV")
+
+// Send uplink on port 1 (confirmed)
+// In real deployment:
+//   let payload = encode_cayenne_lpp(temperature, humidity, battery_mv)
+//   device.send_uplink(1, payload, true)
+println("")
+println("Sending uplink on port 1 (confirmed)...")
+println("Payload: [0x01, 0x67, 0x00, 0xED]")
+println("Data rate: SF12/125kHz")
+println("Uplink sent! FCnt: 1")
+
+// Check for downlink in RX1/RX2 windows
+println("")
+println("Waiting for downlink (RX1: 1s, RX2: 2s)...")
+// let dl = device.receive_downlink()
+println("No downlink received")
+
+// ADR status
+println("")
+println("=== ADR Status ===")
+println("Current DR: SF12BW125 (DR0)")
+println("Link margin: 12 dB")
+println("ADR: enabled")
+
+// Sleep until next transmission
+println("")
+println("Entering sleep mode (next TX in 600s)...")
+// device.sleep()
+println("Sensor data sent via LoRaWAN")
+
+println("")
+println("=== Demo Complete ===")

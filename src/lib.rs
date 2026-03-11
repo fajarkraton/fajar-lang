@@ -21,6 +21,7 @@
 pub mod analyzer;
 pub mod bsp;
 pub mod codegen;
+pub mod compiler;
 pub mod debugger;
 pub mod docgen;
 pub mod formatter;

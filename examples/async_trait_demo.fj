@@ -1,0 +1,114 @@
+// async_trait_demo.fj — Demonstrates async trait methods and GAT patterns
+//
+// This example shows how Fajar Lang supports async methods in traits,
+// GAT-based lending iterators, and streaming patterns.
+
+// ─── Basic async trait ───────────────────────────────────────────────
+
+trait DataSource {
+    async fn fetch(&self, key: str) -> str
+    async fn exists(&self, key: str) -> bool
+    fn name(&self) -> str
+}
+
+struct FileSource {
+    path: str
+}
+
+impl DataSource for FileSource {
+    async fn fetch(&self, key: str) -> str {
+        // In a real implementation, this would read from a file
+        "file_data"
+    }
+
+    async fn exists(&self, key: str) -> bool {
+        true
+    }
+
+    fn name(&self) -> str {
+        "FileSource"
+    }
+}
+
+// ─── Lending iterator pattern (GAT) ─────────────────────────────────
+
+trait LendingIterator {
+    // type Item<'a> where Self: 'a
+    fn next(&mut self) -> i64
+    fn has_next(&self) -> bool
+}
+
+struct WindowsIter {
+    data: [i64; 8]
+    window_size: i64
+    position: i64
+}
+
+impl LendingIterator for WindowsIter {
+    fn next(&mut self) -> i64 {
+        let val = self.position
+        self.position = self.position + 1
+        val
+    }
+
+    fn has_next(&self) -> bool {
+        self.position < 8 - self.window_size + 1
+    }
+}
+
+// ─── Async streaming pattern ────────────────────────────────────────
+
+trait Stream {
+    async fn poll_next(&mut self) -> i64
+    fn is_done(&self) -> bool
+}
+
+struct NumberStream {
+    current: i64
+    max: i64
+}
+
+impl Stream for NumberStream {
+    async fn poll_next(&mut self) -> i64 {
+        let val = self.current
+        self.current = self.current + 1
+        val
+    }
+
+    fn is_done(&self) -> bool {
+        self.current >= self.max
+    }
+}
+
+// ─── Main ───────────────────────────────────────────────────────────
+
+fn main() {
+    // Async trait usage
+    let source = FileSource { path: "/data" }
+    println("Data source: FileSource")
+    println("Supports async fetch and exists methods")
+
+    // Lending iterator usage
+    let mut iter = WindowsIter {
+        data: [1, 2, 3, 4, 5, 6, 7, 8]
+        window_size: 3
+        position: 0
+    }
+    println("Windows iterator created with window_size=3")
+
+    let mut count = 0
+    while iter.has_next() {
+        let val = iter.next()
+        count = count + 1
+    }
+    println("Iterated through all windows")
+    print("Total windows: ")
+    println(to_string(count))
+
+    // Streaming pattern
+    let mut stream = NumberStream { current: 0, max: 5 }
+    println("Number stream: 0..5")
+    println("Supports async poll_next for streaming data")
+
+    println("async_trait_demo complete")
+}

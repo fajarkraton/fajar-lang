@@ -1,0 +1,57 @@
+// Debug Demo — Fajar Lang Debugger Example
+//
+// This program demonstrates debugging features:
+// - Set breakpoints at specific lines
+// - Step through variable assignments
+// - Inspect locals and call stack
+// - Evaluate expressions in the debug console
+//
+// Usage:
+//   fj debug --dap examples/debug_demo.fj
+//
+// VS Code launch.json:
+//   {
+//     "type": "fj",
+//     "request": "launch",
+//     "program": "examples/debug_demo.fj",
+//     "stopOnEntry": true,
+//     "console": "internalConsole"
+//   }
+
+use std::io::println
+
+fn add(a: i64, b: i64) -> i64 {
+    let result = a + b    // Try: set breakpoint here, inspect 'a', 'b', 'result'
+    result
+}
+
+fn fibonacci(n: i64) -> i64 {
+    if n <= 1 {
+        n
+    } else {
+        fibonacci(n - 1) + fibonacci(n - 2)   // Step into to trace recursion
+    }
+}
+
+fn main() -> void {
+    // Step through these assignments and watch values change
+    let x: i64 = 10
+    let y: i64 = 20
+    let sum = add(x, y)      // Step into 'add' to see locals
+    println(sum)
+
+    // Try conditional breakpoint: break when i == 5
+    let mut i: i64 = 0
+    while i < 10 {
+        i = i + 1
+    }
+    println(i)
+
+    // Recursive call — inspect call stack depth
+    let fib_result = fibonacci(6)
+    println(fib_result)
+
+    // Watch expression demo: evaluate 'sum + fib_result' in debug console
+    let total = sum + fib_result
+    println(total)
+}

@@ -1,0 +1,200 @@
+// Lending Iterator Patterns (GAT-inspired)
+//
+// Demonstrates advanced iterator patterns inspired by Rust's
+// Generic Associated Types (GATs). In Fajar Lang, we simulate
+// lending iteration where the iterator yields references tied
+// to its own lifetime using struct-based state machines.
+//
+// Patterns shown:
+// - Windows iterator (overlapping slices)
+// - Chunk iterator (non-overlapping groups)
+// - Flatten iterator (nested collections)
+// - Chain iterator (sequential concatenation)
+//
+// Build: fj run examples/lending_iterator.fj
+
+// ── Windows Iterator ────────────────────────────────────────────────
+// Yields overlapping windows of size N from a collection.
+// In a GAT system: type Item<'a> = &'a [T] where Self: 'a
+
+fn windows_sum(data_len: i64, window_size: i64) -> i64 {
+    // Simulates iterating windows and summing each window
+    let mut total = 0
+    let mut start = 0
+    let num_windows = data_len - window_size + 1
+
+    while start < num_windows {
+        let mut window_sum = 0
+        let mut j = 0
+        while j < window_size {
+            // Simulated data: element at index i has value i+1
+            window_sum = window_sum + (start + j + 1)
+            j = j + 1
+        }
+        println("  window[" + to_string(start) + "]: sum = " + to_string(window_sum))
+        total = total + window_sum
+        start = start + 1
+    }
+    total
+}
+
+// ── Chunk Iterator ──────────────────────────────────────────────────
+// Yields non-overlapping chunks of size N.
+// Last chunk may be smaller than N.
+
+fn chunks_count(data_len: i64, chunk_size: i64) -> i64 {
+    let mut count = 0
+    let mut pos = 0
+
+    while pos < data_len {
+        let remaining = data_len - pos
+        let this_chunk = if remaining < chunk_size { remaining } else { chunk_size }
+
+        let mut chunk_sum = 0
+        let mut j = 0
+        while j < this_chunk {
+            chunk_sum = chunk_sum + (pos + j + 1)
+            j = j + 1
+        }
+
+        println("  chunk[" + to_string(count) + "] (size " + to_string(this_chunk) + "): sum = " + to_string(chunk_sum))
+        count = count + 1
+        pos = pos + chunk_size
+    }
+    count
+}
+
+// ── Flatten Iterator ────────────────────────────────────────────────
+// Flattens nested iteration (simulated as group counts).
+
+fn flatten_groups(group_sizes_len: i64) -> i64 {
+    // Simulates groups of sizes [3, 2, 4] yielding individual elements
+    let mut total_elements = 0
+    let mut group_idx = 0
+
+    while group_idx < group_sizes_len {
+        // Group size: (group_idx + 1) * 2 - 1 -> gives 1, 3, 5 for indices 0, 1, 2
+        let group_size = group_idx * 2 + 1
+        let mut elem_idx = 0
+
+        while elem_idx < group_size {
+            total_elements = total_elements + 1
+            elem_idx = elem_idx + 1
+        }
+
+        println("  group[" + to_string(group_idx) + "] yielded " + to_string(group_size) + " elements")
+        group_idx = group_idx + 1
+    }
+    total_elements
+}
+
+// ── Chain Iterator ──────────────────────────────────────────────────
+// Chains two iterators sequentially.
+
+fn chain_iterate(first_len: i64, second_len: i64) -> i64 {
+    let mut total = 0
+
+    // First iterator
+    let mut i = 0
+    while i < first_len {
+        total = total + (i + 1)
+        i = i + 1
+    }
+    println("  first iterator: " + to_string(first_len) + " elements, sum = " + to_string(total))
+
+    // Second iterator continues
+    let first_sum = total
+    let mut j = 0
+    while j < second_len {
+        total = total + (j + 100)
+        j = j + 1
+    }
+    let second_sum = total - first_sum
+    println("  second iterator: " + to_string(second_len) + " elements, sum = " + to_string(second_sum))
+
+    total
+}
+
+// ── Map + Filter Pipeline ───────────────────────────────────────────
+// Demonstrates chained transformations.
+
+fn pipeline_demo(data_len: i64) -> i64 {
+    // Simulate: data |> map(x => x * 2) |> filter(x => x > 5) |> sum
+    let mut result = 0
+    let mut kept = 0
+    let mut i = 0
+
+    while i < data_len {
+        let original = i + 1
+        let mapped = original * 2  // map: double
+
+        if mapped > 5 {  // filter: > 5
+            result = result + mapped
+            kept = kept + 1
+        }
+
+        i = i + 1
+    }
+
+    println("  pipeline: " + to_string(data_len) + " -> map(*2) -> filter(>5) -> " + to_string(kept) + " elements, sum = " + to_string(result))
+    result
+}
+
+// ── Enumerate ───────────────────────────────────────────────────────
+// Yields (index, value) pairs.
+
+fn enumerate_demo(data_len: i64) -> i64 {
+    let mut i = 0
+    while i < data_len {
+        let value = (i + 1) * 10
+        println("  (" + to_string(i) + ", " + to_string(value) + ")")
+        i = i + 1
+    }
+    data_len
+}
+
+// ── Main ────────────────────────────────────────────────────────────
+
+fn main() -> i64 {
+    println("=== Fajar Lang Lending Iterator Patterns ===")
+    println("")
+
+    // Windows iterator: data = [1, 2, 3, 4, 5], window_size = 3
+    println("1. Windows Iterator (size 3 over 5 elements):")
+    let win_total = windows_sum(5, 3)
+    println("   Total sum of all windows: " + to_string(win_total))
+    println("")
+
+    // Chunk iterator: data = [1..10], chunk_size = 3
+    println("2. Chunk Iterator (size 3 over 10 elements):")
+    let chunk_count = chunks_count(10, 3)
+    println("   Number of chunks: " + to_string(chunk_count))
+    println("")
+
+    // Flatten iterator: 4 groups
+    println("3. Flatten Iterator (4 groups):")
+    let flat_total = flatten_groups(4)
+    println("   Total elements after flatten: " + to_string(flat_total))
+    println("")
+
+    // Chain iterator
+    println("4. Chain Iterator (3 + 4 elements):")
+    let chain_total = chain_iterate(3, 4)
+    println("   Combined sum: " + to_string(chain_total))
+    println("")
+
+    // Pipeline
+    println("5. Map + Filter Pipeline (8 elements):")
+    let pipe_result = pipeline_demo(8)
+    println("   Pipeline result: " + to_string(pipe_result))
+    println("")
+
+    // Enumerate
+    println("6. Enumerate (4 elements):")
+    let enum_count = enumerate_demo(4)
+    println("   Enumerated " + to_string(enum_count) + " items")
+    println("")
+
+    println("=== All Iterator Patterns Complete ===")
+    0
+}

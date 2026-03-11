@@ -15,6 +15,7 @@
 
 pub mod ast;
 pub mod pratt;
+pub mod recovery;
 
 use ast::*;
 use pratt::*;

@@ -1,17 +1,18 @@
 //! IoT connectivity module for Fajar Lang.
 //!
-//! Provides WiFi, BLE, MQTT, and OTA firmware update simulation stubs
-//! for ESP32-based IoT development. All APIs work in simulation mode
+//! Provides WiFi, BLE, MQTT, LoRaWAN, and OTA firmware update simulation
+//! stubs for ESP32-based IoT development. All APIs work in simulation mode
 //! without actual hardware or networking dependencies.
 //!
 //! # Module Structure
 //!
 //! ```text
 //! iot/
-//! ├── wifi.rs   — ESP32 WiFi station/AP mode, scanning, events
-//! ├── ble.rs    — BLE GATT server/client, advertising, scanning
-//! ├── mqtt.rs   — MQTT 3.1.1 client with QoS, subscriptions, last will
-//! └── ota.rs    — OTA firmware & ML model update with A/B partitions
+//! ├── wifi.rs     — ESP32 WiFi station/AP mode, scanning, events
+//! ├── ble.rs      — BLE GATT server/client, advertising, scanning
+//! ├── mqtt.rs     — MQTT 3.1.1 client with QoS, subscriptions, last will
+//! ├── lorawan.rs  — LoRaWAN 1.0.4 Class A/B/C, OTAA, ADR, multicast
+//! └── ota.rs      — OTA firmware & ML model update with A/B partitions
 //! ```
 //!
 //! # Design
@@ -23,6 +24,7 @@
 //! when the `esp32` feature links against `esp-idf-sys`.
 
 pub mod ble;
+pub mod lorawan;
 pub mod mqtt;
 pub mod ota;
 pub mod wifi;
@@ -30,6 +32,11 @@ pub mod wifi;
 // Re-exports for convenience
 pub use ble::{
     BleConfig, BleDevice, BleError, BleEvent, CharProps, GattCharacteristic, GattService,
+};
+pub use lorawan::{
+    AdaptiveDataRate, BeaconInfo, ClassBConfig, DataRate, DeviceClass, Downlink, DutyCycleTracker,
+    FrequencyPlan, IotProtocols, IotStack, JoinAccept, LoRaConfig, LoRaDevice, LoRaDeviceState,
+    LoRaError, LoRaEvent, MacCommand, MulticastGroup,
 };
 pub use mqtt::{LastWill, MqttClient, MqttConfig, MqttError, MqttMessage, QoS};
 pub use ota::{OtaConfig, OtaError, OtaPartition, UpdateInfo, VersionManifest};
@@ -70,5 +77,16 @@ mod tests {
         let config = OtaConfig::new("https://ota.example.com/firmware");
         assert!(config.verify_signature);
         assert!(config.rollback_on_failure);
+    }
+
+    #[test]
+    fn iot_module_re_exports_lorawan_types() {
+        let config = LoRaConfig::new(FrequencyPlan::EU868);
+        assert_eq!(config.frequency_plan, FrequencyPlan::EU868);
+        assert!(config.adr_enabled);
+
+        let device = LoRaDevice::new(config);
+        assert_eq!(device.state(), LoRaDeviceState::Idle);
+        assert_eq!(device.device_class(), DeviceClass::A);
     }
 }

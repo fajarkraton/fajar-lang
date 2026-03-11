@@ -3,9 +3,13 @@
 //! Entry point: [`analyze`] takes a `Program` and returns `Result<(), Vec<SemanticError>>`.
 //! Active from Phase 2 onwards.
 
+pub mod async_trait;
 pub mod borrow_lite;
 pub mod cfg;
+pub mod gat;
+pub mod gat_errors;
 pub mod inference;
+pub mod lending;
 pub mod polonius;
 pub mod scope;
 pub mod type_check;

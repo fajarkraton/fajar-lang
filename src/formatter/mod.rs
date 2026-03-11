@@ -8,6 +8,7 @@
 //! - Max 1 consecutive blank line
 //! - Trailing newline
 
+pub mod config;
 pub mod pretty;
 
 use crate::lexer::tokenize_with_comments;

@@ -23,6 +23,7 @@
 //!     └── Stopped/Terminated events → IDE
 //! ```
 
+pub mod dap;
 pub mod dap_server;
 pub mod dwarf;
 

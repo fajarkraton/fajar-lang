@@ -18,6 +18,38 @@ Kategori perubahan:
 
 ---
 
+## [0.8.0] — 2026-03-11 "Apex"
+
+### Added
+- **Phase 1 — GPU-Accelerated Training** (`src/runtime/ml/gpu/mod.rs`): CUDA device simulation, GPU tensor kernels (matmul, elementwise, activations, softmax, conv2d, batch norm, transpose, reduce), GPU autograd tape, GpuSGD/GpuAdam optimizers, mixed precision (FP16/FP32), data prefetcher, multi-GPU data parallelism (scatter/gather/all-reduce), GPU benchmarks
+- **Phase 2 — Generic Associated Types (GAT)** (`src/analyzer/gat.rs`, `async_trait.rs`, `lending.rs`, `gat_errors.rs`): GAT type system with `AssociatedTypeDef`, `TypeProjection`, `GatRegistry`, async trait desugaring (`async fn` → `impl Future`), object safety checking, `#[async_trait]` boxing, lifetime capture analysis, lending iterator validation (`WindowsIter`, `ChunksIter`, `LinesIter`), GAT error messages (GE001-GE003)
+- **Phase 3 — Incremental Compilation** (`src/compiler/incremental/`): File-level dependency graph, SHA-256 content hashing, change detection, transitive dependents, topological sort, cycle detection, artifact cache with pruning, `IncrementalCompiler` pipeline, compilation benchmarks with lazy parsing/analysis
+- **Phase 4 — Model Optimization** (`src/runtime/ml/pruning.rs`, `distillation.rs`, `custom_grad.rs`, `compression.rs`): Structured pruning (magnitude/gradient/random, channel/filter), knowledge distillation (soft labels, KL divergence, feature/attention transfer, progressive distillation), custom autodiff (JVP/VJP, custom op registry, numerical gradient check, built-in Swish/Mish/FocalLoss), end-to-end compression pipeline (train → prune → distill → quantize → export)
+- **Phase 5 — DAP Debugger** (`src/debugger/dap/`): Source map, breakpoint manager, debug state, DWARF stubs, DAP protocol (Initialize/Launch/SetBreakpoints/Continue/Next/StepIn/StepOut/StackTrace/Variables/Evaluate), watch expressions, conditional breakpoints, hit count breakpoints, log points, exception breakpoints, set-variable, VS Code launch.json configuration, debug console, hover evaluation
+- **Phase 6 — LoRaWAN IoT** (`src/iot/lorawan.rs`): LoRaWAN 1.0.4 MAC layer, OTAA join, Class A/B/C modes, 6 frequency plans (EU868/US915/AU915/AS923/IN865/KR920), adaptive data rate, frame counter tracking, beacon synchronization, multicast groups, MAC commands (LinkCheck/DeviceTime/NewChannel/RxParamSetup/DutyCycleReq), duty cycle enforcement, `IotStack` integration (WiFi+BLE+MQTT+LoRaWAN)
+- **Phase 7 — Production Polish & Release**:
+  - Parser error recovery (`src/parser/recovery.rs`): `RecoveryStrategy`, `ErrorRecovery`, `PartialAst`, `CascadeFilter`, `DidYouMean` (Levenshtein), `MissingSemicolon` detection, `DelimiterTracker`, `TypeMismatchContext`
+  - Formatter configuration (`src/formatter/config.rs`): `FormatterConfig`, `TrailingComma`, `BraceStyle`, `ImportSortOrder`, `CommentPreservation`, `ExpressionWrapper`, `SignatureWrapper`, TOML loading
+  - Documentation generator (`src/package/docgen.rs`): `DocItem`, `DocModule`, `parse_doc_comments`, `render_markdown`, `CrossReference`, `DocSearch`, `DocGenerator`, HTML/JSON output
+  - Runtime profiler (`src/runtime/profiler.rs`): `Profiler`, `FunctionProfile`, `MemorySnapshot`, `FlameGraphEntry`, `AllocationTracker`, `SamplingProfiler`, `ProfileReport` (text/JSON/flamegraph)
+  - Cross-platform support (`src/runtime/platform.rs`): `Platform` detection, path normalization, `QemuTarget`, `PlatformConfig`, `EndianOrder` conversion, `PointerWidth`, Unicode path support
+
+### New Examples
+- `examples/gpu_mnist_train.fj` — GPU-accelerated MNIST training
+- `examples/debug_demo.fj` — Step debugging showcase
+- `examples/compression_pipeline.fj` — Model compression pipeline
+- `examples/lorawan_sensor.fj` — LoRaWAN sensor node
+- `examples/lorawan_gateway.fj` — LoRaWAN gateway with MQTT bridge
+- `examples/lending_iterator.fj` — GAT lending iterator patterns
+
+### Stats
+- New files: 5 source modules, 2 examples
+- New tests: 50 (10 per new source module)
+- Sprints: 23-28 (Phase 7, 60 tasks)
+- Total phases in v0.8: 7 phases, 28 sprints
+
+---
+
 ## [0.7.0] — 2026-03-11 "Power Management & Production Polish"
 
 ### Added

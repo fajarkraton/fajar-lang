@@ -4,6 +4,7 @@
 //! and project builds (`fj build`).
 
 pub mod audit;
+pub mod docgen;
 pub mod manifest;
 pub mod publish;
 pub mod registry;

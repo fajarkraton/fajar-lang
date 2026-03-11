@@ -1,0 +1,241 @@
+// LoRaWAN Gateway with MQTT Bridge
+//
+// Demonstrates a LoRaWAN gateway that receives sensor data from
+// end devices and publishes it to an MQTT broker. Showcases:
+// - Packet parsing and validation
+// - CRC checking
+// - MQTT topic routing
+// - Sensor data decoding
+//
+// Build: fj run examples/lorawan_gateway.fj
+
+// ── LoRaWAN Constants ────────────────────────────────────────────────
+
+const LORA_FREQ_EU868: i64 = 868100000
+const LORA_SF7: i64 = 7
+const LORA_BW_125K: i64 = 125000
+const MAX_PAYLOAD_LEN: i64 = 222
+
+const MSG_TYPE_UNCONFIRMED_UP: i64 = 0x40
+const MSG_TYPE_CONFIRMED_UP: i64 = 0x80
+
+// ── CRC-16 Simulation ───────────────────────────────────────────────
+
+fn crc16(data_len: i64) -> i64 {
+    // Simplified CRC: sum of payload bytes mod 65536
+    let mut crc = 0xFFFF
+    let mut i = 0
+    while i < data_len {
+        crc = (crc + i * 31 + 17) % 65536
+        i = i + 1
+    }
+    crc
+}
+
+fn verify_crc(data_len: i64, expected_crc: i64) -> bool {
+    let computed = crc16(data_len)
+    computed == expected_crc
+}
+
+// ── Packet Parsing ──────────────────────────────────────────────────
+
+fn parse_mhdr(byte: i64) -> i64 {
+    // Message type is in bits 7-5
+    byte / 32
+}
+
+fn parse_dev_addr(b0: i64, b1: i64, b2: i64, b3: i64) -> i64 {
+    b0 + b1 * 256 + b2 * 65536 + b3 * 16777216
+}
+
+fn format_dev_addr(addr: i64) -> str {
+    // Format as hex-like string
+    let part1 = addr % 256
+    let part2 = (addr / 256) % 256
+    to_string(part2) + ":" + to_string(part1)
+}
+
+// ── Sensor Data Decoding ────────────────────────────────────────────
+
+fn decode_temperature(raw: i64) -> i64 {
+    // Temperature in 0.1 degree C units, offset by 400
+    raw - 400
+}
+
+fn decode_humidity(raw: i64) -> i64 {
+    // Humidity in 0.5% units
+    raw / 2
+}
+
+fn decode_battery(raw: i64) -> i64 {
+    // Battery voltage in mV
+    raw * 10 + 2000
+}
+
+fn decode_sensor_payload(sensor_type: i64, raw_value: i64) -> str {
+    if sensor_type == 1 {
+        let temp = decode_temperature(raw_value)
+        "temperature=" + to_string(temp) + " (0.1C)"
+    } else if sensor_type == 2 {
+        let hum = decode_humidity(raw_value)
+        "humidity=" + to_string(hum) + "%"
+    } else if sensor_type == 3 {
+        let batt = decode_battery(raw_value)
+        "battery=" + to_string(batt) + "mV"
+    } else {
+        "unknown_sensor=" + to_string(raw_value)
+    }
+}
+
+// ── MQTT Broker Simulation ──────────────────────────────────────────
+
+fn mqtt_connect(broker_host: str, port: i64) -> bool {
+    println("  [MQTT] Connecting to " + broker_host + ":" + to_string(port))
+    println("  [MQTT] CONNECT sent, CONNACK received (rc=0, success)")
+    true
+}
+
+fn mqtt_publish(topic: str, payload: str, qos: i64) -> bool {
+    println("  [MQTT] PUBLISH topic='" + topic + "' qos=" + to_string(qos))
+    println("         payload: " + payload)
+    true
+}
+
+fn mqtt_subscribe(topic: str, qos: i64) -> bool {
+    println("  [MQTT] SUBSCRIBE topic='" + topic + "' qos=" + to_string(qos))
+    true
+}
+
+fn build_mqtt_topic(dev_addr: str, sensor_type: str) -> str {
+    "lorawan/devices/" + dev_addr + "/sensors/" + sensor_type
+}
+
+// ── Gateway Logic ───────────────────────────────────────────────────
+
+fn process_uplink(
+    dev_addr: i64,
+    msg_type: i64,
+    sensor_type: i64,
+    raw_value: i64,
+    rssi: i64,
+    snr: i64
+) -> bool {
+    let addr_str = format_dev_addr(dev_addr)
+    println("  Uplink from device " + addr_str)
+
+    // Parse message type
+    if msg_type == MSG_TYPE_CONFIRMED_UP {
+        println("  Type: Confirmed uplink (ACK required)")
+    } else {
+        println("  Type: Unconfirmed uplink")
+    }
+
+    println("  RSSI: " + to_string(rssi) + " dBm, SNR: " + to_string(snr) + " dB")
+
+    // Decode sensor data
+    let decoded = decode_sensor_payload(sensor_type, raw_value)
+    println("  Decoded: " + decoded)
+
+    // Determine MQTT topic
+    let type_name = if sensor_type == 1 {
+        "temperature"
+    } else if sensor_type == 2 {
+        "humidity"
+    } else if sensor_type == 3 {
+        "battery"
+    } else {
+        "unknown"
+    }
+
+    let topic = build_mqtt_topic(addr_str, type_name)
+    let payload_json = "{\"value\":" + to_string(raw_value) + ",\"rssi\":" + to_string(rssi) + "}"
+    let _published = mqtt_publish(topic, payload_json, 1)
+    true
+}
+
+// ── Downlink Queue ──────────────────────────────────────────────────
+
+fn queue_downlink(dev_addr: i64, port: i64, confirmed: bool) -> bool {
+    let addr_str = format_dev_addr(dev_addr)
+    println("  [DOWNLINK] Queued for " + addr_str + " port=" + to_string(port))
+    if confirmed {
+        println("  [DOWNLINK] Confirmed delivery requested")
+    }
+    true
+}
+
+// ── Main: Gateway Simulation ────────────────────────────────────────
+
+fn main() -> i64 {
+    println("=== Fajar Lang LoRaWAN Gateway Demo ===")
+    println("")
+
+    // Gateway configuration
+    println("Gateway Configuration:")
+    println("  Frequency: " + to_string(LORA_FREQ_EU868) + " Hz (EU868)")
+    println("  Spreading Factor: SF" + to_string(LORA_SF7))
+    println("  Bandwidth: " + to_string(LORA_BW_125K) + " Hz")
+    println("  Max Payload: " + to_string(MAX_PAYLOAD_LEN) + " bytes")
+    println("")
+
+    // Connect to MQTT broker
+    println("Step 1: MQTT Broker Connection")
+    let _connected = mqtt_connect("mqtt.fajar-iot.local", 1883)
+    let _subscribed = mqtt_subscribe("lorawan/downlink/#", 1)
+    println("")
+
+    // Simulate receiving 3 uplink packets
+    println("Step 2: Processing Uplink Packets")
+    println("")
+
+    // Packet 1: Temperature sensor
+    println("--- Packet 1 ---")
+    let crc1 = crc16(12)
+    println("  CRC16: " + to_string(crc1))
+    let _valid1 = verify_crc(12, crc1)
+    let _p1 = process_uplink(
+        parse_dev_addr(1, 2, 3, 4),
+        MSG_TYPE_UNCONFIRMED_UP,
+        1,   // temperature
+        625, // 22.5C
+        -87,
+        7
+    )
+    println("")
+
+    // Packet 2: Humidity sensor (confirmed)
+    println("--- Packet 2 ---")
+    let crc2 = crc16(15)
+    println("  CRC16: " + to_string(crc2))
+    let _p2 = process_uplink(
+        parse_dev_addr(10, 20, 30, 40),
+        MSG_TYPE_CONFIRMED_UP,
+        2,   // humidity
+        130, // 65%
+        -92,
+        4
+    )
+    // Queue ACK downlink
+    let _dl = queue_downlink(parse_dev_addr(10, 20, 30, 40), 0, true)
+    println("")
+
+    // Packet 3: Battery status
+    println("--- Packet 3 ---")
+    let _p3 = process_uplink(
+        parse_dev_addr(1, 2, 3, 4),
+        MSG_TYPE_UNCONFIRMED_UP,
+        3,    // battery
+        120,  // 3200mV
+        -78,
+        12
+    )
+    println("")
+
+    // Summary
+    println("=== Gateway Summary ===")
+    println("Packets received: 3")
+    println("MQTT messages published: 3")
+    println("Downlinks queued: 1")
+    println("CRC failures: 0")
+    0
+}
