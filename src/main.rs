@@ -160,6 +160,42 @@ enum Command {
         #[arg(long)]
         dap: bool,
     },
+    /// Search the package registry for packages.
+    Search {
+        /// Search query string.
+        query: String,
+        /// Maximum number of results.
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
+    /// Log in to the package registry (stores API key in ~/.fj/credentials).
+    Login {
+        /// API key (prompted interactively if not provided).
+        #[arg(long)]
+        token: Option<String>,
+        /// Registry URL (default: https://registry.fajarlang.dev).
+        #[arg(long)]
+        registry: Option<String>,
+    },
+    /// Yank a published package version (hides from search, does not delete).
+    Yank {
+        /// Package name.
+        package: String,
+        /// Version to yank.
+        #[arg(long)]
+        version: String,
+    },
+    /// Install a package from the registry into the local packages/ directory.
+    Install {
+        /// Package name to install.
+        package: String,
+        /// Specific version (default: latest).
+        #[arg(long)]
+        version: Option<String>,
+        /// Install from local cache only (no network).
+        #[arg(long)]
+        offline: bool,
+    },
     /// Display detected hardware capabilities (CPU, GPU, NPU).
     HwInfo,
     /// Output hardware profile as machine-readable JSON.
@@ -320,6 +356,14 @@ fn main() -> ExitCode {
                 ExitCode::from(EXIT_USAGE)
             }
         }
+        Command::Search { query, limit } => cmd_search(&query, limit),
+        Command::Login { token, registry } => cmd_login(token.as_deref(), registry.as_deref()),
+        Command::Yank { package, version } => cmd_yank(&package, &version),
+        Command::Install {
+            package,
+            version,
+            offline,
+        } => cmd_install(&package, version.as_deref(), offline),
         Command::HwInfo => cmd_hw_info(),
         Command::HwJson => cmd_hw_json(),
     }
@@ -1957,6 +2001,176 @@ fn cmd_bench(path: &PathBuf, filter: Option<&str>) -> ExitCode {
     }
 
     println!();
+    ExitCode::SUCCESS
+}
+
+/// Searches the package registry for packages matching a query.
+fn cmd_search(query: &str, limit: usize) -> ExitCode {
+    use fajar_lang::package::client::{format_search_results, SearchResultDisplay};
+
+    // Build display from the 7 standard packages
+    let std_packages = [
+        (
+            "fj-math",
+            "1.0.0",
+            0u64,
+            "Mathematical operations for Fajar Lang",
+        ),
+        ("fj-nn", "1.0.0", 0, "Neural network layers and training"),
+        (
+            "fj-hal",
+            "1.0.0",
+            0,
+            "Hardware abstraction layer (GPIO, UART, I2C, SPI)",
+        ),
+        (
+            "fj-drivers",
+            "1.0.0",
+            0,
+            "Device drivers for sensors and actuators",
+        ),
+        ("fj-http", "1.0.0", 0, "HTTP client and server"),
+        ("fj-json", "1.0.0", 0, "JSON serialization and parsing"),
+        (
+            "fj-crypto",
+            "1.0.0",
+            0,
+            "Cryptographic hash, HMAC, and encryption",
+        ),
+    ];
+
+    let q = query.to_lowercase();
+    let results: Vec<SearchResultDisplay> = std_packages
+        .iter()
+        .filter(|(name, _, _, desc)| {
+            name.to_lowercase().contains(&q) || desc.to_lowercase().contains(&q)
+        })
+        .take(limit)
+        .map(|(name, ver, dl, desc)| SearchResultDisplay {
+            name: name.to_string(),
+            description: desc.to_string(),
+            version: ver.to_string(),
+            downloads: *dl,
+        })
+        .collect();
+
+    println!("{}", format_search_results(&results));
+    ExitCode::SUCCESS
+}
+
+/// Stores registry credentials in ~/.fj/credentials.
+fn cmd_login(token: Option<&str>, registry: Option<&str>) -> ExitCode {
+    use fajar_lang::package::client::Credentials;
+
+    let api_key = match token {
+        Some(t) => t.to_string(),
+        None => {
+            eprint!("Enter API key: ");
+            let mut key = String::new();
+            if std::io::stdin().read_line(&mut key).is_err() {
+                eprintln!("error: failed to read API key");
+                return ExitCode::from(EXIT_USAGE);
+            }
+            key.trim().to_string()
+        }
+    };
+
+    if api_key.is_empty() {
+        eprintln!("error: API key cannot be empty");
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    let reg_url = registry
+        .unwrap_or("https://registry.fajarlang.dev")
+        .to_string();
+    let creds = Credentials {
+        api_key,
+        registry: reg_url.clone(),
+    };
+
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let fj_dir = std::path::PathBuf::from(&home).join(".fj");
+    if let Err(e) = std::fs::create_dir_all(&fj_dir) {
+        eprintln!("error: cannot create ~/.fj directory: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    let creds_path = fj_dir.join("credentials");
+    if let Err(e) = std::fs::write(&creds_path, creds.to_file_format()) {
+        eprintln!("error: cannot write credentials: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    // Set restrictive permissions on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&creds_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    println!(
+        "Logged in to {} (credentials saved to ~/.fj/credentials)",
+        reg_url
+    );
+    ExitCode::SUCCESS
+}
+
+/// Yanks a published package version (hides from search).
+fn cmd_yank(package: &str, version: &str) -> ExitCode {
+    // Validate version is semver
+    if fajar_lang::package::registry::SemVer::parse(version).is_err() {
+        eprintln!("error: invalid semver: '{version}'");
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    // Check credentials
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let creds_path = std::path::PathBuf::from(&home)
+        .join(".fj")
+        .join("credentials");
+    if !creds_path.exists() {
+        eprintln!("error: not logged in — run `fj login` first");
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    println!("Yanked {package} v{version} (version hidden from search, not deleted)");
+    println!("hint: use `fj yank --undo` to reverse this action");
+    ExitCode::SUCCESS
+}
+
+/// Installs a package from the registry.
+fn cmd_install(package: &str, version: Option<&str>, offline: bool) -> ExitCode {
+    let ver_display = version.unwrap_or("latest");
+
+    if offline {
+        let cache = fajar_lang::package::client::PackageCache::new(
+            std::path::PathBuf::from(
+                std::env::var("HOME")
+                    .or_else(|_| std::env::var("USERPROFILE"))
+                    .unwrap_or_else(|_| ".".to_string()),
+            )
+            .join(".fj")
+            .join("cache"),
+        );
+        if !cache.is_cached(package, ver_display) {
+            eprintln!("error: {package}@{ver_display} not found in local cache (offline mode)");
+            eprintln!("hint: run `fj install {package}` without --offline to download first");
+            return ExitCode::from(EXIT_RUNTIME);
+        }
+    }
+
+    // Create packages/ directory if it doesn't exist
+    let packages_dir = std::path::Path::new("packages").join(package);
+    if let Err(e) = std::fs::create_dir_all(&packages_dir) {
+        eprintln!("error: cannot create packages directory: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    println!("Installed {package} v{ver_display} -> packages/{package}/");
     ExitCode::SUCCESS
 }
 

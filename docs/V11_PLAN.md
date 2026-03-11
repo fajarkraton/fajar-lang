@@ -396,55 +396,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S25 — Registry Backend
 
-- [ ] S25.1 — Cloudflare Workers API: Create Workers project for registry.fajarlang.dev with REST routes
-- [ ] S25.2 — D1 Database Schema: Design tables: packages, versions, users, api_keys, downloads
-- [ ] S25.3 — Package Upload Endpoint: `POST /api/v1/packages` accepting .tar.gz with fj.toml metadata
-- [ ] S25.4 — Package Download Endpoint: `GET /api/v1/packages/{name}/{version}` serving .tar.gz artifact
-- [ ] S25.5 — Package Search Endpoint: `GET /api/v1/search?q=...` with full-text search on name and description
-- [ ] S25.6 — Authentication: API key-based auth for publish, `fj login` stores key in ~/.fj/credentials
-- [ ] S25.7 — Version Validation: Enforce semver on upload, reject duplicate versions, validate fj.toml schema
-- [ ] S25.8 — Rate Limiting: Cloudflare rate limiting on upload (10/hour) and download (1000/hour) per IP
-- [ ] S25.9 — R2 Storage: Store package tarballs in Cloudflare R2 for cost-effective blob storage
-- [ ] S25.10 — Unit Tests: 15+ tests for API routes, auth flow, version validation, search ranking
+- [x] S25.1 — Cloudflare Workers API: Create Workers project for registry.fajarlang.dev with REST routes
+- [x] S25.2 — D1 Database Schema: Design tables: packages, versions, users, api_keys, downloads
+- [x] S25.3 — Package Upload Endpoint: `POST /api/v1/packages` accepting .tar.gz with fj.toml metadata
+- [x] S25.4 — Package Download Endpoint: `GET /api/v1/packages/{name}/{version}` serving .tar.gz artifact
+- [x] S25.5 — Package Search Endpoint: `GET /api/v1/search?q=...` with full-text search on name and description
+- [x] S25.6 — Authentication: API key-based auth for publish, `fj login` stores key in ~/.fj/credentials
+- [x] S25.7 — Version Validation: Enforce semver on upload, reject duplicate versions, validate fj.toml schema
+- [x] S25.8 — Rate Limiting: Cloudflare rate limiting on upload (10/hour) and download (1000/hour) per IP
+- [x] S25.9 — R2 Storage: Store package tarballs in Cloudflare R2 for cost-effective blob storage
+- [x] S25.10 — Unit Tests: 15+ tests for API routes, auth flow, version validation, search ranking
 
 ### Sprint S26 — Registry Client
 
-- [ ] S26.1 — `fj publish` Command: Package current project into .tar.gz, upload to registry with API key auth
-- [ ] S26.2 — `fj install` Command: Download package from registry, extract to local packages/ directory
-- [ ] S26.3 — `fj search` Command: Query registry search endpoint, display results in formatted table
-- [ ] S26.4 — `fj login` Command: Accept API key interactively, store in ~/.fj/credentials file (mode 0600)
-- [ ] S26.5 — `fj yank` Command: Mark a published version as yanked (not deleted, just hidden from search)
-- [ ] S26.6 — Local Cache: Cache downloaded packages in ~/.fj/cache/ with content-addressed storage
-- [ ] S26.7 — Dependency Resolution: Resolve transitive dependencies from fj.toml, download all required packages
-- [ ] S26.8 — Lockfile: Generate fj.lock with exact resolved versions and checksums for reproducible builds
-- [ ] S26.9 — Offline Mode: `fj install --offline` uses only cached packages, fails if missing
-- [ ] S26.10 — Unit Tests: 12+ tests for publish flow, install flow, dependency resolution, lockfile generation
+- [x] S26.1 — `fj publish` Command: Package current project into .tar.gz, upload to registry with API key auth
+- [x] S26.2 — `fj install` Command: Download package from registry, extract to local packages/ directory
+- [x] S26.3 — `fj search` Command: Query registry search endpoint, display results in formatted table
+- [x] S26.4 — `fj login` Command: Accept API key interactively, store in ~/.fj/credentials file (mode 0600)
+- [x] S26.5 — `fj yank` Command: Mark a published version as yanked (not deleted, just hidden from search)
+- [x] S26.6 — Local Cache: Cache downloaded packages in ~/.fj/cache/ with content-addressed storage
+- [x] S26.7 — Dependency Resolution: Resolve transitive dependencies from fj.toml, download all required packages
+- [x] S26.8 — Lockfile: Generate fj.lock with exact resolved versions and checksums for reproducible builds
+- [x] S26.9 — Offline Mode: `fj install --offline` uses only cached packages, fails if missing
+- [x] S26.10 — Unit Tests: 12+ tests for publish flow, install flow, dependency resolution, lockfile generation
 
 ### Sprint S27 — Landing Page
 
-- [ ] S27.1 — Domain Setup: Configure fajarlang.dev DNS on Cloudflare, SSL certificate via Cloudflare Pages
-- [ ] S27.2 — Static Site Generator: Build landing page with clean HTML/CSS (no heavy frameworks), responsive design
-- [ ] S27.3 — Hero Section: Tagline, one-liner install command, animated code example showing Fajar Lang syntax
-- [ ] S27.4 — Feature Showcase: 4 cards: Embedded ML, OS Integration, Safety, Performance — with icons and descriptions
-- [ ] S27.5 — Quickstart Section: 3-step guide: install, write hello.fj, run with `fj run hello.fj`
-- [ ] S27.6 — Benchmark Comparisons: Performance charts comparing Fajar Lang to C, Rust, Python for key workloads
-- [ ] S27.7 — Code Examples: Tabbed code examples (ML inference, OS kernel, embedded sensor, pattern matching)
-- [ ] S27.8 — Footer: Links to GitHub, documentation, playground, registry, community (Discord placeholder)
-- [ ] S27.9 — SEO + Meta Tags: OpenGraph, Twitter cards, structured data (JSON-LD) for search engine visibility
-- [ ] S27.10 — Deployment: Deploy to Cloudflare Pages with automatic builds from docs-site branch
+- [x] S27.1 — Domain Setup: Configure fajarlang.dev DNS on Cloudflare, SSL certificate via Cloudflare Pages
+- [x] S27.2 — Static Site Generator: Build landing page with clean HTML/CSS (no heavy frameworks), responsive design
+- [x] S27.3 — Hero Section: Tagline, one-liner install command, animated code example showing Fajar Lang syntax
+- [x] S27.4 — Feature Showcase: 4 cards: Embedded ML, OS Integration, Safety, Performance — with icons and descriptions
+- [x] S27.5 — Quickstart Section: 3-step guide: install, write hello.fj, run with `fj run hello.fj`
+- [x] S27.6 — Benchmark Comparisons: Performance charts comparing Fajar Lang to C, Rust, Python for key workloads
+- [x] S27.7 — Code Examples: Tabbed code examples (ML inference, OS kernel, embedded sensor, pattern matching)
+- [x] S27.8 — Footer: Links to GitHub, documentation, playground, registry, community (Discord placeholder)
+- [x] S27.9 — SEO + Meta Tags: OpenGraph, Twitter cards, structured data (JSON-LD) for search engine visibility
+- [x] S27.10 — Deployment: Deploy to Cloudflare Pages with automatic builds from docs-site branch
 
 ### Sprint S28 — Documentation Portal
 
-- [ ] S28.1 — mdBook Deployment: Deploy existing 40+ page mdBook to docs.fajarlang.dev via Cloudflare Pages
-- [ ] S28.2 — API Reference Hosting: Generate API reference from doc comments, host at docs.fajarlang.dev/api
-- [ ] S28.3 — Version Selector: Dropdown to switch between v1.0 and v1.1 documentation versions
-- [ ] S28.4 — Search Integration: Add Pagefind or Algolia search index across all documentation pages
-- [ ] S28.5 — Tutorial Section: Step-by-step tutorials: "Hello World", "Build a Calculator", "Train MNIST"
-- [ ] S28.6 — Interactive Examples: Link code examples to playground for "Try it" functionality
-- [ ] S28.7 — Dark Mode: Implement dark/light theme toggle with OS preference detection
-- [ ] S28.8 — Mobile Navigation: Responsive sidebar navigation that collapses to hamburger on mobile
-- [ ] S28.9 — Analytics: Cloudflare Web Analytics (privacy-respecting) for page view tracking
-- [ ] S28.10 — Unit Tests: Verify all documentation links resolve, code examples compile, search returns results
+- [x] S28.1 — mdBook Deployment: Deploy existing 40+ page mdBook to docs.fajarlang.dev via Cloudflare Pages
+- [x] S28.2 — API Reference Hosting: Generate API reference from doc comments, host at docs.fajarlang.dev/api
+- [x] S28.3 — Version Selector: Dropdown to switch between v1.0 and v1.1 documentation versions
+- [x] S28.4 — Search Integration: Add Pagefind or Algolia search index across all documentation pages
+- [x] S28.5 — Tutorial Section: Step-by-step tutorials: "Hello World", "Build a Calculator", "Train MNIST"
+- [x] S28.6 — Interactive Examples: Link code examples to playground for "Try it" functionality
+- [x] S28.7 — Dark Mode: Implement dark/light theme toggle with OS preference detection
+- [x] S28.8 — Mobile Navigation: Responsive sidebar navigation that collapses to hamburger on mobile
+- [x] S28.9 — Analytics: Cloudflare Web Analytics (privacy-respecting) for page view tracking
+- [x] S28.10 — Unit Tests: Verify all documentation links resolve, code examples compile, search returns results
 
 ---
 

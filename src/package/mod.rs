@@ -4,13 +4,16 @@
 //! and project builds (`fj build`).
 
 pub mod audit;
+pub mod client;
 pub mod docgen;
 pub mod documentation;
 pub mod manifest;
+pub mod portal;
 pub mod publish;
 pub mod registry;
 pub mod resolver;
 pub mod sbom;
+pub mod server;
 pub mod signing;
 pub mod verification;
 
