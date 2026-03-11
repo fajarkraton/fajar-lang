@@ -224,6 +224,19 @@ impl SymbolTable {
             .rev()
             .any(|s| s.kind == ScopeKind::AsyncFn)
     }
+
+    /// Returns all defined symbol names across all scopes (for suggestion engine).
+    pub fn all_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for scope in &self.scopes {
+            for sym in &scope.symbols {
+                if !names.contains(&sym.name) {
+                    names.push(sym.name.clone());
+                }
+            }
+        }
+        names
+    }
 }
 
 impl Default for SymbolTable {

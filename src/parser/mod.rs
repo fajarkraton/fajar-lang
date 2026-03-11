@@ -333,12 +333,20 @@ impl Parser {
 
     /// Skips tokens until reaching a synchronization point (statement boundary).
     /// Always advances at least one token to avoid infinite loops.
+    /// Synchronizes on: statement-starting keywords, `;`, and `}`.
     fn synchronize(&mut self) {
         // Always advance at least one token to make progress
         if !self.at_eof() {
             self.advance();
         }
         while !self.at_eof() {
+            // If we just passed a semicolon or closing brace, stop here
+            if self.pos > 0 {
+                let prev = &self.tokens[self.pos - 1].kind;
+                if matches!(prev, TokenKind::Semi | TokenKind::RBrace) {
+                    return;
+                }
+            }
             match self.peek_kind() {
                 TokenKind::Fn
                 | TokenKind::Let

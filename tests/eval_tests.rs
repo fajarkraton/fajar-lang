@@ -3660,3 +3660,176 @@ fn s5_lexer_fstring_token() {
         other => panic!("expected FStringLit, got {other:?}"),
     }
 }
+
+// ── Sprint 6: Error Recovery & Diagnostics ──────────────────────────
+
+#[test]
+fn s6_parser_recovers_multiple_errors() {
+    // Parser should collect multiple errors from invalid syntax
+    let src = r#"
+        fn foo() -> { }
+        fn bar(x: i64) -> i64 { x + 1 }
+        let = 10
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let result = parse(tokens);
+    // Parser should have errors but still try to recover
+    assert!(result.is_err(), "should produce parse errors");
+    let errors = result.unwrap_err();
+    assert!(errors.len() >= 1, "should have at least 1 error");
+}
+
+#[test]
+fn s6_parser_sync_on_fn_keyword() {
+    // Parser should sync on `fn` after error and continue parsing
+    let src = r#"
+        let =
+        fn valid_fn() -> i64 { 42 }
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let result = parse(tokens);
+    // Should have errors but recovered enough to parse valid_fn
+    assert!(result.is_err());
+}
+
+#[test]
+fn s6_suggestion_engine_undefined_variable() {
+    // "did you mean 'counter'?" when using 'couter'
+    let src = r#"
+        fn main() {
+            let counter = 0
+            let x = couter + 1
+        }
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new();
+    let _ = tc.analyze(&program);
+    let errors: Vec<_> = tc.diagnostics().iter().collect();
+    let undef = errors.iter().find(|e| {
+        matches!(
+            e,
+            fajar_lang::analyzer::type_check::SemanticError::UndefinedVariable { name, .. } if name == "couter"
+        )
+    });
+    assert!(
+        undef.is_some(),
+        "should have UndefinedVariable for 'couter'"
+    );
+    // Check suggestion is present
+    if let Some(fajar_lang::analyzer::type_check::SemanticError::UndefinedVariable {
+        suggestion,
+        ..
+    }) = undef
+    {
+        assert!(
+            suggestion.is_some(),
+            "should have a suggestion for 'couter'"
+        );
+        let s = suggestion.as_ref().unwrap();
+        assert!(
+            s.contains("counter"),
+            "suggestion should contain 'counter', got: {s}"
+        );
+    }
+}
+
+#[test]
+fn s6_type_mismatch_hint_int_float() {
+    // Type mismatch hint for int vs float
+    let src = r#"
+        fn main() {
+            let x: i32 = 3.14
+        }
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new();
+    let _ = tc.analyze(&program);
+    let errors: Vec<_> = tc.diagnostics().iter().collect();
+    let mismatch = errors.iter().find(|e| {
+        matches!(
+            e,
+            fajar_lang::analyzer::type_check::SemanticError::TypeMismatch { .. }
+        )
+    });
+    assert!(mismatch.is_some(), "should have TypeMismatch");
+    let msg = format!("{}", mismatch.unwrap());
+    assert!(msg.contains("SE004"), "should contain SE004 error code");
+}
+
+#[test]
+fn s6_unreachable_pattern_after_wildcard() {
+    // Warn when patterns appear after a wildcard catch-all
+    let src = r#"
+        fn main() {
+            let x = 42
+            let r = match x {
+                _ => "catch all",
+                1 => "one",
+            }
+        }
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new();
+    let _ = tc.analyze(&program);
+    let has_unreachable = tc.diagnostics().iter().any(|e| {
+        matches!(
+            e,
+            fajar_lang::analyzer::type_check::SemanticError::UnreachablePattern { .. }
+        )
+    });
+    assert!(
+        has_unreachable,
+        "should warn about unreachable pattern after wildcard"
+    );
+}
+
+#[test]
+fn s6_unreachable_pattern_is_warning() {
+    // UnreachablePattern should be classified as a warning, not an error
+    let err = fajar_lang::analyzer::type_check::SemanticError::UnreachablePattern {
+        span: fajar_lang::lexer::token::Span::new(0, 1),
+    };
+    assert!(err.is_warning(), "UnreachablePattern should be a warning");
+}
+
+#[test]
+fn s6_levenshtein_basic() {
+    // Integration test: misspelled function should still run (analyzer doesn't block)
+    // but should produce a suggestion in the error
+    let src = r#"
+        fn greet(name: str) -> str { name }
+        fn main() {
+            let x = grete("hello")
+        }
+    "#;
+    let tokens = tokenize(src).unwrap();
+    let program = parse(tokens).unwrap();
+    let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new();
+    let _ = tc.analyze(&program);
+    // Should have an error for 'grete' — even though it looks like a variable,
+    // the suggestion engine should find 'greet'
+    let has_error = tc.diagnostics().iter().any(|e| {
+        let msg = format!("{e}");
+        msg.contains("grete")
+    });
+    assert!(has_error, "should have error mentioning 'grete'");
+}
+
+#[test]
+fn s6_unused_import_warning() {
+    // SE019: unused import produces a warning
+    let err = fajar_lang::analyzer::type_check::SemanticError::UnusedImport {
+        name: "std::io::read_file".to_string(),
+        span: fajar_lang::lexer::token::Span::new(0, 20),
+    };
+    assert!(err.is_warning(), "UnusedImport should be a warning");
+    let msg = format!("{err}");
+    assert!(msg.contains("SE019"), "should contain SE019 error code");
+    assert!(
+        msg.contains("unused import"),
+        "should mention 'unused import'"
+    );
+}

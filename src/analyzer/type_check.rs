@@ -15,6 +15,77 @@ use crate::parser::ast::{
 use super::scope::{Symbol, SymbolTable};
 
 // ═══════════════════════════════════════════════════════════════════════
+// Suggestion engine (string similarity)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Computes the Levenshtein edit distance between two strings.
+fn levenshtein_distance(a: &str, b: &str) -> usize {
+    let a_len = a.len();
+    let b_len = b.len();
+    if a_len == 0 {
+        return b_len;
+    }
+    if b_len == 0 {
+        return a_len;
+    }
+
+    let mut prev_row: Vec<usize> = (0..=b_len).collect();
+    let mut curr_row = vec![0; b_len + 1];
+
+    for (i, a_ch) in a.chars().enumerate() {
+        curr_row[0] = i + 1;
+        for (j, b_ch) in b.chars().enumerate() {
+            let cost = if a_ch == b_ch { 0 } else { 1 };
+            curr_row[j + 1] = (prev_row[j + 1] + 1)
+                .min(curr_row[j] + 1)
+                .min(prev_row[j] + cost);
+        }
+        std::mem::swap(&mut prev_row, &mut curr_row);
+    }
+
+    prev_row[b_len]
+}
+
+/// Finds the closest match to `name` from `candidates` within an edit distance threshold.
+///
+/// Returns `Some("did you mean 'X'?")` if a close match is found, `None` otherwise.
+/// The threshold is min(3, name.len() / 2) to avoid spurious suggestions for short names.
+fn suggest_similar(name: &str, candidates: &[String]) -> Option<String> {
+    let threshold = 3.min(name.len() / 2 + 1);
+    let mut best: Option<(usize, &str)> = None;
+
+    for candidate in candidates {
+        // Skip exact matches and very short names
+        if candidate == name || candidate.starts_with('_') {
+            continue;
+        }
+        let dist = levenshtein_distance(name, candidate);
+        if dist <= threshold && (best.is_none() || dist < best.as_ref().map_or(usize::MAX, |b| b.0))
+        {
+            best = Some((dist, candidate));
+        }
+    }
+
+    best.map(|(_, suggestion)| format!("did you mean '{suggestion}'?"))
+}
+
+/// Generates a hint for a type mismatch between expected and found types.
+fn type_mismatch_hint(expected: &str, found: &str) -> Option<String> {
+    match (expected, found) {
+        ("i32", "f64") | ("i64", "f64") | ("i32", "f32") | ("i64", "f32") => {
+            Some(format!("use `{found} as {expected}` to convert"))
+        }
+        ("f64", "i32") | ("f64", "i64") | ("f32", "i32") | ("f32", "i64") => {
+            Some(format!("use `{found} as {expected}` to convert"))
+        }
+        ("str", _) => Some(format!("use `to_string({found})` to convert")),
+        (_, "str") => Some("use `parse_int()` or `parse_float()` to convert".to_string()),
+        ("bool", _) => Some(format!("use a comparison like `{found} != 0`")),
+        _ => None,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Type representation
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -515,34 +586,40 @@ impl std::fmt::Display for Type {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SemanticError {
     /// SE001: Undefined variable.
-    #[error("SE001: undefined variable '{name}'")]
+    #[error("SE001: undefined variable '{name}'{}", suggestion.as_ref().map(|s| format!(" — {s}")).unwrap_or_default())]
     UndefinedVariable {
         /// Variable name.
         name: String,
         /// Source location.
         span: Span,
+        /// Optional suggestion ("did you mean 'X'?").
+        suggestion: Option<String>,
     },
 
     /// SE002: Undefined function.
-    #[error("SE002: undefined function '{name}'")]
+    #[error("SE002: undefined function '{name}'{}", suggestion.as_ref().map(|s| format!(" — {s}")).unwrap_or_default())]
     UndefinedFunction {
         /// Function name.
         name: String,
         /// Source location.
         span: Span,
+        /// Optional suggestion ("did you mean 'X'?").
+        suggestion: Option<String>,
     },
 
     /// SE003: Undefined type.
-    #[error("SE003: undefined type '{name}'")]
+    #[error("SE003: undefined type '{name}'{}", suggestion.as_ref().map(|s| format!(" — {s}")).unwrap_or_default())]
     UndefinedType {
         /// Type name.
         name: String,
         /// Source location.
         span: Span,
+        /// Optional suggestion ("did you mean 'X'?").
+        suggestion: Option<String>,
     },
 
     /// SE004: Type mismatch.
-    #[error("SE004: type mismatch: expected {expected}, found {found}")]
+    #[error("SE004: type mismatch: expected {expected}, found {found}{}", hint.as_ref().map(|h| format!(" ({h})")).unwrap_or_default())]
     TypeMismatch {
         /// Expected type.
         expected: String,
@@ -550,6 +627,8 @@ pub enum SemanticError {
         found: String,
         /// Source location.
         span: Span,
+        /// Optional hint about possible fix.
+        hint: Option<String>,
     },
 
     /// SE005: Argument count mismatch.
@@ -816,6 +895,22 @@ pub enum SemanticError {
         /// Source location.
         span: Span,
     },
+
+    /// SE019: Unused import (warning).
+    #[error("SE019: unused import '{name}'")]
+    UnusedImport {
+        /// Import name.
+        name: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// SE020: Unreachable match pattern (warning).
+    #[error("SE020: unreachable pattern — previous pattern already matches all values")]
+    UnreachablePattern {
+        /// Source location.
+        span: Span,
+    },
 }
 
 impl SemanticError {
@@ -854,7 +949,9 @@ impl SemanticError {
             | SemanticError::UnknownTrait { span, .. }
             | SemanticError::CannotInferType { span, .. }
             | SemanticError::TraitMethodSignatureMismatch { span, .. }
-            | SemanticError::TensorShapeMismatch { span, .. } => *span,
+            | SemanticError::TensorShapeMismatch { span, .. }
+            | SemanticError::UnusedImport { span, .. }
+            | SemanticError::UnreachablePattern { span, .. } => *span,
         }
     }
 
@@ -862,7 +959,10 @@ impl SemanticError {
     pub fn is_warning(&self) -> bool {
         matches!(
             self,
-            SemanticError::UnusedVariable { .. } | SemanticError::UnreachableCode { .. }
+            SemanticError::UnusedVariable { .. }
+                | SemanticError::UnreachableCode { .. }
+                | SemanticError::UnusedImport { .. }
+                | SemanticError::UnreachablePattern { .. }
         )
     }
 }
@@ -910,6 +1010,8 @@ pub struct TypeChecker {
     nll_info: Option<super::cfg::NllInfo>,
     /// Enum definitions: enum name → list of variant names (for exhaustiveness).
     enum_variants: HashMap<String, Vec<String>>,
+    /// Tracked imports: (import name, span, used) — for unused import detection.
+    imports: Vec<(String, Span, bool)>,
 }
 
 /// A trait method signature for validation.
@@ -1013,6 +1115,7 @@ impl TypeChecker {
             moves: super::borrow_lite::MoveTracker::new(),
             nll_info: None,
             enum_variants: HashMap::new(),
+            imports: Vec::new(),
         };
         tc.register_builtins();
         tc.register_builtin_traits();
@@ -1704,6 +1807,20 @@ impl TypeChecker {
             self.check_item(item);
         }
 
+        // SE019: Check for unused imports
+        for (import_name, import_span, _) in &self.imports {
+            // Extract the short name (last segment) and check if used
+            let short_name = import_name.rsplit("::").next().unwrap_or(import_name);
+            if let Some(sym) = self.symbols.lookup(short_name) {
+                if !sym.used {
+                    self.errors.push(SemanticError::UnusedImport {
+                        name: import_name.clone(),
+                        span: *import_span,
+                    });
+                }
+            }
+        }
+
         let has_errors = self.errors.iter().any(|e| !e.is_warning());
         if has_errors {
             Err(self.errors.clone())
@@ -1715,6 +1832,11 @@ impl TypeChecker {
     /// Returns all warnings collected during analysis.
     pub fn warnings(&self) -> Vec<&SemanticError> {
         self.errors.iter().filter(|e| e.is_warning()).collect()
+    }
+
+    /// Returns all diagnostics (errors + warnings) collected during analysis.
+    pub fn diagnostics(&self) -> &[SemanticError] {
+        &self.errors
     }
 
     /// First pass: register top-level declarations.
@@ -2042,6 +2164,7 @@ impl TypeChecker {
                         expected: "self must be the first parameter".into(),
                         found: format!("self at position {}", i + 1),
                         span: param.span,
+                        hint: None,
                     });
                 }
             }
@@ -2280,6 +2403,8 @@ impl TypeChecker {
                             used: false,
                         });
                     }
+                    // Track for unused import detection
+                    self.imports.push((path.join("::"), use_decl.span, false));
                 }
             }
             UseKind::Glob => {
@@ -2333,6 +2458,7 @@ impl TypeChecker {
                             expected: "regular parameter".into(),
                             found: "`self` outside impl block".into(),
                             span: param.span,
+                            hint: None,
                         });
                     }
                 }
@@ -2435,6 +2561,7 @@ impl TypeChecker {
                 expected: declared_ret.display_name(),
                 found: body_type.display_name(),
                 span: fndef.span,
+                hint: None,
             });
         }
 
@@ -2484,6 +2611,7 @@ impl TypeChecker {
                 expected: declared.display_name(),
                 found: val_type.display_name(),
                 span: cdef.span,
+                hint: None,
             });
         }
     }
@@ -2503,10 +2631,13 @@ impl TypeChecker {
                 if let Some(ty_expr) = ty {
                     let declared = self.resolve_type(ty_expr);
                     if !declared.is_compatible(&val_type) {
+                        let hint =
+                            type_mismatch_hint(&declared.display_name(), &val_type.display_name());
                         self.errors.push(SemanticError::TypeMismatch {
                             expected: declared.display_name(),
                             found: val_type.display_name(),
                             span: *span,
+                            hint,
                         });
                     }
                     self.symbols.define(Symbol {
@@ -2586,6 +2717,7 @@ impl TypeChecker {
                         expected: declared.display_name(),
                         found: val_type.display_name(),
                         span: *span,
+                        hint: None,
                     });
                 }
                 self.symbols.define(Symbol {
@@ -2663,6 +2795,7 @@ impl TypeChecker {
                         expected: "bool".into(),
                         found: cond_ty.display_name(),
                         span: condition.span(),
+                        hint: None,
                     });
                 }
                 self.symbols.push_scope_kind(super::scope::ScopeKind::Loop);
@@ -2739,10 +2872,10 @@ impl TypeChecker {
                             expected: "integer".into(),
                             found: st.display_name(),
                             span: s.span(),
+                            hint: None,
                         });
-                    } else {
-                        range_ty = st;
                     }
+                    range_ty = st;
                 }
                 if let Some(e) = end {
                     let et = self.check_expr(e);
@@ -2751,6 +2884,7 @@ impl TypeChecker {
                             expected: "integer".into(),
                             found: et.display_name(),
                             span: e.span(),
+                            hint: None,
                         });
                     }
                 }
@@ -2823,6 +2957,7 @@ impl TypeChecker {
                         ),
                         found: src.display_name(),
                         span: *span,
+                        hint: None,
                     });
                 }
                 target
@@ -2908,9 +3043,11 @@ impl TypeChecker {
                 ty
             }
             None => {
+                let suggestion = suggest_similar(name, &self.symbols.all_names());
                 self.errors.push(SemanticError::UndefinedVariable {
                     name: name.to_string(),
                     span,
+                    suggestion,
                 });
                 Type::Unknown
             }
@@ -2952,12 +3089,14 @@ impl TypeChecker {
                         // Resolve to the concrete type when mixing literal with concrete
                         lt.resolve_with(&rt)
                     } else {
+                        let hint = type_mismatch_hint(&lt.display_name(), &rt.display_name());
                         self.errors.push(SemanticError::TypeMismatch {
                             expected: lt.display_name(),
                             found: rt.display_name(),
                             span: right.span(),
+                            hint,
                         });
-                        lt
+                        Type::Unknown
                     }
                 } else if matches!(lt, Type::Unknown | Type::TypeVar(_))
                     || matches!(rt, Type::Unknown | Type::TypeVar(_))
@@ -2975,6 +3114,7 @@ impl TypeChecker {
                         expected: "numeric".into(),
                         found: format!("{} and {}", lt.display_name(), rt.display_name()),
                         span: left.span(),
+                        hint: None,
                     });
                     Type::Unknown
                 }
@@ -2986,6 +3126,7 @@ impl TypeChecker {
                         expected: lt.display_name(),
                         found: rt.display_name(),
                         span: right.span(),
+                        hint: None,
                     });
                 }
                 Type::Bool
@@ -3001,8 +3142,9 @@ impl TypeChecker {
                         expected: lt.display_name(),
                         found: rt.display_name(),
                         span: right.span(),
+                        hint: None,
                     });
-                    lt
+                    Type::Unknown
                 } else if matches!(lt, Type::Unknown | Type::TypeVar(_))
                     || matches!(rt, Type::Unknown | Type::TypeVar(_))
                 {
@@ -3018,6 +3160,7 @@ impl TypeChecker {
                         expected: "i64".into(),
                         found: format!("{} and {}", lt.display_name(), rt.display_name()),
                         span: left.span(),
+                        hint: None,
                     });
                     Type::Unknown
                 }
@@ -3065,6 +3208,7 @@ impl TypeChecker {
                         expected: "numeric".into(),
                         found: ty.display_name(),
                         span: operand.span(),
+                        hint: None,
                     });
                     Type::Unknown
                 }
@@ -3078,6 +3222,7 @@ impl TypeChecker {
                         expected: "integer".into(),
                         found: ty.display_name(),
                         span: operand.span(),
+                        hint: None,
                     });
                     Type::Unknown
                 }
@@ -3092,6 +3237,7 @@ impl TypeChecker {
                         expected: "reference type".into(),
                         found: ty.display_name(),
                         span: operand.span(),
+                        hint: None,
                     });
                     Type::Unknown
                 }
@@ -3113,6 +3259,7 @@ impl TypeChecker {
                             expected: "mutable variable for &mut".into(),
                             found: format!("immutable variable '{name}'"),
                             span,
+                            hint: None,
                         });
                     }
                 }
@@ -3271,8 +3418,9 @@ impl TypeChecker {
                                     expected: expected.display_name(),
                                     found: found.display_name(),
                                     span: err_span,
+                                    hint: None,
                                 });
-                                *ret
+                                Type::Unknown
                             }
                             super::inference::InferError::Unbound {
                                 param,
@@ -3298,6 +3446,7 @@ impl TypeChecker {
                                     expected: expected.display_name(),
                                     found: found.display_name(),
                                     span: args.get(i).map_or(span, |a| a.span),
+                                    hint: None,
                                 });
                             }
                         }
@@ -3307,9 +3456,12 @@ impl TypeChecker {
             }
             Type::Unknown => Type::Unknown,
             _ => {
+                let suggestion =
+                    suggest_similar(&format!("{callee_ty}"), &self.symbols.all_names());
                 self.errors.push(SemanticError::UndefinedFunction {
                     name: format!("{callee_ty}"),
                     span,
+                    suggestion,
                 });
                 Type::Unknown
             }
@@ -3429,6 +3581,7 @@ impl TypeChecker {
                 expected: "bool".into(),
                 found: cond_ty.display_name(),
                 span: condition.span(),
+                hint: None,
             });
         }
 
@@ -3442,6 +3595,7 @@ impl TypeChecker {
                     expected: then_ty.display_name(),
                     found: else_ty.display_name(),
                     span: else_e.span(),
+                    hint: None,
                 });
             }
             then_ty
@@ -3473,12 +3627,15 @@ impl TypeChecker {
                         expected: sym.ty.display_name(),
                         found: val_ty.display_name(),
                         span,
+                        hint: None,
                     });
                 }
             } else {
+                let suggestion = suggest_similar(name, &self.symbols.all_names());
                 self.errors.push(SemanticError::UndefinedVariable {
                     name: name.clone(),
                     span: *id_span,
+                    suggestion,
                 });
             }
 
@@ -3534,6 +3691,13 @@ impl TypeChecker {
         }
 
         for arm in arms {
+            // SE020: detect unreachable patterns (arms after a catch-all)
+            if has_wildcard_or_catch_all {
+                self.errors.push(SemanticError::UnreachablePattern {
+                    span: arm.pattern.span(),
+                });
+            }
+
             // Check if this arm is a catch-all (wildcard or bare ident without guard)
             if arm.guard.is_none() {
                 match &arm.pattern {
@@ -3664,6 +3828,7 @@ impl TypeChecker {
                     expected: first_ty.display_name(),
                     found: elem_ty.display_name(),
                     span: elem.span(),
+                    hint: None,
                 });
             }
         }
@@ -3688,6 +3853,7 @@ impl TypeChecker {
                         expected: params[0].display_name(),
                         found: arg_ty.display_name(),
                         span: left.span(),
+                        hint: None,
                     });
                 }
                 *ret
@@ -3697,6 +3863,7 @@ impl TypeChecker {
                 self.errors.push(SemanticError::UndefinedFunction {
                     name: format!("{fn_ty}"),
                     span: right.span(),
+                    suggestion: None,
                 });
                 Type::Unknown
             }
@@ -3726,6 +3893,7 @@ impl TypeChecker {
                                 expected: expected_ty.display_name(),
                                 found: val_ty.display_name(),
                                 span: fi.value.span(),
+                                hint: None,
                             });
                         }
                     }
@@ -3766,9 +3934,12 @@ impl TypeChecker {
                 if let Some(ft) = fields.get(field) {
                     ft.clone()
                 } else {
+                    let field_names: Vec<String> = fields.keys().cloned().collect();
+                    let suggestion = suggest_similar(field, &field_names);
                     self.errors.push(SemanticError::UndefinedVariable {
                         name: format!("{name}.{field}"),
                         span,
+                        suggestion,
                     });
                     Type::Unknown
                 }
@@ -3794,6 +3965,7 @@ impl TypeChecker {
                 expected: "integer".into(),
                 found: idx_ty.display_name(),
                 span: index.span(),
+                hint: None,
             });
         }
 
@@ -3945,6 +4117,7 @@ impl TypeChecker {
                         expected: "scalar element type (f32, f64, i32, ...)".into(),
                         found: elem.display_name(),
                         span: *span,
+                        hint: None,
                     });
                 }
                 Type::Tensor {

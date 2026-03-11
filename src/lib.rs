@@ -299,6 +299,8 @@ impl FjDiagnostic {
             SemanticError::AsmInDeviceContext { .. } => "KE006",
             SemanticError::AwaitOutsideAsync { .. } => "SE017",
             SemanticError::NotSendType { .. } => "SE018",
+            SemanticError::UnusedImport { .. } => "SE019",
+            SemanticError::UnreachablePattern { .. } => "SE020",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

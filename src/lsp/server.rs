@@ -575,6 +575,8 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::AsmInDeviceContext { .. } => "KE006",
         SemanticError::AwaitOutsideAsync { .. } => "SE017",
         SemanticError::NotSendType { .. } => "SE018",
+        SemanticError::UnusedImport { .. } => "SE019",
+        SemanticError::UnreachablePattern { .. } => "SE020",
     };
     Diagnostic {
         range,
