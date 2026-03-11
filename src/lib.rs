@@ -25,6 +25,7 @@ pub mod compiler;
 pub mod debugger;
 pub mod docgen;
 pub mod formatter;
+pub mod hw;
 pub mod interpreter;
 pub mod iot;
 pub mod lexer;

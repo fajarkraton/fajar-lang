@@ -1,0 +1,15 @@
+// Hardware detection demo — v1.1 Sprint S1
+let vendor = hw_cpu_vendor()
+let arch = hw_cpu_arch()
+let has_avx2 = hw_has_avx2()
+let has_avx512 = hw_has_avx512()
+let has_amx = hw_has_amx()
+let simd = hw_simd_width()
+
+println("=== Hardware Detection ===")
+println("CPU Vendor:  " + vendor)
+println("CPU Arch:    " + arch)
+println("AVX2:        " + to_string(has_avx2))
+println("AVX-512:     " + to_string(has_avx512))
+println("AMX:         " + to_string(has_amx))
+println("SIMD width:  " + to_string(simd) + " bits")

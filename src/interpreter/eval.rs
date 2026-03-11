@@ -456,6 +456,15 @@ impl Interpreter {
             "map_keys",
             "map_values",
             "map_len",
+            // Hardware detection builtins (v1.1)
+            "hw_cpu_vendor",
+            "hw_cpu_arch",
+            "hw_has_avx2",
+            "hw_has_avx512",
+            "hw_has_amx",
+            "hw_has_neon",
+            "hw_has_sve",
+            "hw_simd_width",
         ];
         for name in &builtins {
             self.env
@@ -2218,6 +2227,39 @@ impl Interpreter {
                     variant: "Err".to_string(),
                     data: Some(Box::new(args.into_iter().next().unwrap_or(Value::Null))),
                 })
+            }
+            // Hardware detection builtins (v1.1)
+            "hw_cpu_vendor" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Str(cpu.vendor.to_string()))
+            }
+            "hw_cpu_arch" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Str(cpu.arch.clone()))
+            }
+            "hw_has_avx2" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Bool(cpu.avx2))
+            }
+            "hw_has_avx512" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Bool(cpu.has_avx512()))
+            }
+            "hw_has_amx" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Bool(cpu.has_amx()))
+            }
+            "hw_has_neon" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Bool(cpu.neon))
+            }
+            "hw_has_sve" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Bool(cpu.has_sve()))
+            }
+            "hw_simd_width" => {
+                let cpu = crate::hw::CpuFeatures::cached();
+                Ok(Value::Int(cpu.best_simd_width() as i64))
             }
             _ => {
                 // Check for enum constructor builtins

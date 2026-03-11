@@ -48,16 +48,16 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S1 — CPU Feature Detection
 
-- [ ] S1.1 — CPUID Wrapper: Implement safe Rust wrapper around x86 CPUID instruction with leaf/subleaf enumeration
-- [ ] S1.2 — AVX-512 Detection: Detect AVX-512F, AVX-512BW, AVX-512VNNI, AVX-512BF16 via CPUID leaf 7 and XCR0
-- [ ] S1.3 — AMX Detection: Detect Intel AMX-BF16, AMX-INT8, AMX-FP16 via CPUID.07H:EDX bits and XSAVE support
-- [ ] S1.4 — SSE/AVX Baseline: Detect SSE4.2, AVX2, FMA3 as minimum SIMD capabilities for fallback paths
-- [ ] S1.5 — Feature Flags Struct: Define `CpuFeatures` struct with bitfield storage for all detected ISA extensions
-- [ ] S1.6 — ARM64 Feature Detection: Read AARCH64 ID_AA64ISAR0_EL1/ID_AA64PFR0_EL1 for SVE, SVE2, SME, dotprod
-- [ ] S1.7 — RISC-V Feature Detection: Parse RISC-V ISA string for V (vector), Zfh (half-float), Zvfh extensions
-- [ ] S1.8 — Runtime Cache: Cache detected features in thread-local static; lazy_static initialization on first query
-- [ ] S1.9 — Feature Query API: Expose `hw::cpu::has_avx512()`, `hw::cpu::has_amx()`, etc. as Fajar Lang builtins
-- [ ] S1.10 — Unit Tests: 10+ tests covering feature detection on current platform with mock CPUID for cross-platform
+- [x] S1.1 — CPUID Wrapper: Implement safe Rust wrapper around x86 CPUID instruction with leaf/subleaf enumeration
+- [x] S1.2 — AVX-512 Detection: Detect AVX-512F, AVX-512BW, AVX-512VNNI, AVX-512BF16 via CPUID leaf 7 and XCR0
+- [x] S1.3 — AMX Detection: Detect Intel AMX-BF16, AMX-INT8, AMX-FP16 via CPUID.07H:EDX bits and XSAVE support
+- [x] S1.4 — SSE/AVX Baseline: Detect SSE4.2, AVX2, FMA3 as minimum SIMD capabilities for fallback paths
+- [x] S1.5 — Feature Flags Struct: Define `CpuFeatures` struct with bitfield storage for all detected ISA extensions
+- [x] S1.6 — ARM64 Feature Detection: Read AARCH64 ID_AA64ISAR0_EL1/ID_AA64PFR0_EL1 for SVE, SVE2, SME, dotprod
+- [x] S1.7 — RISC-V Feature Detection: Parse RISC-V ISA string for V (vector), Zfh (half-float), Zvfh extensions
+- [x] S1.8 — Runtime Cache: Cache detected features in thread-local static; lazy_static initialization on first query
+- [x] S1.9 — Feature Query API: Expose `hw::cpu::has_avx512()`, `hw::cpu::has_amx()`, etc. as Fajar Lang builtins
+- [x] S1.10 — Unit Tests: 10+ tests covering feature detection on current platform with mock CPUID for cross-platform
 
 ### Sprint S2 — GPU Discovery
 

@@ -160,6 +160,10 @@ enum Command {
         #[arg(long)]
         dap: bool,
     },
+    /// Display detected hardware capabilities (CPU, GPU, NPU).
+    HwInfo,
+    /// Output hardware profile as machine-readable JSON.
+    HwJson,
 }
 
 fn main() -> ExitCode {
@@ -316,6 +320,8 @@ fn main() -> ExitCode {
                 ExitCode::from(EXIT_USAGE)
             }
         }
+        Command::HwInfo => cmd_hw_info(),
+        Command::HwJson => cmd_hw_json(),
     }
 }
 
@@ -1952,4 +1958,24 @@ fn cmd_bench(path: &PathBuf, filter: Option<&str>) -> ExitCode {
 
     println!();
     ExitCode::SUCCESS
+}
+
+fn cmd_hw_info() -> ExitCode {
+    let profile = fajar_lang::hw::HardwareProfile::detect();
+    print!("{}", profile.display_info());
+    ExitCode::SUCCESS
+}
+
+fn cmd_hw_json() -> ExitCode {
+    let profile = fajar_lang::hw::HardwareProfile::detect();
+    match profile.to_json() {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("error: failed to serialize hardware profile: {e}");
+            ExitCode::from(EXIT_RUNTIME)
+        }
+    }
 }

@@ -1726,6 +1726,30 @@ impl TypeChecker {
                 used: false,
             });
         }
+
+        // Hardware detection builtins (v1.1)
+        let hw_fns: Vec<(&str, Vec<Type>, Type)> = vec![
+            ("hw_cpu_vendor", vec![], Type::Str),
+            ("hw_cpu_arch", vec![], Type::Str),
+            ("hw_has_avx2", vec![], Type::Bool),
+            ("hw_has_avx512", vec![], Type::Bool),
+            ("hw_has_amx", vec![], Type::Bool),
+            ("hw_has_neon", vec![], Type::Bool),
+            ("hw_has_sve", vec![], Type::Bool),
+            ("hw_simd_width", vec![], Type::I64),
+        ];
+        for (name, params, ret) in hw_fns {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
     }
 
     /// Registers built-in traits and their implementations for primitive types.

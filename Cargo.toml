@@ -20,6 +20,7 @@ rand = "0.8"                  # Phase 4: RNG for randn/xavier
 tower-lsp = "0.20"            # Phase 5.3: LSP server
 tokio = { version = "1", features = ["full"] }  # Phase 5.3: async runtime for LSP
 serde = { version = "1.0", features = ["derive"] }  # Phase 5.4: toml deserialization
+serde_json = "1.0"            # Hardware profile JSON serialization
 toml = "0.8"                  # Phase 5.4: parse fj.toml
 libloading = "0.8"            # Phase 7: FFI dynamic library loading
 dap = "0.4.1-alpha1"          # Phase 2: Debug Adapter Protocol server
