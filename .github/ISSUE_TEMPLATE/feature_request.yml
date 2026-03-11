@@ -35,11 +35,20 @@ body:
       options:
         - Language Feature
         - Type System
-        - ML / Tensor Operations
-        - OS / Embedded Support
+        - Effect System
+        - Macro System
+        - Compile-Time Evaluation
+        - ML / Tensor / GPU
+        - OS / Embedded / RTOS
+        - IoT (WiFi/BLE/MQTT/LoRaWAN)
+        - SIMD / Vectorization
+        - Async I/O / Networking
+        - Concurrency
+        - Security Hardening
         - Standard Library
-        - Tooling (CLI, LSP, Formatter)
+        - Tooling (CLI, LSP, Debugger, Formatter)
         - Package Manager
+        - Codegen Backend (Cranelift/LLVM/Wasm)
         - Performance
         - Documentation
         - Other

@@ -54,14 +54,27 @@ body:
       options:
         - Lexer / Parser
         - Type Checker / Analyzer
+        - Effect System
+        - Macro System
         - Interpreter
         - Bytecode VM
         - Native Codegen (Cranelift)
-        - ML Runtime (Tensor/Autograd)
+        - LLVM Backend
+        - WebAssembly Backend
+        - Compile-Time Evaluation (const fn / comptime)
+        - ML Runtime (Tensor/Autograd/GPU)
         - OS Runtime (Memory/IRQ/Syscall)
+        - SIMD / Vectorization
+        - Async I/O / Networking
+        - Concurrency (threads/channels/async)
+        - Security Hardening (CFI/ASan/canaries)
+        - IoT (WiFi/BLE/MQTT/LoRaWAN)
+        - RTOS Integration
+        - DAP Debugger
         - Package Manager
         - CLI / REPL
         - LSP / Editor Support
+        - Formatter
         - Documentation
         - Other
     validations:
