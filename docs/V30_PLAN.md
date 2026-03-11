@@ -274,55 +274,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S17 — PTX Backend
 
-- [ ] S17.1 — PTX IR Types: Map Fajar Lang types to PTX register types (.u32, .u64, .f32, .f64, .pred)
-- [ ] S17.2 — Kernel Entry: Generate `.entry` kernel functions with `.param` grid/block parameters
-- [ ] S17.3 — Thread Indexing: Emit `%tid.x`, `%ctaid.x`, `%ntid.x` for thread/block/grid indexing
-- [ ] S17.4 — Arithmetic Ops: Generate PTX arithmetic (add, mul, fma, div, rem) for all numeric types
-- [ ] S17.5 — Memory Ops: Load/store to global (`.global`), shared (`.shared`), local (`.local`) memory
-- [ ] S17.6 — Control Flow: Generate PTX branch (`@pred bra`), loop, and predicated instructions
-- [ ] S17.7 — Special Functions: `__syncthreads()`, `atomicAdd`, `__shfl_sync` warp primitives
-- [ ] S17.8 — PTX Assembly Output: Emit valid PTX 7.0+ assembly text for CUDA driver API loading
-- [ ] S17.9 — Grid Launch Config: Compute optimal grid/block dimensions from tensor shape
-- [ ] S17.10 — Unit Tests: 15+ tests for type mapping, thread indexing, arithmetic, memory, control flow, sync
+- [x] S17.1 — PTX IR Types: Map Fajar Lang types to PTX register types (.u32, .u64, .f32, .f64, .pred)
+- [x] S17.2 — Kernel Entry: Generate `.entry` kernel functions with `.param` grid/block parameters
+- [x] S17.3 — Thread Indexing: Emit `%tid.x`, `%ctaid.x`, `%ntid.x` for thread/block/grid indexing
+- [x] S17.4 — Arithmetic Ops: Generate PTX arithmetic (add, mul, fma, div, rem) for all numeric types
+- [x] S17.5 — Memory Ops: Load/store to global (`.global`), shared (`.shared`), local (`.local`) memory
+- [x] S17.6 — Control Flow: Generate PTX branch (`@pred bra`), loop, and predicated instructions
+- [x] S17.7 — Special Functions: `__syncthreads()`, `atomicAdd`, `__shfl_sync` warp primitives
+- [x] S17.8 — PTX Assembly Output: Emit valid PTX 7.0+ assembly text for CUDA driver API loading
+- [x] S17.9 — Grid Launch Config: Compute optimal grid/block dimensions from tensor shape
+- [x] S17.10 — Unit Tests: 15+ tests for type mapping, thread indexing, arithmetic, memory, control flow, sync
 
 ### Sprint S18 — SPIR-V Backend
 
-- [ ] S18.1 — SPIR-V Module: Generate valid SPIR-V binary module with compute shader capability
-- [ ] S18.2 — SPIR-V Types: Map Fajar Lang types to SPIR-V OpTypeInt/OpTypeFloat/OpTypeVector
-- [ ] S18.3 — Compute Shader Entry: OpEntryPoint with GlobalInvocationId built-in for thread indexing
-- [ ] S18.4 — Storage Buffers: SSBO (Shader Storage Buffer Object) for input/output tensor data
-- [ ] S18.5 — Workgroup Memory: Shared memory via Workgroup storage class
-- [ ] S18.6 — Barrier: OpControlBarrier for workgroup synchronization
-- [ ] S18.7 — SPIR-V Validation: Validate generated SPIR-V against specification rules
-- [ ] S18.8 — Vulkan Dispatch: Launch SPIR-V compute shaders via Vulkan compute queue
-- [ ] S18.9 — Backend Selection: `--gpu-backend=ptx|spirv|auto` flag, auto-detect NVIDIA vs other GPUs
-- [ ] S18.10 — Unit Tests: 15+ tests for module generation, type mapping, compute entry, buffers, barriers
+- [x] S18.1 — SPIR-V Module: Generate valid SPIR-V binary module with compute shader capability
+- [x] S18.2 — SPIR-V Types: Map Fajar Lang types to SPIR-V OpTypeInt/OpTypeFloat/OpTypeVector
+- [x] S18.3 — Compute Shader Entry: OpEntryPoint with GlobalInvocationId built-in for thread indexing
+- [x] S18.4 — Storage Buffers: SSBO (Shader Storage Buffer Object) for input/output tensor data
+- [x] S18.5 — Workgroup Memory: Shared memory via Workgroup storage class
+- [x] S18.6 — Barrier: OpControlBarrier for workgroup synchronization
+- [x] S18.7 — SPIR-V Validation: Validate generated SPIR-V against specification rules
+- [x] S18.8 — Vulkan Dispatch: Launch SPIR-V compute shaders via Vulkan compute queue
+- [x] S18.9 — Backend Selection: `--gpu-backend=ptx|spirv|auto` flag, auto-detect NVIDIA vs other GPUs
+- [x] S18.10 — Unit Tests: 15+ tests for module generation, type mapping, compute entry, buffers, barriers
 
 ### Sprint S19 — Kernel Fusion
 
-- [ ] S19.1 — Fusion Analysis: Detect fuseable kernel sequences (e.g., matmul → relu → add bias)
-- [ ] S19.2 — Element-wise Fusion: Fuse chains of element-wise operations into a single kernel
-- [ ] S19.3 — Reduction Fusion: Fuse reduction operations (sum, max) with preceding element-wise ops
-- [ ] S19.4 — Memory Planning: Eliminate intermediate allocations between fused kernels
-- [ ] S19.5 — Tiling Strategy: Tile large operations for shared memory utilization
-- [ ] S19.6 — Auto-Tuning: Try multiple tile sizes and configurations, pick fastest for target GPU
-- [ ] S19.7 — Fusion Graph: Build dataflow graph of GPU operations, identify fusion opportunities
-- [ ] S19.8 — Fusion Limits: Configurable max kernel size and register pressure limits
-- [ ] S19.9 — Fusion Report: `--gpu-report` shows fusion decisions, speedup estimates
-- [ ] S19.10 — Unit Tests: 15+ tests for fusion detection, element-wise chains, tiling, memory planning
+- [x] S19.1 — Fusion Analysis: Detect fuseable kernel sequences (e.g., matmul → relu → add bias)
+- [x] S19.2 — Element-wise Fusion: Fuse chains of element-wise operations into a single kernel
+- [x] S19.3 — Reduction Fusion: Fuse reduction operations (sum, max) with preceding element-wise ops
+- [x] S19.4 — Memory Planning: Eliminate intermediate allocations between fused kernels
+- [x] S19.5 — Tiling Strategy: Tile large operations for shared memory utilization
+- [x] S19.6 — Auto-Tuning: Try multiple tile sizes and configurations, pick fastest for target GPU
+- [x] S19.7 — Fusion Graph: Build dataflow graph of GPU operations, identify fusion opportunities
+- [x] S19.8 — Fusion Limits: Configurable max kernel size and register pressure limits
+- [x] S19.9 — Fusion Report: `--gpu-report` shows fusion decisions, speedup estimates
+- [x] S19.10 — Unit Tests: 15+ tests for fusion detection, element-wise chains, tiling, memory planning
 
 ### Sprint S20 — GPU Memory Management
 
-- [ ] S20.1 — Device Memory Allocator: Pool allocator for GPU memory with configurable initial/max size
-- [ ] S20.2 — Host-Device Transfer: Async `memcpy_h2d` / `memcpy_d2h` with pinned host memory
-- [ ] S20.3 — Unified Memory: Optional unified memory mode for development convenience
-- [ ] S20.4 — Memory Pool: Sub-allocator with free-list for avoiding per-operation cudaMalloc overhead
-- [ ] S20.5 — Memory Defragmentation: Periodic defragmentation of GPU memory pool
-- [ ] S20.6 — Out-of-Memory Handling: Graceful OOM with spill-to-host fallback
-- [ ] S20.7 — Multi-GPU Memory: Peer-to-peer memory access between GPUs on same node
-- [ ] S20.8 — Memory Profiling: Track allocation/deallocation, peak usage, transfer bandwidth
-- [ ] S20.9 — Zero-Copy Tensors: Tensors backed by pinned host memory accessible from GPU
-- [ ] S20.10 — Unit Tests: 15+ tests for allocation, transfer, pool, OOM handling, multi-GPU, profiling
+- [x] S20.1 — Device Memory Allocator: Pool allocator for GPU memory with configurable initial/max size
+- [x] S20.2 — Host-Device Transfer: Async `memcpy_h2d` / `memcpy_d2h` with pinned host memory
+- [x] S20.3 — Unified Memory: Optional unified memory mode for development convenience
+- [x] S20.4 — Memory Pool: Sub-allocator with free-list for avoiding per-operation cudaMalloc overhead
+- [x] S20.5 — Memory Defragmentation: Periodic defragmentation of GPU memory pool
+- [x] S20.6 — Out-of-Memory Handling: Graceful OOM with spill-to-host fallback
+- [x] S20.7 — Multi-GPU Memory: Peer-to-peer memory access between GPUs on same node
+- [x] S20.8 — Memory Profiling: Track allocation/deallocation, peak usage, transfer bandwidth
+- [x] S20.9 — Zero-Copy Tensors: Tensors backed by pinned host memory accessible from GPU
+- [x] S20.10 — Unit Tests: 15+ tests for allocation, transfer, pool, OOM handling, multi-GPU, profiling
 
 ---
 

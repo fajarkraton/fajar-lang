@@ -32,6 +32,7 @@ pub mod docgen;
 pub mod effects;
 pub mod formatter;
 pub mod gc;
+pub mod gpu_codegen;
 pub mod hkt;
 pub mod hw;
 pub mod interpreter;
