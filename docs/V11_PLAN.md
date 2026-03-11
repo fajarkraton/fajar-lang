@@ -61,16 +61,16 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S2 — GPU Discovery
 
-- [ ] S2.1 — CUDA Device Enumeration: Call cuDeviceGetCount/cuDeviceGet via CUDA driver API to list all GPUs
-- [ ] S2.2 — Compute Capability Query: Retrieve sm_XX version per device (sm_89 for Ada, sm_100/sm_101 for Blackwell)
-- [ ] S2.3 — Memory Query: Query total/free VRAM via cuMemGetInfo, report per-device memory in GpuDevice struct
-- [ ] S2.4 — Multi-GPU Topology: Detect NVLink/PCIe connectivity between GPUs via cuDeviceGetP2PAttribute
-- [ ] S2.5 — GPU Feature Struct: Define `GpuDevice { id, name, compute_cap, vram_total, vram_free, bus_type, tensor_cores }`
-- [ ] S2.6 — Tensor Core Detection: Identify Tensor Core generation (1st-5th) from compute capability mapping
-- [ ] S2.7 — Driver Version Check: Query CUDA driver version, validate minimum required version (12.0+), warn on mismatch
-- [ ] S2.8 — Fallback Without CUDA: Graceful degradation when libcuda.so is not found — log warning, GPU list empty
-- [ ] S2.9 — GPU Info Display: Format GPU details for `fj --hw-info` output (name, CC, VRAM, Tensor Core gen)
-- [ ] S2.10 — Unit Tests: Test GPU enumeration on systems with/without CUDA, mock driver for CI environments
+- [x] S2.1 — CUDA Device Enumeration: Call cuDeviceGetCount/cuDeviceGet via CUDA driver API to list all GPUs
+- [x] S2.2 — Compute Capability Query: Retrieve sm_XX version per device (sm_89 for Ada, sm_100/sm_101 for Blackwell)
+- [x] S2.3 — Memory Query: Query total/free VRAM via cuMemGetInfo, report per-device memory in GpuDevice struct
+- [x] S2.4 — Multi-GPU Topology: Detect NVLink/PCIe connectivity between GPUs via cuDeviceGetP2PAttribute
+- [x] S2.5 — GPU Feature Struct: Define `GpuDevice { id, name, compute_cap, vram_total, vram_free, bus_type, tensor_cores }`
+- [x] S2.6 — Tensor Core Detection: Identify Tensor Core generation (1st-5th) from compute capability mapping
+- [x] S2.7 — Driver Version Check: Query CUDA driver version, validate minimum required version (12.0+), warn on mismatch
+- [x] S2.8 — Fallback Without CUDA: Graceful degradation when libcuda.so is not found — log warning, GPU list empty
+- [x] S2.9 — GPU Info Display: Format GPU details for `fj --hw-info` output (name, CC, VRAM, Tensor Core gen)
+- [x] S2.10 — Unit Tests: Test GPU enumeration on systems with/without CUDA, mock driver for CI environments
 
 ### Sprint S3 — NPU Detection
 

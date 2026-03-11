@@ -7,14 +7,16 @@
 //!
 //! ```text
 //! HardwareProfile
-//! ├── CpuFeatures (CPUID / /proc/cpuinfo / ISA string)
-//! ├── Vec<GpuDevice>  (CUDA driver API — Phase 1 S2)
-//! └── Vec<NpuDevice>  (sysfs / OpenVINO — Phase 1 S3)
+//! ├── CpuFeatures   (CPUID / /proc/cpuinfo / ISA string)
+//! ├── GpuDiscovery  (CUDA driver API — dynamically loaded)
+//! └── Vec<NpuDevice> (sysfs / OpenVINO — Phase 1 S3)
 //! ```
 
 pub mod cpu;
+pub mod gpu;
 
 pub use cpu::CpuFeatures;
+pub use gpu::{GpuDevice, GpuDiscovery, TensorCoreGen};
 
 use serde::Serialize;
 
@@ -30,7 +32,8 @@ use serde::Serialize;
 pub struct HardwareProfile {
     /// Detected CPU features (ISA extensions, vendor, model).
     pub cpu: CpuFeatures,
-    // pub gpus: Vec<GpuDevice>,  // Phase 1 S2
+    /// Detected GPU devices and CUDA driver info.
+    pub gpu: GpuDiscovery,
     // pub npus: Vec<NpuDevice>,  // Phase 1 S3
 }
 
@@ -39,6 +42,7 @@ impl HardwareProfile {
     pub fn detect() -> Self {
         Self {
             cpu: CpuFeatures::detect(),
+            gpu: GpuDiscovery::detect(),
         }
     }
 
@@ -46,6 +50,7 @@ impl HardwareProfile {
     pub fn empty() -> Self {
         Self {
             cpu: CpuFeatures::default(),
+            gpu: GpuDiscovery::default(),
         }
     }
 
@@ -54,6 +59,8 @@ impl HardwareProfile {
         let mut out = String::new();
         out.push_str("=== Fajar Lang Hardware Profile ===\n\n");
         out.push_str(&self.cpu.display_info());
+        out.push('\n');
+        out.push_str(&self.gpu.display_info());
         out
     }
 
@@ -63,9 +70,6 @@ impl HardwareProfile {
     }
 }
 
-// Re-export serde_json for to_json
-use serde_json;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,9 +77,9 @@ mod tests {
     #[test]
     fn detect_returns_valid_profile() {
         let profile = HardwareProfile::detect();
-        // Should always succeed on any platform
         let info = profile.display_info();
         assert!(info.contains("CPU"));
+        assert!(info.contains("GPU"));
     }
 
     #[test]
@@ -83,6 +87,8 @@ mod tests {
         let profile = HardwareProfile::empty();
         assert!(!profile.cpu.avx512f);
         assert!(!profile.cpu.amx_bf16);
+        assert!(!profile.gpu.cuda_available);
+        assert!(profile.gpu.devices.is_empty());
     }
 
     #[test]
@@ -90,13 +96,15 @@ mod tests {
         let profile = HardwareProfile::detect();
         let json = profile.to_json().expect("serialization should succeed");
         assert!(json.contains("vendor"));
-        assert!(json.contains("model_name"));
+        assert!(json.contains("cuda_available"));
     }
 
     #[test]
-    fn display_info_contains_header() {
+    fn display_info_contains_sections() {
         let profile = HardwareProfile::detect();
         let info = profile.display_info();
         assert!(info.contains("Hardware Profile"));
+        assert!(info.contains("── CPU"));
+        assert!(info.contains("── GPU"));
     }
 }
