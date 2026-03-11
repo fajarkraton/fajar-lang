@@ -216,55 +216,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S13 — Transformer Inference
 
-- [ ] S13.1 — Multi-Head Self-Attention: Efficient scaled dot-product attention with Q/K/V projections
-- [ ] S13.2 — Causal Masking: Lower-triangular mask for autoregressive (decoder-only) transformers
-- [ ] S13.3 — Rotary Position Embeddings: RoPE for relative position encoding (used by LLaMA, Mistral)
-- [ ] S13.4 — KV Cache: Key-value cache for incremental decoding — avoid recomputing past tokens
-- [ ] S13.5 — Flash Attention: Memory-efficient attention via tiling — O(N) memory instead of O(N^2)
-- [ ] S13.6 — Grouped Query Attention: GQA for reduced memory bandwidth (used by LLaMA 2)
-- [ ] S13.7 — Layer Normalization: RMSNorm (pre-norm) and LayerNorm with fused operations
-- [ ] S13.8 — SwiGLU Activation: Gated linear unit activation (used by LLaMA, PaLM)
-- [ ] S13.9 — Token Sampling: Temperature, top-k, top-p (nucleus) sampling for text generation
-- [ ] S13.10 — Unit Tests: 15+ tests for attention scores, masking, RoPE, KV cache, sampling strategies
+- [x] S13.1 — Multi-Head Self-Attention: Efficient scaled dot-product attention with Q/K/V projections
+- [x] S13.2 — Causal Masking: Lower-triangular mask for autoregressive (decoder-only) transformers
+- [x] S13.3 — Rotary Position Embeddings: RoPE for relative position encoding (used by LLaMA, Mistral)
+- [x] S13.4 — KV Cache: Key-value cache for incremental decoding — avoid recomputing past tokens
+- [x] S13.5 — Flash Attention: Memory-efficient attention via tiling — O(N) memory instead of O(N^2)
+- [x] S13.6 — Grouped Query Attention: GQA for reduced memory bandwidth (used by LLaMA 2)
+- [x] S13.7 — Layer Normalization: RMSNorm (pre-norm) and LayerNorm with fused operations
+- [x] S13.8 — SwiGLU Activation: Gated linear unit activation (used by LLaMA, PaLM)
+- [x] S13.9 — Token Sampling: Temperature, top-k, top-p (nucleus) sampling for text generation
+- [x] S13.10 — Unit Tests: 15+ tests for attention scores, masking, RoPE, KV cache, sampling strategies
 
 ### Sprint S14 — Diffusion Models
 
-- [ ] S14.1 — Noise Schedule: Linear and cosine noise schedules for forward diffusion process
-- [ ] S14.2 — UNet Architecture: Time-conditioned UNet with downsampling/upsampling blocks and skip connections
-- [ ] S14.3 — Sinusoidal Timestep Embedding: Encode diffusion timestep as positional embedding
-- [ ] S14.4 — Forward Process: Add Gaussian noise to data according to noise schedule
-- [ ] S14.5 — Reverse Process: Predict and remove noise iteratively (DDPM sampling)
-- [ ] S14.6 — DDIM Sampling: Deterministic sampling with fewer steps (10-50 instead of 1000)
-- [ ] S14.7 — Classifier-Free Guidance: Conditional generation with guidance scale parameter
-- [ ] S14.8 — Latent Diffusion: Operate in latent space via encoder/decoder for efficiency
-- [ ] S14.9 — Image Generation Pipeline: Full text-to-image pipeline (text encoder → UNet → decoder)
-- [ ] S14.10 — Unit Tests: 15+ tests for noise schedules, UNet forward pass, sampling, guidance, latent space
+- [x] S14.1 — Noise Schedule: Linear and cosine noise schedules for forward diffusion process
+- [x] S14.2 — UNet Architecture: Time-conditioned UNet with downsampling/upsampling blocks and skip connections
+- [x] S14.3 — Sinusoidal Timestep Embedding: Encode diffusion timestep as positional embedding
+- [x] S14.4 — Forward Process: Add Gaussian noise to data according to noise schedule
+- [x] S14.5 — Reverse Process: Predict and remove noise iteratively (DDPM sampling)
+- [x] S14.6 — DDIM Sampling: Deterministic sampling with fewer steps (10-50 instead of 1000)
+- [x] S14.7 — Classifier-Free Guidance: Conditional generation with guidance scale parameter
+- [x] S14.8 — Latent Diffusion: Operate in latent space via encoder/decoder for efficiency
+- [x] S14.9 — Image Generation Pipeline: Full text-to-image pipeline (text encoder → UNet → decoder)
+- [x] S14.10 — Unit Tests: 15+ tests for noise schedules, UNet forward pass, sampling, guidance, latent space
 
 ### Sprint S15 — Reinforcement Learning
 
-- [ ] S15.1 — Environment Trait: `trait Env { type State; type Action; fn step(action) -> (State, f64, bool); fn reset() -> State; }`
-- [ ] S15.2 — Replay Buffer: Experience replay with uniform and prioritized sampling
-- [ ] S15.3 — DQN Agent: Deep Q-Network with target network and epsilon-greedy exploration
-- [ ] S15.4 — Policy Gradient: REINFORCE algorithm with baseline subtraction
-- [ ] S15.5 — PPO Agent: Proximal Policy Optimization with clipped surrogate objective
-- [ ] S15.6 — GAE: Generalized Advantage Estimation for variance reduction
-- [ ] S15.7 — Multi-Agent: Support multiple agents with shared/independent policies
-- [ ] S15.8 — Vectorized Environments: Run N environment instances in parallel for faster training
-- [ ] S15.9 — Reward Shaping: Curriculum learning with staged reward functions
-- [ ] S15.10 — Unit Tests: 15+ tests for environment interface, replay buffer, DQN update, PPO loss, GAE computation
+- [x] S15.1 — Environment Trait: `trait Env { type State; type Action; fn step(action) -> (State, f64, bool); fn reset() -> State; }`
+- [x] S15.2 — Replay Buffer: Experience replay with uniform and prioritized sampling
+- [x] S15.3 — DQN Agent: Deep Q-Network with target network and epsilon-greedy exploration
+- [x] S15.4 — Policy Gradient: REINFORCE algorithm with baseline subtraction
+- [x] S15.5 — PPO Agent: Proximal Policy Optimization with clipped surrogate objective
+- [x] S15.6 — GAE: Generalized Advantage Estimation for variance reduction
+- [x] S15.7 — Multi-Agent: Support multiple agents with shared/independent policies
+- [x] S15.8 — Vectorized Environments: Run N environment instances in parallel for faster training
+- [x] S15.9 — Reward Shaping: Curriculum learning with staged reward functions
+- [x] S15.10 — Unit Tests: 15+ tests for environment interface, replay buffer, DQN update, PPO loss, GAE computation
 
 ### Sprint S16 — Model Serving
 
-- [ ] S16.1 — Inference Server: HTTP/gRPC endpoint for model inference with batching
-- [ ] S16.2 — Dynamic Batching: Accumulate requests into batches for GPU efficiency (max wait: 10ms)
-- [ ] S16.3 — Model Registry: Load/unload models by name and version, A/B testing support
-- [ ] S16.4 — Input Validation: Schema-based request validation with type-checked tensor shapes
-- [ ] S16.5 — Output Postprocessing: Top-k, softmax, argmax, label mapping in serving pipeline
-- [ ] S16.6 — Model Warmup: Pre-run inference on dummy data to warm JIT/caches before serving
-- [ ] S16.7 — Health & Readiness: `/health` and `/ready` endpoints for load balancer integration
-- [ ] S16.8 — Inference Metrics: Latency histogram, throughput counter, batch size distribution
-- [ ] S16.9 — Model Versioning: Blue-green deployment with traffic splitting between model versions
-- [ ] S16.10 — Unit Tests: 15+ tests for batching, registry, validation, warmup, health checks, metrics
+- [x] S16.1 — Inference Server: HTTP/gRPC endpoint for model inference with batching
+- [x] S16.2 — Dynamic Batching: Accumulate requests into batches for GPU efficiency (max wait: 10ms)
+- [x] S16.3 — Model Registry: Load/unload models by name and version, A/B testing support
+- [x] S16.4 — Input Validation: Schema-based request validation with type-checked tensor shapes
+- [x] S16.5 — Output Postprocessing: Top-k, softmax, argmax, label mapping in serving pipeline
+- [x] S16.6 — Model Warmup: Pre-run inference on dummy data to warm JIT/caches before serving
+- [x] S16.7 — Health & Readiness: `/health` and `/ready` endpoints for load balancer integration
+- [x] S16.8 — Inference Metrics: Latency histogram, throughput counter, batch size distribution
+- [x] S16.9 — Model Versioning: Blue-green deployment with traffic splitting between model versions
+- [x] S16.10 — Unit Tests: 15+ tests for batching, registry, validation, warmup, health checks, metrics
 
 ---
 
