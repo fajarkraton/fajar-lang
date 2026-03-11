@@ -18,6 +18,37 @@ Kategori perubahan:
 
 ---
 
+## [2.0.0] — 2026-03-12 "Transcendence"
+
+### Added
+- **Phase 1 — Dependent Types** (`src/dependent/`): Type-level natural numbers (`Nat`, `Zero`, `Succ`), `NatConstraint` arithmetic, `DependentArray<T, N>` with compile-time bounds checking, `DependentTensor<N, M>` with shape verification (matmul `Tensor<A,B> * Tensor<B,C> -> Tensor<A,C>`), reshape proof (`A*B == C*D`), dependent pattern matching, `DependentTypeChecker`, exhaustiveness for nat patterns, `DependentCodegen` for type erasure
+- **Phase 2 — Linear Types** (`src/linear/`): `LinearChecker` with exactly-once usage enforcement, `LinearType`/`AffineType` distinction, `UseTracker` for tracking use/move/drop, `LinearResource` (FileHandle, GpioPin, DmaBuffer, GpuBuffer, Mutex), `BorrowingProtocol` for temporary non-consuming access, `HardwareHandle` with `must_use` enforcement, `PinProtocol` for GPIO configure-once semantics, linear error codes (LN001-LN008)
+- **Phase 3 — Formal Verification** (`src/verification/`): `ContractParser` with `requires`/`ensures`/`invariant` annotations, `RuntimeVerifier` for dynamic contract checking, `SmtContext` with Z3/CVC5 solver abstraction, expression encoding to SMT-LIB (QF_BV integer theory, array theory), `VerifiedFunction` pipeline, automatic bounds/overflow/null safety proofs, `@verified` annotation, loop termination hints (`decreases`), `@kernel @verified` composition for page table bounds, stack depth, IRQ latency verification
+- **Phase 4 — Tiered JIT** (`src/jit/`): Per-function `ExecutionCounter` with hot threshold (default: 100), `BaselineJit` for fast compilation (<1ms), `OptimizingJit` with inlining/constant propagation/dead code elimination, `ProfileCollector` with branch/type profiles, tier promotion (Interpreter→Baseline→Optimizing), `OsrPoint` for on-stack replacement at loop headers with state transfer, `DeoptInfo` for optimistic optimization bailout, `JitCache` keyed by (function_hash, opt_level)
+- **Phase 5 — Effect System v2** (`src/effects/`): `EffectHandler` with resume/abort/transform, `EffectInferenceEngine` with bottom-up inference and fixed-point iteration, `EffectPolyVar` for effect polymorphism with unification, `AsyncEffectMapping` from effects to context annotations, `LinearEffectCheck` for linear type interaction, `EffectErasure` for zero-overhead codegen, `EffectDocEntry` for LSP/IDE, stdlib effect annotations
+- **Phase 6 — GC Mode** (`src/gc/`): `RcType` with strong/weak counts and `CycleCollector` (DFS cycle detection), `GcHeap` with tri-color mark-sweep, generational collection (young/old), write barriers, finalization, `MemoryMode` (Owned/RefCounted/Tracing) selectable via `--gc` flag, `@kernel` prohibition, cross-module GC compatibility, `GcBenchmarks` with throughput/latency/pause metrics
+- **Phase 7 — Self-Hosting v2** (`src/selfhost/`): `FjType`-based type checker with scope resolution, Hindley-Milner unification, borrow analysis in .fj, `IrBuilder` for Cranelift IR generation from .fj, `BootstrapChain` (Stage0→Stage1→Stage2), `BinaryComparison` for byte-for-byte verification, `SourceProvenance` with deterministic FNV-1a hashing, `CrossPlatformBuild` reproducibility verification, `BuildCache` content-addressable
+- **Phase 8 — Language Server v2** (`src/lsp_v2/`): `TraitImplIndex` with incremental updates, `goto_implementation`, blanket impl display, `UnsatisfiedBound` diagnostics, `AssocTypeBinding` resolution, `TraitObjectInfo` with vtable layout, `ImplSuggestion` skeleton generation, `OrphanViolation` checking, declarative `MacroDefinition` with `MacroArm` pattern/template, `MacroExpander` with hygiene (`HygieneContext`), recursive expansion (limit 128), `MacroSourceMap` for error location mapping, `ExpectedType` analysis, `SynthesizedExpr` for type-driven completion, `FillSuggestion`, `PatternSuggestion` for exhaustive match, `ImportSuggestion`, `PostfixCompletion` (.if/.match/.let/.dbg), `SnippetTemplate`, `RankedCompletion` with multi-factor scoring, `ExtractFunction`/`ExtractVariable`/`InlineFunction`/`InlineVariable` refactorings, `RenameSymbol` across workspace, `MoveModule` with import updates, `ExtractTrait`, `ChangeSignature`, `ConvertFunctionMethod`
+
+### New Modules
+- `src/dependent/` — 4 files (nat.rs, arrays.rs, tensor.rs, patterns.rs)
+- `src/linear/` — 4 files (checker.rs, resources.rs, borrowing.rs, hardware.rs)
+- `src/verification/` — 4 files (contracts.rs, smt.rs, verified.rs, kernel_verify.rs)
+- `src/jit/` — 4 files (counter.rs, baseline.rs, optimizing.rs, osr.rs)
+- `src/effects/` — 4 files (handlers.rs, inference.rs, polymorphism.rs, interop.rs)
+- `src/gc/` — 4 files (refcount.rs, tracing.rs, integration.rs, benchmarks.rs)
+- `src/selfhost/` — 4 files (analyzer_fj.rs, codegen_fj.rs, bootstrap.rs, reproducible.rs)
+- `src/lsp_v2/` — 4 files (traits.rs, macros.rs, completion.rs, refactoring.rs)
+
+### Stats
+- New files: 32 source modules across 8 phases
+- New tests: ~700 (320 tasks)
+- Sprints: 32 (8 phases × 4 sprints)
+- Total tests: 4,626 (0 failures)
+- Total LOC: ~210,000 Rust
+
+---
+
 ## [1.0.0] — 2026-03-11 "Genesis"
 
 ### Added

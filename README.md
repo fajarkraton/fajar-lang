@@ -6,8 +6,8 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-3%2C392_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-194K_Rust-blue)]()
+[![Tests](https://img.shields.io/badge/tests-4%2C626_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-210K_Rust-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Fajar Lang?
@@ -311,7 +311,8 @@ docs/                 -- 44+ reference documents
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **v1.0.0** | **Genesis** | **First stable release** — fuzzing, conformance testing, string interning, cross-platform distribution, LSP completion, documentation site, C/Python/Wasm interop, release engineering |
+| **v2.0.0** | **Transcendence** | **Dependent types, linear types, formal verification, tiered JIT, effect system v2, GC mode, self-hosting v2, LSP v2** |
+| v1.0.0 | Genesis | First stable release — fuzzing, conformance testing, string interning, cross-platform distribution, LSP completion, documentation site, C/Python/Wasm interop, release engineering |
 | v0.9.0 | Convergence | Effect system, compile-time eval, macros, SIMD, security hardening, async I/O, editions |
 | v0.8.0 | Apex | GPU training, GAT, incremental compilation, model optimization, DAP debugger, LoRaWAN |
 | v0.7.0 | Zenith | Wasm, ESP32 IoT, Polonius borrow checker, Transformer, PGO, RTIC, package signing |
