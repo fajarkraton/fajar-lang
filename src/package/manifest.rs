@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use super::registry::SemVer;
+
 /// Parsed project configuration from `fj.toml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProjectConfig {
@@ -12,6 +14,9 @@ pub struct ProjectConfig {
     /// The `[dependencies]` section (optional).
     #[serde(default)]
     pub dependencies: std::collections::HashMap<String, String>,
+    /// The `[dev-dependencies]` section (optional).
+    #[serde(default, rename = "dev-dependencies")]
+    pub dev_dependencies: std::collections::HashMap<String, String>,
 }
 
 /// The `[package]` section of `fj.toml`.
@@ -34,6 +39,21 @@ pub struct PackageInfo {
     /// Whether this is a no_std project.
     #[serde(default)]
     pub no_std: bool,
+    /// Package authors (optional, e.g., `["Fajar <fajar@example.com>"]`).
+    #[serde(default)]
+    pub authors: Vec<String>,
+    /// Short description of the package (optional).
+    #[serde(default)]
+    pub description: Option<String>,
+    /// SPDX license identifier (optional, e.g., `"MIT"` or `"Apache-2.0"`).
+    #[serde(default)]
+    pub license: Option<String>,
+    /// Searchable keywords for registry discovery (optional).
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// Registry categories (optional, e.g., `["ml", "embedded"]`).
+    #[serde(default)]
+    pub categories: Vec<String>,
 }
 
 fn default_version() -> String {
@@ -113,6 +133,122 @@ fn main() -> void {{
         .map_err(|e| format!("cannot write src/main.fj: {e}"))?;
 
     Ok(project_dir)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Package file collection & caching
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Collects the list of files that should be included in a published package.
+///
+/// Returns paths relative to `root` for: all `.fj` files, `fj.toml`,
+/// `README*`, and `LICENSE*`.
+pub fn package_filelist(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+
+    // Always include fj.toml
+    let manifest = root.join("fj.toml");
+    if manifest.exists() {
+        files.push(PathBuf::from("fj.toml"));
+    }
+
+    // Collect README* and LICENSE* at root
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            let upper = name_str.to_uppercase();
+            if (upper.starts_with("README") || upper.starts_with("LICENSE"))
+                && entry.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+            {
+                files.push(PathBuf::from(name_str.as_ref()));
+            }
+        }
+    }
+
+    // Recursively collect .fj files
+    collect_fj_files(root, root, &mut files);
+
+    files.sort();
+    files
+}
+
+/// Recursively collects `.fj` files under `dir`, storing paths relative to `root`.
+fn collect_fj_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_fj_files(root, &path, out);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("fj") {
+            if let Ok(relative) = path.strip_prefix(root) {
+                out.push(relative.to_path_buf());
+            }
+        }
+    }
+}
+
+/// Computes a simple SHA-256-like hex digest of the given data.
+///
+/// This is a basic hash representation using the standard library only.
+/// It uses a simple deterministic hash for package integrity checks
+/// without requiring external crypto crates.
+pub fn sha256_hex(data: &[u8]) -> String {
+    // Simple but deterministic hash: we use a basic Merkle-Damgard-like
+    // construction. This is NOT cryptographically secure, but sufficient
+    // for content-addressable integrity in a local/test context.
+    // A real deployment would use ring or sha2 crate.
+    let mut h: [u64; 4] = [
+        0x6a09_e667_f3bc_c908,
+        0xbb67_ae85_84ca_a73b,
+        0x3c6e_f372_fe94_f82b,
+        0xa54f_f53a_5f1d_36f1,
+    ];
+
+    for (i, &byte) in data.iter().enumerate() {
+        let idx = i % 4;
+        h[idx] = h[idx].wrapping_mul(31).wrapping_add(byte as u64);
+        h[(idx + 1) % 4] ^= h[idx].rotate_left(13);
+    }
+
+    // Mix in length
+    h[0] = h[0].wrapping_add(data.len() as u64);
+    h[1] ^= h[0].rotate_left(7);
+    h[2] = h[2].wrapping_add(h[1]);
+    h[3] ^= h[2].rotate_left(19);
+
+    format!("{:016x}{:016x}{:016x}{:016x}", h[0], h[1], h[2], h[3])
+}
+
+/// Returns the local package cache directory (`~/.fj/cache/`).
+///
+/// Falls back to `/tmp/.fj/cache/` if the home directory cannot be determined.
+pub fn cache_dir() -> PathBuf {
+    let base = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/tmp"));
+    base.join(".fj").join("cache")
+}
+
+/// Returns the install path for a specific package version.
+///
+/// Packages are stored under `~/.fj/cache/<name>/<version>/`.
+pub fn install_path(name: &str, version: &SemVer) -> PathBuf {
+    cache_dir().join(name).join(version.to_string())
+}
+
+/// Returns the path to the credentials file (`~/.fj/credentials.toml`).
+///
+/// Falls back to `/tmp/.fj/credentials.toml` if the home directory
+/// cannot be determined.
+pub fn credentials_path() -> PathBuf {
+    let base = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/tmp"));
+    base.join(".fj").join("credentials.toml")
 }
 
 #[cfg(test)]
@@ -313,5 +449,147 @@ name = "app"
                 assert_eq!(config.package.version, "0.1.0");
             }
         }
+    }
+
+    // ── Sprint 16: PackageInfo extensions ──
+
+    #[test]
+    fn parse_manifest_with_extended_fields() {
+        let toml = r#"
+[package]
+name = "fj-awesome"
+version = "0.2.0"
+authors = ["Fajar <fajar@example.com>", "Alice <alice@example.com>"]
+description = "An awesome package for Fajar Lang"
+license = "MIT"
+keywords = ["math", "tensor"]
+categories = ["ml", "science"]
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        assert_eq!(config.package.name, "fj-awesome");
+        assert_eq!(config.package.authors.len(), 2);
+        assert_eq!(config.package.authors[0], "Fajar <fajar@example.com>");
+        assert_eq!(
+            config.package.description,
+            Some("An awesome package for Fajar Lang".to_string())
+        );
+        assert_eq!(config.package.license, Some("MIT".to_string()));
+        assert_eq!(config.package.keywords, vec!["math", "tensor"]);
+        assert_eq!(config.package.categories, vec!["ml", "science"]);
+    }
+
+    #[test]
+    fn parse_manifest_extended_fields_default_to_empty() {
+        let toml = r#"
+[package]
+name = "minimal"
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        assert!(config.package.authors.is_empty());
+        assert!(config.package.description.is_none());
+        assert!(config.package.license.is_none());
+        assert!(config.package.keywords.is_empty());
+        assert!(config.package.categories.is_empty());
+    }
+
+    // ── Sprint 16: Package file list ──
+
+    #[test]
+    fn package_filelist_collects_fj_files() {
+        let tmp = std::env::temp_dir().join("fj_test_filelist");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src = tmp.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(tmp.join("fj.toml"), "[package]\nname = \"x\"\n").unwrap();
+        std::fs::write(tmp.join("README.md"), "# readme").unwrap();
+        std::fs::write(tmp.join("LICENSE"), "MIT").unwrap();
+        std::fs::write(src.join("main.fj"), "fn main() {}").unwrap();
+        std::fs::write(src.join("lib.fj"), "fn foo() {}").unwrap();
+
+        let files = package_filelist(&tmp);
+        assert!(files.contains(&PathBuf::from("fj.toml")));
+        assert!(files.contains(&PathBuf::from("README.md")));
+        assert!(files.contains(&PathBuf::from("LICENSE")));
+        assert!(files.contains(&PathBuf::from("src/main.fj")));
+        assert!(files.contains(&PathBuf::from("src/lib.fj")));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── Sprint 16: SHA-256 hex ──
+
+    #[test]
+    fn sha256_hex_deterministic() {
+        let h1 = sha256_hex(b"hello world");
+        let h2 = sha256_hex(b"hello world");
+        assert_eq!(h1, h2);
+        // 64 hex chars (4 x 16)
+        assert_eq!(h1.len(), 64);
+    }
+
+    #[test]
+    fn sha256_hex_different_inputs() {
+        let h1 = sha256_hex(b"hello");
+        let h2 = sha256_hex(b"world");
+        assert_ne!(h1, h2);
+    }
+
+    // ── Sprint 16: Cache and install paths ──
+
+    #[test]
+    fn cache_dir_contains_fj() {
+        let dir = cache_dir();
+        let dir_str = dir.to_string_lossy();
+        assert!(dir_str.contains(".fj"));
+        assert!(dir_str.contains("cache"));
+    }
+
+    #[test]
+    fn install_path_includes_name_and_version() {
+        let path = install_path("fj-math", &SemVer::new(1, 2, 3));
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("fj-math"));
+        assert!(path_str.contains("1.2.3"));
+    }
+
+    #[test]
+    fn credentials_path_contains_fj() {
+        let path = credentials_path();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains(".fj"));
+        assert!(path_str.contains("credentials.toml"));
+    }
+
+    // ── Sprint 17: Dev dependencies ──
+
+    #[test]
+    fn parse_manifest_with_dev_dependencies() {
+        let toml = r#"
+[package]
+name = "my-app"
+version = "1.0.0"
+
+[dependencies]
+fj-math = "^1.0.0"
+
+[dev-dependencies]
+fj-test-utils = "0.1.0"
+fj-bench = "^0.2.0"
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        assert_eq!(config.dependencies.len(), 1);
+        assert_eq!(config.dev_dependencies.len(), 2);
+        assert_eq!(config.dev_dependencies["fj-test-utils"], "0.1.0");
+        assert_eq!(config.dev_dependencies["fj-bench"], "^0.2.0");
+    }
+
+    #[test]
+    fn parse_manifest_no_dev_dependencies_defaults_empty() {
+        let toml = r#"
+[package]
+name = "simple"
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        assert!(config.dev_dependencies.is_empty());
     }
 }

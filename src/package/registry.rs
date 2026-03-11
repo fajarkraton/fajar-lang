@@ -3,7 +3,7 @@
 //! Provides a local file-based registry for Fajar Lang packages.
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -175,6 +175,103 @@ impl fmt::Display for VersionConstraint {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Authentication
+// ═══════════════════════════════════════════════════════════════════════
+
+/// An authentication token for registry operations.
+///
+/// Tokens can optionally be scoped to a specific package, granting
+/// publish/yank permissions only for that package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthToken {
+    /// The token string (opaque bearer token).
+    pub token: String,
+    /// Optional scope — if `Some`, this token is only valid for the named package.
+    pub scope: Option<String>,
+}
+
+impl AuthToken {
+    /// Creates a new unscoped authentication token.
+    pub fn new(token: &str) -> Self {
+        Self {
+            token: token.to_string(),
+            scope: None,
+        }
+    }
+
+    /// Creates a new scoped authentication token for a specific package.
+    pub fn scoped(token: &str, package_name: &str) -> Self {
+        Self {
+            token: token.to_string(),
+            scope: Some(package_name.to_string()),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Registry Configuration
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Configuration for connecting to a package registry.
+#[derive(Debug, Clone)]
+pub struct RegistryConfig {
+    /// Base URL of the registry (e.g., `https://registry.fajarlang.dev`).
+    pub registry_url: String,
+    /// API endpoint URL (e.g., `https://registry.fajarlang.dev/api/v1`).
+    pub api_url: String,
+    /// Whether authentication is required for publish/yank operations.
+    pub auth_required: bool,
+}
+
+impl Default for RegistryConfig {
+    fn default() -> Self {
+        Self {
+            registry_url: "https://registry.fajarlang.dev".to_string(),
+            api_url: "https://registry.fajarlang.dev/api/v1".to_string(),
+            auth_required: true,
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sparse Index
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A dependency entry within a sparse index version record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SparseIndexDep {
+    /// Dependency package name.
+    pub name: String,
+    /// Version constraint string (e.g., `"^1.0.0"`).
+    pub req: String,
+}
+
+/// A single version record within a sparse index entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SparseIndexVersion {
+    /// The version string.
+    pub vers: String,
+    /// Dependencies for this version.
+    pub deps: Vec<SparseIndexDep>,
+    /// SHA-256 checksum of the published archive.
+    pub cksum: String,
+    /// Whether this version has been yanked.
+    pub yanked: bool,
+}
+
+/// A sparse index entry for a single package.
+///
+/// The sparse index is a per-package JSON document containing all
+/// versions, their dependencies, checksums, and yank status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SparseIndexEntry {
+    /// Package name.
+    pub name: String,
+    /// All published versions for this package.
+    pub versions: Vec<SparseIndexVersion>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Package Registry
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -187,6 +284,8 @@ pub struct PackageEntry {
     pub versions: Vec<SemVer>,
     /// Description.
     pub description: String,
+    /// Total download count across all versions.
+    pub download_count: u64,
 }
 
 /// A simple in-memory package registry.
@@ -194,6 +293,14 @@ pub struct PackageEntry {
 pub struct Registry {
     /// Registered packages.
     packages: HashMap<String, PackageEntry>,
+    /// Set of yanked (package_name, version) pairs.
+    yanked: HashSet<(String, SemVer)>,
+    /// Stored authentication tokens.
+    tokens: Vec<AuthToken>,
+    /// Per-version dependency metadata: `(name, version)` -> deps map.
+    version_deps: HashMap<(String, SemVer), HashMap<String, String>>,
+    /// Per-version checksum: `(name, version)` -> SHA-256 hex string.
+    version_checksums: HashMap<(String, SemVer), String>,
 }
 
 impl Registry {
@@ -211,11 +318,28 @@ impl Registry {
                 name: name.to_string(),
                 versions: Vec::new(),
                 description: description.to_string(),
+                download_count: 0,
             });
         if !entry.versions.contains(&version) {
             entry.versions.push(version);
             entry.versions.sort();
         }
+    }
+
+    /// Registers a package version with dependency and checksum metadata.
+    pub fn publish_with_meta(
+        &mut self,
+        name: &str,
+        version: SemVer,
+        description: &str,
+        deps: HashMap<String, String>,
+        checksum: &str,
+    ) {
+        self.publish(name, version.clone(), description);
+        self.version_deps
+            .insert((name.to_string(), version.clone()), deps);
+        self.version_checksums
+            .insert((name.to_string(), version), checksum.to_string());
     }
 
     /// Looks up a package by name.
@@ -225,15 +349,40 @@ impl Registry {
 
     /// Resolves the best matching version for a constraint.
     ///
-    /// Returns the highest version that satisfies the constraint.
+    /// Returns the highest non-yanked version that satisfies the constraint.
     pub fn resolve(&self, name: &str, constraint: &VersionConstraint) -> Option<SemVer> {
         let entry = self.packages.get(name)?;
         entry
             .versions
             .iter()
             .rev()
-            .find(|v| constraint.matches(v))
+            .find(|v| constraint.matches(v) && !self.is_yanked(name, v))
             .cloned()
+    }
+
+    /// Resolves a version and increments the download counter.
+    ///
+    /// Like `resolve`, but requires `&mut self` so it can update the
+    /// download count for the matched package.
+    pub fn resolve_and_count(
+        &mut self,
+        name: &str,
+        constraint: &VersionConstraint,
+    ) -> Option<SemVer> {
+        let entry = self.packages.get(name)?;
+        let resolved = entry
+            .versions
+            .iter()
+            .rev()
+            .find(|v| constraint.matches(v) && !self.is_yanked(name, v))
+            .cloned();
+
+        if resolved.is_some() {
+            if let Some(entry) = self.packages.get_mut(name) {
+                entry.download_count = entry.download_count.saturating_add(1);
+            }
+        }
+        resolved
     }
 
     /// Returns the number of registered packages.
@@ -243,7 +392,7 @@ impl Registry {
 
     /// Searches packages by name prefix or substring.
     ///
-    /// Returns matching entries sorted by name.
+    /// Returns matching entries sorted by name, with download counts visible.
     pub fn search(&self, query: &str) -> Vec<&PackageEntry> {
         let q = query.to_lowercase();
         let mut results: Vec<&PackageEntry> = self
@@ -271,11 +420,186 @@ impl Registry {
     pub fn latest_version(&self, name: &str) -> Option<&SemVer> {
         self.packages.get(name)?.versions.last()
     }
+
+    // ── Yank management ──
+
+    /// Marks a specific version of a package as yanked.
+    ///
+    /// Yanked versions will be skipped during resolution but remain
+    /// visible in package metadata for audit purposes.
+    pub fn yank(&mut self, name: &str, version: &SemVer) -> Result<(), String> {
+        let entry = self
+            .packages
+            .get(name)
+            .ok_or_else(|| format!("package '{name}' not found"))?;
+        if !entry.versions.contains(version) {
+            return Err(format!("version {version} of '{name}' not found"));
+        }
+        self.yanked.insert((name.to_string(), version.clone()));
+        Ok(())
+    }
+
+    /// Returns `true` if the given package version has been yanked.
+    pub fn is_yanked(&self, name: &str, version: &SemVer) -> bool {
+        self.yanked.contains(&(name.to_string(), version.clone()))
+    }
+
+    // ── Token management ──
+
+    /// Adds an authentication token to the registry.
+    pub fn add_token(&mut self, token: AuthToken) {
+        self.tokens.push(token);
+    }
+
+    /// Validates a token string, returning `true` if a matching token exists.
+    ///
+    /// If `package_name` is `Some`, also checks that the token has either
+    /// no scope (global) or a scope matching the given package.
+    pub fn validate_token(&self, token_str: &str, package_name: Option<&str>) -> bool {
+        self.tokens.iter().any(|t| {
+            if t.token != token_str {
+                return false;
+            }
+            match (&t.scope, package_name) {
+                // Unscoped token: valid for any package
+                (None, _) => true,
+                // Scoped token matches the requested package
+                (Some(scope), Some(pkg)) => scope == pkg,
+                // Scoped token but no package requested: valid (general auth check)
+                (Some(_), None) => true,
+            }
+        })
+    }
+
+    // ── Sparse index ──
+
+    /// Generates a sparse index entry for a package.
+    ///
+    /// The sparse index contains all versions, their dependency metadata,
+    /// checksums, and yank status. Returns `None` if the package does not exist.
+    pub fn to_sparse_index(&self, name: &str) -> Option<SparseIndexEntry> {
+        let entry = self.packages.get(name)?;
+        let versions = entry
+            .versions
+            .iter()
+            .map(|v| {
+                let deps = self
+                    .version_deps
+                    .get(&(name.to_string(), v.clone()))
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(dep_name, req)| SparseIndexDep {
+                        name: dep_name,
+                        req,
+                    })
+                    .collect();
+                let cksum = self
+                    .version_checksums
+                    .get(&(name.to_string(), v.clone()))
+                    .cloned()
+                    .unwrap_or_default();
+                SparseIndexVersion {
+                    vers: v.to_string(),
+                    deps,
+                    cksum,
+                    yanked: self.is_yanked(name, v),
+                }
+            })
+            .collect();
+        Some(SparseIndexEntry {
+            name: name.to_string(),
+            versions,
+        })
+    }
+
+    /// Serializes a sparse index entry to JSON.
+    ///
+    /// Returns `None` if the package does not exist.
+    pub fn sparse_index_json(&self, name: &str) -> Option<String> {
+        let entry = self.to_sparse_index(name)?;
+        Some(sparse_index_to_json(&entry))
+    }
+
+    // ── Download count ──
+
+    /// Returns the download count for a package, or `None` if it does not exist.
+    pub fn download_count(&self, name: &str) -> Option<u64> {
+        self.packages.get(name).map(|e| e.download_count)
+    }
+
+    /// Returns all registered package names.
+    pub fn package_names(&self) -> Vec<&str> {
+        self.packages.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+/// Escapes a string for JSON output (handles `"` and `\`).
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Serializes a `SparseIndexEntry` to a pretty-printed JSON string.
+fn sparse_index_to_json(entry: &SparseIndexEntry) -> String {
+    let mut out = String::new();
+    out.push_str("{\n");
+    out.push_str(&format!("  \"name\": \"{}\",\n", json_escape(&entry.name)));
+    out.push_str("  \"versions\": [\n");
+    for (i, ver) in entry.versions.iter().enumerate() {
+        out.push_str("    {\n");
+        out.push_str(&format!(
+            "      \"vers\": \"{}\",\n",
+            json_escape(&ver.vers)
+        ));
+        out.push_str("      \"deps\": [");
+        if ver.deps.is_empty() {
+            out.push(']');
+        } else {
+            out.push('\n');
+            for (j, dep) in ver.deps.iter().enumerate() {
+                out.push_str(&format!(
+                    "        {{ \"name\": \"{}\", \"req\": \"{}\" }}",
+                    json_escape(&dep.name),
+                    json_escape(&dep.req),
+                ));
+                if j + 1 < ver.deps.len() {
+                    out.push(',');
+                }
+                out.push('\n');
+            }
+            out.push_str("      ]");
+        }
+        out.push_str(",\n");
+        out.push_str(&format!(
+            "      \"cksum\": \"{}\",\n",
+            json_escape(&ver.cksum)
+        ));
+        out.push_str(&format!("      \"yanked\": {}\n", ver.yanked));
+        out.push_str("    }");
+        if i + 1 < entry.versions.len() {
+            out.push(',');
+        }
+        out.push('\n');
+    }
+    out.push_str("  ]\n");
+    out.push('}');
+    out
 }
 
 /// Resolves all dependencies from a dependency map.
 ///
-/// Returns a map of package name → resolved version, or an error
+/// Returns a map of package name -> resolved version, or an error
 /// if any dependency cannot be resolved.
 pub fn resolve_dependencies(
     registry: &Registry,
@@ -591,5 +915,162 @@ name = "simple"
 "#;
         let config = super::super::manifest::ProjectConfig::parse(toml).unwrap();
         assert!(config.dependencies.is_empty());
+    }
+
+    // ── Sprint 15: Yank ──
+
+    #[test]
+    fn yank_version_skipped_in_resolve() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+        reg.publish("fj-math", SemVer::new(1, 1, 0), "Math");
+        reg.publish("fj-math", SemVer::new(1, 2, 0), "Math");
+
+        // Yank the highest version
+        reg.yank("fj-math", &SemVer::new(1, 2, 0)).unwrap();
+
+        let constraint = VersionConstraint::parse("^1.0.0").unwrap();
+        let resolved = reg.resolve("fj-math", &constraint).unwrap();
+        // Should skip 1.2.0 (yanked) and return 1.1.0
+        assert_eq!(resolved, SemVer::new(1, 1, 0));
+    }
+
+    #[test]
+    fn yank_nonexistent_package_errors() {
+        let mut reg = Registry::new();
+        let result = reg.yank("nonexistent", &SemVer::new(1, 0, 0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn yank_nonexistent_version_errors() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+        let result = reg.yank("fj-math", &SemVer::new(9, 9, 9));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn is_yanked_check() {
+        let mut reg = Registry::new();
+        reg.publish("fj-nn", SemVer::new(0, 1, 0), "NN");
+        assert!(!reg.is_yanked("fj-nn", &SemVer::new(0, 1, 0)));
+
+        reg.yank("fj-nn", &SemVer::new(0, 1, 0)).unwrap();
+        assert!(reg.is_yanked("fj-nn", &SemVer::new(0, 1, 0)));
+    }
+
+    // ── Sprint 15: Auth tokens ──
+
+    #[test]
+    fn validate_unscoped_token() {
+        let mut reg = Registry::new();
+        reg.add_token(AuthToken::new("secret-token-123"));
+
+        assert!(reg.validate_token("secret-token-123", None));
+        assert!(reg.validate_token("secret-token-123", Some("fj-math")));
+        assert!(!reg.validate_token("wrong-token", None));
+    }
+
+    #[test]
+    fn validate_scoped_token() {
+        let mut reg = Registry::new();
+        reg.add_token(AuthToken::scoped("scoped-token", "fj-math"));
+
+        // Valid for the scoped package
+        assert!(reg.validate_token("scoped-token", Some("fj-math")));
+        // Not valid for a different package
+        assert!(!reg.validate_token("scoped-token", Some("fj-nn")));
+        // Valid for general auth check (no package specified)
+        assert!(reg.validate_token("scoped-token", None));
+    }
+
+    // ── Sprint 15: Registry config ──
+
+    #[test]
+    fn registry_config_default() {
+        let config = RegistryConfig::default();
+        assert!(config.registry_url.contains("fajarlang"));
+        assert!(config.api_url.contains("api/v1"));
+        assert!(config.auth_required);
+    }
+
+    // ── Sprint 15: Sparse index ──
+
+    #[test]
+    fn sparse_index_generation() {
+        let mut reg = Registry::new();
+        let mut deps = HashMap::new();
+        deps.insert("fj-math".to_string(), "^1.0.0".to_string());
+        reg.publish_with_meta(
+            "fj-nn",
+            SemVer::new(0, 1, 0),
+            "Neural nets",
+            deps,
+            "abc123def456",
+        );
+        reg.publish("fj-nn", SemVer::new(0, 2, 0), "Neural nets");
+        reg.yank("fj-nn", &SemVer::new(0, 1, 0)).unwrap();
+
+        let index = reg.to_sparse_index("fj-nn").unwrap();
+        assert_eq!(index.name, "fj-nn");
+        assert_eq!(index.versions.len(), 2);
+
+        // First version: yanked, has deps and checksum
+        assert_eq!(index.versions[0].vers, "0.1.0");
+        assert!(index.versions[0].yanked);
+        assert_eq!(index.versions[0].deps.len(), 1);
+        assert_eq!(index.versions[0].deps[0].name, "fj-math");
+        assert_eq!(index.versions[0].cksum, "abc123def456");
+
+        // Second version: not yanked, no deps or checksum
+        assert_eq!(index.versions[1].vers, "0.2.0");
+        assert!(!index.versions[1].yanked);
+        assert!(index.versions[1].deps.is_empty());
+    }
+
+    #[test]
+    fn sparse_index_json_output() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        let json = reg.sparse_index_json("fj-math").unwrap();
+        assert!(json.contains("\"name\": \"fj-math\""));
+        assert!(json.contains("\"vers\": \"1.0.0\""));
+        assert!(reg.sparse_index_json("nonexistent").is_none());
+    }
+
+    // ── Sprint 15: Download count ──
+
+    #[test]
+    fn download_count_increments_on_resolve_and_count() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        assert_eq!(reg.download_count("fj-math"), Some(0));
+
+        let constraint = VersionConstraint::parse("^1.0.0").unwrap();
+        reg.resolve_and_count("fj-math", &constraint);
+        assert_eq!(reg.download_count("fj-math"), Some(1));
+
+        reg.resolve_and_count("fj-math", &constraint);
+        reg.resolve_and_count("fj-math", &constraint);
+        assert_eq!(reg.download_count("fj-math"), Some(3));
+    }
+
+    #[test]
+    fn search_shows_download_count() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        let constraint = VersionConstraint::parse("^1.0.0").unwrap();
+        reg.resolve_and_count("fj-math", &constraint);
+        reg.resolve_and_count("fj-math", &constraint);
+
+        let results = reg.search("fj-math");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].download_count, 2);
     }
 }

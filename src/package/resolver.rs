@@ -32,21 +32,35 @@ pub struct LockEntry {
     pub name: String,
     /// Locked version.
     pub version: SemVer,
+    /// Optional SHA-256 checksum for integrity verification.
+    pub checksum: Option<String>,
 }
 
+/// Lock file format version.
+const LOCK_FORMAT_V2: &str = "v2";
+
 impl LockFile {
-    /// Serializes the lock file to a string format.
+    /// Serializes the lock file to v2 format (includes checksums).
     pub fn to_string_repr(&self) -> String {
         let mut out = String::new();
         out.push_str("# fj.lock — auto-generated, do not edit\n");
-        out.push_str("# Fajar Lang dependency lock file\n\n");
+        out.push_str(&format!(
+            "# Fajar Lang dependency lock file (format {LOCK_FORMAT_V2})\n\n"
+        ));
         for entry in &self.entries {
-            out.push_str(&format!("{}={}\n", entry.name, entry.version));
+            if let Some(ref cksum) = entry.checksum {
+                out.push_str(&format!("{}={} {}\n", entry.name, entry.version, cksum));
+            } else {
+                out.push_str(&format!("{}={}\n", entry.name, entry.version));
+            }
         }
         out
     }
 
-    /// Parses a lock file from string content.
+    /// Parses a lock file from string content (supports both v1 and v2 formats).
+    ///
+    /// V1 format: `name=version`
+    /// V2 format: `name=version checksum`
     pub fn parse(content: &str) -> Result<Self, String> {
         let mut entries = Vec::new();
         for line in content.lines() {
@@ -59,15 +73,30 @@ impl LockFile {
                 return Err(format!("invalid lock file line: '{line}'"));
             }
             let name = parts[0].trim().to_string();
-            let version = SemVer::parse(parts[1].trim())?;
-            entries.push(LockEntry { name, version });
+            let rhs = parts[1].trim();
+
+            // V2: version may be followed by a space and checksum
+            let (version_str, checksum) = if let Some(space_idx) = rhs.find(' ') {
+                let ver = &rhs[..space_idx];
+                let cksum = rhs[space_idx + 1..].trim();
+                (ver, Some(cksum.to_string()))
+            } else {
+                (rhs, None)
+            };
+
+            let version = SemVer::parse(version_str)?;
+            entries.push(LockEntry {
+                name,
+                version,
+                checksum,
+            });
         }
         Ok(LockFile { entries })
     }
 }
 
 /// Callback to retrieve dependencies for a specific package version.
-/// Returns a map of dependency name → version constraint string.
+/// Returns a map of dependency name -> version constraint string.
 pub type DepLookupFn = Box<dyn Fn(&str, &SemVer) -> HashMap<String, String>>;
 
 /// Resolves the full dependency tree, including transitive dependencies.
@@ -127,7 +156,11 @@ pub fn resolve_full(
     // Build sorted lock file
     let mut entries: Vec<LockEntry> = resolved
         .into_iter()
-        .map(|(name, version)| LockEntry { name, version })
+        .map(|(name, version)| LockEntry {
+            name,
+            version,
+            checksum: None,
+        })
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -200,8 +233,8 @@ mod tests {
         reg.publish("shared", SemVer::new(1, 0, 0), "Shared");
         reg.publish("shared", SemVer::new(1, 1, 0), "Shared");
 
-        // root → lib-a → shared ^1.0.0
-        // root → lib-b → shared ^1.0.0
+        // root -> lib-a -> shared ^1.0.0
+        // root -> lib-b -> shared ^1.0.0
         let mut deps = HashMap::new();
         deps.insert("lib-a".into(), "^1.0.0".into());
         deps.insert("lib-b".into(), "^1.0.0".into());
@@ -261,10 +294,12 @@ mod tests {
                 LockEntry {
                     name: "fj-math".into(),
                     version: SemVer::new(1, 1, 0),
+                    checksum: None,
                 },
                 LockEntry {
                     name: "fj-nn".into(),
                     version: SemVer::new(0, 3, 0),
+                    checksum: None,
                 },
             ],
         };
@@ -281,6 +316,7 @@ mod tests {
         assert_eq!(lock.entries.len(), 2);
         assert_eq!(lock.entries[0].name, "fj-math");
         assert_eq!(lock.entries[0].version, SemVer::new(1, 1, 0));
+        assert!(lock.entries[0].checksum.is_none());
     }
 
     #[test]
@@ -290,10 +326,12 @@ mod tests {
                 LockEntry {
                     name: "a".into(),
                     version: SemVer::new(1, 0, 0),
+                    checksum: None,
                 },
                 LockEntry {
                     name: "b".into(),
                     version: SemVer::new(2, 3, 4),
+                    checksum: None,
                 },
             ],
         };
@@ -305,5 +343,76 @@ mod tests {
     #[test]
     fn lock_file_parse_invalid() {
         assert!(LockFile::parse("bad-line-no-equals").is_err());
+    }
+
+    // ── Sprint 17: Lock file v2 with checksums ──
+
+    #[test]
+    fn lock_file_v2_with_checksum() {
+        let lock = LockFile {
+            entries: vec![
+                LockEntry {
+                    name: "fj-math".into(),
+                    version: SemVer::new(1, 0, 0),
+                    checksum: Some("abc123def456".to_string()),
+                },
+                LockEntry {
+                    name: "fj-nn".into(),
+                    version: SemVer::new(0, 2, 0),
+                    checksum: None,
+                },
+            ],
+        };
+        let content = lock.to_string_repr();
+        assert!(content.contains("fj-math=1.0.0 abc123def456"));
+        assert!(content.contains("fj-nn=0.2.0"));
+        assert!(!content.contains("fj-nn=0.2.0 ")); // no trailing space
+        assert!(content.contains("format v2"));
+    }
+
+    #[test]
+    fn lock_file_v2_parse_with_checksum() {
+        let content = "# header\nfj-math=1.0.0 deadbeef\nfj-nn=0.2.0\n";
+        let lock = LockFile::parse(content).unwrap();
+        assert_eq!(lock.entries.len(), 2);
+
+        assert_eq!(lock.entries[0].name, "fj-math");
+        assert_eq!(lock.entries[0].version, SemVer::new(1, 0, 0));
+        assert_eq!(lock.entries[0].checksum, Some("deadbeef".to_string()));
+
+        assert_eq!(lock.entries[1].name, "fj-nn");
+        assert_eq!(lock.entries[1].version, SemVer::new(0, 2, 0));
+        assert!(lock.entries[1].checksum.is_none());
+    }
+
+    #[test]
+    fn lock_file_v2_roundtrip_with_checksum() {
+        let lock = LockFile {
+            entries: vec![
+                LockEntry {
+                    name: "a".into(),
+                    version: SemVer::new(1, 0, 0),
+                    checksum: Some("aabbccdd".to_string()),
+                },
+                LockEntry {
+                    name: "b".into(),
+                    version: SemVer::new(2, 0, 0),
+                    checksum: None,
+                },
+            ],
+        };
+        let content = lock.to_string_repr();
+        let parsed = LockFile::parse(&content).unwrap();
+        assert_eq!(parsed.entries, lock.entries);
+    }
+
+    #[test]
+    fn lock_entry_default_checksum_is_none() {
+        let entry = LockEntry {
+            name: "pkg".into(),
+            version: SemVer::new(0, 1, 0),
+            checksum: None,
+        };
+        assert!(entry.checksum.is_none());
     }
 }

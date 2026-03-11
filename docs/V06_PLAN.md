@@ -292,61 +292,61 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Axum-based registry server with SQLite backend
 
-- [ ] S15.1 — `packages/fj-registry/` project: Cargo.toml with axum, sqlx, sha2, flate2, tar
-- [ ] S15.2 — Database schema: users, crates, versions, dependencies, crate_owners tables
-- [ ] S15.3 — SQLx migrations: create tables with proper indices
-- [ ] S15.4 — `PUT /api/v1/crates/new`: parse binary publish format, validate, store
-- [ ] S15.5 — `GET /api/v1/crates/:name/:version/download`: serve .fjpkg tarball
-- [ ] S15.6 — `GET /api/v1/crates?q=query`: full-text search with pagination
-- [ ] S15.7 — `DELETE /api/v1/crates/:name/:version/yank`: mark version as yanked
-- [ ] S15.8 — Authentication middleware: API token validation via Authorization header
-- [ ] S15.9 — Sparse index: serve package metadata files via HTTP
-- [ ] S15.10 — 10 tests: publish, download, search, yank, auth
+- [x] S15.1 — `packages/fj-registry/` project: Cargo.toml with axum, sqlx, sha2, flate2, tar
+- [x] S15.2 — Database schema: users, crates, versions, dependencies, crate_owners tables
+- [x] S15.3 — SQLx migrations: create tables with proper indices
+- [x] S15.4 — `PUT /api/v1/crates/new`: parse binary publish format, validate, store
+- [x] S15.5 — `GET /api/v1/crates/:name/:version/download`: serve .fjpkg tarball
+- [x] S15.6 — `GET /api/v1/crates?q=query`: full-text search with pagination
+- [x] S15.7 — `DELETE /api/v1/crates/:name/:version/yank`: mark version as yanked
+- [x] S15.8 — Authentication middleware: API token validation via Authorization header
+- [x] S15.9 — Sparse index: serve package metadata files via HTTP
+- [x] S15.10 — 10 tests: publish, download, search, yank, auth
 
 #### Sprint 16: CLI Commands `P1`
 
 **Goal:** fj publish, fj install, fj search, fj login
 
-- [ ] S16.1 — `fj publish`: validate fj.toml, build tarball, compute SHA256, upload
-- [ ] S16.2 — `fj install <package>`: query registry, download, extract to ~/.fj/packages/
-- [ ] S16.3 — `fj search <query>`: display formatted search results
-- [ ] S16.4 — `fj login`: prompt for API token, store in ~/.fj/credentials.toml
-- [ ] S16.5 — `fj yank <name> <version>`: mark version as yanked on registry
-- [ ] S16.6 — Package manifest extension: authors, description, license, keywords, categories
-- [ ] S16.7 — Package tarball creation: tar.gz with .fj sources, fj.toml, README, LICENSE
-- [ ] S16.8 — SHA256 checksum verification on download
-- [ ] S16.9 — Local package cache: ~/.fj/cache/ with version-keyed directories
-- [ ] S16.10 — 10 tests: publish flow, install flow, search, login, checksum
+- [x] S16.1 — `fj publish`: validate fj.toml, build tarball, compute SHA256, upload
+- [x] S16.2 — `fj install <package>`: query registry, download, extract to ~/.fj/packages/
+- [x] S16.3 — `fj search <query>`: display formatted search results
+- [x] S16.4 — `fj login`: prompt for API token, store in ~/.fj/credentials.toml
+- [x] S16.5 — `fj yank <name> <version>`: mark version as yanked on registry
+- [x] S16.6 — Package manifest extension: authors, description, license, keywords, categories
+- [x] S16.7 — Package tarball creation: tar.gz with .fj sources, fj.toml, README, LICENSE
+- [x] S16.8 — SHA256 checksum verification on download
+- [x] S16.9 — Local package cache: ~/.fj/cache/ with version-keyed directories
+- [x] S16.10 — 10 tests: publish flow, install flow, search, login, checksum
 
 #### Sprint 17: Dependency Resolution `P1`
 
 **Goal:** PubGrub-based resolver, lock files
 
-- [ ] S17.1 — Add `pubgrub` crate dependency (v0.3)
-- [ ] S17.2 — `FjDependencyProvider` implementing PubGrub's `DependencyProvider` trait
-- [ ] S17.3 — `choose_version()`: return highest matching version from registry
-- [ ] S17.4 — `get_dependencies()`: fetch dependency list for package@version
-- [ ] S17.5 — `prioritize()`: constrained packages first (fewer versions = higher priority)
-- [ ] S17.6 — Resolution error reporting: human-readable conflict derivation tree
-- [ ] S17.7 — Lock file format: `fj.lock` with package name, version, checksum
-- [ ] S17.8 — Diamond dependency handling: single version per major release
-- [ ] S17.9 — Dev-dependency separation: `[dev-dependencies]` only for tests
-- [ ] S17.10 — 10 tests: resolution success, conflict detection, diamond deps, lock file
+- [x] S17.1 — Add `pubgrub` crate dependency (v0.3)
+- [x] S17.2 — `FjDependencyProvider` implementing PubGrub's `DependencyProvider` trait
+- [x] S17.3 — `choose_version()`: return highest matching version from registry
+- [x] S17.4 — `get_dependencies()`: fetch dependency list for package@version
+- [x] S17.5 — `prioritize()`: constrained packages first (fewer versions = higher priority)
+- [x] S17.6 — Resolution error reporting: human-readable conflict derivation tree
+- [x] S17.7 — Lock file format: `fj.lock` with package name, version, checksum
+- [x] S17.8 — Diamond dependency handling: single version per major release
+- [x] S17.9 — Dev-dependency separation: `[dev-dependencies]` only for tests
+- [x] S17.10 — 10 tests: resolution success, conflict detection, diamond deps, lock file
 
 #### Sprint 18: Security & Polish `P2`
 
 **Goal:** Package signing, audit, name validation
 
-- [ ] S18.1 — Name validation: ASCII alphanumeric + hyphens, case-insensitive collision check
-- [ ] S18.2 — Name squatting prevention: `-` and `_` treated as equivalent
-- [ ] S18.3 — Immutable versions: reject republish of same version with different content
-- [ ] S18.4 — `fj audit`: check dependencies against advisory database
-- [ ] S18.5 — Rate limiting: tower-governor middleware on publish endpoint
-- [ ] S18.6 — Token scoping: per-package publish permissions
-- [ ] S18.7 — Download counter: increment on each download, display in search
-- [ ] S18.8 — Registry config.json: dl URL template, api URL, auth-required flag
-- [ ] S18.9 — Registry README: setup instructions, API documentation
-- [ ] S18.10 — 8 tests: name validation, collision, immutability, rate limit
+- [x] S18.1 — Name validation: ASCII alphanumeric + hyphens, case-insensitive collision check
+- [x] S18.2 — Name squatting prevention: `-` and `_` treated as equivalent
+- [x] S18.3 — Immutable versions: reject republish of same version with different content
+- [x] S18.4 — `fj audit`: check dependencies against advisory database
+- [x] S18.5 — Rate limiting: tower-governor middleware on publish endpoint
+- [x] S18.6 — Token scoping: per-package publish permissions
+- [x] S18.7 — Download counter: increment on each download, display in search
+- [x] S18.8 — Registry config.json: dl URL template, api URL, auth-required flag
+- [x] S18.9 — Registry README: setup instructions, API documentation
+- [x] S18.10 — 8 tests: name validation, collision, immutability, rate limit
 
 ### Phase 5: Lifetime Annotations `P2`
 

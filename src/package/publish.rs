@@ -28,6 +28,13 @@ pub enum PublishError {
     },
     /// Package name is empty or contains invalid characters.
     InvalidName(String),
+    /// Package name collides with an existing package after normalization.
+    NameCollision {
+        /// The attempted name.
+        attempted: String,
+        /// The existing package name that conflicts.
+        existing: String,
+    },
 }
 
 impl std::fmt::Display for PublishError {
@@ -44,6 +51,15 @@ impl std::fmt::Display for PublishError {
                 )
             }
             Self::InvalidName(n) => write!(f, "invalid package name: {n}"),
+            Self::NameCollision {
+                attempted,
+                existing,
+            } => {
+                write!(
+                    f,
+                    "package name '{attempted}' collides with existing package '{existing}'"
+                )
+            }
         }
     }
 }
@@ -59,7 +75,10 @@ pub struct ValidatedPackage {
     pub root: std::path::PathBuf,
 }
 
-/// Validates a package name (lowercase alphanumeric + hyphens, 1-64 chars).
+/// Validates a package name (lowercase alphanumeric + hyphens/underscores, 1-64 chars).
+///
+/// Both `-` and `_` are allowed, but they are treated as equivalent
+/// for collision detection purposes (see `normalized_name`).
 fn validate_name(name: &str) -> Result<(), PublishError> {
     if name.is_empty() || name.len() > 64 {
         return Err(PublishError::InvalidName(
@@ -68,18 +87,42 @@ fn validate_name(name: &str) -> Result<(), PublishError> {
     }
     if !name
         .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
     {
         return Err(PublishError::InvalidName(
-            "name must contain only lowercase letters, digits, and hyphens".into(),
+            "name must contain only lowercase letters, digits, hyphens, and underscores".into(),
         ));
     }
-    if name.starts_with('-') || name.ends_with('-') {
+    if name.starts_with('-') || name.ends_with('-') || name.starts_with('_') || name.ends_with('_')
+    {
         return Err(PublishError::InvalidName(
-            "name cannot start or end with a hyphen".into(),
+            "name cannot start or end with a hyphen or underscore".into(),
         ));
     }
     Ok(())
+}
+
+/// Converts a package name to its canonical (normalized) form.
+///
+/// Normalization replaces all underscores with hyphens, making
+/// `fj_math` and `fj-math` equivalent for collision detection.
+pub fn normalized_name(name: &str) -> String {
+    name.replace('_', "-")
+}
+
+/// Checks whether a name (after normalization) collides with any existing
+/// package in the registry.
+///
+/// Returns `true` if a collision is detected (i.e., another package with a
+/// different raw name but the same normalized form already exists).
+pub fn check_name_collision(registry: &Registry, name: &str) -> bool {
+    let norm = normalized_name(name);
+    for pkg_name in registry.package_names() {
+        if pkg_name != name && normalized_name(pkg_name) == norm {
+            return true;
+        }
+    }
+    false
 }
 
 /// Validates a package at the given project root before publishing.
@@ -129,6 +172,18 @@ pub fn publish_to_registry(
         }
     }
 
+    // Check for name squatting / collision
+    let pkg_name = &package.config.package.name;
+    let norm = normalized_name(pkg_name);
+    for existing_name in registry.package_names() {
+        if existing_name != pkg_name && normalized_name(existing_name) == norm {
+            return Err(PublishError::NameCollision {
+                attempted: pkg_name.clone(),
+                existing: existing_name.to_string(),
+            });
+        }
+    }
+
     // Publish to registry
     registry.publish(
         &package.config.package.name,
@@ -172,6 +227,18 @@ mod tests {
     fn name_too_long() {
         let long_name = "a".repeat(65);
         assert!(validate_name(&long_name).is_err());
+    }
+
+    #[test]
+    fn underscores_accepted_in_name() {
+        assert!(validate_name("fj_math").is_ok());
+        assert!(validate_name("my_cool_pkg").is_ok());
+    }
+
+    #[test]
+    fn underscore_leading_trailing_rejected() {
+        assert!(validate_name("_leading").is_err());
+        assert!(validate_name("trailing_").is_err());
     }
 
     // ── Package validation ──
@@ -314,5 +381,77 @@ mod tests {
         assert!(reg.lookup("fj-http").is_some());
         assert!(reg.lookup("fj-json").is_some());
         assert!(reg.lookup("fj-crypto").is_some());
+    }
+
+    // ── Sprint 18: Name normalization & collision detection ──
+
+    #[test]
+    fn normalized_name_replaces_underscores() {
+        assert_eq!(normalized_name("fj_math"), "fj-math");
+        assert_eq!(normalized_name("fj-math"), "fj-math");
+        assert_eq!(normalized_name("my_cool_pkg"), "my-cool-pkg");
+        assert_eq!(normalized_name("no-changes"), "no-changes");
+    }
+
+    #[test]
+    fn check_name_collision_detects_squatting() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        // "fj_math" normalizes to "fj-math" which already exists
+        assert!(check_name_collision(&reg, "fj_math"));
+        // "fj-math" itself is the same name, not a collision
+        assert!(!check_name_collision(&reg, "fj-math"));
+        // Totally different name
+        assert!(!check_name_collision(&reg, "fj-nn"));
+    }
+
+    #[test]
+    fn publish_rejects_name_collision() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        let pkg = ValidatedPackage {
+            config: ProjectConfig::parse("[package]\nname = \"fj_math\"\nversion = \"0.1.0\"\n")
+                .unwrap(),
+            version: SemVer::new(0, 1, 0),
+            root: std::path::PathBuf::from("/tmp"),
+        };
+
+        let result = publish_to_registry(&mut reg, &pkg);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            PublishError::NameCollision { .. }
+        ));
+    }
+
+    #[test]
+    fn publish_allows_same_normalized_name_same_package() {
+        let mut reg = Registry::new();
+        // Publish "fj-math" first
+        reg.publish("fj-math", SemVer::new(0, 1, 0), "Math");
+
+        // Publishing a new version of the same "fj-math" should succeed
+        let pkg = ValidatedPackage {
+            config: ProjectConfig::parse("[package]\nname = \"fj-math\"\nversion = \"0.2.0\"\n")
+                .unwrap(),
+            version: SemVer::new(0, 2, 0),
+            root: std::path::PathBuf::from("/tmp"),
+        };
+
+        let result = publish_to_registry(&mut reg, &pkg);
+        assert!(result.is_ok());
+    }
+
+    // ── Sprint 18: Download counter in PackageEntry ──
+
+    #[test]
+    fn package_entry_has_download_count() {
+        let mut reg = Registry::new();
+        reg.publish("fj-math", SemVer::new(1, 0, 0), "Math");
+
+        let entry = reg.lookup("fj-math").unwrap();
+        assert_eq!(entry.download_count, 0);
     }
 }
