@@ -1,0 +1,26 @@
+// VENTUNO Q Board Constants
+// MCU: STM32H5F5 (Cortex-M33 @ 250MHz)
+// MPU: Qualcomm Dragonwing IQ8 (ARM64)
+
+// MCU Clocks
+const MCU_CLOCK_HZ: u32 = 250000000
+const MCU_HSI_HZ: u32 = 64000000
+const MCU_HSE_HZ: u32 = 25000000
+
+// MCU Memory Map
+const FLASH_BASE: u32 = 0x08000000
+const SRAM1_BASE: u32 = 0x20000000
+const SRAM2_BASE: u32 = 0x20040000
+const SRAM3_BASE: u32 = 0x20060000
+
+// GPIO
+const GPIOA_BASE: u32 = 0x42020000
+const GPIOB_BASE: u32 = 0x42020400
+
+// CAN-FD
+const FDCAN1_BASE: u32 = 0x4000A400
+const FDCAN2_BASE: u32 = 0x4000A800
+
+// NPU
+const NPU_TOPS: u32 = 40
+const NPU_NAME: str = "Hexagon Tensor"

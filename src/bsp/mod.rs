@@ -18,10 +18,13 @@
 //!     LinkerScript / StartupCode / VectorTable
 //! ```
 
+pub mod dragonwing;
 pub mod esp32;
 pub mod hal;
 pub mod rp2040;
 pub mod stm32f407;
+pub mod stm32h5;
+pub mod ventuno_q;
 
 use std::fmt;
 
@@ -36,6 +39,10 @@ pub enum BspArch {
     Xtensa,
     /// RISC-V 32-bit (ESP32-C3, GD32VF103).
     Riscv32,
+    /// ARM Cortex-M33 (STM32H5, STM32L5, STM32U5).
+    ArmCortexM33,
+    /// ARM64 Linux (Qualcomm Dragonwing, Raspberry Pi 4/5, etc.).
+    Aarch64Linux,
 }
 
 impl fmt::Display for BspArch {
@@ -45,6 +52,8 @@ impl fmt::Display for BspArch {
             BspArch::Thumbv6m => write!(f, "thumbv6m-none-eabi"),
             BspArch::Xtensa => write!(f, "xtensa-esp32-none-elf"),
             BspArch::Riscv32 => write!(f, "riscv32imc-unknown-none-elf"),
+            BspArch::ArmCortexM33 => write!(f, "thumbv8m.main-none-eabihf"),
+            BspArch::Aarch64Linux => write!(f, "aarch64-unknown-linux-gnu"),
         }
     }
 }
@@ -359,13 +368,25 @@ pub fn board_by_name(name: &str) -> Option<Box<dyn Board>> {
         }
         "esp32" => Some(Box::new(esp32::Esp32::new())),
         "rp2040" | "pico" | "raspberrypi-pico" => Some(Box::new(rp2040::Rp2040::new())),
+        "stm32h5" | "stm32h5f5" => Some(Box::new(stm32h5::Stm32H5::new())),
+        "dragonwing" | "dragonwing-iq8" => Some(Box::new(dragonwing::DragonwingIQ8::new())),
+        "ventuno-q" | "ventuno_q" | "arduino-ventuno-q" => {
+            Some(Box::new(ventuno_q::VentunoQ::new()))
+        }
         _ => None,
     }
 }
 
 /// Returns a list of all supported board names.
 pub fn supported_boards() -> Vec<&'static str> {
-    vec!["stm32f407", "esp32", "rp2040"]
+    vec![
+        "stm32f407",
+        "esp32",
+        "rp2040",
+        "stm32h5f5",
+        "dragonwing-iq8",
+        "ventuno-q",
+    ]
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -382,6 +403,14 @@ mod tests {
         assert_eq!(BspArch::Thumbv6m.to_string(), "thumbv6m-none-eabi");
         assert_eq!(BspArch::Xtensa.to_string(), "xtensa-esp32-none-elf");
         assert_eq!(BspArch::Riscv32.to_string(), "riscv32imc-unknown-none-elf");
+        assert_eq!(
+            BspArch::ArmCortexM33.to_string(),
+            "thumbv8m.main-none-eabihf"
+        );
+        assert_eq!(
+            BspArch::Aarch64Linux.to_string(),
+            "aarch64-unknown-linux-gnu"
+        );
     }
 
     #[test]
@@ -418,16 +447,26 @@ mod tests {
         assert!(board_by_name("esp32").is_some());
         assert!(board_by_name("rp2040").is_some());
         assert!(board_by_name("pico").is_some());
+        assert!(board_by_name("stm32h5").is_some());
+        assert!(board_by_name("stm32h5f5").is_some());
+        assert!(board_by_name("dragonwing").is_some());
+        assert!(board_by_name("dragonwing-iq8").is_some());
+        assert!(board_by_name("ventuno-q").is_some());
+        assert!(board_by_name("ventuno_q").is_some());
+        assert!(board_by_name("arduino-ventuno-q").is_some());
         assert!(board_by_name("unknown_board").is_none());
     }
 
     #[test]
     fn supported_boards_list() {
         let boards = supported_boards();
-        assert_eq!(boards.len(), 3);
+        assert_eq!(boards.len(), 6);
         assert!(boards.contains(&"stm32f407"));
         assert!(boards.contains(&"esp32"));
         assert!(boards.contains(&"rp2040"));
+        assert!(boards.contains(&"stm32h5f5"));
+        assert!(boards.contains(&"dragonwing-iq8"));
+        assert!(boards.contains(&"ventuno-q"));
     }
 
     #[test]

@@ -525,106 +525,106 @@ half = "2.4"             # f16/bf16 types
 
 **Goal:** Complete board support package for the STM32H5F5 Cortex-M33 MCU
 
-- [ ] S29.1 — `src/bsp/stm32h5.rs`: `Stm32H5` struct implementing `Board` trait (name, arch, clock, memory regions, peripherals)
-- [ ] S29.2 — Memory regions: Flash 0x0800_0000 (4MB), SRAM1 0x2000_0000 (640KB), SRAM2 0x2004_0000 (640KB), SRAM3 0x2006_0000 (320KB), total 1.5MB SRAM
-- [ ] S29.3 — GPIO port definitions: GPIOA-GPIOI at APB2 (0x4202_0000 base, 0x400 stride), MODER/OTYPER/OSPEEDR/PUPDR/IDR/ODR/BSRR/AFRL/AFRH registers
-- [ ] S29.4 — USART peripherals: USART1 (0x4000_C800), USART2 (0x4000_4400), USART3 (0x4000_4800), UART4/5, LPUART1 — BRR calculation for 250MHz source
-- [ ] S29.5 — SPI peripherals: SPI1 (0x4001_3000), SPI2 (0x4000_3800), SPI3 (0x4000_3C00), SPI4-SPI6 — 16-bit frame support
-- [ ] S29.6 — I2C peripherals: I2C1 (0x4000_5400), I2C2 (0x4000_5800), I2C3/I2C4 — timing register calculation for Fast-mode Plus (1MHz)
-- [ ] S29.7 — RCC clock tree: HSI 64MHz, HSE 25MHz, PLL1/PLL2/PLL3, system clock up to 250MHz, `RccConfig::default_250mhz()`
-- [ ] S29.8 — ICACHE/DCACHE enable sequence: required for full-speed Cortex-M33 operation
-- [ ] S29.9 — Linker script generation: Cortex-M33 vector table (ARMv8-M, differs from M4), TrustZone secure/non-secure memory partitioning
-- [ ] S29.10 — 10 tests: board creation, memory regions, GPIO addresses, clock config, linker output
+- [x] S29.1 — `src/bsp/stm32h5.rs`: `Stm32H5` struct implementing `Board` trait (name, arch, clock, memory regions, peripherals)
+- [x] S29.2 — Memory regions: Flash 0x0800_0000 (4MB), SRAM1 0x2000_0000 (640KB), SRAM2 0x2004_0000 (640KB), SRAM3 0x2006_0000 (320KB), total 1.5MB SRAM
+- [x] S29.3 — GPIO port definitions: GPIOA-GPIOI at APB2 (0x4202_0000 base, 0x400 stride), MODER/OTYPER/OSPEEDR/PUPDR/IDR/ODR/BSRR/AFRL/AFRH registers
+- [x] S29.4 — USART peripherals: USART1 (0x4000_C800), USART2 (0x4000_4400), USART3 (0x4000_4800), UART4/5, LPUART1 — BRR calculation for 250MHz source
+- [x] S29.5 — SPI peripherals: SPI1 (0x4001_3000), SPI2 (0x4000_3800), SPI3 (0x4000_3C00), SPI4-SPI6 — 16-bit frame support
+- [x] S29.6 — I2C peripherals: I2C1 (0x4000_5400), I2C2 (0x4000_5800), I2C3/I2C4 — timing register calculation for Fast-mode Plus (1MHz)
+- [x] S29.7 — RCC clock tree: HSI 64MHz, HSE 25MHz, PLL1/PLL2/PLL3, system clock up to 250MHz, `RccConfig::default_250mhz()`
+- [x] S29.8 — ICACHE/DCACHE enable sequence: required for full-speed Cortex-M33 operation
+- [x] S29.9 — Linker script generation: Cortex-M33 vector table (ARMv8-M, differs from M4), TrustZone secure/non-secure memory partitioning
+- [x] S29.10 — 10 tests: board creation, memory regions, GPIO addresses, clock config, linker output
 
 #### Sprint 30: STM32H5 HAL — GPIO, UART, SPI, I2C `P1`
 
 **Goal:** Implement unified HAL traits for all STM32H5 peripherals
 
-- [ ] S30.1 — `H5GpioConfig`: pin mode (input/output/AF/analog), speed (low/medium/high/very-high), pull-up/down, alternate function 0-15
-- [ ] S30.2 — GPIO register write codegen: MODER (2-bit mode), OTYPER (push-pull/open-drain), OSPEEDR, PUPDR, AFRL/AFRH
-- [ ] S30.3 — `H5UartConfig`: baud rate, word length (7/8/9-bit), stop bits, parity, oversampling (8x/16x), FIFO enable
-- [ ] S30.4 — UART BRR calculation: `USARTDIV = f_ck / baud`, handle both oversampling modes, PRESC prescaler divider
-- [ ] S30.5 — `H5SpiConfig`: master/slave, CPOL/CPHA, baud prescaler, frame size (4-32 bit), FIFO threshold
-- [ ] S30.6 — SPI CR1/CR2/CFG1/CFG2 register value computation, hardware CRC polynomial support
-- [ ] S30.7 — `H5I2cConfig`: timing register (PRESC, SCLDEL, SDADEL, SCLH, SCLL) for 100kHz/400kHz/1MHz
-- [ ] S30.8 — I2C TIMINGR computation algorithm: derive PRESC/SCLDEL/SDADEL/SCLH/SCLL from f_I2CCLK and target speed
-- [ ] S30.9 — SysTick timer: `SysTickConfig::tick_1ms()` for 250MHz, `delay_ms()` and `delay_us()` assembly codegen
-- [ ] S30.10 — 10 tests: GPIO config values, UART BRR @ 115200/250MHz, SPI register values, I2C timing @ 400kHz, SysTick reload
+- [x] S30.1 — `H5GpioConfig`: pin mode (input/output/AF/analog), speed (low/medium/high/very-high), pull-up/down, alternate function 0-15
+- [x] S30.2 — GPIO register write codegen: MODER (2-bit mode), OTYPER (push-pull/open-drain), OSPEEDR, PUPDR, AFRL/AFRH
+- [x] S30.3 — `H5UartConfig`: baud rate, word length (7/8/9-bit), stop bits, parity, oversampling (8x/16x), FIFO enable
+- [x] S30.4 — UART BRR calculation: `USARTDIV = f_ck / baud`, handle both oversampling modes, PRESC prescaler divider
+- [x] S30.5 — `H5SpiConfig`: master/slave, CPOL/CPHA, baud prescaler, frame size (4-32 bit), FIFO threshold
+- [x] S30.6 — SPI CR1/CR2/CFG1/CFG2 register value computation, hardware CRC polynomial support
+- [x] S30.7 — `H5I2cConfig`: timing register (PRESC, SCLDEL, SDADEL, SCLH, SCLL) for 100kHz/400kHz/1MHz
+- [x] S30.8 — I2C TIMINGR computation algorithm: derive PRESC/SCLDEL/SDADEL/SCLH/SCLL from f_I2CCLK and target speed
+- [x] S30.9 — SysTick timer: `SysTickConfig::tick_1ms()` for 250MHz, `delay_ms()` and `delay_us()` assembly codegen
+- [x] S30.10 — 10 tests: GPIO config values, UART BRR @ 115200/250MHz, SPI register values, I2C timing @ 400kHz, SysTick reload
 
 #### Sprint 31: CAN-FD HAL & VENTUNO Q Peripherals `P1`
 
 **Goal:** CAN-FD bus support and VENTUNO Q-specific peripheral integration
 
-- [ ] S31.1 — `CanFd` HAL trait in `src/bsp/hal.rs`: `init(bitrate, data_bitrate)`, `send(id, data, is_fd)`, `receive() -> CanFrame`, `set_filter(id, mask)`
-- [ ] S31.2 — `CanFrame` struct: standard (11-bit) / extended (29-bit) ID, RTR flag, FD flag, BRS (bit rate switch), DLC, data (0-64 bytes)
-- [ ] S31.3 — `CanBitTiming` struct: nominal (arbitration) phase + data phase timing, prescaler, SJW, TSEG1, TSEG2 calculations
-- [ ] S31.4 — FDCAN peripheral registers: FDCAN1 (0x4000_A400), FDCAN2 — CCCR, NBTP, DBTP, TXBAR, RXF0C configuration codegen
-- [ ] S31.5 — Message RAM layout: 11-bit filter (128 elements), 29-bit filter (64 elements), Rx FIFO 0/1, Tx event FIFO, Tx buffers (32 elements)
-- [ ] S31.6 — `VentunoQ` board struct: combines STM32H5 MCU + DragonwingIQ8 MPU metadata, dual-target architecture flag
-- [ ] S31.7 — VENTUNO Q peripheral map: CAN-FD (2x), PWM outputs (TIM1-TIM17), high-speed GPIO, MIPI-CSI (MPU side only)
-- [ ] S31.8 — `ventuno_q_memory_budget()`: MCU side (4MB Flash, 1.5MB SRAM) + MPU side (16GB RAM, 64GB eMMC) dual report
-- [ ] S31.9 — Flash command: `fj flash --board ventuno-q` via STM32CubeProgrammer or probe-rs (`--chip STM32H5F5LJTx --probe stlink`)
-- [ ] S31.10 — 10 tests: CAN-FD frame build/parse, bit timing @ 500kbps/2Mbps, filter config, VENTUNO Q board, memory budget
+- [x] S31.1 — `CanFd` HAL trait in `src/bsp/hal.rs`: `init(bitrate, data_bitrate)`, `send(id, data, is_fd)`, `receive() -> CanFrame`, `set_filter(id, mask)`
+- [x] S31.2 — `CanFrame` struct: standard (11-bit) / extended (29-bit) ID, RTR flag, FD flag, BRS (bit rate switch), DLC, data (0-64 bytes)
+- [x] S31.3 — `CanBitTiming` struct: nominal (arbitration) phase + data phase timing, prescaler, SJW, TSEG1, TSEG2 calculations
+- [x] S31.4 — FDCAN peripheral registers: FDCAN1 (0x4000_A400), FDCAN2 — CCCR, NBTP, DBTP, TXBAR, RXF0C configuration codegen
+- [x] S31.5 — Message RAM layout: 11-bit filter (128 elements), 29-bit filter (64 elements), Rx FIFO 0/1, Tx event FIFO, Tx buffers (32 elements)
+- [x] S31.6 — `VentunoQ` board struct: combines STM32H5 MCU + DragonwingIQ8 MPU metadata, dual-target architecture flag
+- [x] S31.7 — VENTUNO Q peripheral map: CAN-FD (2x), PWM outputs (TIM1-TIM17), high-speed GPIO, MIPI-CSI (MPU side only)
+- [x] S31.8 — `ventuno_q_memory_budget()`: MCU side (4MB Flash, 1.5MB SRAM) + MPU side (16GB RAM, 64GB eMMC) dual report
+- [x] S31.9 — Flash command: `fj flash --board ventuno-q` via STM32CubeProgrammer or probe-rs (`--chip STM32H5F5LJTx --probe stlink`)
+- [x] S31.10 — 10 tests: CAN-FD frame build/parse, bit timing @ 500kbps/2Mbps, filter config, VENTUNO Q board, memory budget
 
 #### Sprint 32: Zephyr RTOS Bindings `P1`
 
 **Goal:** C FFI wrappers for Zephyr kernel API (the MCU side of VENTUNO Q runs Zephyr, not FreeRTOS)
 
-- [ ] S32.1 — `src/rtos/zephyr.rs`: Zephyr RTOS module with feature gate `#[cfg(feature = "zephyr")]`, simulation stubs for testing
-- [ ] S32.2 — Thread API: `zephyr_thread_create(name, priority, stack_size, entry_fn) -> Result<ThreadHandle>`, `zephyr_thread_abort(tid)`, `zephyr_thread_suspend/resume(tid)`
-- [ ] S32.3 — Sleep/yield: `zephyr_sleep_ms(ms)`, `zephyr_sleep_us(us)`, `zephyr_yield()` — maps to `k_sleep()` / `k_yield()`
-- [ ] S32.4 — Message queue API: `zephyr_msgq_create(msg_size, max_msgs)`, `zephyr_msgq_put(q, data, timeout)`, `zephyr_msgq_get(q, buf, timeout)` — returns `-ENOMSG` / `-EAGAIN`
-- [ ] S32.5 — Mutex API: `zephyr_mutex_create()`, `zephyr_mutex_lock(m, timeout) -> Result<()>`, `zephyr_mutex_unlock(m)` — priority inheritance built-in
-- [ ] S32.6 — Semaphore API: `zephyr_sem_create(initial, limit)`, `zephyr_sem_give(s)`, `zephyr_sem_take(s, timeout)` — binary and counting
-- [ ] S32.7 — Timer API: `zephyr_timer_create(expiry_fn, period_ms)`, `zephyr_timer_start(t)`, `zephyr_timer_stop(t)`, `zephyr_timer_remaining(t)`
-- [ ] S32.8 — Work queue API: `zephyr_work_submit(work_fn)`, `zephyr_work_schedule(work_fn, delay_ms)` — deferred execution from ISR context
-- [ ] S32.9 — `ZephyrError` enum (thiserror): `ThreadCreateFailed`, `MsgqFull`, `MsgqEmpty`, `MsgqTimeout`, `MutexTimeout`, `SemTimeout`, `InvalidParam`
-- [ ] S32.10 — 10 tests: thread create/abort, msgq roundtrip, mutex lock/unlock, semaphore give/take, timer start/stop, work submit
+- [x] S32.1 — `src/rtos/zephyr.rs`: Zephyr RTOS module with feature gate `#[cfg(feature = "zephyr")]`, simulation stubs for testing
+- [x] S32.2 — Thread API: `zephyr_thread_create(name, priority, stack_size, entry_fn) -> Result<ThreadHandle>`, `zephyr_thread_abort(tid)`, `zephyr_thread_suspend/resume(tid)`
+- [x] S32.3 — Sleep/yield: `zephyr_sleep_ms(ms)`, `zephyr_sleep_us(us)`, `zephyr_yield()` — maps to `k_sleep()` / `k_yield()`
+- [x] S32.4 — Message queue API: `zephyr_msgq_create(msg_size, max_msgs)`, `zephyr_msgq_put(q, data, timeout)`, `zephyr_msgq_get(q, buf, timeout)` — returns `-ENOMSG` / `-EAGAIN`
+- [x] S32.5 — Mutex API: `zephyr_mutex_create()`, `zephyr_mutex_lock(m, timeout) -> Result<()>`, `zephyr_mutex_unlock(m)` — priority inheritance built-in
+- [x] S32.6 — Semaphore API: `zephyr_sem_create(initial, limit)`, `zephyr_sem_give(s)`, `zephyr_sem_take(s, timeout)` — binary and counting
+- [x] S32.7 — Timer API: `zephyr_timer_create(expiry_fn, period_ms)`, `zephyr_timer_start(t)`, `zephyr_timer_stop(t)`, `zephyr_timer_remaining(t)`
+- [x] S32.8 — Work queue API: `zephyr_work_submit(work_fn)`, `zephyr_work_schedule(work_fn, delay_ms)` — deferred execution from ISR context
+- [x] S32.9 — `ZephyrError` enum (thiserror): `ThreadCreateFailed`, `MsgqFull`, `MsgqEmpty`, `MsgqTimeout`, `MutexTimeout`, `SemTimeout`, `InvalidParam`
+- [x] S32.10 — 10 tests: thread create/abort, msgq roundtrip, mutex lock/unlock, semaphore give/take, timer start/stop, work submit
 
 #### Sprint 33: Zephyr Language Abstractions & Arduino Core Compat `P1`
 
 **Goal:** High-level Fajar Lang API for Zephyr + Arduino-style convenience functions
 
-- [ ] S33.1 — `ZephyrTask` struct: wraps thread handle, `spawn(priority, stack, fn)`, `abort()`, `join(timeout)`, stack watermark tracking
-- [ ] S33.2 — `ZephyrMsgQ<T>` generic queue: `send(item, timeout)`, `receive(timeout) -> Option<T>`, `peek()`, `purge()`, capacity/count
-- [ ] S33.3 — `ZephyrMutex` with RAII guard: `lock() -> MutexGuard`, `try_lock() -> Option<MutexGuard>`, auto-unlock on drop
-- [ ] S33.4 — `ZephyrSemaphore`: binary/counting variants, `give()`, `take(timeout)`, ISR-safe `give_from_isr()`
-- [ ] S33.5 — `ZephyrTimer`: one-shot and periodic modes, `start(duration)`, `stop()`, `remaining_ticks()`, callback on expiry
-- [ ] S33.6 — Arduino Core compat: `digital_write(pin, value)`, `digital_read(pin)`, `analog_read(pin)`, `pin_mode(pin, mode)`, `delay(ms)`, `millis()`
-- [ ] S33.7 — Arduino `Serial` abstraction: `serial_begin(baud)`, `serial_print(msg)`, `serial_println(msg)`, `serial_available()`, `serial_read()`
-- [ ] S33.8 — Arduino `Wire` (I2C): `wire_begin()`, `wire_begin_transmission(addr)`, `wire_write(data)`, `wire_end_transmission()`, `wire_request_from(addr, qty)`
-- [ ] S33.9 — Devicetree integration: `board_config()` returns pin assignments and peripheral configuration from Zephyr DTS overlay
-- [ ] S33.10 — 10 tests: ZephyrTask lifecycle, MsgQ send/recv, MutexGuard RAII, Arduino digitalRead/Write, Serial print, Wire I2C
+- [x] S33.1 — `ZephyrTask` struct: wraps thread handle, `spawn(priority, stack, fn)`, `abort()`, `join(timeout)`, stack watermark tracking
+- [x] S33.2 — `ZephyrMsgQ<T>` generic queue: `send(item, timeout)`, `receive(timeout) -> Option<T>`, `peek()`, `purge()`, capacity/count
+- [x] S33.3 — `ZephyrMutex` with RAII guard: `lock() -> MutexGuard`, `try_lock() -> Option<MutexGuard>`, auto-unlock on drop
+- [x] S33.4 — `ZephyrSemaphore`: binary/counting variants, `give()`, `take(timeout)`, ISR-safe `give_from_isr()`
+- [x] S33.5 — `ZephyrTimer`: one-shot and periodic modes, `start(duration)`, `stop()`, `remaining_ticks()`, callback on expiry
+- [x] S33.6 — Arduino Core compat: `digital_write(pin, value)`, `digital_read(pin)`, `analog_read(pin)`, `pin_mode(pin, mode)`, `delay(ms)`, `millis()`
+- [x] S33.7 — Arduino `Serial` abstraction: `serial_begin(baud)`, `serial_print(msg)`, `serial_println(msg)`, `serial_available()`, `serial_read()`
+- [x] S33.8 — Arduino `Wire` (I2C): `wire_begin()`, `wire_begin_transmission(addr)`, `wire_write(data)`, `wire_end_transmission()`, `wire_request_from(addr, qty)`
+- [x] S33.9 — Devicetree integration: `board_config()` returns pin assignments and peripheral configuration from Zephyr DTS overlay
+- [x] S33.10 — 10 tests: ZephyrTask lifecycle, MsgQ send/recv, MutexGuard RAII, Arduino digitalRead/Write, Serial print, Wire I2C
 
 #### Sprint 34: Qualcomm Dragonwing MPU — Linux Target & NPU `P2`
 
 **Goal:** Compile & deploy Fajar Lang on the ARM64 Linux MPU side, integrate Hexagon NPU for ML inference
 
-- [ ] S34.1 — `src/bsp/dragonwing.rs`: `DragonwingIQ8` struct — aarch64-linux target, 16GB LPDDR5, 64GB eMMC, NPU/GPU capabilities
-- [ ] S34.2 — Cross-compile target: `aarch64-unknown-linux-gnu` via LLVM backend, sysroot configuration for Ubuntu/Debian ARM64
-- [ ] S34.3 — Adreno GPU detection: `gpu_available() -> bool` via `/sys/class/kgsl/` sysfs probe, Vulkan capabilities query
-- [ ] S34.4 — Hexagon NPU detection: `npu_available() -> bool`, QNN runtime version query via `dlopen("libQnnHtp.so")`
-- [ ] S34.5 — ONNX → QNN pipeline: `fj export --format qnn model.fj` — exports Fajar ML model to ONNX, then to QNN context binary
-- [ ] S34.6 — QNN inference wrapper: `qnn_load_model(path)`, `qnn_infer(input_tensor) -> output_tensor` via dlopen/dlsym to libQnnHtp.so
-- [ ] S34.7 — Camera MIPI-CSI integration: `camera_open(index)`, `camera_capture() -> Tensor` via Linux V4L2 API, triple camera support
-- [ ] S34.8 — MPU ↔ MCU communication: shared memory region or UART bridge for sensor (MCU) → inference (MPU) → actuator (MCU) pipeline
-- [ ] S34.9 — Deploy command: `fj deploy --board ventuno-q --target mpu` (SCP to device), `--target mcu` (flash via SWD/JTAG)
-- [ ] S34.10 — 10 tests: ARM64 target config, GPU/NPU detection stubs, ONNX export path, deploy command strings, camera open stub
+- [x] S34.1 — `src/bsp/dragonwing.rs`: `DragonwingIQ8` struct — aarch64-linux target, 16GB LPDDR5, 64GB eMMC, NPU/GPU capabilities
+- [x] S34.2 — Cross-compile target: `aarch64-unknown-linux-gnu` via LLVM backend, sysroot configuration for Ubuntu/Debian ARM64
+- [x] S34.3 — Adreno GPU detection: `gpu_available() -> bool` via `/sys/class/kgsl/` sysfs probe, Vulkan capabilities query
+- [x] S34.4 — Hexagon NPU detection: `npu_available() -> bool`, QNN runtime version query via `dlopen("libQnnHtp.so")`
+- [x] S34.5 — ONNX → QNN pipeline: `fj export --format qnn model.fj` — exports Fajar ML model to ONNX, then to QNN context binary
+- [x] S34.6 — QNN inference wrapper: `qnn_load_model(path)`, `qnn_infer(input_tensor) -> output_tensor` via dlopen/dlsym to libQnnHtp.so
+- [x] S34.7 — Camera MIPI-CSI integration: `camera_open(index)`, `camera_capture() -> Tensor` via Linux V4L2 API, triple camera support
+- [x] S34.8 — MPU ↔ MCU communication: shared memory region or UART bridge for sensor (MCU) → inference (MPU) → actuator (MCU) pipeline
+- [x] S34.9 — Deploy command: `fj deploy --board ventuno-q --target mpu` (SCP to device), `--target mcu` (flash via SWD/JTAG)
+- [x] S34.10 — 10 tests: ARM64 target config, GPU/NPU detection stubs, ONNX export path, deploy command strings, camera open stub
 
 #### Sprint 35: Dual-Target Build & Integration Demo `P1`
 
 **Goal:** Single `fj build --board ventuno-q` produces both MCU firmware + MPU binary; end-to-end demos
 
-- [ ] S35.1 — Dual-target build: `fj build --board ventuno-q` compiles `@kernel` code → thumbv8m.main (MCU) + `@device` code → aarch64 (MPU)
-- [ ] S35.2 — Build manifest: `fj.toml` with `[target.mcu]` and `[target.mpu]` sections, separate entry points, shared type definitions
-- [ ] S35.3 — Context routing: `@kernel` functions → MCU binary only, `@device` with NPU annotations → MPU binary, `@safe` → determined by call graph
-- [ ] S35.4 — IPC protocol: MCU→MPU message format (sensor readings, control signals), MPU→MCU format (inference results, actuator commands)
-- [ ] S35.5 — `examples/ventuno_q_blinky.fj`: LED blink on STM32H5 MCU via Zephyr GPIO — basic hardware validation
-- [ ] S35.6 — `examples/ventuno_q_canfd.fj`: CAN-FD send/receive between VENTUNO Q and external ECU node
-- [ ] S35.7 — `examples/ventuno_q_ai_pipeline.fj`: sensor read (MCU @kernel) → NPU inference (MPU @device) → motor control (MCU @kernel)
-- [ ] S35.8 — `stdlib/bsp/ventuno_q.fj`: Fajar Lang constants — clocks, memory map, peripheral addresses, CAN IDs, pin definitions
-- [ ] S35.9 — Memory budget report: combined MCU (4MB Flash / 1.5MB SRAM) + MPU (16GB RAM / 64GB eMMC) dual-panel visualization
-- [ ] S35.10 — 10 tests: dual-target build output, context routing, IPC message format, example compilation, combined memory budget
+- [x] S35.1 — Dual-target build: `fj build --board ventuno-q` compiles `@kernel` code → thumbv8m.main (MCU) + `@device` code → aarch64 (MPU)
+- [x] S35.2 — Build manifest: `fj.toml` with `[target.mcu]` and `[target.mpu]` sections, separate entry points, shared type definitions
+- [x] S35.3 — Context routing: `@kernel` functions → MCU binary only, `@device` with NPU annotations → MPU binary, `@safe` → determined by call graph
+- [x] S35.4 — IPC protocol: MCU→MPU message format (sensor readings, control signals), MPU→MCU format (inference results, actuator commands)
+- [x] S35.5 — `examples/ventuno_q_blinky.fj`: LED blink on STM32H5 MCU via Zephyr GPIO — basic hardware validation
+- [x] S35.6 — `examples/ventuno_q_canfd.fj`: CAN-FD send/receive between VENTUNO Q and external ECU node
+- [x] S35.7 — `examples/ventuno_q_ai_pipeline.fj`: sensor read (MCU @kernel) → NPU inference (MPU @device) → motor control (MCU @kernel)
+- [x] S35.8 — `stdlib/bsp/ventuno_q.fj`: Fajar Lang constants — clocks, memory map, peripheral addresses, CAN IDs, pin definitions
+- [x] S35.9 — Memory budget report: combined MCU (4MB Flash / 1.5MB SRAM) + MPU (16GB RAM / 64GB eMMC) dual-panel visualization
+- [x] S35.10 — 10 tests: dual-target build output, context routing, IPC message format, example compilation, combined memory budget
 
 ---
 

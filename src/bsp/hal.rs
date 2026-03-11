@@ -110,6 +110,182 @@ pub trait Delay {
     fn delay_us(&mut self, us: u32);
 }
 
+/// CAN-FD bus trait.
+pub trait CanFd {
+    /// Error type.
+    type Error: core::fmt::Debug;
+
+    /// Initializes the CAN-FD controller with nominal and data bitrates.
+    fn init(&mut self, bitrate: u32, data_bitrate: u32) -> Result<(), Self::Error>;
+
+    /// Sends a CAN-FD frame.
+    fn send(&mut self, frame: &CanFrame) -> Result<(), Self::Error>;
+
+    /// Receives a CAN-FD frame (blocking).
+    fn receive(&mut self) -> Result<CanFrame, Self::Error>;
+
+    /// Sets an acceptance filter with ID and mask.
+    fn set_filter(&mut self, id: u32, mask: u32) -> Result<(), Self::Error>;
+}
+
+/// CAN-FD frame.
+#[derive(Debug, Clone)]
+pub struct CanFrame {
+    /// CAN identifier (11-bit standard or 29-bit extended).
+    pub id: u32,
+    /// True if using 29-bit extended identifier.
+    pub is_extended: bool,
+    /// True if this is an FD frame (supports > 8 bytes and BRS).
+    pub is_fd: bool,
+    /// True if bit rate switching is enabled (FD only).
+    pub is_brs: bool,
+    /// Data length code (0-8 for classic, 0-64 for FD).
+    pub dlc: u8,
+    /// Frame data payload (max 64 bytes for FD, max 8 for classic).
+    pub data: Vec<u8>,
+}
+
+impl CanFrame {
+    /// Creates a new standard CAN frame (classic, 11-bit ID).
+    pub fn new_standard(id: u32, data: &[u8]) -> Self {
+        let len = data.len().min(8);
+        Self {
+            id: id & 0x7FF,
+            is_extended: false,
+            is_fd: false,
+            is_brs: false,
+            dlc: len as u8,
+            data: data[..len].to_vec(),
+        }
+    }
+
+    /// Creates a new CAN-FD frame (up to 64 bytes, optional BRS).
+    pub fn new_fd(id: u32, data: &[u8], is_brs: bool) -> Self {
+        let len = data.len().min(64);
+        Self {
+            id: id & 0x7FF,
+            is_extended: false,
+            is_fd: true,
+            is_brs,
+            dlc: Self::data_len_to_dlc(len),
+            data: data[..len].to_vec(),
+        }
+    }
+
+    /// Creates a new extended-ID CAN frame (29-bit ID).
+    pub fn new_extended(id: u32, data: &[u8]) -> Self {
+        let len = data.len().min(8);
+        Self {
+            id: id & 0x1FFF_FFFF,
+            is_extended: true,
+            is_fd: false,
+            is_brs: false,
+            dlc: len as u8,
+            data: data[..len].to_vec(),
+        }
+    }
+
+    /// Returns the maximum data length for this frame's DLC.
+    pub fn max_data_length(&self) -> usize {
+        if self.is_fd {
+            Self::dlc_to_data_len(self.dlc)
+        } else {
+            self.dlc.min(8) as usize
+        }
+    }
+
+    /// Converts a data length to a DLC value (CAN-FD encoding).
+    fn data_len_to_dlc(len: usize) -> u8 {
+        match len {
+            0..=8 => len as u8,
+            9..=12 => 9,
+            13..=16 => 10,
+            17..=20 => 11,
+            21..=24 => 12,
+            25..=32 => 13,
+            33..=48 => 14,
+            _ => 15, // 49..=64
+        }
+    }
+
+    /// Converts a DLC value to the actual data length (CAN-FD decoding).
+    fn dlc_to_data_len(dlc: u8) -> usize {
+        match dlc {
+            0..=8 => dlc as usize,
+            9 => 12,
+            10 => 16,
+            11 => 20,
+            12 => 24,
+            13 => 32,
+            14 => 48,
+            _ => 64,
+        }
+    }
+}
+
+/// CAN bit timing parameters (for both nominal and data phases).
+#[derive(Debug, Clone)]
+pub struct CanBitTiming {
+    /// Prescaler divider.
+    pub prescaler: u16,
+    /// Synchronization jump width.
+    pub sjw: u8,
+    /// Time segment 1 (propagation + phase segment 1).
+    pub tseg1: u16,
+    /// Time segment 2 (phase segment 2).
+    pub tseg2: u8,
+}
+
+impl CanBitTiming {
+    /// Calculates the actual bitrate from these timing parameters.
+    pub fn actual_bitrate(&self, clock_hz: u32) -> u32 {
+        let total_tq = 1 + self.tseg1 as u32 + self.tseg2 as u32;
+        if total_tq == 0 || self.prescaler == 0 {
+            return 0;
+        }
+        clock_hz / (self.prescaler as u32 * total_tq)
+    }
+
+    /// Returns the sample point percentage.
+    pub fn sample_point(&self) -> f64 {
+        let total_tq = 1 + self.tseg1 as u32 + self.tseg2 as u32;
+        if total_tq == 0 {
+            return 0.0;
+        }
+        ((1 + self.tseg1 as u32) as f64 / total_tq as f64) * 100.0
+    }
+}
+
+/// Calculates CAN bit timing for a given clock and target bitrate.
+///
+/// Returns `None` if no valid timing can be found.
+pub fn calculate_can_timing(clock_hz: u32, target_bitrate: u32) -> Option<CanBitTiming> {
+    for prescaler in 1..=512u16 {
+        let tq_freq = clock_hz / prescaler as u32;
+        if tq_freq == 0 || !tq_freq.is_multiple_of(target_bitrate) {
+            continue;
+        }
+        let total_tq = tq_freq / target_bitrate;
+        if !(3..=385).contains(&total_tq) {
+            continue;
+        }
+        // Target ~87.5% sample point
+        let tseg1 = ((total_tq * 7) / 8).saturating_sub(1);
+        let tseg2 = total_tq - 1 - tseg1;
+        if !(1..=256).contains(&tseg1) || !(1..=128).contains(&tseg2) {
+            continue;
+        }
+        let sjw = tseg2.min(128) as u8;
+        return Some(CanBitTiming {
+            prescaler,
+            sjw,
+            tseg1: tseg1 as u16,
+            tseg2: tseg2 as u8,
+        });
+    }
+    None
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Binary Format Conversion
 // ═══════════════════════════════════════════════════════════════════════
@@ -288,6 +464,18 @@ pub fn flash_command(board: &str, firmware_path: &str, options: &FlashOptions) -
                 "esptool.py --port {port} --baud 460800 write_flash 0x10000 {firmware_path}"
             ))
         }
+        "stm32h5" | "stm32h5f5" => {
+            let probe = options.probe.as_deref().unwrap_or("stlink");
+            Some(format!(
+                "probe-rs run --chip STM32H5F5LJTx --probe {probe} {firmware_path}"
+            ))
+        }
+        "ventuno-q" | "ventuno_q" | "arduino-ventuno-q" => {
+            let probe = options.probe.as_deref().unwrap_or("stlink");
+            Some(format!(
+                "probe-rs run --chip STM32H5F5LJTx --probe {probe} {firmware_path}"
+            ))
+        }
         _ => None,
     }
 }
@@ -321,6 +509,9 @@ pub fn qemu_command(board: &str, firmware_path: &str, semihosting: bool) -> Opti
         )),
         "rp2040" | "pico" => Some(format!(
             "qemu-system-arm -machine raspi2b -nographic -kernel {firmware_path}{semi_flag}"
+        )),
+        "stm32h5" | "stm32h5f5" | "ventuno-q" | "ventuno_q" | "arduino-ventuno-q" => Some(format!(
+            "qemu-system-arm -machine mps3-an547 -nographic -kernel {firmware_path}{semi_flag}"
         )),
         _ => None,
     }
@@ -426,5 +617,134 @@ mod tests {
         let line = usage.report_line();
         assert!(line.contains("FLASH"));
         assert!(line.contains("50.0%"));
+    }
+
+    // ── CAN-FD Tests ────────────────────────────────────────────
+
+    #[test]
+    fn can_frame_standard_creation() {
+        let frame = CanFrame::new_standard(0x123, &[1, 2, 3, 4]);
+        assert_eq!(frame.id, 0x123);
+        assert!(!frame.is_extended);
+        assert!(!frame.is_fd);
+        assert!(!frame.is_brs);
+        assert_eq!(frame.dlc, 4);
+        assert_eq!(frame.data, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn can_frame_fd_creation() {
+        let data = vec![0u8; 32];
+        let frame = CanFrame::new_fd(0x100, &data, true);
+        assert!(frame.is_fd);
+        assert!(frame.is_brs);
+        assert_eq!(frame.dlc, 13); // 32 bytes = DLC 13
+        assert_eq!(frame.data.len(), 32);
+    }
+
+    #[test]
+    fn can_frame_extended_creation() {
+        let frame = CanFrame::new_extended(0x1234_5678, &[0xAB, 0xCD]);
+        assert!(frame.is_extended);
+        assert_eq!(frame.id, 0x1234_5678 & 0x1FFF_FFFF);
+        assert_eq!(frame.dlc, 2);
+    }
+
+    #[test]
+    fn can_frame_max_data_length() {
+        let classic = CanFrame::new_standard(0x100, &[1, 2, 3]);
+        assert_eq!(classic.max_data_length(), 3);
+
+        let fd = CanFrame::new_fd(0x100, &vec![0u8; 48], false);
+        assert_eq!(fd.max_data_length(), 48); // DLC 14 = 48 bytes
+    }
+
+    #[test]
+    fn can_frame_dlc_encoding() {
+        // FD DLC encoding: 9=12, 10=16, 11=20, 12=24, 13=32, 14=48, 15=64
+        let frame_12 = CanFrame::new_fd(0x100, &vec![0u8; 12], false);
+        assert_eq!(frame_12.dlc, 9);
+
+        let frame_64 = CanFrame::new_fd(0x100, &vec![0u8; 64], false);
+        assert_eq!(frame_64.dlc, 15);
+    }
+
+    #[test]
+    fn can_bit_timing_bitrate() {
+        let timing = CanBitTiming {
+            prescaler: 5,
+            sjw: 4,
+            tseg1: 31,
+            tseg2: 8,
+        };
+        // Total TQ = 1 + 31 + 8 = 40
+        // Bitrate = 250_000_000 / (5 * 40) = 1_250_000
+        assert_eq!(timing.actual_bitrate(250_000_000), 1_250_000);
+    }
+
+    #[test]
+    fn can_bit_timing_sample_point() {
+        let timing = CanBitTiming {
+            prescaler: 5,
+            sjw: 4,
+            tseg1: 31,
+            tseg2: 8,
+        };
+        // Sample point = (1+31) / 40 = 80%
+        assert!((timing.sample_point() - 80.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn can_timing_calculation_500kbps() {
+        let timing = calculate_can_timing(250_000_000, 500_000);
+        assert!(timing.is_some());
+        let t = timing.unwrap();
+        assert_eq!(t.actual_bitrate(250_000_000), 500_000);
+    }
+
+    #[test]
+    fn can_timing_calculation_1mbps() {
+        let timing = calculate_can_timing(250_000_000, 1_000_000);
+        assert!(timing.is_some());
+        let t = timing.unwrap();
+        assert_eq!(t.actual_bitrate(250_000_000), 1_000_000);
+    }
+
+    // ── STM32H5 / VENTUNO Q Flash & QEMU Tests ─────────────────
+
+    #[test]
+    fn flash_command_stm32h5() {
+        let cmd = flash_command("stm32h5", "firmware.elf", &FlashOptions::default());
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("probe-rs"));
+        assert!(cmd_str.contains("STM32H5F5LJTx"));
+    }
+
+    #[test]
+    fn flash_command_ventuno_q() {
+        let cmd = flash_command("ventuno-q", "firmware.elf", &FlashOptions::default());
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("probe-rs"));
+        assert!(cmd_str.contains("STM32H5F5LJTx"));
+    }
+
+    #[test]
+    fn qemu_command_stm32h5() {
+        let cmd = qemu_command("stm32h5", "test.elf", false);
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("qemu-system-arm"));
+        assert!(cmd_str.contains("mps3-an547"));
+    }
+
+    #[test]
+    fn qemu_command_ventuno_q() {
+        let cmd = qemu_command("ventuno-q", "test.elf", true);
+        assert!(cmd.is_some());
+        let cmd_str = cmd.unwrap();
+        assert!(cmd_str.contains("mps3-an547"));
+        assert!(cmd_str.contains("semihosting"));
     }
 }

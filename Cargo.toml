@@ -52,6 +52,7 @@ native = [
 ]
 llvm = ["dep:inkwell"]
 freertos = []
+zephyr = []
 
 [dev-dependencies]
 pretty_assertions = "1.4"

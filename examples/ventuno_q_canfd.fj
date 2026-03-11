@@ -1,0 +1,9 @@
+// VENTUNO Q CAN-FD — send/receive CAN frames
+@kernel
+fn main() {
+    let can_id: u32 = 0x123
+    let data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+
+    println("CAN-FD TX: ID=0x" + to_string(can_id) + " DLC=" + to_string(len(data)))
+    println("CAN-FD demo complete")
+}

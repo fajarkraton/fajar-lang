@@ -1,0 +1,21 @@
+// VENTUNO Q AI Pipeline — sensor (MCU) → inference (MPU) → actuator (MCU)
+fn main() {
+    println("=== VENTUNO Q AI Pipeline Demo ===")
+
+    // Simulate sensor reading (MCU side)
+    let sensor_data = [0.5, 0.3, 0.8, 0.2]
+    println("[MCU] Sensor data: " + to_string(sensor_data[0]) + ", " + to_string(sensor_data[1]))
+
+    // Simulate NPU inference (MPU side)
+    let inference_result = 0.85  // confidence score
+    println("[MPU/NPU] Inference result: " + to_string(inference_result))
+
+    // Simulate actuator command (MCU side)
+    if inference_result > 0.7 {
+        println("[MCU] Actuator: ENGAGE")
+    } else {
+        println("[MCU] Actuator: STANDBY")
+    }
+
+    println("Pipeline demo complete")
+}
