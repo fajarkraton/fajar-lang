@@ -391,55 +391,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S25 — Analyzer in .fj
 
-- [ ] S25.1 — Type Checker Core: Implement `fn type_check(program: Program) -> Result<(), Vec<Error>>` in Fajar Lang
-- [ ] S25.2 — Scope Resolution: Implement symbol table with nested scopes, variable lookup, and shadowing in .fj
-- [ ] S25.3 — Type Unification: Implement Hindley-Milner-style type unification for generic type inference in .fj
-- [ ] S25.4 — Borrow Checker: Implement move tracking and borrow analysis using NLL-style control flow in .fj
-- [ ] S25.5 — Context Checker: Implement @kernel/@device/@safe context validation logic in Fajar Lang
-- [ ] S25.6 — Error Collection: Collect all semantic errors with spans and error codes, matching Rust analyzer output
-- [ ] S25.7 — Trait Resolution: Implement trait impl lookup, method resolution, and blanket impl handling in .fj
-- [ ] S25.8 — Const Evaluation: Implement compile-time constant expression evaluation in Fajar Lang
-- [ ] S25.9 — Cross-Validation: Run both Rust and .fj analyzers on test suite, verify identical error output
-- [ ] S25.10 — Unit Tests: 20+ tests comparing Rust analyzer output with .fj analyzer output for identical programs
+- [x] S25.1 — Type Checker Core: Implement `fn type_check(program: Program) -> Result<(), Vec<Error>>` in Fajar Lang
+- [x] S25.2 — Scope Resolution: Implement symbol table with nested scopes, variable lookup, and shadowing in .fj
+- [x] S25.3 — Type Unification: Implement Hindley-Milner-style type unification for generic type inference in .fj
+- [x] S25.4 — Borrow Checker: Implement move tracking and borrow analysis using NLL-style control flow in .fj
+- [x] S25.5 — Context Checker: Implement @kernel/@device/@safe context validation logic in Fajar Lang
+- [x] S25.6 — Error Collection: Collect all semantic errors with spans and error codes, matching Rust analyzer output
+- [x] S25.7 — Trait Resolution: Implement trait impl lookup, method resolution, and blanket impl handling in .fj
+- [x] S25.8 — Const Evaluation: Implement compile-time constant expression evaluation in Fajar Lang
+- [x] S25.9 — Cross-Validation: Run both Rust and .fj analyzers on test suite, verify identical error output
+- [x] S25.10 — Unit Tests: 20+ tests comparing Rust analyzer output with .fj analyzer output for identical programs
 
 ### Sprint S26 — Codegen in .fj
 
-- [ ] S26.1 — Cranelift IR Builder: Implement Cranelift IR generation from Fajar Lang AST, written in .fj
-- [ ] S26.2 — Function Compilation: Compile function declarations to Cranelift functions with correct ABI in .fj
-- [ ] S26.3 — Expression Lowering: Lower all expression types (binary, unary, call, field access, index) to IR in .fj
-- [ ] S26.4 — Control Flow Lowering: Lower if/else, while, for, loop, match to Cranelift basic blocks in .fj
-- [ ] S26.5 — Type Mapping: Map Fajar Lang types to Cranelift types (i8-i128, f32, f64, pointer) in .fj
-- [ ] S26.6 — Runtime Function Calls: Generate calls to fj_rt_* runtime functions from .fj codegen
-- [ ] S26.7 — String Operations: Generate string allocation, concatenation, and comparison code in .fj
-- [ ] S26.8 — Struct Layout: Compute struct field offsets and generate struct access code in .fj
-- [ ] S26.9 — Object File Emission: Generate ELF/Mach-O object files from Cranelift module in .fj
-- [ ] S26.10 — Unit Tests: 20+ tests comparing native codegen output between Rust and .fj compiler backends
+- [x] S26.1 — Cranelift IR Builder: Implement Cranelift IR generation from Fajar Lang AST, written in .fj
+- [x] S26.2 — Function Compilation: Compile function declarations to Cranelift functions with correct ABI in .fj
+- [x] S26.3 — Expression Lowering: Lower all expression types (binary, unary, call, field access, index) to IR in .fj
+- [x] S26.4 — Control Flow Lowering: Lower if/else, while, for, loop, match to Cranelift basic blocks in .fj
+- [x] S26.5 — Type Mapping: Map Fajar Lang types to Cranelift types (i8-i128, f32, f64, pointer) in .fj
+- [x] S26.6 — Runtime Function Calls: Generate calls to fj_rt_* runtime functions from .fj codegen
+- [x] S26.7 — String Operations: Generate string allocation, concatenation, and comparison code in .fj
+- [x] S26.8 — Struct Layout: Compute struct field offsets and generate struct access code in .fj
+- [x] S26.9 — Object File Emission: Generate ELF/Mach-O object files from Cranelift module in .fj
+- [x] S26.10 — Unit Tests: 20+ tests comparing native codegen output between Rust and .fj compiler backends
 
 ### Sprint S27 — Bootstrap Chain
 
-- [ ] S27.1 — Stage 0 (Rust): Existing Rust compiler produces `fj-stage0` binary from `cargo build --release`
-- [ ] S27.2 — Stage 1 (fj-compiled): Use `fj-stage0` to compile the .fj compiler source, producing `fj-stage1`
-- [ ] S27.3 — Stage 2 (self-compiled): Use `fj-stage1` to compile the .fj compiler source again, producing `fj-stage2`
-- [ ] S27.4 — Binary Comparison: Verify `fj-stage1` and `fj-stage2` produce identical output (byte-for-byte)
-- [ ] S27.5 — Test Suite Validation: Run full test suite through `fj-stage1` — all 3,000+ tests must pass
-- [ ] S27.6 — Performance Comparison: Benchmark `fj-stage0` vs `fj-stage1` — self-compiled within 2x of Rust-compiled
-- [ ] S27.7 — Error Message Parity: Verify error messages from `fj-stage1` match `fj-stage0` exactly
-- [ ] S27.8 — Bootstrap Script: `scripts/bootstrap.sh` automates Stage 0 -> Stage 1 -> Stage 2 -> verify pipeline
-- [ ] S27.9 — CI Bootstrap: GitHub Actions job that runs full bootstrap chain on every PR to self-hosting code
-- [ ] S27.10 — Unit Tests: 10+ tests for bootstrap script correctness, binary hash comparison, test suite passthrough
+- [x] S27.1 — Stage 0 (Rust): Existing Rust compiler produces `fj-stage0` binary from `cargo build --release`
+- [x] S27.2 — Stage 1 (fj-compiled): Use `fj-stage0` to compile the .fj compiler source, producing `fj-stage1`
+- [x] S27.3 — Stage 2 (self-compiled): Use `fj-stage1` to compile the .fj compiler source again, producing `fj-stage2`
+- [x] S27.4 — Binary Comparison: Verify `fj-stage1` and `fj-stage2` produce identical output (byte-for-byte)
+- [x] S27.5 — Test Suite Validation: Run full test suite through `fj-stage1` — all 3,000+ tests must pass
+- [x] S27.6 — Performance Comparison: Benchmark `fj-stage0` vs `fj-stage1` — self-compiled within 2x of Rust-compiled
+- [x] S27.7 — Error Message Parity: Verify error messages from `fj-stage1` match `fj-stage0` exactly
+- [x] S27.8 — Bootstrap Script: `scripts/bootstrap.sh` automates Stage 0 -> Stage 1 -> Stage 2 -> verify pipeline
+- [x] S27.9 — CI Bootstrap: GitHub Actions job that runs full bootstrap chain on every PR to self-hosting code
+- [x] S27.10 — Unit Tests: 10+ tests for bootstrap script correctness, binary hash comparison, test suite passthrough
 
 ### Sprint S28 — Reproducibility
 
-- [ ] S28.1 — Deterministic Compilation: Eliminate all sources of non-determinism (HashMap iteration, timestamps, addresses)
-- [ ] S28.2 — Source Hash Embedding: Embed SHA-256 of source files in compiled binary for provenance tracking
-- [ ] S28.3 — Compiler Version Embedding: Embed compiler version and git commit hash in binary metadata section
-- [ ] S28.4 — Cross-Platform Reproducibility: Same source produces identical binary on Linux x86_64, Linux ARM64, macOS ARM64
-- [ ] S28.5 — Reproducible Builds Spec: Document all inputs (source, compiler version, flags, target) that affect output
-- [ ] S28.6 — Binary Diff Tool: `fj diff binary1 binary2` shows section-by-section comparison for debugging mismatches
-- [ ] S28.7 — Build Cache: Content-addressable build cache keyed by (source_hash, compiler_hash, flags_hash, target)
-- [ ] S28.8 — Verification Script: `scripts/verify-reproducible.sh` builds twice, compares hashes, reports pass/fail
-- [ ] S28.9 — Third-Party Verification: Document process for independent parties to verify build reproducibility
-- [ ] S28.10 — Unit Tests: 12+ tests for determinism, hash embedding, cross-platform parity, cache hit/miss, diff tool
+- [x] S28.1 — Deterministic Compilation: Eliminate all sources of non-determinism (HashMap iteration, timestamps, addresses)
+- [x] S28.2 — Source Hash Embedding: Embed SHA-256 of source files in compiled binary for provenance tracking
+- [x] S28.3 — Compiler Version Embedding: Embed compiler version and git commit hash in binary metadata section
+- [x] S28.4 — Cross-Platform Reproducibility: Same source produces identical binary on Linux x86_64, Linux ARM64, macOS ARM64
+- [x] S28.5 — Reproducible Builds Spec: Document all inputs (source, compiler version, flags, target) that affect output
+- [x] S28.6 — Binary Diff Tool: `fj diff binary1 binary2` shows section-by-section comparison for debugging mismatches
+- [x] S28.7 — Build Cache: Content-addressable build cache keyed by (source_hash, compiler_hash, flags_hash, target)
+- [x] S28.8 — Verification Script: `scripts/verify-reproducible.sh` builds twice, compares hashes, reports pass/fail
+- [x] S28.9 — Third-Party Verification: Document process for independent parties to verify build reproducibility
+- [x] S28.10 — Unit Tests: 12+ tests for determinism, hash embedding, cross-platform parity, cache hit/miss, diff tool
 
 ---
 

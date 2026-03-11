@@ -42,6 +42,7 @@ pub mod parser;
 pub mod playground;
 pub mod rtos;
 pub mod runtime;
+pub mod selfhost;
 pub mod stdlib;
 pub mod testing;
 pub mod verification;
