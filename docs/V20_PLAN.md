@@ -217,55 +217,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S13 — Execution Counter
 
-- [ ] S13.1 — Per-Function Counter: Add `call_count: AtomicU64` to each function metadata in the interpreter environment
-- [ ] S13.2 — Counter Increment: Increment counter on every function entry in both interpreter and bytecode VM
-- [ ] S13.3 — Hot Function Threshold: Define configurable threshold (default: 100 calls) for baseline JIT promotion
-- [ ] S13.4 — Super-Hot Threshold: Define second threshold (default: 10,000 calls) for optimizing JIT promotion
-- [ ] S13.5 — Loop Back-Edge Counter: Count loop back-edge executions for hot loop detection independent of function calls
-- [ ] S13.6 — Sampling Profiler: Lightweight sampling profiler (1ms interval) recording current function at each tick
-- [ ] S13.7 — Call Graph Recording: Record caller-callee pairs for inlining decisions in optimizing tier
-- [ ] S13.8 — Type Profiling: Record observed argument types at call sites for speculative optimization
-- [ ] S13.9 — CLI Configuration: `fj run --jit-threshold=200 --opt-threshold=5000` for tuning tier promotion
-- [ ] S13.10 — Unit Tests: 12+ tests for counter accuracy, threshold detection, loop counting, type profiling recording
+- [x] S13.1 — Per-Function Counter: Add `call_count: AtomicU64` to each function metadata in the interpreter environment
+- [x] S13.2 — Counter Increment: Increment counter on every function entry in both interpreter and bytecode VM
+- [x] S13.3 — Hot Function Threshold: Define configurable threshold (default: 100 calls) for baseline JIT promotion
+- [x] S13.4 — Super-Hot Threshold: Define second threshold (default: 10,000 calls) for optimizing JIT promotion
+- [x] S13.5 — Loop Back-Edge Counter: Count loop back-edge executions for hot loop detection independent of function calls
+- [x] S13.6 — Sampling Profiler: Lightweight sampling profiler (1ms interval) recording current function at each tick
+- [x] S13.7 — Call Graph Recording: Record caller-callee pairs for inlining decisions in optimizing tier
+- [x] S13.8 — Type Profiling: Record observed argument types at call sites for speculative optimization
+- [x] S13.9 — CLI Configuration: `fj run --jit-threshold=200 --opt-threshold=5000` for tuning tier promotion
+- [x] S13.10 — Unit Tests: 12+ tests for counter accuracy, threshold detection, loop counting, type profiling recording
 
 ### Sprint S14 — Baseline JIT
 
-- [ ] S14.1 — Baseline Compiler Entry: When function reaches hot threshold, trigger baseline JIT compilation
-- [ ] S14.2 — Fast IR Translation: Translate AST directly to Cranelift IR without optimization passes (sub-millisecond)
-- [ ] S14.3 — No Optimization: Skip all optimizations (no inlining, no CSE, no DCE) — compile speed is the priority
-- [ ] S14.4 — Simple Register Allocation: Use Cranelift's fast regalloc mode for minimal register allocation overhead
-- [ ] S14.5 — Code Patching: Patch interpreter call sites to jump directly to JIT-compiled code on subsequent calls
-- [ ] S14.6 — Baseline Code Cache: Store compiled code in memory-mapped executable pages, keyed by function identity
-- [ ] S14.7 — Deoptimization Hooks: Embed deopt points in baseline code for falling back to interpreter when needed
-- [ ] S14.8 — Stack Frame Compatibility: Baseline JIT frames must be walkable by the interpreter for mixed-mode execution
-- [ ] S14.9 — Compilation Metrics: Track time-to-first-execution, compilation latency, code size per baseline function
-- [ ] S14.10 — Unit Tests: 15+ tests for baseline compilation correctness, sub-ms compile time, cache lookup, deopt hooks
+- [x] S14.1 — Baseline Compiler Entry: When function reaches hot threshold, trigger baseline JIT compilation
+- [x] S14.2 — Fast IR Translation: Translate AST directly to Cranelift IR without optimization passes (sub-millisecond)
+- [x] S14.3 — No Optimization: Skip all optimizations (no inlining, no CSE, no DCE) — compile speed is the priority
+- [x] S14.4 — Simple Register Allocation: Use Cranelift's fast regalloc mode for minimal register allocation overhead
+- [x] S14.5 — Code Patching: Patch interpreter call sites to jump directly to JIT-compiled code on subsequent calls
+- [x] S14.6 — Baseline Code Cache: Store compiled code in memory-mapped executable pages, keyed by function identity
+- [x] S14.7 — Deoptimization Hooks: Embed deopt points in baseline code for falling back to interpreter when needed
+- [x] S14.8 — Stack Frame Compatibility: Baseline JIT frames must be walkable by the interpreter for mixed-mode execution
+- [x] S14.9 — Compilation Metrics: Track time-to-first-execution, compilation latency, code size per baseline function
+- [x] S14.10 — Unit Tests: 15+ tests for baseline compilation correctness, sub-ms compile time, cache lookup, deopt hooks
 
 ### Sprint S15 — Optimizing JIT
 
-- [ ] S15.1 — Optimizing Compiler Entry: When baseline-compiled function reaches super-hot threshold, trigger opt compilation
-- [ ] S15.2 — Inlining Pass: Inline small functions (< 30 IR instructions) at call sites based on call graph data
-- [ ] S15.3 — CSE in JIT: Common subexpression elimination across basic blocks within hot functions
-- [ ] S15.4 — DCE in JIT: Dead code elimination removing unreachable branches based on type profile data
-- [ ] S15.5 — LICM in JIT: Loop-invariant code motion for hot loops, hoisting constants and invariant computations
-- [ ] S15.6 — Speculative Optimization: Use type profiles to specialize for observed types, insert type guards
-- [ ] S15.7 — Guard Failure Handling: On type guard failure, deoptimize to baseline JIT code (not interpreter)
-- [ ] S15.8 — Code Replacement: Atomically replace baseline code pointer with optimized code (no execution gap)
-- [ ] S15.9 — Optimization Metrics: Track speedup ratio (optimized vs baseline), compilation time, code size delta
-- [ ] S15.10 — Unit Tests: 15+ tests for inlining correctness, speculative optimization, guard failure, atomic replacement
+- [x] S15.1 — Optimizing Compiler Entry: When baseline-compiled function reaches super-hot threshold, trigger opt compilation
+- [x] S15.2 — Inlining Pass: Inline small functions (< 30 IR instructions) at call sites based on call graph data
+- [x] S15.3 — CSE in JIT: Common subexpression elimination across basic blocks within hot functions
+- [x] S15.4 — DCE in JIT: Dead code elimination removing unreachable branches based on type profile data
+- [x] S15.5 — LICM in JIT: Loop-invariant code motion for hot loops, hoisting constants and invariant computations
+- [x] S15.6 — Speculative Optimization: Use type profiles to specialize for observed types, insert type guards
+- [x] S15.7 — Guard Failure Handling: On type guard failure, deoptimize to baseline JIT code (not interpreter)
+- [x] S15.8 — Code Replacement: Atomically replace baseline code pointer with optimized code (no execution gap)
+- [x] S15.9 — Optimization Metrics: Track speedup ratio (optimized vs baseline), compilation time, code size delta
+- [x] S15.10 — Unit Tests: 15+ tests for inlining correctness, speculative optimization, guard failure, atomic replacement
 
 ### Sprint S16 — On-Stack Replacement
 
-- [ ] S16.1 — OSR Entry Points: Identify loop headers as valid OSR entry points in both interpreter and baseline code
-- [ ] S16.2 — State Capture: Capture local variable state at OSR point — interpreter locals to JIT register mapping
-- [ ] S16.3 — Mid-Loop Transition: Transfer execution from interpreter to JIT code mid-loop without restarting the loop
-- [ ] S16.4 — OSR Frame Construction: Build JIT stack frame from captured interpreter state, resume at correct IP
-- [ ] S16.5 — Deoptimization (JIT to Interpreter): On speculation failure, reconstruct interpreter frame from JIT state
-- [ ] S16.6 — Deopt Metadata: Embed per-OSR-point metadata mapping JIT registers back to interpreter local slots
-- [ ] S16.7 — Nested Loop OSR: Handle OSR for nested loops — inner loop promoted independently of outer loop
-- [ ] S16.8 — OSR Threshold: Trigger OSR when loop back-edge count exceeds threshold within a single invocation
-- [ ] S16.9 — Performance Validation: Benchmark long-running loops — OSR must show speedup within 100 iterations
-- [ ] S16.10 — Unit Tests: 15+ tests for mid-loop transition correctness, state capture, deoptimization, nested loops
+- [x] S16.1 — OSR Entry Points: Identify loop headers as valid OSR entry points in both interpreter and baseline code
+- [x] S16.2 — State Capture: Capture local variable state at OSR point — interpreter locals to JIT register mapping
+- [x] S16.3 — Mid-Loop Transition: Transfer execution from interpreter to JIT code mid-loop without restarting the loop
+- [x] S16.4 — OSR Frame Construction: Build JIT stack frame from captured interpreter state, resume at correct IP
+- [x] S16.5 — Deoptimization (JIT to Interpreter): On speculation failure, reconstruct interpreter frame from JIT state
+- [x] S16.6 — Deopt Metadata: Embed per-OSR-point metadata mapping JIT registers back to interpreter local slots
+- [x] S16.7 — Nested Loop OSR: Handle OSR for nested loops — inner loop promoted independently of outer loop
+- [x] S16.8 — OSR Threshold: Trigger OSR when loop back-edge count exceeds threshold within a single invocation
+- [x] S16.9 — Performance Validation: Benchmark long-running loops — OSR must show speedup within 100 iterations
+- [x] S16.10 — Unit Tests: 15+ tests for mid-loop transition correctness, state capture, deoptimization, nested loops
 
 ---
 

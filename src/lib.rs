@@ -31,6 +31,7 @@ pub mod formatter;
 pub mod hw;
 pub mod interpreter;
 pub mod iot;
+pub mod jit;
 pub mod lexer;
 pub mod linear;
 pub mod lsp;
