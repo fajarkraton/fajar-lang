@@ -101,55 +101,55 @@ No existing language combines formal verification + ML + bare metal in a single 
 
 ### Sprint S5 — Linearity Checker
 
-- [ ] S5.1 — Linear Annotation Syntax: Parse `linear` qualifier on types (`let handle: linear FileHandle = open("f")`)
-- [ ] S5.2 — AST Representation: Add `Linearity` enum (Linear, Affine, Unrestricted) to type system TypeExpr
-- [ ] S5.3 — Usage Tracking: Track each linear binding's usage count in analyzer — must be exactly 1
-- [ ] S5.4 — Unused Linear Error: Emit LE-level error when linear value goes out of scope without being consumed
-- [ ] S5.5 — Duplicate Linear Error: Emit LE-level error when linear value is used more than once (copy/clone forbidden)
-- [ ] S5.6 — Consume Syntax: Define `consume(handle)` built-in that explicitly destroys a linear value, returning inner data
-- [ ] S5.7 — Linear in Control Flow: Verify linearity across all branches (if/else must consume in both, match in all arms)
-- [ ] S5.8 — Linear in Loops: Forbid linear values inside loops unless consumed on every iteration with fresh rebinding
-- [ ] S5.9 — Linear Function Parameters: Linear params must be consumed in function body, not returned unconsumed
-- [ ] S5.10 — Unit Tests: 20+ tests for exact-once tracking, unused error, duplicate error, control flow, loop rejection
+- [x] S5.1 — Linear Annotation Syntax: Parse `linear` qualifier on types (`let handle: linear FileHandle = open("f")`)
+- [x] S5.2 — AST Representation: Add `Linearity` enum (Linear, Affine, Unrestricted) to type system TypeExpr
+- [x] S5.3 — Usage Tracking: Track each linear binding's usage count in analyzer — must be exactly 1
+- [x] S5.4 — Unused Linear Error: Emit LE-level error when linear value goes out of scope without being consumed
+- [x] S5.5 — Duplicate Linear Error: Emit LE-level error when linear value is used more than once (copy/clone forbidden)
+- [x] S5.6 — Consume Syntax: Define `consume(handle)` built-in that explicitly destroys a linear value, returning inner data
+- [x] S5.7 — Linear in Control Flow: Verify linearity across all branches (if/else must consume in both, match in all arms)
+- [x] S5.8 — Linear in Loops: Forbid linear values inside loops unless consumed on every iteration with fresh rebinding
+- [x] S5.9 — Linear Function Parameters: Linear params must be consumed in function body, not returned unconsumed
+- [x] S5.10 — Unit Tests: 20+ tests for exact-once tracking, unused error, duplicate error, control flow, loop rejection
 
 ### Sprint S6 — Resource Handles
 
-- [ ] S6.1 — FileHandle Type: Define `linear struct FileHandle { fd: i32 }` with `open()` -> FileHandle, `close(FileHandle)` -> ()
-- [ ] S6.2 — GpuBuffer Type: Define `linear struct GpuBuffer { ptr: *mut u8, size: usize, device: i32 }` for GPU memory
-- [ ] S6.3 — MigPartition Type: Define `linear struct MigPartition { id: u32, gpu: i32 }` for NVIDIA MIG slices
-- [ ] S6.4 — Must-Use Enforcement: Compiler error if a function returning a linear type has its result discarded
-- [ ] S6.5 — Linear Drop Trait: `trait LinearDrop { fn finalize(self) }` called instead of Drop for linear types
-- [ ] S6.6 — Resource Leak Detection: At function exit, verify all linear locals have been consumed or returned
-- [ ] S6.7 — Transfer Semantics: Linear values can be moved into function calls (transferred, not copied)
-- [ ] S6.8 — Linear Struct Fields: Structs containing linear fields are themselves linear (linearity propagation)
-- [ ] S6.9 — Linear Enums: Enum variants containing linear data make the entire enum linear
-- [ ] S6.10 — Unit Tests: 15+ tests for FileHandle lifecycle, GpuBuffer single-use, must-use, leak detection, propagation
+- [x] S6.1 — FileHandle Type: Define `linear struct FileHandle { fd: i32 }` with `open()` -> FileHandle, `close(FileHandle)` -> ()
+- [x] S6.2 — GpuBuffer Type: Define `linear struct GpuBuffer { ptr: *mut u8, size: usize, device: i32 }` for GPU memory
+- [x] S6.3 — MigPartition Type: Define `linear struct MigPartition { id: u32, gpu: i32 }` for NVIDIA MIG slices
+- [x] S6.4 — Must-Use Enforcement: Compiler error if a function returning a linear type has its result discarded
+- [x] S6.5 — Linear Drop Trait: `trait LinearDrop { fn finalize(self) }` called instead of Drop for linear types
+- [x] S6.6 — Resource Leak Detection: At function exit, verify all linear locals have been consumed or returned
+- [x] S6.7 — Transfer Semantics: Linear values can be moved into function calls (transferred, not copied)
+- [x] S6.8 — Linear Struct Fields: Structs containing linear fields are themselves linear (linearity propagation)
+- [x] S6.9 — Linear Enums: Enum variants containing linear data make the entire enum linear
+- [x] S6.10 — Unit Tests: 15+ tests for FileHandle lifecycle, GpuBuffer single-use, must-use, leak detection, propagation
 
 ### Sprint S7 — Borrowing Bridge
 
-- [ ] S7.1 — Temporary Borrow from Linear: `&linear_val` creates a temporary immutable borrow, linear value still consumed later
-- [ ] S7.2 — Borrow Scope Rules: Borrow from linear must not outlive the linear value's consumption point
-- [ ] S7.3 — Affine-to-Linear Promotion: Existing affine (move) types can be promoted to linear via `as linear` cast
-- [ ] S7.4 — Linear-to-Affine Demotion: `unsafe { demote(linear_val) }` converts linear to affine (opt-out, @unsafe only)
-- [ ] S7.5 — Linear-Safe Closures: Closures capturing linear values must consume them exactly once; FnOnce enforcement
-- [ ] S7.6 — Linear in Generics: `fn process<T: Linear>(val: T)` generic constraint for linear type bounds
-- [ ] S7.7 — Linear References: `&linear T` reference type that does not consume but restricts to read-only access
-- [ ] S7.8 — Reborrowing Rules: Cannot reborrow a linear reference — single borrow chain only
-- [ ] S7.9 — Linear + Ownership Interplay: Define precedence rules when linear meets existing ownership/borrow checker
-- [ ] S7.10 — Unit Tests: 15+ tests for temporary borrow, closure capture, generic bounds, promotion/demotion, reborrow rejection
+- [x] S7.1 — Temporary Borrow from Linear: `&linear_val` creates a temporary immutable borrow, linear value still consumed later
+- [x] S7.2 — Borrow Scope Rules: Borrow from linear must not outlive the linear value's consumption point
+- [x] S7.3 — Affine-to-Linear Promotion: Existing affine (move) types can be promoted to linear via `as linear` cast
+- [x] S7.4 — Linear-to-Affine Demotion: `unsafe { demote(linear_val) }` converts linear to affine (opt-out, @unsafe only)
+- [x] S7.5 — Linear-Safe Closures: Closures capturing linear values must consume them exactly once; FnOnce enforcement
+- [x] S7.6 — Linear in Generics: `fn process<T: Linear>(val: T)` generic constraint for linear type bounds
+- [x] S7.7 — Linear References: `&linear T` reference type that does not consume but restricts to read-only access
+- [x] S7.8 — Reborrowing Rules: Cannot reborrow a linear reference — single borrow chain only
+- [x] S7.9 — Linear + Ownership Interplay: Define precedence rules when linear meets existing ownership/borrow checker
+- [x] S7.10 — Unit Tests: 15+ tests for temporary borrow, closure capture, generic bounds, promotion/demotion, reborrow rejection
 
 ### Sprint S8 — Hardware Linear Safety
 
-- [ ] S8.1 — GPIO Pin Linearity: `linear struct GpioPin<const N: u8>` — each physical pin is a unique linear resource
-- [ ] S8.2 — Pin State Machine: GPIO transitions (Input -> Output -> Alternate) consume old state, produce new linear value
-- [ ] S8.3 — DMA Buffer Linearity: `linear struct DmaBuffer { phys_addr: usize, len: usize }` — exactly one owner at a time
-- [ ] S8.4 — DMA Transfer Protocol: `dma_start(consume buf: DmaBuffer) -> DmaFuture`, buffer reclaimed on completion
-- [ ] S8.5 — IRQ Handler Registration: `linear struct IrqRegistration { irq: u8 }` — must unregister before drop
-- [ ] S8.6 — MMIO Region Linearity: `linear struct MmioRegion { base: usize, size: usize }` — exclusive hardware access
-- [ ] S8.7 — Clock Gate Handle: `linear struct ClockGate { peripheral: u8 }` — enable/disable must be paired
-- [ ] S8.8 — Power Domain: `linear struct PowerDomain { id: u8 }` — power on/off lifecycle tracked by type system
-- [ ] S8.9 — @kernel Linear Integration: Linear types interact correctly with @kernel context restrictions
-- [ ] S8.10 — Unit Tests: 15+ tests for GPIO state machine, DMA lifecycle, IRQ registration, MMIO exclusivity, @kernel interop
+- [x] S8.1 — GPIO Pin Linearity: `linear struct GpioPin<const N: u8>` — each physical pin is a unique linear resource
+- [x] S8.2 — Pin State Machine: GPIO transitions (Input -> Output -> Alternate) consume old state, produce new linear value
+- [x] S8.3 — DMA Buffer Linearity: `linear struct DmaBuffer { phys_addr: usize, len: usize }` — exactly one owner at a time
+- [x] S8.4 — DMA Transfer Protocol: `dma_start(consume buf: DmaBuffer) -> DmaFuture`, buffer reclaimed on completion
+- [x] S8.5 — IRQ Handler Registration: `linear struct IrqRegistration { irq: u8 }` — must unregister before drop
+- [x] S8.6 — MMIO Region Linearity: `linear struct MmioRegion { base: usize, size: usize }` — exclusive hardware access
+- [x] S8.7 — Clock Gate Handle: `linear struct ClockGate { peripheral: u8 }` — enable/disable must be paired
+- [x] S8.8 — Power Domain: `linear struct PowerDomain { id: u8 }` — power on/off lifecycle tracked by type system
+- [x] S8.9 — @kernel Linear Integration: Linear types interact correctly with @kernel context restrictions
+- [x] S8.10 — Unit Tests: 15+ tests for GPIO state machine, DMA lifecycle, IRQ registration, MMIO exclusivity, @kernel interop
 
 ---
 

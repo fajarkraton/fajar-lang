@@ -32,6 +32,7 @@ pub mod hw;
 pub mod interpreter;
 pub mod iot;
 pub mod lexer;
+pub mod linear;
 pub mod lsp;
 pub mod package;
 pub mod parser;
