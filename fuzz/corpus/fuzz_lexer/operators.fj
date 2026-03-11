@@ -1,0 +1,19 @@
+fn ops() {
+    let a = 10 + 20 * 3 - 5 / 2
+    let b = a % 7
+    let c = 1 << 4
+    let d = c >> 2
+    let e = a & 0xFF
+    let f = e | 0x10
+    let g = f ^ 0x55
+    let h = !true
+    let i = a == b
+    let j = a != b
+    let k = a < b
+    let l = a <= b
+    let m = a > b
+    let n = a >= b
+    let o = true && false
+    let p = true || false
+    let q = 2 ** 10
+}

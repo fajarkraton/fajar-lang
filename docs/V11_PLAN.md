@@ -338,55 +338,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S21 — GitHub Actions CI
 
-- [ ] S21.1 — CI Workflow File: Create `.github/workflows/ci.yml` with push/PR triggers on main and develop
-- [ ] S21.2 — Linux x86_64 Job: Ubuntu 24.04 runner, cargo test + clippy + fmt, Rust stable + nightly
-- [ ] S21.3 — macOS ARM64 Job: macos-14 (M1) runner, cargo test, validate ARM64 codegen paths
-- [ ] S21.4 — Windows x86_64 Job: windows-latest runner, cargo test, MSVC and GNU toolchain variants
-- [ ] S21.5 — Feature Matrix: Test `--features native`, `--features gpu`, default features, and `--all-features`
-- [ ] S21.6 — Artifact Caching: Cache cargo registry, target directory, and compiled dependencies across runs
-- [ ] S21.7 — Test Result Reporting: Upload test results as GitHub check annotations, fail PR on any test failure
-- [ ] S21.8 — Clippy Enforcement: Run `cargo clippy -- -D warnings` as required check, block merge on warnings
-- [ ] S21.9 — Format Check: Run `cargo fmt -- --check` as required check, block merge on formatting issues
-- [ ] S21.10 — Badge Setup: Add CI status badge to README.md, link to workflow runs page
+- [x] S21.1 — CI Workflow File: Create `.github/workflows/ci.yml` with push/PR triggers on main and develop
+- [x] S21.2 — Linux x86_64 Job: Ubuntu 24.04 runner, cargo test + clippy + fmt, Rust stable + nightly
+- [x] S21.3 — macOS ARM64 Job: macos-14 (M1) runner, cargo test, validate ARM64 codegen paths
+- [x] S21.4 — Windows x86_64 Job: windows-latest runner, cargo test, MSVC and GNU toolchain variants
+- [x] S21.5 — Feature Matrix: Test `--features native`, `--features gpu`, default features, and `--all-features`
+- [x] S21.6 — Artifact Caching: Cache cargo registry, target directory, and compiled dependencies across runs
+- [x] S21.7 — Test Result Reporting: Upload test results as GitHub check annotations, fail PR on any test failure
+- [x] S21.8 — Clippy Enforcement: Run `cargo clippy -- -D warnings` as required check, block merge on warnings
+- [x] S21.9 — Format Check: Run `cargo fmt -- --check` as required check, block merge on formatting issues
+- [x] S21.10 — Badge Setup: Add CI status badge to README.md, link to workflow runs page
 
 ### Sprint S22 — Cross-Compilation Pipeline
 
-- [ ] S22.1 — ARM64 Linux Target: Cross-compile to aarch64-unknown-linux-gnu using cross-rs in CI
-- [ ] S22.2 — RISC-V Target: Cross-compile to riscv64gc-unknown-linux-gnu, validate binary headers
-- [ ] S22.3 — Windows x86_64 Target: Cross-compile from Linux to x86_64-pc-windows-gnu with MinGW
-- [ ] S22.4 — macOS ARM64 Target: Native build on macos-14 runner for aarch64-apple-darwin
-- [ ] S22.5 — Static Linking: Produce statically-linked binaries (musl on Linux) for zero-dependency deployment
-- [ ] S22.6 — Binary Size Optimization: Enable LTO, strip symbols, codegen-units=1 for minimal release binary
-- [ ] S22.7 — QEMU Smoke Test: Run cross-compiled ARM64/RISC-V binary under QEMU in CI to verify execution
-- [ ] S22.8 — Binary Size Tracking: Record binary size per target per commit, alert on >10% regression
-- [ ] S22.9 — Cross-Compile Matrix: CI job matrix: 4 targets * 2 profiles (debug + release) = 8 jobs
-- [ ] S22.10 — Unit Tests: Verify cross-compiled binaries produce correct output for hello.fj on each target
+- [x] S22.1 — ARM64 Linux Target: Cross-compile to aarch64-unknown-linux-gnu using cross-rs in CI
+- [x] S22.2 — RISC-V Target: Cross-compile to riscv64gc-unknown-linux-gnu, validate binary headers
+- [x] S22.3 — Windows x86_64 Target: Cross-compile from Linux to x86_64-pc-windows-gnu with MinGW
+- [x] S22.4 — macOS ARM64 Target: Native build on macos-14 runner for aarch64-apple-darwin
+- [x] S22.5 — Static Linking: Produce statically-linked binaries (musl on Linux) for zero-dependency deployment
+- [x] S22.6 — Binary Size Optimization: Enable LTO, strip symbols, codegen-units=1 for minimal release binary
+- [x] S22.7 — QEMU Smoke Test: Run cross-compiled ARM64/RISC-V binary under QEMU in CI to verify execution
+- [x] S22.8 — Binary Size Tracking: Record binary size per target per commit, alert on >10% regression
+- [x] S22.9 — Cross-Compile Matrix: CI job matrix: 4 targets * 2 profiles (debug + release) = 8 jobs
+- [x] S22.10 — Unit Tests: Verify cross-compiled binaries produce correct output for hello.fj on each target
 
 ### Sprint S23 — OSS-Fuzz Integration
 
-- [ ] S23.1 — Fuzz Targets: Create fuzz targets for lexer (arbitrary byte input), parser (token stream), analyzer
-- [ ] S23.2 — Grammar-Aware Fuzzer: Build grammar-aware fuzzer that generates syntactically-plausible .fj programs
-- [ ] S23.3 — Corpus Seeding: Seed fuzzer with all 24 example .fj programs and test case inputs
-- [ ] S23.4 — OSS-Fuzz Integration: Register project with Google OSS-Fuzz, create Dockerfile and build script
-- [ ] S23.5 — CI Fuzz Job: Run fuzzer for 5 minutes on each PR, report any crashes as test failures
-- [ ] S23.6 — Crash Reproduction: Script to reproduce fuzz crashes locally from OSS-Fuzz testcase artifacts
-- [ ] S23.7 — Coverage Tracking: Integrate fuzz coverage with Codecov/Coveralls to track explored code paths
-- [ ] S23.8 — Regression Corpus: Maintain corpus of previously-found crashes as permanent regression tests
-- [ ] S23.9 — Sanitizer Builds: Fuzz with AddressSanitizer, MemorySanitizer (where applicable to Rust unsafe)
-- [ ] S23.10 — Unit Tests: Verify fuzz targets build and run, test crash reproduction script
+- [x] S23.1 — Fuzz Targets: Create fuzz targets for lexer (arbitrary byte input), parser (token stream), analyzer
+- [x] S23.2 — Grammar-Aware Fuzzer: Build grammar-aware fuzzer that generates syntactically-plausible .fj programs
+- [x] S23.3 — Corpus Seeding: Seed fuzzer with all 24 example .fj programs and test case inputs
+- [x] S23.4 — OSS-Fuzz Integration: Register project with Google OSS-Fuzz, create Dockerfile and build script
+- [x] S23.5 — CI Fuzz Job: Run fuzzer for 5 minutes on each PR, report any crashes as test failures
+- [x] S23.6 — Crash Reproduction: Script to reproduce fuzz crashes locally from OSS-Fuzz testcase artifacts
+- [x] S23.7 — Coverage Tracking: Integrate fuzz coverage with Codecov/Coveralls to track explored code paths
+- [x] S23.8 — Regression Corpus: Maintain corpus of previously-found crashes as permanent regression tests
+- [x] S23.9 — Sanitizer Builds: Fuzz with AddressSanitizer, MemorySanitizer (where applicable to Rust unsafe)
+- [x] S23.10 — Unit Tests: Verify fuzz targets build and run, test crash reproduction script
 
 ### Sprint S24 — Release Automation
 
-- [ ] S24.1 — Semantic Versioning: Enforce semver via cargo-semver-checks, detect breaking API changes
-- [ ] S24.2 — Changelog Generation: Auto-generate CHANGELOG.md from conventional commits using git-cliff
-- [ ] S24.3 — Release Workflow: Create `.github/workflows/release.yml` triggered by version tag push (v*.*.*)
-- [ ] S24.4 — Binary Packaging (tar.gz): Package Linux/macOS binaries as .tar.gz with README and LICENSE
-- [ ] S24.5 — Binary Packaging (zip): Package Windows binary as .zip with README and LICENSE
-- [ ] S24.6 — Debian Package: Build .deb package for Ubuntu/Debian with proper metadata and postinst script
-- [ ] S24.7 — RPM Package: Build .rpm package for Fedora/RHEL with proper spec file
-- [ ] S24.8 — GitHub Release Upload: Upload all binary artifacts to GitHub Release with checksums (SHA256)
-- [ ] S24.9 — Install Script: Create `curl -sSf https://fajarlang.dev/install.sh | sh` installer
-- [ ] S24.10 — Unit Tests: Verify package contents, checksum generation, install script on clean container
+- [x] S24.1 — Semantic Versioning: Enforce semver via cargo-semver-checks, detect breaking API changes
+- [x] S24.2 — Changelog Generation: Auto-generate CHANGELOG.md from conventional commits using git-cliff
+- [x] S24.3 — Release Workflow: Create `.github/workflows/release.yml` triggered by version tag push (v*.*.*)
+- [x] S24.4 — Binary Packaging (tar.gz): Package Linux/macOS binaries as .tar.gz with README and LICENSE
+- [x] S24.5 — Binary Packaging (zip): Package Windows binary as .zip with README and LICENSE
+- [x] S24.6 — Debian Package: Build .deb package for Ubuntu/Debian with proper metadata and postinst script
+- [x] S24.7 — RPM Package: Build .rpm package for Fedora/RHEL with proper spec file
+- [x] S24.8 — GitHub Release Upload: Upload all binary artifacts to GitHub Release with checksums (SHA256)
+- [x] S24.9 — Install Script: Create `curl -sSf https://fajarlang.dev/install.sh | sh` installer
+- [x] S24.10 — Unit Tests: Verify package contents, checksum generation, install script on clean container
 
 ---
 

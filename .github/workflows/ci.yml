@@ -2,21 +2,23 @@ name: CI
 
 on:
   push:
-    branches: [main, master, "phase-*"]
+    branches: [main, master, develop, "phase-*"]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, develop]
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
+  # ── S21: Main CI Matrix ──────────────────────────────────────────────
   check:
     name: Check (${{ matrix.os }}, ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-14, windows-latest]
         rust: [stable, nightly]
 
     steps:
@@ -45,18 +47,138 @@ jobs:
       - name: Clippy lints
         run: cargo clippy -- -D warnings
 
-      - name: Run tests
+      - name: Run tests (default features)
         run: cargo test --all-targets
 
       - name: Run doc tests
         run: cargo test --doc
 
       - name: Compile benchmarks (no run)
+        if: matrix.os == 'ubuntu-24.04'
         run: cargo bench --no-run
 
+  # ── S21.5: Feature Matrix ────────────────────────────────────────────
+  features:
+    name: Features (${{ matrix.features }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - ""
+          - "--features native"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-features-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests (${{ matrix.features || 'default' }})
+        run: cargo test ${{ matrix.features }}
+
+  # ── S22: Cross-Compilation ───────────────────────────────────────────
+  cross-compile:
+    name: Cross (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04
+            cross: true
+          - target: riscv64gc-unknown-linux-gnu
+            os: ubuntu-24.04
+            cross: true
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-24.04
+            cross: true
+          - target: aarch64-apple-darwin
+            os: macos-14
+            cross: false
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04
+            cross: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-rs
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Build release binary (cross)
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build release binary (native)
+        if: "!matrix.cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Record binary size
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/fj"
+          if [ -f "${BIN}.exe" ]; then BIN="${BIN}.exe"; fi
+          if [ -f "${BIN}" ]; then
+            SIZE=$(stat -c%s "${BIN}" 2>/dev/null || stat -f%z "${BIN}" 2>/dev/null || echo "unknown")
+            echo "Binary size for ${{ matrix.target }}: ${SIZE} bytes"
+            echo "SIZE=${SIZE}" >> $GITHUB_ENV
+          fi
+
+      - name: Upload cross-compiled binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: fj-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/fj*
+          if-no-files-found: ignore
+
+  # ── S23: Fuzz (5-minute smoke) ───────────────────────────────────────
+  fuzz:
+    name: Fuzz Smoke Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Cache fuzz corpus
+        uses: actions/cache@v5
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.sha }}
+          restore-keys: fuzz-corpus-
+
+      - name: Fuzz lexer (60s)
+        run: cargo +nightly fuzz run fuzz_lexer -- -max_total_time=60
+        continue-on-error: true
+
+      - name: Fuzz parser (60s)
+        run: cargo +nightly fuzz run fuzz_parser -- -max_total_time=60
+        continue-on-error: true
+
+  # ── Coverage ─────────────────────────────────────────────────────────
   coverage:
     name: Code Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -66,7 +188,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
 
-      - name: Cache cargo registry & build
+      - name: Cache cargo
         uses: actions/cache@v5
         with:
           path: |

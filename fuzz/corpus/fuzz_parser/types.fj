@@ -1,0 +1,6 @@
+let x: i32 = 42
+let mut y: f64 = 3.14
+let name: str = "fajar"
+let flag: bool = true
+let ch: char = 'A'
+const MAX: usize = 1024

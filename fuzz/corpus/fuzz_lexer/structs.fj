@@ -1,0 +1,16 @@
+struct Point { x: f64, y: f64 }
+enum Shape { Circle(f64), Rect(f64, f64) }
+
+trait Drawable {
+    fn draw(self)
+}
+
+impl Drawable for Point {
+    fn draw(self) {
+        println(f"Point({self.x}, {self.y})")
+    }
+}
+
+fn pipeline_demo() {
+    5 |> double |> add_one
+}
