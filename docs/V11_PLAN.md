@@ -222,55 +222,55 @@ The gap between "it compiles" and "it runs on hardware" is the gap v1.1 closes. 
 
 ### Sprint S13 — Jetson Thor Platform
 
-- [ ] S13.1 — T4000/T5000 Detection: Identify Jetson Thor module variant via /proc/device-tree/model string
-- [ ] S13.2 — JetPack 7.1 SDK: Link against JetPack 7.1 CUDA libraries, validate SDK version at build time
-- [ ] S13.3 — AArch64 Cross-Compilation: Configure Cranelift for aarch64 target with Thor-specific CPU features
-- [ ] S13.4 — Device Tree Parsing: Read Thor device tree for memory layout, peripheral addresses, GPU configuration
-- [ ] S13.5 — L4T Integration: Integrate with Linux for Tegra (L4T) BSP for kernel module loading and device access
-- [ ] S13.6 — Thor CPU Config: Detect Cortex-A78AE + Grace CPU cores, configure thread affinity for RT tasks
-- [ ] S13.7 — Thor Memory Map: Map DRAM regions (up to 128GB), carve out GPU/DLA/PVA memory partitions
-- [ ] S13.8 — Boot Configuration: Generate Thor-compatible boot scripts for Fajar Lang firmware images
-- [ ] S13.9 — Platform Abstraction: `platform::jetson_thor()` returns ThorPlatform with all capabilities
-- [ ] S13.10 — Unit Tests: 10+ tests with mock device tree, cross-compilation smoke test, platform detection
+- [x] S13.1 — T4000/T5000 Detection: Identify Jetson Thor module variant via /proc/device-tree/model string
+- [x] S13.2 — JetPack 7.1 SDK: Link against JetPack 7.1 CUDA libraries, validate SDK version at build time
+- [x] S13.3 — AArch64 Cross-Compilation: Configure Cranelift for aarch64 target with Thor-specific CPU features
+- [x] S13.4 — Device Tree Parsing: Read Thor device tree for memory layout, peripheral addresses, GPU configuration
+- [x] S13.5 — L4T Integration: Integrate with Linux for Tegra (L4T) BSP for kernel module loading and device access
+- [x] S13.6 — Thor CPU Config: Detect Cortex-A78AE + Grace CPU cores, configure thread affinity for RT tasks
+- [x] S13.7 — Thor Memory Map: Map DRAM regions (up to 128GB), carve out GPU/DLA/PVA memory partitions
+- [x] S13.8 — Boot Configuration: Generate Thor-compatible boot scripts for Fajar Lang firmware images
+- [x] S13.9 — Platform Abstraction: `platform::jetson_thor()` returns ThorPlatform with all capabilities
+- [x] S13.10 — Unit Tests: 10+ tests with mock device tree, cross-compilation smoke test, platform detection
 
 ### Sprint S14 — Blackwell GPU on Thor
 
-- [ ] S14.1 — sm_101 Compute Capability: Register sm_101 in GPU feature database, map to Blackwell architecture
-- [ ] S14.2 — CUDA 13.0 API: Bind new CUDA 13.0 APIs for Blackwell features (TMA, cluster launch, DPX)
-- [ ] S14.3 — 5th Gen Tensor Core Access: Configure Tensor Core dispatch for FP4/FP8/BF16/INT8 matrix operations
-- [ ] S14.4 — FP4 Inference Path: End-to-end FP4 inference using Tensor Cores: quantize → compute → dequantize
-- [ ] S14.5 — FP8 Training Path: Mixed FP8 training with E4M3 forward, E5M2 backward, FP32 master weights
-- [ ] S14.6 — CUDA Graph Capture: Capture inference workload as CUDA graph for reduced kernel launch overhead
-- [ ] S14.7 — Unified Memory: Enable CUDA Unified Memory for Thor's coherent CPU-GPU memory architecture
-- [ ] S14.8 — Stream Management: Create and manage multiple CUDA streams for pipelined inference
-- [ ] S14.9 — Blackwell Feature Flags: Register all Blackwell features in HardwareProfile GPU capabilities
-- [ ] S14.10 — Unit Tests: 12+ tests for sm_101 detection, Tensor Core dispatch, FP4/FP8 paths, CUDA graphs
+- [x] S14.1 — sm_101 Compute Capability: Register sm_101 in GPU feature database, map to Blackwell architecture
+- [x] S14.2 — CUDA 13.0 API: Bind new CUDA 13.0 APIs for Blackwell features (TMA, cluster launch, DPX)
+- [x] S14.3 — 5th Gen Tensor Core Access: Configure Tensor Core dispatch for FP4/FP8/BF16/INT8 matrix operations
+- [x] S14.4 — FP4 Inference Path: End-to-end FP4 inference using Tensor Cores: quantize → compute → dequantize
+- [x] S14.5 — FP8 Training Path: Mixed FP8 training with E4M3 forward, E5M2 backward, FP32 master weights
+- [x] S14.6 — CUDA Graph Capture: Capture inference workload as CUDA graph for reduced kernel launch overhead
+- [x] S14.7 — Unified Memory: Enable CUDA Unified Memory for Thor's coherent CPU-GPU memory architecture
+- [x] S14.8 — Stream Management: Create and manage multiple CUDA streams for pipelined inference
+- [x] S14.9 — Blackwell Feature Flags: Register all Blackwell features in HardwareProfile GPU capabilities
+- [x] S14.10 — Unit Tests: 12+ tests for sm_101 detection, Tensor Core dispatch, FP4/FP8 paths, CUDA graphs
 
 ### Sprint S15 — MIG Partitioning
 
-- [ ] S15.1 — MIG Support Detection: Query GPU for MIG capability via NVML, check if MIG mode is enabled
-- [ ] S15.2 — Partition Enumeration: List existing MIG instances (GPU instances + compute instances) via NVML
-- [ ] S15.3 — Partition Creation: Create MIG GPU instance with specified profile (1g.10gb, 2g.20gb, etc.)
-- [ ] S15.4 — Compute Instance: Create compute instance within GPU instance for isolated execution
-- [ ] S15.5 — Per-Partition Inference: Bind CUDA context to specific MIG partition, run inference in isolation
-- [ ] S15.6 — Resource Isolation: Verify memory isolation between partitions (no cross-partition access)
-- [ ] S15.7 — Partition Destruction: Clean teardown of compute instance and GPU instance, release resources
-- [ ] S15.8 — MIG Configuration API: `gpu.mig_create(profile="1g.10gb")`, `gpu.mig_list()`, `gpu.mig_destroy(id)`
-- [ ] S15.9 — Multi-Tenant Inference: Demonstrate two models running simultaneously on separate MIG partitions
-- [ ] S15.10 — Unit Tests: 10+ tests with mock NVML, integration test on MIG-capable GPU if available
+- [x] S15.1 — MIG Support Detection: Query GPU for MIG capability via NVML, check if MIG mode is enabled
+- [x] S15.2 — Partition Enumeration: List existing MIG instances (GPU instances + compute instances) via NVML
+- [x] S15.3 — Partition Creation: Create MIG GPU instance with specified profile (1g.10gb, 2g.20gb, etc.)
+- [x] S15.4 — Compute Instance: Create compute instance within GPU instance for isolated execution
+- [x] S15.5 — Per-Partition Inference: Bind CUDA context to specific MIG partition, run inference in isolation
+- [x] S15.6 — Resource Isolation: Verify memory isolation between partitions (no cross-partition access)
+- [x] S15.7 — Partition Destruction: Clean teardown of compute instance and GPU instance, release resources
+- [x] S15.8 — MIG Configuration API: `gpu.mig_create(profile="1g.10gb")`, `gpu.mig_list()`, `gpu.mig_destroy(id)`
+- [x] S15.9 — Multi-Tenant Inference: Demonstrate two models running simultaneously on separate MIG partitions
+- [x] S15.10 — Unit Tests: 10+ tests with mock NVML, integration test on MIG-capable GPU if available
 
 ### Sprint S16 — Thor Power Management
 
-- [ ] S16.1 — NVPM API Bindings: Bind NVIDIA Power Manager API for reading/setting power modes
-- [ ] S16.2 — Power Mode Profiles: Define profiles: 10W (idle), 30W (inference), 60W (training), 130W (max perf)
-- [ ] S16.3 — Thermal Monitoring: Read GPU/CPU temperatures via thermal zones, trigger throttling at thresholds
-- [ ] S16.4 — Thermal Throttling API: `power::set_thermal_limit(85)` with automatic clock reduction on breach
-- [ ] S16.5 — Dynamic Frequency Scaling: Set GPU/CPU clock frequencies based on workload demand
-- [ ] S16.6 — Power Budget Allocation: Distribute power budget across CPU, GPU, DLA when all are active
-- [ ] S16.7 — Energy Measurement: Read power rail sensors for real-time wattage reporting per component
-- [ ] S16.8 — Power Profile API: `power::set_mode("30W")`, `power::current_watts()`, `power::thermal_status()`
-- [ ] S16.9 — Integration with Scheduler: Reduce inference batch size when thermal throttling is active
-- [ ] S16.10 — Unit Tests: 10+ tests with mock NVPM/thermal sensors, power mode transition verification
+- [x] S16.1 — NVPM API Bindings: Bind NVIDIA Power Manager API for reading/setting power modes
+- [x] S16.2 — Power Mode Profiles: Define profiles: 10W (idle), 30W (inference), 60W (training), 130W (max perf)
+- [x] S16.3 — Thermal Monitoring: Read GPU/CPU temperatures via thermal zones, trigger throttling at thresholds
+- [x] S16.4 — Thermal Throttling API: `power::set_thermal_limit(85)` with automatic clock reduction on breach
+- [x] S16.5 — Dynamic Frequency Scaling: Set GPU/CPU clock frequencies based on workload demand
+- [x] S16.6 — Power Budget Allocation: Distribute power budget across CPU, GPU, DLA when all are active
+- [x] S16.7 — Energy Measurement: Read power rail sensors for real-time wattage reporting per component
+- [x] S16.8 — Power Profile API: `power::set_mode("30W")`, `power::current_watts()`, `power::thermal_status()`
+- [x] S16.9 — Integration with Scheduler: Reduce inference batch size when thermal throttling is active
+- [x] S16.10 — Unit Tests: 10+ tests with mock NVPM/thermal sensors, power mode transition verification
 
 ---
 

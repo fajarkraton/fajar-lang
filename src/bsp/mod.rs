@@ -21,6 +21,7 @@
 pub mod dragonwing;
 pub mod esp32;
 pub mod hal;
+pub mod jetson_thor;
 pub mod rp2040;
 pub mod stm32f407;
 pub mod stm32h5;
@@ -373,6 +374,12 @@ pub fn board_by_name(name: &str) -> Option<Box<dyn Board>> {
         "ventuno-q" | "ventuno_q" | "arduino-ventuno-q" => {
             Some(Box::new(ventuno_q::VentunoQ::new()))
         }
+        "jetson-thor" | "jetson_thor" | "thor" => Some(Box::new(jetson_thor::JetsonThor::new(
+            jetson_thor::ThorVariant::T5000,
+        ))),
+        "jetson-thor-t4000" | "thor-t4000" => Some(Box::new(jetson_thor::JetsonThor::new(
+            jetson_thor::ThorVariant::T4000,
+        ))),
         _ => None,
     }
 }
@@ -386,6 +393,7 @@ pub fn supported_boards() -> Vec<&'static str> {
         "stm32h5f5",
         "dragonwing-iq8",
         "ventuno-q",
+        "jetson-thor",
     ]
 }
 
@@ -454,19 +462,24 @@ mod tests {
         assert!(board_by_name("ventuno-q").is_some());
         assert!(board_by_name("ventuno_q").is_some());
         assert!(board_by_name("arduino-ventuno-q").is_some());
+        assert!(board_by_name("jetson-thor").is_some());
+        assert!(board_by_name("jetson_thor").is_some());
+        assert!(board_by_name("thor").is_some());
+        assert!(board_by_name("jetson-thor-t4000").is_some());
         assert!(board_by_name("unknown_board").is_none());
     }
 
     #[test]
     fn supported_boards_list() {
         let boards = supported_boards();
-        assert_eq!(boards.len(), 6);
+        assert_eq!(boards.len(), 7);
         assert!(boards.contains(&"stm32f407"));
         assert!(boards.contains(&"esp32"));
         assert!(boards.contains(&"rp2040"));
         assert!(boards.contains(&"stm32h5f5"));
         assert!(boards.contains(&"dragonwing-iq8"));
         assert!(boards.contains(&"ventuno-q"));
+        assert!(boards.contains(&"jetson-thor"));
     }
 
     #[test]
