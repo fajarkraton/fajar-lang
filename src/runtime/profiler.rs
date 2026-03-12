@@ -55,11 +55,7 @@ impl FunctionProfile {
     ///
     /// Returns 0 if the function was never called.
     pub fn avg_time_us(&self) -> u64 {
-        if self.call_count == 0 {
-            0
-        } else {
-            self.total_time_us / self.call_count
-        }
+        self.total_time_us.checked_div(self.call_count).unwrap_or(0)
     }
 }
 

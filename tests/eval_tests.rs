@@ -1557,7 +1557,8 @@ fn hashmap_method_remove_keys_values() {
 
 #[test]
 fn file_write_and_read() {
-    let path = "/tmp/fajar_test_rw.txt";
+    let path = std::env::temp_dir().join("fajar_test_rw.txt");
+    let path = path.to_str().unwrap().replace('\\', "/");
     let src = format!(
         r#"
         fn main() -> void {{
@@ -1576,13 +1577,14 @@ fn file_write_and_read() {
     );
     let output = eval_output(&src);
     assert_eq!(output, vec!["written", "hello fajar"]);
-    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn file_append() {
-    let path = "/tmp/fajar_test_append.txt";
-    let _ = std::fs::remove_file(path);
+    let path = std::env::temp_dir().join("fajar_test_append.txt");
+    let path = path.to_str().unwrap().replace('\\', "/");
+    let _ = std::fs::remove_file(&path);
     let src = format!(
         r#"
         fn main() -> void {{
@@ -1598,13 +1600,14 @@ fn file_append() {
     );
     let output = eval_output(&src);
     assert_eq!(output, vec!["hello world"]);
-    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn file_exists_check() {
-    let path = "/tmp/fajar_test_exists.txt";
-    let _ = std::fs::remove_file(path);
+    let path = std::env::temp_dir().join("fajar_test_exists.txt");
+    let path = path.to_str().unwrap().replace('\\', "/");
+    let _ = std::fs::remove_file(&path);
     let src = format!(
         r#"
         fn main() -> void {{
@@ -1616,7 +1619,7 @@ fn file_exists_check() {
     );
     let output = eval_output(&src);
     assert_eq!(output, vec!["false", "true"]);
-    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(&path);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
