@@ -18,6 +18,7 @@
 //!     LinkerScript / StartupCode / VectorTable
 //! ```
 
+pub mod dragon_q6a;
 pub mod dragonwing;
 pub mod esp32;
 pub mod hal;
@@ -380,6 +381,9 @@ pub fn board_by_name(name: &str) -> Option<Box<dyn Board>> {
         "jetson-thor-t4000" | "thor-t4000" => Some(Box::new(jetson_thor::JetsonThor::new(
             jetson_thor::ThorVariant::T4000,
         ))),
+        "dragon-q6a" | "dragon_q6a" | "radxa-dragon-q6a" | "q6a" => {
+            Some(Box::new(dragon_q6a::DragonQ6A::new_16gb()))
+        }
         _ => None,
     }
 }
@@ -394,6 +398,7 @@ pub fn supported_boards() -> Vec<&'static str> {
         "dragonwing-iq8",
         "ventuno-q",
         "jetson-thor",
+        "dragon-q6a",
     ]
 }
 
@@ -466,13 +471,17 @@ mod tests {
         assert!(board_by_name("jetson_thor").is_some());
         assert!(board_by_name("thor").is_some());
         assert!(board_by_name("jetson-thor-t4000").is_some());
+        assert!(board_by_name("dragon-q6a").is_some());
+        assert!(board_by_name("dragon_q6a").is_some());
+        assert!(board_by_name("radxa-dragon-q6a").is_some());
+        assert!(board_by_name("q6a").is_some());
         assert!(board_by_name("unknown_board").is_none());
     }
 
     #[test]
     fn supported_boards_list() {
         let boards = supported_boards();
-        assert_eq!(boards.len(), 7);
+        assert_eq!(boards.len(), 8);
         assert!(boards.contains(&"stm32f407"));
         assert!(boards.contains(&"esp32"));
         assert!(boards.contains(&"rp2040"));
@@ -480,6 +489,7 @@ mod tests {
         assert!(boards.contains(&"dragonwing-iq8"));
         assert!(boards.contains(&"ventuno-q"));
         assert!(boards.contains(&"jetson-thor"));
+        assert!(boards.contains(&"dragon-q6a"));
     }
 
     #[test]
