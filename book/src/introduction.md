@@ -49,10 +49,16 @@ fn main() {
 
 ## Current Status
 
-Fajar Lang v1.0 includes:
-- Full compiler pipeline (lexer, parser, type checker, interpreter, native codegen)
-- Cranelift-based JIT and AOT compilation for x86_64, aarch64, and riscv64
-- Complete ML runtime (tensors, autograd, optimizers, layers, quantization)
-- OS runtime (memory management, interrupts, syscalls, DMA, timers)
-- QEMU-based testing for cross-compiled binaries
-- 1300+ tests, 15 examples, 12 benchmarks
+Fajar Lang v3.0 "Singularity" is the latest stable release:
+
+- **3 compiler backends** — Cranelift (JIT+AOT), LLVM (O0-O3), WebAssembly
+- **Advanced type system** — dependent types, linear types, higher-kinded types, GAT
+- **Formal verification** — `requires`/`ensures`/`invariant` with SMT solver support
+- **Full ML stack** — tensors, autograd, Transformer, diffusion models, RL agents, GPU training
+- **OS + embedded** — bare metal, RTOS (FreeRTOS/Zephyr), BSP, IoT (WiFi/BLE/MQTT/LoRaWAN)
+- **GPU codegen** — native PTX (CUDA) and SPIR-V (Vulkan) emission
+- **Structured concurrency** — nurseries, cancellation tokens, flow control
+- **Distributed computing** — actor model, Raft consensus, CRDTs
+- **Production deployment** — containers, observability, runtime management, security
+- **Time-travel debugger** — record/replay, reverse stepping, flame graphs
+- **5,144 tests**, 49 examples, ~230K lines of Rust

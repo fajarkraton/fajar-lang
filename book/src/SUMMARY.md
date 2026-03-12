@@ -23,6 +23,23 @@
 - [Test Framework](./reference/testing.md)
 - [Modules](./reference/modules.md)
 
+# Advanced Type System
+
+- [Algebraic Effects](./advanced/effects.md)
+- [Macros](./advanced/macros.md)
+- [Compile-Time Evaluation](./advanced/comptime.md)
+- [Dependent Types](./advanced/dependent-types.md)
+- [Linear Types](./advanced/linear-types.md)
+- [Higher-Kinded Types](./advanced/hkt.md)
+- [Formal Verification](./advanced/verification.md)
+
+# Compilation
+
+- [LLVM Backend](./compilation/llvm.md)
+- [WebAssembly](./compilation/wasm.md)
+- [Incremental Compilation](./compilation/incremental.md)
+- [Security Hardening](./compilation/security.md)
+
 # Concurrency
 
 - [Threads](./concurrency/threads.md)
@@ -30,6 +47,8 @@
 - [Mutexes & Synchronization](./concurrency/mutexes.md)
 - [Atomic Operations](./concurrency/atomics.md)
 - [Async/Await](./concurrency/async-await.md)
+- [Structured Concurrency](./concurrency/structured.md)
+- [Distributed Computing](./concurrency/distributed.md)
 
 # Embedded ML
 
@@ -37,6 +56,12 @@
 - [Neural Networks](./ml/neural-networks.md)
 - [Training](./ml/training.md)
 - [Embedded Inference](./ml/embedded-inference.md)
+- [Advanced ML](./ml/advanced-ml.md)
+
+# GPU Computing
+
+- [GPU Codegen (PTX & SPIR-V)](./gpu/ptx-spirv.md)
+- [GPU-Accelerated Training](./gpu/training.md)
 
 # OS Development
 
@@ -45,6 +70,20 @@
 - [Interrupts](./os/interrupts.md)
 - [System Calls](./os/syscalls.md)
 - [Cross-Domain Bridges](./os/bridges.md)
+
+# Embedded & IoT
+
+- [Board Support Packages](./embedded/bsp.md)
+- [RTOS Integration](./embedded/rtos.md)
+- [IoT Connectivity](./embedded/iot.md)
+- [Power Management](./embedded/power.md)
+
+# Production Deployment
+
+- [Container Deployment](./deployment/containers.md)
+- [Observability](./deployment/observability.md)
+- [Runtime Management](./deployment/runtime.md)
+- [Production Security](./deployment/security.md)
 
 # Tutorials
 
@@ -56,6 +95,7 @@
 - [CLI Reference](./tools/cli.md)
 - [Formatter](./tools/formatter.md)
 - [LSP Server](./tools/lsp.md)
+- [Debugger](./tools/debugger.md)
 - [Package Manager](./tools/packages.md)
 
 # Demos
