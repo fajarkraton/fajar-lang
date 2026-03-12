@@ -254,7 +254,7 @@ mod tests {
         assert!(result.is_ok());
         let pkg = result.unwrap();
         assert_eq!(pkg.config.package.name, "fj-hal");
-        assert_eq!(pkg.version, SemVer::new(0, 1, 0));
+        assert_eq!(pkg.version, SemVer::new(3, 0, 0));
     }
 
     #[test]

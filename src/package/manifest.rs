@@ -446,7 +446,7 @@ name = "app"
                 let config = ProjectConfig::from_file(&manifest)
                     .unwrap_or_else(|e| panic!("{pkg}/fj.toml failed to parse: {e}"));
                 assert_eq!(config.package.name, *pkg);
-                assert_eq!(config.package.version, "0.1.0");
+                assert_eq!(config.package.version, "3.0.0");
             }
         }
     }
