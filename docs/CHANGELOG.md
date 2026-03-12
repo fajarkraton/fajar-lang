@@ -18,6 +18,38 @@ Kategori perubahan:
 
 ---
 
+## [3.0.0] — 2026-03-12 "Singularity"
+
+### Added
+- **Phase 1 — Higher-Kinded Types** (`src/hkt/`): `TypeConstructor` with kind system (`Kind::Star`, `Kind::Arrow`), `HktApplication` with kind checking, `Functor`/`Monad`/`Applicative` trait encoding, `MonadTransformer` stack composition, `TypeLambda` with beta reduction, `TypeFamilyDef` with closed/open families and overlap checking
+- **Phase 2 — Structured Concurrency** (`src/concurrency_v2/`): `TaskScope` with structured spawning and join-all semantics, `Nursery` pattern (child tasks cancelled on parent exit), `CancellationToken` cooperative cancellation, `StructuredChannel` with scope-bound lifecycle, `FlowControl` (backpressure, rate limiting, windowing, batching), `ConcurrencyLimiter` with `Semaphore`-based slot control
+- **Phase 3 — Distributed Computing** (`src/distributed/`): `ActorSystem` with `ActorRef` message passing, `Supervisor` (one-for-one/all-for-one/rest-for-one), `ConsensusProtocol` with Raft (leader election, log replication, heartbeat), `DistributedKV` with consistent hashing and virtual nodes, `CrdtCounter`/`CrdtGCounter`/`CrdtLwwRegister`/`CrdtOrSet` with `CrdtMerge` trait, `RemoteActor` with `RpcCall`/`RpcResponse` serialization
+- **Phase 4 — Advanced ML v2** (`src/ml_advanced/`): `TransformerBlock` with multi-head self-attention, `InferenceEngine` with KV-cache and batched inference, `DiffusionModel` with `NoiseSchedule` (linear/cosine/sigmoid) and forward/reverse process, `DdpmSampler`/`DdimSampler`, `RlEnvironment` with `RlAgent` trait, `PolicyGradient` REINFORCE, `DqnAgent` with replay buffer and epsilon-greedy, `ModelServer` with request batching and health monitoring
+- **Phase 5 — Native GPU Codegen** (`src/gpu_codegen/`): `PtxModule` with PTX assembly emission (registers, types, thread indexing, shared memory, atomics), `SpirVModule` with SPIR-V word emission (capabilities, entry points, SSBOs, barriers), `FusionGraph` for kernel fusion (elementwise chains, reduction chains, memory planning, tile tuning), `DeviceAllocator` with best-fit free-list, `TransferDesc` for H2D/D2H/D2D, fragmentation analysis, `GpuTopology` for multi-GPU
+- **Phase 6 — Package Ecosystem v2** (`src/package_v2/`): `Workspace` with shared dependencies and topological build ordering, `BuildScript` with directive parsing and native library detection, `CfgPredicate` (All/Any/Not/KeyValue/Flag) with `CfgContext` evaluation, `FeatureSet` with transitive resolution, `TargetTriple` parsing with bare-metal detection, `BuildMatrix` generation, `QemuRunner`, `SupportTier` classification
+- **Phase 7 — Debugger v2** (`src/debugger_v2/`): `EventLog` execution recording with `DeltaPatch` compression, `RingBuffer` for size-limited recording, `RecordFilter` for selective capture, `ReplaySession` with forward/reverse stepping and continue, `Watchpoint` with `WatchCondition`, `RootCauseTrace`, `HeapMap` with fragmentation analysis, `RefGraph` cycle detection, `LeakReport`, `CpuProfile` with flame graph generation, `generate_hints()` for PGO suggestions
+- **Phase 8 — Production Deployment** (`src/deployment/`): `DockerConfig` with multi-stage Dockerfile generation (scratch/distroless/alpine), static linking (musl), `ComposeProject` YAML generation, `HealthReport` with component checks, `K8sDeployment` manifest generation, `HelmChart`, structured `Logger` with JSON output, `MetricsRegistry` (counter/gauge/histogram) with Prometheus exposition, `Span` distributed tracing (W3C traceparent), `AlertRule` evaluation, `ShutdownController` (phased hooks), `HotReloadConfig`, `FlagRegistry` with rollout%, `ConnectionDrainer`, `Supervisor` with exponential backoff, `RollingUpdate`, `MemoryLimiter`, `ThreadPoolConfig` adaptive scaling, `TlsConfig`, JWT validation, `RateLimiter` (token bucket), `CorsConfig`, `SecretStore`, `AuditLog`, input sanitization (XSS/SQL/command/path traversal), `audit_dependencies` CVE scanning
+
+### New Modules
+- `src/hkt/` — 4 files (constructors.rs, traits.rs, lambdas.rs, families.rs)
+- `src/concurrency_v2/` — 4 files (scope.rs, nursery.rs, flow.rs, limiter.rs)
+- `src/distributed/` — 4 files (actors.rs, consensus.rs, kv_store.rs, crdt.rs)
+- `src/ml_advanced/` — 4 files (transformer.rs, diffusion.rs, reinforcement.rs, serving.rs)
+- `src/gpu_codegen/` — 4 files (ptx.rs, spirv.rs, fusion.rs, gpu_memory.rs)
+- `src/package_v2/` — 4 files (workspaces.rs, build_scripts.rs, conditional.rs, cross_compile.rs)
+- `src/debugger_v2/` — 4 files (recording.rs, replay.rs, memory_viz.rs, profiling.rs)
+- `src/deployment/` — 4 files (containers.rs, observability.rs, runtime_mgmt.rs, security.rs)
+
+### Stats
+- New files: 32 source modules across 8 phases
+- New tests: ~540
+- Sprints: 32 (8 phases × 4 sprints)
+- Total: 320 tasks, all complete
+- Total tests: 5,163 (0 failures)
+- Total LOC: ~230,000 Rust
+
+---
+
 ## [2.0.0] — 2026-03-12 "Transcendence"
 
 ### Added

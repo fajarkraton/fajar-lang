@@ -6,8 +6,8 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-4%2C626_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-210K_Rust-blue)]()
+[![Tests](https://img.shields.io/badge/tests-5%2C163_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-230K_Rust-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Fajar Lang?
@@ -278,6 +278,11 @@ src/
     simd.rs           -- SIMD vector types + auto-vectorization
     async_io.rs       -- io_uring, TCP/UDP, HTTP, WebSocket
   debugger/           -- DAP server (breakpoints, stepping, variables)
+  debugger_v2/        -- Time-travel debugging, record/replay, profiling
+  deployment/         -- Containers, observability, runtime mgmt, security
+  gpu_codegen/        -- PTX + SPIR-V backends, kernel fusion, GPU memory
+  package_v2/         -- Workspaces, build scripts, cross-compilation
+  ml_advanced/        -- Transformer, diffusion, RL, model serving
   rtos/               -- FreeRTOS, Zephyr, RTIC integration
   iot/                -- WiFi, BLE, MQTT, LoRaWAN, OTA
   bsp/                -- Board support packages
@@ -298,11 +303,11 @@ docs/                 -- 44+ reference documents
 
 | Metric | Value |
 |--------|-------|
-| Rust LOC | ~194,000 |
-| Source files | 185 `.rs` files |
-| Tests | 3,392 (0 failures) |
+| Rust LOC | ~230,000 |
+| Source files | 210+ `.rs` files |
+| Tests | 5,163 (0 failures) |
 | Examples | 49 `.fj` programs |
-| Error codes | 71+ across 9 categories |
+| Error codes | 78+ across 9 categories |
 | Documentation | 44+ docs + 40-page mdBook |
 | Standard packages | 7 (math, nn, hal, drivers, http, json, crypto) |
 | Codegen backends | 3 (Cranelift, LLVM, WebAssembly) |
@@ -311,12 +316,14 @@ docs/                 -- 44+ reference documents
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **v2.0.0** | **Transcendence** | **Dependent types, linear types, formal verification, tiered JIT, effect system v2, GC mode, self-hosting v2, LSP v2** |
-| v1.0.0 | Genesis | First stable release — fuzzing, conformance testing, string interning, cross-platform distribution, LSP completion, documentation site, C/Python/Wasm interop, release engineering |
-| v0.9.0 | Convergence | Effect system, compile-time eval, macros, SIMD, security hardening, async I/O, editions |
-| v0.8.0 | Apex | GPU training, GAT, incremental compilation, model optimization, DAP debugger, LoRaWAN |
-| v0.7.0 | Zenith | Wasm, ESP32 IoT, Polonius borrow checker, Transformer, PGO, RTIC, package signing |
-| v0.6.0 | Horizon | LLVM backend, debugger, BSP, registry, lifetimes, RTOS, LSTM/GRU, VENTUNO Q |
+| **[v3.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v3.0.0)** | **Singularity** | **HKT, structured concurrency, distributed computing, advanced ML v2, GPU codegen (PTX/SPIR-V), package ecosystem v2, debugger v2, production deployment** |
+| [v2.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v2.0.0) | Transcendence | Dependent types, linear types, formal verification, tiered JIT, effect system v2, GC mode, self-hosting v2, LSP v2 |
+| [v1.1.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v1.1.0) | Ascension | Hardware discovery, NPU, FP8/BF16, Jetson Thor BSP, AVX-512/AMX, CI/CD, package registry, multi-accelerator, real-world demos |
+| [v1.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v1.0.0) | Genesis | First stable release — fuzzing, conformance testing, string interning, cross-platform distribution, LSP completion, documentation site, C/Python/Wasm interop, release engineering |
+| [v0.9.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.9.0) | Convergence | Effect system, compile-time eval, macros, SIMD, security hardening, async I/O, editions |
+| [v0.8.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.8.0) | Apex | GPU training, GAT, incremental compilation, model optimization, DAP debugger, LoRaWAN |
+| [v0.7.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.7.0) | Zenith | Wasm, ESP32 IoT, Polonius borrow checker, Transformer, PGO, RTIC, package signing |
+| [v0.6.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.6.0) | Horizon | LLVM backend, debugger, BSP, registry, lifetimes, RTOS, LSTM/GRU, VENTUNO Q |
 | [v0.5.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.5.0) | Ascendancy | Test framework, doc comments, trait objects, iterators, string interpolation |
 | [v0.4.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.4.0) | Sovereignty | Generic enums, RAII/Drop, Future/Poll, lazy async |
 | [v0.3.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v0.3.0) | Dominion | Concurrency, async/await, ML native, self-hosting, bare metal |
