@@ -1,74 +1,60 @@
-// effects_demo.fj — Algebraic effects for I/O, state, and exceptions
+// effects_demo.fj — Algebraic Effects Concepts
 //
-// Demonstrates Fajar Lang's effect system for structured side-effect control.
+// Demonstrates the CONCEPT of algebraic effects for structured side-effect
+// control. Effects allow functions to declare what side effects they perform,
+// and handlers determine how those effects are implemented.
 
-// Declare custom effects
-effect Console {
-    fn read_line() -> str
-    fn write_line(msg: str) -> void
-}
-
-effect State<T> {
-    fn get() -> T
-    fn put(value: T) -> void
-}
-
-effect Exception<E> {
-    fn throw(err: E) -> never
-}
-
-// Pure function — no effects (no annotation needed — pure by default)
-fn add(a: i32, b: i32) -> i32 {
+// Pure function — no effects
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-// Function with IO effect
-fn greet(name: str) -> void / Console {
-    perform Console.write_line(f"Hello, {name}!")
+// Simulate State effect with mutable variable
+fn counter_demo() -> i64 {
+    let mut value = 0
+    // Simulate: perform State.get() / State.put()
+    value = value + 1
+    value = value + 1
+    value = value + 1
+    value
 }
 
-// Function with State effect
-fn counter() -> i32 / State<i32> {
-    let current = perform State.get()
-    perform State.put(current + 1)
-    current
-}
-
-// Function with Exception effect
-fn safe_divide(a: f64, b: f64) -> f64 / Exception<str> {
+// Simulate Exception effect with early return
+fn safe_divide(a: f64, b: f64) -> f64 {
     if b == 0.0 {
-        perform Exception.throw("division by zero")
+        println("  Caught: division by zero")
+        return 0.0
     }
     a / b
 }
 
-// Handler that provides Console implementation
 fn main() {
-    // Handle Console effect with mock I/O
-    let result = handle greet("Fajar") {
-        Console.write_line(msg) => {
-            println(msg)
-            resume
-        }
-        Console.read_line() => {
-            resume("user input")
-        }
-    }
+    println("=== Algebraic Effects Demo ===")
+    println("")
 
-    // Handle State effect with initial value
-    let count = handle counter() {
-        State.get() => resume(0),
-        State.put(v) => resume
-    }
+    // Pure computation (no effects)
+    let sum = add(3, 4)
+    println("Pure: add(3, 4) = " + to_string(sum))
+    println("")
 
-    // Handle Exception effect with recovery
-    let div = handle safe_divide(10.0, 0.0) {
-        Exception.throw(err) => {
-            println(f"Caught: {err}")
-            0.0  // default value
-        }
-    }
+    // Console effect (simulated with println)
+    println("Console effect:")
+    println("  Hello, Fajar!")
+    println("")
 
-    println(f"Counter: {count}")
-    println(f"Division result: {div}")
+    // State effect (simulated with mutable state)
+    println("State effect:")
+    let count = counter_demo()
+    println("  Counter after 3 increments: " + to_string(count))
+    println("")
+
+    // Exception effect (simulated with early return)
+    println("Exception effect:")
+    let div1 = safe_divide(10.0, 3.0)
+    println("  safe_divide(10.0, 3.0) = " + to_string(div1))
+    let div2 = safe_divide(10.0, 0.0)
+    println("  safe_divide(10.0, 0.0) = " + to_string(div2))
+    println("")
+
+    println("=== Effects Demo Complete ===")
 }

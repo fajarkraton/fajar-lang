@@ -22,7 +22,6 @@ const LED_BLUE: u32 = 15
 
 // ── Main Entry Point ────────────────────────────────────────────
 
-@kernel
 fn main() {
     // 1. Enable GPIOD clock (RCC AHB1ENR bit 3)
     let rcc_ahb1enr = RCC_BASE + RCC_AHB1ENR

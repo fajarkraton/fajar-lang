@@ -1,5 +1,4 @@
 // VENTUNO Q Blinky — LED blink on STM32H5 MCU via Zephyr GPIO
-@kernel
 fn main() {
     // GPIO pin for onboard LED
     let led_pin: u32 = 13  // PB13 on VENTUNO Q

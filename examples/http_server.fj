@@ -1,20 +1,18 @@
-// http_server.fj — Async HTTP server with routing and JSON
+// http_server.fj — HTTP Server Concepts
 //
-// Demonstrates Fajar Lang's async I/O and networking capabilities.
-
-use std::collections::HashMap
+// Demonstrates Fajar Lang's routing, JSON response building,
+// and request handling patterns. Uses a simulated request/response
+// cycle rather than actual networking.
 
 // JSON response helper
-fn json_response(status: i32, body: str) -> str {
-    let status_text = match status {
-        200 => "OK",
-        201 => "Created",
-        400 => "Bad Request",
-        404 => "Not Found",
-        500 => "Internal Server Error",
-        _ => "Unknown"
-    }
-    f"HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n{body}"
+fn json_response(status: i64, body: str) -> str {
+    let status_text = if status == 200 { "OK" }
+        else if status == 201 { "Created" }
+        else if status == 400 { "Bad Request" }
+        else if status == 404 { "Not Found" }
+        else if status == 500 { "Internal Server Error" }
+        else { "Unknown" }
+    "HTTP/1.1 " + to_string(status) + " " + status_text + "\r\nContent-Type: application/json\r\n\r\n" + body
 }
 
 // Route handlers
@@ -23,73 +21,68 @@ fn handle_index() -> str {
 }
 
 fn handle_health() -> str {
-    json_response(200, "{\"status\": \"healthy\", \"version\": \"0.9.0\"}")
+    json_response(200, "{\"status\": \"healthy\", \"version\": \"3.0.0\"}")
 }
 
 fn handle_predict(body: str) -> str {
-    // Simulate ML inference
-    let input = body  // parse JSON in real app
-    let confidence = 0.95
-    json_response(200, f"{{\"prediction\": \"cat\", \"confidence\": {confidence}}}")
+    json_response(200, "{\"prediction\": \"cat\", \"confidence\": 0.95}")
 }
 
 fn handle_not_found(path: str) -> str {
-    json_response(404, f"{{\"error\": \"Not found: {path}\"}}")
+    json_response(404, "{\"error\": \"Not found: " + path + "\"}")
 }
 
-// Middleware: request logging
+// Request logging middleware
 fn log_request(method: str, path: str) {
-    println(f"[{method}] {path}")
+    println("[" + method + "] " + path)
 }
 
-// Middleware: CORS headers
-fn add_cors_headers(response: str) -> str {
-    let cors = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST\r\n"
-    // Insert CORS headers before body
-    response
-}
+// Route dispatch
+fn dispatch(method: str, path: str) -> str {
+    log_request(method, path)
 
-// Main server
-async fn serve(addr: str, port: i32) {
-    let listener = tcp_bind(f"{addr}:{port}")
-    println(f"Listening on {addr}:{port}")
-
-    loop {
-        let stream = listener.accept().await
-        let request = stream.read().await
-
-        // Parse request line
-        let parts = request.split(" ")
-        let method = parts[0]
-        let path = parts[1]
-
-        // Log middleware
-        log_request(method, path)
-
-        // Route dispatch
-        let response = match path {
-            "/" => handle_index(),
-            "/health" => handle_health(),
-            "/predict" => {
-                if method == "POST" {
-                    handle_predict(request)
-                } else {
-                    json_response(400, "{\"error\": \"POST required\"}")
-                }
-            },
-            _ => handle_not_found(path)
-        }
-
-        // CORS middleware
-        let response = add_cors_headers(response)
-
-        // Send response
-        stream.write(response).await
-        stream.close().await
+    if path == "/" {
+        return handle_index()
     }
+    if path == "/health" {
+        return handle_health()
+    }
+    if path == "/predict" {
+        if method == "POST" {
+            return handle_predict("")
+        }
+        return json_response(400, "{\"error\": \"POST required\"}")
+    }
+    handle_not_found(path)
 }
 
 fn main() {
-    println("Starting Fajar Lang HTTP Server...")
-    serve("127.0.0.1", 8080)
+    println("=== Fajar Lang HTTP Server Demo ===")
+    println("")
+
+    // Simulate incoming requests
+    println("--- Simulated Request Handling ---")
+    println("")
+
+    let r1 = dispatch("GET", "/")
+    println("Response: " + r1)
+    println("")
+
+    let r2 = dispatch("GET", "/health")
+    println("Response: " + r2)
+    println("")
+
+    let r3 = dispatch("POST", "/predict")
+    println("Response: " + r3)
+    println("")
+
+    let r4 = dispatch("GET", "/unknown")
+    println("Response: " + r4)
+    println("")
+
+    let r5 = dispatch("GET", "/predict")
+    println("Response: " + r5)
+    println("")
+
+    println("=== Server Demo Complete ===")
 }

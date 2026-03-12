@@ -1,30 +1,10 @@
 // Mini OS Kernel Demo — Fajar Lang
 //
-// Demonstrates OS kernel CONCEPTS using native codegen builtins:
-// - Process table with HashMap (create, schedule, terminate)
+// Demonstrates OS kernel CONCEPTS:
+// - Process table with array-based storage (create, schedule, terminate)
 // - Round-robin scheduler with time quantum
 // - Simple shell command dispatch
 // - System statistics tracking
-//
-// In a real kernel these would use raw memory, IRQs, and context switching.
-// Here we model the abstractions to show the design patterns.
-
-// ═══════════════════════════════════════════════════════════════
-// Process helpers (state encoded as: state * 100 + priority)
-// States: 0=ready, 1=running, 2=blocked, 3=terminated
-// ═══════════════════════════════════════════════════════════════
-
-fn decode_state(entry: i64) -> i64 {
-    entry / 100
-}
-
-fn decode_priority(entry: i64) -> i64 {
-    entry - (entry / 100) * 100
-}
-
-fn encode_proc(state: i64, priority: i64) -> i64 {
-    state * 100 + priority
-}
 
 fn state_name(state: i64) -> str {
     if state == 0 { "READY" }
@@ -32,10 +12,6 @@ fn state_name(state: i64) -> str {
     else if state == 2 { "BLOCKED" }
     else { "TERMINATED" }
 }
-
-// ═══════════════════════════════════════════════════════════════
-// Scancode Table — PS/2 keyboard simulation
-// ═══════════════════════════════════════════════════════════════
 
 fn scancode_to_ascii(scancode: i64) -> i64 {
     if scancode == 30 { 97 }
@@ -55,52 +31,39 @@ fn scancode_to_ascii(scancode: i64) -> i64 {
     else { 0 }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Kernel Main
-// ═══════════════════════════════════════════════════════════════
-
 fn main() -> i64 {
-    println("=== Fajar OS v0.3 ===")
+    println("=== Fajar OS v3.0 ===")
     println("A mini kernel written in Fajar Lang")
     println("")
 
-    // ── Process table: PID -> encoded(state, priority) ─────────
-    let procs = HashMap::new()
-    procs.insert("1", encode_proc(0, 10))
-    procs.insert("2", encode_proc(0, 5))
-    procs.insert("3", encode_proc(0, 8))
-    procs.insert("4", encode_proc(0, 3))
+    // Process table: arrays indexed by PID (0-3 for PIDs 1-4)
+    // States: 0=ready, 1=running, 2=blocked, 3=terminated
+    let mut proc_states = [0, 0, 0, 0]
+    let mut proc_prios = [10, 5, 8, 3]
     println("--- Process Table Initialized ---")
     println("  4 processes created (PIDs 1-4)")
     println("")
 
-    // ── Kernel statistics ──────────────────────────────────────
-    let stats = HashMap::new()
-    stats.insert("ticks", 0)
-    stats.insert("ctx_switches", 0)
-    stats.insert("syscalls", 0)
+    // Kernel statistics
+    let mut ticks = 0
+    let mut ctx_switches = 0
+    let mut syscalls = 0
 
-    // ── Scheduler: round-robin for 8 ticks ─────────────────────
+    // Scheduler: round-robin for 8 ticks
     println("--- Scheduler Simulation (8 ticks) ---")
 
     // Set PID 1 as initially running
-    let p1_prio = decode_priority(procs.get("1"))
-    procs.insert("1", encode_proc(1, p1_prio))
+    proc_states[0] = 1
     let mut current = 1
     let mut tick = 0
 
     while tick < 8 {
-        // Increment tick count
-        let t = stats.get("ticks")
-        stats.insert("ticks", t + 1)
+        ticks = ticks + 1
 
         // Set current process back to ready (if running)
-        let cur_key = to_string(current)
-        let cur_entry = procs.get(cur_key)
-        let cur_state = decode_state(cur_entry)
-        let cur_prio = decode_priority(cur_entry)
-        if cur_state == 1 {
-            procs.insert(cur_key, encode_proc(0, cur_prio))
+        let ci = current - 1
+        if proc_states[ci] == 1 {
+            proc_states[ci] = 0
         }
 
         // Find next ready process (round-robin)
@@ -111,10 +74,8 @@ fn main() -> i64 {
             if next > 4 {
                 next = 1
             }
-            let nk = to_string(next)
-            let ne = procs.get(nk)
-            let ns = decode_state(ne)
-            if ns == 0 {
+            let ni = next - 1
+            if proc_states[ni] == 0 {
                 if found == 0 {
                     found = next
                 }
@@ -125,41 +86,30 @@ fn main() -> i64 {
 
         // Set chosen process to running
         if found > 0 {
-            let fk = to_string(found)
-            let fe = procs.get(fk)
-            let fp = decode_priority(fe)
-            procs.insert(fk, encode_proc(1, fp))
-            let sw = stats.get("ctx_switches")
-            stats.insert("ctx_switches", sw + 1)
+            let fi = found - 1
+            proc_states[fi] = 1
+            ctx_switches = ctx_switches + 1
             current = found
         }
 
-        let msg = format("  Tick {}: PID {} running", tick, current)
-        println(msg)
+        println("  Tick " + to_string(tick) + ": PID " + to_string(current) + " running")
         tick = tick + 1
     }
     println("")
 
-    // ── Terminate PID 2 and continue scheduling ────────────────
+    // Terminate PID 2 and continue scheduling
     println("--- Terminating PID 2 ---")
-    let p2_prio = decode_priority(procs.get("2"))
-    procs.insert("2", encode_proc(3, p2_prio))
+    proc_states[1] = 3
 
     let mut tick2 = 0
     while tick2 < 4 {
-        let t2 = stats.get("ticks")
-        stats.insert("ticks", t2 + 1)
+        ticks = ticks + 1
 
-        // Set current back to ready if running
-        let ck = to_string(current)
-        let ce = procs.get(ck)
-        let cs = decode_state(ce)
-        let cp = decode_priority(ce)
-        if cs == 1 {
-            procs.insert(ck, encode_proc(0, cp))
+        let ci2 = current - 1
+        if proc_states[ci2] == 1 {
+            proc_states[ci2] = 0
         }
 
-        // Round-robin (skip terminated)
         let mut nx = current + 1
         let mut fd = 0
         let mut chk = 0
@@ -167,10 +117,8 @@ fn main() -> i64 {
             if nx > 4 {
                 nx = 1
             }
-            let nk2 = to_string(nx)
-            let ne2 = procs.get(nk2)
-            let ns2 = decode_state(ne2)
-            if ns2 == 0 {
+            let ni2 = nx - 1
+            if proc_states[ni2] == 0 {
                 if fd == 0 {
                     fd = nx
                 }
@@ -180,83 +128,63 @@ fn main() -> i64 {
         }
 
         if fd > 0 {
-            let fk2 = to_string(fd)
-            let fe2 = procs.get(fk2)
-            let fp2 = decode_priority(fe2)
-            procs.insert(fk2, encode_proc(1, fp2))
-            let sw2 = stats.get("ctx_switches")
-            stats.insert("ctx_switches", sw2 + 1)
+            let fi2 = fd - 1
+            proc_states[fi2] = 1
+            ctx_switches = ctx_switches + 1
             current = fd
         }
 
         let tnum = tick2 + 8
-        let msg2 = format("  Tick {}: PID {} running", tnum, current)
-        println(msg2)
+        println("  Tick " + to_string(tnum) + ": PID " + to_string(current) + " running")
         tick2 = tick2 + 1
     }
     println("")
 
-    // ── Shell session ──────────────────────────────────────────
+    // Shell session
     println("--- Shell Session ---")
 
     println("fj> help")
-    let sc1 = stats.get("syscalls")
-    stats.insert("syscalls", sc1 + 1)
+    syscalls = syscalls + 1
     println("  Commands: help, ps, stats, version, mem, halt")
     println("")
 
     println("fj> ps")
-    let sc2 = stats.get("syscalls")
-    stats.insert("syscalls", sc2 + 1)
+    syscalls = syscalls + 1
     println("  PID  STATE       PRIORITY")
     println("  ---  ----------  --------")
-    let mut pid = 1
-    while pid <= 4 {
-        let pk = to_string(pid)
-        let pe = procs.get(pk)
-        let ps_state = decode_state(pe)
-        let ps_prio = decode_priority(pe)
-        let sn = state_name(ps_state)
-        let line = format("  {}    {}    {}", pid, sn, ps_prio)
-        println(line)
+    let mut pid = 0
+    while pid < 4 {
+        let sn = state_name(proc_states[pid])
+        let pr = proc_prios[pid]
+        println("  " + to_string(pid + 1) + "    " + sn + "    " + to_string(pr))
         pid = pid + 1
     }
     println("")
 
     println("fj> stats")
-    let sc3 = stats.get("syscalls")
-    stats.insert("syscalls", sc3 + 1)
-    let stat_ticks = stats.get("ticks")
-    let stat_sw = stats.get("ctx_switches")
-    let stat_sc = stats.get("syscalls")
-    let msg_t = format("  Ticks:            {}", stat_ticks)
-    println(msg_t)
-    let msg_sw = format("  Context switches: {}", stat_sw)
-    println(msg_sw)
-    let msg_sc = format("  Syscalls:         {}", stat_sc)
-    println(msg_sc)
+    syscalls = syscalls + 1
+    println("  Ticks:            " + to_string(ticks))
+    println("  Context switches: " + to_string(ctx_switches))
+    println("  Syscalls:         " + to_string(syscalls))
     println("")
 
     println("fj> version")
-    let sc4 = stats.get("syscalls")
-    stats.insert("syscalls", sc4 + 1)
-    println("  Fajar OS v0.3.0 (Dominion)")
+    syscalls = syscalls + 1
+    println("  Fajar OS v3.0.0 (Genesis)")
     println("")
 
     println("fj> mem")
-    let sc5 = stats.get("syscalls")
-    stats.insert("syscalls", sc5 + 1)
+    syscalls = syscalls + 1
     println("  Memory: 128 MB total, 96 MB free")
     println("  Kernel: 4 MB, User: 28 MB used")
     println("")
 
     println("fj> halt")
-    let sc6 = stats.get("syscalls")
-    stats.insert("syscalls", sc6 + 1)
+    syscalls = syscalls + 1
     println("  System halting...")
     println("")
 
-    // ── Scancode mapping test ──────────────────────────────────
+    // Scancode mapping test
     println("--- Scancode Mapping Test ---")
     let mut pass_count = 0
     let s1 = scancode_to_ascii(30)
@@ -269,25 +197,18 @@ fn main() -> i64 {
     if s4 == 100 { pass_count = pass_count + 1 }
     let s5 = scancode_to_ascii(18)
     if s5 == 101 { pass_count = pass_count + 1 }
-    let msg_pass = format("  Scancode tests passed: {}/5", pass_count)
-    println(msg_pass)
+    println("  Scancode tests passed: " + to_string(pass_count) + "/5")
     println("")
 
-    // ── Architecture summary ───────────────────────────────────
+    // Architecture summary
     println("=== OS Kernel Architecture ===")
     println("  Processes:   4 (round-robin scheduler)")
     println("  Scheduler:   preemptive, time-quantum based")
     println("  Shell:       6 built-in commands")
     println("  Keyboard:    PS/2 scancode table")
-    let final_ticks = stats.get("ticks")
-    let final_sw = stats.get("ctx_switches")
-    let final_sc = stats.get("syscalls")
-    let msg_ft = format("  Total ticks: {}", final_ticks)
-    println(msg_ft)
-    let msg_fs = format("  Context switches: {}", final_sw)
-    println(msg_fs)
-    let msg_fsc = format("  Syscalls: {}", final_sc)
-    println(msg_fsc)
+    println("  Total ticks: " + to_string(ticks))
+    println("  Context switches: " + to_string(ctx_switches))
+    println("  Syscalls: " + to_string(syscalls))
     println("")
     println("=== Demo Complete ===")
     0

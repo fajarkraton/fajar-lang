@@ -14,22 +14,26 @@ fn main() {
     println("=== Model Compression Pipeline ===")
     println("")
 
-    // Step 1: Create model
-    let model = dense(784, 128)
+    // Step 1: Create model (784x128 weight matrix)
+    let model = tensor_xavier(784, 128)
+    let model_rows = tensor_rows(model)
+    let model_cols = tensor_cols(model)
     println("Step 1: Created dense model (784 -> 128)")
-    println("  Original parameters: 100,352")
+    println("  Original parameters: " + to_string(model_rows * model_cols))
     println("  Original size: ~784 KB (f64)")
     println("")
 
     // Step 2: Prune 50% of weights
-    let pruned = dense(784, 64)
+    let pruned = tensor_xavier(784, 64)
+    let pruned_rows = tensor_rows(pruned)
+    let pruned_cols = tensor_cols(pruned)
     println("Step 2: Pruned 50% of weights (magnitude-based)")
-    println("  Remaining parameters: 50,176")
+    println("  Remaining parameters: " + to_string(pruned_rows * pruned_cols))
     println("  Sparsity: 50%")
     println("")
 
     // Step 3: Knowledge distillation
-    let student = dense(784, 64)
+    let student = tensor_xavier(784, 64)
     println("Step 3: Knowledge distillation (T=3.0, alpha=0.7)")
     println("  Teacher accuracy: 95%")
     println("  Student accuracy: 93% (after distillation)")

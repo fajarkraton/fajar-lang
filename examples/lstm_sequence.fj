@@ -5,11 +5,33 @@
 //
 // Build: fj run examples/lstm_sequence.fj
 
-// ── Model Parameters ──────────────────────────────────────────────
 const INPUT_SIZE: i64 = 4
 const HIDDEN_SIZE: i64 = 8
 const SEQ_LENGTH: i64 = 10
 const NUM_CLASSES: i64 = 2
+
+// Taylor series approximation for e^x
+fn my_exp(x: f64) -> f64 {
+    let mut result = 1.0
+    let mut term = 1.0
+    let mut i = 1
+    while i <= 20 {
+        term = term * x / to_float(i)
+        result = result + term
+        i = i + 1
+    }
+    result
+}
+
+// Sigmoid activation: 1 / (1 + e^-x)
+fn my_sigmoid(x: f64) -> f64 {
+    1.0 / (1.0 + my_exp(0.0 - x))
+}
+
+// Tanh activation: (e^2x - 1) / (e^2x + 1)
+fn my_tanh(x: f64) -> f64 {
+    (my_exp(2.0 * x) - 1.0) / (my_exp(2.0 * x) + 1.0)
+}
 
 fn main() {
     println("=== LSTM Sequence Classifier ===")
@@ -29,13 +51,13 @@ fn main() {
     while i < 10 {
         let x = seq1[i]
         // Simplified LSTM: forget gate, input gate, output gate
-        let f = sigmoid(0.5 * x + 0.3 * h)     // forget gate
-        let ig = sigmoid(0.4 * x + 0.2 * h)     // input gate
-        let candidate = tanh(0.6 * x + 0.1 * h) // candidate
-        let og = sigmoid(0.3 * x + 0.4 * h)     // output gate
+        let f = my_sigmoid(0.5 * x + 0.3 * h)
+        let ig = my_sigmoid(0.4 * x + 0.2 * h)
+        let candidate = my_tanh(0.6 * x + 0.1 * h)
+        let og = my_sigmoid(0.3 * x + 0.4 * h)
 
         c = f * c + ig * candidate
-        h = og * tanh(c)
+        h = og * my_tanh(c)
         i = i + 1
     }
 
@@ -48,13 +70,13 @@ fn main() {
     i = 0
     while i < 10 {
         let x = seq2[i]
-        let f = sigmoid(0.5 * x + 0.3 * h)
-        let ig = sigmoid(0.4 * x + 0.2 * h)
-        let candidate = tanh(0.6 * x + 0.1 * h)
-        let og = sigmoid(0.3 * x + 0.4 * h)
+        let f = my_sigmoid(0.5 * x + 0.3 * h)
+        let ig = my_sigmoid(0.4 * x + 0.2 * h)
+        let candidate = my_tanh(0.6 * x + 0.1 * h)
+        let og = my_sigmoid(0.3 * x + 0.4 * h)
 
         c = f * c + ig * candidate
-        h = og * tanh(c)
+        h = og * my_tanh(c)
         i = i + 1
     }
 
@@ -70,26 +92,4 @@ fn main() {
 
     println("")
     println("LSTM sequence demo complete")
-}
-
-fn sigmoid(x: f64) -> f64 {
-    1.0 / (1.0 + exp(-x))
-}
-
-fn exp(x: f64) -> f64 {
-    // Taylor approximation for demo
-    let mut result = 1.0
-    let mut term = 1.0
-    let mut i = 1
-    while i <= 20 {
-        term = term * x / to_float(i)
-        result = result + term
-        i = i + 1
-    }
-    result
-}
-
-fn tanh(x: f64) -> f64 {
-    let e2x = exp(2.0 * x)
-    (e2x - 1.0) / (e2x + 1.0)
 }

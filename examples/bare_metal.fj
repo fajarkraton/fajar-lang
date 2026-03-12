@@ -7,12 +7,9 @@
 //
 // Simulated hardware: PL011 UART + GPIO peripheral
 
-// ═══════════════════════════════════════════════════════════════
 // UART character output (byte-at-a-time, like real UART TX)
-// ═══════════════════════════════════════════════════════════════
 
 fn ascii_char(code: i64) -> str {
-    // Map common ASCII codes to single-character strings
     if code == 10 { "\n" }
     else if code == 32 { " " }
     else if code == 70 { "F" }
@@ -30,38 +27,27 @@ fn ascii_char(code: i64) -> str {
     else { "?" }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Entry Point — all register operations use the HashMap directly
-// ═══════════════════════════════════════════════════════════════
-
 fn main() -> i64 {
     println("=== Bare-Metal Hardware Abstraction Demo ===")
     println("Simulating MMIO register access patterns")
     println("")
 
     // Create register file (simulates hardware address space)
-    let regs = HashMap::new()
+    let regs = map_new()
 
-    // ── UART PL011 Initialization ──────────────────────────────
+    // UART PL011 Initialization
     println("--- UART PL011 Init ---")
-    // UARTCR (control register) — enable TX and UART
-    regs.insert("UART_CR", 769)
-    // UARTIBRD (integer baud rate divisor) — 115200 baud
-    regs.insert("UART_IBRD", 1)
-    // UARTFBRD (fractional baud rate divisor)
-    regs.insert("UART_FBRD", 40)
-    // UARTLCR_H (line control) — 8N1, FIFO enabled
-    regs.insert("UART_LCR_H", 112)
-    // UARTFR (flag register) — TX FIFO not full
-    regs.insert("UART_FR", 0)
-    // Data register starts empty
-    regs.insert("UART_DR", 0)
-    // Byte counter for output tracking
-    regs.insert("TX_COUNT", 0)
+    map_insert(regs, "UART_CR", 769)
+    map_insert(regs, "UART_IBRD", 1)
+    map_insert(regs, "UART_FBRD", 40)
+    map_insert(regs, "UART_LCR_H", 112)
+    map_insert(regs, "UART_FR", 0)
+    map_insert(regs, "UART_DR", 0)
+    map_insert(regs, "TX_COUNT", 0)
 
-    let cr = regs.get("UART_CR")
-    let ibrd = regs.get("UART_IBRD")
-    let lcr = regs.get("UART_LCR_H")
+    let cr = map_get(regs, "UART_CR")
+    let ibrd = map_get(regs, "UART_IBRD")
+    let lcr = map_get(regs, "UART_LCR_H")
     let msg_cr = format("  Control Register:  {}", cr)
     println(msg_cr)
     let msg_baud = format("  Baud Rate Divisor: {}", ibrd)
@@ -70,47 +56,45 @@ fn main() -> i64 {
     println(msg_lcr)
     println("")
 
-    // ── UART Transmit "Hello Fajar Lang" ───────────────────────
+    // UART Transmit "Hello Fajar Lang"
     println("--- UART Transmit ---")
 
-    // Transmit 'H','e','l','l','o',' ' via data register
-    regs.insert("UART_DR", 72)
-    regs.insert("TX_COUNT", 1)
-    regs.insert("UART_DR", 101)
-    regs.insert("TX_COUNT", 2)
-    regs.insert("UART_DR", 108)
-    regs.insert("TX_COUNT", 3)
-    regs.insert("UART_DR", 108)
-    regs.insert("TX_COUNT", 4)
-    regs.insert("UART_DR", 111)
-    regs.insert("TX_COUNT", 5)
-    regs.insert("UART_DR", 32)
-    regs.insert("TX_COUNT", 6)
+    map_insert(regs, "UART_DR", 72)
+    map_insert(regs, "TX_COUNT", 1)
+    map_insert(regs, "UART_DR", 101)
+    map_insert(regs, "TX_COUNT", 2)
+    map_insert(regs, "UART_DR", 108)
+    map_insert(regs, "TX_COUNT", 3)
+    map_insert(regs, "UART_DR", 108)
+    map_insert(regs, "TX_COUNT", 4)
+    map_insert(regs, "UART_DR", 111)
+    map_insert(regs, "TX_COUNT", 5)
+    map_insert(regs, "UART_DR", 32)
+    map_insert(regs, "TX_COUNT", 6)
 
-    // Transmit 'F','a','j','a','r',' ','L','a','n','g'
-    regs.insert("UART_DR", 70)
-    regs.insert("TX_COUNT", 7)
-    regs.insert("UART_DR", 97)
-    regs.insert("TX_COUNT", 8)
-    regs.insert("UART_DR", 106)
-    regs.insert("TX_COUNT", 9)
-    regs.insert("UART_DR", 97)
-    regs.insert("TX_COUNT", 10)
-    regs.insert("UART_DR", 114)
-    regs.insert("TX_COUNT", 11)
-    regs.insert("UART_DR", 32)
-    regs.insert("TX_COUNT", 12)
-    regs.insert("UART_DR", 76)
-    regs.insert("TX_COUNT", 13)
-    regs.insert("UART_DR", 97)
-    regs.insert("TX_COUNT", 14)
-    regs.insert("UART_DR", 110)
-    regs.insert("TX_COUNT", 15)
-    regs.insert("UART_DR", 103)
-    regs.insert("TX_COUNT", 16)
+    map_insert(regs, "UART_DR", 70)
+    map_insert(regs, "TX_COUNT", 7)
+    map_insert(regs, "UART_DR", 97)
+    map_insert(regs, "TX_COUNT", 8)
+    map_insert(regs, "UART_DR", 106)
+    map_insert(regs, "TX_COUNT", 9)
+    map_insert(regs, "UART_DR", 97)
+    map_insert(regs, "TX_COUNT", 10)
+    map_insert(regs, "UART_DR", 114)
+    map_insert(regs, "TX_COUNT", 11)
+    map_insert(regs, "UART_DR", 32)
+    map_insert(regs, "TX_COUNT", 12)
+    map_insert(regs, "UART_DR", 76)
+    map_insert(regs, "TX_COUNT", 13)
+    map_insert(regs, "UART_DR", 97)
+    map_insert(regs, "TX_COUNT", 14)
+    map_insert(regs, "UART_DR", 110)
+    map_insert(regs, "TX_COUNT", 15)
+    map_insert(regs, "UART_DR", 103)
+    map_insert(regs, "TX_COUNT", 16)
 
-    let tx_count = regs.get("TX_COUNT")
-    let last_byte = regs.get("UART_DR")
+    let tx_count = map_get(regs, "TX_COUNT")
+    let last_byte = map_get(regs, "UART_DR")
     let msg_tx = format("  Bytes transmitted: {}", tx_count)
     println(msg_tx)
     let msg_last = format("  Last byte in DR:   {} (g)", last_byte)
@@ -137,36 +121,30 @@ fn main() -> i64 {
     println("")
     println("")
 
-    // ── GPIO Peripheral ────────────────────────────────────────
+    // GPIO Peripheral
     println("--- GPIO Peripheral ---")
-    // Direction register: 0 = input, 1 = output per pin
-    regs.insert("GPIO_DIR", 0)
-    // Output data register
-    regs.insert("GPIO_OUT", 0)
-    // Input data register (simulated sensor reading)
-    regs.insert("GPIO_IN", 42)
+    map_insert(regs, "GPIO_DIR", 0)
+    map_insert(regs, "GPIO_OUT", 0)
+    map_insert(regs, "GPIO_IN", 42)
 
-    // Configure pins 0-3 as output (mask 0x0F = 15)
-    regs.insert("GPIO_DIR", 15)
-    let dir = regs.get("GPIO_DIR")
+    map_insert(regs, "GPIO_DIR", 15)
+    let dir = map_get(regs, "GPIO_DIR")
     let msg_dir = format("  Direction mask: {}", dir)
     println(msg_dir)
 
-    // Write output value
-    regs.insert("GPIO_OUT", 255)
-    let out = regs.get("GPIO_OUT")
+    map_insert(regs, "GPIO_OUT", 255)
+    let out = map_get(regs, "GPIO_OUT")
     let msg_out = format("  Output value:   {}", out)
     println(msg_out)
 
-    // Read sensor input
-    let sensor = regs.get("GPIO_IN")
+    let sensor = map_get(regs, "GPIO_IN")
     let msg_sensor = format("  Sensor input:   {}", sensor)
     println(msg_sensor)
     println("")
 
-    // ── Register dump ──────────────────────────────────────────
+    // Register dump
     println("--- Register File Summary ---")
-    let total = regs.len()
+    let total = map_len(regs)
     let msg_total = format("  Total registers: {}", total)
     println(msg_total)
     println("")

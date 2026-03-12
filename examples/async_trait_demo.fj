@@ -1,14 +1,12 @@
-// async_trait_demo.fj — Demonstrates async trait methods and GAT patterns
+// async_trait_demo.fj — Demonstrates trait methods and iterator patterns
 //
-// This example shows how Fajar Lang supports async methods in traits,
-// GAT-based lending iterators, and streaming patterns.
+// Shows how Fajar Lang supports traits with method dispatch,
+// dynamic dispatch via dyn Trait, and streaming patterns.
 
-// ─── Basic async trait ───────────────────────────────────────────────
-
+// Data source trait
 trait DataSource {
-    async fn fetch(&self, key: str) -> str
-    async fn exists(&self, key: str) -> bool
-    fn name(&self) -> str
+    fn name(self) -> str
+    fn kind(self) -> str
 }
 
 struct FileSource {
@@ -16,99 +14,113 @@ struct FileSource {
 }
 
 impl DataSource for FileSource {
-    async fn fetch(&self, key: str) -> str {
-        // In a real implementation, this would read from a file
-        "file_data"
+    fn name(self) -> str {
+        "FileSource(" + self.path + ")"
     }
 
-    async fn exists(&self, key: str) -> bool {
-        true
-    }
-
-    fn name(&self) -> str {
-        "FileSource"
+    fn kind(self) -> str {
+        "file"
     }
 }
 
-// ─── Lending iterator pattern (GAT) ─────────────────────────────────
-
-trait LendingIterator {
-    // type Item<'a> where Self: 'a
-    fn next(&mut self) -> i64
-    fn has_next(&self) -> bool
+struct MemorySource {
+    capacity: i64
 }
 
-struct WindowsIter {
-    data: [i64; 8],
-    window_size: i64,
-    position: i64
-}
-
-impl LendingIterator for WindowsIter {
-    fn next(&mut self) -> i64 {
-        let val = self.position
-        self.position = self.position + 1
-        val
+impl DataSource for MemorySource {
+    fn name(self) -> str {
+        "MemorySource(" + to_string(self.capacity) + ")"
     }
 
-    fn has_next(&self) -> bool {
-        self.position < 8 - self.window_size + 1
+    fn kind(self) -> str {
+        "memory"
     }
 }
 
-// ─── Async streaming pattern ────────────────────────────────────────
-
-trait Stream {
-    async fn poll_next(&mut self) -> i64
-    fn is_done(&self) -> bool
+// Shape trait — demonstrates polymorphism
+trait Shape {
+    fn area(self) -> f64
+    fn describe(self) -> str
 }
 
-struct NumberStream {
-    current: i64,
-    max: i64
+struct Circle {
+    radius: f64
 }
 
-impl Stream for NumberStream {
-    async fn poll_next(&mut self) -> i64 {
-        let val = self.current
-        self.current = self.current + 1
-        val
+impl Shape for Circle {
+    fn area(self) -> f64 {
+        3.14159 * self.radius * self.radius
     }
 
-    fn is_done(&self) -> bool {
-        self.current >= self.max
+    fn describe(self) -> str {
+        "Circle(r=" + to_string(self.radius) + ")"
     }
 }
 
-// ─── Main ───────────────────────────────────────────────────────────
+struct Square {
+    side: f64
+}
+
+impl Shape for Square {
+    fn area(self) -> f64 {
+        self.side * self.side
+    }
+
+    fn describe(self) -> str {
+        "Square(s=" + to_string(self.side) + ")"
+    }
+}
 
 fn main() {
-    // Async trait usage
+    // Trait usage with dynamic dispatch
+    println("=== Data Source Traits ===")
     let source = FileSource { path: "/data" }
-    println("Data source: FileSource")
-    println("Supports async fetch and exists methods")
+    println("Source: " + source.name() + " [" + source.kind() + "]")
 
-    // Lending iterator usage
-    let mut iter = WindowsIter {
-        data: [1, 2, 3, 4, 5, 6, 7, 8],
-        window_size: 3,
-        position: 0
-    }
-    println("Windows iterator created with window_size=3")
+    let mem = MemorySource { capacity: 1024 }
+    println("Source: " + mem.name() + " [" + mem.kind() + "]")
+    println("")
 
+    // Shape polymorphism
+    println("=== Shape Polymorphism ===")
+    let c = Circle { radius: 5.0 }
+    println(c.describe() + " area = " + to_string(c.area()))
+
+    let s = Square { side: 4.0 }
+    println(s.describe() + " area = " + to_string(s.area()))
+    println("")
+
+    // Iterator pattern (explicit state management)
+    println("=== Sliding Window Iterator ===")
+    let data = [1, 2, 3, 4, 5, 6, 7, 8]
+    let window_size = 3
+    let data_len = to_int(len(data))
+    let mut position = 0
     let mut count = 0
-    while iter.has_next() {
-        let val = iter.next()
+
+    while position < data_len - window_size + 1 {
+        let w0 = data[position]
+        let w1 = data[position + 1]
+        let w2 = data[position + 2]
+        println("  Window " + to_string(count) + ": [" +
+            to_string(w0) + ", " + to_string(w1) + ", " + to_string(w2) + "]")
+        position = position + 1
         count = count + 1
     }
-    println("Iterated through all windows")
-    print("Total windows: ")
-    println(to_string(count))
+    println("Total windows: " + to_string(count))
+    println("")
 
-    // Streaming pattern
-    let mut stream = NumberStream { current: 0, max: 5 }
-    println("Number stream: 0..5")
-    println("Supports async poll_next for streaming data")
+    // Number stream pattern
+    println("=== Number Stream ===")
+    let mut current = 0
+    let max = 5
+    let mut sum = 0
+    while current < max {
+        sum = sum + current
+        current = current + 1
+    }
+    println("Stream 0..5 sum: " + to_string(sum))
+    println("")
 
     println("async_trait_demo complete")
 }

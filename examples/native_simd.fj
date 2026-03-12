@@ -1,17 +1,50 @@
-// SIMD vector operations in Fajar Lang (native codegen)
-// Demonstrates f32x4 and i32x4 SIMD types with arithmetic and horizontal ops.
+// SIMD vector operations in Fajar Lang
+// Demonstrates SIMD-style parallel arithmetic using arrays.
+
+fn dot_product(a: [i64], b: [i64]) -> i64 {
+    // Element-wise multiply and sum (SIMD dot product pattern)
+    let mut sum = 0
+    let mut i = 0
+    let n = to_int(len(a))
+    while i < n {
+        sum = sum + a[i] * b[i]
+        i = i + 1
+    }
+    sum
+}
+
+fn vec_add(a: [f64], b: [f64]) -> [f64] {
+    let mut result: [f64] = []
+    let mut i = 0
+    let n = to_int(len(a))
+    while i < n {
+        result = result.push(a[i] + b[i])
+        i = i + 1
+    }
+    result
+}
 
 fn main() -> i64 {
-    // f32x4: 4-lane float vector
-    let a = f32x4::new(1.0, 2.0, 3.0, 4.0)
-    let b = f32x4::new(10.0, 20.0, 30.0, 40.0)
-    let c = a.add(b)
+    println("=== SIMD Vector Operations Demo ===")
+    println("")
 
-    // i32x4: 4-lane integer vector
-    let x = i32x4::new(1, 2, 3, 4)
-    let y = i32x4::new(5, 6, 7, 8)
-    let dot = x.mul(y)
+    // f32x4-style: 4-lane float vector add
+    let a = [1.0, 2.0, 3.0, 4.0]
+    let b = [10.0, 20.0, 30.0, 40.0]
+    let c = vec_add(a, b)
+    println("f32x4 add: [1,2,3,4] + [10,20,30,40] = [" +
+        to_string(c[0]) + ", " + to_string(c[1]) + ", " +
+        to_string(c[2]) + ", " + to_string(c[3]) + "]")
+
+    // i32x4-style: 4-lane integer dot product
+    let x = [1, 2, 3, 4]
+    let y = [5, 6, 7, 8]
+    let dot = dot_product(x, y)
 
     // Dot product: 1*5 + 2*6 + 3*7 + 4*8 = 5+12+21+32 = 70
-    dot.sum()
+    println("i32x4 dot product: [1,2,3,4] . [5,6,7,8] = " + to_string(dot))
+    println("")
+    println("=== SIMD Demo Complete ===")
+
+    dot
 }

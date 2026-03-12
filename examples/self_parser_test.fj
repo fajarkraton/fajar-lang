@@ -1,9 +1,6 @@
 // Self-hosted expression parser test — iterative Pratt parser
 // Parses simple expressions (integer arithmetic) and evaluates them.
 // Uses an operand stack + operator stack instead of recursion.
-// AST stored as flat array: each node uses 4 entries [kind, value, left, right].
-
-// ========== Character helpers ==========
 
 fn is_digit(c: str) -> bool {
     c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
@@ -23,10 +20,8 @@ fn char_to_digit(c: str) -> i64 {
     return 9
 }
 
-// ========== Tokenizer ==========
-// Tokens: pairs [kind, value]. 130=IntLit, 70=+, 71=-, 72=*, 73=/, 74=%,
-// 76===, 77=!=, 78=<, 79=>, 110=(, 111=), 0=EOF
-
+// Tokenizer: returns flat array of [kind, value] pairs
+// 130=IntLit, 70=+, 71=-, 72=*, 73=/, 74=%, 76===, 77=!=, 78=<, 79=>, 110=(, 111=), 0=EOF
 fn tokenize(source: str) -> [i64] {
     let n = to_int(len(source))
     let mut pos = 0
@@ -76,48 +71,17 @@ fn tokenize(source: str) -> [i64] {
     result
 }
 
-// ========== AST construction helpers ==========
-// AST nodes stored as flat array: [kind, value, left, right] per node.
-// 200 = IntLit, 202 = Binary, 203 = Unary
-
-fn ast_make_int(ast: [i64], val: i64) -> [i64] {
-    let mut out = ast
-    out = out.push(200)
-    out = out.push(val)
-    out = out.push(0)
-    out = out.push(0)
-    out
-}
-
-fn ast_make_binary(ast: [i64], op: i64, left: i64, right: i64) -> [i64] {
-    let mut out = ast
-    out = out.push(202)
-    out = out.push(op)
-    out = out.push(left)
-    out = out.push(right)
-    out
-}
-
-fn ast_make_unary(ast: [i64], op: i64, operand: i64) -> [i64] {
-    let mut out = ast
-    out = out.push(203)
-    out = out.push(op)
-    out = out.push(0)
-    out = out.push(operand)
-    out
-}
-
-// ========== Operator precedence ==========
+// Operator precedence
 fn precedence(kind: i64) -> i64 {
-    if kind == 76 { return 6 }   // ==
-    if kind == 77 { return 6 }   // !=
-    if kind == 78 { return 8 }   // <
-    if kind == 79 { return 8 }   // >
-    if kind == 70 { return 10 }  // +
-    if kind == 71 { return 10 }  // -
-    if kind == 72 { return 12 }  // *
-    if kind == 73 { return 12 }  // /
-    if kind == 74 { return 12 }  // %
+    if kind == 76 { return 6 }
+    if kind == 77 { return 6 }
+    if kind == 78 { return 8 }
+    if kind == 79 { return 8 }
+    if kind == 70 { return 10 }
+    if kind == 71 { return 10 }
+    if kind == 72 { return 12 }
+    if kind == 73 { return 12 }
+    if kind == 74 { return 12 }
     return 0
 }
 
@@ -126,16 +90,40 @@ fn is_op(kind: i64) -> bool {
     kind == 76 || kind == 77 || kind == 78 || kind == 79
 }
 
-// ========== Iterative shunting-yard parser ==========
-// Uses two stacks: operand_stack (AST node indices) and op_stack (operator kinds).
-// Builds AST nodes incrementally.
+// Evaluate a binary operation
+fn eval_binop(op: i64, lv: i64, rv: i64) -> i64 {
+    if op == 70 { return lv + rv }
+    if op == 71 { return lv - rv }
+    if op == 72 { return lv * rv }
+    if op == 73 { return lv / rv }
+    if op == 74 { return lv % rv }
+    if op == 76 {
+        if lv == rv { return 1 }
+        return 0
+    }
+    if op == 77 {
+        if lv != rv { return 1 }
+        return 0
+    }
+    if op == 78 {
+        if lv < rv { return 1 }
+        return 0
+    }
+    if op == 79 {
+        if lv > rv { return 1 }
+        return 0
+    }
+    return 0
+}
+
+// Parse and evaluate expression directly (no AST needed)
+// Uses shunting-yard with evaluation on the fly
 fn parse_and_eval(source: str) -> i64 {
     let tokens = tokenize(source)
     let num_tokens = to_int(len(tokens)) / 2
 
-    // AST array, operand stack, operator stack
-    let mut ast: [i64] = []
-    let mut operands: [i64] = []
+    // Value stack and operator stack
+    let mut values: [i64] = []
     let mut ops: [i64] = []
 
     let mut pos = 0
@@ -147,38 +135,32 @@ fn parse_and_eval(source: str) -> i64 {
         let val = tokens[idx + 1]
 
         if kind == 0 {
-            // EOF — done
             pos = num_tokens
             continue
         }
 
         if kind == 130 && expect_operand {
-            // Integer literal → create AST node, push index to operand stack
-            let node_idx = to_int(len(ast)) / 4
-            ast = ast_make_int(ast, val)
-            operands = operands.push(node_idx)
+            values = values.push(val)
             expect_operand = false
             pos = pos + 1
             continue
         }
 
-        // Unary minus: '-' when expecting an operand
+        // Unary minus
         if kind == 71 && expect_operand {
-            // Push unary minus sentinel (use -71 to distinguish from binary)
             ops = ops.push(-71)
             pos = pos + 1
             continue
         }
 
         if kind == 110 && expect_operand {
-            // '(' — push sentinel
             ops = ops.push(110)
             pos = pos + 1
             continue
         }
 
         if kind == 111 {
-            // ')' — pop operators until '('
+            // Pop until '('
             let mut popping = true
             while popping {
                 let ops_len = to_int(len(ops))
@@ -187,7 +169,6 @@ fn parse_and_eval(source: str) -> i64 {
                 } else {
                     let top_op = ops[ops_len - 1]
                     if top_op == 110 {
-                        // Remove the '(' sentinel
                         let mut new_ops: [i64] = []
                         let mut k = 0
                         while k < ops_len - 1 {
@@ -197,38 +178,30 @@ fn parse_and_eval(source: str) -> i64 {
                         ops = new_ops
                         popping = false
                     } else {
-                        // Pop operator and create binary/unary node
-                        let operands_len = to_int(len(operands))
+                        let vals_len = to_int(len(values))
                         if top_op == -71 {
-                            // Unary minus
-                            let operand_idx = operands[operands_len - 1]
-                            let node_idx = to_int(len(ast)) / 4
-                            ast = ast_make_unary(ast, 71, operand_idx)
-                            // Replace top of operand stack
-                            let mut new_operands: [i64] = []
+                            let operand = values[vals_len - 1]
+                            let mut new_vals: [i64] = []
                             let mut j = 0
-                            while j < operands_len - 1 {
-                                new_operands = new_operands.push(operands[j])
+                            while j < vals_len - 1 {
+                                new_vals = new_vals.push(values[j])
                                 j = j + 1
                             }
-                            new_operands = new_operands.push(node_idx)
-                            operands = new_operands
+                            new_vals = new_vals.push(0 - operand)
+                            values = new_vals
                         } else {
-                            // Binary op
-                            let rhs_idx = operands[operands_len - 1]
-                            let lhs_idx = operands[operands_len - 2]
-                            let node_idx = to_int(len(ast)) / 4
-                            ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
-                            let mut new_operands: [i64] = []
+                            let rv = values[vals_len - 1]
+                            let lv = values[vals_len - 2]
+                            let result = eval_binop(top_op, lv, rv)
+                            let mut new_vals: [i64] = []
                             let mut j = 0
-                            while j < operands_len - 2 {
-                                new_operands = new_operands.push(operands[j])
+                            while j < vals_len - 2 {
+                                new_vals = new_vals.push(values[j])
                                 j = j + 1
                             }
-                            new_operands = new_operands.push(node_idx)
-                            operands = new_operands
+                            new_vals = new_vals.push(result)
+                            values = new_vals
                         }
-                        // Pop op
                         let mut new_ops: [i64] = []
                         let mut k = 0
                         while k < ops_len - 1 {
@@ -245,9 +218,7 @@ fn parse_and_eval(source: str) -> i64 {
         }
 
         if is_op(kind) && expect_operand == false {
-            // Infix operator
             let prec = precedence(kind)
-            // Pop higher-precedence operators from stack
             let mut popping = true
             while popping {
                 let ops_len = to_int(len(ops))
@@ -258,21 +229,17 @@ fn parse_and_eval(source: str) -> i64 {
                     if top_op == 110 {
                         popping = false
                     } else {
-                        let top_prec = precedence(top_op)
                         if top_op == -71 {
-                            // Unary minus has higher precedence than any binary op
-                            let operands_len = to_int(len(operands))
-                            let operand_idx = operands[operands_len - 1]
-                            let node_idx = to_int(len(ast)) / 4
-                            ast = ast_make_unary(ast, 71, operand_idx)
-                            let mut new_operands: [i64] = []
+                            let vals_len = to_int(len(values))
+                            let operand = values[vals_len - 1]
+                            let mut new_vals: [i64] = []
                             let mut j = 0
-                            while j < operands_len - 1 {
-                                new_operands = new_operands.push(operands[j])
+                            while j < vals_len - 1 {
+                                new_vals = new_vals.push(values[j])
                                 j = j + 1
                             }
-                            new_operands = new_operands.push(node_idx)
-                            operands = new_operands
+                            new_vals = new_vals.push(0 - operand)
+                            values = new_vals
                             let mut new_ops: [i64] = []
                             let mut k = 0
                             while k < ops_len - 1 {
@@ -281,21 +248,20 @@ fn parse_and_eval(source: str) -> i64 {
                             }
                             ops = new_ops
                         } else {
+                            let top_prec = precedence(top_op)
                             if top_prec >= prec {
-                                // Pop binary operator
-                                let operands_len = to_int(len(operands))
-                                let rhs_idx = operands[operands_len - 1]
-                                let lhs_idx = operands[operands_len - 2]
-                                let node_idx = to_int(len(ast)) / 4
-                                ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
-                                let mut new_operands: [i64] = []
+                                let vals_len = to_int(len(values))
+                                let rv = values[vals_len - 1]
+                                let lv = values[vals_len - 2]
+                                let result = eval_binop(top_op, lv, rv)
+                                let mut new_vals: [i64] = []
                                 let mut j = 0
-                                while j < operands_len - 2 {
-                                    new_operands = new_operands.push(operands[j])
+                                while j < vals_len - 2 {
+                                    new_vals = new_vals.push(values[j])
                                     j = j + 1
                                 }
-                                new_operands = new_operands.push(node_idx)
-                                operands = new_operands
+                                new_vals = new_vals.push(result)
+                                values = new_vals
                                 let mut new_ops: [i64] = []
                                 let mut k = 0
                                 while k < ops_len - 1 {
@@ -316,7 +282,6 @@ fn parse_and_eval(source: str) -> i64 {
             continue
         }
 
-        // Skip unknown
         pos = pos + 1
     }
 
@@ -328,32 +293,29 @@ fn parse_and_eval(source: str) -> i64 {
             finishing = false
         } else {
             let top_op = ops[ops_len - 1]
-            let operands_len = to_int(len(operands))
+            let vals_len = to_int(len(values))
             if top_op == -71 {
-                let operand_idx = operands[operands_len - 1]
-                let node_idx = to_int(len(ast)) / 4
-                ast = ast_make_unary(ast, 71, operand_idx)
-                let mut new_operands: [i64] = []
+                let operand = values[vals_len - 1]
+                let mut new_vals: [i64] = []
                 let mut j = 0
-                while j < operands_len - 1 {
-                    new_operands = new_operands.push(operands[j])
+                while j < vals_len - 1 {
+                    new_vals = new_vals.push(values[j])
                     j = j + 1
                 }
-                new_operands = new_operands.push(node_idx)
-                operands = new_operands
+                new_vals = new_vals.push(0 - operand)
+                values = new_vals
             } else {
-                let rhs_idx = operands[operands_len - 1]
-                let lhs_idx = operands[operands_len - 2]
-                let node_idx = to_int(len(ast)) / 4
-                ast = ast_make_binary(ast, top_op, lhs_idx, rhs_idx)
-                let mut new_operands: [i64] = []
+                let rv = values[vals_len - 1]
+                let lv = values[vals_len - 2]
+                let result = eval_binop(top_op, lv, rv)
+                let mut new_vals: [i64] = []
                 let mut j = 0
-                while j < operands_len - 2 {
-                    new_operands = new_operands.push(operands[j])
+                while j < vals_len - 2 {
+                    new_vals = new_vals.push(values[j])
                     j = j + 1
                 }
-                new_operands = new_operands.push(node_idx)
-                operands = new_operands
+                new_vals = new_vals.push(result)
+                values = new_vals
             }
             let mut new_ops: [i64] = []
             let mut k = 0
@@ -365,54 +327,11 @@ fn parse_and_eval(source: str) -> i64 {
         }
     }
 
-    // Get root node and evaluate
-    let root = operands[0]
-    eval_ast(ast, root)
+    // Result is on top of value stack
+    values[0]
 }
 
-// ========== AST Evaluator ==========
-fn eval_ast(ast: [i64], idx: i64) -> i64 {
-    let base = idx * 4
-    let kind = ast[base]
-
-    if kind == 200 { return ast[base + 1] }
-
-    if kind == 203 {
-        let operand = eval_ast(ast, ast[base + 3])
-        return 0 - operand
-    }
-
-    if kind == 202 {
-        let op = ast[base + 1]
-        let lv = eval_ast(ast, ast[base + 2])
-        let rv = eval_ast(ast, ast[base + 3])
-        if op == 70 { return lv + rv }
-        if op == 71 { return lv - rv }
-        if op == 72 { return lv * rv }
-        if op == 73 { return lv / rv }
-        if op == 74 { return lv % rv }
-        if op == 76 {
-            if lv == rv { return 1 }
-            return 0
-        }
-        if op == 77 {
-            if lv != rv { return 1 }
-            return 0
-        }
-        if op == 78 {
-            if lv < rv { return 1 }
-            return 0
-        }
-        if op == 79 {
-            if lv > rv { return 1 }
-            return 0
-        }
-        return 0
-    }
-    return 0
-}
-
-fn main() -> void {
+fn main() {
     // Test 1: Integer literal
     assert_eq(parse_and_eval("42"), 42)
     println("Test 1 passed: integer literal (42)")
