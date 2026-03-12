@@ -1,7 +1,7 @@
 [package]
 name = "fj-drivers"
-version = "0.1.0"
+version = "3.0.0"
 entry = "src/lib.fj"
 
 [dependencies]
-fj-hal = "^0.1.0"
+fj-hal = "^3.0.0"

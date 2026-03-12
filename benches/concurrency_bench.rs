@@ -1,6 +1,6 @@
-//! Concurrency benchmarks for Fajar Lang v0.3.
+//! Concurrency benchmarks for Fajar Lang.
 //!
-//! Sprint 13.4: criterion benchmarks for concurrency primitives.
+//! Criterion benchmarks for concurrency primitives.
 //! Measures channel throughput, mutex contention, atomic operations,
 //! and async task spawn/join overhead.
 

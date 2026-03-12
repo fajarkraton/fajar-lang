@@ -85,7 +85,7 @@ body:
     attributes:
       label: Fajar Lang Version
       description: Output of `fj --version`
-      placeholder: "fj 0.1.0"
+      placeholder: "fj 3.0.0"
     validations:
       required: true
 
