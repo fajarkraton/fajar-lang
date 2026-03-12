@@ -242,6 +242,7 @@ impl CpuFeatures {
 
     /// Detect x86 vendor from CPUID leaf 0.
     #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
     fn detect_x86_vendor() -> CpuVendor {
         // SAFETY: CPUID leaf 0 is always available on x86_64
         let result = unsafe { std::arch::x86_64::__cpuid(0) };
@@ -259,6 +260,7 @@ impl CpuFeatures {
 
     /// Read x86 CPU model name from CPUID leaves 0x80000002-0x80000004.
     #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
     fn detect_x86_model_name() -> String {
         // Check if extended CPUID is supported
         // SAFETY: CPUID leaf 0x80000000 is always available on x86_64
@@ -286,6 +288,7 @@ impl CpuFeatures {
 
     /// Detect AMX-BF16 via CPUID leaf 7, subleaf 0, EDX bit 22.
     #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
     fn detect_amx_bf16() -> bool {
         // SAFETY: CPUID leaf 0 always available
         let max_leaf = unsafe { std::arch::x86_64::__cpuid(0) }.eax;
@@ -299,6 +302,7 @@ impl CpuFeatures {
 
     /// Detect AMX-INT8 via CPUID leaf 7, subleaf 0, EDX bit 25.
     #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
     fn detect_amx_int8() -> bool {
         let max_leaf = unsafe { std::arch::x86_64::__cpuid(0) }.eax;
         if max_leaf < 7 {
@@ -311,6 +315,7 @@ impl CpuFeatures {
 
     /// Detect AMX-FP16 via CPUID leaf 7, subleaf 1, EAX bit 21.
     #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
     fn detect_amx_fp16() -> bool {
         let max_leaf = unsafe { std::arch::x86_64::__cpuid(0) }.eax;
         if max_leaf < 7 {
