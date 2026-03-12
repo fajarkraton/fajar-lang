@@ -467,7 +467,10 @@ fn is_balanced(source: &str) -> bool {
 
 /// Starts an interactive REPL with multi-line input and REPL commands.
 fn cmd_repl() -> ExitCode {
-    println!("Fajar Lang v{} — Interactive REPL", env!("CARGO_PKG_VERSION"));
+    println!(
+        "Fajar Lang v{} — Interactive REPL",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("Type expressions to evaluate. Type 'exit' or Ctrl-D to quit.");
     println!("Commands: :type <expr>, :help");
     println!();

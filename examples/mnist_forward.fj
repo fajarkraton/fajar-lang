@@ -79,14 +79,5 @@ fn main() -> i64 {
     println("=== Forward Pass Complete ===")
     println("In production: weights loaded from .fjmodel file, input from dataset.")
 
-    // Cleanup
-    tensor_free(input)
-    tensor_free(w1)
-    tensor_free(b1)
-    tensor_free(w2)
-    tensor_free(b2)
-    tensor_free(hidden)
-    tensor_free(output)
-
     predicted
 }

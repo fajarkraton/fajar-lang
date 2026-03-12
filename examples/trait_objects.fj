@@ -5,8 +5,8 @@
 // Run: fj run examples/trait_objects.fj
 
 trait Shape {
-    fn area() -> f64
-    fn name() -> str
+    fn area(self) -> f64
+    fn name(self) -> str
 }
 
 struct Circle {
@@ -14,10 +14,10 @@ struct Circle {
 }
 
 impl Shape for Circle {
-    fn area() -> f64 {
+    fn area(self) -> f64 {
         3.14159 * self.radius * self.radius
     }
-    fn name() -> str {
+    fn name(self) -> str {
         "Circle"
     }
 }
@@ -28,10 +28,10 @@ struct Rectangle {
 }
 
 impl Shape for Rectangle {
-    fn area() -> f64 {
+    fn area(self) -> f64 {
         self.width * self.height
     }
-    fn name() -> str {
+    fn name(self) -> str {
         "Rectangle"
     }
 }
@@ -42,10 +42,10 @@ struct Triangle {
 }
 
 impl Shape for Triangle {
-    fn area() -> f64 {
+    fn area(self) -> f64 {
         0.5 * self.base * self.height
     }
-    fn name() -> str {
+    fn name(self) -> str {
         "Triangle"
     }
 }

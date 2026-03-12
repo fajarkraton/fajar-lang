@@ -1164,6 +1164,13 @@ impl TypeChecker {
             "tensor_linspace",
             "tensor_xavier",
             "tensor_l1_loss",
+            "tensor_free",
+            "tensor_rows",
+            "tensor_cols",
+            "tensor_set",
+            "tensor_row",
+            "tensor_normalize",
+            "tensor_scale",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -1444,7 +1451,7 @@ impl TypeChecker {
             // Reductions → return dynamic tensor
             ("tensor_max", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_min", vec![dyn_t.clone()], dyn_t.clone()),
-            ("tensor_argmax", vec![dyn_t.clone()], dyn_t.clone()),
+            ("tensor_argmax", vec![dyn_t.clone()], Type::I64),
             // Creation
             (
                 "tensor_arange",
@@ -1461,6 +1468,25 @@ impl TypeChecker {
             (
                 "tensor_l1_loss",
                 vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            // Memory management (no-op in interpreter, meaningful in native codegen)
+            ("tensor_free", vec![dyn_t.clone()], Type::Void),
+            // Shape query → return scalar integers
+            ("tensor_rows", vec![dyn_t.clone()], Type::I64),
+            ("tensor_cols", vec![dyn_t.clone()], Type::I64),
+            // Element access
+            ("tensor_row", vec![dyn_t.clone(), Type::I64], dyn_t.clone()),
+            (
+                "tensor_set",
+                vec![dyn_t.clone(), Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            // Normalization and scaling
+            ("tensor_normalize", vec![dyn_t.clone()], dyn_t.clone()),
+            (
+                "tensor_scale",
+                vec![dyn_t.clone(), Type::I64],
                 dyn_t.clone(),
             ),
         ];
@@ -4185,6 +4211,7 @@ impl TypeChecker {
                 "f64" => Type::F64,
                 "char" => Type::Char,
                 "str" | "String" => Type::Str,
+                "Tensor" => Type::dynamic_tensor(),
                 "any" => Type::Unknown,
                 other => {
                     // Check type aliases first

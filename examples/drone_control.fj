@@ -80,10 +80,6 @@ fn main() -> i64 {
         print(sum)
         println(")")
 
-        // Cleanup per-step tensors
-        tensor_free(sensor_input)
-        tensor_free(output)
-
         step = step + 1
     }
 
@@ -97,12 +93,6 @@ fn main() -> i64 {
     println(pitch_count)
     println("")
     println("Controller ready for deployment on bare-metal target.")
-
-    // Cleanup weights
-    tensor_free(w1)
-    tensor_free(b1)
-    tensor_free(w2)
-    tensor_free(b2)
 
     0
 }

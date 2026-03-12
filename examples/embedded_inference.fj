@@ -38,9 +38,6 @@ fn quantize_tensor(t: Tensor) -> Tensor {
     let inv_scale_bits = 4576918229304087675
     let dequantized = tensor_scale(scaled, inv_scale_bits)
 
-    // Cleanup intermediate
-    tensor_free(scaled)
-
     dequantized
 }
 
@@ -56,13 +53,6 @@ fn infer_quantized(input: Tensor, w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor
     // Layer 2: quantized matmul + bias + softmax
     let z2 = tensor_add(tensor_matmul(a1, qw2), b2)
     let output = tensor_softmax(z2)
-
-    // Cleanup quantized copies
-    tensor_free(qw1)
-    tensor_free(qw2)
-    tensor_free(z1)
-    tensor_free(a1)
-    tensor_free(z2)
 
     output
 }
@@ -120,10 +110,6 @@ fn main() -> i64 {
         }
         println("")
 
-        // Cleanup per-step
-        tensor_free(sensor)
-        tensor_free(output)
-
         step = step + 1
     }
 
@@ -137,12 +123,6 @@ fn main() -> i64 {
     println(alert_count)
     println("")
     println("Quantized inference complete. Memory-efficient for bare-metal.")
-
-    // Cleanup weights
-    tensor_free(w1)
-    tensor_free(b1)
-    tensor_free(w2)
-    tensor_free(b2)
 
     0
 }

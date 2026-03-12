@@ -15,11 +15,11 @@ fn main() -> i64 {
     arr.push(5)
 
     // Map: [2, 4, 6, 8, 10]
-    let doubled = arr.map(double)
+    let doubled = arr.iter().map(double).collect()
 
     // Filter even: [2, 4, 6, 8, 10] (all even after doubling)
-    let evens = doubled.filter(is_even)
+    let evens = doubled.iter().filter(is_even).collect()
 
     // Reduce: 2+4+6+8+10 = 30
-    evens.reduce(0, add)
+    evens.iter().fold(0, add)
 }

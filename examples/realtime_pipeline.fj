@@ -59,8 +59,14 @@ fn main() -> i64 {
         // Stage 2: Normalize
         let normalized = normalize(raw)
 
+        // Compute input mean before passing normalized to inference (moves it)
+        let input_mean = tensor_mean(normalized)
+
         // Stage 3: Neural network inference
         let output = inference(normalized, w1, b1, w2, b2)
+
+        // Compute confidence before argmax (moves output)
+        let confidence = tensor_sum(output)
 
         // Stage 4: Decision
         let class_id = tensor_argmax(output)
@@ -74,9 +80,6 @@ fn main() -> i64 {
         print(step)
         print("] ")
 
-        // Show confidence (sum should be ~1.0 for valid softmax)
-        let confidence = tensor_sum(output)
-
         if decision == 0 {
             print("IDLE     ")
             idle_count = idle_count + 1
@@ -88,8 +91,7 @@ fn main() -> i64 {
             run_count = run_count + 1
         }
 
-        // Show input magnitude
-        let input_mean = tensor_mean(normalized)
+        // Show input magnitude and confidence
         print(" (input_mean=")
         print(input_mean)
         print(", softmax_sum=")
@@ -99,11 +101,6 @@ fn main() -> i64 {
         if decision == 2 {
             println("         ^ HIGH ACTIVITY ALERT")
         }
-
-        // Cleanup per-step tensors
-        tensor_free(raw)
-        tensor_free(normalized)
-        tensor_free(output)
 
         step = step + 1
     }
@@ -121,12 +118,6 @@ fn main() -> i64 {
     println("")
     println("Streaming inference complete.")
     println("In production: runs at 100Hz on bare-metal with bounded latency.")
-
-    // Cleanup weights
-    tensor_free(w1)
-    tensor_free(b1)
-    tensor_free(w2)
-    tensor_free(b2)
 
     0
 }

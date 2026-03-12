@@ -1,7 +1,7 @@
 // String operations in Fajar Lang (native codegen)
 // Demonstrates string methods and manipulation.
 
-fn main() -> i64 {
+fn main() -> usize {
     let greeting = "Hello, World!"
     let len1 = len(greeting)
 

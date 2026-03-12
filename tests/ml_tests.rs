@@ -404,7 +404,7 @@ fn ml_tensor_max_min_argmax() {
     let output = eval_output(source);
     assert_eq!(output[0], "tensor(5)");
     assert_eq!(output[1], "tensor(1)");
-    assert_eq!(output[2], "tensor(4)");
+    assert_eq!(output[2], "4");
 }
 
 #[test]

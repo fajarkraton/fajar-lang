@@ -39,12 +39,6 @@ fn main() -> i64 {
     println(rows)
     println(cols)
 
-    // Cleanup
-    tensor_free(input)
-    tensor_free(w1)
-    tensor_free(w2)
-    tensor_free(output)
-
     println("Training complete.")
     predicted
 }

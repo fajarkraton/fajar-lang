@@ -149,11 +149,6 @@ fn main() -> i64 {
 
         total = total + 1
 
-        // Cleanup per-sample
-        tensor_free(input)
-        tensor_free(output)
-        tensor_free(target_row)
-
         i = i + 1
     }
 
@@ -196,12 +191,6 @@ fn main() -> i64 {
 
     println("")
     println("Metrics evaluation complete.")
-
-    // Cleanup
-    tensor_free(w1)
-    tensor_free(w2)
-    tensor_free(targets)
-    tensor_free(target_classes)
 
     0
 }
