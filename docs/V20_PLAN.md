@@ -6,6 +6,7 @@
 > **App Dev Reference:** `docs/Q6A_APP_DEV.md` — Official Radxa app-dev documentation digest.
 > **Low-Level Dev Reference:** `docs/Q6A_LOW_LEVEL_DEV.md` — Boot, EDL, SPI firmware, kernel/OS build.
 > **Hardware Usage Reference:** `docs/Q6A_HARDWARE_USE.md` — Power, storage, GPIO pinout, display, camera, audio, RTC.
+> **Accessories Reference:** `docs/Q6A_ACCESSORIES.md` — Cameras, displays, storage modules, PoE HAT.
 > **Official Docs:** https://docs.radxa.com/en/dragon/q6a
 
 ---

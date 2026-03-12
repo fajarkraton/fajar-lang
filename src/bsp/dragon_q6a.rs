@@ -909,6 +909,75 @@ impl CameraConfig {
     }
 }
 
+/// Compatible camera module for the Dragon Q6A.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameraModule {
+    /// Radxa Camera 4K — 4K resolution, 31-pin 0.3mm FPC.
+    Camera4K,
+    /// Radxa Camera 8M 219 — IMX219 8MP, 15-pin 1.0mm FPC.
+    Camera8M219,
+    /// Radxa Camera 12M 577 — IMX577 12MP, 31-pin 0.3mm FPC.
+    Camera12M577,
+    /// Radxa Camera 13M 214 — 13MP, 31-pin 0.3mm FPC.
+    Camera13M214,
+}
+
+impl CameraModule {
+    /// Returns the sensor name (if known).
+    pub fn sensor(&self) -> &'static str {
+        match self {
+            CameraModule::Camera4K => "unknown",
+            CameraModule::Camera8M219 => "IMX219",
+            CameraModule::Camera12M577 => "IMX577",
+            CameraModule::Camera13M214 => "unknown",
+        }
+    }
+
+    /// Returns the rsetup overlay name to enable this camera.
+    pub fn rsetup_overlay(&self) -> &'static str {
+        match self {
+            CameraModule::Camera4K => "Enable Radxa Camera 4K on CAM1",
+            CameraModule::Camera8M219 => "Enable IMX219 on CAM1",
+            CameraModule::Camera12M577 => "Enable IMX577 camera on CAM1",
+            CameraModule::Camera13M214 => "Enable Camera 13M 214 on CAM1",
+        }
+    }
+
+    /// Returns the FPC connector pin count.
+    pub fn fpc_pins(&self) -> u8 {
+        match self {
+            CameraModule::Camera8M219 => 15, // 15-pin 1.0mm pitch
+            _ => 31,                          // 31-pin 0.3mm pitch
+        }
+    }
+
+    /// Returns all compatible camera modules.
+    pub fn all() -> &'static [CameraModule] {
+        &[
+            CameraModule::Camera4K,
+            CameraModule::Camera8M219,
+            CameraModule::Camera12M577,
+            CameraModule::Camera13M214,
+        ]
+    }
+}
+
+impl fmt::Display for CameraModule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CameraModule::Camera4K => write!(f, "Radxa Camera 4K"),
+            CameraModule::Camera8M219 => write!(f, "Radxa Camera 8M 219 (IMX219)"),
+            CameraModule::Camera12M577 => write!(f, "Radxa Camera 12M 577 (IMX577)"),
+            CameraModule::Camera13M214 => write!(f, "Radxa Camera 13M 214"),
+        }
+    }
+}
+
+/// Generates the libcamera qcam preview command.
+pub fn libcamera_preview_command(width: u32, height: u32) -> String {
+    format!("./qcam --renderer=gles --stream pixelformat=YUYV,width={width},height={height}")
+}
+
 /// Generates a v4l2-ctl command to capture a frame.
 pub fn camera_capture_command(config: &CameraConfig, output_path: &str) -> String {
     format!(
@@ -1745,6 +1814,48 @@ mod tests {
         assert_eq!(cam.width, 1920);
         assert_eq!(cam.height, 1080);
         assert_eq!(cam.format, CameraFormat::Nv12);
+    }
+
+    #[test]
+    fn q6a_camera_modules() {
+        let modules = CameraModule::all();
+        assert_eq!(modules.len(), 4);
+    }
+
+    #[test]
+    fn q6a_camera_module_sensors() {
+        assert_eq!(CameraModule::Camera8M219.sensor(), "IMX219");
+        assert_eq!(CameraModule::Camera12M577.sensor(), "IMX577");
+        assert_eq!(CameraModule::Camera4K.sensor(), "unknown");
+    }
+
+    #[test]
+    fn q6a_camera_module_fpc_pins() {
+        assert_eq!(CameraModule::Camera8M219.fpc_pins(), 15);
+        assert_eq!(CameraModule::Camera4K.fpc_pins(), 31);
+        assert_eq!(CameraModule::Camera12M577.fpc_pins(), 31);
+    }
+
+    #[test]
+    fn q6a_camera_module_rsetup_overlay() {
+        assert!(CameraModule::Camera12M577.rsetup_overlay().contains("IMX577"));
+        assert!(CameraModule::Camera8M219.rsetup_overlay().contains("IMX219"));
+    }
+
+    #[test]
+    fn q6a_camera_module_display() {
+        assert!(format!("{}", CameraModule::Camera12M577).contains("IMX577"));
+        assert!(format!("{}", CameraModule::Camera8M219).contains("IMX219"));
+        assert!(format!("{}", CameraModule::Camera4K).contains("4K"));
+    }
+
+    #[test]
+    fn q6a_libcamera_preview_command() {
+        let cmd = libcamera_preview_command(1920, 1080);
+        assert!(cmd.contains("qcam"));
+        assert!(cmd.contains("YUYV"));
+        assert!(cmd.contains("1920"));
+        assert!(cmd.contains("1080"));
     }
 
     #[test]
