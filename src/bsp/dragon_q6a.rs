@@ -998,6 +998,95 @@ pub fn npu_fastrpc_device() -> &'static str {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Boot Chain & SPI Firmware
+// ═══════════════════════════════════════════════════════════════════════
+
+/// SPI NOR flash partition in the boot chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpiPartition {
+    /// eXtensible Bootloader — first stage after BootROM.
+    Xbl,
+    /// Device configuration data.
+    Devcfg,
+    /// LPDDR5 memory training data.
+    Ddr,
+    /// UEFI BIOS firmware.
+    Uefi,
+}
+
+impl SpiPartition {
+    /// Returns the partition name as used by edl-ng.
+    pub fn name(&self) -> &'static str {
+        match self {
+            SpiPartition::Xbl => "xbl",
+            SpiPartition::Devcfg => "devcfg",
+            SpiPartition::Ddr => "ddr",
+            SpiPartition::Uefi => "uefi",
+        }
+    }
+
+    /// Returns all SPI partitions in boot order.
+    pub fn all() -> &'static [SpiPartition] {
+        &[
+            SpiPartition::Xbl,
+            SpiPartition::Devcfg,
+            SpiPartition::Ddr,
+            SpiPartition::Uefi,
+        ]
+    }
+}
+
+impl fmt::Display for SpiPartition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SpiPartition::Xbl => write!(f, "XBL (eXtensible Bootloader)"),
+            SpiPartition::Devcfg => write!(f, "DEVCFG (Device Configuration)"),
+            SpiPartition::Ddr => write!(f, "DDR (LPDDR5 Training Data)"),
+            SpiPartition::Uefi => write!(f, "UEFI (BIOS Firmware)"),
+        }
+    }
+}
+
+/// EDL (Emergency Download) mode USB identifiers.
+pub const EDL_USB_VENDOR_ID: u16 = 0x05c6;
+/// EDL USB product ID (Qualcomm 9008 mode).
+pub const EDL_USB_PRODUCT_ID: u16 = 0x9008;
+
+/// Minimum required SPI firmware version for current OS images.
+pub const MIN_SPI_FIRMWARE_VERSION: &str = "20251230";
+
+/// Generates the edl-ng command to flash SPI boot firmware.
+///
+/// Requires the device to be in EDL mode (USB `05c6:9008`).
+pub fn edl_flash_spi_command(firmware_dir: &str) -> String {
+    format!(
+        "sudo edl-ng --memory=spinor \
+         rawprogram {firmware_dir}/rawprogram0.xml {firmware_dir}/patch0.xml \
+         --loader={firmware_dir}/prog_firehose_ddr.elf"
+    )
+}
+
+/// Generates the edl-ng command to erase a specific SPI partition.
+///
+/// **WARNING:** Erasing prevents boot. Re-flash immediately after.
+pub fn edl_erase_partition_command(partition: SpiPartition, loader_path: &str) -> String {
+    format!(
+        "sudo edl-ng --memory spinor erase-part {} -l {loader_path}",
+        partition.name()
+    )
+}
+
+/// Returns the kernel source repository URL.
+pub fn kernel_repo() -> &'static str {
+    "https://github.com/radxa-pkg/linux-qcom.git"
+}
+
+/// Returns the OS SDK (rsdk) repository URL.
+pub fn os_sdk_repo() -> &'static str {
+    "https://github.com/RadxaOS-SDK/rsdk.git"
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Board Implementation
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1728,6 +1817,64 @@ mod tests {
     fn q6a_vector_table_zero() {
         let board = DragonQ6A::new_16gb();
         assert_eq!(board.vector_table_size(), 0);
+    }
+
+    // — Boot Chain & SPI —
+
+    #[test]
+    fn q6a_spi_partitions() {
+        let parts = SpiPartition::all();
+        assert_eq!(parts.len(), 4);
+        assert_eq!(parts[0], SpiPartition::Xbl);
+        assert_eq!(parts[3], SpiPartition::Uefi);
+    }
+
+    #[test]
+    fn q6a_spi_partition_names() {
+        assert_eq!(SpiPartition::Xbl.name(), "xbl");
+        assert_eq!(SpiPartition::Devcfg.name(), "devcfg");
+        assert_eq!(SpiPartition::Ddr.name(), "ddr");
+        assert_eq!(SpiPartition::Uefi.name(), "uefi");
+    }
+
+    #[test]
+    fn q6a_spi_partition_display() {
+        assert!(format!("{}", SpiPartition::Xbl).contains("eXtensible Bootloader"));
+        assert!(format!("{}", SpiPartition::Uefi).contains("BIOS"));
+        assert!(format!("{}", SpiPartition::Ddr).contains("LPDDR5"));
+    }
+
+    #[test]
+    fn q6a_edl_usb_ids() {
+        assert_eq!(EDL_USB_VENDOR_ID, 0x05c6);
+        assert_eq!(EDL_USB_PRODUCT_ID, 0x9008);
+    }
+
+    #[test]
+    fn q6a_edl_flash_command() {
+        let cmd = edl_flash_spi_command("/tmp/fw");
+        assert!(cmd.contains("edl-ng"));
+        assert!(cmd.contains("--memory=spinor"));
+        assert!(cmd.contains("rawprogram0.xml"));
+        assert!(cmd.contains("patch0.xml"));
+        assert!(cmd.contains("prog_firehose_ddr.elf"));
+    }
+
+    #[test]
+    fn q6a_edl_erase_command() {
+        let cmd = edl_erase_partition_command(SpiPartition::Uefi, "/tmp/prog_firehose_ddr.elf");
+        assert!(cmd.contains("erase-part uefi"));
+        assert!(cmd.contains("prog_firehose_ddr.elf"));
+    }
+
+    #[test]
+    fn q6a_kernel_repo_url() {
+        assert!(kernel_repo().contains("linux-qcom"));
+    }
+
+    #[test]
+    fn q6a_os_sdk_repo_url() {
+        assert!(os_sdk_repo().contains("rsdk"));
     }
 
     // — Board Info —
