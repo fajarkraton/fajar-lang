@@ -1087,6 +1087,78 @@ pub fn os_sdk_repo() -> &'static str {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Storage Interfaces
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Storage interface type available on the Dragon Q6A.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageInterface {
+    /// M.2 M Key 2230 NVMe SSD (PCIe Gen3 x2, ~1.6 GB/s read).
+    NvmeM2,
+    /// eMMC module via combo connector.
+    Emmc,
+    /// UFS module via combo connector.
+    Ufs,
+    /// MicroSD/SDHC/SDXC card slot.
+    MicroSd,
+}
+
+impl fmt::Display for StorageInterface {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StorageInterface::NvmeM2 => write!(f, "M.2 M Key 2230 NVMe (PCIe Gen3 x2)"),
+            StorageInterface::Emmc => write!(f, "eMMC module (combo connector)"),
+            StorageInterface::Ufs => write!(f, "UFS module (combo connector)"),
+            StorageInterface::MicroSd => write!(f, "MicroSD/SDHC/SDXC"),
+        }
+    }
+}
+
+/// Measured NVMe read speed in MB/s (PCIe Gen3 x2).
+pub const NVME_READ_SPEED_MBS: u32 = 1649;
+/// Measured NVMe write speed in MB/s (PCIe Gen3 x2).
+pub const NVME_WRITE_SPEED_MBS: u32 = 1467;
+
+// ═══════════════════════════════════════════════════════════════════════
+// Power & RTC
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Power supply method for the Dragon Q6A.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerMethod {
+    /// 12V USB Type-C with PD protocol (recommended, min 2A).
+    UsbTypeCPd,
+    /// 12V via external power header pins (12V + GND).
+    ExternalHeader,
+    /// Power over Ethernet via PoE HAT accessory.
+    PoeHat,
+}
+
+impl fmt::Display for PowerMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PowerMethod::UsbTypeCPd => write!(f, "12V USB Type-C PD (recommended, min 2A)"),
+            PowerMethod::ExternalHeader => write!(f, "12V External Header (12V + GND pins)"),
+            PowerMethod::PoeHat => write!(f, "PoE+ HAT (Ethernet power)"),
+        }
+    }
+}
+
+/// RTC device path.
+pub const RTC_DEVICE: &str = "/dev/rtc0";
+/// RTC chip model.
+pub const RTC_CHIP: &str = "DS1307";
+/// RTC battery type.
+pub const RTC_BATTERY: &str = "CR2032";
+/// Ethernet interface name.
+pub const ETH_INTERFACE: &str = "enp1s0";
+
+/// ALSA audio device for playback (Card 0, Device 1).
+pub const ALSA_PLAYBACK: &str = "hw:0,1";
+/// ALSA audio device for capture (Card 0, Device 2).
+pub const ALSA_CAPTURE: &str = "hw:0,2";
+
+// ═══════════════════════════════════════════════════════════════════════
 // Board Implementation
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1875,6 +1947,46 @@ mod tests {
     #[test]
     fn q6a_os_sdk_repo_url() {
         assert!(os_sdk_repo().contains("rsdk"));
+    }
+
+    // — Storage —
+
+    #[test]
+    fn q6a_storage_interface_display() {
+        assert!(format!("{}", StorageInterface::NvmeM2).contains("PCIe Gen3 x2"));
+        assert!(format!("{}", StorageInterface::Emmc).contains("eMMC"));
+        assert!(format!("{}", StorageInterface::Ufs).contains("UFS"));
+        assert!(format!("{}", StorageInterface::MicroSd).contains("MicroSD"));
+    }
+
+    #[test]
+    fn q6a_nvme_speeds() {
+        assert_eq!(NVME_READ_SPEED_MBS, 1649);
+        assert_eq!(NVME_WRITE_SPEED_MBS, 1467);
+    }
+
+    // — Power & RTC —
+
+    #[test]
+    fn q6a_power_method_display() {
+        assert!(format!("{}", PowerMethod::UsbTypeCPd).contains("12V"));
+        assert!(format!("{}", PowerMethod::UsbTypeCPd).contains("PD"));
+        assert!(format!("{}", PowerMethod::ExternalHeader).contains("Header"));
+        assert!(format!("{}", PowerMethod::PoeHat).contains("PoE"));
+    }
+
+    #[test]
+    fn q6a_rtc_constants() {
+        assert_eq!(RTC_DEVICE, "/dev/rtc0");
+        assert_eq!(RTC_CHIP, "DS1307");
+        assert_eq!(RTC_BATTERY, "CR2032");
+    }
+
+    #[test]
+    fn q6a_eth_and_audio_constants() {
+        assert_eq!(ETH_INTERFACE, "enp1s0");
+        assert_eq!(ALSA_PLAYBACK, "hw:0,1");
+        assert_eq!(ALSA_CAPTURE, "hw:0,2");
     }
 
     // — Board Info —
