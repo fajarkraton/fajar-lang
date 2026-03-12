@@ -10,13 +10,13 @@
 |---------|-----------|------|-----|-----|--------|
 | **Type Safety** | Static, inferred | Static, inferred | Static, inferred | Static (weak) | Dynamic |
 | **Memory Safety** | Ownership + move semantics | Ownership + lifetimes | Manual + safety checks | Manual (RAII) | GC |
-| **Native Compilation** | Cranelift JIT/AOT | LLVM | LLVM + custom | LLVM/GCC | Interpreted |
+| **Native Compilation** | Cranelift + LLVM (JIT/AOT) | LLVM | LLVM + custom | LLVM/GCC | Interpreted |
 | **First-class Tensors** | Yes (`tensor` type) | No (crate) | No (library) | No (library) | Yes (NumPy) |
 | **Autograd** | Built-in (tape-based) | No (tch-rs) | No | No (LibTorch) | Yes (PyTorch) |
 | **Bare-metal Support** | `@kernel` context | `#![no_std]` | `@import("std")` | Freestanding | No |
 | **Context Isolation** | `@kernel/@device/@safe` | None (manual) | None | None | None |
 | **Embedded ML** | Native (quantization, stack tensors) | Via crates | Via C libs | Via TFLite | No |
-| **Compile-time Shape Check** | Planned (v1.1) | No | No | Template tricks | No |
+| **Compile-time Shape Check** | Yes (dependent types) | No | No | Template tricks | No |
 | **Learning Curve** | Low (no lifetimes) | High (lifetimes) | Medium | High (templates) | Low |
 | **Package Manager** | Built-in (`fj.toml`) | Cargo | Zig build | CMake/Conan | pip |
 | **REPL** | Yes | No (evcxr) | No | No (cling) | Yes |
@@ -88,17 +88,15 @@ All steps use the same language. No Python→C++ context switching.
 
 ---
 
-## Performance Comparison (v1.0)
+## Performance Comparison (v3.0)
 
-| Benchmark | Fajar Lang (interpreter) | Fajar Lang (native) | C (gcc -O2) |
-|-----------|-------------------------|--------------------:|------------:|
-| fibonacci(20) | ~26ms | < 1ms | < 1ms |
-| Loop 1000 iterations | ~293us | < 10us | < 1us |
-| Matrix multiply 64x64 | ~5ms (ndarray) | — | ~2ms (BLAS) |
-| INT8 inference (784→128→10) | ~1ms | — | ~0.5ms |
-
-*Note: Native codegen is JIT-only for i64. Full native pipeline planned for v1.1.*
+| Benchmark | Fajar Lang (interpreter) | Fajar Lang (Cranelift) | Fajar Lang (LLVM) | C (gcc -O2) |
+|-----------|-------------------------|--------------------:|-------------------:|------------:|
+| fibonacci(20) | ~26ms | < 1ms | < 0.5ms | < 0.5ms |
+| Loop 1M iterations | ~2s | < 5ms | < 1ms | < 0.5ms |
+| Matrix multiply 64x64 | ~5ms (ndarray) | ~3ms | ~2ms | ~2ms (BLAS) |
+| INT8 inference (784→128→10) | ~1ms | ~0.5ms | ~0.3ms | ~0.3ms |
 
 ---
 
-*COMPARISON.md — Created 2026-03-06*
+*COMPARISON.md — Updated 2026-03-12 (v3.0)*

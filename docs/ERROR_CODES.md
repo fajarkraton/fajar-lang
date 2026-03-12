@@ -20,6 +20,10 @@ Prefix:
   TE  = Tensor Error (shape/type)
   RE  = Runtime Error (execution)
   ME  = Memory Error (ownership/borrow)
+  CE  = Codegen Error (native compilation)
+  EE  = Effect Error (algebraic effects)
+  LN  = Linear Type Error (resource tracking)
+  GE  = GAT Error (generic associated types)
 
 Number: 3-digit sequential (001, 002, ...)
 ```
@@ -67,8 +71,8 @@ error[LE002]: unterminated string literal
 | PE006 | UnmatchedParen | Bracket/paren tidak cocok | `(1 + 2` |
 | PE007 | InvalidPattern | Pattern matching invalid | `match x { 1 + 2 => }` |
 | PE008 | DuplicateField | Field struct duplikat | `Point { x: 1, x: 2 }` |
-| PE009 | TrailingSeparator | Koma/titikkoma di akhir | `fn f(a, b,)` (warning) |
-| PE010 | InvalidAnnotation | Annotation tidak valid | `@unknown fn f() { }` |
+| PE009 | InvalidAssignment | Invalid left-hand side assignment | `1 + 2 = x` |
+| PE010 | ExpectedSemicolon | Statement separator expected | Missing `;` or newline |
 
 ---
 
@@ -81,13 +85,17 @@ error[LE002]: unterminated string literal
 | SE003 | UndefinedType | Tipe belum dideklarasikan |
 | SE004 | TypeMismatch | Tipe tidak cocok (expected vs actual) |
 | SE005 | ArgumentCountMismatch | Jumlah argumen fungsi tidak sesuai |
-| SE006 | DuplicateDefinition | Nama sudah didefinisikan di scope yang sama |
-| SE007 | ImmutableAssignment | Assignment ke variabel immutable (tanpa `mut`) |
-| SE008 | MissingReturnType | Fungsi tidak mengembalikan tipe yang dideklarasikan |
+| SE006 | ImmutableAssignment | Assignment ke variabel immutable (tanpa `mut`) |
+| SE007 | DuplicateDefinition | Nama sudah didefinisikan di scope yang sama |
+| SE008 | ReturnOutsideFunction | `return` di luar function body |
 | SE009 | UnusedVariable | Variabel dideklarasikan tapi tidak dipakai (warning) |
 | SE010 | UnreachableCode | Kode setelah return/break tidak bisa dijangkau (warning) |
-| SE011 | NonExhaustiveMatch | Match expression tidak mencakup semua pattern |
-| SE012 | MissingField | Struct initialization tidak lengkap |
+| SE011 | MissingReturn | Fungsi mungkin tidak mengembalikan value |
+| SE012 | InvalidContext | Operasi invalid di context saat ini |
+| SE017 | AsyncReturnType | Async function harus return `Future<T>` |
+| SE019 | UnusedImport | Import yang tidak digunakan (warning) |
+| SE020 | UnreachablePattern | Match arm unreachable setelah wildcard (warning) |
+| SE021 | LifetimeMismatch | Lifetime annotation conflict |
 
 ---
 
@@ -99,8 +107,8 @@ error[LE002]: unterminated string literal
 |------|------|-----------|--------|
 | KE001 | HeapAllocInKernel | Heap allocation di `@kernel` | `String::new()`, `Vec::new()` |
 | KE002 | TensorInKernel | Tensor operation di `@kernel` | `zeros()`, `relu()`, `.backward()` |
-| KE003 | AsyncInKernel | Async operation di `@kernel` | `await`, `async fn` |
-| KE004 | ClosureInKernel | Closure dengan capture di `@kernel` | `\|x\| x + captured_var` |
+| KE003 | DeviceCallInKernel | Calling `@device` function dari `@kernel` | `@device fn` dipanggil dalam `@kernel` |
+| KE004 | InvalidKernelOp | Operasi tidak diperbolehkan di `@kernel` | Operasi yang memerlukan heap |
 
 #### Contoh Output KE001:
 
@@ -122,8 +130,8 @@ error[KE001]: heap allocation not allowed in @kernel context
 | Code | Nama | Deskripsi | Contoh |
 |------|------|-----------|--------|
 | DE001 | RawPointerInDevice | Raw pointer di `@device` | `*mut T`, `*const T` |
-| DE002 | OsPrimitiveInDevice | OS primitive di `@device` | `irq_register!`, `port_write!`, `map_page!` |
-| DE003 | InlineAsmInDevice | Inline assembly di `@device` | `asm!()` |
+| DE002 | HardwareInDevice | Hardware access di `@device` | `irq_register!`, `port_write!`, `map_page!` |
+| DE003 | InvalidDeviceOp | Operasi tidak diperbolehkan di `@device` | `asm!()`, raw memory access |
 
 ---
 
@@ -132,22 +140,23 @@ error[KE001]: heap allocation not allowed in @kernel context
 | Code | Nama | Deskripsi |
 |------|------|-----------|
 | TE001 | ShapeMismatch | Dimensi tensor tidak kompatibel untuk operasi |
-| TE002 | MatmulShapeMismatch | Inner dimensions tidak cocok untuk matrix multiply |
-| TE003 | BroadcastError | Shape tidak bisa di-broadcast |
-| TE004 | InvalidAxis | Axis melebihi dimensi tensor |
-| TE005 | EmptyTensor | Operasi pada tensor dengan 0 elemen |
-| TE006 | GradNotEnabled | `backward()` dipanggil tanpa `requires_grad` |
-| TE007 | DoubleBackward | `backward()` dipanggil dua kali tanpa `retain_graph` |
-| TE008 | DtypeMismatch | Operasi antara tensor dengan tipe data berbeda |
+| TE002 | InvalidReshape | Cannot reshape — total elemen berbeda |
+| TE003 | DimOutOfRange | Dimension index melebihi rank tensor |
+| TE004 | EmptyTensor | Operasi pada tensor dengan 0 elemen |
+| TE005 | DtypeMismatch | Operasi antara tensor dengan tipe data berbeda |
+| TE006 | GradientError | Gradient computation gagal |
+| TE007 | QuantizationError | Quantization range error |
+| TE008 | DeviceError | Tensor device transfer gagal |
+| TE009 | CompileTimeShapeError | Compile-time shape verification gagal |
 
-### Contoh Output TE002:
+### Contoh Output TE001:
 
 ```
-error[TE002]: matrix multiplication shape mismatch
+error[TE001]: tensor shape mismatch
   --> model.fj:12:15
    |
 12 |     let c = a @ b
-   |               ^ matmul requires inner dimensions to match
+   |               ^ shapes incompatible for matmul
    |
    = note: left shape: [3, 4], right shape: [5, 6]
    = note: expected right rows = 4, got 5
@@ -164,10 +173,10 @@ error[TE002]: matrix multiplication shape mismatch
 | RE002 | IndexOutOfBounds | Akses array/slice di luar batas |
 | RE003 | StackOverflow | Rekursi terlalu dalam (> 1024 frames) |
 | RE004 | IntegerOverflow | Overflow pada arithmetic (debug mode) |
-| RE005 | NullAccess | Akses `Option::None` tanpa unwrap check |
-| RE006 | InvalidCast | Type cast yang tidak valid pada runtime |
-| RE007 | AssertionFailed | `assert!()` atau `assert_eq!()` gagal |
-| RE008 | PanicExplicit | `panic!()` dipanggil eksplisit |
+| RE005 | NullDereference | Null pointer dereference |
+| RE006 | AssertionFailed | `assert` atau `assert_eq` gagal |
+| RE007 | Timeout | Execution time limit exceeded |
+| RE008 | OutOfMemory | Memory allocation gagal |
 
 ---
 
@@ -178,13 +187,72 @@ error[TE002]: matrix multiplication shape mismatch
 | ME001 | UseAfterMove | Akses value setelah ownership berpindah |
 | ME002 | DoubleFree | Dealokasi memori yang sudah di-free |
 | ME003 | BorrowConflict | Simultaneous mutable + immutable borrow |
-| ME004 | MutableBorrowConflict | Dua mutable borrow ke value yang sama |
-| ME005 | DanglingReference | Reference ke value yang sudah di-drop |
-| ME006 | AllocFailed | `alloc!()` gagal (out of memory) |
-| ME007 | InvalidFree | `free!()` pada address yang bukan dari `alloc!()` |
-| ME008 | UnalignedAccess | Akses memory pada address yang tidak aligned |
+| ME004 | DanglingReference | Reference ke value yang sudah di-drop |
+| ME005 | MoveInLoop | Value moved inside loop iteration |
+| ME006 | PartialMove | Partially moved struct accessed |
+| ME007 | BorrowInClosure | Closure captures conflicting borrow |
+| ME008 | MutableAliasing | Multiple mutable references ke data yang sama |
+| ME009 | LifetimeExpired | Borrowed reference outlives source |
+| ME010 | LifetimeConstraint | Lifetime constraint cannot be satisfied |
 
 ---
 
-*Error Codes Version: 1.1 | Total: 61 error codes across 8 categories*
-*Updated: 2026-03-05 (count correction: LE=8, PE=10, SE=12, KE=4, DE=3, TE=8, RE=8, ME=8 = 61)*
+## 9. Codegen Errors (CE)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| CE001 | UnsupportedTarget | Target architecture tidak didukung |
+| CE002 | LinkError | Linker gagal |
+| CE003 | NotImplemented | Fitur belum ada di native codegen |
+| CE004 | FunctionError | Cranelift verification error |
+| CE005 | TypeCoercionError | Cannot coerce types di codegen |
+| CE006 | UndefinedFunction | Function tidak tersedia di native mode |
+| CE007 | SymbolConflict | Duplicate symbol name |
+| CE008 | AbiMismatch | ABI incompatibility |
+| CE009 | LlvmError | LLVM backend error |
+| CE010 | WasmError | WebAssembly backend error |
+
+---
+
+## 10. Effect Errors (EE)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| EE001 | UnhandledEffect | Effect tidak di-handle dalam scope |
+| EE002 | EffectMismatch | Effect set fungsi tidak sesuai deklarasi |
+| EE003 | PurityViolation | `#[pure]` function melakukan operasi effectful |
+| EE004 | EffectInKernel | `Alloc` effect digunakan di `@kernel` |
+| EE005 | EffectInDevice | `IO` effect digunakan di `@device` |
+| EE006 | ResumeTypeMismatch | Resume value type tidak sesuai handler |
+| EE007 | EffectRecursion | Recursive effect handling |
+| EE008 | HandlerMissing | Required effect handler tidak disediakan |
+
+---
+
+## 11. Linear Type Errors (LN)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| LN001 | UseAfterConsume | Linear resource digunakan setelah consumption |
+| LN002 | ResourceNotConsumed | Linear resource di-drop tanpa consumption |
+| LN003 | DoubleConsume | Linear resource di-consume dua kali |
+| LN004 | ResourceEscaped | Linear resource escaped scope-nya |
+| LN005 | BorrowConsumed | Borrow dari resource yang sudah consumed |
+| LN006 | LinearInNonLinear | Linear resource di non-linear context |
+| LN007 | MustUseIgnored | Must-use resource return value diabaikan |
+| LN008 | PinViolation | Pin protocol dilanggar (configure-once) |
+
+---
+
+## 12. GAT Errors (GE)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| GE001 | GatKindMismatch | Associated type kind tidak sesuai deklarasi |
+| GE002 | UnsatisfiedGatBound | GAT type parameter constraint tidak terpenuhi |
+| GE003 | ObjectUnsafe | Trait dengan GAT tidak bisa digunakan sebagai trait object |
+
+---
+
+*Error Codes Version: 3.0 | Total: 95 error codes across 12 categories*
+*Updated: 2026-03-12 (v3.0 — added CE, EE, LN, GE categories; updated SE, ME, TE codes)*
