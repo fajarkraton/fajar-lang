@@ -390,55 +390,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S25 — Execution Recording
 
-- [ ] S25.1 — Record Mode: `fj run --record program.fj` — record all state changes during execution
-- [ ] S25.2 — Event Log: Record function entries/exits, variable assignments, heap allocations, I/O operations
-- [ ] S25.3 — Compact Encoding: Delta-compress state changes — only record what changed, not full snapshots
-- [ ] S25.4 — Recording Format: Binary format with index for random access to any execution point
-- [ ] S25.5 — Recording Overhead: < 10x slowdown for record mode (target: 2-5x)
-- [ ] S25.6 — Selective Recording: `@record` annotation on specific functions to reduce overhead
-- [ ] S25.7 — Recording Size Limits: Configurable max recording size with ring-buffer mode for long runs
-- [ ] S25.8 — I/O Capture: Record all file reads, network responses for deterministic replay
-- [ ] S25.9 — Thread Recording: Record thread scheduling decisions for deterministic multi-threaded replay
-- [ ] S25.10 — Unit Tests: 15+ tests for event recording, delta compression, format, overhead, selective, I/O capture
+- [x] S25.1 — Record Mode: `fj run --record program.fj` — record all state changes during execution
+- [x] S25.2 — Event Log: Record function entries/exits, variable assignments, heap allocations, I/O operations
+- [x] S25.3 — Compact Encoding: Delta-compress state changes — only record what changed, not full snapshots
+- [x] S25.4 — Recording Format: Binary format with index for random access to any execution point
+- [x] S25.5 — Recording Overhead: < 10x slowdown for record mode (target: 2-5x)
+- [x] S25.6 — Selective Recording: `@record` annotation on specific functions to reduce overhead
+- [x] S25.7 — Recording Size Limits: Configurable max recording size with ring-buffer mode for long runs
+- [x] S25.8 — I/O Capture: Record all file reads, network responses for deterministic replay
+- [x] S25.9 — Thread Recording: Record thread scheduling decisions for deterministic multi-threaded replay
+- [x] S25.10 — Unit Tests: 15+ tests for event recording, delta compression, format, overhead, selective, I/O capture
 
 ### Sprint S26 — Time-Travel Replay
 
-- [ ] S26.1 — Replay Mode: `fj replay recording.fjrec` — replay execution with full debugger support
-- [ ] S26.2 — Reverse Continue: `reverse-continue` — run backwards to previous breakpoint
-- [ ] S26.3 — Reverse Step: `reverse-step` — step backwards one statement
-- [ ] S26.4 — Reverse Search: Find last assignment to a variable, last call to a function
-- [ ] S26.5 — Watchpoint Reverse: When a watchpoint triggers, travel back to where the value was set
-- [ ] S26.6 — Root Cause Analysis: Trace back from a crash/assertion to the first wrong value
-- [ ] S26.7 — Timeline View: Visual timeline of execution with zoomable regions and bookmarks
-- [ ] S26.8 — Diff at Points: Compare program state at two points in execution
-- [ ] S26.9 — Replay Fidelity: Guarantee bit-exact reproduction of original execution
-- [ ] S26.10 — Unit Tests: 15+ tests for replay correctness, reverse stepping, search, diff, fidelity
+- [x] S26.1 — Replay Mode: `fj replay recording.fjrec` — replay execution with full debugger support
+- [x] S26.2 — Reverse Continue: `reverse-continue` — run backwards to previous breakpoint
+- [x] S26.3 — Reverse Step: `reverse-step` — step backwards one statement
+- [x] S26.4 — Reverse Search: Find last assignment to a variable, last call to a function
+- [x] S26.5 — Watchpoint Reverse: When a watchpoint triggers, travel back to where the value was set
+- [x] S26.6 — Root Cause Analysis: Trace back from a crash/assertion to the first wrong value
+- [x] S26.7 — Timeline View: Visual timeline of execution with zoomable regions and bookmarks
+- [x] S26.8 — Diff at Points: Compare program state at two points in execution
+- [x] S26.9 — Replay Fidelity: Guarantee bit-exact reproduction of original execution
+- [x] S26.10 — Unit Tests: 15+ tests for replay correctness, reverse stepping, search, diff, fidelity
 
 ### Sprint S27 — Memory Visualization
 
-- [ ] S27.1 — Heap Map: Visual representation of heap — blocks, sizes, fragmentation
-- [ ] S27.2 — Allocation Timeline: Graph of heap usage over time with allocation/deallocation events
-- [ ] S27.3 — Reference Graph: Visual graph of object references — detect cycles, dangling refs
-- [ ] S27.4 — Stack Visualization: Visual stack frames with variable values and sizes
-- [ ] S27.5 — Memory Leak Detection: Track allocations without corresponding frees, report likely leaks
-- [ ] S27.6 — Memory Diff: Compare heap state between two execution points
-- [ ] S27.7 — Ownership Visualization: Show ownership tree — who owns what, borrow relationships
-- [ ] S27.8 — Tensor Memory Map: Visualize tensor layout in memory — strides, padding, alignment
-- [ ] S27.9 — Cache Analysis: Simulate cache behavior, highlight cache-unfriendly access patterns
-- [ ] S27.10 — Unit Tests: 15+ tests for heap tracking, reference graphs, leak detection, ownership viz, tensor layout
+- [x] S27.1 — Heap Map: Visual representation of heap — blocks, sizes, fragmentation
+- [x] S27.2 — Allocation Timeline: Graph of heap usage over time with allocation/deallocation events
+- [x] S27.3 — Reference Graph: Visual graph of object references — detect cycles, dangling refs
+- [x] S27.4 — Stack Visualization: Visual stack frames with variable values and sizes
+- [x] S27.5 — Memory Leak Detection: Track allocations without corresponding frees, report likely leaks
+- [x] S27.6 — Memory Diff: Compare heap state between two execution points
+- [x] S27.7 — Ownership Visualization: Show ownership tree — who owns what, borrow relationships
+- [x] S27.8 — Tensor Memory Map: Visualize tensor layout in memory — strides, padding, alignment
+- [x] S27.9 — Cache Analysis: Simulate cache behavior, highlight cache-unfriendly access patterns
+- [x] S27.10 — Unit Tests: 15+ tests for heap tracking, reference graphs, leak detection, ownership viz, tensor layout
 
 ### Sprint S28 — Performance Profiling
 
-- [ ] S28.1 — CPU Profiler: Sampling profiler with configurable frequency (default: 1000Hz)
-- [ ] S28.2 — Flame Graph: Generate interactive flame graphs from profiling data
-- [ ] S28.3 — Hot Path Detection: Identify functions consuming most CPU time, rank by inclusive/exclusive time
-- [ ] S28.4 — Memory Profiler: Track allocation rate, peak usage, allocation hot spots
-- [ ] S28.5 — Async Profiler: Profile async task scheduling — time in poll, time waiting, wakeup latency
-- [ ] S28.6 — GPU Profiler: Track GPU kernel launch/completion times, occupancy, memory transfers
-- [ ] S28.7 — Lock Contention: Detect mutex contention hot spots — time waiting vs. time holding
-- [ ] S28.8 — I/O Profiler: Track I/O wait time — disk, network, IPC latency breakdown
-- [ ] S28.9 — Profile-Guided Hints: Suggest optimizations based on profiling data (inline, vectorize, cache)
-- [ ] S28.10 — Unit Tests: 15+ tests for sampling, flame graph generation, hot path, memory profiling, lock contention
+- [x] S28.1 — CPU Profiler: Sampling profiler with configurable frequency (default: 1000Hz)
+- [x] S28.2 — Flame Graph: Generate interactive flame graphs from profiling data
+- [x] S28.3 — Hot Path Detection: Identify functions consuming most CPU time, rank by inclusive/exclusive time
+- [x] S28.4 — Memory Profiler: Track allocation rate, peak usage, allocation hot spots
+- [x] S28.5 — Async Profiler: Profile async task scheduling — time in poll, time waiting, wakeup latency
+- [x] S28.6 — GPU Profiler: Track GPU kernel launch/completion times, occupancy, memory transfers
+- [x] S28.7 — Lock Contention: Detect mutex contention hot spots — time waiting vs. time holding
+- [x] S28.8 — I/O Profiler: Track I/O wait time — disk, network, IPC latency breakdown
+- [x] S28.9 — Profile-Guided Hints: Suggest optimizations based on profiling data (inline, vectorize, cache)
+- [x] S28.10 — Unit Tests: 15+ tests for sampling, flame graph generation, hot path, memory profiling, lock contention
 
 ---
 

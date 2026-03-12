@@ -25,6 +25,7 @@ pub mod codegen;
 pub mod compiler;
 pub mod concurrency_v2;
 pub mod debugger;
+pub mod debugger_v2;
 pub mod demos;
 pub mod dependent;
 pub mod distributed;
