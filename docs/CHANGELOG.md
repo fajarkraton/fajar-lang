@@ -45,7 +45,7 @@ Kategori perubahan:
 - New tests: ~540
 - Sprints: 32 (8 phases × 4 sprints)
 - Total: 320 tasks, all complete
-- Total tests: 5,163 (0 failures)
+- Total tests: 5,144 (0 failures)
 - Total LOC: ~230,000 Rust
 
 ---
@@ -97,6 +97,25 @@ Kategori perubahan:
 - New tests: 280 (40 per module)
 - Sprints: 28 (7 phases × 4 sprints)
 - Total: 280 tasks, all complete
+
+---
+
+## [1.1.0] — 2026-03-12 "Ascension"
+
+### Added
+- **Phase 1-2 — Hardware Detection**: CPU feature detection (SSE/AVX/NEON/SVE/RVV via CPUID/MRS), GPU discovery (CUDA Driver API), NPU detection (Intel VPU, AMD XDNA, Qualcomm Hexagon, Apple ANE), accelerator registry with ranking and fallback chains
+- **Phase 3-4 — Modern Numeric Formats & BSP**: FP8 (E4M3/E5M2), FP4, BF16, structured sparsity (2:4, 4:8), Jetson Thor BSP (Blackwell GPU, MIG partitioning, power management)
+- **Phase 5-6 — Advanced SIMD & CI/CD**: AVX-512, AMX (TMUL), AVX10.2+APX, Blackwell PTX emitters, CI/CD pipeline, binary distribution, installer generation
+- **Phase 7-8 — Package Registry & Playground**: Package registry with search/download/version resolution, online playground with Wasm sandbox and share encoding
+- **Phase 9-10 — Multi-Accelerator & Demos**: CPU/GPU/NPU/FPGA dispatch with cost model and profiling, real-world demos (drone controller, medical imaging, autonomous vehicle, smart factory)
+
+### Stats
+- New files: 70 source modules across 10 phases
+- New tests: ~593
+- Sprints: 40 (10 phases × 4 sprints)
+- Total: 400 tasks, all complete
+- Total tests: ~3,985 (0 failures)
+- Total LOC: ~220,000 Rust
 
 ---
 
@@ -156,7 +175,7 @@ Kategori perubahan:
 
 ---
 
-## [0.7.0] — 2026-03-11 "Power Management & Production Polish"
+## [0.7.0] — 2026-03-11 "Zenith"
 
 ### Added
 - **Phase 1 — Wasm Compilation**: Wasm target backend, wasm32 type mapping, memory model, component model stubs
@@ -178,6 +197,24 @@ Kategori perubahan:
 - New tests: 40 (10 per sprint across Sprints 25-28)
 - New example: `examples/rtic_blinky.fj`
 - Sprints: 25-28 (4 sprints, 40 tasks)
+
+---
+
+## [0.6.0] — 2026-03-11 "Horizon"
+
+### Added
+- **Phase 1 — LLVM Backend** (`src/codegen/llvm/`): LLVM JIT/AOT compilation via inkwell, full expression/control flow/function support, optimization passes (O0-O3, LTO), `fj run --llvm` CLI integration
+- **Phase 2 — DAP Debugger** (`src/debugger/dap/`): Debug Adapter Protocol server with VS Code integration, breakpoints (line/conditional/hit count/log), stepping (in/out/over), variable inspection, stack traces, DWARF debug info
+- **Phase 3 — Board Support Packages** (`src/bsp/`): BSP abstraction (`Board` trait), STM32F4/ESP32-S3/nRF52840/RPi4/Jetson Orin Nano targets, HAL traits (GPIO/SPI/I2C/UART/PWM), auto-configuration from `fj.toml`
+- **Phase 4 — Package Registry** (`src/package/registry.rs`): Yanking, auth tokens, sparse index, download counting, name collision detection
+- **Phase 5 — Lifetime Annotations**: `TokenKind::Lifetime`, elision rules (same as Rust), SE021/ME009/ME010 error codes
+- **Phase 6 — RTOS Integration** (`src/runtime/os/rtos.rs`): FreeRTOS FFI, task/queue/mutex/semaphore/timer, realtime annotations
+- **Phase 7 — Advanced ML**: LSTM/GRU layers, AdamW optimizer, LR schedulers, DataLoader, mixed precision training
+- **Phase 8 — Arduino VENTUNO Q**: STM32H5 BSP, CAN-FD HAL, Zephyr RTOS integration, dual-target build (MCU + MPU)
+
+### Stats
+- Sprints: 35 (8 phases)
+- Total: 280 tasks, all complete
 
 ---
 
@@ -307,7 +344,7 @@ Kategori perubahan:
 
 ---
 
-## [1.0.0] — v1.0 Foundation Complete
+## [0.2.0-foundation] — v1.0 Foundation Complete
 
 ### Added
 - **Month 1**: Analyzer + Cranelift JIT/AOT native compilation

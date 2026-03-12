@@ -6,7 +6,7 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-5%2C163_passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-5%2C144_passing-brightgreen)]()
 [![LOC](https://img.shields.io/badge/LOC-230K_Rust-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -305,7 +305,7 @@ docs/                 -- 44+ reference documents
 |--------|-------|
 | Rust LOC | ~230,000 |
 | Source files | 210+ `.rs` files |
-| Tests | 5,163 (0 failures) |
+| Tests | 5,144 (0 failures) |
 | Examples | 49 `.fj` programs |
 | Error codes | 78+ across 9 categories |
 | Documentation | 44+ docs + 40-page mdBook |
