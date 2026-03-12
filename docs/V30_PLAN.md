@@ -448,55 +448,55 @@ No existing language combines all five in a single toolchain.
 
 ### Sprint S29 — Container Support
 
-- [ ] S29.1 — Dockerfile Generation: `fj deploy --docker` generates optimized multi-stage Dockerfile
-- [ ] S29.2 — Minimal Base Image: FROM scratch / distroless for smallest possible container image
-- [ ] S29.3 — Static Linking: Produce fully static binaries (musl libc) for container deployment
-- [ ] S29.4 — Container Config: Read config from environment variables and config files, 12-factor app style
-- [ ] S29.5 — Docker Compose: Generate `docker-compose.yml` for multi-service Fajar Lang applications
-- [ ] S29.6 — Health Check: Container health check endpoint configured in Dockerfile HEALTHCHECK
-- [ ] S29.7 — Resource Limits: Respect cgroup memory/CPU limits, adjust thread pool and buffer sizes
-- [ ] S29.8 — Kubernetes Manifest: `fj deploy --k8s` generates Deployment, Service, ConfigMap YAML
-- [ ] S29.9 — Helm Chart: Generate Helm chart for parameterized Kubernetes deployment
-- [ ] S29.10 — Unit Tests: 15+ tests for Dockerfile generation, config loading, resource detection, manifest generation
+- [x] S29.1 — Dockerfile Generation: `fj deploy --docker` generates optimized multi-stage Dockerfile
+- [x] S29.2 — Minimal Base Image: FROM scratch / distroless for smallest possible container image
+- [x] S29.3 — Static Linking: Produce fully static binaries (musl libc) for container deployment
+- [x] S29.4 — Container Config: Read config from environment variables and config files, 12-factor app style
+- [x] S29.5 — Docker Compose: Generate `docker-compose.yml` for multi-service Fajar Lang applications
+- [x] S29.6 — Health Check: Container health check endpoint configured in Dockerfile HEALTHCHECK
+- [x] S29.7 — Resource Limits: Respect cgroup memory/CPU limits, adjust thread pool and buffer sizes
+- [x] S29.8 — Kubernetes Manifest: `fj deploy --k8s` generates Deployment, Service, ConfigMap YAML
+- [x] S29.9 — Helm Chart: Generate Helm chart for parameterized Kubernetes deployment
+- [x] S29.10 — Unit Tests: 15+ tests for Dockerfile generation, config loading, resource detection, manifest generation
 
 ### Sprint S30 — Observability
 
-- [ ] S30.1 — Structured Logging: `log::info!("request processed", method = "GET", status = 200, latency_ms = 42)`
-- [ ] S30.2 — Log Levels: Trace, Debug, Info, Warn, Error with runtime-configurable level
-- [ ] S30.3 — Metrics Registry: Counter, Gauge, Histogram metrics with Prometheus-compatible exposition
-- [ ] S30.4 — Prometheus Endpoint: `/metrics` HTTP endpoint in Prometheus text format
-- [ ] S30.5 — Distributed Tracing: OpenTelemetry-compatible spans with trace_id, span_id, parent_span_id
-- [ ] S30.6 — Trace Context Propagation: Propagate trace context across async tasks and RPC calls
-- [ ] S30.7 — Custom Metrics: `@metric(counter, "requests_total")` annotation on functions
-- [ ] S30.8 — Alerting Rules: Define alert thresholds in config — trigger when metric exceeds threshold
-- [ ] S30.9 — Dashboard Generation: `fj observe --dashboard` generates Grafana dashboard JSON
-- [ ] S30.10 — Unit Tests: 15+ tests for structured logging, metrics exposition, trace propagation, alerting
+- [x] S30.1 — Structured Logging: `log::info!("request processed", method = "GET", status = 200, latency_ms = 42)`
+- [x] S30.2 — Log Levels: Trace, Debug, Info, Warn, Error with runtime-configurable level
+- [x] S30.3 — Metrics Registry: Counter, Gauge, Histogram metrics with Prometheus-compatible exposition
+- [x] S30.4 — Prometheus Endpoint: `/metrics` HTTP endpoint in Prometheus text format
+- [x] S30.5 — Distributed Tracing: OpenTelemetry-compatible spans with trace_id, span_id, parent_span_id
+- [x] S30.6 — Trace Context Propagation: Propagate trace context across async tasks and RPC calls
+- [x] S30.7 — Custom Metrics: `@metric(counter, "requests_total")` annotation on functions
+- [x] S30.8 — Alerting Rules: Define alert thresholds in config — trigger when metric exceeds threshold
+- [x] S30.9 — Dashboard Generation: `fj observe --dashboard` generates Grafana dashboard JSON
+- [x] S30.10 — Unit Tests: 15+ tests for structured logging, metrics exposition, trace propagation, alerting
 
 ### Sprint S31 — Runtime Management
 
-- [ ] S31.1 — Graceful Shutdown: Handle SIGTERM/SIGINT, drain connections, flush buffers, then exit
-- [ ] S31.2 — Hot Reload: Reload configuration without restart — `fj reload` sends SIGHUP
-- [ ] S31.3 — Feature Flags Runtime: Toggle features at runtime via config file or API endpoint
-- [ ] S31.4 — Connection Draining: Stop accepting new connections, finish in-flight requests, then shutdown
-- [ ] S31.5 — Process Supervision: Restart on crash with exponential backoff (max 5 restarts in 60s)
-- [ ] S31.6 — Rolling Update: Zero-downtime deployment via listen-socket handoff between old/new process
-- [ ] S31.7 — Memory Limits: Configurable heap limit with graceful OOM (reject new work instead of crash)
-- [ ] S31.8 — Thread Pool Tuning: Adaptive thread pool sizing based on CPU count and load
-- [ ] S31.9 — Runtime Info Endpoint: `/info` endpoint with version, uptime, config, active connections
-- [ ] S31.10 — Unit Tests: 15+ tests for shutdown sequence, config reload, feature flags, draining, supervision
+- [x] S31.1 — Graceful Shutdown: Handle SIGTERM/SIGINT, drain connections, flush buffers, then exit
+- [x] S31.2 — Hot Reload: Reload configuration without restart — `fj reload` sends SIGHUP
+- [x] S31.3 — Feature Flags Runtime: Toggle features at runtime via config file or API endpoint
+- [x] S31.4 — Connection Draining: Stop accepting new connections, finish in-flight requests, then shutdown
+- [x] S31.5 — Process Supervision: Restart on crash with exponential backoff (max 5 restarts in 60s)
+- [x] S31.6 — Rolling Update: Zero-downtime deployment via listen-socket handoff between old/new process
+- [x] S31.7 — Memory Limits: Configurable heap limit with graceful OOM (reject new work instead of crash)
+- [x] S31.8 — Thread Pool Tuning: Adaptive thread pool sizing based on CPU count and load
+- [x] S31.9 — Runtime Info Endpoint: `/info` endpoint with version, uptime, config, active connections
+- [x] S31.10 — Unit Tests: 15+ tests for shutdown sequence, config reload, feature flags, draining, supervision
 
 ### Sprint S32 — Security & Auth
 
-- [ ] S32.1 — TLS Configuration: `tls.cert` and `tls.key` in config, automatic HTTPS with Let's Encrypt support
-- [ ] S32.2 — JWT Validation: Parse and validate JWT tokens with configurable issuer, audience, algorithms
-- [ ] S32.3 — API Key Auth: `@auth(api_key)` annotation for API key authentication on endpoints
-- [ ] S32.4 — Rate Limiting: Per-client rate limiting with token bucket algorithm
-- [ ] S32.5 — CORS Configuration: Configurable CORS headers for browser-accessible APIs
-- [ ] S32.6 — Secret Management: `fj secret set KEY=VALUE` — encrypted at-rest secrets, injected as env vars
-- [ ] S32.7 — Audit Logging: Log all authentication and authorization decisions with timestamp and client info
-- [ ] S32.8 — Input Sanitization: Automatic input sanitization for string parameters (XSS, SQL injection prevention)
-- [ ] S32.9 — Dependency Audit: `fj audit` scans dependencies for known vulnerabilities (CVE database)
-- [ ] S32.10 — Unit Tests: 15+ tests for TLS config, JWT parsing, rate limiting, CORS, sanitization, audit
+- [x] S32.1 — TLS Configuration: `tls.cert` and `tls.key` in config, automatic HTTPS with Let's Encrypt support
+- [x] S32.2 — JWT Validation: Parse and validate JWT tokens with configurable issuer, audience, algorithms
+- [x] S32.3 — API Key Auth: `@auth(api_key)` annotation for API key authentication on endpoints
+- [x] S32.4 — Rate Limiting: Per-client rate limiting with token bucket algorithm
+- [x] S32.5 — CORS Configuration: Configurable CORS headers for browser-accessible APIs
+- [x] S32.6 — Secret Management: `fj secret set KEY=VALUE` — encrypted at-rest secrets, injected as env vars
+- [x] S32.7 — Audit Logging: Log all authentication and authorization decisions with timestamp and client info
+- [x] S32.8 — Input Sanitization: Automatic input sanitization for string parameters (XSS, SQL injection prevention)
+- [x] S32.9 — Dependency Audit: `fj audit` scans dependencies for known vulnerabilities (CVE database)
+- [x] S32.10 — Unit Tests: 15+ tests for TLS config, JWT parsing, rate limiting, CORS, sanitization, audit
 
 ---
 
