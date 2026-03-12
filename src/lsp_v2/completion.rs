@@ -269,7 +269,7 @@ pub fn synthesize_expressions(
     }
 
     // Sort by score descending
-    results.sort_by(|a, b| b.score.cmp(&a.score));
+    results.sort_by_key(|x| std::cmp::Reverse(x.score));
     results
 }
 
@@ -424,7 +424,7 @@ pub fn complete_argument(param_type: &str, scope_vars: &[(&str, &str)]) -> Vec<A
         _ => {}
     }
 
-    results.sort_by(|a, b| b.score.cmp(&a.score));
+    results.sort_by_key(|x| std::cmp::Reverse(x.score));
     results
 }
 

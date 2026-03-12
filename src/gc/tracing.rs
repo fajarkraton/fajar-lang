@@ -492,7 +492,7 @@ mod tests {
     fn s22_4_young_gen_collection() {
         let mut heap = GcHeap::new();
         let a = heap.allocate("i32", 8);
-        let b = heap.allocate("i32", 8);
+        let _b = heap.allocate("i32", 8);
         heap.promote_to_old(a);
         heap.add_root(a);
         let result = heap.collect_young();

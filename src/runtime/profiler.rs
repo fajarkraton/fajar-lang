@@ -355,7 +355,7 @@ impl Profiler {
     /// Returns the top N functions by total time.
     pub fn hot_functions(&self, n: usize) -> Vec<&FunctionProfile> {
         let mut sorted: Vec<&FunctionProfile> = self.profiles.values().collect();
-        sorted.sort_by(|a, b| b.total_time_us.cmp(&a.total_time_us));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.total_time_us));
         sorted.truncate(n);
         sorted
     }
@@ -417,7 +417,7 @@ fn build_text_report(profiler: &Profiler) -> Vec<String> {
     lines.push("Functions:".to_string());
 
     let mut sorted: Vec<&FunctionProfile> = profiler.profiles.values().collect();
-    sorted.sort_by(|a, b| b.total_time_us.cmp(&a.total_time_us));
+    sorted.sort_by_key(|x| std::cmp::Reverse(x.total_time_us));
 
     for p in &sorted {
         lines.push(format!("  {p}"));
@@ -565,7 +565,7 @@ mod tests {
         let mut p = Profiler::new();
         p.start_function("foo");
         let dur = p.stop_function("foo").unwrap();
-        assert!(dur.as_nanos() >= 0);
+        let _ = dur; // duration is always non-negative
 
         let profiles = p.function_profiles();
         assert!(profiles.contains_key("foo"));

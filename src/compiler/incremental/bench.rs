@@ -115,8 +115,8 @@ impl BottleneckReport {
         mut file_timings: Vec<(String, u64)>,
         mut phase_timings: Vec<(String, u64)>,
     ) -> Self {
-        file_timings.sort_by(|a, b| b.1.cmp(&a.1));
-        phase_timings.sort_by(|a, b| b.1.cmp(&a.1));
+        file_timings.sort_by_key(|x| std::cmp::Reverse(x.1));
+        phase_timings.sort_by_key(|x| std::cmp::Reverse(x.1));
         Self {
             slowest_files: file_timings,
             slowest_phases: phase_timings,

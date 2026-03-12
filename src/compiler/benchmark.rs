@@ -166,11 +166,7 @@ impl BenchmarkResult {
     pub fn from_samples(name: String, samples: &[u64]) -> Self {
         let iterations = samples.len() as u64;
         let total_ns: u64 = samples.iter().sum();
-        let mean_ns = if iterations > 0 {
-            total_ns / iterations
-        } else {
-            0
-        };
+        let mean_ns = total_ns.checked_div(iterations).unwrap_or(0);
         let min_ns = samples.iter().copied().min().unwrap_or(0);
         let max_ns = samples.iter().copied().max().unwrap_or(0);
         let std_dev_ns = compute_std_dev(samples, mean_ns);

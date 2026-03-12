@@ -480,11 +480,7 @@ impl ThroughputMetrics {
 
     /// Returns the average latency per inference in microseconds.
     pub fn avg_latency_us(&self) -> u64 {
-        if self.iterations == 0 {
-            0
-        } else {
-            self.total_time_us / self.iterations
-        }
+        self.total_time_us.checked_div(self.iterations).unwrap_or(0)
     }
 
     /// Formats a throughput report.

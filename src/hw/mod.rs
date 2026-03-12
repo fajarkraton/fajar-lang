@@ -124,16 +124,10 @@ impl HardwareProfile {
         if let Ok(override_val) = std::env::var("FJ_ACCELERATOR") {
             match override_val.to_lowercase().as_str() {
                 "cpu" => return AcceleratorKind::Cpu,
-                "gpu" => {
-                    if !self.gpu.devices.is_empty() {
-                        return AcceleratorKind::Gpu(0);
-                    }
-                }
-                "npu" => {
-                    if !self.npu.devices.is_empty() {
-                        return AcceleratorKind::Npu(0);
-                    }
-                }
+                "gpu" if !self.gpu.devices.is_empty() => return AcceleratorKind::Gpu(0),
+                "gpu" => {}
+                "npu" if !self.npu.devices.is_empty() => return AcceleratorKind::Npu(0),
+                "npu" => {}
                 _ => {} // Invalid override — use default logic
             }
         }

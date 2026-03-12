@@ -829,11 +829,7 @@ impl PowerRail {
     /// Creates a mock power rail for testing.
     pub fn mock(name: &str, power_mw: u32) -> Self {
         let voltage_mv = 900; // typical Tegra rail voltage
-        let current_ma = if voltage_mv > 0 {
-            (power_mw * 1000) / voltage_mv
-        } else {
-            0
-        };
+        let current_ma = (power_mw * 1000).checked_div(voltage_mv).unwrap_or(0);
         Self {
             name: name.to_string(),
             power_mw,

@@ -180,7 +180,7 @@ impl SamplingProfiler {
     pub fn hottest(&self, top_n: usize) -> Vec<(&str, u64)> {
         let mut sorted: Vec<(&str, u64)> =
             self.samples.iter().map(|(k, v)| (k.as_str(), *v)).collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
         sorted.truncate(top_n);
         sorted
     }
@@ -238,7 +238,7 @@ impl CallGraph {
             .filter(|(e, _)| e.caller == caller)
             .map(|(e, c)| (e.callee.as_str(), *c))
             .collect();
-        result.sort_by(|a, b| b.1.cmp(&a.1));
+        result.sort_by_key(|x| std::cmp::Reverse(x.1));
         result
     }
 
@@ -250,7 +250,7 @@ impl CallGraph {
             .filter(|(e, _)| e.callee == callee)
             .map(|(e, c)| (e.caller.as_str(), *c))
             .collect();
-        result.sort_by(|a, b| b.1.cmp(&a.1));
+        result.sort_by_key(|x| std::cmp::Reverse(x.1));
         result
     }
 }
@@ -389,7 +389,7 @@ mod tests {
     // S13.3 — Hot Function Threshold
     #[test]
     fn s13_3_baseline_promotion() {
-        let mut profile = FunctionProfile::new("hot");
+        let profile = FunctionProfile::new("hot");
         for _ in 0..100 {
             profile.increment();
         }
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn s13_3_no_promotion_below_threshold() {
-        let mut profile = FunctionProfile::new("cold");
+        let profile = FunctionProfile::new("cold");
         for _ in 0..50 {
             profile.increment();
         }
@@ -411,7 +411,7 @@ mod tests {
     // S13.4 — Super-Hot Threshold
     #[test]
     fn s13_4_optimizing_promotion() {
-        let mut profile = FunctionProfile::new("super_hot");
+        let profile = FunctionProfile::new("super_hot");
         for _ in 0..10_000 {
             profile.increment();
         }

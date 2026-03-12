@@ -332,7 +332,7 @@ impl AsyncScope {
     /// Returns tasks sorted by priority (High first).
     pub fn tasks_by_priority(&self) -> Vec<&ScopedTask> {
         let mut sorted: Vec<_> = self.tasks.iter().collect();
-        sorted.sort_by(|a, b| b.priority.cmp(&a.priority));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.priority));
         sorted
     }
 
