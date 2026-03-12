@@ -28,17 +28,25 @@
 - [Algebraic Effects](./advanced/effects.md)
 - [Macros](./advanced/macros.md)
 - [Compile-Time Evaluation](./advanced/comptime.md)
+- [SIMD & Vectorization](./advanced/simd.md)
 - [Dependent Types](./advanced/dependent-types.md)
 - [Linear Types](./advanced/linear-types.md)
 - [Higher-Kinded Types](./advanced/hkt.md)
 - [Formal Verification](./advanced/verification.md)
+- [Garbage Collection Modes](./advanced/gc.md)
 
 # Compilation
 
 - [LLVM Backend](./compilation/llvm.md)
 - [WebAssembly](./compilation/wasm.md)
+- [Tiered JIT](./compilation/jit.md)
 - [Incremental Compilation](./compilation/incremental.md)
 - [Security Hardening](./compilation/security.md)
+- [Cross-Language Interop](./compilation/interop.md)
+- [Self-Hosting](./compilation/selfhost.md)
+- [Hardware Detection](./compilation/hardware.md)
+- [Cross-Platform Support](./compilation/crossplatform.md)
+- [Editions & Stability](./compilation/editions.md)
 
 # Concurrency
 
@@ -97,6 +105,7 @@
 - [LSP Server](./tools/lsp.md)
 - [Debugger](./tools/debugger.md)
 - [Package Manager](./tools/packages.md)
+- [Online Playground](./tools/playground.md)
 
 # Demos
 
