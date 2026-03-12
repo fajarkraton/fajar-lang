@@ -383,6 +383,10 @@ impl Interpreter {
             "tensor_zeros",
             "tensor_ones",
             "tensor_randn",
+            "zeros",
+            "ones",
+            "randn",
+            "tensor_rand",
             "tensor_eye",
             "tensor_full",
             "tensor_from_data",
@@ -1518,9 +1522,9 @@ impl Interpreter {
             "syscall_define" => self.builtin_syscall_define(args),
             "syscall_dispatch" => self.builtin_syscall_dispatch(args),
             // ML runtime builtins
-            "tensor_zeros" => self.builtin_tensor_zeros(args),
-            "tensor_ones" => self.builtin_tensor_ones(args),
-            "tensor_randn" => self.builtin_tensor_randn(args),
+            "tensor_zeros" | "zeros" => self.builtin_tensor_zeros(args),
+            "tensor_ones" | "ones" => self.builtin_tensor_ones(args),
+            "tensor_randn" | "tensor_rand" | "randn" => self.builtin_tensor_randn(args),
             "tensor_eye" => self.builtin_tensor_eye(args),
             "tensor_full" => self.builtin_tensor_full(args),
             "tensor_from_data" => self.builtin_tensor_from_data(args),
@@ -2694,42 +2698,50 @@ impl Interpreter {
         }
     }
 
-    /// `tensor_zeros([dim1, dim2, ...])` → Tensor
-    fn builtin_tensor_zeros(&self, args: Vec<Value>) -> EvalResult {
-        if args.len() != 1 {
-            return Err(RuntimeError::ArityMismatch {
-                expected: 1,
+    /// Helper: resolve tensor shape from args.
+    /// Accepts either `(rows, cols)` as two ints or `([dim1, dim2, ...])` as one array.
+    fn resolve_tensor_shape(&self, args: Vec<Value>) -> Result<Vec<usize>, EvalError> {
+        if args.len() == 1 {
+            Self::extract_shape(&args, 0)
+        } else if args.len() >= 2 && args.iter().all(|a| matches!(a, Value::Int(_))) {
+            let mut shape = Vec::with_capacity(args.len());
+            for a in &args {
+                if let Value::Int(n) = a {
+                    if *n >= 0 {
+                        shape.push(*n as usize);
+                    } else {
+                        return Err(RuntimeError::TypeError(
+                            "shape dimensions must be non-negative".into(),
+                        )
+                        .into());
+                    }
+                }
+            }
+            Ok(shape)
+        } else {
+            Err(RuntimeError::ArityMismatch {
+                expected: 2,
                 got: args.len(),
             }
-            .into());
+            .into())
         }
-        let shape = Self::extract_shape(&args, 0)?;
+    }
+
+    /// `tensor_zeros(rows, cols)` or `tensor_zeros([dim1, dim2, ...])` → Tensor
+    fn builtin_tensor_zeros(&self, args: Vec<Value>) -> EvalResult {
+        let shape = self.resolve_tensor_shape(args)?;
         Ok(Value::Tensor(TensorValue::zeros(&shape)))
     }
 
-    /// `tensor_ones([dim1, dim2, ...])` → Tensor
+    /// `tensor_ones(rows, cols)` or `tensor_ones([dim1, dim2, ...])` → Tensor
     fn builtin_tensor_ones(&self, args: Vec<Value>) -> EvalResult {
-        if args.len() != 1 {
-            return Err(RuntimeError::ArityMismatch {
-                expected: 1,
-                got: args.len(),
-            }
-            .into());
-        }
-        let shape = Self::extract_shape(&args, 0)?;
+        let shape = self.resolve_tensor_shape(args)?;
         Ok(Value::Tensor(TensorValue::ones(&shape)))
     }
 
-    /// `tensor_randn([dim1, dim2, ...])` → Tensor
+    /// `tensor_randn(rows, cols)` or `tensor_randn([dim1, dim2, ...])` → Tensor
     fn builtin_tensor_randn(&self, args: Vec<Value>) -> EvalResult {
-        if args.len() != 1 {
-            return Err(RuntimeError::ArityMismatch {
-                expected: 1,
-                got: args.len(),
-            }
-            .into());
-        }
-        let shape = Self::extract_shape(&args, 0)?;
+        let shape = self.resolve_tensor_shape(args)?;
         Ok(Value::Tensor(TensorValue::randn(&shape)))
     }
 

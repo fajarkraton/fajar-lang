@@ -23,7 +23,7 @@ use fajar_lang::FjDiagnostic;
 
 /// Fajar Lang — A systems programming language for OS and AI/ML.
 #[derive(Parser)]
-#[command(name = "fj", version = "0.5.0", about)]
+#[command(name = "fj", version = env!("CARGO_PKG_VERSION"), about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -467,7 +467,7 @@ fn is_balanced(source: &str) -> bool {
 
 /// Starts an interactive REPL with multi-line input and REPL commands.
 fn cmd_repl() -> ExitCode {
-    println!("Fajar Lang v0.5.0 — Interactive REPL");
+    println!("Fajar Lang v{} — Interactive REPL", env!("CARGO_PKG_VERSION"));
     println!("Type expressions to evaluate. Type 'exit' or Ctrl-D to quit.");
     println!("Commands: :type <expr>, :help");
     println!();

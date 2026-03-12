@@ -22,9 +22,9 @@ fn main() {
                        0.0, 0.0, 0.0, 0.0,
                        0.0, 0.0, 0.0, 0.0]
     let mut pos = 0
-    while pos < SEQ_LEN {
+    while pos < (SEQ_LEN) {
         let mut i = 0
-        while i < D_MODEL / 2 {
+        while i < (D_MODEL) / 2 {
             let angle = to_float(pos) / pow(10000.0, 2.0 * to_float(i) / to_float(D_MODEL))
             pos_enc[pos * D_MODEL + 2 * i] = sin(angle)
             pos_enc[pos * D_MODEL + 2 * i + 1] = cos(angle)

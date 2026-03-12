@@ -17,8 +17,7 @@ effect Exception<E> {
     fn throw(err: E) -> never
 }
 
-// Pure function — no effects
-#[pure]
+// Pure function — no effects (no annotation needed — pure by default)
 fn add(a: i32, b: i32) -> i32 {
     a + b
 }

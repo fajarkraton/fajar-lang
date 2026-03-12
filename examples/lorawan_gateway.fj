@@ -124,7 +124,7 @@ fn process_uplink(
     println("  Uplink from device " + addr_str)
 
     // Parse message type
-    if msg_type == MSG_TYPE_CONFIRMED_UP {
+    if msg_type == (MSG_TYPE_CONFIRMED_UP) {
         println("  Type: Confirmed uplink (ACK required)")
     } else {
         println("  Type: Unconfirmed uplink")

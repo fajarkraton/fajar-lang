@@ -64,7 +64,7 @@ fn exp(x: f64) -> f64 {
 // ── Actuator Control ──────────────────────────────────────────────
 
 fn actuator_control(anomaly_prob: f64) {
-    if anomaly_prob > THRESHOLD {
+    if anomaly_prob > (THRESHOLD) {
         println("[ACTUATOR] ALERT: Anomaly detected (p=" + to_string(anomaly_prob) + ") -> Emergency stop")
     } else {
         println("[ACTUATOR] Normal operation (p=" + to_string(anomaly_prob) + ")")

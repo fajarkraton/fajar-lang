@@ -1353,6 +1353,10 @@ impl TypeChecker {
             ("tensor_zeros", vec![Type::Unknown], dyn_t.clone()),
             ("tensor_ones", vec![Type::Unknown], dyn_t.clone()),
             ("tensor_randn", vec![Type::Unknown], dyn_t.clone()),
+            ("zeros", vec![Type::Unknown], dyn_t.clone()),
+            ("ones", vec![Type::Unknown], dyn_t.clone()),
+            ("randn", vec![Type::Unknown], dyn_t.clone()),
+            ("tensor_rand", vec![Type::Unknown], dyn_t.clone()),
             ("tensor_eye", vec![Type::I64], dyn_t.clone()),
             ("tensor_full", vec![Type::Unknown, Type::F64], dyn_t.clone()),
             (

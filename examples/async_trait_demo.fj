@@ -39,8 +39,8 @@ trait LendingIterator {
 }
 
 struct WindowsIter {
-    data: [i64; 8]
-    window_size: i64
+    data: [i64; 8],
+    window_size: i64,
     position: i64
 }
 
@@ -64,7 +64,7 @@ trait Stream {
 }
 
 struct NumberStream {
-    current: i64
+    current: i64,
     max: i64
 }
 
@@ -90,8 +90,8 @@ fn main() {
 
     // Lending iterator usage
     let mut iter = WindowsIter {
-        data: [1, 2, 3, 4, 5, 6, 7, 8]
-        window_size: 3
+        data: [1, 2, 3, 4, 5, 6, 7, 8],
+        window_size: 3,
         position: 0
     }
     println("Windows iterator created with window_size=3")
