@@ -896,6 +896,15 @@ impl Interpreter {
             (Value::Int(a), Value::Float(b)) => self.eval_float_binop(*a as f64, op, *b),
             (Value::Float(a), Value::Int(b)) => self.eval_float_binop(*a, op, *b as f64),
             (Value::Str(a), Value::Str(b)) => self.eval_str_binop(a, op, b),
+            // Pointer arithmetic: ptr + offset, offset + ptr, ptr - offset
+            (Value::Pointer(addr), Value::Int(offset)) => match op {
+                BinOp::Add => Ok(Value::Pointer(addr.wrapping_add(*offset as u64))),
+                BinOp::Sub => Ok(Value::Pointer(addr.wrapping_sub(*offset as u64))),
+                _ => self.eval_comparison(&lv, op, &rv),
+            },
+            (Value::Int(offset), Value::Pointer(addr)) if op == BinOp::Add => {
+                Ok(Value::Pointer(addr.wrapping_add(*offset as u64)))
+            }
             (Value::Bool(_), Value::Bool(_)) => self.eval_comparison(&lv, op, &rv),
             _ => self.eval_comparison(&lv, op, &rv),
         }
@@ -3839,6 +3848,13 @@ impl Interpreter {
             (Value::Str(a), Value::Str(b)) if binop == BinOp::Add => {
                 Ok(Value::Str(format!("{a}{b}")))
             }
+            // Pointer compound assignment: ptr += offset, ptr -= offset
+            (Value::Pointer(addr), Value::Int(offset)) if binop == BinOp::Add => {
+                Ok(Value::Pointer(addr.wrapping_add(*offset as u64)))
+            }
+            (Value::Pointer(addr), Value::Int(offset)) if binop == BinOp::Sub => {
+                Ok(Value::Pointer(addr.wrapping_sub(*offset as u64)))
+            }
             _ => Err(RuntimeError::TypeError(format!(
                 "unsupported compound assignment for {} and {}",
                 old.type_name(),
@@ -4365,10 +4381,23 @@ impl Interpreter {
         match (&val, type_name) {
             // Int → Float
             (Value::Int(n), "f64" | "f32") => Ok(Value::Float(*n as f64)),
-            // Float → Int (truncate)
-            (Value::Float(f), "i64" | "i32" | "i16" | "i8") => Ok(Value::Int(*f as i64)),
-            // Int → Int (widening/narrowing — all stored as i64 internally)
-            (Value::Int(_), "i64" | "i32" | "i16" | "i8" | "u8" | "u16" | "u32" | "u64") => Ok(val),
+            // Float → Int (truncate to target width)
+            (Value::Float(f), "i64") => Ok(Value::Int(*f as i64)),
+            (Value::Float(f), "i32") => Ok(Value::Int((*f as i32) as i64)),
+            (Value::Float(f), "i16") => Ok(Value::Int((*f as i16) as i64)),
+            (Value::Float(f), "i8") => Ok(Value::Int((*f as i8) as i64)),
+            (Value::Float(f), "u8") => Ok(Value::Int((*f as u8) as i64)),
+            (Value::Float(f), "u16") => Ok(Value::Int((*f as u16) as i64)),
+            (Value::Float(f), "u32") => Ok(Value::Int((*f as u32) as i64)),
+            (Value::Float(f), "u64") => Ok(Value::Int(*f as i64)),
+            // Int → Int (narrowing casts truncate, widening preserves)
+            (Value::Int(n), "u8") => Ok(Value::Int((*n as u8) as i64)),
+            (Value::Int(n), "u16") => Ok(Value::Int((*n as u16) as i64)),
+            (Value::Int(n), "u32") => Ok(Value::Int((*n as u32) as i64)),
+            (Value::Int(n), "i8") => Ok(Value::Int((*n as i8) as i64)),
+            (Value::Int(n), "i16") => Ok(Value::Int((*n as i16) as i64)),
+            (Value::Int(n), "i32") => Ok(Value::Int((*n as i32) as i64)),
+            (Value::Int(_), "i64" | "u64" | "isize" | "usize") => Ok(val),
             // Float → Float (stored as f64 internally)
             (Value::Float(_), "f64" | "f32") => Ok(val),
             // Bool → Int

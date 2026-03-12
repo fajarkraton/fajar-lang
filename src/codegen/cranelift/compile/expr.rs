@@ -524,8 +524,34 @@ pub(in crate::codegen::cranelift) fn compile_cast<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 Ok(result)
             } else {
+                let target_ty = clif_types::lower_simple_type(target_name)
+                    .unwrap_or(clif_types::default_int_type());
+                let src_ty = builder.func.dfg.value_type(val);
+
+                let result = if target_ty.bits() < src_ty.bits() {
+                    // Narrowing cast: truncate (e.g., i64 → u8 via ireduce)
+                    let narrow = builder.ins().ireduce(target_ty, val);
+                    // Extend back to i64 for uniform value representation
+                    match target_name {
+                        "i8" | "i16" | "i32" => builder
+                            .ins()
+                            .sextend(clif_types::default_int_type(), narrow),
+                        _ => builder
+                            .ins()
+                            .uextend(clif_types::default_int_type(), narrow),
+                    }
+                } else if target_ty.bits() > src_ty.bits() {
+                    // Widening cast: extend
+                    match target_name {
+                        "i16" | "i32" | "i64" | "isize" => builder.ins().sextend(target_ty, val),
+                        _ => builder.ins().uextend(target_ty, val),
+                    }
+                } else {
+                    // Same width: no-op
+                    val
+                };
                 cx.last_expr_type = Some(clif_types::default_int_type());
-                Ok(val)
+                Ok(result)
             }
         }
         "bool" => {

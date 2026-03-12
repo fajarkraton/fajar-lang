@@ -83,4 +83,12 @@ pub enum CodegenError {
     /// CE010: Feature not yet implemented in native codegen.
     #[error("[CE010] not yet implemented in native codegen: {0}")]
     NotImplemented(String),
+
+    /// NS001: no_std violation in bare-metal/kernel compilation.
+    #[error("[NS001] no_std violation: {0}")]
+    NoStdViolation(String),
+
+    /// CE011: Context annotation violation in codegen.
+    #[error("[CE011] context violation: {0}")]
+    ContextViolation(String),
 }

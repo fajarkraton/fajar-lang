@@ -8359,6 +8359,281 @@ fn native_memory_fence() {
     assert_eq!(compile_and_run(src), 42);
 }
 
+// ── B3: Integer type width enforcement (as cast) ──
+
+#[test]
+fn native_cast_u8_truncation() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 256
+            x as u8 as i64
+        }
+    "#;
+    // 256 truncated to u8 = 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_cast_u8_wraps() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 300
+            x as u8 as i64
+        }
+    "#;
+    // 300 mod 256 = 44
+    assert_eq!(compile_and_run(src), 44);
+}
+
+#[test]
+fn native_cast_u16_truncation() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 65536
+            x as u16 as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_cast_u32_truncation() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 4294967296
+            x as u32 as i64
+        }
+    "#;
+    // 0x1_0000_0000 truncated to u32 = 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_cast_u32_preserves_bits() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 0xDEAD_BEEF
+            x as u32 as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0xDEAD_BEEF_i64);
+}
+
+#[test]
+fn native_cast_i8_sign_extension() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 128
+            x as i8 as i64
+        }
+    "#;
+    // 128 as i8 = -128, sign-extended to i64 = -128
+    assert_eq!(compile_and_run(src), -128);
+}
+
+#[test]
+fn native_cast_i8_positive() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 42
+            x as i8 as i64
+        }
+    "#;
+    // 42 fits in i8, so no change
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_cast_u8_from_negative() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = -1
+            x as u8 as i64
+        }
+    "#;
+    // -1 in i64 = 0xFFFFFFFFFFFFFFFF, truncated to u8 = 0xFF = 255
+    assert_eq!(compile_and_run(src), 255);
+}
+
+#[test]
+fn native_cast_i16_sign_extension() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 32768
+            x as i16 as i64
+        }
+    "#;
+    // 32768 as i16 = -32768
+    assert_eq!(compile_and_run(src), -32768);
+}
+
+#[test]
+fn native_cast_u8_identity() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i64 = 200
+            x as u8 as i64
+        }
+    "#;
+    // 200 fits in u8
+    assert_eq!(compile_and_run(src), 200);
+}
+
+// ── B2: Multi-width volatile I/O ──
+
+#[test]
+fn native_volatile_read_write_u8() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u8(buf, 0x48)
+            let val = volatile_read_u8(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x48);
+}
+
+#[test]
+fn native_volatile_read_write_u16() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u16(buf, 0x1234)
+            let val = volatile_read_u16(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x1234);
+}
+
+#[test]
+fn native_volatile_read_write_u32() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u32(buf, 0xDEAD_BEEF)
+            let val = volatile_read_u32(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    // 0xDEAD_BEEF = 3735928559
+    assert_eq!(compile_and_run(src), 0xDEAD_BEEF_i64);
+}
+
+#[test]
+fn native_volatile_u32_no_corrupt_adjacent() {
+    // Writing u32 should NOT corrupt the adjacent 4 bytes
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            mem_write(buf, 0, 0)
+            mem_write(buf, 8, 0)
+            volatile_write_u32(buf, 0xAAAA_BBBB)
+            let upper = volatile_read_u32(buf + 4)
+            dealloc(buf, 16)
+            upper
+        }
+    "#;
+    // Upper 4 bytes should remain 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_volatile_u8_truncation() {
+    // Writing a value > 255 should truncate to u8
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u8(buf, 256)
+            let val = volatile_read_u8(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    // 256 truncated to u8 = 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_volatile_u16_truncation() {
+    // Writing a value > 65535 should truncate to u16
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u16(buf, 65536)
+            let val = volatile_read_u16(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    // 65536 truncated to u16 = 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_volatile_u32_truncation() {
+    // Writing a value > 0xFFFF_FFFF should truncate to u32
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u32(buf, 4294967296)
+            let val = volatile_read_u32(buf)
+            dealloc(buf, 8)
+            val
+        }
+    "#;
+    // 4294967296 (0x1_0000_0000) truncated to u32 = 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_volatile_mixed_widths() {
+    // Write u32, read back individual bytes
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u32(buf, 0x04030201)
+            let byte0 = volatile_read_u8(buf)
+            let byte1 = volatile_read_u8(buf + 1)
+            let byte2 = volatile_read_u8(buf + 2)
+            let byte3 = volatile_read_u8(buf + 3)
+            dealloc(buf, 8)
+            byte0 + byte1 * 256 + byte2 * 65536 + byte3 * 16777216
+        }
+    "#;
+    // Little-endian: 0x04030201 stored as [0x01, 0x02, 0x03, 0x04]
+    assert_eq!(compile_and_run(src), 0x04030201);
+}
+
+#[test]
+fn native_volatile_u16_at_offset() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(8)
+            mem_write(buf, 0, 0)
+            volatile_write_u16(buf, 0xAAAA)
+            volatile_write_u16(buf + 2, 0xBBBB)
+            let lo = volatile_read_u16(buf)
+            let hi = volatile_read_u16(buf + 2)
+            dealloc(buf, 8)
+            lo + hi
+        }
+    "#;
+    // 0xAAAA + 0xBBBB = 43690 + 48059 = 91749
+    assert_eq!(compile_and_run(src), 0xAAAA + 0xBBBB);
+}
+
 // ── S16.1: Allocator primitives ──
 
 #[test]
@@ -14988,4 +15263,78 @@ fn native_tensor_from_data() {
     "#;
     // null ptr / 0 elems → falls back to zeros(2,3)
     assert_eq!(compile_and_run(src), 23);
+}
+
+// ── H1: no_std enforcement in codegen ──
+
+#[test]
+fn nostd_rejects_tensor_zeros() {
+    let src = r#"
+        fn main() -> i64 {
+            let t = tensor_zeros([2, 3])
+            0
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    let result = compiler.compile_program(&program);
+    assert!(
+        result.is_err(),
+        "expected no_std violation for tensor_zeros"
+    );
+    let errs = result.unwrap_err();
+    assert!(
+        errs.iter().any(|e| format!("{e}").contains("NS001")),
+        "expected NS001 error code, got: {errs:?}"
+    );
+}
+
+#[test]
+fn nostd_rejects_read_file() {
+    let src = r#"
+        fn main() -> i64 {
+            let data = read_file("test.txt")
+            0
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    let result = compiler.compile_program(&program);
+    assert!(result.is_err(), "expected no_std violation for read_file");
+}
+
+#[test]
+fn nostd_allows_pure_arithmetic() {
+    let src = r#"
+        fn main() -> i64 {
+            let x = 10 + 20
+            x * 3
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    let result = compiler.compile_program(&program);
+    assert!(
+        result.is_ok(),
+        "pure arithmetic should pass no_std: {result:?}"
+    );
+}
+
+#[test]
+fn nostd_normal_mode_allows_tensor() {
+    // Without no_std, tensor_zeros should compile fine
+    let src = r#"
+        fn main() -> i64 {
+            let t = tensor_zeros(2, 3)
+            tensor_free(t)
+            0
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
 }

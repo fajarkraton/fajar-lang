@@ -947,7 +947,7 @@ impl CameraModule {
     pub fn fpc_pins(&self) -> u8 {
         match self {
             CameraModule::Camera8M219 => 15, // 15-pin 1.0mm pitch
-            _ => 31,                          // 31-pin 0.3mm pitch
+            _ => 31,                         // 31-pin 0.3mm pitch
         }
     }
 
@@ -1838,8 +1838,12 @@ mod tests {
 
     #[test]
     fn q6a_camera_module_rsetup_overlay() {
-        assert!(CameraModule::Camera12M577.rsetup_overlay().contains("IMX577"));
-        assert!(CameraModule::Camera8M219.rsetup_overlay().contains("IMX219"));
+        assert!(CameraModule::Camera12M577
+            .rsetup_overlay()
+            .contains("IMX577"));
+        assert!(CameraModule::Camera8M219
+            .rsetup_overlay()
+            .contains("IMX219"));
     }
 
     #[test]

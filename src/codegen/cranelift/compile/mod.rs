@@ -255,6 +255,42 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
             }
+            "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32" => {
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "{fn_name} requires 1 argument (address)"
+                    )));
+                }
+                let addr = compile_expr(builder, cx, &args[0].value)?;
+                let internal = format!("__{fn_name}");
+                let fn_id = *cx
+                    .functions
+                    .get(&internal)
+                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[addr]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "{fn_name} requires 2 arguments (address, value)"
+                    )));
+                }
+                let addr = compile_expr(builder, cx, &args[0].value)?;
+                let value = compile_expr(builder, cx, &args[1].value)?;
+                let internal = format!("__{fn_name}");
+                let fn_id = *cx
+                    .functions
+                    .get(&internal)
+                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                builder.ins().call(callee, &[addr, value]);
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+            }
             "compiler_fence" => {
                 let fn_id = *cx.functions.get("__compiler_fence").ok_or_else(|| {
                     CodegenError::Internal("__compiler_fence not declared".into())

@@ -2327,6 +2327,66 @@ pub extern "C" fn fj_rt_volatile_write(addr: *mut i64, value: i64) {
     unsafe { std::ptr::write_volatile(addr, value) }
 }
 
+/// Volatile read u8: reads a single byte from the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid u8 memory location.
+pub extern "C" fn fj_rt_volatile_read_u8(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer
+    unsafe { std::ptr::read_volatile(addr) as i64 }
+}
+
+/// Volatile read u16: reads a 16-bit value from the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u16 memory location.
+pub extern "C" fn fj_rt_volatile_read_u16(addr: *const u16) -> i64 {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::read_volatile(addr) as i64 }
+}
+
+/// Volatile read u32: reads a 32-bit value from the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u32 memory location.
+pub extern "C" fn fj_rt_volatile_read_u32(addr: *const u32) -> i64 {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::read_volatile(addr) as i64 }
+}
+
+/// Volatile write u8: writes a single byte to the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid u8 memory location.
+pub extern "C" fn fj_rt_volatile_write_u8(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer
+    unsafe { std::ptr::write_volatile(addr, value as u8) }
+}
+
+/// Volatile write u16: writes a 16-bit value to the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u16 memory location.
+pub extern "C" fn fj_rt_volatile_write_u16(addr: *mut u16, value: i64) {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::write_volatile(addr, value as u16) }
+}
+
+/// Volatile write u32: writes a 32-bit value to the given address.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u32 memory location.
+pub extern "C" fn fj_rt_volatile_write_u32(addr: *mut u32, value: i64) {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::write_volatile(addr, value as u32) }
+}
+
 /// Compiler fence: prevents compiler reordering across this point.
 pub extern "C" fn fj_rt_compiler_fence() {
     std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
@@ -7094,7 +7154,13 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_tls_get" => Some(fj_rt_tls_get as *const u8),
         "fj_rt_tls_set" => Some(fj_rt_tls_set as *const u8),
         "fj_rt_volatile_read" => Some(fj_rt_volatile_read as *const u8),
+        "fj_rt_volatile_read_u8" => Some(fj_rt_volatile_read_u8 as *const u8),
+        "fj_rt_volatile_read_u16" => Some(fj_rt_volatile_read_u16 as *const u8),
+        "fj_rt_volatile_read_u32" => Some(fj_rt_volatile_read_u32 as *const u8),
         "fj_rt_volatile_write" => Some(fj_rt_volatile_write as *const u8),
+        "fj_rt_volatile_write_u8" => Some(fj_rt_volatile_write_u8 as *const u8),
+        "fj_rt_volatile_write_u16" => Some(fj_rt_volatile_write_u16 as *const u8),
+        "fj_rt_volatile_write_u32" => Some(fj_rt_volatile_write_u32 as *const u8),
         "fj_rt_waker_clone" => Some(fj_rt_waker_clone as *const u8),
         "fj_rt_waker_drop" => Some(fj_rt_waker_drop as *const u8),
         "fj_rt_waker_is_woken" => Some(fj_rt_waker_is_woken as *const u8),

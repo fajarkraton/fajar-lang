@@ -4226,3 +4226,123 @@ first
         other => panic!("expected Int(6), got {other:?}"),
     }
 }
+
+// ── M2: Cast truncation in interpreter ──
+
+#[test]
+fn cast_u8_truncation() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("256 as u8");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 0),
+        other => panic!("expected Int(0), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_u8_wraps() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("300 as u8");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 44),
+        other => panic!("expected Int(44), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_u16_truncation() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("65536 as u16");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 0),
+        other => panic!("expected Int(0), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_u32_truncation() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("4294967296 as u32");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 0),
+        other => panic!("expected Int(0), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_i8_sign_extension() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("128 as i8");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, -128),
+        other => panic!("expected Int(-128), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_u8_from_negative() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("-1 as u8");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, 255),
+        other => panic!("expected Int(255), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_i16_sign_extension() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("32768 as i16");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, -32768),
+        other => panic!("expected Int(-32768), got {other:?}"),
+    }
+}
+
+#[test]
+fn cast_i32_sign_extension() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("2147483648 as i32");
+    match result {
+        Ok(Value::Int(n)) => assert_eq!(n, -2147483648),
+        other => panic!("expected Int(-2147483648), got {other:?}"),
+    }
+}
+
+// ── H2: Pointer arithmetic in interpreter ──
+
+#[test]
+fn pointer_add_offset() {
+    let source = r#"
+fn main() {
+    let p = mem_alloc(32, 8)
+    mem_write_u64(p, 100)
+    let q = p + 8
+    mem_write_u64(q, 200)
+    let v1 = mem_read_u64(p)
+    let v2 = mem_read_u64(p + 8)
+    assert_eq(v1, 100)
+    assert_eq(v2, 200)
+    mem_free(p)
+}
+"#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(source).expect("eval_source failed");
+}
+
+#[test]
+fn pointer_sub_offset() {
+    let source = r#"
+fn main() {
+    let p = mem_alloc(32, 8)
+    let q = p + 16
+    let r = q - 16
+    mem_write_u64(r, 42)
+    let val = mem_read_u64(p)
+    assert_eq(val, 42)
+    mem_free(p)
+}
+"#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(source).expect("eval_source failed");
+}

@@ -2573,6 +2573,54 @@ impl CraneliftCompiler {
         self.functions
             .insert("__volatile_write".to_string(), volatile_write_id);
 
+        // fj_rt_volatile_read_u8/u16/u32(addr) -> i64
+        for (suffix, internal) in &[
+            ("u8", "__volatile_read_u8"),
+            ("u16", "__volatile_read_u16"),
+            ("u32", "__volatile_read_u32"),
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(
+                    &format!("fj_rt_volatile_read_{suffix}"),
+                    Linkage::Import,
+                    &sig,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(internal.to_string(), id);
+        }
+
+        // fj_rt_volatile_write_u8/u16/u32(addr, value) -> void
+        for (suffix, internal) in &[
+            ("u8", "__volatile_write_u8"),
+            ("u16", "__volatile_write_u16"),
+            ("u32", "__volatile_write_u32"),
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(
+                    &format!("fj_rt_volatile_write_{suffix}"),
+                    Linkage::Import,
+                    &sig,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(internal.to_string(), id);
+        }
+
         // fj_rt_compiler_fence() -> void
         let sig_void_void = self.module.make_signature();
         let compiler_fence_id = self
@@ -4242,6 +4290,18 @@ impl CraneliftCompiler {
     /// Compiles all functions in a program.
     pub fn compile_program(&mut self, program: &Program) -> Result<(), Vec<CodegenError>> {
         let mut errors = Vec::new();
+
+        // H1: Enforce no_std compliance when enabled
+        if self.no_std {
+            let config = crate::codegen::nostd::NoStdConfig::bare_metal();
+            let violations = crate::codegen::nostd::check_nostd_compliance(program, &config);
+            for v in violations {
+                errors.push(CodegenError::NoStdViolation(v.to_string()));
+            }
+            if !errors.is_empty() {
+                return Err(errors);
+            }
+        }
 
         // Declare runtime built-in functions
         if let Err(e) = self.declare_runtime_functions() {
@@ -7947,6 +8007,54 @@ impl ObjectCompiler {
         self.functions
             .insert("__volatile_write".to_string(), volatile_write_id);
 
+        // fj_rt_volatile_read_u8/u16/u32(addr) -> i64
+        for (suffix, internal) in &[
+            ("u8", "__volatile_read_u8"),
+            ("u16", "__volatile_read_u16"),
+            ("u32", "__volatile_read_u32"),
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(
+                    &format!("fj_rt_volatile_read_{suffix}"),
+                    Linkage::Import,
+                    &sig,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(internal.to_string(), id);
+        }
+
+        // fj_rt_volatile_write_u8/u16/u32(addr, value) -> void
+        for (suffix, internal) in &[
+            ("u8", "__volatile_write_u8"),
+            ("u16", "__volatile_write_u16"),
+            ("u32", "__volatile_write_u32"),
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(
+                    &format!("fj_rt_volatile_write_{suffix}"),
+                    Linkage::Import,
+                    &sig,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(internal.to_string(), id);
+        }
+
         // fj_rt_compiler_fence() -> void
         let sig_void_void = self.module.make_signature();
         let compiler_fence_id = self
@@ -9067,6 +9175,18 @@ impl ObjectCompiler {
     /// Compiles all functions in a program to object code.
     pub fn compile_program(&mut self, program: &Program) -> Result<(), Vec<CodegenError>> {
         let mut errors = Vec::new();
+
+        // H1: Enforce no_std compliance for bare-metal targets
+        if self.no_std {
+            let config = crate::codegen::nostd::NoStdConfig::bare_metal();
+            let violations = crate::codegen::nostd::check_nostd_compliance(program, &config);
+            for v in violations {
+                errors.push(CodegenError::NoStdViolation(v.to_string()));
+            }
+            if !errors.is_empty() {
+                return Err(errors);
+            }
+        }
 
         // Declare runtime built-in functions
         if let Err(e) = self.declare_runtime_functions() {
