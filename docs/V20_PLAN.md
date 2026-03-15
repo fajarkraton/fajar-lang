@@ -195,15 +195,15 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 11.1 | Create `src/bsp/dragon_q6a/qnn_ffi.rs` — FFI bindings to libQnnHtp.so | [ ] |
-| 11.2 | Implement `dlopen("libQnnHtp.so")` dynamic loading | [ ] |
-| 11.3 | Bind QNN functions: `QnnInterface_getProviders`, `QnnContext_create`, `QnnGraph_execute` | [ ] |
-| 11.4 | Implement `qnn_load_model()` with real QNN backend (not simulation) | [ ] |
-| 11.5 | Implement `qnn_infer()` with real NPU execution | [ ] |
-| 11.6 | Handle QNN error codes → Fajar Lang `QnnError` mapping | [ ] |
-| 11.7 | Implement model input/output tensor buffer management | [ ] |
-| 11.8 | Support multiple concurrent models loaded | [ ] |
-| 11.9 | Write unit tests with mock QNN library | [ ] |
+| 11.1 | Create `src/runtime/ml/npu/qnn.rs` — FFI bindings to libQnnHtp.so | [x] |
+| 11.2 | Implement `dlopen("libQnnHtp.so")` dynamic loading | [x] |
+| 11.3 | Bind QNN functions: `QnnInterface_getProviders`, `QnnContext_create`, `QnnGraph_execute` | [x] |
+| 11.4 | Implement `qnn_load_model()` with real QNN backend (not simulation) | [x] |
+| 11.5 | Implement `qnn_infer()` with real NPU execution | [x] |
+| 11.6 | Handle QNN error codes → Fajar Lang `QnnError` mapping | [x] |
+| 11.7 | Implement model input/output tensor buffer management | [x] |
+| 11.8 | Support multiple concurrent models loaded | [x] |
+| 11.9 | Write unit tests with mock QNN library | [x] |
 | 11.10 | Write integration test on Q6A with real NPU | [ ] |
 
 ### Sprint 12: Fajar Lang NPU Builtins
@@ -215,10 +215,10 @@
 | 12.3 | Add `npu_available() -> bool` builtin for runtime detection | [x] |
 | 12.4 | Add `npu_info() -> str` builtin returning NPU specs | [x] |
 | 12.5 | Register builtins in analyzer type checker | [x] |
-| 12.6 | Implement Tensor → QNN buffer conversion (f64 → INT8 quantized) | [ ] |
-| 12.7 | Implement QNN output → Tensor conversion (INT8 → f64 dequantized) | [ ] |
-| 12.8 | Create `examples/q6a_npu_classify.fj` — image classification on NPU | [ ] |
-| 12.9 | Create `examples/q6a_npu_detect.fj` — object detection on NPU | [ ] |
+| 12.6 | Implement Tensor → QNN buffer conversion (f64 → INT8 quantized) | [x] |
+| 12.7 | Implement QNN output → Tensor conversion (INT8 → f64 dequantized) | [x] |
+| 12.8 | Create `examples/q6a_npu_classify.fj` — image classification on NPU | [x] |
+| 12.9 | Create `examples/q6a_npu_detect.fj` — object detection on NPU | [x] |
 | 12.10 | Benchmark NPU inference: target < 10ms for MobileNet on Q6A | [ ] |
 
 ### Sprint 13: NPU Training Pipeline

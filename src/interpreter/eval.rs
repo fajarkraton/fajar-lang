@@ -197,6 +197,8 @@ pub struct Interpreter {
     spi_buses: HashMap<i64, (i64, Vec<u8>)>,
     /// Loaded NPU model handles: model_id → model_path.
     npu_models: HashMap<i64, String>,
+    /// QNN buffer store: buffer_id → QnnBuffer (for quantize/dequantize round-trip).
+    qnn_buffers: HashMap<i64, crate::runtime::ml::npu::QnnBuffer>,
 }
 
 impl Interpreter {
@@ -228,6 +230,7 @@ impl Interpreter {
             pwm_channels: HashMap::new(),
             spi_buses: HashMap::new(),
             npu_models: HashMap::new(),
+            qnn_buffers: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -261,6 +264,7 @@ impl Interpreter {
             pwm_channels: HashMap::new(),
             spi_buses: HashMap::new(),
             npu_models: HashMap::new(),
+            qnn_buffers: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -530,6 +534,8 @@ impl Interpreter {
             "npu_info",
             "npu_load",
             "npu_infer",
+            "qnn_quantize",
+            "qnn_dequantize",
             // Timing builtins (v2.0)
             "delay_ms",
             "delay_us",
@@ -2400,6 +2406,8 @@ impl Interpreter {
             "npu_info" => self.builtin_npu_info(args),
             "npu_load" => self.builtin_npu_load(args),
             "npu_infer" => self.builtin_npu_infer(args),
+            "qnn_quantize" => self.builtin_qnn_quantize(args),
+            "qnn_dequantize" => self.builtin_qnn_dequantize(args),
             // Timing builtins (v2.0)
             "delay_ms" => self.builtin_delay_ms(args),
             "delay_us" => self.builtin_delay_us(args),
@@ -3537,6 +3545,90 @@ impl Interpreter {
         }
         // Simulation: return class 0 (placeholder for real QNN inference)
         Ok(Value::Int(0))
+    }
+
+    /// `qnn_quantize(tensor: Tensor, dtype: str) -> i64` — Quantize tensor to QNN buffer; returns handle.
+    ///
+    /// Supported dtypes: "uint8", "int8", "f32", "f16", "bf16".
+    fn builtin_qnn_quantize(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let tensor = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            v => {
+                return Err(RuntimeError::TypeError(format!(
+                    "qnn_quantize: first argument must be Tensor, got {:?}",
+                    v
+                ))
+                .into())
+            }
+        };
+        let dtype_str = match &args[1] {
+            Value::Str(s) => s.clone(),
+            v => {
+                return Err(RuntimeError::TypeError(format!(
+                    "qnn_quantize: second argument must be string dtype, got {:?}",
+                    v
+                ))
+                .into())
+            }
+        };
+        let dtype = match dtype_str.as_str() {
+            "uint8" => crate::runtime::ml::npu::NpuDtype::UINT8,
+            "int8" => crate::runtime::ml::npu::NpuDtype::INT8,
+            "f32" => crate::runtime::ml::npu::NpuDtype::F32,
+            "f16" => crate::runtime::ml::npu::NpuDtype::F16,
+            "bf16" => crate::runtime::ml::npu::NpuDtype::BF16,
+            other => {
+                return Err(RuntimeError::TypeError(format!(
+                    "qnn_quantize: unsupported dtype '{}', expected uint8/int8/f32/f16/bf16",
+                    other
+                ))
+                .into())
+            }
+        };
+        let buf = crate::runtime::ml::npu::QnnBuffer::from_tensor(&tensor, dtype).map_err(|e| {
+            EvalError::Runtime(RuntimeError::TypeError(format!("qnn_quantize: {e}")))
+        })?;
+        let handle = self.qnn_buffers.len() as i64 + 1;
+        self.qnn_buffers.insert(handle, buf);
+        Ok(Value::Int(handle))
+    }
+
+    /// `qnn_dequantize(handle: i64) -> Tensor` — Dequantize QNN buffer back to tensor.
+    fn builtin_qnn_dequantize(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(n) => *n,
+            v => {
+                return Err(RuntimeError::TypeError(format!(
+                    "qnn_dequantize: argument must be int handle, got {:?}",
+                    v
+                ))
+                .into())
+            }
+        };
+        let buf = self.qnn_buffers.get(&handle).ok_or_else(|| {
+            EvalError::Runtime(RuntimeError::TypeError(format!(
+                "qnn_dequantize: buffer handle {} not found",
+                handle
+            )))
+        })?;
+        let tensor = buf.to_tensor().map_err(|e| {
+            EvalError::Runtime(RuntimeError::TypeError(format!("qnn_dequantize: {e}")))
+        })?;
+        Ok(Value::Tensor(tensor))
     }
 
     // ── ML runtime builtins ──

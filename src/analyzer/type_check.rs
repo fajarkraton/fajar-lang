@@ -1368,6 +1368,25 @@ impl TypeChecker {
             ("npu_info", vec![], Type::Str),
             ("npu_load", vec![Type::Str], Type::I64),
             ("npu_infer", vec![Type::I64, Type::I64], Type::I64),
+            (
+                "qnn_quantize",
+                vec![
+                    Type::Tensor {
+                        element: Box::new(Type::F64),
+                        dims: vec![],
+                    },
+                    Type::Str,
+                ],
+                Type::I64,
+            ),
+            (
+                "qnn_dequantize",
+                vec![Type::I64],
+                Type::Tensor {
+                    element: Box::new(Type::F64),
+                    dims: vec![],
+                },
+            ),
             // Timing builtins (v2.0)
             ("delay_ms", vec![Type::I64], Type::Void),
             ("delay_us", vec![Type::I64], Type::Void),

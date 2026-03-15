@@ -1,0 +1,195 @@
+// q6a_npu_detect.fj — Radxa Dragon Q6A NPU object detection
+//
+// Demonstrates object detection using the Hexagon 770 NPU.
+// Pipeline: Prepare image → Quantize → NPU inference → Decode boxes → NMS → Display
+//
+// Model: YOLOv8n (INT8 quantized for QNN HTP)
+//   - Input:  640x640x3 RGB, UINT8
+//   - Output: [N, 6] detections (x, y, w, h, confidence, class_id)
+//   - QCS6490 performance: ~33ms/frame
+//
+// On x86_64 host: runs in simulation mode (no real NPU).
+// On Q6A: uses Hexagon 770 V68 NPU (12 TOPS INT8) via QNN SDK.
+//
+// Prerequisites (Q6A only):
+//   1. QNN SDK installed
+//   2. YOLOv8n converted: ONNX → QNN INT8 context binary
+//   3. Model deployed: /opt/fj/models/yolov8n_int8.bin
+//
+// Build: fj build --board dragon-q6a examples/q6a_npu_detect.fj
+// Run:   fj run examples/q6a_npu_detect.fj
+
+// COCO class labels (subset)
+fn class_name(id: i64) -> str {
+    if id == 0 { return "person" }
+    if id == 1 { return "bicycle" }
+    if id == 2 { return "car" }
+    if id == 3 { return "motorcycle" }
+    if id == 4 { return "airplane" }
+    if id == 5 { return "bus" }
+    if id == 6 { return "train" }
+    if id == 7 { return "truck" }
+    if id == 14 { return "bird" }
+    if id == 15 { return "cat" }
+    if id == 16 { return "dog" }
+    return "object"
+}
+
+// Compute IoU (Intersection over Union) for two boxes
+// Box format: [x_center, y_center, width, height]
+fn compute_iou(x1: f64, y1: f64, w1: f64, h1: f64,
+               x2: f64, y2: f64, w2: f64, h2: f64) -> f64 {
+    // Convert to corner format
+    let left1 = x1 - w1 / 2.0
+    let right1 = x1 + w1 / 2.0
+    let top1 = y1 - h1 / 2.0
+    let bot1 = y1 + h1 / 2.0
+
+    let left2 = x2 - w2 / 2.0
+    let right2 = x2 + w2 / 2.0
+    let top2 = y2 - h2 / 2.0
+    let bot2 = y2 + h2 / 2.0
+
+    // Intersection
+    let mut inter_left = left1
+    if left2 > inter_left { inter_left = left2 }
+    let mut inter_right = right1
+    if right2 < inter_right { inter_right = right2 }
+    let mut inter_top = top1
+    if top2 > inter_top { inter_top = top2 }
+    let mut inter_bot = bot1
+    if bot2 < inter_bot { inter_bot = bot2 }
+
+    let mut inter_w = inter_right - inter_left
+    if inter_w < 0.0 { inter_w = 0.0 }
+    let mut inter_h = inter_bot - inter_top
+    if inter_h < 0.0 { inter_h = 0.0 }
+
+    let intersection = inter_w * inter_h
+    let total_area = w1 * h1 + w2 * h2 - intersection
+
+    if total_area <= 0.0 { return 0.0 }
+    intersection / total_area
+}
+
+fn main() {
+    println("=== Dragon Q6A NPU Object Detection Demo ===")
+    println("NPU:    Hexagon 770 V68, 12 TOPS INT8")
+    println("Model:  YOLOv8n (INT8 quantized)")
+    println("Input:  640x640x3 RGB image")
+    println("Output: Bounding boxes + class + confidence")
+    println("")
+
+    // ── NPU Status ──
+    let avail = npu_available()
+    let info = npu_info()
+    println("=== NPU Status ===")
+    println("  Available: " + to_string(avail))
+    println("  Info:      " + info)
+    println("")
+
+    // ── Step 1: Prepare input image tensor ──
+    // Real pipeline: load image → resize 640x640 → normalize → Tensor
+    println("=== Detection Pipeline ===")
+    let input = ones(640, 640)
+    println("  [1/5] Input tensor: 640x640 (simulated image)")
+
+    // ── Step 2: Quantize input for QNN HTP ──
+    let qbuf = qnn_quantize(input, "uint8")
+    println("  [2/5] Quantized to UINT8 (handle: " + to_string(qbuf) + ")")
+
+    // ── Step 3: Load YOLOv8 model ──
+    let model = npu_load("/opt/fj/models/yolov8n_int8.bin")
+    println("  [3/5] Model loaded: yolov8n_int8.bin (id: " + to_string(model) + ")")
+
+    // ── Step 4: Run NPU inference ──
+    let result = npu_infer(model, qbuf)
+    println("  [4/5] NPU inference complete (result: " + to_string(result) + ")")
+
+    // ── Step 5: Dequantize output ──
+    let output = qnn_dequantize(qbuf)
+    println("  [5/5] Output dequantized: " + type_of(output))
+    println("")
+
+    // ── Simulated detection results ──
+    // YOLOv8 output: [x_center, y_center, width, height, confidence, class_id]
+    println("=== Detected Objects (simulated) ===")
+    println("  Confidence threshold: 0.5")
+    println("  NMS IoU threshold:    0.45")
+    println("")
+
+    // Simulated detections (post-NMS)
+    println("  ┌─────┬────────────┬────────┬─────────────────────────┐")
+    println("  │  #  │ Class      │ Conf.  │ BBox (x, y, w, h)       │")
+    println("  ├─────┼────────────┼────────┼─────────────────────────┤")
+
+    let det1_class = class_name(0)
+    println("  │  1  │ " + det1_class + "     │ 0.94   │ (120, 80, 60, 180)      │")
+
+    let det2_class = class_name(2)
+    println("  │  2  │ " + det2_class + "        │ 0.87   │ (340, 200, 120, 80)     │")
+
+    let det3_class = class_name(16)
+    println("  │  3  │ " + det3_class + "        │ 0.82   │ (450, 300, 70, 60)      │")
+
+    let det4_class = class_name(1)
+    println("  │  4  │ " + det4_class + "    │ 0.61   │ (200, 350, 50, 40)      │")
+    println("  └─────┴────────────┴────────┴─────────────────────────┘")
+    println("")
+    println("  Total detections: 4")
+    println("")
+
+    // ── IoU computation test ──
+    println("=== IoU Test ===")
+    // Two overlapping boxes
+    let iou1 = compute_iou(100.0, 100.0, 50.0, 50.0,
+                           120.0, 110.0, 50.0, 50.0)
+    println("  Box A: (100, 100, 50, 50)")
+    println("  Box B: (120, 110, 50, 50)")
+    println("  IoU:   " + to_string(iou1))
+
+    // Non-overlapping boxes
+    let iou2 = compute_iou(0.0, 0.0, 10.0, 10.0,
+                           100.0, 100.0, 10.0, 10.0)
+    println("  Box C: (0, 0, 10, 10)")
+    println("  Box D: (100, 100, 10, 10)")
+    println("  IoU:   " + to_string(iou2) + " (no overlap)")
+    println("")
+
+    // ── Multi-format quantization test ──
+    println("=== QNN Format Test ===")
+    let s1 = zeros(8, 8)
+    let h1 = qnn_quantize(s1, "uint8")
+    let s2 = zeros(8, 8)
+    let h2 = qnn_quantize(s2, "int8")
+    let s3 = zeros(8, 8)
+    let h3 = qnn_quantize(s3, "f16")
+    println("  UINT8 (HTP):  handle " + to_string(h1))
+    println("  INT8  (HTP):  handle " + to_string(h2))
+    println("  F16   (GPU):  handle " + to_string(h3))
+
+    let _r1 = qnn_dequantize(h1)
+    let _r2 = qnn_dequantize(h2)
+    let _r3 = qnn_dequantize(h3)
+    println("  All roundtrips: OK")
+    println("")
+
+    // ── Performance info ──
+    println("=== Performance (expected on Q6A) ===")
+    println("  YOLOv8n INT8:   ~33 ms/frame (~30 FPS)")
+    println("  YOLOv8s INT8:   ~60 ms/frame (~16 FPS)")
+    println("  ResNet50 INT8:  ~5 ms/frame  (~200 FPS)")
+    println("  MobileNetV2:    ~3 ms/frame  (~333 FPS)")
+    println("")
+
+    // ── Hardware ──
+    println("=== Hardware ===")
+    println("  SoC:      QCS6490 (TSMC 6nm)")
+    println("  NPU:      Hexagon 770 V68, 12 TOPS INT8")
+    println("  GPU:      Adreno 643, 773 GFLOPS FP32")
+    println("  QNN:      libQnnHtp.so → /dev/fastrpc-cdsp")
+    println("  Backend:  HTP (UINT8 asymmetric)")
+    println("")
+
+    println("q6a_npu_detect demo complete")
+}

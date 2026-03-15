@@ -4619,6 +4619,73 @@ fn main() {
     assert_eq!(out, vec!["1", "0"]); // model_id=1, simulated result=0
 }
 
+// ── QNN quantize/dequantize tests (Sprint 12.6/12.7) ──
+
+#[test]
+fn e2e_qnn_quantize_uint8_roundtrip() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t = zeros(2, 3)
+    let handle = qnn_quantize(t, "uint8")
+    println(to_string(handle))
+    let restored = qnn_dequantize(handle)
+    println(type_of(restored))
+}
+"#,
+    );
+    assert_eq!(out[0], "1"); // first buffer handle = 1
+    assert_eq!(out[1], "tensor"); // dequantized back to tensor
+}
+
+#[test]
+fn e2e_qnn_quantize_int8() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t = ones(3, 3)
+    let h = qnn_quantize(t, "int8")
+    println(to_string(h))
+    let back = qnn_dequantize(h)
+    println(type_of(back))
+}
+"#,
+    );
+    assert_eq!(out[0], "1");
+    assert_eq!(out[1], "tensor");
+}
+
+#[test]
+fn e2e_qnn_quantize_f32() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t = zeros(4, 4)
+    let h = qnn_quantize(t, "f32")
+    println(to_string(h))
+}
+"#,
+    );
+    assert_eq!(out[0], "1");
+}
+
+#[test]
+fn e2e_qnn_quantize_multiple_buffers() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t1 = zeros(2, 2)
+    let t2 = ones(3, 3)
+    let h1 = qnn_quantize(t1, "uint8")
+    let h2 = qnn_quantize(t2, "int8")
+    println(to_string(h1))
+    println(to_string(h2))
+}
+"#,
+    );
+    assert_eq!(out, vec!["1", "2"]);
+}
+
 // ── Full Q6A example tests ──
 
 #[test]
@@ -4671,4 +4738,44 @@ fn e2e_q6a_button_led_example() {
     assert!(out.iter().any(|l| l.contains("LED on GPIO25")));
     assert!(out.iter().any(|l| l.contains("Button: 1 (pressed)")));
     assert!(out.iter().any(|l| l.contains("LED:    1 (on)")));
+}
+
+#[test]
+fn e2e_q6a_npu_classify_example() {
+    let source = std::fs::read_to_string("examples/q6a_npu_classify.fj")
+        .expect("cannot read q6a_npu_classify.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("NPU Classification Demo")));
+    assert!(out.iter().any(|l| l.contains("Quantized to UINT8")));
+    assert!(out.iter().any(|l| l.contains("NPU inference complete")));
+    assert!(out.iter().any(|l| l.contains("Output dequantized")));
+    assert!(out
+        .iter()
+        .any(|l| l.contains("All 5 formats roundtrip: OK")));
+    assert!(out
+        .iter()
+        .any(|l| l.contains("q6a_npu_classify demo complete")));
+}
+
+#[test]
+fn e2e_q6a_npu_detect_example() {
+    let source = std::fs::read_to_string("examples/q6a_npu_detect.fj")
+        .expect("cannot read q6a_npu_detect.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("NPU Object Detection Demo")));
+    assert!(out.iter().any(|l| l.contains("Quantized to UINT8")));
+    assert!(out.iter().any(|l| l.contains("person")));
+    assert!(out.iter().any(|l| l.contains("car")));
+    assert!(out.iter().any(|l| l.contains("dog")));
+    assert!(out.iter().any(|l| l.contains("IoU")));
+    assert!(out.iter().any(|l| l.contains("All roundtrips: OK")));
+    assert!(out
+        .iter()
+        .any(|l| l.contains("q6a_npu_detect demo complete")));
 }
