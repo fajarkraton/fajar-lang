@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-15 | **Tests:** 5,147+ (0 failures) | **Examples:** 59 .fj (9 Q6A-specific)
+> **Last updated:** 2026-03-15 | **Tests:** 5,147+ (0 failures) | **Examples:** 59 .fj (10 Q6A-specific)
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
-| **2 — On-Device** | S5-S8 | 18 | 40 | S5 4/10, S7 6/10, S8 6/10; board connected |
+| **2 — On-Device** | S5-S8 | 19 | 40 | S5 4/10, S7 7/10, S8 6/10; GPIO verified on HW |
 | **3 — AI/ML NPU** | S9-S14 | 26 | 60 | S9 5/10, S11 9/10, S12 9/10, S13 3/10; QNN installed |
-| **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started (needs board) |
-| **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started (needs board) |
+| **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started |
+| **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started |
 | **6 — Production** | S23-S24 | 0 | 20 | Not started |
-| **TOTAL** | **24** | **84** | **240** | **35% complete** |
+| **TOTAL** | **24** | **85** | **240** | **35% complete** |
 
 ### Sprint Completion Detail
 
@@ -53,10 +53,10 @@
 | S2 | Dragon Q6A BSP Module | 10/10 | COMPLETE |
 | S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
 | S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
-| S5 | Deploy & Run on Q6A | **4/10** | Board connected, fj deployed + running |
-| S6 | Native Codegen on ARM64 | 0/10 | Blocked: needs board |
-| S7 | GPIO Blinky on Q6A | 6/10 | Software done, HW tests need board |
-| S8 | Serial Communication | 6/10 | Software done, HW tests need board |
+| S5 | Deploy & Run on Q6A | **5/10** | Board connected, fj deployed, 10 Q6A examples pass |
+| S6 | Native Codegen on ARM64 | 0/10 | Not started |
+| S7 | GPIO Blinky on Q6A | **7/10** | GPIO verified on real HW (gpioset/gpioget gpiochip4) |
+| S8 | Serial Communication | 6/10 | Software done, HW tests pending |
 | S9 | QNN SDK Setup | **5/10** | QNN v2.40 installed, HTP/CPU/GPU backends present |
 | S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
 | S11 | QNN FFI Integration | **9/10** | Only 11.10 (on-device test) remains |
@@ -195,13 +195,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 7.1 | Create `examples/q6a_blinky.fj` — toggle GPIO pin via `/dev/gpiochip4` | [x] |
 | 7.2 | Wire LED to GPIO pin 7 (GPIO96/MCLK) with current-limiting resistor | [ ] |
 | 7.3 | Implement `gpio_open()`, `gpio_set_direction()`, `gpio_write()`, `gpio_read()`, `gpio_toggle()`, `gpio_close()` builtins | [x] |
-| 7.4 | Test GPIO read from push button on pin 13 (GPIO0) | [ ] |
+| 7.4 | Test GPIO read from push button on pin 13 (GPIO0) | [x] |
 | 7.5 | Create `examples/q6a_button_led.fj` — button controls LED | [x] |
 | 7.6 | Implement `delay_ms()` / `delay_us()` builtins using `std::thread::sleep` | [x] |
 | 7.7 | Test I2C sensor read (e.g., BME280 temperature/humidity) | [ ] |
 | 7.8 | Create `examples/q6a_i2c_sensor.fj` — read I2C sensor data | [x] |
 | 7.9 | Test SPI display output (e.g., SSD1306 OLED) | [ ] |
-| 7.10 | Create `examples/q6a_spi_display.fj` — draw text on OLED | [x] |
+| 7.10 | Create `examples/q6a_spi_display.fj` — draw text on OLED + verified GPIO on real Q6A hardware | [x] |
 
 ### Sprint 8: Serial Communication
 
