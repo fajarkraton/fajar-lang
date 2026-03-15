@@ -1387,6 +1387,7 @@ impl TypeChecker {
                     dims: vec![],
                 },
             ),
+            ("qnn_version", vec![], Type::Str),
             // Timing builtins (v2.0)
             ("delay_ms", vec![Type::I64], Type::Void),
             ("delay_us", vec![Type::I64], Type::Void),

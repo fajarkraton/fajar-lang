@@ -539,6 +539,7 @@ impl Interpreter {
             "npu_infer",
             "qnn_quantize",
             "qnn_dequantize",
+            "qnn_version",
             // Timing builtins (v2.0)
             "delay_ms",
             "delay_us",
@@ -2519,6 +2520,7 @@ impl Interpreter {
             "npu_infer" => self.builtin_npu_infer(args),
             "qnn_quantize" => self.builtin_qnn_quantize(args),
             "qnn_dequantize" => self.builtin_qnn_dequantize(args),
+            "qnn_version" => self.builtin_qnn_version(args),
             // Timing builtins (v2.0)
             "delay_ms" => self.builtin_delay_ms(args),
             "delay_us" => self.builtin_delay_us(args),
@@ -3596,6 +3598,35 @@ impl Interpreter {
             Ok(Value::Str("Hexagon 770 V68, 12 TOPS INT8, QNN SDK".into()))
         } else {
             Ok(Value::Str("NPU not available (simulation mode)".into()))
+        }
+    }
+
+    /// `qnn_version() -> str` — Detect QNN SDK version from installed packages.
+    fn builtin_qnn_version(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        // Try to detect QNN version from libqnn1 package
+        let output = std::process::Command::new("dpkg-query")
+            .args(["--showformat=${Version}", "-W", "libqnn1"])
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                let version = String::from_utf8_lossy(&out.stdout).to_string();
+                Ok(Value::Str(format!("QNN {version}")))
+            }
+            _ => {
+                // Fallback: check if libQnnHtp.so exists
+                if std::path::Path::new("/usr/lib/libQnnHtp.so").exists() {
+                    Ok(Value::Str("QNN (version unknown)".into()))
+                } else {
+                    Ok(Value::Str("QNN not installed".into()))
+                }
+            }
         }
     }
 

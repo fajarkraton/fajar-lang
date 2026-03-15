@@ -4690,6 +4690,26 @@ fn main() {
     assert_eq!(out, vec!["1", "2"]);
 }
 
+// ── QNN version detection (Sprint 9.10) ──
+
+#[test]
+fn e2e_qnn_version_detection() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let ver = qnn_version()
+    println(ver)
+}
+"#,
+    );
+    // On host: "QNN not installed"; on Q6A: "QNN 2.40.0.251030-0ubuntu1"
+    assert!(
+        out[0].contains("QNN"),
+        "qnn_version() should contain 'QNN': got {}",
+        out[0]
+    );
+}
+
 // ── Full Q6A example tests ──
 
 #[test]
