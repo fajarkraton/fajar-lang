@@ -477,6 +477,9 @@ impl Interpreter {
             "metric_precision",
             "metric_recall",
             "metric_f1_score",
+            // Model export builtins
+            "model_save",
+            "model_save_quantized",
             // File I/O builtins
             "read_file",
             "write_file",
@@ -1893,6 +1896,114 @@ impl Interpreter {
                         "optimizer_zero_grad requires a tensor".into(),
                     )
                     .into()),
+                }
+            }
+            // ── Model export builtins ──
+            "model_save" => {
+                // model_save(path, name1, tensor1, name2, tensor2, ...)
+                if args.len() < 3 || !(args.len() - 1).is_multiple_of(2) {
+                    return Err(RuntimeError::TypeError(
+                        "model_save(path, name1, tensor1, name2, tensor2, ...)".into(),
+                    )
+                    .into());
+                }
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "model_save: first arg must be a string path".into(),
+                        )
+                        .into())
+                    }
+                };
+                let mut named = Vec::new();
+                let mut i = 1;
+                while i < args.len() {
+                    let name = match &args[i] {
+                        Value::Str(s) => s.clone(),
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "model_save: name args must be strings".into(),
+                            )
+                            .into())
+                        }
+                    };
+                    let tensor = match &args[i + 1] {
+                        Value::Tensor(t) => t.clone(),
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "model_save: tensor args must be tensors".into(),
+                            )
+                            .into())
+                        }
+                    };
+                    named.push(crate::runtime::ml::serialize::NamedTensor { name, tensor });
+                    i += 2;
+                }
+                let bytes = crate::runtime::ml::serialize::save(&named);
+                match std::fs::write(&path, &bytes) {
+                    Ok(()) => Ok(Value::Enum {
+                        variant: "Ok".into(),
+                        data: Some(Box::new(Value::Int(bytes.len() as i64))),
+                    }),
+                    Err(e) => Ok(Value::Enum {
+                        variant: "Err".into(),
+                        data: Some(Box::new(Value::Str(e.to_string()))),
+                    }),
+                }
+            }
+            "model_save_quantized" => {
+                // model_save_quantized(path, name1, tensor1, name2, tensor2, ...)
+                if args.len() < 3 || !(args.len() - 1).is_multiple_of(2) {
+                    return Err(RuntimeError::TypeError(
+                        "model_save_quantized(path, name1, tensor1, name2, tensor2, ...)".into(),
+                    )
+                    .into());
+                }
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "model_save_quantized: first arg must be a string path".into(),
+                        )
+                        .into())
+                    }
+                };
+                let mut named = Vec::new();
+                let mut i = 1;
+                while i < args.len() {
+                    let name = match &args[i] {
+                        Value::Str(s) => s.clone(),
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "model_save_quantized: name args must be strings".into(),
+                            )
+                            .into())
+                        }
+                    };
+                    let tensor = match &args[i + 1] {
+                        Value::Tensor(t) => t.clone(),
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "model_save_quantized: tensor args must be tensors".into(),
+                            )
+                            .into())
+                        }
+                    };
+                    let qt = crate::runtime::ml::quantize::QuantizedTensor::quantize(&tensor);
+                    named.push(crate::runtime::ml::export::NamedQuantized { name, tensor: qt });
+                    i += 2;
+                }
+                let bytes = crate::runtime::ml::export::export_quantized(&named);
+                match std::fs::write(&path, &bytes) {
+                    Ok(()) => Ok(Value::Enum {
+                        variant: "Ok".into(),
+                        data: Some(Box::new(Value::Int(bytes.len() as i64))),
+                    }),
+                    Err(e) => Ok(Value::Enum {
+                        variant: "Err".into(),
+                        data: Some(Box::new(Value::Str(e.to_string()))),
+                    }),
                 }
             }
             // ── Layer builtins ──

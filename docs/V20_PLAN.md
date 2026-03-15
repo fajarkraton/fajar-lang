@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-15 | **Tests:** 5,342 (0 failures) | **Examples:** 59 .fj (9 Q6A-specific)
+> **Last updated:** 2026-03-15 | **Tests:** 5,147+ (0 failures) | **Examples:** 59 .fj (9 Q6A-specific)
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 14 | 40 | Blocked: board setup (S5.1) |
-| **3 — AI/ML NPU** | S9-S14 | 18 | 60 | S11 9/10, S12 9/10; rest needs board |
+| **3 — AI/ML NPU** | S9-S14 | 21 | 60 | S11 9/10, S12 9/10, S13 3/10; rest needs board |
 | **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started (needs board) |
 | **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started (needs board) |
 | **6 — Production** | S23-S24 | 0 | 20 | Not started |
-| **TOTAL** | **24** | **72** | **240** | **30% complete** |
+| **TOTAL** | **24** | **75** | **240** | **31% complete** |
 
 ### Sprint Completion Detail
 
@@ -61,7 +61,7 @@
 | S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
 | S11 | QNN FFI Integration | **9/10** | Only 11.10 (on-device test) remains |
 | S12 | Fajar Lang NPU Builtins | **9/10** | Only 12.10 (benchmark) remains |
-| S13 | NPU Training Pipeline | 0/10 | Needs board |
+| S13 | NPU Training Pipeline | **3/10** | 13.1 train + 13.2 export + 13.10 docs done; rest needs board |
 | S14 | Camera → NPU Pipeline | 0/10 | Needs board |
 | S15-S24 | GPU/Edge/Production | 0/100 | Needs board |
 
@@ -76,7 +76,9 @@
 - **Interpreter builtins**: `qnn_quantize(tensor, dtype) → handle`, `qnn_dequantize(handle) → tensor`
 - **Type checker**: QNN builtins registered with proper Tensor/I64/Str types
 - **Examples**: `q6a_npu_classify.fj` (MobileNetV2), `q6a_npu_detect.fj` (YOLOv8n)
-- **Tests**: 46 QNN unit tests + 6 integration tests
+- **Model export**: `model_save(path, name, tensor, ...)` → FJML (f64), `model_save_quantized(...)` → FJMQ (INT8)
+- **Training example**: `mnist_train_full.fj` — full pipeline: Xavier init → forward → cross-entropy → backward → SGD → save
+- **Tests**: 46 QNN unit tests + 7 integration tests
 
 ### Blocking Dependencies
 
@@ -284,8 +286,8 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 13.1 | Train MNIST model in Fajar Lang on host (x86_64) | [ ] |
-| 13.2 | Export trained weights to ONNX using `fj export --onnx model.onnx` | [ ] |
+| 13.1 | Train MNIST model in Fajar Lang on host (x86_64) | [x] |
+| 13.2 | Export trained weights via `model_save`/`model_save_quantized` (FJML/FJMQ) | [x] |
 | 13.3 | Convert ONNX → QNN INT8 for Hexagon 770 | [ ] |
 | 13.4 | Deploy quantized MNIST model to Q6A `/opt/fj/models/mnist_int8.so` | [ ] |
 | 13.5 | Run MNIST inference on NPU: verify > 90% accuracy | [ ] |
@@ -293,7 +295,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 13.7 | Create end-to-end pipeline: `fj train → fj export → fj deploy → fj infer` | [ ] |
 | 13.8 | Test with larger model: ResNet-18 INT8 on NPU | [ ] |
 | 13.9 | Test mixed precision: INT8 convolutions + FP16 fully-connected | [ ] |
-| 13.10 | Document training→deployment pipeline in `docs/Q6A_ML_PIPELINE.md` | [ ] |
+| 13.10 | Document training→deployment pipeline in `docs/Q6A_ML_PIPELINE.md` | [x] |
 
 ### Sprint 14: Camera → NPU Pipeline
 

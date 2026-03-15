@@ -1804,11 +1804,29 @@ impl TypeChecker {
             (
                 "optimizer_step",
                 vec![Type::Unknown, Type::Unknown],
-                Type::Void,
+                dyn_t.clone(),
             ),
-            ("optimizer_zero_grad", vec![Type::Unknown], Type::Void),
+            ("optimizer_zero_grad", vec![Type::Unknown], dyn_t.clone()),
         ];
         for (name, params, ret) in optim_fns {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
+        // Model export builtins (variadic: path, name1, tensor1, ...)
+        let export_fns: Vec<(&str, Vec<Type>, Type)> = vec![
+            ("model_save", vec![Type::Unknown], Type::Unknown),
+            ("model_save_quantized", vec![Type::Unknown], Type::Unknown),
+        ];
+        for (name, params, ret) in export_fns {
             self.symbols.define(Symbol {
                 name: name.to_string(),
                 ty: Type::Function {
@@ -3533,6 +3551,8 @@ impl TypeChecker {
                 name.as_str(),
                 "len" | "type_of" | "println" | "print" | "dbg" | "assert" | "assert_eq"
             ) || name.starts_with("tensor_")
+                || name.starts_with("optimizer_")
+                || name.starts_with("model_")
         } else {
             false
         };

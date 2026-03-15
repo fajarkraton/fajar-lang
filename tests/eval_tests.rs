@@ -4779,3 +4779,26 @@ fn e2e_q6a_npu_detect_example() {
         .iter()
         .any(|l| l.contains("q6a_npu_detect demo complete")));
 }
+
+#[test]
+fn e2e_mnist_train_full_example() {
+    let source = std::fs::read_to_string("examples/mnist_train_full.fj")
+        .expect("cannot read mnist_train_full.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("Full Training Pipeline")));
+    assert!(out.iter().any(|l| l.contains("Weights initialized")));
+    assert!(out.iter().any(|l| l.contains("131 parameters")));
+    assert!(out.iter().any(|l| l.contains("SGD(lr=0.1")));
+    assert!(out.iter().any(|l| l.contains("Final Evaluation")));
+    assert!(out.iter().any(|l| l.contains("Final accuracy")));
+    assert!(out.iter().any(|l| l.contains("Model Summary")));
+    assert!(out.iter().any(|l| l.contains("FJML saved")));
+    assert!(out.iter().any(|l| l.contains("FJMQ saved")));
+    assert!(out.iter().any(|l| l.contains("mnist_train_full complete")));
+    // Clean up generated model files
+    let _ = std::fs::remove_file("model_mnist.fjml");
+    let _ = std::fs::remove_file("model_mnist.fjmq");
+}
