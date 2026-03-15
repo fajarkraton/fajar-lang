@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-15 | **Tests:** 5,147+ (0 failures) | **Examples:** 59 .fj (10 Q6A-specific)
+> **Last updated:** 2026-03-15 | **Tests:** 5,864 native (1 AOT skip) | **Examples:** 60/60 pass on Q6A
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
-| **2 — On-Device** | S5-S8 | 19 | 40 | S5 4/10, S7 7/10, S8 6/10; GPIO verified on HW |
+| **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 26 | 60 | S9 5/10, S11 9/10, S12 9/10, S13 3/10; QNN installed |
 | **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started |
 | **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started |
 | **6 — Production** | S23-S24 | 0 | 20 | Not started |
-| **TOTAL** | **24** | **85** | **240** | **35% complete** |
+| **TOTAL** | **24** | **94** | **240** | **39% complete** |
 
 ### Sprint Completion Detail
 
@@ -53,8 +53,8 @@
 | S2 | Dragon Q6A BSP Module | 10/10 | COMPLETE |
 | S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
 | S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
-| S5 | Deploy & Run on Q6A | **5/10** | Board connected, fj deployed, 10 Q6A examples pass |
-| S6 | Native Codegen on ARM64 | 0/10 | Not started |
+| S5 | Deploy & Run on Q6A | **9/10** | 60/60 examples pass, benchmarks done, REPL+NEON verified |
+| S6 | Native Codegen on ARM64 | **5/10** | JIT works (128x speedup), AOT blocked (Cranelift reloc), 5863/5864 tests |
 | S7 | GPIO Blinky on Q6A | **7/10** | GPIO verified on real HW (gpioset/gpioget gpiochip4) |
 | S8 | Serial Communication | 6/10 | Software done, HW tests pending |
 | S9 | QNN SDK Setup | **5/10** | QNN v2.40 installed, HTP/CPU/GPU backends present |
@@ -164,27 +164,27 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 |---|------|--------|
 | 5.1 | Set up Q6A board: flash Ubuntu 24.04, configure Ethernet/SSH | [x] |
 | 5.2 | Deploy `fj` binary via SCP: cross-compile + scp to Q6A | [x] |
-| 5.3 | Run all 50 .fj examples on Q6A, verify 50/50 pass | [ ] |
-| 5.4 | Benchmark interpreter performance on ARM64 (fibonacci, loop, string) | [ ] |
-| 5.5 | Compare ARM64 vs x86_64 performance numbers | [ ] |
+| 5.3 | Run all 60 .fj examples on Q6A, verify 60/60 pass | [x] |
+| 5.4 | Benchmark interpreter performance on ARM64 (fibonacci, loop, string) | [x] |
+| 5.5 | Compare ARM64 vs x86_64 performance numbers (ARM64 ~2x slower, tensor 1.7x) | [x] |
 | 5.6 | Create `scripts/deploy-q6a.sh` for one-command deploy+run | [x] |
 | 5.7 | Set up `fj` in PATH on Q6A: `/usr/local/bin/fj` | [x] |
-| 5.8 | Test REPL mode on Q6A terminal | [ ] |
-| 5.9 | Verify tensor operations work on ARM64 (ndarray NEON auto-vectorization) | [ ] |
+| 5.8 | Test REPL mode on Q6A terminal | [x] |
+| 5.9 | Verify tensor operations work on ARM64 (ndarray NEON auto-vectorization) | [x] |
 | 5.10 | Document deployment procedure in `docs/Q6A_DEPLOY.md` | [x] |
 
 ### Sprint 6: Native Codegen on ARM64
 
 | # | Task | Status |
 |---|------|--------|
-| 6.1 | Verify Cranelift `aarch64` backend generates correct ARM64 code | [ ] |
-| 6.2 | Test `fj build --native` on Q6A (Cranelift JIT on ARM64) | [ ] |
-| 6.3 | Test `fj build --aot` (Cranelift AOT → ARM64 ELF binary) | [ ] |
-| 6.4 | Run native codegen tests on Q6A: `cargo test --features native` | [ ] |
-| 6.5 | Benchmark native vs interpreted on ARM64 (fibonacci, matmul, sort) | [ ] |
+| 6.1 | Verify Cranelift `aarch64` backend generates correct ARM64 code | [x] |
+| 6.2 | Test `fj run --native` on Q6A (Cranelift JIT on ARM64) — 128x speedup | [x] |
+| 6.3 | Test AOT (Cranelift AOT → ARM64 ELF) — BLOCKED: Aarch64AdrPrelPgHi21 reloc | [ ] |
+| 6.4 | Run native codegen tests on Q6A: 5863/5864 pass (1 AOT reloc skip) | [x] |
+| 6.5 | Benchmark native vs interpreted: fib(30) 128x, loop 50x faster | [x] |
 | 6.6 | Test LLVM backend on ARM64 (inkwell targeting aarch64-linux-gnu) | [ ] |
 | 6.7 | Verify ARM64 NEON SIMD instructions in generated code | [ ] |
-| 6.8 | Test cross-compiled native binaries run correctly | [ ] |
+| 6.8 | Test cross-compiled native binaries run correctly | [x] |
 | 6.9 | Profile with `perf` on Q6A: identify hot spots in interpreter | [ ] |
 | 6.10 | Create ARM64-specific benchmark suite in `benches/arm64_bench.rs` | [ ] |
 
