@@ -345,7 +345,8 @@ impl QnnLibrary {
 
         let mut graph_handle: QnnHandle = std::ptr::null_mut();
         // SAFETY: Calling graphRetrieve with a valid context and name.
-        let result = unsafe { retrieve_fn(context_handle, c_name.as_ptr(), &mut graph_handle) };
+        let result =
+            unsafe { retrieve_fn(context_handle, c_name.as_ptr().cast(), &mut graph_handle) };
 
         if result != 0 {
             return Err(QnnErrorCode::from_raw(result).to_npu_error("graphRetrieve"));

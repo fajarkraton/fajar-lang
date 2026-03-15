@@ -4599,8 +4599,12 @@ fn main() {
 }
 "#,
     );
-    // On x86_64 host, NPU is not available
-    assert_eq!(out[0], "false");
+    // On x86_64: NPU not available (simulation); on aarch64: NPU available
+    if cfg!(target_arch = "aarch64") {
+        assert_eq!(out[0], "true");
+    } else {
+        assert_eq!(out[0], "false");
+    }
     assert!(out[1].contains("simulation") || out[1].contains("Hexagon"));
 }
 

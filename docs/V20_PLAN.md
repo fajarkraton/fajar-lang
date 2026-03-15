@@ -38,12 +38,12 @@
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
-| **2 — On-Device** | S5-S8 | 14 | 40 | Blocked: board setup (S5.1) |
-| **3 — AI/ML NPU** | S9-S14 | 21 | 60 | S11 9/10, S12 9/10, S13 3/10; rest needs board |
+| **2 — On-Device** | S5-S8 | 18 | 40 | S5 4/10, S7 6/10, S8 6/10; board connected |
+| **3 — AI/ML NPU** | S9-S14 | 26 | 60 | S9 5/10, S11 9/10, S12 9/10, S13 3/10; QNN installed |
 | **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started (needs board) |
 | **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started (needs board) |
 | **6 — Production** | S23-S24 | 0 | 20 | Not started |
-| **TOTAL** | **24** | **75** | **240** | **31% complete** |
+| **TOTAL** | **24** | **84** | **240** | **35% complete** |
 
 ### Sprint Completion Detail
 
@@ -53,11 +53,11 @@
 | S2 | Dragon Q6A BSP Module | 10/10 | COMPLETE |
 | S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
 | S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
-| S5 | Deploy & Run on Q6A | 2/10 | Blocked: need Ubuntu flash (5.1) |
+| S5 | Deploy & Run on Q6A | **4/10** | Board connected, fj deployed + running |
 | S6 | Native Codegen on ARM64 | 0/10 | Blocked: needs board |
 | S7 | GPIO Blinky on Q6A | 6/10 | Software done, HW tests need board |
 | S8 | Serial Communication | 6/10 | Software done, HW tests need board |
-| S9 | QNN SDK Setup | 0/10 | Needs board + QNN SDK install |
+| S9 | QNN SDK Setup | **5/10** | QNN v2.40 installed, HTP/CPU/GPU backends present |
 | S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
 | S11 | QNN FFI Integration | **9/10** | Only 11.10 (on-device test) remains |
 | S12 | Fajar Lang NPU Builtins | **9/10** | Only 12.10 (benchmark) remains |
@@ -162,13 +162,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 5.1 | Set up Q6A board: flash Ubuntu 24.04, configure WiFi/SSH | [ ] |
-| 5.2 | Deploy `fj` binary via SCP: `scp fj radxa@<ip>:~/bin/` | [ ] |
+| 5.1 | Set up Q6A board: flash Ubuntu 24.04, configure Ethernet/SSH | [x] |
+| 5.2 | Deploy `fj` binary via SCP: cross-compile + scp to Q6A | [x] |
 | 5.3 | Run all 50 .fj examples on Q6A, verify 50/50 pass | [ ] |
 | 5.4 | Benchmark interpreter performance on ARM64 (fibonacci, loop, string) | [ ] |
 | 5.5 | Compare ARM64 vs x86_64 performance numbers | [ ] |
 | 5.6 | Create `scripts/deploy-q6a.sh` for one-command deploy+run | [x] |
-| 5.7 | Set up `fj` in PATH on Q6A: `/usr/local/bin/fj` symlink | [ ] |
+| 5.7 | Set up `fj` in PATH on Q6A: `/usr/local/bin/fj` | [x] |
 | 5.8 | Test REPL mode on Q6A terminal | [ ] |
 | 5.9 | Verify tensor operations work on ARM64 (ndarray NEON auto-vectorization) | [ ] |
 | 5.10 | Document deployment procedure in `docs/Q6A_DEPLOY.md` | [x] |
@@ -226,11 +226,11 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 9.1 | Install Qualcomm AI Engine Direct (QNN) SDK on Q6A | [ ] |
-| 9.2 | Verify `libQnnHtp.so` and `libQnnHtpV68Skel.so` are present | [ ] |
-| 9.3 | Verify `libqnnhtpv68.cat` context binary exists | [ ] |
-| 9.4 | Test `qnn-net-run` with a sample model on HTP backend | [ ] |
-| 9.5 | Verify NPU detection: `/sys/class/hexagon/` or `/dev/adsprpc-smd` | [ ] |
+| 9.1 | Install Qualcomm AI Engine Direct (QNN) SDK on Q6A | [x] |
+| 9.2 | Verify `libQnnHtp.so` and `libQnnHtpV68Skel.so` are present | [x] |
+| 9.3 | Verify `libqnnhtpv68.cat` context binary exists | [x] |
+| 9.4 | Test `qnn-net-run` with a sample model on HTP backend | [x] |
+| 9.5 | Verify NPU detection: `/dev/fastrpc-cdsp`, CDSP running | [x] |
 | 9.6 | Benchmark CPU vs NPU inference latency with MobileNet | [ ] |
 | 9.7 | Test QNN CPU backend (`libQnnCpu.so`) as fallback | [ ] |
 | 9.8 | Test QNN GPU backend (`libQnnGpu.so`) for FP16 inference | [ ] |
