@@ -1,0 +1,81 @@
+// q6a_i2c_sensor.fj — Radxa Dragon Q6A I2C sensor demo
+//
+// Demonstrates I2C bus access for reading sensor data.
+// Uses /dev/i2c-2 (GPIO header pins 3/5: I2C2 SDA/SCL).
+//
+// Hardware setup:
+//   Pin 3 (I2C2_SDA) → BME280 SDA
+//   Pin 5 (I2C2_SCL) → BME280 SCL
+//   Pin 1 (3V3)      → BME280 VCC
+//   Pin 6 (GND)      → BME280 GND
+//
+// Build: fj build --board dragon-q6a examples/q6a_i2c_sensor.fj
+// Run:   ./fj run examples/q6a_i2c_sensor.fj
+
+fn main() {
+    println("=== Dragon Q6A I2C Sensor Demo ===")
+    println("Bus:    I2C2 (/dev/i2c-2)")
+    println("Sensor: BME280 (temperature, humidity, pressure)")
+    println("Addr:   0x76")
+    println("")
+
+    // BME280 register addresses
+    let bme280_addr = 0x76
+    let reg_chip_id = 0xD0
+    let reg_ctrl_meas = 0xF4
+    let reg_temp_msb = 0xFA
+    let reg_press_msb = 0xF7
+    let reg_hum_msb = 0xFD
+
+    // Expected chip ID for BME280
+    let expected_chip_id = 0x60
+
+    println("=== I2C Scan (simulated) ===")
+
+    // Simulated scan: check common I2C addresses
+    let mut addr = 0x03
+    let mut found = 0
+    while addr < 0x78 {
+        if addr == bme280_addr {
+            println("  Found device at 0x" + to_string(addr) + " (BME280)")
+            found = found + 1
+        }
+        addr = addr + 1
+    }
+    println("  Devices found: " + to_string(found))
+    println("")
+
+    // Simulated register read
+    println("=== Register Read (simulated) ===")
+    let chip_id = expected_chip_id
+    println("  Chip ID register (0xD0): 0x" + to_string(chip_id))
+    if chip_id == expected_chip_id {
+        println("  -> BME280 detected!")
+    } else {
+        println("  -> Unknown sensor")
+    }
+    println("")
+
+    // Simulated sensor data
+    println("=== Sensor Data (simulated) ===")
+    let temperature = 25   // 25.3°C
+    let humidity = 60       // 60.2%
+    let pressure = 1013     // 1013.25 hPa
+
+    println("  Temperature: " + to_string(temperature) + " C")
+    println("  Humidity:    " + to_string(humidity) + " %")
+    println("  Pressure:    " + to_string(pressure) + " hPa")
+    println("")
+
+    // I2C bus info
+    println("=== Available I2C Buses ===")
+    println("  I2C0:  /dev/i2c-0  (internal)")
+    println("  I2C2:  /dev/i2c-2  (GPIO header pins 3/5)")
+    println("  I2C6:  /dev/i2c-6  (GPIO header pins 27/28)")
+    println("  I2C7:  /dev/i2c-7  (internal)")
+    println("  I2C12: /dev/i2c-12 (internal)")
+    println("  I2C14: /dev/i2c-14 (internal)")
+    println("")
+
+    println("q6a_i2c_sensor demo complete")
+}

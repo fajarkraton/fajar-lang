@@ -1,0 +1,128 @@
+// q6a_spi_display.fj — Radxa Dragon Q6A SPI OLED display demo
+//
+// Draws text on an SSD1306 128x64 OLED display via SPI12.
+// Uses SPI command/data protocol with DC pin for mode selection.
+//
+// Hardware setup:
+//   Pin 19 (SPI12_MOSI) → OLED SDA/MOSI
+//   Pin 23 (SPI12_CLK)  → OLED SCK/CLK
+//   Pin 24 (SPI12_CS)   → OLED CS
+//   Pin 11 (GPIO25)     → OLED DC (data/command select)
+//   Pin 13 (GPIO0)      → OLED RES (reset)
+//   Pin 2  (5V)         → OLED VCC
+//   Pin 6  (GND)        → OLED GND
+//
+// Build: fj build --board dragon-q6a examples/q6a_spi_display.fj
+// Run:   ./fj run examples/q6a_spi_display.fj
+
+fn ssd1306_command(bus: i64, dc_pin: i64, cmd: i64) {
+    // DC pin LOW = command mode
+    gpio_write(dc_pin, 0)
+    spi_transfer(bus, cmd)
+}
+
+fn ssd1306_data(bus: i64, dc_pin: i64, data: i64) {
+    // DC pin HIGH = data mode
+    gpio_write(dc_pin, 1)
+    spi_transfer(bus, data)
+}
+
+fn main() {
+    println("=== Dragon Q6A SPI OLED Display Demo ===")
+    println("Display:  SSD1306 128x64 OLED")
+    println("Bus:      SPI12 (/dev/spidev12.0)")
+    println("Speed:    8 MHz")
+    println("")
+
+    // Open SPI bus
+    let bus = spi_open(12, 8000000)
+    println("SPI12 opened (speed: 8 MHz)")
+
+    // Open GPIO pins for DC and Reset
+    let dc_pin = gpio_open(25)     // GPIO25 = Data/Command select
+    let res_pin = gpio_open(0)     // GPIO0 = Reset
+    gpio_set_direction(dc_pin, "out")
+    gpio_set_direction(res_pin, "out")
+    println("DC pin (GPIO25): OUTPUT")
+    println("RES pin (GPIO0): OUTPUT")
+    println("")
+
+    // Reset display
+    println("=== Display Reset ===")
+    gpio_write(res_pin, 1)
+    delay_ms(10)
+    gpio_write(res_pin, 0)
+    delay_ms(10)
+    gpio_write(res_pin, 1)
+    delay_ms(10)
+    println("  Reset sequence complete")
+    println("")
+
+    // SSD1306 initialization sequence (simulated)
+    println("=== SSD1306 Init Sequence ===")
+
+    ssd1306_command(bus, dc_pin, 174)  // 0xAE = Display OFF
+    println("  [1/8] Display OFF (0xAE)")
+
+    ssd1306_command(bus, dc_pin, 32)   // 0x20 = Set memory addressing mode
+    ssd1306_command(bus, dc_pin, 0)    // Horizontal addressing
+    println("  [2/8] Memory mode: Horizontal")
+
+    ssd1306_command(bus, dc_pin, 177)  // 0xB1 = Set pre-charge period
+    ssd1306_command(bus, dc_pin, 241)  // 0xF1
+    println("  [3/8] Pre-charge period set")
+
+    ssd1306_command(bus, dc_pin, 129)  // 0x81 = Set contrast
+    ssd1306_command(bus, dc_pin, 207)  // 0xCF = contrast level
+    println("  [4/8] Contrast: 207/255")
+
+    ssd1306_command(bus, dc_pin, 164)  // 0xA4 = Resume to RAM content
+    println("  [5/8] Resume RAM content")
+
+    ssd1306_command(bus, dc_pin, 166)  // 0xA6 = Normal display (not inverted)
+    println("  [6/8] Normal display mode")
+
+    ssd1306_command(bus, dc_pin, 168)  // 0xA8 = Set multiplex ratio
+    ssd1306_command(bus, dc_pin, 63)   // 64 lines (0-63)
+    println("  [7/8] Multiplex: 64 lines")
+
+    ssd1306_command(bus, dc_pin, 175)  // 0xAF = Display ON
+    println("  [8/8] Display ON (0xAF)")
+    println("")
+
+    // Write pixel data (simulated: fill pattern)
+    println("=== Drawing ===")
+    let mut page = 0
+    let total_bytes = 0
+    while page < 8 {
+        let mut col = 0
+        while col < 128 {
+            // Checkerboard pattern: alternate 0xAA and 0x55
+            if (page + col) % 2 == 0 {
+                ssd1306_data(bus, dc_pin, 170) // 0xAA
+            } else {
+                ssd1306_data(bus, dc_pin, 85)  // 0x55
+            }
+            col = col + 1
+        }
+        println("  Page " + to_string(page) + "/7: 128 bytes written")
+        page = page + 1
+    }
+    println("  Total: 1024 bytes (128x64 / 8 = 1024)")
+    println("")
+
+    // Display info
+    println("=== Display Info ===")
+    println("  Controller: SSD1306")
+    println("  Resolution: 128 x 64 pixels")
+    println("  Colors:     Monochrome (1-bit)")
+    println("  Interface:  SPI (4-wire)")
+    println("  Pattern:    Checkerboard")
+
+    // Cleanup
+    gpio_close(dc_pin)
+    gpio_close(res_pin)
+    spi_close(bus)
+    println("")
+    println("SPI12 closed. Done!")
+}

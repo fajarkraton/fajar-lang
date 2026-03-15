@@ -10,10 +10,44 @@ use cranelift_module::Module;
 use super::super::clif_types;
 use super::super::context::{emit_owned_cleanup, push_owned, CodegenCtx, OwnedKind};
 use crate::codegen::CodegenError;
-use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt};
+use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr};
 
 // Re-use sibling functions via the parent module's re-exports.
 use super::{compile_expr, compile_heap_array_init};
+
+/// Coerces an integer value to match a declared sub-I64 integer type.
+///
+/// For types narrower than I64 (u8, u16, u32, i8, i16, i32), truncates
+/// the value via `ireduce` then extends back to I64 for uniform storage.
+/// Signed types use `sextend`, unsigned types use `uextend`.
+/// Returns the value unchanged if no coercion is needed.
+fn coerce_int_to_declared_type(
+    builder: &mut FunctionBuilder,
+    val: ClifValue,
+    type_name: &str,
+) -> ClifValue {
+    // Check by name to distinguish u8/i8 from bool (both are I8 in Cranelift)
+    let target_ty = match type_name {
+        "u8" | "i8" => cranelift_codegen::ir::types::I8,
+        "u16" | "i16" => cranelift_codegen::ir::types::I16,
+        "u32" | "i32" => cranelift_codegen::ir::types::I32,
+        _ => return val, // No coercion for i64, f64, bool, etc.
+    };
+    let val_ty = builder.func.dfg.value_type(val);
+    if val_ty.bits() <= target_ty.bits() {
+        return val; // Already narrow enough
+    }
+    // Truncate to target width, then extend back to I64 for uniform representation
+    let narrow = builder.ins().ireduce(target_ty, val);
+    match type_name {
+        "i8" | "i16" | "i32" => builder
+            .ins()
+            .sextend(clif_types::default_int_type(), narrow),
+        _ => builder
+            .ins()
+            .uextend(clif_types::default_int_type(), narrow),
+    }
+}
 
 /// Coerces a return value to match the declared function return type.
 /// Handles i64→i8 (bool), i8→i64, etc.
@@ -63,8 +97,31 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             let val = compile_expr(builder, cx, value)?;
             // Track element type before overriding for array pointer storage
             let elem_type_for_array = cx.last_expr_type;
-            let var_type = if let Some(ty_expr) = ty {
-                clif_types::lower_type(ty_expr).unwrap_or(clif_types::default_int_type())
+
+            // B3.2: Determine semantic type from annotation (may be sub-I64)
+            let semantic_type = ty.as_ref().and_then(clif_types::lower_type);
+
+            // B3.2: Coerce value to match declared sub-I64 integer type.
+            // Truncates (e.g., I64 → I32 → I64) to enforce width semantics
+            // while keeping uniform I64 storage for all variables.
+            let val = if let Some(TypeExpr::Simple { name: ref tn, .. }) = ty {
+                coerce_int_to_declared_type(builder, val, tn)
+            } else {
+                val
+            };
+
+            // Variable always declared as I64 for uniform representation,
+            // unless it's a bool (I8), float (F64/F32), or other special type.
+            // Check the type NAME to distinguish u8/i8 (→ I64 storage) from bool (→ I8 storage).
+            let is_sub_i64_int = matches!(
+                ty.as_ref(),
+                Some(TypeExpr::Simple { name, .. })
+                    if matches!(name.as_str(), "u8" | "i8" | "u16" | "i16" | "u32" | "i32")
+            );
+            let var_type = if is_sub_i64_int {
+                clif_types::default_int_type() // sub-I64 integers stored as I64
+            } else if let Some(st) = semantic_type {
+                st // bools, floats, i64, i128 stay as-is
             } else if cx.last_array.is_some() {
                 clif_types::pointer_type()
             } else {
@@ -84,7 +141,10 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                     elem_type_for_array.unwrap_or(clif_types::default_int_type()),
                 );
             } else {
-                cx.var_types.insert(name.clone(), var_type);
+                // B3.2: Store semantic type (e.g., I32 for u32) for type-aware
+                // arithmetic propagation in B3.3
+                cx.var_types
+                    .insert(name.clone(), semantic_type.unwrap_or(var_type));
             }
             // If RHS was a string, save the length variable.
             // Only register as string if the variable actually holds a pointer
@@ -355,12 +415,30 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             name, value, ty, ..
         } => {
             let val = compile_expr(builder, cx, value)?;
-            let var_type = clif_types::lower_type(ty)
-                .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
+            let semantic_type = clif_types::lower_type(ty);
+            // B3.2: Coerce value for sub-I64 integer types
+            let val = if let TypeExpr::Simple { name: ref tn, .. } = ty {
+                coerce_int_to_declared_type(builder, val, tn)
+            } else {
+                val
+            };
+            let is_sub_i64_int = matches!(
+                ty,
+                TypeExpr::Simple { name, .. }
+                    if matches!(name.as_str(), "u8" | "i8" | "u16" | "i16" | "u32" | "i32")
+            );
+            let var_type = if is_sub_i64_int {
+                clif_types::default_int_type()
+            } else if let Some(st) = semantic_type {
+                st
+            } else {
+                cx.last_expr_type.unwrap_or(clif_types::default_int_type())
+            };
             let var = builder.declare_var(var_type);
             builder.def_var(var, val);
             cx.var_map.insert(name.clone(), var);
-            cx.var_types.insert(name.clone(), var_type);
+            cx.var_types
+                .insert(name.clone(), semantic_type.unwrap_or(var_type));
             // Handle string/array/enum/struct metadata (same as Let)
             if let Some(meta) = cx.last_array.take() {
                 cx.array_meta.insert(name.clone(), meta);

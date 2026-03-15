@@ -1,0 +1,76 @@
+// q6a_uart_gps.fj — Radxa Dragon Q6A UART GPS (NMEA) parser demo
+//
+// Reads simulated NMEA sentences from UART6 and parses GPS data.
+// In real hardware, connect a GPS module (e.g., NEO-6M) to UART6.
+//
+// Hardware setup:
+//   Pin 16 (UART6_TX) → GPS module RX
+//   Pin 18 (UART6_RX) → GPS module TX
+//   Pin 2  (5V)       → GPS VCC
+//   Pin 6  (GND)      → GPS GND
+//
+// Build: fj build --board dragon-q6a examples/q6a_uart_gps.fj
+// Run:   ./fj run examples/q6a_uart_gps.fj
+
+fn main() {
+    println("=== Dragon Q6A GPS (NMEA) Demo ===")
+    println("Port:   UART6 (/dev/ttyMSM6)")
+    println("Pins:   16 (TX), 18 (RX)")
+    println("Baud:   9600")
+    println("Format: NMEA 0183")
+    println("")
+
+    // Open UART6 at 9600 baud (standard GPS baud rate)
+    let port = uart_open(6, 9600)
+    println("UART6 opened for GPS data")
+    println("")
+
+    // Simulated NMEA sentences (what a real GPS module would send)
+    let gprmc = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A"
+    let gpgga = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,47.0,M,,*47"
+
+    // Write simulated NMEA data to UART
+    uart_write_str(port, gprmc)
+
+    // Parse GPRMC: split on commas and extract fields by index
+    println("=== GPRMC (Recommended Minimum) ===")
+    println("  Raw: " + gprmc)
+
+    let rmc = gprmc.split(",")
+    println("")
+    println("  Parsed:")
+    println("    Type:      " + rmc[0])
+    println("    Time UTC:  " + rmc[1])
+    println("    Status:    " + rmc[2] + " (A=active, V=void)")
+    println("    Latitude:  " + rmc[3] + " " + rmc[4])
+    println("    Longitude: " + rmc[5] + " " + rmc[6])
+    println("    Speed:     " + rmc[7] + " knots")
+    println("    Course:    " + rmc[8])
+    println("    Date:      " + rmc[9])
+    println("")
+
+    // Parse GPGGA sentence
+    println("=== GPGGA (Fix Data) ===")
+    println("  Raw: " + gpgga)
+
+    let gga = gpgga.split(",")
+    println("")
+    println("  Parsed:")
+    println("    Fix quality: " + gga[6] + " (1=GPS fix)")
+    println("    Satellites:  " + gga[7])
+    println("    HDOP:        " + gga[8])
+    println("    Altitude:    " + gga[9] + " " + gga[10])
+    println("")
+
+    // Summary
+    println("=== GPS Position Summary ===")
+    println("  Position:   " + rmc[3] + " " + rmc[4] + ", " + rmc[5] + " " + rmc[6])
+    println("  Altitude:   " + gga[9] + " m")
+    println("  Speed:      " + rmc[7] + " knots")
+    println("  Satellites: " + gga[7])
+    println("  Fix:        Valid (quality " + gga[6] + ")")
+
+    uart_close(port)
+    println("")
+    println("UART6 closed. Done!")
+}

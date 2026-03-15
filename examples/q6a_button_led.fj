@@ -1,0 +1,65 @@
+// q6a_button_led.fj — Radxa Dragon Q6A button controls LED demo
+//
+// Reads a push button on GPIO0 (pin 13) and controls an LED on GPIO25 (pin 11).
+// On x86_64 host, runs in simulation mode.
+//
+// Hardware setup:
+//   Pin 11 (GPIO25) → 220Ω → LED → GND
+//   Pin 13 (GPIO0)  → Push button → GND (with pull-up)
+//
+// Build: fj build --board dragon-q6a examples/q6a_button_led.fj
+// Run:   ./fj run examples/q6a_button_led.fj
+
+fn main() {
+    println("=== Dragon Q6A Button + LED Demo ===")
+    println("")
+
+    // Open LED pin (output)
+    let led = gpio_open(25)
+    gpio_set_direction(led, "out")
+    println("LED on GPIO25 (pin 11): OUTPUT")
+
+    // Open button pin (input)
+    let button = gpio_open(0)
+    gpio_set_direction(button, "in")
+    println("Button on GPIO0 (pin 13): INPUT")
+    println("")
+
+    // Simulate button press/release cycle
+    println("=== Simulated Button Events ===")
+
+    // Simulate: button not pressed → LED off
+    let btn_state = gpio_read(button)
+    println("  Button: " + to_string(btn_state) + " (not pressed)")
+    gpio_write(led, btn_state)
+    println("  LED:    " + to_string(gpio_read(led)) + " (off)")
+    println("")
+
+    // Simulate: "press" button by writing 1 to input pin
+    // (In real hardware, the button sets the level; here we simulate)
+    println("  [Simulating button press...]")
+    gpio_set_direction(button, "out")
+    gpio_write(button, 1)
+    gpio_set_direction(button, "in")
+    let btn_state2 = gpio_read(button)
+    println("  Button: " + to_string(btn_state2) + " (pressed)")
+    gpio_write(led, btn_state2)
+    println("  LED:    " + to_string(gpio_read(led)) + " (on)")
+    println("")
+
+    // Release
+    println("  [Simulating button release...]")
+    gpio_set_direction(button, "out")
+    gpio_write(button, 0)
+    gpio_set_direction(button, "in")
+    let btn_state3 = gpio_read(button)
+    println("  Button: " + to_string(btn_state3) + " (released)")
+    gpio_write(led, btn_state3)
+    println("  LED:    " + to_string(gpio_read(led)) + " (off)")
+
+    // Cleanup
+    gpio_close(led)
+    gpio_close(button)
+    println("")
+    println("Done!")
+}

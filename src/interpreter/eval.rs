@@ -187,6 +187,16 @@ pub struct Interpreter {
     debug_source: String,
     /// Source file name for debug hook.
     debug_file: String,
+    /// Simulated GPIO pin states: pin_number → (direction: 0=in/1=out, level: 0/1).
+    gpio_pins: HashMap<i64, (i64, i64)>,
+    /// Simulated UART port states: port_number → (baud_rate, tx_buffer).
+    uart_ports: HashMap<i64, (i64, Vec<u8>)>,
+    /// Simulated PWM channel states: channel → (frequency_hz, duty_percent, enabled).
+    pwm_channels: HashMap<i64, (i64, i64, bool)>,
+    /// Simulated SPI bus states: bus_number → (speed_hz, rx_buffer).
+    spi_buses: HashMap<i64, (i64, Vec<u8>)>,
+    /// Loaded NPU model handles: model_id → model_path.
+    npu_models: HashMap<i64, String>,
 }
 
 impl Interpreter {
@@ -213,6 +223,11 @@ impl Interpreter {
             debug_state: None,
             debug_source: String::new(),
             debug_file: String::new(),
+            gpio_pins: HashMap::new(),
+            uart_ports: HashMap::new(),
+            pwm_channels: HashMap::new(),
+            spi_buses: HashMap::new(),
+            npu_models: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -241,6 +256,11 @@ impl Interpreter {
             debug_state: None,
             debug_source: String::new(),
             debug_file: String::new(),
+            gpio_pins: HashMap::new(),
+            uart_ports: HashMap::new(),
+            pwm_channels: HashMap::new(),
+            spi_buses: HashMap::new(),
+            npu_models: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -480,6 +500,39 @@ impl Interpreter {
             "hw_gpu_count",
             "hw_npu_count",
             "hw_best_accelerator",
+            // GPIO builtins (v2.0 Q6A)
+            "gpio_open",
+            "gpio_close",
+            "gpio_set_direction",
+            "gpio_write",
+            "gpio_read",
+            "gpio_toggle",
+            // UART builtins (v2.0 Q6A)
+            "uart_open",
+            "uart_close",
+            "uart_write_byte",
+            "uart_read_byte",
+            "uart_write_str",
+            // PWM builtins (v2.0 Q6A)
+            "pwm_open",
+            "pwm_close",
+            "pwm_set_frequency",
+            "pwm_set_duty",
+            "pwm_enable",
+            "pwm_disable",
+            // SPI builtins (v2.0 Q6A)
+            "spi_open",
+            "spi_close",
+            "spi_transfer",
+            "spi_write",
+            // NPU builtins (v2.0 Q6A)
+            "npu_available",
+            "npu_info",
+            "npu_load",
+            "npu_infer",
+            // Timing builtins (v2.0)
+            "delay_ms",
+            "delay_us",
         ];
         for name in &builtins {
             self.env
@@ -1063,6 +1116,17 @@ impl Interpreter {
             (UnaryOp::Not, Value::Bool(v)) => Ok(Value::Bool(!v)),
             (UnaryOp::Not, _) => Ok(Value::Bool(!val.is_truthy())),
             (UnaryOp::BitNot, Value::Int(v)) => Ok(Value::Int(!v)),
+            (UnaryOp::Deref, Value::Pointer(addr)) => {
+                // Dereference pointer: read i64 at address
+                use crate::runtime::os::memory::VirtAddr;
+                match self.os.memory.read_u64(VirtAddr(*addr)) {
+                    Ok(val) => Ok(Value::Int(val as i64)),
+                    Err(_) => Err(RuntimeError::TypeError(format!(
+                        "cannot dereference invalid pointer 0x{addr:x}"
+                    ))
+                    .into()),
+                }
+            }
             _ => Err(RuntimeError::TypeError(format!(
                 "unsupported unary {op} for {}",
                 val.type_name()
@@ -2306,6 +2370,39 @@ impl Interpreter {
                 let best = profile.select_best(crate::hw::TaskType::General);
                 Ok(Value::Str(best.to_string()))
             }
+            // GPIO builtins (v2.0 Q6A)
+            "gpio_open" => self.builtin_gpio_open(args),
+            "gpio_close" => self.builtin_gpio_close(args),
+            "gpio_set_direction" => self.builtin_gpio_set_direction(args),
+            "gpio_write" => self.builtin_gpio_write(args),
+            "gpio_read" => self.builtin_gpio_read(args),
+            "gpio_toggle" => self.builtin_gpio_toggle(args),
+            // UART builtins (v2.0 Q6A)
+            "uart_open" => self.builtin_uart_open(args),
+            "uart_close" => self.builtin_uart_close(args),
+            "uart_write_byte" => self.builtin_uart_write_byte(args),
+            "uart_read_byte" => self.builtin_uart_read_byte(args),
+            "uart_write_str" => self.builtin_uart_write_str(args),
+            // PWM builtins (v2.0 Q6A)
+            "pwm_open" => self.builtin_pwm_open(args),
+            "pwm_close" => self.builtin_pwm_close(args),
+            "pwm_set_frequency" => self.builtin_pwm_set_frequency(args),
+            "pwm_set_duty" => self.builtin_pwm_set_duty(args),
+            "pwm_enable" => self.builtin_pwm_enable(args),
+            "pwm_disable" => self.builtin_pwm_disable(args),
+            // SPI builtins (v2.0 Q6A)
+            "spi_open" => self.builtin_spi_open(args),
+            "spi_close" => self.builtin_spi_close(args),
+            "spi_transfer" => self.builtin_spi_transfer(args),
+            "spi_write" => self.builtin_spi_write(args),
+            // NPU builtins (v2.0 Q6A)
+            "npu_available" => self.builtin_npu_available(args),
+            "npu_info" => self.builtin_npu_info(args),
+            "npu_load" => self.builtin_npu_load(args),
+            "npu_infer" => self.builtin_npu_infer(args),
+            // Timing builtins (v2.0)
+            "delay_ms" => self.builtin_delay_ms(args),
+            "delay_us" => self.builtin_delay_us(args),
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {
@@ -2695,6 +2792,751 @@ impl Interpreter {
             Ok(handler) => Ok(Value::Str(handler.name.clone())),
             Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
         }
+    }
+
+    // ── GPIO builtins (v2.0 Q6A) ──
+
+    /// `gpio_open(pin: i64) -> i64` — Open a GPIO pin; returns pin handle (the pin number).
+    /// On x86_64 host, operates in simulation mode.
+    fn builtin_gpio_open(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("gpio_open: pin must be int".into()).into()),
+        };
+        // Store pin state in gpio_pins map: pin -> (direction: 0=in/1=out, level: 0/1)
+        self.gpio_pins.insert(pin, (0, 0));
+        Ok(Value::Int(pin))
+    }
+
+    /// `gpio_close(pin: i64) -> null` — Close/release a GPIO pin.
+    fn builtin_gpio_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("gpio_close: pin must be int".into()).into()),
+        };
+        self.gpio_pins.remove(&pin);
+        Ok(Value::Null)
+    }
+
+    /// `gpio_set_direction(pin: i64, dir: str) -> null` — Set pin direction ("in" or "out").
+    fn builtin_gpio_set_direction(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpio_set_direction: pin must be int".into()).into(),
+                )
+            }
+        };
+        let dir = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "gpio_set_direction: direction must be string (\"in\" or \"out\")".into(),
+                )
+                .into())
+            }
+        };
+        let dir_val = match dir.as_str() {
+            "in" | "input" => 0,
+            "out" | "output" => 1,
+            _ => {
+                return Err(RuntimeError::TypeError(format!(
+                    "gpio_set_direction: invalid direction '{}' (use \"in\" or \"out\")",
+                    dir
+                ))
+                .into())
+            }
+        };
+        if let Some(state) = self.gpio_pins.get_mut(&pin) {
+            state.0 = dir_val;
+        } else {
+            return Err(RuntimeError::TypeError(format!(
+                "gpio_set_direction: pin {} not opened",
+                pin
+            ))
+            .into());
+        }
+        Ok(Value::Null)
+    }
+
+    /// `gpio_write(pin: i64, level: i64) -> null` — Write 0 (low) or 1 (high) to an output pin.
+    fn builtin_gpio_write(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("gpio_write: pin must be int".into()).into()),
+        };
+        let level = match &args[1] {
+            Value::Int(n) => {
+                if *n != 0 {
+                    1
+                } else {
+                    0
+                }
+            }
+            Value::Bool(b) => {
+                if *b {
+                    1
+                } else {
+                    0
+                }
+            }
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpio_write: level must be int or bool".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.gpio_pins.get_mut(&pin) {
+            if state.0 != 1 {
+                return Err(RuntimeError::TypeError(format!(
+                    "gpio_write: pin {} is not set to output",
+                    pin
+                ))
+                .into());
+            }
+            state.1 = level;
+        } else {
+            return Err(
+                RuntimeError::TypeError(format!("gpio_write: pin {} not opened", pin)).into(),
+            );
+        }
+        Ok(Value::Null)
+    }
+
+    /// `gpio_read(pin: i64) -> i64` — Read current pin level (0 or 1).
+    fn builtin_gpio_read(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("gpio_read: pin must be int".into()).into()),
+        };
+        if let Some(state) = self.gpio_pins.get(&pin) {
+            Ok(Value::Int(state.1))
+        } else {
+            Err(RuntimeError::TypeError(format!("gpio_read: pin {} not opened", pin)).into())
+        }
+    }
+
+    /// `gpio_toggle(pin: i64) -> null` — Toggle output pin level (0→1 or 1→0).
+    fn builtin_gpio_toggle(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pin = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("gpio_toggle: pin must be int".into()).into()),
+        };
+        if let Some(state) = self.gpio_pins.get_mut(&pin) {
+            if state.0 != 1 {
+                return Err(RuntimeError::TypeError(format!(
+                    "gpio_toggle: pin {} is not set to output",
+                    pin
+                ))
+                .into());
+            }
+            state.1 = if state.1 == 0 { 1 } else { 0 };
+        } else {
+            return Err(
+                RuntimeError::TypeError(format!("gpio_toggle: pin {} not opened", pin)).into(),
+            );
+        }
+        Ok(Value::Null)
+    }
+
+    // ── UART builtins (v2.0 Q6A) ──
+
+    /// `uart_open(port: i64, baud: i64) -> i64` — Open UART port; returns port handle.
+    fn builtin_uart_open(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("uart_open: port must be int".into()).into()),
+        };
+        let baud = match &args[1] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("uart_open: baud must be int".into()).into()),
+        };
+        // Store UART state: port -> (baud, tx_buffer)
+        self.uart_ports.insert(port, (baud, Vec::new()));
+        Ok(Value::Int(port))
+    }
+
+    /// `uart_close(port: i64) -> null` — Close UART port.
+    fn builtin_uart_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("uart_close: port must be int".into()).into()),
+        };
+        self.uart_ports.remove(&port);
+        Ok(Value::Null)
+    }
+
+    /// `uart_write_byte(port: i64, byte: i64) -> null` — Write a byte to UART.
+    fn builtin_uart_write_byte(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("uart_write_byte: port must be int".into()).into(),
+                )
+            }
+        };
+        let byte = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("uart_write_byte: byte must be int".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.uart_ports.get_mut(&port) {
+            state.1.push(byte);
+        } else {
+            return Err(RuntimeError::TypeError(format!(
+                "uart_write_byte: port {} not opened",
+                port
+            ))
+            .into());
+        }
+        Ok(Value::Null)
+    }
+
+    /// `uart_read_byte(port: i64) -> i64` — Read a byte from UART TX buffer (simulation: reads back written bytes).
+    fn builtin_uart_read_byte(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("uart_read_byte: port must be int".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.uart_ports.get_mut(&port) {
+            if state.1.is_empty() {
+                Ok(Value::Int(-1)) // No data available
+            } else {
+                let byte = state.1.remove(0); // FIFO
+                Ok(Value::Int(byte as i64))
+            }
+        } else {
+            Err(RuntimeError::TypeError(format!("uart_read_byte: port {} not opened", port)).into())
+        }
+    }
+
+    /// `uart_write_str(port: i64, s: str) -> null` — Write string bytes to UART.
+    fn builtin_uart_write_str(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("uart_write_str: port must be int".into()).into(),
+                )
+            }
+        };
+        let s = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("uart_write_str: data must be string".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.uart_ports.get_mut(&port) {
+            state.1.extend_from_slice(s.as_bytes());
+        } else {
+            return Err(RuntimeError::TypeError(format!(
+                "uart_write_str: port {} not opened",
+                port
+            ))
+            .into());
+        }
+        Ok(Value::Null)
+    }
+
+    // ── Timing builtins (v2.0) ──
+
+    /// `delay_ms(ms: i64) -> null` — Sleep for the given number of milliseconds.
+    fn builtin_delay_ms(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ms = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError("delay_ms: argument must be int".into()).into())
+            }
+        };
+        if ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+        }
+        Ok(Value::Null)
+    }
+
+    /// `delay_us(us: i64) -> null` — Sleep for the given number of microseconds.
+    fn builtin_delay_us(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let us = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError("delay_us: argument must be int".into()).into())
+            }
+        };
+        if us > 0 {
+            std::thread::sleep(std::time::Duration::from_micros(us as u64));
+        }
+        Ok(Value::Null)
+    }
+
+    // ── PWM builtins (v2.0 Q6A) ──
+
+    /// `pwm_open(channel: i64) -> i64` — Open PWM channel; returns handle.
+    fn builtin_pwm_open(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError("pwm_open: channel must be int".into()).into())
+            }
+        };
+        // Store PWM state: channel -> (frequency_hz, duty_percent, enabled)
+        self.pwm_channels.insert(ch, (1000, 0, false));
+        Ok(Value::Int(ch))
+    }
+
+    /// `pwm_close(channel: i64) -> null`
+    fn builtin_pwm_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError("pwm_close: channel must be int".into()).into())
+            }
+        };
+        self.pwm_channels.remove(&ch);
+        Ok(Value::Null)
+    }
+
+    /// `pwm_set_frequency(channel: i64, hz: i64) -> null`
+    fn builtin_pwm_set_frequency(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "pwm_set_frequency: channel must be int".into(),
+                )
+                .into())
+            }
+        };
+        let hz = match &args[1] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pwm_set_frequency: hz must be int".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.pwm_channels.get_mut(&ch) {
+            state.0 = hz;
+        } else {
+            return Err(RuntimeError::TypeError(format!(
+                "pwm_set_frequency: channel {} not opened",
+                ch
+            ))
+            .into());
+        }
+        Ok(Value::Null)
+    }
+
+    /// `pwm_set_duty(channel: i64, percent: i64) -> null` — Set duty cycle (0-100).
+    fn builtin_pwm_set_duty(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pwm_set_duty: channel must be int".into()).into(),
+                )
+            }
+        };
+        let duty = match &args[1] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pwm_set_duty: percent must be int".into()).into(),
+                )
+            }
+        };
+        if !(0..=100).contains(&duty) {
+            return Err(RuntimeError::TypeError(format!(
+                "pwm_set_duty: percent must be 0-100, got {}",
+                duty
+            ))
+            .into());
+        }
+        if let Some(state) = self.pwm_channels.get_mut(&ch) {
+            state.1 = duty;
+        } else {
+            return Err(RuntimeError::TypeError(format!(
+                "pwm_set_duty: channel {} not opened",
+                ch
+            ))
+            .into());
+        }
+        Ok(Value::Null)
+    }
+
+    /// `pwm_enable(channel: i64) -> null`
+    fn builtin_pwm_enable(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pwm_enable: channel must be int".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.pwm_channels.get_mut(&ch) {
+            state.2 = true;
+        } else {
+            return Err(
+                RuntimeError::TypeError(format!("pwm_enable: channel {} not opened", ch)).into(),
+            );
+        }
+        Ok(Value::Null)
+    }
+
+    /// `pwm_disable(channel: i64) -> null`
+    fn builtin_pwm_disable(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ch = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pwm_disable: channel must be int".into()).into(),
+                )
+            }
+        };
+        if let Some(state) = self.pwm_channels.get_mut(&ch) {
+            state.2 = false;
+        } else {
+            return Err(
+                RuntimeError::TypeError(format!("pwm_disable: channel {} not opened", ch)).into(),
+            );
+        }
+        Ok(Value::Null)
+    }
+
+    // ── SPI builtins (v2.0 Q6A) ──
+
+    /// `spi_open(bus: i64, speed_hz: i64) -> i64` — Open SPI bus; returns handle.
+    fn builtin_spi_open(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let bus = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("spi_open: bus must be int".into()).into()),
+        };
+        let speed = match &args[1] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("spi_open: speed must be int".into()).into()),
+        };
+        // Store SPI state: bus -> (speed_hz, rx_buffer)
+        self.spi_buses.insert(bus, (speed, Vec::new()));
+        Ok(Value::Int(bus))
+    }
+
+    /// `spi_close(bus: i64) -> null`
+    fn builtin_spi_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let bus = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("spi_close: bus must be int".into()).into()),
+        };
+        self.spi_buses.remove(&bus);
+        Ok(Value::Null)
+    }
+
+    /// `spi_transfer(bus: i64, byte: i64) -> i64` — Full-duplex: send byte, receive byte.
+    fn builtin_spi_transfer(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let bus = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError("spi_transfer: bus must be int".into()).into())
+            }
+        };
+        let byte = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(RuntimeError::TypeError("spi_transfer: byte must be int".into()).into())
+            }
+        };
+        if let Some(state) = self.spi_buses.get_mut(&bus) {
+            // Simulation: loopback — received byte = sent byte (MOSI→MISO)
+            state.1.push(byte);
+            Ok(Value::Int(byte as i64))
+        } else {
+            Err(RuntimeError::TypeError(format!("spi_transfer: bus {} not opened", bus)).into())
+        }
+    }
+
+    /// `spi_write(bus: i64, data: str) -> null` — Write string bytes to SPI.
+    fn builtin_spi_write(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let bus = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(RuntimeError::TypeError("spi_write: bus must be int".into()).into()),
+        };
+        let data = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("spi_write: data must be string".into()).into())
+            }
+        };
+        if let Some(state) = self.spi_buses.get_mut(&bus) {
+            state.1.extend_from_slice(data.as_bytes());
+        } else {
+            return Err(
+                RuntimeError::TypeError(format!("spi_write: bus {} not opened", bus)).into(),
+            );
+        }
+        Ok(Value::Null)
+    }
+
+    // ── NPU builtins (v2.0 Q6A) ──
+
+    /// `npu_available() -> bool` — Check if NPU (Hexagon 770) is available.
+    fn builtin_npu_available(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        // Check for FastRPC device node (real hardware detection)
+        let available = std::path::Path::new("/dev/fastrpc-cdsp").exists();
+        Ok(Value::Bool(available))
+    }
+
+    /// `npu_info() -> str` — Return NPU info string.
+    fn builtin_npu_info(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let available = std::path::Path::new("/dev/fastrpc-cdsp").exists();
+        if available {
+            Ok(Value::Str("Hexagon 770 V68, 12 TOPS INT8, QNN SDK".into()))
+        } else {
+            Ok(Value::Str("NPU not available (simulation mode)".into()))
+        }
+    }
+
+    /// `npu_load(path: str) -> i64` — Load NPU model; returns model handle.
+    fn builtin_npu_load(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let path = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("npu_load: path must be string".into()).into())
+            }
+        };
+        // Simulation: assign incrementing model ID
+        let model_id = self.npu_models.len() as i64 + 1;
+        self.npu_models.insert(model_id, path);
+        Ok(Value::Int(model_id))
+    }
+
+    /// `npu_infer(model: i64, input_data: i64) -> i64` — Run inference; returns result class index.
+    fn builtin_npu_infer(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let model_id = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("npu_infer: model must be int handle".into()).into(),
+                )
+            }
+        };
+        let _input = match &args[1] {
+            Value::Int(n) => *n,
+            v => {
+                return Err(RuntimeError::TypeError(format!(
+                    "npu_infer: input must be int, got {:?}",
+                    v
+                ))
+                .into())
+            }
+        };
+        if !self.npu_models.contains_key(&model_id) {
+            return Err(RuntimeError::TypeError(format!(
+                "npu_infer: model {} not loaded",
+                model_id
+            ))
+            .into());
+        }
+        // Simulation: return class 0 (placeholder for real QNN inference)
+        Ok(Value::Int(0))
     }
 
     // ── ML runtime builtins ──

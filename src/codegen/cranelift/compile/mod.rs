@@ -6047,6 +6047,59 @@ pub(crate) fn compile_inline_asm<M: Module>(
             }
         }
 
+        // ARM64-specific instructions: encode via aarch64_asm module
+        _ if crate::codegen::aarch64_asm::is_arm64_specific(mnemonic) => {
+            // Parse operands from the template string (after mnemonic).
+            // Bracket-aware split: commas inside [...] are part of memory operands.
+            let operand_str = tmpl.strip_prefix(mnemonic).unwrap_or("").trim();
+            let asm_operands: Vec<String> = if operand_str.is_empty() {
+                vec![]
+            } else {
+                let mut result = Vec::new();
+                let mut current = String::new();
+                let mut bracket_depth = 0u32;
+                for ch in operand_str.chars() {
+                    match ch {
+                        '[' => {
+                            bracket_depth += 1;
+                            current.push(ch);
+                        }
+                        ']' => {
+                            bracket_depth = bracket_depth.saturating_sub(1);
+                            current.push(ch);
+                        }
+                        ',' if bracket_depth == 0 => {
+                            let trimmed = current.trim().to_string();
+                            if !trimmed.is_empty() {
+                                result.push(trimmed);
+                            }
+                            current.clear();
+                        }
+                        _ => current.push(ch),
+                    }
+                }
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() {
+                    result.push(trimmed);
+                }
+                result
+            };
+            let asm_op_refs: Vec<&str> = asm_operands.iter().map(|s| s.as_str()).collect();
+
+            // Encode the instruction — validates syntax and produces a 32-bit word
+            let encoded = crate::codegen::aarch64_asm::encode_instruction(mnemonic, &asm_op_refs)?;
+
+            // Return the encoded instruction word as an integer constant.
+            // For AOT bare-metal targets, this value can be written to memory
+            // or emitted as raw .text data. For JIT cross-compilation, it serves
+            // as a validated encoding that can be inspected/tested.
+            let val = builder
+                .ins()
+                .iconst(clif_types::default_int_type(), encoded as i64);
+            write_output(builder, cx, val);
+            val
+        }
+
         _ => {
             return Err(CodegenError::NotImplemented(format!(
                 "inline assembly template not supported in codegen: \"{tmpl}\""
@@ -6132,6 +6185,25 @@ fn validate_asm_register_class(
                 return Err(CodegenError::NotImplemented(format!(
                     "asm: integer value in float register ({direction}(\"{c}\") operand has type {val_ty})"
                 )));
+            }
+        }
+        // ARM64 GP registers (x0-x30, w0-w30, sp, lr, xzr, wzr) — reject float values
+        c if crate::codegen::aarch64_asm::reg_number(c).is_some() => {
+            if is_float {
+                return Err(CodegenError::NotImplemented(format!(
+                    "asm: float value in ARM64 integer register ({direction}(\"{c}\") operand has type {val_ty})"
+                )));
+            }
+        }
+        // ARM64 NEON/FP registers (v0-v31, d0-d31, s0-s31) — reject integer values
+        c if c.starts_with('v') || c.starts_with('d') || c.starts_with('s') => {
+            let suffix = &c[1..];
+            if let Ok(n) = suffix.parse::<u32>() {
+                if n <= 31 && !is_float {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "asm: integer value in ARM64 float register ({direction}(\"{c}\") operand has type {val_ty})"
+                    )));
+                }
             }
         }
         // All other constraints (empty, unknown, or platform-specific): accept any type

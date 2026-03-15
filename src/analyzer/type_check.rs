@@ -1338,6 +1338,39 @@ impl TypeChecker {
                 Type::Void,
             ),
             ("syscall_dispatch", vec![Type::Unknown], Type::Str),
+            // GPIO builtins (v2.0 Q6A)
+            ("gpio_open", vec![Type::I64], Type::I64),
+            ("gpio_close", vec![Type::I64], Type::Void),
+            ("gpio_set_direction", vec![Type::I64, Type::Str], Type::Void),
+            ("gpio_write", vec![Type::I64, Type::I64], Type::Void),
+            ("gpio_read", vec![Type::I64], Type::I64),
+            ("gpio_toggle", vec![Type::I64], Type::Void),
+            // UART builtins (v2.0 Q6A)
+            ("uart_open", vec![Type::I64, Type::I64], Type::I64),
+            ("uart_close", vec![Type::I64], Type::Void),
+            ("uart_write_byte", vec![Type::I64, Type::I64], Type::Void),
+            ("uart_read_byte", vec![Type::I64], Type::I64),
+            ("uart_write_str", vec![Type::I64, Type::Str], Type::Void),
+            // PWM builtins (v2.0 Q6A)
+            ("pwm_open", vec![Type::I64], Type::I64),
+            ("pwm_close", vec![Type::I64], Type::Void),
+            ("pwm_set_frequency", vec![Type::I64, Type::I64], Type::Void),
+            ("pwm_set_duty", vec![Type::I64, Type::I64], Type::Void),
+            ("pwm_enable", vec![Type::I64], Type::Void),
+            ("pwm_disable", vec![Type::I64], Type::Void),
+            // SPI builtins (v2.0 Q6A)
+            ("spi_open", vec![Type::I64, Type::I64], Type::I64),
+            ("spi_close", vec![Type::I64], Type::Void),
+            ("spi_transfer", vec![Type::I64, Type::I64], Type::I64),
+            ("spi_write", vec![Type::I64, Type::Str], Type::Void),
+            // NPU builtins (v2.0 Q6A)
+            ("npu_available", vec![], Type::Bool),
+            ("npu_info", vec![], Type::Str),
+            ("npu_load", vec![Type::Str], Type::I64),
+            ("npu_infer", vec![Type::I64, Type::I64], Type::I64),
+            // Timing builtins (v2.0)
+            ("delay_ms", vec![Type::I64], Type::Void),
+            ("delay_us", vec![Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

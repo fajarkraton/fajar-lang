@@ -302,6 +302,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub fn_ret_type: Option<cranelift_codegen::ir::Type>,
     /// True when the current function returns an enum type (tag + payload).
     pub is_enum_return_fn: bool,
+    /// Current function's context annotation (@kernel, @device, @safe, @unsafe).
+    /// Used for codegen-level enforcement of context restrictions (H4).
+    #[allow(dead_code)]
+    pub current_context: Option<String>,
 }
 
 /// Pushes a new owned resource to both `owned_ptrs` and the current scope (if any).

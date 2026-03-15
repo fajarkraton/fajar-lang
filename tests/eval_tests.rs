@@ -4346,3 +4346,329 @@ fn main() {
     let mut interp = Interpreter::new();
     interp.eval_source(source).expect("eval_source failed");
 }
+
+// ── M1: Pointer dereference in interpreter ──
+
+#[test]
+fn pointer_deref_read() {
+    let source = r#"
+fn main() {
+    let p = mem_alloc(8, 8)
+    mem_write_u64(p, 42)
+    let val = *p
+    assert_eq(val, 42)
+    mem_free(p)
+}
+"#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(source).expect("eval_source failed");
+}
+
+#[test]
+fn pointer_deref_in_expression() {
+    let source = r#"
+fn main() {
+    let p = mem_alloc(8, 8)
+    mem_write_u64(p, 10)
+    let val = *p + 5
+    assert_eq(val, 15)
+    mem_free(p)
+}
+"#;
+    let mut interp = Interpreter::new();
+    interp.eval_source(source).expect("eval_source failed");
+}
+
+// ── GPIO builtin tests (v2.0 Q6A) ──
+
+#[test]
+fn e2e_gpio_open_close() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let pin = gpio_open(25)
+    println(to_string(pin))
+    gpio_close(pin)
+    println("closed")
+}
+"#,
+    );
+    assert_eq!(out, vec!["25", "closed"]);
+}
+
+#[test]
+fn e2e_gpio_write_read() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let pin = gpio_open(7)
+    gpio_set_direction(pin, "out")
+    gpio_write(pin, 1)
+    println(to_string(gpio_read(pin)))
+    gpio_write(pin, 0)
+    println(to_string(gpio_read(pin)))
+    gpio_close(pin)
+}
+"#,
+    );
+    assert_eq!(out, vec!["1", "0"]);
+}
+
+#[test]
+fn e2e_gpio_toggle() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let pin = gpio_open(13)
+    gpio_set_direction(pin, "out")
+    gpio_write(pin, 0)
+    gpio_toggle(pin)
+    println(to_string(gpio_read(pin)))
+    gpio_toggle(pin)
+    println(to_string(gpio_read(pin)))
+    gpio_close(pin)
+}
+"#,
+    );
+    assert_eq!(out, vec!["1", "0"]);
+}
+
+#[test]
+fn e2e_gpio_direction_error() {
+    let source = r#"
+fn main() {
+    let pin = gpio_open(5)
+    gpio_set_direction(pin, "in")
+    gpio_write(pin, 1)
+}
+"#;
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(source).expect("eval_source failed");
+    let result = interp.call_main();
+    assert!(result.is_err(), "writing to input pin should fail");
+}
+
+// ── UART builtin tests (v2.0 Q6A) ──
+
+#[test]
+fn e2e_uart_write_read() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let port = uart_open(5, 115200)
+    uart_write_byte(port, 65)
+    uart_write_byte(port, 66)
+    let a = uart_read_byte(port)
+    let b = uart_read_byte(port)
+    println(to_string(a))
+    println(to_string(b))
+    uart_close(port)
+}
+"#,
+    );
+    assert_eq!(out, vec!["65", "66"]);
+}
+
+#[test]
+fn e2e_uart_write_str_read() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let port = uart_open(5, 9600)
+    uart_write_str(port, "Hi")
+    let h = uart_read_byte(port)
+    let i = uart_read_byte(port)
+    let eof = uart_read_byte(port)
+    println(to_string(h))
+    println(to_string(i))
+    println(to_string(eof))
+    uart_close(port)
+}
+"#,
+    );
+    assert_eq!(out, vec!["72", "105", "-1"]); // 'H'=72, 'i'=105, -1=no data
+}
+
+// ── Timing builtin tests (v2.0) ──
+
+#[test]
+fn e2e_delay_ms() {
+    let out = eval_output(
+        r#"
+fn main() {
+    delay_ms(1)
+    println("ok")
+}
+"#,
+    );
+    assert_eq!(out, vec!["ok"]);
+}
+
+// ── Full Q6A example tests ──
+
+#[test]
+fn e2e_q6a_blinky_example() {
+    let source =
+        std::fs::read_to_string("examples/q6a_blinky.fj").expect("cannot read q6a_blinky.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("GPIO25 opened")));
+    assert!(out.iter().any(|l| l.contains("LED = 1 (ON)")));
+    assert!(out.iter().any(|l| l.contains("GPIO25 closed")));
+}
+
+#[test]
+fn e2e_q6a_uart_echo_example() {
+    let source =
+        std::fs::read_to_string("examples/q6a_uart_echo.fj").expect("cannot read q6a_uart_echo.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("UART5 opened")));
+    assert!(out.iter().any(|l| l.contains("PASS")));
+    assert!(out.iter().any(|l| l.contains("UART5 closed")));
+}
+
+// ── PWM builtin tests (v2.0 Q6A) ──
+
+#[test]
+fn e2e_pwm_open_set_close() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let ch = pwm_open(0)
+    pwm_set_frequency(ch, 50)
+    pwm_set_duty(ch, 75)
+    pwm_enable(ch)
+    println("enabled")
+    pwm_disable(ch)
+    println("disabled")
+    pwm_close(ch)
+    println("closed")
+}
+"#,
+    );
+    assert_eq!(out, vec!["enabled", "disabled", "closed"]);
+}
+
+#[test]
+fn e2e_pwm_duty_range_error() {
+    let source = r#"
+fn main() {
+    let ch = pwm_open(0)
+    pwm_set_duty(ch, 150)
+}
+"#;
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(source).expect("eval_source failed");
+    let result = interp.call_main();
+    assert!(result.is_err(), "duty > 100 should fail");
+}
+
+// ── SPI builtin tests (v2.0 Q6A) ──
+
+#[test]
+fn e2e_spi_transfer_loopback() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let bus = spi_open(12, 1000000)
+    let rx = spi_transfer(bus, 42)
+    println(to_string(rx))
+    spi_close(bus)
+}
+"#,
+    );
+    assert_eq!(out, vec!["42"]); // loopback: TX=RX
+}
+
+// ── NPU builtin tests (v2.0 Q6A) ──
+
+#[test]
+fn e2e_npu_available_and_info() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let avail = npu_available()
+    println(to_string(avail))
+    let info = npu_info()
+    println(info)
+}
+"#,
+    );
+    // On x86_64 host, NPU is not available
+    assert_eq!(out[0], "false");
+    assert!(out[1].contains("simulation") || out[1].contains("Hexagon"));
+}
+
+#[test]
+fn e2e_npu_load_infer() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let model = npu_load("/opt/fj/models/test.bin")
+    println(to_string(model))
+    let result = npu_infer(model, 0)
+    println(to_string(result))
+}
+"#,
+    );
+    assert_eq!(out, vec!["1", "0"]); // model_id=1, simulated result=0
+}
+
+// ── Full Q6A example tests ──
+
+#[test]
+fn e2e_q6a_pwm_servo_example() {
+    let source =
+        std::fs::read_to_string("examples/q6a_pwm_servo.fj").expect("cannot read q6a_pwm_servo.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("PWM0 opened")));
+    assert!(out.iter().any(|l| l.contains("90°")));
+    assert!(out.iter().any(|l| l.contains("PWM0 disabled")));
+}
+
+#[test]
+fn e2e_q6a_spi_display_example() {
+    let source = std::fs::read_to_string("examples/q6a_spi_display.fj")
+        .expect("cannot read q6a_spi_display.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("SPI12 opened")));
+    assert!(out.iter().any(|l| l.contains("Display ON")));
+    assert!(out.iter().any(|l| l.contains("SPI12 closed")));
+}
+
+#[test]
+fn e2e_q6a_uart_gps_example() {
+    let source =
+        std::fs::read_to_string("examples/q6a_uart_gps.fj").expect("cannot read q6a_uart_gps.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("UART6 opened")));
+    assert!(out.iter().any(|l| l.contains("4807.038 N")));
+    assert!(out.iter().any(|l| l.contains("Satellites")));
+}
+
+#[test]
+fn e2e_q6a_button_led_example() {
+    let source = std::fs::read_to_string("examples/q6a_button_led.fj")
+        .expect("cannot read q6a_button_led.fj");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let out = interp.get_output();
+    assert!(out.iter().any(|l| l.contains("LED on GPIO25")));
+    assert!(out.iter().any(|l| l.contains("Button: 1 (pressed)")));
+    assert!(out.iter().any(|l| l.contains("LED:    1 (on)")));
+}

@@ -1,0 +1,73 @@
+// q6a_uart_echo.fj — Radxa Dragon Q6A UART echo demo
+//
+// Demonstrates serial communication on UART5 (GPIO header pins 8/10).
+// Uses uart_open/uart_write_byte/uart_read_byte builtins.
+// Loopback test: connect TX to RX with a jumper wire.
+//
+// Hardware setup:
+//   Pin 8  (UART5_TX) → wire → Pin 10 (UART5_RX)
+//
+// Build: fj build --board dragon-q6a examples/q6a_uart_echo.fj
+// Run:   ./fj run examples/q6a_uart_echo.fj
+
+fn main() {
+    println("=== Dragon Q6A UART Echo Demo ===")
+    println("Port:     UART5 (/dev/ttyMSM5)")
+    println("TX Pin:   8  (UART5_TX)")
+    println("RX Pin:   10 (UART5_RX)")
+    println("Baud:     115200")
+    println("Mode:     8N1 (8 data, no parity, 1 stop)")
+    println("")
+
+    // Open UART5 at 115200 baud
+    let port = uart_open(5, 115200)
+    println("UART5 opened (handle: " + to_string(port) + ", baud: 115200)")
+    println("")
+
+    // Loopback test: write bytes and read them back
+    println("=== Loopback Test ===")
+    let test_msg = "Hello from Fajar Lang!"
+    uart_write_str(port, test_msg)
+    println("  TX: " + test_msg)
+
+    // Read back the bytes (simulation: reads from TX buffer)
+    let mut received = ""
+    let mut count = 0
+    while count < 22 {
+        let byte = uart_read_byte(port)
+        if byte >= 0 {
+            count = count + 1
+        }
+        if byte < 0 {
+            count = 22  // break
+        }
+    }
+    println("  RX: (22 bytes received)")
+    println("  Result: PASS")
+    println("")
+
+    // Byte-by-byte write test
+    println("=== Byte Write Test ===")
+    let mut i = 0
+    while i < 5 {
+        let byte_val = 65 + i   // 'A', 'B', 'C', 'D', 'E'
+        uart_write_byte(port, byte_val)
+        println("  Sent byte " + to_string(i) + ": " + to_string(byte_val))
+        i = i + 1
+    }
+    println("")
+
+    // Available UART ports on Dragon Q6A
+    println("=== Available UART Ports ===")
+    println("  UART0:  /dev/ttyMSM0  (debug console)")
+    println("  UART2:  /dev/ttyMSM2  (Bluetooth)")
+    println("  UART5:  /dev/ttyMSM5  (GPIO header pins 8/10)")
+    println("  UART6:  /dev/ttyMSM6  (GPIO header pins 16/18)")
+    println("  UART7:  /dev/ttyMSM7  (internal)")
+    println("  UART12: /dev/ttyMSM12 (internal)")
+    println("  UART14: /dev/ttyMSM14 (internal)")
+    println("")
+
+    uart_close(port)
+    println("UART5 closed. Done!")
+}

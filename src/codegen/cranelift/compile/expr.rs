@@ -843,6 +843,22 @@ pub(in crate::codegen::cranelift) fn compile_unary<M: Module>(
             cx.last_expr_type = Some(clif_types::default_int_type());
             Ok(builder.ins().bnot(val))
         }
+        UnaryOp::Deref => {
+            // Dereference pointer: emit a load from the address held in `val`.
+            use cranelift_codegen::ir::MemFlags;
+            let mem_flags = MemFlags::new();
+            let loaded = builder
+                .ins()
+                .load(clif_types::default_int_type(), mem_flags, val, 0);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(loaded)
+        }
+        UnaryOp::Ref => {
+            // Address-of: value must already be a stack slot reference (pointer).
+            // For now, return the value as-is (variables are already I64 holding addresses).
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(val)
+        }
         _ => Err(CodegenError::NotImplemented(format!("unary op {:?}", op))),
     }
 }
@@ -929,17 +945,23 @@ pub(in crate::codegen::cranelift) fn compile_binop<M: Module>(
     if is_float {
         compile_float_binop(builder, cx, op, lhs, rhs)
     } else {
-        compile_int_binop(builder, cx, op, lhs, rhs)
+        compile_int_binop(builder, cx, op, lhs, rhs, left_type, right_type)
     }
 }
 
 /// Compiles an integer binary operation.
+///
+/// B3.3: When both operands have the same sub-I64 semantic type (e.g., both u32),
+/// the result is truncated to that width to ensure correct overflow behavior.
+/// When operand types differ, the result is I64.
 pub(super) fn compile_int_binop<M: Module>(
     builder: &mut FunctionBuilder,
     cx: &mut CodegenCtx<'_, M>,
     op: &BinOp,
     lhs: ClifValue,
     rhs: ClifValue,
+    left_semantic_type: Option<cranelift_codegen::ir::Type>,
+    right_semantic_type: Option<cranelift_codegen::ir::Type>,
 ) -> Result<ClifValue, CodegenError> {
     // Widen I8 (bool) operands to I64 for comparison/arithmetic
     let lhs_ty = builder.func.dfg.value_type(lhs);
@@ -955,27 +977,26 @@ pub(super) fn compile_int_binop<M: Module>(
         rhs
     };
 
-    match op {
-        BinOp::Add => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().iadd(lhs, rhs))
+    // B3.3: Determine if both operands share a sub-I64 semantic type.
+    // If so, arithmetic results will be truncated to that width.
+    let narrow_type = match (left_semantic_type, right_semantic_type) {
+        (Some(lt), Some(rt))
+            if lt == rt
+                && !clif_types::is_float(lt)
+                && lt.bits() < 64
+                && lt != clif_types::bool_type() =>
+        {
+            Some(lt)
         }
-        BinOp::Sub => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().isub(lhs, rhs))
-        }
-        BinOp::Mul => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().imul(lhs, rhs))
-        }
-        BinOp::Div => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().sdiv(lhs, rhs))
-        }
-        BinOp::Rem => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().srem(lhs, rhs))
-        }
+        _ => None,
+    };
+
+    let result = match op {
+        BinOp::Add => Ok(builder.ins().iadd(lhs, rhs)),
+        BinOp::Sub => Ok(builder.ins().isub(lhs, rhs)),
+        BinOp::Mul => Ok(builder.ins().imul(lhs, rhs)),
+        BinOp::Div => Ok(builder.ins().sdiv(lhs, rhs)),
+        BinOp::Rem => Ok(builder.ins().srem(lhs, rhs)),
         BinOp::Pow => {
             // Integer power: convert to f64, call pow, convert back
             let lf = builder
@@ -991,41 +1012,39 @@ pub(super) fn compile_int_binop<M: Module>(
             let callee = cx.module.declare_func_in_func(pow_id, builder.func);
             let call = builder.ins().call(callee, &[lf, rf]);
             let result_f = builder.inst_results(call)[0];
-            let result = builder
+            Ok(builder
                 .ins()
-                .fcvt_to_sint(clif_types::default_int_type(), result_f);
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+                .fcvt_to_sint(clif_types::default_int_type(), result_f))
         }
         BinOp::Eq => {
             let cmp = builder.ins().icmp(IntCC::Equal, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result); // Comparisons always return I64, skip truncation
         }
         BinOp::Ne => {
             let cmp = builder.ins().icmp(IntCC::NotEqual, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result);
         }
         BinOp::Lt => {
             let cmp = builder.ins().icmp(IntCC::SignedLessThan, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result);
         }
         BinOp::Gt => {
             let cmp = builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result);
         }
         BinOp::Le => {
             let cmp = builder.ins().icmp(IntCC::SignedLessThanOrEqual, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result);
         }
         BinOp::Ge => {
             let cmp = builder
@@ -1033,29 +1052,29 @@ pub(super) fn compile_int_binop<M: Module>(
                 .icmp(IntCC::SignedGreaterThanOrEqual, lhs, rhs);
             let result = builder.ins().uextend(clif_types::default_int_type(), cmp);
             cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(result)
+            return Ok(result);
         }
-        BinOp::BitAnd => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().band(lhs, rhs))
-        }
-        BinOp::BitOr => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().bor(lhs, rhs))
-        }
-        BinOp::BitXor => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().bxor(lhs, rhs))
-        }
-        BinOp::Shl => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().ishl(lhs, rhs))
-        }
-        BinOp::Shr => {
-            cx.last_expr_type = Some(clif_types::default_int_type());
-            Ok(builder.ins().sshr(lhs, rhs))
-        }
+        BinOp::BitAnd => Ok(builder.ins().band(lhs, rhs)),
+        BinOp::BitOr => Ok(builder.ins().bor(lhs, rhs)),
+        BinOp::BitXor => Ok(builder.ins().bxor(lhs, rhs)),
+        BinOp::Shl => Ok(builder.ins().ishl(lhs, rhs)),
+        BinOp::Shr => Ok(builder.ins().sshr(lhs, rhs)),
         _ => Err(CodegenError::NotImplemented(format!("int binop {:?}", op))),
+    }?;
+
+    // B3.3: If both operands share a sub-I64 type, truncate the result to that
+    // width so that overflow wraps correctly (e.g., u32 max + 1 → 0).
+    if let Some(nt) = narrow_type {
+        let narrow = builder.ins().ireduce(nt, result);
+        // Extend back to I64 for uniform representation (uextend for unsigned semantics)
+        let extended = builder
+            .ins()
+            .uextend(clif_types::default_int_type(), narrow);
+        cx.last_expr_type = Some(nt);
+        Ok(extended)
+    } else {
+        cx.last_expr_type = Some(clif_types::default_int_type());
+        Ok(result)
     }
 }
 

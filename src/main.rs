@@ -960,7 +960,8 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
         Some(b) => b,
         None => {
             eprintln!("error: unknown board '{board_name}'");
-            eprintln!("hint: supported boards: stm32f407, esp32, rp2040");
+            let all = fajar_lang::bsp::supported_boards();
+            eprintln!("hint: supported boards: {}", all.join(", "));
             return ExitCode::from(EXIT_USAGE);
         }
     };
@@ -1038,18 +1039,27 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
         );
     }
 
-    // Compile program (parse + analyze are already done above)
-    // For now: generate the BSP artifacts and report success.
-    // Full cross-compilation requires the native/llvm backend with target triple.
+    // For Linux boards (Aarch64Linux), directly cross-compile via the native backend.
+    // For bare-metal MCU boards, generate artifacts and print next-step instructions.
     let _ = program;
-    println!("\nBSP artifacts generated successfully.");
-    println!("To complete compilation, use:");
-    println!(
-        "  fj build {} --target {} --linker-script {} --no-std",
-        path.display(),
-        board.arch(),
-        ld_path.display()
-    );
+    match board.arch() {
+        fajar_lang::bsp::BspArch::Aarch64Linux => {
+            let target_triple = board.arch().to_string();
+            println!("\nCross-compiling for {target_triple}...");
+            return cmd_build(path, &target_triple, output, false, None);
+        }
+        _ => {
+            // Bare-metal MCU boards: generate BSP artifacts only
+            println!("\nBSP artifacts generated successfully.");
+            println!("To complete compilation, use:");
+            println!(
+                "  fj build {} --target {} --linker-script {} --no-std",
+                path.display(),
+                board.arch(),
+                ld_path.display()
+            );
+        }
+    }
 
     ExitCode::SUCCESS
 }

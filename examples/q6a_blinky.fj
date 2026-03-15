@@ -1,95 +1,70 @@
 // q6a_blinky.fj — Radxa Dragon Q6A GPIO blinky demo
 //
-// Demonstrates GPIO pin control on the Dragon Q6A's 40-pin header.
-// Uses /dev/gpiochip4 for GPIO access on QCS6490.
+// Toggles GPIO25 (physical pin 11) to blink an LED.
+// Uses gpio_open/gpio_write/gpio_read builtins.
+// On x86_64 host, runs in simulation mode (no real hardware).
 //
 // Hardware setup:
-//   Pin 7  (GPIO96/MCLK)  → LED + 330Ω resistor → GND (Pin 9)
-//   Pin 13 (GPIO0)        → Push button → GND (Pin 14)
+//   Pin 11 (GPIO25) → 220Ω resistor → LED → GND
 //
 // Build: fj build --board dragon-q6a examples/q6a_blinky.fj
 // Run:   ./fj run examples/q6a_blinky.fj
 
 fn main() {
-    println("=== Dragon Q6A GPIO Blinky ===")
-    println("Board: Radxa Dragon Q6A (QCS6490)")
-    println("GPIO device: /dev/gpiochip4")
+    println("=== Dragon Q6A GPIO Blinky Demo ===")
+    println("Board:  Radxa Dragon Q6A (QCS6490)")
+    println("GPIO:   /dev/gpiochip4")
+    println("Pin:    11 (GPIO25)")
     println("")
 
-    // 40-pin header pinout (selected pins)
-    let led_pin = 96        // Physical pin 7: GPIO96/MCLK
-    let button_pin = 0      // Physical pin 13: GPIO0
-    let uart5_tx = 22       // Physical pin 8: GPIO22/UART5_TX
-    let uart5_rx = 23       // Physical pin 10: GPIO23/UART5_RX
-    let i2c6_sda = 24       // Physical pin 3: GPIO24/I2C6_SDA
-    let i2c6_scl = 25       // Physical pin 5: GPIO25/I2C6_SCL
-    let spi12_mosi = 49     // Physical pin 19: GPIO49/SPI12_MOSI
-    let spi12_miso = 48     // Physical pin 21: GPIO48/SPI12_MISO
+    // Open GPIO pin 25
+    let pin = gpio_open(25)
+    println("GPIO25 opened (handle: " + to_string(pin) + ")")
 
-    println("Pin configuration:")
-    println("  LED output:   GPIO" + to_string(led_pin) + " (pin 7)")
-    println("  Button input: GPIO" + to_string(button_pin) + " (pin 13)")
-    println("  UART5 TX:     GPIO" + to_string(uart5_tx) + " (pin 8)")
-    println("  UART5 RX:     GPIO" + to_string(uart5_rx) + " (pin 10)")
-    println("  I2C6 SDA:     GPIO" + to_string(i2c6_sda) + " (pin 3)")
-    println("  I2C6 SCL:     GPIO" + to_string(i2c6_scl) + " (pin 5)")
-    println("  SPI12 MOSI:   GPIO" + to_string(spi12_mosi) + " (pin 19)")
-    println("  SPI12 MISO:   GPIO" + to_string(spi12_miso) + " (pin 21)")
+    // Set as output
+    gpio_set_direction(pin, "out")
+    println("Direction: OUTPUT")
     println("")
 
-    // Simulate GPIO blink sequence
-    println("=== Blink Sequence (simulated) ===")
+    // Blink 5 times
+    println("=== Blinking ===")
     let mut cycle = 0
-    let max_cycles = 5
-
-    while cycle < max_cycles {
+    while cycle < 5 {
         // LED ON
-        println("  Cycle " + to_string(cycle) + ": LED ON  (GPIO" + to_string(led_pin) + " = HIGH)")
+        gpio_write(pin, 1)
+        let level = gpio_read(pin)
+        println("  Cycle " + to_string(cycle) + ": LED = " + to_string(level) + " (ON)")
 
         // LED OFF
-        println("  Cycle " + to_string(cycle) + ": LED OFF (GPIO" + to_string(led_pin) + " = LOW)")
+        gpio_write(pin, 0)
+        let level2 = gpio_read(pin)
+        println("  Cycle " + to_string(cycle) + ": LED = " + to_string(level2) + " (OFF)")
 
         cycle = cycle + 1
     }
-    println("")
 
-    // Simulate button read
-    println("=== Button Read (simulated) ===")
-    let button_state = 0  // 0 = not pressed (pull-up)
-    if button_state == 0 {
-        println("  GPIO" + to_string(button_pin) + " = LOW (button not pressed)")
-    } else {
-        println("  GPIO" + to_string(button_pin) + " = HIGH (button pressed)")
-    }
+    // Test toggle
     println("")
-
-    // NPU info
-    println("=== Hexagon 770 NPU ===")
-    println("  ISA:  V68")
-    println("  TOPS: 12 (INT8)")
-    println("  HTP:  libQnnHtpV68Skel.so")
-    println("")
-
-    // GPU info
-    println("=== Adreno 643 GPU ===")
-    println("  Clock:  812 MHz")
-    println("  Vulkan: 1.1")
-    println("  OpenCL: 2.0")
-    println("")
+    println("=== Toggle Test ===")
+    gpio_write(pin, 0)
+    println("  Initial: " + to_string(gpio_read(pin)))
+    gpio_toggle(pin)
+    println("  After toggle: " + to_string(gpio_read(pin)))
+    gpio_toggle(pin)
+    println("  After toggle: " + to_string(gpio_read(pin)))
 
     // Board summary
+    println("")
     println("=== Board Summary ===")
     println("  SoC:     QCS6490 (TSMC 6nm)")
     println("  CPU:     Kryo 670 (1+3+4 cores, 2.71 GHz max)")
-    println("  RAM:     LPDDR5 @ 3200 MHz")
-    println("  Storage: NVMe + eMMC + microSD")
+    println("  NPU:     Hexagon 770 V68, 12 TOPS INT8")
+    println("  GPU:     Adreno 643 @ 812 MHz")
     println("  GPIO:    40-pin, 3.3V logic, /dev/gpiochip4")
-    println("  Camera:  3x MIPI CSI (4+2+2 lanes)")
-    println("  Display: HDMI 4K@30 + MIPI DSI")
-    println("  Network: GbE + WiFi 6 + BT 5.4")
-    println("  OS:      Ubuntu 24.04 (kernel 6.16.x)")
     println("  Target:  aarch64-unknown-linux-gnu")
     println("")
 
-    println("q6a_blinky demo complete")
+    // Cleanup
+    gpio_close(pin)
+    println("GPIO25 closed. Done!")
 }

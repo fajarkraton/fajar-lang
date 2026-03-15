@@ -15,6 +15,7 @@
 //!     └──► WasmCompiler       (wasm)     → .wasm binary
 //! ```
 
+pub mod aarch64_asm;
 pub mod amx;
 pub mod analysis;
 pub mod avx10;

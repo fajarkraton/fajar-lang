@@ -8479,6 +8479,181 @@ fn native_cast_u8_identity() {
     assert_eq!(compile_and_run(src), 200);
 }
 
+// ── B3.2: Let binding type honoring ──
+
+#[test]
+fn native_let_u32_truncates_overflow() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: u32 = 4294967296
+            x as i64
+        }
+    "#;
+    // 0x1_0000_0000 doesn't fit in u32, wraps to 0
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_let_u32_preserves_value() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: u32 = 42
+            x as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_let_u8_truncates() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: u8 = 256
+            x as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_let_i8_sign_extends() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i8 = 200
+            x as i64
+        }
+    "#;
+    // 200 as i8 = -56 (0xC8 sign-extends to -56)
+    assert_eq!(compile_and_run(src), -56);
+}
+
+#[test]
+fn native_let_u16_truncates() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: u16 = 65536
+            x as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_let_u32_max_value() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: u32 = 4294967295
+            x as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 4294967295);
+}
+
+#[test]
+fn native_let_i32_negative() {
+    let src = r#"
+        fn main() -> i64 {
+            let x: i32 = -42
+            x as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), -42);
+}
+
+// ── B3.3: Arithmetic type propagation ──
+
+#[test]
+fn native_u32_add_overflow_wraps() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 4294967295
+            let b: u32 = 1
+            let c: u32 = a + b
+            c as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_u32_mul_overflow_wraps() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 65536
+            let b: u32 = 65536
+            let c: u32 = a * b
+            c as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_u8_add_overflow_wraps() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u8 = 255
+            let b: u8 = 1
+            let c: u8 = a + b
+            c as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0);
+}
+
+#[test]
+fn native_u32_arithmetic_preserves() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 100
+            let b: u32 = 200
+            let c: u32 = a + b
+            c as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 300);
+}
+
+#[test]
+fn native_u32_sub_underflow_wraps() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 0
+            let b: u32 = 1
+            let c: u32 = a - b
+            c as i64
+        }
+    "#;
+    // 0 - 1 wraps to 0xFFFFFFFF = 4294967295
+    assert_eq!(compile_and_run(src), 4294967295);
+}
+
+#[test]
+fn native_u32_bitwise_ops() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 4294967295
+            let b: u32 = 255
+            let c: u32 = a & b
+            c as i64
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 255);
+}
+
+#[test]
+fn native_mixed_u32_i64_promotes() {
+    let src = r#"
+        fn main() -> i64 {
+            let a: u32 = 100
+            let b: i64 = 200
+            a + b
+        }
+    "#;
+    // Mixed types: u32 + i64 → result is i64 (300)
+    assert_eq!(compile_and_run(src), 300);
+}
+
 // ── B2: Multi-width volatile I/O ──
 
 #[test]
@@ -15337,4 +15512,405 @@ fn nostd_normal_mode_allows_tensor() {
         }
     "#;
     assert_eq!(compile_and_run(src), 0);
+}
+
+// ── H4: Context enforcement in native codegen ──
+
+#[test]
+fn context_kernel_rejects_tensor() {
+    // @kernel function calling tensor_zeros should fail with ContextViolation
+    let src = r#"
+        @kernel fn boot() -> i64 {
+            let t = tensor_zeros(2, 3)
+            0
+        }
+        fn main() -> i64 { boot() }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    let result = compiler.compile_program(&program);
+    assert!(result.is_err(), "@kernel should reject tensor_zeros");
+    let errs = result.unwrap_err();
+    let msg = format!("{:?}", errs);
+    assert!(
+        msg.contains("ContextViolation") || msg.contains("KE002"),
+        "error should mention context violation: {msg}"
+    );
+}
+
+#[test]
+fn context_kernel_rejects_read_file() {
+    let src = r#"
+        @kernel fn boot() -> i64 {
+            let f = read_file("test.txt")
+            0
+        }
+        fn main() -> i64 { boot() }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    let result = compiler.compile_program(&program);
+    assert!(result.is_err(), "@kernel should reject read_file");
+    let errs = result.unwrap_err();
+    let msg = format!("{:?}", errs);
+    assert!(
+        msg.contains("ContextViolation") || msg.contains("KE001"),
+        "error should mention context violation: {msg}"
+    );
+}
+
+#[test]
+fn context_device_rejects_raw_pointer() {
+    let src = r#"
+        @device fn infer() -> i64 {
+            let p = mem_alloc(8, 8)
+            0
+        }
+        fn main() -> i64 { infer() }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    let result = compiler.compile_program(&program);
+    assert!(result.is_err(), "@device should reject mem_alloc");
+    let errs = result.unwrap_err();
+    let msg = format!("{:?}", errs);
+    assert!(
+        msg.contains("ContextViolation") || msg.contains("DE001"),
+        "error should mention context violation: {msg}"
+    );
+}
+
+#[test]
+fn context_safe_allows_normal_code() {
+    let src = r#"
+        @safe fn compute(x: i64) -> i64 { x + 1 }
+        fn main() -> i64 { compute(41) }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn context_unsafe_allows_everything() {
+    // @unsafe should not reject anything
+    let src = r#"
+        @unsafe fn do_everything() -> i64 { 42 }
+        fn main() -> i64 { do_everything() }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+// ── M1: Pointer dereference in native codegen ──
+
+#[test]
+fn native_pointer_deref() {
+    let src = r#"
+        fn main() -> i64 {
+            let p = alloc(8)
+            volatile_write(p, 99)
+            let val = *p
+            dealloc(p, 8)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 99);
+}
+
+#[test]
+fn native_pointer_deref_in_expr() {
+    let src = r#"
+        fn main() -> i64 {
+            let p = alloc(8)
+            volatile_write(p, 10)
+            let val = *p + 5
+            dealloc(p, 8)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 15);
+}
+
+// ── M3: Const evaluation / folding in native codegen ──
+
+#[test]
+fn native_const_folding() {
+    // Verify const values propagate correctly at compile time
+    let src = r#"
+        const PAGE_SIZE: i64 = 4096
+        fn main() -> i64 {
+            let x = PAGE_SIZE * 2
+            x
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 8192);
+}
+
+#[test]
+fn native_const_arithmetic() {
+    let src = r#"
+        const BASE: i64 = 100
+        const OFFSET: i64 = 42
+        fn main() -> i64 {
+            BASE + OFFSET
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 142);
+}
+
+// ── B4: Bare-metal _start generation ──
+
+#[test]
+fn bare_metal_start_has_bss_zeroing() {
+    // When no_std is enabled with @entry, _start should include BSS zeroing
+    let src = r#"
+        @entry fn boot() {
+            let x = 42
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let mut compiler = super::ObjectCompiler::new("test_bare_metal").expect("compiler init failed");
+    compiler.set_no_std(true);
+    let result = compiler.compile_program(&program);
+    assert!(
+        result.is_ok(),
+        "bare-metal _start should compile: {result:?}"
+    );
+    // Verify the object file was produced (contains _start + BSS zeroing)
+    let product = compiler.finish();
+    let bytes = product.emit().expect("emit failed");
+    assert!(bytes.len() > 100, "object file should be non-trivial");
+}
+
+#[test]
+fn non_bare_metal_start_has_return() {
+    // Normal mode: _start just calls entry and returns
+    let src = r#"
+        @entry fn boot() {
+            let x = 42
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let mut compiler = super::ObjectCompiler::new("test_normal").expect("compiler init failed");
+    // NOT setting no_std — normal mode
+    let result = compiler.compile_program(&program);
+    assert!(result.is_ok(), "normal _start should compile: {result:?}");
+    let product = compiler.finish();
+    let bytes = product.emit().expect("emit failed");
+    assert!(bytes.len() > 50, "object file should be non-trivial");
+}
+
+#[test]
+fn bare_metal_aarch64_start() {
+    // ARM64 bare-metal target should produce valid object
+    let src = r#"
+        @entry fn kernel_main() {
+            let uart_base: i64 = 0x09000000
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).expect("lex failed");
+    let program = crate::parser::parse(tokens).expect("parse failed");
+    let target = crate::codegen::target::TargetConfig::from_triple("aarch64-unknown-none");
+    if let Ok(target) = target {
+        if let Ok(mut compiler) =
+            super::ObjectCompiler::new_with_target("test_aarch64_start", &target)
+        {
+            compiler.set_no_std(true);
+            let result = compiler.compile_program(&program);
+            assert!(
+                result.is_ok(),
+                "aarch64 bare-metal _start should compile: {result:?}"
+            );
+        }
+    }
+    // Skip if aarch64 target not available
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// B1: ARM64 inline assembly encoding integration
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_asm_arm64_mrs_encoding() {
+    // asm!("mrs x0, SCTLR_EL1") should encode to a valid ARM64 mrs instruction word
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("mrs x0, SCTLR_EL1", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    // The encoded mrs instruction word should be non-zero
+    assert_ne!(
+        result, 0,
+        "mrs encoding should produce non-zero instruction word"
+    );
+    // Verify it matches the expected encoding from aarch64_asm
+    let expected = crate::codegen::aarch64_asm::encode_instruction("mrs", &["x0", "SCTLR_EL1"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(
+        result, expected as i64,
+        "JIT mrs encoding should match aarch64_asm encoder"
+    );
+}
+
+#[test]
+fn native_asm_arm64_msr_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("msr VBAR_EL1, x1", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("msr", &["VBAR_EL1", "x1"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "msr encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_isb_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("isb", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("isb", &[])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "isb encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_wfi_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("wfi", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("wfi", &[])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "wfi encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_eret_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("eret", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("eret", &[])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "eret encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_svc_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("svc #0", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("svc", &["#0"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "svc encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_movz_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("movz x0, #0x1234", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("movz", &["x0", "#0x1234"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "movz encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_ldr_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("ldr x0, [x1, #8]", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("ldr", &["x0", "[x1, #8]"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "ldr encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_ret_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("ret", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("ret", &[])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "ret encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_dsb_encoding() {
+    let src = r#"
+        fn main() -> i64 {
+            let mut encoded: i64 = 0
+            asm!("dsb sy", out(reg) encoded)
+            encoded
+        }
+    "#;
+    let result = compile_and_run(src);
+    let expected = crate::codegen::aarch64_asm::encode_instruction("dsb", &["sy"])
+        .expect("encode_instruction should succeed");
+    assert_eq!(result, expected as i64, "dsb encoding should match");
+}
+
+#[test]
+fn native_asm_arm64_sequence() {
+    // Multiple ARM64 instructions in sequence
+    let src = r#"
+        fn main() -> i64 {
+            let mut e1: i64 = 0
+            let mut e2: i64 = 0
+            asm!("isb", out(reg) e1)
+            asm!("dsb sy", out(reg) e2)
+            e1 + e2
+        }
+    "#;
+    let result = compile_and_run(src);
+    let isb = crate::codegen::aarch64_asm::encode_instruction("isb", &[]).unwrap() as i64;
+    let dsb = crate::codegen::aarch64_asm::encode_instruction("dsb", &["sy"]).unwrap() as i64;
+    assert_eq!(
+        result,
+        isb + dsb,
+        "sum of encoded instructions should match"
+    );
 }

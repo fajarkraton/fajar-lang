@@ -30,7 +30,7 @@ use generics::{collect_called_fns, collect_generic_calls, compute_reachable, spe
 
 use super::types as clif_types;
 use super::CodegenError;
-use crate::parser::ast::{Expr, ExternFn, FnDef, Item, LiteralKind, Program, TypeExpr};
+use crate::parser::ast::{Expr, ExternFn, FnDef, Item, LiteralKind, Program, Stmt, TypeExpr};
 
 // ═══════════════════════════════════════════════════════════════════════
 // Shared helpers for JIT + AOT compilers
@@ -182,6 +182,176 @@ fn coerce_ret(
         builder.ins().ireduce(expected_ty, val)
     } else {
         builder.ins().uextend(expected_ty, val)
+    }
+}
+
+/// H4: Scans an expression tree for function calls forbidden in the given context.
+///
+/// Returns a list of violation descriptions (empty = no violations).
+/// - `"kernel"`: forbids tensor ops, heap allocation, string ops
+/// - `"device"`: forbids raw pointer ops, IRQ ops
+fn check_context_violations(body: &Expr, context: &str) -> Vec<String> {
+    let mut violations = Vec::new();
+    collect_violations(body, context, &mut violations);
+    violations
+}
+
+/// Recursively collects context violations from an expression tree.
+fn collect_violations(expr: &Expr, context: &str, out: &mut Vec<String>) {
+    match expr {
+        Expr::Call { callee, args, .. } => {
+            // Check the callee name
+            if let Expr::Ident { name, .. } = callee.as_ref() {
+                check_call_name(name, context, out);
+            }
+            if let Expr::Path { segments, .. } = callee.as_ref() {
+                if let Some(name) = segments.last() {
+                    check_call_name(name, context, out);
+                }
+            }
+            // Recurse into args
+            for arg in args {
+                collect_violations(&arg.value, context, out);
+            }
+        }
+        Expr::Block { stmts, .. } => {
+            for stmt in stmts {
+                collect_stmt_violations(stmt, context, out);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_violations(condition, context, out);
+            collect_violations(then_branch, context, out);
+            if let Some(e) = else_branch {
+                collect_violations(e, context, out);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            collect_violations(condition, context, out);
+            collect_violations(body, context, out);
+        }
+        Expr::Loop { body, .. } => {
+            collect_violations(body, context, out);
+        }
+        Expr::For { iterable, body, .. } => {
+            collect_violations(iterable, context, out);
+            collect_violations(body, context, out);
+        }
+        Expr::Binary { left, right, .. } => {
+            collect_violations(left, context, out);
+            collect_violations(right, context, out);
+        }
+        Expr::Unary { operand, .. } => {
+            collect_violations(operand, context, out);
+        }
+        Expr::Assign { value, .. } => {
+            collect_violations(value, context, out);
+        }
+        _ => {}
+    }
+}
+
+/// Collects violations from a statement.
+fn collect_stmt_violations(stmt: &Stmt, context: &str, out: &mut Vec<String>) {
+    match stmt {
+        Stmt::Let { value, .. } | Stmt::Const { value, .. } => {
+            collect_violations(value, context, out);
+        }
+        Stmt::Expr { expr, .. } => {
+            collect_violations(expr, context, out);
+        }
+        Stmt::Return { value: Some(v), .. } => {
+            collect_violations(v, context, out);
+        }
+        _ => {}
+    }
+}
+
+/// Checks whether a function call name is forbidden in the given context.
+fn check_call_name(name: &str, context: &str, out: &mut Vec<String>) {
+    match context {
+        "kernel" => {
+            // KE002: tensor ops forbidden in @kernel
+            const TENSOR_OPS: &[&str] = &[
+                "tensor_zeros",
+                "tensor_ones",
+                "tensor_rand",
+                "tensor_xavier",
+                "tensor_matmul",
+                "tensor_relu",
+                "tensor_sigmoid",
+                "tensor_softmax",
+                "zeros",
+                "ones",
+                "randn",
+                "xavier",
+                "matmul",
+                "relu",
+                "sigmoid",
+                "softmax",
+                "backward",
+                "tensor_grad",
+                "cross_entropy_loss",
+            ];
+            if TENSOR_OPS.contains(&name) {
+                out.push(format!("[KE002] tensor op '{}' forbidden in @kernel", name));
+            }
+            // KE001: heap allocation forbidden in @kernel
+            const HEAP_OPS: &[&str] = &[
+                "String_new",
+                "Vec_new",
+                "read_file",
+                "write_file",
+                "append_file",
+            ];
+            if HEAP_OPS.contains(&name) {
+                out.push(format!("[KE001] heap op '{}' forbidden in @kernel", name));
+            }
+        }
+        "device" => {
+            // DE001: raw pointer ops forbidden in @device
+            const PTR_OPS: &[&str] = &[
+                "mem_alloc",
+                "mem_free",
+                "mem_read",
+                "mem_write",
+                "mem_read_u8",
+                "mem_read_u16",
+                "mem_read_u32",
+                "mem_write_u8",
+                "mem_write_u16",
+                "mem_write_u32",
+            ];
+            if PTR_OPS.contains(&name) {
+                out.push(format!(
+                    "[DE001] raw pointer op '{}' forbidden in @device",
+                    name
+                ));
+            }
+            // DE002: IRQ/hardware ops forbidden in @device
+            const IRQ_OPS: &[&str] = &[
+                "irq_register",
+                "irq_unregister",
+                "irq_enable",
+                "irq_disable",
+                "port_read",
+                "port_write",
+            ];
+            if IRQ_OPS.contains(&name) {
+                out.push(format!(
+                    "[DE002] hardware op '{}' forbidden in @device",
+                    name
+                ));
+            }
+        }
+        _ => {}
     }
 }
 
@@ -5005,6 +5175,21 @@ impl CraneliftCompiler {
             .get(&fndef.name)
             .ok_or_else(|| CodegenError::UndefinedFunction(fndef.name.clone()))?;
 
+        // H4: Context enforcement — reject forbidden builtins before codegen
+        if let Some(ref ann) = fndef.annotation {
+            let ctx_name = &ann.name;
+            if ctx_name == "kernel" || ctx_name == "device" {
+                let forbidden = check_context_violations(&fndef.body, ctx_name);
+                if !forbidden.is_empty() {
+                    return Err(CodegenError::ContextViolation(format!(
+                        "@{ctx_name} fn '{}': {}",
+                        fndef.name,
+                        forbidden.join("; ")
+                    )));
+                }
+            }
+        }
+
         let is_enum_ret = self.fn_returns_enum.contains(&fndef.name);
         let has_return = !Self::is_void_return(fndef) || is_enum_ret;
         let ret_type = if is_enum_ret {
@@ -5322,7 +5507,9 @@ impl CraneliftCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
+                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
+
             // Inject top-level const definitions as variables
             for (cname, cexpr, cty) in &self.const_defs {
                 if let Ok(val) = compile_expr(&mut builder, &mut cx, cexpr) {
@@ -9626,23 +9813,115 @@ impl ObjectCompiler {
                         let mut builder_ctx = FunctionBuilderContext::new();
                         {
                             let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_ctx);
-                            let block = builder.create_block();
-                            builder.switch_to_block(block);
-                            builder.seal_block(block);
-                            if let Some(&entry_id) = self.functions.get(&fndef.name) {
-                                let entry_ref =
-                                    self.module.declare_func_in_func(entry_id, builder.func);
-                                let call_sig = builder.func.import_signature(
-                                    cranelift_codegen::ir::Signature {
-                                        params: vec![],
-                                        returns: vec![],
-                                        call_conv: self.module.isa().default_call_conv(),
-                                    },
-                                );
-                                builder.ins().call(entry_ref, &[]);
-                                let _ = call_sig;
+                            let entry_block = builder.create_block();
+                            builder.switch_to_block(entry_block);
+                            builder.seal_block(entry_block); // No predecessors
+
+                            if self.no_std {
+                                // B4: Bare-metal _start: BSS zeroing + call @entry + halt loop
+
+                                // Try to declare BSS linker symbols
+                                let bss_start_data = self
+                                    .module
+                                    .declare_data("__bss_start", Linkage::Import, false, false)
+                                    .ok();
+                                let bss_end_data = self
+                                    .module
+                                    .declare_data("__bss_end", Linkage::Import, false, false)
+                                    .ok();
+
+                                // BSS zeroing (if linker symbols available)
+                                if let (Some(bss_start_id), Some(bss_end_id)) =
+                                    (bss_start_data, bss_end_data)
+                                {
+                                    let bss_start_gv = self
+                                        .module
+                                        .declare_data_in_func(bss_start_id, builder.func);
+                                    let bss_end_gv =
+                                        self.module.declare_data_in_func(bss_end_id, builder.func);
+                                    let bss_start_addr = builder.ins().global_value(
+                                        cranelift_codegen::ir::types::I64,
+                                        bss_start_gv,
+                                    );
+                                    let bss_end_addr = builder.ins().global_value(
+                                        cranelift_codegen::ir::types::I64,
+                                        bss_end_gv,
+                                    );
+
+                                    // Call fj_rt_memset_zero(start, end) as a runtime function
+                                    // For simplicity, emit the zeroing as a call to memset-like
+                                    // runtime function. The linker resolves __bss_start/end.
+                                    // We use a simple subtraction + zero-fill via Cranelift store.
+                                    let ptr_var =
+                                        builder.declare_var(cranelift_codegen::ir::types::I64);
+                                    builder.def_var(ptr_var, bss_start_addr);
+
+                                    let loop_hdr = builder.create_block();
+                                    let loop_body = builder.create_block();
+                                    let loop_done = builder.create_block();
+
+                                    builder.ins().jump(loop_hdr, &[]);
+
+                                    // Loop header
+                                    builder.switch_to_block(loop_hdr);
+                                    let cur = builder.use_var(ptr_var);
+                                    let still_going = builder.ins().icmp(
+                                        cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
+                                        cur,
+                                        bss_end_addr,
+                                    );
+                                    builder
+                                        .ins()
+                                        .brif(still_going, loop_body, &[], loop_done, &[]);
+
+                                    // Loop body: *ptr = 0; ptr += 8
+                                    builder.switch_to_block(loop_body);
+                                    let cur2 = builder.use_var(ptr_var);
+                                    let zero =
+                                        builder.ins().iconst(cranelift_codegen::ir::types::I64, 0);
+                                    builder.ins().store(
+                                        cranelift_codegen::ir::MemFlags::new(),
+                                        zero,
+                                        cur2,
+                                        0,
+                                    );
+                                    let eight =
+                                        builder.ins().iconst(cranelift_codegen::ir::types::I64, 8);
+                                    let next = builder.ins().iadd(cur2, eight);
+                                    builder.def_var(ptr_var, next);
+                                    builder.ins().jump(loop_hdr, &[]);
+                                    builder.seal_block(loop_body); // Only from loop_hdr
+
+                                    builder.switch_to_block(loop_done);
+                                    builder.seal_block(loop_hdr); // From entry + loop_body
+                                    builder.seal_block(loop_done); // Only from loop_hdr
+                                } else {
+                                    // No BSS symbols available — skip zeroing
+                                }
+
+                                // Call @entry function
+                                if let Some(&entry_id) = self.functions.get(&fndef.name) {
+                                    let entry_ref =
+                                        self.module.declare_func_in_func(entry_id, builder.func);
+                                    builder.ins().call(entry_ref, &[]);
+                                }
+
+                                // Infinite halt loop (bare-metal: never returns)
+                                let halt_block = builder.create_block();
+                                builder.ins().jump(halt_block, &[]);
+                                builder.switch_to_block(halt_block);
+                                builder.ins().jump(halt_block, &[]); // spin forever
+                                builder.seal_block(halt_block); // Self-loop predecessor
+                            } else {
+                                // Normal mode: just call entry and return
+                                if let Some(&entry_id) = self.functions.get(&fndef.name) {
+                                    let entry_ref =
+                                        self.module.declare_func_in_func(entry_id, builder.func);
+                                    builder.ins().call(entry_ref, &[]);
+                                }
+                                builder.ins().return_(&[]);
                             }
-                            builder.ins().return_(&[]);
+
                             builder.finalize();
                         }
                         let _ = self.module.define_function(start_id, &mut ctx);
@@ -9885,6 +10164,21 @@ impl ObjectCompiler {
             .functions
             .get(&fndef.name)
             .ok_or_else(|| CodegenError::UndefinedFunction(fndef.name.clone()))?;
+
+        // H4: Context enforcement — reject forbidden builtins before codegen
+        if let Some(ref ann) = fndef.annotation {
+            let ctx_name = &ann.name;
+            if ctx_name == "kernel" || ctx_name == "device" {
+                let forbidden = check_context_violations(&fndef.body, ctx_name);
+                if !forbidden.is_empty() {
+                    return Err(CodegenError::ContextViolation(format!(
+                        "@{ctx_name} fn '{}': {}",
+                        fndef.name,
+                        forbidden.join("; ")
+                    )));
+                }
+            }
+        }
 
         let is_enum_ret = self.fn_returns_enum.contains(&fndef.name);
         let has_return = !CraneliftCompiler::is_void_return(fndef) || is_enum_ret;
@@ -10199,7 +10493,9 @@ impl ObjectCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
+                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
+
             // Inject top-level const definitions as variables
             for (cname, cexpr, cty) in &self.const_defs {
                 if let Ok(val) = compile_expr(&mut builder, &mut cx, cexpr) {

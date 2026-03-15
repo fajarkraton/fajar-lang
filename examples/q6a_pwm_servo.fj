@@ -1,0 +1,91 @@
+// q6a_pwm_servo.fj — Radxa Dragon Q6A PWM servo control demo
+//
+// Controls a servo motor via PWM on GPIO5 (pin 32) or GPIO6 (pin 33).
+// Standard servo: 50Hz, 1ms-2ms pulse width (duty 5%-10%).
+//
+// Hardware setup:
+//   Pin 32 (PWM0/GPIO5) → Servo signal wire (orange/white)
+//   Pin 2  (5V)         → Servo power (red)
+//   Pin 6  (GND)        → Servo ground (brown/black)
+//
+// Build: fj build --board dragon-q6a examples/q6a_pwm_servo.fj
+// Run:   ./fj run examples/q6a_pwm_servo.fj
+
+fn angle_to_duty(angle: i64) -> i64 {
+    // Servo: 0° = 2.5% duty, 90° = 7.5%, 180° = 12.5% at 50Hz
+    // Linear mapping: duty = 2.5 + (angle / 180) * 10
+    // Using integer math: duty = 25 + (angle * 100) / 180 → then /10
+    let duty = (25 + (angle * 100) / 180) / 10
+    if duty < 2 {
+        2
+    } else {
+        if duty > 12 {
+            12
+        } else {
+            duty
+        }
+    }
+}
+
+fn main() {
+    println("=== Dragon Q6A PWM Servo Demo ===")
+    println("PWM Channel: 0 (GPIO5, pin 32)")
+    println("Frequency:   50 Hz (20ms period)")
+    println("Servo range: 0-180 degrees")
+    println("")
+
+    // Open PWM channel 0
+    let ch = pwm_open(0)
+    println("PWM0 opened (handle: " + to_string(ch) + ")")
+
+    // Configure for servo: 50Hz
+    pwm_set_frequency(ch, 50)
+    println("Frequency set: 50 Hz")
+    println("")
+
+    // Sweep servo through positions
+    println("=== Servo Sweep ===")
+
+    // 0 degrees (far left)
+    let duty0 = angle_to_duty(0)
+    pwm_set_duty(ch, duty0)
+    pwm_enable(ch)
+    println("  0°   → duty: " + to_string(duty0) + "%")
+    delay_ms(500)
+
+    // 45 degrees
+    let duty45 = angle_to_duty(45)
+    pwm_set_duty(ch, duty45)
+    println("  45°  → duty: " + to_string(duty45) + "%")
+    delay_ms(500)
+
+    // 90 degrees (center)
+    let duty90 = angle_to_duty(90)
+    pwm_set_duty(ch, duty90)
+    println("  90°  → duty: " + to_string(duty90) + "%")
+    delay_ms(500)
+
+    // 135 degrees
+    let duty135 = angle_to_duty(135)
+    pwm_set_duty(ch, duty135)
+    println("  135° → duty: " + to_string(duty135) + "%")
+    delay_ms(500)
+
+    // 180 degrees (far right)
+    let duty180 = angle_to_duty(180)
+    pwm_set_duty(ch, duty180)
+    println("  180° → duty: " + to_string(duty180) + "%")
+    delay_ms(500)
+
+    // Return to center
+    println("")
+    println("Returning to center (90°)...")
+    pwm_set_duty(ch, duty90)
+    delay_ms(500)
+
+    // Cleanup
+    pwm_disable(ch)
+    pwm_close(ch)
+    println("")
+    println("PWM0 disabled and closed. Done!")
+}

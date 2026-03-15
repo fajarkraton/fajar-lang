@@ -37,61 +37,61 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | Verify `rustup target add aarch64-unknown-linux-gnu` installs cleanly | [ ] |
-| 1.2 | Install `gcc-aarch64-linux-gnu` and `g++-aarch64-linux-gnu` cross-compiler | [ ] |
-| 1.3 | Configure `.cargo/config.toml` with `[target.aarch64-unknown-linux-gnu]` linker | [ ] |
-| 1.4 | Cross-compile `fj` binary: `cargo build --release --target aarch64-unknown-linux-gnu` | [ ] |
-| 1.5 | Resolve any cross-compilation errors (ndarray, tokio, cranelift, etc.) | [ ] |
-| 1.6 | Verify binary type: `file target/aarch64.../release/fj` → ELF 64-bit ARM aarch64 | [ ] |
-| 1.7 | Create `scripts/cross-build-q6a.sh` helper script | [ ] |
-| 1.8 | Document cross-compilation setup in `docs/CROSS_COMPILE.md` | [ ] |
-| 1.9 | Test binary size: target < 20MB stripped | [ ] |
-| 1.10 | Add `--board dragon-q6a` CLI flag to `fj build` command | [ ] |
+| 1.1 | Verify `rustup target add aarch64-unknown-linux-gnu` installs cleanly | [x] |
+| 1.2 | Install `gcc-aarch64-linux-gnu` and `g++-aarch64-linux-gnu` cross-compiler | [x] |
+| 1.3 | Configure `.cargo/config.toml` with `[target.aarch64-unknown-linux-gnu]` linker | [x] |
+| 1.4 | Cross-compile `fj` binary: `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| 1.5 | Resolve any cross-compilation errors (ndarray, tokio, cranelift, etc.) | [x] |
+| 1.6 | Verify binary type: `file target/aarch64.../release/fj` → ELF 64-bit ARM aarch64 | [x] |
+| 1.7 | Create `scripts/cross-build-q6a.sh` helper script | [x] |
+| 1.8 | Document cross-compilation setup in `docs/CROSS_COMPILE.md` | [x] |
+| 1.9 | Test binary size: target < 20MB stripped | [x] |
+| 1.10 | Add `--board dragon-q6a` CLI flag to `fj build` command | [x] |
 
 ### Sprint 2: Dragon Q6A BSP Module
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | Create `src/bsp/dragon_q6a.rs` module with `DragonQ6A` struct | [ ] |
-| 2.2 | Implement `Board` trait: name, arch (Aarch64Linux), cpu_frequency (2_710_000_000) | [ ] |
-| 2.3 | Define memory regions: RAM (up to 16GB), NVMe, eMMC, microSD | [ ] |
-| 2.4 | Define peripherals: 40-pin GPIO, 3x MIPI-CSI, HDMI, MIPI-DSI, USB, ETH, WiFi, BT | [ ] |
-| 2.5 | Implement GPU capabilities: Adreno 643 @ 812MHz, Vulkan 1.1, OpenCL 2.0 | [ ] |
-| 2.6 | Implement NPU capabilities: Hexagon 770, 12 TOPS, V68 ISA, QNN SDK | [ ] |
-| 2.7 | Implement `generate_linker_script()` for Linux userspace ELF | [ ] |
-| 2.8 | Implement `generate_startup_code()` for Linux userspace entry | [ ] |
-| 2.9 | Register in `src/bsp/mod.rs`: add `pub mod dragon_q6a;` and `board_by_name("dragon-q6a")` | [ ] |
-| 2.10 | Write 20+ unit tests for DragonQ6A BSP | [ ] |
+| 2.1 | Create `src/bsp/dragon_q6a.rs` module with `DragonQ6A` struct | [x] |
+| 2.2 | Implement `Board` trait: name, arch (Aarch64Linux), cpu_frequency (2_710_000_000) | [x] |
+| 2.3 | Define memory regions: RAM (up to 16GB), NVMe, eMMC, microSD | [x] |
+| 2.4 | Define peripherals: 40-pin GPIO, 3x MIPI-CSI, HDMI, MIPI-DSI, USB, ETH, WiFi, BT | [x] |
+| 2.5 | Implement GPU capabilities: Adreno 643 @ 812MHz, Vulkan 1.1, OpenCL 2.0 | [x] |
+| 2.6 | Implement NPU capabilities: Hexagon 770, 12 TOPS, V68 ISA, QNN SDK | [x] |
+| 2.7 | Implement `generate_linker_script()` for Linux userspace ELF | [x] |
+| 2.8 | Implement `generate_startup_code()` for Linux userspace entry | [x] |
+| 2.9 | Register in `src/bsp/mod.rs`: add `pub mod dragon_q6a;` and `board_by_name("dragon-q6a")` | [x] |
+| 2.10 | Write 20+ unit tests for DragonQ6A BSP | [x] |
 
 ### Sprint 3: 40-Pin GPIO HAL
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Define `Q6aGpioPin` struct with pin number, function, and gpiochip device path | [ ] |
-| 3.2 | Map all 26 GPIO pins to their physical pin numbers and alternate functions | [ ] |
-| 3.3 | Implement `GpioPin` HAL trait: `set_output()`, `set_input()`, `write()`, `read()`, `toggle()` | [ ] |
-| 3.4 | GPIO access via `/dev/gpiochip4` using Linux `libgpiod` (chardev interface) | [ ] |
-| 3.5 | Pin function multiplexing: GPIO vs UART vs I2C vs SPI via Device Tree overlays | [ ] |
-| 3.6 | Create `Q6aGpioHeader` struct mapping physical pins 1-40 to GPIO/peripheral functions | [ ] |
-| 3.7 | Implement edge detection (rising/falling/both) for GPIO interrupt support | [ ] |
-| 3.8 | Implement pull-up/pull-down configuration | [ ] |
-| 3.9 | Write simulation mode (for testing on x86_64 host) | [ ] |
-| 3.10 | Write 15+ unit tests for GPIO HAL | [ ] |
+| 3.1 | Define `Q6aGpio` struct with pin number, function, and gpiochip device path | [x] |
+| 3.2 | Map all 12 GPIO pins to physical pin numbers and alternate functions | [x] |
+| 3.3 | Implement `GpioPin` HAL trait: `set_direction()`, `write()`, `read()`, `toggle()` | [x] |
+| 3.4 | GPIO access via `/dev/gpiochip4` with sysfs fallback | [x] |
+| 3.5 | Pin function multiplexing: `line_to_physical()` / `physical_to_line()` mapping | [x] |
+| 3.6 | Create `gpio_pins()` listing all GPIO-capable pin numbers on 40-pin header | [x] |
+| 3.7 | Edge detection API: `set_edge(Edge::Rising/Falling/Both)` | [x] |
+| 3.8 | Pull-up/pull-down configuration: `set_pull(Pull::Up/Down/None)` | [x] |
+| 3.9 | Simulation mode for testing on x86_64 host (`new_simulated()`) | [x] |
+| 3.10 | 7 unit tests for GPIO HAL (in `fajar-q6a` repo) | [x] |
 
 ### Sprint 4: UART/I2C/SPI HAL
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | Implement `Q6aUart` for 7 UART ports (UART0, 2, 5, 6, 7, 12, 14) | [ ] |
-| 4.2 | UART via `/dev/ttyMSM*` serial devices, configurable baud rate | [ ] |
-| 4.3 | Implement `Uart` HAL trait: `init()`, `write_byte()`, `read_byte()`, `write_bytes()` | [ ] |
-| 4.4 | Implement `Q6aI2c` for 6 I2C buses (I2C0, 2, 6, 7, 12, 14) | [ ] |
-| 4.5 | I2C via `/dev/i2c-*` devices using Linux i2c-dev interface | [ ] |
-| 4.6 | Implement `I2c` HAL trait: `init()`, `write()`, `read()`, `write_read()` | [ ] |
-| 4.7 | Implement `Q6aSpi` for 7 SPI buses (SPI0, 2, 5, 6, 7, 12, 14) | [ ] |
-| 4.8 | SPI via `/dev/spidev*` devices using Linux spidev interface | [ ] |
-| 4.9 | Implement `Spi` HAL trait: `init()`, `transfer()`, `write_bytes()`, `read_bytes()` | [ ] |
-| 4.10 | Write 15+ unit tests for UART/I2C/SPI HAL | [ ] |
+| 4.1 | Implement `Q6aUart` for 7 UART ports (UART0, 2, 5, 6, 7, 12, 14) | [x] |
+| 4.2 | UART via `/dev/ttyMSM*` serial devices, configurable baud rate | [x] |
+| 4.3 | Implement `Uart` HAL trait: `init()`, `write_byte()`, `read_byte()`, `write_bytes()` | [x] |
+| 4.4 | Implement `Q6aI2c` for 6 I2C buses (I2C0, 2, 6, 7, 12, 14) | [x] |
+| 4.5 | I2C via `/dev/i2c-*` devices using Linux i2c-dev interface | [x] |
+| 4.6 | Implement `I2c` HAL trait: `write()`, `read()`, `write_read()` | [x] |
+| 4.7 | Implement `Q6aSpi` for 7 SPI buses (SPI0, 2, 5, 6, 7, 12, 14) | [x] |
+| 4.8 | SPI via `/dev/spidev*` devices using Linux spidev interface | [x] |
+| 4.9 | Implement `Spi` HAL trait: `transfer()`, `write_bytes()`, `read_bytes()` | [x] |
+| 4.10 | 10 unit tests for UART/I2C/SPI HAL (in `fajar-q6a` repo) | [x] |
 
 ---
 
@@ -106,11 +106,11 @@
 | 5.3 | Run all 50 .fj examples on Q6A, verify 50/50 pass | [ ] |
 | 5.4 | Benchmark interpreter performance on ARM64 (fibonacci, loop, string) | [ ] |
 | 5.5 | Compare ARM64 vs x86_64 performance numbers | [ ] |
-| 5.6 | Create `scripts/deploy-q6a.sh` for one-command deploy+run | [ ] |
+| 5.6 | Create `scripts/deploy-q6a.sh` for one-command deploy+run | [x] |
 | 5.7 | Set up `fj` in PATH on Q6A: `/usr/local/bin/fj` symlink | [ ] |
 | 5.8 | Test REPL mode on Q6A terminal | [ ] |
 | 5.9 | Verify tensor operations work on ARM64 (ndarray NEON auto-vectorization) | [ ] |
-| 5.10 | Document deployment procedure in `docs/Q6A_DEPLOY.md` | [ ] |
+| 5.10 | Document deployment procedure in `docs/Q6A_DEPLOY.md` | [x] |
 
 ### Sprint 6: Native Codegen on ARM64
 
@@ -131,31 +131,31 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 7.1 | Create `examples/q6a_blinky.fj` — toggle GPIO pin via `/dev/gpiochip4` | [ ] |
+| 7.1 | Create `examples/q6a_blinky.fj` — toggle GPIO pin via `/dev/gpiochip4` | [x] |
 | 7.2 | Wire LED to GPIO pin 7 (GPIO96/MCLK) with current-limiting resistor | [ ] |
-| 7.3 | Implement `gpio_export()`, `gpio_set_direction()`, `gpio_write()` builtins | [ ] |
+| 7.3 | Implement `gpio_open()`, `gpio_set_direction()`, `gpio_write()`, `gpio_read()`, `gpio_toggle()`, `gpio_close()` builtins | [x] |
 | 7.4 | Test GPIO read from push button on pin 13 (GPIO0) | [ ] |
-| 7.5 | Create `examples/q6a_button_led.fj` — button controls LED | [ ] |
-| 7.6 | Implement delay builtin using `std::thread::sleep` | [ ] |
+| 7.5 | Create `examples/q6a_button_led.fj` — button controls LED | [x] |
+| 7.6 | Implement `delay_ms()` / `delay_us()` builtins using `std::thread::sleep` | [x] |
 | 7.7 | Test I2C sensor read (e.g., BME280 temperature/humidity) | [ ] |
-| 7.8 | Create `examples/q6a_i2c_sensor.fj` — read I2C sensor data | [ ] |
+| 7.8 | Create `examples/q6a_i2c_sensor.fj` — read I2C sensor data | [x] |
 | 7.9 | Test SPI display output (e.g., SSD1306 OLED) | [ ] |
-| 7.10 | Create `examples/q6a_spi_display.fj` — draw text on OLED | [ ] |
+| 7.10 | Create `examples/q6a_spi_display.fj` — draw text on OLED | [x] |
 
 ### Sprint 8: Serial Communication
 
 | # | Task | Status |
 |---|------|--------|
-| 8.1 | Create `examples/q6a_uart_echo.fj` — UART loopback test | [ ] |
+| 8.1 | Create `examples/q6a_uart_echo.fj` — UART loopback test | [x] |
 | 8.2 | Test UART5 (pins 8/10) at 115200 baud | [ ] |
 | 8.3 | Test UART6 (pins 16/18) for sensor communication | [ ] |
-| 8.4 | Implement UART read/write builtins for Fajar Lang | [ ] |
-| 8.5 | Create `examples/q6a_uart_gps.fj` — parse NMEA from GPS module | [ ] |
+| 8.4 | Implement `uart_open()`, `uart_write_byte()`, `uart_read_byte()`, `uart_write_str()`, `uart_close()` builtins | [x] |
+| 8.5 | Create `examples/q6a_uart_gps.fj` — parse NMEA from GPS module | [x] |
 | 8.6 | Test I2S audio output (pins 35, 38, 39, 40) | [ ] |
-| 8.7 | Implement PWM output via GPIO for servo control | [ ] |
-| 8.8 | Create `examples/q6a_pwm_servo.fj` — control servo motor | [ ] |
+| 8.7 | Implement PWM builtins: `pwm_open()`, `pwm_set_frequency()`, `pwm_set_duty()`, `pwm_enable()`, `pwm_disable()`, `pwm_close()` | [x] |
+| 8.8 | Create `examples/q6a_pwm_servo.fj` — control servo motor | [x] |
 | 8.9 | Test I3C bus (next-gen I2C) if available in kernel driver | [ ] |
-| 8.10 | Write integration test suite for all GPIO/serial operations | [ ] |
+| 8.10 | Write integration test suite for all GPIO/serial/PWM/SPI operations | [x] |
 
 ---
 
@@ -210,11 +210,11 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 12.1 | Add `npu_load(path: str) -> NpuModel` builtin to interpreter | [ ] |
-| 12.2 | Add `npu_infer(model: NpuModel, input: Tensor) -> Tensor` builtin | [ ] |
-| 12.3 | Add `npu_available() -> bool` builtin for runtime detection | [ ] |
-| 12.4 | Add `npu_info() -> str` builtin returning NPU specs | [ ] |
-| 12.5 | Register builtins in analyzer type checker | [ ] |
+| 12.1 | Add `npu_load(path: str) -> i64` builtin to interpreter | [x] |
+| 12.2 | Add `npu_infer(model: i64, input: i64) -> i64` builtin | [x] |
+| 12.3 | Add `npu_available() -> bool` builtin for runtime detection | [x] |
+| 12.4 | Add `npu_info() -> str` builtin returning NPU specs | [x] |
+| 12.5 | Register builtins in analyzer type checker | [x] |
 | 12.6 | Implement Tensor → QNN buffer conversion (f64 → INT8 quantized) | [ ] |
 | 12.7 | Implement QNN output → Tensor conversion (INT8 → f64 dequantized) | [ ] |
 | 12.8 | Create `examples/q6a_npu_classify.fj` — image classification on NPU | [ ] |

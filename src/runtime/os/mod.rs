@@ -1,6 +1,21 @@
 //! OS runtime — memory, IRQ, and syscall primitives.
 //!
 //! Only accessible from `@kernel` or `@unsafe` context.
+//!
+//! # Simulation vs Real Hardware
+//!
+//! This module provides **simulated** hardware primitives for the interpreter
+//! and testing. All structures (memory, IRQ table, page table, etc.) use
+//! in-memory data structures (HashMap, Vec) — they do NOT touch real hardware.
+//!
+//! For **real hardware access** on bare-metal targets, use the volatile I/O
+//! builtins in native-compiled code:
+//! - `volatile_read(addr)` / `volatile_write(addr, val)` — 64-bit
+//! - `volatile_read_u8/u16/u32(addr)` / `volatile_write_u8/u16/u32(addr, val)`
+//!
+//! These builtins emit actual `read_volatile`/`write_volatile` instructions
+//! and are the correct way to interact with MMIO registers in AOT-compiled
+//! bare-metal binaries.
 
 pub mod aarch64;
 pub mod bus;
