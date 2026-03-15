@@ -27,7 +27,66 @@
 | **OS** | Ubuntu 24.04, kernel 6.16.x |
 | **Phases** | 6 |
 | **Sprints** | 24 |
-| **Tasks** | ~240 |
+| **Tasks** | 240 |
+
+---
+
+## Progress Summary
+
+> **Last updated:** 2026-03-15 | **Tests:** 5,342 (0 failures) | **Examples:** 59 .fj (9 Q6A-specific)
+
+| Phase | Sprints | Tasks Done | Tasks Total | Status |
+|-------|---------|------------|-------------|--------|
+| **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
+| **2 — On-Device** | S5-S8 | 14 | 40 | Blocked: board setup (S5.1) |
+| **3 — AI/ML NPU** | S9-S14 | 18 | 60 | S11 9/10, S12 9/10; rest needs board |
+| **4 — GPU Compute** | S15-S18 | 0 | 40 | Not started (needs board) |
+| **5 — Edge AI Apps** | S19-S22 | 0 | 40 | Not started (needs board) |
+| **6 — Production** | S23-S24 | 0 | 20 | Not started |
+| **TOTAL** | **24** | **72** | **240** | **30% complete** |
+
+### Sprint Completion Detail
+
+| Sprint | Name | Done/Total | Notes |
+|--------|------|------------|-------|
+| S1 | Cross-Compilation Toolchain | 10/10 | COMPLETE |
+| S2 | Dragon Q6A BSP Module | 10/10 | COMPLETE |
+| S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
+| S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
+| S5 | Deploy & Run on Q6A | 2/10 | Blocked: need Ubuntu flash (5.1) |
+| S6 | Native Codegen on ARM64 | 0/10 | Blocked: needs board |
+| S7 | GPIO Blinky on Q6A | 6/10 | Software done, HW tests need board |
+| S8 | Serial Communication | 6/10 | Software done, HW tests need board |
+| S9 | QNN SDK Setup | 0/10 | Needs board + QNN SDK install |
+| S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
+| S11 | QNN FFI Integration | **9/10** | Only 11.10 (on-device test) remains |
+| S12 | Fajar Lang NPU Builtins | **9/10** | Only 12.10 (benchmark) remains |
+| S13 | NPU Training Pipeline | 0/10 | Needs board |
+| S14 | Camera → NPU Pipeline | 0/10 | Needs board |
+| S15-S24 | GPU/Edge/Production | 0/100 | Needs board |
+
+### What's Implemented (Software-Side, No Board Required)
+
+- **QNN FFI bindings** (`src/runtime/ml/npu/qnn.rs`): Full `dlopen` → `QnnInterface_getProviders` → function table, cfg-gated for aarch64
+- **QNN error codes**: 24 QNN error codes mapped to `NpuRuntimeError`
+- **QNN data types**: 13 types (INT8/UINT8/F16/F32/BF16/etc.) with `NpuDtype` conversion
+- **QNN tensor descriptors**: `QnnTensorDescriptor` (input/output), `QnnClientBuffer`, `QnnScaleOffset`
+- **QNN backend**: `QnnBackend` with `load_model()`, `execute()`, `unload_model()` — real + simulation paths
+- **QNN buffer conversion**: `QnnBuffer::from_tensor()` / `to_tensor()` with 5 quantization formats
+- **Interpreter builtins**: `qnn_quantize(tensor, dtype) → handle`, `qnn_dequantize(handle) → tensor`
+- **Type checker**: QNN builtins registered with proper Tensor/I64/Str types
+- **Examples**: `q6a_npu_classify.fj` (MobileNetV2), `q6a_npu_detect.fj` (YOLOv8n)
+- **Tests**: 46 QNN unit tests + 6 integration tests
+
+### Blocking Dependencies
+
+```
+Board setup (S5.1: flash Ubuntu 24.04) blocks:
+  └── All Phase 2 hardware tests (S5-S8)
+  └── QNN SDK install (S9)
+  └── On-device NPU testing (S11.10, S12.10)
+  └── All Phase 4-6 (GPU, Edge AI, Production)
+```
 
 ---
 
@@ -569,5 +628,5 @@ docker pull radxazifeng278/qairt-npu:v1.0  # QCS6490 QAIRT SDK
 
 ---
 
-*V2.0 "Dawn" Plan Version: 1.1 | Updated: 2026-03-12 | Hardware: Radxa Dragon Q6A (QCS6490)*
+*V2.0 "Dawn" Plan Version: 1.2 | Updated: 2026-03-15 | 72/240 tasks (30%) | Hardware: Radxa Dragon Q6A (QCS6490)*
 *Source: docs.radxa.com/en/dragon/q6a/app-dev*
