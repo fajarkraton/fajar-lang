@@ -5979,6 +5979,20 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__halt".to_string(), halt_id);
 
+        // IRQ enable/disable (uses DAIFClr/DAIFSet which need special MSR encoding)
+        let sig_void = cranelift_codegen::ir::Signature::new(call_conv);
+        let irq_en_id = self
+            .module
+            .declare_function("fj_rt_bare_irq_enable", Linkage::Import, &sig_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("irq_enable".to_string(), irq_en_id);
+        let sig_void2 = cranelift_codegen::ir::Signature::new(call_conv);
+        let irq_dis_id = self
+            .module
+            .declare_function("fj_rt_bare_irq_disable", Linkage::Import, &sig_void2)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("irq_disable".to_string(), irq_dis_id);
+
         // Volatile I/O (essential for bare-metal MMIO)
         // volatile_write(addr: i64, value: i64) -> void
         let mut sig_vw = cranelift_codegen::ir::Signature::new(call_conv);

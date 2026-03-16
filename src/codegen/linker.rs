@@ -498,6 +498,22 @@ fj_rt_bare_print_i64:
     ret
 .size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64
 
+.global fj_rt_bare_irq_enable
+.type fj_rt_bare_irq_enable, @function
+fj_rt_bare_irq_enable:
+    msr     DAIFClr, #2
+    isb
+    ret
+.size fj_rt_bare_irq_enable, . - fj_rt_bare_irq_enable
+
+.global fj_rt_bare_irq_disable
+.type fj_rt_bare_irq_disable, @function
+fj_rt_bare_irq_disable:
+    msr     DAIFSet, #2
+    isb
+    ret
+.size fj_rt_bare_irq_disable, . - fj_rt_bare_irq_disable
+
 .global fj_rt_bare_print
 .type fj_rt_bare_print, @function
 fj_rt_bare_print:
