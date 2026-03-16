@@ -1,0 +1,83 @@
+// q6a_rtsp_server.fj — RTSP server pattern for live camera + inference overlay
+//
+// Demonstrates: camera capture → inference → overlay → encode → RTSP stream
+// Dragon Q6A: H.264 HW encode, 3x MIPI-CSI, Spectra ISP
+//
+// Usage: fj run examples/q6a_rtsp_server.fj
+
+fn encode_frame(frame_id: i64, width: i64, height: i64) -> i64 {
+    // Simulate H.264 hardware encode (V4L2 M2M)
+    // Returns encoded frame size in bytes
+    width * height * 3 / 10
+}
+
+fn run_object_detection(frame_id: i64) -> str {
+    let input = tensor_randn(1, 256)
+    let w = tensor_xavier(256, 10)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    let class_id = tensor_argmax(probs)
+    let x1 = 50 + frame_id * 3
+    let y1 = 30 + frame_id * 2
+    f"[{x1},{y1},{x1 + 120},{y1 + 80}]:class{class_id}"
+}
+
+// --- Main ---
+
+println("=== RTSP Server (Dragon Q6A) ===")
+println("")
+println("rtsp://0.0.0.0:8554/live")
+println("Encoder:  H.264 HW (V4L2 M2M)")
+println("Source:   CSI0 4-lane (1080p@30)")
+println("Overlay:  Bounding boxes + class labels")
+println("")
+
+let logpath = "/tmp/q6a_rtsp.log"
+let width = 1920
+let height = 1080
+
+// Simulate 30 frames (1 second at 30 FPS)
+let total_frames = 30
+let mut frame = 0
+let mut total_bytes = 0
+let t0 = sys_uptime()
+
+println(f"Streaming {total_frames} frames ({width}x{height})...")
+println("")
+
+while frame < total_frames {
+    // 1. Capture frame
+    let _pixels = tensor_randn(224, 224)
+
+    // 2. Run detection
+    let detection = run_object_detection(frame)
+
+    // 3. Overlay bounding box (simulated)
+    // 4. Encode to H.264
+    let encoded_size = encode_frame(frame, width, height)
+    total_bytes = total_bytes + encoded_size
+
+    // 5. Send via RTSP
+    if frame % 10 == 0 {
+        println(f"  Frame {frame}: {detection} | encoded: {encoded_size}B")
+    } else {
+        let _skip = 0
+    }
+
+    log_to_file(logpath, f"RTSP frame={frame} det={detection} size={encoded_size}")
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println("=== RTSP Statistics ===")
+println(f"  Frames:       {total_frames}")
+println(f"  Resolution:   {width}x{height}")
+println(f"  Target FPS:   30")
+println(f"  Total data:   {total_bytes / 1024} KB")
+println(f"  Elapsed:      {elapsed}s")
+println(f"  Encoder:      H.264 HW (V4L2 M2M)")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("RTSP server stopped.")

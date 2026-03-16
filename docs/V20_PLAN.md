@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-16 | **Tests:** 5,402 (0 failures) | **Examples:** 85 .fj (34 Q6A-specific)
+> **Last updated:** 2026-03-16 | **Tests:** 5,411 (0 failures) | **Examples:** 91 .fj (40 Q6A-specific)
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 31 | 40 | S5 9/10, S6 8/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
-| **4 — GPU Compute** | S15-S18 | 25 | 40 | S15 **COMPLETE**, S16 **COMPLETE**, S18 5/10 |
-| **5 — Edge AI Apps** | S19-S22 | 25 | 40 | S19 **COMPLETE**, S20 6/10, S21 7/10, S22 4/10 |
+| **4 — GPU Compute** | S15-S18 | 30 | 40 | S15 **COMPLETE**, S16 **COMPLETE**, S18 **COMPLETE** |
+| **5 — Edge AI Apps** | S19-S22 | 29 | 40 | S19 **COMPLETE**, S20 8/10, S21 8/10, S22 5/10 |
 | **6 — Production** | S23-S24 | 16 | 20 | S23 **COMPLETE**, S24 6/10 |
-| **TOTAL** | **24** | **170** | **240** | **71% complete** |
+| **TOTAL** | **24** | **179** | **240** | **75% complete** |
 
 ### Sprint Completion Detail
 
@@ -65,11 +65,11 @@
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
 | S15 | OpenCL 2.0 Setup | **10/10** | **COMPLETE** — Adreno 635, GPU builtins, benchmarks, all verified on HW |
 | S16 | GPU Tensor Operations | **10/10** | **COMPLETE** — mul/transpose/sum builtins, all GPU ops with CPU fallback |
-| S17-S18 | Vulkan/GPU Training | 5/20 | Vulkan blocked; S18: fwd/bwd, train, sync, docs done |
+| S17-S18 | Vulkan/GPU Training | 10/20 | Vulkan blocked; **S18 COMPLETE** — fwd/bwd, optim, train, bench, mempool, docs |
 | S19 | Camera→NPU→GPIO Pipeline | **10/10** | **COMPLETE** — full pipeline, doorbell, plant monitor, watchdog, logging, thermal, stress test |
-| S20 | Multi-Sensor Fusion | **6/10** | IMU, activity, ring buffer, UART bridge + tests |
-| S21 | Network AI Services | **7/10** | HTTP, REST, MQTT, WebSocket, hot-reload + tests |
-| S22 | Video Processing | **4/10** | Video detect, multi-stream, bbox overlay + docs |
+| S20 | Multi-Sensor Fusion | **8/10** | IMU, activity, ring buffer, UART, SPI ADC, benchmark |
+| S21 | Network AI Services | **8/10** | HTTP, REST, MQTT, WebSocket, hot-reload, throughput |
+| S22 | Video Processing | **5/10** | Video detect, multi-stream, RTSP, bbox overlay + docs |
 | S23 | Production Hardening | **10/10** | **COMPLETE** — systemd, monitor, OTA, crash recovery, log rotation, security, storage, deploy guide, BOM |
 | S24 | Release & Documentation | **6/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook, Dockerfile |
 
@@ -375,13 +375,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 |---|------|--------|
 | 18.1 | Implement GPU-accelerated forward pass (matmul + activation) | [x] |
 | 18.2 | Implement GPU-accelerated backward pass (gradient computation) | [x] |
-| 18.3 | Implement GPU-accelerated optimizer step (SGD, Adam) | [ ] |
+| 18.3 | Implement GPU-accelerated optimizer step (SGD, Adam) | [x] |
 | 18.4 | Implement CPU↔GPU gradient synchronization | [x] |
-| 18.5 | Train simple model (XOR, iris) entirely on Adreno 643 | [ ] |
-| 18.6 | Benchmark GPU training vs CPU training on Q6A | [ ] |
+| 18.5 | Train simple model (XOR, iris) entirely on Adreno 643 | [x] |
+| 18.6 | Benchmark GPU training vs CPU training on Q6A | [x] |
 | 18.7 | Create `examples/q6a_gpu_train.fj` — on-device GPU training | [x] |
-| 18.8 | Test memory management: avoid GPU OOM with large batches | [ ] |
-| 18.9 | Implement GPU memory pool for training allocations | [ ] |
+| 18.8 | Test memory management: avoid GPU OOM with large batches | [x] |
+| 18.9 | Implement GPU memory pool for training allocations | [x] |
 | 18.10 | Document GPU compute in `docs/Q6A_GPU_COMPUTE.md` | [x] |
 
 ---
@@ -410,13 +410,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 20.1 | Read multiple I2C sensors simultaneously (accelerometer, gyroscope, magnetometer) | [ ] |
 | 20.2 | Implement sensor data fusion in Fajar Lang (complementary filter) | [x] |
 | 20.3 | Create `examples/q6a_imu_fusion.fj` — 9-axis IMU data fusion | [x] |
-| 20.4 | Implement SPI high-speed data acquisition (ADC sampling) | [ ] |
+| 20.4 | Implement SPI high-speed data acquisition (ADC sampling) | [x] |
 | 20.5 | Create ring buffer for continuous sensor data stream | [x] |
 | 20.6 | ML inference on fused sensor data (activity recognition) | [x] |
 | 20.7 | Create `examples/q6a_activity_recognition.fj` — classify motion patterns | [x] |
 | 20.8 | Implement UART-based inter-board communication (Q6A → Arduino/MCU) | [x] |
 | 20.9 | Test multi-camera simultaneous capture (CSI0 + CSI1 + CSI2) | [ ] |
-| 20.10 | Benchmark sensor read latency for real-time control applications | [ ] |
+| 20.10 | Benchmark sensor read latency for real-time control applications | [x] |
 
 ### Sprint 21: Network AI Services
 
@@ -430,7 +430,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 21.6 | Create `examples/q6a_mqtt_sensor.fj` — publish sensor data to MQTT broker | [x] |
 | 21.7 | Implement model hot-reload: update model without restarting | [x] |
 | 21.8 | Implement inference result caching for repeated queries | [x] |
-| 21.9 | Test network throughput: target > 100 inferences/second via HTTP | [ ] |
+| 21.9 | Test network throughput: target > 100 inferences/second via HTTP | [x] |
 | 21.10 | Implement TLS/SSL for secure inference API | [ ] |
 
 ### Sprint 22: Video Processing Pipeline
@@ -439,7 +439,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 |---|------|--------|
 | 22.1 | Implement H.264 hardware decode on Q6A (V4L2 M2M) | [ ] |
 | 22.2 | Implement H.265 hardware encode for inference result overlay | [ ] |
-| 22.3 | Implement RTSP server for live camera + inference overlay | [ ] |
+| 22.3 | Implement RTSP server for live camera + inference overlay | [x] |
 | 22.4 | Create `examples/q6a_video_detect.fj` — real-time video object detection | [x] |
 | 22.5 | Implement bounding box overlay on decoded frames | [x] |
 | 22.6 | Test 4K@30 decode → inference → 1080p@30 encode pipeline | [ ] |

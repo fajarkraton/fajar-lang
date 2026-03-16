@@ -5478,3 +5478,51 @@ fn e2e_q6a_multi_stream_example() {
     assert!(out.iter().any(|l| l.contains("Multi-Stream Camera Pipeline")));
     assert!(out.iter().any(|l| l.contains("Multi-stream pipeline complete.")));
 }
+
+#[test]
+fn e2e_q6a_gpu_optimizer_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_optimizer.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU-Accelerated Optimizer")));
+    assert!(out.iter().any(|l| l.contains("GPU optimizer demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_gpu_benchmark_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_benchmark.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU vs CPU Training Benchmark")));
+    assert!(out.iter().any(|l| l.contains("GPU benchmark complete.")));
+}
+
+#[test]
+fn e2e_q6a_spi_adc_example() {
+    let code = std::fs::read_to_string("examples/q6a_spi_adc.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("SPI ADC Data Acquisition")));
+    assert!(out.iter().any(|l| l.contains("SPI ADC acquisition complete.")));
+}
+
+#[test]
+fn e2e_q6a_gpu_mempool_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_mempool.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU Memory Pool")));
+    assert!(out.iter().any(|l| l.contains("GPU memory pool demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_sensor_benchmark_example() {
+    let code = std::fs::read_to_string("examples/q6a_sensor_benchmark.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Sensor Read Latency Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Sensor benchmark complete.")));
+}
+
+#[test]
+fn e2e_q6a_rtsp_server_example() {
+    let code = std::fs::read_to_string("examples/q6a_rtsp_server.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("RTSP Server")));
+    assert!(out.iter().any(|l| l.contains("RTSP server stopped.")));
+}

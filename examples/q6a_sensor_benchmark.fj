@@ -1,0 +1,102 @@
+// q6a_sensor_benchmark.fj — Sensor read latency benchmark
+//
+// Benchmarks: I2C, SPI, UART, GPIO read latency for real-time control
+// Measures: single read, burst read, concurrent channel reads
+//
+// Usage: fj run examples/q6a_sensor_benchmark.fj
+
+fn bench_i2c_read(iterations: i64) -> i64 {
+    // Simulate I2C sensor read latency
+    let mut i = 0
+    while i < iterations {
+        let _reading = tensor_randn(1, 4)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_spi_read(iterations: i64) -> i64 {
+    // Simulate SPI ADC burst read
+    let mut i = 0
+    while i < iterations {
+        let _samples = tensor_randn(1, 16)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_gpio_read(iterations: i64) -> i64 {
+    // Simulate GPIO digital read
+    let mut i = 0
+    let mut high_count = 0
+    while i < iterations {
+        let val = i % 2
+        if val == 1 {
+            high_count = high_count + 1
+        } else {
+            let _low = 0
+        }
+        i = i + 1
+    }
+    high_count
+}
+
+// --- Main ---
+
+println("=== Sensor Read Latency Benchmark (Dragon Q6A) ===")
+println(f"CPU: {cpu_freq() / 1000} MHz | Temp: {cpu_temp() / 1000}C")
+println("")
+
+let iterations = 1000
+
+// I2C benchmark
+println(f"[1/4] I2C sensor read ({iterations} iterations)...")
+let t0 = sys_uptime()
+let _i2c = bench_i2c_read(iterations)
+let t1 = sys_uptime()
+let i2c_time = t1 - t0
+println(f"  Time: {i2c_time}s")
+
+// SPI benchmark
+println(f"[2/4] SPI burst read ({iterations} iterations)...")
+let t2 = sys_uptime()
+let _spi = bench_spi_read(iterations)
+let t3 = sys_uptime()
+let spi_time = t3 - t2
+println(f"  Time: {spi_time}s")
+
+// GPIO benchmark
+println(f"[3/4] GPIO digital read ({iterations} iterations)...")
+let t4 = sys_uptime()
+let _gpio = bench_gpio_read(iterations)
+let t5 = sys_uptime()
+let gpio_time = t5 - t4
+println(f"  Time: {gpio_time}s")
+
+// System builtins benchmark
+println(f"[4/4] System builtins ({iterations} iterations)...")
+let t6 = sys_uptime()
+let mut k = 0
+while k < iterations {
+    let _temp = cpu_temp()
+    let _mem = mem_usage()
+    k = k + 1
+}
+let t7 = sys_uptime()
+let sys_time = t7 - t6
+println(f"  Time: {sys_time}s")
+
+// Results
+println("")
+println("=== Results ===")
+println("  +----------+----------+")
+println("  | Bus      | Time (s) |")
+println("  +----------+----------+")
+println(f"  | I2C      | {i2c_time}        |")
+println(f"  | SPI      | {spi_time}        |")
+println(f"  | GPIO     | {gpio_time}        |")
+println(f"  | Sys      | {sys_time}        |")
+println("  +----------+----------+")
+println("")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Sensor benchmark complete.")

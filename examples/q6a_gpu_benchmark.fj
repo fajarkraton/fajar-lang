@@ -1,0 +1,67 @@
+// q6a_gpu_benchmark.fj — GPU vs CPU training benchmark
+//
+// Compares: GPU-accelerated vs CPU-only training pipeline
+// Measures: forward pass, backward pass, full epoch
+//
+// Usage: fj run examples/q6a_gpu_benchmark.fj
+
+println("=== GPU vs CPU Training Benchmark (Dragon Q6A) ===")
+println(f"GPU: {gpu_info()}")
+println(f"CPU: {cpu_freq() / 1000} MHz")
+println("")
+
+let sizes = 32
+let epochs = 20
+
+// --- CPU Training ---
+println(f"[1/3] CPU Training ({epochs} epochs, {sizes}x{sizes} matmul)")
+let t0_cpu = sys_uptime()
+
+let w_cpu = tensor_xavier(sizes, 16)
+let mut cpu_epoch = 0
+while cpu_epoch < epochs {
+    let batch = tensor_randn(4, sizes)
+    let h = tensor_matmul(batch, w_cpu)
+    let _act = tensor_relu(h)
+    let _grad = tensor_matmul(tensor_transpose(batch), h)
+    cpu_epoch = cpu_epoch + 1
+}
+
+let t1_cpu = sys_uptime()
+let cpu_time = t1_cpu - t0_cpu
+println(f"  CPU time: {cpu_time}s")
+println("")
+
+// --- GPU Training ---
+println(f"[2/3] GPU Training ({epochs} epochs, {sizes}x{sizes} matmul)")
+let t0_gpu = sys_uptime()
+
+let w_gpu = tensor_xavier(sizes, 16)
+let mut gpu_epoch = 0
+while gpu_epoch < epochs {
+    let batch = tensor_randn(4, sizes)
+    let h = gpu_matmul(batch, w_gpu)
+    let act = gpu_relu(h)
+    let _grad_t = gpu_transpose(w_gpu)
+    let _cost = gpu_sum(act)
+    gpu_epoch = gpu_epoch + 1
+}
+
+let t1_gpu = sys_uptime()
+let gpu_time = t1_gpu - t0_gpu
+println(f"  GPU time: {gpu_time}s")
+println("")
+
+// --- Results ---
+println("[3/3] Benchmark Results")
+println("")
+println("  +-----------+----------+")
+println("  | Backend   | Time (s) |")
+println("  +-----------+----------+")
+println(f"  | CPU       | {cpu_time}        |")
+println(f"  | GPU       | {gpu_time}        |")
+println("  +-----------+----------+")
+println("")
+
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("GPU benchmark complete.")

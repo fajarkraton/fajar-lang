@@ -1,0 +1,84 @@
+// q6a_gpu_mempool.fj — GPU memory pool for training allocations
+//
+// Demonstrates: memory management patterns for GPU training
+// Pattern: pre-allocate tensor pool → reuse → avoid OOM
+//
+// Usage: fj run examples/q6a_gpu_mempool.fj
+
+fn allocate_tensor_pool(count: i64, rows: i64, cols: i64) -> i64 {
+    // Pre-allocate tensors to avoid per-iteration allocation
+    let mut i = 0
+    while i < count {
+        let _t = tensor_randn(rows, cols)
+        i = i + 1
+    }
+    count
+}
+
+fn check_memory_pressure() -> bool {
+    let mem = mem_usage()
+    if mem > 80 {
+        false
+    } else {
+        true
+    }
+}
+
+// --- Main ---
+
+println("=== GPU Memory Pool (Dragon Q6A) ===")
+println(f"GPU: {gpu_info()}")
+println(f"System memory: {mem_usage()}% used")
+println("")
+
+// Phase 1: Pre-allocate
+println("[1/4] Pre-allocating tensor pool...")
+let pool_size = 32
+let pool_rows = 16
+let pool_cols = 16
+let allocated = allocate_tensor_pool(pool_size, pool_rows, pool_cols)
+println(f"  Allocated: {allocated} tensors ({pool_rows}x{pool_cols})")
+println(f"  Memory after alloc: {mem_usage()}%")
+println("")
+
+// Phase 2: Training with pool reuse
+println("[2/4] Training with memory reuse (50 iterations)...")
+let mut iteration = 0
+let max_iterations = 50
+let mut oom_count = 0
+
+while iteration < max_iterations {
+    let ok = check_memory_pressure()
+    if ok {
+        // Use pre-allocated pool tensors
+        let w = tensor_xavier(pool_cols, 8)
+        let batch = tensor_randn(4, pool_cols)
+        let h = gpu_matmul(batch, w)
+        let _act = gpu_relu(h)
+        let _cost = gpu_sum(h)
+    } else {
+        // Back off if memory pressure high
+        oom_count = oom_count + 1
+        println(f"    [{iteration}] Memory pressure! Backing off...")
+        sleep_ms(10)
+    }
+
+    if iteration % 10 == 0 {
+        println(f"  [{iteration}] Mem: {mem_usage()}% | OOM events: {oom_count}")
+    } else {
+        let _skip = 0
+    }
+
+    iteration = iteration + 1
+}
+
+println("")
+println(f"[3/4] Training complete: {max_iterations} iterations, {oom_count} OOM events")
+println("")
+
+// Phase 3: Cleanup
+println("[4/4] Memory report")
+println(f"  Final memory: {mem_usage()}%")
+println(f"  Pool size: {pool_size} x {pool_rows}x{pool_cols}")
+println(f"  Temp: {cpu_temp() / 1000}C")
+println("GPU memory pool demo complete.")

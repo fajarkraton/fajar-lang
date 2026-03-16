@@ -1,0 +1,96 @@
+// q6a_spi_adc.fj — SPI high-speed ADC data acquisition
+//
+// Demonstrates: SPI data acquisition → tensor → ML inference
+// Pattern: read ADC samples → buffer → classify signal pattern
+//
+// Usage: fj run examples/q6a_spi_adc.fj
+
+fn simulate_adc_read(channel: i64, sample_id: i64) -> i64 {
+    // Simulate 12-bit ADC reading (0-4095)
+    // In production: SPI read from /dev/spidev*
+    let base = channel * 1000
+    let noise = (sample_id * 7 + channel * 13) % 200
+    base + noise + 2000
+}
+
+fn classify_signal(readings: i64) -> str {
+    // Classify ADC signal pattern using ML
+    let input = tensor_randn(1, 16)
+    let w = tensor_xavier(16, 4)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    let class_id = tensor_argmax(probs)
+    if class_id == 0 {
+        "DC_STABLE"
+    } else {
+        if class_id == 1 {
+            "AC_SINE"
+        } else {
+            if class_id == 2 {
+                "NOISE"
+            } else {
+                "TRANSIENT"
+            }
+        }
+    }
+}
+
+// --- Main ---
+
+println("=== SPI ADC Data Acquisition (Dragon Q6A) ===")
+println("")
+println("SPI bus:   SPI2 (pins 19/21/23/24)")
+println("ADC:       12-bit, 4 channels")
+println("Rate:      1 kHz sample rate")
+println("")
+
+let logpath = "/tmp/q6a_spi_adc.log"
+let num_channels = 4
+let samples_per_channel = 16
+let mut total_samples = 0
+
+println(f"Acquiring {samples_per_channel} samples x {num_channels} channels...")
+println("")
+
+let mut ch = 0
+while ch < num_channels {
+    println(f"  Channel {ch}:")
+    let mut sample = 0
+    let mut sum = 0
+    let mut min_val = 9999
+    let mut max_val = 0
+
+    while sample < samples_per_channel {
+        let reading = simulate_adc_read(ch, sample)
+        sum = sum + reading
+        if reading < min_val {
+            min_val = reading
+        } else {
+            let _keep = 0
+        }
+        if reading > max_val {
+            max_val = reading
+        } else {
+            let _keep = 0
+        }
+        total_samples = total_samples + 1
+        sample = sample + 1
+    }
+
+    let avg = sum / samples_per_channel
+    let signal_type = classify_signal(total_samples)
+    println(f"    Samples: {samples_per_channel} | Avg: {avg} | Min: {min_val} | Max: {max_val}")
+    println(f"    Signal: {signal_type}")
+
+    log_to_file(logpath, f"CH={ch} avg={avg} min={min_val} max={max_val} type={signal_type}")
+    ch = ch + 1
+}
+
+println("")
+println("=== Acquisition Summary ===")
+println(f"  Total samples: {total_samples}")
+println(f"  Channels: {num_channels}")
+println(f"  Rate: 1 kHz per channel")
+println(f"  Resolution: 12-bit (0-4095)")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("SPI ADC acquisition complete.")
