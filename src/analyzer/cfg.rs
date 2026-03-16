@@ -228,6 +228,7 @@ impl UseCollector {
                         AsmOperand::In { expr, .. }
                         | AsmOperand::Out { expr, .. }
                         | AsmOperand::InOut { expr, .. }
+                        | AsmOperand::LateOut { expr, .. }
                         | AsmOperand::Const { expr } => {
                             self.visit_expr(expr);
                         }

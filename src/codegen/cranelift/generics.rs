@@ -406,6 +406,7 @@ pub(crate) fn collect_called_fns(expr: &Expr, called: &mut HashSet<String>) {
                     AsmOperand::In { expr, .. }
                     | AsmOperand::Out { expr, .. }
                     | AsmOperand::InOut { expr, .. }
+                    | AsmOperand::LateOut { expr, .. }
                     | AsmOperand::Const { expr } => {
                         collect_called_fns(expr, called);
                     }

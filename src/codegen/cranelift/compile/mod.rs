@@ -5716,7 +5716,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
                 input_vals.push(val);
                 out_names.push(None);
             }
-            AsmOperand::Out { constraint, expr } => {
+            AsmOperand::Out { constraint, expr } | AsmOperand::LateOut { constraint, expr } => {
                 let var_name = extract_ident_name(expr);
                 if let Some(ref name) = var_name {
                     if let Some(&clif_ty) = cx.var_types.get(name) {

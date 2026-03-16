@@ -804,6 +804,8 @@ pub enum AsmOperand {
     Out { constraint: String, expr: Box<Expr> },
     /// `inout(reg) expr` — input+output operand.
     InOut { constraint: String, expr: Box<Expr> },
+    /// `lateout(reg) expr` — output clobbered after all inputs consumed.
+    LateOut { constraint: String, expr: Box<Expr> },
     /// `const expr` — compile-time constant.
     Const { expr: Box<Expr> },
     /// `sym name` — symbol reference (function pointer address).

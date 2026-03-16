@@ -2377,8 +2377,9 @@ impl Parser {
                     "in" => Ok(AsmOperand::In { constraint, expr }),
                     "out" => Ok(AsmOperand::Out { constraint, expr }),
                     "inout" => Ok(AsmOperand::InOut { constraint, expr }),
+                    "lateout" => Ok(AsmOperand::LateOut { constraint, expr }),
                     _ => Err(ParseError::UnexpectedToken {
-                        expected: "in, out, inout, or const".into(),
+                        expected: "in, out, inout, lateout, or const".into(),
                         found: direction,
                         line: tok.line,
                         col: tok.col,
