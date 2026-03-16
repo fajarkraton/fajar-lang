@@ -214,6 +214,11 @@ _start:
     b       .Lbss_loop
 .Lbss_done:
 
+    /* Set VBAR_EL1 to exception vector table */
+    ldr     x0, =__vectors
+    msr     VBAR_EL1, x0
+    isb
+
     /* Call kernel entry */
     bl      {entry_fn}
 
@@ -223,6 +228,165 @@ _start:
     b       .Lhalt
 
 .size _start, . - _start
+
+/* ═══════════════════════════════════════════════════════════════════
+   Exception Vector Table (aarch64 EL1)
+   16 entries × 128 bytes each = 2048 bytes, 2KB aligned
+   Layout:
+     Current EL, SP_EL0:    Sync, IRQ, FIQ, SError
+     Current EL, SP_ELx:    Sync, IRQ, FIQ, SError
+     Lower EL, AArch64:     Sync, IRQ, FIQ, SError
+     Lower EL, AArch32:     Sync, IRQ, FIQ, SError
+   ═══════════════════════════════════════════════════════════════════ */
+
+.balign 2048
+.global __vectors
+__vectors:
+    /* Current EL, SP_EL0 — Sync */
+    b       __exc_sync_cur
+    .balign 128
+    /* Current EL, SP_EL0 — IRQ */
+    b       __exc_irq_cur
+    .balign 128
+    /* Current EL, SP_EL0 — FIQ */
+    b       __exc_fiq
+    .balign 128
+    /* Current EL, SP_EL0 — SError */
+    b       __exc_serror
+    .balign 128
+
+    /* Current EL, SP_ELx — Sync */
+    b       __exc_sync_cur
+    .balign 128
+    /* Current EL, SP_ELx — IRQ */
+    b       __exc_irq_cur
+    .balign 128
+    /* Current EL, SP_ELx — FIQ */
+    b       __exc_fiq
+    .balign 128
+    /* Current EL, SP_ELx — SError */
+    b       __exc_serror
+    .balign 128
+
+    /* Lower EL, AArch64 — Sync (syscalls come here) */
+    b       __exc_sync_lower
+    .balign 128
+    /* Lower EL, AArch64 — IRQ */
+    b       __exc_irq_lower
+    .balign 128
+    /* Lower EL, AArch64 — FIQ */
+    b       __exc_fiq
+    .balign 128
+    /* Lower EL, AArch64 — SError */
+    b       __exc_serror
+    .balign 128
+
+    /* Lower EL, AArch32 — Sync */
+    b       __exc_sync_lower
+    .balign 128
+    /* Lower EL, AArch32 — IRQ */
+    b       __exc_irq_lower
+    .balign 128
+    /* Lower EL, AArch32 — FIQ */
+    b       __exc_fiq
+    .balign 128
+    /* Lower EL, AArch32 — SError */
+    b       __exc_serror
+    .balign 128
+
+/* ─── Exception stubs: save context, call handler, restore ─── */
+
+/* Macro: save all GP registers to stack (256 bytes) */
+.macro SAVE_CONTEXT
+    sub     sp, sp, #256
+    stp     x0, x1, [sp, #0]
+    stp     x2, x3, [sp, #16]
+    stp     x4, x5, [sp, #32]
+    stp     x6, x7, [sp, #48]
+    stp     x8, x9, [sp, #64]
+    stp     x10, x11, [sp, #80]
+    stp     x12, x13, [sp, #96]
+    stp     x14, x15, [sp, #112]
+    stp     x16, x17, [sp, #128]
+    stp     x18, x19, [sp, #144]
+    stp     x20, x21, [sp, #160]
+    stp     x22, x23, [sp, #176]
+    stp     x24, x25, [sp, #192]
+    stp     x26, x27, [sp, #208]
+    stp     x28, x29, [sp, #224]
+    mrs     x0, ELR_EL1
+    mrs     x1, SPSR_EL1
+    stp     x30, x0, [sp, #240]
+.endm
+
+.macro RESTORE_CONTEXT
+    ldp     x30, x0, [sp, #240]
+    msr     ELR_EL1, x0
+    ldp     x0, x1, [sp, #0]
+    ldp     x2, x3, [sp, #16]
+    ldp     x4, x5, [sp, #32]
+    ldp     x6, x7, [sp, #48]
+    ldp     x8, x9, [sp, #64]
+    ldp     x10, x11, [sp, #80]
+    ldp     x12, x13, [sp, #96]
+    ldp     x14, x15, [sp, #112]
+    ldp     x16, x17, [sp, #128]
+    ldp     x18, x19, [sp, #144]
+    ldp     x20, x21, [sp, #160]
+    ldp     x22, x23, [sp, #176]
+    ldp     x24, x25, [sp, #192]
+    ldp     x26, x27, [sp, #208]
+    ldp     x28, x29, [sp, #224]
+    add     sp, sp, #256
+.endm
+
+/* Sync exception from current EL */
+.global __exc_sync_cur
+__exc_sync_cur:
+    SAVE_CONTEXT
+    mrs     x0, ESR_EL1     /* x0 = ESR (exception syndrome) */
+    mrs     x1, ELR_EL1     /* x1 = ELR (return address) */
+    mrs     x2, FAR_EL1     /* x2 = FAR (fault address) */
+    bl      fj_exception_sync
+    RESTORE_CONTEXT
+    eret
+
+/* IRQ from current EL */
+.global __exc_irq_cur
+__exc_irq_cur:
+    SAVE_CONTEXT
+    bl      fj_exception_irq
+    RESTORE_CONTEXT
+    eret
+
+/* Sync exception from lower EL (syscalls) */
+.global __exc_sync_lower
+__exc_sync_lower:
+    SAVE_CONTEXT
+    mrs     x0, ESR_EL1
+    mrs     x1, ELR_EL1
+    mrs     x2, FAR_EL1
+    bl      fj_exception_sync
+    RESTORE_CONTEXT
+    eret
+
+/* IRQ from lower EL */
+.global __exc_irq_lower
+__exc_irq_lower:
+    SAVE_CONTEXT
+    bl      fj_exception_irq
+    RESTORE_CONTEXT
+    eret
+
+/* FIQ (unused, halt) */
+.global __exc_fiq
+__exc_fiq:
+    b       __exc_fiq
+
+/* SError (halt) */
+.global __exc_serror
+__exc_serror:
+    b       __exc_serror
 
 /* Bare-metal runtime: volatile I/O */
 .global fj_rt_volatile_write

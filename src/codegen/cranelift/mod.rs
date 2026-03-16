@@ -9739,8 +9739,12 @@ impl ObjectCompiler {
                     dce_entry_points.push(fndef.name.clone());
                 }
             }
-            // Bare-metal: kernel_main is called from startup asm, not .fj code
-            if self.no_std && fndef.name == "kernel_main" {
+            // Bare-metal: functions called from startup assembly (not from .fj code)
+            if self.no_std
+                && (fndef.name == "kernel_main"
+                    || fndef.name == "fj_exception_sync"
+                    || fndef.name == "fj_exception_irq")
+            {
                 dce_entry_points.push(fndef.name.clone());
             }
         }
