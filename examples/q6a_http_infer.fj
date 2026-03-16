@@ -1,0 +1,71 @@
+// q6a_http_infer.fj — HTTP inference server pattern for Dragon Q6A
+//
+// Demonstrates: receive request → preprocess → inference → format response
+// Uses an in-memory cache to avoid redundant inference calls.
+// (Simulated — no real TCP; patterns show production structure)
+//
+// Usage: fj run examples/q6a_http_infer.fj
+
+fn run_inference(request_id: i64) -> str {
+    // Two-layer MLP: input → hidden → output → softmax
+    let input = tensor_randn(1, 10)
+    let w1 = tensor_xavier(10, 8)
+    let h = tensor_matmul(input, w1)
+    let h_act = tensor_relu(h)
+    let w2 = tensor_xavier(8, 4)
+    let out = tensor_matmul(h_act, w2)
+    let probs = tensor_softmax(out)
+    let class = tensor_argmax(probs)
+    f"{{\"id\":{request_id},\"class\":{class},\"status\":\"ok\"}}"
+}
+
+// --- Server initialisation ---
+
+let pid = process_id()
+println("=== HTTP Inference Server (Dragon Q6A) ===")
+println(f"PID: {pid}")
+println("")
+
+// Warm-up inference to prime caches
+let _warmup = run_inference(0)
+println("Model warm-up complete")
+
+// --- Request handling loop ---
+
+let mut request_id = 1
+let max_requests = 6
+let logpath = "/tmp/q6a_http_infer.log"
+
+log_to_file(logpath, f"SERVER_START pid={pid}")
+
+while request_id < max_requests {
+    // Check cache first (keyed by request_id string)
+    let cache_key = f"req_{request_id}"
+    let cached = cache_get(cache_key)
+
+    if len(cached) > 0 {
+        // Cache hit — return stored result
+        println(f"  [{request_id}] CACHE HIT: {cached}")
+        log_to_file(logpath, f"HIT id={request_id}")
+    } else {
+        // Cache miss — run inference
+        let resp = run_inference(request_id)
+
+        // Store in cache
+        cache_set(cache_key, resp)
+        println(f"  [{request_id}] INFER -> {resp}")
+        log_to_file(logpath, f"INFER id={request_id}")
+    }
+
+    request_id = request_id + 1
+}
+
+// --- Shutdown ---
+
+let handled = request_id - 1
+log_to_file(logpath, f"SERVER_STOP pid={pid} handled={handled}")
+
+println("")
+let uptime = sys_uptime()
+println(f"Handled {handled} requests, uptime: {uptime}s")
+println("Server shutdown clean.")

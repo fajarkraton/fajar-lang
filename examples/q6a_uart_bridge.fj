@@ -1,0 +1,98 @@
+// q6a_uart_bridge.fj — UART bridge: Q6A ↔ MCU communication
+//
+// Demonstrates: inter-board communication protocol via UART
+// Pattern: send command → wait → read response → process
+// In production: use /dev/ttyS* with real baud rate config
+//
+// Usage: fj run examples/q6a_uart_bridge.fj
+
+fn format_command(cmd: str, param: i64) -> str {
+    f"CMD:{cmd}:{param}"
+}
+
+fn parse_response(raw: str) -> str {
+    // In production: parse actual UART response bytes
+    // Simulated: echo back with ACK
+    f"ACK:{raw}"
+}
+
+fn simulate_mcu_response(cmd: str) -> str {
+    // Simulate MCU responding to commands
+    if cmd == "READ_SENSOR" {
+        "RESP:TEMP=2543:HUM=65"
+    } else {
+        if cmd == "SET_PWM" {
+            "RESP:PWM_OK"
+        } else {
+            if cmd == "GET_STATUS" {
+                "RESP:STATUS=RUNNING:UPTIME=3600"
+            } else {
+                "RESP:UNKNOWN_CMD"
+            }
+        }
+    }
+}
+
+// --- Main ---
+
+println("=== UART Bridge: Q6A ↔ MCU (Dragon Q6A) ===")
+println("")
+println("Protocol: 115200 baud, 8N1")
+println("UART5: pins 8 (TX) / 10 (RX)")
+println("")
+
+let logpath = "/tmp/q6a_uart_bridge.log"
+
+// Command sequence
+let mut cmd_id = 0
+let total_cmds = 5
+
+println(f"Sending {total_cmds} commands to MCU...")
+println("")
+
+while cmd_id < total_cmds {
+    // Determine command
+    let cmd_type = cmd_id % 3
+    let mut cmd_name = "GET_STATUS"
+    if cmd_type == 0 {
+        cmd_name = "READ_SENSOR"
+    } else {
+        if cmd_type == 1 {
+            cmd_name = "SET_PWM"
+        } else {
+            cmd_name = "GET_STATUS"
+        }
+    }
+
+    // Format and "send"
+    let packet = format_command(cmd_name, cmd_id)
+    println(f"  TX [{cmd_id}]: {packet}")
+
+    // "Receive" response
+    let response = simulate_mcu_response(cmd_name)
+    let parsed = parse_response(response)
+    println(f"  RX [{cmd_id}]: {parsed}")
+
+    // Log transaction
+    log_to_file(logpath, f"TX:{packet} RX:{response}")
+
+    // Process response — run inference if sensor data
+    if cmd_type == 0 {
+        let input = tensor_randn(1, 4)
+        let w = tensor_xavier(4, 2)
+        let pred = tensor_argmax(tensor_softmax(tensor_matmul(input, w)))
+        println(f"       → ML inference on sensor data: class {pred}")
+    } else {
+        println(f"       → Command acknowledged")
+    }
+
+    println("")
+    cmd_id = cmd_id + 1
+}
+
+println("=== Bridge Summary ===")
+println(f"  Commands sent: {total_cmds}")
+println(f"  Protocol: UART 115200 8N1")
+println(f"  CPU temp: {cpu_temp() / 1000}C")
+println(f"  Uptime: {sys_uptime()}s")
+println("UART bridge demo complete.")

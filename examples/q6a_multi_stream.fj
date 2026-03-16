@@ -1,0 +1,83 @@
+// q6a_multi_stream.fj — Multi-camera inference pipeline
+//
+// Demonstrates: 3 simultaneous camera streams → 3 inference pipelines
+// Dragon Q6A has: CSI0 (4-lane), CSI1 (2-lane), CSI2 (2-lane)
+//
+// Usage: fj run examples/q6a_multi_stream.fj
+
+fn camera_capture(cam_id: i64, frame_id: i64) -> i64 {
+    // Simulate capture from MIPI-CSI camera
+    let _frame = tensor_randn(224, 224)
+    frame_id
+}
+
+fn run_model(cam_id: i64, model_name: str) -> str {
+    let input = tensor_randn(1, 128)
+    let w = tensor_xavier(128, 10)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    let class_id = tensor_argmax(probs)
+    f"cam{cam_id}:{model_name}=class{class_id}"
+}
+
+// --- Main ---
+
+println("=== Multi-Stream Camera Pipeline (Dragon Q6A) ===")
+println("")
+println("Cameras:")
+println("  CSI0: 4-lane (4K@30 / 1080p@60) → Object detection")
+println("  CSI1: 2-lane (1080p@30) → Face recognition")
+println("  CSI2: 2-lane (1080p@30) → License plate OCR")
+println("")
+
+let logpath = "/tmp/q6a_multi_stream.log"
+let t0 = sys_uptime()
+
+// Process frames from all 3 cameras
+let total_frames = 10
+let mut frame = 0
+let mut detections = 0
+
+println(f"Processing {total_frames} frames per camera ({total_frames * 3} total)...")
+println("")
+
+while frame < total_frames {
+    // Camera 0: Object detection (primary)
+    let _cap0 = camera_capture(0, frame)
+    let det0 = run_model(0, "yolov8n")
+
+    // Camera 1: Face recognition
+    let _cap1 = camera_capture(1, frame)
+    let det1 = run_model(1, "arcface")
+
+    // Camera 2: License plate
+    let _cap2 = camera_capture(2, frame)
+    let det2 = run_model(2, "lprnet")
+
+    detections = detections + 3
+
+    if frame % 3 == 0 {
+        println(f"  Frame {frame}:")
+        println(f"    {det0}")
+        println(f"    {det1}")
+        println(f"    {det2}")
+    } else {
+        let _skip = 0
+    }
+
+    log_to_file(logpath, f"FRAME={frame} {det0} | {det1} | {det2}")
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println("=== Pipeline Statistics ===")
+println(f"  Cameras:       3 (CSI0 + CSI1 + CSI2)")
+println(f"  Frames/camera: {total_frames}")
+println(f"  Total frames:  {total_frames * 3}")
+println(f"  Detections:    {detections}")
+println(f"  Elapsed:       {elapsed}s")
+println(f"  CPU temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Multi-stream pipeline complete.")

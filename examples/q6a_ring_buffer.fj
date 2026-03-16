@@ -1,0 +1,99 @@
+// q6a_ring_buffer.fj — Ring buffer for continuous sensor data streams
+//
+// Demonstrates: fixed-size circular buffer for real-time sensor data
+// Pattern: write at head, read from tail, automatic wraparound
+//
+// Usage: fj run examples/q6a_ring_buffer.fj
+
+fn ring_write(buf: i64, head: i64, size: i64, value: i64) -> i64 {
+    // Returns new head position after write
+    // In production: use shared memory or array
+    let new_head = (head + 1) % size
+    new_head
+}
+
+fn ring_read(tail: i64, head: i64, size: i64) -> i64 {
+    // Returns new tail position after read, or -1 if empty
+    if tail == head {
+        0 - 1
+    } else {
+        let new_tail = (tail + 1) % size
+        new_tail
+    }
+}
+
+fn ring_count(head: i64, tail: i64, size: i64) -> i64 {
+    if head >= tail {
+        head - tail
+    } else {
+        size - tail + head
+    }
+}
+
+// --- Main ---
+
+println("=== Ring Buffer for Sensor Streams (Dragon Q6A) ===")
+println("")
+
+let buf_size = 16
+let mut head = 0
+let mut tail = 0
+let mut total_writes = 0
+let mut total_reads = 0
+
+println(f"Buffer size: {buf_size} slots")
+println("")
+
+// Phase 1: Fill buffer with sensor readings
+println("[1] Writing 20 sensor samples...")
+let mut i = 0
+let write_count = 20
+while i < write_count {
+    let sensor_val = cpu_temp()
+    head = ring_write(0, head, buf_size, sensor_val)
+    total_writes = total_writes + 1
+
+    // Simulate consumer reading every 3rd sample
+    if i % 3 == 0 {
+        let new_tail = ring_read(tail, head, buf_size)
+        if new_tail >= 0 {
+            tail = new_tail
+            total_reads = total_reads + 1
+        } else {
+            println(f"    [{i}] Buffer empty — no read")
+        }
+    } else {
+        let _skip = 0
+    }
+
+    i = i + 1
+}
+
+let count = ring_count(head, tail, buf_size)
+println(f"    After writes: head={head}, tail={tail}, count={count}")
+
+// Phase 2: Drain remaining
+println("")
+println("[2] Draining remaining samples...")
+let mut drained = 0
+let mut drain_tail = tail
+while drain_tail != head {
+    let new_t = ring_read(drain_tail, head, buf_size)
+    if new_t >= 0 {
+        drain_tail = new_t
+        drained = drained + 1
+    } else {
+        println("    Unexpected empty")
+    }
+}
+println(f"    Drained {drained} samples")
+
+// Phase 3: Stats
+println("")
+println("=== Statistics ===")
+println(f"  Total writes: {total_writes}")
+println(f"  Total reads:  {total_reads + drained}")
+println(f"  Buffer size:  {buf_size}")
+println(f"  Overwrites:   {total_writes - buf_size}")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Ring buffer demo complete.")

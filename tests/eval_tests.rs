@@ -5350,3 +5350,131 @@ fn e2e_q6a_profile_example() {
     assert!(out.iter().any(|l| l.contains("Performance Profile")));
     assert!(out.iter().any(|l| l.contains("Profile complete.")));
 }
+
+#[test]
+fn e2e_q6a_gpu_train() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_train.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(
+        out.iter().any(|l| l.contains("GPU-Accelerated Training")),
+        "expected header in output, got: {out:?}"
+    );
+    assert!(
+        out.iter().any(|l| l.contains("Epoch 1/50")),
+        "expected epoch 1 log in output, got: {out:?}"
+    );
+    assert!(
+        out.iter().any(|l| l.contains("Final accuracy")),
+        "expected final accuracy in output, got: {out:?}"
+    );
+    assert!(
+        out.iter().any(|l| l.contains("GPU training complete.")),
+        "expected completion message in output, got: {out:?}"
+    );
+}
+
+#[test]
+fn e2e_q6a_http_infer_example() {
+    let code = std::fs::read_to_string("examples/q6a_http_infer.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("HTTP Inference Server")));
+    assert!(out.iter().any(|l| l.contains("Server shutdown clean.")));
+}
+
+#[test]
+fn e2e_q6a_mqtt_sensor_example() {
+    let code = std::fs::read_to_string("examples/q6a_mqtt_sensor.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("MQTT Sensor Publisher")));
+    assert!(out.iter().any(|l| l.contains("MQTT publisher stopped.")));
+}
+
+#[test]
+fn e2e_q6a_model_hotreload_example() {
+    let code = std::fs::read_to_string("examples/q6a_model_hotreload.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Model Hot-Reload")));
+    assert!(out.iter().any(|l| l.contains("Hot-reload demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_video_detect_example() {
+    let code = std::fs::read_to_string("examples/q6a_video_detect.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Video Object Detection")));
+    assert!(out.iter().any(|l| l.contains("Video pipeline complete.")));
+}
+
+#[test]
+fn e2e_q6a_imu_fusion_example() {
+    let code = std::fs::read_to_string("examples/q6a_imu_fusion.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("9-Axis IMU Fusion")));
+    assert!(out.iter().any(|l| l.contains("Fused Orientation")));
+    assert!(out.iter().any(|l| l.contains("Roll:")));
+    assert!(out.iter().any(|l| l.contains("Pitch:")));
+    assert!(out.iter().any(|l| l.contains("Yaw:")));
+    assert!(out.iter().any(|l| l.contains("imu_fusion complete")));
+}
+
+#[test]
+fn e2e_q6a_activity_recognition_example() {
+    let code = std::fs::read_to_string("examples/q6a_activity_recognition.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Activity Recognition")));
+    assert!(out.iter().any(|l| l.contains("2-layer classifier")));
+    assert!(out.iter().any(|l| l.contains("Classification summary")));
+    assert!(out.iter().any(|l| l.contains("Walking:")));
+    assert!(out.iter().any(|l| l.contains("Running:")));
+    assert!(out.iter().any(|l| l.contains("Standing:")));
+    assert!(out.iter().any(|l| l.contains("Sitting:")));
+    assert!(out.iter().any(|l| l.contains("activity_recognition complete")));
+}
+
+#[test]
+fn e2e_q6a_ring_buffer_example() {
+    let code = std::fs::read_to_string("examples/q6a_ring_buffer.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Ring Buffer")));
+    assert!(out.iter().any(|l| l.contains("Ring buffer demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_uart_bridge_example() {
+    let code = std::fs::read_to_string("examples/q6a_uart_bridge.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("UART Bridge")));
+    assert!(out.iter().any(|l| l.contains("UART bridge demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_rest_api_example() {
+    let code = std::fs::read_to_string("examples/q6a_rest_api.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("REST API Inference Server")));
+    assert!(out.iter().any(|l| l.contains("REST API server shutdown.")));
+}
+
+#[test]
+fn e2e_q6a_websocket_stream_example() {
+    let code = std::fs::read_to_string("examples/q6a_websocket_stream.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("WebSocket Streaming")));
+    assert!(out.iter().any(|l| l.contains("WebSocket streaming stopped.")));
+}
+
+#[test]
+fn e2e_q6a_gpu_forward_backward_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_forward_backward.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU Forward/Backward Pass")));
+    assert!(out.iter().any(|l| l.contains("GPU forward/backward demo complete.")));
+}
+
+#[test]
+fn e2e_q6a_multi_stream_example() {
+    let code = std::fs::read_to_string("examples/q6a_multi_stream.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Multi-Stream Camera Pipeline")));
+    assert!(out.iter().any(|l| l.contains("Multi-stream pipeline complete.")));
+}

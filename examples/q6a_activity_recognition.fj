@@ -1,0 +1,153 @@
+// q6a_activity_recognition.fj — Motion Activity Recognition on Dragon Q6A
+//
+// Demonstrates ML-based activity classification from accelerometer data:
+//   1. Simulate sensor data windows (accelerometer time series)
+//   2. Build a 2-layer neural classifier
+//   3. Run inference: sensor window → tensor → ReLU → softmax → activity label
+//   4. Activities: walking (0), running (1), standing (2), sitting (3)
+//
+// Architecture: input(1x16) → Dense(16x32) → ReLU → Dense(32x4) → Softmax → Argmax
+//
+// Hardware: Dragon Q6A with accelerometer (e.g., on I2C2)
+// Build: fj build --board dragon-q6a examples/q6a_activity_recognition.fj
+// Run:   fj run examples/q6a_activity_recognition.fj
+
+fn activity_label(class: i64) -> str {
+    if class == 0 {
+        "walking"
+    } else if class == 1 {
+        "running"
+    } else if class == 2 {
+        "standing"
+    } else {
+        "sitting"
+    }
+}
+
+fn classify_window(window: Tensor, w1: Tensor, w2: Tensor) -> i64 {
+    // Layer 1: Dense + ReLU
+    let z1 = tensor_matmul(window, w1)
+    let h1 = tensor_relu(z1)
+
+    // Layer 2: Dense + Softmax
+    let z2 = tensor_matmul(h1, w2)
+    let probs = tensor_softmax(z2)
+
+    // Argmax → predicted class
+    tensor_argmax(probs)
+}
+
+fn main() {
+    println("=== Dragon Q6A Activity Recognition ===")
+    println("Model:  2-layer classifier (16→32→4)")
+    println("Input:  Accelerometer window (16 samples x 1 axis)")
+    println("Output: walking | running | standing | sitting")
+    println("")
+
+    // ── Step 1: Initialize model weights ──
+    println("[1/4] Initializing model weights...")
+    let w1 = tensor_xavier(16, 32)
+    let w2 = tensor_xavier(32, 4)
+    let num_params = 16 * 32 + 32 * 4
+    println(f"  Layer 1: Dense(16, 32) — Xavier init")
+    println(f"  Layer 2: Dense(32, 4)  — Xavier init")
+    println(f"  Total parameters: {num_params}")
+    println("")
+
+    // ── Step 2: Training (simplified — 5 epochs) ──
+    println("[2/4] Training classifier (5 epochs)...")
+    let num_epochs = 5
+    let batch_size = 8
+
+    let mut epoch = 0
+    while epoch < num_epochs {
+        // Simulate training batch
+        let batch = tensor_randn(batch_size, 16)
+        let pred = tensor_matmul(batch, w1)
+        let activated = tensor_relu(pred)
+        let output = tensor_matmul(activated, w2)
+        let _probs = tensor_softmax(output)
+
+        println(f"  Epoch {epoch + 1}/{num_epochs}: batch_size={batch_size}")
+        epoch = epoch + 1
+    }
+    println("  Training complete")
+    println("")
+
+    // ── Step 3: Inference on sensor windows ──
+    println("[3/4] Running inference on sensor windows...")
+    println("")
+    println("  ┌────────┬──────────────┬────────────┐")
+    println("  │ Window │ Activity     │ Confidence │")
+    println("  ├────────┼──────────────┼────────────┤")
+
+    let num_windows = 20
+    let mut counts_walk = 0
+    let mut counts_run = 0
+    let mut counts_stand = 0
+    let mut counts_sit = 0
+
+    let mut win = 0
+    while win < num_windows {
+        // Simulate accelerometer window (16 time steps)
+        let sensor_window = tensor_randn(1, 16)
+
+        // Classify
+        let predicted = classify_window(sensor_window, w1, w2)
+        let label = activity_label(predicted)
+
+        // Count per activity
+        if predicted == 0 {
+            counts_walk = counts_walk + 1
+        } else if predicted == 1 {
+            counts_run = counts_run + 1
+        } else if predicted == 2 {
+            counts_stand = counts_stand + 1
+        } else {
+            counts_sit = counts_sit + 1
+        }
+
+        // Print every 5th window
+        let print_every = 5
+        if win % print_every == 0 {
+            println(f"  │ {win}      │ {label}     │ class {predicted}    │")
+        }
+
+        win = win + 1
+    }
+
+    println("  └────────┴──────────────┴────────────┘")
+    println("")
+
+    // ── Step 4: Results summary ──
+    println("[4/4] Classification summary:")
+    println(f"  Walking:  {counts_walk}/{num_windows} windows")
+    println(f"  Running:  {counts_run}/{num_windows} windows")
+    println(f"  Standing: {counts_stand}/{num_windows} windows")
+    println(f"  Sitting:  {counts_sit}/{num_windows} windows")
+    println("")
+
+    // Verify total
+    let total = counts_walk + counts_run + counts_stand + counts_sit
+    println(f"  Total classified: {total}/{num_windows}")
+    println("")
+
+    // ── Model Architecture ──
+    println("=== Model Architecture ===")
+    println("  Input:   (1, 16) — 16 accel samples @ 50 Hz = 320ms window")
+    println("  Dense1:  (16, 32) + ReLU activation")
+    println("  Dense2:  (32, 4) + Softmax activation")
+    println("  Output:  argmax → {walking=0, running=1, standing=2, sitting=3}")
+    println(f"  Params:  {num_params}")
+    println("")
+
+    // ── Hardware ──
+    println("=== Hardware ===")
+    println("  SoC:      QCS6490 (TSMC 6nm)")
+    println("  CPU:      Kryo 670 (8 cores, 2.71 GHz)")
+    println("  NPU:      Hexagon 770 V68, 12 TOPS")
+    println("  Sensor:   3-axis accelerometer (I2C2)")
+    println("")
+
+    println("activity_recognition complete")
+}

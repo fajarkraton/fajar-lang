@@ -1,0 +1,64 @@
+// q6a_mqtt_sensor.fj — MQTT sensor publishing pattern for Dragon Q6A
+//
+// Demonstrates: periodic sensor collection, JSON formatting, "publish" via log
+// In production: replace log_to_file with real MQTT client publish()
+//
+// Usage: fj run examples/q6a_mqtt_sensor.fj
+
+fn read_sensors() -> str {
+    // Collect system telemetry
+    let temp = cpu_temp()
+    let mem = mem_usage()
+    let up = sys_uptime()
+    // Format as JSON-like payload
+    f"{{\"temp_mc\":{temp},\"mem_pct\":{mem},\"uptime_s\":{up}}}"
+}
+
+fn make_topic(device_id: str, sensor: str) -> str {
+    f"dt/q6a/{device_id}/{sensor}"
+}
+
+// --- Main ---
+
+println("=== MQTT Sensor Publisher (Dragon Q6A) ===")
+println("")
+
+let pid = process_id()
+let device_id = f"q6a-{pid}"
+let broker_log = "/tmp/q6a_mqtt.log"
+
+// Read optional config from environment
+let _interval_env = env_var("FJ_MQTT_INTERVAL")
+let topic_prefix = make_topic(device_id, "telemetry")
+
+println(f"Device ID : {device_id}")
+println(f"Topic     : {topic_prefix}")
+println(f"Log file  : {broker_log}")
+println("")
+
+// --- Collection loop ---
+
+let mut tick = 0
+let max_ticks = 5
+
+while tick < max_ticks {
+    let payload = read_sensors()
+    let msg = f"[{tick}] {topic_prefix} -> {payload}"
+
+    // "Publish" by writing to log (simulates MQTT broker)
+    log_to_file(broker_log, msg)
+    println(f"  PUB {msg}")
+
+    tick = tick + 1
+    sleep_ms(10)
+}
+
+// --- Summary ---
+
+println("")
+let uptime = sys_uptime()
+let temp_c = cpu_temp() / 1000
+let mem_pct = mem_usage()
+println(f"Published {tick} messages for device {device_id}")
+println(f"System uptime: {uptime}s | Temp: {temp_c}C | Mem: {mem_pct}%")
+println("MQTT publisher stopped.")

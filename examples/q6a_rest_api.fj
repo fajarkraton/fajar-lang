@@ -1,0 +1,116 @@
+// q6a_rest_api.fj — REST API for NPU inference on Dragon Q6A
+//
+// Demonstrates: HTTP endpoint pattern for serving ML inference
+// Pattern: parse request → validate → preprocess → infer → format JSON → respond
+//
+// Usage: fj run examples/q6a_rest_api.fj
+
+fn validate_request(content_type: str, body_size: i64) -> bool {
+    // Validate incoming request
+    if body_size > 0 {
+        if body_size < 10000000 {
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+fn preprocess_image(width: i64, height: i64) -> i64 {
+    // Resize to model input, normalize
+    let _resized = tensor_randn(1, 224 * 224 * 3)
+    width * height
+}
+
+fn run_inference(model_name: str) -> str {
+    // Run inference through NPU (simulated)
+    let input = tensor_randn(1, 512)
+    let w = tensor_xavier(512, 10)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    let class_id = tensor_argmax(probs)
+    f"{class_id}"
+}
+
+fn format_json_response(req_id: i64, class_id: str, latency: i64) -> str {
+    f"{{\"id\":{req_id},\"class\":{class_id},\"latency_ms\":{latency},\"status\":\"ok\"}}"
+}
+
+// --- Main ---
+
+println("=== REST API Inference Server (Dragon Q6A) ===")
+println("")
+println("Endpoints:")
+println("  POST /api/v1/infer   — Run inference on image")
+println("  GET  /api/v1/health  — Health check")
+println("  GET  /api/v1/models  — List available models")
+println("")
+
+let pid = process_id()
+let logpath = "/tmp/q6a_rest_api.log"
+println(f"Server PID: {pid}")
+println(f"Listening on 0.0.0.0:8080")
+println("")
+
+// Simulate handling requests
+let mut req_id = 0
+let total_requests = 8
+
+// Cache for repeated requests
+cache_clear()
+
+while req_id < total_requests {
+    let t0 = sys_uptime()
+
+    // Simulate different request types
+    let req_type = req_id % 4
+
+    if req_type == 0 {
+        // POST /api/v1/infer — image classification
+        let valid = validate_request("image/jpeg", 50000)
+        if valid {
+            let _pixels = preprocess_image(640, 480)
+
+            // Check cache first
+            let cache_key = f"infer_{req_id % 3}"
+            let cached = cache_get(cache_key)
+            if len(cached) > 0 {
+                println(f"  [{req_id}] POST /api/v1/infer → CACHED: {cached}")
+            } else {
+                let class_id = run_inference("mobilenet_v2")
+                let t1 = sys_uptime()
+                let response = format_json_response(req_id, class_id, t1 - t0)
+                cache_set(cache_key, response)
+                println(f"  [{req_id}] POST /api/v1/infer → {response}")
+            }
+        } else {
+            println(f"  [{req_id}] POST /api/v1/infer → 400 Bad Request")
+        }
+    } else {
+        if req_type == 1 {
+            // GET /api/v1/health
+            let temp = cpu_temp() / 1000
+            let mem = mem_usage()
+            println(f"  [{req_id}] GET  /api/v1/health → {{\"status\":\"healthy\",\"temp\":{temp},\"mem\":{mem}}}")
+        } else {
+            if req_type == 2 {
+                // GET /api/v1/models
+                println(f"  [{req_id}] GET  /api/v1/models → [\"mobilenet_v2\",\"yolov8n\",\"resnet18\"]")
+            } else {
+                // POST /api/v1/infer — batch request
+                let class_id = run_inference("yolov8n")
+                println(f"  [{req_id}] POST /api/v1/infer → {{\"id\":{req_id},\"class\":{class_id},\"model\":\"yolov8n\"}}")
+            }
+        }
+    }
+
+    log_to_file(logpath, f"REQ id={req_id} type={req_type}")
+    req_id = req_id + 1
+}
+
+println("")
+println(f"Handled {total_requests} requests")
+println(f"Uptime: {sys_uptime()}s | Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("REST API server shutdown.")

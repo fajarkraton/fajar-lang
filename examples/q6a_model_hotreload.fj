@@ -1,0 +1,73 @@
+// q6a_model_hotreload.fj — Model hot-reload pattern for Dragon Q6A
+//
+// Demonstrates: check for new model file → load weights → swap inference
+// Uses cache to track current model version and detect changes.
+//
+// Usage: fj run examples/q6a_model_hotreload.fj
+
+fn run_inference(version: i64) -> str {
+    // Build a fresh model for this version and run one sample
+    let w = tensor_xavier(4, 3)
+    let sample = tensor_randn(1, 4)
+    let out = tensor_matmul(sample, w)
+    let act = tensor_relu(out)
+    let probs = tensor_softmax(act)
+    let class = tensor_argmax(probs)
+    f"v{version}:class={class}"
+}
+
+// --- Main ---
+
+println("=== Model Hot-Reload (Dragon Q6A) ===")
+println("")
+
+let logpath = "/tmp/q6a_hotreload.log"
+let model_path = "/tmp/q6a_hotreload_model.fjml"
+
+// Initial model — save weights to disk
+let init_w = tensor_xavier(4, 3)
+let mut model_version = 1
+cache_set("model_version", to_string(model_version))
+
+let _saved = model_save(model_path, f"hotreload_v{model_version}", init_w)
+let mut known_size = file_size(model_path)
+
+println(f"Loaded model v{model_version}")
+println(f"Model file: {known_size} bytes")
+log_to_file(logpath, f"LOAD version={model_version}")
+println("")
+
+// --- Inference loop with hot-reload check ---
+
+let mut cycle = 0
+let max_cycles = 5
+
+while cycle < max_cycles {
+    // Check for updated model file (compare file size)
+    let current_size = file_size(model_path)
+    if current_size != known_size {
+        model_version = model_version + 1
+        known_size = current_size
+        cache_set("model_version", to_string(model_version))
+        log_to_file(logpath, f"RELOAD cycle={cycle} version={model_version}")
+        println(f"  [{cycle}] HOT-RELOAD -> v{model_version} ({known_size} bytes)")
+    } else {
+        println(f"  [{cycle}] No update detected")
+    }
+
+    // Run inference with current model version
+    let result = run_inference(model_version)
+    let ver = cache_get("model_version")
+    println(f"  [{cycle}] Infer {result}")
+    log_to_file(logpath, f"INFER cycle={cycle} version={ver}")
+
+    cycle = cycle + 1
+}
+
+// --- Summary ---
+
+println("")
+let uptime = sys_uptime()
+println(f"Ran {cycle} cycles, final model: v{model_version}")
+println(f"Uptime: {uptime}s")
+println("Hot-reload demo complete.")

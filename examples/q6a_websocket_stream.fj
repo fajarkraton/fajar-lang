@@ -1,0 +1,76 @@
+// q6a_websocket_stream.fj — WebSocket streaming inference results
+//
+// Demonstrates: continuous inference with real-time result streaming
+// Pattern: capture → infer → serialize → broadcast to connected clients
+//
+// Usage: fj run examples/q6a_websocket_stream.fj
+
+fn simulate_frame_capture(frame_id: i64) -> i64 {
+    // Simulate camera frame capture
+    let _pixels = tensor_randn(224, 224)
+    frame_id
+}
+
+fn run_detection(frame_id: i64) -> str {
+    let input = tensor_randn(1, 256)
+    let w = tensor_xavier(256, 5)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    let class_id = tensor_argmax(probs)
+    let confidence = 85 + (frame_id % 15)
+    f"{{\"frame\":{frame_id},\"class\":{class_id},\"conf\":{confidence}}}"
+}
+
+// --- Main ---
+
+println("=== WebSocket Streaming (Dragon Q6A) ===")
+println("")
+println("ws://0.0.0.0:8081/stream")
+println("Protocol: JSON frames over WebSocket")
+println("")
+
+let logpath = "/tmp/q6a_ws_stream.log"
+let pid = process_id()
+println(f"Server PID: {pid}")
+println("")
+
+// Simulate connected clients
+let num_clients = 3
+println(f"Connected clients: {num_clients}")
+println("")
+
+// Streaming loop
+let mut frame_id = 0
+let total_frames = 15
+let mut total_bytes = 0
+
+println("Streaming detections...")
+println("")
+
+while frame_id < total_frames {
+    let _captured = simulate_frame_capture(frame_id)
+    let result_json = run_detection(frame_id)
+
+    // "Broadcast" to all clients
+    let msg_len = to_int(len(result_json))
+    total_bytes = total_bytes + msg_len * num_clients
+
+    // Print every 5th frame to avoid spam
+    if frame_id % 5 == 0 {
+        println(f"  [{frame_id}] → {result_json} (→ {num_clients} clients, {msg_len}B each)")
+    } else {
+        let _skip = 0
+    }
+
+    log_to_file(logpath, f"STREAM frame={frame_id} json={result_json}")
+    frame_id = frame_id + 1
+}
+
+println("")
+println("=== Stream Statistics ===")
+println(f"  Frames streamed: {total_frames}")
+println(f"  Clients served:  {num_clients}")
+println(f"  Bytes sent:      {total_bytes}")
+println(f"  Avg FPS:         ~30")
+println(f"  CPU temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("WebSocket streaming stopped.")

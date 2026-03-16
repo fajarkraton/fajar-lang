@@ -1,0 +1,99 @@
+// q6a_video_detect.fj — Video object detection pipeline for Dragon Q6A
+//
+// Demonstrates: frame decode → preprocess → inference → bounding box overlay
+// Simulates V4L2 capture + H.264 decode + NPU inference pipeline
+//
+// Usage: fj run examples/q6a_video_detect.fj
+
+fn decode_frame(frame_id: i64) -> i64 {
+    // Simulate H.264 decode via V4L2 M2M
+    // In production: open /dev/video*, VIDIOC_DQBUF, decode to NV12
+    let _pixels = tensor_randn(224, 224)
+    frame_id
+}
+
+fn preprocess_frame(frame_id: i64) -> i64 {
+    // Resize 1080p → 224x224, normalize [0,1], channel reorder
+    let _normalized = tensor_randn(1, 150528)
+    frame_id
+}
+
+fn detect_objects(_frame_id: i64) -> i64 {
+    // Run object detection model (simulated YOLO-like)
+    let input = tensor_randn(1, 512)
+    let w1 = tensor_xavier(512, 128)
+    let h1 = tensor_relu(tensor_matmul(input, w1))
+    let w2 = tensor_xavier(128, 20)
+    let scores = tensor_softmax(tensor_matmul(h1, w2))
+    let best_class = tensor_argmax(scores)
+    best_class
+}
+
+fn class_label(class_id: i64) -> str {
+    if class_id == 0 {
+        "person"
+    } else {
+        if class_id == 1 {
+            "car"
+        } else {
+            if class_id == 2 {
+                "bicycle"
+            } else {
+                if class_id == 3 {
+                    "dog"
+                } else {
+                    "unknown"
+                }
+            }
+        }
+    }
+}
+
+fn draw_bbox(label: str, frame_id: i64) -> bool {
+    // Overlay bounding box + label on frame
+    // In production: cairo or direct framebuffer write
+    println(f"    bbox: [{frame_id * 10}, {frame_id * 5}, {frame_id * 10 + 100}, {frame_id * 5 + 80}] → {label}")
+    true
+}
+
+// --- Main video detection pipeline ---
+
+println("=== Video Object Detection (Dragon Q6A) ===")
+println(f"CPU: {cpu_freq() / 1000} MHz | Temp: {cpu_temp() / 1000}C")
+println("")
+
+let total_frames = 10
+let mut frame = 0
+let mut detections = 0
+let t0 = sys_uptime()
+
+println(f"Processing {total_frames} frames...")
+println("")
+
+while frame < total_frames {
+    // Pipeline: decode → preprocess → detect → overlay
+    let decoded = decode_frame(frame)
+    let _prepped = preprocess_frame(decoded)
+    let class_id = detect_objects(frame)
+    let label = class_label(class_id)
+
+    if class_id < 4 {
+        let _drawn = draw_bbox(label, frame)
+        detections = detections + 1
+        log_to_file("/tmp/q6a_video.log", f"DETECT frame={frame} class={label}")
+    } else {
+        println(f"    frame {frame}: no detection")
+        log_to_file("/tmp/q6a_video.log", f"NODET frame={frame}")
+    }
+
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println(f"Processed {total_frames} frames, {detections} detections")
+println(f"Elapsed: {elapsed}s")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Video pipeline complete.")
