@@ -6047,10 +6047,9 @@ pub(crate) fn compile_inline_asm<M: Module>(
             }
         }
 
-        // ARM64-specific instructions: encode via aarch64_asm module
+        // ARM64-specific instructions: route through assembly stubs for bare-metal AOT,
+        // or encode as integer constants for JIT testing.
         _ if crate::codegen::aarch64_asm::is_arm64_specific(mnemonic) => {
-            // Parse operands from the template string (after mnemonic).
-            // Bracket-aware split: commas inside [...] are part of memory operands.
             let operand_str = tmpl.strip_prefix(mnemonic).unwrap_or("").trim();
             let asm_operands: Vec<String> = if operand_str.is_empty() {
                 vec![]
@@ -6086,18 +6085,79 @@ pub(crate) fn compile_inline_asm<M: Module>(
             };
             let asm_op_refs: Vec<&str> = asm_operands.iter().map(|s| s.as_str()).collect();
 
-            // Encode the instruction — validates syntax and produces a 32-bit word
+            // Validate encoding (always check syntax)
             let encoded = crate::codegen::aarch64_asm::encode_instruction(mnemonic, &asm_op_refs)?;
 
-            // Return the encoded instruction word as an integer constant.
-            // For AOT bare-metal targets, this value can be written to memory
-            // or emitted as raw .text data. For JIT cross-compilation, it serves
-            // as a validated encoding that can be inspected/tested.
-            let val = builder
-                .ins()
-                .iconst(clif_types::default_int_type(), encoded as i64);
-            write_output(builder, cx, val);
-            val
+            // For bare-metal AOT: route mrs/msr/barriers through assembly stubs
+            // that actually execute the instruction. For JIT: return encoded value.
+            if cx.no_std {
+                match mnemonic {
+                    "mrs" if asm_operands.len() == 2 => {
+                        // mrs Xd, SYSREG → call fj_rt_asm_mrs_<sysreg>() -> i64
+                        let sysreg = asm_operands[1].to_lowercase().replace('.', "_");
+                        let stub_name = format!("fj_rt_asm_mrs_{sysreg}");
+                        let call_conv = cx.module.target_config().default_call_conv;
+                        let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+                        sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                            clif_types::default_int_type(),
+                        ));
+                        let func_id = cx
+                            .module
+                            .declare_function(&stub_name, cranelift_module::Linkage::Import, &sig)
+                            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                        let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
+                        let inst = builder.ins().call(func_ref, &[]);
+                        let result = builder.inst_results(inst)[0];
+                        write_output(builder, cx, result);
+                        result
+                    }
+                    "msr" if asm_operands.len() == 2 && !input_vals.is_empty() => {
+                        // msr SYSREG, Xt → call fj_rt_asm_msr_<sysreg>(val)
+                        let sysreg = asm_operands[0].to_lowercase().replace('.', "_");
+                        let stub_name = format!("fj_rt_asm_msr_{sysreg}");
+                        let call_conv = cx.module.target_config().default_call_conv;
+                        let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+                        sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                            clif_types::default_int_type(),
+                        ));
+                        let func_id = cx
+                            .module
+                            .declare_function(&stub_name, cranelift_module::Linkage::Import, &sig)
+                            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                        let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
+                        builder.ins().call(func_ref, &[input_vals[0]]);
+                        builder.ins().iconst(clif_types::default_int_type(), 0)
+                    }
+                    "svc" | "isb" | "dsb" | "dmb" | "wfe" | "wfi" | "nop" | "eret" => {
+                        // Side-effect instructions → call fj_rt_asm_<mnemonic>()
+                        let stub_name = format!("fj_rt_asm_{mnemonic}");
+                        let call_conv = cx.module.target_config().default_call_conv;
+                        let sig = cranelift_codegen::ir::Signature::new(call_conv);
+                        let func_id = cx
+                            .module
+                            .declare_function(&stub_name, cranelift_module::Linkage::Import, &sig)
+                            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                        let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
+                        builder.ins().call(func_ref, &[]);
+                        builder.ins().iconst(clif_types::default_int_type(), 0)
+                    }
+                    _ => {
+                        // Fallback: return encoded value
+                        let val = builder
+                            .ins()
+                            .iconst(clif_types::default_int_type(), encoded as i64);
+                        write_output(builder, cx, val);
+                        val
+                    }
+                }
+            } else {
+                // JIT mode: return encoded instruction word for testing
+                let val = builder
+                    .ins()
+                    .iconst(clif_types::default_int_type(), encoded as i64);
+                write_output(builder, cx, val);
+                val
+            }
         }
 
         _ => {

@@ -637,6 +637,132 @@ fj_rt_bare_gic_eoi:
     msr     ICC_EOIR1_EL1, x0
     ret
 .size fj_rt_bare_gic_eoi, . - fj_rt_bare_gic_eoi
+
+/* ═══════════════════════════════════════════════════════════════════
+   Auto-generated asm! stubs: mrs/msr/barrier
+   These actually execute ARM64 instructions and return real values.
+   Generated for all system registers in sysreg_encoding().
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* MRS stubs: () -> i64 */
+.macro MRS_STUB name, sysreg
+.global fj_rt_asm_mrs_\name
+.type fj_rt_asm_mrs_\name, @function
+fj_rt_asm_mrs_\name:
+    mrs     x0, \sysreg
+    ret
+.size fj_rt_asm_mrs_\name, . - fj_rt_asm_mrs_\name
+.endm
+
+MRS_STUB sctlr_el1, SCTLR_EL1
+MRS_STUB tcr_el1, TCR_EL1
+MRS_STUB mair_el1, MAIR_EL1
+MRS_STUB ttbr0_el1, TTBR0_EL1
+MRS_STUB ttbr1_el1, TTBR1_EL1
+MRS_STUB vbar_el1, VBAR_EL1
+MRS_STUB esr_el1, ESR_EL1
+MRS_STUB far_el1, FAR_EL1
+MRS_STUB elr_el1, ELR_EL1
+MRS_STUB spsr_el1, SPSR_EL1
+MRS_STUB sp_el0, SP_EL0
+MRS_STUB daif, DAIF
+MRS_STUB currentel, CurrentEL
+MRS_STUB icc_iar1_el1, ICC_IAR1_EL1
+MRS_STUB icc_pmr_el1, ICC_PMR_EL1
+MRS_STUB icc_sre_el1, ICC_SRE_EL1
+MRS_STUB icc_ctlr_el1, ICC_CTLR_EL1
+MRS_STUB icc_igrpen1_el1, ICC_IGRPEN1_EL1
+MRS_STUB cntfrq_el0, CNTFRQ_EL0
+MRS_STUB cntpct_el0, CNTPCT_EL0
+MRS_STUB cntp_tval_el0, CNTP_TVAL_EL0
+MRS_STUB cntp_ctl_el0, CNTP_CTL_EL0
+MRS_STUB cntvct_el0, CNTVCT_EL0
+MRS_STUB cntv_tval_el0, CNTV_TVAL_EL0
+MRS_STUB cntv_ctl_el0, CNTV_CTL_EL0
+MRS_STUB midr_el1, MIDR_EL1
+
+/* MSR stubs: (i64) -> void */
+.macro MSR_STUB name, sysreg
+.global fj_rt_asm_msr_\name
+.type fj_rt_asm_msr_\name, @function
+fj_rt_asm_msr_\name:
+    msr     \sysreg, x0
+    ret
+.size fj_rt_asm_msr_\name, . - fj_rt_asm_msr_\name
+.endm
+
+MSR_STUB sctlr_el1, SCTLR_EL1
+MSR_STUB tcr_el1, TCR_EL1
+MSR_STUB mair_el1, MAIR_EL1
+MSR_STUB ttbr0_el1, TTBR0_EL1
+MSR_STUB ttbr1_el1, TTBR1_EL1
+MSR_STUB vbar_el1, VBAR_EL1
+MSR_STUB elr_el1, ELR_EL1
+MSR_STUB spsr_el1, SPSR_EL1
+MSR_STUB daif, DAIF
+MSR_STUB icc_pmr_el1, ICC_PMR_EL1
+MSR_STUB icc_eoir1_el1, ICC_EOIR1_EL1
+MSR_STUB icc_igrpen1_el1, ICC_IGRPEN1_EL1
+MSR_STUB cntp_tval_el0, CNTP_TVAL_EL0
+MSR_STUB cntp_ctl_el0, CNTP_CTL_EL0
+MSR_STUB cntv_tval_el0, CNTV_TVAL_EL0
+MSR_STUB cntv_ctl_el0, CNTV_CTL_EL0
+
+/* Barrier/control stubs: () -> void */
+.global fj_rt_asm_isb
+.type fj_rt_asm_isb, @function
+fj_rt_asm_isb:
+    isb
+    ret
+.size fj_rt_asm_isb, . - fj_rt_asm_isb
+
+.global fj_rt_asm_dsb
+.type fj_rt_asm_dsb, @function
+fj_rt_asm_dsb:
+    dsb     sy
+    ret
+.size fj_rt_asm_dsb, . - fj_rt_asm_dsb
+
+.global fj_rt_asm_dmb
+.type fj_rt_asm_dmb, @function
+fj_rt_asm_dmb:
+    dmb     sy
+    ret
+.size fj_rt_asm_dmb, . - fj_rt_asm_dmb
+
+.global fj_rt_asm_wfe
+.type fj_rt_asm_wfe, @function
+fj_rt_asm_wfe:
+    wfe
+    ret
+.size fj_rt_asm_wfe, . - fj_rt_asm_wfe
+
+.global fj_rt_asm_wfi
+.type fj_rt_asm_wfi, @function
+fj_rt_asm_wfi:
+    wfi
+    ret
+.size fj_rt_asm_wfi, . - fj_rt_asm_wfi
+
+.global fj_rt_asm_svc
+.type fj_rt_asm_svc, @function
+fj_rt_asm_svc:
+    svc     #0
+    ret
+.size fj_rt_asm_svc, . - fj_rt_asm_svc
+
+.global fj_rt_asm_nop
+.type fj_rt_asm_nop, @function
+fj_rt_asm_nop:
+    nop
+    ret
+.size fj_rt_asm_nop, . - fj_rt_asm_nop
+
+.global fj_rt_asm_eret
+.type fj_rt_asm_eret, @function
+fj_rt_asm_eret:
+    eret
+.size fj_rt_asm_eret, . - fj_rt_asm_eret
 "#
     )
 }
