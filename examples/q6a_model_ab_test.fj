@@ -1,0 +1,179 @@
+// q6a_model_ab_test.fj — A/B testing for ML models on Dragon Q6A
+//
+// Compares two model architectures on the same test data:
+//   Model A: 2-layer (input 8 -> 32 -> 10)
+//   Model B: 3-layer (input 8 -> 16 -> 16 -> 10) with relu activations
+//
+// Runs 50 test samples through each model, tracks:
+//   - Accuracy (simulated via argmax agreement with ground truth)
+//   - Per-model latency (via sys_uptime delta)
+//   - Statistical comparison and winner declaration
+//
+// Usage: fj run examples/q6a_model_ab_test.fj
+
+fn model_a_forward(sample: i64) -> i64 {
+    // 2-layer: input(1x8) -> dense(8x32) -> dense(32x10) -> softmax -> argmax
+    let input = tensor_randn(1, 8)
+    let w1 = tensor_xavier(8, 32)
+    let h = tensor_matmul(input, w1)
+    let w2 = tensor_xavier(32, 10)
+    let logits = tensor_matmul(h, w2)
+    let probs = tensor_softmax(logits)
+    tensor_argmax(probs)
+}
+
+fn model_b_forward(sample: i64) -> i64 {
+    // 3-layer: input(1x8) -> dense(8x16) -> relu -> dense(16x16) -> relu -> dense(16x10) -> softmax
+    let input = tensor_randn(1, 8)
+    let w1 = tensor_xavier(8, 16)
+    let h1 = tensor_relu(tensor_matmul(input, w1))
+    let w2 = tensor_xavier(16, 16)
+    let h2 = tensor_relu(tensor_matmul(h1, w2))
+    let w3 = tensor_xavier(16, 10)
+    let logits = tensor_matmul(h2, w3)
+    let probs = tensor_softmax(logits)
+    tensor_argmax(probs)
+}
+
+fn generate_ground_truth(sample: i64) -> i64 {
+    // Simulated ground truth: class = sample mod 10
+    let gt = sample % 10
+    if gt < 0 { gt + 10 } else { gt }
+}
+
+// --- Main A/B test ---
+
+println("=== Model A/B Test (Dragon Q6A) ===")
+println("Model A: 2-layer (8 -> 32 -> 10)")
+println("Model B: 3-layer (8 -> 16 -> 16 -> 10) + relu")
+println("Samples: 50 test inputs")
+println("")
+
+let logpath = "/tmp/q6a_ab_test.log"
+let _logged = log_to_file(logpath, "AB_TEST_START")
+
+// System status
+let temp = cpu_temp()
+let mem = mem_usage()
+let uptime = sys_uptime()
+let temp_c = temp / 1000
+println(f"System: temp={temp_c}C  mem={mem}%  uptime={uptime}s")
+println(f"GPU: {gpu_info()}")
+println("")
+
+let num_samples = 50
+
+// --- Run Model A ---
+println("=== Running Model A (2-layer) ===")
+let start_a = sys_uptime()
+let mut correct_a = 0
+let mut sample_a = 0
+
+while sample_a < num_samples {
+    let pred = model_a_forward(sample_a)
+    let truth = generate_ground_truth(sample_a)
+    if pred == truth {
+        correct_a = correct_a + 1
+    }
+    // Log every 10th sample
+    let log_check = sample_a % 10
+    if log_check == 0 {
+        println(f"  Sample {sample_a}: pred={pred} truth={truth}")
+    }
+    sample_a = sample_a + 1
+}
+
+let end_a = sys_uptime()
+let time_a = end_a - start_a
+let accuracy_a = (correct_a * 100) / num_samples
+println(f"  Correct: {correct_a}/{num_samples}")
+println(f"  Accuracy: {accuracy_a}%")
+println(f"  Time: {time_a}s")
+let _logged = log_to_file(logpath, f"MODEL_A correct={correct_a} accuracy={accuracy_a} time={time_a}")
+println("")
+
+// --- Run Model B ---
+println("=== Running Model B (3-layer + relu) ===")
+let start_b = sys_uptime()
+let mut correct_b = 0
+let mut sample_b = 0
+
+while sample_b < num_samples {
+    let pred = model_b_forward(sample_b)
+    let truth = generate_ground_truth(sample_b)
+    if pred == truth {
+        correct_b = correct_b + 1
+    }
+    let log_check = sample_b % 10
+    if log_check == 0 {
+        println(f"  Sample {sample_b}: pred={pred} truth={truth}")
+    }
+    sample_b = sample_b + 1
+}
+
+let end_b = sys_uptime()
+let time_b = end_b - start_b
+let accuracy_b = (correct_b * 100) / num_samples
+println(f"  Correct: {correct_b}/{num_samples}")
+println(f"  Accuracy: {accuracy_b}%")
+println(f"  Time: {time_b}s")
+let _logged = log_to_file(logpath, f"MODEL_B correct={correct_b} accuracy={accuracy_b} time={time_b}")
+println("")
+
+// --- Statistical Comparison ---
+println("=== A/B Comparison ===")
+println(f"  Model A: {accuracy_a}% accuracy, {time_a}s latency, 2 layers")
+println(f"  Model B: {accuracy_b}% accuracy, {time_b}s latency, 3 layers")
+println("")
+
+// Determine winner
+let acc_diff = correct_a - correct_b
+let abs_diff = if acc_diff < 0 { 0 - acc_diff } else { acc_diff }
+let significance = abs_diff * 100 / num_samples
+
+println(f"  Accuracy delta: {abs_diff} samples ({significance}%)")
+
+if correct_a > correct_b {
+    println(f"  WINNER: Model A (+{abs_diff} correct)")
+    let _logged = log_to_file(logpath, f"WINNER=A delta={abs_diff}")
+} else if correct_b > correct_a {
+    println(f"  WINNER: Model B (+{abs_diff} correct)")
+    let _logged = log_to_file(logpath, f"WINNER=B delta={abs_diff}")
+} else {
+    println("  RESULT: Statistical tie")
+    let _logged = log_to_file(logpath, "WINNER=TIE")
+}
+
+// Latency comparison
+println("")
+if time_a < time_b {
+    println(f"  Faster model: A ({time_a}s vs {time_b}s)")
+} else if time_b < time_a {
+    println(f"  Faster model: B ({time_b}s vs {time_a}s)")
+} else {
+    println("  Latency: equal")
+}
+
+// Recommendation
+println("")
+println("=== Recommendation ===")
+if correct_a > correct_b {
+    println("  Deploy Model A: higher accuracy with simpler architecture")
+    println("  Benefits: fewer parameters, lower memory, faster inference")
+} else if correct_b > correct_a {
+    println("  Deploy Model B: higher accuracy justifies extra layer")
+    println("  Note: monitor latency and thermal impact in production")
+} else {
+    println("  Deploy Model A: equal accuracy, simpler is better")
+    println("  Principle: prefer minimal complexity at same performance")
+}
+
+// Final system check
+println("")
+let final_temp = cpu_temp() / 1000
+let final_mem = mem_usage()
+println(f"Post-test: temp={final_temp}C  mem={final_mem}%")
+let _logged = log_to_file(logpath, "AB_TEST_END")
+
+println("")
+println("A/B test complete.")

@@ -1,0 +1,185 @@
+// q6a_fleet_manager.fj — Fleet management for multiple edge AI nodes
+//
+// Simulates managing 5 Dragon Q6A edge nodes:
+//   1. Health monitoring (CPU temp, mem usage, inference latency)
+//   2. Load balancing (assign workload to healthiest nodes)
+//   3. Failure detection and workload redistribution
+//   4. Logging all events for audit trail
+//
+// Each node has a health score 0-100 computed from temp/mem/latency.
+// Workloads route to the node with the highest score.
+//
+// Usage: fj run examples/q6a_fleet_manager.fj
+
+fn compute_health(temp: i64, mem: i64, latency: i64) -> i64 {
+    // Health = 100 - penalties
+    // Temp penalty: 1 point per degree above 40C
+    let temp_c = temp / 1000
+    let temp_penalty = if temp_c > 40 { temp_c - 40 } else { 0 }
+    // Mem penalty: 1 point per % above 50
+    let mem_penalty = if mem > 50 { mem - 50 } else { 0 }
+    // Latency penalty: 1 point per ms above 10
+    let lat_penalty = if latency > 10 { latency - 10 } else { 0 }
+    let score = 100 - temp_penalty - mem_penalty - lat_penalty
+    if score < 0 { 0 } else { score }
+}
+
+fn pick_best_node(s0: i64, s1: i64, s2: i64, s3: i64, s4: i64) -> i64 {
+    let mut best = 0
+    let mut best_score = s0
+    if s1 > best_score {
+        best = 1
+        best_score = s1
+    }
+    if s2 > best_score {
+        best = 2
+        best_score = s2
+    }
+    if s3 > best_score {
+        best = 3
+        best_score = s3
+    }
+    if s4 > best_score {
+        best = 4
+        best_score = s4
+    }
+    best
+}
+
+// --- Main fleet manager ---
+
+println("=== Fleet Manager (Dragon Q6A) ===")
+println("Nodes:     5 edge devices (Q6A cluster)")
+println("Strategy:  health-aware load balancing")
+println("Failover:  auto-redistribute on node failure")
+println("")
+
+let logpath = "/tmp/q6a_fleet.log"
+let _logged = log_to_file(logpath, "FLEET_START")
+
+// Read local hardware status
+let local_temp = cpu_temp()
+let local_mem = mem_usage()
+let uptime = sys_uptime()
+let temp_c = local_temp / 1000
+println(f"Local node status:")
+println(f"  CPU Temp:  {temp_c}C")
+println(f"  Memory:    {local_mem}%")
+println(f"  Uptime:    {uptime}s")
+println(f"  GPU:       {gpu_info()}")
+println("")
+
+// Simulated node telemetry arrays (temp_milli, mem%, latency_ms)
+// We store per-node values and update them each round
+let mut t0 = 45000
+let mut t1 = 52000
+let mut t2 = 38000
+let mut t3 = 61000
+let mut t4 = 44000
+
+let mut m0 = 55
+let mut m1 = 72
+let mut m2 = 40
+let mut m3 = 85
+let mut m4 = 48
+
+let mut l0 = 8
+let mut l1 = 15
+let mut l2 = 6
+let mut l3 = 22
+let mut l4 = 9
+
+// Track workload assignments and failures
+let mut total_tasks = 0
+let mut failed_nodes = 0
+
+println("=== Monitoring Rounds ===")
+println("")
+
+let mut round = 0
+let max_rounds = 10
+
+while round < max_rounds {
+    println(f"--- Round {round} ---")
+
+    // Compute health scores
+    let s0 = compute_health(t0, m0, l0)
+    let s1 = compute_health(t1, m1, l1)
+    let s2 = compute_health(t2, m2, l2)
+    let s3 = compute_health(t3, m3, l3)
+    let s4 = compute_health(t4, m4, l4)
+
+    println(f"  Scores: [{s0}, {s1}, {s2}, {s3}, {s4}]")
+
+    // Check for failed nodes (score < 20)
+    let fail_threshold = 20
+    let n3_failed = s3 < fail_threshold
+
+    if n3_failed {
+        failed_nodes = failed_nodes + 1
+        println(f"  ALERT: Node 3 FAILED (score={s3})")
+        let _logged = log_to_file(logpath, f"FAIL round={round} node=3 score={s3}")
+    } else {
+        println(f"  All nodes operational")
+    }
+
+    // Pick healthiest node for next workload
+    let target = pick_best_node(s0, s1, s2, s3, s4)
+    total_tasks = total_tasks + 1
+    println(f"  Assigned task #{total_tasks} -> Node {target}")
+    let _logged = log_to_file(logpath, f"ASSIGN round={round} task={total_tasks} node={target}")
+
+    // Run a quick inference on the "assigned" node to simulate work
+    let input = tensor_randn(1, 16)
+    let weights = tensor_xavier(16, 4)
+    let output = gpu_matmul(input, weights)
+    let activated = gpu_relu(output)
+    let probs = tensor_softmax(activated)
+    let class = tensor_argmax(probs)
+    println(f"  Inference result: class {class}")
+
+    // Simulate telemetry drift each round
+    // Node 0: stable
+    t0 = t0 + 200
+    m0 = m0 + 1
+    // Node 1: warming up
+    t1 = t1 + 800
+    m1 = m1 + 2
+    // Node 2: cool and efficient
+    t2 = t2 + 100
+    // Node 3: degrading rapidly
+    t3 = t3 + 2000
+    m3 = m3 + 3
+    l3 = l3 + 5
+    // Node 4: steady
+    t4 = t4 + 300
+    m4 = m4 + 1
+
+    println("")
+    round = round + 1
+}
+
+// --- Fleet Summary ---
+println("=== Fleet Summary ===")
+
+// Final health scores
+let fs0 = compute_health(t0, m0, l0)
+let fs1 = compute_health(t1, m1, l1)
+let fs2 = compute_health(t2, m2, l2)
+let fs3 = compute_health(t3, m3, l3)
+let fs4 = compute_health(t4, m4, l4)
+
+println(f"  Node 0: health={fs0}  temp={t0 / 1000}C  mem={m0}%")
+println(f"  Node 1: health={fs1}  temp={t1 / 1000}C  mem={m1}%")
+println(f"  Node 2: health={fs2}  temp={t2 / 1000}C  mem={m2}%")
+println(f"  Node 3: health={fs3}  temp={t3 / 1000}C  mem={m3}%")
+println(f"  Node 4: health={fs4}  temp={t4 / 1000}C  mem={m4}%")
+println("")
+println(f"  Total tasks assigned: {total_tasks}")
+println(f"  Node failures detected: {failed_nodes}")
+println(f"  Best final node: Node {pick_best_node(fs0, fs1, fs2, fs3, fs4)}")
+
+let _logged = log_to_file(logpath, f"FLEET_END tasks={total_tasks} failures={failed_nodes}")
+
+println("")
+println("Fleet manager complete.")

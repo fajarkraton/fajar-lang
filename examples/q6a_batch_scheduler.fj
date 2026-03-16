@@ -1,0 +1,164 @@
+// q6a_batch_scheduler.fj — Batch inference scheduler for Dragon Q6A
+//
+// Simulates a production inference scheduler:
+//   1. 40 inference requests arrive over time
+//   2. Requests queue up and batch in groups of 8
+//   3. Each batch runs GPU-accelerated matmul inference
+//   4. Tracks queue depth, batch latency, throughput
+//   5. Prints scheduler statistics at the end
+//
+// Batching amortizes GPU kernel launch overhead and improves throughput.
+//
+// Usage: fj run examples/q6a_batch_scheduler.fj
+
+fn run_batch_inference(batch_size: i64, input_dim: i64, output_dim: i64) -> i64 {
+    // GPU batch inference: batch_size x input_dim @ input_dim x output_dim
+    let batch_input = tensor_randn(batch_size, input_dim)
+    let weights = tensor_xavier(input_dim, output_dim)
+    let hidden = gpu_relu(gpu_matmul(batch_input, weights))
+    let w2 = tensor_xavier(output_dim, 10)
+    let logits = gpu_matmul(hidden, w2)
+    let probs = tensor_softmax(logits)
+    let pred = tensor_argmax(probs)
+    pred
+}
+
+// --- Main scheduler ---
+
+println("=== Batch Inference Scheduler (Dragon Q6A) ===")
+println("Total requests: 40")
+println("Batch size:     8")
+println("Model:          input(32) -> hidden(64) -> output(10)")
+println("Backend:        GPU (Adreno 643)")
+println("")
+
+let logpath = "/tmp/q6a_batch_scheduler.log"
+let _logged = log_to_file(logpath, "SCHEDULER_START")
+
+// System status
+let temp = cpu_temp()
+let mem = mem_usage()
+let uptime = sys_uptime()
+let temp_c = temp / 1000
+let has_gpu = gpu_available()
+println(f"System: temp={temp_c}C  mem={mem}%  uptime={uptime}s")
+println(f"GPU: {gpu_info()} (available={has_gpu})")
+println("")
+
+// Scheduler parameters
+let total_requests = 40
+let batch_size = 8
+let input_dim = 32
+let hidden_dim = 64
+let num_batches = total_requests / batch_size
+
+// Track statistics
+let mut total_processed = 0
+let mut max_queue_depth = 0
+let mut batches_run = 0
+
+let start_time = sys_uptime()
+
+println("=== Processing Batches ===")
+println("")
+
+// Simulate request arrival and batching
+let mut queue_depth = 0
+let mut request_id = 0
+let mut batch_id = 0
+
+while batch_id < num_batches {
+    // Simulate requests arriving into the queue
+    // Each round, 8 new requests arrive
+    let mut arrival = 0
+    while arrival < batch_size {
+        queue_depth = queue_depth + 1
+        request_id = request_id + 1
+        arrival = arrival + 1
+    }
+
+    // Track max queue depth
+    if queue_depth > max_queue_depth {
+        max_queue_depth = queue_depth
+    }
+
+    println(f"  Batch {batch_id}: queue_depth={queue_depth} requests")
+
+    // Drain batch_size from queue
+    let batch_start = sys_uptime()
+
+    // Run GPU batch inference
+    let pred = run_batch_inference(batch_size, input_dim, hidden_dim)
+
+    let batch_end = sys_uptime()
+    let batch_time = batch_end - batch_start
+
+    // Update stats
+    queue_depth = queue_depth - batch_size
+    total_processed = total_processed + batch_size
+    batches_run = batches_run + 1
+
+    println(f"    -> processed {batch_size} requests, latency={batch_time}s, pred={pred}")
+    println(f"    -> remaining in queue: {queue_depth}")
+
+    let _logged = log_to_file(logpath, f"BATCH id={batch_id} size={batch_size} latency={batch_time}")
+
+    batch_id = batch_id + 1
+}
+
+let end_time = sys_uptime()
+let total_time = end_time - start_time
+
+println("")
+
+// --- Handle any remaining requests in queue ---
+if queue_depth > 0 {
+    println(f"Processing remaining {queue_depth} requests (partial batch)...")
+    let pred = run_batch_inference(queue_depth, input_dim, hidden_dim)
+    total_processed = total_processed + queue_depth
+    batches_run = batches_run + 1
+    println(f"  Partial batch done, pred={pred}")
+    queue_depth = 0
+    println("")
+}
+
+// --- Scheduler Statistics ---
+println("=== Scheduler Statistics ===")
+println(f"  Total requests:     {total_requests}")
+println(f"  Requests processed: {total_processed}")
+println(f"  Batches executed:   {batches_run}")
+println(f"  Batch size:         {batch_size}")
+println(f"  Max queue depth:    {max_queue_depth}")
+println(f"  Total wall time:    {total_time}s")
+
+// Throughput calculation
+if total_time > 0 {
+    let throughput = total_processed / total_time
+    println(f"  Throughput:         {throughput} req/s")
+} else {
+    println(f"  Throughput:         {total_processed} req/s (< 1s)")
+}
+
+// Efficiency: compare batched vs hypothetical single inference
+println("")
+println("=== Efficiency Analysis ===")
+let overhead_per_batch = 1
+let batched_overhead = batches_run * overhead_per_batch
+let single_overhead = total_requests * overhead_per_batch
+let saved = single_overhead - batched_overhead
+println(f"  Batched launches:  {batches_run} GPU dispatches")
+println(f"  Single launches:   {total_requests} GPU dispatches (if unbatched)")
+println(f"  Overhead saved:    {saved} kernel launches avoided")
+let savings_pct = (saved * 100) / single_overhead
+println(f"  Efficiency gain:   {savings_pct}%")
+
+// Post-run system check
+println("")
+let final_temp = cpu_temp() / 1000
+let final_mem = mem_usage()
+println(f"Post-run: temp={final_temp}C  mem={final_mem}%")
+
+let _logged = log_to_file(logpath, f"SCHEDULER_END processed={total_processed} batches={batches_run} time={total_time}")
+
+println("")
+println("Batch scheduler complete.")

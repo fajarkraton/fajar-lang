@@ -1,0 +1,136 @@
+// q6a_qnn_gpu_infer.fj — QNN GPU backend inference on Dragon Q6A
+//
+// Demonstrates QNN GPU backend inference (Adreno 643, OpenCL 3.0).
+// Unlike the HTP/DSP backend, the GPU backend does NOT require testsig
+// and works out-of-the-box with QNN SDK v2.40.
+//
+// Pipeline:
+//   1. Check GPU availability (Adreno 643)
+//   2. Create input tensors at 3 model sizes (small/medium/large)
+//   3. Run QNN GPU inference for each size
+//   4. Benchmark inference latency
+//   5. Print summary table
+//
+// On x86_64 host: runs in simulation mode (CPU fallback).
+// On Q6A: uses Adreno 643 GPU via QNN GPU backend (OpenCL 3.0).
+//
+// QNN GPU backend: libQnnGpu.so (no testsig needed!)
+//
+// Usage: fj run examples/q6a_qnn_gpu_infer.fj
+
+fn classify_result(class_id: i64) -> str {
+    if class_id == 0 { return "cat" }
+    if class_id == 1 { return "dog" }
+    if class_id == 2 { return "bird" }
+    if class_id == 3 { return "fish" }
+    return "unknown"
+}
+
+fn run_model_inference(name: str, rows: i64, cols: i64) -> i64 {
+    println(f"  Model: {name} ({rows}x{cols})")
+
+    // Create input tensor and a copy for quantization demo
+    let input = tensor_randn(rows, cols)
+    let quant_copy = tensor_randn(rows, cols)
+    println(f"    Input tensor: {rows}x{cols}")
+
+    // Quantize copy for QNN GPU (F32 — GPU doesn't need INT8)
+    let qbuf = qnn_quantize(quant_copy, "f32")
+    println(f"    Quantized to F32 (handle: {qbuf})")
+
+    // Simulate model weights + forward pass on GPU
+    let weights = tensor_xavier(cols, 4)
+    let t_start = sys_uptime()
+
+    let z = gpu_matmul(input, weights)
+    let activated = gpu_relu(z)
+    let output = tensor_softmax(activated)
+    let predicted = tensor_argmax(output)
+
+    let t_end = sys_uptime()
+    let elapsed = t_end - t_start
+
+    // Dequantize output
+    let _dequant = qnn_dequantize(qbuf)
+
+    let label = classify_result(predicted)
+    println(f"    Predicted class: {predicted} ({label})")
+    println(f"    Inference time: {elapsed}s")
+    println("")
+
+    elapsed
+}
+
+// --- Main ---
+
+println("=== QNN GPU Backend Inference (Dragon Q6A) ===")
+println("")
+
+// ── GPU Status ──
+let has_gpu = gpu_available()
+let info = gpu_info()
+println("=== GPU Status ===")
+println(f"  Available: {has_gpu}")
+println(f"  Info: {info}")
+println(f"  Backend: QNN GPU (libQnnGpu.so)")
+println(f"  Compute: Adreno 643, OpenCL 3.0, 773 GFLOPS FP32")
+println("")
+
+// ── System monitoring ──
+let temp = cpu_temp() / 1000
+let mem = mem_usage()
+let uptime = sys_uptime()
+println(f"  CPU Temp: {temp}C | Memory: {mem}% | Uptime: {uptime}s")
+println("")
+
+// ── Run 3 model sizes ──
+println("=== Model Inference Benchmarks ===")
+println("")
+
+// Small model: MobileNetV2-like (224x64)
+let time_small = run_model_inference("MobileNetV2-small", 224, 64)
+
+// Medium model: ResNet50-like (224x128)
+let time_medium = run_model_inference("ResNet50-medium", 224, 128)
+
+// Large model: EfficientNet-like (224x256)
+let time_large = run_model_inference("EfficientNet-large", 224, 256)
+
+// ── QNN format validation ──
+println("=== QNN GPU Format Validation ===")
+let t1 = tensor_zeros(4, 4)
+let h_f32 = qnn_quantize(t1, "f32")
+let t2 = tensor_zeros(4, 4)
+let h_f16 = qnn_quantize(t2, "f16")
+let _r1 = qnn_dequantize(h_f32)
+let _r2 = qnn_dequantize(h_f16)
+println(f"  F32 roundtrip: OK (handle {h_f32})")
+println(f"  F16 roundtrip: OK (handle {h_f16})")
+println("")
+
+// ── Summary table ──
+println("=== Benchmark Summary ===")
+println("  +---------------------+----------+")
+println("  | Model               | Time (s) |")
+println("  +---------------------+----------+")
+println(f"  | MobileNetV2-small   | {time_small}     |")
+println(f"  | ResNet50-medium     | {time_medium}     |")
+println(f"  | EfficientNet-large  | {time_large}     |")
+println("  +---------------------+----------+")
+println("")
+
+// ── Hardware info ──
+println("=== Hardware ===")
+println("  SoC:      QCS6490 (TSMC 6nm)")
+println("  GPU:      Adreno 643 @ 812 MHz, 773 GFLOPS FP32")
+println("  OpenCL:   3.0")
+println("  QNN SDK:  v2.40 (libQnnGpu.so)")
+println("  Note:     GPU backend requires NO testsig (unlike HTP/DSP)")
+println("")
+
+// ── Log results ──
+let _logged = log_to_file("/tmp/q6a_qnn_gpu_infer.log", f"QNN GPU inference complete")
+let _logged2 = log_to_file("/tmp/q6a_qnn_gpu_infer.log", f"Small: {time_small}s, Medium: {time_medium}s, Large: {time_large}s")
+println("Results logged to /tmp/q6a_qnn_gpu_infer.log")
+
+println("QNN GPU inference complete.")

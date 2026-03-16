@@ -1,0 +1,166 @@
+// q6a_predictive_maintenance.fj — Industrial predictive maintenance on Dragon Q6A
+//
+// Demonstrates an industrial predictive maintenance pipeline:
+//   1. Read vibration + temperature sensor data (simulated)
+//   2. Extract features: mean, variance, peak amplitude
+//   3. ML classification into 4 equipment health states
+//   4. Generate maintenance alerts
+//   5. Print summary report
+//
+// Health classes:
+//   0 = Normal     (no action)
+//   1 = Warning    (schedule maintenance)
+//   2 = Critical   (maintenance required soon)
+//   3 = Failure    (immediate shutdown)
+//
+// Model: 2-layer MLP — features(8) -> hidden(16) -> classes(4)
+// Uses: tensor_randn, tensor_xavier, tensor_matmul, tensor_relu, tensor_softmax, tensor_argmax
+//
+// On x86_64 host: runs in simulation mode.
+// On Q6A: uses Adreno 643 GPU for matrix multiply acceleration.
+//
+// Usage: fj run examples/q6a_predictive_maintenance.fj
+
+fn health_label(class_id: i64) -> str {
+    if class_id == 0 { return "Normal" }
+    if class_id == 1 { return "Warning" }
+    if class_id == 2 { return "Critical" }
+    if class_id == 3 { return "Failure" }
+    return "Unknown"
+}
+
+fn severity_action(class_id: i64) -> str {
+    if class_id == 0 { return "No action needed" }
+    if class_id == 1 { return "Schedule maintenance within 7 days" }
+    if class_id == 2 { return "Maintenance required within 24 hours" }
+    if class_id == 3 { return "IMMEDIATE SHUTDOWN recommended" }
+    return "Unknown action"
+}
+
+fn extract_features(sample_idx: i64) -> Tensor {
+    // Simulate sensor reading: 8 features from vibration + temperature
+    // Features: [vib_mean, vib_var, vib_peak, vib_rms, temp_mean, temp_delta, freq_peak, duty_cycle]
+    let features = tensor_randn(1, 8)
+    features
+}
+
+fn classify_health(features: Tensor, w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor) -> i64 {
+    // Forward pass: features(1x8) -> hidden(1x16) -> output(1x4)
+    let z1 = gpu_matmul(features, w1)
+    let h1_raw = tensor_add(z1, b1)
+    let h1 = tensor_relu(h1_raw)
+
+    let z2 = gpu_matmul(h1, w2)
+    let out_raw = tensor_add(z2, b2)
+    let output = tensor_softmax(out_raw)
+
+    let predicted = tensor_argmax(output)
+    predicted
+}
+
+fn main() {
+    println("=== Predictive Maintenance System (Dragon Q6A) ===")
+    println("")
+
+    // ── System status ──
+    let has_gpu = gpu_available()
+    let info = gpu_info()
+    let temp = cpu_temp() / 1000
+    let mem = mem_usage()
+    println(f"GPU: {has_gpu} | Info: {info}")
+    println(f"CPU Temp: {temp}C | Memory: {mem}%")
+    println("")
+
+    // ── Step 1: Initialize model weights ──
+    println("[1/4] Initializing classification model...")
+    let w1 = tensor_xavier(8, 16)
+    let b1 = tensor_zeros(1, 16)
+    let w2 = tensor_xavier(16, 4)
+    let b2 = tensor_zeros(1, 4)
+
+    let total_params = tensor_numel(w1) + tensor_numel(b1) + tensor_numel(w2) + tensor_numel(b2)
+    println(f"  Architecture: 8 -> 16 (ReLU) -> 4 (Softmax)")
+    println(f"  Parameters: {total_params}")
+    println(f"  Classes: Normal, Warning, Critical, Failure")
+    println("")
+
+    // ── Step 2: Process sensor samples ──
+    println("[2/4] Processing sensor data (20 samples)...")
+    println("")
+
+    let num_samples = 20
+    let mut sample_idx = 0
+    let mut normal_count = 0
+    let mut warning_count = 0
+    let mut critical_count = 0
+    let mut failure_count = 0
+
+    while sample_idx < num_samples {
+        // Extract features from sensor data
+        let features = extract_features(sample_idx)
+
+        // Classify equipment health
+        let class_id = classify_health(features, w1, b1, w2, b2)
+        let label = health_label(class_id)
+
+        // Track alert counts
+        if class_id == 0 {
+            normal_count = normal_count + 1
+        } else if class_id == 1 {
+            warning_count = warning_count + 1
+        } else if class_id == 2 {
+            critical_count = critical_count + 1
+        } else {
+            failure_count = failure_count + 1
+        }
+
+        // Print alert for non-normal states
+        if class_id > 0 {
+            let action = severity_action(class_id)
+            println(f"  ALERT Sample #{sample_idx + 1}: {label} - {action}")
+        } else {
+            let _skip = 0
+        }
+
+        sample_idx = sample_idx + 1
+    }
+
+    println("")
+
+    // ── Step 3: Summary report ──
+    println("[3/4] Equipment Health Report")
+    println("  +------------+-------+")
+    println("  | Status     | Count |")
+    println("  +------------+-------+")
+    println(f"  | Normal     | {normal_count}     |")
+    println(f"  | Warning    | {warning_count}     |")
+    println(f"  | Critical   | {critical_count}     |")
+    println(f"  | Failure    | {failure_count}     |")
+    println("  +------------+-------+")
+    println(f"  | Total      | {num_samples}    |")
+    println("  +------------+-------+")
+    println("")
+
+    // Overall health assessment
+    let alert_count = warning_count + critical_count + failure_count
+    if failure_count > 0 {
+        println("  OVERALL: DANGER - Equipment failure detected!")
+    } else if critical_count > 0 {
+        println("  OVERALL: HIGH RISK - Critical issues found")
+    } else if warning_count > 0 {
+        println("  OVERALL: CAUTION - Warnings detected")
+    } else {
+        println("  OVERALL: HEALTHY - All systems nominal")
+    }
+    println("")
+
+    // ── Step 4: Log and finish ──
+    println("[4/4] Logging results...")
+    let _logged = log_to_file("/tmp/q6a_maintenance.log", f"Samples: {num_samples}")
+    let _logged2 = log_to_file("/tmp/q6a_maintenance.log", f"Normal: {normal_count}, Warning: {warning_count}, Critical: {critical_count}, Failure: {failure_count}")
+    let _logged3 = log_to_file("/tmp/q6a_maintenance.log", f"Alerts: {alert_count}")
+    println("  Results logged to /tmp/q6a_maintenance.log")
+    println("")
+
+    println("Predictive maintenance analysis complete.")
+}

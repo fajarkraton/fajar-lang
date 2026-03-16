@@ -1,0 +1,158 @@
+// q6a_data_pipeline.fj — Real-time data pipeline on Dragon Q6A
+//
+// Demonstrates: ingest -> clean -> transform -> store -> query pipeline
+// Pattern: sensor data ingestion with windowed aggregation
+// Simulates 100 data points with 10-sample sliding window
+// Computes mean, variance, and trend for each window
+// Stores results to log file
+//
+// Usage: fj run examples/q6a_data_pipeline.fj
+
+fn classify_trend(first_half: i64, second_half: i64) -> str {
+    let delta = second_half - first_half
+    if delta > 50 {
+        "RISING"
+    } else if delta < -50 {
+        "FALLING"
+    } else {
+        "STABLE"
+    }
+}
+
+fn is_noise(raw: i64) -> bool {
+    // Values outside 10..990 are considered noise
+    if raw < 10 {
+        true
+    } else if raw > 990 {
+        true
+    } else {
+        false
+    }
+}
+
+// --- Main pipeline ---
+
+println("=== Data Pipeline (Dragon Q6A) ===")
+println("")
+
+let start_uptime = sys_uptime()
+let temp = cpu_temp() / 1000
+let mem = mem_usage()
+println(f"System: temp={temp}C mem={mem}% uptime={start_uptime}s")
+println("")
+
+// Pipeline configuration
+let total_points = 100
+let window_size = 10
+let num_windows = total_points / window_size
+
+println(f"Config: {total_points} data points, window={window_size}, windows={num_windows}")
+println("")
+
+// --- Stage 1 & 2 & 3: Ingest, Clean, Transform (streaming) ---
+println("[1/5] Ingesting sensor data...")
+println("[2/5] Cleaning data inline...")
+println("[3/5] Computing windowed aggregations...")
+println("")
+println("  Window | Mean  | Var     | Trend")
+println("  -------+-------+---------+--------")
+
+let logpath = "/tmp/q6a_pipeline_data.log"
+let mut seed = 42
+let mut noise_count = 0
+let mut store_count = 0
+let mut global_sum = 0
+let mut global_min = 999999
+let mut global_max = 0
+let mut prev_clean = 500
+let mut win = 0
+
+while win < num_windows {
+    // Process one window of 10 samples
+    let mut w_sum = 0
+    let mut w_sum_sq = 0
+    let mut first_half_sum = 0
+    let mut second_half_sum = 0
+    let mut si = 0
+
+    while si < window_size {
+        // Ingest: generate raw data (LCG PRNG)
+        seed = ((seed * 1103515245 + 12345) % 65536)
+        if seed < 0 {
+            seed = 0 - seed
+        }
+        let raw = seed % 1000
+
+        // Clean: replace noise with previous clean value
+        let clean = if is_noise(raw) {
+            noise_count = noise_count + 1
+            prev_clean
+        } else {
+            prev_clean = raw
+            raw
+        }
+
+        // Accumulate for mean and variance
+        w_sum = w_sum + clean
+        w_sum_sq = w_sum_sq + clean * clean
+
+        // Accumulate for trend (first 5 vs last 5)
+        if si < 5 {
+            first_half_sum = first_half_sum + clean
+        } else {
+            second_half_sum = second_half_sum + clean
+        }
+
+        si = si + 1
+    }
+
+    // Compute window statistics
+    let mean = w_sum / window_size
+    // Variance = E[x^2] - (E[x])^2
+    let variance = (w_sum_sq / window_size) - (mean * mean)
+    let trend = classify_trend(first_half_sum / 5, second_half_sum / 5)
+
+    // Track global stats
+    global_sum = global_sum + mean
+    if mean < global_min {
+        global_min = mean
+    }
+    if mean > global_max {
+        global_max = mean
+    }
+
+    println(f"  W{win}     | {mean} | {variance} | {trend}")
+
+    // --- Stage 4: Store ---
+    log_to_file(logpath, f"window={win} mean={mean} var={variance} trend={trend}")
+    store_count = store_count + 1
+
+    win = win + 1
+}
+
+println("")
+
+// --- Stage 4 summary ---
+println("[4/5] Storing results...")
+println(f"  Stored {store_count} window records to {logpath}")
+
+// --- Stage 5: Query / Summary ---
+println("[5/5] Querying pipeline results...")
+println("")
+
+let global_mean = global_sum / num_windows
+
+println("=== Pipeline Statistics ===")
+println(f"  Total points ingested:  {total_points}")
+println(f"  Noise points cleaned:   {noise_count}")
+println(f"  Windows processed:      {num_windows}")
+println(f"  Global mean:            {global_mean}")
+println(f"  Global min (window):    {global_min}")
+println(f"  Global max (window):    {global_max}")
+println(f"  Records stored:         {store_count}")
+
+let end_uptime = sys_uptime()
+let elapsed = end_uptime - start_uptime
+println(f"  Processing time:        ~{elapsed}s")
+println("")
+println("Data pipeline complete.")

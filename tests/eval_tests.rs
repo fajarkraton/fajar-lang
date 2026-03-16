@@ -5583,3 +5583,101 @@ fn e2e_q6a_tls_server_example() {
     assert!(out.iter().any(|l| l.contains("Rejected:")));
     assert!(out.iter().any(|l| l.contains("TLS server shutdown.")));
 }
+
+#[test]
+fn e2e_q6a_qnn_gpu_infer_example() {
+    let code = std::fs::read_to_string("examples/q6a_qnn_gpu_infer.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("QNN GPU Backend Inference")));
+    assert!(out.iter().any(|l| l.contains("GPU Status")));
+    assert!(out.iter().any(|l| l.contains("Model Inference Benchmarks")));
+    assert!(out.iter().any(|l| l.contains("Benchmark Summary")));
+    assert!(out.iter().any(|l| l.contains("QNN GPU inference complete.")));
+}
+
+#[test]
+fn e2e_q6a_predictive_maintenance_example() {
+    let code = std::fs::read_to_string("examples/q6a_predictive_maintenance.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Predictive Maintenance System")));
+    assert!(out.iter().any(|l| l.contains("Equipment Health Report")));
+    assert!(out.iter().any(|l| l.contains("Normal")));
+    assert!(out.iter().any(|l| l.contains("Predictive maintenance analysis complete.")));
+}
+
+#[test]
+fn e2e_q6a_federated_edge_example() {
+    let code = std::fs::read_to_string("examples/q6a_federated_edge.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Federated Learning on Edge")));
+    assert!(out.iter().any(|l| l.contains("Federation Configuration")));
+    assert!(out.iter().any(|l| l.contains("Federation Summary")));
+    assert!(out.iter().any(|l| l.contains("Federated edge learning complete.")));
+}
+
+#[test]
+fn e2e_q6a_data_pipeline_example() {
+    let code = std::fs::read_to_string("examples/q6a_data_pipeline.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Data Pipeline (Dragon Q6A)")));
+    assert!(out.iter().any(|l| l.contains("[1/5] Ingesting sensor data")));
+    assert!(out.iter().any(|l| l.contains("[2/5] Cleaning data")));
+    assert!(out.iter().any(|l| l.contains("[3/5] Computing windowed aggregations")));
+    assert!(out.iter().any(|l| l.contains("[4/5] Storing results")));
+    assert!(out.iter().any(|l| l.contains("[5/5] Querying pipeline results")));
+    assert!(out.iter().any(|l| l.contains("Pipeline Statistics")));
+    assert!(out.iter().any(|l| l.contains("Total points ingested:")));
+    assert!(out.iter().any(|l| l.contains("Data pipeline complete.")));
+}
+
+#[test]
+fn e2e_q6a_anomaly_pipeline_example() {
+    let code = std::fs::read_to_string("examples/q6a_anomaly_pipeline.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Anomaly Detection Pipeline (Dragon Q6A)")));
+    assert!(out.iter().any(|l| l.contains("[1/3] Initializing autoencoder")));
+    assert!(out.iter().any(|l| l.contains("[2/3] Processing sensor data")));
+    assert!(out.iter().any(|l| l.contains("[3/3] Pipeline summary")));
+    assert!(out.iter().any(|l| l.contains("Anomaly Pipeline Results")));
+    assert!(out.iter().any(|l| l.contains("Total alerts:")));
+    assert!(out.iter().any(|l| l.contains("FP rate estimate:")));
+    assert!(out.iter().any(|l| l.contains("Anomaly pipeline complete.")));
+}
+
+#[test]
+fn e2e_q6a_power_monitor_example() {
+    let code = std::fs::read_to_string("examples/q6a_power_monitor.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Power Monitor (Dragon Q6A)")));
+    assert!(out.iter().any(|l| l.contains("Monitoring")));
+    assert!(out.iter().any(|l| l.contains("Power Profile Summary")));
+    assert!(out.iter().any(|l| l.contains("Avg power draw:")));
+    assert!(out.iter().any(|l| l.contains("State Distribution")));
+    assert!(out.iter().any(|l| l.contains("Dominant state:")));
+    assert!(out.iter().any(|l| l.contains("Recommendation:")));
+    assert!(out.iter().any(|l| l.contains("Power monitor complete.")));
+}
+
+#[test]
+fn e2e_q6a_fleet_manager_example() {
+    let code = std::fs::read_to_string("examples/q6a_fleet_manager.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Fleet Manager")));
+    assert!(out.iter().any(|l| l.contains("Fleet manager complete.")));
+}
+
+#[test]
+fn e2e_q6a_model_ab_test_example() {
+    let code = std::fs::read_to_string("examples/q6a_model_ab_test.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Model A/B Test")));
+    assert!(out.iter().any(|l| l.contains("A/B test complete.")));
+}
+
+#[test]
+fn e2e_q6a_batch_scheduler_example() {
+    let code = std::fs::read_to_string("examples/q6a_batch_scheduler.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Batch Inference Scheduler")));
+    assert!(out.iter().any(|l| l.contains("Batch scheduler complete.")));
+}
