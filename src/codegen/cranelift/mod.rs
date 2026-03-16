@@ -19,6 +19,7 @@ mod closures;
 mod compile;
 mod context;
 mod generics;
+pub mod runtime_bare;
 pub mod runtime_fns;
 #[cfg(test)]
 mod tests;
