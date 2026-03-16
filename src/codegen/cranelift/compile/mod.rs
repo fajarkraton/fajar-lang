@@ -255,6 +255,37 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
             }
+            // fn_addr("function_name") → returns the link-time address of a function
+            "fn_addr" => {
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(
+                        "fn_addr requires 1 argument (function name as string)".into(),
+                    ));
+                }
+                // Extract function name from identifier or string argument
+                let target_name = match &args[0].value {
+                    crate::parser::ast::Expr::Ident { name, .. } => name.clone(),
+                    crate::parser::ast::Expr::Literal {
+                        kind: crate::parser::ast::LiteralKind::String(s),
+                        ..
+                    } => s.clone(),
+                    _ => {
+                        return Err(CodegenError::NotImplemented(
+                            "fn_addr argument must be a function name".into(),
+                        ));
+                    }
+                };
+                let func_id = *cx
+                    .functions
+                    .get(&target_name)
+                    .ok_or_else(|| CodegenError::UndefinedFunction(target_name.clone()))?;
+                let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
+                let addr = builder
+                    .ins()
+                    .func_addr(clif_types::default_int_type(), func_ref);
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(addr);
+            }
             "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(format!(
