@@ -40,10 +40,10 @@
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 32 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 3/10 |
-| **4 — GPU Compute** | S15-S18 | 8 | 40 | S15 8/10 (OpenCL detected, GPU builtins w/ CPU fallback) |
+| **4 — GPU Compute** | S15-S18 | 9 | 40 | S15 9/10 (Adreno 635, OpenCL 3.0, GPU builtins verified on HW) |
 | **5 — Edge AI Apps** | S19-S22 | 3 | 40 | S19 2/10, S21 1/10 |
 | **6 — Production** | S23-S24 | 3 | 20 | S23 3/10 (systemd, monitor, cold-start) |
-| **TOTAL** | **24** | **114** | **240** | **48% complete** |
+| **TOTAL** | **24** | **115** | **240** | **48% complete** |
 
 ### Sprint Completion Detail
 
@@ -63,7 +63,7 @@
 | S12 | Fajar Lang NPU Builtins | **10/10** | **COMPLETE** — 1000 inferences in 4ms, q/dq roundtrip ok |
 | S13 | NPU Training Pipeline | **3/10** | 13.1 train + 13.2 export + 13.10 docs done |
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
-| S15 | OpenCL 2.0 Setup | **8/10** | OpenCL 3.0 detected, GPU builtins + 10 tests |
+| S15 | OpenCL 2.0 Setup | **9/10** | Adreno 635 GPU detected, 6 builtins + 10 tests, verified on HW |
 | S16-S18 | GPU Tensor/Vulkan/Train | 0/30 | Vulkan blocked (driver loader), OpenCL kernels pending |
 | S19 | Camera→NPU→GPIO Pipeline | **2/10** | anomaly_detect + NPU fallback done |
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
@@ -333,7 +333,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 15.4 | Implement OpenCL platform/device query via FFI (clGetPlatformIDs, clGetDeviceInfo) | [x] |
 | 15.5 | Implement `gpu_matmul(a, b)` — CPU fallback via tensor_matmul | [x] |
 | 15.6 | Implement `gpu_add(a, b)`, `gpu_relu(t)`, `gpu_sigmoid(t)` — CPU fallback | [x] |
-| 15.7 | Test GPU builtins on Q6A with OpenCL detection | [ ] |
+| 15.7 | Test GPU builtins on Q6A — Adreno 635, OpenCL 3.0, 3793MB detected | [x] |
 | 15.8 | Implement error handling for GPU operations (arity, type checks) | [x] |
 | 15.9 | Benchmark GPU vs CPU for vector operations | [ ] |
 | 15.10 | Write 10 integration tests for GPU builtins | [x] |
