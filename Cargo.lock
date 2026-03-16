@@ -561,8 +561,6 @@ dependencies = [
 [[package]]
 name = "cranelift-object"
 version = "0.129.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38fe79386c13648cf28653b300ba16b797a5be248bf11d3984201a17acbbbde5"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
@@ -743,6 +741,7 @@ checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 name = "fajar-lang"
 version = "3.0.0"
 dependencies = [
+ "ash",
  "clap",
  "cranelift-codegen",
  "cranelift-frontend",

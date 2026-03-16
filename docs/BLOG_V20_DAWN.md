@@ -95,7 +95,7 @@ All 55 examples verified on real Q6A hardware via SSH.
 The remaining 20% of v2.0 tasks are mostly hardware-blocked:
 - Camera module (IMX219) for the full camera->NPU->GPIO pipeline
 - I2C/SPI sensors for real peripheral testing
-- Vulkan compute (blocked by system loader version)
+- ~~Vulkan compute (blocked by system loader version)~~ — **FIXED:** Mesa Turnip 25.2.8 installed, Vulkan 1.3 working
 
 After v2.0, **FajarOS v3.0 "Surya"** will bring a full OS written in Fajar Lang, targeting the Dragon Q6A as the reference platform.
 

@@ -3626,4 +3626,32 @@ mod tests {
         assert!(metadata.len() > 0, "bitcode file should not be empty");
         let _ = std::fs::remove_file(path);
     }
+
+    #[test]
+    fn llvm_compile_aarch64_cross_target() {
+        LlvmCompiler::init_all_targets();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_aarch64");
+
+        let body = make_binop(make_int_lit(10), BinOp::Add, make_int_lit(32));
+        let program = make_program(vec![Item::FnDef(make_simple_fn("main", body))]);
+        compiler.compile_program(&program).unwrap();
+
+        // Create aarch64 target machine
+        let tm = compiler
+            .create_target_machine(Some("aarch64-unknown-linux-gnu"))
+            .expect("aarch64 target machine");
+        compiler.configure_module_target(&tm);
+
+        // Verify IR is valid for aarch64
+        assert!(compiler.verify().is_ok());
+
+        // Emit object file for aarch64
+        let path = std::path::Path::new("/tmp/fj_test_aarch64.o");
+        let result = tm.write_to_file(&compiler.module, inkwell::targets::FileType::Object, path);
+        assert!(result.is_ok(), "aarch64 object emission failed: {result:?}");
+        let size = std::fs::metadata(path).unwrap().len();
+        assert!(size > 0, "aarch64 object file should not be empty");
+        let _ = std::fs::remove_file(path);
+    }
 }

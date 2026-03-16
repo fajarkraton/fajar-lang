@@ -12,21 +12,42 @@
 | **Clock** | 812 MHz max |
 | **FP32 Performance** | ~773 GFLOPS |
 | **API: OpenCL** | 3.0 (Adreno OpenCL driver) |
-| **API: Vulkan** | 1.1 (BLOCKED — see below) |
+| **API: Vulkan** | 1.3.318 (Mesa Turnip 25.2.8) |
 | **Global Memory** | 3793 MB (shared with system LPDDR5) |
 | **Max Workgroup Size** | 1024 |
 | **Max Compute Units** | 2 |
 | **Driver** | `/vendor/lib64/libOpenCL.so` |
 
-### Vulkan Status: BLOCKED
+### Vulkan Status: WORKING (Mesa Turnip)
 
-Vulkan 1.1 is supported by the Adreno 643 hardware, but the system Vulkan loader version (v3) is incompatible with the required version (v5). Until the loader is updated via a system image refresh, Vulkan compute is unavailable. All GPU builtins use the OpenCL 3.0 path instead.
+Vulkan is fully operational via **Mesa Turnip** open-source driver (installed 2026-03-16).
+
+The stock proprietary `libvulkan_adreno.so` only supports ICD loader interface v3, while the system Vulkan loader requires v5+ (Policy #LDP_DRIVER_7). **Fix:** Install `mesa-vulkan-drivers` which provides Turnip — an open-source Vulkan driver for Adreno GPUs supporting ICD interface v5+ and Vulkan 1.3.
 
 ```
-$ vulkaninfo 2>&1 | head -5
-ERROR: [Loader Message] vkCreateInstance: Found no drivers!
-# Loader version 3 cannot discover Adreno Vulkan ICD (requires v5)
+$ vulkaninfo --summary 2>&1 | grep -A8 'GPU0:'
+GPU0:
+    apiVersion         = 1.3.318
+    driverVersion      = 25.2.8
+    vendorID           = 0x5143
+    deviceID           = 0x6030500
+    deviceType         = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+    deviceName         = Turnip Adreno (TM) 643
+    driverID           = DRIVER_ID_MESA_TURNIP
+    driverName         = turnip Mesa driver
+    driverInfo         = Mesa 25.2.8-0ubuntu0.24.04.1
+
+$ sudo apt install -y mesa-vulkan-drivers vulkan-tools  # one-time fix
 ```
+
+| Vulkan Property | Value |
+|-----------------|-------|
+| **API Version** | 1.3.318 |
+| **Driver** | Mesa Turnip 25.2.8 |
+| **Device** | Turnip Adreno (TM) 643 |
+| **Subgroup Size** | 128 |
+| **Max Compute Shared Memory** | 32768 bytes |
+| **Max Workgroup Size** | 1024 |
 
 ---
 

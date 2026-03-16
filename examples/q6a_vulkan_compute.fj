@@ -1,0 +1,60 @@
+// q6a_vulkan_compute.fj — Vulkan GPU-accelerated tensor operations on Dragon Q6A
+//
+// Demonstrates using the Adreno 643 GPU via Vulkan 1.3 (Mesa Turnip)
+// for tensor computation: add, multiply, ReLU, sigmoid, and matrix multiply.
+//
+// On the Dragon Q6A, this runs on the Adreno 643 GPU via compute shaders.
+// On other systems, operations fall back to CPU via the tensor builtins.
+//
+// Usage:
+//   fj run examples/q6a_vulkan_compute.fj
+
+fn main() {
+    println("=== Dragon Q6A Vulkan Compute Demo ===")
+    println("")
+
+    // Check GPU availability
+    let has_gpu = gpu_available()
+    if has_gpu {
+        println(f"GPU detected: {gpu_info()}")
+    } else {
+        println("No GPU detected — using CPU fallback")
+    }
+    println("")
+
+    // Element-wise operations
+    println("--- Element-wise Operations ---")
+
+    let a = ones(1, 4)
+    let b = ones(1, 4)
+    let sum = gpu_add(a, b)
+    println(f"ones(1,4) + ones(1,4) = {sum}")
+
+    // Matrix multiply
+    let m1 = ones(2, 3)
+    let m2 = ones(3, 2)
+    let product = gpu_matmul(m1, m2)
+    println(f"ones(2,3) x ones(3,2) = {product}")
+    println("")
+
+    // Activation functions
+    println("--- Activation Functions ---")
+
+    let x = zeros(1, 4)
+    let relu_result = gpu_relu(x)
+    println(f"relu(zeros) = {relu_result}")
+
+    let sig_result = gpu_sigmoid(x)
+    println(f"sigmoid(zeros) = {sig_result}")
+    println("")
+
+    // Performance: larger tensor
+    println("--- Larger Tensor (256 elements) ---")
+    let big_a = zeros(1, 256)
+    let big_b = ones(1, 256)
+    let big_sum = gpu_add(big_a, big_b)
+    println("zeros(1,256) + ones(1,256) computed successfully")
+    println("")
+
+    println("=== Vulkan Compute Demo Complete ===")
+}

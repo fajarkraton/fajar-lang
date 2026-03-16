@@ -7,7 +7,7 @@
 //!
 //! - **SoC**: Qualcomm QCS6490 (Dragonwing), TSMC 6nm
 //! - **CPU**: Kryo 670 ARMv8.2-A — 1x A78@2.71GHz + 3x A78@2.4GHz + 4x A55@1.96GHz
-//! - **GPU**: Adreno 643 @ 812MHz — OpenCL 2.0, Vulkan 1.1
+//! - **GPU**: Adreno 643 @ 812MHz — OpenCL 3.0, Vulkan 1.3 (Mesa Turnip)
 //! - **NPU**: Hexagon 770 (V68) — 12 TOPS INT8
 //! - **RAM**: LPDDR5 up to 16GB @ 3200MHz (~25.6 GB/s)
 //! - **GPIO**: 40-pin header — 7 UART, 6 I2C, 7 SPI, I2S, I3C
@@ -29,6 +29,9 @@
 //! cargo build --release --target aarch64-unknown-linux-gnu
 //! scp target/aarch64-unknown-linux-gnu/release/fj radxa@<ip>:~/
 //! ```
+
+#[cfg(feature = "vulkan")]
+pub mod vulkan;
 
 use super::{Board, BspArch, MemoryAttr, MemoryRegion, Peripheral};
 use std::fmt;
@@ -127,8 +130,8 @@ impl GpuCapabilities {
         Self {
             name: "Adreno 643".to_string(),
             clock_mhz: 812,
-            vulkan_version: "1.1".to_string(),
-            opencl_version: "2.0".to_string(),
+            vulkan_version: "1.3".to_string(),
+            opencl_version: "3.0".to_string(),
             gles_version: "3.2".to_string(),
             fp32_gflops: 773, // vkpeak benchmark: 773 GFLOPS FP32, 1581 GFLOPS FP16
         }
@@ -1494,8 +1497,8 @@ mod tests {
         let gpu = board.gpu_capabilities();
         assert_eq!(gpu.name, "Adreno 643");
         assert_eq!(gpu.clock_mhz, 812);
-        assert_eq!(gpu.vulkan_version, "1.1");
-        assert_eq!(gpu.opencl_version, "2.0");
+        assert_eq!(gpu.vulkan_version, "1.3");
+        assert_eq!(gpu.opencl_version, "3.0");
         assert_eq!(gpu.gles_version, "3.2");
         assert_eq!(gpu.fp32_gflops, 773);
     }
@@ -1506,8 +1509,8 @@ mod tests {
         let s = format!("{gpu}");
         assert!(s.contains("Adreno 643"));
         assert!(s.contains("812MHz"));
-        assert!(s.contains("Vulkan 1.1"));
-        assert!(s.contains("OpenCL 2.0"));
+        assert!(s.contains("Vulkan 1.3"));
+        assert!(s.contains("OpenCL 3.0"));
     }
 
     // — NPU —
