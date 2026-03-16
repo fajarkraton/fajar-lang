@@ -4,11 +4,11 @@
 
 ---
 
-## Hardware: Adreno 635 GPU
+## Hardware: Adreno 643 GPU
 
 | Property | Value |
 |----------|-------|
-| **GPU** | Qualcomm Adreno 635 (part of QCS6490 SoC) |
+| **GPU** | Qualcomm Adreno 643 (part of QCS6490 SoC) |
 | **Clock** | 812 MHz max |
 | **FP32 Performance** | ~773 GFLOPS |
 | **API: OpenCL** | 3.0 (Adreno OpenCL driver) |
@@ -20,7 +20,7 @@
 
 ### Vulkan Status: BLOCKED
 
-Vulkan 1.1 is supported by the Adreno 635 hardware, but the system Vulkan loader version (v3) is incompatible with the required version (v5). Until the loader is updated via a system image refresh, Vulkan compute is unavailable. All GPU builtins use the OpenCL 3.0 path instead.
+Vulkan 1.1 is supported by the Adreno 643 hardware, but the system Vulkan loader version (v3) is incompatible with the required version (v5). Until the loader is updated via a system image refresh, Vulkan compute is unavailable. All GPU builtins use the OpenCL 3.0 path instead.
 
 ```
 $ vulkaninfo 2>&1 | head -5
@@ -32,7 +32,7 @@ ERROR: [Loader Message] vkCreateInstance: Found no drivers!
 
 ## GPU Builtins
 
-Fajar Lang provides 7 GPU-accelerated tensor builtins. On the Dragon Q6A, these use the Adreno 635 GPU via OpenCL 3.0. On systems without a GPU (or during development on x86_64), they automatically fall back to equivalent CPU tensor operations with identical results.
+Fajar Lang provides 7 GPU-accelerated tensor builtins. On the Dragon Q6A, these use the Adreno 643 GPU via OpenCL 3.0. On systems without a GPU (or during development on x86_64), they automatically fall back to equivalent CPU tensor operations with identical results.
 
 ### Summary Table
 
@@ -68,7 +68,7 @@ let c = gpu_matmul(a, b)
 // c is shape 64x32
 ```
 
-**Performance:** On Adreno 635, 256x256 matmul completes in ~2.1ms (vs ~8.5ms CPU).
+**Performance:** On Adreno 643, 256x256 matmul completes in ~2.1ms (vs ~8.5ms CPU).
 
 ### `gpu_add(a, b) -> Tensor`
 
@@ -211,7 +211,7 @@ This means the same `.fj` program runs correctly on both the Q6A board and a dev
 
 ## Performance Benchmarks
 
-Benchmarks measured on Dragon Q6A (Adreno 635, OpenCL 3.0) vs CPU (Kryo 670, 8 cores):
+Benchmarks measured on Dragon Q6A (Adreno 643, OpenCL 3.0) vs CPU (Kryo 670, 8 cores):
 
 | Operation | Size | GPU (ms) | CPU (ms) | Speedup |
 |-----------|------|----------|----------|---------|
@@ -246,7 +246,7 @@ For small models like XOR, GPU overhead dominates. For larger models, GPU traini
 
 ## Memory Management
 
-The Adreno 635 shares system LPDDR5 memory (up to 3793 MB available for GPU). Key considerations:
+The Adreno 643 shares system LPDDR5 memory (up to 3793 MB available for GPU). Key considerations:
 
 - **No separate GPU memory:** Unified memory architecture means no explicit CPU→GPU transfers
 - **Max allocation:** Single buffer limited to ~1.5 GB (driver constraint)
