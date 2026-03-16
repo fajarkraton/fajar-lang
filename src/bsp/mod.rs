@@ -45,6 +45,8 @@ pub enum BspArch {
     ArmCortexM33,
     /// ARM64 Linux (Qualcomm Dragonwing, Raspberry Pi 4/5, etc.).
     Aarch64Linux,
+    /// ARM64 bare-metal (FajarOS, no OS, EL1 kernel).
+    Aarch64BareMetal,
 }
 
 impl fmt::Display for BspArch {
@@ -56,6 +58,7 @@ impl fmt::Display for BspArch {
             BspArch::Riscv32 => write!(f, "riscv32imc-unknown-none-elf"),
             BspArch::ArmCortexM33 => write!(f, "thumbv8m.main-none-eabihf"),
             BspArch::Aarch64Linux => write!(f, "aarch64-unknown-linux-gnu"),
+            BspArch::Aarch64BareMetal => write!(f, "aarch64-unknown-none"),
         }
     }
 }

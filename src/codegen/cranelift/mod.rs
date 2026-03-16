@@ -5894,8 +5894,100 @@ impl ObjectCompiler {
         })
     }
 
+    /// Declares bare-metal runtime functions (no libc, no heap).
+    /// Only memcpy/memset/memcmp + optional UART print.
+    fn declare_bare_metal_runtime(&mut self) -> Result<(), CodegenError> {
+        let call_conv = self.module.target_config().default_call_conv;
+
+        // fj_rt_bare_memcpy(dst: ptr, src: ptr, n: i64) -> ptr
+        let mut sig_memcpy = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_memcpy.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::pointer_type(),
+        ));
+        sig_memcpy.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::pointer_type(),
+        ));
+        sig_memcpy.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_memcpy
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        let memcpy_id = self
+            .module
+            .declare_function("fj_rt_bare_memcpy", Linkage::Import, &sig_memcpy)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__memcpy".to_string(), memcpy_id);
+
+        // fj_rt_bare_memset(dst: ptr, val: i64, n: i64) -> ptr
+        let mut sig_memset = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_memset.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::pointer_type(),
+        ));
+        sig_memset.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_memset.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_memset
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        let memset_id = self
+            .module
+            .declare_function("fj_rt_bare_memset", Linkage::Import, &sig_memset)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__memset".to_string(), memset_id);
+
+        // fj_rt_bare_print(ptr: ptr, len: i64) -> void (UART output)
+        let mut sig_print = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_print.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::pointer_type(),
+        ));
+        sig_print.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        let print_id = self
+            .module
+            .declare_function("fj_rt_bare_print", Linkage::Import, &sig_print)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__println_str".to_string(), print_id);
+        // Also register as println/print for compatibility
+        let print_id2 = self
+            .module
+            .declare_function("fj_rt_bare_print_i64", Linkage::Import, &{
+                let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+                s
+            })
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("println".to_string(), print_id2);
+        self.functions.insert("print".to_string(), print_id2);
+
+        // fj_rt_bare_halt() -> void (halt CPU)
+        let sig_halt = cranelift_codegen::ir::Signature::new(call_conv);
+        let halt_id = self
+            .module
+            .declare_function("fj_rt_bare_halt", Linkage::Import, &sig_halt)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__halt".to_string(), halt_id);
+
+        Ok(())
+    }
+
     /// Declares built-in runtime functions as imports (resolved at link time).
     fn declare_runtime_functions(&mut self) -> Result<(), CodegenError> {
+        // Bare-metal: only declare minimal runtime (no libc/heap)
+        if self.no_std {
+            return self.declare_bare_metal_runtime();
+        }
+
         let call_conv = self.module.target_config().default_call_conv;
 
         // println(val: i64) -> void

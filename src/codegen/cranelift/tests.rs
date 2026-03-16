@@ -12203,6 +12203,123 @@ fn native_aot_entry_start_calls_boot() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// FajarOS S1 — Bare-metal aarch64 target tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_bare_metal_aarch64_compiles_empty_kernel() {
+    // Task 1.8: compile empty @kernel fn _start() {} → valid aarch64 ELF
+    let src = r#"
+        @panic_handler
+        fn panic(code: i64) -> i64 { code }
+
+        @entry
+        fn _start() -> i64 {
+            0
+        }
+
+        fn main() -> i64 { 0 }
+    "#;
+    let target = crate::codegen::target::TargetConfig::from_triple("aarch64-unknown-none").unwrap();
+    assert!(target.is_bare_metal);
+
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::ObjectCompiler::new_with_target("bare_kernel", &target).unwrap();
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).unwrap();
+    let product = compiler.finish();
+    let obj_bytes = product.emit().unwrap();
+
+    // Verify it's a valid ELF
+    assert_eq!(&obj_bytes[..4], b"\x7fELF", "should be valid ELF");
+    assert_eq!(obj_bytes[4], 2, "should be 64-bit (ELFCLASS64)");
+    assert!(obj_bytes.len() > 100, "object should have content");
+    // Should contain _start symbol
+    let has_start = obj_bytes.windows(6).any(|w| w == b"_start");
+    assert!(has_start, "should contain _start symbol");
+}
+
+#[test]
+fn native_bare_metal_no_libc_symbols() {
+    // Task 1.5: bare-metal should NOT reference libc functions
+    let src = r#"
+        @panic_handler
+        fn panic(code: i64) -> i64 { code }
+
+        @entry
+        fn _start() -> i64 {
+            let x = 10
+            let y = 32
+            x + y
+        }
+
+        fn main() -> i64 { 0 }
+    "#;
+    let target = crate::codegen::target::TargetConfig::from_triple("aarch64-unknown-none").unwrap();
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::ObjectCompiler::new_with_target("no_libc", &target).unwrap();
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).unwrap();
+    let product = compiler.finish();
+    let obj_bytes = product.emit().unwrap();
+
+    // Should NOT contain libc-dependent symbols
+    let obj_str = String::from_utf8_lossy(&obj_bytes);
+    assert!(
+        !obj_str.contains("fj_rt_print_i64\0"),
+        "should not reference libc print"
+    );
+    assert!(
+        !obj_str.contains("fj_rt_read_file"),
+        "should not reference file I/O"
+    );
+    assert!(
+        !obj_str.contains("fj_rt_str_split"),
+        "should not reference heap string ops"
+    );
+}
+
+#[test]
+fn native_bare_metal_has_bare_runtime() {
+    // Bare-metal should declare fj_rt_bare_* functions
+    let src = r#"
+        @panic_handler
+        fn panic(code: i64) -> i64 { code }
+
+        @entry
+        fn _start() -> i64 { 42 }
+
+        fn main() -> i64 { 0 }
+    "#;
+    let target = crate::codegen::target::TargetConfig::from_triple("aarch64-unknown-none").unwrap();
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::ObjectCompiler::new_with_target("bare_rt", &target).unwrap();
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).unwrap();
+    let product = compiler.finish();
+    let obj_bytes = product.emit().unwrap();
+
+    let obj_str = String::from_utf8_lossy(&obj_bytes);
+    assert!(
+        obj_str.contains("fj_rt_bare_memcpy"),
+        "should reference bare memcpy"
+    );
+    assert!(
+        obj_str.contains("fj_rt_bare_memset"),
+        "should reference bare memset"
+    );
+}
+
+#[test]
+fn native_bsp_arch_bare_metal_display() {
+    let arch = crate::bsp::BspArch::Aarch64BareMetal;
+    assert_eq!(arch.to_string(), "aarch64-unknown-none");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // S36.3 — MNIST IDX parser (unit tests using runtime fns directly)
 // ═══════════════════════════════════════════════════════════════════════
 
