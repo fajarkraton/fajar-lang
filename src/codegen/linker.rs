@@ -351,7 +351,7 @@ __exc_sync_cur:
     RESTORE_CONTEXT
     eret
 
-/* IRQ from current EL */
+/* IRQ from current EL — with context switch support */
 .global __exc_irq_cur
 __exc_irq_cur:
     SAVE_CONTEXT
