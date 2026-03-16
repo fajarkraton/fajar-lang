@@ -38,12 +38,12 @@
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
-| **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
+| **2 — On-Device** | S5-S8 | 30 | 40 | S5 9/10, S6 7/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
 | **4 — GPU Compute** | S15-S18 | 15 | 40 | S15 **COMPLETE**, S16 5/10 |
 | **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
 | **6 — Production** | S23-S24 | 13 | 20 | S23 8/10, S24 5/10 |
-| **TOTAL** | **24** | **141** | **240** | **59% complete** |
+| **TOTAL** | **24** | **143** | **240** | **60% complete** |
 
 ### Sprint Completion Detail
 
@@ -54,7 +54,7 @@
 | S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
 | S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
 | S5 | Deploy & Run on Q6A | **9/10** | 60/60 examples pass, benchmarks done, REPL+NEON verified |
-| S6 | Native Codegen on ARM64 | **5/10** | JIT works (128x speedup), AOT blocked (Cranelift reloc), 5863/5864 tests |
+| S6 | Native Codegen on ARM64 | **7/10** | JIT 128x, AOT blocked, NEON verified, benchmark suite, 5863/5864 tests |
 | S7 | GPIO Blinky on Q6A | **7/10** | GPIO verified on real HW (gpioset/gpioget gpiochip4) |
 | S8 | Serial Communication | 6/10 | Software done, HW tests pending |
 | S9 | QNN SDK Setup | **9/10** | All backends verified, docs + qnn_version() builtin done |
@@ -191,10 +191,10 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 6.4 | Run native codegen tests on Q6A: 5863/5864 pass (1 AOT reloc skip) | [x] |
 | 6.5 | Benchmark native vs interpreted: fib(30) 128x, loop 50x faster | [x] |
 | 6.6 | Test LLVM backend on ARM64 (inkwell targeting aarch64-linux-gnu) | [ ] |
-| 6.7 | Verify ARM64 NEON SIMD instructions in generated code | [ ] |
+| 6.7 | Verify ARM64 NEON SIMD instructions in generated code | [x] |
 | 6.8 | Test cross-compiled native binaries run correctly | [x] |
 | 6.9 | Profile with `perf` on Q6A: identify hot spots in interpreter | [ ] |
-| 6.10 | Create ARM64-specific benchmark suite in `benches/arm64_bench.rs` | [ ] |
+| 6.10 | Create ARM64-specific benchmark suite in `benches/arm64_bench.rs` | [x] |
 
 ### Sprint 7: GPIO Blinky on Q6A
 

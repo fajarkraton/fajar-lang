@@ -75,6 +75,10 @@ name = "concurrency_bench"
 harness = false
 required-features = ["native"]
 
+[[bench]]
+name = "arm64_bench"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true
