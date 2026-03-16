@@ -355,7 +355,21 @@ __exc_sync_cur:
 .global __exc_irq_cur
 __exc_irq_cur:
     SAVE_CONTEXT
+    /* Save current SP for scheduler */
+    mov     x0, sp
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    str     x0, [x1]
     bl      fj_exception_irq
+    /* Check context switch flag at 0x47001010 */
+    movz    x0, #0x1010
+    movk    x0, #0x4700, lsl #16
+    ldr     x1, [x0]
+    cbz     x1, 1f
+    /* Switch stack to new process */
+    mov     sp, x1
+    str     xzr, [x0]
+1:
     RESTORE_CONTEXT
     eret
 
