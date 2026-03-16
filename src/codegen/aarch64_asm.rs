@@ -33,6 +33,11 @@ pub fn sysreg_encoding(name: &str) -> Option<(u32, u32, u32, u32, u32)> {
         "icc_iar1_el1" => Some((3, 0, 12, 12, 0)),
         "icc_eoir1_el1" => Some((3, 0, 12, 12, 1)),
         "icc_ctrl_el1" => Some((3, 0, 12, 12, 4)),
+        "icc_igrpen1_el1" => Some((3, 0, 12, 12, 7)),
+        "icc_bpr1_el1" => Some((3, 0, 12, 12, 3)),
+        // DAIF control (special: DAIFSet/DAIFClr use imm, not register)
+        "daifset" => Some((3, 3, 4, 2, 6)),
+        "daifclr" => Some((3, 3, 4, 2, 7)),
         // Timers
         "cntfrq_el0" => Some((3, 3, 14, 0, 0)),
         "cntp_tval_el0" => Some((3, 3, 14, 2, 0)),
