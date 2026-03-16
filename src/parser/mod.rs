@@ -1863,9 +1863,28 @@ impl Parser {
         }
 
         // Check for struct init: Name { field: value, ... }
-        // Only if the identifier starts with uppercase (convention for struct names)
+        // Only if: (a) identifier starts with uppercase, (b) next is `{`,
+        // and (c) inside the brace there's `ident:` (field init pattern).
+        // This prevents `while i < MAX {` from being treated as struct init.
         if self.at(&TokenKind::LBrace) && name.starts_with(|c: char| c.is_uppercase()) {
-            return self.parse_struct_init(name, start);
+            // Look ahead: if `{ ident :` pattern, it's struct init.
+            // If `{ <statement>` (e.g., `{ let`, `{ putc`, `{ i`), it's a block.
+            let is_struct_init = if let Some(tok1) = self.tokens.get(self.pos + 1) {
+                if let TokenKind::Ident(_) = &tok1.kind {
+                    // Check if token after ident is `:` (field init)
+                    self.tokens
+                        .get(self.pos + 2)
+                        .is_some_and(|tok2| matches!(tok2.kind, TokenKind::Colon))
+                } else {
+                    // `{ }` (empty struct) or `{ RBrace`
+                    matches!(tok1.kind, TokenKind::RBrace)
+                }
+            } else {
+                false
+            };
+            if is_struct_init {
+                return self.parse_struct_init(name, start);
+            }
         }
 
         Ok(Expr::Ident {
