@@ -5304,3 +5304,49 @@ fn e2e_q6a_ota_update_example() {
     assert!(out.iter().any(|l| l.contains("OTA Update Check")));
     assert!(out.iter().any(|l| l.contains("OTA check complete.")));
 }
+
+#[test]
+fn e2e_gpu_mul_cpu_fallback() {
+    let code = r#"
+let a = tensor_ones(3, 3)
+let b = tensor_ones(3, 3)
+let c = gpu_mul(a, b)
+println(c)
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(code);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_gpu_transpose_cpu_fallback() {
+    let code = r#"
+let a = tensor_ones(2, 3)
+let b = gpu_transpose(a)
+println(b)
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(code);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_gpu_sum_cpu_fallback() {
+    let code = r#"
+let a = tensor_ones(3, 3)
+let s = gpu_sum(a)
+assert(s == 9.0)
+println(s)
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(code);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_q6a_profile_example() {
+    let code = std::fs::read_to_string("examples/q6a_profile.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Performance Profile")));
+    assert!(out.iter().any(|l| l.contains("Profile complete.")));
+}

@@ -554,6 +554,9 @@ impl Interpreter {
             "gpu_add",
             "gpu_relu",
             "gpu_sigmoid",
+            "gpu_mul",
+            "gpu_transpose",
+            "gpu_sum",
             // Edge AI / production builtins (v2.0 Q6A)
             "cpu_temp",
             "cpu_freq",
@@ -2561,6 +2564,9 @@ impl Interpreter {
             "gpu_add" => self.builtin_gpu_add(args),
             "gpu_relu" => self.builtin_gpu_relu(args),
             "gpu_sigmoid" => self.builtin_gpu_sigmoid(args),
+            "gpu_mul" => self.builtin_gpu_mul(args),
+            "gpu_transpose" => self.builtin_gpu_transpose(args),
+            "gpu_sum" => self.builtin_gpu_sum(args),
             // Edge AI / production builtins (v2.0 Q6A)
             "cpu_temp" => self.builtin_cpu_temp(args),
             "cpu_freq" => self.builtin_cpu_freq(args),
@@ -6796,6 +6802,64 @@ impl Interpreter {
         match &args[0] {
             Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sigmoid(t))),
             _ => Err(RuntimeError::TypeError("gpu_sigmoid: arg must be tensor".into()).into()),
+        }
+    }
+
+    /// `gpu_mul(a, b) -> Tensor` — Element-wise multiply (CPU fallback).
+    fn builtin_gpu_mul(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(a), Value::Tensor(b)) => {
+                tensor_ops::mul(a, b).map(Value::Tensor).map_err(|e| {
+                    crate::interpreter::EvalError::Runtime(RuntimeError::TypeError(format!(
+                        "gpu_mul: {e}"
+                    )))
+                })
+            }
+            _ => Err(RuntimeError::TypeError("gpu_mul: args must be tensors".into()).into()),
+        }
+    }
+
+    /// `gpu_transpose(t) -> Tensor` — Matrix transpose (CPU fallback).
+    fn builtin_gpu_transpose(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => tensor_ops::transpose(t).map(Value::Tensor).map_err(|e| {
+                crate::interpreter::EvalError::Runtime(RuntimeError::TypeError(format!(
+                    "gpu_transpose: {e}"
+                )))
+            }),
+            _ => Err(RuntimeError::TypeError("gpu_transpose: arg must be tensor".into()).into()),
+        }
+    }
+
+    /// `gpu_sum(t) -> Float` — Sum all elements (CPU fallback).
+    fn builtin_gpu_sum(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => {
+                let sum: f64 = t.data().iter().sum();
+                Ok(Value::Float(sum))
+            }
+            _ => Err(RuntimeError::TypeError("gpu_sum: arg must be tensor".into()).into()),
         }
     }
 

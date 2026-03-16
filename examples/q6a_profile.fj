@@ -1,0 +1,83 @@
+// q6a_profile.fj — Performance profiling for Dragon Q6A
+//
+// Measures interpreter hot spots: startup, tensor, inference, I/O
+//
+// Usage: fj run examples/q6a_profile.fj
+
+fn bench_loop(n: i64) -> i64 {
+    let mut sum = 0
+    let mut i = 0
+    while i < n {
+        sum = sum + i
+        i = i + 1
+    }
+    sum
+}
+
+fn bench_tensor() -> i64 {
+    let a = tensor_randn(16, 16)
+    let b = tensor_randn(16, 16)
+    let c = tensor_matmul(a, b)
+    let _d = tensor_relu(c)
+    0
+}
+
+fn bench_inference() -> i64 {
+    let input = tensor_randn(1, 32)
+    let w = tensor_xavier(32, 10)
+    let h = tensor_relu(tensor_matmul(input, w))
+    let probs = tensor_softmax(h)
+    tensor_argmax(probs)
+}
+
+println("=== Performance Profile (Dragon Q6A) ===")
+println(f"CPU: {cpu_freq() / 1000} MHz | Temp: {cpu_temp() / 1000}C")
+println("")
+
+// Warm up
+let _w = bench_loop(100)
+
+// Profile sections
+let t0 = sys_uptime()
+
+println("[1] Loop 10000 iterations...")
+let _r1 = bench_loop(10000)
+
+println("[2] Tensor ops (100x matmul 16x16)...")
+let mut i = 0
+while i < 100 {
+    let _r = bench_tensor()
+    i = i + 1
+}
+
+println("[3] Inference pipeline (100x)...")
+let mut j = 0
+while j < 100 {
+    let _r = bench_inference()
+    j = j + 1
+}
+
+println("[4] System builtins (1000x)...")
+let mut k = 0
+while k < 1000 {
+    let _t = cpu_temp()
+    let _m = mem_usage()
+    k = k + 1
+}
+
+println("[5] String ops (1000x concat)...")
+let mut s = ""
+let mut l = 0
+while l < 1000 {
+    s = s + "x"
+    l = l + 1
+}
+let _slen = len(s)
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println(f"Total elapsed: {elapsed}s")
+println(f"Temp after: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Profile complete.")

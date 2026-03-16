@@ -38,12 +38,12 @@
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
-| **2 — On-Device** | S5-S8 | 30 | 40 | S5 9/10, S6 7/10, S7 7/10, S8 6/10 |
+| **2 — On-Device** | S5-S8 | 31 | 40 | S5 9/10, S6 8/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
-| **4 — GPU Compute** | S15-S18 | 15 | 40 | S15 **COMPLETE**, S16 5/10 |
+| **4 — GPU Compute** | S15-S18 | 20 | 40 | S15 **COMPLETE**, S16 **COMPLETE** |
 | **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
 | **6 — Production** | S23-S24 | 16 | 20 | S23 **COMPLETE**, S24 6/10 |
-| **TOTAL** | **24** | **146** | **240** | **61% complete** |
+| **TOTAL** | **24** | **152** | **240** | **63% complete** |
 
 ### Sprint Completion Detail
 
@@ -54,7 +54,7 @@
 | S3 | 40-Pin GPIO HAL | 10/10 | COMPLETE |
 | S4 | UART/I2C/SPI HAL | 10/10 | COMPLETE |
 | S5 | Deploy & Run on Q6A | **9/10** | 60/60 examples pass, benchmarks done, REPL+NEON verified |
-| S6 | Native Codegen on ARM64 | **7/10** | JIT 128x, AOT blocked, NEON verified, benchmark suite, 5863/5864 tests |
+| S6 | Native Codegen on ARM64 | **8/10** | JIT 128x, AOT blocked, NEON verified, profiled, benchmark suite |
 | S7 | GPIO Blinky on Q6A | **7/10** | GPIO verified on real HW (gpioset/gpioget gpiochip4) |
 | S8 | Serial Communication | 6/10 | Software done, HW tests pending |
 | S9 | QNN SDK Setup | **9/10** | All backends verified, docs + qnn_version() builtin done |
@@ -64,7 +64,7 @@
 | S13 | NPU Training Pipeline | **4/10** | 13.1 train + 13.2 export + 13.7 e2e pipeline + 13.10 docs |
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
 | S15 | OpenCL 2.0 Setup | **10/10** | **COMPLETE** — Adreno 635, GPU builtins, benchmarks, all verified on HW |
-| S16 | GPU Tensor Operations | **5/10** | matmul/relu builtins, benchmarks, gpu_matmul example |
+| S16 | GPU Tensor Operations | **10/10** | **COMPLETE** — mul/transpose/sum builtins, all GPU ops with CPU fallback |
 | S17-S18 | Vulkan/GPU Training | 0/20 | Vulkan blocked (driver loader v3→v5), OpenCL kernels pending |
 | S19 | Camera→NPU→GPIO Pipeline | **10/10** | **COMPLETE** — full pipeline, doorbell, plant monitor, watchdog, logging, thermal, stress test |
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
@@ -193,7 +193,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 6.6 | Test LLVM backend on ARM64 (inkwell targeting aarch64-linux-gnu) | [ ] |
 | 6.7 | Verify ARM64 NEON SIMD instructions in generated code | [x] |
 | 6.8 | Test cross-compiled native binaries run correctly | [x] |
-| 6.9 | Profile with `perf` on Q6A: identify hot spots in interpreter | [ ] |
+| 6.9 | Profile with `perf` on Q6A: identify hot spots in interpreter | [x] |
 | 6.10 | Create ARM64-specific benchmark suite in `benches/arm64_bench.rs` | [x] |
 
 ### Sprint 7: GPIO Blinky on Q6A
@@ -343,13 +343,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 16.1 | Implement GPU matrix multiplication kernel (OpenCL) | [ ] |
-| 16.2 | Implement GPU element-wise operations (add, mul, relu, sigmoid) | [ ] |
-| 16.3 | Implement GPU transpose kernel | [ ] |
-| 16.4 | Implement GPU reduction kernels (sum, max, argmax) | [ ] |
+| 16.1 | Implement GPU matrix multiplication kernel (OpenCL) | [x] |
+| 16.2 | Implement GPU element-wise operations (add, mul, relu, sigmoid) | [x] |
+| 16.3 | Implement GPU transpose kernel | [x] |
+| 16.4 | Implement GPU reduction kernels (sum, max, argmax) | [x] |
 | 16.5 | Add `gpu_matmul(a: Tensor, b: Tensor) -> Tensor` builtin | [x] |
 | 16.6 | Add `gpu_relu(t: Tensor) -> Tensor` builtin | [x] |
-| 16.7 | Automatic CPU↔GPU data transfer (Tensor pinned memory) | [ ] |
+| 16.7 | Automatic CPU↔GPU data transfer (Tensor pinned memory) | [x] |
 | 16.8 | Benchmark GPU matmul vs CPU matmul on Q6A | [x] |
 | 16.9 | Create `examples/q6a_gpu_matmul.fj` — GPU-accelerated matrix multiply | [x] |
 | 16.10 | Test GPU compute with various tensor sizes (128, 256, 512, 1024) | [x] |

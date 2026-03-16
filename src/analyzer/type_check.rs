@@ -1577,6 +1577,9 @@ impl TypeChecker {
             ("gpu_add", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
             ("gpu_relu", vec![dyn_t.clone()], dyn_t.clone()),
             ("gpu_sigmoid", vec![dyn_t.clone()], dyn_t.clone()),
+            ("gpu_mul", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
+            ("gpu_transpose", vec![dyn_t.clone()], dyn_t.clone()),
+            ("gpu_sum", vec![dyn_t.clone()], Type::F64),
         ];
         for (name, params, ret) in ml_fns {
             self.symbols.define(Symbol {
