@@ -42,6 +42,11 @@ pub fn sysreg_encoding(name: &str) -> Option<(u32, u32, u32, u32, u32)> {
         "cntfrq_el0" => Some((3, 3, 14, 0, 0)),
         "cntp_tval_el0" => Some((3, 3, 14, 2, 0)),
         "cntp_ctl_el0" => Some((3, 3, 14, 2, 1)),
+        "cntpct_el0" => Some((3, 3, 14, 0, 1)),
+        // Virtual timer
+        "cntv_tval_el0" => Some((3, 3, 14, 3, 0)),
+        "cntv_ctl_el0" => Some((3, 3, 14, 3, 1)),
+        "cntvct_el0" => Some((3, 3, 14, 0, 2)),
         _ => None,
     }
 }

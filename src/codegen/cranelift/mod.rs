@@ -5993,6 +5993,78 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("irq_disable".to_string(), irq_dis_id);
 
+        // System register stubs (workaround for asm! out() codegen bug)
+        // These are implemented in startup assembly and actually execute mrs/msr.
+
+        // () -> i64 return signatures
+        let sig_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        // (i64) -> void signatures
+        let sig_i64_void = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            s.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+
+        // Timer builtins
+        for (name, builtin) in [
+            ("fj_rt_bare_timer_count", "timer_count"),
+            ("fj_rt_bare_timer_freq", "timer_freq"),
+            ("fj_rt_bare_timer_status", "timer_status"),
+            ("fj_rt_bare_read_el", "read_el"),
+            ("fj_rt_bare_read_midr", "read_midr"),
+            ("fj_rt_bare_gic_ack", "gic_ack"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        for (name, builtin) in [
+            ("fj_rt_bare_timer_set", "timer_set"),
+            ("fj_rt_bare_timer_disable", "timer_disable"),
+            ("fj_rt_bare_gic_eoi", "gic_eoi"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // gic_cpu_init(pmr: i64) -> void
+        let gic_cpu_id = self
+            .module
+            .declare_function("fj_rt_bare_gic_cpu_init", Linkage::Import, &sig_i64_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("gic_cpu_init".to_string(), gic_cpu_id);
+
+        // mmu_enable(mair: i64, tcr: i64, ttbr0: i64) -> void
+        let mut sig_mmu = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_mmu.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_mmu.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_mmu.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        let mmu_id = self
+            .module
+            .declare_function("fj_rt_bare_mmu_enable", Linkage::Import, &sig_mmu)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("mmu_enable".to_string(), mmu_id);
+
         // Volatile I/O (essential for bare-metal MMIO)
         // volatile_write(addr: i64, value: i64) -> void
         let mut sig_vw = cranelift_codegen::ir::Signature::new(call_conv);

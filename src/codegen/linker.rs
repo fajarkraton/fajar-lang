@@ -528,6 +528,115 @@ fj_rt_bare_print:
 .Lprint_done:
     ret
 .size fj_rt_bare_print, . - fj_rt_bare_print
+
+/* ═══════════════════════════════════════════════════════════════════
+   System register access stubs (workaround for asm! out() codegen bug)
+   These functions actually execute mrs/msr instructions and return
+   real register values, unlike the asm!() codegen which only encodes.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Timer */
+.global fj_rt_bare_timer_count
+.type fj_rt_bare_timer_count, @function
+fj_rt_bare_timer_count:
+    mrs     x0, CNTPCT_EL0
+    ret
+.size fj_rt_bare_timer_count, . - fj_rt_bare_timer_count
+
+.global fj_rt_bare_timer_freq
+.type fj_rt_bare_timer_freq, @function
+fj_rt_bare_timer_freq:
+    mrs     x0, CNTFRQ_EL0
+    ret
+.size fj_rt_bare_timer_freq, . - fj_rt_bare_timer_freq
+
+.global fj_rt_bare_timer_set
+.type fj_rt_bare_timer_set, @function
+fj_rt_bare_timer_set:
+    /* x0 = tval (timer interval in counter ticks) */
+    msr     CNTP_TVAL_EL0, x0
+    mov     x1, #1
+    msr     CNTP_CTL_EL0, x1
+    ret
+.size fj_rt_bare_timer_set, . - fj_rt_bare_timer_set
+
+.global fj_rt_bare_timer_disable
+.type fj_rt_bare_timer_disable, @function
+fj_rt_bare_timer_disable:
+    msr     CNTP_CTL_EL0, xzr
+    ret
+.size fj_rt_bare_timer_disable, . - fj_rt_bare_timer_disable
+
+.global fj_rt_bare_timer_status
+.type fj_rt_bare_timer_status, @function
+fj_rt_bare_timer_status:
+    /* Returns CNTP_CTL_EL0 (bit 2 = ISTATUS) */
+    mrs     x0, CNTP_CTL_EL0
+    ret
+.size fj_rt_bare_timer_status, . - fj_rt_bare_timer_status
+
+/* CPU info */
+.global fj_rt_bare_read_el
+.type fj_rt_bare_read_el, @function
+fj_rt_bare_read_el:
+    mrs     x0, CurrentEL
+    lsr     x0, x0, #2
+    and     x0, x0, #3
+    ret
+.size fj_rt_bare_read_el, . - fj_rt_bare_read_el
+
+.global fj_rt_bare_read_midr
+.type fj_rt_bare_read_midr, @function
+fj_rt_bare_read_midr:
+    mrs     x0, MIDR_EL1
+    ret
+.size fj_rt_bare_read_midr, . - fj_rt_bare_read_midr
+
+/* MMU */
+.global fj_rt_bare_mmu_enable
+.type fj_rt_bare_mmu_enable, @function
+fj_rt_bare_mmu_enable:
+    /* x0 = MAIR, x1 = TCR, x2 = TTBR0 */
+    msr     MAIR_EL1, x0
+    msr     TCR_EL1, x1
+    isb
+    msr     TTBR0_EL1, x2
+    isb
+    mrs     x3, SCTLR_EL1
+    orr     x3, x3, #1         /* M = MMU enable */
+    orr     x3, x3, #4         /* C = data cache */
+    orr     x3, x3, #(1<<12)   /* I = instruction cache */
+    msr     SCTLR_EL1, x3
+    isb
+    ret
+.size fj_rt_bare_mmu_enable, . - fj_rt_bare_mmu_enable
+
+/* GIC CPU interface */
+.global fj_rt_bare_gic_cpu_init
+.type fj_rt_bare_gic_cpu_init, @function
+fj_rt_bare_gic_cpu_init:
+    /* x0 = PMR value */
+    msr     ICC_PMR_EL1, x0
+    mov     x1, #1
+    msr     ICC_IGRPEN1_EL1, x1
+    msr     DAIFClr, #2
+    isb
+    ret
+.size fj_rt_bare_gic_cpu_init, . - fj_rt_bare_gic_cpu_init
+
+.global fj_rt_bare_gic_ack
+.type fj_rt_bare_gic_ack, @function
+fj_rt_bare_gic_ack:
+    mrs     x0, ICC_IAR1_EL1
+    ret
+.size fj_rt_bare_gic_ack, . - fj_rt_bare_gic_ack
+
+.global fj_rt_bare_gic_eoi
+.type fj_rt_bare_gic_eoi, @function
+fj_rt_bare_gic_eoi:
+    msr     ICC_EOIR1_EL1, x0
+    ret
+.size fj_rt_bare_gic_eoi, . - fj_rt_bare_gic_eoi
 "#
     )
 }
