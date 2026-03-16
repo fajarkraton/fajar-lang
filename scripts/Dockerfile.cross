@@ -1,0 +1,25 @@
+# Dockerfile for cross-compiling Fajar Lang for Dragon Q6A (aarch64)
+#
+# Build: docker build -t fj-cross -f scripts/Dockerfile.cross .
+# Run:   docker run --rm -v $(pwd):/src fj-cross
+# Output: target/aarch64-unknown-linux-gnu/release/fj
+
+FROM rust:1.83
+
+# Install cross-compilation toolchain
+RUN apt-get update && apt-get install -y \
+    gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add ARM64 target
+RUN rustup target add aarch64-unknown-linux-gnu
+
+# Configure linker
+RUN mkdir -p /root/.cargo && \
+    echo '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"' > /root/.cargo/config.toml
+
+WORKDIR /src
+
+# Build for ARM64
+CMD ["cargo", "build", "--release", "--target", "aarch64-unknown-linux-gnu"]

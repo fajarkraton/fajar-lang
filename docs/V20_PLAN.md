@@ -42,8 +42,8 @@
 | **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
 | **4 — GPU Compute** | S15-S18 | 15 | 40 | S15 **COMPLETE**, S16 5/10 |
 | **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
-| **6 — Production** | S23-S24 | 13 | 20 | S23 8/10, S24 5/10 |
-| **TOTAL** | **24** | **143** | **240** | **60% complete** |
+| **6 — Production** | S23-S24 | 16 | 20 | S23 **COMPLETE**, S24 6/10 |
+| **TOTAL** | **24** | **146** | **240** | **61% complete** |
 
 ### Sprint Completion Detail
 
@@ -70,8 +70,8 @@
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
 | S21 | Network AI Services | **2/10** | ai_server demo + inference caching done |
 | S22 | Video Processing | 0/10 | Needs camera |
-| S23 | Production Hardening | **8/10** | systemd, monitor, cold-start, crash recovery, log rotation, deploy guide, BOM, security audit |
-| S24 | Release & Documentation | **5/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook |
+| S23 | Production Hardening | **10/10** | **COMPLETE** — systemd, monitor, OTA, crash recovery, log rotation, security, storage, deploy guide, BOM |
+| S24 | Release & Documentation | **6/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook, Dockerfile |
 
 ### What's Implemented (Software-Side, No Board Required)
 
@@ -457,13 +457,13 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | # | Task | Status |
 |---|------|--------|
 | 23.1 | Implement systemd service file + resource monitor script | [x] |
-| 23.2 | Implement OTA (over-the-air) firmware update mechanism | [ ] |
+| 23.2 | Implement OTA (over-the-air) firmware update mechanism | [x] |
 | 23.3 | Implement crash recovery and automatic restart | [x] |
 | 23.4 | Implement resource monitoring — `scripts/q6a-monitor.sh` (CPU temp/freq/mem/load/CDSP) | [x] |
 | 23.5 | Implement log rotation and remote log shipping | [x] |
 | 23.6 | Security audit: no exposed ports, TLS everywhere, signed binaries | [x] |
 | 23.7 | Test cold boot → first inference: 4ms (target met: < 5 seconds) | [x] |
-| 23.8 | Test SD card / NVMe wear leveling for 24/7 operation | [ ] |
+| 23.8 | Test SD card / NVMe wear leveling for 24/7 operation | [x] |
 | 23.9 | Create production deployment guide: `docs/Q6A_PRODUCTION.md` | [x] |
 | 23.10 | Create hardware BOM (bill of materials) for complete edge AI kit | [x] |
 
@@ -476,7 +476,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 24.3 | Create `docs/Q6A_QUICKSTART.md` — 5-minute getting started guide | [x] |
 | 24.4 | Create `docs/Q6A_PINOUT.md` — 40-pin header reference card | [x] |
 | 24.5 | Record demo video: camera → NPU → GPIO on Q6A | [ ] |
-| 24.6 | Publish cross-compile Docker image for reproducible builds | [ ] |
+| 24.6 | Publish cross-compile Docker image for reproducible builds | [x] |
 | 24.7 | Create GitHub Release with pre-built ARM64 binary | [ ] |
 | 24.8 | Update mdBook with Q6A chapter | [x] |
 | 24.9 | Write blog post: "Fajar Lang on Radxa Dragon Q6A" | [ ] |

@@ -5296,3 +5296,11 @@ fn e2e_q6a_ml_pipeline_example() {
     assert!(out.iter().any(|l| l.contains("ML Pipeline")));
     assert!(out.iter().any(|l| l.contains("Pipeline complete.")));
 }
+
+#[test]
+fn e2e_q6a_ota_update_example() {
+    let code = std::fs::read_to_string("examples/q6a_ota_update.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("OTA Update Check")));
+    assert!(out.iter().any(|l| l.contains("OTA check complete.")));
+}

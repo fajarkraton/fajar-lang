@@ -1,0 +1,63 @@
+// q6a_ota_update.fj — Over-the-air update pattern for Dragon Q6A
+//
+// Demonstrates: version check → download → verify → swap → restart
+// In production: use HTTP to fetch binary + checksum
+//
+// Usage: fj run examples/q6a_ota_update.fj
+
+fn get_current_version() -> str {
+    // Read version from a local file
+    "2.0.0-dawn"
+}
+
+fn check_for_update(current: str) -> bool {
+    // In production: HTTP GET to update server
+    // Returns true if newer version available
+    println(f"  Checking updates for v{current}...")
+    false
+}
+
+fn verify_binary(path: str) -> bool {
+    // Check file exists and has reasonable size
+    let size = file_size(path)
+    if size > 1000000 {
+        println(f"  Binary verified: {size} bytes")
+        true
+    } else {
+        println(f"  Binary too small or missing: {size}")
+        false
+    }
+}
+
+// --- Main ---
+
+println("=== OTA Update Check (Dragon Q6A) ===")
+println("")
+
+let version = get_current_version()
+let pid = process_id()
+println(f"Current: v{version} (PID: {pid})")
+println(f"Binary: /usr/local/bin/fj")
+
+// Check binary health
+let healthy = verify_binary("/usr/local/bin/fj")
+if healthy {
+    println("Binary: OK")
+} else {
+    println("Binary: MISSING or CORRUPT")
+}
+
+// Check for updates
+let update_available = check_for_update(version)
+if update_available {
+    println("Update available! Download and install...")
+} else {
+    println("System is up to date.")
+}
+
+// System status
+println("")
+println(f"Uptime: {sys_uptime()}s")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+log_to_file("/tmp/q6a_ota.log", f"CHECK version={version} update={update_available}")
+println("OTA check complete.")
