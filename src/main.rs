@@ -1332,11 +1332,46 @@ fn cmd_build_native(
     let mut link_cmd = std::process::Command::new(&linker);
     link_cmd.arg(&obj_path).arg("-o").arg(&bin_path);
 
+    // Bare-metal startup assembly object (assembled alongside the main .o)
+    let startup_obj_path =
+        if target.is_bare_metal && target.arch == fajar_lang::codegen::target::Arch::Aarch64 {
+            // Find the @entry function name, default to "kernel_main"
+            let entry_fn = "kernel_main";
+            let startup_asm = fajar_lang::codegen::linker::generate_aarch64_startup(entry_fn);
+            let startup_s = obj_path.with_extension("start.S");
+            let startup_o = obj_path.with_extension("start.o");
+            std::fs::write(&startup_s, &startup_asm).ok();
+
+            // Assemble with cross-assembler
+            let as_cmd = if cfg!(target_arch = "aarch64") {
+                "as"
+            } else {
+                "aarch64-linux-gnu-as"
+            };
+            let _ = std::process::Command::new(as_cmd)
+                .arg(&startup_s)
+                .arg("-o")
+                .arg(&startup_o)
+                .status();
+            let _ = std::fs::remove_file(&startup_s);
+            if startup_o.exists() {
+                Some(startup_o)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
     if target.is_bare_metal {
         // Bare-metal: no standard libs, use linker script
         link_cmd.arg("-nostdlib").arg("-nostartfiles");
         if let Some(ref sp) = script_path {
             link_cmd.arg("-T").arg(sp);
+        }
+        // Add startup object if generated
+        if let Some(ref so) = startup_obj_path {
+            link_cmd.arg(so);
         }
     } else {
         link_cmd.arg("-lm");
@@ -1350,8 +1385,11 @@ fn cmd_build_native(
     }
     let status = link_cmd.status();
 
-    // Clean up object file and generated linker script
+    // Clean up object file, startup object, and generated linker script
     let _ = std::fs::remove_file(&obj_path);
+    if let Some(ref so) = startup_obj_path {
+        let _ = std::fs::remove_file(so);
+    }
     if let Some(ref sp) = script_path {
         if linker_script.is_none() {
             // Only remove auto-generated scripts, not user-provided ones

@@ -5979,6 +5979,53 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__halt".to_string(), halt_id);
 
+        // Volatile I/O (essential for bare-metal MMIO)
+        // volatile_write(addr: i64, value: i64) -> void
+        let mut sig_vw = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_vw.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_vw.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        let vw_id = self
+            .module
+            .declare_function("fj_rt_volatile_write", Linkage::Import, &sig_vw)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__volatile_write".to_string(), vw_id);
+
+        // volatile_read(addr: i64) -> i64
+        let mut sig_vr = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_vr.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_vr.returns.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        let vr_id = self
+            .module
+            .declare_function("fj_rt_volatile_read", Linkage::Import, &sig_vr)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("__volatile_read".to_string(), vr_id);
+
+        // volatile_write_u8/u16/u32 + volatile_read_u8/u16/u32
+        for suffix in ["_u8", "_u16", "_u32"] {
+            let write_name = format!("fj_rt_volatile_write{suffix}");
+            let read_name = format!("fj_rt_volatile_read{suffix}");
+            let wid = self
+                .module
+                .declare_function(&write_name, Linkage::Import, &sig_vw)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert(format!("__volatile_write{suffix}"), wid);
+            let rid = self
+                .module
+                .declare_function(&read_name, Linkage::Import, &sig_vr)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert(format!("__volatile_read{suffix}"), rid);
+        }
+
         Ok(())
     }
 

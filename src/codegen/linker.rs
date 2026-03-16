@@ -39,17 +39,17 @@ impl LinkerConfig {
                     MemoryRegion {
                         name: "FLASH".into(),
                         origin: 0x4000_0000,
-                        size: 64 * 1024 * 1024, // 64MB
+                        size: 16 * 1024 * 1024, // 16MB kernel .text
                         attrs: "rx".into(),
                     },
                     MemoryRegion {
                         name: "RAM".into(),
-                        origin: 0x8000_0000,
-                        size: 128 * 1024 * 1024, // 128MB
+                        origin: 0x4100_0000,
+                        size: 128 * 1024 * 1024, // 128MB kernel data+heap+stack
                         attrs: "rwx".into(),
                     },
                 ],
-                stack_size: 8192,
+                stack_size: 64 * 1024, // 64KB kernel stack
                 entry: "_start".into(),
             },
             Arch::Riscv64 => Self {
@@ -183,6 +183,173 @@ pub fn generate_linker_script(config: &LinkerConfig) -> Result<String, CodegenEr
     script.push_str("PROVIDE(__stack_ptr = __stack_top);\n");
 
     Ok(script)
+}
+
+/// Generates aarch64 bare-metal startup assembly.
+///
+/// This stub:
+/// 1. Sets the stack pointer from linker symbol `__stack_top`
+/// 2. Zeros the BSS section (`__bss_start` to `__bss_end`)
+/// 3. Calls the user's entry function (default: `kernel_main`)
+/// 4. On return, enters WFE halt loop
+pub fn generate_aarch64_startup(entry_fn: &str) -> String {
+    format!(
+        r#"/* Auto-generated aarch64 bare-metal startup — FajarOS */
+.section .text.start, "ax"
+.global _start
+.type _start, @function
+
+_start:
+    /* Set stack pointer */
+    ldr     x0, =__stack_top
+    mov     sp, x0
+
+    /* Zero BSS section */
+    ldr     x0, =__bss_start
+    ldr     x1, =__bss_end
+.Lbss_loop:
+    cmp     x0, x1
+    b.ge    .Lbss_done
+    str     xzr, [x0], #8
+    b       .Lbss_loop
+.Lbss_done:
+
+    /* Call kernel entry */
+    bl      {entry_fn}
+
+    /* Halt loop (should never return) */
+.Lhalt:
+    wfe
+    b       .Lhalt
+
+.size _start, . - _start
+
+/* Bare-metal runtime: volatile I/O */
+.global fj_rt_volatile_write
+.type fj_rt_volatile_write, @function
+fj_rt_volatile_write:
+    /* x0 = addr, x1 = value */
+    str     x1, [x0]
+    ret
+.size fj_rt_volatile_write, . - fj_rt_volatile_write
+
+.global fj_rt_volatile_read
+.type fj_rt_volatile_read, @function
+fj_rt_volatile_read:
+    /* x0 = addr, returns value in x0 */
+    ldr     x0, [x0]
+    ret
+.size fj_rt_volatile_read, . - fj_rt_volatile_read
+
+.global fj_rt_volatile_write_u8
+.type fj_rt_volatile_write_u8, @function
+fj_rt_volatile_write_u8:
+    strb    w1, [x0]
+    ret
+.size fj_rt_volatile_write_u8, . - fj_rt_volatile_write_u8
+
+.global fj_rt_volatile_read_u8
+.type fj_rt_volatile_read_u8, @function
+fj_rt_volatile_read_u8:
+    ldrb    w0, [x0]
+    ret
+.size fj_rt_volatile_read_u8, . - fj_rt_volatile_read_u8
+
+.global fj_rt_volatile_write_u16
+.type fj_rt_volatile_write_u16, @function
+fj_rt_volatile_write_u16:
+    strh    w1, [x0]
+    ret
+.size fj_rt_volatile_write_u16, . - fj_rt_volatile_write_u16
+
+.global fj_rt_volatile_read_u16
+.type fj_rt_volatile_read_u16, @function
+fj_rt_volatile_read_u16:
+    ldrh    w0, [x0]
+    ret
+.size fj_rt_volatile_read_u16, . - fj_rt_volatile_read_u16
+
+.global fj_rt_volatile_write_u32
+.type fj_rt_volatile_write_u32, @function
+fj_rt_volatile_write_u32:
+    str     w1, [x0]
+    ret
+.size fj_rt_volatile_write_u32, . - fj_rt_volatile_write_u32
+
+.global fj_rt_volatile_read_u32
+.type fj_rt_volatile_read_u32, @function
+fj_rt_volatile_read_u32:
+    ldr     w0, [x0]
+    ret
+.size fj_rt_volatile_read_u32, . - fj_rt_volatile_read_u32
+
+/* Bare-metal runtime: memcpy/memset/halt */
+.global fj_rt_bare_memcpy
+.type fj_rt_bare_memcpy, @function
+fj_rt_bare_memcpy:
+    /* x0=dst, x1=src, x2=n */
+    mov     x3, x0
+.Lmcpy:
+    cbz     x2, .Lmcpy_done
+    ldrb    w4, [x1], #1
+    strb    w4, [x0], #1
+    sub     x2, x2, #1
+    b       .Lmcpy
+.Lmcpy_done:
+    mov     x0, x3
+    ret
+.size fj_rt_bare_memcpy, . - fj_rt_bare_memcpy
+
+.global fj_rt_bare_memset
+.type fj_rt_bare_memset, @function
+fj_rt_bare_memset:
+    /* x0=dst, x1=val, x2=n */
+    mov     x3, x0
+.Lmset:
+    cbz     x2, .Lmset_done
+    strb    w1, [x0], #1
+    sub     x2, x2, #1
+    b       .Lmset
+.Lmset_done:
+    mov     x0, x3
+    ret
+.size fj_rt_bare_memset, . - fj_rt_bare_memset
+
+.global fj_rt_bare_halt
+.type fj_rt_bare_halt, @function
+fj_rt_bare_halt:
+    wfe
+    b       fj_rt_bare_halt
+.size fj_rt_bare_halt, . - fj_rt_bare_halt
+
+.global fj_rt_bare_print_i64
+.type fj_rt_bare_print_i64, @function
+fj_rt_bare_print_i64:
+    /* Minimal: just write value as single char to UART */
+    ldr     x1, =0x09000000
+    add     w2, w0, #48   /* convert digit to ASCII (works for 0-9) */
+    strb    w2, [x1]
+    mov     w2, #10       /* newline */
+    strb    w2, [x1]
+    ret
+.size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64
+
+.global fj_rt_bare_print
+.type fj_rt_bare_print, @function
+fj_rt_bare_print:
+    /* x0=ptr, x1=len */
+    ldr     x2, =0x09000000
+.Lprint:
+    cbz     x1, .Lprint_done
+    ldrb    w3, [x0], #1
+    strb    w3, [x2]
+    sub     x1, x1, #1
+    b       .Lprint
+.Lprint_done:
+    ret
+.size fj_rt_bare_print, . - fj_rt_bare_print
+"#
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════
