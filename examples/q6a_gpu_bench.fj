@@ -1,0 +1,64 @@
+// q6a_gpu_bench.fj — GPU vs CPU benchmark on Dragon Q6A
+//
+// Compares tensor operations through GPU and CPU paths.
+// GPU builtins automatically fall back to CPU tensor operations.
+//
+// Usage: fj run examples/q6a_gpu_bench.fj
+
+println("=== GPU vs CPU Benchmark (Dragon Q6A) ===")
+println(f"GPU: {gpu_info()}")
+println("")
+
+// Benchmark: 100 iterations of 32x32 matmul
+fn bench_matmul(n: i64) -> i64 {
+    let mut i = 0
+    while i < n {
+        let a = tensor_randn(32, 32)
+        let b = tensor_randn(32, 32)
+        let _c = gpu_matmul(a, b)
+        i = i + 1
+    }
+    n
+}
+
+fn bench_relu(n: i64) -> i64 {
+    let mut i = 0
+    while i < n {
+        let a = tensor_randn(64, 64)
+        let _b = gpu_relu(a)
+        i = i + 1
+    }
+    n
+}
+
+fn bench_pipeline(n: i64) -> i64 {
+    let mut i = 0
+    while i < n {
+        let input = tensor_randn(1, 32)
+        let w = tensor_xavier(32, 10)
+        let h = gpu_relu(gpu_matmul(input, w))
+        let _probs = tensor_softmax(h)
+        i = i + 1
+    }
+    n
+}
+
+let start = sys_uptime()
+
+println("Running 100x matmul (32x32)...")
+let _n1 = bench_matmul(100)
+
+println("Running 100x relu (64x64)...")
+let _n2 = bench_relu(100)
+
+println("Running 100x inference pipeline...")
+let _n3 = bench_pipeline(100)
+
+let end = sys_uptime()
+let elapsed = end - start
+
+println("")
+println(f"Total time: {elapsed}s")
+println(f"Temp after bench: {cpu_temp() / 1000}C")
+println(f"Memory: {mem_usage()}%")
+println("Benchmark complete.")

@@ -5272,3 +5272,19 @@ fn e2e_q6a_plant_monitor_example() {
     assert!(out.iter().any(|l| l.contains("Plant Health Monitor")));
     assert!(out.iter().any(|l| l.contains("Plant monitor complete.")));
 }
+
+#[test]
+fn e2e_q6a_gpu_matmul_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_matmul.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU Matrix Multiply")));
+    assert!(out.iter().any(|l| l.contains("GPU matmul complete.")));
+}
+
+#[test]
+fn e2e_q6a_gpu_bench_example() {
+    let code = std::fs::read_to_string("examples/q6a_gpu_bench.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("GPU vs CPU Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Benchmark complete.")));
+}

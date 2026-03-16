@@ -1,0 +1,56 @@
+// q6a_gpu_matmul.fj — GPU-accelerated matrix multiplication on Dragon Q6A
+//
+// Demonstrates GPU builtins with CPU fallback for matrix operations.
+// On Q6A: Uses Adreno 635 GPU via OpenCL 3.0
+//
+// Usage: fj run examples/q6a_gpu_matmul.fj
+
+println("=== GPU Matrix Multiply (Dragon Q6A) ===")
+println("")
+
+// Check GPU availability
+let has_gpu = gpu_available()
+let info = gpu_info()
+println(f"GPU Available: {has_gpu}")
+println(f"GPU Info: {info}")
+println("")
+
+// Small matrix multiply
+println("--- 4x4 Matrix Multiply ---")
+let a = tensor_ones(4, 4)
+let b = tensor_ones(4, 4)
+let c = gpu_matmul(a, b)
+println(f"Result shape: 4x4 (via GPU path)")
+
+// Larger matrix
+println("")
+println("--- 64x64 Matrix Multiply ---")
+let m1 = tensor_randn(64, 64)
+let m2 = tensor_randn(64, 64)
+let m3 = gpu_matmul(m1, m2)
+println("Result shape: 64x64")
+
+// Element-wise operations
+println("")
+println("--- Element-wise GPU ops ---")
+let x = tensor_randn(8, 8)
+let y = tensor_randn(8, 8)
+let sum = gpu_add(x, y)
+let activated = gpu_relu(sum)
+let prob = gpu_sigmoid(activated)
+println("add → relu → sigmoid pipeline complete")
+
+// Inference pipeline
+println("")
+println("--- GPU Inference Pipeline ---")
+let input = tensor_randn(1, 128)
+let w1 = tensor_xavier(128, 64)
+let h = gpu_relu(gpu_matmul(input, w1))
+let w2 = tensor_xavier(64, 10)
+let logits = gpu_matmul(h, w2)
+let probs = tensor_softmax(logits)
+let class = tensor_argmax(probs)
+println(f"Predicted class: {class}")
+
+println("")
+println("GPU matmul complete.")

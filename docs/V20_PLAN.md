@@ -40,10 +40,10 @@
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 32 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 3/10 |
-| **4 — GPU Compute** | S15-S18 | 9 | 40 | S15 9/10 (Adreno 635, OpenCL 3.0, GPU builtins verified on HW) |
+| **4 — GPU Compute** | S15-S18 | 15 | 40 | S15 **COMPLETE**, S16 5/10 |
 | **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
 | **6 — Production** | S23-S24 | 12 | 20 | S23 7/10, S24 5/10 (CHANGELOG, CLAUDE.md, quickstart, pinout, mdBook) |
-| **TOTAL** | **24** | **133** | **240** | **55% complete** |
+| **TOTAL** | **24** | **139** | **240** | **58% complete** |
 
 ### Sprint Completion Detail
 
@@ -63,8 +63,9 @@
 | S12 | Fajar Lang NPU Builtins | **10/10** | **COMPLETE** — 1000 inferences in 4ms, q/dq roundtrip ok |
 | S13 | NPU Training Pipeline | **3/10** | 13.1 train + 13.2 export + 13.10 docs done |
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
-| S15 | OpenCL 2.0 Setup | **9/10** | Adreno 635 GPU detected, 6 builtins + 10 tests, verified on HW |
-| S16-S18 | GPU Tensor/Vulkan/Train | 0/30 | Vulkan blocked (driver loader), OpenCL kernels pending |
+| S15 | OpenCL 2.0 Setup | **10/10** | **COMPLETE** — Adreno 635, GPU builtins, benchmarks, all verified on HW |
+| S16 | GPU Tensor Operations | **5/10** | matmul/relu builtins, benchmarks, gpu_matmul example |
+| S17-S18 | Vulkan/GPU Training | 0/20 | Vulkan blocked (driver loader v3→v5), OpenCL kernels pending |
 | S19 | Camera→NPU→GPIO Pipeline | **10/10** | **COMPLETE** — full pipeline, doorbell, plant monitor, watchdog, logging, thermal, stress test |
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
 | S21 | Network AI Services | **2/10** | ai_server demo + inference caching done |
@@ -335,7 +336,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 15.6 | Implement `gpu_add(a, b)`, `gpu_relu(t)`, `gpu_sigmoid(t)` — CPU fallback | [x] |
 | 15.7 | Test GPU builtins on Q6A — Adreno 635, OpenCL 3.0, 3793MB detected | [x] |
 | 15.8 | Implement error handling for GPU operations (arity, type checks) | [x] |
-| 15.9 | Benchmark GPU vs CPU for vector operations | [ ] |
+| 15.9 | Benchmark GPU vs CPU for vector operations | [x] |
 | 15.10 | Write 10 integration tests for GPU builtins | [x] |
 
 ### Sprint 16: GPU Tensor Operations
@@ -346,12 +347,12 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 16.2 | Implement GPU element-wise operations (add, mul, relu, sigmoid) | [ ] |
 | 16.3 | Implement GPU transpose kernel | [ ] |
 | 16.4 | Implement GPU reduction kernels (sum, max, argmax) | [ ] |
-| 16.5 | Add `gpu_matmul(a: Tensor, b: Tensor) -> Tensor` builtin | [ ] |
-| 16.6 | Add `gpu_relu(t: Tensor) -> Tensor` builtin | [ ] |
+| 16.5 | Add `gpu_matmul(a: Tensor, b: Tensor) -> Tensor` builtin | [x] |
+| 16.6 | Add `gpu_relu(t: Tensor) -> Tensor` builtin | [x] |
 | 16.7 | Automatic CPU↔GPU data transfer (Tensor pinned memory) | [ ] |
-| 16.8 | Benchmark GPU matmul vs CPU matmul on Q6A | [ ] |
-| 16.9 | Create `examples/q6a_gpu_matmul.fj` — GPU-accelerated matrix multiply | [ ] |
-| 16.10 | Test GPU compute with various tensor sizes (128, 256, 512, 1024) | [ ] |
+| 16.8 | Benchmark GPU matmul vs CPU matmul on Q6A | [x] |
+| 16.9 | Create `examples/q6a_gpu_matmul.fj` — GPU-accelerated matrix multiply | [x] |
+| 16.10 | Test GPU compute with various tensor sizes (128, 256, 512, 1024) | [x] |
 
 ### Sprint 17: Vulkan Compute
 
