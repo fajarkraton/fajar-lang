@@ -4710,6 +4710,24 @@ fn main() {
     );
 }
 
+// ── Full Q6A example tests (Sprint 19+) ──
+
+#[test]
+fn e2e_q6a_anomaly_detect_example() {
+    let source = std::fs::read_to_string("examples/q6a_anomaly_detect.fj")
+        .expect("cannot read q6a_anomaly_detect.fj");
+    let out = eval_output(&source);
+    assert!(out.iter().any(|l| l.contains("anomaly_detect complete")));
+}
+
+#[test]
+fn e2e_q6a_ai_server_example() {
+    let source = std::fs::read_to_string("examples/q6a_ai_server.fj")
+        .expect("cannot read q6a_ai_server.fj");
+    let out = eval_output(&source);
+    assert!(out.iter().any(|l| l.contains("ai_server complete")));
+}
+
 // ── Full Q6A example tests ──
 
 #[test]
@@ -4825,4 +4843,202 @@ fn e2e_mnist_train_full_example() {
     // Clean up generated model files
     let _ = std::fs::remove_file("model_mnist.fjml");
     let _ = std::fs::remove_file("model_mnist.fjmq");
+}
+
+// ── GPU/OpenCL builtin tests (Sprint 15.3-15.8) ──
+
+#[test]
+fn e2e_gpu_available_returns_bool() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let avail = gpu_available()
+    println(type_of(avail))
+    println(avail)
+}
+"#,
+    );
+    assert_eq!(out[0], "bool");
+    // Value is either "true" or "false" depending on system
+    assert!(out[1] == "true" || out[1] == "false");
+}
+
+#[test]
+fn e2e_gpu_info_returns_string() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let info = gpu_info()
+    println(type_of(info))
+    // Should always return a non-empty string (either real info or fallback)
+    let has_content = len(info) > 0
+    println(has_content)
+}
+"#,
+    );
+    assert_eq!(out[0], "str");
+    assert_eq!(out[1], "true");
+}
+
+#[test]
+fn e2e_gpu_matmul_cpu_fallback() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let a = zeros(2, 3)
+    let b = ones(3, 2)
+    let c = gpu_matmul(a, b)
+    println(type_of(c))
+    println(c)
+}
+"#,
+    );
+    // 2x3 zeros @ 3x2 ones = 2x2 result tensor
+    assert!(
+        out.iter().any(|l| l.contains("tensor")),
+        "expected tensor from gpu_matmul, got: {out:?}"
+    );
+    assert!(
+        out.iter().any(|l| l.contains("shape=[2, 2]")),
+        "expected shape=[2, 2] from gpu_matmul, got: {out:?}"
+    );
+}
+
+#[test]
+fn e2e_gpu_add_cpu_fallback() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let a = ones(2, 2)
+    let b = ones(2, 2)
+    let c = gpu_add(a, b)
+    println(type_of(c))
+    println(c)
+}
+"#,
+    );
+    // gpu_add returns a tensor with correct shape
+    assert!(
+        out.iter().any(|l| l.contains("tensor")),
+        "expected tensor from gpu_add, got: {out:?}"
+    );
+    assert!(
+        out.iter().any(|l| l.contains("shape=[2, 2]")),
+        "expected shape=[2, 2] from gpu_add, got: {out:?}"
+    );
+}
+
+#[test]
+fn e2e_gpu_relu_cpu_fallback() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t = tensor_randn(2, 3)
+    let r = gpu_relu(t)
+    println(type_of(r))
+    println(to_string(tensor_rows(r)))
+    println(to_string(tensor_cols(r)))
+}
+"#,
+    );
+    assert_eq!(out[0], "tensor");
+    assert_eq!(out[1], "2");
+    assert_eq!(out[2], "3");
+}
+
+#[test]
+fn e2e_gpu_sigmoid_cpu_fallback() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let t = zeros(2, 2)
+    let s = gpu_sigmoid(t)
+    // Verify we get a tensor back with the correct shape
+    println(type_of(s))
+}
+"#,
+    );
+    // gpu_sigmoid returns a tensor
+    assert!(
+        out.iter().any(|l| l.contains("tensor")),
+        "expected tensor type from gpu_sigmoid, got: {out:?}"
+    );
+}
+
+#[test]
+fn e2e_gpu_matmul_type_error_non_tensor() {
+    let mut interp = Interpreter::new_capturing();
+    let result = interp.eval_source(
+        r#"
+fn main() {
+    let x = gpu_matmul(42, 42)
+}
+"#,
+    );
+    // Should succeed parse+analyze but might fail at runtime
+    if result.is_ok() {
+        let result = interp.call_main();
+        assert!(result.is_err(), "gpu_matmul with ints should fail");
+    }
+}
+
+#[test]
+fn e2e_gpu_available_no_args_arity() {
+    let mut interp = Interpreter::new_capturing();
+    let result = interp.eval_source(
+        r#"
+fn main() {
+    let x = gpu_available(42)
+}
+"#,
+    );
+    // Should fail either at analysis or runtime
+    if result.is_ok() {
+        let result = interp.call_main();
+        assert!(result.is_err(), "gpu_available(42) should fail arity check");
+    }
+}
+
+#[test]
+fn e2e_gpu_info_no_args_arity() {
+    let mut interp = Interpreter::new_capturing();
+    let result = interp.eval_source(
+        r#"
+fn main() {
+    let x = gpu_info(42)
+}
+"#,
+    );
+    if result.is_ok() {
+        let result = interp.call_main();
+        assert!(result.is_err(), "gpu_info(42) should fail arity check");
+    }
+}
+
+#[test]
+fn e2e_gpu_combined_pipeline() {
+    let out = eval_output(
+        r#"
+fn main() {
+    let avail = gpu_available()
+    let info = gpu_info()
+    println(f"GPU available: {avail}")
+    println(f"GPU info: {info}")
+
+    let a = tensor_ones(3, 3)
+    let b = tensor_ones(3, 3)
+    let c = gpu_matmul(a, b)
+    let d = tensor_ones(3, 3)
+    let e = gpu_add(c, d)
+    let f = gpu_relu(e)
+    let g = gpu_sigmoid(f)
+    println("Pipeline complete")
+    println(type_of(g))
+}
+"#,
+    );
+    assert!(out.iter().any(|l| l.contains("GPU available:")));
+    assert!(out.iter().any(|l| l.contains("GPU info:")));
+    assert!(out.iter().any(|l| l.contains("Pipeline complete")));
+    assert!(out.iter().any(|l| l.contains("tensor")));
 }

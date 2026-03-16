@@ -1391,6 +1391,9 @@ impl TypeChecker {
             // Timing builtins (v2.0)
             ("delay_ms", vec![Type::I64], Type::Void),
             ("delay_us", vec![Type::I64], Type::Void),
+            // GPU/OpenCL builtins — detection (v2.0 Q6A)
+            ("gpu_available", vec![], Type::Bool),
+            ("gpu_info", vec![], Type::Str),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {
@@ -1542,6 +1545,15 @@ impl TypeChecker {
                 vec![dyn_t.clone(), Type::I64],
                 dyn_t.clone(),
             ),
+            // GPU/OpenCL tensor builtins — CPU fallback (v2.0 Q6A)
+            (
+                "gpu_matmul",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            ("gpu_add", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
+            ("gpu_relu", vec![dyn_t.clone()], dyn_t.clone()),
+            ("gpu_sigmoid", vec![dyn_t.clone()], dyn_t.clone()),
         ];
         for (name, params, ret) in ml_fns {
             self.symbols.define(Symbol {

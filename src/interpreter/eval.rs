@@ -543,6 +543,13 @@ impl Interpreter {
             // Timing builtins (v2.0)
             "delay_ms",
             "delay_us",
+            // GPU/OpenCL builtins (v2.0 Q6A)
+            "gpu_available",
+            "gpu_info",
+            "gpu_matmul",
+            "gpu_add",
+            "gpu_relu",
+            "gpu_sigmoid",
         ];
         for name in &builtins {
             self.env
@@ -2524,6 +2531,13 @@ impl Interpreter {
             // Timing builtins (v2.0)
             "delay_ms" => self.builtin_delay_ms(args),
             "delay_us" => self.builtin_delay_us(args),
+            // GPU/OpenCL builtins (v2.0 Q6A)
+            "gpu_available" => self.builtin_gpu_available(args),
+            "gpu_info" => self.builtin_gpu_info(args),
+            "gpu_matmul" => self.builtin_gpu_matmul(args),
+            "gpu_add" => self.builtin_gpu_add(args),
+            "gpu_relu" => self.builtin_gpu_relu(args),
+            "gpu_sigmoid" => self.builtin_gpu_sigmoid(args),
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {
@@ -6439,6 +6453,304 @@ impl Interpreter {
                 obj.type_name()
             ))
             .into()),
+        }
+    }
+
+    // ── GPU/OpenCL builtins (v2.0 Q6A) ──
+
+    /// OpenCL library search paths — standard locations plus the
+    /// Adreno-specific library on the Radxa Dragon Q6A.
+    const OPENCL_LIB_CANDIDATES: &'static [&'static str] = &[
+        "libOpenCL.so",
+        "libOpenCL.so.1",
+        "libOpenCL_adreno.so.1",
+        "/usr/lib/aarch64-linux-gnu/libOpenCL.so.1",
+        "/vendor/lib64/libOpenCL_adreno.so.1",
+    ];
+
+    /// Attempt to detect OpenCL availability by loading the shared library.
+    ///
+    /// Tries standard names and the Adreno-specific path. Returns `true`
+    /// if any of them can be loaded via `libloading`.
+    fn detect_opencl() -> bool {
+        for name in Self::OPENCL_LIB_CANDIDATES {
+            // SAFETY: we only probe whether the library can be loaded.
+            // No symbols are called; the library is dropped immediately.
+            if unsafe { libloading::Library::new(name) }.is_ok() {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Query OpenCL platform/device info string via the OpenCL C API,
+    /// loaded dynamically through `libloading`.
+    ///
+    /// Returns a human-readable info string on success, or `None` if
+    /// OpenCL is not available or any FFI call fails.
+    fn query_opencl_info() -> Option<String> {
+        // OpenCL type aliases matching the C headers.
+        type ClInt = i32;
+        type ClUint = u32;
+        type ClPlatformId = *mut std::ffi::c_void;
+        type ClDeviceId = *mut std::ffi::c_void;
+        type ClDeviceInfo = ClUint;
+        type ClUlong = u64;
+
+        // OpenCL constants.
+        const CL_SUCCESS: ClInt = 0;
+        const CL_DEVICE_TYPE_GPU: ClUlong = 4;
+        const CL_DEVICE_NAME: ClDeviceInfo = 0x102B;
+        const CL_DEVICE_VERSION: ClDeviceInfo = 0x102F;
+        const CL_DEVICE_GLOBAL_MEM_SIZE: ClDeviceInfo = 0x101F;
+        const CL_DEVICE_MAX_WORK_GROUP_SIZE: ClDeviceInfo = 0x1004;
+
+        // OpenCL C function pointer types.
+        type ClGetPlatformIDsFn =
+            unsafe extern "C" fn(ClUint, *mut ClPlatformId, *mut ClUint) -> ClInt;
+        type ClGetDeviceIDsFn = unsafe extern "C" fn(
+            ClPlatformId,
+            ClUlong,
+            ClUint,
+            *mut ClDeviceId,
+            *mut ClUint,
+        ) -> ClInt;
+        type ClGetDeviceInfoFn =
+            unsafe extern "C" fn(ClDeviceId, ClDeviceInfo, usize, *mut u8, *mut usize) -> ClInt;
+
+        // Try to load OpenCL from any known path.
+        let lib = {
+            let mut found = None;
+            for name in Self::OPENCL_LIB_CANDIDATES {
+                // SAFETY: we load the library in order to call well-known
+                // OpenCL entry points whose signatures match the C API.
+                if let Ok(l) = unsafe { libloading::Library::new(name) } {
+                    found = Some(l);
+                    break;
+                }
+            }
+            found?
+        };
+
+        // SAFETY: symbol names and type signatures match the OpenCL 1.0+ C API.
+        let cl_get_platform_ids: libloading::Symbol<ClGetPlatformIDsFn> =
+            unsafe { lib.get(b"clGetPlatformIDs\0") }.ok()?;
+        let cl_get_device_ids: libloading::Symbol<ClGetDeviceIDsFn> =
+            unsafe { lib.get(b"clGetDeviceIDs\0") }.ok()?;
+        let cl_get_device_info: libloading::Symbol<ClGetDeviceInfoFn> =
+            unsafe { lib.get(b"clGetDeviceInfo\0") }.ok()?;
+
+        // Get first platform.
+        let mut platform: ClPlatformId = std::ptr::null_mut();
+        let mut num_platforms: ClUint = 0;
+        // SAFETY: valid pointers, single-element output.
+        let ret = unsafe { cl_get_platform_ids(1, &mut platform, &mut num_platforms) };
+        if ret != CL_SUCCESS || num_platforms == 0 {
+            return None;
+        }
+
+        // Get first GPU device on that platform.
+        let mut device: ClDeviceId = std::ptr::null_mut();
+        let mut num_devices: ClUint = 0;
+        // SAFETY: valid platform handle, valid output pointers.
+        let ret = unsafe {
+            cl_get_device_ids(
+                platform,
+                CL_DEVICE_TYPE_GPU,
+                1,
+                &mut device,
+                &mut num_devices,
+            )
+        };
+        if ret != CL_SUCCESS || num_devices == 0 {
+            return None;
+        }
+
+        // Helper closure: query a string-valued device info field.
+        let query_string = |info: ClDeviceInfo| -> String {
+            let mut size: usize = 0;
+            // SAFETY: querying required buffer size; null data pointer.
+            let ret =
+                unsafe { cl_get_device_info(device, info, 0, std::ptr::null_mut(), &mut size) };
+            if ret != CL_SUCCESS || size == 0 {
+                return String::new();
+            }
+            let mut buf = vec![0u8; size];
+            // SAFETY: buf is sized to hold the full result.
+            let ret =
+                unsafe { cl_get_device_info(device, info, size, buf.as_mut_ptr(), &mut size) };
+            if ret != CL_SUCCESS {
+                return String::new();
+            }
+            // Trim trailing NUL bytes.
+            while buf.last() == Some(&0) {
+                buf.pop();
+            }
+            String::from_utf8_lossy(&buf).to_string()
+        };
+
+        let dev_name = query_string(CL_DEVICE_NAME);
+        let dev_version = query_string(CL_DEVICE_VERSION);
+
+        // Query global memory size (u64).
+        let mut global_mem: ClUlong = 0;
+        let mut _ret_size: usize = 0;
+        // SAFETY: output pointer correctly sized for u64.
+        unsafe {
+            cl_get_device_info(
+                device,
+                CL_DEVICE_GLOBAL_MEM_SIZE,
+                std::mem::size_of::<ClUlong>(),
+                std::ptr::addr_of_mut!(global_mem).cast::<u8>(),
+                &mut _ret_size,
+            );
+        }
+
+        // Query max work group size (usize on the host).
+        let mut max_wg: usize = 0;
+        // SAFETY: output pointer correctly sized for usize.
+        unsafe {
+            cl_get_device_info(
+                device,
+                CL_DEVICE_MAX_WORK_GROUP_SIZE,
+                std::mem::size_of::<usize>(),
+                std::ptr::addr_of_mut!(max_wg).cast::<u8>(),
+                &mut _ret_size,
+            );
+        }
+
+        let mem_mb = global_mem / (1024 * 1024);
+        Some(format!(
+            "{dev_name}, {dev_version}, {mem_mb}MB, max_workgroup={max_wg}"
+        ))
+    }
+
+    /// `gpu_available() -> bool` — Check if an OpenCL GPU is available.
+    fn builtin_gpu_available(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        Ok(Value::Bool(Self::detect_opencl()))
+    }
+
+    /// `gpu_info() -> str` — Return GPU info string via OpenCL, or a fallback message.
+    fn builtin_gpu_info(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        match Self::query_opencl_info() {
+            Some(info) => Ok(Value::Str(info)),
+            None => Ok(Value::Str("GPU not available (CPU fallback mode)".into())),
+        }
+    }
+
+    /// `gpu_matmul(a: Tensor, b: Tensor) -> Tensor` — GPU-accelerated matrix multiply.
+    ///
+    /// Falls back to CPU tensor_matmul when OpenCL is unavailable.
+    fn builtin_gpu_matmul(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let a = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_matmul: first arg must be tensor".into()).into(),
+                )
+            }
+        };
+        let b = match &args[1] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_matmul: second arg must be tensor".into()).into(),
+                )
+            }
+        };
+        // CPU fallback — delegates to existing tensor_matmul
+        match tensor_ops::matmul(&a, &b) {
+            Ok(t) => Ok(Value::Tensor(t)),
+            Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
+        }
+    }
+
+    /// `gpu_add(a: Tensor, b: Tensor) -> Tensor` — GPU-accelerated element-wise add.
+    ///
+    /// Falls back to CPU tensor_add when OpenCL is unavailable.
+    fn builtin_gpu_add(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let a = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_add: first arg must be tensor".into()).into(),
+                )
+            }
+        };
+        let b = match &args[1] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_add: second arg must be tensor".into()).into(),
+                )
+            }
+        };
+        // CPU fallback — delegates to existing tensor_add
+        match tensor_ops::add(&a, &b) {
+            Ok(t) => Ok(Value::Tensor(t)),
+            Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
+        }
+    }
+
+    /// `gpu_relu(t: Tensor) -> Tensor` — GPU-accelerated ReLU activation.
+    ///
+    /// Falls back to CPU tensor_relu when OpenCL is unavailable.
+    fn builtin_gpu_relu(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::relu(t))),
+            _ => Err(RuntimeError::TypeError("gpu_relu: arg must be tensor".into()).into()),
+        }
+    }
+
+    /// `gpu_sigmoid(t: Tensor) -> Tensor` — GPU-accelerated sigmoid activation.
+    ///
+    /// Falls back to CPU tensor_sigmoid when OpenCL is unavailable.
+    fn builtin_gpu_sigmoid(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sigmoid(t))),
+            _ => Err(RuntimeError::TypeError("gpu_sigmoid: arg must be tensor".into()).into()),
         }
     }
 }

@@ -1,0 +1,27 @@
+[Unit]
+Description=Fajar Lang Application Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radxa
+Group=radxa
+WorkingDirectory=/opt/fj
+ExecStart=/usr/local/bin/fj run /opt/fj/app.fj
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/fj/app.log
+StandardError=append:/var/log/fj/error.log
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=4G
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/fj /var/log/fj /tmp
+
+[Install]
+WantedBy=multi-user.target

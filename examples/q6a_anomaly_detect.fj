@@ -1,0 +1,62 @@
+// q6a_anomaly_detect.fj — Sensor Anomaly Detection on Dragon Q6A
+//
+// Demonstrates edge AI anomaly detection:
+//   1. Read sensor data (simulated accelerometer)
+//   2. Detect anomalies using threshold on tensor argmax
+//   3. Report anomalies
+//
+// Run: fj run examples/q6a_anomaly_detect.fj
+
+fn main() {
+    println("=== Q6A Anomaly Detection ===")
+    println("Monitoring 4 sensor channels")
+    println("")
+
+    // Anomaly detection threshold
+    let threshold = 2
+    let num_samples = 20
+
+    println("Monitoring sensor data (threshold: argmax > " + to_string(threshold) + ")...")
+    println("  ┌────────┬──────────┬──────────┐")
+    println("  │ Sample │ ArgMax   │  Status  │")
+    println("  ├────────┼──────────┼──────────┤")
+
+    let mut anomaly_count = 0
+    let mut sample = 0
+
+    while sample < num_samples {
+        // Simulate sensor reading (4 channels)
+        let reading = tensor_randn(1, 4)
+
+        // Apply relu to get magnitudes
+        let magnitudes = tensor_relu(reading)
+
+        // Check which channel has highest activation
+        let max_channel = tensor_argmax(magnitudes)
+
+        // Simple anomaly: if max channel index is high (channels 2-3)
+        let is_anomaly = max_channel > threshold
+
+        if is_anomaly {
+            anomaly_count = anomaly_count + 1
+            println("  │   " + to_string(sample + 1) + "   │    " + to_string(max_channel) + "     │ ANOMALY  │")
+        } else {
+            println("  │   " + to_string(sample + 1) + "   │    " + to_string(max_channel) + "     │   OK     │")
+        }
+
+        sample = sample + 1
+    }
+
+    println("  └────────┴──────────┴──────────┘")
+    println("")
+    println("Results: " + to_string(anomaly_count) + "/" + to_string(num_samples) + " anomalies detected")
+
+    if anomaly_count > 0 {
+        println("ALERT: Anomalous readings detected!")
+    } else {
+        println("All readings within normal range.")
+    }
+
+    println("")
+    println("anomaly_detect complete")
+}
