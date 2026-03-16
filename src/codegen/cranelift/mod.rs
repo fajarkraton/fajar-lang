@@ -9739,6 +9739,10 @@ impl ObjectCompiler {
                     dce_entry_points.push(fndef.name.clone());
                 }
             }
+            // Bare-metal: kernel_main is called from startup asm, not .fj code
+            if self.no_std && fndef.name == "kernel_main" {
+                dce_entry_points.push(fndef.name.clone());
+            }
         }
         // If no explicit entry points, keep all functions (library mode)
         let mut reachable = if dce_entry_points.is_empty() {
