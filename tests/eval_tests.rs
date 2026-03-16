@@ -5288,3 +5288,11 @@ fn e2e_q6a_gpu_bench_example() {
     assert!(out.iter().any(|l| l.contains("GPU vs CPU Benchmark")));
     assert!(out.iter().any(|l| l.contains("Benchmark complete.")));
 }
+
+#[test]
+fn e2e_q6a_ml_pipeline_example() {
+    let code = std::fs::read_to_string("examples/q6a_ml_pipeline.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("ML Pipeline")));
+    assert!(out.iter().any(|l| l.contains("Pipeline complete.")));
+}

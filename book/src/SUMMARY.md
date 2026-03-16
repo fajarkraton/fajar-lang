@@ -82,6 +82,7 @@
 # Embedded & IoT
 
 - [Board Support Packages](./embedded/bsp.md)
+- [Dragon Q6A (QCS6490)](./embedded/dragon-q6a.md)
 - [RTOS Integration](./embedded/rtos.md)
 - [IoT Connectivity](./embedded/iot.md)
 - [Power Management](./embedded/power.md)

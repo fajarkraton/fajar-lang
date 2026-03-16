@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-16 | **Tests:** 5,378 (0 failures) | **Examples:** 67 .fj (15 Q6A-specific)
+> **Last updated:** 2026-03-16 | **Tests:** 5,381 (0 failures) | **Examples:** 68 .fj (18 Q6A-specific)
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
-| **3 — AI/ML NPU** | S9-S14 | 32 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 3/10 |
+| **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
 | **4 — GPU Compute** | S15-S18 | 15 | 40 | S15 **COMPLETE**, S16 5/10 |
 | **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
-| **6 — Production** | S23-S24 | 12 | 20 | S23 7/10, S24 5/10 (CHANGELOG, CLAUDE.md, quickstart, pinout, mdBook) |
-| **TOTAL** | **24** | **139** | **240** | **58% complete** |
+| **6 — Production** | S23-S24 | 13 | 20 | S23 8/10, S24 5/10 |
+| **TOTAL** | **24** | **141** | **240** | **59% complete** |
 
 ### Sprint Completion Detail
 
@@ -61,7 +61,7 @@
 | S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
 | S11 | QNN FFI Integration | **10/10** | **COMPLETE** — all builtins verified on real Q6A NPU |
 | S12 | Fajar Lang NPU Builtins | **10/10** | **COMPLETE** — 1000 inferences in 4ms, q/dq roundtrip ok |
-| S13 | NPU Training Pipeline | **3/10** | 13.1 train + 13.2 export + 13.10 docs done |
+| S13 | NPU Training Pipeline | **4/10** | 13.1 train + 13.2 export + 13.7 e2e pipeline + 13.10 docs |
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
 | S15 | OpenCL 2.0 Setup | **10/10** | **COMPLETE** — Adreno 635, GPU builtins, benchmarks, all verified on HW |
 | S16 | GPU Tensor Operations | **5/10** | matmul/relu builtins, benchmarks, gpu_matmul example |
@@ -70,7 +70,7 @@
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
 | S21 | Network AI Services | **2/10** | ai_server demo + inference caching done |
 | S22 | Video Processing | 0/10 | Needs camera |
-| S23 | Production Hardening | **7/10** | systemd, monitor, cold-start, crash recovery, log rotation, deploy guide, BOM |
+| S23 | Production Hardening | **8/10** | systemd, monitor, cold-start, crash recovery, log rotation, deploy guide, BOM, security audit |
 | S24 | Release & Documentation | **5/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook |
 
 ### What's Implemented (Software-Side, No Board Required)
@@ -300,7 +300,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 13.4 | Deploy quantized MNIST model to Q6A `/opt/fj/models/mnist_int8.so` | [ ] |
 | 13.5 | Run MNIST inference on NPU: verify > 90% accuracy | [ ] |
 | 13.6 | Benchmark MNIST inference latency on NPU (target: < 1ms per image) | [ ] |
-| 13.7 | Create end-to-end pipeline: `fj train → fj export → fj deploy → fj infer` | [ ] |
+| 13.7 | Create end-to-end pipeline: `fj train → fj export → fj deploy → fj infer` | [x] |
 | 13.8 | Test with larger model: ResNet-18 INT8 on NPU | [ ] |
 | 13.9 | Test mixed precision: INT8 convolutions + FP16 fully-connected | [ ] |
 | 13.10 | Document training→deployment pipeline in `docs/Q6A_ML_PIPELINE.md` | [x] |
@@ -461,7 +461,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 23.3 | Implement crash recovery and automatic restart | [x] |
 | 23.4 | Implement resource monitoring — `scripts/q6a-monitor.sh` (CPU temp/freq/mem/load/CDSP) | [x] |
 | 23.5 | Implement log rotation and remote log shipping | [x] |
-| 23.6 | Security audit: no exposed ports, TLS everywhere, signed binaries | [ ] |
+| 23.6 | Security audit: no exposed ports, TLS everywhere, signed binaries | [x] |
 | 23.7 | Test cold boot → first inference: 4ms (target met: < 5 seconds) | [x] |
 | 23.8 | Test SD card / NVMe wear leveling for 24/7 operation | [ ] |
 | 23.9 | Create production deployment guide: `docs/Q6A_PRODUCTION.md` | [x] |

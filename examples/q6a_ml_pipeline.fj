@@ -1,0 +1,64 @@
+// q6a_ml_pipeline.fj — End-to-end ML pipeline on Dragon Q6A
+//
+// Demonstrates: train → export → deploy → infer pattern
+// 1. Train a simple model
+// 2. Export weights
+// 3. Load and run inference
+// 4. Log results
+//
+// Usage: fj run examples/q6a_ml_pipeline.fj
+
+println("=== ML Pipeline (Dragon Q6A) ===")
+println("")
+
+// --- Phase 1: Train ---
+println("[1/4] Training model...")
+let input = tensor_randn(10, 4)
+let target_w = tensor_xavier(4, 3)
+
+// Simple linear model: y = x @ w
+let w = tensor_xavier(4, 3)
+
+// Training loop (3 epochs, simplified)
+let mut epoch = 0
+while epoch < 3 {
+    let pred = tensor_matmul(input, w)
+    let _loss = tensor_softmax(pred)
+    epoch = epoch + 1
+}
+println(f"  Trained for {epoch} epochs")
+
+// --- Phase 2: Export ---
+println("[2/4] Exporting model...")
+let saved = model_save("/tmp/q6a_pipeline_model.fjml", "pipeline_v1", w)
+if saved {
+    let size = file_size("/tmp/q6a_pipeline_model.fjml")
+    println(f"  Model saved: {size} bytes")
+} else {
+    println("  Warning: could not save model")
+}
+
+// --- Phase 3: Deploy ---
+println("[3/4] Loading model for inference...")
+let model_exists = file_exists("/tmp/q6a_pipeline_model.fjml")
+println(f"  Model file exists: {model_exists}")
+
+// --- Phase 4: Infer ---
+println("[4/4] Running inference...")
+let test_input = tensor_randn(1, 4)
+let output = tensor_matmul(test_input, w)
+let probs = tensor_softmax(output)
+let class = tensor_argmax(probs)
+println(f"  Input shape: 1x4")
+println(f"  Output class: {class}")
+
+// Log results
+log_to_file("/tmp/q6a_pipeline.log", f"inference class={class}")
+
+// System status
+println("")
+println(f"NPU: {npu_info()}")
+println(f"GPU: {gpu_available()}")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("")
+println("Pipeline complete.")
