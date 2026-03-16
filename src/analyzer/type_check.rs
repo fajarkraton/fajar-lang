@@ -1394,6 +1394,29 @@ impl TypeChecker {
             // GPU/OpenCL builtins — detection (v2.0 Q6A)
             ("gpu_available", vec![], Type::Bool),
             ("gpu_info", vec![], Type::Str),
+            // Edge AI / production builtins (v2.0 Q6A)
+            ("cpu_temp", vec![], Type::I64),
+            ("cpu_freq", vec![], Type::I64),
+            ("mem_usage", vec![], Type::I64),
+            ("sys_uptime", vec![], Type::I64),
+            ("log_to_file", vec![Type::Str, Type::Str], Type::Bool),
+            // Watchdog / deployment builtins (v2.0 Q6A)
+            ("watchdog_start", vec![Type::I64], Type::I64),
+            ("watchdog_kick", vec![Type::I64], Type::Bool),
+            ("watchdog_stop", vec![Type::I64], Type::Bool),
+            ("process_id", vec![], Type::I64),
+            ("sleep_ms", vec![Type::I64], Type::Void),
+            // Cache / file utilities (v2.0 Q6A)
+            ("cache_set", vec![Type::Str, Type::Str], Type::Bool),
+            ("cache_get", vec![Type::Str], Type::Str),
+            ("cache_clear", vec![], Type::Void),
+            ("file_size", vec![Type::Str], Type::I64),
+            (
+                "dir_list",
+                vec![Type::Str],
+                Type::Array(Box::new(Type::Str)),
+            ),
+            ("env_var", vec![Type::Str], Type::Str),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

@@ -4722,8 +4722,8 @@ fn e2e_q6a_anomaly_detect_example() {
 
 #[test]
 fn e2e_q6a_ai_server_example() {
-    let source = std::fs::read_to_string("examples/q6a_ai_server.fj")
-        .expect("cannot read q6a_ai_server.fj");
+    let source =
+        std::fs::read_to_string("examples/q6a_ai_server.fj").expect("cannot read q6a_ai_server.fj");
     let out = eval_output(&source);
     assert!(out.iter().any(|l| l.contains("ai_server complete")));
 }
@@ -5041,4 +5041,234 @@ fn main() {
     assert!(out.iter().any(|l| l.contains("GPU info:")));
     assert!(out.iter().any(|l| l.contains("Pipeline complete")));
     assert!(out.iter().any(|l| l.contains("tensor")));
+}
+
+// ============================================================
+// Edge AI / Production builtins (v2.0 Q6A Sprint 19/23)
+// ============================================================
+
+#[test]
+fn e2e_cpu_temp_returns_int() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("let t = cpu_temp()\nprintln(t)");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_cpu_freq_returns_int() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("let f = cpu_freq()\nprintln(f)");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_mem_usage_returns_percentage() {
+    let mut interp = Interpreter::new();
+    let result =
+        interp.eval_source("let m = mem_usage()\nassert(m >= 0)\nassert(m <= 100)\nprintln(m)");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_sys_uptime_returns_positive() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("let u = sys_uptime()\nassert(u > 0)\nprintln(u)");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_log_to_file_writes_message() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(
+        "let ok = log_to_file(\"/tmp/fj_test_log.txt\", \"test message\")\nassert(ok == true)",
+    );
+    assert!(result.is_ok());
+    // Verify file was written
+    let content = std::fs::read_to_string("/tmp/fj_test_log.txt").unwrap();
+    assert!(content.contains("test message"));
+    // Cleanup
+    let _ = std::fs::remove_file("/tmp/fj_test_log.txt");
+}
+
+#[test]
+fn e2e_log_to_file_wrong_arity() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("log_to_file(\"only_one_arg\")");
+    assert!(result.is_err());
+}
+
+#[test]
+fn e2e_q6a_system_monitor_example() {
+    let code = std::fs::read_to_string("examples/q6a_system_monitor.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Dragon Q6A System Monitor")));
+    assert!(out.iter().any(|l| l.contains("CPU Temperature:")));
+    assert!(out.iter().any(|l| l.contains("Memory Usage:")));
+    assert!(out.iter().any(|l| l.contains("System Uptime:")));
+    assert!(out.iter().any(|l| l.contains("Monitor complete.")));
+}
+
+#[test]
+fn e2e_edge_ai_monitoring_pipeline() {
+    let code = r#"
+let temp = cpu_temp()
+let freq = cpu_freq()
+let mem = mem_usage()
+let up = sys_uptime()
+println(f"temp={temp} freq={freq} mem={mem}% uptime={up}s")
+assert(mem >= 0)
+assert(up > 0)
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(code);
+    assert!(result.is_ok());
+}
+
+// ============================================================
+// Watchdog / Deployment builtins (v2.0 Q6A Sprint 19/23)
+// ============================================================
+
+#[test]
+fn e2e_watchdog_start_kick_stop() {
+    let code = r#"
+let wd = watchdog_start(500)
+watchdog_kick(wd)
+sleep_ms(100)
+watchdog_kick(wd)
+watchdog_stop(wd)
+println("watchdog ok")
+"#;
+    let out = eval_output(code);
+    assert!(out.iter().any(|l| l.contains("watchdog ok")));
+}
+
+#[test]
+fn e2e_process_id_returns_positive() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("let pid = process_id()\nassert(pid > 0)\nprintln(pid)");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_sleep_ms_works() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("sleep_ms(10)\nprintln(\"slept\")");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_watchdog_wrong_arity() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source("watchdog_start()");
+    assert!(result.is_err());
+}
+
+#[test]
+fn e2e_q6a_stress_test_example() {
+    let code = std::fs::read_to_string("examples/q6a_stress_test.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Stress Test")));
+    assert!(out.iter().any(|l| l.contains("Stress test PASSED")));
+}
+
+#[test]
+fn e2e_q6a_edge_deploy_example() {
+    let code = std::fs::read_to_string("examples/q6a_edge_deploy.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Edge AI Deployment")));
+    assert!(out.iter().any(|l| l.contains("Deployment shutdown clean.")));
+}
+
+// ============================================================
+// Cache / File utility builtins (v2.0 Q6A Sprint 21/23)
+// ============================================================
+
+#[test]
+fn e2e_cache_set_get_clear() {
+    let code = r#"
+cache_set("key1", "value1")
+cache_set("key2", "value2")
+let v1 = cache_get("key1")
+let v2 = cache_get("key2")
+let miss = cache_get("no_such_key")
+assert(v1 == "value1")
+assert(v2 == "value2")
+assert(miss == "")
+cache_clear()
+let after = cache_get("key1")
+assert(after == "")
+println("cache ok")
+"#;
+    let out = eval_output(code);
+    assert!(out.iter().any(|l| l.contains("cache ok")));
+}
+
+#[test]
+fn e2e_file_size_returns_int() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(
+        r#"let s = file_size("Cargo.toml")
+assert(s > 0)
+println(s)"#,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_file_size_nonexistent_returns_neg() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(
+        r#"let s = file_size("/no/such/file")
+assert(s == -1)"#,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_dir_list_returns_array() {
+    let code = r#"
+let files = dir_list("examples")
+assert(len(files) > 0)
+println(len(files))
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(code);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_env_var_reads_path() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(
+        r#"let p = env_var("HOME")
+assert(len(p) > 0)
+println(p)"#,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_env_var_missing_returns_empty() {
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(
+        r#"let v = env_var("FJ_NONEXISTENT_VAR_XYZ")
+assert(v == "")"#,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn e2e_q6a_smart_doorbell_example() {
+    let code = std::fs::read_to_string("examples/q6a_smart_doorbell.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Smart Doorbell")));
+    assert!(out.iter().any(|l| l.contains("Doorbell shutdown.")));
+}
+
+#[test]
+fn e2e_q6a_plant_monitor_example() {
+    let code = std::fs::read_to_string("examples/q6a_plant_monitor.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Plant Health Monitor")));
+    assert!(out.iter().any(|l| l.contains("Plant monitor complete.")));
 }

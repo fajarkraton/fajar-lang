@@ -1,0 +1,71 @@
+// q6a_edge_deploy.fj — Production edge AI deployment pattern for Dragon Q6A
+//
+// Demonstrates: watchdog, health monitoring, logging, graceful degradation
+// Runs a simulated inference loop with health checks and auto-recovery
+//
+// Usage: fj run examples/q6a_edge_deploy.fj
+
+fn health_check() -> bool {
+    let temp = cpu_temp()
+    let mem = mem_usage()
+    // Healthy if temp < 90C and mem < 90%
+    if temp < 90000 {
+        if mem < 90 {
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+fn run_inference() -> str {
+    let input = tensor_randn(1, 10)
+    let weights = tensor_xavier(10, 3)
+    let output = tensor_matmul(input, weights)
+    let result = tensor_softmax(output)
+    let class = tensor_argmax(result)
+    to_string(class)
+}
+
+// --- Main deployment loop ---
+
+let pid = process_id()
+println(f"=== Edge AI Deployment (PID: {pid}) ===")
+
+// Initialize watchdog (3 second timeout)
+let wd = watchdog_start(3000)
+
+// Log startup
+log_to_file("/tmp/q6a_deploy.log", f"STARTUP pid={pid}")
+
+let mut cycle = 0
+let max_cycles = 5
+
+while cycle < max_cycles {
+    watchdog_kick(wd)
+
+    // Health check before inference
+    let healthy = health_check()
+    if healthy {
+        let result = run_inference()
+        println(f"  [{cycle}] Inference result: class {result}")
+        log_to_file("/tmp/q6a_deploy.log", f"INFER cycle={cycle} class={result}")
+        sleep_ms(10)
+    } else {
+        println(f"  [{cycle}] DEGRADED — skipping inference")
+        log_to_file("/tmp/q6a_deploy.log", f"DEGRADED cycle={cycle}")
+        sleep_ms(100)
+    }
+
+    cycle = cycle + 1
+}
+
+watchdog_stop(wd)
+log_to_file("/tmp/q6a_deploy.log", f"SHUTDOWN pid={pid} cycles={cycle}")
+
+println("")
+let uptime = sys_uptime()
+println(f"Completed {cycle} cycles, system uptime: {uptime}s")
+println("Deployment shutdown clean.")

@@ -1,0 +1,72 @@
+// q6a_plant_monitor.fj — Classify plant health → display on I2C
+//
+// Simulates: sensor read → ML inference → I2C display output
+// On real hardware: connect soil moisture sensor + I2C OLED display
+//
+// Usage: fj run examples/q6a_plant_monitor.fj
+
+fn read_sensors() -> i64 {
+    // Simulate soil moisture + ambient light + temperature readings
+    let moisture = tensor_randn(1, 3)
+    0
+}
+
+fn classify_health(sensor_id: i64) -> str {
+    // 4-class plant health classifier
+    let features = tensor_randn(1, 16)
+    let w1 = tensor_xavier(16, 8)
+    let h = tensor_relu(tensor_matmul(features, w1))
+    let w2 = tensor_xavier(8, 4)
+    let logits = tensor_matmul(h, w2)
+    let probs = tensor_softmax(logits)
+    let class = tensor_argmax(probs)
+    if class == 0 {
+        "healthy"
+    } else if class == 1 {
+        "needs_water"
+    } else if class == 2 {
+        "needs_light"
+    } else {
+        "critical"
+    }
+}
+
+fn display_status(plant_id: i64, status: str) -> bool {
+    // Simulate I2C display update
+    // On real hardware: i2c_write(0x3C, ...) to OLED
+    println(f"  [Display] Plant #{plant_id}: {status}")
+    true
+}
+
+// --- Main ---
+
+println("=== Plant Health Monitor (Dragon Q6A) ===")
+println("")
+
+let num_plants = 4
+let mut plant = 0
+let mut alerts = 0
+
+while plant < num_plants {
+    let _s = read_sensors()
+    let status = classify_health(plant)
+
+    display_status(plant, status)
+
+    if status == "critical" {
+        alerts = alerts + 1
+        log_to_file("/tmp/q6a_plant.log", f"ALERT plant={plant} status=critical")
+    } else if status == "needs_water" {
+        alerts = alerts + 1
+        log_to_file("/tmp/q6a_plant.log", f"ALERT plant={plant} status=needs_water")
+    } else {
+        log_to_file("/tmp/q6a_plant.log", f"OK plant={plant} status={status}")
+    }
+
+    plant = plant + 1
+}
+
+println("")
+println(f"Checked {num_plants} plants, {alerts} alerts")
+println(f"System uptime: {sys_uptime()}s, temp: {cpu_temp() / 1000}C")
+println("Plant monitor complete.")

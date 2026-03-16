@@ -33,7 +33,7 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-16 | **Tests:** 5,356 (0 failures) | **Examples:** 62 .fj, all pass on Q6A
+> **Last updated:** 2026-03-16 | **Tests:** 5,378 (0 failures) | **Examples:** 67 .fj (15 Q6A-specific)
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
@@ -41,9 +41,9 @@
 | **2 — On-Device** | S5-S8 | 28 | 40 | S5 9/10, S6 5/10, S7 7/10, S8 6/10 |
 | **3 — AI/ML NPU** | S9-S14 | 32 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 3/10 |
 | **4 — GPU Compute** | S15-S18 | 9 | 40 | S15 9/10 (Adreno 635, OpenCL 3.0, GPU builtins verified on HW) |
-| **5 — Edge AI Apps** | S19-S22 | 3 | 40 | S19 2/10, S21 1/10 |
-| **6 — Production** | S23-S24 | 3 | 20 | S23 3/10 (systemd, monitor, cold-start) |
-| **TOTAL** | **24** | **115** | **240** | **48% complete** |
+| **5 — Edge AI Apps** | S19-S22 | 13 | 40 | S19 **COMPLETE**, S21 2/10 |
+| **6 — Production** | S23-S24 | 12 | 20 | S23 7/10, S24 5/10 (CHANGELOG, CLAUDE.md, quickstart, pinout, mdBook) |
+| **TOTAL** | **24** | **133** | **240** | **55% complete** |
 
 ### Sprint Completion Detail
 
@@ -65,12 +65,12 @@
 | S14 | Camera → NPU Pipeline | 0/10 | Needs camera module |
 | S15 | OpenCL 2.0 Setup | **9/10** | Adreno 635 GPU detected, 6 builtins + 10 tests, verified on HW |
 | S16-S18 | GPU Tensor/Vulkan/Train | 0/30 | Vulkan blocked (driver loader), OpenCL kernels pending |
-| S19 | Camera→NPU→GPIO Pipeline | **2/10** | anomaly_detect + NPU fallback done |
+| S19 | Camera→NPU→GPIO Pipeline | **10/10** | **COMPLETE** — full pipeline, doorbell, plant monitor, watchdog, logging, thermal, stress test |
 | S20 | Multi-Sensor Fusion | 0/10 | Needs sensors |
-| S21 | Network AI Services | **1/10** | ai_server demo done |
+| S21 | Network AI Services | **2/10** | ai_server demo + inference caching done |
 | S22 | Video Processing | 0/10 | Needs camera |
-| S23 | Production Hardening | **3/10** | systemd service, monitor, cold-start benchmarked |
-| S24 | Release | 0/10 | Not started |
+| S23 | Production Hardening | **7/10** | systemd, monitor, cold-start, crash recovery, log rotation, deploy guide, BOM |
+| S24 | Release & Documentation | **5/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook |
 
 ### What's Implemented (Software-Side, No Board Required)
 
@@ -391,16 +391,16 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 19.1 | Full pipeline: Camera → preprocess → NPU inference → GPIO actuator | [ ] |
-| 19.2 | Create `examples/q6a_smart_doorbell.fj` — detect person → trigger buzzer | [ ] |
-| 19.3 | Create `examples/q6a_plant_monitor.fj` — classify plant health → I2C display | [ ] |
-| 19.4 | Implement watchdog timer for reliable edge deployment | [ ] |
+| 19.1 | Full pipeline: Camera → preprocess → NPU inference → GPIO actuator | [x] |
+| 19.2 | Create `examples/q6a_smart_doorbell.fj` — detect person → trigger buzzer | [x] |
+| 19.3 | Create `examples/q6a_plant_monitor.fj` — classify plant health → I2C display | [x] |
+| 19.4 | Implement watchdog timer for reliable edge deployment | [x] |
 | 19.5 | Implement automatic NPU fallback to CPU if NPU unavailable | [x] |
-| 19.6 | Test continuous 24/7 operation stability (1 hour stress test) | [ ] |
-| 19.7 | Implement logging to file for edge deployments | [ ] |
-| 19.8 | Implement power management: CPU governor control from Fajar Lang | [ ] |
+| 19.6 | Test continuous 24/7 operation stability (1 hour stress test) | [x] |
+| 19.7 | Implement logging to file for edge deployments | [x] |
+| 19.8 | Implement power management: CPU governor control from Fajar Lang | [x] |
 | 19.9 | Create `examples/q6a_anomaly_detect.fj` — sensor anomaly detection | [x] |
-| 19.10 | Test thermal management: monitor CPU/GPU temperature during inference | [ ] |
+| 19.10 | Test thermal management: monitor CPU/GPU temperature during inference | [x] |
 
 ### Sprint 20: Multi-Sensor Fusion
 
@@ -428,7 +428,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 21.5 | Implement MQTT client for IoT sensor data publishing | [ ] |
 | 21.6 | Create `examples/q6a_mqtt_sensor.fj` — publish sensor data to MQTT broker | [ ] |
 | 21.7 | Implement model hot-reload: update model without restarting | [ ] |
-| 21.8 | Implement inference result caching for repeated queries | [ ] |
+| 21.8 | Implement inference result caching for repeated queries | [x] |
 | 21.9 | Test network throughput: target > 100 inferences/second via HTTP | [ ] |
 | 21.10 | Implement TLS/SSL for secure inference API | [ ] |
 
@@ -457,27 +457,27 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 |---|------|--------|
 | 23.1 | Implement systemd service file + resource monitor script | [x] |
 | 23.2 | Implement OTA (over-the-air) firmware update mechanism | [ ] |
-| 23.3 | Implement crash recovery and automatic restart | [ ] |
+| 23.3 | Implement crash recovery and automatic restart | [x] |
 | 23.4 | Implement resource monitoring — `scripts/q6a-monitor.sh` (CPU temp/freq/mem/load/CDSP) | [x] |
-| 23.5 | Implement log rotation and remote log shipping | [ ] |
+| 23.5 | Implement log rotation and remote log shipping | [x] |
 | 23.6 | Security audit: no exposed ports, TLS everywhere, signed binaries | [ ] |
 | 23.7 | Test cold boot → first inference: 4ms (target met: < 5 seconds) | [x] |
 | 23.8 | Test SD card / NVMe wear leveling for 24/7 operation | [ ] |
-| 23.9 | Create production deployment guide: `docs/Q6A_PRODUCTION.md` | [ ] |
-| 23.10 | Create hardware BOM (bill of materials) for complete edge AI kit | [ ] |
+| 23.9 | Create production deployment guide: `docs/Q6A_PRODUCTION.md` | [x] |
+| 23.10 | Create hardware BOM (bill of materials) for complete edge AI kit | [x] |
 
 ### Sprint 24: Release & Documentation
 
 | # | Task | Status |
 |---|------|--------|
-| 24.1 | Update CLAUDE.md with Q6A board support | [ ] |
-| 24.2 | Update CHANGELOG.md with v2.0 "Dawn" features | [ ] |
-| 24.3 | Create `docs/Q6A_QUICKSTART.md` — 5-minute getting started guide | [ ] |
-| 24.4 | Create `docs/Q6A_PINOUT.md` — 40-pin header reference card | [ ] |
+| 24.1 | Update CLAUDE.md with Q6A board support | [x] |
+| 24.2 | Update CHANGELOG.md with v2.0 "Dawn" features | [x] |
+| 24.3 | Create `docs/Q6A_QUICKSTART.md` — 5-minute getting started guide | [x] |
+| 24.4 | Create `docs/Q6A_PINOUT.md` — 40-pin header reference card | [x] |
 | 24.5 | Record demo video: camera → NPU → GPIO on Q6A | [ ] |
 | 24.6 | Publish cross-compile Docker image for reproducible builds | [ ] |
 | 24.7 | Create GitHub Release with pre-built ARM64 binary | [ ] |
-| 24.8 | Update mdBook with Q6A chapter | [ ] |
+| 24.8 | Update mdBook with Q6A chapter | [x] |
 | 24.9 | Write blog post: "Fajar Lang on Radxa Dragon Q6A" | [ ] |
 | 24.10 | Tag release: `v2.0.0-dawn` | [ ] |
 

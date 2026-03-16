@@ -199,6 +199,8 @@ pub struct Interpreter {
     npu_models: HashMap<i64, String>,
     /// QNN buffer store: buffer_id → QnnBuffer (for quantize/dequantize round-trip).
     qnn_buffers: HashMap<i64, crate::runtime::ml::npu::QnnBuffer>,
+    /// Inference result cache: key (string) → cached result (string).
+    inference_cache: HashMap<String, String>,
 }
 
 impl Interpreter {
@@ -231,6 +233,7 @@ impl Interpreter {
             spi_buses: HashMap::new(),
             npu_models: HashMap::new(),
             qnn_buffers: HashMap::new(),
+            inference_cache: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -265,6 +268,7 @@ impl Interpreter {
             spi_buses: HashMap::new(),
             npu_models: HashMap::new(),
             qnn_buffers: HashMap::new(),
+            inference_cache: HashMap::new(),
         };
         interp.register_builtins();
         interp
@@ -550,6 +554,25 @@ impl Interpreter {
             "gpu_add",
             "gpu_relu",
             "gpu_sigmoid",
+            // Edge AI / production builtins (v2.0 Q6A)
+            "cpu_temp",
+            "cpu_freq",
+            "mem_usage",
+            "sys_uptime",
+            "log_to_file",
+            // Watchdog / deployment builtins (v2.0 Q6A)
+            "watchdog_start",
+            "watchdog_kick",
+            "watchdog_stop",
+            "process_id",
+            "sleep_ms",
+            // Cache / file utilities (v2.0 Q6A)
+            "cache_set",
+            "cache_get",
+            "cache_clear",
+            "file_size",
+            "dir_list",
+            "env_var",
         ];
         for name in &builtins {
             self.env
@@ -2538,6 +2561,28 @@ impl Interpreter {
             "gpu_add" => self.builtin_gpu_add(args),
             "gpu_relu" => self.builtin_gpu_relu(args),
             "gpu_sigmoid" => self.builtin_gpu_sigmoid(args),
+            // Edge AI / production builtins (v2.0 Q6A)
+            "cpu_temp" => self.builtin_cpu_temp(args),
+            "cpu_freq" => self.builtin_cpu_freq(args),
+            "mem_usage" => self.builtin_mem_usage(args),
+            "sys_uptime" => self.builtin_sys_uptime(args),
+            "log_to_file" => self.builtin_log_to_file(args),
+            // Watchdog / deployment builtins (v2.0 Q6A)
+            "watchdog_start" => self.builtin_watchdog_start(args),
+            "watchdog_kick" => self.builtin_watchdog_kick(args),
+            "watchdog_stop" => self.builtin_watchdog_stop(args),
+            "process_id" => Ok(Value::Int(std::process::id() as i64)),
+            "sleep_ms" => self.builtin_sleep_ms(args),
+            // Cache / file utilities (v2.0 Q6A)
+            "cache_set" => self.builtin_cache_set(args),
+            "cache_get" => self.builtin_cache_get(args),
+            "cache_clear" => {
+                self.inference_cache.clear();
+                Ok(Value::Null)
+            }
+            "file_size" => self.builtin_file_size(args),
+            "dir_list" => self.builtin_dir_list(args),
+            "env_var" => self.builtin_env_var(args),
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {
@@ -6751,6 +6796,380 @@ impl Interpreter {
         match &args[0] {
             Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sigmoid(t))),
             _ => Err(RuntimeError::TypeError("gpu_sigmoid: arg must be tensor".into()).into()),
+        }
+    }
+
+    // ── Edge AI / production builtins (v2.0 Q6A) ──
+
+    /// `cpu_temp() -> i64` — Read maximum CPU temperature in millidegrees Celsius.
+    fn builtin_cpu_temp(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let mut max_temp: i64 = 0;
+        for i in 0..10 {
+            let path = format!("/sys/class/thermal/thermal_zone{i}/temp");
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(temp) = content.trim().parse::<i64>() {
+                    if temp > max_temp {
+                        max_temp = temp;
+                    }
+                }
+            }
+        }
+        Ok(Value::Int(max_temp))
+    }
+
+    /// `cpu_freq() -> i64` — Read current CPU frequency in kHz (max across all cores).
+    fn builtin_cpu_freq(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let mut max_freq: i64 = 0;
+        for i in 0..8 {
+            let path = format!("/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_cur_freq");
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(freq) = content.trim().parse::<i64>() {
+                    if freq > max_freq {
+                        max_freq = freq;
+                    }
+                }
+            }
+        }
+        Ok(Value::Int(max_freq))
+    }
+
+    /// `mem_usage() -> i64` — Return memory usage percentage (0-100).
+    fn builtin_mem_usage(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        if let Ok(content) = std::fs::read_to_string("/proc/meminfo") {
+            let mut total: i64 = 0;
+            let mut available: i64 = 0;
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("MemTotal:") {
+                    total = val
+                        .split_whitespace()
+                        .next()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                } else if let Some(val) = line.strip_prefix("MemAvailable:") {
+                    available = val
+                        .split_whitespace()
+                        .next()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                }
+            }
+            if total > 0 {
+                return Ok(Value::Int((total - available) * 100 / total));
+            }
+        }
+        Ok(Value::Int(0))
+    }
+
+    /// `sys_uptime() -> i64` — Return system uptime in seconds.
+    fn builtin_sys_uptime(&self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        if let Ok(content) = std::fs::read_to_string("/proc/uptime") {
+            if let Some(secs_str) = content.split_whitespace().next() {
+                if let Ok(secs) = secs_str.parse::<f64>() {
+                    return Ok(Value::Int(secs as i64));
+                }
+            }
+        }
+        Ok(Value::Int(0))
+    }
+
+    /// `log_to_file(path: str, message: str) -> bool` — Append message to log file.
+    fn builtin_log_to_file(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let path = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("log_to_file: path must be string".into()).into(),
+                )
+            }
+        };
+        let message = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("log_to_file: message must be string".into()).into(),
+                )
+            }
+        };
+        use std::io::Write;
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(file, "[{timestamp}] {message}");
+                Ok(Value::Bool(true))
+            }
+            Err(_) => Ok(Value::Bool(false)),
+        }
+    }
+
+    /// Software watchdog — starts a background thread that panics if not kicked within timeout_ms.
+    /// Returns a watchdog ID (i64).
+    fn builtin_watchdog_start(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let timeout_ms = match &args[0] {
+            Value::Int(n) => *n as u64,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "watchdog_start: timeout must be integer (ms)".into(),
+                )
+                .into())
+            }
+        };
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let alive = Arc::new(AtomicBool::new(true));
+        let alive_clone = alive.clone();
+        let id = Arc::as_ptr(&alive) as i64;
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
+                if !alive_clone.load(Ordering::Relaxed) {
+                    break; // stopped
+                }
+                // If still alive, the watchdog was kicked (reset to true after check)
+                if !alive_clone.swap(false, Ordering::Relaxed) {
+                    // Was already false = not kicked in time
+                    eprintln!("[watchdog] TIMEOUT after {timeout_ms}ms — process not responding");
+                    break;
+                }
+            }
+        });
+        // Store the Arc in a global map so kick/stop can access it
+        self.env
+            .borrow_mut()
+            .define(format!("__watchdog_{id}"), Value::Int(id));
+        // Store alive flag pointer for kick/stop
+        // We leak the Arc intentionally — it's cleaned up on stop
+        std::mem::forget(alive);
+        Ok(Value::Int(id))
+    }
+
+    /// Kick the watchdog to prevent timeout.
+    fn builtin_watchdog_kick(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let id = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("watchdog_kick: id must be integer".into()).into(),
+                )
+            }
+        };
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // SAFETY: id is a pointer to an Arc<AtomicBool> we leaked in watchdog_start
+        let alive = unsafe { &*(id as *const AtomicBool) };
+        alive.store(true, Ordering::Relaxed);
+        Ok(Value::Bool(true))
+    }
+
+    /// Stop the watchdog.
+    fn builtin_watchdog_stop(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let id = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("watchdog_stop: id must be integer".into()).into(),
+                )
+            }
+        };
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // SAFETY: id is a pointer to an Arc<AtomicBool> we leaked in watchdog_start
+        let alive = unsafe { &*(id as *const AtomicBool) };
+        alive.store(false, Ordering::Relaxed); // signal thread to exit
+        Ok(Value::Bool(true))
+    }
+
+    /// Sleep for given milliseconds.
+    fn builtin_sleep_ms(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ms = match &args[0] {
+            Value::Int(n) => *n as u64,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "sleep_ms: duration must be integer (ms)".into(),
+                )
+                .into())
+            }
+        };
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+        Ok(Value::Null)
+    }
+
+    /// Set a key-value pair in the inference cache.
+    fn builtin_cache_set(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("cache_set: key must be string".into()).into())
+            }
+        };
+        let val = match &args[1] {
+            Value::Str(s) => s.clone(),
+            other => format!("{other}"),
+        };
+        self.inference_cache.insert(key, val);
+        Ok(Value::Bool(true))
+    }
+
+    /// Get a value from the inference cache. Returns "" if not found.
+    fn builtin_cache_get(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("cache_get: key must be string".into()).into())
+            }
+        };
+        match self.inference_cache.get(&key) {
+            Some(val) => Ok(Value::Str(val.clone())),
+            None => Ok(Value::Str(String::new())),
+        }
+    }
+
+    /// Get file size in bytes. Returns -1 if file doesn't exist.
+    fn builtin_file_size(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let path = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("file_size: path must be string".into()).into())
+            }
+        };
+        match std::fs::metadata(&path) {
+            Ok(m) => Ok(Value::Int(m.len() as i64)),
+            Err(_) => Ok(Value::Int(-1)),
+        }
+    }
+
+    /// List directory contents. Returns array of filenames.
+    fn builtin_dir_list(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let path = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("dir_list: path must be string".into()).into())
+            }
+        };
+        let mut entries = Vec::new();
+        if let Ok(dir) = std::fs::read_dir(&path) {
+            for entry in dir.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    entries.push(Value::Str(name.to_string()));
+                }
+            }
+        }
+        Ok(Value::Array(entries))
+    }
+
+    /// Get environment variable value. Returns "" if not set.
+    fn builtin_env_var(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let name = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => return Err(RuntimeError::TypeError("env_var: name must be string".into()).into()),
+        };
+        match std::env::var(&name) {
+            Ok(val) => Ok(Value::Str(val)),
+            Err(_) => Ok(Value::Str(String::new())),
         }
     }
 }

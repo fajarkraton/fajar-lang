@@ -18,6 +18,30 @@ Kategori perubahan:
 
 ---
 
+## [2.0.0-dawn] — 2026-03-16 "Dawn" (Q6A Hardware Deployment)
+
+### Added
+- **Dragon Q6A BSP**: Full board support for Radxa Dragon Q6A (QCS6490 edge AI SBC)
+- **Cross-compilation**: `cargo build --release --target aarch64-unknown-linux-gnu` → 6.8MB binary
+- **GPU builtins**: `gpu_available()`, `gpu_info()`, `gpu_matmul()`, `gpu_add()`, `gpu_relu()`, `gpu_sigmoid()` — OpenCL Adreno 635 + CPU fallback
+- **NPU builtins**: `qnn_version()`, `npu_info()`, `qnn_quantize()`, `qnn_dequantize()` — Hexagon 770 via QNN SDK v2.40
+- **Edge AI builtins**: `cpu_temp()`, `cpu_freq()`, `mem_usage()`, `sys_uptime()`, `log_to_file()`, `process_id()`, `sleep_ms()`
+- **Watchdog**: `watchdog_start()`, `watchdog_kick()`, `watchdog_stop()` — software watchdog timer
+- **Cache**: `cache_set()`, `cache_get()`, `cache_clear()` — inference result caching
+- **File utilities**: `file_size()`, `dir_list()`, `env_var()`
+- **15 Q6A examples**: blinky, button_led, uart_echo/gps, i2c_sensor, spi_display, pwm_servo, npu_classify/detect, system_monitor, stress_test, edge_deploy, smart_doorbell, plant_monitor, anomaly_detect, ai_server
+- **Production tooling**: systemd service, monitoring script, deployment guide, quickstart guide, pinout reference
+- **Tests**: 5,376 total (0 failures), verified on real Q6A hardware
+
+### Performance (Q6A)
+- Cold start → first inference: **4ms**
+- JIT speedup: **128x** vs interpreted (fib30)
+- Cranelift JIT: works on ARM64
+- GPU detection: Adreno 635, OpenCL 3.0
+- NPU: Hexagon 770, 12 TOPS INT8
+
+---
+
 ## [3.0.0] — 2026-03-12 "Singularity"
 
 ### Added

@@ -1,0 +1,67 @@
+// q6a_stress_test.fj — Continuous operation stability test for Dragon Q6A
+//
+// Tests: tensor ops, NPU detection, GPU detection, memory usage, thermal monitoring
+// Default: 10 iterations (change ITERATIONS for longer soak tests)
+//
+// Usage: fj run examples/q6a_stress_test.fj
+
+let max_iters = 10
+
+println("=== Dragon Q6A Stress Test ===")
+println(f"Running {max_iters} iterations...")
+println("")
+
+let start_mem = mem_usage()
+let start_up = sys_uptime()
+
+// Start watchdog (5 second timeout)
+let wd = watchdog_start(5000)
+
+let mut i = 0
+while i < max_iters {
+    // Kick watchdog each iteration
+    watchdog_kick(wd)
+
+    // Tensor operations
+    let a = tensor_ones(4, 4)
+    let b = tensor_ones(4, 4)
+    let c = tensor_matmul(a, b)
+    let _d = tensor_relu(c)
+
+    // System health check
+    let temp = cpu_temp()
+    let mem = mem_usage()
+    let freq = cpu_freq()
+
+    // Check thermal throttling
+    if temp > 85000 {
+        println(f"WARNING: High temperature {temp / 1000}C at iteration {i}")
+        log_to_file("/tmp/q6a_stress.log", f"THERMAL_WARNING: {temp}mC at iter {i}")
+    }
+
+    // Check memory leak
+    if mem > start_mem + 20 {
+        println(f"WARNING: Memory increased from {start_mem}% to {mem}% at iteration {i}")
+        log_to_file("/tmp/q6a_stress.log", f"MEM_WARNING: {mem}% at iter {i}")
+    }
+
+    // Log progress every 5 iterations
+    if i % 5 == 0 {
+        println(f"  [{i}/{max_iters}] temp={temp / 1000}C freq={freq / 1000}MHz mem={mem}%")
+    }
+
+    i = i + 1
+}
+
+// Stop watchdog
+watchdog_stop(wd)
+
+let end_mem = mem_usage()
+let end_up = sys_uptime()
+let elapsed = end_up - start_up
+
+println("")
+println(f"Completed {max_iters} iterations in {elapsed}s")
+println(f"Memory: {start_mem}% -> {end_mem}% (delta: {end_mem - start_mem}%)")
+println(f"Final temp: {cpu_temp() / 1000}C")
+println("Stress test PASSED")

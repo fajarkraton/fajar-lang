@@ -1,0 +1,73 @@
+// q6a_smart_doorbell.fj — Detect person → trigger buzzer pattern
+//
+// Simulates camera → NPU inference → GPIO actuator pipeline
+// On real hardware: connect camera + buzzer to GPIO pin
+//
+// Usage: fj run examples/q6a_smart_doorbell.fj
+
+fn preprocess_frame() -> i64 {
+    // Simulate: capture frame and preprocess to feature vector
+    let features = tensor_randn(1, 128)
+    let _norm = tensor_relu(features)
+    0
+}
+
+fn classify_person(_frame_id: i64) -> str {
+    // Simulate person detection: random 3-class classifier
+    let input = tensor_randn(1, 128)
+    let weights = tensor_xavier(128, 3)
+    let logits = tensor_matmul(input, weights)
+    let probs = tensor_softmax(logits)
+    let class = tensor_argmax(probs)
+    if class == 0 {
+        "person"
+    } else if class == 1 {
+        "animal"
+    } else {
+        "none"
+    }
+}
+
+fn trigger_buzzer(duration_ms: i64) -> bool {
+    // Simulate GPIO buzzer trigger
+    // On real hardware: gpio_write(BUZZER_PIN, 1) → sleep → gpio_write(BUZZER_PIN, 0)
+    println(f"  BUZZER: on for {duration_ms}ms")
+    sleep_ms(duration_ms)
+    true
+}
+
+// --- Main ---
+
+println("=== Smart Doorbell (Dragon Q6A) ===")
+println("")
+
+let wd = watchdog_start(5000)
+let mut detections = 0
+let mut frame = 0
+let max_frames = 8
+
+while frame < max_frames {
+    watchdog_kick(wd)
+
+    let _pre = preprocess_frame()
+    let detection = classify_person(frame)
+
+    if detection == "person" {
+        detections = detections + 1
+        println(f"  Frame {frame}: PERSON detected! (#{detections})")
+        let _b = trigger_buzzer(200)
+        let _l = log_to_file("/tmp/q6a_doorbell.log", f"PERSON frame={frame}")
+    } else if detection == "animal" {
+        println(f"  Frame {frame}: animal (no alert)")
+    } else {
+        println(f"  Frame {frame}: clear")
+    }
+
+    frame = frame + 1
+    sleep_ms(50)
+}
+
+watchdog_stop(wd)
+println("")
+println(f"Processed {frame} frames, {detections} person detections")
+println("Doorbell shutdown.")
