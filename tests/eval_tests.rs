@@ -5526,3 +5526,60 @@ fn e2e_q6a_rtsp_server_example() {
     assert!(out.iter().any(|l| l.contains("RTSP Server")));
     assert!(out.iter().any(|l| l.contains("RTSP server stopped.")));
 }
+
+#[test]
+fn e2e_q6a_h264_decode_example() {
+    let code = std::fs::read_to_string("examples/q6a_h264_decode.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("H.264 Hardware Decode")));
+    assert!(out.iter().any(|l| l.contains("H.264 decode complete.")));
+}
+
+#[test]
+fn e2e_q6a_h265_encode_example() {
+    let code = std::fs::read_to_string("examples/q6a_h265_encode.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("H.265 Encode + Inference")));
+    assert!(out.iter().any(|l| l.contains("H.265 encode complete.")));
+}
+
+#[test]
+fn e2e_q6a_hdr10_capture_example() {
+    let code = std::fs::read_to_string("examples/q6a_hdr10_capture.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("HDR10 Camera Capture")));
+    assert!(out.iter().any(|l| l.contains("HDR10 capture complete.")));
+}
+
+#[test]
+fn e2e_q6a_video_benchmark_example() {
+    let code = std::fs::read_to_string("examples/q6a_video_benchmark.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Video Pipeline Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Video benchmark complete.")));
+}
+
+#[test]
+fn e2e_q6a_npu_benchmark_example() {
+    let code = std::fs::read_to_string("examples/q6a_npu_benchmark.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("CPU vs NPU Inference Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Small Model Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Medium Model Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Large Model Benchmark")));
+    assert!(out.iter().any(|l| l.contains("Benchmark Results")));
+    assert!(out.iter().any(|l| l.contains("NPU benchmark complete.")));
+}
+
+#[test]
+fn e2e_q6a_tls_server_example() {
+    let code = std::fs::read_to_string("examples/q6a_tls_server.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("TLS Secure Inference Server")));
+    assert!(out.iter().any(|l| l.contains("TLS OK | Auth OK")));
+    assert!(out.iter().any(|l| l.contains("TLS OK | Auth FAIL")));
+    assert!(out.iter().any(|l| l.contains("Server Statistics")));
+    assert!(out.iter().any(|l| l.contains("Accepted:")));
+    assert!(out.iter().any(|l| l.contains("Rejected:")));
+    assert!(out.iter().any(|l| l.contains("TLS server shutdown.")));
+}

@@ -1,0 +1,113 @@
+// q6a_hdr10_capture.fj — HDR10 camera capture pattern for Dragon Q6A
+//
+// Demonstrates: HDR10 wide dynamic range capture from Spectra ISP
+// Pipeline: capture HDR frame -> tone map -> inference -> display
+// Dragon Q6A: Spectra 580 ISP, 3x MIPI-CSI, HDR10 (Rec.2020)
+//
+// Usage: fj run examples/q6a_hdr10_capture.fj
+
+fn capture_hdr_frame(frame_id: i64) -> i64 {
+    // Simulate HDR10 capture via Spectra ISP
+    // Multi-exposure merge: short + medium + long exposure
+    // Output: 10-bit per channel, Rec.2020 color space
+    let _short_exp = tensor_randn(224, 224)
+    let _medium_exp = tensor_randn(224, 224)
+    let _long_exp = tensor_randn(224, 224)
+    // HDR10 frame size: 1920x1080x3 channels x 2 bytes (10-bit packed)
+    1920 * 1080 * 3 * 2
+}
+
+fn tone_map_reinhard(frame_id: i64) -> i64 {
+    // Reinhard tone mapping: HDR -> SDR for display
+    // L_mapped = L / (1 + L)
+    let _tonemapped = tensor_randn(224, 224)
+    // Output: 8-bit SDR frame
+    1920 * 1080 * 3
+}
+
+fn run_scene_classifier(frame_id: i64) -> i64 {
+    // Classify scene for adaptive tone mapping parameters
+    // Classes: indoor(0), outdoor(1), night(2), backlit(3), sunset(4)
+    let input = tensor_randn(1, 512)
+    let w1 = tensor_xavier(512, 128)
+    let h1 = tensor_relu(tensor_matmul(input, w1))
+    let w2 = tensor_xavier(128, 5)
+    let scores = tensor_softmax(tensor_matmul(h1, w2))
+    let scene_id = tensor_argmax(scores)
+    scene_id
+}
+
+fn scene_name(scene_id: i64) -> str {
+    if scene_id == 0 {
+        "indoor"
+    } else {
+        if scene_id == 1 {
+            "outdoor"
+        } else {
+            if scene_id == 2 {
+                "night"
+            } else {
+                if scene_id == 3 {
+                    "backlit"
+                } else {
+                    "sunset"
+                }
+            }
+        }
+    }
+}
+
+// --- Main HDR10 capture pipeline ---
+
+println("=== HDR10 Camera Capture (Dragon Q6A) ===")
+println("ISP:      Spectra 580 (multi-exposure HDR)")
+println("Format:   HDR10 Rec.2020 (10-bit)")
+println("Tone Map: Reinhard (adaptive)")
+println("Source:   CSI0 4-lane MIPI (4K sensor)")
+println(f"Temp: {cpu_temp() / 1000}C")
+println("")
+
+let total_frames = 15
+let mut frame = 0
+let mut total_hdr_bytes = 0
+let mut total_sdr_bytes = 0
+let t0 = sys_uptime()
+
+println(f"Capturing {total_frames} HDR frames...")
+println("")
+
+while frame < total_frames {
+    // 1. Capture HDR10 frame (multi-exposure merge)
+    let hdr_size = capture_hdr_frame(frame)
+    total_hdr_bytes = total_hdr_bytes + hdr_size
+
+    // 2. Classify scene for adaptive tone mapping
+    let scene_id = run_scene_classifier(frame)
+    let scene = scene_name(scene_id)
+
+    // 3. Tone map HDR -> SDR
+    let sdr_size = tone_map_reinhard(frame)
+    total_sdr_bytes = total_sdr_bytes + sdr_size
+
+    // Log every 5th frame
+    if frame % 5 == 0 {
+        println(f"  Frame {frame}: scene={scene} | HDR={hdr_size / 1024}KB | SDR={sdr_size / 1024}KB")
+    } else {
+        let _skip = 0
+    }
+
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println("=== HDR10 Capture Statistics ===")
+println(f"  Frames:      {total_frames}")
+println(f"  HDR data:    {total_hdr_bytes / 1024} KB")
+println(f"  SDR data:    {total_sdr_bytes / 1024} KB")
+println(f"  Bit depth:   10-bit (Rec.2020)")
+println(f"  Elapsed:     {elapsed}s")
+println(f"  Temp: {cpu_temp() / 1000}C")
+println("HDR10 capture complete.")

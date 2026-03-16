@@ -1,0 +1,145 @@
+// q6a_video_benchmark.fj — Video pipeline latency benchmark for Dragon Q6A
+//
+// Benchmarks each stage: decode, preprocess, inference, encode, total
+// Target: < 50ms glass-to-glass for real-time video analytics
+// Dragon Q6A: Venus codec + Hexagon NPU + Adreno GPU
+//
+// Usage: fj run examples/q6a_video_benchmark.fj
+
+fn bench_decode(iterations: i64) -> i64 {
+    // Benchmark H.264 decode throughput
+    let mut i = 0
+    while i < iterations {
+        let _frame = tensor_randn(224, 224)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_preprocess(iterations: i64) -> i64 {
+    // Benchmark frame preprocessing (resize + normalize)
+    let mut i = 0
+    while i < iterations {
+        let _resized = tensor_randn(1, 150528)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_inference(iterations: i64) -> i64 {
+    // Benchmark inference throughput
+    let mut i = 0
+    while i < iterations {
+        let input = tensor_randn(1, 256)
+        let w = tensor_xavier(256, 64)
+        let h = tensor_relu(tensor_matmul(input, w))
+        let w2 = tensor_xavier(64, 10)
+        let scores = tensor_softmax(tensor_matmul(h, w2))
+        let _cls = tensor_argmax(scores)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_encode(iterations: i64) -> i64 {
+    // Benchmark H.265 encode throughput
+    let mut i = 0
+    while i < iterations {
+        let _encoded = tensor_randn(108, 192)
+        i = i + 1
+    }
+    iterations
+}
+
+fn bench_full_pipeline(iterations: i64) -> i64 {
+    // Benchmark full glass-to-glass pipeline
+    let mut i = 0
+    while i < iterations {
+        // Decode
+        let _frame = tensor_randn(224, 224)
+        // Preprocess
+        let _prep = tensor_randn(1, 150528)
+        // Inference
+        let input = tensor_randn(1, 256)
+        let w = tensor_xavier(256, 64)
+        let h = tensor_relu(tensor_matmul(input, w))
+        let w2 = tensor_xavier(64, 10)
+        let scores = tensor_softmax(tensor_matmul(h, w2))
+        let _cls = tensor_argmax(scores)
+        // Encode
+        let _enc = tensor_randn(108, 192)
+        i = i + 1
+    }
+    iterations
+}
+
+// --- Main benchmark ---
+
+println("=== Video Pipeline Benchmark (Dragon Q6A) ===")
+println("Target: < 50ms glass-to-glass latency")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("")
+
+let iterations = 10
+
+// --- Decode benchmark ---
+println("=== Stage 1: H.264 Decode ===")
+let t0 = sys_uptime()
+let _d = bench_decode(iterations)
+let t1 = sys_uptime()
+let decode_time = t1 - t0
+println(f"  Iterations:  {iterations}")
+println(f"  Total time:  {decode_time}s")
+println("")
+
+// --- Preprocess benchmark ---
+println("=== Stage 2: Preprocess ===")
+let t2 = sys_uptime()
+let _p = bench_preprocess(iterations)
+let t3 = sys_uptime()
+let preprocess_time = t3 - t2
+println(f"  Iterations:  {iterations}")
+println(f"  Total time:  {preprocess_time}s")
+println("")
+
+// --- Inference benchmark ---
+println("=== Stage 3: Inference ===")
+let t4 = sys_uptime()
+let _inf = bench_inference(iterations)
+let t5 = sys_uptime()
+let inference_time = t5 - t4
+println(f"  Iterations:  {iterations}")
+println(f"  Total time:  {inference_time}s")
+println("")
+
+// --- Encode benchmark ---
+println("=== Stage 4: H.265 Encode ===")
+let t6 = sys_uptime()
+let _e = bench_encode(iterations)
+let t7 = sys_uptime()
+let encode_time = t7 - t6
+println(f"  Iterations:  {iterations}")
+println(f"  Total time:  {encode_time}s")
+println("")
+
+// --- Full pipeline benchmark ---
+println("=== Full Pipeline (glass-to-glass) ===")
+let t8 = sys_uptime()
+let _f = bench_full_pipeline(iterations)
+let t9 = sys_uptime()
+let pipeline_time = t9 - t8
+println(f"  Iterations:  {iterations}")
+println(f"  Total time:  {pipeline_time}s")
+println("")
+
+// --- Summary ---
+let total = decode_time + preprocess_time + inference_time + encode_time
+println("=== Benchmark Summary ===")
+println(f"  Decode:      {decode_time}s")
+println(f"  Preprocess:  {preprocess_time}s")
+println(f"  Inference:   {inference_time}s")
+println(f"  Encode:      {encode_time}s")
+println(f"  Sum stages:  {total}s")
+println(f"  Pipeline:    {pipeline_time}s")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("Video benchmark complete.")

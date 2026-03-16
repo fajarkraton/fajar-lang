@@ -1,0 +1,101 @@
+// q6a_h264_decode.fj — H.264 hardware decode pattern for Dragon Q6A
+//
+// Demonstrates: V4L2 M2M hardware decode pipeline
+// Pattern: open device -> queue encoded buffer -> dequeue decoded frame -> process
+// Dragon Q6A: Venus V4L2 codec engine (4K@60 decode)
+//
+// Usage: fj run examples/q6a_h264_decode.fj
+
+fn simulate_encoded_nal(frame_id: i64) -> i64 {
+    // Simulate H.264 NAL unit size (I-frame vs P-frame)
+    // I-frames are larger (~50KB), P-frames smaller (~8KB)
+    if frame_id % 15 == 0 {
+        51200
+    } else {
+        8192 + frame_id * 128
+    }
+}
+
+fn decode_nal_to_nv12(frame_id: i64, nal_size: i64) -> i64 {
+    // Simulate V4L2 M2M decode: queue NAL → dequeue NV12 frame
+    // Output: 1920x1080 NV12 = 1920 * 1080 * 3 / 2 = 3,110,400 bytes
+    let _decoded_pixels = tensor_randn(1080, 1920)
+    let nv12_size = 1920 * 1080 * 3 / 2
+    nv12_size
+}
+
+fn postprocess_frame(frame_id: i64) -> bool {
+    // Convert NV12 to RGB, apply color correction
+    let _rgb = tensor_randn(224, 224)
+    true
+}
+
+// --- Main H.264 decode pipeline ---
+
+println("=== H.264 Hardware Decode (Dragon Q6A) ===")
+println("Codec:    Venus V4L2 M2M (H.264 Main Profile)")
+println("Device:   /dev/video0 (decoder)")
+println("Input:    H.264 bitstream (1080p@30)")
+println("Output:   NV12 raw frames")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("")
+
+let total_frames = 30
+let mut frame = 0
+let mut total_nal_bytes = 0
+let mut total_decoded_bytes = 0
+let mut iframe_count = 0
+let mut pframe_count = 0
+let t0 = sys_uptime()
+
+println(f"Decoding {total_frames} frames...")
+println("")
+
+while frame < total_frames {
+    // Step 1: Get encoded NAL unit
+    let nal_size = simulate_encoded_nal(frame)
+    total_nal_bytes = total_nal_bytes + nal_size
+
+    // Step 2: Queue to V4L2 output, dequeue from capture
+    let decoded_size = decode_nal_to_nv12(frame, nal_size)
+    total_decoded_bytes = total_decoded_bytes + decoded_size
+
+    // Step 3: Post-process decoded frame
+    let _ok = postprocess_frame(frame)
+
+    // Track frame types
+    if frame % 15 == 0 {
+        iframe_count = iframe_count + 1
+        if frame % 10 == 0 {
+            println(f"  Frame {frame}: I-frame | NAL: {nal_size}B | Decoded: {decoded_size}B")
+        } else {
+            let _skip = 0
+        }
+    } else {
+        pframe_count = pframe_count + 1
+        if frame % 10 == 0 {
+            println(f"  Frame {frame}: P-frame | NAL: {nal_size}B | Decoded: {decoded_size}B")
+        } else {
+            let _skip = 0
+        }
+    }
+
+    let _logged = log_to_file("/tmp/q6a_h264.log", f"DECODE frame={frame} nal={nal_size} decoded={decoded_size}")
+
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+
+println("")
+println("=== Decode Statistics ===")
+println(f"  Total frames:    {total_frames}")
+println(f"  I-frames:        {iframe_count}")
+println(f"  P-frames:        {pframe_count}")
+println(f"  NAL bytes in:    {total_nal_bytes / 1024} KB")
+println(f"  Decoded bytes:   {total_decoded_bytes / 1024} KB")
+println(f"  Compression:     {total_decoded_bytes / total_nal_bytes}x")
+println(f"  Elapsed:         {elapsed}s")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("H.264 decode complete.")

@@ -1,0 +1,111 @@
+// q6a_h265_encode.fj — H.265 hardware encode with inference overlay for Dragon Q6A
+//
+// Demonstrates: capture frame -> run inference -> overlay bbox -> H.265 encode
+// Dragon Q6A: Venus V4L2 codec engine (H.265 Main10 encode)
+//
+// Usage: fj run examples/q6a_h265_encode.fj
+
+fn capture_frame(frame_id: i64, width: i64, height: i64) -> i64 {
+    // Simulate camera capture via V4L2 (CSI0 → ISP → NV12)
+    let _raw = tensor_randn(224, 224)
+    width * height * 3 / 2
+}
+
+fn run_classifier(frame_id: i64) -> i64 {
+    // Run lightweight classifier for overlay labels
+    let input = tensor_randn(1, 256)
+    let w1 = tensor_xavier(256, 64)
+    let h1 = tensor_relu(tensor_matmul(input, w1))
+    let w2 = tensor_xavier(64, 10)
+    let scores = tensor_softmax(tensor_matmul(h1, w2))
+    let class_id = tensor_argmax(scores)
+    class_id
+}
+
+fn overlay_bbox(frame_id: i64, class_id: i64) -> bool {
+    // Draw bounding box and class label onto frame buffer
+    // In production: direct framebuffer write or GPU compositor
+    true
+}
+
+fn encode_h265(frame_id: i64, width: i64, height: i64, qp: i64) -> i64 {
+    // Simulate H.265 encode via V4L2 M2M
+    // Higher QP = more compression, lower quality
+    // Approximate: base_size / qp_factor
+    let base = width * height * 3 / 2
+    let encoded = base / (qp / 5 + 1)
+    encoded
+}
+
+// --- Main H.265 encode pipeline ---
+
+println("=== H.265 Encode + Inference (Dragon Q6A) ===")
+println("Codec:    Venus V4L2 M2M (H.265 Main10)")
+println("Source:   CSI0 4-lane MIPI (1080p@30)")
+println("Overlay:  Real-time inference bounding boxes")
+println("QP:       28 (balanced quality/size)")
+println(f"Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("")
+
+let width = 1920
+let height = 1080
+let qp = 28
+let total_frames = 20
+let mut frame = 0
+let mut total_raw_bytes = 0
+let mut total_encoded_bytes = 0
+let mut detections = 0
+let t0 = sys_uptime()
+let logpath = "/tmp/q6a_h265.log"
+
+println(f"Encoding {total_frames} frames ({width}x{height} H.265 QP={qp})...")
+println("")
+
+while frame < total_frames {
+    // 1. Capture raw frame
+    let raw_size = capture_frame(frame, width, height)
+    total_raw_bytes = total_raw_bytes + raw_size
+
+    // 2. Run inference
+    let class_id = run_classifier(frame)
+
+    // 3. Overlay bounding box
+    if class_id < 5 {
+        let _drawn = overlay_bbox(frame, class_id)
+        detections = detections + 1
+    } else {
+        let _skip = 0
+    }
+
+    // 4. H.265 encode
+    let encoded_size = encode_h265(frame, width, height, qp)
+    total_encoded_bytes = total_encoded_bytes + encoded_size
+
+    // Log every 5th frame
+    if frame % 5 == 0 {
+        println(f"  Frame {frame}: class={class_id} | raw={raw_size}B | h265={encoded_size}B")
+    } else {
+        let _skip = 0
+    }
+
+    let _logged = log_to_file(logpath, f"ENCODE frame={frame} class={class_id} size={encoded_size}")
+
+    frame = frame + 1
+}
+
+let t1 = sys_uptime()
+let elapsed = t1 - t0
+let ratio = total_raw_bytes / total_encoded_bytes
+
+println("")
+println("=== Encode Statistics ===")
+println(f"  Frames:          {total_frames}")
+println(f"  Resolution:      {width}x{height}")
+println(f"  Codec:           H.265 Main10 (QP={qp})")
+println(f"  Raw bytes:       {total_raw_bytes / 1024} KB")
+println(f"  Encoded bytes:   {total_encoded_bytes / 1024} KB")
+println(f"  Compression:     {ratio}x")
+println(f"  Detections:      {detections}/{total_frames}")
+println(f"  Elapsed:         {elapsed}s")
+println(f"  Temp: {cpu_temp() / 1000}C | Mem: {mem_usage()}%")
+println("H.265 encode complete.")

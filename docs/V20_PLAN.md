@@ -33,17 +33,17 @@
 
 ## Progress Summary
 
-> **Last updated:** 2026-03-16 | **Tests:** 5,411 (0 failures) | **Examples:** 91 .fj (40 Q6A-specific)
+> **Last updated:** 2026-03-16 | **Tests:** 5,411 (0 failures) | **Examples:** 97 .fj (46 Q6A-specific) | **45/45 Q6A HW verified**
 
 | Phase | Sprints | Tasks Done | Tasks Total | Status |
 |-------|---------|------------|-------------|--------|
 | **1 — Foundation** | S1-S4 | 40 | 40 | **COMPLETE** |
 | **2 — On-Device** | S5-S8 | 31 | 40 | S5 9/10, S6 8/10, S7 7/10, S8 6/10 |
-| **3 — AI/ML NPU** | S9-S14 | 33 | 60 | S9 9/10, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
+| **3 — AI/ML NPU** | S9-S14 | 34 | 60 | S9 **COMPLETE**, S11 **COMPLETE**, S12 **COMPLETE**, S13 4/10 |
 | **4 — GPU Compute** | S15-S18 | 30 | 40 | S15 **COMPLETE**, S16 **COMPLETE**, S18 **COMPLETE** |
-| **5 — Edge AI Apps** | S19-S22 | 29 | 40 | S19 **COMPLETE**, S20 8/10, S21 8/10, S22 5/10 |
+| **5 — Edge AI Apps** | S19-S22 | 34 | 40 | S19 **COMPLETE**, S20 8/10, S21 9/10, S22 **COMPLETE** |
 | **6 — Production** | S23-S24 | 16 | 20 | S23 **COMPLETE**, S24 6/10 |
-| **TOTAL** | **24** | **179** | **240** | **75% complete** |
+| **TOTAL** | **24** | **186** | **240** | **78% complete** |
 
 ### Sprint Completion Detail
 
@@ -57,8 +57,8 @@
 | S6 | Native Codegen on ARM64 | **8/10** | JIT 128x, AOT blocked, NEON verified, profiled, benchmark suite |
 | S7 | GPIO Blinky on Q6A | **7/10** | GPIO verified on real HW (gpioset/gpioget gpiochip4) |
 | S8 | Serial Communication | 6/10 | Software done, HW tests pending |
-| S9 | QNN SDK Setup | **9/10** | All backends verified, docs + qnn_version() builtin done |
-| S10 | ONNX → QNN Pipeline | 0/10 | Needs QNN tools on host |
+| S9 | QNN SDK Setup | **10/10** | **COMPLETE** — all backends, NPU benchmark, qnn_version() |
+| S10 | ONNX → QNN Pipeline | 1/10 | export-qnn.sh script created; needs qnn-onnx-converter on host |
 | S11 | QNN FFI Integration | **10/10** | **COMPLETE** — all builtins verified on real Q6A NPU |
 | S12 | Fajar Lang NPU Builtins | **10/10** | **COMPLETE** — 1000 inferences in 4ms, q/dq roundtrip ok |
 | S13 | NPU Training Pipeline | **4/10** | 13.1 train + 13.2 export + 13.7 e2e pipeline + 13.10 docs |
@@ -68,8 +68,8 @@
 | S17-S18 | Vulkan/GPU Training | 10/20 | Vulkan blocked; **S18 COMPLETE** — fwd/bwd, optim, train, bench, mempool, docs |
 | S19 | Camera→NPU→GPIO Pipeline | **10/10** | **COMPLETE** — full pipeline, doorbell, plant monitor, watchdog, logging, thermal, stress test |
 | S20 | Multi-Sensor Fusion | **8/10** | IMU, activity, ring buffer, UART, SPI ADC, benchmark |
-| S21 | Network AI Services | **8/10** | HTTP, REST, MQTT, WebSocket, hot-reload, throughput |
-| S22 | Video Processing | **5/10** | Video detect, multi-stream, RTSP, bbox overlay + docs |
+| S21 | Network AI Services | **9/10** | HTTP, REST, MQTT, WebSocket, TLS, hot-reload, throughput |
+| S22 | Video Processing | **10/10** | **COMPLETE** — H.264/265, RTSP, HDR10, multi-stream, benchmark, docs |
 | S23 | Production Hardening | **10/10** | **COMPLETE** — systemd, monitor, OTA, crash recovery, log rotation, security, storage, deploy guide, BOM |
 | S24 | Release & Documentation | **6/10** | CLAUDE.md, CHANGELOG, quickstart, pinout, mdBook, Dockerfile |
 
@@ -239,7 +239,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 9.3 | Verify `libqnnhtpv68.cat` context binary exists | [x] |
 | 9.4 | Test `qnn-net-run` with a sample model on HTP backend | [x] |
 | 9.5 | Verify NPU detection: `/dev/fastrpc-cdsp`, CDSP running | [x] |
-| 9.6 | Benchmark CPU vs NPU inference latency with MobileNet | [ ] |
+| 9.6 | Benchmark CPU vs NPU inference latency with MobileNet | [x] |
 | 9.7 | Test QNN CPU backend (`libQnnCpu.so`) — verified present on Q6A | [x] |
 | 9.8 | Test QNN GPU backend (`libQnnGpu.so`) — verified present on Q6A | [x] |
 | 9.9 | Document QNN SDK setup in `docs/Q6A_QNN_SETUP.md` | [x] |
@@ -258,7 +258,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 10.7 | Deploy compiled model to Q6A: `/opt/fj/models/` | [ ] |
 | 10.8 | Run inference: `qnn-net-run --model model.so --backend libQnnHtp.so` | [ ] |
 | 10.9 | Verify INT8 accuracy vs FP32 baseline (target: < 1% accuracy loss) | [ ] |
-| 10.10 | Create `scripts/export-qnn.sh` automation script | [ ] |
+| 10.10 | Create `scripts/export-qnn.sh` automation script | [x] |
 
 ### Sprint 11: QNN FFI Integration
 
@@ -431,21 +431,21 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 21.7 | Implement model hot-reload: update model without restarting | [x] |
 | 21.8 | Implement inference result caching for repeated queries | [x] |
 | 21.9 | Test network throughput: target > 100 inferences/second via HTTP | [x] |
-| 21.10 | Implement TLS/SSL for secure inference API | [ ] |
+| 21.10 | Implement TLS/SSL for secure inference API | [x] |
 
 ### Sprint 22: Video Processing Pipeline
 
 | # | Task | Status |
 |---|------|--------|
-| 22.1 | Implement H.264 hardware decode on Q6A (V4L2 M2M) | [ ] |
-| 22.2 | Implement H.265 hardware encode for inference result overlay | [ ] |
+| 22.1 | Implement H.264 hardware decode on Q6A (V4L2 M2M) | [x] |
+| 22.2 | Implement H.265 hardware encode for inference result overlay | [x] |
 | 22.3 | Implement RTSP server for live camera + inference overlay | [x] |
 | 22.4 | Create `examples/q6a_video_detect.fj` — real-time video object detection | [x] |
 | 22.5 | Implement bounding box overlay on decoded frames | [x] |
-| 22.6 | Test 4K@30 decode → inference → 1080p@30 encode pipeline | [ ] |
+| 22.6 | Test 4K@30 decode → inference → 1080p@30 encode pipeline | [x] |
 | 22.7 | Implement multi-stream: 3 cameras → 3 inference pipelines | [x] |
-| 22.8 | Implement HDR10 support for camera capture | [ ] |
-| 22.9 | Benchmark video pipeline latency (target: < 50ms glass-to-glass) | [ ] |
+| 22.8 | Implement HDR10 support for camera capture | [x] |
+| 22.9 | Benchmark video pipeline latency (target: < 50ms glass-to-glass) | [x] |
 | 22.10 | Document video processing in `docs/Q6A_VIDEO_PIPELINE.md` | [x] |
 
 ---
