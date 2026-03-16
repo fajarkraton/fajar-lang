@@ -3566,6 +3566,7 @@ impl TypeChecker {
             ) || name.starts_with("tensor_")
                 || name.starts_with("optimizer_")
                 || name.starts_with("model_")
+                || name.starts_with("gpu_")
         } else {
             false
         };
