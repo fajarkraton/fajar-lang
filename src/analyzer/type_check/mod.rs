@@ -1187,6 +1187,11 @@ impl TypeChecker {
             "sys_cpu_temp",
             "sys_ram_total",
             "sys_ram_free",
+            // Context switch
+            "sched_get_saved_sp",
+            "sched_set_next_sp",
+            "sched_read_proc",
+            "sched_write_proc",
         ]
         .iter()
         .map(|s| s.to_string())

@@ -653,6 +653,49 @@ fj_rt_bare_gic_eoi:
 .size fj_rt_bare_gic_eoi, . - fj_rt_bare_gic_eoi
 
 /* ═══════════════════════════════════════════════════════════════════
+   Context Switch Builtins (for IRQ handler scheduler integration)
+   These use hardcoded addresses to avoid volatile_read/write clobber
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Read saved SP from vector stub (0x47001018) */
+.global fj_rt_bare_sched_get_saved_sp
+.type fj_rt_bare_sched_get_saved_sp, @function
+fj_rt_bare_sched_get_saved_sp:
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    ldr     x0, [x1]
+    ret
+.size fj_rt_bare_sched_get_saved_sp, . - fj_rt_bare_sched_get_saved_sp
+
+/* Set next SP for context switch (0x47001010) */
+.global fj_rt_bare_sched_set_next_sp
+.type fj_rt_bare_sched_set_next_sp, @function
+fj_rt_bare_sched_set_next_sp:
+    /* x0 = new process SP */
+    movz    x1, #0x1010
+    movk    x1, #0x4700, lsl #16
+    str     x0, [x1]
+    ret
+.size fj_rt_bare_sched_set_next_sp, . - fj_rt_bare_sched_set_next_sp
+
+/* Read/write process table entry (avoids volatile clobber in IRQ) */
+/* sched_read_proc(addr) -> value at addr */
+.global fj_rt_bare_sched_read_proc
+.type fj_rt_bare_sched_read_proc, @function
+fj_rt_bare_sched_read_proc:
+    ldr     x0, [x0]
+    ret
+.size fj_rt_bare_sched_read_proc, . - fj_rt_bare_sched_read_proc
+
+/* sched_write_proc(addr, value) */
+.global fj_rt_bare_sched_write_proc
+.type fj_rt_bare_sched_write_proc, @function
+fj_rt_bare_sched_write_proc:
+    str     x1, [x0]
+    ret
+.size fj_rt_bare_sched_write_proc, . - fj_rt_bare_sched_write_proc
+
+/* ═══════════════════════════════════════════════════════════════════
    Phase 3 HAL Driver Stubs (Sprint 11-15)
    GPIO uses TLMM MMIO, UART uses PL011, Timer uses virtual timer regs.
    These are the bare-metal versions; hosted mode uses runtime_bare.rs.

@@ -5877,6 +5877,27 @@ impl CraneliftCompiler {
             ("fj_rt_bare_proc_yield", "proc_yield", &sig_void),
             ("fj_rt_bare_sys_poweroff", "sys_poweroff", &sig_void),
             ("fj_rt_bare_sys_reboot", "sys_reboot", &sig_void),
+            // Context switch builtins (scheduler in IRQ handler)
+            (
+                "fj_rt_bare_sched_get_saved_sp",
+                "sched_get_saved_sp",
+                &sig_ret_i64,
+            ),
+            (
+                "fj_rt_bare_sched_set_next_sp",
+                "sched_set_next_sp",
+                &sig_i64_void,
+            ),
+            (
+                "fj_rt_bare_sched_read_proc",
+                "sched_read_proc",
+                &sig_i64_ret_i64,
+            ),
+            (
+                "fj_rt_bare_sched_write_proc",
+                "sched_write_proc",
+                &sig_2i64_ret_i64,
+            ),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -6701,6 +6722,56 @@ impl ObjectCompiler {
                 .declare_function("fj_rt_bare_net_bind", Linkage::Import, &sig_2i64_ret_i64)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("net_bind".to_string(), id);
+        }
+
+        // Context switch builtins (scheduler in IRQ handler)
+        {
+            let id = self
+                .module
+                .declare_function(
+                    "fj_rt_bare_sched_get_saved_sp",
+                    Linkage::Import,
+                    &sig_ret_i64,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("sched_get_saved_sp".to_string(), id);
+        }
+        {
+            let id = self
+                .module
+                .declare_function(
+                    "fj_rt_bare_sched_set_next_sp",
+                    Linkage::Import,
+                    &sig_i64_void,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("sched_set_next_sp".to_string(), id);
+        }
+        {
+            let id = self
+                .module
+                .declare_function(
+                    "fj_rt_bare_sched_read_proc",
+                    Linkage::Import,
+                    &sig_i64_ret_i64,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("sched_read_proc".to_string(), id);
+        }
+        {
+            let mut sig_2i = cranelift_codegen::ir::Signature::new(call_conv);
+            sig_2i.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_2i.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_sched_write_proc", Linkage::Import, &sig_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("sched_write_proc".to_string(), id);
         }
 
         // Volatile I/O (essential for bare-metal MMIO)

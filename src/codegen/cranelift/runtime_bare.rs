@@ -1314,6 +1314,34 @@ pub extern "C" fn fj_rt_bare_proc_yield() {
     // simulation: no-op
 }
 
+/// Context switch: read saved SP (written by exception vector stub).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sched_get_saved_sp() -> i64 {
+    0 // simulation: no saved SP
+}
+
+/// Context switch: set next process SP (checked by vector stub after handler returns).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sched_set_next_sp(_sp: i64) {
+    // simulation: no-op
+}
+
+/// Read a value from process table (IRQ-safe, no register clobber).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sched_read_proc(addr: i64) -> i64 {
+    if addr == 0 {
+        return 0;
+    }
+    // Simulation: return 0
+    0
+}
+
+/// Write a value to process table (IRQ-safe, no register clobber).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sched_write_proc(_addr: i64, _value: i64) {
+    // simulation: no-op
+}
+
 /// Power off the system.
 #[no_mangle]
 pub extern "C" fn fj_rt_bare_sys_poweroff() {

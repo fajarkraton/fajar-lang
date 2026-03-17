@@ -7260,6 +7260,17 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_sys_cpu_temp" => Some(runtime_bare::fj_rt_bare_sys_cpu_temp as *const u8),
         "fj_rt_bare_sys_ram_total" => Some(runtime_bare::fj_rt_bare_sys_ram_total as *const u8),
         "fj_rt_bare_sys_ram_free" => Some(runtime_bare::fj_rt_bare_sys_ram_free as *const u8),
+        // Context switch builtins
+        "fj_rt_bare_sched_get_saved_sp" => {
+            Some(runtime_bare::fj_rt_bare_sched_get_saved_sp as *const u8)
+        }
+        "fj_rt_bare_sched_set_next_sp" => {
+            Some(runtime_bare::fj_rt_bare_sched_set_next_sp as *const u8)
+        }
+        "fj_rt_bare_sched_read_proc" => Some(runtime_bare::fj_rt_bare_sched_read_proc as *const u8),
+        "fj_rt_bare_sched_write_proc" => {
+            Some(runtime_bare::fj_rt_bare_sched_write_proc as *const u8)
+        }
         _ => None,
     }
 }

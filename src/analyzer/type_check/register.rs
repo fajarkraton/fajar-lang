@@ -324,6 +324,11 @@ impl TypeChecker {
             ("sys_cpu_temp", vec![], Type::I64),
             ("sys_ram_total", vec![], Type::I64),
             ("sys_ram_free", vec![], Type::I64),
+            // Context switch builtins
+            ("sched_get_saved_sp", vec![], Type::I64),
+            ("sched_set_next_sp", vec![Type::I64], Type::Void),
+            ("sched_read_proc", vec![Type::I64], Type::I64),
+            ("sched_write_proc", vec![Type::I64, Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {
