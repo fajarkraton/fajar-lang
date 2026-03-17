@@ -29,3 +29,13 @@ book/book/
 
 # MNIST data (downloaded separately)
 data/
+
+# Binary artifacts (not tracked)
+models/
+release/
+.claude/worktrees/
+*.dlc
+*.onnx.data
+*.onnx.tmp
+*.raw
+*.tar.gz
