@@ -204,9 +204,9 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Used during call compilation to infer per-param type suffixes for multi-param generics.
     pub generic_fn_params: HashMap<String, Vec<(usize, String)>>,
     /// Set of async function names (their return is wrapped in a future handle).
-    pub async_fns: &'a HashSet<String>,
+    pub _async_fns: &'a HashSet<String>,
     /// Names of variables that hold future handles from async function calls.
-    pub future_handles: HashSet<String>,
+    pub _future_handles: HashSet<String>,
     /// True when the last expression was an async function call.
     pub last_future_new: bool,
     /// When true, disables IO/heap operations (bare metal mode).
@@ -299,7 +299,7 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub is_enum_return_fn: bool,
     /// Current function's context annotation (@kernel, @device, @safe, @unsafe).
     /// Used for codegen-level enforcement of context restrictions (H4).
-    pub current_context: Option<String>,
+    pub _current_context: Option<String>,
 }
 
 /// Pushes a new owned resource to both `owned_ptrs` and the current scope (if any).

@@ -5461,8 +5461,8 @@ impl CraneliftCompiler {
                 arc_handles: HashSet::new(),
                 last_arc_new: false,
                 generic_fn_params: self.generic_fn_params.clone(),
-                async_fns: &self.async_fns,
-                future_handles: HashSet::new(),
+                _async_fns: &self.async_fns,
+                _future_handles: HashSet::new(),
                 last_future_new: false,
                 no_std: self.no_std,
                 panic_handler_fn: self.panic_handler_fn.clone(),
@@ -5508,7 +5508,7 @@ impl CraneliftCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
-                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                _current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
 
             // Inject top-level const definitions as variables
@@ -10680,8 +10680,8 @@ impl ObjectCompiler {
                 arc_handles: HashSet::new(),
                 last_arc_new: false,
                 generic_fn_params: self.generic_fn_params.clone(),
-                async_fns: &self.async_fns,
-                future_handles: HashSet::new(),
+                _async_fns: &self.async_fns,
+                _future_handles: HashSet::new(),
                 last_future_new: false,
                 no_std: self.no_std,
                 panic_handler_fn: self.panic_handler_fn.clone(),
@@ -10727,7 +10727,7 @@ impl ObjectCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
-                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                _current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
 
             // Inject top-level const definitions as variables

@@ -13,7 +13,7 @@
 | **1** | Fix `.unwrap()` in production code | 3 files, 16 calls | **COMPLETE** |
 | **2** | Cleanup commented-out code | LLVM module + others | **SKIPPED** (all clean) |
 | **3** | `#[allow(dead_code)]` audit | 11 files, 23→2 annotations | **COMPLETE** |
-| **4** | Large file modularization | eval.rs, compile/mod.rs | NOT STARTED |
+| **4** | Large file modularization | compile/mod.rs split done | **4.1 COMPLETE** |
 
 ---
 
@@ -94,12 +94,30 @@
 
 ---
 
-## Phase 4: Large File Modularization (Future)
+## Phase 4: Large File Modularization
+
+### 4.1 — `compile/mod.rs` split — COMPLETE
+
+> **Before:** 6,312 LOC in single file | **After:** 38 LOC mod.rs + 3 new files
+> **Verified:** 6,463 tests pass (--features native), clippy 0 warnings, fmt clean
+
+| File | LOC | Content |
+|------|-----|---------|
+| `mod.rs` | 38 | Module declarations and re-exports |
+| `call.rs` | 3,092 | `compile_call`, `compile_regular_call`, `compile_path_call`, `compile_enum_constructor`, `compile_generic_call`, `infer_semantic_type`, `compile_fn_ptr_call` |
+| `method.rs` | 2,600 | `compile_method_call`, `compile_map_method` |
+| `asm.rs` | 630 | `compile_inline_asm`, `validate_asm_operand_type`, `validate_asm_register_class`, `extract_ident_name` |
+
+### 4.2 — `eval.rs` split (Future)
 
 | # | File | LOC | Target |
 |---|------|-----|--------|
-| 4.1 | `src/codegen/cranelift/compile/mod.rs` | 6,312 | Split into `call.rs`, `method.rs` |
-| 4.2 | `src/interpreter/eval.rs` | 8,348 | Split into `eval/expr.rs`, `eval/stmt.rs`, `eval/builtins.rs` |
+| 4.2 | `src/interpreter/eval.rs` | 8,389 | Split into `eval/expr.rs`, `eval/stmt.rs`, `eval/builtins.rs` |
+
+### 4.3 — `type_check.rs` split (Future)
+
+| # | File | LOC | Target |
+|---|------|-----|--------|
 | 4.3 | `src/analyzer/type_check.rs` | 7,344 | Split into `type_rules.rs`, `inference.rs` |
 
 ---

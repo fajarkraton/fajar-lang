@@ -1545,7 +1545,7 @@ struct MutexGuardHandle {
     /// Actually stores `Box<std::sync::MutexGuard<'a, i64>>` (transmuted).
     guard_raw: *mut (),
     /// Pointer to the mutex handle (for diagnostics only).
-    mutex_ptr: *const MutexHandle,
+    _mutex_ptr: *const MutexHandle,
 }
 
 /// Runtime: locks a mutex and returns an opaque guard handle.
@@ -1563,7 +1563,7 @@ pub extern "C" fn fj_rt_mutex_guard_lock(mutex_handle: *mut u8) -> *mut u8 {
     let guard_raw = Box::into_raw(boxed) as *mut ();
     let gh = Box::new(MutexGuardHandle {
         guard_raw,
-        mutex_ptr: mutex_handle as *const MutexHandle,
+        _mutex_ptr: mutex_handle as *const MutexHandle,
     });
     Box::into_raw(gh) as *mut u8
 }
