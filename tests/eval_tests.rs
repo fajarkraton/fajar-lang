@@ -5832,3 +5832,71 @@ fn hal_blinky_example() {
     assert!(out.iter().any(|l| l.contains("[Timer] Frequency:")));
     assert!(out.iter().any(|l| l.contains("[DMA] Barrier complete")));
 }
+
+#[test]
+fn fajaros_kernel_example() {
+    let code = std::fs::read_to_string("examples/fajaros_kernel.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("FajarOS v3.0 Surya")));
+    assert!(out.iter().any(|l| l.contains("FajarOS Ready")));
+    assert!(out.iter().any(|l| l.contains("[OK] NVMe SSD initialized")));
+    assert!(out
+        .iter()
+        .any(|l| l.contains("[OK] Ethernet RGMII link up")));
+    assert!(out
+        .iter()
+        .any(|l| l.contains("[OK] Framebuffer: 1920x1080")));
+    assert!(out.iter().any(|l| l.contains("[OK] Init process PID=1")));
+    assert!(out.iter().any(|l| l.contains("fjsh>")));
+}
+
+#[test]
+fn fajaros_shell_example() {
+    let code = std::fs::read_to_string("examples/fajaros_shell.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("Welcome to FajarOS")));
+    assert!(out.iter().any(|l| l.contains("Goodbye")));
+    assert!(out.iter().any(|l| l.contains("45.0 C")));
+    assert!(out.iter().any(|l| l.contains("8192 MB")));
+    assert!(out.iter().any(|l| l.contains("GPIO96: toggled")));
+    assert!(out.iter().any(|l| l.contains("eth0: link up")));
+}
+
+#[test]
+fn hal_display_interpreter() {
+    let src = r#"
+        fn main() {
+            fb_init(800, 600)
+            let w = fb_width()
+            let h = fb_height()
+            println(w)
+            println(h)
+            fb_fill_rect(0, 0, 100, 50, 255)
+            fb_write_pixel(10, 10, 16711680)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "1920"); // interpreter stub always returns 1920
+    assert_eq!(out[1], "1080");
+}
+
+#[test]
+fn hal_process_interpreter() {
+    let src = r#"
+        fn main() {
+            let me = proc_self()
+            println(me)
+            let child = proc_spawn(0)
+            println(child)
+            let exit = proc_wait(child)
+            println(exit)
+            let temp = sys_cpu_temp()
+            println(temp)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "1"); // init PID
+    assert_eq!(out[1], "2"); // child PID
+    assert_eq!(out[2], "0"); // exit code
+    assert_eq!(out[3], "45000"); // 45°C in millidegrees
+}

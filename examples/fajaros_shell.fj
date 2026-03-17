@@ -1,0 +1,138 @@
+// fajaros_shell.fj — FajarOS Shell (fjsh) Simulation
+//
+// Demonstrates a minimal OS shell using Phase 3-8 builtins.
+// Shows command dispatch, system info, and hardware interaction.
+
+fn print_prompt() {
+    print("fjsh> ")
+}
+
+fn cmd_help() {
+    println("FajarOS Shell Commands:")
+    println("  help       — Show this help")
+    println("  sysinfo    — System information")
+    println("  gpio <pin> — Toggle GPIO pin")
+    println("  temp       — CPU temperature")
+    println("  mem        — Memory usage")
+    println("  net        — Network status")
+    println("  ps         — Process list")
+    println("  uptime     — System uptime")
+    println("  reboot     — Reboot system")
+    println("  halt       — Power off")
+}
+
+fn cmd_sysinfo() {
+    println("FajarOS v3.0 Surya")
+    println("Board:  Radxa Dragon Q6A (QCS6490)")
+    println("CPU:    Kryo 670 (4x A78 + 4x A55)")
+    let temp = sys_cpu_temp()
+    println("Temp:   " + to_string(temp / 1000) + "." + to_string((temp % 1000) / 100) + " C")
+    let total = sys_ram_total() / (1024 * 1024)
+    let free = sys_ram_free() / (1024 * 1024)
+    let used = total - free
+    println("RAM:    " + to_string(used) + " MB used / " + to_string(total) + " MB total")
+    let fb_w = fb_width()
+    let fb_h = fb_height()
+    if fb_w > 0 {
+        println("Display: " + to_string(fb_w) + "x" + to_string(fb_h))
+    }
+}
+
+fn cmd_gpio(pin: i64) {
+    gpio_set_output(pin)
+    println("GPIO" + to_string(pin) + ": toggled")
+}
+
+fn cmd_temp() {
+    let t = sys_cpu_temp()
+    println(to_string(t / 1000) + "." + to_string((t % 1000) / 100) + " C")
+}
+
+fn cmd_mem() {
+    let total = sys_ram_total()
+    let free = sys_ram_free()
+    let used = total - free
+    let pct = (used * 100) / total
+    println("Total:  " + to_string(total / (1024 * 1024)) + " MB")
+    println("Used:   " + to_string(used / (1024 * 1024)) + " MB (" + to_string(pct) + "%)")
+    println("Free:   " + to_string(free / (1024 * 1024)) + " MB")
+}
+
+fn cmd_net() {
+    let r = eth_init()
+    if r == 0 {
+        println("eth0: link up (1000 Mbps)")
+    } else {
+        println("eth0: link down")
+    }
+}
+
+fn cmd_ps() {
+    let me = proc_self()
+    println("  PID  STATE    NAME")
+    println("    0  idle     [idle]")
+    println("    1  running  init")
+    println("    " + to_string(me) + "  running  fjsh")
+}
+
+fn cmd_uptime() {
+    let ms = time_since_boot()
+    let secs = ms / 1000
+    let mins = secs / 60
+    let hours = mins / 60
+    println("up " + to_string(hours) + "h " + to_string(mins % 60) + "m " + to_string(secs % 60) + "s")
+}
+
+fn run_command(cmd: str) {
+    if cmd == "help" {
+        cmd_help()
+    } else if cmd == "sysinfo" {
+        cmd_sysinfo()
+    } else if cmd == "temp" {
+        cmd_temp()
+    } else if cmd == "mem" {
+        cmd_mem()
+    } else if cmd == "net" {
+        cmd_net()
+    } else if cmd == "ps" {
+        cmd_ps()
+    } else if cmd == "uptime" {
+        cmd_uptime()
+    } else if cmd == "gpio96" {
+        cmd_gpio(96)
+    } else if cmd == "reboot" {
+        println("Rebooting...")
+    } else if cmd == "halt" {
+        println("Powering off...")
+    } else {
+        println("fjsh: command not found: " + cmd)
+    }
+}
+
+fn main() {
+    // Init hardware
+    fb_init(1920, 1080)
+    uart_init(0, 115200)
+    timer_mark_boot()
+    kb_init()
+
+    println("Welcome to FajarOS v3.0 Surya")
+    println("Type 'help' for commands")
+    println("")
+
+    // Simulate command sequence
+    let commands = ["sysinfo", "ps", "temp", "mem", "net", "uptime", "gpio96", "help"]
+    let count = len(commands)
+    let mut i: usize = 0
+    while i < count {
+        print_prompt()
+        let cmd = commands[i]
+        println(cmd)
+        run_command(cmd)
+        println("")
+        i = i + 1
+    }
+
+    println("fjsh> exit")
+    println("Goodbye.")
+}
