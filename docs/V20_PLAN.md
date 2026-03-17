@@ -43,7 +43,7 @@
 | **4 — GPU Compute** | S15-S18 | 40 | 40 | **ALL COMPLETE** — S15, S16, S17, S18 |
 | **5 — Edge AI Apps** | S19-S22 | 40 | 40 | **ALL COMPLETE** — S19, S20, S21, S22 |
 | **6 — Production** | S23-S24 | 18 | 20 | S23 **COMPLETE**, S24 8/10 |
-| **TOTAL** | **24** | **221** | **240** | **92% complete** |
+| **TOTAL** | **24** | **222** | **240** | **93% complete** |
 
 ### Sprint Completion Detail
 
@@ -477,7 +477,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 24.4 | Create `docs/Q6A_PINOUT.md` — 40-pin header reference card | [x] |
 | 24.5 | Record demo video: camera → NPU → GPIO on Q6A | [ ] |
 | 24.6 | Publish cross-compile Docker image for reproducible builds | [x] |
-| 24.7 | Create GitHub Release with pre-built ARM64 binary | [ ] |
+| 24.7 | Create GitHub Release with pre-built ARM64 + x86_64 binaries — https://github.com/fajarkraton/fajar-lang/releases/tag/v2.0.0-dawn | [x] |
 | 24.8 | Update mdBook with Q6A chapter | [x] |
 | 24.9 | Write blog post: "Fajar Lang on Radxa Dragon Q6A" — draft created | [x] |
 | 24.10 | Tag release: `v2.0.0-dawn` | [x] |
