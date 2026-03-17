@@ -16526,3 +16526,140 @@ fn native_nostd_net_accept() {
     let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
     assert_eq!(main_fn(), 0);
 }
+
+// ── Sprint 24-26: Display & Input Builtins ──
+
+#[test]
+fn native_nostd_fb_init_and_draw() {
+    let src = r#"
+        fn main() -> i64 {
+            fb_init(1920, 1080)
+            let w = fb_width()
+            let h = fb_height()
+            fb_write_pixel(0, 0, 16711680)
+            fb_fill_rect(10, 10, 100, 50, 65280)
+            w * 10000 + h
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("framebuffer should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 1920 * 10000 + 1080);
+}
+
+#[test]
+fn native_nostd_keyboard() {
+    let src = r#"
+        fn main() -> i64 {
+            kb_init()
+            let avail = kb_available()
+            let key = kb_read()
+            avail + key
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("keyboard should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0); // no keys
+}
+
+// ── Sprint 32-35: OS Services Builtins ──
+
+#[test]
+fn native_nostd_proc_lifecycle() {
+    let src = r#"
+        fn main() -> i64 {
+            let me = proc_self()
+            let child = proc_spawn(0)
+            let exit = proc_wait(child)
+            proc_yield()
+            me * 100 + exit
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("process lifecycle should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 100); // me=1*100 + exit=0
+}
+
+#[test]
+fn native_nostd_sys_info() {
+    let src = r#"
+        fn main() -> i64 {
+            let temp = sys_cpu_temp()
+            let total = sys_ram_total()
+            let free = sys_ram_free()
+            if temp == 45000 { 1 } else { 0 }
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("sys_info should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 1); // 45°C
+}
+
+// ── Combined: Full FajarOS Kernel Boot Pattern ──
+
+#[test]
+fn native_nostd_kernel_boot_pattern() {
+    let src = r#"
+        fn main() -> i64 {
+            // Phase 3: HAL init
+            uart_init(0, 115200)
+            gpio_config(96, 0, 1, 0)
+            timer_mark_boot()
+
+            // Phase 4: Storage init
+            nvme_init()
+            sd_init()
+
+            // Phase 5: Network init
+            eth_init()
+
+            // Phase 6: Display init
+            fb_init(1920, 1080)
+            kb_init()
+
+            // Phase 8: System info
+            let temp = sys_cpu_temp()
+            let free = sys_ram_free()
+
+            // Return success indicator
+            if temp > 0 { 1 } else { 0 }
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("full kernel boot should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 1);
+}

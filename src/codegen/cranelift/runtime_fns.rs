@@ -7240,6 +7240,26 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_net_send" => Some(runtime_bare::fj_rt_bare_net_send as *const u8),
         "fj_rt_bare_net_recv" => Some(runtime_bare::fj_rt_bare_net_recv as *const u8),
         "fj_rt_bare_net_close" => Some(runtime_bare::fj_rt_bare_net_close as *const u8),
+        // Phase 6: Display & Input
+        "fj_rt_bare_fb_init" => Some(runtime_bare::fj_rt_bare_fb_init as *const u8),
+        "fj_rt_bare_fb_write_pixel" => Some(runtime_bare::fj_rt_bare_fb_write_pixel as *const u8),
+        "fj_rt_bare_fb_fill_rect" => Some(runtime_bare::fj_rt_bare_fb_fill_rect as *const u8),
+        "fj_rt_bare_fb_width" => Some(runtime_bare::fj_rt_bare_fb_width as *const u8),
+        "fj_rt_bare_fb_height" => Some(runtime_bare::fj_rt_bare_fb_height as *const u8),
+        "fj_rt_bare_kb_init" => Some(runtime_bare::fj_rt_bare_kb_init as *const u8),
+        "fj_rt_bare_kb_read" => Some(runtime_bare::fj_rt_bare_kb_read as *const u8),
+        "fj_rt_bare_kb_available" => Some(runtime_bare::fj_rt_bare_kb_available as *const u8),
+        // Phase 8: OS Services
+        "fj_rt_bare_proc_spawn" => Some(runtime_bare::fj_rt_bare_proc_spawn as *const u8),
+        "fj_rt_bare_proc_wait" => Some(runtime_bare::fj_rt_bare_proc_wait as *const u8),
+        "fj_rt_bare_proc_kill" => Some(runtime_bare::fj_rt_bare_proc_kill as *const u8),
+        "fj_rt_bare_proc_self" => Some(runtime_bare::fj_rt_bare_proc_self as *const u8),
+        "fj_rt_bare_proc_yield" => Some(runtime_bare::fj_rt_bare_proc_yield as *const u8),
+        "fj_rt_bare_sys_poweroff" => Some(runtime_bare::fj_rt_bare_sys_poweroff as *const u8),
+        "fj_rt_bare_sys_reboot" => Some(runtime_bare::fj_rt_bare_sys_reboot as *const u8),
+        "fj_rt_bare_sys_cpu_temp" => Some(runtime_bare::fj_rt_bare_sys_cpu_temp as *const u8),
+        "fj_rt_bare_sys_ram_total" => Some(runtime_bare::fj_rt_bare_sys_ram_total as *const u8),
+        "fj_rt_bare_sys_ram_free" => Some(runtime_bare::fj_rt_bare_sys_ram_free as *const u8),
         _ => None,
     }
 }

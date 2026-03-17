@@ -627,6 +627,26 @@ impl Interpreter {
             "net_send",
             "net_recv",
             "net_close",
+            // Phase 6: Display & Input (v3.0 FajarOS)
+            "fb_init",
+            "fb_write_pixel",
+            "fb_fill_rect",
+            "fb_width",
+            "fb_height",
+            "kb_init",
+            "kb_read",
+            "kb_available",
+            // Phase 8: OS Services (v3.0 FajarOS)
+            "proc_spawn",
+            "proc_wait",
+            "proc_kill",
+            "proc_self",
+            "proc_yield",
+            "sys_poweroff",
+            "sys_reboot",
+            "sys_cpu_temp",
+            "sys_ram_total",
+            "sys_ram_free",
         ];
         for name in &builtins {
             self.env
@@ -2720,6 +2740,19 @@ impl Interpreter {
                 Ok(Value::Int(0))
             }
             "net_recv" => Ok(Value::Int(0)), // nothing to receive
+            // Phase 6: Display & Input stubs
+            "fb_init" | "fb_write_pixel" | "fb_fill_rect" | "kb_init" => Ok(Value::Int(0)),
+            "fb_width" => Ok(Value::Int(1920)),
+            "fb_height" => Ok(Value::Int(1080)),
+            "kb_read" | "kb_available" => Ok(Value::Int(0)),
+            // Phase 8: OS Services stubs
+            "proc_spawn" => Ok(Value::Int(2)),
+            "proc_wait" | "proc_kill" => Ok(Value::Int(0)),
+            "proc_self" => Ok(Value::Int(1)),
+            "sys_cpu_temp" => Ok(Value::Int(45_000)),
+            "sys_ram_total" => Ok(Value::Int(8 * 1024 * 1024 * 1024)),
+            "sys_ram_free" => Ok(Value::Int(6 * 1024 * 1024 * 1024)),
+            "proc_yield" | "sys_poweroff" | "sys_reboot" => Ok(Value::Null),
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {

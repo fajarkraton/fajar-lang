@@ -5854,7 +5854,55 @@ impl CraneliftCompiler {
             ("fj_rt_bare_net_accept", "net_accept", &sig_i64_ret_i64),
             ("fj_rt_bare_net_close", "net_close", &sig_i64_ret_i64),
             ("fj_rt_bare_net_connect", "net_connect", &sig_3i64_ret_i64),
+            // Phase 6: Display & Input
+            ("fj_rt_bare_fb_init", "fb_init", &sig_2i64_ret_i64),
+            ("fj_rt_bare_fb_width", "fb_width", &sig_ret_i64),
+            ("fj_rt_bare_fb_height", "fb_height", &sig_ret_i64),
+            (
+                "fj_rt_bare_fb_write_pixel",
+                "fb_write_pixel",
+                &sig_3i64_ret_i64,
+            ),
+            ("fj_rt_bare_kb_init", "kb_init", &sig_ret_i64),
+            ("fj_rt_bare_kb_read", "kb_read", &sig_ret_i64),
+            ("fj_rt_bare_kb_available", "kb_available", &sig_ret_i64),
+            // Phase 8: OS Services
+            ("fj_rt_bare_proc_spawn", "proc_spawn", &sig_i64_ret_i64),
+            ("fj_rt_bare_proc_wait", "proc_wait", &sig_i64_ret_i64),
+            ("fj_rt_bare_proc_kill", "proc_kill", &sig_i64_ret_i64),
+            ("fj_rt_bare_proc_self", "proc_self", &sig_ret_i64),
+            ("fj_rt_bare_sys_cpu_temp", "sys_cpu_temp", &sig_ret_i64),
+            ("fj_rt_bare_sys_ram_total", "sys_ram_total", &sig_ret_i64),
+            ("fj_rt_bare_sys_ram_free", "sys_ram_free", &sig_ret_i64),
+            ("fj_rt_bare_proc_yield", "proc_yield", &sig_void),
+            ("fj_rt_bare_sys_poweroff", "sys_poweroff", &sig_void),
+            ("fj_rt_bare_sys_reboot", "sys_reboot", &sig_void),
         ];
+
+        // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
+        let sig_5i64_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..5 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        {
+            let id = self
+                .module
+                .declare_function(
+                    "fj_rt_bare_fb_fill_rect",
+                    Linkage::Import,
+                    &sig_5i64_ret_i64,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("fb_fill_rect".to_string(), id);
+        }
 
         for (extern_name, builtin_name, sig) in hal_fns {
             let id = self

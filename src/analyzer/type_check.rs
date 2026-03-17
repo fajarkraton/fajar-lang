@@ -1164,6 +1164,26 @@ impl TypeChecker {
             "net_send",
             "net_recv",
             "net_close",
+            // Phase 6: Display & Input
+            "fb_init",
+            "fb_write_pixel",
+            "fb_fill_rect",
+            "fb_width",
+            "fb_height",
+            "kb_init",
+            "kb_read",
+            "kb_available",
+            // Phase 8: OS Services
+            "proc_spawn",
+            "proc_wait",
+            "proc_kill",
+            "proc_self",
+            "proc_yield",
+            "sys_poweroff",
+            "sys_reboot",
+            "sys_cpu_temp",
+            "sys_ram_total",
+            "sys_ram_free",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -1548,6 +1568,34 @@ impl TypeChecker {
             ("net_send", vec![Type::I64, Type::I64, Type::I64], Type::I64),
             ("net_recv", vec![Type::I64, Type::I64, Type::I64], Type::I64),
             ("net_close", vec![Type::I64], Type::I64),
+            // Phase 6: Display & Input (v3.0 FajarOS)
+            ("fb_init", vec![Type::I64, Type::I64], Type::I64),
+            (
+                "fb_write_pixel",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "fb_fill_rect",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            ("fb_width", vec![], Type::I64),
+            ("fb_height", vec![], Type::I64),
+            ("kb_init", vec![], Type::I64),
+            ("kb_read", vec![], Type::I64),
+            ("kb_available", vec![], Type::I64),
+            // Phase 8: OS Services (v3.0 FajarOS)
+            ("proc_spawn", vec![Type::I64], Type::I64),
+            ("proc_wait", vec![Type::I64], Type::I64),
+            ("proc_kill", vec![Type::I64], Type::I64),
+            ("proc_self", vec![], Type::I64),
+            ("proc_yield", vec![], Type::Void),
+            ("sys_poweroff", vec![], Type::Void),
+            ("sys_reboot", vec![], Type::Void),
+            ("sys_cpu_temp", vec![], Type::I64),
+            ("sys_ram_total", vec![], Type::I64),
+            ("sys_ram_free", vec![], Type::I64),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

@@ -1,0 +1,123 @@
+// fajaros_kernel.fj — FajarOS v3.0 "Surya" Kernel Boot Simulation
+//
+// Demonstrates the complete FajarOS boot sequence using all Phase 3-8 builtins.
+// Runs in interpreter (simulation) and native codegen (bare-metal or JIT).
+
+fn print_header(title: str) {
+    println("══════════════════════════════════════════")
+    println("  " + title)
+    println("══════════════════════════════════════════")
+}
+
+fn print_ok(msg: str) {
+    println("  [OK] " + msg)
+}
+
+fn main() {
+    print_header("FajarOS v3.0 Surya — Boot Sequence")
+    println("")
+
+    // ── Phase 1-2: Already done by startup assembly ──
+    println("[BOOT] Kernel entry from UEFI handoff")
+    println("[BOOT] MMU enabled, GICv3 initialized")
+    println("[BOOT] Scheduler running (round-robin, 10ms quantum)")
+    println("")
+
+    // ── Phase 3: HAL Driver Initialization ──
+    print_header("Phase 3: HAL Drivers")
+
+    uart_init(0, 115200)
+    print_ok("UART0 @ 115200 baud")
+
+    gpio_config(96, 0, 1, 0)
+    gpio_set_output(96)
+    print_ok("GPIO96 configured as output")
+
+    spi_init(0, 1000000)
+    print_ok("SPI0 @ 1 MHz")
+
+    i2c_init(0, 400000)
+    print_ok("I2C0 @ 400 kHz")
+
+    timer_mark_boot()
+    let freq = timer_get_freq()
+    print_ok("Timer: " + to_string(freq / 1000000) + " MHz")
+
+    println("")
+
+    // ── Phase 4: Storage ──
+    print_header("Phase 4: Storage")
+
+    let nvme = nvme_init()
+    if nvme == 0 {
+        print_ok("NVMe SSD initialized")
+    }
+
+    let sd = sd_init()
+    if sd == 0 {
+        print_ok("SD/eMMC initialized")
+    }
+
+    let fd = vfs_open("/etc/fajaros/config", 1)
+    if fd >= 0 {
+        print_ok("VFS mounted, config fd=" + to_string(fd))
+        vfs_close(fd)
+    }
+
+    println("")
+
+    // ── Phase 5: Network ──
+    print_header("Phase 5: Network")
+
+    eth_init()
+    print_ok("Ethernet RGMII link up")
+
+    let http_sock = net_socket(0)
+    net_bind(http_sock, 80)
+    net_listen(http_sock)
+    print_ok("HTTP server listening on :80")
+    net_close(http_sock)
+
+    println("")
+
+    // ── Phase 6: Display ──
+    print_header("Phase 6: Display & Input")
+
+    fb_init(1920, 1080)
+    let w = fb_width()
+    let h = fb_height()
+    print_ok("Framebuffer: " + to_string(w) + "x" + to_string(h))
+
+    fb_fill_rect(0, 0, w, h, 1579032)
+    print_ok("Screen cleared (dark blue)")
+
+    kb_init()
+    print_ok("USB keyboard initialized")
+
+    println("")
+
+    // ── Phase 8: System Services ──
+    print_header("Phase 8: OS Services")
+
+    let me = proc_self()
+    print_ok("Init process PID=" + to_string(me))
+
+    let temp = sys_cpu_temp()
+    print_ok("CPU temp: " + to_string(temp / 1000) + "." + to_string((temp % 1000) / 100) + " C")
+
+    let total_mb = sys_ram_total() / (1024 * 1024)
+    let free_mb = sys_ram_free() / (1024 * 1024)
+    print_ok("RAM: " + to_string(free_mb) + " MB free / " + to_string(total_mb) + " MB total")
+
+    let uptime = time_since_boot()
+    print_ok("Boot time: " + to_string(uptime) + " ms")
+
+    println("")
+    print_header("FajarOS Ready")
+    println("")
+    println("  Board:    Radxa Dragon Q6A (QCS6490)")
+    println("  Kernel:   FajarOS v3.0 Surya")
+    println("  Language: 100% Fajar Lang")
+    println("")
+    println("  fjsh> _")
+}

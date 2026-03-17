@@ -1183,6 +1183,168 @@ pub extern "C" fn fj_rt_bare_net_close(sock: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Framebuffer & Input Simulation (Sprint 24-26 — Display & Input)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Simulated framebuffer (1920×1080, 32bpp = ~8MB).
+/// We only track metadata, not actual pixel data.
+static FB_WIDTH: AtomicU64 = AtomicU64::new(0);
+static FB_HEIGHT: AtomicU64 = AtomicU64::new(0);
+static FB_INIT: AtomicU64 = AtomicU64::new(0);
+static FB_CURSOR_X: AtomicU64 = AtomicU64::new(0);
+static FB_CURSOR_Y: AtomicU64 = AtomicU64::new(0);
+
+/// Initialize framebuffer with resolution. Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_fb_init(width: i64, height: i64) -> i64 {
+    if width <= 0 || height <= 0 {
+        return -1;
+    }
+    FB_WIDTH.store(width as u64, Ordering::Relaxed);
+    FB_HEIGHT.store(height as u64, Ordering::Relaxed);
+    FB_CURSOR_X.store(0, Ordering::Relaxed);
+    FB_CURSOR_Y.store(0, Ordering::Relaxed);
+    FB_INIT.store(1, Ordering::Relaxed);
+    0
+}
+
+/// Write a pixel at (x, y) with color (ARGB). Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_fb_write_pixel(x: i64, y: i64, color: i64) -> i64 {
+    let w = FB_WIDTH.load(Ordering::Relaxed) as i64;
+    let h = FB_HEIGHT.load(Ordering::Relaxed) as i64;
+    if x < 0 || x >= w || y < 0 || y >= h || FB_INIT.load(Ordering::Relaxed) == 0 {
+        return -1;
+    }
+    let _ = color; // simulation: discard pixel
+    0
+}
+
+/// Fill rectangle with color. Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_fb_fill_rect(x: i64, y: i64, w: i64, h: i64, color: i64) -> i64 {
+    if FB_INIT.load(Ordering::Relaxed) == 0 || w <= 0 || h <= 0 {
+        return -1;
+    }
+    let _ = (x, y, color); // simulation: discard
+    0
+}
+
+/// Get framebuffer width.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_fb_width() -> i64 {
+    FB_WIDTH.load(Ordering::Relaxed) as i64
+}
+
+/// Get framebuffer height.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_fb_height() -> i64 {
+    FB_HEIGHT.load(Ordering::Relaxed) as i64
+}
+
+/// Simulated keyboard: last key pressed (0 = no key).
+static KB_LAST_KEY: AtomicU64 = AtomicU64::new(0);
+static KB_INIT: AtomicU64 = AtomicU64::new(0);
+
+/// Initialize keyboard input. Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_kb_init() -> i64 {
+    KB_INIT.store(1, Ordering::Relaxed);
+    0
+}
+
+/// Read key event. Returns ASCII code or 0 (no key).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_kb_read() -> i64 {
+    KB_LAST_KEY.swap(0, Ordering::Relaxed) as i64
+}
+
+/// Check if key is available. Returns 1 if key ready, 0 if not.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_kb_available() -> i64 {
+    if KB_LAST_KEY.load(Ordering::Relaxed) != 0 {
+        1
+    } else {
+        0
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OS Services Simulation (Sprint 32-35 — Process & System Management)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Next process ID.
+static NEXT_PID: AtomicU64 = AtomicU64::new(2); // PID 0=idle, 1=init
+
+/// Spawn a new process. Returns PID or -1.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_proc_spawn(_entry_addr: i64) -> i64 {
+    let pid = NEXT_PID.fetch_add(1, Ordering::Relaxed);
+    if pid > 255 {
+        NEXT_PID.fetch_sub(1, Ordering::Relaxed);
+        return -1;
+    }
+    pid as i64
+}
+
+/// Wait for process to exit. Returns exit code.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_proc_wait(_pid: i64) -> i64 {
+    0 // simulation: process exited with 0
+}
+
+/// Kill a process. Returns 0 on success.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_proc_kill(pid: i64) -> i64 {
+    if pid <= 1 {
+        return -1; // can't kill idle or init
+    }
+    0
+}
+
+/// Get current process ID.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_proc_self() -> i64 {
+    1 // simulation: always init process
+}
+
+/// Yield CPU to scheduler.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_proc_yield() {
+    // simulation: no-op
+}
+
+/// Power off the system.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sys_poweroff() {
+    // simulation: no-op (on real hardware: PSCI shutdown)
+}
+
+/// Reboot the system.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sys_reboot() {
+    // simulation: no-op
+}
+
+/// Get CPU temperature in millidegrees Celsius.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sys_cpu_temp() -> i64 {
+    45_000 // simulation: 45.0°C
+}
+
+/// Get total RAM in bytes.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sys_ram_total() -> i64 {
+    8 * 1024 * 1024 * 1024 // 8 GB
+}
+
+/// Get free RAM in bytes.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_sys_ram_free() -> i64 {
+    6 * 1024 * 1024 * 1024 // 6 GB free
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1599,5 +1761,68 @@ mod tests {
         assert_eq!(fj_rt_bare_net_socket(5), -1); // invalid type
         assert_eq!(fj_rt_bare_net_send(-1, std::ptr::null(), 0), -1);
         assert_eq!(fj_rt_bare_net_close(99), -1);
+    }
+
+    // ── Framebuffer tests (Phase 6) ──
+
+    #[test]
+    fn bare_fb_init_and_pixel() {
+        assert_eq!(fj_rt_bare_fb_init(1920, 1080), 0);
+        assert_eq!(fj_rt_bare_fb_width(), 1920);
+        assert_eq!(fj_rt_bare_fb_height(), 1080);
+        assert_eq!(fj_rt_bare_fb_write_pixel(100, 200, 0xFF_FF_00_00), 0); // red
+        assert_eq!(fj_rt_bare_fb_write_pixel(1920, 0, 0), -1); // out of bounds
+    }
+
+    #[test]
+    fn bare_fb_fill_rect() {
+        fj_rt_bare_fb_init(800, 600);
+        assert_eq!(fj_rt_bare_fb_fill_rect(10, 10, 100, 50, 0xFF_00_FF_00), 0);
+        assert_eq!(fj_rt_bare_fb_fill_rect(0, 0, 0, 0, 0), -1); // zero size
+    }
+
+    #[test]
+    fn bare_kb_init_read() {
+        assert_eq!(fj_rt_bare_kb_init(), 0);
+        assert_eq!(fj_rt_bare_kb_available(), 0); // no key
+        assert_eq!(fj_rt_bare_kb_read(), 0);
+        // Simulate key press
+        KB_LAST_KEY.store(b'A' as u64, Ordering::Relaxed);
+        assert_eq!(fj_rt_bare_kb_available(), 1);
+        assert_eq!(fj_rt_bare_kb_read(), b'A' as i64);
+        assert_eq!(fj_rt_bare_kb_available(), 0); // consumed
+    }
+
+    // ── OS Services tests (Phase 8) ──
+
+    #[test]
+    fn bare_proc_spawn_wait_kill() {
+        let pid = fj_rt_bare_proc_spawn(0x4000_0000);
+        assert!(pid >= 2);
+        assert_eq!(fj_rt_bare_proc_wait(pid), 0);
+        assert_eq!(fj_rt_bare_proc_kill(pid), 0);
+        assert_eq!(fj_rt_bare_proc_kill(0), -1); // can't kill idle
+        assert_eq!(fj_rt_bare_proc_kill(1), -1); // can't kill init
+    }
+
+    #[test]
+    fn bare_proc_self_yield() {
+        assert_eq!(fj_rt_bare_proc_self(), 1); // init
+        fj_rt_bare_proc_yield(); // no-op, should not crash
+    }
+
+    #[test]
+    fn bare_sys_info() {
+        assert_eq!(fj_rt_bare_sys_cpu_temp(), 45_000); // 45°C
+        assert!(fj_rt_bare_sys_ram_total() > 0);
+        assert!(fj_rt_bare_sys_ram_free() > 0);
+        assert!(fj_rt_bare_sys_ram_free() <= fj_rt_bare_sys_ram_total());
+    }
+
+    #[test]
+    fn bare_sys_poweroff_reboot_no_crash() {
+        // These are no-ops in simulation
+        fj_rt_bare_sys_reboot();
+        // Don't call poweroff in tests — it's a no-op but semantically wrong
     }
 }
