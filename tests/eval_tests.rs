@@ -4588,6 +4588,7 @@ fn main() {
 // ── NPU builtin tests (v2.0 Q6A) ──
 
 #[test]
+#[cfg(target_os = "linux")]
 fn e2e_npu_available_and_info() {
     let out = eval_output(
         r#"
@@ -5070,6 +5071,7 @@ fn e2e_mem_usage_returns_percentage() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn e2e_sys_uptime_returns_positive() {
     let mut interp = Interpreter::new();
     let result = interp.eval_source("let u = sys_uptime()\nassert(u > 0)\nprintln(u)");
@@ -5077,6 +5079,7 @@ fn e2e_sys_uptime_returns_positive() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn e2e_log_to_file_writes_message() {
     let mut interp = Interpreter::new();
     let result = interp.eval_source(
@@ -5109,6 +5112,7 @@ fn e2e_q6a_system_monitor_example() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn e2e_edge_ai_monitoring_pipeline() {
     let code = r#"
 let temp = cpu_temp()
@@ -5237,6 +5241,7 @@ println(len(files))
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn e2e_env_var_reads_path() {
     let mut interp = Interpreter::new();
     let result = interp.eval_source(
