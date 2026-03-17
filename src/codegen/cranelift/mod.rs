@@ -5845,6 +5845,7 @@ impl CraneliftCompiler {
             // Phase 4: Storage
             ("fj_rt_bare_nvme_init", "nvme_init", &sig_ret_i64),
             ("fj_rt_bare_sd_init", "sd_init", &sig_ret_i64),
+            ("fj_rt_bare_vfs_close", "vfs_close", &sig_i64_ret_i64),
             // Phase 5: Network
             ("fj_rt_bare_eth_init", "eth_init", &sig_ret_i64),
             ("fj_rt_bare_net_socket", "net_socket", &sig_i64_ret_i64),

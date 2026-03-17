@@ -16374,3 +16374,155 @@ fn native_nostd_hal_sensor_poll() {
     let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
     assert_eq!(main_fn(), 55); // SPI loopback returns previous TX
 }
+
+// ── Sprint 16-17: Storage Builtins ──
+
+#[test]
+fn native_nostd_nvme_lifecycle() {
+    let src = r#"
+        fn main() -> i64 {
+            let r = nvme_init()
+            r
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("nvme_init should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+#[test]
+fn native_nostd_sd_init() {
+    let src = r#"
+        fn main() -> i64 {
+            sd_init()
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("sd_init should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+#[test]
+fn native_nostd_vfs_close() {
+    // VFS close with a file descriptor (no strings in no_std)
+    let src = r#"
+        fn main() -> i64 {
+            vfs_close(3)
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("vfs_close should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+// ── Sprint 20-23: Network Builtins ──
+
+#[test]
+fn native_nostd_eth_init() {
+    let src = r#"
+        fn main() -> i64 {
+            eth_init()
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("eth_init should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+#[test]
+fn native_nostd_net_tcp_server() {
+    let src = r#"
+        fn main() -> i64 {
+            let sock = net_socket(0)
+            let b = net_bind(sock, 8080)
+            let l = net_listen(sock)
+            let c = net_close(sock)
+            if sock >= 0 { b + l + c } else { -1 }
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("TCP server should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0); // all return 0 (success)
+}
+
+#[test]
+fn native_nostd_net_tcp_client() {
+    let src = r#"
+        fn main() -> i64 {
+            let sock = net_socket(0)
+            let c = net_connect(sock, 0, 80)
+            let r = net_close(sock)
+            c + r
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("TCP client should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+#[test]
+fn native_nostd_net_accept() {
+    let src = r#"
+        fn main() -> i64 {
+            let sock = net_socket(0)
+            net_bind(sock, 9090)
+            net_listen(sock)
+            let client = net_accept(sock)
+            let r = net_close(client)
+            net_close(sock)
+            if client >= 0 { r } else { -1 }
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("net_accept should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
