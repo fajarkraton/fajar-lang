@@ -1910,7 +1910,13 @@ impl Interpreter {
                     OptimizerValue::Sgd(sgd) => sgd.step(&mut params),
                     OptimizerValue::Adam(adam) => adam.step(&mut params),
                 }
-                Ok(Value::Tensor(params.into_iter().next().unwrap()))
+                Ok(Value::Tensor(params.into_iter().next().ok_or_else(
+                    || {
+                        EvalError::Runtime(RuntimeError::TypeError(
+                            "optimizer step returned no parameters".into(),
+                        ))
+                    },
+                )?))
             }
             "optimizer_zero_grad" => {
                 if args.len() != 1 {
@@ -2320,9 +2326,24 @@ impl Interpreter {
                     .into());
                 }
                 let mut args = args.into_iter();
-                let map_val = args.next().unwrap();
-                let key_val = args.next().unwrap();
-                let value = args.next().unwrap();
+                let map_val = args.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: 0,
+                    })
+                })?;
+                let key_val = args.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: 1,
+                    })
+                })?;
+                let value = args.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: 2,
+                    })
+                })?;
                 match (map_val, key_val) {
                     (Value::Map(mut m), Value::Str(k)) => {
                         m.insert(k, value);
@@ -2364,8 +2385,18 @@ impl Interpreter {
                     .into());
                 }
                 let mut args = args.into_iter();
-                let map_val = args.next().unwrap();
-                let key_val = args.next().unwrap();
+                let map_val = args.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: 0,
+                    })
+                })?;
+                let key_val = args.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: 1,
+                    })
+                })?;
                 match (map_val, key_val) {
                     (Value::Map(mut m), Value::Str(k)) => {
                         m.remove(&k);
@@ -6441,8 +6472,18 @@ impl Interpreter {
                     .into());
                 }
                 let mut args_iter = arg_vals.into_iter();
-                let key = args_iter.next().unwrap();
-                let val = args_iter.next().unwrap();
+                let key = args_iter.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: 0,
+                    })
+                })?;
+                let val = args_iter.next().ok_or_else(|| {
+                    EvalError::Runtime(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: 1,
+                    })
+                })?;
                 if let Value::Str(k) = key {
                     let mut new_map = m.clone();
                     new_map.insert(k, val);

@@ -64,8 +64,7 @@ impl Fp8E5M2 {
     /// Smallest positive subnormal (2^-16 = 0.0000152588).
     pub const MIN_SUBNORMAL: Self = Self(0x01);
 
-    #[allow(dead_code)]
-    const EXP_BITS: u32 = 5;
+    const _EXP_BITS: u32 = 5;
     const MAN_BITS: u32 = 2;
     const EXP_BIAS: i32 = 15;
     const EXP_MASK: u8 = 0x7C; // 0b0_11111_00
@@ -249,8 +248,7 @@ impl Fp8E4M3 {
     /// Smallest positive subnormal (2^-9 = 0.001953125).
     pub const MIN_SUBNORMAL: Self = Self(0x01);
 
-    #[allow(dead_code)]
-    const EXP_BITS: u32 = 4;
+    const _EXP_BITS: u32 = 4;
     const MAN_BITS: u32 = 3;
     const EXP_BIAS: i32 = 7;
     const EXP_MASK: u8 = 0x78; // 0b0_1111_000

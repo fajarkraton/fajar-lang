@@ -127,14 +127,13 @@ pub fn run_dap_server<R: Read, W: Write>(input: R, output: W) {
 }
 
 /// Internal state for the DAP server session.
-#[allow(dead_code)]
 struct DapState {
     /// Debug state (breakpoints, stepping).
     debug_state: DebugState,
     /// Source file being debugged.
-    source_file: String,
+    _source_file: String,
     /// Source code content.
-    source_code: String,
+    _source_code: String,
     /// Whether execution has started.
     running: bool,
     /// Channel to send commands to the interpreter thread.
@@ -148,22 +147,22 @@ struct DapState {
     /// Whether stop_on_entry was requested.
     stop_on_entry: bool,
     /// Server output handle for sending events from interpreter thread.
-    server_output: Option<Arc<Mutex<dap::server::ServerOutput<BufWriter<std::io::Stdout>>>>>,
+    _server_output: Option<Arc<Mutex<dap::server::ServerOutput<BufWriter<std::io::Stdout>>>>>,
 }
 
 impl DapState {
     fn new() -> Self {
         Self {
             debug_state: DebugState::new(),
-            source_file: String::new(),
-            source_code: String::new(),
+            _source_file: String::new(),
+            _source_code: String::new(),
             running: false,
             cmd_tx: None,
             resp_rx: None,
             last_stop: None,
             locals: Vec::new(),
             stop_on_entry: false,
-            server_output: None,
+            _server_output: None,
         }
     }
 }

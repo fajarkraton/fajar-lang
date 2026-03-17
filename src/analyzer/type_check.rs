@@ -1084,7 +1084,6 @@ pub struct TypeChecker {
 
 /// A trait method signature for validation.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct TraitMethodSig {
     /// Method name.
     name: String,
@@ -2004,6 +2003,7 @@ impl TypeChecker {
     }
 
     /// Checks whether a concrete type satisfies a trait bound.
+    /// Used by tests; will be integrated into trait constraint checking.
     #[allow(dead_code)]
     fn type_satisfies_trait(&self, type_name: &str, trait_name: &str) -> bool {
         self.trait_impls

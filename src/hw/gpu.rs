@@ -404,13 +404,15 @@ impl GpuDiscovery {
 
 /// Error during GPU detection.
 #[derive(Debug)]
+// Fields stored for Debug display but not individually read.
+#[allow(dead_code)]
 enum GpuDetectError {
     /// Could not load CUDA driver library.
     LibraryNotFound,
     /// Could not find a required symbol.
-    SymbolNotFound(#[allow(dead_code)] &'static str),
+    SymbolNotFound(&'static str),
     /// CUDA API returned an error code.
-    CudaError(#[allow(dead_code)] &'static str, #[allow(dead_code)] i32),
+    CudaError(&'static str, i32),
 }
 
 // CUDA Driver API function signatures

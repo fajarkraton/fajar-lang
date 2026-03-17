@@ -1545,7 +1545,6 @@ struct MutexGuardHandle {
     /// Actually stores `Box<std::sync::MutexGuard<'a, i64>>` (transmuted).
     guard_raw: *mut (),
     /// Pointer to the mutex handle (for diagnostics only).
-    #[allow(dead_code)]
     mutex_ptr: *const MutexHandle,
 }
 

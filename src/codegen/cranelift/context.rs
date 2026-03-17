@@ -77,7 +77,6 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Generic enum definitions: enum_name → list of generic param names.
     /// E.g., `enum Option<T>` → `("Option", ["T"])`.
     /// Used by S1.5 for generic enum function signatures.
-    #[allow(dead_code)]
     pub generic_enum_defs: &'a HashMap<String, Vec<String>>,
     /// Tracks variables that hold enum values: name → (tag_var, payload_var, payload_type).
     pub enum_vars: &'a mut HashMap<String, (Variable, Variable, cranelift_codegen::ir::Type)>,
@@ -109,7 +108,6 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Trait definitions: trait name → list of required method names.
     pub trait_defs: &'a HashMap<String, Vec<String>>,
     /// Trait impls: (trait_name, type_name) → list of method names implemented.
-    #[allow(dead_code)]
     pub trait_impls: &'a HashMap<(String, String), Vec<String>>,
     /// Tracks heap-allocated resources that need cleanup at function exit.
     pub owned_ptrs: Vec<(String, OwnedKind)>,
@@ -206,13 +204,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Used during call compilation to infer per-param type suffixes for multi-param generics.
     pub generic_fn_params: HashMap<String, Vec<(usize, String)>>,
     /// Set of async function names (their return is wrapped in a future handle).
-    #[allow(dead_code)]
     pub async_fns: &'a HashSet<String>,
     /// Names of variables that hold future handles from async function calls.
-    #[allow(dead_code)]
     pub future_handles: HashSet<String>,
     /// True when the last expression was an async function call.
-    #[allow(dead_code)]
     pub last_future_new: bool,
     /// When true, disables IO/heap operations (bare metal mode).
     pub no_std: bool,
@@ -304,7 +299,6 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub is_enum_return_fn: bool,
     /// Current function's context annotation (@kernel, @device, @safe, @unsafe).
     /// Used for codegen-level enforcement of context restrictions (H4).
-    #[allow(dead_code)]
     pub current_context: Option<String>,
 }
 

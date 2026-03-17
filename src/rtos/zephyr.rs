@@ -165,28 +165,26 @@ pub enum ZephyrThreadState {
 
 /// Simulated Zephyr thread descriptor.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimZephyrThread {
     /// Thread name.
     name: String,
     /// Thread priority (lower = higher priority in Zephyr).
     priority: i32,
     /// Stack size in bytes.
-    stack_size: u32,
+    _stack_size: u32,
     /// Entry function ID.
-    entry_fn: u64,
+    _entry_fn: u64,
     /// Current thread state.
     state: ZephyrThreadState,
 }
 
 /// Simulated Zephyr message queue.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimZephyrMsgq {
     /// Message buffer (FIFO).
     messages: VecDeque<i64>,
     /// Maximum message size in bytes.
-    msg_size: u32,
+    _msg_size: u32,
     /// Maximum number of messages.
     max_msgs: u32,
 }
@@ -211,10 +209,9 @@ struct SimZephyrSem {
 
 /// Simulated Zephyr timer.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimZephyrTimer {
     /// Timer name.
-    name: String,
+    _name: String,
     /// Period in milliseconds (0 = one-shot).
     period_ms: u32,
     /// Whether the timer is currently running.
@@ -327,8 +324,8 @@ impl ZephyrSim {
         let thread = SimZephyrThread {
             name: name.to_string(),
             priority,
-            stack_size,
-            entry_fn,
+            _stack_size: stack_size,
+            _entry_fn: entry_fn,
             state: ZephyrThreadState::Ready,
         };
         self.threads.insert(handle, thread);
@@ -424,7 +421,7 @@ impl ZephyrSim {
         let handle = next_handle();
         let msgq = SimZephyrMsgq {
             messages: VecDeque::new(),
-            msg_size,
+            _msg_size: msg_size,
             max_msgs,
         };
         self.msgqs.insert(handle, msgq);
@@ -675,7 +672,7 @@ impl ZephyrSim {
         }
         let handle = next_handle();
         let timer = SimZephyrTimer {
-            name: name.to_string(),
+            _name: name.to_string(),
             period_ms,
             running: false,
             expiry_count: 0,

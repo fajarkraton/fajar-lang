@@ -40,8 +40,7 @@ impl Fp4E2M1 {
     /// Minimum positive subnormal (0.5).
     pub const MIN_POSITIVE: Self = Self(0x1);
 
-    #[allow(dead_code)]
-    const EXP_BIAS: i32 = 1;
+    const _EXP_BIAS: i32 = 1;
 
     /// All 8 non-negative representable values (indexed by 4-bit code).
     const VALUES: [f32; 8] = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0];

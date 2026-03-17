@@ -1561,7 +1561,16 @@ impl Parser {
 
             // ── Pipeline |> ──
             if matches!(kind, TokenKind::PipeGt) {
-                let (l_bp, r_bp) = infix_binding_power(&kind).unwrap();
+                let (l_bp, r_bp) = infix_binding_power(&kind).ok_or_else(|| {
+                    let tok = self.peek();
+                    ParseError::UnexpectedToken {
+                        expected: "infix operator".into(),
+                        found: format!("{kind:?}"),
+                        line: tok.line,
+                        col: tok.col,
+                        span: tok.span,
+                    }
+                })?;
                 if l_bp < min_bp {
                     break;
                 }
@@ -1578,7 +1587,16 @@ impl Parser {
 
             // ── Range .. / ..= ──
             if matches!(kind, TokenKind::DotDot | TokenKind::DotDotEq) {
-                let (l_bp, _r_bp) = infix_binding_power(&kind).unwrap();
+                let (l_bp, _r_bp) = infix_binding_power(&kind).ok_or_else(|| {
+                    let tok = self.peek();
+                    ParseError::UnexpectedToken {
+                        expected: "range operator".into(),
+                        found: format!("{kind:?}"),
+                        line: tok.line,
+                        col: tok.col,
+                        span: tok.span,
+                    }
+                })?;
                 if l_bp < min_bp {
                     break;
                 }

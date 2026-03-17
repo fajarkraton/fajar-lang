@@ -218,16 +218,15 @@ impl TaskPriority {
 
 /// Simulated FreeRTOS task descriptor.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimTask {
     /// Task name.
     name: String,
     /// Task priority.
     priority: TaskPriority,
     /// Stack size in words.
-    stack_size: u32,
+    _stack_size: u32,
     /// Function pointer (simulated as a name/id).
-    fn_id: u64,
+    _fn_id: u64,
     /// Current task state.
     state: TaskState,
     /// Remaining delay ticks (if blocked on delay).
@@ -240,14 +239,13 @@ struct SimTask {
 
 /// Simulated FreeRTOS queue.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimQueue {
     /// Items in the queue (stored as raw bytes/u64 values).
     items: Vec<u64>,
     /// Maximum number of items.
     max_length: u32,
     /// Item size in bytes.
-    item_size: u32,
+    _item_size: u32,
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -256,14 +254,13 @@ struct SimQueue {
 
 /// Simulated FreeRTOS mutex.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct SimMutex {
     /// Whether the mutex is locked.
     locked: bool,
     /// Task that holds the lock (if any).
     holder: Option<TaskHandle>,
     /// Whether priority inheritance is enabled.
-    priority_inheritance: bool,
+    _priority_inheritance: bool,
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -392,8 +389,8 @@ impl FreeRtosRuntime {
         let task = SimTask {
             name: name.to_string(),
             priority: TaskPriority(priority),
-            stack_size,
-            fn_id: fn_ptr,
+            _stack_size: stack_size,
+            _fn_id: fn_ptr,
             state: TaskState::Ready,
             delay_remaining: 0,
         };
@@ -498,7 +495,7 @@ impl FreeRtosRuntime {
         let queue = SimQueue {
             items: Vec::new(),
             max_length: length,
-            item_size,
+            _item_size: item_size,
         };
         self.queues.insert(handle, queue);
         Ok(QueueHandle(handle))
@@ -597,7 +594,7 @@ impl FreeRtosRuntime {
         let mutex = SimMutex {
             locked: false,
             holder: None,
-            priority_inheritance: true,
+            _priority_inheritance: true,
         };
         self.mutexes.insert(handle, mutex);
         MutexHandle(handle)

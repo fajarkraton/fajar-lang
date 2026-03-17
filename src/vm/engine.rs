@@ -22,8 +22,7 @@ enum DispatchResult {
 #[derive(Debug)]
 struct CallFrame {
     /// Index into chunk.functions (for debugging).
-    #[allow(dead_code)]
-    function_index: usize,
+    _function_index: usize,
     /// Saved instruction pointer (return address).
     return_ip: usize,
     /// Base index of this frame's local variables on the stack.
@@ -178,7 +177,7 @@ impl VM {
                     let stack_base = self.stack.len() - arity as usize;
 
                     self.frames.push(CallFrame {
-                        function_index: func_idx,
+                        _function_index: func_idx,
                         return_ip: self.ip,
                         stack_base,
                     });
@@ -228,7 +227,7 @@ impl VM {
         }
 
         self.frames.push(CallFrame {
-            function_index: func_idx,
+            _function_index: func_idx,
             return_ip: self.ip,
             stack_base,
         });

@@ -595,21 +595,29 @@ pub fn matmul_tracked(
             vec![a_id, b_id],
             Box::new(move |g| {
                 // grad_a = g @ b^T
-                let g2 = g
-                    .clone()
-                    .into_shape_with_order((a_shape[0], b_shape[1]))
-                    .unwrap();
-                let b2 = b_data
-                    .clone()
-                    .into_shape_with_order((b_shape[0], b_shape[1]))
-                    .unwrap();
-                let a2 = a_data
-                    .clone()
-                    .into_shape_with_order((a_shape[0], a_shape[1]))
-                    .unwrap();
-                let grad_a = g2.dot(&b2.t()).into_dyn();
-                let grad_b = a2.t().dot(&g2).into_dyn();
-                vec![grad_a, grad_b]
+                // Shapes are guaranteed valid from matmul operands.
+                match (
+                    g.clone().into_shape_with_order((a_shape[0], b_shape[1])),
+                    b_data
+                        .clone()
+                        .into_shape_with_order((b_shape[0], b_shape[1])),
+                    a_data
+                        .clone()
+                        .into_shape_with_order((a_shape[0], a_shape[1])),
+                ) {
+                    (Ok(g2), Ok(b2), Ok(a2)) => {
+                        let grad_a = g2.dot(&b2.t()).into_dyn();
+                        let grad_b = a2.t().dot(&g2).into_dyn();
+                        vec![grad_a, grad_b]
+                    }
+                    _ => {
+                        // Fallback: zero gradients if reshape fails (should never happen)
+                        vec![
+                            ArrayD::zeros(ndarray::IxDyn(&a_shape)),
+                            ArrayD::zeros(ndarray::IxDyn(&b_shape)),
+                        ]
+                    }
+                }
             }),
         );
     }
@@ -741,7 +749,9 @@ fn reduce_broadcast(grad: &ArrayD<f64>, target_shape: &[usize]) -> ArrayD<f64> {
     // If target is scalar, sum everything
     if target_shape.is_empty() {
         let total: f64 = grad.iter().sum();
-        return ArrayD::from_shape_vec(vec![], vec![total]).unwrap();
+        // Scalar shape with one element — construction is infallible here.
+        return ArrayD::from_shape_vec(vec![], vec![total])
+            .unwrap_or_else(|_| ArrayD::from_elem(ndarray::IxDyn(&[]), total));
     }
 
     // Sum along axes that were broadcast (size 1 in target but larger in grad)
@@ -768,7 +778,8 @@ fn reduce_broadcast(grad: &ArrayD<f64>, target_shape: &[usize]) -> ArrayD<f64> {
     // Remove leading dimensions that were added by padding
     if result.shape().len() > target_shape.len() {
         let data: Vec<f64> = result.iter().copied().collect();
-        result = ArrayD::from_shape_vec(target_shape.to_vec(), data).unwrap();
+        result =
+            ArrayD::from_shape_vec(target_shape.to_vec(), data).unwrap_or_else(|_| result.clone());
     }
 
     result
@@ -908,12 +919,14 @@ pub fn cross_entropy_tracked(
             Box::new(move |g| {
                 let scalar = g.iter().next().copied().unwrap_or(1.0);
                 let eps = 1e-12;
-                let grad = target_data
+                let grad: Vec<f64> = target_data
                     .iter()
                     .zip(pred_data.iter())
-                    .map(|(&t, &p)| -t / p.max(eps) * scalar);
-                let grad_arr =
-                    ArrayD::from_shape_vec(pred_data.shape().to_vec(), grad.collect()).unwrap();
+                    .map(|(&t, &p)| -t / p.max(eps) * scalar)
+                    .collect();
+                let shape = pred_data.shape().to_vec();
+                let grad_arr = ArrayD::from_shape_vec(shape.clone(), grad)
+                    .unwrap_or_else(|_| ArrayD::zeros(ndarray::IxDyn(&shape)));
                 vec![grad_arr]
             }),
         );
@@ -943,12 +956,17 @@ pub fn bce_loss_tracked(
             Box::new(move |g| {
                 let scalar = g.iter().next().copied().unwrap_or(1.0);
                 let eps = 1e-12;
-                let grad = pred_data.iter().zip(target_data.iter()).map(|(&p, &t)| {
-                    let p_clamp = p.clamp(eps, 1.0 - eps);
-                    (-t / p_clamp + (1.0 - t) / (1.0 - p_clamp)) * scalar / n
-                });
-                let grad_arr =
-                    ArrayD::from_shape_vec(pred_data.shape().to_vec(), grad.collect()).unwrap();
+                let grad: Vec<f64> = pred_data
+                    .iter()
+                    .zip(target_data.iter())
+                    .map(|(&p, &t)| {
+                        let p_clamp = p.clamp(eps, 1.0 - eps);
+                        (-t / p_clamp + (1.0 - t) / (1.0 - p_clamp)) * scalar / n
+                    })
+                    .collect();
+                let shape = pred_data.shape().to_vec();
+                let grad_arr = ArrayD::from_shape_vec(shape.clone(), grad)
+                    .unwrap_or_else(|_| ArrayD::zeros(ndarray::IxDyn(&shape)));
                 vec![grad_arr]
             }),
         );
