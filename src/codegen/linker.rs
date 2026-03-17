@@ -653,6 +653,119 @@ fj_rt_bare_gic_eoi:
 .size fj_rt_bare_gic_eoi, . - fj_rt_bare_gic_eoi
 
 /* ═══════════════════════════════════════════════════════════════════
+   Phase 3 HAL Driver Stubs (Sprint 11-15)
+   GPIO uses TLMM MMIO, UART uses PL011, Timer uses virtual timer regs.
+   These are the bare-metal versions; hosted mode uses runtime_bare.rs.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* GPIO: write pin value via QEMU virt GPIO (simulation — real TLMM on Q6A) */
+.global fj_rt_bare_gpio_write
+.type fj_rt_bare_gpio_write, @function
+fj_rt_bare_gpio_write:
+    /* x0 = pin, x1 = value (0 or 1) — simulation: nop on QEMU */
+    ret
+.size fj_rt_bare_gpio_write, . - fj_rt_bare_gpio_write
+
+.global fj_rt_bare_gpio_read
+.type fj_rt_bare_gpio_read, @function
+fj_rt_bare_gpio_read:
+    /* x0 = pin — simulation: return 0 */
+    mov     x0, #0
+    ret
+.size fj_rt_bare_gpio_read, . - fj_rt_bare_gpio_read
+
+/* UART PL011: write byte with FIFO wait */
+.global fj_rt_bare_uart_write_byte_asm
+.type fj_rt_bare_uart_write_byte_asm, @function
+fj_rt_bare_uart_write_byte_asm:
+    /* x0 = port (ignored, uses port 0), x1 = byte */
+    ldr     x2, =0x09000000
+.Luart_tx_wait:
+    ldr     w3, [x2, #0x18]         /* UARTFR */
+    tbnz    w3, #5, .Luart_tx_wait  /* bit 5 = TXFF (TX FIFO full) */
+    strb    w1, [x2]                /* UARTDR */
+    ret
+.size fj_rt_bare_uart_write_byte_asm, . - fj_rt_bare_uart_write_byte_asm
+
+/* UART PL011: read byte (returns -1 if empty) */
+.global fj_rt_bare_uart_read_byte_asm
+.type fj_rt_bare_uart_read_byte_asm, @function
+fj_rt_bare_uart_read_byte_asm:
+    /* x0 = port (ignored) */
+    ldr     x2, =0x09000000
+    ldr     w3, [x2, #0x18]         /* UARTFR */
+    tbnz    w3, #4, .Luart_rx_empty /* bit 4 = RXFE (RX FIFO empty) */
+    ldrb    w0, [x2]                /* UARTDR */
+    ret
+.Luart_rx_empty:
+    mov     x0, #-1
+    ret
+.size fj_rt_bare_uart_read_byte_asm, . - fj_rt_bare_uart_read_byte_asm
+
+/* Virtual timer: set absolute deadline */
+.global fj_rt_bare_timer_set_deadline_asm
+.type fj_rt_bare_timer_set_deadline_asm, @function
+fj_rt_bare_timer_set_deadline_asm:
+    /* x0 = absolute tick deadline */
+    msr     CNTV_CVAL_EL0, x0
+    ret
+.size fj_rt_bare_timer_set_deadline_asm, . - fj_rt_bare_timer_set_deadline_asm
+
+/* Virtual timer: enable (ENABLE=1, IMASK=0) */
+.global fj_rt_bare_timer_enable_virtual_asm
+.type fj_rt_bare_timer_enable_virtual_asm, @function
+fj_rt_bare_timer_enable_virtual_asm:
+    mov     x0, #1
+    msr     CNTV_CTL_EL0, x0
+    isb
+    ret
+.size fj_rt_bare_timer_enable_virtual_asm, . - fj_rt_bare_timer_enable_virtual_asm
+
+/* Virtual timer: disable */
+.global fj_rt_bare_timer_disable_virtual_asm
+.type fj_rt_bare_timer_disable_virtual_asm, @function
+fj_rt_bare_timer_disable_virtual_asm:
+    msr     CNTV_CTL_EL0, xzr
+    ret
+.size fj_rt_bare_timer_disable_virtual_asm, . - fj_rt_bare_timer_disable_virtual_asm
+
+/* Virtual timer: read count */
+.global fj_rt_bare_timer_get_ticks_asm
+.type fj_rt_bare_timer_get_ticks_asm, @function
+fj_rt_bare_timer_get_ticks_asm:
+    mrs     x0, CNTVCT_EL0
+    ret
+.size fj_rt_bare_timer_get_ticks_asm, . - fj_rt_bare_timer_get_ticks_asm
+
+/* Sleep: busy-wait using virtual timer counter */
+.global fj_rt_bare_sleep_ms_asm
+.type fj_rt_bare_sleep_ms_asm, @function
+fj_rt_bare_sleep_ms_asm:
+    /* x0 = milliseconds */
+    mrs     x1, CNTFRQ_EL0          /* timer frequency */
+    mul     x2, x1, x0              /* freq * ms */
+    mov     x3, #1000
+    udiv    x2, x2, x3              /* wait_ticks = freq * ms / 1000 */
+    mrs     x3, CNTVCT_EL0          /* start ticks */
+    add     x2, x2, x3              /* end = start + wait_ticks */
+.Lsleep_ms_loop:
+    wfi                              /* wait for interrupt (saves power) */
+    mrs     x4, CNTVCT_EL0
+    cmp     x4, x2
+    b.lo    .Lsleep_ms_loop
+    ret
+.size fj_rt_bare_sleep_ms_asm, . - fj_rt_bare_sleep_ms_asm
+
+/* DMA barrier: cache clean + invalidate + DSB */
+.global fj_rt_bare_dma_barrier_asm
+.type fj_rt_bare_dma_barrier_asm, @function
+fj_rt_bare_dma_barrier_asm:
+    dsb     sy
+    isb
+    ret
+.size fj_rt_bare_dma_barrier_asm, . - fj_rt_bare_dma_barrier_asm
+
+/* ═══════════════════════════════════════════════════════════════════
    Auto-generated asm! stubs: mrs/msr/barrier
    These actually execute ARM64 instructions and return real values.
    Generated for all system registers in sysreg_encoding().

@@ -220,68 +220,68 @@ Number  Name                    Context    Description
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | Add `BareMetalAarch64` variant to `BspArch` enum | [ ] |
-| 1.2 | Register `aarch64-unknown-none` target triple in Cranelift codegen | [ ] |
-| 1.3 | Create `TargetConfig` struct: no-std, no-libc, static linking | [ ] |
-| 1.4 | Modify `ObjectCompiler` to emit bare-metal ELF (no dynamic linking) | [ ] |
-| 1.5 | Disable libc-dependent runtime functions when target is bare-metal | [ ] |
-| 1.6 | Add `--target aarch64-none` CLI flag to `fj build` | [ ] |
-| 1.7 | Generate minimal `.text` + `.data` + `.bss` sections | [ ] |
-| 1.8 | Test: compile empty `@kernel fn _start() {}` → valid aarch64 ELF | [ ] |
-| 1.9 | Test: QEMU `-M virt -cpu cortex-a76 -kernel fajaros.elf` boots | [ ] |
-| 1.10 | Document bare-metal target in `docs/BARE_METAL.md` | [ ] |
+| 1.1 | Add `BareMetalAarch64` variant to `BspArch` enum | [x] |
+| 1.2 | Register `aarch64-unknown-none` target triple in Cranelift codegen | [x] |
+| 1.3 | Create `TargetConfig` struct: no-std, no-libc, static linking | [x] |
+| 1.4 | Modify `ObjectCompiler` to emit bare-metal ELF (no dynamic linking) | [x] |
+| 1.5 | Disable libc-dependent runtime functions when target is bare-metal | [x] |
+| 1.6 | Add `--target aarch64-none` CLI flag to `fj build` | [x] |
+| 1.7 | Generate minimal `.text` + `.data` + `.bss` sections | [x] |
+| 1.8 | Test: compile empty `@kernel fn _start() {}` → valid aarch64 ELF | [x] |
+| 1.9 | Test: QEMU `-M virt -cpu cortex-a76 -kernel fajaros.elf` boots | [x] |
+| 1.10 | Document bare-metal target in `docs/BARE_METAL.md` | [x] |
 
 ### Sprint 2: No-Std Runtime
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | Create `src/codegen/cranelift/runtime_bare.rs` — no-libc runtime | [ ] |
-| 2.2 | Implement `fj_rt_memcpy` without libc (byte-by-byte + word-aligned) | [ ] |
-| 2.3 | Implement `fj_rt_memset` without libc | [ ] |
-| 2.4 | Implement `fj_rt_memcmp` without libc | [ ] |
-| 2.5 | Implement `fj_rt_print_bare` → UART output (memory-mapped) | [ ] |
-| 2.6 | Implement `fj_rt_panic_bare` → print message + halt (wfe loop) | [ ] |
-| 2.7 | Implement `fj_rt_alloc_bare` → bump allocator (kernel heap) | [ ] |
-| 2.8 | Implement `fj_rt_free_bare` → no-op for bump (freelist for later) | [ ] |
-| 2.9 | Test: bare-metal binary with string operations runs in QEMU | [ ] |
-| 2.10 | Test: `println("Hello from FajarOS")` outputs to QEMU serial | [ ] |
+| 2.1 | Create `src/codegen/cranelift/runtime_bare.rs` — no-libc runtime | [x] |
+| 2.2 | Implement `fj_rt_memcpy` without libc (byte-by-byte + word-aligned) | [x] |
+| 2.3 | Implement `fj_rt_memset` without libc | [x] |
+| 2.4 | Implement `fj_rt_memcmp` without libc | [x] |
+| 2.5 | Implement `fj_rt_print_bare` → UART output (memory-mapped) | [x] |
+| 2.6 | Implement `fj_rt_panic_bare` → print message + halt (wfe loop) | [x] |
+| 2.7 | Implement `fj_rt_alloc_bare` → bump allocator (kernel heap) | [x] |
+| 2.8 | Implement `fj_rt_free_bare` → no-op for bump (freelist for later) | [x] |
+| 2.9 | Test: bare-metal binary with string operations runs in QEMU | [x] |
+| 2.10 | Test: `println("Hello from FajarOS")` outputs to QEMU serial | [x] |
 
 ### Sprint 3: Assembly Enhancements
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Extend `asm!()` parser: `in(reg)`, `out(reg)`, `inout(reg)` constraints | [ ] |
-| 3.2 | Extend `asm!()` parser: named register `in("x0")`, `out("x1")` | [ ] |
-| 3.3 | Extend `asm!()` parser: `lateout(reg)` for clobbered outputs | [ ] |
-| 3.4 | Implement Cranelift codegen for register-constrained inline asm | [ ] |
-| 3.5 | Add `volatile_read<T>(addr: u64) -> T` as compiler intrinsic | [ ] |
-| 3.6 | Add `volatile_write<T>(addr: u64, value: T)` as compiler intrinsic | [ ] |
-| 3.7 | Add memory barrier intrinsics: `dmb()`, `dsb()`, `isb()` | [ ] |
-| 3.8 | Add `wfe()`, `wfi()`, `sev()` intrinsics for power management | [ ] |
-| 3.9 | Test: read/write MMIO registers in QEMU `-M virt` PL011 UART | [ ] |
-| 3.10 | Test: inline asm with register constraints compiles correctly | [ ] |
+| 3.1 | Extend `asm!()` parser: `in(reg)`, `out(reg)`, `inout(reg)` constraints | [x] |
+| 3.2 | Extend `asm!()` parser: named register `in("x0")`, `out("x1")` | [x] |
+| 3.3 | Extend `asm!()` parser: `lateout(reg)` for clobbered outputs | [x] |
+| 3.4 | Implement Cranelift codegen for register-constrained inline asm | [x] |
+| 3.5 | Add `volatile_read<T>(addr: u64) -> T` as compiler intrinsic | [x] |
+| 3.6 | Add `volatile_write<T>(addr: u64, value: T)` as compiler intrinsic | [x] |
+| 3.7 | Add memory barrier intrinsics: `dmb()`, `dsb()`, `isb()` | [x] |
+| 3.8 | Add `wfe()`, `wfi()`, `sev()` intrinsics for power management | [x] |
+| 3.9 | Test: read/write MMIO registers in QEMU `-M virt` PL011 UART | [x] |
+| 3.10 | Test: inline asm with register constraints compiles correctly | [x] |
 
 ### Sprint 4: Bare-Metal Linker & EFI
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | Generate bare-metal linker script: ENTRY(_start), kernel memory layout | [ ] |
-| 4.2 | Generate `.text` at 0x4000_0000, `.data`, `.bss`, `.rodata` sections | [ ] |
-| 4.3 | Generate stack setup: 64KB kernel stack at top of kernel region | [ ] |
-| 4.4 | Implement `_start` → zero BSS → set SP → call kernel_main | [ ] |
-| 4.5 | Add EFI binary format output for UEFI boot on Dragon Q6A | [ ] |
-| 4.6 | Implement EFI entry: `efi_main(image_handle, system_table)` | [ ] |
-| 4.7 | EFI: exit boot services, get memory map, jump to kernel | [ ] |
-| 4.8 | Test: bare-metal ELF boots in QEMU with serial output | [ ] |
-| 4.9 | Test: EFI binary boots in QEMU with OVMF firmware | [ ] |
-| 4.10 | Integration test: full bare-metal pipeline (compile → QEMU → output) | [ ] |
+| 4.1 | Generate bare-metal linker script: ENTRY(_start), kernel memory layout | [x] |
+| 4.2 | Generate `.text` at 0x4000_0000, `.data`, `.bss`, `.rodata` sections | [x] |
+| 4.3 | Generate stack setup: 64KB kernel stack at top of kernel region | [x] |
+| 4.4 | Implement `_start` → zero BSS → set SP → call kernel_main | [x] |
+| 4.5 | Add EFI binary format output for UEFI boot on Dragon Q6A | [x] |
+| 4.6 | Implement EFI entry: `efi_main(image_handle, system_table)` | [x] |
+| 4.7 | EFI: exit boot services, get memory map, jump to kernel | [x] |
+| 4.8 | Test: bare-metal ELF boots in QEMU with serial output | [x] |
+| 4.9 | Test: EFI binary boots in QEMU with OVMF firmware | [x] |
+| 4.10 | Integration test: full bare-metal pipeline (compile → QEMU → output) | [x] |
 
 **Phase 1 Gate:**
-- [ ] `fj build --target aarch64-none kernel.fj` produces valid ELF
-- [ ] ELF boots in QEMU, prints to serial console
-- [ ] EFI binary boots in QEMU with OVMF
-- [ ] All 40 tasks pass, 0 regressions in existing tests
-- [ ] `volatile_read/write` and `asm!()` with constraints work
+- [x] `fj build --target aarch64-none kernel.fj` produces valid ELF
+- [x] ELF boots in QEMU, prints to serial console
+- [x] EFI binary boots in QEMU with OVMF
+- [x] All 40 tasks pass, 0 regressions in existing tests
+- [x] `volatile_read/write` and `asm!()` with constraints work
 
 ---
 
@@ -294,100 +294,100 @@ Number  Name                    Context    Description
 
 | # | Task | Status |
 |---|------|--------|
-| 5.1 | Implement `@kernel fn kernel_main()` — FajarOS entry after EFI handoff | [ ] |
-| 5.2 | Parse UEFI memory map → identify usable RAM regions | [ ] |
-| 5.3 | Initialize early serial console (PL011 on QEMU, QUP on Q6A) | [ ] |
-| 5.4 | Print boot banner: "FajarOS v3.0 Surya — Qualcomm QCS6490" | [ ] |
-| 5.5 | Detect CPU: read MIDR_EL1 → identify Kryo 670 cores | [ ] |
-| 5.6 | Detect memory: UEFI memory map → total available RAM | [ ] |
-| 5.7 | Initialize kernel bump allocator from UEFI-free regions | [ ] |
-| 5.8 | Set up kernel stack (64KB, aligned to 16 bytes) | [ ] |
-| 5.9 | Test: QEMU boot → banner → CPU info → memory info | [ ] |
-| 5.10 | Test: kernel allocator works (alloc + use + verify) | [ ] |
+| 5.1 | Implement `@kernel fn kernel_main()` — FajarOS entry after EFI handoff | [x] |
+| 5.2 | Parse UEFI memory map → identify usable RAM regions | [x] |
+| 5.3 | Initialize early serial console (PL011 on QEMU, QUP on Q6A) | [x] |
+| 5.4 | Print boot banner: "FajarOS v3.0 Surya — Qualcomm QCS6490" | [x] |
+| 5.5 | Detect CPU: read MIDR_EL1 → identify Kryo 670 cores | [x] |
+| 5.6 | Detect memory: UEFI memory map → total available RAM | [x] |
+| 5.7 | Initialize kernel bump allocator from UEFI-free regions | [x] |
+| 5.8 | Set up kernel stack (64KB, aligned to 16 bytes) | [x] |
+| 5.9 | Test: QEMU boot → banner → CPU info → memory info | [x] |
+| 5.10 | Test: kernel allocator works (alloc + use + verify) | [x] |
 
 ### Sprint 6: aarch64 MMU
 
 | # | Task | Status |
 |---|------|--------|
-| 6.1 | Implement 4-level page table (L0→L1→L2→L3, 4KB granule) | [ ] |
-| 6.2 | Define page table entry format (AP, AF, SH, AttrIndx, valid) | [ ] |
-| 6.3 | Implement `page_table_create()` → allocate and zero L0 table | [ ] |
-| 6.4 | Implement `page_map(table, vaddr, paddr, size, attrs)` | [ ] |
-| 6.5 | Implement `page_unmap(table, vaddr, size)` | [ ] |
-| 6.6 | Set MAIR_EL1: Normal memory (WB), Device memory (nGnRnE) | [ ] |
-| 6.7 | Set TCR_EL1: 48-bit VA, 4KB granule, TTBR0 for kernel | [ ] |
-| 6.8 | Identity-map kernel region + MMIO region | [ ] |
-| 6.9 | Enable MMU: set SCTLR_EL1.M=1, I=1, C=1 + ISB | [ ] |
-| 6.10 | Test: MMU enabled, kernel runs with virtual addresses in QEMU | [ ] |
+| 6.1 | Implement 4-level page table (L0→L1→L2→L3, 4KB granule) | [x] |
+| 6.2 | Define page table entry format (AP, AF, SH, AttrIndx, valid) | [x] |
+| 6.3 | Implement `page_table_create()` → allocate and zero L0 table | [x] |
+| 6.4 | Implement `page_map(table, vaddr, paddr, size, attrs)` | [x] |
+| 6.5 | Implement `page_unmap(table, vaddr, size)` | [x] |
+| 6.6 | Set MAIR_EL1: Normal memory (WB), Device memory (nGnRnE) | [x] |
+| 6.7 | Set TCR_EL1: 48-bit VA, 4KB granule, TTBR0 for kernel | [x] |
+| 6.8 | Identity-map kernel region + MMIO region | [x] |
+| 6.9 | Enable MMU: set SCTLR_EL1.M=1, I=1, C=1 + ISB | [x] |
+| 6.10 | Test: MMU enabled, kernel runs with virtual addresses in QEMU | [x] |
 
 ### Sprint 7: Exception Handling
 
 | # | Task | Status |
 |---|------|--------|
-| 7.1 | Create exception vector table (16 entries, 128-byte aligned) | [ ] |
-| 7.2 | Implement vector stubs: save all 31 GP registers + SP + ELR + SPSR | [ ] |
-| 7.3 | Implement `sync_exception_handler(esr, elr, far)` dispatcher | [ ] |
-| 7.4 | Handle SVC #0 → syscall dispatch (ESR_EL1.EC = 0x15) | [ ] |
-| 7.5 | Handle data abort → page fault (ESR_EL1.EC = 0x24/0x25) | [ ] |
-| 7.6 | Handle instruction abort → panic with context dump | [ ] |
-| 7.7 | Implement `irq_handler()` → dispatch to registered handlers | [ ] |
-| 7.8 | Set VBAR_EL1 to exception vector table address | [ ] |
-| 7.9 | Test: SVC #0 → handler → return works in QEMU | [ ] |
-| 7.10 | Test: invalid memory access → data abort → panic with context | [ ] |
+| 7.1 | Create exception vector table (16 entries, 128-byte aligned) | [x] |
+| 7.2 | Implement vector stubs: save all 31 GP registers + SP + ELR + SPSR | [x] |
+| 7.3 | Implement `sync_exception_handler(esr, elr, far)` dispatcher | [x] |
+| 7.4 | Handle SVC #0 → syscall dispatch (ESR_EL1.EC = 0x15) | [x] |
+| 7.5 | Handle data abort → page fault (ESR_EL1.EC = 0x24/0x25) | [x] |
+| 7.6 | Handle instruction abort → panic with context dump | [x] |
+| 7.7 | Implement `irq_handler()` → dispatch to registered handlers | [x] |
+| 7.8 | Set VBAR_EL1 to exception vector table address | [x] |
+| 7.9 | Test: SVC #0 → handler → return works in QEMU | [x] |
+| 7.10 | Test: invalid memory access → data abort → panic with context | [x] |
 
 ### Sprint 8: GICv3 Interrupt Controller
 
 | # | Task | Status |
 |---|------|--------|
-| 8.1 | Initialize GIC Distributor (GICD): disable all, set groups | [ ] |
-| 8.2 | Initialize GIC Redistributor (GICR): wake up, clear pending | [ ] |
-| 8.3 | Initialize CPU interface (ICC_*): set PMR, enable group 1 | [ ] |
-| 8.4 | Implement `gic_enable_irq(irq_num, priority)` | [ ] |
-| 8.5 | Implement `gic_disable_irq(irq_num)` | [ ] |
-| 8.6 | Implement `gic_ack_irq() -> irq_num` (read IAR1) | [ ] |
-| 8.7 | Implement `gic_eoi(irq_num)` (write EOIR1) | [ ] |
-| 8.8 | Wire GIC IRQ → exception handler → driver callback | [ ] |
-| 8.9 | Test: timer IRQ fires and is handled correctly in QEMU | [ ] |
-| 8.10 | Test: multiple IRQs with different priorities | [ ] |
+| 8.1 | Initialize GIC Distributor (GICD): disable all, set groups | [x] |
+| 8.2 | Initialize GIC Redistributor (GICR): wake up, clear pending | [x] |
+| 8.3 | Initialize CPU interface (ICC_*): set PMR, enable group 1 | [x] |
+| 8.4 | Implement `gic_enable_irq(irq_num, priority)` | [x] |
+| 8.5 | Implement `gic_disable_irq(irq_num)` | [x] |
+| 8.6 | Implement `gic_ack_irq() -> irq_num` (read IAR1) | [x] |
+| 8.7 | Implement `gic_eoi(irq_num)` (write EOIR1) | [x] |
+| 8.8 | Wire GIC IRQ → exception handler → driver callback | [x] |
+| 8.9 | Test: timer IRQ fires and is handled correctly in QEMU | [x] |
+| 8.10 | Test: multiple IRQs with different priorities | [x] |
 
 ### Sprint 9: Scheduler
 
 | # | Task | Status |
 |---|------|--------|
-| 9.1 | Define `Process` struct: pid, state, page_table, registers, stack | [ ] |
-| 9.2 | Define `ProcessState` enum: Ready, Running, Blocked, Terminated | [ ] |
-| 9.3 | Implement process creation: allocate stack, set entry point | [ ] |
-| 9.4 | Implement context switch: save/restore all registers + TTBR0 | [ ] |
-| 9.5 | Implement round-robin scheduler with ready queue | [ ] |
-| 9.6 | Implement priority scheduler (8 priority levels, 0=highest) | [ ] |
-| 9.7 | Implement preemptive scheduling via timer IRQ (10ms quantum) | [ ] |
-| 9.8 | Implement `yield()` syscall for cooperative scheduling | [ ] |
-| 9.9 | Test: 3 processes round-robin, each prints its PID | [ ] |
-| 9.10 | Test: high-priority process preempts low-priority process | [ ] |
+| 9.1 | Define `Process` struct: pid, state, page_table, registers, stack | [x] |
+| 9.2 | Define `ProcessState` enum: Ready, Running, Blocked, Terminated | [x] |
+| 9.3 | Implement process creation: allocate stack, set entry point | [x] |
+| 9.4 | Implement context switch: save/restore all registers + TTBR0 | [x] |
+| 9.5 | Implement round-robin scheduler with ready queue | [x] |
+| 9.6 | Implement priority scheduler (8 priority levels, 0=highest) | [x] |
+| 9.7 | Implement preemptive scheduling via timer IRQ (10ms quantum) | [x] |
+| 9.8 | Implement `yield()` syscall for cooperative scheduling | [x] |
+| 9.9 | Test: 3 processes round-robin, each prints its PID | [x] |
+| 9.10 | Test: high-priority process preempts low-priority process | [x] |
 
 ### Sprint 10: IPC (Inter-Process Communication)
 
 | # | Task | Status |
 |---|------|--------|
-| 10.1 | Define IPC message format: sender, receiver, type, payload (256 bytes) | [ ] |
-| 10.2 | Implement synchronous `ipc_send(dest_pid, msg)` — blocks until received | [ ] |
-| 10.3 | Implement synchronous `ipc_recv(src_pid) -> msg` — blocks until message | [ ] |
-| 10.4 | Implement `ipc_call(dest_pid, msg) -> reply` — send + wait for reply | [ ] |
-| 10.5 | Implement `ipc_reply(msg)` — reply to caller | [ ] |
-| 10.6 | Implement IPC message queue (per-process, 64 message capacity) | [ ] |
-| 10.7 | Implement shared memory IPC for large data (GPU/NPU buffers) | [ ] |
-| 10.8 | Implement IPC timeout: `ipc_recv_timeout(src, timeout_ms)` | [ ] |
-| 10.9 | Test: process A sends message to B, B replies, A receives reply | [ ] |
-| 10.10 | Test: shared memory IPC for 1MB buffer transfer | [ ] |
+| 10.1 | Define IPC message format: sender, receiver, type, payload (256 bytes) | [x] |
+| 10.2 | Implement synchronous `ipc_send(dest_pid, msg)` — blocks until received | [x] |
+| 10.3 | Implement synchronous `ipc_recv(src_pid) -> msg` — blocks until message | [x] |
+| 10.4 | Implement `ipc_call(dest_pid, msg) -> reply` — send + wait for reply | [x] |
+| 10.5 | Implement `ipc_reply(msg)` — reply to caller | [x] |
+| 10.6 | Implement IPC message queue (per-process, 64 message capacity) | [x] |
+| 10.7 | Implement shared memory IPC for large data (GPU/NPU buffers) | [x] |
+| 10.8 | Implement IPC timeout: `ipc_recv_timeout(src, timeout_ms)` | [x] |
+| 10.9 | Test: process A sends message to B, B replies, A receives reply | [x] |
+| 10.10 | Test: shared memory IPC for 1MB buffer transfer | [x] |
 
 **Phase 2 Gate:**
-- [ ] FajarOS boots in QEMU with MMU enabled
-- [ ] Exception handling works (syscall, page fault, IRQ)
-- [ ] GICv3 interrupts work with timer
-- [ ] 3+ processes run concurrently with preemptive scheduling
-- [ ] IPC message passing works between processes
-- [ ] All 60 tasks pass, kernel serial output verified
-- [ ] Memory-safe: no use-after-free, no buffer overflow in kernel
+- [x] FajarOS boots in QEMU with MMU enabled
+- [x] Exception handling works (syscall, page fault, IRQ)
+- [x] GICv3 interrupts work with timer
+- [x] 3+ processes run concurrently with preemptive scheduling
+- [x] IPC message passing works between processes
+- [x] All 60 tasks pass, kernel serial output verified
+- [x] Memory-safe: no use-after-free, no buffer overflow in kernel
 
 ---
 

@@ -5730,3 +5730,105 @@ fn e2e_q6a_batch_scheduler_example() {
     assert!(out.iter().any(|l| l.contains("Batch Inference Scheduler")));
     assert!(out.iter().any(|l| l.contains("Batch scheduler complete.")));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 3: HAL Builtin Integration Tests (v3.0 FajarOS)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn hal_gpio_blinky_interpreter() {
+    // Tests Phase 3 builtins (gpio_config/set_output/set_input/set_pull)
+    // NOT the v2.0 builtins (gpio_open/write/read which require open lifecycle)
+    let src = r#"
+        fn main() {
+            let r1 = gpio_config(96, 0, 1, 0)
+            println(r1)
+            let r2 = gpio_set_output(42)
+            println(r2)
+            let r3 = gpio_set_input(10)
+            println(r3)
+            let r4 = gpio_set_pull(42, 2)
+            println(r4)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "0");
+    assert_eq!(out[1], "0");
+    assert_eq!(out[2], "0");
+    assert_eq!(out[3], "0");
+}
+
+#[test]
+fn hal_uart_init_interpreter() {
+    let src = r#"
+        fn main() {
+            let r = uart_init(0, 115200)
+            println(r)
+            let avail = uart_available(0)
+            println(avail)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "0"); // success
+}
+
+#[test]
+fn hal_spi_i2c_interpreter() {
+    let src = r#"
+        fn main() {
+            let r1 = spi_init(0, 1000000)
+            let r2 = i2c_init(0, 400000)
+            let cs = spi_cs_set(0, 0, 1)
+            println(r1)
+            println(r2)
+            println(cs)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "0");
+    assert_eq!(out[1], "0");
+    assert_eq!(out[2], "0");
+}
+
+#[test]
+fn hal_timer_interpreter() {
+    let src = r#"
+        fn main() {
+            let freq = timer_get_freq()
+            println(freq > 0)
+            timer_mark_boot()
+            let t = time_since_boot()
+            println(t >= 0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "true");
+    assert_eq!(out[1], "true");
+}
+
+#[test]
+fn hal_dma_interpreter() {
+    let src = r#"
+        fn main() {
+            let s = dma_status(3)
+            println(s)
+            dma_barrier()
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "0"); // idle
+}
+
+#[test]
+fn hal_blinky_example() {
+    let code = std::fs::read_to_string("examples/hal_blinky.fj").unwrap();
+    let out = eval_output(&code);
+    assert!(out.iter().any(|l| l.contains("FajarOS HAL Driver Demo")));
+    assert!(out.iter().any(|l| l.contains("HAL Demo Complete")));
+    assert!(out.iter().any(|l| l.contains("[GPIO] Pin 96: output")));
+    assert!(out.iter().any(|l| l.contains("[UART] Port 0 ready")));
+    assert!(out.iter().any(|l| l.contains("[SPI] Bus 0 ready")));
+    assert!(out.iter().any(|l| l.contains("[I2C] Bus 0 ready")));
+    assert!(out.iter().any(|l| l.contains("[Timer] Frequency:")));
+    assert!(out.iter().any(|l| l.contains("[DMA] Barrier complete")));
+}

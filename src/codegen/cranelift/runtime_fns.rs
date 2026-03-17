@@ -9,6 +9,8 @@
 //! Callers (JIT/AOT compiled code) guarantee valid, non-null pointers.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+use super::runtime_bare;
+
 // ═══════════════════════════════════════════════════════════════════════
 // I/O: Integer, Float, Bool, String print
 // ═══════════════════════════════════════════════════════════════════════
@@ -7175,6 +7177,69 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_async_io_result_ptr" => Some(fj_rt_async_io_result_ptr as *const u8),
         "fj_rt_async_io_result_len" => Some(fj_rt_async_io_result_len as *const u8),
         "fj_rt_async_io_free" => Some(fj_rt_async_io_free as *const u8),
+        // Phase 3 HAL bare-metal builtins (runtime_bare.rs simulation)
+        "fj_rt_bare_gpio_config" => Some(runtime_bare::fj_rt_bare_gpio_config as *const u8),
+        "fj_rt_bare_gpio_set_output" => Some(runtime_bare::fj_rt_bare_gpio_set_output as *const u8),
+        "fj_rt_bare_gpio_set_input" => Some(runtime_bare::fj_rt_bare_gpio_set_input as *const u8),
+        "fj_rt_bare_gpio_write" => Some(runtime_bare::fj_rt_bare_gpio_write as *const u8),
+        "fj_rt_bare_gpio_read" => Some(runtime_bare::fj_rt_bare_gpio_read as *const u8),
+        "fj_rt_bare_gpio_toggle" => Some(runtime_bare::fj_rt_bare_gpio_toggle as *const u8),
+        "fj_rt_bare_gpio_set_pull" => Some(runtime_bare::fj_rt_bare_gpio_set_pull as *const u8),
+        "fj_rt_bare_gpio_set_irq" => Some(runtime_bare::fj_rt_bare_gpio_set_irq as *const u8),
+        "fj_rt_bare_uart_init" => Some(runtime_bare::fj_rt_bare_uart_init as *const u8),
+        "fj_rt_bare_uart_write_byte" => Some(runtime_bare::fj_rt_bare_uart_write_byte as *const u8),
+        "fj_rt_bare_uart_read_byte" => Some(runtime_bare::fj_rt_bare_uart_read_byte as *const u8),
+        "fj_rt_bare_uart_available" => Some(runtime_bare::fj_rt_bare_uart_available as *const u8),
+        "fj_rt_bare_spi_init" => Some(runtime_bare::fj_rt_bare_spi_init as *const u8),
+        "fj_rt_bare_spi_transfer" => Some(runtime_bare::fj_rt_bare_spi_transfer as *const u8),
+        "fj_rt_bare_spi_cs_set" => Some(runtime_bare::fj_rt_bare_spi_cs_set as *const u8),
+        "fj_rt_bare_i2c_init" => Some(runtime_bare::fj_rt_bare_i2c_init as *const u8),
+        "fj_rt_bare_timer_get_ticks" => Some(runtime_bare::fj_rt_bare_timer_get_ticks as *const u8),
+        "fj_rt_bare_timer_get_freq" => Some(runtime_bare::fj_rt_bare_timer_get_freq as *const u8),
+        "fj_rt_bare_time_since_boot" => Some(runtime_bare::fj_rt_bare_time_since_boot as *const u8),
+        "fj_rt_bare_timer_set_deadline" => {
+            Some(runtime_bare::fj_rt_bare_timer_set_deadline as *const u8)
+        }
+        "fj_rt_bare_sleep_ms" => Some(runtime_bare::fj_rt_bare_sleep_ms as *const u8),
+        "fj_rt_bare_sleep_us" => Some(runtime_bare::fj_rt_bare_sleep_us as *const u8),
+        "fj_rt_bare_timer_enable_virtual" => {
+            Some(runtime_bare::fj_rt_bare_timer_enable_virtual as *const u8)
+        }
+        "fj_rt_bare_timer_disable_virtual" => {
+            Some(runtime_bare::fj_rt_bare_timer_disable_virtual as *const u8)
+        }
+        "fj_rt_bare_timer_mark_boot" => Some(runtime_bare::fj_rt_bare_timer_mark_boot as *const u8),
+        "fj_rt_bare_dma_alloc" => Some(runtime_bare::fj_rt_bare_dma_alloc as *const u8),
+        "fj_rt_bare_dma_config" => Some(runtime_bare::fj_rt_bare_dma_config as *const u8),
+        "fj_rt_bare_dma_start" => Some(runtime_bare::fj_rt_bare_dma_start as *const u8),
+        "fj_rt_bare_dma_wait" => Some(runtime_bare::fj_rt_bare_dma_wait as *const u8),
+        "fj_rt_bare_dma_status" => Some(runtime_bare::fj_rt_bare_dma_status as *const u8),
+        "fj_rt_bare_dma_barrier" => Some(runtime_bare::fj_rt_bare_dma_barrier as *const u8),
+        // Phase 4: Storage
+        "fj_rt_bare_nvme_init" => Some(runtime_bare::fj_rt_bare_nvme_init as *const u8),
+        "fj_rt_bare_nvme_read" => Some(runtime_bare::fj_rt_bare_nvme_read as *const u8),
+        "fj_rt_bare_nvme_write" => Some(runtime_bare::fj_rt_bare_nvme_write as *const u8),
+        "fj_rt_bare_sd_init" => Some(runtime_bare::fj_rt_bare_sd_init as *const u8),
+        "fj_rt_bare_sd_read_block" => Some(runtime_bare::fj_rt_bare_sd_read_block as *const u8),
+        "fj_rt_bare_sd_write_block" => Some(runtime_bare::fj_rt_bare_sd_write_block as *const u8),
+        "fj_rt_bare_vfs_open" => Some(runtime_bare::fj_rt_bare_vfs_open as *const u8),
+        "fj_rt_bare_vfs_read" => Some(runtime_bare::fj_rt_bare_vfs_read as *const u8),
+        "fj_rt_bare_vfs_write" => Some(runtime_bare::fj_rt_bare_vfs_write as *const u8),
+        "fj_rt_bare_vfs_close" => Some(runtime_bare::fj_rt_bare_vfs_close as *const u8),
+        "fj_rt_bare_vfs_stat" => Some(runtime_bare::fj_rt_bare_vfs_stat as *const u8),
+        "fj_rt_bare_vfs_mount" => Some(runtime_bare::fj_rt_bare_vfs_mount as *const u8),
+        // Phase 5: Network
+        "fj_rt_bare_eth_init" => Some(runtime_bare::fj_rt_bare_eth_init as *const u8),
+        "fj_rt_bare_eth_send" => Some(runtime_bare::fj_rt_bare_eth_send as *const u8),
+        "fj_rt_bare_eth_recv" => Some(runtime_bare::fj_rt_bare_eth_recv as *const u8),
+        "fj_rt_bare_net_socket" => Some(runtime_bare::fj_rt_bare_net_socket as *const u8),
+        "fj_rt_bare_net_bind" => Some(runtime_bare::fj_rt_bare_net_bind as *const u8),
+        "fj_rt_bare_net_listen" => Some(runtime_bare::fj_rt_bare_net_listen as *const u8),
+        "fj_rt_bare_net_accept" => Some(runtime_bare::fj_rt_bare_net_accept as *const u8),
+        "fj_rt_bare_net_connect" => Some(runtime_bare::fj_rt_bare_net_connect as *const u8),
+        "fj_rt_bare_net_send" => Some(runtime_bare::fj_rt_bare_net_send as *const u8),
+        "fj_rt_bare_net_recv" => Some(runtime_bare::fj_rt_bare_net_recv as *const u8),
+        "fj_rt_bare_net_close" => Some(runtime_bare::fj_rt_bare_net_close as *const u8),
         _ => None,
     }
 }

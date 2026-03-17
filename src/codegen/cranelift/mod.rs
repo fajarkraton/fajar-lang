@@ -438,6 +438,12 @@ impl CraneliftCompiler {
 
     /// Declares built-in runtime functions (println, print) in the module.
     fn declare_runtime_functions(&mut self) -> Result<(), CodegenError> {
+        // In no_std mode, declare bare-metal HAL builtins alongside standard ones.
+        // The JIT linker resolves them to the hosted simulation functions in runtime_bare.rs.
+        if self.no_std {
+            self.declare_bare_metal_jit_builtins()?;
+        }
+
         let call_conv = self.module.target_config().default_call_conv;
 
         // println(val: i64) -> void
@@ -5684,6 +5690,181 @@ impl CraneliftCompiler {
     pub fn global_asm_sections(&self) -> &[String] {
         &self.global_asm_sections
     }
+
+    /// Declares bare-metal HAL builtins for JIT mode (simulation via runtime_bare.rs).
+    /// These are resolved at JIT link time to the hosted simulation functions.
+    fn declare_bare_metal_jit_builtins(&mut self) -> Result<(), CodegenError> {
+        let call_conv = self.module.target_config().default_call_conv;
+
+        // Reusable signatures
+        let sig_void = cranelift_codegen::ir::Signature::new(call_conv);
+        let sig_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        let sig_i64_void = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            s.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        let sig_i64_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            s.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        let sig_2i64_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..2 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        let sig_3i64_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..3 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+        let sig_4i64_ret_i64 = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..4 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            s
+        };
+
+        // GPIO: 4-arg, 2-arg, 1-arg functions
+        let hal_fns: Vec<(&str, &str, &cranelift_codegen::ir::Signature)> = vec![
+            // GPIO
+            ("fj_rt_bare_gpio_config", "gpio_config", &sig_4i64_ret_i64),
+            (
+                "fj_rt_bare_gpio_set_output",
+                "gpio_set_output",
+                &sig_i64_ret_i64,
+            ),
+            (
+                "fj_rt_bare_gpio_set_input",
+                "gpio_set_input",
+                &sig_i64_ret_i64,
+            ),
+            ("fj_rt_bare_gpio_write", "gpio_write", &sig_2i64_ret_i64),
+            ("fj_rt_bare_gpio_read", "gpio_read", &sig_i64_ret_i64),
+            ("fj_rt_bare_gpio_toggle", "gpio_toggle", &sig_i64_ret_i64),
+            (
+                "fj_rt_bare_gpio_set_pull",
+                "gpio_set_pull",
+                &sig_2i64_ret_i64,
+            ),
+            ("fj_rt_bare_gpio_set_irq", "gpio_set_irq", &sig_2i64_ret_i64),
+            // UART
+            ("fj_rt_bare_uart_init", "uart_init", &sig_2i64_ret_i64),
+            (
+                "fj_rt_bare_uart_write_byte",
+                "uart_write_byte",
+                &sig_2i64_ret_i64,
+            ),
+            (
+                "fj_rt_bare_uart_read_byte",
+                "uart_read_byte",
+                &sig_i64_ret_i64,
+            ),
+            (
+                "fj_rt_bare_uart_available",
+                "uart_available",
+                &sig_i64_ret_i64,
+            ),
+            // SPI
+            ("fj_rt_bare_spi_init", "spi_init", &sig_2i64_ret_i64),
+            ("fj_rt_bare_spi_transfer", "spi_transfer", &sig_2i64_ret_i64),
+            ("fj_rt_bare_spi_cs_set", "spi_cs_set", &sig_3i64_ret_i64),
+            // I2C
+            ("fj_rt_bare_i2c_init", "i2c_init", &sig_2i64_ret_i64),
+            // Timer
+            (
+                "fj_rt_bare_timer_get_ticks",
+                "timer_get_ticks",
+                &sig_ret_i64,
+            ),
+            ("fj_rt_bare_timer_get_freq", "timer_get_freq", &sig_ret_i64),
+            (
+                "fj_rt_bare_time_since_boot",
+                "time_since_boot",
+                &sig_ret_i64,
+            ),
+            (
+                "fj_rt_bare_timer_set_deadline",
+                "timer_set_deadline",
+                &sig_i64_void,
+            ),
+            ("fj_rt_bare_sleep_ms", "sleep_ms", &sig_i64_void),
+            ("fj_rt_bare_sleep_us", "sleep_us", &sig_i64_void),
+            (
+                "fj_rt_bare_timer_enable_virtual",
+                "timer_enable_virtual",
+                &sig_void,
+            ),
+            (
+                "fj_rt_bare_timer_disable_virtual",
+                "timer_disable_virtual",
+                &sig_void,
+            ),
+            ("fj_rt_bare_timer_mark_boot", "timer_mark_boot", &sig_void),
+            // DMA
+            ("fj_rt_bare_dma_alloc", "dma_alloc", &sig_i64_ret_i64),
+            ("fj_rt_bare_dma_config", "dma_config", &sig_4i64_ret_i64),
+            ("fj_rt_bare_dma_start", "dma_start", &sig_i64_ret_i64),
+            ("fj_rt_bare_dma_wait", "dma_wait", &sig_i64_ret_i64),
+            ("fj_rt_bare_dma_status", "dma_status", &sig_i64_ret_i64),
+            ("fj_rt_bare_dma_barrier", "dma_barrier", &sig_void),
+            // Phase 4: Storage
+            ("fj_rt_bare_nvme_init", "nvme_init", &sig_ret_i64),
+            ("fj_rt_bare_sd_init", "sd_init", &sig_ret_i64),
+            // Phase 5: Network
+            ("fj_rt_bare_eth_init", "eth_init", &sig_ret_i64),
+            ("fj_rt_bare_net_socket", "net_socket", &sig_i64_ret_i64),
+            ("fj_rt_bare_net_bind", "net_bind", &sig_2i64_ret_i64),
+            ("fj_rt_bare_net_listen", "net_listen", &sig_i64_ret_i64),
+            ("fj_rt_bare_net_accept", "net_accept", &sig_i64_ret_i64),
+            ("fj_rt_bare_net_close", "net_close", &sig_i64_ret_i64),
+            ("fj_rt_bare_net_connect", "net_connect", &sig_3i64_ret_i64),
+        ];
+
+        for (extern_name, builtin_name, sig) in hal_fns {
+            let id = self
+                .module
+                .declare_function(extern_name, Linkage::Import, sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin_name.to_string(), id);
+        }
+
+        Ok(())
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -6064,6 +6245,414 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_mmu_enable", Linkage::Import, &sig_mmu)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("mmu_enable".to_string(), mmu_id);
+
+        // ── Phase 3 HAL Driver Runtime Functions ──
+
+        // GPIO: (i64, ...) -> i64 signatures
+        // gpio_config(pin, func, output, pull) -> i64
+        let mut sig_gpio4 = cranelift_codegen::ir::Signature::new(call_conv);
+        for _ in 0..4 {
+            sig_gpio4.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        }
+        sig_gpio4.returns.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        let gpio_config_id = self
+            .module
+            .declare_function("fj_rt_bare_gpio_config", Linkage::Import, &sig_gpio4)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("gpio_config".to_string(), gpio_config_id);
+
+        // (i64) -> i64 GPIO functions
+        let mut sig_i64_ret_i64 = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_i64_ret_i64
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_i64_ret_i64
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        for (name, builtin) in [
+            ("fj_rt_bare_gpio_set_output", "gpio_set_output"),
+            ("fj_rt_bare_gpio_set_input", "gpio_set_input"),
+            ("fj_rt_bare_gpio_read", "gpio_read"),
+            ("fj_rt_bare_gpio_toggle", "gpio_toggle"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // (i64, i64) -> i64 GPIO functions
+        let mut sig_2i64_ret_i64 = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_2i64_ret_i64
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_2i64_ret_i64
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_2i64_ret_i64
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        for (name, builtin) in [
+            ("fj_rt_bare_gpio_write", "gpio_write"),
+            ("fj_rt_bare_gpio_set_pull", "gpio_set_pull"),
+            ("fj_rt_bare_gpio_set_irq", "gpio_set_irq"),
+            ("fj_rt_bare_uart_init", "uart_init"),
+            ("fj_rt_bare_uart_write_byte", "uart_write_byte"),
+            ("fj_rt_bare_spi_init", "spi_init"),
+            ("fj_rt_bare_i2c_init", "i2c_init"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_2i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // uart_read_byte(port) -> i64
+        let uart_rb_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_uart_read_byte",
+                Linkage::Import,
+                &sig_i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("uart_read_byte".to_string(), uart_rb_id);
+
+        // uart_available(port) -> i64
+        let uart_av_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_uart_available",
+                Linkage::Import,
+                &sig_i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("uart_available".to_string(), uart_av_id);
+
+        // uart_write_buf(port, ptr, len) -> i64
+        let mut sig_uart_buf = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_uart_buf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_uart_buf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_uart_buf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_uart_buf
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let uart_wb_id = self
+            .module
+            .declare_function("fj_rt_bare_uart_write_buf", Linkage::Import, &sig_uart_buf)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("uart_write_buf".to_string(), uart_wb_id);
+
+        // uart_read_buf(port, ptr, max_len) -> i64
+        let mut sig_uart_rbuf = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_uart_rbuf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_uart_rbuf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+        sig_uart_rbuf
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_uart_rbuf
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let uart_rb2_id = self
+            .module
+            .declare_function("fj_rt_bare_uart_read_buf", Linkage::Import, &sig_uart_rbuf)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("uart_read_buf".to_string(), uart_rb2_id);
+
+        // uart_set_base(port, addr) -> void
+        let mut sig_2i64_void = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_2i64_void
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        sig_2i64_void
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let uart_sb_id = self
+            .module
+            .declare_function("fj_rt_bare_uart_set_base", Linkage::Import, &sig_2i64_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("uart_set_base".to_string(), uart_sb_id);
+
+        // SPI: spi_transfer(bus, tx_byte) -> i64
+        let spi_xfer_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_spi_transfer",
+                Linkage::Import,
+                &sig_2i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("spi_transfer".to_string(), spi_xfer_id);
+
+        // spi_cs_set(bus, cs, active) -> i64
+        let mut sig_3i64_ret_i64 = cranelift_codegen::ir::Signature::new(call_conv);
+        for _ in 0..3 {
+            sig_3i64_ret_i64
+                .params
+                .push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+        }
+        sig_3i64_ret_i64
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let spi_cs_id = self
+            .module
+            .declare_function("fj_rt_bare_spi_cs_set", Linkage::Import, &sig_3i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("spi_cs_set".to_string(), spi_cs_id);
+
+        // I2C: i2c_write(bus, addr, ptr, len) -> i64
+        let mut sig_i2c_w = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_i2c_w.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_i2c_w.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_i2c_w.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::pointer_type(),
+        ));
+        sig_i2c_w.params.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        sig_i2c_w.returns.push(cranelift_codegen::ir::AbiParam::new(
+            clif_types::default_int_type(),
+        ));
+        for (name, builtin) in [
+            ("fj_rt_bare_i2c_write", "i2c_write"),
+            ("fj_rt_bare_i2c_read", "i2c_read"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i2c_w)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // i2c_write_read(bus, addr, tx, tx_len, rx, rx_len) -> i64
+        let mut sig_i2c_wr = cranelift_codegen::ir::Signature::new(call_conv);
+        for t in [
+            clif_types::default_int_type(),
+            clif_types::default_int_type(),
+            clif_types::pointer_type(),
+            clif_types::default_int_type(),
+            clif_types::pointer_type(),
+            clif_types::default_int_type(),
+        ] {
+            sig_i2c_wr
+                .params
+                .push(cranelift_codegen::ir::AbiParam::new(t));
+        }
+        sig_i2c_wr
+            .returns
+            .push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+        let i2c_wr_id = self
+            .module
+            .declare_function("fj_rt_bare_i2c_write_read", Linkage::Import, &sig_i2c_wr)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("i2c_write_read".to_string(), i2c_wr_id);
+
+        // Timer enhanced: () -> i64 return signatures
+        for (name, builtin) in [
+            ("fj_rt_bare_timer_get_ticks", "timer_get_ticks"),
+            ("fj_rt_bare_timer_get_freq", "timer_get_freq"),
+            ("fj_rt_bare_time_since_boot", "time_since_boot"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // Timer: (i64) -> void
+        for (name, builtin) in [
+            ("fj_rt_bare_timer_set_deadline", "timer_set_deadline"),
+            ("fj_rt_bare_sleep_ms", "sleep_ms"),
+            ("fj_rt_bare_sleep_us", "sleep_us"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // Timer: () -> void
+        let sig_void_void = cranelift_codegen::ir::Signature::new(call_conv);
+        for (name, builtin) in [
+            ("fj_rt_bare_timer_enable_virtual", "timer_enable_virtual"),
+            ("fj_rt_bare_timer_disable_virtual", "timer_disable_virtual"),
+            ("fj_rt_bare_timer_mark_boot", "timer_mark_boot"),
+            ("fj_rt_bare_dma_barrier", "dma_barrier"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_void_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // DMA: dma_alloc(size) -> u64
+        let dma_alloc_id = self
+            .module
+            .declare_function("fj_rt_bare_dma_alloc", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("dma_alloc".to_string(), dma_alloc_id);
+
+        // dma_config(channel, src, dst, len) -> i64
+        let dma_cfg_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_dma_config",
+                Linkage::Import,
+                &sig_gpio4, // reuse 4-arg signature
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("dma_config".to_string(), dma_cfg_id);
+
+        // dma_start(channel) -> i64, dma_wait(channel) -> i64, dma_status(channel) -> i64
+        for (name, builtin) in [
+            ("fj_rt_bare_dma_start", "dma_start"),
+            ("fj_rt_bare_dma_wait", "dma_wait"),
+            ("fj_rt_bare_dma_status", "dma_status"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // dma_free(ptr, size) -> void
+        let dma_free_id = self
+            .module
+            .declare_function("fj_rt_bare_dma_free", Linkage::Import, &sig_2i64_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("dma_free".to_string(), dma_free_id);
+
+        // Phase 4: Storage — () -> i64
+        for (name, builtin) in [
+            ("fj_rt_bare_nvme_init", "nvme_init"),
+            ("fj_rt_bare_sd_init", "sd_init"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // nvme_read/write(lba, count, buf) -> i64, sd_read/write_block(lba, buf) -> i64
+        for (name, builtin) in [
+            ("fj_rt_bare_nvme_read", "nvme_read"),
+            ("fj_rt_bare_nvme_write", "nvme_write"),
+        ] {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::pointer_type(),
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // VFS + Network: (i64) -> i64
+        for (name, builtin) in [
+            ("fj_rt_bare_vfs_close", "vfs_close"),
+            ("fj_rt_bare_net_socket", "net_socket"),
+            ("fj_rt_bare_net_listen", "net_listen"),
+            ("fj_rt_bare_net_accept", "net_accept"),
+            ("fj_rt_bare_net_close", "net_close"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // () -> i64
+        {
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_eth_init", Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("eth_init".to_string(), id);
+        }
+        // (i64, i64) -> i64
+        {
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_net_bind", Linkage::Import, &sig_2i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("net_bind".to_string(), id);
+        }
 
         // Volatile I/O (essential for bare-metal MMIO)
         // volatile_write(addr: i64, value: i64) -> void

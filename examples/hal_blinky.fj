@@ -1,0 +1,57 @@
+// hal_blinky.fj — FajarOS HAL Driver Demo
+//
+// Demonstrates Phase 3 HAL builtins: GPIO, UART, SPI, I2C, Timer, DMA.
+// Runs in interpreter (simulation) and native codegen (bare-metal or JIT).
+
+fn main() {
+    println("=== FajarOS HAL Driver Demo ===")
+
+    // ── GPIO ──
+    println("\n[GPIO] Configuring pin 96 as output...")
+    gpio_config(96, 0, 1, 0)
+    gpio_set_output(96)
+    gpio_set_pull(96, 2)
+    println("[GPIO] Pin 96: output, pull-up")
+
+    gpio_config(10, 0, 0, 1)
+    gpio_set_input(10)
+    println("[GPIO] Pin 10: input, pull-down")
+
+    // ── UART ──
+    println("\n[UART] Initializing port 0 at 115200 baud...")
+    let r = uart_init(0, 115200)
+    if r == 0 {
+        println("[UART] Port 0 ready")
+    }
+
+    // ── SPI ──
+    println("\n[SPI] Initializing bus 0 at 1 MHz...")
+    spi_init(0, 1000000)
+    spi_cs_set(0, 0, 1)
+    println("[SPI] Bus 0 ready, CS asserted")
+
+    // ── I2C ──
+    println("\n[I2C] Initializing bus 0 at 400 kHz...")
+    i2c_init(0, 400000)
+    println("[I2C] Bus 0 ready")
+
+    // ── Timer ──
+    println("\n[Timer] Reading system timer...")
+    let freq = timer_get_freq()
+    timer_mark_boot()
+    let uptime = time_since_boot()
+    println("[Timer] Frequency: " + to_string(freq) + " Hz")
+    println("[Timer] Uptime: " + to_string(uptime) + " ms")
+
+    // ── DMA ──
+    println("\n[DMA] Testing DMA channel 5...")
+    let s0 = dma_status(5)
+    println("[DMA] Initial status: " + to_string(s0))
+    dma_config(5, 0, 0, 256)
+    let s1 = dma_status(5)
+    println("[DMA] After config: " + to_string(s1))
+    dma_barrier()
+    println("[DMA] Barrier complete")
+
+    println("\n=== HAL Demo Complete ===")
+}

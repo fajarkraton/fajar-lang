@@ -576,6 +576,57 @@ impl Interpreter {
             "file_size",
             "dir_list",
             "env_var",
+            // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
+            "gpio_config",
+            "gpio_set_output",
+            "gpio_set_input",
+            "gpio_set_pull",
+            "gpio_set_irq",
+            "uart_init",
+            "uart_available",
+            "spi_init",
+            "spi_cs_set",
+            "i2c_init",
+            "i2c_write",
+            "i2c_read",
+            "timer_get_ticks",
+            "timer_get_freq",
+            "timer_set_deadline",
+            "timer_enable_virtual",
+            "timer_disable_virtual",
+            "sleep_us",
+            "time_since_boot",
+            "timer_mark_boot",
+            "dma_alloc",
+            "dma_free",
+            "dma_config",
+            "dma_start",
+            "dma_wait",
+            "dma_status",
+            "dma_barrier",
+            // Phase 4: Storage builtins (v3.0 FajarOS)
+            "nvme_init",
+            "nvme_read",
+            "nvme_write",
+            "sd_init",
+            "sd_read_block",
+            "sd_write_block",
+            "vfs_mount",
+            "vfs_open",
+            "vfs_read",
+            "vfs_write",
+            "vfs_close",
+            "vfs_stat",
+            // Phase 5: Network builtins (v3.0 FajarOS)
+            "eth_init",
+            "net_socket",
+            "net_bind",
+            "net_listen",
+            "net_accept",
+            "net_connect",
+            "net_send",
+            "net_recv",
+            "net_close",
         ];
         for name in &builtins {
             self.env
@@ -2620,6 +2671,55 @@ impl Interpreter {
             "file_size" => self.builtin_file_size(args),
             "dir_list" => self.builtin_dir_list(args),
             "env_var" => self.builtin_env_var(args),
+            // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
+            // Simulation stubs — return 0/Null for interpreter mode without native feature
+            "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"
+            | "gpio_set_irq" | "uart_init" | "uart_available" | "spi_init" | "spi_cs_set"
+            | "i2c_init" | "i2c_write" | "i2c_read" | "dma_alloc" | "dma_config" | "dma_start"
+            | "dma_wait" | "dma_status" => Ok(Value::Int(0)),
+            "timer_get_ticks" => Ok(Value::Int(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos() as i64)
+                    .unwrap_or(0),
+            )),
+            "timer_get_freq" => Ok(Value::Int(1_000_000_000)), // 1 GHz (nanosecond resolution)
+            "time_since_boot" => Ok(Value::Int(0)),
+            "timer_set_deadline"
+            | "timer_enable_virtual"
+            | "timer_disable_virtual"
+            | "sleep_us"
+            | "timer_mark_boot"
+            | "dma_free"
+            | "dma_barrier" => Ok(Value::Null),
+            // Phase 4: Storage stubs
+            "nvme_init" | "sd_init" | "nvme_read" | "nvme_write" | "sd_read_block"
+            | "sd_write_block" | "vfs_close" | "vfs_stat" | "vfs_read" => Ok(Value::Int(0)),
+            "vfs_open" => Ok(Value::Int(3)), // return fd=3
+            "vfs_write" => {
+                // Return count of bytes "written"
+                if args.len() >= 3 {
+                    if let Value::Int(n) = &args[2] {
+                        return Ok(Value::Int(*n));
+                    }
+                }
+                Ok(Value::Int(0))
+            }
+            "vfs_mount" => Ok(Value::Int(0)),
+            // Phase 5: Network stubs
+            "eth_init" => Ok(Value::Int(0)),
+            "net_socket" => Ok(Value::Int(0)),
+            "net_bind" | "net_listen" | "net_connect" | "net_close" => Ok(Value::Int(0)),
+            "net_accept" => Ok(Value::Int(1)), // return new socket
+            "net_send" => {
+                if args.len() >= 3 {
+                    if let Value::Int(n) = &args[2] {
+                        return Ok(Value::Int(*n));
+                    }
+                }
+                Ok(Value::Int(0))
+            }
+            "net_recv" => Ok(Value::Int(0)), // nothing to receive
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {
@@ -6115,6 +6215,87 @@ impl Interpreter {
             }
             _ => Err(RuntimeError::TypeError(format!("{fn_name} requires array argument")).into()),
         }
+    }
+
+    /// Extract single i64 from args[0].
+    #[allow(dead_code)]
+    fn extract_i64(&self, args: &[Value], fn_name: &str) -> Result<i64, EvalError> {
+        match args.first() {
+            Some(Value::Int(n)) => Ok(*n),
+            _ => Err(RuntimeError::TypeError(format!("{fn_name}: expected i64 argument")).into()),
+        }
+    }
+
+    /// Extract two i64 values from args.
+    #[allow(dead_code)]
+    fn extract_2i64(&self, args: &[Value], fn_name: &str) -> Result<(i64, i64), EvalError> {
+        if args.len() < 2 {
+            return Err(RuntimeError::TypeError(format!("{fn_name}: expected 2 arguments")).into());
+        }
+        let a = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into())
+            }
+        };
+        let b = match &args[1] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into())
+            }
+        };
+        Ok((a, b))
+    }
+
+    /// Extract three i64 values from args.
+    #[allow(dead_code)]
+    fn extract_3i64(&self, args: &[Value], fn_name: &str) -> Result<(i64, i64, i64), EvalError> {
+        if args.len() < 3 {
+            return Err(RuntimeError::TypeError(format!("{fn_name}: expected 3 arguments")).into());
+        }
+        let a = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into())
+            }
+        };
+        let b = match &args[1] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into())
+            }
+        };
+        let c = match &args[2] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 2 must be i64")).into())
+            }
+        };
+        Ok((a, b, c))
+    }
+
+    /// Extract four i64 values from args.
+    #[allow(dead_code)]
+    fn extract_4i64(
+        &self,
+        args: &[Value],
+        fn_name: &str,
+    ) -> Result<(i64, i64, i64, i64), EvalError> {
+        if args.len() < 4 {
+            return Err(RuntimeError::TypeError(format!("{fn_name}: expected 4 arguments")).into());
+        }
+        let vals: Result<Vec<i64>, _> = args[..4]
+            .iter()
+            .enumerate()
+            .map(|(i, v)| match v {
+                Value::Int(n) => Ok(*n),
+                _ => Err(EvalError::from(RuntimeError::TypeError(format!(
+                    "{fn_name}: arg {i} must be i64"
+                )))),
+            })
+            .collect();
+        let v = vals?;
+        Ok((v[0], v[1], v[2], v[3]))
     }
 
     /// Evaluates a method call: `obj.method(args)`.

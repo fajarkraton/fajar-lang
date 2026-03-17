@@ -16031,3 +16031,346 @@ fn native_asm_arm64_sequence() {
         "sum of encoded instructions should match"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 3: HAL Driver Builtins (Sprint 11-15 — FajarOS v3.0 "Surya")
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Sprint 11: GPIO Builtins ──
+
+#[test]
+fn native_nostd_gpio_write_read() {
+    // GPIO write/read cycle in no_std bare-metal mode
+    let src = r#"
+        fn main() -> i64 {
+            gpio_set_output(42)
+            gpio_write(42, 1)
+            let val = gpio_read(42)
+            gpio_write(42, 0)
+            let val2 = gpio_read(42)
+            val * 10 + val2
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("GPIO builtins should compile in no_std mode");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 10); // val=1*10 + val2=0 = 10
+}
+
+#[test]
+fn native_nostd_gpio_toggle() {
+    let src = r#"
+        fn main() -> i64 {
+            gpio_set_output(50)
+            gpio_write(50, 0)
+            gpio_toggle(50)
+            let v1 = gpio_read(50)
+            gpio_toggle(50)
+            let v2 = gpio_read(50)
+            v1 * 10 + v2
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("GPIO toggle should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 10); // v1=1, v2=0 → 10
+}
+
+#[test]
+fn native_nostd_gpio_config() {
+    let src = r#"
+        fn main() -> i64 {
+            let r = gpio_config(96, 0, 1, 2)
+            r
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("gpio_config should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0); // success
+}
+
+#[test]
+fn native_nostd_gpio_invalid_pin() {
+    let src = r#"
+        fn main() -> i64 {
+            gpio_write(999, 1)
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("gpio with invalid pin should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), -1); // error: invalid pin
+}
+
+// ── Sprint 12: UART Builtins ──
+
+#[test]
+fn native_nostd_uart_init() {
+    let src = r#"
+        fn main() -> i64 {
+            let r = uart_init(0, 115200)
+            r
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("uart_init should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+#[test]
+fn native_nostd_uart_write_byte() {
+    let src = r#"
+        fn main() -> i64 {
+            uart_init(1, 9600)
+            uart_write_byte(1, 65)
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("uart_write_byte should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0); // success (byte written to nowhere)
+}
+
+// ── Sprint 13: SPI/I2C Builtins ──
+
+#[test]
+fn native_nostd_spi_loopback() {
+    let src = r#"
+        fn main() -> i64 {
+            spi_init(0, 1000000)
+            spi_cs_set(0, 0, 1)
+            spi_transfer(0, 42)
+            let rx = spi_transfer(0, 99)
+            spi_cs_set(0, 0, 0)
+            rx
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("SPI builtins should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 42); // loopback: previous TX (42) returned as RX
+}
+
+#[test]
+fn native_nostd_i2c_init() {
+    let src = r#"
+        fn main() -> i64 {
+            let r = i2c_init(0, 400000)
+            r
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("i2c_init should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 0);
+}
+
+// ── Sprint 14: Timer Builtins ──
+
+#[test]
+fn native_nostd_timer_ticks() {
+    let src = r#"
+        fn main() -> i64 {
+            let t1 = timer_get_ticks()
+            let t2 = timer_get_ticks()
+            if t2 > t1 { 1 } else { 0 }
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("timer_get_ticks should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 1); // monotonic
+}
+
+#[test]
+fn native_nostd_timer_frequency() {
+    let src = r#"
+        fn main() -> i64 {
+            timer_get_freq()
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("timer_get_freq should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 62_500_000); // QEMU default 62.5 MHz
+}
+
+#[test]
+fn native_nostd_timer_deadline_and_uptime() {
+    let src = r#"
+        fn main() -> i64 {
+            timer_mark_boot()
+            timer_set_deadline(1000000)
+            timer_enable_virtual()
+            timer_disable_virtual()
+            time_since_boot()
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("timer deadline + uptime should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    let uptime = main_fn();
+    assert!(uptime >= 0); // non-negative uptime
+}
+
+// ── Sprint 15: DMA Builtins ──
+
+#[test]
+fn native_nostd_dma_lifecycle() {
+    // Use channel 7 to avoid conflicts with other parallel tests
+    let src = r#"
+        fn main() -> i64 {
+            let status0 = dma_status(7)
+            dma_config(7, 0, 0, 64)
+            let status1 = dma_status(7)
+            dma_start(7)
+            let status2 = dma_status(7)
+            dma_wait(7)
+            dma_barrier()
+            status0 * 100 + status1 * 10 + status2
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("DMA lifecycle should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    // status0=0(idle)*100 + status1=1(configured)*10 + status2=3(done) = 13
+    assert_eq!(main_fn(), 13);
+}
+
+// ── Combined: HAL Integration ──
+
+#[test]
+fn native_nostd_hal_blinky_pattern() {
+    // Simulates the classic "blinky" LED program pattern
+    let src = r#"
+        fn main() -> i64 {
+            gpio_config(96, 0, 1, 0)
+            uart_init(0, 115200)
+            timer_mark_boot()
+
+            let mut count = 0
+            let mut i = 0
+            while i < 5 {
+                gpio_write(96, 1)
+                let on = gpio_read(96)
+                gpio_write(96, 0)
+                let off = gpio_read(96)
+                count = count + on - off
+                i = i + 1
+            }
+            count
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("blinky pattern should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 5); // 5 cycles, each adds 1 (on=1, off=0)
+}
+
+#[test]
+fn native_nostd_hal_sensor_poll() {
+    // Simulates I2C sensor polling with SPI data forwarding
+    let src = r#"
+        fn main() -> i64 {
+            i2c_init(0, 400000)
+            spi_init(0, 1000000)
+
+            spi_cs_set(0, 0, 1)
+            spi_transfer(0, 55)
+            let forwarded = spi_transfer(0, 0)
+            spi_cs_set(0, 0, 0)
+
+            forwarded
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
+    compiler.set_no_std(true);
+    compiler
+        .compile_program(&program)
+        .expect("sensor poll should compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main not found");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 55); // SPI loopback returns previous TX
+}
