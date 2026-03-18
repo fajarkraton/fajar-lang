@@ -18,6 +18,52 @@ Kategori perubahan:
 
 ---
 
+## [3.1.0] — 2026-03-19 "Surya Enablers"
+
+### Added
+- **String literals in @kernel** — `println("text")` compiles to `.rodata` section in bare-metal. No heap allocation. Eliminates 200+ `putc()` calls in FajarOS.
+- **90+ bare-metal runtime functions** — GPIO (8), UART (7), SPI (3), I2C (4), Timer (9), DMA (7), VFS (6), Network (11), Display (8), Process (10), Syscall (8), MMU (3)
+- **`svc()` builtin** — user-mode syscall via assembly stub (`svc #0; ret`)
+- **`tlbi_va()` builtin** — per-VA TLB flush for MMU management
+- **`switch_ttbr0()` builtin** — TTBR0 switch + TLB flush for per-process page tables
+- **`MSR SP_EL0` stub** — set user stack pointer for EL0 processes
+- **EL0 vector stubs** — `__exc_sync_lower` and `__exc_irq_lower` with context switch support
+- **26 native codegen tests** — GPIO, UART, SPI, I2C, Timer, DMA, Storage, Network, Display, Process, kernel boot pattern
+- **3 new examples** — `hal_blinky.fj`, `fajaros_kernel.fj`, `fajaros_shell.fj`
+- **`COMPILER_ENHANCEMENT_PLAN.md`** — 5 sprints, 48 tasks for future improvements
+- **`NEXT_STEPS_PLAN.md`** — EL0, labeled break, v3.1 release plan
+
+### Fixed
+- **`return` in bare-metal** — void return now emits `return_(&[iconst(0)])` matching i64 signature
+- **Sequential SVC calls** — advance ELR_EL1 directly via `asm!("mrs/add/msr")` instead of writing to saved frame
+- **SPSR_EL1 save/restore** — exception frames expanded from 256 to 272 bytes
+- **`print()` in bare-metal** — registered `__print_str` → `fj_rt_bare_print` in AOT
+- **`println()` newline** — added `fj_rt_bare_println` (print + `\n`) assembly stub
+- **WXN cleared in MMU enable** — prevents writable+executable conflict
+- **TLB flush before MMU enable** — clears stale firmware entries
+- **CI cross-compile** — suppressed `execute_graph` dead_code warning on aarch64
+
+### Changed
+- **`nostd.rs`**: `allow_strings=true` for bare-metal config (strings → `.rodata`)
+- **`is_io_builtin()`**: removed println/print from IO blocklist (file I/O still blocked)
+- **Exception frame**: 256→272 bytes (added SPSR_EL1 at offset 256)
+- **`mmu_enable` stub**: added TLB flush + WXN clear before enabling
+
+### Refactored
+- **`parser/mod.rs`** (4,931 LOC) → `mod.rs` (2,480) + `items.rs` (893) + `expr.rs` (1,571)
+- **`eval.rs`** (8,603 LOC) → `eval/mod.rs` (2,457) + `builtins.rs` (5,019) + `methods.rs` (1,181)
+- **`type_check.rs`** (7,524 LOC) → `type_check/mod.rs` (4,123) + `register.rs` (1,551) + `check.rs` (1,884)
+- Total: 4 monolithic files (27,370 LOC) → 12 focused modules
+
+### Verified on Hardware
+- **Radxa Dragon Q6A** (QCS6490): JIT fib(40) in 0.65s (1,246× speedup)
+- **GPIO96**: real hardware toggle on Q6A
+- **QNN CPU**: MNIST inference in 24ms (42 inf/sec)
+- **QNN GPU**: MNIST inference in 262ms (Adreno 643 via OpenCL 3.0)
+- **FajarOS EL0**: user process at unprivileged level with MMU protection
+
+---
+
 ## [2.0.0-dawn] — 2026-03-16 "Dawn" (Q6A Hardware Deployment)
 
 ### Added
