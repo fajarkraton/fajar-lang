@@ -11,6 +11,7 @@ use cranelift_module::Module;
 use super::super::clif_types;
 use super::super::context::{emit_owned_cleanup, emit_scope_cleanup, CodegenCtx};
 use crate::codegen::CodegenError;
+use crate::lexer::token::Span;
 use crate::parser::ast::{BinOp, Expr, LiteralKind, UnaryOp};
 
 // Re-use sibling functions via the parent module's re-exports.
@@ -431,6 +432,47 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
 
             cx.last_future_new = true;
             Ok(future_ptr)
+        }
+        Expr::FString { parts, .. } => {
+            // Convert f-string to format() call:
+            // f"Hello {name}, age {age}" → format("Hello {}, age {}", name, age)
+            use crate::parser::ast::{CallArg, FStringExprPart};
+
+            // Build template string: replace {expr} with {}
+            let mut template = String::new();
+            let mut format_args: Vec<CallArg> = Vec::new();
+
+            for part in parts {
+                match part {
+                    FStringExprPart::Literal(s) => template.push_str(s),
+                    FStringExprPart::Expr(e) => {
+                        template.push_str("{}");
+                        format_args.push(CallArg {
+                            name: None,
+                            value: *e.clone(),
+                            span: Span::new(0, 0),
+                        });
+                    }
+                }
+            }
+
+            // Build args: [template_literal, arg1, arg2, ...]
+            let dummy_span = Span::new(0, 0);
+            let mut all_args = vec![CallArg {
+                name: None,
+                value: Expr::Literal {
+                    kind: LiteralKind::String(template),
+                    span: dummy_span,
+                },
+                span: dummy_span,
+            }];
+            for mut fa in format_args {
+                fa.span = dummy_span;
+                all_args.push(fa);
+            }
+
+            // Delegate to compile_format_builtin
+            super::compile_format_builtin(builder, cx, &all_args)
         }
         _ => Err(CodegenError::UnsupportedExpr(format!(
             "{:?}",
