@@ -739,7 +739,7 @@ checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 
 [[package]]
 name = "fajar-lang"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "ash",
  "clap",

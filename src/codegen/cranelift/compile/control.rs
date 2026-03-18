@@ -772,6 +772,33 @@ pub(in crate::codegen::cranelift) fn compile_match<M: Module>(
                     .ins()
                     .brif(in_range, body_block, &[], next_test, &[]);
             }
+            Pattern::Or { patterns, .. } => {
+                // Or-pattern: try each alternative, jump to body if any matches
+                for (pi, sub_pat) in patterns.iter().enumerate() {
+                    if let Pattern::Literal { kind, .. } = sub_pat {
+                        let pat_val = match kind {
+                            LiteralKind::Int(n) => {
+                                builder.ins().iconst(clif_types::default_int_type(), *n)
+                            }
+                            LiteralKind::Bool(b) => builder
+                                .ins()
+                                .iconst(clif_types::default_int_type(), if *b { 1 } else { 0 }),
+                            _ => continue,
+                        };
+                        let cmp = builder.ins().icmp(IntCC::Equal, tag_val, pat_val);
+                        if pi < patterns.len() - 1 {
+                            // More alternatives: branch to body on match, else continue
+                            let or_next = builder.create_block();
+                            builder.ins().brif(cmp, body_block, &[], or_next, &[]);
+                            builder.switch_to_block(or_next);
+                            builder.seal_block(or_next);
+                        } else {
+                            // Last alternative
+                            builder.ins().brif(cmp, body_block, &[], next_test, &[]);
+                        }
+                    }
+                }
+            }
         }
 
         // Body block for non-Enum patterns

@@ -18,6 +18,43 @@ Kategori perubahan:
 
 ---
 
+## [3.2.0] — 2026-03-19 "Surya Rising"
+
+### Added — Fajar Lang
+- **`const` in function body** — `const SIZE: i64 = 4096 * 16` inside functions, with compile-time folding and immutability enforcement (SE007)
+- **Or-patterns in match** — `match x { 0 | 1 => "small", 2 | 3 | 4 => "medium", _ => "big" }`
+- **`Pattern::Or`** AST variant with parser, interpreter, analyzer, and formatter support
+
+### Added — FajarOS v3.1 "Surya Rising"
+- **16-PID priority scheduler** — IDLE(0), NORMAL(1), HIGH(2), REALTIME(3) with round-robin within same priority
+- **Idle process** (PID 15) — WFI loop, runs when no other process is READY
+- **Per-process page tables** — each process gets unique L0, shared kernel L1, TTBR0 switch on context switch
+- **EL0 user processes** — unprivileged processes with SVC syscalls, timer preemption, mixed EL0/EL1 scheduling
+- **Data/instruction abort handlers** — page faults kill offending process with fault address display
+- **Service registry** — 16-slot table, `svc_register()`/`svc_lookup()`, 3 kernel services (UART, Timer, Memory)
+- **Signal delivery** — SIGTERM, SIGKILL, SIGCHLD with signal handlers per process
+- **Pipes** — 8 pipe slots × 4KB circular buffer, `pipe_create()`/`pipe_write()`/`pipe_read()`
+- **IPC v2** — 8-message queues (was 4), total_sent tracking, `ipcstat` command
+- **17 syscalls** — SYS_EXIT through SYS_PIPE_READ
+- **New shell commands** — `nice`, `pmap`, `memstat`, `ipcstat`, `svclist`, `signal`, `pipe`
+- **Interactive shell** — Ctrl+C, up-arrow history, tab completion, `[PID] fjsh>` prompt
+- **Process names** — stored in process table, displayed in `ps`/`kill`/`spawn`
+- **Per-process tick counting** — CPU% in `top` command
+- **152 shell commands** (was 138), **4,805 LOC kernel** (was 4,022)
+
+### Changed — FajarOS
+- putc calls: 342 → 137 (**-60%**), replaced with `println()`/`print()` strings
+- Scheduler: 8 → 16 PIDs, priority-based, kernel at NORMAL (was HIGH) for fair scheduling
+- Kill: supports PID 1-14 (was 1-2), validates state, sets TERMINATED properly
+
+### Verified on Hardware — Radxa Dragon Q6A
+- **MNIST MLP**: 10/10 correct, CPU 0.8ms/inference, GPU 25.3ms/inference
+- **ResNet18**: INT8 CPU 67ms single, 27ms/img batch (37 img/s), 1000-class ImageNet
+- **FajarOS**: boots on Q6A QEMU, all 152 commands work, 5/5 kernel self-tests pass
+- **fj v3.1.1 native**: installed at `/usr/local/bin/fj`, JIT fib(30) = 8ms
+
+---
+
 ## [3.1.0] — 2026-03-19 "Surya Enablers"
 
 ### Added
