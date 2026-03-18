@@ -1199,6 +1199,7 @@ impl TypeChecker {
             "svc",
             "switch_ttbr0",
             "read_ttbr0",
+            "tlbi_va",
         ]
         .iter()
         .map(|s| s.to_string())

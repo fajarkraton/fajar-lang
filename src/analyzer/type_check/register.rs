@@ -337,6 +337,7 @@ impl TypeChecker {
             ("svc", vec![Type::I64, Type::I64, Type::I64], Type::I64),
             ("switch_ttbr0", vec![Type::I64], Type::Void),
             ("read_ttbr0", vec![], Type::I64),
+            ("tlbi_va", vec![Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

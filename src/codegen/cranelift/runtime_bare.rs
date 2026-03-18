@@ -1901,3 +1901,6 @@ pub extern "C" fn fj_rt_bare_switch_ttbr0(_ttbr0: i64) {}
 pub extern "C" fn fj_rt_bare_read_ttbr0() -> i64 {
     0
 }
+
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_tlbi_va(_va: i64) {}

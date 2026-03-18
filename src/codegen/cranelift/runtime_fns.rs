@@ -7281,6 +7281,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_svc" => Some(runtime_bare::fj_rt_bare_svc as *const u8),
         "fj_rt_bare_switch_ttbr0" => Some(runtime_bare::fj_rt_bare_switch_ttbr0 as *const u8),
         "fj_rt_bare_read_ttbr0" => Some(runtime_bare::fj_rt_bare_read_ttbr0 as *const u8),
+        "fj_rt_bare_tlbi_va" => Some(runtime_bare::fj_rt_bare_tlbi_va as *const u8),
         _ => None,
     }
 }

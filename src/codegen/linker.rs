@@ -742,6 +742,18 @@ fj_rt_bare_switch_ttbr0:
     ret
 .size fj_rt_bare_switch_ttbr0, . - fj_rt_bare_switch_ttbr0
 
+/* Flush TLB for specific VA (does NOT affect current code page) */
+.global fj_rt_bare_tlbi_va
+.type fj_rt_bare_tlbi_va, @function
+fj_rt_bare_tlbi_va:
+    /* x0 = virtual address to flush (shifted right by 12) */
+    lsr     x0, x0, #12
+    tlbi    vale1is, x0
+    dsb     ish
+    isb
+    ret
+.size fj_rt_bare_tlbi_va, . - fj_rt_bare_tlbi_va
+
 /* Read current TTBR0 */
 .global fj_rt_bare_read_ttbr0
 .type fj_rt_bare_read_ttbr0, @function
