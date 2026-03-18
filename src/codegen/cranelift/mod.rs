@@ -5907,6 +5907,8 @@ impl CraneliftCompiler {
                 "syscall_set_return",
                 &sig_i64_void,
             ),
+            // svc(num, arg1, arg2) -> result
+            ("fj_rt_bare_svc", "svc", &sig_3i64_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -6804,6 +6806,23 @@ impl ObjectCompiler {
                 )
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("syscall_set_return".to_string(), id);
+        }
+        // svc(num, arg1, arg2) -> i64
+        {
+            let mut sig_svc = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..3 {
+                sig_svc.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            sig_svc.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_svc", Linkage::Import, &sig_svc)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("svc".to_string(), id);
         }
 
         // Volatile I/O (essential for bare-metal MMIO)

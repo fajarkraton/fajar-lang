@@ -7278,6 +7278,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_syscall_set_return" => {
             Some(runtime_bare::fj_rt_bare_syscall_set_return as *const u8)
         }
+        "fj_rt_bare_svc" => Some(runtime_bare::fj_rt_bare_svc as *const u8),
         _ => None,
     }
 }

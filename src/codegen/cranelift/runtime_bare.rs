@@ -1878,3 +1878,9 @@ pub extern "C" fn fj_rt_bare_syscall_arg2() -> i64 {
 /// Set syscall return value (write to saved x0 on exception stack).
 #[no_mangle]
 pub extern "C" fn fj_rt_bare_syscall_set_return(_val: i64) {}
+
+/// User-mode syscall: svc(num, arg1, arg2) -> result.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_svc(_num: i64, _arg1: i64, _arg2: i64) -> i64 {
+    0
+}

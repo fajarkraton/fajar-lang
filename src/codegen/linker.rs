@@ -662,6 +662,17 @@ fj_rt_bare_gic_eoi:
    These use hardcoded addresses to avoid volatile_read/write clobber
    ═══════════════════════════════════════════════════════════════════ */
 
+/* User-mode syscall: svc(num, arg1, arg2) -> result */
+/* Sets x0=num, x1=arg1, x2=arg2, executes SVC #0, returns x0 */
+.global fj_rt_bare_svc
+.type fj_rt_bare_svc, @function
+fj_rt_bare_svc:
+    /* x0=syscall_num, x1=arg1, x2=arg2 already in correct registers */
+    svc     #0
+    /* x0 = return value (set by syscall handler via syscall_set_return) */
+    ret
+.size fj_rt_bare_svc, . - fj_rt_bare_svc
+
 /* Syscall: read saved x0 from exception stack (syscall arg 0) */
 /* The exception stack has saved registers at known offsets. */
 /* saved_sp is at 0x47001018. x0 is at [saved_sp + 0]. */

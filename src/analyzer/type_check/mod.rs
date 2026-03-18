@@ -1196,6 +1196,7 @@ impl TypeChecker {
             "syscall_arg1",
             "syscall_arg2",
             "syscall_set_return",
+            "svc",
         ]
         .iter()
         .map(|s| s.to_string())
