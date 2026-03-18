@@ -1,0 +1,49 @@
+// Q6A Edge Service — Continuous monitoring daemon for Dragon Q6A
+// Deploy: systemctl enable fajar-monitor.service
+//
+// Runs system health checks every 10 seconds,
+// logs to stdout (captured by journald).
+
+fn check_thermal(temp: i64) -> i64 {
+    if temp > 85000 { 2 }
+    else { if temp > 75000 { 1 }
+    else { 0 } }
+}
+
+fn main() -> i64 {
+    println("[fajar-monitor] Starting edge monitoring service")
+    println("[fajar-monitor] Interval: 10 seconds")
+    println("")
+
+    let mut cycle = 0
+    while cycle < 6 {
+        let temp = cpu_temp()
+        let freq = cpu_freq()
+        let up = sys_uptime()
+
+        print("[")
+        print(to_string(cycle))
+        print("] temp=")
+        print(to_string(temp / 1000))
+        print("C freq=")
+        print(to_string(freq / 1000))
+        print("MHz up=")
+        print(to_string(up))
+        print("s")
+
+        let alert = check_thermal(temp)
+        if alert == 2 {
+            print(" CRITICAL!")
+        }
+        if alert == 1 {
+            print(" WARNING")
+        }
+
+        println("")
+        sleep_ms(2000)
+        cycle = cycle + 1
+    }
+
+    println("[fajar-monitor] Service stopped (demo mode: 6 cycles)")
+    0
+}
