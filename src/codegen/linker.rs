@@ -389,22 +389,48 @@ __exc_irq_cur:
     RESTORE_CONTEXT
     eret
 
-/* Sync exception from lower EL (syscalls) */
+/* Sync exception from lower EL (syscalls from EL0) */
 .global __exc_sync_lower
 __exc_sync_lower:
     SAVE_CONTEXT
+    /* Save SP for syscall handlers + context switch */
+    mov     x3, sp
+    movz    x4, #0x1018
+    movk    x4, #0x4700, lsl #16
+    str     x3, [x4]
     mrs     x0, ESR_EL1
     mrs     x1, ELR_EL1
     mrs     x2, FAR_EL1
     bl      fj_exception_sync
+    /* Check context switch flag (same as cur EL) */
+    movz    x0, #0x1010
+    movk    x0, #0x4700, lsl #16
+    ldr     x1, [x0]
+    cbz     x1, 1f
+    mov     sp, x1
+    str     xzr, [x0]
+1:
     RESTORE_CONTEXT
     eret
 
-/* IRQ from lower EL */
+/* IRQ from lower EL (timer preemption of EL0 processes) */
 .global __exc_irq_lower
 __exc_irq_lower:
     SAVE_CONTEXT
+    /* Save SP for scheduler */
+    mov     x0, sp
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    str     x0, [x1]
     bl      fj_exception_irq
+    /* Check context switch flag */
+    movz    x0, #0x1010
+    movk    x0, #0x4700, lsl #16
+    ldr     x1, [x0]
+    cbz     x1, 1f
+    mov     sp, x1
+    str     xzr, [x0]
+1:
     RESTORE_CONTEXT
     eret
 
@@ -984,6 +1010,7 @@ MSR_STUB cntp_tval_el0, CNTP_TVAL_EL0
 MSR_STUB cntp_ctl_el0, CNTP_CTL_EL0
 MSR_STUB cntv_tval_el0, CNTV_TVAL_EL0
 MSR_STUB cntv_ctl_el0, CNTV_CTL_EL0
+MSR_STUB sp_el0, SP_EL0
 
 /* Barrier/control stubs: () -> void */
 .global fj_rt_asm_isb
