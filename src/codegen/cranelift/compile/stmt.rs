@@ -519,7 +519,13 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 }
             } else {
                 emit_owned_cleanup(builder, cx, None)?;
-                builder.ins().return_(&[]);
+                // Void return: if function has return type, return 0
+                if let Some(ret_ty) = cx.fn_ret_type {
+                    let zero = builder.ins().iconst(ret_ty, 0);
+                    builder.ins().return_(&[zero]);
+                } else {
+                    builder.ins().return_(&[]);
+                }
             }
             // Switch to a new unreachable block so subsequent instructions
             // don't try to add to the already-terminated block.
