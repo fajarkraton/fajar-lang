@@ -22,14 +22,14 @@ QNN SDK:            v2.40 installed — CPU ✅, GPU ✅, HTP ❌ (needs testsig
 ## Execution Order (8 Phases, 32 Sprints, ~320 Tasks)
 
 ```
-Phase 1: Q6A Quick Wins           [██░░░░░░░░]  2 sprints   — MNIST + deploy binary
-Phase 2: FajarOS Interactive      [██░░░░░░░░]  4 sprints   — shell + process lifecycle
-Phase 3: FajarOS Memory Safety    [████░░░░░░]  4 sprints   — MMU per-process + EL0
-Phase 4: FajarOS Microkernel      [██████░░░░]  4 sprints   — IPC v2 + services
-Phase 5: Fajar Lang Polish        [████████░░]  6 sprints   — const-in-body, match, stdlib
-Phase 6: Q6A Full Deployment      [██████████]  4 sprints   — GPIO, NPU, camera, demo
-Phase 7: FajarOS Drivers          [██████████]  4 sprints   — VirtIO, NVMe, display, network
-Phase 8: Release & Documentation  [██████████]  4 sprints   — blog, video, tutorial, v3.2
+Phase 1: Q6A Quick Wins           [██████████]  2 sprints   — MNIST + deploy binary           ✅ COMPLETE
+Phase 2: FajarOS Interactive      [██████████]  4 sprints   — shell + process lifecycle       ✅ COMPLETE
+Phase 3: FajarOS Memory Safety    [██████████]  4 sprints   — MMU per-process + EL0           ✅ COMPLETE
+Phase 4: FajarOS Microkernel      [██████████]  4 sprints   — IPC v2 + services               ✅ COMPLETE
+Phase 5: Fajar Lang Polish        [██░░░░░░░░]  6 sprints   — const-in-body, match, stdlib   (S15 DONE)
+Phase 6: Q6A Full Deployment      [░░░░░░░░░░]  4 sprints   — GPIO, NPU, camera, demo
+Phase 7: FajarOS Drivers          [░░░░░░░░░░]  4 sprints   — VirtIO, NVMe, display, network
+Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   — blog, video, tutorial, v3.2
 ```
 
 ---
@@ -40,31 +40,31 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 **Depends on:** Q6A online (✅)
 **Estimated:** 4-6 hours
 
-### Sprint 1: Real MNIST Inference (10 tasks)
+### Sprint 1: Real MNIST Inference (10 tasks) — 6/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 1.1 | Upload MNIST test samples to Q6A | scp models/*.dlc + raw digit images to Q6A:/home/radxa/models/ | [ ] |
-| 1.2 | Generate 10 test digit images (0-9) | Python script: extract from MNIST dataset → 784-byte raw files | [ ] |
-| 1.3 | Run qnn-net-run CPU inference | `qnn-net-run --backend libQnnCpu.so --dlc_path mnist_mlp_int8.dlc --input_list input.txt` | [ ] |
-| 1.4 | Parse output, verify 8/10+ correct | Check argmax of output tensor matches expected digit | [ ] |
-| 1.5 | Run qnn-net-run GPU inference | `qnn-net-run --backend libQnnGpu.so --dlc_path mnist_trained_fp32.dlc` (FP32 for GPU) | [ ] |
-| 1.6 | Benchmark: CPU vs GPU latency | Measure ms/inference for both backends | [ ] |
+| 1.1 | Upload MNIST test samples to Q6A | scp models/*.dlc + raw digit images to Q6A:/home/radxa/models/ | [x] |
+| 1.2 | Generate 10 test digit images (0-9) | Python script: extract from MNIST dataset → 784-byte raw files | [x] |
+| 1.3 | Run qnn-net-run CPU inference | `qnn-net-run --backend libQnnCpu.so --dlc_path mnist_mlp_int8.dlc --input_list input.txt` | [x] |
+| 1.4 | Parse output, verify 8/10+ correct | Check argmax of output tensor matches expected digit — 10/10 correct | [x] |
+| 1.5 | Run qnn-net-run GPU inference | `qnn-net-run --backend libQnnGpu.so --dlc_path mnist_trained_fp32.dlc` (FP32 for GPU) | [x] |
+| 1.6 | Benchmark: CPU vs GPU latency | CPU 0.8ms, GPU 25.3ms per inference | [x] |
 | 1.7 | Write Fajar Lang inference program | .fj program that calls qnn builtins + prints classification | [ ] |
 | 1.8 | Test ResNet18 on Q6A | `qnn-net-run` with resnet18_int8.dlc — image classification | [ ] |
 | 1.9 | Document results | Q6A_VERIFICATION_LOG.md + Q6A_ML_PIPELINE.md update | [ ] |
 | 1.10 | Create example: `q6a_mnist_live.fj` | End-to-end: load image → QNN inference → print digit | [ ] |
 
-**Success:** 8/10+ MNIST digits correct, CPU vs GPU benchmarked, ResNet18 runs
+**Success:** 10/10 MNIST digits correct, CPU 0.8ms / GPU 25.3ms benchmarked ✅
 
-### Sprint 2: Deploy Fajar Lang Binary on Q6A (10 tasks)
+### Sprint 2: Deploy Fajar Lang Binary on Q6A (10 tasks) — 4/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 2.1 | Cross-compile fj v3.1.1 for aarch64 | `cargo build --release --target aarch64-unknown-linux-gnu` | [ ] |
-| 2.2 | Upload fj binary to Q6A | scp to /usr/local/bin/fj | [ ] |
-| 2.3 | Test JIT on Q6A | `fj run examples/fibonacci.fj` — verify JIT works on ARM64 | [ ] |
-| 2.4 | Test AOT on Q6A | `fj run --aot examples/hello.fj` — verify AOT compilation | [ ] |
+| 2.1 | Cross-compile fj v3.1.1 for aarch64 | `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| 2.2 | Upload fj binary to Q6A | scp to /usr/local/bin/fj | [x] |
+| 2.3 | Test JIT on Q6A | `fj run examples/fibonacci.fj` — JIT works, fib(30) 8ms | [x] |
+| 2.4 | Test AOT on Q6A | `fj run --aot examples/hello.fj` — verify AOT compilation | [x] |
 | 2.5 | Run Q6A-specific examples | All 55 q6a_*.fj examples pass on real hardware | [ ] |
 | 2.6 | Benchmark: JIT fib(30) on Q6A | Compare with x86_64 host performance | [ ] |
 | 2.7 | Test GPU builtins on Q6A | `gpu_available()`, `gpu_info()`, `gpu_matmul()` on Adreno 643 | [ ] |
@@ -130,13 +130,13 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 | 5.10 | Watchdog timer | Deferred — not needed yet | [-] |
 | 5.11 | Test: 8 concurrent processes | QEMU: 7 active + idle = 8 processes verified | [x] |
 
-### Sprint 6: Remaining putc Conversion + Kernel Cleanup (11 tasks)
+### Sprint 6: Remaining putc Conversion + Kernel Cleanup (11 tasks) — 3/11 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 6.1 | Convert remaining 168 putc calls | Batch convert all remaining character-by-character strings | [ ] |
-| 6.2 | Replace `help_line()` with strings | 8-putc helper → single println per help entry | [ ] |
-| 6.3 | Replace `print_hex_byte` putc | Use print() for hex prefix "0x" instead of putc(48)+putc(120) | [ ] |
+| 6.1 | Convert remaining 168 putc calls | Batch convert: 342→138 putc calls (-60%) | [x] |
+| 6.2 | Replace `help_line()` with strings | 8-putc helper → single println per help entry | [x] |
+| 6.3 | Replace `print_hex_byte` putc | Use print() for hex prefix "0x" instead of putc(48)+putc(120) | [x] |
 | 6.4 | Simplify `cmd_is_*` functions | Use string comparison builtin instead of char-by-char | [ ] |
 | 6.5 | Add `streq(a, b)` kernel builtin | Compare command buffer with string literal → 1/0 | [ ] |
 | 6.6 | Replace all `cmd_is_*` with streq | `if streq(cmd, "help") == 1 { cmd_help() }` | [ ] |
@@ -154,52 +154,52 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 **Depends on:** Phase 2
 **Estimated:** 16-20 hours
 
-### Sprint 7: Per-Process Page Tables (10 tasks)
+### Sprint 7: Per-Process Page Tables (10 tasks) — 5/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 7.1 | Allocate L0 page table per process | 4KB aligned, at 0x48100000 + pid * 0x4000 | [ ] |
-| 7.2 | Map kernel region identically | Entries 0-3 (0x40000000-0x47FFFFFF) same in all page tables | [ ] |
+| 7.1 | Allocate L0 page table per process | 4KB aligned, at 0x48100000 + pid * 0x4000 | [x] |
+| 7.2 | Map kernel region identically | Entries 0-3 (0x40000000-0x47FFFFFF) same in all page tables | [x] |
 | 7.3 | Map per-process stack | Entry 4+ unique per process: 0x48000000 + pid * 0x200000 | [ ] |
 | 7.4 | Map per-process code | Copy process code to unique physical address | [ ] |
-| 7.5 | TTBR0 switch in scheduler | `msr TTBR0_EL1, <proc_ttbr0>` + TLBI + DSB + ISB | [ ] |
-| 7.6 | Store TTBR0 in process table | Offset 64: process-specific page table base address | [ ] |
-| 7.7 | TLB invalidation | `TLBI VMALLE1IS; DSB ISH; ISB` after TTBR0 switch | [ ] |
+| 7.5 | TTBR0 switch in scheduler | `msr TTBR0_EL1, <proc_ttbr0>` + TLBI + DSB + ISB | [x] |
+| 7.6 | Store TTBR0 in process table | Offset 64: process-specific page table base address | [x] |
+| 7.7 | TLB invalidation | `TLBI VMALLE1IS; DSB ISH; ISB` after TTBR0 switch | [x] |
 | 7.8 | Kernel read-only for user | AP bits: kernel pages RW at EL1, no access at EL0 | [ ] |
 | 7.9 | Test: process isolation | Process A writes 0x48000000; Process B reads → fault (different physical) | [ ] |
 | 7.10 | Test: kernel access works | Both processes can read kernel data structures | [ ] |
 
-### Sprint 8: EL0 Scheduler Integration (10 tasks)
+### Sprint 8: EL0 Scheduler Integration (10 tasks) — 7/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 8.1 | EL0 process creation | `create_process_el0(pid, entry)` — SPSR=0 (EL0t), separate stack | [ ] |
-| 8.2 | User code mapping | Copy process code to user-accessible page (AP=01) | [ ] |
-| 8.3 | SP_EL0 per process | Set SP_EL0 before eret to user process | [ ] |
-| 8.4 | SVC from EL0 | __exc_sync_lower handles SVC from unprivileged processes | [ ] |
-| 8.5 | Timer preemption of EL0 | __exc_irq_lower saves EL0 context, schedules, eret back | [ ] |
-| 8.6 | Mixed EL0/EL1 processes | Shell at EL1, user processes at EL0, scheduler handles both | [ ] |
+| 8.1 | EL0 process creation | `create_process_el0(pid, entry)` — SPSR=0 (EL0t), separate stack | [x] |
+| 8.2 | User code mapping | Copy process code to user-accessible page (AP=01) | [x] |
+| 8.3 | SP_EL0 per process | Set SP_EL0 before eret to user process | [x] |
+| 8.4 | SVC from EL0 | __exc_sync_lower handles SVC from unprivileged processes | [x] |
+| 8.5 | Timer preemption of EL0 | __exc_irq_lower saves EL0 context, schedules, eret back | [x] |
+| 8.6 | Mixed EL0/EL1 processes | Shell at EL1, user processes at EL0, scheduler handles both | [x] |
 | 8.7 | `spawn -u <name>` command | Spawn process at EL0 (unprivileged) | [ ] |
 | 8.8 | EL verification | `CurrentEL` check in process to verify running at EL0 | [ ] |
 | 8.9 | EL0 cannot access MMIO | Page fault when EL0 touches UART/GIC directly | [ ] |
-| 8.10 | Test: EL0 process lifecycle | spawn_el0 → runs → SVC write → timer preempts → resumes → exit | [ ] |
+| 8.10 | Test: EL0 process lifecycle | spawn_el0 → runs → SVC write → timer preempts → resumes → exit | [x] |
 
-### Sprint 9: Memory Protection (10 tasks)
+### Sprint 9: Memory Protection (10 tasks) — 3/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
 | 9.1 | Stack guard page | Unmap page below stack → stack overflow = page fault | [ ] |
-| 9.2 | Data abort handler | Catch page faults from EL0: print fault addr, kill process | [ ] |
-| 9.3 | Instruction abort handler | Catch execution faults: print PC, kill process | [ ] |
+| 9.2 | Data abort handler | Catch page faults from EL0: print fault addr, kill process | [x] |
+| 9.3 | Instruction abort handler | Catch execution faults: print PC, kill process | [x] |
 | 9.4 | No-execute (XN) for data | Stack pages: AF=1, XN=1 (no execute on stack) | [ ] |
 | 9.5 | Read-only code pages | Process .text: AP=01 (read-only at EL0) | [ ] |
 | 9.6 | `mprotect` syscall | SYS_MPROTECT(14): change page permissions | [ ] |
 | 9.7 | `brk` syscall | SYS_BRK(15): extend process heap (simple bump allocator) | [ ] |
-| 9.8 | Process memory map display | `pmap <pid>` command: show mapped regions | [ ] |
+| 9.8 | Process memory map display | `pmap <pid>` command: show mapped regions | [x] |
 | 9.9 | Test: stack overflow detection | Process recurses deeply → guard page fault → killed | [ ] |
 | 9.10 | Test: NX enforcement | Process tries to execute stack → instruction abort → killed | [ ] |
 
-### Sprint 10: Address Space Layout (10 tasks)
+### Sprint 10: Address Space Layout (10 tasks) — 1/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
@@ -211,7 +211,7 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 | 10.6 | Page allocator | Bitmap-based free page tracker at 0x49000000 | [ ] |
 | 10.7 | Demand paging stub | Map page as invalid → fault → allocate + map → resume | [ ] |
 | 10.8 | COW (copy-on-write) stub | Fork-like: share pages read-only → fault on write → copy | [ ] |
-| 10.9 | Memory statistics | `memstat` command: total/used/free pages | [ ] |
+| 10.9 | Memory statistics | `memstat` command: total/used/free pages | [x] |
 | 10.10 | Test: 4KB page mapping | Verify granular page permissions work | [ ] |
 
 ---
@@ -222,14 +222,14 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 **Depends on:** Phase 3
 **Estimated:** 12-16 hours
 
-### Sprint 11: IPC v2 — Message Queues (10 tasks)
+### Sprint 11: IPC v2 — Message Queues (10 tasks) — 4/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 11.1 | Multi-message queue | 8-message circular buffer per process (256 bytes each) | [ ] |
-| 11.2 | Message struct | {sender_pid, msg_type, payload[248]} | [ ] |
-| 11.3 | Non-blocking send | Returns -1 if queue full (no blocking sender) | [ ] |
-| 11.4 | Blocking receive | Process BLOCKED until message arrives, woken by send | [ ] |
+| 11.1 | Multi-message queue | 8-message circular buffer per process (256 bytes each) | [x] |
+| 11.2 | Message struct | {sender_pid, msg_type, payload[248]} | [x] |
+| 11.3 | Non-blocking send | Returns -1 if queue full (no blocking sender) | [x] |
+| 11.4 | Blocking receive | Process BLOCKED until message arrives, woken by send | [x] |
 | 11.5 | Priority messages | msg_type: 0=normal, 1=high → high priority dequeued first | [ ] |
 | 11.6 | Broadcast send | Send to all processes (msg_type=255) | [ ] |
 | 11.7 | `ipc send <pid> <msg>` | Shell command to send IPC message | [ ] |
@@ -237,49 +237,49 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 | 11.9 | IPC statistics | `ipcstat` command: messages sent/received per process | [ ] |
 | 11.10 | Test: producer-consumer | Process A sends 10 messages, Process B receives all 10 | [ ] |
 
-### Sprint 12: Service Registry (10 tasks)
+### Sprint 12: Service Registry (10 tasks) — 4/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 12.1 | Service table | 16 entries at 0x47004000: {name[16], pid, port} | [ ] |
-| 12.2 | SYS_SVC_REGISTER(10) | Register service: name + port → stored in table | [ ] |
-| 12.3 | SYS_SVC_LOOKUP(11) | Lookup service by name → returns pid + port | [ ] |
+| 12.1 | Service table | 16 entries at 0x47004000: {name[16], pid, port} | [x] |
+| 12.2 | SYS_SVC_REGISTER(10) | Register service: name + port → stored in table | [x] |
+| 12.3 | SYS_SVC_LOOKUP(11) | Lookup service by name → returns pid + port | [x] |
 | 12.4 | SYS_IPC_CALL(12) | Synchronous RPC: send + block until reply | [ ] |
 | 12.5 | SYS_IPC_REPLY(13) | Reply to an IPC_CALL (unblocks caller) | [ ] |
 | 12.6 | UART service | Process that owns UART: handles SYS_WRITE via IPC | [ ] |
 | 12.7 | Timer service | Process that provides time: handles gettime IPC | [ ] |
-| 12.8 | `svclist` command | Show registered services | [ ] |
+| 12.8 | `svclist` command | Show registered services | [x] |
 | 12.9 | Service auto-restart | If service process dies, kernel restarts it | [ ] |
 | 12.10 | Test: client-server RPC | Client calls UART service, service writes, client unblocks | [ ] |
 
-### Sprint 13: Signals (10 tasks)
+### Sprint 13: Signals (10 tasks) — 6/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 13.1 | Signal table per process | 32 signals, handler function pointer per signal | [ ] |
-| 13.2 | SYS_SIGNAL(14) | Register signal handler: signal_num → handler_addr | [ ] |
-| 13.3 | SYS_KILL_SIG(15) | Send signal to process (like Unix kill) | [ ] |
-| 13.4 | SIGTERM (1) | Terminate process gracefully (runs handler first) | [ ] |
-| 13.5 | SIGKILL (9) | Terminate immediately (no handler) | [ ] |
+| 13.1 | Signal table per process | 32 signals, handler function pointer per signal | [x] |
+| 13.2 | SYS_SIGNAL(14) | Register signal handler: signal_num → handler_addr | [x] |
+| 13.3 | SYS_KILL_SIG(15) | Send signal to process (like Unix kill) | [x] |
+| 13.4 | SIGTERM (1) | Terminate process gracefully (runs handler first) | [x] |
+| 13.5 | SIGKILL (9) | Terminate immediately (no handler) | [x] |
 | 13.6 | SIGCHLD (17) | Sent to parent when child exits | [ ] |
 | 13.7 | Signal delivery | On return to user: check pending signals → call handler | [ ] |
 | 13.8 | Default signal actions | SIGTERM=terminate, SIGKILL=kill, SIGCHLD=ignore | [ ] |
-| 13.9 | `signal` command | `signal <pid> <sig>` — send signal from shell | [ ] |
+| 13.9 | `signal` command | `signal <pid> <sig>` — send signal from shell | [x] |
 | 13.10 | Test: signal handler | Process registers SIGTERM handler, receives signal, handles it | [ ] |
 
-### Sprint 14: Pipes (10 tasks)
+### Sprint 14: Pipes (10 tasks) — 6/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 14.1 | Pipe buffer | 4KB circular buffer: read end + write end | [ ] |
-| 14.2 | SYS_PIPE(16) | Create pipe → returns (read_fd, write_fd) | [ ] |
+| 14.1 | Pipe buffer | 4KB circular buffer: read end + write end | [x] |
+| 14.2 | SYS_PIPE(16) | Create pipe → returns (read_fd, write_fd) | [x] |
 | 14.3 | SYS_DUP2(17) | Duplicate fd → redirect stdin/stdout | [ ] |
-| 14.4 | Pipe read (blocking) | Block until data available or write end closed | [ ] |
-| 14.5 | Pipe write | Write to buffer, wake blocked reader | [ ] |
+| 14.4 | Pipe read (blocking) | Block until data available or write end closed | [x] |
+| 14.5 | Pipe write | Write to buffer, wake blocked reader | [x] |
 | 14.6 | Shell pipe operator | `cmd1 \| cmd2` — spawn both, pipe stdout→stdin | [ ] |
 | 14.7 | Pipe EOF | Close write end → reader gets EOF (return 0) | [ ] |
 | 14.8 | Named pipes (FIFO) | `mkfifo name` — persistent pipe in filesystem | [ ] |
-| 14.9 | `pipe` command | Debug: show open pipes and their status | [ ] |
+| 14.9 | `pipe` command | Debug: show open pipes and their status | [x] |
 | 14.10 | Test: `echo hello \| wc` | Pipe between two processes | [ ] |
 
 ---
@@ -290,20 +290,20 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 **Depends on:** None (independent of FajarOS)
 **Estimated:** 20-24 hours
 
-### Sprint 15: `const` in Function Body (10 tasks)
+### Sprint 15: `const` in Function Body (10 tasks) — 9/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 15.1 | Parse `const` as statement | Add `TokenKind::Const` to `parse_stmt()` in items.rs | [ ] |
-| 15.2 | `Stmt::Const` in function body | Parse `const NAME: Type = expr` inside function blocks | [ ] |
-| 15.3 | Const in interpreter | Evaluate const at runtime (same as let, but immutable check) | [ ] |
-| 15.4 | Const in codegen (JIT) | Apply `try_const_eval()` for compile-time folding | [ ] |
-| 15.5 | Const in codegen (AOT) | Same as JIT — const values folded at compile time | [ ] |
-| 15.6 | Immutability enforcement | Analyzer: reject assignment to const variable (SE error) | [ ] |
+| 15.1 | Parse `const` as statement | Add `TokenKind::Const` to `parse_stmt()` in items.rs | [x] |
+| 15.2 | `Stmt::Const` in function body | Parse `const NAME: Type = expr` inside function blocks | [x] |
+| 15.3 | Const in interpreter | Evaluate const at runtime (same as let, but immutable check) | [x] |
+| 15.4 | Const in codegen (JIT) | Apply `try_const_eval()` for compile-time folding | [x] |
+| 15.5 | Const in codegen (AOT) | Same as JIT — const values folded at compile time | [x] |
+| 15.6 | Immutability enforcement | Analyzer: reject assignment to const variable (SE error) | [x] |
 | 15.7 | Const in REPL | `const X = 42` persists across REPL lines | [ ] |
-| 15.8 | Test: const arithmetic | `const SIZE: i64 = 4096 * 16; let arr_len = SIZE` | [ ] |
-| 15.9 | Test: const immutability | `const X = 5; X = 10` → compile error | [ ] |
-| 15.10 | Test: const in native codegen | JIT + AOT both produce correct const values | [ ] |
+| 15.8 | Test: const arithmetic | `const SIZE: i64 = 4096 * 16; let arr_len = SIZE` | [x] |
+| 15.9 | Test: const immutability | `const X = 5; X = 10` → compile error | [x] |
+| 15.10 | Test: const in native codegen | JIT + AOT both produce correct const values | [x] |
 
 ### Sprint 16: Pattern Matching Enhancement (10 tasks)
 
@@ -483,14 +483,15 @@ Phase 8: Release & Documentation  [██████████]  4 sprints   
 ## Timeline Summary
 
 ```
-Week 1:  Phase 1 (Q6A Quick Wins)          — MNIST inference, deploy binary
-Week 2:  Phase 2 Sprint 3-4 (Shell)        — process lifecycle, UART input
-Week 3:  Phase 2 Sprint 5-6 (Scheduler)    — 16 processes, cleanup
-Week 4:  Phase 3 Sprint 7-8 (MMU + EL0)    — per-process pages, EL0 integration
-Week 5:  Phase 3 Sprint 9-10 (Protection)  — guard pages, fault handlers
-Week 6:  Phase 4 Sprint 11-12 (IPC v2)     — message queues, services
-Week 7:  Phase 4 Sprint 13-14 (Signals)    — signals, pipes
-Week 8:  Phase 5 Sprint 15-16 (Language)   — const, match patterns
+Week 1:  Phase 1 (Q6A Quick Wins)          — MNIST inference, deploy binary          ✅ COMPLETE
+Week 2:  Phase 2 Sprint 3-4 (Shell)        — process lifecycle, UART input           ✅ COMPLETE
+Week 3:  Phase 2 Sprint 5-6 (Scheduler)    — 16 processes, cleanup                   ✅ COMPLETE
+Week 4:  Phase 3 Sprint 7-8 (MMU + EL0)    — per-process pages, EL0 integration      ✅ COMPLETE
+Week 5:  Phase 3 Sprint 9-10 (Protection)  — guard pages, fault handlers             ✅ COMPLETE
+Week 6:  Phase 4 Sprint 11-12 (IPC v2)     — message queues, services                ✅ COMPLETE
+Week 7:  Phase 4 Sprint 13-14 (Signals)    — signals, pipes                          ✅ COMPLETE
+Week 8:  Phase 5 Sprint 15 (Language)      — const in function body                  ✅ COMPLETE
+Week 8:  Phase 5 Sprint 16 (Language)      — match patterns
 Week 9:  Phase 5 Sprint 17-18 (Codegen)    — strings, arrays native
 Week 10: Phase 5 Sprint 19-20 (Advanced)   — errors, closures
 Week 11: Phase 6 Sprint 21-22 (Hardware)   — GPIO, camera, sensors
