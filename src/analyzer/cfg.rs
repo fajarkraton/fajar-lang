@@ -304,6 +304,11 @@ impl UseCollector {
                 self.visit_expr(start);
                 self.visit_expr(end);
             }
+            Pattern::Or { patterns, .. } => {
+                for p in patterns {
+                    self.visit_pattern(p);
+                }
+            }
         }
     }
 }

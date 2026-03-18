@@ -1424,6 +1424,11 @@ impl TypeChecker {
                 }
             }
             Pattern::Wildcard { .. } | Pattern::Literal { .. } | Pattern::Range { .. } => {}
+            Pattern::Or { patterns, .. } => {
+                for p in patterns {
+                    self.check_pattern(p);
+                }
+            }
         }
     }
 

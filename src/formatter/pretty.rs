@@ -1055,6 +1055,14 @@ impl<'src> Formatter<'src> {
                 }
                 self.format_expr(end);
             }
+            Pattern::Or { patterns, .. } => {
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        self.push(" | ");
+                    }
+                    self.format_pattern(p);
+                }
+            }
         }
     }
 }

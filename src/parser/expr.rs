@@ -645,7 +645,20 @@ impl Parser {
     /// Parses a single match arm: `pattern [if guard] => body`.
     fn parse_match_arm(&mut self) -> Result<MatchArm, ParseError> {
         let start = self.peek().span.start;
-        let pattern = self.parse_pattern()?;
+        let mut pattern = self.parse_pattern()?;
+
+        // Or-pattern: `0 | 1 | 2 => ...`
+        if matches!(self.peek_kind(), TokenKind::Pipe) {
+            let mut patterns = vec![pattern];
+            while self.eat(&TokenKind::Pipe) {
+                patterns.push(self.parse_pattern()?);
+            }
+            let end = patterns.last().map_or(start, |p| p.span().end);
+            pattern = Pattern::Or {
+                patterns,
+                span: Span::new(start, end),
+            };
+        }
 
         let guard = if self.eat(&TokenKind::If) {
             Some(Box::new(self.parse_expr(0)?))

@@ -4095,6 +4095,15 @@ impl Interpreter {
                 // Phase 1: basic range matching not yet supported
                 None
             }
+            Pattern::Or { patterns, .. } => {
+                // Try each alternative — first match wins
+                for alt in patterns {
+                    if let Some(bindings) = self.match_pattern(alt, value) {
+                        return Some(bindings);
+                    }
+                }
+                None
+            }
         }
     }
 

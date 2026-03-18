@@ -1306,6 +1306,14 @@ pub enum Pattern {
         /// Source span.
         span: Span,
     },
+
+    /// Or pattern: `0 | 1 | 2`.
+    Or {
+        /// Alternative patterns.
+        patterns: Vec<Pattern>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 impl Pattern {
@@ -1317,6 +1325,7 @@ impl Pattern {
             | Pattern::Wildcard { span, .. }
             | Pattern::Tuple { span, .. }
             | Pattern::Struct { span, .. }
+            | Pattern::Or { span, .. }
             | Pattern::Enum { span, .. }
             | Pattern::Range { span, .. } => *span,
         }
@@ -1501,6 +1510,15 @@ impl fmt::Display for Pattern {
                     if *inclusive { "=" } else { "" },
                     ExprDisplay(end)
                 )
+            }
+            Pattern::Or { patterns, .. } => {
+                for (i, p) in patterns.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " | ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                Ok(())
             }
         }
     }
