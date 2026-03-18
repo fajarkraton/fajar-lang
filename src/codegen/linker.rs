@@ -672,10 +672,15 @@ fj_rt_bare_mmu_enable:
     isb
     msr     TTBR0_EL1, x2
     isb
+    /* Flush TLB before enabling (clear stale firmware entries) */
+    tlbi    vmalle1is
+    dsb     ish
+    isb
     mrs     x3, SCTLR_EL1
     orr     x3, x3, #1         /* M = MMU enable */
     orr     x3, x3, #4         /* C = data cache */
     orr     x3, x3, #(1<<12)   /* I = instruction cache */
+    bic     x3, x3, #(1<<19)   /* Clear WXN: allow writable+executable */
     msr     SCTLR_EL1, x3
     isb
     ret
