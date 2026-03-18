@@ -2573,4 +2573,51 @@ mod tests {
         // First time i+j==5: i=0, j=5 → result=5
         assert_eq!(eval(src).unwrap(), Value::Int(5));
     }
+
+    // --- const in function body tests ---
+
+    #[test]
+    fn const_in_function_body() {
+        let src = r#"
+            fn main() -> i64 {
+                const SIZE: i64 = 4096 * 16
+                SIZE
+            }
+            main()
+        "#;
+        assert_eq!(eval(src).unwrap(), Value::Int(65536));
+    }
+
+    #[test]
+    fn const_chained_in_body() {
+        let src = r#"
+            fn main() -> i64 {
+                const A: i64 = 100
+                const B: i64 = A * 2
+                const C: i64 = A + B
+                C
+            }
+            main()
+        "#;
+        assert_eq!(eval(src).unwrap(), Value::Int(300));
+    }
+
+    #[test]
+    fn const_immutability_check() {
+        // const assignment should produce analyzer error SE007
+        use crate::analyzer::analyze;
+        use crate::lexer::tokenize;
+        use crate::parser::parse;
+        let src = r#"
+            fn main() -> i64 {
+                const X: i64 = 42
+                X = 10
+                X
+            }
+        "#;
+        let tokens = tokenize(src).unwrap();
+        let program = parse(tokens).unwrap();
+        let result = analyze(&program);
+        assert!(result.is_err(), "const assignment should be rejected");
+    }
 }

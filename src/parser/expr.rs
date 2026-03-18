@@ -525,7 +525,11 @@ impl Parser {
         while !self.at(&TokenKind::RBrace) && !self.at_eof() {
             // Try parsing as an item/statement
             match self.peek_kind() {
-                TokenKind::Let | TokenKind::Return | TokenKind::Break | TokenKind::Continue => {
+                TokenKind::Let
+                | TokenKind::Const
+                | TokenKind::Return
+                | TokenKind::Break
+                | TokenKind::Continue => {
                     stmts.push(self.parse_stmt()?);
                 }
                 TokenKind::Fn | TokenKind::Struct | TokenKind::Union | TokenKind::Enum => {

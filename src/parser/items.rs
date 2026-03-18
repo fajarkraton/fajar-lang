@@ -771,6 +771,7 @@ impl Parser {
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         match self.peek_kind() {
             TokenKind::Let => self.parse_let_stmt(),
+            TokenKind::Const => self.parse_const_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::Break => self.parse_break_stmt(),
             TokenKind::Continue => self.parse_continue_stmt(),
@@ -802,6 +803,25 @@ impl Parser {
                 })
             }
         }
+    }
+
+    /// Parses a const statement: `const NAME: Type = value`.
+    fn parse_const_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.peek().span.start;
+        self.expect(&TokenKind::Const)?;
+        let (name, _) = self.expect_ident()?;
+        self.expect(&TokenKind::Colon)?;
+        let ty = self.parse_type_expr()?;
+        self.expect(&TokenKind::Eq)?;
+        let value = Box::new(self.parse_expr(0)?);
+        let end = value.span().end;
+        self.eat_semi();
+        Ok(Stmt::Const {
+            name,
+            ty,
+            value,
+            span: Span::new(start, end),
+        })
     }
 
     /// Parses a let statement: `let [mut] name [: Type] = value`.
