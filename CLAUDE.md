@@ -149,19 +149,28 @@ Tasks:     80/80 complete | 0 deferred
 Sprints:   8/8 complete
 ```
 
-### Current Totals (v0.5 complete)
+### Current Totals
 
 ```
-Tests:     ~1,774 lib + 399 integration = ~2,173 total (0 failures, non-native)
-LOC:       ~101,000 lines of Rust (100+ files)
-Examples:  28 .fj programs
+Tests:     5,947 lib + 379 integration = 6,326 total (0 failures, --features native)
+LOC:       ~270,000+ lines of Rust (200+ files, 12 module splits)
+Examples:  109 .fj programs (incl. hal_blinky, fajaros_kernel, fajaros_shell)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
-Stdlib:    6 .fj modules (core, nn, os, hal, drivers, lexer)
-mdBook:    44+ pages
+Builtins:  90+ bare-metal runtime functions (GPIO, UART, SPI, I2C, Timer, DMA, VFS, Network, Display, Process, Syscall, MMU)
+CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
+```
+
+### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang
+
+```
+Features:  MMU, EL0 user space, 10 syscalls, IPC, preemptive scheduler, 65+ shell commands
+Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inference
+Repo:      github.com/fajarkraton/fajar-os
 ```
 
 > **Task lists:** `docs/V05_PLAN.md` (v0.5), `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
 > **Implementation plans:** `docs/V03_IMPLEMENTATION_PLAN.md`, `docs/V1_IMPLEMENTATION_PLAN.md`
+> **OS plans:** `docs/V30_PLAN.md`, `docs/COMPILER_ENHANCEMENT_PLAN.md`, `docs/NEXT_STEPS_PLAN.md`
 
 ---
 
