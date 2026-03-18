@@ -353,6 +353,14 @@ __exc_sync_cur:
     mrs     x1, ELR_EL1     /* x1 = ELR (return address) */
     mrs     x2, FAR_EL1     /* x2 = FAR (fault address) */
     bl      fj_exception_sync
+    /* Check context switch flag (same as IRQ handler) */
+    movz    x0, #0x1010
+    movk    x0, #0x4700, lsl #16
+    ldr     x1, [x0]
+    cbz     x1, 1f
+    mov     sp, x1
+    str     xzr, [x0]
+1:
     RESTORE_CONTEXT
     eret
 
