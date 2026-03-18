@@ -298,7 +298,7 @@ __vectors:
 
 /* Macro: save all GP registers to stack (256 bytes) */
 .macro SAVE_CONTEXT
-    sub     sp, sp, #256
+    sub     sp, sp, #272
     stp     x0, x1, [sp, #0]
     stp     x2, x3, [sp, #16]
     stp     x4, x5, [sp, #32]
@@ -317,9 +317,12 @@ __vectors:
     mrs     x0, ELR_EL1
     mrs     x1, SPSR_EL1
     stp     x30, x0, [sp, #240]
+    str     x1, [sp, #256]          /* SPSR_EL1 saved! */
 .endm
 
 .macro RESTORE_CONTEXT
+    ldr     x1, [sp, #256]          /* restore SPSR_EL1 */
+    msr     SPSR_EL1, x1
     ldp     x30, x0, [sp, #240]
     msr     ELR_EL1, x0
     ldp     x0, x1, [sp, #0]
@@ -337,7 +340,7 @@ __vectors:
     ldp     x24, x25, [sp, #192]
     ldp     x26, x27, [sp, #208]
     ldp     x28, x29, [sp, #224]
-    add     sp, sp, #256
+    add     sp, sp, #272
 .endm
 
 /* Sync exception from current EL (includes SVC syscalls) */
