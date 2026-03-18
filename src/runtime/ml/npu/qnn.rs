@@ -358,6 +358,7 @@ impl QnnLibrary {
     ///
     /// `inputs` and `outputs` must be raw QNN tensor structs laid out
     /// in memory as the SDK expects.
+    #[allow(dead_code)]
     fn execute_graph(
         &self,
         graph_handle: QnnHandle,
