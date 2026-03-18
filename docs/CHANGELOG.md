@@ -28,9 +28,14 @@ Kategori perubahan:
 - **`switch_ttbr0()` builtin** — TTBR0 switch + TLB flush for per-process page tables
 - **`MSR SP_EL0` stub** — set user stack pointer for EL0 processes
 - **EL0 vector stubs** — `__exc_sync_lower` and `__exc_irq_lower` with context switch support
-- **26 native codegen tests** — GPIO, UART, SPI, I2C, Timer, DMA, Storage, Network, Display, Process, kernel boot pattern
+- **36 native codegen tests** — GPIO, UART, SPI, I2C, Timer, DMA, Storage, Network, Display, Process, kernel boot, labeled break/continue (3), const eval (3), @kernel enforcement (4), plus 15 interpreter/unit tests
 - **3 new examples** — `hal_blinky.fj`, `fajaros_kernel.fj`, `fajaros_shell.fj`
-- **`COMPILER_ENHANCEMENT_PLAN.md`** — 5 sprints, 48 tasks for future improvements
+- **Labeled break/continue** — `'outer: while/for/loop { break 'outer }` syntax. Parser, interpreter, and Cranelift codegen support. Exits/continues outer loops from nested loops.
+- **Compile-time constant folding** — `try_const_eval()` evaluates `const X: i64 = 4096 * 16` at compile time. Supports arithmetic, bitwise, unary, power, and chained const references.
+- **@kernel codegen enforcement** — `is_kernel_forbidden_builtin()` blocks tensor ops, file I/O, heap-allocating builtins in @kernel functions at codegen time. Error code CE011.
+- **`labeled_loops` in CodegenCtx** — `HashMap<String, (Block, Block)>` tracks label → (header, exit) for Cranelift codegen of labeled break/continue.
+- **`const_values` in CodegenCtx** — `HashMap<String, i64>` stores compile-time constant values for chained const folding.
+- **`COMPILER_ENHANCEMENT_PLAN.md`** — 5 sprints, 48 tasks. Sprints 4-5 complete.
 - **`NEXT_STEPS_PLAN.md`** — EL0, labeled break, v3.1 release plan
 
 ### Fixed

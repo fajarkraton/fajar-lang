@@ -17,6 +17,67 @@ use crate::codegen::CodegenError;
 use crate::parser::ast::{CallArg, Expr, LiteralKind};
 
 // ═══════════════════════════════════════════════════════════════════════
+// @kernel context enforcement
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Returns true if a builtin is forbidden in @kernel context.
+///
+/// @kernel functions cannot use heap allocation or tensor operations.
+/// File I/O and string-allocating builtins are also blocked.
+fn is_kernel_forbidden_builtin(name: &str) -> bool {
+    matches!(
+        name,
+        // Tensor operations (heap-heavy)
+        "tensor_zeros"
+            | "tensor_ones"
+            | "tensor_randn"
+            | "tensor_xavier"
+            | "tensor_from_data"
+            | "tensor_eye"
+            | "tensor_arange"
+            | "tensor_linspace"
+            | "tensor_matmul"
+            | "tensor_add"
+            | "tensor_sub"
+            | "tensor_mul"
+            | "tensor_div"
+            | "tensor_relu"
+            | "tensor_sigmoid"
+            | "tensor_tanh"
+            | "tensor_softmax"
+            | "tensor_reshape"
+            | "tensor_transpose"
+            | "tensor_flatten"
+            | "zeros"
+            | "ones"
+            | "randn"
+            | "xavier"
+            | "matmul"
+            | "relu"
+            | "sigmoid"
+            | "softmax"
+            // File I/O
+            | "read_file"
+            | "write_file"
+            | "append_file"
+            | "file_exists"
+            | "async_read_file"
+            | "async_write_file"
+            // Heap-allocating string ops
+            | "split"
+            | "replace"
+            | "repeat"
+            | "to_uppercase"
+            | "to_lowercase"
+            | "format"
+            // Optimizer/layer (heap-heavy ML)
+            | "optimizer_sgd"
+            | "optimizer_adam"
+            | "layer_dense"
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Function call compilation
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -72,6 +133,14 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
         if found_variant {
             return compile_enum_constructor(builder, cx, &fn_name, args);
         }
+    }
+
+    // ── @kernel context enforcement ───────────────────────────────────
+    // Block heap-allocating and tensor builtins in @kernel functions.
+    if cx.current_context.as_deref() == Some("kernel") && is_kernel_forbidden_builtin(&fn_name) {
+        return Err(CodegenError::NotImplemented(format!(
+            "[CE011] @kernel function cannot call `{fn_name}` (requires heap/tensor)"
+        )));
     }
 
     // ── Builtin dispatch (only if no user-defined function with that name) ──

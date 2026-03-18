@@ -855,10 +855,19 @@ impl Parser {
         })
     }
 
-    /// Parses a break statement: `break [expr]`.
-    fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
+    /// Parses a break statement: `break ['label] [expr]`.
+    pub(super) fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Break)?;
+
+        // Check for optional label: break 'outer
+        let label = if let TokenKind::Lifetime(name) = &self.peek().kind {
+            let l = Some(name.clone());
+            self.advance();
+            l
+        } else {
+            None
+        };
 
         let value = if !self.at(&TokenKind::Semi) && !self.at(&TokenKind::RBrace) && !self.at_eof()
         {
@@ -873,21 +882,32 @@ impl Parser {
         self.eat_semi();
 
         Ok(Stmt::Break {
-            label: None, // TODO: parse 'label syntax
+            label,
             value,
             span: Span::new(start, end),
         })
     }
 
     /// Parses a continue statement: `continue ['label]`.
-    fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
+    pub(super) fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
-        let end_tok = self.expect(&TokenKind::Continue)?;
+        self.expect(&TokenKind::Continue)?;
+
+        // Check for optional label: continue 'outer
+        let label = if let TokenKind::Lifetime(name) = &self.peek().kind {
+            let l = Some(name.clone());
+            self.advance();
+            l
+        } else {
+            None
+        };
+
+        let end = self.prev_span().end;
         self.eat_semi();
 
         Ok(Stmt::Continue {
-            label: None, // TODO: parse 'label syntax
-            span: Span::new(start, end_tok.span.end),
+            label,
+            span: Span::new(start, end),
         })
     }
 

@@ -306,14 +306,36 @@ impl Parser {
             // Match expression
             TokenKind::Match => self.parse_match_expr(),
 
+            // Labeled loop: 'name: while/for/loop
+            TokenKind::Lifetime(name) => {
+                let label = name.clone();
+                self.advance(); // eat 'label
+                self.expect(&TokenKind::Colon)?; // eat :
+                match self.peek().kind {
+                    TokenKind::While => self.parse_while_expr_with_label(Some(label)),
+                    TokenKind::For => self.parse_for_expr_with_label(Some(label)),
+                    TokenKind::Loop => self.parse_loop_expr_with_label(Some(label)),
+                    _ => {
+                        let tok = self.peek();
+                        Err(ParseError::UnexpectedToken {
+                            expected: "while, for, or loop after label".into(),
+                            found: format!("{}", tok.kind),
+                            line: tok.line,
+                            col: tok.col,
+                            span: tok.span,
+                        })
+                    }
+                }
+            }
+
             // While loop
-            TokenKind::While => self.parse_while_expr(),
+            TokenKind::While => self.parse_while_expr_with_label(None),
 
             // For loop
-            TokenKind::For => self.parse_for_expr(),
+            TokenKind::For => self.parse_for_expr_with_label(None),
 
             // Loop (infinite)
-            TokenKind::Loop => self.parse_loop_expr(),
+            TokenKind::Loop => self.parse_loop_expr_with_label(None),
 
             // Array literal: [a, b, c]
             TokenKind::LBracket => self.parse_array_expr(),
@@ -639,36 +661,32 @@ impl Parser {
         })
     }
 
-    /// Parses a while loop: `while cond { body }`.
-    fn parse_while_expr(&mut self) -> Result<Expr, ParseError> {
+    /// Parses a while loop: `['label:] while cond { body }`.
+    fn parse_while_expr_with_label(&mut self, label: Option<String>) -> Result<Expr, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::While)?;
-
         let condition = Box::new(self.parse_expr(0)?);
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
-
         Ok(Expr::While {
-            label: None,
+            label,
             condition,
             body,
             span: Span::new(start, end),
         })
     }
 
-    /// Parses a for loop: `for var in iter { body }`.
-    fn parse_for_expr(&mut self) -> Result<Expr, ParseError> {
+    /// Parses a for loop: `['label:] for var in iter { body }`.
+    fn parse_for_expr_with_label(&mut self, label: Option<String>) -> Result<Expr, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::For)?;
-
         let (variable, _) = self.expect_ident()?;
         self.expect(&TokenKind::In)?;
         let iterable = Box::new(self.parse_expr(0)?);
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
-
         Ok(Expr::For {
-            label: None,
+            label,
             variable,
             iterable,
             body,
@@ -676,14 +694,14 @@ impl Parser {
         })
     }
 
-    /// Parses a loop expression: `loop { body }`.
-    fn parse_loop_expr(&mut self) -> Result<Expr, ParseError> {
+    /// Parses a loop: `['label:] loop { body }`.
+    fn parse_loop_expr_with_label(&mut self, label: Option<String>) -> Result<Expr, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Loop)?;
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
         Ok(Expr::Loop {
-            label: None,
+            label,
             body,
             span: Span::new(start, end),
         })

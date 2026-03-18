@@ -152,7 +152,7 @@ Sprints:   8/8 complete
 ### Current Totals
 
 ```
-Tests:     5,947 lib + 379 integration = 6,326 total (0 failures, --features native)
+Tests:     5,972 lib + 379 integration = 6,351 total (0 failures, --features native)
 LOC:       ~270,000+ lines of Rust (200+ files, 12 module splits)
 Examples:  109 .fj programs (incl. hal_blinky, fajaros_kernel, fajaros_shell)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)

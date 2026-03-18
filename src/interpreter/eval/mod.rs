@@ -104,10 +104,10 @@ pub enum RuntimeError {
 pub enum ControlFlow {
     /// A `return` statement with an optional value.
     Return(Value),
-    /// A `break` statement with an optional value.
-    Break(Value),
-    /// A `continue` statement.
-    Continue,
+    /// A `break` statement with an optional value and optional label.
+    Break(Value, Option<String>),
+    /// A `continue` statement with an optional label.
+    Continue(Option<String>),
 }
 
 /// Result type for interpreter operations.
@@ -920,14 +920,14 @@ impl Interpreter {
                 };
                 Err(ControlFlow::Return(val).into())
             }
-            Stmt::Break { value, .. } => {
+            Stmt::Break { label, value, .. } => {
                 let val = match value {
                     Some(e) => self.eval_expr(e)?,
                     None => Value::Null,
                 };
-                Err(ControlFlow::Break(val).into())
+                Err(ControlFlow::Break(val, label.clone()).into())
             }
-            Stmt::Continue { .. } => Err(ControlFlow::Continue.into()),
+            Stmt::Continue { label, .. } => Err(ControlFlow::Continue(label.clone()).into()),
             Stmt::Item(item) => self.eval_item(item),
         }
     }
@@ -950,19 +950,19 @@ impl Interpreter {
                 ..
             } => self.eval_if(condition, then_branch, else_branch),
             Expr::While {
-                label: _,
+                label,
                 condition,
                 body,
                 ..
-            } => self.eval_while(condition, body),
+            } => self.eval_while(condition, body, label.as_deref()),
             Expr::For {
-                label: _,
+                label,
                 variable,
                 iterable,
                 body,
                 ..
-            } => self.eval_for(variable, iterable, body),
-            Expr::Loop { label: _, body, .. } => self.eval_loop(body),
+            } => self.eval_for(variable, iterable, body, label.as_deref()),
+            Expr::Loop { label, body, .. } => self.eval_loop(body, label.as_deref()),
             Expr::Assign {
                 target, op, value, ..
             } => self.eval_assign(target, *op, value),
@@ -2457,5 +2457,120 @@ mod tests {
         let src = "let x = -9223372036854775807 - 1\nx / -1";
         let err = eval(src).unwrap_err();
         assert!(matches!(err, RuntimeError::IntegerOverflow { .. }));
+    }
+
+    // --- Labeled break/continue tests ---
+
+    #[test]
+    fn labeled_break_outer_while() {
+        let src = r#"
+            fn main() -> i64 {
+                let mut result = 0
+                'outer: while true {
+                    let mut j = 0
+                    while j < 10 {
+                        if j == 3 {
+                            result = 42
+                            break 'outer
+                        }
+                        j = j + 1
+                    }
+                }
+                result
+            }
+            main()
+        "#;
+        assert_eq!(eval(src).unwrap(), Value::Int(42));
+    }
+
+    #[test]
+    fn labeled_continue_outer_while() {
+        let src = r#"
+            fn main() -> i64 {
+                let mut count = 0
+                let mut i = 0
+                'outer: while i < 5 {
+                    i = i + 1
+                    let mut j = 0
+                    while j < 5 {
+                        j = j + 1
+                        if j == 2 {
+                            continue 'outer
+                        }
+                    }
+                    count = count + 1
+                }
+                count
+            }
+            main()
+        "#;
+        // Inner loop always hits continue 'outer at j==2,
+        // so count never increments
+        assert_eq!(eval(src).unwrap(), Value::Int(0));
+    }
+
+    #[test]
+    fn labeled_break_outer_loop() {
+        let src = r#"
+            fn main() -> i64 {
+                let mut x = 0
+                'outer: loop {
+                    loop {
+                        x = 99
+                        break 'outer
+                    }
+                }
+                x
+            }
+            main()
+        "#;
+        assert_eq!(eval(src).unwrap(), Value::Int(99));
+    }
+
+    #[test]
+    fn labeled_break_inner_only() {
+        // break without label only breaks inner loop
+        let src = r#"
+            fn main() -> i64 {
+                let mut sum = 0
+                let mut i = 0
+                while i < 3 {
+                    let mut j = 0
+                    while j < 100 {
+                        if j == 2 {
+                            break
+                        }
+                        j = j + 1
+                    }
+                    sum = sum + i
+                    i = i + 1
+                }
+                sum
+            }
+            main()
+        "#;
+        // sum = 0 + 1 + 2 = 3
+        assert_eq!(eval(src).unwrap(), Value::Int(3));
+    }
+
+    #[test]
+    fn labeled_break_for_loop() {
+        let src = r#"
+            fn main() -> i64 {
+                let mut result = 0
+                'outer: for i in 0..10 {
+                    for j in 0..10 {
+                        if i + j == 5 {
+                            result = i * 100 + j
+                            break 'outer
+                        }
+                    }
+                }
+                result
+            }
+            main()
+        "#;
+        // First time i+j==5: i=0, j=5 → result=5
+        assert_eq!(eval(src).unwrap(), Value::Int(5));
     }
 }

@@ -93,15 +93,15 @@ EL0 (User)          EL1 (Kernel)
 ### Tasks
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Add `label: Option<String>` to Break/Continue AST nodes | [ ] |
-| 3.2 | Parse `'name: while/loop/for` syntax (labeled loops) | [ ] |
-| 3.3 | Parse `break 'name` and `continue 'name` | [ ] |
-| 3.4 | Codegen: track label→Block mapping in loop stack | [ ] |
-| 3.5 | Codegen: `break 'outer` → jump to outer loop's exit block | [ ] |
-| 3.6 | Codegen: `continue 'outer` → jump to outer loop's header block | [ ] |
-| 3.7 | Test: nested loop with labeled break | [ ] |
-| 3.8 | Test: labeled continue | [ ] |
-| 3.9 | Verify all 5,947 tests pass | [ ] |
+| 3.1 | Add `label: Option<String>` to Break/Continue AST nodes | [x] |
+| 3.2 | Parse `'name: while/loop/for` syntax (labeled loops) | [x] |
+| 3.3 | Parse `break 'name` and `continue 'name` | [x] |
+| 3.4 | Codegen: track label→Block mapping in loop stack | [x] |
+| 3.5 | Codegen: `break 'outer` → jump to outer loop's exit block | [x] |
+| 3.6 | Codegen: `continue 'outer` → jump to outer loop's header block | [x] |
+| 3.7 | Test: nested loop with labeled break | [x] |
+| 3.8 | Test: labeled continue | [x] |
+| 3.9 | Verify all 5,947 tests pass | [x] |
 
 ### Success Criteria
 - `'outer: while a { while b { break 'outer } }` works
@@ -134,6 +134,9 @@ EL0 (User)          EL1 (Kernel)
 - Per-process page tables (TTBR0 switch)
 - 12 module splits (27K LOC refactored)
 - FajarOS verified on Radxa Dragon Q6A
+- Labeled break/continue (`'outer: while ... { break 'outer }`)
+- Const folding (compile-time evaluation of constant expressions)
+- @kernel codegen enforcement (compiler rejects heap/tensor ops in @kernel context)
 
 ---
 

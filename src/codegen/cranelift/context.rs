@@ -49,6 +49,11 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub loop_exit: Option<cranelift_codegen::ir::Block>,
     /// Current loop's header block (for `continue`).
     pub loop_header: Option<cranelift_codegen::ir::Block>,
+    /// Labeled loop blocks: label → (header_block, exit_block) for `break 'label`/`continue 'label`.
+    pub labeled_loops:
+        HashMap<String, (cranelift_codegen::ir::Block, cranelift_codegen::ir::Block)>,
+    /// Compile-time constant values: name → i64 value (for `const X = expr` folding).
+    pub const_values: HashMap<String, i64>,
     /// Tracks the Cranelift type of each variable for type-aware codegen.
     pub var_types: &'a mut HashMap<String, cranelift_codegen::ir::Type>,
     /// Tracks the return type of each function for type-aware dispatch.
@@ -298,8 +303,8 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// True when the current function returns an enum type (tag + payload).
     pub is_enum_return_fn: bool,
     /// Current function's context annotation (@kernel, @device, @safe, @unsafe).
-    /// Used for codegen-level enforcement of context restrictions (H4).
-    pub _current_context: Option<String>,
+    /// Used for codegen-level enforcement of context restrictions (Sprint 5).
+    pub current_context: Option<String>,
 }
 
 /// Pushes a new owned resource to both `owned_ptrs` and the current scope (if any).

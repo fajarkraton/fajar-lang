@@ -5405,6 +5405,8 @@ impl CraneliftCompiler {
                 last_array: None,
                 loop_exit: None,
                 loop_header: None,
+                labeled_loops: HashMap::new(),
+                const_values: HashMap::new(),
                 var_types: &mut var_types,
                 fn_return_types: &self.fn_return_types,
                 last_expr_type: None,
@@ -5522,23 +5524,33 @@ impl CraneliftCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
-                _current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
 
-            // Inject top-level const definitions as variables
+            // Inject top-level const definitions as variables.
+            // Try compile-time constant folding first for integer expressions.
             for (cname, cexpr, cty) in &self.const_defs {
-                if let Ok(val) = compile_expr(&mut builder, &mut cx, cexpr) {
-                    let var_type = clif_types::lower_type(cty)
-                        .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
-                    let var = builder.declare_var(var_type);
-                    builder.def_var(var, val);
-                    cx.var_map.insert(cname.clone(), var);
-                    cx.var_types.insert(cname.clone(), var_type);
-                    if let Some(len_val) = cx.last_string_len.take() {
-                        let len_var = builder.declare_var(clif_types::default_int_type());
-                        builder.def_var(len_var, len_val);
-                        cx.string_lens.insert(cname.clone(), len_var);
-                    }
+                let const_folded = compile::try_const_eval(cexpr, &cx.const_values);
+                let val = if let Some(cv) = const_folded {
+                    builder.ins().iconst(clif_types::default_int_type(), cv)
+                } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {
+                    v
+                } else {
+                    continue;
+                };
+                if let Some(cv) = const_folded {
+                    cx.const_values.insert(cname.clone(), cv);
+                }
+                let var_type = clif_types::lower_type(cty)
+                    .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
+                let var = builder.declare_var(var_type);
+                builder.def_var(var, val);
+                cx.var_map.insert(cname.clone(), var);
+                cx.var_types.insert(cname.clone(), var_type);
+                if let Some(len_val) = cx.last_string_len.take() {
+                    let len_var = builder.declare_var(clif_types::default_int_type());
+                    builder.def_var(len_var, len_val);
+                    cx.string_lens.insert(cname.clone(), len_var);
                 }
             }
             // Check if this function returns an array (need heap copy for callee stack safety)
@@ -11412,6 +11424,8 @@ impl ObjectCompiler {
                 last_array: None,
                 loop_exit: None,
                 loop_header: None,
+                labeled_loops: HashMap::new(),
+                const_values: HashMap::new(),
                 var_types: &mut var_types,
                 fn_return_types: &self.fn_return_types,
                 last_expr_type: None,
@@ -11529,23 +11543,33 @@ impl ObjectCompiler {
                 last_heap_array_return: false,
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
-                _current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
             };
 
-            // Inject top-level const definitions as variables
+            // Inject top-level const definitions as variables.
+            // Try compile-time constant folding first for integer expressions.
             for (cname, cexpr, cty) in &self.const_defs {
-                if let Ok(val) = compile_expr(&mut builder, &mut cx, cexpr) {
-                    let var_type = clif_types::lower_type(cty)
-                        .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
-                    let var = builder.declare_var(var_type);
-                    builder.def_var(var, val);
-                    cx.var_map.insert(cname.clone(), var);
-                    cx.var_types.insert(cname.clone(), var_type);
-                    if let Some(len_val) = cx.last_string_len.take() {
-                        let len_var = builder.declare_var(clif_types::default_int_type());
-                        builder.def_var(len_var, len_val);
-                        cx.string_lens.insert(cname.clone(), len_var);
-                    }
+                let const_folded = compile::try_const_eval(cexpr, &cx.const_values);
+                let val = if let Some(cv) = const_folded {
+                    builder.ins().iconst(clif_types::default_int_type(), cv)
+                } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {
+                    v
+                } else {
+                    continue;
+                };
+                if let Some(cv) = const_folded {
+                    cx.const_values.insert(cname.clone(), cv);
+                }
+                let var_type = clif_types::lower_type(cty)
+                    .unwrap_or(cx.last_expr_type.unwrap_or(clif_types::default_int_type()));
+                let var = builder.declare_var(var_type);
+                builder.def_var(var, val);
+                cx.var_map.insert(cname.clone(), var);
+                cx.var_types.insert(cname.clone(), var_type);
+                if let Some(len_val) = cx.last_string_len.take() {
+                    let len_var = builder.declare_var(clif_types::default_int_type());
+                    builder.def_var(len_var, len_val);
+                    cx.string_lens.insert(cname.clone(), len_var);
                 }
             }
             // Check if this function returns an array (need heap copy for callee stack safety)

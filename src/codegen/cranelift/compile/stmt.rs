@@ -10,10 +10,82 @@ use cranelift_module::Module;
 use super::super::clif_types;
 use super::super::context::{emit_owned_cleanup, push_owned, CodegenCtx, OwnedKind};
 use crate::codegen::CodegenError;
-use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr};
+use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr, UnaryOp};
 
 // Re-use sibling functions via the parent module's re-exports.
 use super::{compile_expr, compile_heap_array_init};
+
+/// Attempts to evaluate a constant expression at compile time.
+///
+/// Supports integer literals, arithmetic (`+`, `-`, `*`, `/`, `%`),
+/// bitwise operations (`&`, `|`, `^`, `<<`, `>>`), power (`**`),
+/// unary negation (`-`), bitwise NOT (`~`), and references to previously
+/// defined constants via `const_table`.
+/// Returns `Some(value)` if the expression is fully constant, `None` otherwise.
+pub(in crate::codegen::cranelift) fn try_const_eval(
+    expr: &Expr,
+    const_table: &std::collections::HashMap<String, i64>,
+) -> Option<i64> {
+    match expr {
+        Expr::Literal {
+            kind: LiteralKind::Int(n),
+            ..
+        } => Some(*n),
+        Expr::Literal {
+            kind: LiteralKind::Bool(b),
+            ..
+        } => Some(if *b { 1 } else { 0 }),
+        Expr::Ident { name, .. } => const_table.get(name).copied(),
+        Expr::Grouped { expr, .. } => try_const_eval(expr, const_table),
+        Expr::Unary { op, operand, .. } => {
+            let val = try_const_eval(operand, const_table)?;
+            match op {
+                UnaryOp::Neg => Some(-val),
+                UnaryOp::BitNot => Some(!val),
+                _ => None,
+            }
+        }
+        Expr::Binary {
+            op, left, right, ..
+        } => {
+            let l = try_const_eval(left, const_table)?;
+            let r = try_const_eval(right, const_table)?;
+            match op {
+                BinOp::Add => l.checked_add(r),
+                BinOp::Sub => l.checked_sub(r),
+                BinOp::Mul => l.checked_mul(r),
+                BinOp::Div => {
+                    if r == 0 {
+                        None
+                    } else {
+                        l.checked_div(r)
+                    }
+                }
+                BinOp::Rem => {
+                    if r == 0 {
+                        None
+                    } else {
+                        l.checked_rem(r)
+                    }
+                }
+                BinOp::BitAnd => Some(l & r),
+                BinOp::BitOr => Some(l | r),
+                BinOp::BitXor => Some(l ^ r),
+                BinOp::Shl => Some(l << (r & 63)),
+                BinOp::Shr => Some(l >> (r & 63)),
+                BinOp::Pow => {
+                    if r < 0 {
+                        None
+                    } else {
+                        Some(l.wrapping_pow(r as u32))
+                    }
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
 
 /// Coerces an integer value to match a declared sub-I64 integer type.
 ///
@@ -414,7 +486,18 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
         Stmt::Const {
             name, value, ty, ..
         } => {
-            let val = compile_expr(builder, cx, value)?;
+            // Try compile-time constant evaluation first
+            let const_folded = try_const_eval(value, &cx.const_values);
+            let val = if let Some(const_val) = const_folded {
+                let ty = clif_types::default_int_type();
+                builder.ins().iconst(ty, const_val)
+            } else {
+                compile_expr(builder, cx, value)?
+            };
+            // Store in const table for future const references
+            if let Some(cv) = const_folded {
+                cx.const_values.insert(name.clone(), cv);
+            }
             let semantic_type = clif_types::lower_type(ty);
             // B3.2: Coerce value for sub-I64 integer types
             let val = if let TypeExpr::Simple { name: ref tn, .. } = ty {
@@ -532,10 +615,19 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             builder.seal_block(after_return);
             Ok(None)
         }
-        Stmt::Break { .. } => {
-            let exit_block = cx
-                .loop_exit
-                .ok_or_else(|| CodegenError::NotImplemented("break outside loop".into()))?;
+        Stmt::Break { label, .. } => {
+            let exit_block = if let Some(lbl) = label {
+                // Labeled break: look up the named loop's exit block
+                cx.labeled_loops
+                    .get(lbl)
+                    .map(|&(_, exit)| exit)
+                    .ok_or_else(|| {
+                        CodegenError::NotImplemented(format!("unknown loop label '{lbl}"))
+                    })?
+            } else {
+                cx.loop_exit
+                    .ok_or_else(|| CodegenError::NotImplemented("break outside loop".into()))?
+            };
             builder.ins().jump(exit_block, &[]);
             // Switch to an unreachable block so subsequent stmts don't panic.
             let after = builder.create_block();
@@ -543,10 +635,19 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             builder.seal_block(after);
             Ok(None)
         }
-        Stmt::Continue { .. } => {
-            let header = cx
-                .loop_header
-                .ok_or_else(|| CodegenError::NotImplemented("continue outside loop".into()))?;
+        Stmt::Continue { label, .. } => {
+            let header = if let Some(lbl) = label {
+                // Labeled continue: look up the named loop's header block
+                cx.labeled_loops
+                    .get(lbl)
+                    .map(|&(hdr, _)| hdr)
+                    .ok_or_else(|| {
+                        CodegenError::NotImplemented(format!("unknown loop label '{lbl}"))
+                    })?
+            } else {
+                cx.loop_header
+                    .ok_or_else(|| CodegenError::NotImplemented("continue outside loop".into()))?
+            };
             builder.ins().jump(header, &[]);
             // Switch to an unreachable block so subsequent stmts don't panic.
             let after = builder.create_block();
@@ -558,5 +659,109 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             "{:?}",
             std::mem::discriminant(stmt)
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::tokenize;
+    use crate::parser::parse;
+    use std::collections::HashMap;
+
+    /// Helper: parse an expression from source and try const eval.
+    fn const_eval_expr(src: &str) -> Option<i64> {
+        let full = format!("fn main() -> i64 {{ {src} }}");
+        let tokens = tokenize(&full).unwrap();
+        let program = parse(tokens).unwrap();
+        // Extract the body expression from the function
+        if let crate::parser::ast::Item::FnDef(fndef) = &program.items[0] {
+            if let Expr::Block { stmts, expr, .. } = &*fndef.body {
+                if let Some(tail) = expr {
+                    return try_const_eval(tail, &HashMap::new());
+                }
+                if let Some(crate::parser::ast::Stmt::Expr { expr, .. }) = stmts.first() {
+                    return try_const_eval(expr, &HashMap::new());
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn const_eval_int_literal() {
+        assert_eq!(const_eval_expr("42"), Some(42));
+    }
+
+    #[test]
+    fn const_eval_arithmetic() {
+        assert_eq!(const_eval_expr("4096 * 16"), Some(65536));
+        assert_eq!(const_eval_expr("100 / 2 + 3"), Some(53));
+        assert_eq!(const_eval_expr("10 - 3 * 2"), Some(4));
+        assert_eq!(const_eval_expr("7 % 3"), Some(1));
+    }
+
+    #[test]
+    fn const_eval_bitwise() {
+        assert_eq!(const_eval_expr("0xFF & 0x0F"), Some(0x0F));
+        assert_eq!(const_eval_expr("0x0F | 0xF0"), Some(0xFF));
+        assert_eq!(const_eval_expr("0xFF ^ 0x0F"), Some(0xF0));
+        assert_eq!(const_eval_expr("1 << 10"), Some(1024));
+        assert_eq!(const_eval_expr("1024 >> 5"), Some(32));
+    }
+
+    #[test]
+    fn const_eval_unary() {
+        assert_eq!(const_eval_expr("-42"), Some(-42));
+        assert_eq!(const_eval_expr("~0"), Some(-1));
+    }
+
+    #[test]
+    fn const_eval_power() {
+        assert_eq!(const_eval_expr("2 ** 10"), Some(1024));
+        assert_eq!(const_eval_expr("3 ** 3"), Some(27));
+    }
+
+    #[test]
+    fn const_eval_nested() {
+        assert_eq!(const_eval_expr("(4096 + 512) * 2"), Some(9216));
+        assert_eq!(const_eval_expr("(1 << 12) | (1 << 8)"), Some(4352));
+    }
+
+    #[test]
+    fn const_eval_div_by_zero_returns_none() {
+        assert_eq!(const_eval_expr("42 / 0"), None);
+        assert_eq!(const_eval_expr("42 % 0"), None);
+    }
+
+    #[test]
+    fn const_eval_non_const_returns_none() {
+        // Function call is not const
+        assert_eq!(const_eval_expr("foo()"), None);
+    }
+
+    #[test]
+    fn const_eval_with_const_table() {
+        let mut table = HashMap::new();
+        table.insert("PAGE_SIZE".to_string(), 4096i64);
+        table.insert("NUM_PAGES".to_string(), 16i64);
+
+        let full = "fn main() -> i64 { PAGE_SIZE * NUM_PAGES }";
+        let tokens = tokenize(full).unwrap();
+        let program = parse(tokens).unwrap();
+        if let crate::parser::ast::Item::FnDef(fndef) = &program.items[0] {
+            if let Expr::Block {
+                expr: Some(tail), ..
+            } = &*fndef.body
+            {
+                assert_eq!(try_const_eval(tail, &table), Some(65536));
+            }
+        }
+    }
+
+    #[test]
+    fn const_eval_bool() {
+        assert_eq!(const_eval_expr("true"), Some(1));
+        assert_eq!(const_eval_expr("false"), Some(0));
     }
 }

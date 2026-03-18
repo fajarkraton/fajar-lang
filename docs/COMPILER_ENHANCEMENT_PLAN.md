@@ -186,15 +186,15 @@ Labeled break/continue requires parser + AST + codegen changes.
 
 | # | Task | Detail | File(s) | Status |
 |---|------|--------|---------|--------|
-| 4.1 | **Add label to Break/Continue AST** | `Break { label: Option<String>, value: Option<Box<Expr>>, span }` and `Continue { label: Option<String>, span }`. | `ast.rs` | [ ] |
-| 4.2 | **Parse labeled loops** | `'name: while ...` or `'name: loop ...` → store label name. | `parser/expr.rs` | [ ] |
-| 4.3 | **Parse labeled break** | `break 'name` or `break 'name value` → store label. | `parser/stmt.rs` | [ ] |
-| 4.4 | **Parse labeled continue** | `continue 'name` → store label. | `parser/stmt.rs` | [ ] |
-| 4.5 | **Codegen: labeled break** | Track loop labels → Cranelift blocks. `break 'outer` → jump to outer loop's merge block. | `compile/control.rs` | [ ] |
-| 4.6 | **Codegen: labeled continue** | `continue 'outer` → jump to outer loop's header block. | `compile/control.rs` | [ ] |
-| 4.7 | **Const expression evaluation** | Allow `const X = 100 / 2 + 3` → evaluate at compile time. Support arithmetic + bitwise ops. | `compile/stmt.rs` | [ ] |
-| 4.8 | **Test: nested loop break** | `'outer: while a { while b { break 'outer } }` → exits both loops. | `tests.rs` | [ ] |
-| 4.9 | **Test: const expression** | `const SIZE = 4096 * 16; let arr = alloc(SIZE)` → SIZE = 65536 at compile time. | `tests.rs` | [ ] |
+| 4.1 | **Add label to Break/Continue AST** | `Break { label: Option<String>, value: Option<Box<Expr>>, span }` and `Continue { label: Option<String>, span }`. | `ast.rs` | [x] |
+| 4.2 | **Parse labeled loops** | `'name: while ...` or `'name: loop ...` → store label name. | `parser/expr.rs` | [x] |
+| 4.3 | **Parse labeled break** | `break 'name` or `break 'name value` → store label. | `parser/items.rs` | [x] |
+| 4.4 | **Parse labeled continue** | `continue 'name` → store label. | `parser/items.rs` | [x] |
+| 4.5 | **Codegen: labeled break** | Track loop labels → Cranelift blocks. `break 'outer` → jump to outer loop's merge block. | `compile/control.rs`, `compile/stmt.rs` | [x] |
+| 4.6 | **Codegen: labeled continue** | `continue 'outer` → jump to outer loop's header block. | `compile/control.rs`, `compile/stmt.rs` | [x] |
+| 4.7 | **Const expression evaluation** | `try_const_eval()` in `compile/stmt.rs`: arithmetic, bitwise, unary, power, const ident lookup via `const_values` table. | `compile/stmt.rs` | [x] |
+| 4.8 | **Test: nested loop break** | `'outer: while a { while b { break 'outer } }` → exits both loops. 5 interpreter tests pass. | `eval/mod.rs` | [x] |
+| 4.9 | **Test: const expression** | 10 unit tests: arithmetic, bitwise, unary, power, nested, div-by-zero, const table, bool. | `compile/stmt.rs` | [x] |
 
 ### Success Criteria
 - `break 'outer` exits nested loops
@@ -219,13 +219,13 @@ is bypassed. Full safety requires codegen-level enforcement.
 
 | # | Task | Detail | File(s) | Status |
 |---|------|--------|---------|--------|
-| 5.1 | **Pass context annotation to codegen** | Thread `@kernel`/`@device`/`@safe` from FnDef through to CraneliftCompiler/ObjectCompiler. Store in `CodegenCtx`. | `cranelift/mod.rs` | [ ] |
-| 5.2 | **Block heap builtins in @kernel codegen** | When compiling @kernel function, reject calls to `alloc`, `String::new`, `Vec::new`, etc. at codegen time. | `compile/call.rs` | [ ] |
-| 5.3 | **Block tensor ops in @kernel codegen** | Reject tensor builtins (zeros, matmul, etc.) in @kernel context at codegen time. | `compile/call.rs` | [ ] |
+| 5.1 | **Pass context annotation to codegen** | `current_context: Option<String>` in CodegenCtx, set from `fndef.annotation`. | `context.rs`, `cranelift/mod.rs` | [x] |
+| 5.2 | **Block heap builtins in @kernel codegen** | `is_kernel_forbidden_builtin()` in call.rs — blocks file I/O, heap strings, ML builtins. CE011 error. | `compile/call.rs` | [x] |
+| 5.3 | **Block tensor ops in @kernel codegen** | Same function blocks tensor_zeros, matmul, relu, softmax, etc. in @kernel context. | `compile/call.rs` | [x] |
 | 5.4 | **@interrupt function attribute** | New attribute: `@interrupt fn handler() { ... }` → auto-generate register save/restore prologue/epilogue. | `cranelift/mod.rs` | [ ] |
 | 5.5 | **@interrupt: save all GP registers** | Generate `stp x0,x1,[sp,#-16]!; stp x2,x3,...` at function entry. Reverse at exit. | `cranelift/mod.rs` | [ ] |
 | 5.6 | **@interrupt: eret instead of ret** | @interrupt functions end with `eret` (exception return) instead of `ret`. | `cranelift/mod.rs` | [ ] |
-| 5.7 | **Test: @kernel blocks heap** | `@kernel fn f() { let s = String::new() }` → codegen error CE011. | `tests.rs` | [ ] |
+| 5.7 | **Test: @kernel blocks heap** | 4 tests: blocks tensor_zeros, blocks read_file, allows arithmetic, allows println. | `tests.rs` | [x] |
 | 5.8 | **Test: @interrupt saves registers** | `@interrupt fn irq() { putc(46) }` → objdump shows STP/LDP pairs around function body. | `tests.rs` | [ ] |
 
 ### Technical Design
@@ -262,8 +262,8 @@ fj_exception_irq:
 Sprint 1: String literals     [████████░░] ~6h  — 30% code reduction
 Sprint 2: Fix return          [██████░░░░] ~4h  — unblock early returns
 Sprint 3: Fix volatile/asm    [████████░░] ~6h  — unblock IPC + timer
-Sprint 4: Labels + const      [██████░░░░] ~4h  — code clarity
-Sprint 5: @kernel + @interrupt[██████░░░░] ~4h  — safety guarantees
+Sprint 4: Labels + const      [██████████] DONE — labeled break/continue + const folding
+Sprint 5: @kernel + @interrupt[████████░░] 5/8  — context enforcement done, @interrupt pending
                               Total: ~24h, 48 tasks
 ```
 

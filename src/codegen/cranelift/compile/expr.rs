@@ -92,19 +92,19 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
         } => compile_if(builder, cx, condition, then_branch, else_branch),
         Expr::Grouped { expr: inner, .. } => compile_expr(builder, cx, inner),
         Expr::While {
-            label: _,
+            label,
             condition,
             body,
             ..
-        } => compile_while(builder, cx, condition, body),
+        } => compile_while(builder, cx, condition, body, label.as_deref()),
         Expr::For {
-            label: _,
+            label,
             variable,
             iterable,
             body,
             ..
-        } => compile_for(builder, cx, variable, iterable, body),
-        Expr::Loop { label: _, body, .. } => compile_loop(builder, cx, body),
+        } => compile_for(builder, cx, variable, iterable, body, label.as_deref()),
+        Expr::Loop { label, body, .. } => compile_loop(builder, cx, body, label.as_deref()),
         Expr::Array { elements, .. } => compile_array_literal(builder, cx, elements),
         Expr::Index { object, index, .. } => compile_index(builder, cx, object, index),
         Expr::Assign {

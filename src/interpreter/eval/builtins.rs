@@ -3535,8 +3535,13 @@ impl Interpreter {
         }
     }
 
-    /// Evaluates a while loop.
-    pub(super) fn eval_while(&mut self, condition: &Expr, body: &Expr) -> EvalResult {
+    /// Evaluates a while loop with optional label.
+    pub(super) fn eval_while(
+        &mut self,
+        condition: &Expr,
+        body: &Expr,
+        label: Option<&str>,
+    ) -> EvalResult {
         loop {
             let cond = self.eval_expr(condition)?;
             if !cond.is_truthy() {
@@ -3545,8 +3550,23 @@ impl Interpreter {
             match self.eval_expr(body) {
                 Ok(_) => {}
                 Err(EvalError::Control(cf)) => match *cf {
-                    ControlFlow::Break(v) => return Ok(v),
-                    ControlFlow::Continue => continue,
+                    ControlFlow::Break(v, ref bl) => {
+                        if bl.is_none() || bl.as_deref() == label {
+                            return Ok(v);
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Break(
+                            v,
+                            bl.clone(),
+                        ))));
+                    }
+                    ControlFlow::Continue(ref cl) => {
+                        if cl.is_none() || cl.as_deref() == label {
+                            continue;
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Continue(
+                            cl.clone(),
+                        ))));
+                    }
                     cf => return Err(EvalError::Control(Box::new(cf))),
                 },
                 Err(e) => return Err(e),
@@ -3555,14 +3575,29 @@ impl Interpreter {
         Ok(Value::Null)
     }
 
-    /// Evaluates an infinite loop: `loop { body }`.
-    pub(super) fn eval_loop(&mut self, body: &Expr) -> EvalResult {
+    /// Evaluates an infinite loop: `loop { body }` with optional label.
+    pub(super) fn eval_loop(&mut self, body: &Expr, label: Option<&str>) -> EvalResult {
         loop {
             match self.eval_expr(body) {
                 Ok(_) => {}
                 Err(EvalError::Control(cf)) => match *cf {
-                    ControlFlow::Break(v) => return Ok(v),
-                    ControlFlow::Continue => continue,
+                    ControlFlow::Break(v, ref bl) => {
+                        if bl.is_none() || bl.as_deref() == label {
+                            return Ok(v);
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Break(
+                            v,
+                            bl.clone(),
+                        ))));
+                    }
+                    ControlFlow::Continue(ref cl) => {
+                        if cl.is_none() || cl.as_deref() == label {
+                            continue;
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Continue(
+                            cl.clone(),
+                        ))));
+                    }
                     cf => return Err(EvalError::Control(Box::new(cf))),
                 },
                 Err(e) => return Err(e),
@@ -3570,13 +3605,19 @@ impl Interpreter {
         }
     }
 
-    /// Evaluates a for loop.
-    pub(super) fn eval_for(&mut self, variable: &str, iterable: &Expr, body: &Expr) -> EvalResult {
+    /// Evaluates a for loop with optional label.
+    pub(super) fn eval_for(
+        &mut self,
+        variable: &str,
+        iterable: &Expr,
+        body: &Expr,
+        label: Option<&str>,
+    ) -> EvalResult {
         let iter_val = self.eval_expr(iterable)?;
 
         // If iterable is already an Iterator, use iterator protocol
         if let Value::Iterator(iter_rc) = iter_val {
-            return self.for_loop_iterator(variable, iter_rc, body);
+            return self.for_loop_iterator(variable, iter_rc, body, label);
         }
 
         // Convert value to iterator or eagerly collect
@@ -3613,8 +3654,23 @@ impl Interpreter {
             match result {
                 Ok(_) => {}
                 Err(EvalError::Control(cf)) => match *cf {
-                    ControlFlow::Break(v) => return Ok(v),
-                    ControlFlow::Continue => continue,
+                    ControlFlow::Break(v, ref bl) => {
+                        if bl.is_none() || bl.as_deref() == label {
+                            return Ok(v);
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Break(
+                            v,
+                            bl.clone(),
+                        ))));
+                    }
+                    ControlFlow::Continue(ref cl) => {
+                        if cl.is_none() || cl.as_deref() == label {
+                            continue;
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Continue(
+                            cl.clone(),
+                        ))));
+                    }
                     cf => return Err(EvalError::Control(Box::new(cf))),
                 },
                 Err(e) => return Err(e),
@@ -3630,6 +3686,7 @@ impl Interpreter {
         variable: &str,
         iter_rc: Rc<RefCell<IteratorValue>>,
         body: &Expr,
+        label: Option<&str>,
     ) -> EvalResult {
         loop {
             let item = self.iter_next(&iter_rc)?;
@@ -3653,8 +3710,23 @@ impl Interpreter {
             match result {
                 Ok(_) => {}
                 Err(EvalError::Control(cf)) => match *cf {
-                    ControlFlow::Break(v) => return Ok(v),
-                    ControlFlow::Continue => continue,
+                    ControlFlow::Break(v, ref bl) => {
+                        if bl.is_none() || bl.as_deref() == label {
+                            return Ok(v);
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Break(
+                            v,
+                            bl.clone(),
+                        ))));
+                    }
+                    ControlFlow::Continue(ref cl) => {
+                        if cl.is_none() || cl.as_deref() == label {
+                            continue;
+                        }
+                        return Err(EvalError::Control(Box::new(ControlFlow::Continue(
+                            cl.clone(),
+                        ))));
+                    }
                     cf => return Err(EvalError::Control(Box::new(cf))),
                 },
                 Err(e) => return Err(e),

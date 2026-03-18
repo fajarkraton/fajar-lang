@@ -356,6 +356,7 @@ pub(in crate::codegen::cranelift) fn compile_while<M: Module>(
     cx: &mut CodegenCtx<'_, M>,
     condition: &Expr,
     body: &Expr,
+    label: Option<&str>,
 ) -> Result<ClifValue, CodegenError> {
     let header_block = builder.create_block();
     let body_block = builder.create_block();
@@ -374,6 +375,12 @@ pub(in crate::codegen::cranelift) fn compile_while<M: Module>(
     let prev_exit = cx.loop_exit.replace(exit_block);
     let prev_header = cx.loop_header.replace(header_block);
 
+    // Register labeled loop blocks
+    if let Some(lbl) = label {
+        cx.labeled_loops
+            .insert(lbl.to_string(), (header_block, exit_block));
+    }
+
     builder.switch_to_block(body_block);
     builder.seal_block(body_block);
     let _ = compile_expr(builder, cx, body)?;
@@ -383,6 +390,9 @@ pub(in crate::codegen::cranelift) fn compile_while<M: Module>(
 
     cx.loop_exit = prev_exit;
     cx.loop_header = prev_header;
+    if let Some(lbl) = label {
+        cx.labeled_loops.remove(lbl);
+    }
 
     // Seal header after both predecessors (entry jump + body back-edge) are added
     builder.seal_block(header_block);
@@ -402,6 +412,7 @@ pub(in crate::codegen::cranelift) fn compile_loop<M: Module>(
     builder: &mut FunctionBuilder,
     cx: &mut CodegenCtx<'_, M>,
     body: &Expr,
+    label: Option<&str>,
 ) -> Result<ClifValue, CodegenError> {
     let loop_block = builder.create_block();
     let exit_block = builder.create_block();
@@ -409,6 +420,12 @@ pub(in crate::codegen::cranelift) fn compile_loop<M: Module>(
     // Save/restore loop context for nested loops
     let prev_exit = cx.loop_exit.replace(exit_block);
     let prev_header = cx.loop_header.replace(loop_block);
+
+    // Register labeled loop blocks
+    if let Some(lbl) = label {
+        cx.labeled_loops
+            .insert(lbl.to_string(), (loop_block, exit_block));
+    }
 
     builder.ins().jump(loop_block, &[]);
 
@@ -422,6 +439,9 @@ pub(in crate::codegen::cranelift) fn compile_loop<M: Module>(
 
     cx.loop_exit = prev_exit;
     cx.loop_header = prev_header;
+    if let Some(lbl) = label {
+        cx.labeled_loops.remove(lbl);
+    }
 
     // Seal after all predecessors are added
     builder.seal_block(loop_block);
@@ -864,6 +884,7 @@ pub(in crate::codegen::cranelift) fn compile_for<M: Module>(
     variable: &str,
     iterable: &Expr,
     body: &Expr,
+    label: Option<&str>,
 ) -> Result<ClifValue, CodegenError> {
     // Range expressions: for i in start..end
     let (start_expr, end_expr, inclusive) = match iterable {
@@ -941,6 +962,12 @@ pub(in crate::codegen::cranelift) fn compile_for<M: Module>(
     let prev_exit = cx.loop_exit.replace(exit_block);
     let prev_header = cx.loop_header.replace(incr_block);
 
+    // Register labeled loop blocks (for `break 'label` / `continue 'label`)
+    if let Some(lbl) = label {
+        cx.labeled_loops
+            .insert(lbl.to_string(), (incr_block, exit_block));
+    }
+
     builder.switch_to_block(body_block);
     builder.seal_block(body_block);
     let _ = compile_expr(builder, cx, body)?;
@@ -961,6 +988,9 @@ pub(in crate::codegen::cranelift) fn compile_for<M: Module>(
 
     cx.loop_exit = prev_exit;
     cx.loop_header = prev_header;
+    if let Some(lbl) = label {
+        cx.labeled_loops.remove(lbl);
+    }
 
     builder.seal_block(header_block);
 
