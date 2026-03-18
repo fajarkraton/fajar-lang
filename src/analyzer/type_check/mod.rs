@@ -1192,6 +1192,10 @@ impl TypeChecker {
             "sched_set_next_sp",
             "sched_read_proc",
             "sched_write_proc",
+            "syscall_arg0",
+            "syscall_arg1",
+            "syscall_arg2",
+            "syscall_set_return",
         ]
         .iter()
         .map(|s| s.to_string())

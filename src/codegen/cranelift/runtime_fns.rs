@@ -7271,6 +7271,13 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_sched_write_proc" => {
             Some(runtime_bare::fj_rt_bare_sched_write_proc as *const u8)
         }
+        // Syscall builtins
+        "fj_rt_bare_syscall_arg0" => Some(runtime_bare::fj_rt_bare_syscall_arg0 as *const u8),
+        "fj_rt_bare_syscall_arg1" => Some(runtime_bare::fj_rt_bare_syscall_arg1 as *const u8),
+        "fj_rt_bare_syscall_arg2" => Some(runtime_bare::fj_rt_bare_syscall_arg2 as *const u8),
+        "fj_rt_bare_syscall_set_return" => {
+            Some(runtime_bare::fj_rt_bare_syscall_set_return as *const u8)
+        }
         _ => None,
     }
 }

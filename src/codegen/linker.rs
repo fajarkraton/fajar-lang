@@ -340,10 +340,15 @@ __vectors:
     add     sp, sp, #256
 .endm
 
-/* Sync exception from current EL */
+/* Sync exception from current EL (includes SVC syscalls) */
 .global __exc_sync_cur
 __exc_sync_cur:
     SAVE_CONTEXT
+    /* Save SP so syscall handlers can read saved registers */
+    mov     x3, sp
+    movz    x4, #0x1018
+    movk    x4, #0x4700, lsl #16
+    str     x3, [x4]
     mrs     x0, ESR_EL1     /* x0 = ESR (exception syndrome) */
     mrs     x1, ELR_EL1     /* x1 = ELR (return address) */
     mrs     x2, FAR_EL1     /* x2 = FAR (fault address) */
@@ -656,6 +661,51 @@ fj_rt_bare_gic_eoi:
    Context Switch Builtins (for IRQ handler scheduler integration)
    These use hardcoded addresses to avoid volatile_read/write clobber
    ═══════════════════════════════════════════════════════════════════ */
+
+/* Syscall: read saved x0 from exception stack (syscall arg 0) */
+/* The exception stack has saved registers at known offsets. */
+/* saved_sp is at 0x47001018. x0 is at [saved_sp + 0]. */
+.global fj_rt_bare_syscall_arg0
+.type fj_rt_bare_syscall_arg0, @function
+fj_rt_bare_syscall_arg0:
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    ldr     x1, [x1]           /* x1 = saved_sp */
+    ldr     x0, [x1, #0]      /* x0 = saved x0 (arg0) */
+    ret
+.size fj_rt_bare_syscall_arg0, . - fj_rt_bare_syscall_arg0
+
+.global fj_rt_bare_syscall_arg1
+.type fj_rt_bare_syscall_arg1, @function
+fj_rt_bare_syscall_arg1:
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    ldr     x1, [x1]
+    ldr     x0, [x1, #8]      /* x0 = saved x1 (arg1) */
+    ret
+.size fj_rt_bare_syscall_arg1, . - fj_rt_bare_syscall_arg1
+
+.global fj_rt_bare_syscall_arg2
+.type fj_rt_bare_syscall_arg2, @function
+fj_rt_bare_syscall_arg2:
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    ldr     x1, [x1]
+    ldr     x0, [x1, #16]     /* x0 = saved x2 (arg2) */
+    ret
+.size fj_rt_bare_syscall_arg2, . - fj_rt_bare_syscall_arg2
+
+/* Syscall: set return value (write to saved x0 on exception stack) */
+.global fj_rt_bare_syscall_set_return
+.type fj_rt_bare_syscall_set_return, @function
+fj_rt_bare_syscall_set_return:
+    /* x0 = return value to set */
+    movz    x1, #0x1018
+    movk    x1, #0x4700, lsl #16
+    ldr     x1, [x1]
+    str     x0, [x1, #0]      /* saved x0 = return value */
+    ret
+.size fj_rt_bare_syscall_set_return, . - fj_rt_bare_syscall_set_return
 
 /* Read saved SP from vector stub (0x47001018) */
 .global fj_rt_bare_sched_get_saved_sp

@@ -5898,6 +5898,15 @@ impl CraneliftCompiler {
                 "sched_write_proc",
                 &sig_2i64_ret_i64,
             ),
+            // Syscall builtins
+            ("fj_rt_bare_syscall_arg0", "syscall_arg0", &sig_ret_i64),
+            ("fj_rt_bare_syscall_arg1", "syscall_arg1", &sig_ret_i64),
+            ("fj_rt_bare_syscall_arg2", "syscall_arg2", &sig_ret_i64),
+            (
+                "fj_rt_bare_syscall_set_return",
+                "syscall_set_return",
+                &sig_i64_void,
+            ),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -6734,8 +6743,7 @@ impl ObjectCompiler {
                     &sig_ret_i64,
                 )
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-            self.functions
-                .insert("sched_get_saved_sp".to_string(), id);
+            self.functions.insert("sched_get_saved_sp".to_string(), id);
         }
         {
             let id = self
@@ -6772,6 +6780,30 @@ impl ObjectCompiler {
                 .declare_function("fj_rt_bare_sched_write_proc", Linkage::Import, &sig_2i)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("sched_write_proc".to_string(), id);
+        }
+
+        // Syscall builtins
+        for (name, builtin) in [
+            ("fj_rt_bare_syscall_arg0", "syscall_arg0"),
+            ("fj_rt_bare_syscall_arg1", "syscall_arg1"),
+            ("fj_rt_bare_syscall_arg2", "syscall_arg2"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        {
+            let id = self
+                .module
+                .declare_function(
+                    "fj_rt_bare_syscall_set_return",
+                    Linkage::Import,
+                    &sig_i64_void,
+                )
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("syscall_set_return".to_string(), id);
         }
 
         // Volatile I/O (essential for bare-metal MMIO)

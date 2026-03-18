@@ -1854,3 +1854,27 @@ mod tests {
         // Don't call poweroff in tests — it's a no-op but semantically wrong
     }
 }
+
+// Syscall builtins (simulation — bare-metal uses assembly stubs)
+
+/// Read syscall argument 0 from saved exception stack.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_syscall_arg0() -> i64 {
+    0
+}
+
+/// Read syscall argument 1 from saved exception stack.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_syscall_arg1() -> i64 {
+    0
+}
+
+/// Read syscall argument 2 from saved exception stack.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_syscall_arg2() -> i64 {
+    0
+}
+
+/// Set syscall return value (write to saved x0 on exception stack).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_syscall_set_return(_val: i64) {}

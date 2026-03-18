@@ -329,6 +329,11 @@ impl TypeChecker {
             ("sched_set_next_sp", vec![Type::I64], Type::Void),
             ("sched_read_proc", vec![Type::I64], Type::I64),
             ("sched_write_proc", vec![Type::I64, Type::I64], Type::Void),
+            // Syscall builtins
+            ("syscall_arg0", vec![], Type::I64),
+            ("syscall_arg1", vec![], Type::I64),
+            ("syscall_arg2", vec![], Type::I64),
+            ("syscall_set_return", vec![Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {
