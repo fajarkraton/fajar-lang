@@ -161,6 +161,9 @@ pub struct CraneliftCompiler {
     data_sections: HashMap<String, String>,
     /// Global data objects for section-annotated consts: name → DataId.
     global_data: HashMap<String, DataId>,
+    /// Functions annotated with `@interrupt` — need assembly wrapper with
+    /// register save/restore and `eret` instead of `ret`.
+    interrupt_fns: Vec<String>,
 }
 
 /// Coerces a return value to match the declared function return type.
@@ -436,7 +439,16 @@ impl CraneliftCompiler {
             fn_sections: HashMap::new(),
             data_sections: HashMap::new(),
             global_data: HashMap::new(),
+            interrupt_fns: Vec::new(),
         })
+    }
+
+    /// Returns the list of `@interrupt`-annotated function names.
+    ///
+    /// Use with `linker::generate_interrupt_wrapper()` to create
+    /// assembly wrappers that save/restore registers and use `eret`.
+    pub fn interrupt_functions(&self) -> &[String] {
+        &self.interrupt_fns
     }
 
     /// Enables no_std mode: disables IO/heap runtime declarations.
@@ -4748,6 +4760,15 @@ impl CraneliftCompiler {
                 break;
             }
         }
+        // Mark @interrupt and @panic_handler functions as always reachable
+        for fndef in &concrete_fns {
+            if let Some(ref ann) = fndef.annotation {
+                if ann.name == "interrupt" || ann.name == "panic_handler" || ann.name == "entry" {
+                    reachable.insert(fndef.name.clone());
+                }
+            }
+        }
+
         // Filter concrete_fns to only reachable functions
         concrete_fns.retain(|f| reachable.contains(&f.name));
 
@@ -4882,7 +4903,7 @@ impl CraneliftCompiler {
         // Build generic param mapping for multi-param type dispatch
         self.generic_fn_params = self.build_generic_fn_params();
 
-        // Scan for @panic_handler, @section annotations and async functions
+        // Scan for @panic_handler, @section, @interrupt annotations and async functions
         for fndef in &concrete_fns {
             if let Some(ref ann) = fndef.annotation {
                 if ann.name == "panic_handler" {
@@ -4893,6 +4914,9 @@ impl CraneliftCompiler {
                         self.fn_sections
                             .insert(fndef.name.clone(), section_name.clone());
                     }
+                }
+                if ann.name == "interrupt" {
+                    self.interrupt_fns.push(fndef.name.clone());
                 }
             }
             if fndef.is_async {
@@ -6056,6 +6080,9 @@ pub struct ObjectCompiler {
     source_file: Option<String>,
     /// Per-function source locations: fn_name → (start_line, end_line).
     fn_source_locations: HashMap<String, (u32, u32)>,
+    /// Functions annotated with `@interrupt` — need assembly wrapper with
+    /// register save/restore and `eret` instead of `ret`.
+    interrupt_fns: Vec<String>,
 }
 
 impl ObjectCompiler {
@@ -6120,6 +6147,7 @@ impl ObjectCompiler {
             debug_info: false,
             source_file: None,
             fn_source_locations: HashMap::new(),
+            interrupt_fns: Vec::new(),
         })
     }
 
@@ -6178,6 +6206,7 @@ impl ObjectCompiler {
             debug_info: false,
             source_file: None,
             fn_source_locations: HashMap::new(),
+            interrupt_fns: Vec::new(),
         })
     }
 
@@ -10673,6 +10702,15 @@ impl ObjectCompiler {
                 }
             }
         }
+        // Mark @interrupt and @panic_handler functions as always reachable
+        for fndef in &concrete_fns {
+            if let Some(ref ann) = fndef.annotation {
+                if ann.name == "interrupt" || ann.name == "panic_handler" || ann.name == "entry" {
+                    reachable.insert(fndef.name.clone());
+                }
+            }
+        }
+
         // Filter concrete_fns to only reachable functions
         concrete_fns.retain(|f| reachable.contains(&f.name));
 
@@ -10802,7 +10840,7 @@ impl ObjectCompiler {
         // Build generic param mapping for multi-param type dispatch
         self.generic_fn_params = self.build_generic_fn_params();
 
-        // Scan for @panic_handler, @section annotations and async functions
+        // Scan for @panic_handler, @section, @interrupt annotations and async functions
         for fndef in &concrete_fns {
             if let Some(ref ann) = fndef.annotation {
                 if ann.name == "panic_handler" {
@@ -10813,6 +10851,9 @@ impl ObjectCompiler {
                         self.fn_sections
                             .insert(fndef.name.clone(), section_name.clone());
                     }
+                }
+                if ann.name == "interrupt" {
+                    self.interrupt_fns.push(fndef.name.clone());
                 }
             }
             if fndef.is_async {

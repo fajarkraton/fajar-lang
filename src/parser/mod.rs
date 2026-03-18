@@ -570,6 +570,7 @@ impl Parser {
             | TokenKind::AtReprPacked
             | TokenKind::AtSimd
             | TokenKind::AtSection
+            | TokenKind::AtInterrupt
             | TokenKind::AtTest
             | TokenKind::AtShouldPanic
             | TokenKind::AtIgnore => {
@@ -590,6 +591,7 @@ impl Parser {
                     TokenKind::AtTest => ("test", None),
                     TokenKind::AtShouldPanic => ("should_panic", None),
                     TokenKind::AtIgnore => ("ignore", None),
+                    TokenKind::AtInterrupt => ("interrupt", None),
                     TokenKind::AtSection => {
                         // Parse @section("section_name")
                         let section_name = if matches!(self.peek_kind(), TokenKind::LParen) {

@@ -1092,6 +1092,80 @@ fj_rt_asm_eret:
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
+/// Generates an ARM64 assembly wrapper for an `@interrupt` function.
+///
+/// The wrapper saves all general-purpose registers (x0-x30), calls the
+/// Cranelift-compiled handler function, restores registers, and returns
+/// via `eret` (exception return) instead of `ret`.
+///
+/// Usage: include the generated assembly in the AOT compilation output.
+/// The wrapper symbol is `__interrupt_{fn_name}` and should be placed
+/// in the vector table instead of the raw function.
+pub fn generate_interrupt_wrapper(fn_name: &str) -> String {
+    format!(
+        r#"
+/* @interrupt wrapper for {fn_name} — auto-generated */
+.global __interrupt_{fn_name}
+.type __interrupt_{fn_name}, @function
+__interrupt_{fn_name}:
+    /* Save all GP registers (272 bytes: x0-x30 + SP + SPSR + ELR) */
+    sub     sp, sp, #272
+    stp     x0,  x1,  [sp, #0]
+    stp     x2,  x3,  [sp, #16]
+    stp     x4,  x5,  [sp, #32]
+    stp     x6,  x7,  [sp, #48]
+    stp     x8,  x9,  [sp, #64]
+    stp     x10, x11, [sp, #80]
+    stp     x12, x13, [sp, #96]
+    stp     x14, x15, [sp, #112]
+    stp     x16, x17, [sp, #128]
+    stp     x18, x19, [sp, #144]
+    stp     x20, x21, [sp, #160]
+    stp     x22, x23, [sp, #176]
+    stp     x24, x25, [sp, #192]
+    stp     x26, x27, [sp, #208]
+    stp     x28, x29, [sp, #224]
+    str     x30,      [sp, #240]
+    mrs     x0, SPSR_EL1
+    str     x0,       [sp, #248]
+    mrs     x0, ELR_EL1
+    str     x0,       [sp, #256]
+
+    /* Call the actual handler */
+    bl      {fn_name}
+
+    /* Restore ELR and SPSR */
+    ldr     x0,       [sp, #256]
+    msr     ELR_EL1, x0
+    ldr     x0,       [sp, #248]
+    msr     SPSR_EL1, x0
+
+    /* Restore all GP registers */
+    ldp     x0,  x1,  [sp, #0]
+    ldp     x2,  x3,  [sp, #16]
+    ldp     x4,  x5,  [sp, #32]
+    ldp     x6,  x7,  [sp, #48]
+    ldp     x8,  x9,  [sp, #64]
+    ldp     x10, x11, [sp, #80]
+    ldp     x12, x13, [sp, #96]
+    ldp     x14, x15, [sp, #112]
+    ldp     x16, x17, [sp, #128]
+    ldp     x18, x19, [sp, #144]
+    ldp     x20, x21, [sp, #160]
+    ldp     x22, x23, [sp, #176]
+    ldp     x24, x25, [sp, #192]
+    ldp     x26, x27, [sp, #208]
+    ldp     x28, x29, [sp, #224]
+    ldr     x30,      [sp, #240]
+    add     sp, sp, #272
+
+    /* Exception return (not ret) */
+    eret
+.size __interrupt_{fn_name}, . - __interrupt_{fn_name}
+"#
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1245,5 +1319,40 @@ mod tests {
                 "missing stack symbol for {triple}"
             );
         }
+    }
+
+    #[test]
+    fn interrupt_wrapper_contains_save_restore() {
+        let wrapper = generate_interrupt_wrapper("irq_handler");
+        assert!(wrapper.contains("__interrupt_irq_handler"));
+        assert!(wrapper.contains("stp     x0,  x1,  [sp, #0]"));
+        assert!(wrapper.contains("ldp     x0,  x1,  [sp, #0]"));
+        assert!(wrapper.contains("bl      irq_handler"));
+        assert!(wrapper.contains("eret"));
+        assert!(wrapper.contains("SPSR_EL1"));
+        assert!(wrapper.contains("ELR_EL1"));
+    }
+
+    #[test]
+    fn interrupt_wrapper_saves_all_registers() {
+        let wrapper = generate_interrupt_wrapper("timer_irq");
+        // Verify all GP register pairs are saved
+        for reg_pair in &[
+            "x0,  x1", "x2,  x3", "x4,  x5", "x6,  x7", "x8,  x9", "x10, x11", "x12, x13",
+            "x14, x15", "x16, x17", "x18, x19", "x20, x21", "x22, x23", "x24, x25", "x26, x27",
+            "x28, x29",
+        ] {
+            assert!(
+                wrapper.contains(&format!("stp     {reg_pair}")),
+                "missing STP for {reg_pair}"
+            );
+            assert!(
+                wrapper.contains(&format!("ldp     {reg_pair}")),
+                "missing LDP for {reg_pair}"
+            );
+        }
+        // x30 saved individually
+        assert!(wrapper.contains("str     x30"));
+        assert!(wrapper.contains("ldr     x30"));
     }
 }

@@ -16871,3 +16871,33 @@ fn s4_const_eval_chained() {
     let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
     assert_eq!(main_fn(), 65536);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 5: @interrupt attribute tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s5_interrupt_detected() {
+    let src = r#"
+        @interrupt fn irq_handler() -> i64 { 0 }
+        fn main() -> i64 { 0 }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.compile_program(&program).expect("compile");
+    let irq_fns = compiler.interrupt_functions();
+    assert_eq!(irq_fns.len(), 1);
+    assert_eq!(irq_fns[0], "irq_handler");
+}
+
+#[test]
+fn s5_interrupt_wrapper_assembly() {
+    use crate::codegen::linker::generate_interrupt_wrapper;
+    let wrapper = generate_interrupt_wrapper("timer_handler");
+    assert!(wrapper.contains("__interrupt_timer_handler"));
+    assert!(wrapper.contains("bl      timer_handler"));
+    assert!(wrapper.contains("eret"));
+    assert!(wrapper.contains("stp     x28, x29"));
+    assert!(wrapper.contains("ldp     x28, x29"));
+}
