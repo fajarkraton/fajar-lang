@@ -222,11 +222,11 @@ is bypassed. Full safety requires codegen-level enforcement.
 | 5.1 | **Pass context annotation to codegen** | `current_context: Option<String>` in CodegenCtx, set from `fndef.annotation`. | `context.rs`, `cranelift/mod.rs` | [x] |
 | 5.2 | **Block heap builtins in @kernel codegen** | `is_kernel_forbidden_builtin()` in call.rs — blocks file I/O, heap strings, ML builtins. CE011 error. | `compile/call.rs` | [x] |
 | 5.3 | **Block tensor ops in @kernel codegen** | Same function blocks tensor_zeros, matmul, relu, softmax, etc. in @kernel context. | `compile/call.rs` | [x] |
-| 5.4 | **@interrupt function attribute** | New attribute: `@interrupt fn handler() { ... }` → auto-generate register save/restore prologue/epilogue. | `cranelift/mod.rs` | [ ] |
-| 5.5 | **@interrupt: save all GP registers** | Generate `stp x0,x1,[sp,#-16]!; stp x2,x3,...` at function entry. Reverse at exit. | `cranelift/mod.rs` | [ ] |
-| 5.6 | **@interrupt: eret instead of ret** | @interrupt functions end with `eret` (exception return) instead of `ret`. | `cranelift/mod.rs` | [ ] |
+| 5.4 | **@interrupt function attribute** | `AtInterrupt` TokenKind + parser + `interrupt_fns` tracking in codegen. | `token.rs`, `mod.rs`, `cranelift/mod.rs` | [x] |
+| 5.5 | **@interrupt: save all GP registers** | `generate_interrupt_wrapper()` saves x0-x30 + SPSR + ELR (272 bytes). | `linker.rs` | [x] |
+| 5.6 | **@interrupt: eret instead of ret** | Wrapper ends with `eret`. @interrupt fns always reachable (bypass DCE). | `linker.rs`, `cranelift/mod.rs` | [x] |
 | 5.7 | **Test: @kernel blocks heap** | 4 tests: blocks tensor_zeros, blocks read_file, allows arithmetic, allows println. | `tests.rs` | [x] |
-| 5.8 | **Test: @interrupt saves registers** | `@interrupt fn irq() { putc(46) }` → objdump shows STP/LDP pairs around function body. | `tests.rs` | [ ] |
+| 5.8 | **Test: @interrupt saves registers** | 4 tests: detection, wrapper assembly, register save verification, linker output. | `tests.rs`, `linker.rs` | [x] |
 
 ### Technical Design
 
@@ -263,7 +263,7 @@ Sprint 1: String literals     [████████░░] ~6h  — 30% code
 Sprint 2: Fix return          [██████░░░░] ~4h  — unblock early returns
 Sprint 3: Fix volatile/asm    [████████░░] ~6h  — unblock IPC + timer
 Sprint 4: Labels + const      [██████████] DONE — labeled break/continue + const folding
-Sprint 5: @kernel + @interrupt[████████░░] 5/8  — context enforcement done, @interrupt pending
+Sprint 5: @kernel + @interrupt[██████████] DONE — context enforcement + interrupt wrappers
                               Total: ~24h, 48 tasks
 ```
 
