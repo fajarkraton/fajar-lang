@@ -22,14 +22,11 @@ use super::control::{infer_expr_type, is_string_producing_expr};
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Returns true if the given builtin is forbidden in no_std mode.
+/// Note: println/print are allowed in bare-metal no_std (via fj_rt_bare_print).
 fn is_io_builtin(name: &str) -> bool {
     matches!(
         name,
-        "println"
-            | "print"
-            | "eprintln"
-            | "eprint"
-            | "read_file"
+        "read_file"
             | "write_file"
             | "append_file"
             | "file_exists"

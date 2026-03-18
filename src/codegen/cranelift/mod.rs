@@ -6217,11 +6217,17 @@ impl ObjectCompiler {
         sig_print.params.push(cranelift_codegen::ir::AbiParam::new(
             clif_types::default_int_type(),
         ));
-        let print_id = self
+        let _print_id = self
             .module
             .declare_function("fj_rt_bare_print", Linkage::Import, &sig_print)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("__println_str".to_string(), print_id);
+        // println → fj_rt_bare_println (appends newline)
+        let println_id = self
+            .module
+            .declare_function("fj_rt_bare_println", Linkage::Import, &sig_print)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__println_str".to_string(), println_id);
         // Also register as println/print for compatibility
         let print_id2 = self
             .module

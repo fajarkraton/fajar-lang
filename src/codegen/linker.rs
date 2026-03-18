@@ -556,6 +556,20 @@ fj_rt_bare_print:
     ret
 .size fj_rt_bare_print, . - fj_rt_bare_print
 
+/* println: print + newline */
+.global fj_rt_bare_println
+.type fj_rt_bare_println, @function
+fj_rt_bare_println:
+    /* x0 = ptr, x1 = len — reuse print, then add newline */
+    stp     x29, x30, [sp, #-16]!
+    bl      fj_rt_bare_print
+    mov     w0, #10
+    ldr     x1, =0x09000000
+    strb    w0, [x1]
+    ldp     x29, x30, [sp], #16
+    ret
+.size fj_rt_bare_println, . - fj_rt_bare_println
+
 /* ═══════════════════════════════════════════════════════════════════
    System register access stubs (workaround for asm! out() codegen bug)
    These functions actually execute mrs/msr instructions and return

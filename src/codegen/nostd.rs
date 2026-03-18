@@ -105,9 +105,15 @@ impl NoStdConfig {
         }
     }
 
-    /// Configuration for bare-metal: no heap, float allowed.
+    /// Configuration for bare-metal: no heap, float allowed, static strings allowed.
+    /// String literals compile to .rodata section (read-only static data, no heap needed).
     pub fn bare_metal() -> Self {
-        Self::default()
+        Self {
+            allow_heap: false,
+            allow_float: true,
+            allow_strings: true, // strings → .rodata, not heap
+            max_stack_bytes: 8192,
+        }
     }
 }
 

@@ -10489,10 +10489,10 @@ fn native_no_std_compiles() {
 
 #[test]
 fn native_no_std_rejects_io() {
-    // println should fail in no_std mode
+    // File I/O should fail in no_std mode (println is allowed via bare-metal UART)
     let src = r#"
         fn main() -> i64 {
-            println(42)
+            read_file("test.txt")
             0
         }
     "#;
@@ -10501,7 +10501,7 @@ fn native_no_std_rejects_io() {
     let mut compiler = CraneliftCompiler::new().expect("compiler init failed");
     compiler.set_no_std(true);
     let result = compiler.compile_program(&program);
-    assert!(result.is_err(), "no_std should reject println");
+    assert!(result.is_err(), "no_std should reject file I/O");
 }
 
 // ── S17.2: Panic Handler ────────────────────────────────────────────

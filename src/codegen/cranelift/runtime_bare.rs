@@ -156,6 +156,13 @@ pub extern "C" fn fj_rt_bare_print(ptr: *const u8, len: i64) {
     }
 }
 
+/// Bare-metal println: write `len` bytes + newline to UART.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_println(ptr: *const u8, len: i64) {
+    fj_rt_bare_print(ptr, len);
+    uart_putc(b'\n');
+}
+
 /// Bare-metal print integer to UART.
 #[no_mangle]
 pub extern "C" fn fj_rt_bare_print_i64(val: i64) {
