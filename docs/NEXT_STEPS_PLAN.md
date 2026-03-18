@@ -118,12 +118,12 @@ EL0 (User)          EL1 (Kernel)
 ### Tasks
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | Version bump: Cargo.toml → 3.1.0 | [ ] |
-| 4.2 | Update CHANGELOG.md with all session achievements | [ ] |
-| 4.3 | Update CLAUDE.md with FajarOS status | [ ] |
-| 4.4 | Git tag: v3.1.0 | [ ] |
-| 4.5 | Build release binaries (x86_64 + aarch64) | [ ] |
-| 4.6 | GitHub release with binaries + release notes | [ ] |
+| 4.1 | Version bump: Cargo.toml → 3.1.0 | [x] |
+| 4.2 | Update CHANGELOG.md with all session achievements | [x] |
+| 4.3 | Update CLAUDE.md with FajarOS status | [x] |
+| 4.4 | Git tag: v3.1.1 | [x] |
+| 4.5 | Build release binaries (x86_64: 6.5MB, aarch64: 5.7MB) | [x] |
+| 4.6 | GitHub release: github.com/fajarkraton/fajar-lang/releases/tag/v3.1.1 | [x] |
 
 ### Release Notes Highlights
 - 90+ bare-metal runtime functions
