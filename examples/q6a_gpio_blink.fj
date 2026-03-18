@@ -1,0 +1,44 @@
+// Q6A GPIO Blink — Toggle GPIO96 (PIN_7) on Dragon Q6A
+// Run: fj run examples/q6a_gpio_blink.fj
+//
+// Connect an LED to PIN_7 (GPIO96) + GND to see it blink.
+// Without LED, verify via: gpioget gpiochip4 96
+
+fn main() -> i64 {
+    println("GPIO96 Blink — Dragon Q6A")
+    println("")
+
+    let pin = 96
+    let cycles = 5
+
+    // Open and configure GPIO pin
+    gpio_open(pin)
+    gpio_set_direction(pin, "out")
+    println("GPIO96 opened as output")
+
+    let mut i = 0
+    while i < cycles {
+        // ON
+        gpio_write(pin, 1)
+        print("Cycle ")
+        print(to_string(i + 1))
+        print(": ON  ")
+
+        // Wait ~500ms
+        sleep_ms(500)
+
+        // OFF
+        gpio_write(pin, 0)
+        println("OFF")
+
+        // Wait ~500ms
+        sleep_ms(500)
+
+        i = i + 1
+    }
+
+    println("")
+    print(to_string(cycles))
+    println(" blink cycles complete")
+    0
+}

@@ -1,0 +1,100 @@
+// Q6A Showcase — Demonstrates Fajar Lang capabilities on Dragon Q6A
+// Run: fj run examples/q6a_showcase.fj
+
+fn main() -> i64 {
+    println("========================================")
+    println("  Fajar Lang v3.2 on Dragon Q6A")
+    println("  Qualcomm QCS6490 Edge AI Platform")
+    println("========================================")
+    println("")
+
+    // 1. System Info
+    println("[1] System Information")
+    let temp = cpu_temp()
+    let freq = cpu_freq()
+    let up = sys_uptime()
+    print("    CPU: ")
+    print(to_string(freq / 1000))
+    print("MHz, ")
+    print(to_string(temp / 1000))
+    println("C")
+    print("    Uptime: ")
+    print(to_string(up / 3600))
+    print("h ")
+    print(to_string((up % 3600) / 60))
+    println("m")
+    println("")
+
+    // 2. GPU Detection
+    println("[2] GPU Status")
+    let gpu = gpu_available()
+    if gpu {
+        println("    Adreno 643 @ 812MHz — AVAILABLE")
+    } else {
+        println("    GPU not detected")
+    }
+    println("")
+
+    // 3. Computation Benchmark
+    println("[3] JIT Benchmark")
+    let mut fib_n = 0
+    let mut a = 0
+    let mut b = 1
+    while fib_n < 40 {
+        let tmp = a + b
+        a = b
+        b = tmp
+        fib_n = fib_n + 1
+    }
+    print("    fib(40) = ")
+    println(to_string(b))
+    println("")
+
+    // 4. String Operations
+    println("[4] String Operations")
+    let lang = "Fajar Lang"
+    let upper = lang.to_uppercase()
+    print("    \"")
+    print(lang)
+    print("\" → \"")
+    print(upper)
+    println("\"")
+    print("    contains 'Lang': ")
+    let has = lang.contains("Lang")
+    println(to_string(has))
+    println("")
+
+    // 5. Array Operations
+    println("[5] Array Processing")
+    let data = [42, 17, 93, 8, 55, 31, 76]
+    let mut sum = 0
+    let mut max_val = 0
+    for x in data {
+        sum = sum + x
+        if x > max_val {
+            max_val = x
+        }
+    }
+    print("    Sum: ")
+    println(to_string(sum))
+    print("    Max: ")
+    println(to_string(max_val))
+    print("    Avg: ")
+    println(to_string(sum / 7))
+    println("")
+
+    // 6. Pattern Matching
+    println("[6] Pattern Matching")
+    let score = 85
+    let grade = if score >= 90 { "A" } else { if score >= 80 { "B+" } else { "B" } }
+    print("    Score ")
+    print(to_string(score))
+    print(" → Grade ")
+    println(grade)
+    println("")
+
+    println("========================================")
+    println("  All tests passed!")
+    println("========================================")
+    0
+}

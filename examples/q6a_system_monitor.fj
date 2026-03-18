@@ -1,71 +1,65 @@
-// q6a_system_monitor.fj — Real-time system monitoring for Dragon Q6A
-//
-// Reads CPU temperature, frequency, memory usage, and uptime.
-// Logs all readings to a file for analysis.
-//
-// Usage: fj run examples/q6a_system_monitor.fj
+// Q6A System Monitor — Real-time hardware monitoring on Dragon Q6A
+// Run: fj run examples/q6a_system_monitor.fj
 
-fn check_thermal_status(temp: i64) -> str {
-    if temp > 80000 {
-        "CRITICAL"
-    } else if temp > 65000 {
-        "WARNING"
-    } else {
-        "OK"
-    }
+fn check_thermal(temp: i64) -> str {
+    if temp > 80000 { "CRITICAL" }
+    else { if temp > 70000 { "WARNING" }
+    else { if temp > 60000 { "WARM" }
+    else { "OK" } } }
 }
 
-fn format_freq(khz: i64) -> str {
-    let mhz = khz / 1000
-    to_string(mhz)
-}
-
-// --- Main monitoring ---
-
-println("=== Dragon Q6A System Monitor ===")
-println("")
-
-// Read system vitals
-let temp = cpu_temp()
-let freq = cpu_freq()
-let mem = mem_usage()
-let uptime = sys_uptime()
-
-// Thermal status
-let status = check_thermal_status(temp)
-let temp_c = temp / 1000
-println(f"CPU Temperature: {temp_c}C ({status})")
-
-// CPU frequency
-let freq_mhz = format_freq(freq)
-println(f"CPU Frequency:   {freq_mhz} MHz")
-
-// Memory
-println(f"Memory Usage:    {mem}%")
-
-// Uptime
-let hours = uptime / 3600
-let mins = (uptime % 3600) / 60
-println(f"System Uptime:   {hours}h {mins}m")
-
-// Log to file
-let logged = log_to_file("/tmp/q6a_monitor.log", f"temp={temp} freq={freq} mem={mem} uptime={uptime}")
-if logged {
+fn main() -> i64 {
+    println("=== Dragon Q6A System Monitor ===")
     println("")
-    println("Logged to /tmp/q6a_monitor.log")
-} else {
-    println("Warning: could not write log file")
+
+    // CPU Temperature
+    let temp = cpu_temp()
+    let deg = temp / 1000
+    let frac = (temp - deg * 1000) / 100
+    let status = check_thermal(temp)
+    print("CPU Temp:  ")
+    print(to_string(deg))
+    print(".")
+    print(to_string(frac))
+    print(" C [")
+    print(status)
+    println("]")
+
+    // CPU Frequency
+    let freq = cpu_freq()
+    print("CPU Freq:  ")
+    print(to_string(freq / 1000))
+    println(" MHz")
+
+    // Memory Usage
+    let mem = mem_usage()
+    print("Memory:    ")
+    print(to_string(mem))
+    println(" MB used")
+
+    // System Uptime
+    let up = sys_uptime()
+    let hours = up / 3600
+    let mins = (up - hours * 3600) / 60
+    let secs = up - hours * 3600 - mins * 60
+    print("Uptime:    ")
+    print(to_string(hours))
+    print("h ")
+    print(to_string(mins))
+    print("m ")
+    print(to_string(secs))
+    println("s")
+
+    // GPU Info
+    let gpu = gpu_available()
+    print("GPU:       ")
+    if gpu {
+        println("Adreno 643 (available)")
+    } else {
+        println("not detected")
+    }
+
+    println("")
+    println("=== Monitor Complete ===")
+    0
 }
-
-// GPU status
-let has_gpu = gpu_available()
-let gpu = gpu_info()
-println(f"GPU Available:   {has_gpu}")
-println(f"GPU Info:        {gpu}")
-
-// NPU status
-let npu = npu_info()
-println(f"NPU Info:        {npu}")
-
-println("")
-println("Monitor complete.")
