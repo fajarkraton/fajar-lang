@@ -5909,6 +5909,9 @@ impl CraneliftCompiler {
             ),
             // svc(num, arg1, arg2) -> result
             ("fj_rt_bare_svc", "svc", &sig_3i64_ret_i64),
+            // MMU builtins
+            ("fj_rt_bare_switch_ttbr0", "switch_ttbr0", &sig_i64_void),
+            ("fj_rt_bare_read_ttbr0", "read_ttbr0", &sig_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -6823,6 +6826,22 @@ impl ObjectCompiler {
                 .declare_function("fj_rt_bare_svc", Linkage::Import, &sig_svc)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("svc".to_string(), id);
+        }
+
+        // MMU builtins
+        {
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_switch_ttbr0", Linkage::Import, &sig_i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("switch_ttbr0".to_string(), id);
+        }
+        {
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_read_ttbr0", Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("read_ttbr0".to_string(), id);
         }
 
         // Volatile I/O (essential for bare-metal MMIO)

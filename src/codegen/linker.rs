@@ -681,6 +681,27 @@ fj_rt_bare_svc:
     ret
 .size fj_rt_bare_svc, . - fj_rt_bare_svc
 
+/* TTBR0 switch + TLB flush (for per-process page tables) */
+.global fj_rt_bare_switch_ttbr0
+.type fj_rt_bare_switch_ttbr0, @function
+fj_rt_bare_switch_ttbr0:
+    /* x0 = new TTBR0 address */
+    msr     TTBR0_EL1, x0
+    isb
+    tlbi    vmalle1is
+    dsb     ish
+    isb
+    ret
+.size fj_rt_bare_switch_ttbr0, . - fj_rt_bare_switch_ttbr0
+
+/* Read current TTBR0 */
+.global fj_rt_bare_read_ttbr0
+.type fj_rt_bare_read_ttbr0, @function
+fj_rt_bare_read_ttbr0:
+    mrs     x0, TTBR0_EL1
+    ret
+.size fj_rt_bare_read_ttbr0, . - fj_rt_bare_read_ttbr0
+
 /* Syscall: read saved x0 from exception stack (syscall arg 0) */
 /* The exception stack has saved registers at known offsets. */
 /* saved_sp is at 0x47001018. x0 is at [saved_sp + 0]. */

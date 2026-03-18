@@ -1884,3 +1884,13 @@ pub extern "C" fn fj_rt_bare_syscall_set_return(_val: i64) {}
 pub extern "C" fn fj_rt_bare_svc(_num: i64, _arg1: i64, _arg2: i64) -> i64 {
     0
 }
+
+/// Switch TTBR0 + TLB flush (simulation: no-op).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_switch_ttbr0(_ttbr0: i64) {}
+
+/// Read current TTBR0 (simulation: return 0).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_read_ttbr0() -> i64 {
+    0
+}
