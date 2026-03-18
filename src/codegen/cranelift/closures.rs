@@ -97,12 +97,16 @@ fn collect_free_vars_inner(expr: &Expr, bound: &HashSet<String>, free: &mut Hash
             }
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             collect_free_vars_inner(condition, bound, free);
             collect_free_vars_inner(body, bound, free);
         }
         Expr::For {
+            label: _,
             variable,
             iterable,
             body,
@@ -113,7 +117,7 @@ fn collect_free_vars_inner(expr: &Expr, bound: &HashSet<String>, free: &mut Hash
             inner_bound.insert(variable.clone());
             collect_free_vars_inner(body, &inner_bound, free);
         }
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             collect_free_vars_inner(body, bound, free);
         }
         Expr::Array { elements, .. } => {
@@ -342,15 +346,18 @@ fn scan_closures_recursive(
             }
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             scan_closures_recursive(condition, known_names, closures);
             scan_closures_recursive(body, known_names, closures);
         }
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             scan_closures_recursive(body, known_names, closures);
         }
-        Expr::For { body, .. } => {
+        Expr::For { label: _, body, .. } => {
             scan_closures_recursive(body, known_names, closures);
         }
         Expr::Assign { value, .. } => {

@@ -506,11 +506,15 @@ impl FactGenerator {
                 self.visit_if(condition, then_branch, else_branch.as_deref());
             }
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => {
                 self.visit_while(condition, body);
             }
             Expr::For {
+                label: _,
                 variable,
                 iterable,
                 body,
@@ -518,7 +522,7 @@ impl FactGenerator {
             } => {
                 self.visit_for(variable, iterable, body);
             }
-            Expr::Loop { body, .. } => {
+            Expr::Loop { label: _, body, .. } => {
                 self.visit_loop(body);
             }
             Expr::Call { callee, args, .. } => {
@@ -1352,6 +1356,7 @@ mod tests {
                 let_stmt("x", false, int_lit(1, 5, 6), 0, 10),
                 expr_stmt(
                     Expr::While {
+                        label: None,
                         condition: Box::new(Expr::Literal {
                             kind: LiteralKind::Bool(true),
                             span: span(18, 22),

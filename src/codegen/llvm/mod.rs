@@ -535,17 +535,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
             Expr::Cast { expr, ty, .. } => self.compile_cast(expr, ty),
 
             Expr::While {
-                condition, body, ..
+                label: None,
+                condition,
+                body,
+                ..
             } => self.compile_while(condition, body),
 
             Expr::For {
+                label: None,
                 variable,
                 iterable,
                 body,
                 ..
             } => self.compile_for(variable, iterable, body),
 
-            Expr::Loop { body, .. } => self.compile_loop(body),
+            Expr::Loop {
+                label: None, body, ..
+            } => self.compile_loop(body),
 
             Expr::Match { subject, arms, .. } => self.compile_match(subject, arms),
 
@@ -2481,6 +2487,7 @@ mod tests {
                 make_let_stmt("i", make_int_lit(0)),
                 make_let_stmt("sum", make_int_lit(0)),
                 make_expr_stmt(Expr::While {
+                    label: None,
                     condition: Box::new(make_binop(make_ident("i"), BinOp::Lt, make_int_lit(10))),
                     body: Box::new(while_body),
                     span: dummy_span(),
@@ -2520,6 +2527,7 @@ mod tests {
             stmts: vec![
                 make_let_stmt("sum", make_int_lit(0)),
                 make_expr_stmt(Expr::For {
+                    label: None,
                     variable: "i".to_string(),
                     iterable: Box::new(Expr::Range {
                         start: Some(Box::new(make_int_lit(0))),
@@ -2579,6 +2587,7 @@ mod tests {
         let body = Expr::Block {
             stmts: vec![make_let_stmt("i", make_int_lit(0))],
             expr: Some(Box::new(Expr::Loop {
+                label: None,
                 body: Box::new(loop_body),
                 span: dummy_span(),
             })),
@@ -2758,6 +2767,7 @@ mod tests {
                 make_let_stmt("b", make_int_lit(1)),
                 make_let_stmt("i", make_int_lit(0)),
                 make_expr_stmt(Expr::While {
+                    label: None,
                     condition: Box::new(make_binop(make_ident("i"), BinOp::Lt, make_int_lit(10))),
                     body: Box::new(while_body),
                     span: dummy_span(),
@@ -3502,6 +3512,7 @@ mod tests {
                 ),
                 make_let_stmt("sum", make_int_lit(0)),
                 make_expr_stmt(Expr::For {
+                    label: None,
                     variable: "i".to_string(),
                     iterable: Box::new(Expr::Range {
                         start: Some(Box::new(make_int_lit(0))),

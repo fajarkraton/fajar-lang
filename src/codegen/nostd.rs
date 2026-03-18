@@ -199,18 +199,26 @@ fn check_expr_nostd(
         }
 
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             check_expr_nostd(condition, location, config, violations);
             check_expr_nostd(body, location, config, violations);
         }
 
-        Expr::For { iterable, body, .. } => {
+        Expr::For {
+            label: _,
+            iterable,
+            body,
+            ..
+        } => {
             check_expr_nostd(iterable, location, config, violations);
             check_expr_nostd(body, location, config, violations);
         }
 
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             check_expr_nostd(body, location, config, violations);
         }
 

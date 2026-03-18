@@ -649,6 +649,7 @@ impl Parser {
         let end = body.span().end;
 
         Ok(Expr::While {
+            label: None,
             condition,
             body,
             span: Span::new(start, end),
@@ -667,6 +668,7 @@ impl Parser {
         let end = body.span().end;
 
         Ok(Expr::For {
+            label: None,
             variable,
             iterable,
             body,
@@ -681,6 +683,7 @@ impl Parser {
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
         Ok(Expr::Loop {
+            label: None,
             body,
             span: Span::new(start, end),
         })

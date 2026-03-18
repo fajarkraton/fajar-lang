@@ -873,18 +873,20 @@ impl Parser {
         self.eat_semi();
 
         Ok(Stmt::Break {
+            label: None, // TODO: parse 'label syntax
             value,
             span: Span::new(start, end),
         })
     }
 
-    /// Parses a continue statement: `continue`.
+    /// Parses a continue statement: `continue ['label]`.
     fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
         let end_tok = self.expect(&TokenKind::Continue)?;
         self.eat_semi();
 
         Ok(Stmt::Continue {
+            label: None, // TODO: parse 'label syntax
             span: Span::new(start, end_tok.span.end),
         })
     }

@@ -94,12 +94,15 @@ pub(crate) fn collect_generic_calls(
             collect_generic_calls(operand, generic_fns, mono_map, mono_specs, param_types);
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             collect_generic_calls(condition, generic_fns, mono_map, mono_specs, param_types);
             collect_generic_calls(body, generic_fns, mono_map, mono_specs, param_types);
         }
-        Expr::For { body, .. } | Expr::Loop { body, .. } => {
+        Expr::For { label: _, body, .. } | Expr::Loop { label: _, body, .. } => {
             collect_generic_calls(body, generic_fns, mono_map, mono_specs, param_types);
         }
         Expr::Assign { value, .. } => {
@@ -332,16 +335,24 @@ pub(crate) fn collect_called_fns(expr: &Expr, called: &mut HashSet<String>) {
             collect_called_fns(operand, called);
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             collect_called_fns(condition, called);
             collect_called_fns(body, called);
         }
-        Expr::For { body, iterable, .. } => {
+        Expr::For {
+            label: _,
+            body,
+            iterable,
+            ..
+        } => {
             collect_called_fns(iterable, called);
             collect_called_fns(body, called);
         }
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             collect_called_fns(body, called);
         }
         Expr::Assign { value, .. } => {

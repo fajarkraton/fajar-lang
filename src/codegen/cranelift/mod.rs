@@ -233,15 +233,23 @@ fn collect_violations(expr: &Expr, context: &str, out: &mut Vec<String>) {
             }
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             collect_violations(condition, context, out);
             collect_violations(body, context, out);
         }
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             collect_violations(body, context, out);
         }
-        Expr::For { iterable, body, .. } => {
+        Expr::For {
+            label: _,
+            iterable,
+            body,
+            ..
+        } => {
             collect_violations(iterable, context, out);
             collect_violations(body, context, out);
         }

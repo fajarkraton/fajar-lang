@@ -330,9 +330,9 @@ pub(in crate::codegen::cranelift) fn infer_expr_type<M: Module>(
                 .unwrap_or(clif_types::default_int_type())
         }
         // Loops/assignments are void-valued (i64 zero)
-        Expr::While { .. }
-        | Expr::Loop { .. }
-        | Expr::For { .. }
+        Expr::While { label: _, .. }
+        | Expr::Loop { label: _, .. }
+        | Expr::For { label: _, .. }
         | Expr::Assign { .. }
         | Expr::Range { .. } => clif_types::default_int_type(),
         _ => clif_types::default_int_type(),

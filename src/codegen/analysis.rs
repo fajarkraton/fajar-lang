@@ -159,18 +159,26 @@ fn analyze_expr(
             }
         }
         Expr::While {
-            condition, body, ..
+            label: _,
+            condition,
+            body,
+            ..
         } => {
             analyze_expr(condition, local_count, frame_bytes, calls);
             analyze_expr(body, local_count, frame_bytes, calls);
         }
-        Expr::For { body, iterable, .. } => {
+        Expr::For {
+            label: _,
+            body,
+            iterable,
+            ..
+        } => {
             *local_count += 1; // loop variable
             *frame_bytes += DEFAULT_VAR_SIZE;
             analyze_expr(iterable, local_count, frame_bytes, calls);
             analyze_expr(body, local_count, frame_bytes, calls);
         }
-        Expr::Loop { body, .. } => {
+        Expr::Loop { label: _, body, .. } => {
             analyze_expr(body, local_count, frame_bytes, calls);
         }
         Expr::Call { callee, args, .. } => {
@@ -797,6 +805,7 @@ mod tests {
             "looper",
             vec![],
             Expr::For {
+                label: None,
                 variable: "i".into(),
                 iterable: Box::new(Expr::Range {
                     start: Some(Box::new(int_lit(0))),

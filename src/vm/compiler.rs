@@ -385,7 +385,10 @@ impl Compiler {
                 self.chunk.patch_jump(jump_end, end);
             }
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => {
                 let loop_start = self.chunk.current_offset();
                 self.loop_stack.push(LoopContext {
@@ -414,7 +417,7 @@ impl Compiler {
                     self.chunk.patch_jump(patch, after);
                 }
             }
-            Expr::Loop { body, .. } => {
+            Expr::Loop { label: _, body, .. } => {
                 let loop_start = self.chunk.current_offset();
                 self.loop_stack.push(LoopContext {
                     continue_target: loop_start,
@@ -434,6 +437,7 @@ impl Compiler {
                 }
             }
             Expr::For {
+                label: _,
                 variable,
                 iterable,
                 body,

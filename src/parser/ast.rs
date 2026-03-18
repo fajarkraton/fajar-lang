@@ -471,16 +471,20 @@ pub enum Stmt {
         span: Span,
     },
 
-    /// Break statement: `break [expr]`.
+    /// Break statement: `break ['label] [expr]`.
     Break {
+        /// Optional label for multi-level break (e.g., `break 'outer`).
+        label: Option<String>,
         /// Optional break value (for loop expressions).
         value: Option<Box<Expr>>,
         /// Source span.
         span: Span,
     },
 
-    /// Continue statement: `continue`.
+    /// Continue statement: `continue ['label]`.
     Continue {
+        /// Optional label for multi-level continue (e.g., `continue 'outer`).
+        label: Option<String>,
         /// Source span.
         span: Span,
     },
@@ -628,7 +632,10 @@ pub enum Expr {
     },
 
     /// While loop: `while cond { body }`.
+    /// While loop: `['label:] while condition { body }`.
     While {
+        /// Optional label for break/continue (e.g., `'outer: while ...`).
+        label: Option<String>,
         /// Loop condition.
         condition: Box<Expr>,
         /// Loop body.
@@ -637,8 +644,10 @@ pub enum Expr {
         span: Span,
     },
 
-    /// For loop: `for var in iter { body }`.
+    /// For loop: `['label:] for var in iter { body }`.
     For {
+        /// Optional label.
+        label: Option<String>,
         /// Loop variable name.
         variable: String,
         /// Iterator expression.
@@ -649,8 +658,10 @@ pub enum Expr {
         span: Span,
     },
 
-    /// Infinite loop: `loop { body }`.
+    /// Infinite loop: `['label:] loop { body }`.
     Loop {
+        /// Optional label.
+        label: Option<String>,
         /// Loop body.
         body: Box<Expr>,
         /// Source span.

@@ -450,6 +450,7 @@ mod tests {
                 expr_stmt(
                     Expr::While {
                         condition: Box::new(ident("cond", 21, 25)),
+                        label: None,
                         body: Box::new(block(
                             vec![expr_stmt(ident("x", 30, 31), 30, 35)],
                             None,
@@ -506,6 +507,7 @@ mod tests {
         let body = block(
             vec![expr_stmt(
                 Expr::While {
+                    label: None,
                     condition: Box::new(Expr::Literal {
                         kind: LiteralKind::Bool(true),
                         span: Span::new(6, 10),
@@ -513,6 +515,7 @@ mod tests {
                     body: Box::new(block(
                         vec![expr_stmt(
                             Expr::While {
+                                label: None,
                                 condition: Box::new(Expr::Literal {
                                     kind: LiteralKind::Bool(true),
                                     span: Span::new(16, 20),
@@ -554,6 +557,7 @@ mod tests {
         let body = block(
             vec![expr_stmt(
                 Expr::For {
+                    label: None,
                     variable: "i".to_string(),
                     iterable: Box::new(Expr::Range {
                         start: Some(Box::new(int_lit(0, 7, 8))),

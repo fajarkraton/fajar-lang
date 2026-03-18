@@ -1608,9 +1608,12 @@ impl WasmCompiler {
                 ..
             } => self.compile_if(condition, then_branch, else_branch.as_deref(), out),
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => self.compile_while(condition, body, out),
-            Expr::Loop { body, .. } => self.compile_loop(body, out),
+            Expr::Loop { label: _, body, .. } => self.compile_loop(body, out),
             Expr::Block { stmts, expr, .. } => self.compile_block(stmts, expr.as_deref(), out),
             Expr::Assign {
                 target, op, value, ..
@@ -2548,6 +2551,7 @@ mod tests {
         let mut compiler = WasmCompiler::new(WasmTarget::Wasi);
         let mut out = Vec::new();
         let while_expr = Expr::While {
+            label: _,
             condition: Box::new(int_lit(1)),
             body: Box::new(Expr::Block {
                 stmts: vec![],

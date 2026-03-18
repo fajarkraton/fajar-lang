@@ -950,15 +950,19 @@ impl Interpreter {
                 ..
             } => self.eval_if(condition, then_branch, else_branch),
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => self.eval_while(condition, body),
             Expr::For {
+                label: _,
                 variable,
                 iterable,
                 body,
                 ..
             } => self.eval_for(variable, iterable, body),
-            Expr::Loop { body, .. } => self.eval_loop(body),
+            Expr::Loop { label: _, body, .. } => self.eval_loop(body),
             Expr::Assign {
                 target, op, value, ..
             } => self.eval_assign(target, *op, value),

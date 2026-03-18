@@ -597,7 +597,10 @@ impl<'src> Formatter<'src> {
                 self.push("}");
             }
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => {
                 self.push("while ");
                 self.format_expr(condition);
@@ -605,6 +608,7 @@ impl<'src> Formatter<'src> {
                 self.format_block_body(body);
             }
             Expr::For {
+                label: _,
                 variable,
                 iterable,
                 body,
@@ -617,7 +621,7 @@ impl<'src> Formatter<'src> {
                 self.push(" ");
                 self.format_block_body(body);
             }
-            Expr::Loop { body, .. } => {
+            Expr::Loop { label: _, body, .. } => {
                 self.push("loop ");
                 self.format_block_body(body);
             }

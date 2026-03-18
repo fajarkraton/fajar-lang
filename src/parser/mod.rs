@@ -1087,14 +1087,16 @@ mod tests {
     #[test]
     fn parse_while_loop() {
         let expr = parse_expr_ok("while x > 0 { x }");
-        assert!(matches!(expr, Expr::While { .. }));
+        assert!(matches!(expr, Expr::While { label: _, .. }));
     }
 
     #[test]
     fn parse_for_loop() {
         let expr = parse_expr_ok("for i in items { i }");
         match expr {
-            Expr::For { variable, .. } => assert_eq!(variable, "i"),
+            Expr::For {
+                label: _, variable, ..
+            } => assert_eq!(variable, "i"),
             _ => panic!("expected For"),
         }
     }

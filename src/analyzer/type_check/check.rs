@@ -306,7 +306,11 @@ impl TypeChecker {
                     Type::Void
                 }
             }
-            Stmt::Break { value, span } => {
+            Stmt::Break {
+                label: _,
+                value,
+                span,
+            } => {
                 if !self.symbols.is_inside_loop() {
                     self.errors
                         .push(SemanticError::BreakOutsideLoop { span: *span });
@@ -317,7 +321,7 @@ impl TypeChecker {
                     Type::Void
                 }
             }
-            Stmt::Continue { span } => {
+            Stmt::Continue { label: _, span } => {
                 if !self.symbols.is_inside_loop() {
                     self.errors
                         .push(SemanticError::BreakOutsideLoop { span: *span });
@@ -352,7 +356,10 @@ impl TypeChecker {
                 ..
             } => self.check_if(condition, then_branch, else_branch),
             Expr::While {
-                condition, body, ..
+                label: _,
+                condition,
+                body,
+                ..
             } => {
                 let cond_ty = self.check_expr(condition);
                 if !cond_ty.is_compatible(&Type::Bool) && !cond_ty.is_integer() {
@@ -370,6 +377,7 @@ impl TypeChecker {
                 Type::Void
             }
             Expr::For {
+                label: _,
                 variable,
                 iterable,
                 body,
@@ -394,7 +402,7 @@ impl TypeChecker {
                 self.symbols.pop_scope();
                 Type::Void
             }
-            Expr::Loop { body, .. } => {
+            Expr::Loop { label: _, body, .. } => {
                 self.symbols
                     .push_scope_kind(crate::analyzer::scope::ScopeKind::Loop);
                 self.check_expr(body);
