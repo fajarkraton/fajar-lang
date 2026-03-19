@@ -741,22 +741,57 @@ const LAPIC_TIMER_DIV: i64 = 0x3E0
 
 const IOAPIC_BASE: i64 = 0xFEC00000
 
+@kernel fn lapic_eoi() {
+    // Send End of Interrupt to LAPIC
+    volatile_write_u32(LAPIC_BASE + LAPIC_EOI, 0)
+}
+
 @kernel fn cmd_lapic() {
     cprintln("LAPIC Info:", YELLOW_ON_BLACK)
     cprint("  Base: 0x", WHITE_ON_BLACK)
     cprint_hex(LAPIC_BASE, 8, CYAN_ON_BLACK)
     console_putchar(10, WHITE_ON_BLACK)
-    // Check if APIC present via CPUID
     let edx = cpuid_edx(1)
     if (edx & (1 << 9)) != 0 {
         cprintln("  APIC: present (CPUID)", GREEN_ON_BLACK)
+        // Read LAPIC registers (now mapped via map_page)
+        let lapic_id = volatile_read_u32(LAPIC_BASE + LAPIC_ID)
+        let lapic_ver = volatile_read_u32(LAPIC_BASE + LAPIC_VER)
+        let lapic_svr = volatile_read_u32(LAPIC_BASE + LAPIC_SVR)
+        cprint("  ID:   0x", WHITE_ON_BLACK)
+        cprint_hex(lapic_id >> 24, 2, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        cprint("  Ver:  0x", WHITE_ON_BLACK)
+        cprint_hex(lapic_ver & 0xFF, 2, CYAN_ON_BLACK)
+        cprint(" (max LVT: ", WHITE_ON_BLACK)
+        cprint_decimal((lapic_ver >> 16) & 0xFF, CYAN_ON_BLACK)
+        cprintln(")", WHITE_ON_BLACK)
+        cprint("  SVR:  0x", WHITE_ON_BLACK)
+        cprint_hex(lapic_svr, 8, CYAN_ON_BLACK)
+        if (lapic_svr & 0x100) != 0 { cprintln(" ENABLED", GREEN_ON_BLACK) }
+        else { cprintln(" disabled", RED_ON_BLACK) }
     } else {
         cprintln("  APIC: not detected", RED_ON_BLACK)
-        return
     }
-    cprintln("  Note: LAPIC at 0xFEE00000 outside 128MB identity map", YELLOW_ON_BLACK)
-    cprintln("  Using PIC (8259A) for interrupts instead", WHITE_ON_BLACK)
-    cprintln("  LAPIC init requires higher-half mapping", WHITE_ON_BLACK)
+    // IOAPIC
+    cprintln("IOAPIC Info:", YELLOW_ON_BLACK)
+    cprint("  Base: 0x", WHITE_ON_BLACK)
+    cprint_hex(IOAPIC_BASE, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    // Read IOAPIC ID (register 0)
+    volatile_write_u32(IOAPIC_BASE, 0)  // select register 0
+    let ioapic_id = volatile_read_u32(IOAPIC_BASE + 0x10)
+    cprint("  ID:   0x", WHITE_ON_BLACK)
+    cprint_hex((ioapic_id >> 24) & 0xF, 1, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    // Read IOAPIC version (register 1)
+    volatile_write_u32(IOAPIC_BASE, 1)
+    let ioapic_ver = volatile_read_u32(IOAPIC_BASE + 0x10)
+    cprint("  Ver:  0x", WHITE_ON_BLACK)
+    cprint_hex(ioapic_ver & 0xFF, 2, CYAN_ON_BLACK)
+    cprint(" (max redir: ", WHITE_ON_BLACK)
+    cprint_decimal((ioapic_ver >> 16) & 0xFF, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
 }
 
 @kernel fn cmd_irq() {
@@ -4345,6 +4380,18 @@ const FS_ENTRY_SIZE: i64 = 128
     ipc_init()
     ramfs_init()
     mnist_init_weights()
+
+    // Map LAPIC + IOAPIC MMIO pages (beyond 128MB identity region)
+    map_page(0xFEE00000, 0xFEE00000, PAGE_PRESENT | PAGE_WRITABLE)  // LAPIC
+    map_page(0xFEC00000, 0xFEC00000, PAGE_PRESENT | PAGE_WRITABLE)  // IOAPIC
+
+    // Initialize LAPIC
+    let apic_present = cpuid_edx(1) & (1 << 9)
+    if apic_present != 0 {
+        // Set spurious interrupt vector to 0xFF, enable APIC (bit 8)
+        let svr = volatile_read_u32(0xFEE000F0)
+        volatile_write_u32(0xFEE000F0, svr | 0x1FF)  // vector 0xFF + enable
+    }
     history_init()
 
     // Enable interrupts

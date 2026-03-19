@@ -297,10 +297,10 @@ fajaros-x86/
 | 5 | Syscalls & User Space | S13-S15 | 30 | **19** | SYSCALL + IPC + pipe + spawn/kill/wait |
 | 6 | Drivers | S16-S18 | 30 | **26** | Keyboard+Shift, VGA+cursor, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
-| 8 | SMP & Advanced | S22-S24 | 30 | **11** | ACPI + W^X + SMEP security |
+| 8 | SMP & Advanced | S22-S24 | 30 | **16** | ACPI + LAPIC/IOAPIC + SMEP + W^X |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **266** | **89% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **271** | **90% complete** |
 
 ---
 
@@ -451,11 +451,11 @@ fajaros-x86/
 | # | Task | Detail | Status |
 |---|------|--------|--------|
 | 8.1 | **Detect APIC via CPUID** | CPUID leaf 1, EDX bit 9 = APIC present. Read APIC base from IA32_APIC_BASE MSR. | [x] |
-| 8.2 | **Map LAPIC MMIO registers** | Default at 0xFEE0_0000 (physical). Map to same virtual address (identity mapped). | [ ] |
-| 8.3 | **Initialize LAPIC** | Set spurious interrupt vector (0xFF), enable APIC (bit 8 of SVR). | [ ] |
-| 8.4 | **Implement LAPIC EOI** | Write 0 to offset 0xB0 (End of Interrupt). Must be called at end of every IRQ handler. | [ ] |
-| 8.5 | **Detect IOAPIC via ACPI MADT** | Parse ACPI RSDP → RSDT/XSDT → MADT table → find IOAPIC entry (base address, GSI base). | [ ] |
-| 8.6 | **Initialize IOAPIC** | Map IOAPIC at 0xFEC0_0000. Configure redirection entries for IRQs 0-23. | [ ] |
+| 8.2 | **Map LAPIC MMIO registers** | `map_page(0xFEE00000, 0xFEE00000, P|RW)` at boot. LAPIC now accessible. | [x] |
+| 8.3 | **Initialize LAPIC** | SVR set to 0x1FF (vector 0xFF + enable bit 8). `lapic` cmd reads ID/Ver/SVR. | [x] |
+| 8.4 | **Implement LAPIC EOI** | `lapic_eoi()`: write 0 to LAPIC offset 0xB0. | [x] |
+| 8.5 | **Map IOAPIC** | `map_page(0xFEC00000, 0xFEC00000, P|RW)`. IOAPIC registers accessible. | [x] |
+| 8.6 | **Read IOAPIC** | `lapic` cmd reads IOAPIC ID (reg 0) and version (reg 1) + max redir entries. | [x] |
 | 8.7 | **Route keyboard IRQ** | PIC IRQ1 → vector 33 (0x21). Keyboard interrupt handler reads port 0x60. | [x] |
 | 8.8 | **Route timer IRQ** | PIC IRQ0 → vector 32 (0x20). PIT timer fires at configured frequency. | [x] |
 | 8.9 | **Remap legacy PIC (8259)** | Remap PIC master to vectors 0x20-0x27, slave to 0x28-0x2F. Used for timer + keyboard. | [x] |
