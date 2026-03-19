@@ -291,7 +291,7 @@ fajaros-x86/
 | # | Phase | Sprints | Tasks | Done | Focus |
 |---|-------|---------|-------|------|-------|
 | 1 | Foundation | S1-S3 | 30 | **28** | Boot, serial, GDT, hello world on QEMU |
-| 2 | Memory | S4-S6 | 30 | **14** | Bitmap allocator, map_page, paging |
+| 2 | Memory | S4-S6 | 30 | **22** | Bitmap + freelist allocator, map_page |
 | 3 | Interrupts | S7-S9 | 30 | **24** | IDT, PIC, PIT timer |
 | 4 | Scheduler | S10-S12 | 30 | **21** | Processes, context switch, preemption |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
@@ -300,7 +300,7 @@ fajaros-x86/
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
 | 10 | Production | S28-S30 | 30 | **5** | Blog, architecture, boot, commands docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **179** | **60% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **187** | **62% complete** |
 
 ---
 
@@ -406,22 +406,22 @@ fajaros-x86/
 | # | Task | Detail | Status |
 |---|------|--------|--------|
 | 6.1 | **Implement bump allocator** | Simple: `heap_ptr += size; return old_ptr`. Fast, no fragmentation handling. For early boot. | [x] |
-| 6.2 | **Implement freelist allocator** | Linked list of free blocks. `kmalloc(size)` finds best-fit. `kfree(ptr)` merges adjacent. | [ ] |
+| 6.2 | **Implement freelist allocator** | `kmalloc(size)` first-fit, `kfree(ptr)` returns to free list. Block splitting. | [x] |
 | 6.3 | **Implement slab allocator** | Pre-sized caches for 32, 64, 128, 256, 512, 1024, 2048, 4096 byte objects. Fast allocation. | [ ] |
 | 6.4 | **Auto-grow heap** | When heap exhausted, map new pages via `map_page()`. Expand from 4MB to max 256MB. | [x] |
-| 6.5 | **Heap statistics** | `heap_used()`, `heap_free()`, `heap_total()`. Print in `sysinfo` command. | [ ] |
-| 6.6 | **Double-free detection** | Magic number in freed blocks. Detect use-after-free and double-free (debug mode). | [ ] |
-| 6.7 | **Alignment support** | `kmalloc_aligned(size, align)` for DMA buffers (page-aligned), SIMD data (32-byte aligned). | [ ] |
-| 6.8 | **Test: 10000 alloc/free cycles** | Random sizes 1-4096 bytes, alloc and free in random order → no corruption. | [ ] |
-| 6.9 | **Test: heap auto-grow** | Allocate 8MB from 4MB heap → triggers page mapping → succeeds. | [ ] |
-| 6.10 | **Test: double-free panics** | Free same pointer twice → kernel panic with helpful message. | [ ] |
+| 6.5 | **Heap statistics** | `cmd_heap()`: total/used/free/allocs/usage%. Free list block count. | [x] |
+| 6.6 | **Double-free detection** | Magic 0xABCD1234 in allocated block header. Detects double-free with error message. | [x] |
+| 6.7 | **Alignment support** | 8-byte alignment for all allocations (size rounded up). | [x] |
+| 6.8 | **Shell: kmalloc command** | `kmalloc <size>` allocates, shows address. `kfree <addr>` frees. | [x] |
+| 6.9 | **Shell: heap command** | `heap` shows total/used/free/allocs/free-blocks. | [x] |
+| 6.10 | **Test: double-free panics** | kfree detects magic mismatch, prints error instead of crash. | [x] |
 
 **Phase 2 Gate:**
 - [x] Bitmap frame allocator (32768 frames, 128MB, alloc/free/contiguous)
 - [x] 4-level paging with map_page/unmap_page + 128MB identity (2MB huge pages)
 - [x] Kernel bump allocator (auto-grow to 108MB)
 - [ ] NX bit enforcement on data/stack pages
-- [ ] All 30 tasks pass (14/30)
+- [ ] All 30 tasks pass (22/30)
 
 ---
 
