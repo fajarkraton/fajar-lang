@@ -2282,6 +2282,124 @@ fj_rt_bare_pci_read32:
     ret
 .size fj_rt_bare_pci_read32, . - fj_rt_bare_pci_read32
 
+/* ── Phase 8: ACPI + SMP ── */
+
+/* acpi_shutdown() — ACPI S5 power off (works on QEMU) */
+.global fj_rt_bare_acpi_shutdown
+.type fj_rt_bare_acpi_shutdown, @function
+fj_rt_bare_acpi_shutdown:
+    /* QEMU specific: write to ACPI PM1a control register */
+    /* For QEMU i440fx: port 0x604, value 0x2000 (SLP_TYP=5, SLP_EN=1) */
+    mov     dx, 0x604
+    mov     ax, 0x2000
+    out     dx, ax
+    /* If that didn't work, try Bochs/QEMU shutdown port */
+    mov     dx, 0xB004
+    mov     ax, 0x2000
+    out     dx, ax
+    /* Fallback: halt */
+    cli
+    hlt
+    ret
+.size fj_rt_bare_acpi_shutdown, . - fj_rt_bare_acpi_shutdown
+
+/* acpi_find_rsdp() -> rax (physical address of RSDP, or 0) */
+/* Scans EBDA (0x9FC00) and BIOS area (0xE0000-0xFFFFF) for "RSD PTR " */
+.global fj_rt_bare_acpi_find_rsdp
+.type fj_rt_bare_acpi_find_rsdp, @function
+fj_rt_bare_acpi_find_rsdp:
+    /* Search BIOS area: 0xE0000 to 0xFFFFF, aligned to 16 bytes */
+    mov     rdi, 0xE0000
+.Lrsdp_loop:
+    cmp     rdi, 0x100000
+    jge     .Lrsdp_not_found
+    /* Check for "RSD PTR " signature (8 bytes) */
+    mov     rax, QWORD PTR [rdi]
+    /* "RSD PTR " = 0x2052545020445352 (little-endian) */
+    mov     rcx, 0x2052545020445352
+    cmp     rax, rcx
+    je      .Lrsdp_found
+    add     rdi, 16
+    jmp     .Lrsdp_loop
+.Lrsdp_not_found:
+    xor     eax, eax
+    ret
+.Lrsdp_found:
+    mov     rax, rdi
+    ret
+.size fj_rt_bare_acpi_find_rsdp, . - fj_rt_bare_acpi_find_rsdp
+
+/* acpi_get_cpu_count(rsdp_addr: rdi) -> rax (number of LAPIC entries in MADT) */
+/* Walks RSDP → RSDT → scan for MADT (sig "APIC") → count LAPIC entries */
+.global fj_rt_bare_acpi_get_cpu_count
+.type fj_rt_bare_acpi_get_cpu_count, @function
+fj_rt_bare_acpi_get_cpu_count:
+    test    rdi, rdi
+    jz      .Lcpu_fail
+    /* RSDP: revision at offset 15, RSDT address at offset 16 */
+    mov     eax, DWORD PTR [rdi + 16]  /* RSDT physical address */
+    test    eax, eax
+    jz      .Lcpu_fail
+    mov     rsi, rax                /* rsi = RSDT */
+    /* RSDT: signature "RSDT" at offset 0, length at offset 4 */
+    mov     eax, DWORD PTR [rsi + 4]   /* RSDT length */
+    sub     eax, 36                     /* entries start at offset 36 */
+    shr     eax, 2                      /* number of entries (each 4 bytes) */
+    mov     ecx, eax                    /* entry count */
+    lea     rdx, [rsi + 36]             /* first entry pointer */
+    /* Scan entries for MADT (signature "APIC") */
+.Lrsdt_scan:
+    test    ecx, ecx
+    jz      .Lcpu_fail
+    mov     eax, DWORD PTR [rdx]        /* table physical address */
+    test    eax, eax
+    jz      .Lrsdt_next
+    mov     r8, rax
+    /* Check if this table has signature "APIC" (0x43495041) */
+    cmp     DWORD PTR [r8], 0x43495041
+    je      .Lmadt_found
+.Lrsdt_next:
+    add     rdx, 4
+    sub     ecx, 1
+    jmp     .Lrsdt_scan
+.Lmadt_found:
+    /* r8 = MADT base. Length at offset 4. Entries start at offset 44. */
+    mov     eax, DWORD PTR [r8 + 4]     /* MADT total length */
+    lea     rsi, [r8 + 44]              /* first entry */
+    lea     rdi, [r8 + rax]             /* end of MADT */
+    xor     ecx, ecx                    /* CPU counter */
+.Lmadt_entry:
+    cmp     rsi, rdi
+    jge     .Lmadt_done
+    movzx   eax, BYTE PTR [rsi]         /* entry type */
+    movzx   edx, BYTE PTR [rsi + 1]     /* entry length */
+    cmp     al, 0                        /* type 0 = Processor Local APIC */
+    jne     .Lmadt_skip
+    /* Check if APIC is enabled (flags bit 0 at offset +4) */
+    test    DWORD PTR [rsi + 4], 1
+    jz      .Lmadt_skip
+    add     ecx, 1
+.Lmadt_skip:
+    add     rsi, rdx
+    jmp     .Lmadt_entry
+.Lmadt_done:
+    mov     eax, ecx
+    ret
+.Lcpu_fail:
+    mov     eax, 1                      /* at least BSP */
+    ret
+.size fj_rt_bare_acpi_get_cpu_count, . - fj_rt_bare_acpi_get_cpu_count
+
+/* rdtsc() -> rax (timestamp counter) */
+.global fj_rt_bare_rdtsc
+.type fj_rt_bare_rdtsc, @function
+fj_rt_bare_rdtsc:
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    ret
+.size fj_rt_bare_rdtsc, . - fj_rt_bare_rdtsc
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:

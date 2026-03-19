@@ -614,6 +614,10 @@ impl Interpreter {
             "kb_read_scancode",
             "kb_has_data",
             "pci_read32",
+            "acpi_shutdown",
+            "acpi_find_rsdp",
+            "acpi_get_cpu_count",
+            "rdtsc",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

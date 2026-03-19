@@ -6002,6 +6002,11 @@ impl CraneliftCompiler {
             ("fj_rt_bare_kb_read_scancode", "kb_read_scancode", &sig_ret_i64),
             ("fj_rt_bare_kb_has_data", "kb_has_data", &sig_ret_i64),
             ("fj_rt_bare_pci_read32", "pci_read32", &sig_4i64_ret_i64),
+            // Phase 8: ACPI + SMP
+            ("fj_rt_bare_acpi_shutdown", "acpi_shutdown", &sig_void),
+            ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp", &sig_ret_i64),
+            ("fj_rt_bare_acpi_get_cpu_count", "acpi_get_cpu_count", &sig_i64_ret_i64),
+            ("fj_rt_bare_rdtsc", "rdtsc", &sig_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7189,6 +7194,28 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_pci_read32", Linkage::Import, &sig_gpio4)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("pci_read32".to_string(), pci_id);
+
+        // Phase 8: ACPI + SMP
+        let acpi_shutdown_id = self
+            .module
+            .declare_function("fj_rt_bare_acpi_shutdown", Linkage::Import, &sig_halt)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("acpi_shutdown".to_string(), acpi_shutdown_id);
+        for (name, builtin) in [
+            ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp"),
+            ("fj_rt_bare_rdtsc", "rdtsc"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        let acpi_cpu_id = self
+            .module
+            .declare_function("fj_rt_bare_acpi_get_cpu_count", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("acpi_get_cpu_count".to_string(), acpi_cpu_id);
 
         Ok(())
     }

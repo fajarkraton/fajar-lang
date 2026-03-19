@@ -1416,6 +1416,9 @@ impl Interpreter {
             "kb_read_scancode" => Ok(Value::Int(-1)),
             "kb_has_data" => Ok(Value::Int(0)),
             "pci_read32" => Ok(Value::Int(0xFFFFFFFF)),
+            "acpi_shutdown" => Ok(Value::Null),
+            "acpi_find_rsdp" | "acpi_get_cpu_count" => Ok(Value::Int(0)),
+            "rdtsc" => Ok(Value::Int(0)),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"
