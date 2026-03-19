@@ -74,18 +74,18 @@ impl LinkerConfig {
                 regions: vec![
                     MemoryRegion {
                         name: "FLASH".into(),
-                        origin: 0x0010_0000, // 1MB
-                        size: 16 * 1024 * 1024,
+                        origin: 0x0010_0000, // 1MB — kernel code
+                        size: 3 * 1024 * 1024, // 3MB for .text + .rodata
                         attrs: "rx".into(),
                     },
                     MemoryRegion {
                         name: "RAM".into(),
-                        origin: 0x0200_0000,
-                        size: 64 * 1024 * 1024,
+                        origin: 0x0040_0000, // 4MB — data + bss + heap
+                        size: 124 * 1024 * 1024, // 124MB (up to 128MB identity mapped)
                         attrs: "rwx".into(),
                     },
                 ],
-                stack_size: 16384,
+                stack_size: 64 * 1024, // 64KB kernel stack
                 entry: "_start".into(),
             },
         }
@@ -1214,7 +1214,7 @@ _start:
     /* cld ; rep stosd */
     .byte 0xFC, 0xF3, 0xAB
 
-    /* --- Set up page tables --- */
+    /* --- Set up page tables: identity map first 128MB (64 × 2MB) --- */
     /* PML4[0] → PDPT at 0x71000 (present+write = 0x03) */
     /* mov eax, 0x70000 */
     .byte 0xB8, 0x00, 0x00, 0x07, 0x00
@@ -1227,14 +1227,28 @@ _start:
     /* mov dword [eax], 0x72003 */
     .byte 0xC7, 0x00, 0x03, 0x20, 0x07, 0x00
 
-    /* PD[0] → 0x0 (2MB huge page, present+write+huge = 0x83) */
-    /* mov eax, 0x72000 */
+    /* Fill PD[0..63] with 2MB huge pages: identity map 0x0 - 0x7FFFFFF (128MB) */
+    /* mov eax, 0x72000 (PD base) */
     .byte 0xB8, 0x00, 0x20, 0x07, 0x00
-    /* mov dword [eax], 0x83 */
-    .byte 0xC7, 0x00, 0x83, 0x00, 0x00, 0x00
-    /* PD[1] → 0x200000 (2nd 2MB block) */
-    /* mov dword [eax+8], 0x200083 */
-    .byte 0xC7, 0x40, 0x08, 0x83, 0x00, 0x20, 0x00
+    /* mov ecx, 0 (counter) */
+    .byte 0xB9, 0x00, 0x00, 0x00, 0x00
+    /* .Lpd_loop: (28 bytes in loop body) */
+    /* mov edx, ecx */
+    .byte 0x89, 0xCA
+    /* shl edx, 21 (edx = counter * 2MB) */
+    .byte 0xC1, 0xE2, 0x15
+    /* or edx, 0x83 (present + write + huge page) */
+    .byte 0x81, 0xCA, 0x83, 0x00, 0x00, 0x00
+    /* mov [eax + ecx*8], edx (PD entry low dword) */
+    .byte 0x89, 0x14, 0xC8
+    /* mov dword [eax + ecx*8 + 4], 0 (PD entry high dword) */
+    .byte 0xC7, 0x44, 0xC8, 0x04, 0x00, 0x00, 0x00, 0x00
+    /* add ecx, 1 (NOT inc ecx — 0x41 is REX prefix in 64-bit!) */
+    .byte 0x83, 0xC1, 0x01
+    /* cmp ecx, 64 */
+    .byte 0x83, 0xF9, 0x40
+    /* jb .Lpd_loop (28 bytes loop body + 2 bytes jb = 30, offset = -30 = 0xE2) */
+    .byte 0x72, 0xE2
 
     /* --- Load PML4 into CR3 --- */
     /* mov eax, 0x70000 */
@@ -1304,7 +1318,7 @@ _start64:
     /* Set proper stack pointer: RAM starts at 0x2000000, stack at end of 64MB */
     /* __stack_top = RAM_ORIGIN + RAM_SIZE = 0x2000000 + 0x4000000 = 0x6000000 */
     /* Actually stack is at RAM + 0x4000 (16KB after BSS) */
-    mov     rsp, 0x3F0000      /* Stack at ~4MB, within mapped 0-4MB range */
+    mov     rsp, 0x7F00000     /* Stack near top of 128MB mapped region */
 
     /* Save Multiboot2 info pointer */
     mov     r12, rdi
@@ -1668,15 +1682,15 @@ fj_rt_bare_alloc:
     mov     rax, [0x6FF00]
     test    rax, rax
     jnz     .Lalloc_bump
-    /* First call: initialize to 0x300000 */
-    mov     rax, 0x300000
+    /* First call: initialize to 0x400000 (4MB) */
+    mov     rax, 0x400000
 .Lalloc_bump:
     /* Align size to 8 bytes */
     lea     rcx, [rdi + 7]
     and     rcx, -8
     /* New bump = current + aligned_size */
     lea     rdx, [rax + rcx]
-    cmp     rdx, 0x3E0000       /* Check OOM (max ~900KB heap) */
+    cmp     rdx, 0x7000000      /* Check OOM (max 108MB heap: 4MB-112MB) */
     ja      .Lalloc_oom
     mov     [0x6FF00], rdx       /* Store new bump */
     ret
