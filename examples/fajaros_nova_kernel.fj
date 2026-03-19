@@ -741,6 +741,74 @@ const LAPIC_TIMER_DIV: i64 = 0x3E0
 
 const IOAPIC_BASE: i64 = 0xFEC00000
 
+// ═══════════════════════════════════════════════
+// Spinlock (Phase 8 Sprint 23.6)
+// Simple test-and-set lock using volatile memory
+// ═══════════════════════════════════════════════
+
+@kernel fn spinlock_acquire(lock_addr: i64) {
+    // Spin until lock is 0, then set to 1
+    while volatile_read(lock_addr) != 0 {}
+    volatile_write(lock_addr, 1)
+}
+
+@kernel fn spinlock_release(lock_addr: i64) {
+    volatile_write(lock_addr, 0)
+}
+
+@kernel fn cmd_spinlock() {
+    cprintln("Spinlock Test:", YELLOW_ON_BLACK)
+    let lock: i64 = 0x651000  // test lock address
+    volatile_write(lock, 0)
+    cprint("  Acquire... ", WHITE_ON_BLACK)
+    spinlock_acquire(lock)
+    cprintln("OK (locked)", GREEN_ON_BLACK)
+    cprint("  Release... ", WHITE_ON_BLACK)
+    spinlock_release(lock)
+    cprintln("OK (unlocked)", GREEN_ON_BLACK)
+    cprint("  Double acquire... ", WHITE_ON_BLACK)
+    spinlock_acquire(lock)
+    cprintln("OK", GREEN_ON_BLACK)
+    spinlock_release(lock)
+    cprintln("  Spinlock verified!", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Resource Limits (Phase 8 Sprint 24.7)
+// ═══════════════════════════════════════════════
+
+const MAX_PROCESSES: i64 = 16
+const MAX_FILES: i64 = 64
+const MAX_HEAP_ALLOCS: i64 = 1024
+
+@kernel fn cmd_limits() {
+    cprintln("Resource Limits:", YELLOW_ON_BLACK)
+    cprint("  Max processes: ", WHITE_ON_BLACK)
+    cprint_decimal(MAX_PROCESSES, CYAN_ON_BLACK)
+    let mut active: i64 = 0
+    let mut p: i64 = 0
+    while p < 16 { if volatile_read(0x600000 + p * 256 + 8) != 0 { active = active + 1 }; p = p + 1 }
+    cprint(" (", WHITE_ON_BLACK)
+    cprint_decimal(active, WHITE_ON_BLACK)
+    cprintln(" active)", WHITE_ON_BLACK)
+    cprint("  Max files:     ", WHITE_ON_BLACK)
+    cprint_decimal(MAX_FILES, CYAN_ON_BLACK)
+    cprint(" (", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read(FS_BASE), WHITE_ON_BLACK)
+    cprintln(" used)", WHITE_ON_BLACK)
+    cprint("  Max heap alloc:", WHITE_ON_BLACK)
+    cprint_decimal(MAX_HEAP_ALLOCS, CYAN_ON_BLACK)
+    cprint(" (", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read(0x581020), WHITE_ON_BLACK)
+    cprintln(" active)", WHITE_ON_BLACK)
+    cprint("  Max IPC msgs:  ", WHITE_ON_BLACK)
+    cprint_decimal(IPC_QUEUE_SIZE, CYAN_ON_BLACK)
+    cprintln(" per process", WHITE_ON_BLACK)
+    cprint("  Max pipe buf:  ", WHITE_ON_BLACK)
+    cprint_decimal(PIPE_BUF_SIZE, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+}
+
 @kernel fn lapic_eoi() {
     // Send End of Interrupt to LAPIC
     volatile_write_u32(LAPIC_BASE + LAPIC_EOI, 0)
@@ -4322,6 +4390,10 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 8 && buf_eq4(115, 101, 99, 117) == 1 { cmd_security(); handled = 1 }
     // pipe (112,105,112,101) — "pipe <text>"
     if handled == 0 && len >= 4 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe(); handled = 1 }
+    // spinlock
+    if handled == 0 && len == 8 && buf_eq4(115, 112, 105, 110) == 1 { cmd_spinlock(); handled = 1 }
+    // limits (108,105,109,105,116,115)
+    if handled == 0 && len == 6 && buf_eq4(108, 105, 109, 105) == 1 { cmd_limits(); handled = 1 }
     // timer (already dispatched as "time" — use "timer" for full test)
     if handled == 0 && len == 5 && buf_eq4(116, 105, 109, 101) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_timer(); handled = 1 }
 

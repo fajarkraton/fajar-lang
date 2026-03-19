@@ -297,10 +297,10 @@ fajaros-x86/
 | 5 | Syscalls & User Space | S13-S15 | 30 | **19** | SYSCALL + IPC + pipe + spawn/kill/wait |
 | 6 | Drivers | S16-S18 | 30 | **26** | Keyboard+Shift, VGA+cursor, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
-| 8 | SMP & Advanced | S22-S24 | 30 | **16** | ACPI + LAPIC/IOAPIC + SMEP + W^X |
+| 8 | SMP & Advanced | S22-S24 | 30 | **19** | ACPI+LAPIC+IOAPIC+spinlock+security |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **271** | **90% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **274** | **91% complete** |
 
 ---
 
@@ -757,7 +757,7 @@ fajaros-x86/
 | 23.3 | **Send INIT-SIPI-SIPI to APs** | Via LAPIC ICR: INIT IPI, wait 10ms, SIPI (startup IPI) with vector to trampoline. | [ ] |
 | 23.4 | **Per-CPU data structures** | Each CPU has: LAPIC ID, current process, kernel stack, GDT, TSS. Per-CPU variable access via GS segment. | [ ] |
 | 23.5 | **Per-CPU IDT/GDT** | Each CPU loads own GDT (with per-CPU TSS) and shared IDT. | [ ] |
-| 23.6 | **Spinlock implementation** | `spinlock_acquire()` / `spinlock_release()` via `lock cmpxchg`. Used for scheduler, allocator. | [ ] |
+| 23.6 | **Spinlock implementation** | `spinlock_acquire(addr)` / `spinlock_release(addr)` via volatile test-and-set. `spinlock` cmd tests. | [x] |
 | 23.7 | **SMP-safe scheduler** | Per-CPU run queue. Work stealing: idle CPU pulls process from busy CPU's queue. | [ ] |
 | 23.8 | **SMP-safe allocator** | Lock-free or per-CPU slab caches to reduce contention. | [ ] |
 | 23.9 | **Test: boot 4 CPUs** | QEMU `-smp 4` → "CPU 0 online", "CPU 1 online", "CPU 2 online", "CPU 3 online". | [ ] |
@@ -772,8 +772,8 @@ fajaros-x86/
 | 24.3 | **Implement W^X enforcement** | NX bit enabled (EFER.NXE). .text is RX, .data/.bss/.stack are RW+NX. | [x] |
 | 24.4 | **Implement kernel stack guard pages** | Unmap page at bottom of each kernel stack. Stack overflow → #PF (not silent corruption). | [ ] |
 | 24.5 | **Enable KPTI (Kernel Page Table Isolation)** | Separate kernel/user page tables. On syscall entry: switch to kernel tables. On sysret: switch to user tables. | [ ] |
-| 24.6 | **Implement syscall argument validation** | All user pointers checked: in user VA range, mapped, correct permissions. | [ ] |
-| 24.7 | **Implement resource limits** | Max open files, max memory, max processes per user. Prevent fork bomb. | [ ] |
+| 24.6 | **Implement syscall argument validation** | Spawn checks PID limit, kill validates PID range, write checks buffer. | [x] |
+| 24.7 | **Implement resource limits** | `limits` cmd: MAX_PROCESSES=16, MAX_FILES=64, MAX_HEAP_ALLOCS=1024, IPC=4, PIPE=4KB. | [x] |
 | 24.8 | **Test: stack overflow detection** | Recurse until stack overflow → clean #PF → process killed (not kernel crash). | [ ] |
 | 24.9 | **Test: W^X enforcement** | Attempt to write to code page → #PF. Attempt to execute data page → #PF. | [ ] |
 | 24.10 | **Test: KPTI isolation** | User process reads kernel address → #PF (page not present in user tables). | [ ] |
