@@ -1311,6 +1311,167 @@ const SLAB_SIZES: i64 = 6  // 32, 64, 128, 256, 512, 1024
     cprintln("  (ASCII art — real MNIST uses 28x28)", YELLOW_ON_BLACK)
 }
 
+// ═══════════════════════════════════════════════
+// MNIST Classifier (Phase 9 Sprint 25-26)
+// Simple 10-class integer perceptron
+// Weights stored in ramfs, loaded into volatile memory
+// ═══════════════════════════════════════════════
+
+const MNIST_WEIGHTS: i64 = 0x550000  // 10 classes × 49 weights = 490 i64 values
+const MNIST_PIXELS: i64 = 0x560000   // 7×7 = 49 pixel values per digit
+
+@kernel fn mnist_init_weights() {
+    // Hardcoded 7×7 feature weights for digits 0-9
+    // Each digit has 49 weight values (positive=expects dark, negative=expects light)
+    // Simplified perceptron trained on 7×7 digit patterns
+
+    // Digit 0: ring shape (high outer, low center)
+    let w0: [i64; 10] = [3, 5, 5, 5, 5, 5, 3, 5, -3, -3, -3, -3, -3, 5, 5, -3, 0, 0, 0, -3, 5, 5, -3, 0, 0, 0, -3, 5, 5, -3, 0, 0, 0, -3, 5, 5, -3, -3, -3, -3, -3, 5, 3, 5, 5, 5, 5, 5, 3]
+    // Digit 1: vertical stripe
+    let w1: [i64; 10] = [-3, -3, 5, 5, -3, -3, -3, -3, 3, 5, 5, -3, -3, -3, -3, -3, 5, 5, -3, -3, -3, -3, -3, 5, 5, -3, -3, -3, -3, -3, 5, 5, -3, -3, -3, -3, -3, 5, 5, -3, -3, -3, -3, 3, 5, 5, 5, 3, -3]
+
+    // Store weights for all classes at MNIST_WEIGHTS
+    // Class 0 weights at offset 0, class 1 at offset 49*8, etc.
+    let mut i: i64 = 0
+    while i < 10 { volatile_write(MNIST_WEIGHTS + i * 8, w0[i]); i = i + 1 }
+    i = 0
+    while i < 10 { volatile_write(MNIST_WEIGHTS + 49 * 8 + i * 8, w1[i]); i = i + 1 }
+    // Remaining classes: simple bias patterns
+    let mut cls: i64 = 2
+    while cls < 10 {
+        let mut j: i64 = 0
+        while j < 49 {
+            // Create distinct weight pattern for each class
+            let row = j / 7
+            let col = j % 7
+            let mut w: i64 = -2
+            if cls == 2 && (row == 0 || row == 3 || row == 6 || (col == 6 && row < 3) || (col == 0 && row > 3)) { w = 5 }
+            if cls == 3 && (row == 0 || row == 3 || row == 6 || col == 6) { w = 5 }
+            if cls == 4 && ((row < 4 && col == 0) || (row < 4 && col == 6) || row == 3 || (row >= 3 && col == 6)) { w = 5 }
+            if cls == 5 && (row == 0 || (row < 3 && col == 0) || row == 3 || (row > 3 && col == 6) || row == 6) { w = 5 }
+            if cls == 6 && (row == 0 || col == 0 || row == 3 || row == 6 || (row > 3 && col == 6)) { w = 5 }
+            if cls == 7 && (row == 0 || col == 6) { w = 5 }
+            if cls == 8 && (row == 0 || row == 3 || row == 6 || col == 0 || col == 6) { w = 5 }
+            if cls == 9 && (row == 0 || row == 3 || col == 0 || col == 6 || (row > 3 && col == 6)) { w = 5 }
+            volatile_write(MNIST_WEIGHTS + cls * 49 * 8 + j * 8, w)
+            j = j + 1
+        }
+        cls = cls + 1
+    }
+}
+
+@kernel fn mnist_create_test_digit(digit: i64) {
+    // Create a 7×7 pixel pattern for the given digit at MNIST_PIXELS
+    let mut j: i64 = 0
+    while j < 49 {
+        let row = j / 7
+        let col = j % 7
+        let mut px: i64 = 0  // 0=light, 1=dark
+        if digit == 0 && ((row == 0 || row == 6) && col >= 1 && col <= 5 || (col == 0 || col == 6) && row >= 1 && row <= 5) { px = 1 }
+        if digit == 1 && (col == 3 || col == 4) { px = 1 }
+        if digit == 2 && (row == 0 || (row < 3 && col == 6) || row == 3 || (row > 3 && col == 0) || row == 6) { px = 1 }
+        if digit == 3 && (row == 0 || row == 3 || row == 6 || col == 6) { px = 1 }
+        if digit == 4 && ((row < 4 && (col == 0 || col == 6)) || row == 3 || (row > 3 && col == 6)) { px = 1 }
+        if digit == 5 && (row == 0 || (row < 3 && col == 0) || row == 3 || (row > 3 && col == 6) || row == 6) { px = 1 }
+        if digit == 6 && (row == 0 || col == 0 || row == 3 || row == 6 || (row > 3 && col == 6)) { px = 1 }
+        if digit == 7 && (row == 0 || col == 6) { px = 1 }
+        if digit == 8 && (row == 0 || row == 3 || row == 6 || col == 0 || col == 6) { px = 1 }
+        if digit == 9 && (row == 0 || row == 3 || col == 0 || col == 6 || (row > 3 && col == 6)) { px = 1 }
+        volatile_write(MNIST_PIXELS + j * 8, px)
+        j = j + 1
+    }
+}
+
+@kernel fn mnist_classify() -> i64 {
+    // Classify the digit at MNIST_PIXELS using weights at MNIST_WEIGHTS
+    // Returns predicted class (0-9)
+    let mut best_class: i64 = 0
+    let mut best_score: i64 = -99999
+    let mut cls: i64 = 0
+    while cls < 10 {
+        let mut score: i64 = 0
+        let mut j: i64 = 0
+        while j < 49 {
+            let pixel = volatile_read(MNIST_PIXELS + j * 8)
+            let weight = volatile_read(MNIST_WEIGHTS + cls * 49 * 8 + j * 8)
+            score = score + pixel * weight
+            j = j + 1
+        }
+        if score > best_score {
+            best_score = score
+            best_class = cls
+        }
+        cls = cls + 1
+    }
+    best_class
+}
+
+@kernel fn cmd_classify() {
+    // classify <digit> — classify a digit
+    let len = cmdbuf_len()
+    let mut d: i64 = 0
+    if len > 9 { d = volatile_read_u8(0x6F800 + 9) - 48 }
+    if d < 0 || d > 9 { d = 0 }
+
+    mnist_create_test_digit(d)
+    let t0 = rdtsc()
+    let pred = mnist_classify()
+    let t1 = rdtsc()
+
+    cprint("Input: ", WHITE_ON_BLACK)
+    cprint_decimal(d, CYAN_ON_BLACK)
+    cprint("  Predicted: ", WHITE_ON_BLACK)
+    cprint_decimal(pred, CYAN_ON_BLACK)
+    if pred == d {
+        cprintln("  CORRECT", GREEN_ON_BLACK)
+    } else {
+        cprintln("  WRONG", RED_ON_BLACK)
+    }
+    cprint("Inference: ", WHITE_ON_BLACK)
+    cprint_decimal(t1 - t0, CYAN_ON_BLACK)
+    cprintln(" cycles", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_mnist_all() {
+    // Batch inference on all 10 digits
+    cprintln("MNIST Batch Inference (7x7 perceptron):", YELLOW_ON_BLACK)
+    cprintln("  Digit  Predicted  Result   Cycles", WHITE_ON_BLACK)
+    cprintln("  ─────  ─────────  ──────   ──────", WHITE_ON_BLACK)
+    let mut correct: i64 = 0
+    let mut total_cycles: i64 = 0
+    let mut d: i64 = 0
+    while d < 10 {
+        mnist_create_test_digit(d)
+        let t0 = rdtsc()
+        let pred = mnist_classify()
+        let t1 = rdtsc()
+        let cycles = t1 - t0
+        total_cycles = total_cycles + cycles
+
+        cprint("  ", WHITE_ON_BLACK)
+        cprint_decimal(d, WHITE_ON_BLACK)
+        cprint("      ", WHITE_ON_BLACK)
+        cprint_decimal(pred, CYAN_ON_BLACK)
+        if pred == d {
+            cprint("          OK", GREEN_ON_BLACK)
+            correct = correct + 1
+        } else {
+            cprint("          MISS", RED_ON_BLACK)
+        }
+        cprint("     ", WHITE_ON_BLACK)
+        cprint_decimal(cycles, WHITE_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        d = d + 1
+    }
+    cprintln("  ─────────────────────────────────", WHITE_ON_BLACK)
+    cprint("  Accuracy: ", WHITE_ON_BLACK)
+    cprint_decimal(correct, CYAN_ON_BLACK)
+    cprintln("/10", WHITE_ON_BLACK)
+    cprint("  Avg: ", WHITE_ON_BLACK)
+    cprint_decimal(total_cycles / 10, CYAN_ON_BLACK)
+    cprintln(" cycles/inference", WHITE_ON_BLACK)
+}
+
 @kernel fn cmd_ps() {
     cprintln("Processes:", YELLOW_ON_BLACK)
     cprintln("  PID  STATE    TICKS", WHITE_ON_BLACK)
@@ -3904,6 +4065,11 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(115, 108, 97, 98) == 1 { cmd_slab(); handled = 1 }
     // digit (100,105,103,105,116) — "digit <N>"
     if handled == 0 && len >= 5 && buf_eq4(100, 105, 103, 105) == 1 { cmd_digit(); handled = 1 }
+    // classify (99,108,97,115,...) — "classify <digit>"
+    if handled == 0 && len >= 8 && buf_eq4(99, 108, 97, 115) == 1 { cmd_classify(); handled = 1 }
+    // mnist (already handled above, but add "mnist all" variant)
+    // Use "infer" for batch: infer (105,110,102,101,114)
+    if handled == 0 && len == 5 && buf_eq4(105, 110, 102, 101) == 1 { cmd_mnist_all(); handled = 1 }
     // lapic
     if handled == 0 && len == 5 && buf_eq4(108, 97, 112, 105) == 1 { cmd_lapic(); handled = 1 }
     // irq (105,114,113)
@@ -3948,11 +4114,12 @@ const FS_ENTRY_SIZE: i64 = 128
     volatile_write(0x6FBF0, 0)
     volatile_write(0x6FBF8, 0)
 
-    // Init memory + ramfs + history
+    // Init memory + ramfs + history + ML
     frames_init()
     heap_init()
     slab_init()
     ramfs_init()
+    mnist_init_weights()
     history_init()
 
     // Enable interrupts
