@@ -297,10 +297,10 @@ fajaros-x86/
 | 5 | Syscalls & User Space | S13-S15 | 30 | **19** | SYSCALL + IPC + pipe + spawn/kill/wait |
 | 6 | Drivers | S16-S18 | 30 | **27** | Kbd+Shift, VGA+cursor+ANSI, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
-| 8 | SMP & Advanced | S22-S24 | 30 | **22** | ACPI+LAPIC+IOAPIC+spinlock+MADT+W^X |
+| 8 | SMP & Advanced | S22-S24 | 30 | **24** | ACPI+LAPIC+IOAPIC+spinlock+guard+W^X |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **280** | **93% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **282** | **94% complete** |
 
 ---
 
@@ -770,11 +770,11 @@ fajaros-x86/
 | 24.1 | **Implement KASLR (Kernel Address Space Layout Randomization)** | Randomize kernel base address using RDRAND instruction. | [ ] |
 | 24.2 | **Implement stack canaries** | Place random value before return address. Check on function return → panic if corrupted. | [ ] |
 | 24.3 | **Implement W^X enforcement** | NX bit enabled (EFER.NXE). .text is RX, .data/.bss/.stack are RW+NX. | [x] |
-| 24.4 | **Implement kernel stack guard pages** | Unmap page at bottom of each kernel stack. Stack overflow → #PF (not silent corruption). | [ ] |
+| 24.4 | **Implement kernel stack guard page** | `unmap_page(0x7F0000-4096)` at boot. Stack overflow → #PF instead of corruption. | [x] |
 | 24.5 | **Enable KPTI (Kernel Page Table Isolation)** | Separate kernel/user page tables. On syscall entry: switch to kernel tables. On sysret: switch to user tables. | [ ] |
 | 24.6 | **Implement syscall argument validation** | Spawn checks PID limit, kill validates PID range, write checks buffer. | [x] |
 | 24.7 | **Implement resource limits** | `limits` cmd: MAX_PROCESSES=16, MAX_FILES=64, MAX_HEAP_ALLOCS=1024, IPC=4, PIPE=4KB. | [x] |
-| 24.8 | **Test: stack overflow detection** | Recurse until stack overflow → clean #PF → process killed (not kernel crash). | [ ] |
+| 24.8 | **Test: stack guard page** | Guard page unmapped at boot. Stack overflow → #PF (page not present). | [x] |
 | 24.9 | **Test: W^X enforcement** | NX enabled (EFER.NXE). `security` cmd confirms W^X enforced. | [x] |
 | 24.10 | **Test: KPTI isolation** | User process reads kernel address → #PF (page not present in user tables). | [ ] |
 

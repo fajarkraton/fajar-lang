@@ -4474,6 +4474,9 @@ const FS_ENTRY_SIZE: i64 = 128
         write_cr4(cr4 | (1 << 20))
     }
 
+    // Stack guard page: unmap bottom of stack to catch overflow
+    unmap_page(0x7F0000 - 4096)  // guard page below stack bottom
+
     // Init memory + IPC + ramfs + history + ML
     frames_init()
     heap_init()
