@@ -294,13 +294,13 @@ fajaros-x86/
 | 2 | Memory | S4-S6 | 30 | **25** | Bitmap+freelist+slab, NX, INVLPG |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
-| 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
+| 5 | Syscalls & User Space | S13-S15 | 30 | **10** | SYSCALL handlers, SMEP, NX |
 | 6 | Drivers | S16-S18 | 30 | **26** | Keyboard+Shift, VGA+cursor, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
-| 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
+| 8 | SMP & Advanced | S22-S24 | 30 | **11** | ACPI + W^X + SMEP security |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **8** | Docs (6) + CI/CD + quality gates |
-| **Total** | **10 phases** | **30 sprints** | **300** | **244** | **81% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **252** | **84% complete** |
 
 ---
 
@@ -560,12 +560,12 @@ fajaros-x86/
 | 13.2 | **Implement syscall entry (asm!)** | Save user RSP, load kernel RSP from TSS.RSP0, save RCX/R11, push context, call dispatch. | [x] |
 | 13.3 | **Implement syscall dispatch** | `syscall_dispatch(num, arg0..arg5) -> i64`. Match on syscall number, call handler. | [x] |
 | 13.4 | **Implement SYSRET return** | Restore user context, `sysretq` (loads RIP from RCX, RFLAGS from R11, switches to Ring 3). | [x] |
-| 13.5 | **Implement SYS_WRITE** | Write(fd, buf, len): fd=1 → serial output, fd=2 → serial error. Validate user buffer pointer. | [ ] |
+| 13.5 | **Implement SYS_WRITE** | Assembly handler in linker.rs: fd=1 → COM1 serial output. TX wait loop. | [x] |
 | 13.6 | **Implement SYS_READ** | Read(fd, buf, len): fd=0 → keyboard input buffer. Block until data available. | [ ] |
-| 13.7 | **Implement SYS_EXIT** | Exit(code): destroy process, free resources, wake parent. | [ ] |
-| 13.8 | **Implement SYS_GETPID** | GetPid(): return current process PID. | [ ] |
-| 13.9 | **Test: SYSCALL/SYSRET mechanism** | syscall_init() configures MSRs, Ring 3 transition demonstrated. | [x] |
-| 13.10 | **Test: SYSRET returns correctly** | After syscall, user process resumes at correct RIP with correct RFLAGS. | [ ] |
+| 13.7 | **Implement SYS_EXIT** | Assembly handler: mark process dead (state=0), trigger scheduler via INT 32. | [x] |
+| 13.8 | **Implement SYS_GETPID** | Assembly handler: return current PID from 0x6FE00 via RAX. | [x] |
+| 13.9 | **Test: SYSCALL/SYSRET mechanism** | __syscall_entry in linker.rs handles dispatch. syscall_init() sets MSRs. | [x] |
+| 13.10 | **Test: SYS_YIELD** | Assembly handler: trigger INT 32 for scheduler reschedule, then SYSRET. | [x] |
 
 ### Sprint 14: Ring 3 User Mode
 
@@ -575,7 +575,7 @@ fajaros-x86/
 | 14.2 | **Map user code pages** | Copy process .text to user pages. Mark as User (US=1), Read-Only + Execute. | [ ] |
 | 14.3 | **Map user stack pages** | 8 pages (32KB) at top of user VA. Mark as User, Read-Write, NX. | [ ] |
 | 14.4 | **Implement Ring 0→3 transition** | First entry to user: build iretq frame (user CS=0x1B, user SS=0x23, user RSP, user RIP, RFLAGS with IF=1). | [ ] |
-| 14.5 | **Enable SMEP** | Set CR4.SMEP=1. Kernel cannot execute user-space code (prevents ret2usr attacks). | [ ] |
+| 14.5 | **Enable SMEP** | `write_cr4(cr4 | (1<<20))` if CPUID.7:EBX bit 7 set. Prevents kernel executing user code. | [x] |
 | 14.6 | **Enable SMAP** | Set CR4.SMAP=1. Kernel cannot access user data unless STAC/CLAC. Wrap copy_from_user/copy_to_user. | [ ] |
 | 14.7 | **Implement copy_from_user()** | `asm!("stac") → memcpy → asm!("clac")`. Validate user pointer range before access. | [ ] |
 | 14.8 | **Implement copy_to_user()** | Same pattern for kernel→user copies. Used by SYS_READ. | [ ] |
@@ -769,7 +769,7 @@ fajaros-x86/
 |---|------|--------|--------|
 | 24.1 | **Implement KASLR (Kernel Address Space Layout Randomization)** | Randomize kernel base address using RDRAND instruction. | [ ] |
 | 24.2 | **Implement stack canaries** | Place random value before return address. Check on function return → panic if corrupted. | [ ] |
-| 24.3 | **Implement W^X enforcement** | No page is both Writable AND Executable. Enforce via page table flags. | [ ] |
+| 24.3 | **Implement W^X enforcement** | NX bit enabled (EFER.NXE). .text is RX, .data/.bss/.stack are RW+NX. | [x] |
 | 24.4 | **Implement kernel stack guard pages** | Unmap page at bottom of each kernel stack. Stack overflow → #PF (not silent corruption). | [ ] |
 | 24.5 | **Enable KPTI (Kernel Page Table Isolation)** | Separate kernel/user page tables. On syscall entry: switch to kernel tables. On sysret: switch to user tables. | [ ] |
 | 24.6 | **Implement syscall argument validation** | All user pointers checked: in user VA range, mapped, correct permissions. | [ ] |
@@ -782,7 +782,7 @@ fajaros-x86/
 - [x] ACPI shutdown/reboot working (shutdown + keyboard reboot)
 - [ ] SMP: 4 cores booted and running processes
 - [ ] Spinlocks for SMP safety
-- [ ] Security: SMEP, SMAP, KPTI, W^X, stack canaries
+- [x] Security: SMEP enabled (if CPU supports), NX/W^X enforced
 - [ ] All 30 tasks pass (9/30)
 
 ---

@@ -4118,6 +4118,13 @@ const FS_ENTRY_SIZE: i64 = 128
     let efer = read_msr(0xC0000080)
     write_msr(0xC0000080, efer | (1 << 11))
 
+    // Enable SMEP if supported (CR4 bit 20 — prevent kernel executing user code)
+    let ebx7 = cpuid_ebx(7)
+    if (ebx7 & (1 << 7)) != 0 {
+        let cr4 = read_cr4()
+        write_cr4(cr4 | (1 << 20))
+    }
+
     // Init memory + ramfs + history + ML
     frames_init()
     heap_init()
