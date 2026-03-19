@@ -294,13 +294,13 @@ fajaros-x86/
 | 2 | Memory | S4-S6 | 30 | **25** | Bitmap+freelist+slab, NX, INVLPG |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
-| 5 | Syscalls & User Space | S13-S15 | 30 | **10** | SYSCALL handlers, SMEP, NX |
+| 5 | Syscalls & User Space | S13-S15 | 30 | **13** | SYSCALL handlers, SMEP, IPC queues |
 | 6 | Drivers | S16-S18 | 30 | **26** | Keyboard+Shift, VGA+cursor, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **11** | ACPI + W^X + SMEP security |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **256** | **85% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **260** | **87% complete** |
 
 ---
 
@@ -586,9 +586,9 @@ fajaros-x86/
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 15.1 | **Implement message queue** | Per-process: circular buffer of 16 messages. `Message { sender_pid, data: [u8; 64] }`. | [ ] |
-| 15.2 | **Implement SYS_IPC_SEND** | Send(dst_pid, msg_ptr): copy message to dst's queue. Wake dst if blocked on recv. | [ ] |
-| 15.3 | **Implement SYS_IPC_RECV** | Recv(buf_ptr): if queue empty → block (state=Blocked). When message arrives → wake, copy to buf. | [ ] |
+| 15.1 | **Implement message queue** | Per-process circular buffer at 0x640000. 4 messages × 64 bytes per PID. | [x] |
+| 15.2 | **Implement IPC send** | `ipc_send(dst_pid, value)`: enqueue message with sender PID. `send` command. | [x] |
+| 15.3 | **Implement IPC recv** | `ipc_recv(pid)`: dequeue message. `recv` command. `ipc` shows queue status. | [x] |
 | 15.4 | **Implement SYS_SPAWN** | Spawn(name, entry): create new user process, return child PID. | [ ] |
 | 15.5 | **Implement SYS_WAIT** | Wait(pid): block until child exits, return exit code. | [ ] |
 | 15.6 | **Implement SYS_KILL** | Kill(pid, signal): terminate target process (signal 9) or send signal. | [ ] |

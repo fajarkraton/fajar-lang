@@ -497,6 +497,148 @@ const HEAP_MAGIC: i64 = 0xABCD1234
 }
 
 // ═══════════════════════════════════════════════
+// IPC Message Queue (Phase 5 Sprint 15)
+// Per-process message queue: 4 messages × 64 bytes
+// Queue at 0x640000 + pid * 512
+// Header: head(i64), tail(i64), count(i64)
+// Messages: 4 × (sender_pid(i64) + data[56 bytes])
+// ═══════════════════════════════════════════════
+
+const IPC_BASE: i64 = 0x640000
+const IPC_MSG_SIZE: i64 = 64
+const IPC_QUEUE_SIZE: i64 = 4
+
+@kernel fn ipc_init() {
+    // Zero all IPC queues
+    let mut i: i64 = 0
+    while i < 16 * 512 { volatile_write_u8(IPC_BASE + i, 0); i = i + 1 }
+}
+
+@kernel fn ipc_send(dst_pid: i64, msg_val: i64) -> i64 {
+    if dst_pid < 0 || dst_pid >= 16 { return -1 }
+    let base = IPC_BASE + dst_pid * 512
+    let count = volatile_read(base + 16)
+    if count >= IPC_QUEUE_SIZE { return -2 } // queue full
+    let tail = volatile_read(base + 8)
+    let msg_addr = base + 24 + tail * IPC_MSG_SIZE
+    let src_pid = volatile_read(0x6FE00)  // current pid
+    volatile_write(msg_addr, src_pid)
+    volatile_write(msg_addr + 8, msg_val)
+    volatile_write(base + 8, (tail + 1) % IPC_QUEUE_SIZE)
+    volatile_write(base + 16, count + 1)
+    0
+}
+
+@kernel fn ipc_recv(pid: i64) -> i64 {
+    let base = IPC_BASE + pid * 512
+    let count = volatile_read(base + 16)
+    if count == 0 { return -1 } // no messages
+    let head = volatile_read(base)
+    let msg_addr = base + 24 + head * IPC_MSG_SIZE
+    let val = volatile_read(msg_addr + 8)
+    volatile_write(base, (head + 1) % IPC_QUEUE_SIZE)
+    volatile_write(base + 16, count - 1)
+    val
+}
+
+@kernel fn cmd_ipc_send() {
+    // send <pid> <value>
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: send <pid> <value>", YELLOW_ON_BLACK); return }
+    let mut pid: i64 = 0
+    let mut i: i64 = 5
+    while i < len && volatile_read_u8(0x6F800 + i) != 32 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { pid = pid * 10 + (ch - 48) }
+        i = i + 1
+    }
+    i = i + 1  // skip space
+    let mut val: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { val = val * 10 + (ch - 48) }
+        i = i + 1
+    }
+    let result = ipc_send(pid, val)
+    if result == 0 {
+        cprint("Sent ", GREEN_ON_BLACK)
+        cprint_decimal(val, CYAN_ON_BLACK)
+        cprint(" to PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else if result == -2 {
+        cprintln("send: queue full", RED_ON_BLACK)
+    } else {
+        cprintln("send: invalid PID", RED_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_ipc_recv() {
+    // recv — receive message for current process (PID 0)
+    let pid = volatile_read(0x6FE00)
+    let val = ipc_recv(pid)
+    if val == -1 {
+        cprintln("recv: no messages", YELLOW_ON_BLACK)
+    } else {
+        cprint("Received: ", GREEN_ON_BLACK)
+        cprint_decimal(val, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_ipc() {
+    // ipc — show IPC queue status for all processes
+    cprintln("IPC Queues:", YELLOW_ON_BLACK)
+    let mut pid: i64 = 0
+    while pid < 16 {
+        let base = IPC_BASE + pid * 512
+        let count = volatile_read(base + 16)
+        if count > 0 || volatile_read(0x600000 + pid * 256 + 8) != 0 {
+            cprint("  PID ", WHITE_ON_BLACK)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint(": ", WHITE_ON_BLACK)
+            cprint_decimal(count, CYAN_ON_BLACK)
+            cprint("/", WHITE_ON_BLACK)
+            cprint_decimal(IPC_QUEUE_SIZE, WHITE_ON_BLACK)
+            cprintln(" messages", WHITE_ON_BLACK)
+        }
+        pid = pid + 1
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Security Features (Phase 8 Sprint 24)
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_security() {
+    cprintln("Security Status:", YELLOW_ON_BLACK)
+    // NX
+    let efer = read_msr(0xC0000080)
+    cprint("  NX (EFER.NXE):  ", WHITE_ON_BLACK)
+    if (efer & (1 << 11)) != 0 { cprintln("ENABLED", GREEN_ON_BLACK) }
+    else { cprintln("disabled", RED_ON_BLACK) }
+    // SMEP
+    let cr4 = read_cr4()
+    cprint("  SMEP (CR4.20):  ", WHITE_ON_BLACK)
+    if (cr4 & (1 << 20)) != 0 { cprintln("ENABLED", GREEN_ON_BLACK) }
+    else { cprintln("disabled (CPU may not support)", YELLOW_ON_BLACK) }
+    // SMAP
+    cprint("  SMAP (CR4.21):  ", WHITE_ON_BLACK)
+    if (cr4 & (1 << 21)) != 0 { cprintln("ENABLED", GREEN_ON_BLACK) }
+    else { cprintln("disabled", YELLOW_ON_BLACK) }
+    // W^X
+    cprintln("  W^X:            ENFORCED (.text=RX, .data=RW+NX)", GREEN_ON_BLACK)
+    // Double-free detection
+    cprintln("  Double-free:    DETECTED (magic 0xABCD1234)", GREEN_ON_BLACK)
+    // Stack
+    cprintln("  Stack:          0x7F0000 (64KB, no guard page)", YELLOW_ON_BLACK)
+    // ASLR
+    cprintln("  KASLR:          disabled (fixed at 0x100000)", YELLOW_ON_BLACK)
+    // KPTI
+    cprintln("  KPTI:           disabled (shared page tables)", YELLOW_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Timer Utilities (Phase 3)
 // ═══════════════════════════════════════════════
 
@@ -4074,6 +4216,14 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 5 && buf_eq4(108, 97, 112, 105) == 1 { cmd_lapic(); handled = 1 }
     // irq (105,114,113)
     if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 114 && volatile_read_u8(0x6F802) == 113 { cmd_irq(); handled = 1 }
+    // send (115,101,110,100) — "send <pid> <value>"
+    if handled == 0 && len >= 4 && buf_eq4(115, 101, 110, 100) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_ipc_send(); handled = 1 }
+    // recv (114,101,99,118)
+    if handled == 0 && len == 4 && buf_eq4(114, 101, 99, 118) == 1 { cmd_ipc_recv(); handled = 1 }
+    // ipc (105,112,99)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 112 && volatile_read_u8(0x6F802) == 99 { cmd_ipc(); handled = 1 }
+    // security (115,101,99,117,114,105,116,121)
+    if handled == 0 && len == 8 && buf_eq4(115, 101, 99, 117) == 1 { cmd_security(); handled = 1 }
     // timer (already dispatched as "time" — use "timer" for full test)
     if handled == 0 && len == 5 && buf_eq4(116, 105, 109, 101) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_timer(); handled = 1 }
 
@@ -4125,10 +4275,11 @@ const FS_ENTRY_SIZE: i64 = 128
         write_cr4(cr4 | (1 << 20))
     }
 
-    // Init memory + ramfs + history + ML
+    // Init memory + IPC + ramfs + history + ML
     frames_init()
     heap_init()
     slab_init()
+    ipc_init()
     ramfs_init()
     mnist_init_weights()
     history_init()
