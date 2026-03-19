@@ -1135,6 +1135,8 @@ impl TypeChecker {
             "pic_eoi",
             "pit_init",
             "read_timer_ticks",
+            "str_byte_at",
+            "str_len",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

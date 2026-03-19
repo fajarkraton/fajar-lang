@@ -1387,6 +1387,25 @@ impl Interpreter {
             "sse_enable" => Ok(Value::Null),
             "idt_init" | "pic_remap" | "pic_eoi" | "pit_init" => Ok(Value::Null),
             "read_timer_ticks" => Ok(Value::Int(0)),
+            "str_byte_at" => {
+                if args.len() >= 2 {
+                    if let (Value::Str(s), Value::Int(idx)) = (&args[0], &args[1]) {
+                        let i = *idx as usize;
+                        if i < s.len() {
+                            return Ok(Value::Int(s.as_bytes()[i] as i64));
+                        }
+                    }
+                }
+                Ok(Value::Int(0))
+            },
+            "str_len" => {
+                if !args.is_empty() {
+                    if let Value::Str(s) = &args[0] {
+                        return Ok(Value::Int(s.len() as i64));
+                    }
+                }
+                Ok(Value::Int(0))
+            },
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"

@@ -2031,8 +2031,11 @@ fn compile_regular_call<M: Module>(
         call_args.push(val);
         // If the argument produced a string value, pass the length too
         // (matches the ABI where str params get an extra len param)
+        // Exception: str_byte_at and str_len take raw pointer only (no length)
         if let Some(str_len) = cx.last_string_len.take() {
-            call_args.push(str_len);
+            if resolved_name != "str_byte_at" && resolved_name != "str_len" {
+                call_args.push(str_len);
+            }
         }
     }
 

@@ -5984,6 +5984,9 @@ impl CraneliftCompiler {
             ("fj_rt_bare_pic_eoi", "pic_eoi", &sig_i64_void),
             ("fj_rt_bare_pit_init", "pit_init", &sig_i64_void),
             ("fj_rt_bare_read_timer_ticks", "read_timer_ticks", &sig_ret_i64),
+            // String byte access
+            ("fj_rt_str_byte_at", "str_byte_at", &sig_2i64_ret_i64),
+            ("fj_rt_str_len", "str_len", &sig_i64_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7087,6 +7090,21 @@ impl ObjectCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(builtin.to_string(), id);
         }
+
+        // String byte access
+        let str_byte_at_id = self
+            .module
+            .declare_function("fj_rt_str_byte_at", Linkage::Import, &sig_2i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("str_byte_at".to_string(), str_byte_at_id);
+
+        let str_len_id = self
+            .module
+            .declare_function("fj_rt_str_len", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("str_len".to_string(), str_len_id);
 
         Ok(())
     }

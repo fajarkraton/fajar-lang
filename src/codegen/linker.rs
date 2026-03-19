@@ -1785,6 +1785,32 @@ fj_rt_bare_read_cr4:
     ret
 .size fj_rt_bare_read_cr4, . - fj_rt_bare_read_cr4
 
+/* str_byte_at(str_ptr: rdi, index: rsi) -> rax (byte at index) */
+.global fj_rt_str_byte_at
+.type fj_rt_str_byte_at, @function
+fj_rt_str_byte_at:
+    xor     eax, eax
+    mov     al, BYTE PTR [rdi + rsi]
+    ret
+.size fj_rt_str_byte_at, . - fj_rt_str_byte_at
+
+/* str_len(str_ptr: rdi) -> rax (length, scans for null terminator) */
+.global fj_rt_str_len
+.type fj_rt_str_len, @function
+fj_rt_str_len:
+    xor     eax, eax
+    mov     rcx, rdi
+.Lstrlen_loop:
+    cmp     BYTE PTR [rcx], 0
+    je      .Lstrlen_done
+    add     rcx, 1
+    jmp     .Lstrlen_loop
+.Lstrlen_done:
+    sub     rcx, rdi
+    mov     rax, rcx
+    ret
+.size fj_rt_str_len, . - fj_rt_str_len
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:
