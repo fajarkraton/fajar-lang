@@ -587,6 +587,13 @@ impl Interpreter {
             "port_inb",
             "x86_serial_init",
             "set_uart_mode_x86",
+            "cpuid_eax",
+            "cpuid_ebx",
+            "cpuid_ecx",
+            "cpuid_edx",
+            "sse_enable",
+            "read_cr0",
+            "read_cr4",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

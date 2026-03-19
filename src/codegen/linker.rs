@@ -1692,6 +1692,85 @@ fj_rt_bare_free:
     ret
 .size fj_rt_bare_free, . - fj_rt_bare_free
 
+/* cpuid_eax(leaf: rdi) -> rax (EAX result) */
+.global fj_rt_bare_cpuid_eax
+.type fj_rt_bare_cpuid_eax, @function
+fj_rt_bare_cpuid_eax:
+    mov     eax, edi
+    xor     ecx, ecx
+    cpuid
+    ret     /* eax already has result */
+.size fj_rt_bare_cpuid_eax, . - fj_rt_bare_cpuid_eax
+
+/* cpuid_ebx(leaf: rdi) -> rax (EBX result) */
+.global fj_rt_bare_cpuid_ebx
+.type fj_rt_bare_cpuid_ebx, @function
+fj_rt_bare_cpuid_ebx:
+    push    rbx
+    mov     eax, edi
+    xor     ecx, ecx
+    cpuid
+    mov     eax, ebx
+    pop     rbx
+    ret
+.size fj_rt_bare_cpuid_ebx, . - fj_rt_bare_cpuid_ebx
+
+/* cpuid_ecx(leaf: rdi) -> rax (ECX result) */
+.global fj_rt_bare_cpuid_ecx
+.type fj_rt_bare_cpuid_ecx, @function
+fj_rt_bare_cpuid_ecx:
+    push    rbx
+    mov     eax, edi
+    xor     ecx, ecx
+    cpuid
+    mov     eax, ecx
+    pop     rbx
+    ret
+.size fj_rt_bare_cpuid_ecx, . - fj_rt_bare_cpuid_ecx
+
+/* cpuid_edx(leaf: rdi) -> rax (EDX result) */
+.global fj_rt_bare_cpuid_edx
+.type fj_rt_bare_cpuid_edx, @function
+fj_rt_bare_cpuid_edx:
+    push    rbx
+    mov     eax, edi
+    xor     ecx, ecx
+    cpuid
+    mov     eax, edx
+    pop     rbx
+    ret
+.size fj_rt_bare_cpuid_edx, . - fj_rt_bare_cpuid_edx
+
+/* sse_enable() -> void — Enable SSE/SSE2 (required for Cranelift code) */
+.global fj_rt_bare_sse_enable
+.type fj_rt_bare_sse_enable, @function
+fj_rt_bare_sse_enable:
+    mov     rax, cr0
+    and     ax, 0xFFFB      /* Clear CR0.EM (bit 2) */
+    or      ax, 0x0002      /* Set CR0.MP (bit 1) */
+    mov     cr0, rax
+    mov     rax, cr4
+    or      ax, (3 << 9)    /* Set CR4.OSFXSR (bit 9) + OSXMMEXCPT (bit 10) */
+    mov     cr4, rax
+    ret
+.size fj_rt_bare_sse_enable, . - fj_rt_bare_sse_enable
+
+/* read_cr0() -> rax */
+.global fj_rt_bare_read_cr0
+.type fj_rt_bare_read_cr0, @function
+fj_rt_bare_read_cr0:
+    mov     rax, cr0
+    ret
+.size fj_rt_bare_read_cr0, . - fj_rt_bare_read_cr0
+
+/* read_cr4() -> rax */
+.global fj_rt_bare_read_cr4
+.type fj_rt_bare_read_cr4, @function
+fj_rt_bare_read_cr4:
+    mov     rax, cr4
+    ret
+.size fj_rt_bare_read_cr4, . - fj_rt_bare_read_cr4
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:

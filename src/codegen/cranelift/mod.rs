@@ -5970,6 +5970,14 @@ impl CraneliftCompiler {
                 "set_uart_mode_x86",
                 &sig_i64_void,
             ),
+            // x86_64 CPUID + SSE builtins
+            ("fj_rt_bare_cpuid_eax", "cpuid_eax", &sig_i64_ret_i64),
+            ("fj_rt_bare_cpuid_ebx", "cpuid_ebx", &sig_i64_ret_i64),
+            ("fj_rt_bare_cpuid_ecx", "cpuid_ecx", &sig_i64_ret_i64),
+            ("fj_rt_bare_cpuid_edx", "cpuid_edx", &sig_i64_ret_i64),
+            ("fj_rt_bare_sse_enable", "sse_enable", &sig_void),
+            ("fj_rt_bare_read_cr0", "read_cr0", &sig_ret_i64),
+            ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7017,6 +7025,29 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("set_uart_mode_x86".to_string(), set_mode_id);
+
+        // x86_64 CPUID builtins
+        for (name, builtin) in [
+            ("fj_rt_bare_cpuid_eax", "cpuid_eax"),
+            ("fj_rt_bare_cpuid_ebx", "cpuid_ebx"),
+            ("fj_rt_bare_cpuid_ecx", "cpuid_ecx"),
+            ("fj_rt_bare_cpuid_edx", "cpuid_edx"),
+            ("fj_rt_bare_read_cr0", "read_cr0"),
+            ("fj_rt_bare_read_cr4", "read_cr4"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // sse_enable() -> void
+        let sse_id = self
+            .module
+            .declare_function("fj_rt_bare_sse_enable", Linkage::Import, &sig_halt)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("sse_enable".to_string(), sse_id);
 
         Ok(())
     }

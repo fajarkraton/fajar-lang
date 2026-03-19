@@ -218,6 +218,14 @@ impl TypeChecker {
             ("port_inb", vec![Type::I64], Type::I64),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
+            // x86_64 CPUID + SSE builtins
+            ("cpuid_eax", vec![Type::I64], Type::I64),
+            ("cpuid_ebx", vec![Type::I64], Type::I64),
+            ("cpuid_ecx", vec![Type::I64], Type::I64),
+            ("cpuid_edx", vec![Type::I64], Type::I64),
+            ("sse_enable", vec![], Type::Void),
+            ("read_cr0", vec![], Type::I64),
+            ("read_cr4", vec![], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (
