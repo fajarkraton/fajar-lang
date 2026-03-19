@@ -226,6 +226,12 @@ impl TypeChecker {
             ("sse_enable", vec![], Type::Void),
             ("read_cr0", vec![], Type::I64),
             ("read_cr4", vec![], Type::I64),
+            // x86_64 IDT + PIC + PIT builtins (Phase 3)
+            ("idt_init", vec![], Type::Void),
+            ("pic_remap", vec![], Type::Void),
+            ("pic_eoi", vec![Type::I64], Type::Void),
+            ("pit_init", vec![Type::I64], Type::Void),
+            ("read_timer_ticks", vec![], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (

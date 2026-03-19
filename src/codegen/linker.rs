@@ -1831,6 +1831,308 @@ fj_rt_bare_tlbi_va:
 fj_rt_bare_svc:
     ret
 
+/* ═══════════════════════════════════════════════════════════════════
+   IDT (Interrupt Descriptor Table) — 256 entries × 16 bytes = 4096 bytes
+   + Exception/IRQ handler stubs + PIC remapping + PIT timer
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* IDT storage (4096 bytes, 16-byte aligned) */
+.section .bss
+.align 16
+.global __idt_table
+__idt_table:
+    .space 4096
+
+/* Tick counter (incremented by timer IRQ) */
+.align 8
+.global __timer_ticks
+__timer_ticks:
+    .quad 0
+
+.section .text
+
+/* ── idt_init(): Build IDT entries and load with LIDT ── */
+.global fj_rt_bare_idt_init
+.type fj_rt_bare_idt_init, @function
+fj_rt_bare_idt_init:
+    push    rbx
+    push    r12
+    push    r13
+
+    /* Fill all 256 IDT entries with default handler */
+    lea     rbx, [rip + __idt_table]
+    lea     r12, [rip + __isr_default]
+    xor     r13d, r13d          /* counter */
+
+.Lidt_fill:
+    mov     rax, r12            /* handler address */
+    mov     WORD PTR [rbx], ax           /* offset_low */
+    mov     WORD PTR [rbx + 2], 0x08    /* selector = kernel CS */
+    mov     BYTE PTR [rbx + 4], 0       /* IST = 0 */
+    mov     BYTE PTR [rbx + 5], 0x8E    /* type = interrupt gate, DPL=0, present */
+    shr     rax, 16
+    mov     WORD PTR [rbx + 6], ax      /* offset_mid */
+    shr     rax, 16
+    mov     DWORD PTR [rbx + 8], eax    /* offset_high */
+    mov     DWORD PTR [rbx + 12], 0     /* reserved */
+    add     rbx, 16
+    add     r13d, 1
+    cmp     r13d, 256
+    jb      .Lidt_fill
+
+    /* Set specific exception handlers */
+    lea     rbx, [rip + __idt_table]
+
+    /* Vector 0: #DE Divide Error */
+    lea     rax, [rip + __isr_0]
+    call    .Lidt_set_entry
+
+    /* Vector 8: #DF Double Fault (use IST 1 for safety) */
+    lea     rax, [rip + __isr_8]
+    lea     rbx, [rip + __idt_table + 8*16]
+    call    .Lidt_set_entry
+    lea     rbx, [rip + __idt_table + 8*16]
+    mov     BYTE PTR [rbx + 4], 1   /* IST = 1 */
+
+    /* Vector 13: #GP General Protection */
+    lea     rax, [rip + __isr_13]
+    lea     rbx, [rip + __idt_table + 13*16]
+    call    .Lidt_set_entry
+
+    /* Vector 14: #PF Page Fault */
+    lea     rax, [rip + __isr_14]
+    lea     rbx, [rip + __idt_table + 14*16]
+    call    .Lidt_set_entry
+
+    /* Vector 32: Timer IRQ (PIT IRQ0) */
+    lea     rax, [rip + __isr_timer]
+    lea     rbx, [rip + __idt_table + 32*16]
+    call    .Lidt_set_entry
+
+    /* Vector 33: Keyboard IRQ (IRQ1) */
+    lea     rax, [rip + __isr_keyboard]
+    lea     rbx, [rip + __idt_table + 33*16]
+    call    .Lidt_set_entry
+
+    /* Load IDT */
+    sub     rsp, 16
+    mov     WORD PTR [rsp], 4095        /* limit = 256*16 - 1 */
+    lea     rax, [rip + __idt_table]
+    mov     QWORD PTR [rsp + 2], rax   /* base */
+    lidt    [rsp]
+    add     rsp, 16
+
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+/* Helper: set IDT entry at [rbx] with handler in rax */
+.Lidt_set_entry:
+    mov     WORD PTR [rbx], ax
+    mov     WORD PTR [rbx + 2], 0x08
+    mov     BYTE PTR [rbx + 4], 0
+    mov     BYTE PTR [rbx + 5], 0x8E
+    mov     rcx, rax
+    shr     rcx, 16
+    mov     WORD PTR [rbx + 6], cx
+    shr     rcx, 16
+    mov     DWORD PTR [rbx + 8], ecx
+    mov     DWORD PTR [rbx + 12], 0
+    ret
+.size fj_rt_bare_idt_init, . - fj_rt_bare_idt_init
+
+/* ── Exception Handlers ── */
+
+/* Common handler: print vector number and error code, then halt */
+__isr_common:
+    /* Stack: [vector] [error_code] [rip] [cs] [rflags] [rsp] [ss] */
+    push    rax
+    push    rdx
+
+    /* Print "[EXC " */
+    mov     dx, 0x3F8
+    mov     al, '['; out dx, al
+    mov     al, 'E'; out dx, al
+    mov     al, 'X'; out dx, al
+    mov     al, 'C'; out dx, al
+    mov     al, ' '; out dx, al
+
+    /* Print vector number (from stack) */
+    mov     rax, [rsp + 24]     /* vector number (after push rax, rdx, error_code) */
+    /* Print as 2-digit decimal */
+    xor     rdx, rdx
+    mov     rcx, 10
+    div     rcx
+    add     al, '0'
+    mov     dx, 0x3F8
+    out     dx, al
+    mov     al, dl
+    add     al, '0'             /* remainder */
+    /* fix: remainder is in rdx from div */
+    pop     rdx                 /* restore original rdx */
+    push    rdx
+    mov     rax, [rsp + 24]
+    push    rbx
+    xor     rdx, rdx
+    mov     rbx, 10
+    div     rbx                 /* rax = tens, rdx = ones */
+    add     al, '0'
+    mov     dx, 0x3F8
+    out     dx, al
+    mov     rax, rdx
+    add     al, '0'
+    mov     dx, 0x3F8
+    out     dx, al
+    mov     al, ']'
+    out     dx, al
+    mov     al, 0x0A
+    out     dx, al
+    pop     rbx
+
+    pop     rdx
+    pop     rax
+    cli
+    hlt
+    jmp     . - 2
+
+/* Default ISR: push dummy error + vector 0xFF */
+__isr_default:
+    push    0               /* dummy error code */
+    push    0xFF            /* vector = unknown */
+    jmp     __isr_common
+
+/* Vector 0: #DE Divide Error (no error code) */
+__isr_0:
+    push    0
+    push    0
+    jmp     __isr_common
+
+/* Vector 8: #DF Double Fault (has error code, always 0) */
+__isr_8:
+    /* CPU pushes error code */
+    push    8
+    jmp     __isr_common
+
+/* Vector 13: #GP General Protection (has error code) */
+__isr_13:
+    /* CPU pushes error code */
+    push    13
+    jmp     __isr_common
+
+/* Vector 14: #PF Page Fault (has error code) */
+__isr_14:
+    /* CPU pushes error code */
+    push    14
+    jmp     __isr_common
+
+/* ── PIC (8259) Remapping ── */
+
+/* pic_remap(): Remap PIC IRQs to vectors 32-47 */
+.global fj_rt_bare_pic_remap
+.type fj_rt_bare_pic_remap, @function
+fj_rt_bare_pic_remap:
+    /* ICW1: begin init (cascade, ICW4 needed) */
+    mov     al, 0x11
+    out     0x20, al            /* Master PIC command */
+    out     0xA0, al            /* Slave PIC command */
+
+    /* ICW2: vector offset */
+    mov     al, 32              /* Master: IRQ 0-7 → vectors 32-39 */
+    out     0x21, al
+    mov     al, 40              /* Slave: IRQ 8-15 → vectors 40-47 */
+    out     0xA1, al
+
+    /* ICW3: cascade */
+    mov     al, 4               /* Master: slave on IRQ2 */
+    out     0x21, al
+    mov     al, 2               /* Slave: cascade identity */
+    out     0xA1, al
+
+    /* ICW4: 8086 mode */
+    mov     al, 0x01
+    out     0x21, al
+    out     0xA1, al
+
+    /* Mask all IRQs except IRQ0 (timer) and IRQ1 (keyboard) */
+    mov     al, 0xFC            /* 1111_1100: unmask IRQ0 + IRQ1 */
+    out     0x21, al
+    mov     al, 0xFF            /* mask all slave IRQs */
+    out     0xA1, al
+    ret
+.size fj_rt_bare_pic_remap, . - fj_rt_bare_pic_remap
+
+/* pic_eoi(irq): Send End-of-Interrupt to PIC */
+.global fj_rt_bare_pic_eoi
+.type fj_rt_bare_pic_eoi, @function
+fj_rt_bare_pic_eoi:
+    cmp     rdi, 8
+    jb      .Lpic_eoi_master
+    /* Slave PIC EOI */
+    mov     al, 0x20
+    out     0xA0, al
+.Lpic_eoi_master:
+    mov     al, 0x20
+    out     0x20, al
+    ret
+.size fj_rt_bare_pic_eoi, . - fj_rt_bare_pic_eoi
+
+/* ── PIT (8254) Timer ── */
+
+/* pit_init(hz): Set PIT channel 0 frequency */
+.global fj_rt_bare_pit_init
+.type fj_rt_bare_pit_init, @function
+fj_rt_bare_pit_init:
+    /* divisor = 1193182 / hz */
+    mov     rax, 1193182
+    xor     rdx, rdx
+    div     rdi                 /* rax = divisor */
+
+    /* Channel 0, lo/hi byte, rate generator */
+    push    rax
+    mov     al, 0x34            /* 0b00_11_010_0: ch0, lobyte/hibyte, rate gen */
+    out     0x43, al
+    pop     rax
+    out     0x40, al            /* low byte */
+    shr     rax, 8
+    out     0x40, al            /* high byte */
+    ret
+.size fj_rt_bare_pit_init, . - fj_rt_bare_pit_init
+
+/* Timer IRQ handler (vector 32 = IRQ0) */
+__isr_timer:
+    push    rax
+    push    rdx
+    /* Increment tick counter */
+    lock add QWORD PTR [rip + __timer_ticks], 1
+    /* Send EOI to master PIC */
+    mov     al, 0x20
+    out     0x20, al
+    pop     rdx
+    pop     rax
+    iretq
+
+/* Keyboard IRQ handler (vector 33 = IRQ1) */
+__isr_keyboard:
+    push    rax
+    push    rdx
+    /* Read scancode (must read to clear IRQ) */
+    in      al, 0x60
+    /* Send EOI */
+    mov     al, 0x20
+    out     0x20, al
+    pop     rdx
+    pop     rax
+    iretq
+
+/* read_timer_ticks() -> rax */
+.global fj_rt_bare_read_timer_ticks
+.type fj_rt_bare_read_timer_ticks, @function
+fj_rt_bare_read_timer_ticks:
+    mov     rax, [rip + __timer_ticks]
+    ret
+.size fj_rt_bare_read_timer_ticks, . - fj_rt_bare_read_timer_ticks
+
 /* GNU stack note — mark as non-executable */
 .section .note.GNU-stack, "", @progbits
 "#,

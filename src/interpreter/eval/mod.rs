@@ -594,6 +594,11 @@ impl Interpreter {
             "sse_enable",
             "read_cr0",
             "read_cr4",
+            "idt_init",
+            "pic_remap",
+            "pic_eoi",
+            "pit_init",
+            "read_timer_ticks",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

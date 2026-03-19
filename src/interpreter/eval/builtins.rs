@@ -1385,6 +1385,8 @@ impl Interpreter {
             // x86_64 CPUID stubs (simulation)
             "cpuid_eax" | "cpuid_ebx" | "cpuid_ecx" | "cpuid_edx" | "read_cr0" | "read_cr4" => Ok(Value::Int(0)),
             "sse_enable" => Ok(Value::Null),
+            "idt_init" | "pic_remap" | "pic_eoi" | "pit_init" => Ok(Value::Null),
+            "read_timer_ticks" => Ok(Value::Int(0)),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"

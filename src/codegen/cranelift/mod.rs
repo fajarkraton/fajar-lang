@@ -5978,6 +5978,12 @@ impl CraneliftCompiler {
             ("fj_rt_bare_sse_enable", "sse_enable", &sig_void),
             ("fj_rt_bare_read_cr0", "read_cr0", &sig_ret_i64),
             ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
+            // x86_64 IDT + PIC + PIT builtins
+            ("fj_rt_bare_idt_init", "idt_init", &sig_void),
+            ("fj_rt_bare_pic_remap", "pic_remap", &sig_void),
+            ("fj_rt_bare_pic_eoi", "pic_eoi", &sig_i64_void),
+            ("fj_rt_bare_pit_init", "pit_init", &sig_i64_void),
+            ("fj_rt_bare_read_timer_ticks", "read_timer_ticks", &sig_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7032,12 +7038,23 @@ impl ObjectCompiler {
             ("fj_rt_bare_cpuid_ebx", "cpuid_ebx"),
             ("fj_rt_bare_cpuid_ecx", "cpuid_ecx"),
             ("fj_rt_bare_cpuid_edx", "cpuid_edx"),
-            ("fj_rt_bare_read_cr0", "read_cr0"),
-            ("fj_rt_bare_read_cr4", "read_cr4"),
         ] {
             let id = self
                 .module
                 .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+
+        // () -> i64 builtins (no params, returns i64)
+        for (name, builtin) in [
+            ("fj_rt_bare_read_cr0", "read_cr0"),
+            ("fj_rt_bare_read_cr4", "read_cr4"),
+            ("fj_rt_bare_read_timer_ticks", "read_timer_ticks"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(builtin.to_string(), id);
         }
@@ -7048,6 +7065,28 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_sse_enable", Linkage::Import, &sig_halt)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("sse_enable".to_string(), sse_id);
+
+        // x86_64 IDT + PIC + PIT
+        for (name, builtin) in [
+            ("fj_rt_bare_idt_init", "idt_init"),
+            ("fj_rt_bare_pic_remap", "pic_remap"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_halt)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        for (name, builtin) in [
+            ("fj_rt_bare_pic_eoi", "pic_eoi"),
+            ("fj_rt_bare_pit_init", "pit_init"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
 
         Ok(())
     }
