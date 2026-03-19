@@ -1411,6 +1411,8 @@ impl Interpreter {
             "get_current_pid" | "get_proc_count" => Ok(Value::Int(0)),
             "set_current_pid" | "yield_proc" => Ok(Value::Null),
             "proc_create" => Ok(Value::Int(0)),
+            "tss_init" | "syscall_init" => Ok(Value::Null),
+            "proc_create_user" => Ok(Value::Int(0)),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"

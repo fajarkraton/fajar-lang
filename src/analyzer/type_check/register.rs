@@ -243,6 +243,10 @@ impl TypeChecker {
             ("get_proc_count", vec![], Type::I64),
             ("proc_create", vec![Type::I64], Type::I64),
             ("yield_proc", vec![], Type::Void),
+            // Phase 5: Ring 3 + SYSCALL
+            ("tss_init", vec![], Type::Void),
+            ("syscall_init", vec![], Type::Void),
+            ("proc_create_user", vec![Type::I64], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (

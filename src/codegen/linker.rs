@@ -1215,17 +1215,17 @@ _start:
     .byte 0xFC, 0xF3, 0xAB
 
     /* --- Set up page tables: identity map first 128MB (64 × 2MB) --- */
-    /* PML4[0] → PDPT at 0x71000 (present+write = 0x03) */
+    /* PML4[0] → PDPT at 0x71000 (present+write+user = 0x07) */
     /* mov eax, 0x70000 */
     .byte 0xB8, 0x00, 0x00, 0x07, 0x00
-    /* mov dword [eax], 0x71003 */
-    .byte 0xC7, 0x00, 0x03, 0x10, 0x07, 0x00
+    /* mov dword [eax], 0x71007 */
+    .byte 0xC7, 0x00, 0x07, 0x10, 0x07, 0x00
 
-    /* PDPT[0] → PD at 0x72000 */
+    /* PDPT[0] → PD at 0x72000 (present+write+user = 0x07) */
     /* mov eax, 0x71000 */
     .byte 0xB8, 0x00, 0x10, 0x07, 0x00
-    /* mov dword [eax], 0x72003 */
-    .byte 0xC7, 0x00, 0x03, 0x20, 0x07, 0x00
+    /* mov dword [eax], 0x72007 */
+    .byte 0xC7, 0x00, 0x07, 0x20, 0x07, 0x00
 
     /* Fill PD[0..63] with 2MB huge pages: identity map 0x0 - 0x7FFFFFF (128MB) */
     /* mov eax, 0x72000 (PD base) */
@@ -1237,8 +1237,8 @@ _start:
     .byte 0x89, 0xCA
     /* shl edx, 21 (edx = counter * 2MB) */
     .byte 0xC1, 0xE2, 0x15
-    /* or edx, 0x83 (present + write + huge page) */
-    .byte 0x81, 0xCA, 0x83, 0x00, 0x00, 0x00
+    /* or edx, 0x87 (present + write + user + huge page) */
+    .byte 0x81, 0xCA, 0x87, 0x00, 0x00, 0x00
     /* mov [eax + ecx*8], edx (PD entry low dword) */
     .byte 0x89, 0x14, 0xC8
     /* mov dword [eax + ecx*8 + 4], 0 (PD entry high dword) */
@@ -1292,12 +1292,27 @@ _start:
     .long _start64
     .word 0x0008
 
-/* Minimal 64-bit GDT */
+/* GDT with kernel + user segments + TSS placeholder */
+/* Selectors: null=0x00, kcode=0x08, kdata=0x10, udata=0x18, ucode=0x20, tss=0x28 */
+/* NOTE: For SYSRET, user segments MUST be: udata=STAR[47:32], ucode=STAR[47:32]+16 */
+/* STAR[47:32] = 0x18 → SS=0x18+8=0x20? No: SYSRET loads CS=STAR[63:48]+16, SS=STAR[63:48]+8 */
+/* AMD64: SYSCALL loads CS=STAR[47:32], SS=STAR[47:32]+8 */
+/*        SYSRET  loads CS=STAR[63:48]+16, SS=STAR[63:48]+8 */
+/* So layout: [null, kcode, kdata, udata, ucode, tss0, tss1] */
+/* STAR = (0x18 << 48) | (0x08 << 32) → SYSCALL: CS=0x08, SS=0x10; SYSRET: CS=0x28|3, SS=0x20|3 */
+/* Wait: SYSRET CS = STAR[63:48]+16 = 0x18+16 = 0x28? That's TSS! Wrong. */
+/* Correct layout for SYSRET: STAR[63:48] = user_cs_base - 16 */
+/* Let's use: [null, kcode=0x08, kdata=0x10, udata=0x18, ucode=0x20, tss] */
+/* STAR = (0x10 << 48) | (0x08 << 32) → SYSRET: CS=0x10+16=0x20|3, SS=0x10+8=0x18|3 ✓ */
 .align 16
 __gdt64:
-    .quad 0x0000000000000000    /* null */
-    .quad 0x00AF9A000000FFFF    /* code64: L=1, D=0, P=1, DPL=0, S=1, type=A (exec/read) */
-    .quad 0x00CF92000000FFFF    /* data64: P=1, DPL=0, S=1, type=2 (read/write) */
+    .quad 0x0000000000000000    /* [0] 0x00: Null */
+    .quad 0x00AF9A000000FFFF    /* [1] 0x08: Kernel Code (DPL=0, L=1, exec/read) */
+    .quad 0x00CF92000000FFFF    /* [2] 0x10: Kernel Data (DPL=0, read/write) */
+    .quad 0x00CFF2000000FFFF    /* [3] 0x18: User Data (DPL=3, read/write) */
+    .quad 0x00AFFA000000FFFF    /* [4] 0x20: User Code (DPL=3, L=1, exec/read) */
+    .quad 0x0000000000000000    /* [5] 0x28: TSS low (filled at runtime by tss_init) */
+    .quad 0x0000000000000000    /* [6] 0x30: TSS high */
 __gdt64_ptr:
     .word __gdt64_ptr - __gdt64 - 1
     .long __gdt64
@@ -1813,6 +1828,281 @@ fj_rt_str_len:
 
 /* ── Process Scheduler ── */
 
+/* ── TSS (Task State Segment) ── */
+
+/* TSS storage: 104 bytes (16-byte aligned) at fixed address 0x6FC00 */
+/* TSS is needed for Ring 3→0 transitions: RSP0 = kernel stack */
+
+/* tss_init() — Initialize TSS + GDT TSS descriptor + load TR */
+.global fj_rt_bare_tss_init
+.type fj_rt_bare_tss_init, @function
+fj_rt_bare_tss_init:
+    /* Zero TSS area (104 bytes at 0x6FC00) */
+    mov     rdi, 0x6FC00
+    xor     eax, eax
+    mov     ecx, 13            /* 104/8 = 13 qwords */
+    cld
+    rep     stosq
+
+    /* Set RSP0 = kernel stack (used when Ring 3 → Ring 0 via interrupt/syscall) */
+    mov     QWORD PTR [0x6FC04], 0x7F00000  /* RSP0 at TSS offset +4 */
+
+    /* Set IST[1] = double fault stack (at 0x6F0000) */
+    mov     QWORD PTR [0x6FC24], 0x6F0000   /* IST1 at TSS offset +36 */
+
+    /* Build TSS descriptor in GDT[5-6] (0x28) */
+    /* TSS descriptor is 16 bytes (128 bits): */
+    /* Byte layout: limit[0:15], base[0:15], base[16:23], type(0x89), limit[16:19]+flags, base[24:31], base[32:63], reserved */
+    mov     rdi, 0x6FC00        /* TSS base address */
+    mov     rax, rdi
+
+    /* GDT entry at __gdt64 + 0x28 (5th entry) */
+    lea     rbx, [rip + __gdt64]
+    add     rbx, 0x28
+
+    /* Low 8 bytes of TSS descriptor */
+    mov     ecx, 103            /* TSS limit = 104-1 = 103 */
+    mov     WORD PTR [rbx], cx                  /* limit[0:15] */
+    mov     WORD PTR [rbx+2], ax                /* base[0:15] */
+    shr     rax, 16
+    mov     BYTE PTR [rbx+4], al                /* base[16:23] */
+    mov     BYTE PTR [rbx+5], 0x89              /* type: present, 64-bit TSS available */
+    mov     BYTE PTR [rbx+6], 0x00              /* limit[16:19]=0, flags=0 */
+    shr     rax, 8
+    mov     BYTE PTR [rbx+7], al                /* base[24:31] */
+
+    /* High 8 bytes: base[32:63] + reserved */
+    mov     rax, rdi
+    shr     rax, 32
+    mov     DWORD PTR [rbx+8], eax              /* base[32:63] */
+    mov     DWORD PTR [rbx+12], 0               /* reserved */
+
+    /* Reload GDT (size changed from 3 to 7 entries) */
+    sub     rsp, 16
+    mov     WORD PTR [rsp], 7*8-1               /* limit: 7 entries × 8 bytes - 1 = 55 */
+    lea     rax, [rip + __gdt64]
+    mov     QWORD PTR [rsp+2], rax
+    lgdt    [rsp]
+    add     rsp, 16
+
+    /* Load TR with TSS selector (0x28) */
+    mov     ax, 0x28
+    ltr     ax
+
+    ret
+.size fj_rt_bare_tss_init, . - fj_rt_bare_tss_init
+
+/* ── SYSCALL/SYSRET Setup ── */
+
+/* syscall_init() — Configure SYSCALL/SYSRET MSRs */
+.global fj_rt_bare_syscall_init
+.type fj_rt_bare_syscall_init, @function
+fj_rt_bare_syscall_init:
+    /* IA32_STAR (0xC0000081): segment selectors for SYSCALL/SYSRET */
+    /* Bits [47:32] = kernel CS for SYSCALL (0x08) */
+    /* Bits [63:48] = base for SYSRET: CS = base+16 = 0x20, SS = base+8 = 0x18 */
+    /* So bits [63:48] = 0x10 (0x10+16=0x20=ucode, 0x10+8=0x18=udata) */
+    mov     ecx, 0xC0000081     /* IA32_STAR */
+    xor     eax, eax            /* low 32 bits = 0 (reserved) */
+    mov     edx, 0x00100008     /* high 32: [63:48]=0x10, [47:32]=0x08 */
+    wrmsr
+
+    /* IA32_LSTAR (0xC0000082): SYSCALL entry point */
+    mov     ecx, 0xC0000082
+    lea     rax, [rip + __syscall_entry]
+    mov     rdx, rax
+    shr     rdx, 32
+    wrmsr
+
+    /* IA32_FMASK (0xC0000084): RFLAGS mask — clear IF during syscall */
+    mov     ecx, 0xC0000084
+    mov     eax, 0x200          /* mask IF bit so interrupts disabled in kernel */
+    xor     edx, edx
+    wrmsr
+
+    /* Enable SYSCALL/SYSRET via EFER.SCE (bit 0) */
+    mov     ecx, 0xC0000080     /* IA32_EFER */
+    rdmsr
+    or      eax, 1              /* SCE = System Call Extensions */
+    wrmsr
+
+    ret
+.size fj_rt_bare_syscall_init, . - fj_rt_bare_syscall_init
+
+/* SYSCALL entry point — Ring 3 → Ring 0 */
+/* On entry: RCX=user RIP, R11=user RFLAGS, RAX=syscall number */
+/* Args: RDI=arg0, RSI=arg1, RDX=arg2, R10=arg3, R8=arg4, R9=arg5 */
+__syscall_entry:
+    /* Swap to kernel stack (from TSS RSP0 equivalent at fixed address) */
+    mov     QWORD PTR [0x6FE10], rsp    /* save user RSP */
+    mov     rsp, 0x7F00000              /* kernel stack */
+
+    /* Save user context */
+    push    rcx                 /* user RIP */
+    push    r11                 /* user RFLAGS */
+    push    rdi                 /* arg0 */
+    push    rsi                 /* arg1 */
+    push    rdx                 /* arg2 */
+
+    /* Dispatch syscall by number (RAX) */
+    cmp     rax, 0              /* SYS_EXIT */
+    je      .Lsys_exit
+    cmp     rax, 1              /* SYS_WRITE */
+    je      .Lsys_write
+    cmp     rax, 9              /* SYS_GETPID */
+    je      .Lsys_getpid
+    cmp     rax, 10             /* SYS_YIELD */
+    je      .Lsys_yield
+
+    /* Unknown syscall — return -1 */
+    mov     rax, -1
+    jmp     .Lsys_return
+
+.Lsys_exit:
+    /* SYS_EXIT(code): mark process as dead, yield to next */
+    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    shl     rax, 8
+    add     rax, 0x600000
+    mov     QWORD PTR [rax + 8], 0     /* state = dead */
+    /* Fall through to yield */
+
+.Lsys_yield:
+    /* SYS_YIELD: trigger timer interrupt to reschedule */
+    pop     rdx
+    pop     rsi
+    pop     rdi
+    pop     r11
+    pop     rcx
+    mov     rsp, QWORD PTR [0x6FE10]   /* restore user RSP */
+    int     32                          /* trigger scheduler via timer ISR */
+    /* After scheduler returns here */
+    xor     eax, eax
+    sysretq
+
+.Lsys_write:
+    /* SYS_WRITE(fd=RDI, buf=RSI, len=RDX): write to serial */
+    /* For fd=1 (stdout), output each byte to COM1 */
+    pop     rdx                 /* len */
+    pop     rsi                 /* buf */
+    pop     rdi                 /* fd (ignored, always serial) */
+    mov     rcx, rdx            /* count */
+    mov     r8, rsi             /* buffer */
+.Lsys_write_loop:
+    test    rcx, rcx
+    jz      .Lsys_write_done
+    /* Wait TX ready */
+    mov     dx, 0x3FD
+.Lsys_write_wait:
+    in      al, dx
+    test    al, 0x20
+    jz      .Lsys_write_wait
+    /* Send byte */
+    mov     dx, 0x3F8
+    mov     al, BYTE PTR [r8]
+    out     dx, al
+    add     r8, 1
+    sub     rcx, 1
+    jmp     .Lsys_write_loop
+.Lsys_write_done:
+    mov     rax, rdx            /* return bytes written */
+    pop     r11
+    pop     rcx
+    mov     rsp, QWORD PTR [0x6FE10]
+    sysretq
+
+.Lsys_getpid:
+    pop     rdx
+    pop     rsi
+    pop     rdi
+    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    pop     r11
+    pop     rcx
+    mov     rsp, QWORD PTR [0x6FE10]
+    sysretq
+
+.Lsys_return:
+    pop     rdx
+    pop     rsi
+    pop     rdi
+    pop     r11
+    pop     rcx
+    mov     rsp, QWORD PTR [0x6FE10]
+    sysretq
+
+/* ── Ring 3 Process Creation ── */
+
+/* proc_create_user(entry_fn: rdi) -> rax (pid) */
+/* Creates a Ring 3 process with user CS/SS in iretq frame */
+.global fj_rt_bare_proc_create_user
+.type fj_rt_bare_proc_create_user, @function
+fj_rt_bare_proc_create_user:
+    push    rbx
+    push    r12
+    mov     r12, rdi            /* save entry */
+    /* Find free slot */
+    mov     rbx, 0x600000
+    xor     ecx, ecx
+.Lpcu_find:
+    cmp     ecx, 16
+    jge     .Lpcu_full
+    mov     rax, QWORD PTR [rbx + 8]
+    test    rax, rax
+    jz      .Lpcu_found
+    add     rbx, 256
+    add     ecx, 1
+    jmp     .Lpcu_find
+.Lpcu_full:
+    mov     rax, -1
+    pop     r12
+    pop     rbx
+    ret
+.Lpcu_found:
+    /* Set pid, state, entry */
+    mov     QWORD PTR [rbx], rcx
+    mov     QWORD PTR [rbx + 8], 1     /* ready */
+    mov     QWORD PTR [rbx + 24], r12
+    mov     QWORD PTR [rbx + 32], 0    /* ticks */
+
+    /* User stack: 0x680000 + pid*0x10000 + 0xFFF0 */
+    mov     rax, rcx
+    shl     rax, 16
+    add     rax, 0x680000
+    add     rax, 0xFFF0
+
+    /* Build iretq frame for Ring 3 */
+    mov     QWORD PTR [rax - 8], 0x1B      /* SS = User Data (0x18 | RPL=3) */
+    mov     QWORD PTR [rax - 16], rax      /* RSP = user stack top */
+    mov     QWORD PTR [rax - 24], 0x3202   /* RFLAGS = IF=1, IOPL=3 (allow port I/O from Ring 3) */
+    mov     QWORD PTR [rax - 32], 0x23     /* CS = User Code (0x20 | RPL=3) */
+    mov     QWORD PTR [rax - 40], r12      /* RIP = entry function */
+
+    /* 15 zero GPRs */
+    xor     edx, edx
+    mov     QWORD PTR [rax - 48], rdx
+    mov     QWORD PTR [rax - 56], rdx
+    mov     QWORD PTR [rax - 64], rdx
+    mov     QWORD PTR [rax - 72], rdx
+    mov     QWORD PTR [rax - 80], rdx
+    mov     QWORD PTR [rax - 88], rdx
+    mov     QWORD PTR [rax - 96], rdx
+    mov     QWORD PTR [rax - 104], rdx
+    mov     QWORD PTR [rax - 112], rdx
+    mov     QWORD PTR [rax - 120], rdx
+    mov     QWORD PTR [rax - 128], rdx
+    mov     QWORD PTR [rax - 136], rdx
+    mov     QWORD PTR [rax - 144], rdx
+    mov     QWORD PTR [rax - 152], rdx
+    mov     QWORD PTR [rax - 160], rdx
+
+    sub     rax, 160
+    mov     QWORD PTR [rbx + 16], rax  /* saved RSP */
+    add     QWORD PTR [0x6FE08], 1     /* proc count++ */
+    mov     rax, rcx                    /* return pid */
+    pop     r12
+    pop     rbx
+    ret
+.size fj_rt_bare_proc_create_user, . - fj_rt_bare_proc_create_user
+
 /* proc_table_addr() -> rax (0x600000) */
 .global fj_rt_bare_proc_table_addr
 .type fj_rt_bare_proc_table_addr, @function
@@ -2318,8 +2608,16 @@ __isr_timer:
     add     rax, 0x600000
     mov     QWORD PTR [rax + 8], 2     /* state = running */
 
-    /* Check if this is the first run (rsp might point to initial stack) */
+    /* Restore process RSP */
     mov     rsp, QWORD PTR [rax + 16]  /* restore rsp */
+
+    /* Update TSS.RSP0 for Ring 3→0 transitions */
+    /* Each process has a kernel stack at 0x700000 + pid*0x4000 + 0x3FF0 */
+    mov     rax, rbx                    /* new pid */
+    shl     rax, 14                     /* pid * 0x4000 */
+    add     rax, 0x700000
+    add     rax, 0x3FF0                 /* kernel stack top */
+    mov     QWORD PTR [0x6FC04], rax    /* TSS.RSP0 */
 
 .Lsched_eoi:
     /* Send EOI to PIC */

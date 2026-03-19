@@ -5994,6 +5994,10 @@ impl CraneliftCompiler {
             ("fj_rt_bare_get_proc_count", "get_proc_count", &sig_ret_i64),
             ("fj_rt_bare_proc_create", "proc_create", &sig_i64_ret_i64),
             ("fj_rt_bare_yield", "yield_proc", &sig_void),
+            // Phase 5: Ring 3 + SYSCALL
+            ("fj_rt_bare_tss_init", "tss_init", &sig_void),
+            ("fj_rt_bare_syscall_init", "syscall_init", &sig_void),
+            ("fj_rt_bare_proc_create_user", "proc_create_user", &sig_i64_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7147,6 +7151,23 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("yield_proc".to_string(), yield_id);
+
+        // Phase 5: Ring 3 + SYSCALL
+        for (name, builtin) in [
+            ("fj_rt_bare_tss_init", "tss_init"),
+            ("fj_rt_bare_syscall_init", "syscall_init"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_halt)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        let pcu_id = self
+            .module
+            .declare_function("fj_rt_bare_proc_create_user", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("proc_create_user".to_string(), pcu_id);
 
         Ok(())
     }

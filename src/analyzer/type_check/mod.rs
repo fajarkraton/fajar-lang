@@ -1144,6 +1144,9 @@ impl TypeChecker {
             "get_proc_count",
             "proc_create",
             "yield_proc",
+            "tss_init",
+            "syscall_init",
+            "proc_create_user",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",
