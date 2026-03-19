@@ -5998,6 +5998,10 @@ impl CraneliftCompiler {
             ("fj_rt_bare_tss_init", "tss_init", &sig_void),
             ("fj_rt_bare_syscall_init", "syscall_init", &sig_void),
             ("fj_rt_bare_proc_create_user", "proc_create_user", &sig_i64_ret_i64),
+            // Phase 6: Keyboard + PCI
+            ("fj_rt_bare_kb_read_scancode", "kb_read_scancode", &sig_ret_i64),
+            ("fj_rt_bare_kb_has_data", "kb_has_data", &sig_ret_i64),
+            ("fj_rt_bare_pci_read32", "pci_read32", &sig_4i64_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7168,6 +7172,23 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_proc_create_user", Linkage::Import, &sig_i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("proc_create_user".to_string(), pcu_id);
+
+        // Phase 6: Keyboard + PCI
+        for (name, builtin) in [
+            ("fj_rt_bare_kb_read_scancode", "kb_read_scancode"),
+            ("fj_rt_bare_kb_has_data", "kb_has_data"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        let pci_id = self
+            .module
+            .declare_function("fj_rt_bare_pci_read32", Linkage::Import, &sig_gpio4)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("pci_read32".to_string(), pci_id);
 
         Ok(())
     }

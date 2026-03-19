@@ -611,6 +611,9 @@ impl Interpreter {
             "tss_init",
             "syscall_init",
             "proc_create_user",
+            "kb_read_scancode",
+            "kb_has_data",
+            "pci_read32",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

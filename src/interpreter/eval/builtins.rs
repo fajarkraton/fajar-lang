@@ -1413,6 +1413,9 @@ impl Interpreter {
             "proc_create" => Ok(Value::Int(0)),
             "tss_init" | "syscall_init" => Ok(Value::Null),
             "proc_create_user" => Ok(Value::Int(0)),
+            "kb_read_scancode" => Ok(Value::Int(-1)),
+            "kb_has_data" => Ok(Value::Int(0)),
+            "pci_read32" => Ok(Value::Int(0xFFFFFFFF)),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"

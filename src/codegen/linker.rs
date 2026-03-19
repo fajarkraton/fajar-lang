@@ -2223,6 +2223,65 @@ fj_rt_bare_yield:
     ret
 .size fj_rt_bare_yield, . - fj_rt_bare_yield
 
+/* ── Phase 6: Keyboard + PCI Builtins ── */
+
+/* kb_read_scancode() -> rax (next scancode, or -1 if empty) */
+.global fj_rt_bare_kb_read_scancode
+.type fj_rt_bare_kb_read_scancode, @function
+fj_rt_bare_kb_read_scancode:
+    movzx   eax, BYTE PTR [0x6FBF8]    /* read index */
+    movzx   ecx, BYTE PTR [0x6FBF0]    /* write index */
+    cmp     al, cl
+    je      .Lkb_empty
+    movzx   eax, BYTE PTR [0x6FB00 + rax]  /* read scancode */
+    movzx   ecx, BYTE PTR [0x6FBF8]
+    add     cl, 1
+    mov     BYTE PTR [0x6FBF8], cl      /* advance read index */
+    ret
+.Lkb_empty:
+    mov     rax, -1
+    ret
+.size fj_rt_bare_kb_read_scancode, . - fj_rt_bare_kb_read_scancode
+
+/* kb_has_data() -> rax (1 if data available, 0 if empty) */
+.global fj_rt_bare_kb_has_data
+.type fj_rt_bare_kb_has_data, @function
+fj_rt_bare_kb_has_data:
+    movzx   eax, BYTE PTR [0x6FBF8]
+    movzx   ecx, BYTE PTR [0x6FBF0]
+    cmp     al, cl
+    je      .Lkb_no_data
+    mov     eax, 1
+    ret
+.Lkb_no_data:
+    xor     eax, eax
+    ret
+.size fj_rt_bare_kb_has_data, . - fj_rt_bare_kb_has_data
+
+/* pci_read32(bus: rdi, dev: rsi, func: rdx, offset: rcx) -> rax */
+/* Read 32-bit PCI config space register */
+.global fj_rt_bare_pci_read32
+.type fj_rt_bare_pci_read32, @function
+fj_rt_bare_pci_read32:
+    /* Build PCI config address: bit31=enable, bus[23:16], dev[15:11], func[10:8], offset[7:0] */
+    mov     eax, 0x80000000     /* enable bit */
+    shl     edi, 16             /* bus << 16 */
+    or      eax, edi
+    shl     esi, 11             /* dev << 11 */
+    or      eax, esi
+    shl     edx, 8              /* func << 8 */
+    or      eax, edx
+    and     ecx, 0xFC           /* offset aligned to 4 bytes */
+    or      eax, ecx
+    /* Write to CONFIG_ADDRESS port (0xCF8) */
+    mov     dx, 0xCF8
+    out     dx, eax
+    /* Read from CONFIG_DATA port (0xCFC) */
+    mov     dx, 0xCFC
+    in      eax, dx
+    ret
+.size fj_rt_bare_pci_read32, . - fj_rt_bare_pci_read32
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:
@@ -2642,16 +2701,25 @@ __isr_timer:
     pop     rax
     iretq
 
-/* Keyboard IRQ handler (vector 33 = IRQ1) */
+/* Keyboard IRQ handler (vector 33 = IRQ1) — with ring buffer */
 __isr_keyboard:
     push    rax
+    push    rbx
     push    rdx
-    /* Read scancode (must read to clear IRQ) */
+    /* Read scancode from PS/2 port */
     in      al, 0x60
+    /* Store in ring buffer at 0x6FD00 (256-byte buffer) */
+    /* Write index at 0x6FD00+256 = 0x6FE00-0x100... use 0x6FB00 instead */
+    /* Buffer: 0x6FB00 (256 bytes), write_idx: 0x6FBF0, read_idx: 0x6FBF8 */
+    movzx   ebx, BYTE PTR [0x6FBF0]    /* write index */
+    mov     BYTE PTR [0x6FB00 + rbx], al /* store scancode */
+    add     bl, 1                        /* wrap at 256 */
+    mov     BYTE PTR [0x6FBF0], bl
     /* Send EOI */
     mov     al, 0x20
     out     0x20, al
     pop     rdx
+    pop     rbx
     pop     rax
     iretq
 

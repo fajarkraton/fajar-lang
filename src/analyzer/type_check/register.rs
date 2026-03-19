@@ -247,6 +247,10 @@ impl TypeChecker {
             ("tss_init", vec![], Type::Void),
             ("syscall_init", vec![], Type::Void),
             ("proc_create_user", vec![Type::I64], Type::I64),
+            // Phase 6: Keyboard + PCI
+            ("kb_read_scancode", vec![], Type::I64),
+            ("kb_has_data", vec![], Type::I64),
+            ("pci_read32", vec![Type::I64, Type::I64, Type::I64, Type::I64], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (
