@@ -152,12 +152,13 @@ Sprints:   8/8 complete
 ### Current Totals
 
 ```
-Tests:     5,972 lib + 379 integration = 6,351 total (0 failures, --features native)
-LOC:       ~270,000+ lines of Rust (200+ files, 12 module splits)
-Examples:  109 .fj programs (incl. hal_blinky, fajaros_kernel, fajaros_shell)
+Tests:     5,979 lib + 379 integration = 6,358 total (0 failures, --features native)
+LOC:       ~280,000 lines of Rust (220+ files)
+Examples:  114 .fj programs (incl. hal_blinky, fajaros_kernel, q6a_showcase, q6a_gpio_blink)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
 Builtins:  90+ bare-metal runtime functions (GPIO, UART, SPI, I2C, Timer, DMA, VFS, Network, Display, Process, Syscall, MMU)
 CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
+Release:   v3.2.0 "Surya Rising" (2026-03-19)
 ```
 
 ### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang

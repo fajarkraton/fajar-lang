@@ -6,8 +6,8 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-5%2C144_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-230K_Rust-blue)]()
+[![Tests](https://img.shields.io/badge/tests-5%2C979_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-280K_Rust-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Fajar Lang?
@@ -290,7 +290,7 @@ src/
   formatter/          -- Code formatter
   package/            -- Package manager, registry, signing
 stdlib/               -- Fajar Lang stdlib (.fj source)
-examples/             -- 49 example .fj programs
+examples/             -- 114 example .fj programs
 tests/                -- Integration tests (eval, ML, OS, safety, property)
 benches/              -- Criterion benchmarks
 packages/             -- 7 standard packages
@@ -303,10 +303,10 @@ docs/                 -- 44+ reference documents
 
 | Metric | Value |
 |--------|-------|
-| Rust LOC | ~230,000 |
-| Source files | 210+ `.rs` files |
-| Tests | 5,144 (0 failures) |
-| Examples | 49 `.fj` programs |
+| Rust LOC | ~280,000 |
+| Source files | 220+ `.rs` files |
+| Tests | 5,979 lib + 379 integration (0 failures) |
+| Examples | 114 `.fj` programs |
 | Error codes | 78+ across 9 categories |
 | Documentation | 44+ docs + 40-page mdBook |
 | Standard packages | 7 (math, nn, hal, drivers, http, json, crypto) |
@@ -316,6 +316,8 @@ docs/                 -- 44+ reference documents
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
+| **[v3.2.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v3.2.0)** | **Surya Rising** | **`const` in body, or-patterns, f-strings, @interrupt, @kernel enforcement, FajarOS v3.2 microkernel (17 syscalls, 160 commands, signals, pipes, services), Q6A MNIST 100%, ResNet18 34 img/s** |
+| [v3.1.1](https://github.com/fajarkraton/fajar-lang/releases/tag/v3.1.1) | Surya Enablers | Labeled break/continue, const folding, @kernel codegen enforcement, @interrupt attribute, 90+ bare-metal builtins |
 | **[v3.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v3.0.0)** | **Singularity** | **HKT, structured concurrency, distributed computing, advanced ML v2, GPU codegen (PTX/SPIR-V), package ecosystem v2, debugger v2, production deployment** |
 | [v2.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v2.0.0) | Transcendence | Dependent types, linear types, formal verification, tiered JIT, effect system v2, GC mode, self-hosting v2, LSP v2 |
 | [v1.1.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v1.1.0) | Ascension | Hardware discovery, NPU, FP8/BF16, Jetson Thor BSP, AVX-512/AMX, CI/CD, package registry, multi-accelerator, real-world demos |
