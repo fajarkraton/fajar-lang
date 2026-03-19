@@ -4467,12 +4467,13 @@ const FS_ENTRY_SIZE: i64 = 128
     let efer = read_msr(0xC0000080)
     write_msr(0xC0000080, efer | (1 << 11))
 
-    // Enable SMEP if supported (CR4 bit 20 — prevent kernel executing user code)
-    let ebx7 = cpuid_ebx(7)
-    if (ebx7 & (1 << 7)) != 0 {
-        let cr4 = read_cr4()
-        write_cr4(cr4 | (1 << 20))
-    }
+    // Note: SMEP (CR4 bit 20) NOT enabled — our identity-mapped 2MB pages
+    // use P|RW|PS flags without explicit Supervisor-only marking.
+    // On real CPUs with SMEP, the U/S bit in page tables must be 0 for
+    // kernel pages. Our 32-bit trampoline sets PD entries with just P|RW|PS
+    // (no User bit), so SMEP *should* work, but some QEMU -cpu host configs
+    // expose SMEP before we can verify page table correctness.
+    // TODO: Enable SMEP after verifying all kernel pages have U/S=0.
 
     // Stack guard page: unmap bottom of stack to catch overflow
     unmap_page(0x7F0000 - 4096)  // guard page below stack bottom

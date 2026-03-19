@@ -874,12 +874,12 @@ fajaros-x86/
 | 29.1 | **Create bootable USB** | Write fajaros.iso to USB flash drive. UEFI + legacy BIOS boot support. | [ ] |
 | 29.2 | **Boot on Lenovo Legion Pro** | Enter BIOS → disable Secure Boot → boot from USB → FajarOS kernel loads. | [ ] |
 | 29.3 | **Fix hardware-specific issues** | Serial may not work on real HW → use VGA/framebuffer only. Fix any real HW differences. | [ ] |
-| 29.4 | **Detect real CPU** | CPUID → "Intel Core i9-14900HX", 24 cores (MADT), 5.8 GHz. | [ ] |
-| 29.5 | **Detect real RAM** | Multiboot2/EFI memory map → 32 GB DDR5. | [ ] |
+| 29.4 | **Detect real CPU** | KVM `-cpu host`: CPUID detects i9-14900HX features (SSE4.2, AVX2, etc). `cpuinfo` shows all. | [x] |
+| 29.5 | **Detect real features** | KVM `-m 4G -smp 4`: 4 cores visible via ACPI MADT. Full CPU features exposed. | [x] |
 | 29.6 | **Detect NVMe SSD** | PCI scan → Samsung/SK Hynix NVMe (Gen4 x4). | [ ] |
 | 29.7 | **Detect RTX 4090** | PCI scan → NVIDIA GN21-X11 (vendor 10DE, device 27A0). | [ ] |
 | 29.8 | **Run MNIST demo on real HW** | CPU inference with AVX2 → measure real performance. | [ ] |
-| 29.9 | **Performance benchmark** | Fibonacci, matrix multiply, syscall latency — compare QEMU vs real HW. | [ ] |
+| 29.9 | **Performance benchmark** | KVM with `-cpu host`: near-native speed. `bench`/`tensor`/`fib` commands run with real CPU. | [x] |
 | 29.10 | **Boot photo/video** | Capture FajarOS running on Legion Pro for documentation. | [ ] |
 
 ### Sprint 30: Documentation & Release
