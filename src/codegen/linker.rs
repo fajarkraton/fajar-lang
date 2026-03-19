@@ -1811,6 +1811,128 @@ fj_rt_str_len:
     ret
 .size fj_rt_str_len, . - fj_rt_str_len
 
+/* ── Process Scheduler ── */
+
+/* proc_table_addr() -> rax (0x600000) */
+.global fj_rt_bare_proc_table_addr
+.type fj_rt_bare_proc_table_addr, @function
+fj_rt_bare_proc_table_addr:
+    mov     rax, 0x600000
+    ret
+.size fj_rt_bare_proc_table_addr, . - fj_rt_bare_proc_table_addr
+
+/* get_current_pid() -> rax */
+.global fj_rt_bare_get_current_pid
+.type fj_rt_bare_get_current_pid, @function
+fj_rt_bare_get_current_pid:
+    mov     rax, QWORD PTR [0x6FE00]
+    ret
+.size fj_rt_bare_get_current_pid, . - fj_rt_bare_get_current_pid
+
+/* set_current_pid(pid: rdi) */
+.global fj_rt_bare_set_current_pid
+.type fj_rt_bare_set_current_pid, @function
+fj_rt_bare_set_current_pid:
+    mov     QWORD PTR [0x6FE00], rdi
+    ret
+.size fj_rt_bare_set_current_pid, . - fj_rt_bare_set_current_pid
+
+/* get_proc_count() -> rax */
+.global fj_rt_bare_get_proc_count
+.type fj_rt_bare_get_proc_count, @function
+fj_rt_bare_get_proc_count:
+    mov     rax, QWORD PTR [0x6FE08]
+    ret
+.size fj_rt_bare_get_proc_count, . - fj_rt_bare_get_proc_count
+
+/* proc_create(entry_fn: rdi) -> rax (pid) */
+/* Creates a new process with given entry point. Returns pid or -1. */
+.global fj_rt_bare_proc_create
+.type fj_rt_bare_proc_create, @function
+fj_rt_bare_proc_create:
+    push    rbx
+    push    r12
+    /* Find free slot (state == 0) */
+    mov     rbx, 0x600000       /* process table base */
+    xor     ecx, ecx            /* slot index */
+.Lpc_find:
+    cmp     ecx, 16
+    jge     .Lpc_full
+    mov     rax, QWORD PTR [rbx + 8]   /* state */
+    test    rax, rax
+    jz      .Lpc_found
+    add     rbx, 256
+    add     ecx, 1
+    jmp     .Lpc_find
+.Lpc_full:
+    mov     rax, -1
+    pop     r12
+    pop     rbx
+    ret
+.Lpc_found:
+    /* rbx = process entry, ecx = pid, rdi = entry function */
+    mov     r12, rdi            /* save entry */
+    /* Set pid */
+    mov     QWORD PTR [rbx], rcx
+    /* Set state = 1 (ready) */
+    mov     QWORD PTR [rbx + 8], 1
+    /* Set entry */
+    mov     QWORD PTR [rbx + 24], r12
+    /* Set ticks = 0 */
+    mov     QWORD PTR [rbx + 32], 0
+    /* Set up stack: each process gets 64KB, stack top = 0x680000 + pid*0x10000 */
+    mov     rax, rcx
+    shl     rax, 16             /* pid * 0x10000 */
+    add     rax, 0x680000       /* base */
+    add     rax, 0xFFF0         /* near top, 16-byte aligned */
+    /* Build initial stack frame for context switch:
+       The timer ISR pops 15 GPRs then does iretq.
+       iretq expects: [RIP, CS, RFLAGS, RSP, SS] on the stack.
+       So we push: SS, RSP, RFLAGS, CS, RIP, then 15 zero GPRs. */
+    /* rax = stack top; r12 = entry function */
+    mov     QWORD PTR [rax - 8], 0x10      /* SS = kernel data */
+    mov     QWORD PTR [rax - 16], rax      /* RSP = stack top */
+    mov     QWORD PTR [rax - 24], 0x202    /* RFLAGS = IF=1 */
+    mov     QWORD PTR [rax - 32], 0x08     /* CS = kernel code */
+    mov     QWORD PTR [rax - 40], r12      /* RIP = entry fn */
+    /* 15 zero GPRs (r15..rax): 15 * 8 = 120 bytes */
+    xor     edx, edx
+    mov     QWORD PTR [rax - 48], rdx      /* r15 */
+    mov     QWORD PTR [rax - 56], rdx      /* r14 */
+    mov     QWORD PTR [rax - 64], rdx      /* r13 */
+    mov     QWORD PTR [rax - 72], rdx      /* r12 */
+    mov     QWORD PTR [rax - 80], rdx      /* r11 */
+    mov     QWORD PTR [rax - 88], rdx      /* r10 */
+    mov     QWORD PTR [rax - 96], rdx      /* r9 */
+    mov     QWORD PTR [rax - 104], rdx     /* r8 */
+    mov     QWORD PTR [rax - 112], rdx     /* rbp */
+    mov     QWORD PTR [rax - 120], rdx     /* rdi */
+    mov     QWORD PTR [rax - 128], rdx     /* rsi */
+    mov     QWORD PTR [rax - 136], rdx     /* rdx */
+    mov     QWORD PTR [rax - 144], rdx     /* rcx */
+    mov     QWORD PTR [rax - 152], rdx     /* rbx */
+    mov     QWORD PTR [rax - 160], rdx     /* rax */
+    /* Saved RSP = stack top - 160 (points to top of saved frame) */
+    sub     rax, 160
+    mov     QWORD PTR [rbx + 16], rax
+    /* Increment process count */
+    add     QWORD PTR [0x6FE08], 1
+    /* Return pid */
+    mov     rax, rcx
+    pop     r12
+    pop     rbx
+    ret
+.size fj_rt_bare_proc_create, . - fj_rt_bare_proc_create
+
+/* yield() — voluntary context switch */
+.global fj_rt_bare_yield
+.type fj_rt_bare_yield, @function
+fj_rt_bare_yield:
+    /* Just trigger a software interrupt to go through the same path as timer */
+    int     32
+    ret
+.size fj_rt_bare_yield, . - fj_rt_bare_yield
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:
@@ -2125,16 +2247,100 @@ fj_rt_bare_pit_init:
     ret
 .size fj_rt_bare_pit_init, . - fj_rt_bare_pit_init
 
-/* Timer IRQ handler (vector 32 = IRQ0) */
+/* Timer IRQ handler (vector 32 = IRQ0) — with context switch */
 __isr_timer:
+    /* Save all GP registers */
     push    rax
+    push    rbx
+    push    rcx
     push    rdx
+    push    rsi
+    push    rdi
+    push    rbp
+    push    r8
+    push    r9
+    push    r10
+    push    r11
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
     /* Increment tick counter */
     lock add QWORD PTR [rip + __timer_ticks], 1
-    /* Send EOI to master PIC */
+
+    /* Save current process RSP */
+    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    shl     rax, 8                      /* pid * 256 */
+    add     rax, 0x600000               /* + table base */
+    mov     QWORD PTR [rax + 16], rsp  /* save rsp */
+    /* Increment current process ticks */
+    add     QWORD PTR [rax + 32], 1
+
+    /* Round-robin: find next ready process */
+    mov     rbx, QWORD PTR [0x6FE00]   /* current pid */
+    mov     rcx, 16                     /* max iterations */
+.Lsched_next:
+    add     rbx, 1
+    cmp     rbx, 16
+    jl      .Lsched_check
+    xor     ebx, ebx                   /* wrap to 0 */
+.Lsched_check:
+    /* Check if process rbx is ready (state == 1 or state == 2) */
+    mov     rax, rbx
+    shl     rax, 8
+    add     rax, 0x600000
+    mov     rdx, QWORD PTR [rax + 8]   /* state */
+    cmp     rdx, 1
+    je      .Lsched_switch
+    cmp     rdx, 2
+    je      .Lsched_switch
+    sub     rcx, 1
+    jnz     .Lsched_next
+    /* No ready process found — stay on current */
+    jmp     .Lsched_eoi
+
+.Lsched_switch:
+    /* Mark old process as ready (if it was running) */
+    mov     rax, QWORD PTR [0x6FE00]
+    shl     rax, 8
+    add     rax, 0x600000
+    mov     rdx, QWORD PTR [rax + 8]
+    cmp     rdx, 2
+    jne     .Lsched_no_demote
+    mov     QWORD PTR [rax + 8], 1     /* running → ready */
+.Lsched_no_demote:
+
+    /* Switch to new process */
+    mov     QWORD PTR [0x6FE00], rbx   /* set current pid */
+    mov     rax, rbx
+    shl     rax, 8
+    add     rax, 0x600000
+    mov     QWORD PTR [rax + 8], 2     /* state = running */
+
+    /* Check if this is the first run (rsp might point to initial stack) */
+    mov     rsp, QWORD PTR [rax + 16]  /* restore rsp */
+
+.Lsched_eoi:
+    /* Send EOI to PIC */
     mov     al, 0x20
     out     0x20, al
+
+    /* Restore all GP registers */
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
+    pop     rbp
+    pop     rdi
+    pop     rsi
     pop     rdx
+    pop     rcx
+    pop     rbx
     pop     rax
     iretq
 

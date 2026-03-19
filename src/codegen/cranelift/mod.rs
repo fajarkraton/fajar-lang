@@ -5987,6 +5987,13 @@ impl CraneliftCompiler {
             // String byte access
             ("fj_rt_str_byte_at", "str_byte_at", &sig_2i64_ret_i64),
             ("fj_rt_str_len", "str_len", &sig_i64_ret_i64),
+            // Process scheduler (Phase 4)
+            ("fj_rt_bare_proc_table_addr", "proc_table_addr", &sig_ret_i64),
+            ("fj_rt_bare_get_current_pid", "get_current_pid", &sig_ret_i64),
+            ("fj_rt_bare_set_current_pid", "set_current_pid", &sig_i64_void),
+            ("fj_rt_bare_get_proc_count", "get_proc_count", &sig_ret_i64),
+            ("fj_rt_bare_proc_create", "proc_create", &sig_i64_ret_i64),
+            ("fj_rt_bare_yield", "yield_proc", &sig_void),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7105,6 +7112,41 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("str_len".to_string(), str_len_id);
+
+        // Process scheduler (Phase 4)
+        for (name, builtin) in [
+            ("fj_rt_bare_proc_table_addr", "proc_table_addr"),
+            ("fj_rt_bare_get_current_pid", "get_current_pid"),
+            ("fj_rt_bare_get_proc_count", "get_proc_count"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        let proc_create_id = self
+            .module
+            .declare_function("fj_rt_bare_proc_create", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("proc_create".to_string(), proc_create_id);
+        let set_pid_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_set_current_pid",
+                Linkage::Import,
+                &sig_i64_void,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("set_current_pid".to_string(), set_pid_id);
+        let yield_id = self
+            .module
+            .declare_function("fj_rt_bare_yield", Linkage::Import, &sig_halt)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("yield_proc".to_string(), yield_id);
 
         Ok(())
     }
@@ -10828,6 +10870,15 @@ impl ObjectCompiler {
                 dce_entry_points.push(fndef.name.clone());
             }
         }
+        // Scan for fn_addr("name") calls and add targets as entry points
+        // (fn_addr references functions by string, invisible to call-graph DCE)
+        for fndef in &concrete_fns {
+            crate::codegen::cranelift::scan_fn_addr_targets(
+                &fndef.body,
+                &mut dce_entry_points,
+            );
+        }
+
         // If no explicit entry points, keep all functions (library mode)
         let mut reachable = if dce_entry_points.is_empty() {
             concrete_fns.iter().map(|f| f.name.clone()).collect()
@@ -11906,5 +11957,68 @@ impl ObjectCompiler {
     /// Returns the data section annotations collected during compilation.
     pub fn data_sections(&self) -> &HashMap<String, String> {
         &self.data_sections
+    }
+}
+
+/// Scan an expression tree for `fn_addr("name")` calls and collect the target
+/// function names. Used to prevent DCE from removing functions referenced by
+/// `fn_addr` (which passes names as string literals, invisible to call-graph analysis).
+pub(crate) fn scan_fn_addr_targets(expr: &Expr, targets: &mut Vec<String>) {
+    match expr {
+        Expr::Call { callee, args, .. } => {
+            if let Expr::Ident { name, .. } = callee.as_ref() {
+                if name == "fn_addr" && !args.is_empty() {
+                    match &args[0].value {
+                        Expr::Ident { name: target, .. } => {
+                            targets.push(target.clone());
+                        }
+                        Expr::Literal {
+                            kind: LiteralKind::String(s),
+                            ..
+                        } => {
+                            targets.push(s.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            scan_fn_addr_targets(callee, targets);
+            for arg in args {
+                scan_fn_addr_targets(&arg.value, targets);
+            }
+        }
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                scan_fn_addr_targets_stmt(stmt, targets);
+            }
+            if let Some(tail) = expr {
+                scan_fn_addr_targets(tail, targets);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            scan_fn_addr_targets(condition, targets);
+            scan_fn_addr_targets(then_branch, targets);
+            if let Some(eb) = else_branch {
+                scan_fn_addr_targets(eb, targets);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scan_fn_addr_targets_stmt(stmt: &Stmt, targets: &mut Vec<String>) {
+    match stmt {
+        Stmt::Expr { expr, .. } => {
+            scan_fn_addr_targets(expr, targets);
+        }
+        Stmt::Let { value, .. } => {
+            scan_fn_addr_targets(value, targets);
+        }
+        _ => {}
     }
 }

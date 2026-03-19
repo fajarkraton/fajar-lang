@@ -1137,6 +1137,13 @@ impl TypeChecker {
             "read_timer_ticks",
             "str_byte_at",
             "str_len",
+            // Process scheduler builtins (Phase 4)
+            "proc_table_addr",
+            "get_current_pid",
+            "set_current_pid",
+            "get_proc_count",
+            "proc_create",
+            "yield_proc",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

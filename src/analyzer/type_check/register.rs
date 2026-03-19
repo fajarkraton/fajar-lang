@@ -236,6 +236,13 @@ impl TypeChecker {
             // Take i64 pointer (not str) to avoid heap string issues in no_std
             ("str_byte_at", vec![Type::I64, Type::I64], Type::I64),
             ("str_len", vec![Type::I64], Type::I64),
+            // Process scheduler builtins (Phase 4)
+            ("proc_table_addr", vec![], Type::I64),
+            ("get_current_pid", vec![], Type::I64),
+            ("set_current_pid", vec![Type::I64], Type::Void),
+            ("get_proc_count", vec![], Type::I64),
+            ("proc_create", vec![Type::I64], Type::I64),
+            ("yield_proc", vec![], Type::Void),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (
