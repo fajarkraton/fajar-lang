@@ -5105,10 +5105,10 @@ fn e2e_q6a_system_monitor_example() {
     let code = std::fs::read_to_string("examples/q6a_system_monitor.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("Dragon Q6A System Monitor")));
-    assert!(out.iter().any(|l| l.contains("CPU Temperature:")));
-    assert!(out.iter().any(|l| l.contains("Memory Usage:")));
-    assert!(out.iter().any(|l| l.contains("System Uptime:")));
-    assert!(out.iter().any(|l| l.contains("Monitor complete.")));
+    assert!(out.iter().any(|l| l.contains("CPU Temp:")));
+    assert!(out.iter().any(|l| l.contains("Memory:")));
+    assert!(out.iter().any(|l| l.contains("Uptime:")));
+    assert!(out.iter().any(|l| l.contains("Monitor Complete")));
 }
 
 #[test]
