@@ -582,6 +582,11 @@ impl Interpreter {
             "file_size",
             "dir_list",
             "env_var",
+            // x86_64 port I/O builtins (FajarOS Nova)
+            "port_outb",
+            "port_inb",
+            "x86_serial_init",
+            "set_uart_mode_x86",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

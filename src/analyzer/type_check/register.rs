@@ -213,6 +213,11 @@ impl TypeChecker {
                 Type::Array(Box::new(Type::Str)),
             ),
             ("env_var", vec![Type::Str], Type::Str),
+            // x86_64 port I/O builtins (FajarOS Nova)
+            ("port_outb", vec![Type::I64, Type::I64], Type::I64),
+            ("port_inb", vec![Type::I64], Type::I64),
+            ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
+            ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (

@@ -1904,3 +1904,100 @@ pub extern "C" fn fj_rt_bare_read_ttbr0() -> i64 {
 
 #[no_mangle]
 pub extern "C" fn fj_rt_bare_tlbi_va(_va: i64) {}
+
+// ═══════════════════════════════════════════════════════════════════════
+// x86_64 Port I/O (IN/OUT instructions)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// x86_64 uses port I/O (not MMIO) for legacy devices:
+//   - 16550 UART (COM1: 0x3F8, COM2: 0x2F8)
+//   - PIC (0x20/0xA0), PIT (0x40), PS/2 (0x60/0x64)
+//   - PCI config (0xCF8/0xCFC), VGA (0x3D4/0x3D5)
+//
+// These are simulation stubs for hosted testing.
+// In bare-metal AOT, the compiler generates actual IN/OUT instructions.
+
+/// x86_64 port output: write a byte to an I/O port.
+/// In hosted mode, this simulates COM1 serial output.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_port_outb(port: i64, value: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // On real x86_64 host, we can use the actual instruction
+        // (only works in ring 0 or with ioperm — skip for simulation)
+    }
+
+    // Simulation: if writing to COM1 data register, output to UART
+    if port == 0x3F8 {
+        uart_putc(value as u8);
+    }
+    0
+}
+
+/// x86_64 port input: read a byte from an I/O port.
+/// In hosted mode, returns simulated values.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_port_inb(port: i64) -> i64 {
+    // Simulation: COM1 LSR (0x3FD) — TX empty + TX holding empty
+    if port == 0x3FD {
+        return 0x60; // bits 5+6 set = transmitter empty
+    }
+    // Simulation: COM1 data register — no data
+    if port == 0x3F8 {
+        return 0;
+    }
+    0
+}
+
+/// x86_64 serial init: initialize 16550 UART at standard COM port.
+/// port: 0 = COM1 (0x3F8), 1 = COM2 (0x2F8)
+/// baud: baud rate (115200, 9600, etc.)
+///
+/// In hosted simulation, this just marks the port as initialized.
+/// In bare-metal AOT, the .fj code calls port_outb() directly.
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_x86_serial_init(port: i64, baud: i64) -> i64 {
+    let base: i64 = match port {
+        0 => 0x3F8, // COM1
+        1 => 0x2F8, // COM2
+        _ => return -1,
+    };
+
+    if baud <= 0 {
+        return -1;
+    }
+
+    let divisor = 115200 / baud;
+
+    // Standard 16550 UART initialization sequence
+    fj_rt_bare_port_outb(base + 1, 0x00); // Disable interrupts
+    fj_rt_bare_port_outb(base + 3, 0x80); // Enable DLAB
+    fj_rt_bare_port_outb(base, divisor);   // Divisor low byte
+    fj_rt_bare_port_outb(base + 1, 0x00); // Divisor high byte
+    fj_rt_bare_port_outb(base + 3, 0x03); // 8N1
+    fj_rt_bare_port_outb(base + 2, 0xC7); // Enable FIFO, clear, 14-byte threshold
+    fj_rt_bare_port_outb(base + 4, 0x0B); // IRQs enabled, RTS/DSR set
+
+    // Also register as UART port 0 for the existing UART subsystem
+    if (port as usize) < UART_MAX_PORTS {
+        UART_INIT[port as usize].store(1, Ordering::Relaxed);
+        UART_BAUD[port as usize].store(baud as u64, Ordering::Relaxed);
+    }
+
+    0
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// x86_64 UART print (uses port I/O instead of MMIO)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Mode flag: 0 = MMIO (ARM), 1 = port I/O (x86_64).
+static UART_MODE: AtomicU64 = AtomicU64::new(0);
+
+/// Set UART mode to x86_64 port I/O (call once at boot).
+#[no_mangle]
+pub extern "C" fn fj_rt_bare_set_uart_mode_x86(base_port: i64) {
+    UART_MODE.store(1, Ordering::Relaxed);
+    // Store the port base in UART_BASE (reuse the atomic)
+    UART_BASE.store(base_port as u64, Ordering::Relaxed);
+}

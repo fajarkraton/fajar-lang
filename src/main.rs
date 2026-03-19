@@ -1255,8 +1255,8 @@ fn cmd_build_native(
         }
     };
 
-    // Enable no_std mode: --no-std flag or @no_std annotation in source
-    if no_std {
+    // Enable no_std mode: --no-std flag, bare-metal target, or @no_std annotation
+    if no_std || target.is_bare_metal {
         compiler.set_no_std(true);
     }
     for item in &program.items {
@@ -1295,7 +1295,9 @@ fn cmd_build_native(
     }
 
     // Determine linker command
-    let linker = if is_cross {
+    let linker = if target.is_bare_metal {
+        "ld".to_string() // bare-metal always uses ld directly (no libc)
+    } else if is_cross {
         cross_linker(&target)
     } else {
         "cc".to_string()
@@ -1308,7 +1310,12 @@ fn cmd_build_native(
     } else if target.is_bare_metal {
         // Auto-generate a default linker script for bare-metal targets
         let config = fajar_lang::codegen::linker::LinkerConfig::for_target(&target);
-        match fajar_lang::codegen::linker::generate_linker_script(&config) {
+        let script_result = if target.arch == fajar_lang::codegen::target::Arch::X86_64 {
+            fajar_lang::codegen::linker::generate_x86_64_linker_script(&config)
+        } else {
+            fajar_lang::codegen::linker::generate_linker_script(&config)
+        };
+        match script_result {
             Ok(script) => {
                 generated_script_path = obj_path.with_extension("ld");
                 if let Err(e) = std::fs::write(&generated_script_path, &script) {
@@ -1333,22 +1340,42 @@ fn cmd_build_native(
     link_cmd.arg(&obj_path).arg("-o").arg(&bin_path);
 
     // Bare-metal startup assembly object (assembled alongside the main .o)
-    let startup_obj_path =
-        if target.is_bare_metal && target.arch == fajar_lang::codegen::target::Arch::Aarch64 {
-            // Find the @entry function name, default to "kernel_main"
-            let entry_fn = "kernel_main";
-            let startup_asm = fajar_lang::codegen::linker::generate_aarch64_startup(entry_fn);
-            let startup_s = obj_path.with_extension("start.S");
-            let startup_o = obj_path.with_extension("start.o");
-            std::fs::write(&startup_s, &startup_asm).ok();
+    let startup_obj_path = if target.is_bare_metal {
+        use fajar_lang::codegen::target::Arch;
 
-            // Assemble with cross-assembler
-            let as_cmd = if cfg!(target_arch = "aarch64") {
-                "as"
-            } else {
-                "aarch64-linux-gnu-as"
-            };
-            let _ = std::process::Command::new(as_cmd)
+        // Find the @entry function name, default to "kernel_main"
+        let entry_fn = "kernel_main";
+        let startup_s = obj_path.with_extension("start.S");
+        let startup_o = obj_path.with_extension("start.o");
+
+        let (startup_asm, as_cmd) = match target.arch {
+            Arch::Aarch64 => {
+                let asm = fajar_lang::codegen::linker::generate_aarch64_startup(entry_fn);
+                let cmd = if cfg!(target_arch = "aarch64") {
+                    "as"
+                } else {
+                    "aarch64-linux-gnu-as"
+                };
+                (asm, cmd)
+            }
+            Arch::X86_64 => {
+                let asm = fajar_lang::codegen::linker::generate_x86_64_startup(entry_fn);
+                let cmd = "as";
+                (asm, cmd)
+            }
+            _ => {
+                // No startup assembly for other architectures yet
+                (String::new(), "as")
+            }
+        };
+
+        if !startup_asm.is_empty() {
+            std::fs::write(&startup_s, &startup_asm).ok();
+            let mut as_command = std::process::Command::new(as_cmd);
+            if target.arch == Arch::X86_64 {
+                as_command.arg("--64"); // ELF64 — 32-bit trampoline uses .byte encoding
+            }
+            let _ = as_command
                 .arg(&startup_s)
                 .arg("-o")
                 .arg(&startup_o)
@@ -1361,11 +1388,14 @@ fn cmd_build_native(
             }
         } else {
             None
-        };
+        }
+    } else {
+        None
+    };
 
     if target.is_bare_metal {
-        // Bare-metal: no standard libs, use linker script
-        link_cmd.arg("-nostdlib").arg("-nostartfiles");
+        // Bare-metal: use linker script, no standard libs
+        // Using `ld` directly — no -nostdlib/-nostartfiles needed (those are gcc flags)
         if let Some(ref sp) = script_path {
             link_cmd.arg("-T").arg(sp);
         }
@@ -1378,7 +1408,9 @@ fn cmd_build_native(
     }
 
     // Add platform-specific dead-code stripping flags
-    if cfg!(target_os = "macos") {
+    if target.is_bare_metal {
+        link_cmd.arg("--gc-sections"); // ld (not cc) syntax
+    } else if cfg!(target_os = "macos") {
         link_cmd.arg("-Wl,-dead_strip");
     } else {
         link_cmd.arg("-Wl,--gc-sections");

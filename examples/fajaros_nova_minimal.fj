@@ -1,0 +1,45 @@
+// FajarOS Nova — Minimal x86_64 bare-metal test
+// This uses only bare-metal-safe operations (no heap, no strings)
+
+@kernel
+fn kernel_main() {
+    // Initialize COM1 serial (16550 UART) via port I/O
+    x86_serial_init(0, 115200)
+
+    // Direct serial output via port I/O
+    // Write "Hello" one byte at a time
+    port_outb(0x3F8, 72)   // 'H'
+    port_outb(0x3F8, 101)  // 'e'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 111)  // 'o'
+    port_outb(0x3F8, 32)   // ' '
+
+    // Write "FajarOS Nova"
+    port_outb(0x3F8, 70)   // 'F'
+    port_outb(0x3F8, 97)   // 'a'
+    port_outb(0x3F8, 106)  // 'j'
+    port_outb(0x3F8, 97)   // 'a'
+    port_outb(0x3F8, 114)  // 'r'
+    port_outb(0x3F8, 79)   // 'O'
+    port_outb(0x3F8, 83)   // 'S'
+    port_outb(0x3F8, 32)   // ' '
+    port_outb(0x3F8, 78)   // 'N'
+    port_outb(0x3F8, 111)  // 'o'
+    port_outb(0x3F8, 118)  // 'v'
+    port_outb(0x3F8, 97)   // 'a'
+    port_outb(0x3F8, 10)   // '\n'
+
+    // Test: read COM1 LSR (Line Status Register)
+    let lsr = port_inb(0x3FD)
+
+    // If TX ready, print "OK"
+    if (lsr & 0x20) != 0 {
+        port_outb(0x3F8, 79)   // 'O'
+        port_outb(0x3F8, 75)   // 'K'
+        port_outb(0x3F8, 10)   // '\n'
+    }
+
+    // Use println (mapped to fj_rt_bare_println in no_std)
+    println("FajarOS Nova booted successfully!")
+}

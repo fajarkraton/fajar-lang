@@ -1118,6 +1118,11 @@ impl TypeChecker {
             "port_write",
             "syscall_define",
             "syscall_dispatch",
+            // x86_64 port I/O builtins (FajarOS Nova)
+            "port_outb",
+            "port_inb",
+            "x86_serial_init",
+            "set_uart_mode_x86",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

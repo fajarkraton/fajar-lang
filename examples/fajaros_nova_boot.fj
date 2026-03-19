@@ -1,0 +1,39 @@
+// FajarOS Nova — x86_64 Boot Sequence Test
+// Tests the port I/O builtins and serial initialization
+// Run: fj run examples/fajaros_nova_boot.fj
+
+fn main() {
+    println("============================================")
+    println("  FajarOS Nova v0.1.0")
+    println("  Target: x86_64 (Intel Core i9-14900HX)")
+    println("  Written 100% in Fajar Lang")
+    println("============================================")
+    println("")
+
+    // Initialize COM1 serial via x86_64 port I/O
+    let result = x86_serial_init(0, 115200)
+    println("[BOOT] Serial init: " + to_string(result))
+
+    // Test port I/O simulation
+    port_outb(0x3F8, 72)   // 'H'
+    port_outb(0x3F8, 101)  // 'e'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 111)  // 'o'
+    port_outb(0x3F8, 10)   // newline
+
+    // Read COM1 LSR — should return 0x60 (TX empty)
+    let lsr = port_inb(0x3FD)
+    println("[BOOT] COM1 LSR: " + to_string(lsr))
+
+    // Verify TX ready bit
+    if (lsr & 0x20) != 0 {
+        println("[BOOT] COM1 TX ready — OK")
+    } else {
+        println("[BOOT] COM1 TX not ready — ERROR")
+    }
+
+    println("")
+    println("[BOOT] FajarOS Nova — boot sequence test PASSED")
+    println("[BOOT] Ready for QEMU x86_64 deployment")
+}

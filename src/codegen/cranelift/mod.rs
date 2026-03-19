@@ -5957,6 +5957,19 @@ impl CraneliftCompiler {
             ("fj_rt_bare_switch_ttbr0", "switch_ttbr0", &sig_i64_void),
             ("fj_rt_bare_read_ttbr0", "read_ttbr0", &sig_ret_i64),
             ("fj_rt_bare_tlbi_va", "tlbi_va", &sig_i64_void),
+            // x86_64 port I/O builtins
+            ("fj_rt_bare_port_outb", "port_outb", &sig_2i64_ret_i64),
+            ("fj_rt_bare_port_inb", "port_inb", &sig_i64_ret_i64),
+            (
+                "fj_rt_bare_x86_serial_init",
+                "x86_serial_init",
+                &sig_2i64_ret_i64,
+            ),
+            (
+                "fj_rt_bare_set_uart_mode_x86",
+                "set_uart_mode_x86",
+                &sig_i64_void,
+            ),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -6954,6 +6967,56 @@ impl ObjectCompiler {
             self.functions
                 .insert(format!("__volatile_read{suffix}"), rid);
         }
+
+        // ── x86_64 Port I/O Builtins (FajarOS Nova) ──
+
+        // port_outb(port, value) -> i64
+        let port_outb_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_port_outb",
+                Linkage::Import,
+                &sig_2i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("port_outb".to_string(), port_outb_id);
+
+        // port_inb(port) -> i64
+        let port_inb_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_port_inb",
+                Linkage::Import,
+                &sig_i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("port_inb".to_string(), port_inb_id);
+
+        // x86_serial_init(port, baud) -> i64
+        let x86_serial_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_x86_serial_init",
+                Linkage::Import,
+                &sig_2i64_ret_i64,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("x86_serial_init".to_string(), x86_serial_id);
+
+        // set_uart_mode_x86(base_port) -> void
+        let set_mode_id = self
+            .module
+            .declare_function(
+                "fj_rt_bare_set_uart_mode_x86",
+                Linkage::Import,
+                &sig_i64_void,
+            )
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("set_uart_mode_x86".to_string(), set_mode_id);
 
         Ok(())
     }

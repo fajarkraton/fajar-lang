@@ -1370,6 +1370,18 @@ impl Interpreter {
             "file_size" => self.builtin_file_size(args),
             "dir_list" => self.builtin_dir_list(args),
             "env_var" => self.builtin_env_var(args),
+            // x86_64 port I/O builtins (FajarOS Nova) — simulation stubs
+            "port_outb" | "x86_serial_init" => Ok(Value::Int(0)),
+            "port_inb" => {
+                // Simulate COM1 LSR: TX empty
+                if !args.is_empty() {
+                    if let Value::Int(port) = &args[0] {
+                        if *port == 0x3FD { return Ok(Value::Int(0x60)); }
+                    }
+                }
+                Ok(Value::Int(0))
+            },
+            "set_uart_mode_x86" => Ok(Value::Null),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // Simulation stubs — return 0/Null for interpreter mode without native feature
             "gpio_config" | "gpio_set_output" | "gpio_set_input" | "gpio_set_pull"

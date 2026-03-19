@@ -1092,6 +1092,639 @@ fj_rt_asm_eret:
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
+/// Generates x86_64 bare-metal startup assembly with Multiboot2 header.
+///
+/// This stub:
+/// 1. Provides a Multiboot2 header (magic 0xE85250D6) so GRUB2 can boot us
+/// 2. Sets the stack pointer from linker symbol `__stack_top`
+/// 3. Zeros the BSS section (`__bss_start` to `__bss_end`)
+/// 4. Initializes the 16550 UART at COM1 (0x3F8) for serial output
+/// 5. Calls the user's entry function (default: `kernel_main`)
+/// 6. On return, enters CLI+HLT halt loop
+///
+/// The generated ELF can be booted by:
+/// - GRUB2: `multiboot2 /boot/fajaros.elf`
+/// - QEMU direct: `qemu-system-x86_64 -kernel fajaros.elf`
+///
+/// When loaded by Multiboot2-compliant bootloader:
+/// - EAX = 0x36D76289 (Multiboot2 magic)
+/// - EBX = physical address of Multiboot2 info struct
+/// - CPU is already in 64-bit long mode (if using GRUB2 x86_64)
+/// - Paging enabled (identity-mapped)
+/// - Interrupts disabled
+pub fn generate_x86_64_startup(entry_fn: &str) -> String {
+    format!(
+        r#"/* Auto-generated x86_64 bare-metal startup — FajarOS Nova */
+.intel_syntax noprefix
+
+/* ═══════════════════════════════════════════════════════════════════
+   Multiboot2 Header
+   Must be within the first 32KB of the kernel image.
+   Magic: 0xE85250D6, Architecture: 0 (i386, used for x86_64 too)
+   ═══════════════════════════════════════════════════════════════════ */
+.section .multiboot_header, "a"
+.align 8
+multiboot_header_start:
+    .long   0xE85250D6                              /* magic */
+    .long   0                                        /* architecture: 0 = i386/x86_64 */
+    .long   multiboot_header_end - multiboot_header_start   /* header length */
+    .long   -(0xE85250D6 + 0 + (multiboot_header_end - multiboot_header_start))  /* checksum */
+
+    /* Address tag (type=2): tell GRUB where to load us */
+    .align  8
+    .short  2       /* type = address */
+    .short  0       /* flags */
+    .long   24      /* size */
+    .long   multiboot_header_start  /* header_addr */
+    .long   0x100000                /* load_addr (1MB) */
+    .long   0                       /* load_end_addr (0 = load entire file) */
+    .long   0                       /* bss_end_addr (0 = no BSS) */
+
+    /* Entry address tag (type=3): tell GRUB where to jump */
+    .align  8
+    .short  3       /* type = entry_addr */
+    .short  0       /* flags */
+    .long   12      /* size */
+    .long   _start  /* entry_addr (32-bit!) */
+
+    /* End tag (type=0, flags=0, size=8) */
+    .align  8
+    .short  0       /* type */
+    .short  0       /* flags */
+    .long   8       /* size */
+multiboot_header_end:
+
+/* ═══════════════════════════════════════════════════════════════════
+   Entry Point
+   GRUB loads us in protected mode (32-bit) or long mode (64-bit)
+   depending on config. We handle 64-bit long mode (standard GRUB2).
+   QEMU -kernel loads us directly in long mode with identity paging.
+   ═══════════════════════════════════════════════════════════════════ */
+.section .text.start, "ax"
+.global _start
+.type _start, @function
+
+/* ═══════════════════════════════════════════════════════════════════
+   32-bit Entry (Multiboot2 loads us in 32-bit protected mode)
+   Transition: 32-bit protected → 64-bit long mode
+   ═══════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+   32-bit trampoline encoded as raw bytes to avoid assembler encoding
+   issues when building an ELF64 with .code32 sections.
+
+   Instructions (32-bit protected mode, Intel syntax):
+     cli
+     mov esp, 0x200000           ; temporary stack
+     mov edi, ebx                ; save multiboot2 info ptr
+     ; Serial output 'N','o','v','a','\n' to COM1 (0x3F8)
+     mov dx, 0x3F8 / mov al, byte / out dx, al  (×5)
+     ; Page tables at 0x800000 (PML4→PDPT→PD, identity map 0-4MB)
+     ; Enable PAE, LME, PG → long mode active
+     ; lgdt + far jmp to _start64 in 64-bit segment
+   ═══════════════════════════════════════════════════════════════════ */
+_start:
+    /* cli */
+    .byte 0xFA
+    /* mov esp, 0x00200000 */
+    .byte 0xBC, 0x00, 0x00, 0x20, 0x00
+    /* mov edi, ebx */
+    .byte 0x89, 0xDF
+
+    /* --- Early serial: write "[BOOT32]\n" to COM1 --- */
+    /* mov dx, 0x3F8 ; then mov al, byte ; out dx, al for each char */
+    .byte 0x66, 0xBA, 0xF8, 0x03
+    .byte 0xB0, 0x5B, 0xEE         /* '[' */
+    .byte 0xB0, 0x42, 0xEE         /* 'B' */
+    .byte 0xB0, 0x4F, 0xEE         /* 'O' */
+    .byte 0xB0, 0x4F, 0xEE         /* 'O' */
+    .byte 0xB0, 0x54, 0xEE         /* 'T' */
+    .byte 0xB0, 0x33, 0xEE         /* '3' */
+    .byte 0xB0, 0x32, 0xEE         /* '2' */
+    .byte 0xB0, 0x5D, 0xEE         /* ']' */
+    .byte 0xB0, 0x0A, 0xEE         /* '\n' */
+
+    /* --- Zero 12KB at 0x70000 for page tables --- */
+    /* Page tables: PML4 at 0x70000, PDPT at 0x71000, PD at 0x72000 */
+    /* xor eax, eax */
+    .byte 0x31, 0xC0
+    /* mov edi, 0x70000 */
+    .byte 0xBF, 0x00, 0x00, 0x07, 0x00
+    /* mov ecx, 0xC00 (3 pages × 4096/4 = 3072 dwords) */
+    .byte 0xB9, 0x00, 0x0C, 0x00, 0x00
+    /* cld ; rep stosd */
+    .byte 0xFC, 0xF3, 0xAB
+
+    /* --- Set up page tables --- */
+    /* PML4[0] → PDPT at 0x71000 (present+write = 0x03) */
+    /* mov eax, 0x70000 */
+    .byte 0xB8, 0x00, 0x00, 0x07, 0x00
+    /* mov dword [eax], 0x71003 */
+    .byte 0xC7, 0x00, 0x03, 0x10, 0x07, 0x00
+
+    /* PDPT[0] → PD at 0x72000 */
+    /* mov eax, 0x71000 */
+    .byte 0xB8, 0x00, 0x10, 0x07, 0x00
+    /* mov dword [eax], 0x72003 */
+    .byte 0xC7, 0x00, 0x03, 0x20, 0x07, 0x00
+
+    /* PD[0] → 0x0 (2MB huge page, present+write+huge = 0x83) */
+    /* mov eax, 0x72000 */
+    .byte 0xB8, 0x00, 0x20, 0x07, 0x00
+    /* mov dword [eax], 0x83 */
+    .byte 0xC7, 0x00, 0x83, 0x00, 0x00, 0x00
+    /* PD[1] → 0x200000 (2nd 2MB block) */
+    /* mov dword [eax+8], 0x200083 */
+    .byte 0xC7, 0x40, 0x08, 0x83, 0x00, 0x20, 0x00
+
+    /* --- Load PML4 into CR3 --- */
+    /* mov eax, 0x70000 */
+    .byte 0xB8, 0x00, 0x00, 0x07, 0x00
+    /* mov cr3, eax */
+    .byte 0x0F, 0x22, 0xD8
+
+    /* --- Enable PAE (CR4 bit 5) --- */
+    /* mov eax, cr4 */
+    .byte 0x0F, 0x20, 0xE0
+    /* or eax, 0x20 */
+    .byte 0x83, 0xC8, 0x20
+    /* mov cr4, eax */
+    .byte 0x0F, 0x22, 0xE0
+
+    /* --- Enable long mode (EFER.LME, bit 8) --- */
+    /* mov ecx, 0xC0000080 */
+    .byte 0xB9, 0x80, 0x00, 0x00, 0xC0
+    /* rdmsr */
+    .byte 0x0F, 0x32
+    /* or eax, 0x100 */
+    .byte 0x0D, 0x00, 0x01, 0x00, 0x00
+    /* wrmsr */
+    .byte 0x0F, 0x30
+
+    /* --- Enable paging (CR0 bit 31) → long mode active --- */
+    /* mov eax, cr0 */
+    .byte 0x0F, 0x20, 0xC0
+    /* or eax, 0x80000000 */
+    .byte 0x0D, 0x00, 0x00, 0x00, 0x80
+    /* mov cr0, eax */
+    .byte 0x0F, 0x22, 0xC0
+
+    /* --- Load GDT and far jump to 64-bit code --- */
+    /* lgdt [__gdt64_ptr] — address filled by linker */
+    .byte 0x0F, 0x01, 0x15
+    .long __gdt64_ptr
+
+    /* jmp far 0x08:_start64 */
+    .byte 0xEA
+    .long _start64
+    .word 0x0008
+
+/* Minimal 64-bit GDT */
+.align 16
+__gdt64:
+    .quad 0x0000000000000000    /* null */
+    .quad 0x00AF9A000000FFFF    /* code64: L=1, D=0, P=1, DPL=0, S=1, type=A (exec/read) */
+    .quad 0x00CF92000000FFFF    /* data64: P=1, DPL=0, S=1, type=2 (read/write) */
+__gdt64_ptr:
+    .word __gdt64_ptr - __gdt64 - 1
+    .long __gdt64
+
+/* ═══════════════════════════════════════════════════════════════════
+   64-bit Entry (after long mode transition)
+   ═══════════════════════════════════════════════════════════════════ */
+.code64
+_start64:
+    /* Reload data segments with 64-bit data selector */
+    mov     ax, 0x10
+    mov     ds, ax
+    mov     es, ax
+    mov     fs, ax
+    mov     gs, ax
+    mov     ss, ax
+
+    /* Set proper stack pointer: RAM starts at 0x2000000, stack at end of 64MB */
+    /* __stack_top = RAM_ORIGIN + RAM_SIZE = 0x2000000 + 0x4000000 = 0x6000000 */
+    /* Actually stack is at RAM + 0x4000 (16KB after BSS) */
+    mov     rsp, 0x3F0000      /* Stack at ~4MB, within mapped 0-4MB range */
+
+    /* Save Multiboot2 info pointer */
+    mov     r12, rdi
+
+    /* BSS is small in bare-metal — kernel_main() handles init */
+    /* Skip BSS zeroing here (Cranelift _start wrapper already zeros BSS) */
+
+    /* Initialize COM1 serial (16550 UART at 0x3F8) for debug output */
+    mov     dx, 0x3F9           /* IER: disable all interrupts */
+    xor     al, al
+    out     dx, al
+
+    mov     dx, 0x3FB           /* LCR: enable DLAB */
+    mov     al, 0x80
+    out     dx, al
+
+    mov     dx, 0x3F8           /* DLL: divisor low = 1 (115200 baud) */
+    mov     al, 0x01
+    out     dx, al
+
+    mov     dx, 0x3F9           /* DLH: divisor high = 0 */
+    xor     al, al
+    out     dx, al
+
+    mov     dx, 0x3FB           /* LCR: 8N1, disable DLAB */
+    mov     al, 0x03
+    out     dx, al
+
+    mov     dx, 0x3FA           /* FCR: enable FIFO, clear, 14-byte threshold */
+    mov     al, 0xC7
+    out     dx, al
+
+    mov     dx, 0x3FC           /* MCR: RTS + DTR + OUT2 */
+    mov     al, 0x0B
+    out     dx, al
+
+    /* Call kernel entry */
+    call    {entry_fn}
+
+    /* Halt loop (should never return) */
+.Lhalt:
+    cli
+    hlt
+    jmp     .Lhalt
+
+.size _start, . - _start
+
+/* ═══════════════════════════════════════════════════════════════════
+   Runtime Functions (x86_64 bare-metal)
+   These provide the minimal runtime needed by compiled Fajar Lang code.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* port_outb(port: rdi, value: rsi) -> rax=0 */
+.global fj_rt_bare_port_outb
+.type fj_rt_bare_port_outb, @function
+fj_rt_bare_port_outb:
+    mov     dx, di              /* port number → DX */
+    mov     al, sil             /* value → AL */
+    out     dx, al              /* write byte to I/O port */
+    xor     eax, eax            /* return 0 */
+    ret
+.size fj_rt_bare_port_outb, . - fj_rt_bare_port_outb
+
+/* port_inb(port: rdi) -> rax=byte */
+.global fj_rt_bare_port_inb
+.type fj_rt_bare_port_inb, @function
+fj_rt_bare_port_inb:
+    mov     dx, di              /* port number → DX */
+    xor     eax, eax
+    in      al, dx              /* read byte from I/O port → AL */
+    ret
+.size fj_rt_bare_port_inb, . - fj_rt_bare_port_inb
+
+/* x86_serial_init(port: rdi, baud: rsi) -> rax=0 */
+.global fj_rt_bare_x86_serial_init
+.type fj_rt_bare_x86_serial_init, @function
+fj_rt_bare_x86_serial_init:
+    /* port 0 = 0x3F8 (COM1), port 1 = 0x2F8 (COM2) */
+    cmp     rdi, 0
+    je      .Lserial_com1
+    cmp     rdi, 1
+    je      .Lserial_com2
+    mov     rax, -1
+    ret
+.Lserial_com1:
+    mov     r8, 0x3F8
+    jmp     .Lserial_init
+.Lserial_com2:
+    mov     r8, 0x2F8
+.Lserial_init:
+    /* divisor = 115200 / baud */
+    mov     rax, 115200
+    xor     rdx, rdx
+    div     rsi                 /* rax = divisor */
+    mov     r9, rax             /* save divisor */
+
+    /* Disable interrupts */
+    lea     rdx, [r8 + 1]
+    xor     al, al
+    out     dx, al
+
+    /* Enable DLAB */
+    lea     rdx, [r8 + 3]
+    mov     al, 0x80
+    out     dx, al
+
+    /* Set divisor low */
+    mov     rdx, r8
+    mov     al, r9b
+    out     dx, al
+
+    /* Set divisor high */
+    lea     rdx, [r8 + 1]
+    mov     al, 0
+    out     dx, al
+
+    /* 8N1, disable DLAB */
+    lea     rdx, [r8 + 3]
+    mov     al, 0x03
+    out     dx, al
+
+    /* Enable FIFO */
+    lea     rdx, [r8 + 2]
+    mov     al, 0xC7
+    out     dx, al
+
+    /* MCR: RTS + DTR + OUT2 */
+    lea     rdx, [r8 + 4]
+    mov     al, 0x0B
+    out     dx, al
+
+    xor     eax, eax
+    ret
+.size fj_rt_bare_x86_serial_init, . - fj_rt_bare_x86_serial_init
+
+/* set_uart_mode_x86(base_port: rdi) -> void */
+.global fj_rt_bare_set_uart_mode_x86
+.type fj_rt_bare_set_uart_mode_x86, @function
+fj_rt_bare_set_uart_mode_x86:
+    ret
+.size fj_rt_bare_set_uart_mode_x86, . - fj_rt_bare_set_uart_mode_x86
+
+/* fj_rt_bare_print(ptr: rdi, len: rsi) -> void */
+/* Outputs bytes to COM1 serial port */
+.global fj_rt_bare_print
+.type fj_rt_bare_print, @function
+fj_rt_bare_print:
+    test    rdi, rdi
+    jz      .Lprint_done
+    test    rsi, rsi
+    jle     .Lprint_done
+    mov     rcx, rsi            /* count */
+    mov     r8, rdi             /* buffer pointer */
+.Lprint_loop:
+    /* Wait for TX ready (LSR bit 5) */
+    mov     dx, 0x3FD
+.Lprint_wait:
+    in      al, dx
+    test    al, 0x20
+    jz      .Lprint_wait
+    /* Send byte */
+    mov     dx, 0x3F8
+    mov     al, [r8]
+    out     dx, al
+    inc     r8
+    dec     rcx
+    jnz     .Lprint_loop
+.Lprint_done:
+    ret
+.size fj_rt_bare_print, . - fj_rt_bare_print
+
+/* fj_rt_bare_println(ptr: rdi, len: rsi) -> void */
+.global fj_rt_bare_println
+.type fj_rt_bare_println, @function
+fj_rt_bare_println:
+    call    fj_rt_bare_print
+    /* Send newline */
+    mov     dx, 0x3FD
+.Lprintln_wait:
+    in      al, dx
+    test    al, 0x20
+    jz      .Lprintln_wait
+    mov     dx, 0x3F8
+    mov     al, 0x0A
+    out     dx, al
+    ret
+.size fj_rt_bare_println, . - fj_rt_bare_println
+
+/* fj_rt_bare_print_i64(val: rdi) -> void */
+/* Print integer as decimal string to COM1 */
+.global fj_rt_bare_print_i64
+.type fj_rt_bare_print_i64, @function
+fj_rt_bare_print_i64:
+    push    rbx
+    push    r12
+    sub     rsp, 24             /* buffer for digits */
+    mov     r12, rsp
+    mov     rbx, rdi
+    lea     rcx, [rsp + 20]     /* end of buffer */
+    mov     byte ptr [rcx], 0x0A   /* newline at end */
+
+    /* Handle zero */
+    test    rbx, rbx
+    jnz     .Lnot_zero
+    dec     rcx
+    mov     byte ptr [rcx], 0x30  /* '0' */
+    jmp     .Lprint_digits
+
+    /* Handle negative */
+.Lnot_zero:
+    mov     rax, rbx
+    test    rax, rax
+    jns     .Lpositive
+    neg     rax
+    mov     rbx, rax
+    mov     byte ptr [r12], 0x2D  /* '-' prefix handled later */
+
+.Lpositive:
+    mov     rax, rbx
+.Ldigit_loop:
+    xor     rdx, rdx
+    mov     rbx, 10
+    div     rbx
+    add     dl, 0x30            /* digit → ASCII */
+    dec     rcx
+    mov     [rcx], dl
+    test    rax, rax
+    jnz     .Ldigit_loop
+
+.Lprint_digits:
+    /* Print from rcx to rsp+21 */
+    mov     rdi, rcx
+    lea     rsi, [rsp + 21]
+    sub     rsi, rcx
+    call    fj_rt_bare_print
+
+    add     rsp, 24
+    pop     r12
+    pop     rbx
+    ret
+.size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64
+
+/* fj_rt_bare_halt() -> noreturn */
+.global fj_rt_bare_halt
+.type fj_rt_bare_halt, @function
+fj_rt_bare_halt:
+    cli
+    hlt
+    jmp     fj_rt_bare_halt
+.size fj_rt_bare_halt, . - fj_rt_bare_halt
+
+/* fj_rt_bare_panic() -> noreturn */
+.global fj_rt_bare_panic
+.type fj_rt_bare_panic, @function
+fj_rt_bare_panic:
+    lea     rdi, [rip + .Lpanic_msg]
+    mov     rsi, 19
+    call    fj_rt_bare_print
+    jmp     fj_rt_bare_halt
+.Lpanic_msg:
+    .ascii  "PANIC: kernel halt\n"
+.size fj_rt_bare_panic, . - fj_rt_bare_panic
+
+/* fj_rt_bare_memcpy(dst: rdi, src: rsi, n: rdx) -> rax=dst */
+.global fj_rt_bare_memcpy
+.type fj_rt_bare_memcpy, @function
+fj_rt_bare_memcpy:
+    mov     rax, rdi
+    mov     rcx, rdx
+    cld
+    rep     movsb
+    ret
+.size fj_rt_bare_memcpy, . - fj_rt_bare_memcpy
+
+/* fj_rt_bare_memset(dst: rdi, val: rsi, n: rdx) -> rax=dst */
+.global fj_rt_bare_memset
+.type fj_rt_bare_memset, @function
+fj_rt_bare_memset:
+    mov     rax, rdi
+    mov     rcx, rdx
+    mov     al, sil
+    cld
+    rep     stosb
+    mov     rax, rdi
+    ret
+.size fj_rt_bare_memset, . - fj_rt_bare_memset
+
+/* IRQ enable/disable stubs */
+.global fj_rt_bare_irq_enable
+fj_rt_bare_irq_enable:
+    sti
+    ret
+
+.global fj_rt_bare_irq_disable
+fj_rt_bare_irq_disable:
+    cli
+    ret
+
+/* Stubs for ARM64-specific builtins (no-op on x86_64) */
+.global fj_rt_bare_timer_count
+.global fj_rt_bare_timer_freq
+.global fj_rt_bare_timer_status
+.global fj_rt_bare_read_el
+.global fj_rt_bare_read_midr
+.global fj_rt_bare_gic_ack
+.global fj_rt_bare_timer_set
+.global fj_rt_bare_timer_disable
+.global fj_rt_bare_gic_eoi
+.global fj_rt_bare_gic_cpu_init
+.global fj_rt_bare_mmu_enable
+.global fj_rt_bare_switch_ttbr0
+.global fj_rt_bare_read_ttbr0
+.global fj_rt_bare_tlbi_va
+.global fj_rt_bare_svc
+fj_rt_bare_timer_count:
+fj_rt_bare_timer_freq:
+fj_rt_bare_timer_status:
+fj_rt_bare_read_el:
+fj_rt_bare_read_midr:
+fj_rt_bare_gic_ack:
+fj_rt_bare_read_ttbr0:
+    xor     eax, eax
+    ret
+fj_rt_bare_timer_set:
+fj_rt_bare_timer_disable:
+fj_rt_bare_gic_eoi:
+fj_rt_bare_gic_cpu_init:
+fj_rt_bare_mmu_enable:
+fj_rt_bare_switch_ttbr0:
+fj_rt_bare_tlbi_va:
+fj_rt_bare_svc:
+    ret
+
+/* GNU stack note — mark as non-executable */
+.section .note.GNU-stack, "", @progbits
+"#,
+        entry_fn = entry_fn
+    )
+}
+
+/// Generates x86_64 linker script with Multiboot2 header section.
+///
+/// This extends the standard linker script to place the `.multiboot_header`
+/// section at the very beginning of the binary (within first 32KB).
+pub fn generate_x86_64_linker_script(config: &LinkerConfig) -> Result<String, CodegenError> {
+    if config.regions.is_empty() {
+        return Err(CodegenError::AbiError(
+            "linker config has no memory regions".into(),
+        ));
+    }
+
+    let mut script = String::new();
+
+    script.push_str("/* Auto-generated by Fajar Lang compiler — FajarOS Nova x86_64 */\n\n");
+    script.push_str(&format!("ENTRY({})\n\n", config.entry));
+
+    // Memory regions
+    script.push_str("MEMORY\n{\n");
+    for region in &config.regions {
+        script.push_str(&format!(
+            "    {} ({}) : ORIGIN = 0x{:08X}, LENGTH = 0x{:X}\n",
+            region.name, region.attrs, region.origin, region.size
+        ));
+    }
+    script.push_str("}\n\n");
+
+    let flash_name = config
+        .regions
+        .iter()
+        .find(|r| r.attrs.contains('x'))
+        .map(|r| r.name.as_str())
+        .unwrap_or("FLASH");
+    let ram_name = config
+        .regions
+        .iter()
+        .find(|r| r.attrs.contains('w') && !r.attrs.contains('x'))
+        .or_else(|| config.regions.iter().find(|r| r.attrs.contains('w')))
+        .map(|r| r.name.as_str())
+        .unwrap_or("RAM");
+
+    script.push_str("SECTIONS\n{\n");
+
+    // Multiboot2 header MUST be first (within 32KB)
+    script.push_str(&format!(
+        "    .multiboot_header :\n    {{\n        KEEP(*(.multiboot_header))\n    }} > {flash_name}\n\n"
+    ));
+
+    // .text (code) — .text.start comes first (contains _start)
+    script.push_str(&format!(
+        "    .text :\n    {{\n        *(.text.start)\n        *(.text .text.*)\n    }} > {flash_name}\n\n"
+    ));
+
+    // .rodata
+    script.push_str(&format!(
+        "    .rodata :\n    {{\n        *(.rodata .rodata.*)\n    }} > {flash_name}\n\n"
+    ));
+
+    // .data
+    script.push_str(&format!(
+        "    .data :\n    {{\n        __data_start = .;\n        *(.data .data.*)\n        __data_end = .;\n    }} > {ram_name} AT > {flash_name}\n\n"
+    ));
+
+    // .bss
+    script.push_str(&format!(
+        "    .bss :\n    {{\n        __bss_start = .;\n        *(.bss .bss.*)\n        *(COMMON)\n        __bss_end = .;\n    }} > {ram_name}\n\n"
+    ));
+
+    // Stack (16-byte aligned for x86_64 ABI)
+    script.push_str(&format!(
+        "    .stack (NOLOAD) :\n    {{\n        . = ALIGN(16);\n        __stack_bottom = .;\n        . += 0x{:X};\n        __stack_top = .;\n    }} > {ram_name}\n\n",
+        config.stack_size
+    ));
+
+    script.push_str("    /DISCARD/ :\n    {\n        *(.comment)\n        *(.note*)\n    }\n");
+    script.push_str("}\n\n");
+    script.push_str("PROVIDE(__stack_ptr = __stack_top);\n");
+
+    Ok(script)
+}
+
 /// Generates an ARM64 assembly wrapper for an `@interrupt` function.
 ///
 /// The wrapper saves all general-purpose registers (x0-x30), calls the
@@ -1354,5 +1987,101 @@ mod tests {
         // x30 saved individually
         assert!(wrapper.contains("str     x30"));
         assert!(wrapper.contains("ldr     x30"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // x86_64 startup and linker script tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[test]
+    fn x86_64_startup_has_multiboot2_header() {
+        let startup = generate_x86_64_startup("kernel_main");
+        assert!(startup.contains("0xE85250D6"), "missing Multiboot2 magic");
+        assert!(
+            startup.contains(".multiboot_header"),
+            "missing multiboot_header section"
+        );
+    }
+
+    #[test]
+    fn x86_64_startup_has_start_symbol() {
+        let startup = generate_x86_64_startup("kernel_main");
+        assert!(startup.contains(".global _start"));
+        assert!(startup.contains("_start:"));
+    }
+
+    #[test]
+    fn x86_64_startup_sets_stack() {
+        let startup = generate_x86_64_startup("kernel_main");
+        assert!(startup.contains("rsp"), "must set stack pointer in 64-bit mode");
+    }
+
+    #[test]
+    fn x86_64_startup_initializes_serial() {
+        let startup = generate_x86_64_startup("kernel_main");
+        // COM1 base = 0x3F8, IER = 0x3F9, LCR = 0x3FB, etc.
+        assert!(startup.contains("0x3F8"), "missing COM1 base address");
+        assert!(startup.contains("0x3FB"), "missing LCR register");
+        assert!(
+            startup.contains("out     dx, al"),
+            "missing port I/O output"
+        );
+    }
+
+    #[test]
+    fn x86_64_startup_calls_entry_fn() {
+        let startup = generate_x86_64_startup("my_kernel_entry");
+        assert!(startup.contains("call    my_kernel_entry"));
+    }
+
+    #[test]
+    fn x86_64_startup_halts_after_entry() {
+        let startup = generate_x86_64_startup("kernel_main");
+        assert!(startup.contains("cli"));
+        assert!(startup.contains("hlt"));
+    }
+
+    #[test]
+    fn x86_64_linker_script_has_multiboot_section() {
+        let config = LinkerConfig::for_target(&TargetConfig {
+            triple: target_lexicon::Triple::host(),
+            arch: crate::codegen::target::Arch::X86_64,
+            os: crate::codegen::target::Os::None,
+            is_bare_metal: true,
+            call_conv: cranelift_codegen::isa::CallConv::SystemV,
+        });
+        let script = generate_x86_64_linker_script(&config).unwrap();
+        assert!(
+            script.contains(".multiboot_header"),
+            "missing multiboot_header section"
+        );
+        assert!(
+            script.contains("KEEP(*(.multiboot_header))"),
+            "multiboot_header must use KEEP"
+        );
+    }
+
+    #[test]
+    fn x86_64_linker_script_has_correct_layout() {
+        let config = LinkerConfig::for_target(&TargetConfig {
+            triple: target_lexicon::Triple::host(),
+            arch: crate::codegen::target::Arch::X86_64,
+            os: crate::codegen::target::Os::None,
+            is_bare_metal: true,
+            call_conv: cranelift_codegen::isa::CallConv::SystemV,
+        });
+        let script = generate_x86_64_linker_script(&config).unwrap();
+        assert!(script.contains("ENTRY(_start)"));
+        assert!(script.contains("0x00100000")); // FLASH origin at 1MB
+        assert!(script.contains("__bss_start"));
+        assert!(script.contains("__bss_end"));
+        assert!(script.contains("__stack_top"));
+    }
+
+    #[test]
+    fn x86_64_startup_is_64bit() {
+        let startup = generate_x86_64_startup("kernel_main");
+        assert!(startup.contains(".code64"), "must generate 64-bit code");
+        assert!(startup.contains("rsp"), "must use 64-bit registers");
     }
 }
