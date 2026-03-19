@@ -2562,6 +2562,217 @@ const FS_ENTRY_SIZE: i64 = 128
 }
 
 // ═══════════════════════════════════════════════
+// Phase 8 — Process Demo + Interactive Features
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_spawn() {
+    // spawn <name> — create simulated process entry
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: spawn <name>", YELLOW_ON_BLACK); return }
+    // Find free PID
+    let mut pid: i64 = -1
+    let mut i: i64 = 1
+    while i < 16 && pid == -1 {
+        if volatile_read(0x600000 + i * 256 + 8) == 0 { pid = i }
+        i = i + 1
+    }
+    if pid == -1 { cprintln("spawn: no free PIDs", RED_ON_BLACK); return }
+    // Set process state
+    let base = 0x600000 + pid * 256
+    volatile_write(base + 8, 1)    // state = ready
+    volatile_write(base + 32, 0)   // ticks = 0
+    // Copy name (up to 16 chars)
+    let mut j: i64 = 0
+    while j < 16 && j + 6 < len {
+        volatile_write_u8(base + 64 + j, volatile_read_u8(0x6F800 + 6 + j))
+        j = j + 1
+    }
+    volatile_write_u8(base + 64 + j, 0)
+    cprint("Spawned PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" (", WHITE_ON_BLACK)
+    let mut k: i64 = 6
+    while k < len { console_putchar(volatile_read_u8(0x6F800 + k), WHITE_ON_BLACK); k = k + 1 }
+    cprintln(")", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_wait() {
+    // wait <pid> — wait for process (simulated)
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: wait <pid>", YELLOW_ON_BLACK); return }
+    let mut pid: i64 = 0
+    let mut i: i64 = 5
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { pid = pid * 10 + (ch - 48) }
+        i = i + 1
+    }
+    let base = 0x600000 + pid * 256
+    let state = volatile_read(base + 8)
+    if state == 0 {
+        cprint("PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln(" already exited", WHITE_ON_BLACK)
+    } else {
+        cprint("Waiting for PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln("...", WHITE_ON_BLACK)
+        // Simulate wait (busy-wait 1 second then mark dead)
+        let target = read_timer_ticks() + 100
+        while read_timer_ticks() < target {}
+        volatile_write(base + 8, 0)
+        cprint("PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        cprintln(" exited (0)", GREEN_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_nice() {
+    // nice — show/set process priority (simulated)
+    cprintln("Priorities:", YELLOW_ON_BLACK)
+    cprintln("  PID 0: priority 0 (kernel)", WHITE_ON_BLACK)
+    let mut i: i64 = 1
+    while i < 16 {
+        let base = 0x600000 + i * 256
+        if volatile_read(base + 8) != 0 {
+            cprint("  PID ", WHITE_ON_BLACK)
+            cprint_decimal(i, CYAN_ON_BLACK)
+            cprintln(": priority 20 (normal)", WHITE_ON_BLACK)
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_demo() {
+    // demo — run interactive OS demo
+    cprintln("=== FajarOS Nova Demo ===", WHITE_ON_BLUE)
+    cprintln("", WHITE_ON_BLACK)
+
+    // 1. File operations
+    cprintln("[1/5] File System Demo:", YELLOW_ON_BLACK)
+    ramfs_write_file("demo.txt", "Hello from FajarOS Nova!", 24)
+    cprint("  Created demo.txt: ", WHITE_ON_BLACK)
+    // Read it back
+    let idx = ramfs_find("demo.txt")
+    if idx >= 0 {
+        let addr = ramfs_entry_addr(idx)
+        let size = volatile_read(addr + 32)
+        let data = volatile_read(addr + 40)
+        let mut i: i64 = 0
+        while i < size { console_putchar(volatile_read_u8(data + i), GREEN_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    // 2. Process demo
+    cprintln("[2/5] Process Demo:", YELLOW_ON_BLACK)
+    let mut pid: i64 = 1
+    while pid < 4 {
+        let base = 0x600000 + pid * 256
+        if volatile_read(base + 8) == 0 {
+            volatile_write(base + 8, 1)
+            volatile_write(base + 32, read_timer_ticks() % 1000)
+        }
+        pid = pid + 1
+    }
+    cprintln("  Spawned 3 demo processes (PID 1-3)", GREEN_ON_BLACK)
+
+    // 3. Math demo
+    cprintln("[3/5] Math Demo:", YELLOW_ON_BLACK)
+    cprint("  fib(20) = ", WHITE_ON_BLACK)
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut n: i64 = 0
+    while n < 20 { let tmp = a + b; a = b; b = tmp; n = n + 1 }
+    cprint_decimal(b, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  factors(360) = ", WHITE_ON_BLACK)
+    let mut val: i64 = 360
+    let mut d: i64 = 2
+    while d * d <= val {
+        while val % d == 0 { cprint_decimal(d, CYAN_ON_BLACK); cprint(" ", WHITE_ON_BLACK); val = val / d }
+        d = d + 1
+    }
+    if val > 1 { cprint_decimal(val, CYAN_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // 4. Hardware info
+    cprintln("[4/5] Hardware:", YELLOW_ON_BLACK)
+    let rsdp = acpi_find_rsdp()
+    if rsdp != 0 {
+        cprint("  CPUs: ", WHITE_ON_BLACK)
+        cprint_decimal(acpi_get_cpu_count(rsdp), CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+    cprint("  PCI devices: ", WHITE_ON_BLACK)
+    let mut pci_count: i64 = 0
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 { pci_count = pci_count + 1 }
+        dev = dev + 1
+    }
+    cprint_decimal(pci_count, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // 5. Benchmark
+    cprintln("[5/5] Benchmark:", YELLOW_ON_BLACK)
+    let t0 = rdtsc()
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < 1000000 { sum = sum + k; k = k + 1 }
+    let t1 = rdtsc()
+    cprint("  1M loop: ", WHITE_ON_BLACK)
+    cprint_decimal((t1 - t0) / 1000, CYAN_ON_BLACK)
+    cprintln("K cycles", WHITE_ON_BLACK)
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Demo complete! Type 'help' for all commands.", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_neofetch() {
+    // neofetch — system info with ASCII art
+    cprintln("", WHITE_ON_BLACK)
+    // Left side: ASCII logo, Right side: info
+    cprint("  ####  ##   ", CYAN_ON_BLACK)
+    cprintln("OS:      FajarOS Nova v0.1.0", WHITE_ON_BLACK)
+    cprint("  #     # #  ", CYAN_ON_BLACK)
+    cprintln("Kernel:  x86_64 bare-metal", WHITE_ON_BLACK)
+    cprint("  ###  ##### ", CYAN_ON_BLACK)
+    cprintln("Lang:    Fajar Lang (fj)", WHITE_ON_BLACK)
+    cprint("  #    #   # ", CYAN_ON_BLACK)
+    cprint("Uptime:  ", WHITE_ON_BLACK)
+    let ticks = read_timer_ticks()
+    cprint_decimal(ticks / 100, CYAN_ON_BLACK)
+    cprintln("s", WHITE_ON_BLACK)
+    cprint("  #    #   # ", CYAN_ON_BLACK)
+    cprint("Shell:   fjsh (", WHITE_ON_BLACK)
+    cprintln("100 commands)", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Memory:  128 MB", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprint("CPU:     ", WHITE_ON_BLACK)
+    let rsdp = acpi_find_rsdp()
+    if rsdp != 0 { cprint_decimal(acpi_get_cpu_count(rsdp), CYAN_ON_BLACK) }
+    else { console_putchar(49, CYAN_ON_BLACK) }
+    cprintln(" core(s)", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Display: VGA 80x25 text", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Timer:   PIT 100 Hz", WHITE_ON_BLACK)
+    // Color blocks
+    cprint("  ", WHITE_ON_BLACK)
+    let mut c: i64 = 0
+    while c < 8 {
+        console_putchar(32, c * 16 + 15)
+        console_putchar(32, c * 16 + 15)
+        console_putchar(32, c * 16 + 15)
+        c = c + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Command Dispatcher
 // ═══════════════════════════════════════════════
 
@@ -2781,6 +2992,18 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(109, 111, 116, 100) == 1 { cmd_motd(); handled = 1 }
     // splash
     if handled == 0 && len == 6 && buf_eq4(115, 112, 108, 97) == 1 { cmd_splash(); handled = 1 }
+
+    // === Phase 8 commands ===
+    // spawn (115,112,97,119,110) — "spawn <name>"
+    if handled == 0 && len >= 5 && buf_eq4(115, 112, 97, 119) == 1 && volatile_read_u8(0x6F804) == 110 { cmd_spawn(); handled = 1 }
+    // wait (119,97,105,116) — "wait <pid>"
+    if handled == 0 && len >= 4 && buf_eq4(119, 97, 105, 116) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_wait(); handled = 1 }
+    // nice
+    if handled == 0 && len == 4 && buf_eq4(110, 105, 99, 101) == 1 { cmd_nice(); handled = 1 }
+    // demo
+    if handled == 0 && len == 4 && buf_eq4(100, 101, 109, 111) == 1 { cmd_demo(); handled = 1 }
+    // neofetch (110,101,111,102,101,116,99,104)
+    if handled == 0 && len == 8 && buf_eq4(110, 101, 111, 102) == 1 { cmd_neofetch(); handled = 1 }
 
     if handled == 0 && len > 0 {
         cprint("Unknown: ", RED_ON_BLACK)
