@@ -304,28 +304,30 @@ const HIST_SLOT_SIZE: i64 = 64
 // ═══════════════════════════════════════════════
 
 @kernel fn cmd_help() {
-    cprintln("=== FajarOS Nova — 60 Commands ===", YELLOW_ON_BLACK)
+    cprintln("=== FajarOS Nova - 75 Commands ===", YELLOW_ON_BLACK)
     cprintln("System:", WHITE_ON_BLUE)
     cprintln("  help version about uname sysinfo", WHITE_ON_BLACK)
     cprintln("  uptime date hostname whoami arch", WHITE_ON_BLACK)
-    cprintln("  dmesg env id cal history", WHITE_ON_BLACK)
+    cprintln("  dmesg env id cal history man", WHITE_ON_BLACK)
+    cprintln("  which banner exit", WHITE_ON_BLACK)
     cprintln("Hardware:", WHITE_ON_BLUE)
     cprintln("  cpuinfo meminfo free nproc lspci", WHITE_ON_BLACK)
     cprintln("  acpi tsc time", WHITE_ON_BLACK)
     cprintln("Process:", WHITE_ON_BLUE)
-    cprintln("  ps top kill <pid> sleep <N>", WHITE_ON_BLACK)
-    cprintln("  reboot shutdown", WHITE_ON_BLACK)
+    cprintln("  ps top kill sleep reboot shutdown", WHITE_ON_BLACK)
     cprintln("Files:", WHITE_ON_BLUE)
-    cprintln("  ls cat touch rm cp mkdir pwd", WHITE_ON_BLACK)
-    cprintln("  write append head wc stat xxd", WHITE_ON_BLACK)
+    cprintln("  ls cat touch rm cp mv mkdir pwd", WHITE_ON_BLACK)
+    cprintln("  write append head tail wc grep", WHITE_ON_BLACK)
+    cprintln("  stat xxd df du count", WHITE_ON_BLACK)
     cprintln("AI/Compute:", WHITE_ON_BLUE)
-    cprintln("  tensor mnist bench", WHITE_ON_BLACK)
-    cprintln("Math:", WHITE_ON_BLUE)
-    cprintln("  hex <N> factor <N> prime <N>", WHITE_ON_BLACK)
+    cprintln("  tensor mnist bench fib", WHITE_ON_BLACK)
+    cprintln("Math/Text:", WHITE_ON_BLUE)
+    cprintln("  hex factor prime", WHITE_ON_BLACK)
+    cprintln("  echo rev upcase downcase", WHITE_ON_BLACK)
     cprintln("Utility:", WHITE_ON_BLUE)
-    cprintln("  echo clear seq rev true false", WHITE_ON_BLACK)
-    cprintln("  yes dice logo color cowsay fortune", WHITE_ON_BLACK)
-    cprintln("Keys: Up/Down arrows for history", YELLOW_ON_BLACK)
+    cprintln("  clear cls seq true false yes dice", WHITE_ON_BLACK)
+    cprintln("  logo color cowsay fortune", WHITE_ON_BLACK)
+    cprintln("Keys: Up/Down = history", YELLOW_ON_BLACK)
 }
 
 @kernel fn cmd_version() {
@@ -336,7 +338,7 @@ const HIST_SLOT_SIZE: i64 = 64
     cprintln("  Boot:     Multiboot2 (GRUB2)", WHITE_ON_BLACK)
     cprintln("  Paging:   128MB identity (2MB pages)", WHITE_ON_BLACK)
     cprintln("  Timer:    PIT 100Hz preemptive", WHITE_ON_BLACK)
-    cprintln("  Shell:    60 commands", WHITE_ON_BLACK)
+    cprintln("  Shell:    75 commands", WHITE_ON_BLACK)
     cprintln("  Author:   Fajar (TaxPrime/PrimeCore.id)", WHITE_ON_BLACK)
     cprintln("  Built with Claude Opus 4.6", CYAN_ON_BLACK)
 }
@@ -678,7 +680,7 @@ const HIST_SLOT_SIZE: i64 = 64
 
     // Shell
     cprint("Shell:    ", WHITE_ON_BLACK)
-    cprintln("60 commands", CYAN_ON_BLACK)
+    cprintln("75 commands", CYAN_ON_BLACK)
 }
 
 @kernel fn cmd_logo() {
@@ -1246,7 +1248,7 @@ const FS_ENTRY_SIZE: i64 = 128
     cprintln("[0.011] Heap: bump allocator at 0x400000", WHITE_ON_BLACK)
     cprintln("[0.012] RamFS: initialized (64 entries, 832KB)", WHITE_ON_BLACK)
     cprintln("[0.013] VGA: 80x25 text mode at 0xB8000", WHITE_ON_BLACK)
-    cprintln("[0.014] Shell: 60 commands ready", WHITE_ON_BLACK)
+    cprintln("[0.014] Shell: 75 commands ready", WHITE_ON_BLACK)
     cprint("[", WHITE_ON_BLACK)
     let ticks = read_timer_ticks()
     cprint_decimal(ticks / 100, WHITE_ON_BLACK)
@@ -1654,6 +1656,354 @@ const FS_ENTRY_SIZE: i64 = 128
 }
 
 // ═══════════════════════════════════════════════
+// Phase 5 Commands — 75+ total
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_mv() {
+    // mv <src> <dst> — rename/move file
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: mv <src> <dst>", YELLOW_ON_BLACK); return }
+    let mut sp: i64 = 3
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: mv <src> <dst>", YELLOW_ON_BLACK); return }
+    let src_len = sp - 3
+    let dst_start = sp + 1
+    let dst_len = len - dst_start
+    // Find source
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < src_len && ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + 3 + j) { ok = 0 }
+            j = j + 1
+        }
+        if ok == 1 && volatile_read_u8(addr + src_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("mv: source not found", RED_ON_BLACK); return }
+    // Rename: overwrite name
+    let addr = ramfs_entry_addr(idx)
+    let mut i: i64 = 0
+    while i < dst_len && i < 31 {
+        volatile_write_u8(addr + i, volatile_read_u8(0x6F800 + dst_start + i))
+        i = i + 1
+    }
+    volatile_write_u8(addr + i, 0)
+    // Clear remaining name bytes
+    while i < 32 { volatile_write_u8(addr + i, 0); i = i + 1 }
+}
+
+@kernel fn cmd_tail() {
+    // tail <file> — show last 5 lines
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: tail <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("tail: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { return }
+    // Count total lines
+    let mut total_lines: i64 = 0
+    let mut i: i64 = 0
+    while i < size { if volatile_read_u8(data_ptr + i) == 10 { total_lines = total_lines + 1 }; i = i + 1 }
+    // Find start of last 5 lines
+    let skip = total_lines - 5
+    let mut line_num: i64 = 0
+    let mut start: i64 = 0
+    if skip > 0 {
+        i = 0
+        while i < size && line_num < skip {
+            if volatile_read_u8(data_ptr + i) == 10 { line_num = line_num + 1 }
+            i = i + 1
+        }
+        start = i
+    }
+    // Print from start
+    i = start
+    while i < size { console_putchar(volatile_read_u8(data_ptr + i), WHITE_ON_BLACK); i = i + 1 }
+    if size > 0 && volatile_read_u8(data_ptr + size - 1) != 10 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+@kernel fn cmd_grep() {
+    // grep <pattern> <file> — search for pattern in file
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: grep <pattern> <file>", YELLOW_ON_BLACK); return }
+    // Find first space (after "grep ")
+    let mut sp: i64 = 5
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: grep <pattern> <file>", YELLOW_ON_BLACK); return }
+    let pat_start: i64 = 5
+    let pat_len = sp - 5
+    let file_start = sp + 1
+    let file_len = len - file_start
+    // Find file
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < file_len && ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + file_start + j) { ok = 0 }
+            j = j + 1
+        }
+        if ok == 1 && volatile_read_u8(addr + file_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("grep: file not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    // Search each "line" (byte range between newlines)
+    let mut line_start: i64 = 0
+    let mut pos: i64 = 0
+    while pos <= size {
+        let at_end = pos == size
+        let is_nl = pos < size && volatile_read_u8(data_ptr + pos) == 10
+        if at_end || is_nl {
+            let line_len = pos - line_start
+            // Check if pattern is in this line
+            let mut found: i64 = 0
+            let mut k: i64 = 0
+            while k <= line_len - pat_len && found == 0 {
+                let mut match_ok: i64 = 1
+                let mut m: i64 = 0
+                while m < pat_len && match_ok == 1 {
+                    if volatile_read_u8(data_ptr + line_start + k + m) != volatile_read_u8(0x6F800 + pat_start + m) { match_ok = 0 }
+                    m = m + 1
+                }
+                if match_ok == 1 { found = 1 }
+                k = k + 1
+            }
+            if found == 1 {
+                // Print matching line
+                let mut p = line_start
+                while p < pos { console_putchar(volatile_read_u8(data_ptr + p), GREEN_ON_BLACK); p = p + 1 }
+                console_putchar(10, WHITE_ON_BLACK)
+            }
+            line_start = pos + 1
+        }
+        pos = pos + 1
+    }
+}
+
+@kernel fn cmd_df() {
+    // df — disk free (ramfs usage)
+    let count = volatile_read(FS_BASE)
+    let used_data = volatile_read(FS_BASE + 8) - FS_DATA
+    let total_data: i64 = 0x7E0000 - FS_DATA  // 832KB
+    cprintln("Filesystem      Size    Used    Avail   Use%", YELLOW_ON_BLACK)
+    cprint("ramfs           ", WHITE_ON_BLACK)
+    cprint_decimal(total_data / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    cprint_decimal(used_data / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    cprint_decimal((total_data - used_data) / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    if total_data > 0 { cprint_decimal(used_data * 100 / total_data, CYAN_ON_BLACK) }
+    else { console_putchar(48, CYAN_ON_BLACK) }
+    cprintln("%", WHITE_ON_BLACK)
+    cprint("Inodes: ", WHITE_ON_BLACK)
+    cprint_decimal(count, CYAN_ON_BLACK)
+    cprint("/", WHITE_ON_BLACK)
+    cprint_decimal(FS_MAX_FILES, CYAN_ON_BLACK)
+    cprintln(" used", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_du() {
+    // du — disk usage per file
+    let count = volatile_read(FS_BASE)
+    let mut total: i64 = 0
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let size = volatile_read(addr + 32)
+        let ftype = volatile_read(addr + 48)
+        cprint_decimal(size, CYAN_ON_BLACK)
+        cprint("\t", WHITE_ON_BLACK)
+        let mut j: i64 = 0
+        while volatile_read_u8(addr + j) != 0 && j < 31 {
+            console_putchar(volatile_read_u8(addr + j), WHITE_ON_BLACK)
+            j = j + 1
+        }
+        if ftype == 2 { cprint("/", CYAN_ON_BLACK) }
+        console_putchar(10, WHITE_ON_BLACK)
+        total = total + size
+        i = i + 1
+    }
+    cprint_decimal(total, YELLOW_ON_BLACK)
+    cprintln("\ttotal", YELLOW_ON_BLACK)
+}
+
+@kernel fn cmd_which() {
+    // which <cmd> — show if command exists
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: which <cmd>", YELLOW_ON_BLACK); return }
+    cprint("/bin/", WHITE_ON_BLACK)
+    let mut i: i64 = 6
+    while i < len { console_putchar(volatile_read_u8(0x6F800 + i), CYAN_ON_BLACK); i = i + 1 }
+    cprintln(" (builtin)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_type() {
+    // type <cmd>
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: type <cmd>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 5
+    while i < len { console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK); i = i + 1 }
+    cprintln(" is a shell builtin", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_man() {
+    // man <cmd> — manual page (brief)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: man <cmd>", YELLOW_ON_BLACK); return }
+    // Check first char of command name
+    let ch = volatile_read_u8(0x6F800 + 4)
+    if ch == 108 {  // 'l' → ls
+        cprintln("LS(1) — list directory contents", YELLOW_ON_BLACK)
+        cprintln("  Lists all files and directories in ramfs.", WHITE_ON_BLACK)
+        cprintln("  Shows type (d/f), size, and name.", WHITE_ON_BLACK)
+    } else if ch == 99 {  // 'c' → cat/cp/...
+        cprintln("CAT(1) — concatenate and print files", YELLOW_ON_BLACK)
+        cprintln("  cat <file> — display file contents.", WHITE_ON_BLACK)
+    } else if ch == 112 {  // 'p' → ps/pwd/prime
+        cprintln("PS(1) — report process status", YELLOW_ON_BLACK)
+        cprintln("  Shows PID, state, and tick count.", WHITE_ON_BLACK)
+    } else {
+        cprint("No manual entry for: ", YELLOW_ON_BLACK)
+        let mut i: i64 = 4
+        while i < len { console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        cprintln("Available: man ls, man cat, man ps", WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_banner() {
+    // banner <text> — big ASCII text (simple 3-line)
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: banner <text>", YELLOW_ON_BLACK); return }
+    // Simple: print text in large style using # characters
+    // Top border
+    cprint("  ", WHITE_ON_BLACK)
+    let text_len = len - 7
+    let mut i: i64 = 0
+    while i < text_len * 2 + 4 { console_putchar(95, YELLOW_ON_BLACK); i = i + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Middle with text
+    cprint(" | ", YELLOW_ON_BLACK)
+    i = 7
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        // Uppercase
+        if ch >= 97 && ch <= 122 { console_putchar(ch - 32, CYAN_ON_BLACK) }
+        else { console_putchar(ch, CYAN_ON_BLACK) }
+        console_putchar(32, WHITE_ON_BLACK)
+        i = i + 1
+    }
+    cprintln("| ", YELLOW_ON_BLACK)
+    // Bottom border
+    cprint("  ", WHITE_ON_BLACK)
+    i = 0
+    while i < text_len * 2 + 4 { console_putchar(8254 % 256, YELLOW_ON_BLACK); i = i + 1 }
+    // Use dash instead
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    i = 0
+    while i < text_len * 2 + 4 { console_putchar(45, YELLOW_ON_BLACK); i = i + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_fib() {
+    // fib <N> — compute fibonacci(N)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: fib <N>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 4
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if n > 90 { n = 90 }  // prevent overflow
+    let t0 = rdtsc()
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut k: i64 = 0
+    while k < n { let tmp = a + b; a = b; b = tmp; k = k + 1 }
+    let t1 = rdtsc()
+    cprint("fib(", WHITE_ON_BLACK)
+    cprint_decimal(n, WHITE_ON_BLACK)
+    cprint(") = ", WHITE_ON_BLACK)
+    cprint_decimal(b, CYAN_ON_BLACK)
+    cprint("  (", WHITE_ON_BLACK)
+    cprint_decimal(t1 - t0, CYAN_ON_BLACK)
+    cprintln(" cycles)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_count() {
+    // count — count files in ramfs
+    let count = volatile_read(FS_BASE)
+    let mut files: i64 = 0
+    let mut dirs: i64 = 0
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        if volatile_read(addr + 48) == 1 { files = files + 1 }
+        else { dirs = dirs + 1 }
+        i = i + 1
+    }
+    cprint_decimal(files, CYAN_ON_BLACK)
+    cprint(" files, ", WHITE_ON_BLACK)
+    cprint_decimal(dirs, CYAN_ON_BLACK)
+    cprintln(" directories", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_upcase() {
+    // upcase <text> — convert to uppercase
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: upcase <text>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 7
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 97 && ch <= 122 { console_putchar(ch - 32, WHITE_ON_BLACK) }
+        else { console_putchar(ch, WHITE_ON_BLACK) }
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_downcase() {
+    // downcase <text> — convert to lowercase
+    let len = cmdbuf_len()
+    if len <= 9 { cprintln("Usage: downcase <text>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 9
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 65 && ch <= 90 { console_putchar(ch + 32, WHITE_ON_BLACK) }
+        else { console_putchar(ch, WHITE_ON_BLACK) }
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_cls() {
+    // cls — alias for clear
+    console_init()
+}
+
+@kernel fn cmd_exit() {
+    cprintln("Goodbye!", CYAN_ON_BLACK)
+    acpi_shutdown()
+}
+
+// ═══════════════════════════════════════════════
 // Command Dispatcher
 // ═══════════════════════════════════════════════
 
@@ -1797,6 +2147,37 @@ const FS_ENTRY_SIZE: i64 = 128
     // prime (112,114,105,109,101) — "prime <N>"
     if handled == 0 && len >= 5 && buf_eq4(112, 114, 105, 109) == 1 && volatile_read_u8(0x6F804) == 101 { cmd_prime(); handled = 1 }
 
+    // === Phase 5 commands (75 total) ===
+    // mv (109,118) — "mv <src> <dst>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 118 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_mv(); handled = 1 }
+    // tail (116,97,105,108) — "tail <file>"
+    if handled == 0 && len >= 4 && buf_eq4(116, 97, 105, 108) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_tail(); handled = 1 }
+    // grep (103,114,101,112) — "grep <pat> <file>"
+    if handled == 0 && len >= 4 && buf_eq4(103, 114, 101, 112) == 1 { cmd_grep(); handled = 1 }
+    // df (100,102)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 102 { cmd_df(); handled = 1 }
+    // du (100,117)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 117 { cmd_du(); handled = 1 }
+    // which (119,104,105,99,104) — "which <cmd>"
+    if handled == 0 && len >= 5 && buf_eq4(119, 104, 105, 99) == 1 && volatile_read_u8(0x6F804) == 104 { cmd_which(); handled = 1 }
+    // type (handled via "type" — but conflicts with "time" prefix check buf_eq4)
+    // man (109,97,110) — "man <cmd>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 97 && volatile_read_u8(0x6F802) == 110 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_man(); handled = 1 }
+    // banner (98,97,110,110,101,114) — "banner <text>"
+    if handled == 0 && len >= 6 && buf_eq4(98, 97, 110, 110) == 1 { cmd_banner(); handled = 1 }
+    // fib (102,105,98) — "fib <N>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 102 && volatile_read_u8(0x6F801) == 105 && volatile_read_u8(0x6F802) == 98 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_fib(); handled = 1 }
+    // count
+    if handled == 0 && len == 5 && buf_eq4(99, 111, 117, 110) == 1 { cmd_count(); handled = 1 }
+    // upcase (117,112,99,97,115,101) — "upcase <text>"
+    if handled == 0 && len >= 6 && buf_eq4(117, 112, 99, 97) == 1 { cmd_upcase(); handled = 1 }
+    // downcase (100,111,119,110,...) — "downcase <text>"
+    if handled == 0 && len >= 8 && buf_eq4(100, 111, 119, 110) == 1 { cmd_downcase(); handled = 1 }
+    // cls (99,108,115)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 108 && volatile_read_u8(0x6F802) == 115 { cmd_cls(); handled = 1 }
+    // exit (101,120,105,116)
+    if handled == 0 && len == 4 && buf_eq4(101, 120, 105, 116) == 1 { cmd_exit(); handled = 1 }
+
     if handled == 0 && len > 0 {
         cprint("Unknown: ", RED_ON_BLACK)
         let mut i: i64 = 0
@@ -1843,7 +2224,7 @@ const FS_ENTRY_SIZE: i64 = 128
 
     // Serial confirmation
     println("[NOVA] FajarOS Nova v0.1.0 booted")
-    println("[NOVA] 60 shell commands ready")
+    println("[NOVA] 75 shell commands ready")
     println("[NOVA] RamFS: 64 entries, 832KB data")
     println("[NOVA] VGA console active at 0xB8000")
 
