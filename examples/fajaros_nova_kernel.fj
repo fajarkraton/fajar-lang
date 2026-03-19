@@ -993,6 +993,41 @@ const HIST_SLOT_SIZE: i64 = 64
     cprintln("  ProcTbl: 0x600000 (4 KB)", WHITE_ON_BLACK)
 }
 
+@kernel fn pci_class_name(class: i64, subclass: i64) {
+    if class == 0x00 { cprint("Legacy", WHITE_ON_BLACK) }
+    else if class == 0x01 {
+        cprint("Storage", WHITE_ON_BLACK)
+        if subclass == 0x01 { cprint("/IDE", CYAN_ON_BLACK) }
+        else if subclass == 0x06 { cprint("/SATA", CYAN_ON_BLACK) }
+        else if subclass == 0x08 { cprint("/NVMe", GREEN_ON_BLACK) }
+    }
+    else if class == 0x02 {
+        cprint("Network", WHITE_ON_BLACK)
+        if subclass == 0x00 { cprint("/Ethernet", CYAN_ON_BLACK) }
+        else if subclass == 0x80 { cprint("/Other", CYAN_ON_BLACK) }
+    }
+    else if class == 0x03 {
+        cprint("Display", WHITE_ON_BLACK)
+        if subclass == 0x00 { cprint("/VGA", CYAN_ON_BLACK) }
+        else if subclass == 0x02 { cprint("/3D", CYAN_ON_BLACK) }
+    }
+    else if class == 0x04 { cprint("Multimedia", WHITE_ON_BLACK) }
+    else if class == 0x05 { cprint("Memory", WHITE_ON_BLACK) }
+    else if class == 0x06 {
+        cprint("Bridge", WHITE_ON_BLACK)
+        if subclass == 0x00 { cprint("/Host", CYAN_ON_BLACK) }
+        else if subclass == 0x01 { cprint("/ISA", CYAN_ON_BLACK) }
+        else if subclass == 0x04 { cprint("/PCI", CYAN_ON_BLACK) }
+    }
+    else if class == 0x07 { cprint("Serial", WHITE_ON_BLACK) }
+    else if class == 0x08 { cprint("System", WHITE_ON_BLACK) }
+    else if class == 0x0C {
+        cprint("Serial Bus", WHITE_ON_BLACK)
+        if subclass == 0x03 { cprint("/USB", CYAN_ON_BLACK) }
+    }
+    else { cprint("Unknown", WHITE_ON_BLACK) }
+}
+
 @kernel fn cmd_lspci() {
     cprintln("PCI Devices:", YELLOW_ON_BLACK)
     let mut dev: i64 = 0
@@ -1005,9 +1040,10 @@ const HIST_SLOT_SIZE: i64 = 64
             console_putchar(58, WHITE_ON_BLACK)
             cprint_hex((id >> 16) & 0xFFFF, 4, CYAN_ON_BLACK)
             let cl = pci_read32(0, dev, 0, 8)
-            cprint(" class=", WHITE_ON_BLACK)
-            cprint_hex((cl >> 24) & 0xFF, 2, YELLOW_ON_BLACK)
-            cprint_hex((cl >> 16) & 0xFF, 2, YELLOW_ON_BLACK)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            cprint(" ", WHITE_ON_BLACK)
+            pci_class_name(class, subclass)
             console_putchar(10, WHITE_ON_BLACK)
             found = found + 1
         }

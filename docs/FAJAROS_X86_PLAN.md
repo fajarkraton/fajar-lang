@@ -295,12 +295,12 @@ fajaros-x86/
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
-| 6 | Drivers | S16-S18 | 30 | **20** | Keyboard, VGA, PCI |
+| 6 | Drivers | S16-S18 | 30 | **25** | Keyboard+Shift, VGA+cursor, PCI class |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
-| 10 | Production | S28-S30 | 30 | **5** | Blog, architecture, boot, commands docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **200** | **67% complete** |
+| 10 | Production | S28-S30 | 30 | **6** | Blog, architecture, boot, commands, porting docs |
+| **Total** | **10 phases** | **30 sprints** | **300** | **213** | **71% complete** |
 
 ---
 
@@ -626,7 +626,7 @@ fajaros-x86/
 | 16.7 | **Implement line editing** | Backspace deletes last char from cmdbuf + VGA. Enter dispatches command. | [x] |
 | 16.8 | **Test: keyboard input echo** | Type characters → appear on VGA in real-time. | [x] |
 | 16.9 | **Test: special keys** | Enter executes command, Backspace deletes, Space works. | [x] |
-| 16.10 | **Test: shift/caps lock** | Shift+A = 'A', Caps Lock toggle working. | [ ] |
+| 16.10 | **Test: shift/caps lock** | Shift (all symbols !@#$%), CapsLock toggle, shift XOR caps. | [x] |
 
 ### Sprint 17: VGA Console & Framebuffer
 
@@ -635,7 +635,7 @@ fajaros-x86/
 | 17.1 | **Implement VGA text console** | 80×25 text mode, cursor tracking (row at 0x6FA00, col at 0x6FA08), auto-scroll. | [x] |
 | 17.2 | **Implement color support** | 6 colors: WHITE_ON_BLACK(0x0F), WHITE_ON_BLUE(0x1F), GREEN(0x0A), CYAN(0x0B), YELLOW(0x0E), RED(0x0C). | [x] |
 | 17.3 | **Implement scrolling** | `console_scroll()`: memmove rows up by 1, clear last row. Triggers when row >= 24. | [x] |
-| 17.4 | **Implement cursor control** | Hardware cursor via VGA ports 0x3D4/0x3D5. Move cursor to (row, col). | [ ] |
+| 17.4 | **Implement cursor control** | `vga_update_cursor()` via ports 0x3D4/0x3D5, called from console_putchar. | [x] |
 | 17.5 | **Implement ANSI escape codes** | `\x1B[31m` (red), `\x1B[0m` (reset), `\x1B[2J` (clear), `\x1B[H` (home). Basic subset. | [ ] |
 | 17.6 | **Implement Multiboot2 framebuffer** | If framebuffer tag present: linear framebuffer mode (32bpp). Pixel plotting, rect fill, font rendering. | [ ] |
 | 17.7 | **Implement bitmap font (8×16)** | 256 ASCII glyphs, 16 bytes per glyph. Render to framebuffer for graphical mode. | [ ] |
@@ -652,9 +652,9 @@ fajaros-x86/
 | 18.3 | **Implement PCI device display** | Print vendor:device ID (hex) + class code for each detected device. | [x] |
 | 18.4 | **Parse BAR (Base Address Registers)** | Detect MMIO vs I/O port, 32-bit vs 64-bit, size. Map MMIO BARs into kernel address space. | [ ] |
 | 18.5 | **Print PCI device list** | `lspci` shell command lists all detected PCI devices with vendor:device + class. | [x] |
-| 18.6 | **Detect NVMe controller** | Class 01h (storage), subclass 08h (NVMe). Read BARs for NVMe registers. | [ ] |
-| 18.7 | **Detect network controller** | Class 02h (network). Detect Intel I219 or virtio-net. | [ ] |
-| 18.8 | **Detect GPU** | Class 03h (display). Detect VGA controller or virtio-gpu. | [ ] |
+| 18.6 | **Detect NVMe controller** | `pci_class_name()` identifies class 01h/subclass 08h as "Storage/NVMe". | [x] |
+| 18.7 | **Detect network controller** | Class 02h → "Network/Ethernet". Detects virtio-net in QEMU. | [x] |
+| 18.8 | **Detect GPU** | Class 03h → "Display/VGA" or "Display/3D". | [x] |
 | 18.9 | **Test: detect QEMU devices** | `lspci` detects QEMU PIIX4/virtio devices with correct vendor:device IDs. | [x] |
 | 18.10 | **Test: BAR mapping** | Read NVMe BAR0 → map MMIO → read NVMe CAP register → verify valid capability. | [ ] |
 
@@ -890,7 +890,7 @@ fajaros-x86/
 | 30.2 | **Write ARCHITECTURE.md** | `docs/NOVA_ARCHITECTURE.md` — memory map, process table, ramfs, interrupts, VGA. | [x] |
 | 30.3 | **Write BOOT_SEQUENCE.md** | `docs/NOVA_BOOT_SEQUENCE.md` — Multiboot2→32-bit→64-bit→kernel_main, GDT, PML4. | [x] |
 | 30.4 | **Write command reference** | `docs/NOVA_COMMANDS.md` — all 102 commands with usage and descriptions. | [x] |
-| 30.5 | **Write PORTING_FROM_ARM64.md** | Differences between FajarOS Surya (ARM64) and Nova (x86_64). | [ ] |
+| 30.5 | **Write PORTING_FROM_ARM64.md** | `docs/NOVA_PORTING_FROM_ARM64.md` — boot, I/O, interrupts, paging, context switch comparison. | [x] |
 | 30.6 | **Create demo video** | Screen recording: boot → shell → commands → MNIST demo. | [ ] |
 | 30.7 | **Benchmarks report** | CPU inference speed, syscall latency, context switch time, boot time. | [ ] |
 | 30.8 | **GitHub release: v0.1.0** | Tag, release notes, binary ISO download. | [ ] |
