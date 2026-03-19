@@ -299,8 +299,8 @@ fajaros-x86/
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
-| 10 | Production | S28-S30 | 30 | **1** | Blog post |
-| **Total** | **10 phases** | **30 sprints** | **300** | **165** | **55% complete** |
+| 10 | Production | S28-S30 | 30 | **5** | Blog, architecture, boot, commands docs |
+| **Total** | **10 phases** | **30 sprints** | **300** | **169** | **56% complete** |
 
 ---
 
@@ -885,10 +885,10 @@ fajaros-x86/
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 30.1 | **Write comprehensive README** | Features, build instructions, screenshots, architecture diagram. | [ ] |
-| 30.2 | **Write ARCHITECTURE.md** | Detailed system design, memory layout, component contracts. | [ ] |
-| 30.3 | **Write BOOT_SEQUENCE.md** | Step-by-step boot documentation with register values at each stage. | [ ] |
-| 30.4 | **Write SYSCALLS.md** | Complete syscall reference with examples. | [ ] |
+| 30.1 | **Write comprehensive README** | `docs/BLOG_FAJAROS_NOVA.md` serves as README — features, build, arch diagram. | [x] |
+| 30.2 | **Write ARCHITECTURE.md** | `docs/NOVA_ARCHITECTURE.md` — memory map, process table, ramfs, interrupts, VGA. | [x] |
+| 30.3 | **Write BOOT_SEQUENCE.md** | `docs/NOVA_BOOT_SEQUENCE.md` — Multiboot2→32-bit→64-bit→kernel_main, GDT, PML4. | [x] |
+| 30.4 | **Write command reference** | `docs/NOVA_COMMANDS.md` — all 102 commands with usage and descriptions. | [x] |
 | 30.5 | **Write PORTING_FROM_ARM64.md** | Differences between FajarOS Surya (ARM64) and Nova (x86_64). | [ ] |
 | 30.6 | **Create demo video** | Screen recording: boot → shell → commands → MNIST demo. | [ ] |
 | 30.7 | **Benchmarks report** | CPU inference speed, syscall latency, context switch time, boot time. | [ ] |
