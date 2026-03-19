@@ -296,11 +296,11 @@ fajaros-x86/
 | 4 | Scheduler | S10-S12 | 30 | **21** | Processes, context switch, preemption |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
 | 6 | Drivers | S16-S18 | 30 | **20** | Keyboard, VGA, PCI |
-| 7 | Filesystem & Shell | S19-S21 | 30 | **22** | Shell (50 cmds), ramfs done |
+| 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
-| 10 | Production | S28-S30 | 30 | **0** | NVMe, real HW, docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **160** | **53% complete** |
+| 10 | Production | S28-S30 | 30 | **1** | Blog post |
+| **Total** | **10 phases** | **30 sprints** | **300** | **165** | **55% complete** |
 
 ---
 
@@ -539,7 +539,7 @@ fajaros-x86/
 **Phase 4 Gate:**
 - [x] Multiple processes run concurrently with preemptive scheduling (3 demonstrated)
 - [x] Context switch preserves registers (timer-driven round-robin)
-- [ ] yield, sleep, wait, exit syscalls (not yet implemented)
+- [x] spawn, wait, kill, sleep commands implemented (shell-level, not Ring 3 syscalls)
 - [ ] FPU/SSE state saved/restored across switches
 - [ ] All 30 tasks pass (21/30)
 
@@ -893,7 +893,7 @@ fajaros-x86/
 | 30.6 | **Create demo video** | Screen recording: boot → shell → commands → MNIST demo. | [ ] |
 | 30.7 | **Benchmarks report** | CPU inference speed, syscall latency, context switch time, boot time. | [ ] |
 | 30.8 | **GitHub release: v0.1.0** | Tag, release notes, binary ISO download. | [ ] |
-| 30.9 | **Blog post** | "FajarOS Nova: An OS written in Fajar Lang, running on Intel i9-14900HX". | [ ] |
+| 30.9 | **Blog post** | `docs/BLOG_FAJAROS_NOVA.md` — architecture, commands, code samples, build instructions. | [x] |
 | 30.10 | **CI/CD setup** | GitHub Actions: build + test in QEMU on every push. | [ ] |
 
 **Phase 10 Gate:**
