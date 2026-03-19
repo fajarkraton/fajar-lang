@@ -207,3 +207,67 @@ jobs:
         with:
           files: coverage/cobertura.xml
           fail_ci_if_error: false
+
+  # ── FajarOS Nova: x86_64 Bare-Metal Kernel Build ─────────────────────
+  nova-kernel:
+    name: FajarOS Nova (x86_64 bare-metal)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-nova-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Fajar Lang compiler (native)
+        run: cargo build --release --features native
+
+      - name: Compile FajarOS Nova kernel
+        run: cargo run --release --features native -- build --target x86_64-none examples/fajaros_nova_kernel.fj
+
+      - name: Verify kernel ELF
+        run: |
+          file examples/fajaros_nova_kernel
+          readelf -h examples/fajaros_nova_kernel | grep -E "Class|Machine|Entry"
+          readelf -S examples/fajaros_nova_kernel | grep multiboot_header
+
+      - name: Verify command count
+        run: |
+          CMD_COUNT=$(grep '@kernel fn cmd_' examples/fajaros_nova_kernel.fj | wc -l)
+          echo "Commands: $CMD_COUNT"
+          test "$CMD_COUNT" -ge 100 || (echo "FAIL: expected >= 100 commands" && exit 1)
+
+      - name: Install QEMU + GRUB
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 grub-pc-bin grub-common xorriso mtools
+
+      - name: Build bootable ISO
+        run: |
+          mkdir -p /tmp/iso/boot/grub
+          cp examples/fajaros_nova_kernel /tmp/iso/boot/fajaros.elf
+          echo 'set timeout=0; menuentry "Nova" { multiboot2 /boot/fajaros.elf; boot }' > /tmp/iso/boot/grub/grub.cfg
+          grub-mkrescue -o /tmp/nova.iso /tmp/iso
+
+      - name: Boot in QEMU (serial test)
+        run: |
+          timeout 8 qemu-system-x86_64 -cdrom /tmp/nova.iso -m 256M -display none -serial file:/tmp/serial.log -monitor none -no-reboot 2>/dev/null || true
+          cat /tmp/serial.log
+          grep -q "\[BOOT32\]" /tmp/serial.log || (echo "FAIL: no [BOOT32]" && exit 1)
+          grep -q "\[NOVA\].*booted" /tmp/serial.log || (echo "FAIL: kernel not booted" && exit 1)
+          grep -q "shell commands ready" /tmp/serial.log || (echo "FAIL: shell not ready" && exit 1)
+          echo "FajarOS Nova boot test PASSED"
+
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fajaros-nova-kernel
+          path: examples/fajaros_nova_kernel
