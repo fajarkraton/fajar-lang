@@ -152,21 +152,35 @@ Sprints:   8/8 complete
 ### Current Totals
 
 ```
-Tests:     5,979 lib + 379 integration = 6,358 total (0 failures, --features native)
+Tests:     5,988 lib + 379 integration = 6,580 total (0 failures, --features native)
 LOC:       ~280,000 lines of Rust (220+ files)
-Examples:  114 .fj programs (incl. hal_blinky, fajaros_kernel, q6a_showcase, q6a_gpio_blink)
+Examples:  115 .fj programs (incl. fajaros_nova_kernel, fajaros_kernel, q6a_showcase)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
 Builtins:  90+ bare-metal runtime functions (GPIO, UART, SPI, I2C, Timer, DMA, VFS, Network, Display, Process, Syscall, MMU)
 CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
 Release:   v3.2.0 "Surya Rising" (2026-03-19)
 ```
 
-### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang
+### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
 
 ```
 Features:  MMU, EL0 user space, 10 syscalls, IPC, preemptive scheduler, 65+ shell commands
 Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inference
 Repo:      github.com/fajarkraton/fajar-os
+```
+
+### FajarOS Nova v0.1.0 — x86_64 bare-metal OS (100% Fajar Lang)
+
+```
+Kernel:    examples/fajaros_nova_kernel.fj — 3,133 lines, 104KB ELF
+Commands:  102 shell commands (system, files, process, AI, math, utility)
+Features:  ramfs (64 files, 832KB), Shift/CapsLock keyboard, VGA cursor,
+           command history (Up/Down), grep, sort, calc, neofetch, demo
+Hardware:  PIT 100Hz, IDT 256 vectors, PCI scan, ACPI shutdown, CPUID
+Plan:      docs/FAJAROS_X86_PLAN.md — 169/300 tasks (56%)
+Docs:      BLOG_FAJAROS_NOVA.md, NOVA_ARCHITECTURE.md, NOVA_BOOT_SEQUENCE.md, NOVA_COMMANDS.md
+Test:      examples/fajaros_nova_test.sh — automated QEMU test suite (ALL PASS)
+Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
 ```
 
 > **Task lists:** `docs/V05_PLAN.md` (v0.5), `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
