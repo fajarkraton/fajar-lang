@@ -1054,6 +1054,263 @@ const HIST_SLOT_SIZE: i64 = 64
     cprintln(" devices", GREEN_ON_BLACK)
 }
 
+@kernel fn cmd_lspci_v() {
+    // lspci -v — verbose with BAR info
+    cprintln("PCI Devices (verbose):", YELLOW_ON_BLACK)
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let cl = pci_read32(0, dev, 0, 8)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            cprint("  Dev ", WHITE_ON_BLACK)
+            cprint_decimal(dev, CYAN_ON_BLACK)
+            cprint(": ", WHITE_ON_BLACK)
+            cprint_hex(id & 0xFFFF, 4, CYAN_ON_BLACK)
+            console_putchar(58, WHITE_ON_BLACK)
+            cprint_hex((id >> 16) & 0xFFFF, 4, CYAN_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            pci_class_name(class, subclass)
+            console_putchar(10, WHITE_ON_BLACK)
+            // Read BARs (offset 0x10-0x24, 6 BARs)
+            let mut bar: i64 = 0
+            while bar < 6 {
+                let bar_val = pci_read32(0, dev, 0, 0x10 + bar * 4)
+                if bar_val != 0 {
+                    cprint("    BAR", WHITE_ON_BLACK)
+                    cprint_decimal(bar, WHITE_ON_BLACK)
+                    cprint(": 0x", WHITE_ON_BLACK)
+                    cprint_hex(bar_val, 8, CYAN_ON_BLACK)
+                    if (bar_val & 1) == 1 {
+                        cprint(" (I/O port ", YELLOW_ON_BLACK)
+                        cprint_hex(bar_val & 0xFFFFFFFC, 4, YELLOW_ON_BLACK)
+                        cprintln(")", WHITE_ON_BLACK)
+                    } else {
+                        let bar_type = (bar_val >> 1) & 3
+                        if bar_type == 0 { cprint(" (MMIO 32-bit)", YELLOW_ON_BLACK) }
+                        else if bar_type == 2 { cprint(" (MMIO 64-bit)", YELLOW_ON_BLACK) }
+                        console_putchar(10, WHITE_ON_BLACK)
+                    }
+                }
+                bar = bar + 1
+            }
+            // Read interrupt line
+            let int_reg = pci_read32(0, dev, 0, 0x3C)
+            let irq = int_reg & 0xFF
+            if irq != 0 && irq != 0xFF {
+                cprint("    IRQ: ", WHITE_ON_BLACK)
+                cprint_decimal(irq, CYAN_ON_BLACK)
+                console_putchar(10, WHITE_ON_BLACK)
+            }
+        }
+        dev = dev + 1
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Slab Allocator (Phase 2 Sprint 6)
+// Pre-sized caches: 32, 64, 128, 256, 512, 1024
+// Each slab: bitmap + objects at fixed addresses
+// ═══════════════════════════════════════════════
+
+const SLAB_BASE: i64 = 0x590000
+const SLAB_SIZES: i64 = 6  // 32, 64, 128, 256, 512, 1024
+
+@kernel fn slab_init() {
+    // Initialize slab metadata at SLAB_BASE
+    // Each slab: offset +0: object_size, +8: capacity, +16: used, +24: bitmap_addr, +32: data_addr
+    let mut i: i64 = 0
+    let sizes: [i64; 6] = [32, 64, 128, 256, 512, 1024]
+    let mut data_off: i64 = SLAB_BASE + 256  // data starts after metadata
+    while i < SLAB_SIZES {
+        let meta = SLAB_BASE + i * 40
+        let obj_size = sizes[i]
+        let capacity = 4096 / obj_size  // one page worth
+        volatile_write(meta, obj_size)
+        volatile_write(meta + 8, capacity)
+        volatile_write(meta + 16, 0)      // used = 0
+        volatile_write(meta + 24, data_off) // bitmap
+        volatile_write(meta + 32, data_off + capacity) // data
+        // Clear bitmap
+        let mut j: i64 = 0
+        while j < capacity { volatile_write_u8(data_off + j, 0); j = j + 1 }
+        data_off = data_off + capacity + capacity * obj_size
+        i = i + 1
+    }
+}
+
+@kernel fn slab_alloc(size: i64) -> i64 {
+    // Find smallest slab that fits
+    let sizes: [i64; 6] = [32, 64, 128, 256, 512, 1024]
+    let mut i: i64 = 0
+    while i < SLAB_SIZES {
+        if sizes[i] >= size {
+            let meta = SLAB_BASE + i * 40
+            let capacity = volatile_read(meta + 8)
+            let used = volatile_read(meta + 16)
+            if used < capacity {
+                let bitmap = volatile_read(meta + 24)
+                let data = volatile_read(meta + 32)
+                // Find free slot
+                let mut j: i64 = 0
+                while j < capacity {
+                    if volatile_read_u8(bitmap + j) == 0 {
+                        volatile_write_u8(bitmap + j, 1)
+                        volatile_write(meta + 16, used + 1)
+                        return data + j * sizes[i]
+                    }
+                    j = j + 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    -1  // No suitable slab
+}
+
+@kernel fn slab_free(ptr: i64, size: i64) {
+    let sizes: [i64; 6] = [32, 64, 128, 256, 512, 1024]
+    let mut i: i64 = 0
+    while i < SLAB_SIZES {
+        if sizes[i] >= size {
+            let meta = SLAB_BASE + i * 40
+            let data = volatile_read(meta + 32)
+            let bitmap = volatile_read(meta + 24)
+            let slot = (ptr - data) / sizes[i]
+            if slot >= 0 && slot < volatile_read(meta + 8) {
+                volatile_write_u8(bitmap + slot, 0)
+                let used = volatile_read(meta + 16)
+                if used > 0 { volatile_write(meta + 16, used - 1) }
+            }
+            return
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_slab() {
+    cprintln("Slab Allocator:", YELLOW_ON_BLACK)
+    let sizes: [i64; 6] = [32, 64, 128, 256, 512, 1024]
+    let mut i: i64 = 0
+    while i < SLAB_SIZES {
+        let meta = SLAB_BASE + i * 40
+        let obj_size = volatile_read(meta)
+        let capacity = volatile_read(meta + 8)
+        let used = volatile_read(meta + 16)
+        cprint("  ", WHITE_ON_BLACK)
+        cprint_decimal(obj_size, CYAN_ON_BLACK)
+        cprint("B: ", WHITE_ON_BLACK)
+        cprint_decimal(used, WHITE_ON_BLACK)
+        cprint("/", WHITE_ON_BLACK)
+        cprint_decimal(capacity, WHITE_ON_BLACK)
+        cprintln(" used", WHITE_ON_BLACK)
+        i = i + 1
+    }
+}
+
+// ═══════════════════════════════════════════════
+// MNIST Digit Display (Phase 9)
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_digit() {
+    // digit <N> — display digit N as ASCII art (28x28)
+    let len = cmdbuf_len()
+    let mut n: i64 = 0
+    if len > 6 {
+        n = volatile_read_u8(0x6F800 + 6) - 48
+    }
+    if n < 0 || n > 9 { n = 0 }
+    cprintln("MNIST Digit Display:", YELLOW_ON_BLACK)
+    cprint("  Digit: ", WHITE_ON_BLACK)
+    cprint_decimal(n, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    // Generate a simple digit pattern (7x7 ASCII art)
+    // Each digit has a hardcoded 7-line pattern
+    if n == 0 {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else if n == 1 {
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("   ##   ", WHITE_ON_BLACK)
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else if n == 2 {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("    ##  ", WHITE_ON_BLACK)
+        cprintln("   #    ", WHITE_ON_BLACK)
+        cprintln("  #     ", WHITE_ON_BLACK)
+        cprintln("  ##### ", WHITE_ON_BLACK)
+    } else if n == 3 {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("    ##  ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else if n == 4 {
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  ##### ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+    } else if n == 5 {
+        cprintln("  ##### ", WHITE_ON_BLACK)
+        cprintln("  #     ", WHITE_ON_BLACK)
+        cprintln("  ####  ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else if n == 6 {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #     ", WHITE_ON_BLACK)
+        cprintln("  ####  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else if n == 7 {
+        cprintln("  ##### ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("     #  ", WHITE_ON_BLACK)
+        cprintln("    #   ", WHITE_ON_BLACK)
+        cprintln("   #    ", WHITE_ON_BLACK)
+        cprintln("   #    ", WHITE_ON_BLACK)
+        cprintln("   #    ", WHITE_ON_BLACK)
+    } else if n == 8 {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    } else {
+        cprintln("   ###  ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   #### ", WHITE_ON_BLACK)
+        cprintln("      # ", WHITE_ON_BLACK)
+        cprintln("  #   # ", WHITE_ON_BLACK)
+        cprintln("   ###  ", WHITE_ON_BLACK)
+    }
+    cprintln("  (ASCII art — real MNIST uses 28x28)", YELLOW_ON_BLACK)
+}
+
 @kernel fn cmd_ps() {
     cprintln("Processes:", YELLOW_ON_BLACK)
     cprintln("  PID  STATE    TICKS", WHITE_ON_BLACK)
@@ -3640,6 +3897,13 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len >= 7 && buf_eq4(107, 109, 97, 108) == 1 { cmd_kmalloc(); handled = 1 }
     // kfree (107,102,114,101,101) — "kfree <addr>"
     if handled == 0 && len >= 5 && buf_eq4(107, 102, 114, 101) == 1 { cmd_kfree(); handled = 1 }
+    // lspci -v (108,115,112,99,105,32,45,118) — verbose PCI listing
+    // Use "pcibar" instead to avoid conflict with lspci
+    if handled == 0 && len == 6 && buf_eq4(112, 99, 105, 98) == 1 { cmd_lspci_v(); handled = 1 }
+    // slab
+    if handled == 0 && len == 4 && buf_eq4(115, 108, 97, 98) == 1 { cmd_slab(); handled = 1 }
+    // digit (100,105,103,105,116) — "digit <N>"
+    if handled == 0 && len >= 5 && buf_eq4(100, 105, 103, 105) == 1 { cmd_digit(); handled = 1 }
     // lapic
     if handled == 0 && len == 5 && buf_eq4(108, 97, 112, 105) == 1 { cmd_lapic(); handled = 1 }
     // irq (105,114,113)
@@ -3687,6 +3951,7 @@ const FS_ENTRY_SIZE: i64 = 128
     // Init memory + ramfs + history
     frames_init()
     heap_init()
+    slab_init()
     ramfs_init()
     history_init()
 

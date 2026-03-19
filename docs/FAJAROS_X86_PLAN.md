@@ -291,16 +291,16 @@ fajaros-x86/
 | # | Phase | Sprints | Tasks | Done | Focus |
 |---|-------|---------|-------|------|-------|
 | 1 | Foundation | S1-S3 | 30 | **28** | Boot, serial, GDT, hello world on QEMU |
-| 2 | Memory | S4-S6 | 30 | **22** | Bitmap + freelist allocator, map_page |
+| 2 | Memory | S4-S6 | 30 | **23** | Bitmap + freelist + slab allocator |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
-| 6 | Drivers | S16-S18 | 30 | **25** | Keyboard+Shift, VGA+cursor, PCI class |
+| 6 | Drivers | S16-S18 | 30 | **26** | Keyboard+Shift, VGA+cursor, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
-| 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
+| 9 | AI & GPU | S25-S27 | 30 | **9** | Tensor matmul + MNIST + digit display |
 | 10 | Production | S28-S30 | 30 | **6** | Blog, architecture, boot, commands, porting docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **213** | **71% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **219** | **73% complete** |
 
 ---
 
@@ -407,7 +407,7 @@ fajaros-x86/
 |---|------|--------|--------|
 | 6.1 | **Implement bump allocator** | Simple: `heap_ptr += size; return old_ptr`. Fast, no fragmentation handling. For early boot. | [x] |
 | 6.2 | **Implement freelist allocator** | `kmalloc(size)` first-fit, `kfree(ptr)` returns to free list. Block splitting. | [x] |
-| 6.3 | **Implement slab allocator** | Pre-sized caches for 32, 64, 128, 256, 512, 1024, 2048, 4096 byte objects. Fast allocation. | [ ] |
+| 6.3 | **Implement slab allocator** | 6 slab caches (32/64/128/256/512/1024B). `slab_alloc(size)`, `slab_free(ptr,size)`, `cmd_slab()`. | [x] |
 | 6.4 | **Auto-grow heap** | When heap exhausted, map new pages via `map_page()`. Expand from 4MB to max 256MB. | [x] |
 | 6.5 | **Heap statistics** | `cmd_heap()`: total/used/free/allocs/usage%. Free list block count. | [x] |
 | 6.6 | **Double-free detection** | Magic 0xABCD1234 in allocated block header. Detects double-free with error message. | [x] |
@@ -650,7 +650,7 @@ fajaros-x86/
 | 18.1 | **Implement PCI config space access** | `pci_read32(bus, dev, func, offset)` builtin via I/O ports 0xCF8/0xCFC. | [x] |
 | 18.2 | **Implement PCI bus scan** | `cmd_lspci()` scans bus 0, devices 0-31, function 0. Reads vendor/device ID. | [x] |
 | 18.3 | **Implement PCI device display** | Print vendor:device ID (hex) + class code for each detected device. | [x] |
-| 18.4 | **Parse BAR (Base Address Registers)** | Detect MMIO vs I/O port, 32-bit vs 64-bit, size. Map MMIO BARs into kernel address space. | [ ] |
+| 18.4 | **Parse BAR (Base Address Registers)** | `cmd_lspci_v()` reads 6 BARs per device, detects MMIO 32/64-bit vs I/O port, shows IRQ. | [x] |
 | 18.5 | **Print PCI device list** | `lspci` shell command lists all detected PCI devices with vendor:device + class. | [x] |
 | 18.6 | **Detect NVMe controller** | `pci_class_name()` identifies class 01h/subclass 08h as "Storage/NVMe". | [x] |
 | 18.7 | **Detect network controller** | Class 02h → "Network/Ethernet". Detects virtio-net in QEMU. | [x] |
@@ -817,7 +817,7 @@ fajaros-x86/
 | 26.3 | **Implement digit classifier app** | `apps/mnist.fj`: load model, load image, forward pass, print predicted digit. | [ ] |
 | 26.4 | **Implement batch inference** | Classify all 10 test images, print accuracy (expect 8/10+). | [ ] |
 | 26.5 | **Benchmark inference time** | `cmd_mnist()` times forward pass with rdtsc(), prints K cycles. | [x] |
-| 26.6 | **Display digit on VGA** | Render 28×28 digit image using ASCII art on VGA console. '#' for dark, '.' for light. | [ ] |
+| 26.6 | **Display digit on VGA** | `digit <N>` renders 7-line ASCII art digit 0-9 on VGA console. | [x] |
 | 26.7 | **Interactive demo** | `mnist` shell command runs inference simulation with timing output. | [x] |
 | 26.8 | **Test: classification accuracy** | At least 8/10 test digits classified correctly. | [ ] |
 | 26.9 | **Test: inference performance** | Single inference < 5ms on QEMU (no KVM). | [ ] |
