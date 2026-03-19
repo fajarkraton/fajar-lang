@@ -639,6 +639,67 @@ const IPC_QUEUE_SIZE: i64 = 4
 }
 
 // ═══════════════════════════════════════════════
+// Pipe (Phase 5 Sprint 15.7)
+// Simple 4KB buffer between two processes
+// Pipe data at 0x650000 (4096 bytes buffer + metadata)
+// ═══════════════════════════════════════════════
+
+const PIPE_BASE: i64 = 0x650000
+const PIPE_BUF_SIZE: i64 = 4096
+
+@kernel fn pipe_init() {
+    volatile_write(PIPE_BASE, 0)           // read_pos
+    volatile_write(PIPE_BASE + 8, 0)       // write_pos
+    volatile_write(PIPE_BASE + 16, 0)      // count (bytes in buffer)
+    volatile_write(PIPE_BASE + 24, 0)      // closed flag
+}
+
+@kernel fn pipe_write_byte(b: i64) -> i64 {
+    let count = volatile_read(PIPE_BASE + 16)
+    if count >= PIPE_BUF_SIZE { return -1 }  // full
+    let wpos = volatile_read(PIPE_BASE + 8)
+    volatile_write_u8(PIPE_BASE + 32 + wpos, b)
+    volatile_write(PIPE_BASE + 8, (wpos + 1) % PIPE_BUF_SIZE)
+    volatile_write(PIPE_BASE + 16, count + 1)
+    0
+}
+
+@kernel fn pipe_read_byte() -> i64 {
+    let count = volatile_read(PIPE_BASE + 16)
+    if count == 0 { return -1 }  // empty
+    let rpos = volatile_read(PIPE_BASE)
+    let b = volatile_read_u8(PIPE_BASE + 32 + rpos)
+    volatile_write(PIPE_BASE, (rpos + 1) % PIPE_BUF_SIZE)
+    volatile_write(PIPE_BASE + 16, count - 1)
+    b
+}
+
+@kernel fn cmd_pipe() {
+    // pipe <text> — write text to pipe, then read it back (demo)
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: pipe <text>", YELLOW_ON_BLACK); return }
+    pipe_init()
+    // Write text to pipe
+    let text_len = len - 5
+    let mut i: i64 = 5
+    while i < len {
+        pipe_write_byte(volatile_read_u8(0x6F800 + i))
+        i = i + 1
+    }
+    cprint("Wrote ", WHITE_ON_BLACK)
+    cprint_decimal(text_len, CYAN_ON_BLACK)
+    cprintln(" bytes to pipe", WHITE_ON_BLACK)
+    // Read back from pipe
+    cprint("Read:  ", WHITE_ON_BLACK)
+    let mut b = pipe_read_byte()
+    while b != -1 {
+        console_putchar(b, GREEN_ON_BLACK)
+        b = pipe_read_byte()
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Timer Utilities (Phase 3)
 // ═══════════════════════════════════════════════
 
@@ -4224,6 +4285,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 112 && volatile_read_u8(0x6F802) == 99 { cmd_ipc(); handled = 1 }
     // security (115,101,99,117,114,105,116,121)
     if handled == 0 && len == 8 && buf_eq4(115, 101, 99, 117) == 1 { cmd_security(); handled = 1 }
+    // pipe (112,105,112,101) — "pipe <text>"
+    if handled == 0 && len >= 4 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe(); handled = 1 }
     // timer (already dispatched as "time" — use "timer" for full test)
     if handled == 0 && len == 5 && buf_eq4(116, 105, 109, 101) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_timer(); handled = 1 }
 
