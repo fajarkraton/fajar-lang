@@ -497,6 +497,105 @@ const HEAP_MAGIC: i64 = 0xABCD1234
 }
 
 // ═══════════════════════════════════════════════
+// Timer Utilities (Phase 3)
+// ═══════════════════════════════════════════════
+
+@kernel fn sleep_ms(ms: i64) {
+    // Busy-wait using PIT ticks (100 Hz = 10ms per tick)
+    let ticks_to_wait = ms / 10
+    let target = read_timer_ticks() + ticks_to_wait
+    while read_timer_ticks() < target {}
+}
+
+@kernel fn delay_us(us: i64) {
+    // Microsecond delay using TSC
+    // Estimate TSC frequency: ~2 GHz (QEMU default) = 2000 cycles/us
+    let cycles = us * 2000
+    let start = rdtsc()
+    while rdtsc() - start < cycles {}
+}
+
+// ═══════════════════════════════════════════════
+// LAPIC / IOAPIC (Phase 3 Sprint 8)
+// LAPIC MMIO at 0xFEE00000 (identity-mapped in 128MB)
+// Note: only works if APIC is within 128MB mapping
+// QEMU default LAPIC is at 0xFEE00000 (outside 128MB!)
+// These functions prepare for when higher-address mapping is added
+// ═══════════════════════════════════════════════
+
+const LAPIC_BASE: i64 = 0xFEE00000
+const LAPIC_ID: i64 = 0x20
+const LAPIC_VER: i64 = 0x30
+const LAPIC_TPR: i64 = 0x80
+const LAPIC_EOI: i64 = 0xB0
+const LAPIC_SVR: i64 = 0xF0
+const LAPIC_ICR_LO: i64 = 0x300
+const LAPIC_ICR_HI: i64 = 0x310
+const LAPIC_TIMER_LVT: i64 = 0x320
+const LAPIC_TIMER_INIT: i64 = 0x380
+const LAPIC_TIMER_CUR: i64 = 0x390
+const LAPIC_TIMER_DIV: i64 = 0x3E0
+
+const IOAPIC_BASE: i64 = 0xFEC00000
+
+@kernel fn cmd_lapic() {
+    cprintln("LAPIC Info:", YELLOW_ON_BLACK)
+    cprint("  Base: 0x", WHITE_ON_BLACK)
+    cprint_hex(LAPIC_BASE, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    // Check if APIC present via CPUID
+    let edx = cpuid_edx(1)
+    if (edx & (1 << 9)) != 0 {
+        cprintln("  APIC: present (CPUID)", GREEN_ON_BLACK)
+    } else {
+        cprintln("  APIC: not detected", RED_ON_BLACK)
+        return
+    }
+    cprintln("  Note: LAPIC at 0xFEE00000 outside 128MB identity map", YELLOW_ON_BLACK)
+    cprintln("  Using PIC (8259A) for interrupts instead", WHITE_ON_BLACK)
+    cprintln("  LAPIC init requires higher-half mapping", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_irq() {
+    cprintln("IRQ Configuration:", YELLOW_ON_BLACK)
+    cprintln("  Controller: PIC 8259A (legacy)", WHITE_ON_BLACK)
+    cprintln("  Master PIC: vectors 0x20-0x27", WHITE_ON_BLACK)
+    cprintln("  Slave PIC:  vectors 0x28-0x2F", WHITE_ON_BLACK)
+    cprintln("  IRQ0 (PIT):  vector 0x20 - timer", GREEN_ON_BLACK)
+    cprintln("  IRQ1 (KBD):  vector 0x21 - keyboard", GREEN_ON_BLACK)
+    cprintln("  Timer:  PIT channel 0, 100 Hz", WHITE_ON_BLACK)
+    cprint("  Ticks:  ", WHITE_ON_BLACK)
+    cprint_decimal(read_timer_ticks(), CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  TSC:    ", WHITE_ON_BLACK)
+    cprint_hex(rdtsc() >> 32, 8, CYAN_ON_BLACK)
+    cprint_hex(rdtsc() & 0xFFFFFFFF, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_timer() {
+    // timer — show timer details + test sleep
+    cprintln("Timer Test:", YELLOW_ON_BLACK)
+    cprint("  PIT freq: 100 Hz (", WHITE_ON_BLACK)
+    cprint_decimal(read_timer_ticks(), CYAN_ON_BLACK)
+    cprintln(" ticks)", WHITE_ON_BLACK)
+
+    cprint("  Testing sleep_ms(500)... ", WHITE_ON_BLACK)
+    let t0 = read_timer_ticks()
+    sleep_ms(500)
+    let t1 = read_timer_ticks()
+    cprint_decimal(t1 - t0, CYAN_ON_BLACK)
+    cprintln(" ticks (expect ~50)", WHITE_ON_BLACK)
+
+    cprint("  Testing delay_us(1000)... ", WHITE_ON_BLACK)
+    let c0 = rdtsc()
+    delay_us(1000)
+    let c1 = rdtsc()
+    cprint_decimal((c1 - c0) / 1000, CYAN_ON_BLACK)
+    cprintln("K cycles", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // VGA Console Engine
 // ═══════════════════════════════════════════════
 
@@ -3505,6 +3604,12 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len >= 7 && buf_eq4(107, 109, 97, 108) == 1 { cmd_kmalloc(); handled = 1 }
     // kfree (107,102,114,101,101) — "kfree <addr>"
     if handled == 0 && len >= 5 && buf_eq4(107, 102, 114, 101) == 1 { cmd_kfree(); handled = 1 }
+    // lapic
+    if handled == 0 && len == 5 && buf_eq4(108, 97, 112, 105) == 1 { cmd_lapic(); handled = 1 }
+    // irq (105,114,113)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 114 && volatile_read_u8(0x6F802) == 113 { cmd_irq(); handled = 1 }
+    // timer (already dispatched as "time" — use "timer" for full test)
+    if handled == 0 && len == 5 && buf_eq4(116, 105, 109, 101) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_timer(); handled = 1 }
 
     if handled == 0 && len > 0 {
         cprint("Unknown: ", RED_ON_BLACK)
