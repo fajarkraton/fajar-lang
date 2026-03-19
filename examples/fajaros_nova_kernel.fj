@@ -809,6 +809,33 @@ const MAX_HEAP_ALLOCS: i64 = 1024
     cprintln(" bytes", WHITE_ON_BLACK)
 }
 
+@kernel fn cmd_ansi() {
+    // ANSI escape code demo — VGA attribute mapping
+    cprintln("ANSI Color Mapping:", YELLOW_ON_BLACK)
+    // VGA colors map to ANSI codes:
+    // 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white
+    cprint("  \\e[31m RED    ", RED_ON_BLACK)
+    cprint("  \\e[32m GREEN  ", GREEN_ON_BLACK)
+    cprintln("  \\e[33m YELLOW", YELLOW_ON_BLACK)
+    cprint("  \\e[34m BLUE   ", WHITE_ON_BLUE)
+    cprint("  \\e[36m CYAN   ", CYAN_ON_BLACK)
+    cprintln("  \\e[37m WHITE", WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    // Background colors
+    let mut bg: i64 = 0
+    while bg < 8 {
+        let attr = bg * 16 + 15  // white text on colored bg
+        console_putchar(32, attr)
+        console_putchar(52 + bg % 10, attr)  // digit
+        console_putchar(48 + bg, attr)
+        console_putchar(32, attr)
+        bg = bg + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprintln("  \\e[2J = clear, \\e[H = home, \\e[0m = reset", WHITE_ON_BLACK)
+    cprintln("  (VGA text mode uses direct attr bytes)", YELLOW_ON_BLACK)
+}
+
 @kernel fn lapic_eoi() {
     // Send End of Interrupt to LAPIC
     volatile_write_u32(LAPIC_BASE + LAPIC_EOI, 0)
@@ -4392,6 +4419,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len >= 4 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe(); handled = 1 }
     // spinlock
     if handled == 0 && len == 8 && buf_eq4(115, 112, 105, 110) == 1 { cmd_spinlock(); handled = 1 }
+    // ansi (97,110,115,105) — ANSI color test
+    if handled == 0 && len == 4 && buf_eq4(97, 110, 115, 105) == 1 { cmd_ansi(); handled = 1 }
     // limits (108,105,109,105,116,115)
     if handled == 0 && len == 6 && buf_eq4(108, 105, 109, 105) == 1 { cmd_limits(); handled = 1 }
     // timer (already dispatched as "time" — use "timer" for full test)
