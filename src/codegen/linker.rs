@@ -1792,14 +1792,6 @@ fj_rt_bare_read_cr0:
     ret
 .size fj_rt_bare_read_cr0, . - fj_rt_bare_read_cr0
 
-/* read_cr4() -> rax */
-.global fj_rt_bare_read_cr4
-.type fj_rt_bare_read_cr4, @function
-fj_rt_bare_read_cr4:
-    mov     rax, cr4
-    ret
-.size fj_rt_bare_read_cr4, . - fj_rt_bare_read_cr4
-
 /* str_byte_at(str_ptr: rdi, index: rsi) -> rax (byte at index) */
 .global fj_rt_str_byte_at
 .type fj_rt_str_byte_at, @function
@@ -2410,6 +2402,56 @@ fj_rt_bare_irq_enable:
 fj_rt_bare_irq_disable:
     cli
     ret
+
+/* ═══ Phase 5+8: MSR, CR4, INVLPG builtins ═══ */
+
+/* read_msr(msr_num) -> value (rax = edx:eax combined) */
+.global fj_rt_bare_read_msr
+.type fj_rt_bare_read_msr, @function
+fj_rt_bare_read_msr:
+    mov     ecx, edi        /* MSR number in ECX */
+    rdmsr                   /* EDX:EAX = MSR value */
+    shl     rdx, 32
+    or      rax, rdx
+    ret
+.size fj_rt_bare_read_msr, . - fj_rt_bare_read_msr
+
+/* write_msr(msr_num, value) -> 0 */
+.global fj_rt_bare_write_msr
+.type fj_rt_bare_write_msr, @function
+fj_rt_bare_write_msr:
+    mov     ecx, edi        /* MSR number in ECX */
+    mov     eax, esi        /* Low 32 bits of value */
+    shr     rsi, 32
+    mov     edx, esi        /* High 32 bits of value */
+    wrmsr
+    xor     eax, eax
+    ret
+.size fj_rt_bare_write_msr, . - fj_rt_bare_write_msr
+
+/* read_cr4() -> rax */
+.global fj_rt_bare_read_cr4
+.type fj_rt_bare_read_cr4, @function
+fj_rt_bare_read_cr4:
+    mov     rax, cr4
+    ret
+.size fj_rt_bare_read_cr4, . - fj_rt_bare_read_cr4
+
+/* write_cr4(value) */
+.global fj_rt_bare_write_cr4
+.type fj_rt_bare_write_cr4, @function
+fj_rt_bare_write_cr4:
+    mov     cr4, rdi
+    ret
+.size fj_rt_bare_write_cr4, . - fj_rt_bare_write_cr4
+
+/* invlpg(virt_addr) — invalidate TLB for one page */
+.global fj_rt_bare_invlpg
+.type fj_rt_bare_invlpg, @function
+fj_rt_bare_invlpg:
+    invlpg  [rdi]
+    ret
+.size fj_rt_bare_invlpg, . - fj_rt_bare_invlpg
 
 /* Stubs for ARM64-specific builtins (no-op on x86_64) */
 .global fj_rt_bare_timer_count

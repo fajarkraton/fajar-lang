@@ -1154,6 +1154,12 @@ impl TypeChecker {
             "acpi_find_rsdp",
             "acpi_get_cpu_count",
             "rdtsc",
+            // Phase 5+8: MSR, CR4, INVLPG
+            "read_msr",
+            "write_msr",
+            "read_cr4",
+            "write_cr4",
+            "invlpg",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

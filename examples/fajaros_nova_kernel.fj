@@ -231,9 +231,9 @@ const PAGE_NX: i64 = 0  // Would be bit 63, needs EFER.NXE
     if (pd_entry & PAGE_PRESENT) == 0 || (pd_entry & PAGE_HUGE) != 0 { return }
     let pt_addr = pd_entry & 0xFFFFF000
 
-    // Clear PT entry
+    // Clear PT entry and flush TLB
     page_table_set(pt_addr, pt_idx, 0)
-    // TODO: invlpg for TLB flush (needs asm! builtin)
+    invlpg(virt)
 }
 
 // ═══════════════════════════════════════════════
@@ -4113,6 +4113,10 @@ const FS_ENTRY_SIZE: i64 = 128
     volatile_write(0x600000 + 8, 2)
     volatile_write(0x6FBF0, 0)
     volatile_write(0x6FBF8, 0)
+
+    // Enable NX bit (EFER.NXE, MSR 0xC0000080 bit 11)
+    let efer = read_msr(0xC0000080)
+    write_msr(0xC0000080, efer | (1 << 11))
 
     // Init memory + ramfs + history + ML
     frames_init()

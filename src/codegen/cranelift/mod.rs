@@ -6007,6 +6007,12 @@ impl CraneliftCompiler {
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp", &sig_ret_i64),
             ("fj_rt_bare_acpi_get_cpu_count", "acpi_get_cpu_count", &sig_i64_ret_i64),
             ("fj_rt_bare_rdtsc", "rdtsc", &sig_ret_i64),
+            // Phase 5+8: MSR, CR4, INVLPG for NX/SMEP/SMAP/TLB
+            ("fj_rt_bare_read_msr", "read_msr", &sig_i64_ret_i64),
+            ("fj_rt_bare_write_msr", "write_msr", &sig_2i64_ret_i64),
+            ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
+            ("fj_rt_bare_write_cr4", "write_cr4", &sig_i64_void),
+            ("fj_rt_bare_invlpg", "invlpg", &sig_i64_void),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7103,6 +7109,8 @@ impl ObjectCompiler {
         for (name, builtin) in [
             ("fj_rt_bare_pic_eoi", "pic_eoi"),
             ("fj_rt_bare_pit_init", "pit_init"),
+            ("fj_rt_bare_write_cr4", "write_cr4"),
+            ("fj_rt_bare_invlpg", "invlpg"),
         ] {
             let id = self
                 .module
@@ -7110,6 +7118,21 @@ impl ObjectCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(builtin.to_string(), id);
         }
+
+        // MSR read/write (Phase 5+8)
+        let read_msr_id = self
+            .module
+            .declare_function("fj_rt_bare_read_msr", Linkage::Import, &sig_i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("read_msr".to_string(), read_msr_id);
+
+        let write_msr_id = self
+            .module
+            .declare_function("fj_rt_bare_write_msr", Linkage::Import, &sig_2i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("write_msr".to_string(), write_msr_id);
 
         // String byte access
         let str_byte_at_id = self
@@ -7204,6 +7227,7 @@ impl ObjectCompiler {
         for (name, builtin) in [
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp"),
             ("fj_rt_bare_rdtsc", "rdtsc"),
+            ("fj_rt_bare_read_cr4", "read_cr4"),
         ] {
             let id = self
                 .module

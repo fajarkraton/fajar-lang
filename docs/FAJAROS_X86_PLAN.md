@@ -291,7 +291,7 @@ fajaros-x86/
 | # | Phase | Sprints | Tasks | Done | Focus |
 |---|-------|---------|-------|------|-------|
 | 1 | Foundation | S1-S3 | 30 | **28** | Boot, serial, GDT, hello world on QEMU |
-| 2 | Memory | S4-S6 | 30 | **23** | Bitmap + freelist + slab allocator |
+| 2 | Memory | S4-S6 | 30 | **25** | Bitmap+freelist+slab, NX, INVLPG |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
@@ -300,7 +300,7 @@ fajaros-x86/
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **8** | Docs (6) + CI/CD + quality gates |
-| **Total** | **10 phases** | **30 sprints** | **300** | **241** | **80% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **244** | **81% complete** |
 
 ---
 
@@ -396,8 +396,8 @@ fajaros-x86/
 | 5.4 | **Load page tables into CR3** | `asm!("mov cr3, {pml4}", ...)`. Flush TLB automatically on CR3 write. | [x] |
 | 5.5 | **Implement `map_page(virt, phys, flags)`** | Walk PML4→PDPT→PD→PT, allocate intermediate tables via frame_alloc(). | [x] |
 | 5.6 | **Implement `unmap_page(virt)`** | Clear PT entry. invlpg TLB flush deferred (needs asm! builtin). | [x] |
-| 5.7 | **Enable NX bit** | Set EFER.NXE (IA32_EFER MSR bit 11). Mark .data/.bss/.stack as NX. | [ ] |
-| 5.8 | **Implement INVLPG wrapper** | `tlb_flush_page(virt_addr)` via `asm!("invlpg [{addr}]")`. For single-page invalidation. | [ ] |
+| 5.7 | **Enable NX bit** | `write_msr(0xC0000080, efer | (1<<11))` in kernel_main. EFER.NXE enabled at boot. | [x] |
+| 5.8 | **Implement INVLPG wrapper** | `invlpg(addr)` builtin added. Used in `unmap_page()` for TLB flush. | [x] |
 | 5.9 | **Test: identity paging works** | Read/write at 5MB, 64MB, 120MB → data persists. VGA at 0xB8000 works. | [x] |
 | 5.10 | **Test: NX enforcement** | Mark data page NX → attempt execute → #PF with NX violation flag. | [ ] |
 
@@ -420,8 +420,8 @@ fajaros-x86/
 - [x] Bitmap frame allocator (32768 frames, 128MB, alloc/free/contiguous)
 - [x] 4-level paging with map_page/unmap_page + 128MB identity (2MB huge pages)
 - [x] Kernel bump allocator (auto-grow to 108MB)
-- [ ] NX bit enforcement on data/stack pages
-- [ ] All 30 tasks pass (22/30)
+- [x] NX bit enabled (EFER.NXE) + INVLPG TLB flush
+- [ ] All 30 tasks pass (25/30)
 
 ---
 

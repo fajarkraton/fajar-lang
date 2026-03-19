@@ -256,6 +256,12 @@ impl TypeChecker {
             ("acpi_find_rsdp", vec![], Type::I64),
             ("acpi_get_cpu_count", vec![Type::I64], Type::I64),
             ("rdtsc", vec![], Type::I64),
+            // Phase 5+8: MSR, CR4, INVLPG
+            ("read_msr", vec![Type::I64], Type::I64),
+            ("write_msr", vec![Type::I64, Type::I64], Type::I64),
+            ("read_cr4", vec![], Type::I64),
+            ("write_cr4", vec![Type::I64], Type::Void),
+            ("invlpg", vec![Type::I64], Type::Void),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (
