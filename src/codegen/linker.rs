@@ -1592,6 +1592,106 @@ fj_rt_bare_memset:
     ret
 .size fj_rt_bare_memset, . - fj_rt_bare_memset
 
+/* volatile_write(addr: rdi, value: rsi) -> void */
+.global fj_rt_volatile_write
+.type fj_rt_volatile_write, @function
+fj_rt_volatile_write:
+    mov     [rdi], rsi
+    ret
+.size fj_rt_volatile_write, . - fj_rt_volatile_write
+
+/* volatile_read(addr: rdi) -> rax */
+.global fj_rt_volatile_read
+.type fj_rt_volatile_read, @function
+fj_rt_volatile_read:
+    mov     rax, [rdi]
+    ret
+.size fj_rt_volatile_read, . - fj_rt_volatile_read
+
+/* volatile_write_u8(addr: rdi, value: rsi) -> void */
+.global fj_rt_volatile_write_u8
+.type fj_rt_volatile_write_u8, @function
+fj_rt_volatile_write_u8:
+    mov     [rdi], sil
+    ret
+.size fj_rt_volatile_write_u8, . - fj_rt_volatile_write_u8
+
+/* volatile_read_u8(addr: rdi) -> rax */
+.global fj_rt_volatile_read_u8
+.type fj_rt_volatile_read_u8, @function
+fj_rt_volatile_read_u8:
+    xor     eax, eax
+    mov     al, [rdi]
+    ret
+.size fj_rt_volatile_read_u8, . - fj_rt_volatile_read_u8
+
+/* volatile_write_u16(addr: rdi, value: rsi) -> void */
+.global fj_rt_volatile_write_u16
+.type fj_rt_volatile_write_u16, @function
+fj_rt_volatile_write_u16:
+    mov     [rdi], si
+    ret
+.size fj_rt_volatile_write_u16, . - fj_rt_volatile_write_u16
+
+/* volatile_read_u16(addr: rdi) -> rax */
+.global fj_rt_volatile_read_u16
+.type fj_rt_volatile_read_u16, @function
+fj_rt_volatile_read_u16:
+    xor     eax, eax
+    mov     ax, [rdi]
+    ret
+.size fj_rt_volatile_read_u16, . - fj_rt_volatile_read_u16
+
+/* volatile_write_u32(addr: rdi, value: rsi) -> void */
+.global fj_rt_volatile_write_u32
+.type fj_rt_volatile_write_u32, @function
+fj_rt_volatile_write_u32:
+    mov     [rdi], esi
+    ret
+.size fj_rt_volatile_write_u32, . - fj_rt_volatile_write_u32
+
+/* volatile_read_u32(addr: rdi) -> rax */
+.global fj_rt_volatile_read_u32
+.type fj_rt_volatile_read_u32, @function
+fj_rt_volatile_read_u32:
+    xor     eax, eax
+    mov     eax, [rdi]
+    ret
+.size fj_rt_volatile_read_u32, . - fj_rt_volatile_read_u32
+
+/* fj_rt_bare_alloc(size: rdi) -> rax (bump allocator) */
+/* Simple bump allocator starting at 0x300000 (3MB), grows up to 0x3E0000 */
+.global fj_rt_bare_alloc
+.type fj_rt_bare_alloc, @function
+fj_rt_bare_alloc:
+    /* Load current bump pointer from fixed location 0x6FF00 */
+    mov     rax, [0x6FF00]
+    test    rax, rax
+    jnz     .Lalloc_bump
+    /* First call: initialize to 0x300000 */
+    mov     rax, 0x300000
+.Lalloc_bump:
+    /* Align size to 8 bytes */
+    lea     rcx, [rdi + 7]
+    and     rcx, -8
+    /* New bump = current + aligned_size */
+    lea     rdx, [rax + rcx]
+    cmp     rdx, 0x3E0000       /* Check OOM (max ~900KB heap) */
+    ja      .Lalloc_oom
+    mov     [0x6FF00], rdx       /* Store new bump */
+    ret
+.Lalloc_oom:
+    xor     eax, eax             /* Return 0 (null) */
+    ret
+.size fj_rt_bare_alloc, . - fj_rt_bare_alloc
+
+/* fj_rt_bare_free — no-op for bump allocator */
+.global fj_rt_bare_free
+.type fj_rt_bare_free, @function
+fj_rt_bare_free:
+    ret
+.size fj_rt_bare_free, . - fj_rt_bare_free
+
 /* IRQ enable/disable stubs */
 .global fj_rt_bare_irq_enable
 fj_rt_bare_irq_enable:
