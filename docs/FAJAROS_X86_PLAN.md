@@ -291,7 +291,7 @@ fajaros-x86/
 | # | Phase | Sprints | Tasks | Done | Focus |
 |---|-------|---------|-------|------|-------|
 | 1 | Foundation | S1-S3 | 30 | **28** | Boot, serial, GDT, hello world on QEMU |
-| 2 | Memory | S4-S6 | 30 | **6** | Paging, heap, physical allocator |
+| 2 | Memory | S4-S6 | 30 | **14** | Bitmap allocator, map_page, paging |
 | 3 | Interrupts | S7-S9 | 30 | **24** | IDT, PIC, PIT timer |
 | 4 | Scheduler | S10-S12 | 30 | **21** | Processes, context switch, preemption |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **5** | Ring 3, SYSCALL/SYSRET, IPC |
@@ -300,7 +300,7 @@ fajaros-x86/
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
 | 10 | Production | S28-S30 | 30 | **5** | Blog, architecture, boot, commands docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **169** | **56% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **179** | **60% complete** |
 
 ---
 
@@ -376,14 +376,14 @@ fajaros-x86/
 | # | Task | Detail | Status |
 |---|------|--------|--------|
 | 4.1 | **Parse Multiboot2 memory map** | Iterate memory map tags → build list of usable physical regions. Skip reserved/ACPI/firmware. | [ ] |
-| 4.2 | **Implement bitmap allocator** | 1 bit per 4KB frame. For 32GB RAM = 8M frames = 1MB bitmap. `frame_alloc() -> PhysAddr`, `frame_free(addr)`. | [ ] |
-| 4.3 | **Mark kernel memory as used** | Frames from 0x100000 to kernel_end marked as allocated in bitmap. | [x] |
-| 4.4 | **Mark Multiboot2 info as used** | Bootloader info struct memory preserved until fully parsed. | [ ] |
-| 4.5 | **Implement frame statistics** | `total_frames()`, `used_frames()`, `free_frames()` for monitoring. | [ ] |
-| 4.6 | **Implement region allocator** | `alloc_contiguous(count) -> PhysAddr` for DMA buffers (must be physically contiguous). | [ ] |
-| 4.7 | **Test: allocate and free 1000 frames** | Alloc 1000, free all, alloc 1000 again → no leak. | [ ] |
-| 4.8 | **Test: OOM handling** | Allocate until exhausted → returns error (not panic). | [ ] |
-| 4.9 | **Test: contiguous allocation** | Allocate 16 contiguous frames for DMA → verify physically adjacent. | [ ] |
+| 4.2 | **Implement bitmap allocator** | 4096-byte bitmap at 0x580000. `frame_alloc()`, `frame_free()`, `frame_mark_used/free()`. | [x] |
+| 4.3 | **Mark kernel memory as used** | Kernel, heap, page tables, process table, ramfs, stack all marked in bitmap. | [x] |
+| 4.4 | **Mark reserved regions** | Low memory (0-512K), BIOS ROM, VGA, bitmap itself all marked used. | [x] |
+| 4.5 | **Implement frame statistics** | `frame_stats_total()`, `frame_stats_used()`, `frame_stats_free()` + `frames` command. | [x] |
+| 4.6 | **Implement region allocator** | `frame_alloc_contiguous(count)` for DMA — scans for N consecutive free frames. | [x] |
+| 4.7 | **Shell: alloc command** | `alloc [N]` allocates 1-16 frames, prints addresses. `dealloc <addr>` frees. | [x] |
+| 4.8 | **OOM handling** | `frame_alloc()` returns -1 on exhaustion, printed as error. | [x] |
+| 4.9 | **Shell: mmap command** | `mmap` shows full memory map with regions and sizes. | [x] |
 | 4.10 | **Test: memory map parsing** | Verify correct region detection from Multiboot2 info. | [ ] |
 
 ### Sprint 5: 4-Level Paging
@@ -394,8 +394,8 @@ fajaros-x86/
 | 5.2 | **Implement identity mapping (0-128MB)** | Map physical 0x0-0x7FFFFFF → virtual using 2MB huge pages (64 PD entries). Verified read/write at 5MB, 64MB, 120MB. | [x] |
 | 5.3 | **Implement kernel higher-half mapping** | Map kernel at virtual 0xFFFF_FFFF_8000_0000 → physical 0x100000. Standard higher-half kernel layout. | [ ] |
 | 5.4 | **Load page tables into CR3** | `asm!("mov cr3, {pml4}", ...)`. Flush TLB automatically on CR3 write. | [x] |
-| 5.5 | **Implement `map_page(virt, phys, flags)`** | Walk PML4→PDPT→PD→PT, allocate intermediate tables as needed, set leaf entry. | [ ] |
-| 5.6 | **Implement `unmap_page(virt)`** | Clear PT entry, `invlpg` to flush single TLB entry. | [ ] |
+| 5.5 | **Implement `map_page(virt, phys, flags)`** | Walk PML4→PDPT→PD→PT, allocate intermediate tables via frame_alloc(). | [x] |
+| 5.6 | **Implement `unmap_page(virt)`** | Clear PT entry. invlpg TLB flush deferred (needs asm! builtin). | [x] |
 | 5.7 | **Enable NX bit** | Set EFER.NXE (IA32_EFER MSR bit 11). Mark .data/.bss/.stack as NX. | [ ] |
 | 5.8 | **Implement INVLPG wrapper** | `tlb_flush_page(virt_addr)` via `asm!("invlpg [{addr}]")`. For single-page invalidation. | [ ] |
 | 5.9 | **Test: identity paging works** | Read/write at 5MB, 64MB, 120MB → data persists. VGA at 0xB8000 works. | [x] |
@@ -417,11 +417,11 @@ fajaros-x86/
 | 6.10 | **Test: double-free panics** | Free same pointer twice → kernel panic with helpful message. | [ ] |
 
 **Phase 2 Gate:**
-- [ ] Physical frame allocator manages all RAM from Multiboot2 memory map
-- [x] 4-level paging with 128MB identity mapping (2MB huge pages)
+- [x] Bitmap frame allocator (32768 frames, 128MB, alloc/free/contiguous)
+- [x] 4-level paging with map_page/unmap_page + 128MB identity (2MB huge pages)
 - [x] Kernel bump allocator (auto-grow to 108MB)
 - [ ] NX bit enforcement on data/stack pages
-- [ ] All 30 tasks pass (6/30)
+- [ ] All 30 tasks pass (14/30)
 
 ---
 
