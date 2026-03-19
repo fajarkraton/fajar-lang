@@ -300,7 +300,7 @@ fajaros-x86/
 | 8 | SMP & Advanced | S22-S24 | 30 | **9** | ACPI shutdown/reboot/CPU count |
 | 9 | AI & GPU | S25-S27 | 30 | **8** | Tensor matmul + MNIST demo |
 | 10 | Production | S28-S30 | 30 | **0** | NVMe, real HW, docs |
-| **Total** | **10 phases** | **30 sprints** | **300** | **153** | **51% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **160** | **53% complete** |
 
 ---
 
@@ -710,8 +710,8 @@ fajaros-x86/
 | 21.2 | **Process commands** | ps, kill, sleep (3/6 — spawn, wait, top remaining). | [x] |
 | 21.3 | **System commands** | cpuinfo, meminfo, lspci, shutdown, reboot, sysinfo, dmesg, env, id, cal (10/10). | [x] |
 | 21.4 | **Utility commands** | date, cal, sleep, seq, true, false, yes, rev, hex, dice (10/10). | [x] |
-| 21.5 | **Text commands** | rev, wc implemented. grep, sort, uniq, tr remaining. (2/8) | [~] |
-| 21.6 | **I/O commands** | write (to file) implemented. append, hexdump remaining. (1/4) | [~] |
+| 21.5 | **Text commands** | grep, sort, uniq, tr, cut, rev, wc, nl, strings implemented. (9/9) | [x] |
+| 21.6 | **I/O commands** | write, append, xxd (hex dump), md5 (checksum). (4/4) | [x] |
 | 21.7 | **Fun/demo commands** | tensor, mnist, bench, logo, color, cowsay, fortune, dice (8 commands). | [x] |
 | 21.8 | **Command history** | Up/Down arrows navigate history. Store last 32 commands. | [ ] |
 | 21.9 | **Test: file operations** | touch → write → cat verified. rm deletes entries. mkdir creates dirs. | [x] |
@@ -719,10 +719,10 @@ fajaros-x86/
 
 **Phase 7 Gate:**
 - [x] RAM filesystem with directories and files (64 entries, 832KB)
-- [x] 50 shell commands working
+- [x] 97 shell commands working
 - [x] Interactive line editing (backspace works)
 - [x] File I/O (touch, write, cat, rm, head, wc, stat)
-- [ ] All 30 tasks pass (22/30)
+- [ ] All 30 tasks pass (26/30)
 
 ---
 
@@ -848,7 +848,7 @@ fajaros-x86/
 ## Phase 10: Production & Polish (Sprints 28-30)
 
 > **Goal:** Release-quality OS with documentation, benchmarks, and demo showcase.
-> **Gate:** FajarOS Nova boots on real Intel hardware, runs MNIST demo, 50+ shell commands.
+> **Gate:** FajarOS Nova boots on real Intel hardware, runs MNIST demo, 97 shell commands.
 > **Hardware needed:** Lenovo Legion Pro (real hardware boot)
 
 ### Sprint 28: NVMe Block Device Driver
@@ -898,7 +898,7 @@ fajaros-x86/
 
 **Phase 10 Gate:**
 - [ ] FajarOS boots on real Lenovo Legion Pro hardware
-- [ ] 50+ shell commands, filesystem, MNIST demo
+- [ ] 97 shell commands, filesystem, MNIST demo
 - [ ] Documentation complete
 - [ ] GitHub release published
 - [ ] CI/CD green
@@ -1005,7 +1005,7 @@ Total: 30 sprints, 300 tasks, ~20 weeks
 
 ### Feature Complete (Phase 1-7)
 - [x] Interactive shell (nova>) with 50 commands
-- [x] 50 shell commands
+- [x] 97 shell commands
 - [x] RAM filesystem with file I/O (64 entries, 832KB, 11 file commands)
 - [x] Keyboard input (PS/2 scancode → ASCII, 52+ keys)
 - [x] VGA text console with 6 colors + scrolling
