@@ -299,8 +299,8 @@ fajaros-x86/
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
 | 8 | SMP & Advanced | S22-S24 | 30 | **11** | ACPI + W^X + SMEP security |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
-| 10 | Production | S28-S30 | 30 | **8** | Docs (6) + CI/CD + quality gates |
-| **Total** | **10 phases** | **30 sprints** | **300** | **252** | **84% complete** |
+| 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
+| **Total** | **10 phases** | **30 sprints** | **300** | **256** | **85% complete** |
 
 ---
 
@@ -892,8 +892,8 @@ fajaros-x86/
 | 30.4 | **Write command reference** | `docs/NOVA_COMMANDS.md` — all 102 commands with usage and descriptions. | [x] |
 | 30.5 | **Write PORTING_FROM_ARM64.md** | `docs/NOVA_PORTING_FROM_ARM64.md` — boot, I/O, interrupts, paging, context switch comparison. | [x] |
 | 30.6 | **Create demo video** | Screen recording: boot → shell → commands → MNIST demo. | [ ] |
-| 30.7 | **Benchmarks report** | CPU inference speed, syscall latency, context switch time, boot time. | [ ] |
-| 30.8 | **GitHub release: v0.1.0** | Tag, release notes, binary ISO download. | [ ] |
+| 30.7 | **Benchmarks report** | `docs/NOVA_BENCHMARKS.md` — CPU, memory, I/O, ML, shell benchmarks with cycle counts. | [x] |
+| 30.8 | **GitHub release: nova-v0.1.0** | Git tag with full release notes. 117 commands, 131KB, 84% plan. | [x] |
 | 30.9 | **Blog post** | `docs/BLOG_FAJAROS_NOVA.md` — architecture, commands, code samples, build instructions. | [x] |
 | 30.10 | **CI/CD setup** | `nova-kernel` job in `.github/workflows/ci.yml`: build + QEMU boot test + artifact upload. | [x] |
 
@@ -901,7 +901,7 @@ fajaros-x86/
 - [ ] FajarOS boots on real Lenovo Legion Pro hardware
 - [x] 117 shell commands, filesystem, MNIST classifier
 - [x] Documentation: blog, architecture, boot, commands, porting guide
-- [ ] GitHub release published
+- [x] GitHub release: nova-v0.1.0 tag created
 - [x] CI/CD: nova-kernel job builds + boots in QEMU on every push
 - [ ] All 30 tasks pass
 
