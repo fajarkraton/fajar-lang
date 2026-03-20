@@ -4532,31 +4532,26 @@ const FS_ENTRY_SIZE: i64 = 128
 
     // Parse Multiboot2 info (pointer saved at 0x6FF00 by trampoline)
     let mb2_ptr = volatile_read(0x6FF00)
-    if mb2_ptr != 0 {
-        // MB2 info: first 4 bytes = total size, next 4 = reserved
-        // Tags start at mb2_ptr + 8, each tag: type(u32) + size(u32) + data
-        // Store parsed info at 0x6FF10
-        volatile_write(0x6FF10, mb2_ptr)  // mb2 base
+    if mb2_ptr > 0x1000 && mb2_ptr < 0x8000000 {
+        volatile_write(0x6FF10, mb2_ptr)
         let mb2_size = volatile_read_u32(mb2_ptr)
-        volatile_write(0x6FF18, mb2_size) // total size
-        // Scan for memory map tag (type 6) and framebuffer tag (type 8)
-        let mut offset: i64 = 8
-        while offset < mb2_size {
-            let tag_type = volatile_read_u32(mb2_ptr + offset)
-            let tag_size = volatile_read_u32(mb2_ptr + offset + 4)
-            if tag_type == 6 {
-                // Memory map tag
-                volatile_write(0x6FF20, mb2_ptr + offset) // mmap tag addr
-                volatile_write(0x6FF28, tag_size)         // mmap tag size
+        if mb2_size > 8 && mb2_size < 0x100000 {
+            volatile_write(0x6FF18, mb2_size)
+            let mut offset: i64 = 8
+            while offset + 8 < mb2_size {
+                let tag_type = volatile_read_u32(mb2_ptr + offset)
+                let tag_size = volatile_read_u32(mb2_ptr + offset + 4)
+                if tag_type == 0 || tag_size < 8 { offset = mb2_size }
+                else {
+                    if tag_type == 6 {
+                        volatile_write(0x6FF20, mb2_ptr + offset)
+                        volatile_write(0x6FF28, tag_size)
+                    }
+                    if tag_type == 8 { volatile_write(0x6FF30, mb2_ptr + offset) }
+                    let aligned = (tag_size + 7) / 8 * 8
+                    offset = offset + aligned
+                }
             }
-            if tag_type == 8 {
-                // Framebuffer tag
-                volatile_write(0x6FF30, mb2_ptr + offset) // fb tag addr
-            }
-            if tag_type == 0 { offset = mb2_size } // end tag
-            // Align to 8 bytes
-            offset = offset + ((tag_size + 7) & (0 - 8))
-            if tag_size == 0 { offset = mb2_size }
         }
     }
 
