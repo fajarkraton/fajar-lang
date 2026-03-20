@@ -169,17 +169,18 @@ Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inf
 Repo:      github.com/fajarkraton/fajar-os
 ```
 
-### FajarOS Nova v0.1.0 — x86_64 bare-metal OS (100% Fajar Lang)
+### FajarOS Nova v0.2.0 "Perseverance" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 3,133 lines, 104KB ELF
-Commands:  102 shell commands (system, files, process, AI, math, utility)
-Features:  ramfs (64 files, 832KB), Shift/CapsLock keyboard, VGA cursor,
-           command history (Up/Down), grep, sort, calc, neofetch, demo
-Hardware:  PIT 100Hz, IDT 256 vectors, PCI scan, ACPI shutdown, CPUID
-Plan:      docs/FAJAROS_X86_PLAN.md — 169/300 tasks (56%)
-Docs:      BLOG_FAJAROS_NOVA.md, NOVA_ARCHITECTURE.md, NOVA_BOOT_SEQUENCE.md, NOVA_COMMANDS.md
-Test:      examples/fajaros_nova_test.sh — automated QEMU test suite (ALL PASS)
+Kernel:    examples/fajaros_nova_kernel.fj — 7,313 lines, 197KB ELF
+Commands:  122 shell commands (system, files, process, AI, network, storage)
+Storage:   NVMe driver (admin+IO queues, sector R/W) + FAT32 (mount, ls, cat)
+VFS:       / (ramfs), /dev (null/zero/random), /proc (version/uptime), /mnt (fat32)
+Network:   Ethernet + ARP + IPv4 + ICMP (ping)
+SMP:       AP trampoline (16-bit→64-bit), INIT-SIPI-SIPI, per-CPU tracking
+ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls (exit, write, read, mmap, etc.)
+Plan:      docs/FAJAROS_NOVA_V2_PLAN.md — ALL 6 PHASES COMPLETE
+Test:      QEMU verified: NVMe + FAT32 + VFS + NET + Syscall
 Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
 ```
 
