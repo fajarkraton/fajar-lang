@@ -544,11 +544,11 @@ Week 5:  Phase 3 Sprint 9-10 (Protection)  — guard pages, fault handlers      
 Week 6:  Phase 4 Sprint 11-12 (IPC v2)     — message queues, services                ✅ COMPLETE
 Week 7:  Phase 4 Sprint 13-14 (Signals)    — signals, pipes                          ✅ COMPLETE
 Week 8:  Phase 5 Sprint 15 (Language)      — const in function body                  ✅ COMPLETE
-Week 8:  Phase 5 Sprint 16 (Language)      — match patterns
-Week 9:  Phase 5 Sprint 17-18 (Codegen)    — strings, arrays native
-Week 10: Phase 5 Sprint 19-20 (Advanced)   — errors, closures
-Week 11: Phase 6 Sprint 21-22 (Hardware)   — GPIO, camera, sensors
-Week 12: Phase 6 Sprint 23-24 (Deploy)     — NPU, edge deployment
+Week 8:  Phase 5 Sprint 16-20 (Language)   — match, strings, arrays, errors, closures ✅ COMPLETE
+Week 8:  Phase 7 Sprint 25-28 (Drivers)   — VirtIO, VFS, network, display            ✅ COMPLETE
+---      Idul Fitri break                  — 🌙 Selamat Hari Raya!
+Week ?:  Phase 6 Sprint 21-24 (Q6A)       — GPIO, NPU, camera, deploy (needs Q6A HW)
+Week ?:  Phase 8 Sprint 29-32 (Release)   — blog, docs, community, v3.2 release
 ```
 
 ---
