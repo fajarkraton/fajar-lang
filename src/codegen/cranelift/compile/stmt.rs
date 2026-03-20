@@ -478,6 +478,26 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 let ret_type = clif_types::lower_type(return_type);
                 cx.fn_ptr_sigs.insert(name.clone(), (param_types, ret_type));
             }
+            // If RHS is a known function name, infer signature and record as fn pointer.
+            // This enables `let f = add; f(3, 4)` without explicit type annotation.
+            if let Expr::Ident { name: rhs_name, .. } = value.as_ref() {
+                if !cx.fn_ptr_sigs.contains_key(name) {
+                    if let Some(&fn_id) = cx.functions.get(rhs_name) {
+                        // Get function signature from the module
+                        let decl = cx.module.declarations().get_function_decl(fn_id);
+                        let param_types: Vec<_> =
+                            decl.signature.params.iter().map(|p| p.value_type).collect();
+                        let ret_type = decl.signature.returns.first().map(|r| r.value_type);
+                        // Store function address in the variable
+                        let fn_ref = cx.module.declare_func_in_func(fn_id, builder.func);
+                        let fn_addr = builder
+                            .ins()
+                            .func_addr(clif_types::default_int_type(), fn_ref);
+                        builder.def_var(var, fn_addr);
+                        cx.fn_ptr_sigs.insert(name.clone(), (param_types, ret_type));
+                    }
+                }
+            }
             Ok(None)
         }
         Stmt::Const {
