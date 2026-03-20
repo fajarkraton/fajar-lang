@@ -305,12 +305,14 @@ docs/                 -- 44+ reference documents
 |--------|-------|
 | Rust LOC | ~152,000 |
 | Source files | 220+ `.rs` files |
-| Tests | 4,903 lib + 566 integration (0 failures) |
+| Tests | 6,045 native + 566 integration = 6,471 total (0 failures) |
 | Examples | 126 `.fj` programs |
 | Error codes | 78+ across 9 categories |
-| Documentation | 44+ docs + 40-page mdBook |
+| Documentation | 50+ docs + 40-page mdBook |
 | Standard packages | 7 (math, nn, hal, drivers, http, json, crypto) |
 | Codegen backends | 3 (Cranelift, LLVM, WebAssembly) |
+| **FajarOS Nova** | **8,327 LOC kernel, 135 commands, 215KB ELF** |
+| Hardware verified | QEMU + KVM (Intel i9-14900HX, 24 cores) |
 
 ## Releases
 
