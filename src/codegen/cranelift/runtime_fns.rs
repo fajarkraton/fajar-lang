@@ -7519,6 +7519,22 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_cpuid_ebx" => Some(runtime_bare::fj_rt_bare_cpuid_ebx as *const u8),
         "fj_rt_bare_cpuid_ecx" => Some(runtime_bare::fj_rt_bare_cpuid_ecx as *const u8),
         "fj_rt_bare_cpuid_edx" => Some(runtime_bare::fj_rt_bare_cpuid_edx as *const u8),
+        // FajarOS Nova v0.3 Stage A builtins
+        "fj_rt_bare_port_inw" => Some(runtime_bare::fj_rt_bare_port_inw as *const u8),
+        "fj_rt_bare_port_ind" => Some(runtime_bare::fj_rt_bare_port_ind as *const u8),
+        "fj_rt_bare_port_outw" => Some(runtime_bare::fj_rt_bare_port_outw as *const u8),
+        "fj_rt_bare_port_outd" => Some(runtime_bare::fj_rt_bare_port_outd as *const u8),
+        "fj_rt_bare_ltr" => Some(runtime_bare::fj_rt_bare_ltr as *const u8),
+        "fj_rt_bare_lgdt_mem" => Some(runtime_bare::fj_rt_bare_lgdt_mem as *const u8),
+        "fj_rt_bare_lidt_mem" => Some(runtime_bare::fj_rt_bare_lidt_mem as *const u8),
+        "fj_rt_bare_swapgs" => Some(runtime_bare::fj_rt_bare_swapgs as *const u8),
+        "fj_rt_bare_int_n" => Some(runtime_bare::fj_rt_bare_int_n as *const u8),
+        "fj_rt_bare_pause" => Some(runtime_bare::fj_rt_bare_pause as *const u8),
+        "fj_rt_bare_stac" => Some(runtime_bare::fj_rt_bare_stac as *const u8),
+        "fj_rt_bare_clac" => Some(runtime_bare::fj_rt_bare_clac as *const u8),
+        "fj_rt_bare_memcmp_buf" => Some(runtime_bare::fj_rt_bare_memcmp_buf as *const u8),
+        "fj_rt_bare_memcpy_buf" => Some(runtime_bare::fj_rt_bare_memcpy_buf as *const u8),
+        "fj_rt_bare_memset_buf" => Some(runtime_bare::fj_rt_bare_memset_buf as *const u8),
         _ => None,
     }
 }

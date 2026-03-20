@@ -1190,6 +1190,24 @@ impl TypeChecker {
             "cpuid",
             "rdmsr",
             "wrmsr",
+            // FajarOS Nova v0.3 Stage A: Extended Port I/O
+            "port_inw",
+            "port_ind",
+            "port_outw",
+            "port_outd",
+            // FajarOS Nova v0.3 Stage A: CPU Control
+            "ltr",
+            "lgdt_mem",
+            "lidt_mem",
+            "swapgs",
+            "int_n",
+            "pause",
+            "stac",
+            "clac",
+            // FajarOS Nova v0.3 Stage A: Buffer Operations
+            "memcmp_buf",
+            "memcpy_buf",
+            "memset_buf",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

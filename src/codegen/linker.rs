@@ -2694,6 +2694,177 @@ fj_rt_bare_rdrand:
     ret
 .size fj_rt_bare_rdrand, . - fj_rt_bare_rdrand
 
+/* ═══ FajarOS Nova v0.3 Stage A: Extended Port I/O ═══ */
+
+/* port_inw(port: rdi) -> rax (16-bit word) */
+.global fj_rt_bare_port_inw
+.type fj_rt_bare_port_inw, @function
+fj_rt_bare_port_inw:
+    mov     dx, di
+    xor     eax, eax
+    in      ax, dx
+    ret
+.size fj_rt_bare_port_inw, . - fj_rt_bare_port_inw
+
+/* port_ind(port: rdi) -> rax (32-bit dword) */
+.global fj_rt_bare_port_ind
+.type fj_rt_bare_port_ind, @function
+fj_rt_bare_port_ind:
+    mov     dx, di
+    in      eax, dx
+    ret
+.size fj_rt_bare_port_ind, . - fj_rt_bare_port_ind
+
+/* port_outw(port: rdi, val: rsi) -> void */
+.global fj_rt_bare_port_outw
+.type fj_rt_bare_port_outw, @function
+fj_rt_bare_port_outw:
+    mov     dx, di
+    mov     ax, si
+    out     dx, ax
+    ret
+.size fj_rt_bare_port_outw, . - fj_rt_bare_port_outw
+
+/* port_outd(port: rdi, val: rsi) -> void */
+.global fj_rt_bare_port_outd
+.type fj_rt_bare_port_outd, @function
+fj_rt_bare_port_outd:
+    mov     dx, di
+    mov     eax, esi
+    out     dx, eax
+    ret
+.size fj_rt_bare_port_outd, . - fj_rt_bare_port_outd
+
+/* ═══ FajarOS Nova v0.3 Stage A: CPU Control ═══ */
+
+/* ltr(selector: rdi) — Load Task Register */
+.global fj_rt_bare_ltr
+.type fj_rt_bare_ltr, @function
+fj_rt_bare_ltr:
+    ltr     di
+    ret
+.size fj_rt_bare_ltr, . - fj_rt_bare_ltr
+
+/* lgdt_mem(addr: rdi) — Load GDT from memory pointer */
+.global fj_rt_bare_lgdt_mem
+.type fj_rt_bare_lgdt_mem, @function
+fj_rt_bare_lgdt_mem:
+    lgdt    [rdi]
+    ret
+.size fj_rt_bare_lgdt_mem, . - fj_rt_bare_lgdt_mem
+
+/* lidt_mem(addr: rdi) — Load IDT from memory pointer */
+.global fj_rt_bare_lidt_mem
+.type fj_rt_bare_lidt_mem, @function
+fj_rt_bare_lidt_mem:
+    lidt    [rdi]
+    ret
+.size fj_rt_bare_lidt_mem, . - fj_rt_bare_lidt_mem
+
+/* swapgs() — Swap GS base (kernel <-> user) */
+.global fj_rt_bare_swapgs
+.type fj_rt_bare_swapgs, @function
+fj_rt_bare_swapgs:
+    swapgs
+    ret
+.size fj_rt_bare_swapgs, . - fj_rt_bare_swapgs
+
+/* int_n(vector: rdi) — Software interrupt (stub, cannot use variable INT) */
+.global fj_rt_bare_int_n
+.type fj_rt_bare_int_n, @function
+fj_rt_bare_int_n:
+    ret
+.size fj_rt_bare_int_n, . - fj_rt_bare_int_n
+
+/* pause() — CPU pause hint for spinloop optimization */
+.global fj_rt_bare_pause
+.type fj_rt_bare_pause, @function
+fj_rt_bare_pause:
+    pause
+    ret
+.size fj_rt_bare_pause, . - fj_rt_bare_pause
+
+/* stac() — Set AC flag, allow kernel access to user pages (SMAP) */
+.global fj_rt_bare_stac
+.type fj_rt_bare_stac, @function
+fj_rt_bare_stac:
+    stac
+    ret
+.size fj_rt_bare_stac, . - fj_rt_bare_stac
+
+/* clac() — Clear AC flag, disallow kernel access to user pages (SMAP) */
+.global fj_rt_bare_clac
+.type fj_rt_bare_clac, @function
+fj_rt_bare_clac:
+    clac
+    ret
+.size fj_rt_bare_clac, . - fj_rt_bare_clac
+
+/* ═══ FajarOS Nova v0.3 Stage A: Buffer Operations ═══ */
+/* These alias the existing fj_rt_bare_memcmp/memcpy/memset */
+
+/* memcmp_buf(a: rdi, b: rsi, len: rdx) -> rax (0=equal) */
+.global fj_rt_bare_memcmp_buf
+.type fj_rt_bare_memcmp_buf, @function
+fj_rt_bare_memcmp_buf:
+    mov     rcx, rdx
+    xor     eax, eax
+    repe    cmpsb
+    je      .Lmemcmp_buf_eq
+    movzx   eax, BYTE PTR [rsi-1]
+    movzx   edx, BYTE PTR [rdi-1]
+    sub     edx, eax
+    mov     eax, edx
+.Lmemcmp_buf_eq:
+    ret
+.size fj_rt_bare_memcmp_buf, . - fj_rt_bare_memcmp_buf
+
+/* memcpy_buf(dst: rdi, src: rsi, len: rdx) -> void */
+.global fj_rt_bare_memcpy_buf
+.type fj_rt_bare_memcpy_buf, @function
+fj_rt_bare_memcpy_buf:
+    mov     rax, rdi
+    mov     rcx, rdx
+    cld
+    rep     movsb
+    ret
+.size fj_rt_bare_memcpy_buf, . - fj_rt_bare_memcpy_buf
+
+/* memset_buf(dst: rdi, val: rsi, len: rdx) -> void */
+.global fj_rt_bare_memset_buf
+.type fj_rt_bare_memset_buf, @function
+fj_rt_bare_memset_buf:
+    mov     rcx, rdx
+    mov     al, sil
+    cld
+    rep     stosb
+    ret
+.size fj_rt_bare_memset_buf, . - fj_rt_bare_memset_buf
+
+/* hlt() — Halt CPU until next interrupt */
+.global fj_rt_bare_hlt
+.type fj_rt_bare_hlt, @function
+fj_rt_bare_hlt:
+    hlt
+    ret
+.size fj_rt_bare_hlt, . - fj_rt_bare_hlt
+
+/* cli() — Disable interrupts */
+.global fj_rt_bare_cli
+.type fj_rt_bare_cli, @function
+fj_rt_bare_cli:
+    cli
+    ret
+.size fj_rt_bare_cli, . - fj_rt_bare_cli
+
+/* sti() — Enable interrupts */
+.global fj_rt_bare_sti
+.type fj_rt_bare_sti, @function
+fj_rt_bare_sti:
+    sti
+    ret
+.size fj_rt_bare_sti, . - fj_rt_bare_sti
+
 /* Stubs for ARM64-specific builtins (no-op on x86_64) */
 .global fj_rt_bare_timer_count
 .global fj_rt_bare_timer_freq

@@ -5850,6 +5850,24 @@ impl CraneliftCompiler {
             ));
             s
         };
+        let sig_2i64_void = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..2 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s
+        };
+        let sig_3i64_void = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..3 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s
+        };
 
         // GPIO: 4-arg, 2-arg, 1-arg functions
         let hal_fns: Vec<(&str, &str, &cranelift_codegen::ir::Signature)> = vec![
@@ -6105,6 +6123,24 @@ impl CraneliftCompiler {
             // rdmsr/wrmsr aliases (map to same runtime as read_msr/write_msr)
             ("fj_rt_bare_read_msr", "rdmsr", &sig_i64_ret_i64),
             ("fj_rt_bare_write_msr", "wrmsr", &sig_2i64_ret_i64),
+            // FajarOS Nova v0.3 Stage A: Extended Port I/O
+            ("fj_rt_bare_port_inw", "port_inw", &sig_i64_ret_i64),
+            ("fj_rt_bare_port_ind", "port_ind", &sig_i64_ret_i64),
+            ("fj_rt_bare_port_outw", "port_outw", &sig_2i64_void),
+            ("fj_rt_bare_port_outd", "port_outd", &sig_2i64_void),
+            // FajarOS Nova v0.3 Stage A: CPU Control
+            ("fj_rt_bare_ltr", "ltr", &sig_i64_void),
+            ("fj_rt_bare_lgdt_mem", "lgdt_mem", &sig_i64_void),
+            ("fj_rt_bare_lidt_mem", "lidt_mem", &sig_i64_void),
+            ("fj_rt_bare_swapgs", "swapgs", &sig_void),
+            ("fj_rt_bare_int_n", "int_n", &sig_i64_void),
+            ("fj_rt_bare_pause", "pause", &sig_void),
+            ("fj_rt_bare_stac", "stac", &sig_void),
+            ("fj_rt_bare_clac", "clac", &sig_void),
+            // FajarOS Nova v0.3 Stage A: Buffer Operations
+            ("fj_rt_bare_memcmp_buf", "memcmp_buf", &sig_3i64_ret_i64),
+            ("fj_rt_bare_memcpy_buf", "memcpy_buf", &sig_3i64_ret_i64),
+            ("fj_rt_bare_memset_buf", "memset_buf", &sig_3i64_void),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7267,6 +7303,92 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_cpuid", Linkage::Import, &sig_2i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("cpuid".to_string(), cpuid_id);
+
+        // FajarOS Nova v0.3 Stage A: Extended Port I/O
+        for (name, builtin) in [
+            ("fj_rt_bare_port_inw", "port_inw"),
+            ("fj_rt_bare_port_ind", "port_ind"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_ret_i64)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        {
+            let mut sig_2i64_void = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..2 {
+                sig_2i64_void
+                    .params
+                    .push(cranelift_codegen::ir::AbiParam::new(
+                        clif_types::default_int_type(),
+                    ));
+            }
+            for (name, builtin) in [
+                ("fj_rt_bare_port_outw", "port_outw"),
+                ("fj_rt_bare_port_outd", "port_outd"),
+            ] {
+                let id = self
+                    .module
+                    .declare_function(name, Linkage::Import, &sig_2i64_void)
+                    .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                self.functions.insert(builtin.to_string(), id);
+            }
+        }
+        // FajarOS Nova v0.3 Stage A: CPU Control
+        for (name, builtin) in [
+            ("fj_rt_bare_ltr", "ltr"),
+            ("fj_rt_bare_lgdt_mem", "lgdt_mem"),
+            ("fj_rt_bare_lidt_mem", "lidt_mem"),
+            ("fj_rt_bare_int_n", "int_n"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        for (name, builtin) in [
+            ("fj_rt_bare_swapgs", "swapgs"),
+            ("fj_rt_bare_pause", "pause"),
+            ("fj_rt_bare_stac", "stac"),
+            ("fj_rt_bare_clac", "clac"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_halt)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        // FajarOS Nova v0.3 Stage A: Buffer Operations
+        let memcmp_buf_id = self
+            .module
+            .declare_function("fj_rt_bare_memcmp_buf", Linkage::Import, &sig_3i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("memcmp_buf".to_string(), memcmp_buf_id);
+        let memcpy_buf_id = self
+            .module
+            .declare_function("fj_rt_bare_memcpy_buf", Linkage::Import, &sig_3i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("memcpy_buf".to_string(), memcpy_buf_id);
+        {
+            let mut sig_3i64_void = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..3 {
+                sig_3i64_void
+                    .params
+                    .push(cranelift_codegen::ir::AbiParam::new(
+                        clif_types::default_int_type(),
+                    ));
+            }
+            let memset_buf_id = self
+                .module
+                .declare_function("fj_rt_bare_memset_buf", Linkage::Import, &sig_3i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("memset_buf".to_string(), memset_buf_id);
+        }
 
         // String byte access
         let str_byte_at_id = self

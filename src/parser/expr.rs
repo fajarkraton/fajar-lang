@@ -20,6 +20,17 @@ impl Parser {
                     break;
                 }
 
+                // Prevent `(` on a new line from chaining as a function call.
+                // E.g., `foo()\n(x + 1)` should be two statements, not `foo()(x + 1)`.
+                // Only break for LParen; Dot and LBracket are fine on new lines.
+                if kind == TokenKind::LParen {
+                    let next_line = self.peek().line;
+                    let prev_line = self.prev_line();
+                    if next_line > prev_line {
+                        break;
+                    }
+                }
+
                 lhs = self.parse_postfix(lhs)?;
                 continue;
             }

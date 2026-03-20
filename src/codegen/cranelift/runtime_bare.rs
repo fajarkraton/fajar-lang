@@ -2196,3 +2196,114 @@ pub extern "C" fn fj_rt_bare_cpuid_edx(leaf: i64) -> i64 {
         0
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// FajarOS Nova v0.3 Stage A: Extended Port I/O, CPU Control, Buffer Ops
+// ═══════════════════════════════════════════════════════════════════════
+
+/// x86_64 port input: read a 16-bit word from an I/O port.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_port_inw(port: i64) -> i64 {
+    let _ = port;
+    0
+}
+
+/// x86_64 port input: read a 32-bit dword from an I/O port.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_port_ind(port: i64) -> i64 {
+    let _ = port;
+    0
+}
+
+/// x86_64 port output: write a 16-bit word to an I/O port.
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_port_outw(port: i64, value: i64) {
+    let _ = (port, value);
+}
+
+/// x86_64 port output: write a 32-bit dword to an I/O port.
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_port_outd(port: i64, value: i64) {
+    let _ = (port, value);
+}
+
+/// Load Task Register (LTR instruction).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_ltr(_selector: i64) {
+    // Bare-metal: `ltr di`
+}
+
+/// Load GDT from memory pointer (LGDT instruction).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_lgdt_mem(_addr: i64) {
+    // Bare-metal: `lgdt [rdi]`
+}
+
+/// Load IDT from memory pointer (LIDT instruction).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_lidt_mem(_addr: i64) {
+    // Bare-metal: `lidt [rdi]`
+}
+
+/// Swap GS base register (kernel <-> user).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_swapgs() {
+    // Bare-metal: `swapgs`
+}
+
+/// Software interrupt (INT N).
+/// On hosted targets: no-op (cannot issue variable INT from userspace).
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_int_n(_vector: i64) {
+    // Bare-metal: stub — cannot use variable INT instruction
+}
+
+/// CPU pause hint for spinloop optimization.
+/// On hosted targets: calls `core::hint::spin_loop()`.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_pause() {
+    core::hint::spin_loop();
+}
+
+/// Set AC flag — allow kernel access to user pages (SMAP).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_stac() {
+    // Bare-metal: `stac`
+}
+
+/// Clear AC flag — disallow kernel access to user pages (SMAP).
+/// On hosted targets: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_clac() {
+    // Bare-metal: `clac`
+}
+
+/// Compare memory buffers: returns 0 if equal, <0 if a<b, >0 if a>b.
+/// Alias for fj_rt_bare_memcmp.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_memcmp_buf(a: *const u8, b: *const u8, len: i64) -> i64 {
+    fj_rt_bare_memcmp(a, b, len)
+}
+
+/// Copy memory buffer: copy `len` bytes from `src` to `dst`.
+/// Alias for fj_rt_bare_memcpy.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_memcpy_buf(dst: *mut u8, src: *const u8, len: i64) -> *mut u8 {
+    fj_rt_bare_memcpy(dst, src, len)
+}
+
+/// Fill memory buffer: set `len` bytes at `dst` to `val`.
+/// Alias for fj_rt_bare_memset.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_memset_buf(dst: *mut u8, val: i64, len: i64) -> *mut u8 {
+    fj_rt_bare_memset(dst, val, len)
+}

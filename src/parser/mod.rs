@@ -391,6 +391,15 @@ impl Parser {
         }
     }
 
+    /// Returns the line number of the previous token.
+    fn prev_line(&self) -> u32 {
+        if self.pos > 0 {
+            self.tokens[self.pos - 1].line
+        } else {
+            0
+        }
+    }
+
     // ── Program ────────────────────────────────────────────────────────
 
     /// Parses the entire program.

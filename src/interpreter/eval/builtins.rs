@@ -1441,7 +1441,18 @@ impl Interpreter {
             "acpi_find_rsdp" | "acpi_get_cpu_count" => Ok(Value::Int(0)),
             "rdtsc" => Ok(Value::Int(0)),
             // FajarOS Nova v0.2: system builtins
-            "hlt" | "cli" | "sti" => Ok(Value::Null),
+            "hlt" | "cli" | "sti" | "swapgs" | "int_n" | "pause" | "stac" | "clac" => {
+                Ok(Value::Null)
+            }
+            // FajarOS Nova v0.3 Stage A: Extended Port I/O
+            "port_inw" | "port_ind" => Ok(Value::Int(0)),
+            "port_outw" | "port_outd" => Ok(Value::Null),
+            // FajarOS Nova v0.3 Stage A: CPU Control
+            "ltr" | "lgdt_mem" | "lidt_mem" => Ok(Value::Null),
+            // FajarOS Nova v0.3 Stage A: Buffer Operations
+            "memcmp_buf" => Ok(Value::Int(0)),
+            "memcpy_buf" | "memset_buf" => Ok(Value::Null),
+            // FajarOS Nova v0.2: (legacy line preserved for other builtins)
             "cpuid" | "rdmsr" | "read_msr" => Ok(Value::Int(0)),
             "wrmsr" | "write_msr" => Ok(Value::Int(0)),
             "write_cr4" | "invlpg" | "fxsave" | "fxrstor" => Ok(Value::Null),

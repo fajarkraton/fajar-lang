@@ -327,6 +327,36 @@ impl TypeChecker {
             ("cpuid", vec![Type::I64, Type::I64], Type::I64),
             ("rdmsr", vec![Type::I64], Type::I64),
             ("wrmsr", vec![Type::I64, Type::I64], Type::I64),
+            // FajarOS Nova v0.3 Stage A: Extended Port I/O
+            ("port_inw", vec![Type::I64], Type::I64),
+            ("port_ind", vec![Type::I64], Type::I64),
+            ("port_outw", vec![Type::I64, Type::I64], Type::Void),
+            ("port_outd", vec![Type::I64, Type::I64], Type::Void),
+            // FajarOS Nova v0.3 Stage A: CPU Control
+            ("ltr", vec![Type::I64], Type::Void),
+            ("lgdt_mem", vec![Type::I64], Type::Void),
+            ("lidt_mem", vec![Type::I64], Type::Void),
+            ("swapgs", vec![], Type::Void),
+            ("int_n", vec![Type::I64], Type::Void),
+            ("pause", vec![], Type::Void),
+            ("stac", vec![], Type::Void),
+            ("clac", vec![], Type::Void),
+            // FajarOS Nova v0.3 Stage A: Buffer Operations
+            (
+                "memcmp_buf",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "memcpy_buf",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "memset_buf",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (
