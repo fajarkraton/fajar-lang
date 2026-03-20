@@ -1306,6 +1306,30 @@ const BLK_MAX_DEVS: i64 = 4
     let mut f: i64 = RAMDISK_BASE / FRAME_SIZE
     while f < (RAMDISK_BASE + RAMDISK_SIZE) / FRAME_SIZE { frame_mark_used(f); f = f + 1 }
 
+    // Quick sector 0 read test
+    println("[NVMe] Testing sector read...")
+    nvme_clear_queue(NVME_DMA, 512)
+    let rs = nvme_read_sectors(0, 1, NVME_DMA)
+    if rs == 0 {
+        let b510 = volatile_read_u8(NVME_DMA + 510)
+        let b511 = volatile_read_u8(NVME_DMA + 511)
+        if b510 == 0x55 && b511 == 0xAA {
+            println("[NVMe] Sector 0 read OK — boot signature found (0x55AA)")
+        } else {
+            println("[NVMe] Sector 0 read OK — no boot signature")
+        }
+    } else {
+        println("[NVMe] Sector read FAILED")
+    }
+
+    // Auto-mount FAT32
+    let mnt = fat32_mount(0)
+    if mnt == 0 {
+        println("[FAT32] Mounted successfully")
+    } else {
+        println("[FAT32] Mount failed or no FAT32 partition")
+    }
+
     0
 }
 
