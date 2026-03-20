@@ -74,13 +74,13 @@ impl LinkerConfig {
                 regions: vec![
                     MemoryRegion {
                         name: "FLASH".into(),
-                        origin: 0x0010_0000, // 1MB — kernel code
+                        origin: 0x0010_0000,   // 1MB — kernel code
                         size: 3 * 1024 * 1024, // 3MB for .text + .rodata
                         attrs: "rx".into(),
                     },
                     MemoryRegion {
                         name: "RAM".into(),
-                        origin: 0x0040_0000, // 4MB — data + bss + heap
+                        origin: 0x0040_0000,     // 4MB — data + bss + heap
                         size: 124 * 1024 * 1024, // 124MB (up to 128MB identity mapped)
                         attrs: "rwx".into(),
                     },
@@ -3346,7 +3346,10 @@ mod tests {
     #[test]
     fn x86_64_startup_sets_stack() {
         let startup = generate_x86_64_startup("kernel_main");
-        assert!(startup.contains("rsp"), "must set stack pointer in 64-bit mode");
+        assert!(
+            startup.contains("rsp"),
+            "must set stack pointer in 64-bit mode"
+        );
     }
 
     #[test]

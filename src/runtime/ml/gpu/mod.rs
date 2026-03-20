@@ -2212,29 +2212,29 @@ mod tests {
     fn s3_3_gpu_backward_computes_gradients() {
         let mut tape = GpuTape::new();
 
-        // Simulate: c = a * 2 (ptr a=100, ptr c=200)
+        // Create buffers first to capture auto-assigned ptrs
+        let loss_grad = GpuBuffer::new(0, vec![1.0], DType::F64);
+        let output_ptr = loss_grad.ptr;
+        let input_buf = GpuBuffer::new(0, vec![5.0], DType::F64);
+        let input_ptr = input_buf.ptr;
+
+        // Simulate: c = a * 2
         tape.record_op(
             "mul_scalar",
-            vec![100],
-            200,
+            vec![input_ptr],
+            output_ptr,
             Box::new(|out_grad| {
                 let data: Vec<f64> = out_grad.data().iter().map(|v| v * 2.0).collect();
                 vec![GpuBuffer::new(0, data, DType::F64)]
             }),
         );
 
-        let loss_grad = GpuBuffer::new(0, vec![1.0], DType::F64);
-        // Override loss_grad ptr to match output_ptr=200
-        let mut loss_grad_fixed = loss_grad;
-        loss_grad_fixed.ptr = 200; // hack for test: match output ptr
-
-        // We need to insert the grad with the right ptr
-        let grads = gpu_backward(&tape, loss_grad_fixed);
-        // Grad for ptr 200 is the loss grad itself
-        assert!(grads.contains_key(&200));
-        // Grad for ptr 100 should be 2.0 (chain rule: d(2*a)/da = 2)
-        assert!(grads.contains_key(&100));
-        assert!((grads[&100].data()[0] - 2.0).abs() < 1e-10);
+        let grads = gpu_backward(&tape, loss_grad);
+        // Grad for output is the loss grad itself
+        assert!(grads.contains_key(&output_ptr));
+        // Grad for input should be 2.0 (chain rule: d(2*a)/da = 2)
+        assert!(grads.contains_key(&input_ptr));
+        assert!((grads[&input_ptr].data()[0] - 2.0).abs() < 1e-10);
     }
 
     #[test]

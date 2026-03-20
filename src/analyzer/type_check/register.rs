@@ -250,7 +250,11 @@ impl TypeChecker {
             // Phase 6: Keyboard + PCI
             ("kb_read_scancode", vec![], Type::I64),
             ("kb_has_data", vec![], Type::I64),
-            ("pci_read32", vec![Type::I64, Type::I64, Type::I64, Type::I64], Type::I64),
+            (
+                "pci_read32",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             // Phase 8: ACPI + SMP
             ("acpi_shutdown", vec![], Type::Void),
             ("acpi_find_rsdp", vec![], Type::I64),
@@ -265,7 +269,11 @@ impl TypeChecker {
             // Phase 5: FPU, Ring 3, SMP
             ("fxsave", vec![Type::I64], Type::Void),
             ("fxrstor", vec![Type::I64], Type::Void),
-            ("iretq_to_user", vec![Type::I64, Type::I64, Type::I64], Type::I64),
+            (
+                "iretq_to_user",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             ("rdrand", vec![], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO

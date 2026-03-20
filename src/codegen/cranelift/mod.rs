@@ -5983,33 +5983,65 @@ impl CraneliftCompiler {
             ("fj_rt_bare_pic_remap", "pic_remap", &sig_void),
             ("fj_rt_bare_pic_eoi", "pic_eoi", &sig_i64_void),
             ("fj_rt_bare_pit_init", "pit_init", &sig_i64_void),
-            ("fj_rt_bare_read_timer_ticks", "read_timer_ticks", &sig_ret_i64),
+            (
+                "fj_rt_bare_read_timer_ticks",
+                "read_timer_ticks",
+                &sig_ret_i64,
+            ),
             // String byte access
             ("fj_rt_str_byte_at", "str_byte_at", &sig_2i64_ret_i64),
             ("fj_rt_str_len", "str_len", &sig_i64_ret_i64),
             // Process scheduler (Phase 4)
-            ("fj_rt_bare_proc_table_addr", "proc_table_addr", &sig_ret_i64),
-            ("fj_rt_bare_get_current_pid", "get_current_pid", &sig_ret_i64),
-            ("fj_rt_bare_set_current_pid", "set_current_pid", &sig_i64_void),
+            (
+                "fj_rt_bare_proc_table_addr",
+                "proc_table_addr",
+                &sig_ret_i64,
+            ),
+            (
+                "fj_rt_bare_get_current_pid",
+                "get_current_pid",
+                &sig_ret_i64,
+            ),
+            (
+                "fj_rt_bare_set_current_pid",
+                "set_current_pid",
+                &sig_i64_void,
+            ),
             ("fj_rt_bare_get_proc_count", "get_proc_count", &sig_ret_i64),
             ("fj_rt_bare_proc_create", "proc_create", &sig_i64_ret_i64),
             ("fj_rt_bare_yield", "yield_proc", &sig_void),
             // Phase 5: Ring 3 + SYSCALL
             ("fj_rt_bare_tss_init", "tss_init", &sig_void),
             ("fj_rt_bare_syscall_init", "syscall_init", &sig_void),
-            ("fj_rt_bare_proc_create_user", "proc_create_user", &sig_i64_ret_i64),
+            (
+                "fj_rt_bare_proc_create_user",
+                "proc_create_user",
+                &sig_i64_ret_i64,
+            ),
             // Phase 6: Keyboard + PCI
-            ("fj_rt_bare_kb_read_scancode", "kb_read_scancode", &sig_ret_i64),
+            (
+                "fj_rt_bare_kb_read_scancode",
+                "kb_read_scancode",
+                &sig_ret_i64,
+            ),
             ("fj_rt_bare_kb_has_data", "kb_has_data", &sig_ret_i64),
             ("fj_rt_bare_pci_read32", "pci_read32", &sig_4i64_ret_i64),
             // Phase 8: ACPI + SMP
             ("fj_rt_bare_acpi_shutdown", "acpi_shutdown", &sig_void),
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp", &sig_ret_i64),
-            ("fj_rt_bare_acpi_get_cpu_count", "acpi_get_cpu_count", &sig_i64_ret_i64),
+            (
+                "fj_rt_bare_acpi_get_cpu_count",
+                "acpi_get_cpu_count",
+                &sig_i64_ret_i64,
+            ),
             ("fj_rt_bare_rdtsc", "rdtsc", &sig_ret_i64),
             ("fj_rt_bare_rdrand", "rdrand", &sig_ret_i64),
             // Phase 5+8: MSR, CR4, INVLPG, FPU, iretq
-            ("fj_rt_bare_iretq_to_user", "iretq_to_user", &sig_3i64_ret_i64),
+            (
+                "fj_rt_bare_iretq_to_user",
+                "iretq_to_user",
+                &sig_3i64_ret_i64,
+            ),
             ("fj_rt_bare_read_msr", "read_msr", &sig_i64_ret_i64),
             ("fj_rt_bare_write_msr", "write_msr", &sig_2i64_ret_i64),
             ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
@@ -7020,26 +7052,16 @@ impl ObjectCompiler {
         // port_outb(port, value) -> i64
         let port_outb_id = self
             .module
-            .declare_function(
-                "fj_rt_bare_port_outb",
-                Linkage::Import,
-                &sig_2i64_ret_i64,
-            )
+            .declare_function("fj_rt_bare_port_outb", Linkage::Import, &sig_2i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("port_outb".to_string(), port_outb_id);
+        self.functions.insert("port_outb".to_string(), port_outb_id);
 
         // port_inb(port) -> i64
         let port_inb_id = self
             .module
-            .declare_function(
-                "fj_rt_bare_port_inb",
-                Linkage::Import,
-                &sig_i64_ret_i64,
-            )
+            .declare_function("fj_rt_bare_port_inb", Linkage::Import, &sig_i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("port_inb".to_string(), port_inb_id);
+        self.functions.insert("port_inb".to_string(), port_inb_id);
 
         // x86_serial_init(port, baud) -> i64
         let x86_serial_id = self
@@ -7126,25 +7148,26 @@ impl ObjectCompiler {
         // iretq_to_user (Phase 5: Ring 3 transition)
         let iretq_id = self
             .module
-            .declare_function("fj_rt_bare_iretq_to_user", Linkage::Import, &sig_3i64_ret_i64)
+            .declare_function(
+                "fj_rt_bare_iretq_to_user",
+                Linkage::Import,
+                &sig_3i64_ret_i64,
+            )
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("iretq_to_user".to_string(), iretq_id);
+        self.functions.insert("iretq_to_user".to_string(), iretq_id);
 
         // MSR read/write (Phase 5+8)
         let read_msr_id = self
             .module
             .declare_function("fj_rt_bare_read_msr", Linkage::Import, &sig_i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("read_msr".to_string(), read_msr_id);
+        self.functions.insert("read_msr".to_string(), read_msr_id);
 
         let write_msr_id = self
             .module
             .declare_function("fj_rt_bare_write_msr", Linkage::Import, &sig_2i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("write_msr".to_string(), write_msr_id);
+        self.functions.insert("write_msr".to_string(), write_msr_id);
 
         // String byte access
         let str_byte_at_id = self
@@ -7158,8 +7181,7 @@ impl ObjectCompiler {
             .module
             .declare_function("fj_rt_str_len", Linkage::Import, &sig_i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("str_len".to_string(), str_len_id);
+        self.functions.insert("str_len".to_string(), str_len_id);
 
         // Process scheduler (Phase 4)
         for (name, builtin) in [
@@ -7181,11 +7203,7 @@ impl ObjectCompiler {
             .insert("proc_create".to_string(), proc_create_id);
         let set_pid_id = self
             .module
-            .declare_function(
-                "fj_rt_bare_set_current_pid",
-                Linkage::Import,
-                &sig_i64_void,
-            )
+            .declare_function("fj_rt_bare_set_current_pid", Linkage::Import, &sig_i64_void)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions
             .insert("set_current_pid".to_string(), set_pid_id);
@@ -7193,8 +7211,7 @@ impl ObjectCompiler {
             .module
             .declare_function("fj_rt_bare_yield", Linkage::Import, &sig_halt)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions
-            .insert("yield_proc".to_string(), yield_id);
+        self.functions.insert("yield_proc".to_string(), yield_id);
 
         // Phase 5: Ring 3 + SYSCALL
         for (name, builtin) in [
@@ -7209,9 +7226,14 @@ impl ObjectCompiler {
         }
         let pcu_id = self
             .module
-            .declare_function("fj_rt_bare_proc_create_user", Linkage::Import, &sig_i64_ret_i64)
+            .declare_function(
+                "fj_rt_bare_proc_create_user",
+                Linkage::Import,
+                &sig_i64_ret_i64,
+            )
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("proc_create_user".to_string(), pcu_id);
+        self.functions
+            .insert("proc_create_user".to_string(), pcu_id);
 
         // Phase 6: Keyboard + PCI
         for (name, builtin) in [
@@ -7235,7 +7257,8 @@ impl ObjectCompiler {
             .module
             .declare_function("fj_rt_bare_acpi_shutdown", Linkage::Import, &sig_halt)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("acpi_shutdown".to_string(), acpi_shutdown_id);
+        self.functions
+            .insert("acpi_shutdown".to_string(), acpi_shutdown_id);
         for (name, builtin) in [
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp"),
             ("fj_rt_bare_rdtsc", "rdtsc"),
@@ -7250,9 +7273,14 @@ impl ObjectCompiler {
         }
         let acpi_cpu_id = self
             .module
-            .declare_function("fj_rt_bare_acpi_get_cpu_count", Linkage::Import, &sig_i64_ret_i64)
+            .declare_function(
+                "fj_rt_bare_acpi_get_cpu_count",
+                Linkage::Import,
+                &sig_i64_ret_i64,
+            )
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("acpi_get_cpu_count".to_string(), acpi_cpu_id);
+        self.functions
+            .insert("acpi_get_cpu_count".to_string(), acpi_cpu_id);
 
         Ok(())
     }
@@ -10979,10 +11007,7 @@ impl ObjectCompiler {
         // Scan for fn_addr("name") calls and add targets as entry points
         // (fn_addr references functions by string, invisible to call-graph DCE)
         for fndef in &concrete_fns {
-            crate::codegen::cranelift::scan_fn_addr_targets(
-                &fndef.body,
-                &mut dce_entry_points,
-            );
+            crate::codegen::cranelift::scan_fn_addr_targets(&fndef.body, &mut dce_entry_points);
         }
 
         // If no explicit entry points, keep all functions (library mode)

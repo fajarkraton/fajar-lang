@@ -1972,7 +1972,7 @@ pub extern "C" fn fj_rt_bare_x86_serial_init(port: i64, baud: i64) -> i64 {
     // Standard 16550 UART initialization sequence
     fj_rt_bare_port_outb(base + 1, 0x00); // Disable interrupts
     fj_rt_bare_port_outb(base + 3, 0x80); // Enable DLAB
-    fj_rt_bare_port_outb(base, divisor);   // Divisor low byte
+    fj_rt_bare_port_outb(base, divisor); // Divisor low byte
     fj_rt_bare_port_outb(base + 1, 0x00); // Divisor high byte
     fj_rt_bare_port_outb(base + 3, 0x03); // 8N1
     fj_rt_bare_port_outb(base + 2, 0xC7); // Enable FIFO, clear, 14-byte threshold

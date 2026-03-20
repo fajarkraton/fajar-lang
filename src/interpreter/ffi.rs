@@ -129,7 +129,9 @@ impl FfiManager {
             .map(|(val, ty)| marshal_to_c(val, ty))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Call based on arity and return type
+        // SAFETY: Arguments are marshaled via marshal_to_c() against registered
+        // param_types, symbol existence was verified at register_function() time,
+        // and the library was loaded from a user-provided path (trust boundary).
         let result = unsafe { self.call_raw(lib, &ffi_fn.symbol, &c_args, ffi_fn.ret_type) }?;
 
         Ok(marshal_from_c(result, ffi_fn.ret_type))

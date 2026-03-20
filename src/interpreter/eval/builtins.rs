@@ -1376,14 +1376,18 @@ impl Interpreter {
                 // Simulate COM1 LSR: TX empty
                 if !args.is_empty() {
                     if let Value::Int(port) = &args[0] {
-                        if *port == 0x3FD { return Ok(Value::Int(0x60)); }
+                        if *port == 0x3FD {
+                            return Ok(Value::Int(0x60));
+                        }
                     }
                 }
                 Ok(Value::Int(0))
-            },
+            }
             "set_uart_mode_x86" => Ok(Value::Null),
             // x86_64 CPUID stubs (simulation)
-            "cpuid_eax" | "cpuid_ebx" | "cpuid_ecx" | "cpuid_edx" | "read_cr0" | "read_cr4" => Ok(Value::Int(0)),
+            "cpuid_eax" | "cpuid_ebx" | "cpuid_ecx" | "cpuid_edx" | "read_cr0" | "read_cr4" => {
+                Ok(Value::Int(0))
+            }
             "sse_enable" => Ok(Value::Null),
             "idt_init" | "pic_remap" | "pic_eoi" | "pit_init" => Ok(Value::Null),
             "read_timer_ticks" => Ok(Value::Int(0)),
@@ -1397,7 +1401,7 @@ impl Interpreter {
                     }
                 }
                 Ok(Value::Int(0))
-            },
+            }
             "str_len" => {
                 if !args.is_empty() {
                     if let Value::Str(s) = &args[0] {
@@ -1405,7 +1409,7 @@ impl Interpreter {
                     }
                 }
                 Ok(Value::Int(0))
-            },
+            }
             // Process scheduler builtins (Phase 4)
             "proc_table_addr" => Ok(Value::Int(0x600000)),
             "get_current_pid" | "get_proc_count" => Ok(Value::Int(0)),
