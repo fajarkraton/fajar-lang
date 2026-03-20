@@ -1940,6 +1940,332 @@ const FAT32_NAME_BUF: i64 = 0x822000
     bytes_read
 }
 
+// ── FAT32 Write Operations (Sprint B1-B2) ──
+
+@kernel fn fat32_write_fat_entry(cluster: i64, value: i64) -> i64 {
+    let fat_start = fat32_state_read(64)
+    let bps = fat32_state_read(8)
+    let fat_offset = cluster * 4
+    let fat_sector = fat_start + fat_offset / bps
+    let byte_in_sector = fat_offset % bps
+    let dev = fat32_state_read(88)
+
+    // Read sector containing FAT entry
+    let status = blk_read(dev, fat_sector, 1, FAT32_BUF)
+    if status != 0 { return -1 }
+
+    // Modify the 4-byte entry (preserve upper 4 bits)
+    let old = buffer_read_u32_le(FAT32_BUF + byte_in_sector)
+    let new_val = (old & 0xF0000000) | (value & 0x0FFFFFFF)
+    buffer_write_u32_le(FAT32_BUF + byte_in_sector, new_val)
+
+    // Write sector back
+    let ws = blk_write(dev, fat_sector, 1, FAT32_BUF)
+    if ws != 0 { return -2 }
+    0
+}
+
+@kernel fn fat32_find_free_cluster() -> i64 {
+    let fat_start = fat32_state_read(64)
+    let bps = fat32_state_read(8)
+    let total = fat32_state_read(56)
+    let data_start = fat32_state_read(72)
+    let spc = fat32_state_read(16)
+    let total_clusters = (total - data_start) / spc + 2
+    let dev = fat32_state_read(88)
+
+    let mut cluster: i64 = 2
+    while cluster < total_clusters {
+        let fat_offset = cluster * 4
+        let fat_sector = fat_start + fat_offset / bps
+        let byte_in_sector = fat_offset % bps
+
+        let rs = blk_read(dev, fat_sector, 1, FAT32_BUF)
+        if rs != 0 { return -1 }
+
+        let entry = buffer_read_u32_le(FAT32_BUF + byte_in_sector) & 0x0FFFFFFF
+        if entry == 0 { return cluster }
+        cluster = cluster + 1
+    }
+    -1 // Disk full
+}
+
+@kernel fn fat32_alloc_cluster(prev_cluster: i64) -> i64 {
+    let free = fat32_find_free_cluster()
+    if free < 2 { return -1 }
+
+    // Mark new cluster as end-of-chain
+    let ws1 = fat32_write_fat_entry(free, 0x0FFFFFFF)
+    if ws1 != 0 { return -2 }
+
+    // Link previous cluster to new one (if not first)
+    if prev_cluster >= 2 {
+        let ws2 = fat32_write_fat_entry(prev_cluster, free)
+        if ws2 != 0 { return -3 }
+    }
+    free
+}
+
+@kernel fn fat32_write_cluster(cluster: i64, buf: i64) -> i64 {
+    let lba = fat32_cluster_to_lba(cluster)
+    let spc = fat32_state_read(16)
+    let dev = fat32_state_read(88)
+    blk_write(dev, lba, spc, buf)
+}
+
+@kernel fn fat32_free_chain(start_cluster: i64) {
+    let mut cluster = start_cluster
+    while cluster >= 2 && fat32_is_end_of_chain(cluster) == 0 {
+        let next = fat32_read_fat_entry(cluster)
+        fat32_write_fat_entry(cluster, 0)
+        cluster = next
+    }
+    // Free the last cluster too
+    if cluster >= 2 {
+        fat32_write_fat_entry(cluster, 0)
+    }
+}
+
+// Create 8.3 filename in buffer (11 bytes, space-padded)
+@kernel fn fat32_make_83_name(src: i64, dst: i64) {
+    // Clear with spaces
+    let mut i: i64 = 0
+    while i < 11 { volatile_write_u8(dst + i, 32); i = i + 1 }
+
+    // Copy name part (before dot)
+    let mut si: i64 = 0
+    let mut di: i64 = 0
+    while di < 8 {
+        let ch = volatile_read_u8(src + si)
+        if ch == 0 || ch == 46 { di = 8 } // null or '.'
+        else {
+            volatile_write_u8(dst + di, fat32_toupper(ch))
+            si = si + 1
+            di = di + 1
+        }
+    }
+
+    // Skip to dot
+    let mut si2: i64 = 0
+    while volatile_read_u8(src + si2) != 0 && volatile_read_u8(src + si2) != 46 { si2 = si2 + 1 }
+    if volatile_read_u8(src + si2) == 46 {
+        si2 = si2 + 1
+        // Copy extension
+        let mut ei: i64 = 0
+        while ei < 3 {
+            let ch = volatile_read_u8(src + si2)
+            if ch == 0 { ei = 3 }
+            else {
+                volatile_write_u8(dst + 8 + ei, fat32_toupper(ch))
+                si2 = si2 + 1
+                ei = ei + 1
+            }
+        }
+    }
+}
+
+@kernel fn fat32_create_dir_entry(dir_cluster: i64, name: i64, first_cluster: i64, file_size: i64, is_dir: i64) -> i64 {
+    let cluster_bytes = fat32_state_read(80)
+    let dev = fat32_state_read(88)
+    let mut cluster = dir_cluster
+
+    while fat32_is_end_of_chain(cluster) == 0 && cluster >= 2 {
+        let status = fat32_read_cluster(cluster, FAT32_DIR_BUF)
+        if status != 0 { return -1 }
+
+        let entries = cluster_bytes / 32
+        let mut idx: i64 = 0
+        while idx < entries {
+            let first_byte = volatile_read_u8(FAT32_DIR_BUF + idx * 32)
+            if first_byte == 0 || first_byte == 0xE5 {
+                // Found free entry — write it
+                let base = FAT32_DIR_BUF + idx * 32
+
+                // 8.3 name (11 bytes)
+                let name_buf: i64 = 0x806600
+                fat32_make_83_name(name, name_buf)
+                let mut k: i64 = 0
+                while k < 11 { volatile_write_u8(base + k, volatile_read_u8(name_buf + k)); k = k + 1 }
+
+                // Attributes
+                let attr = if is_dir == 1 { 0x10 } else { 0x20 }
+                volatile_write_u8(base + 11, attr)
+
+                // Reserved + timestamps (zero for now)
+                k = 12
+                while k < 20 { volatile_write_u8(base + k, 0); k = k + 1 }
+
+                // Cluster high + low
+                buffer_write_u16_le(base + 20, (first_cluster >> 16) & 0xFFFF)
+                buffer_write_u16_le(base + 26, first_cluster & 0xFFFF)
+
+                // File size
+                buffer_write_u32_le(base + 28, file_size)
+
+                // Write cluster back to disk
+                let ws = fat32_write_cluster(cluster, FAT32_DIR_BUF)
+                if ws != 0 { return -2 }
+                return 0
+            }
+            idx = idx + 1
+        }
+        cluster = fat32_read_fat_entry(cluster)
+    }
+    -3 // Directory full
+}
+
+@kernel fn fat32_create_file(name: i64, data: i64, data_len: i64) -> i64 {
+    if fat32_state_read(0) != 1 { return -1 }
+    let root = fat32_state_read(48)
+    let cluster_bytes = fat32_state_read(80)
+
+    // Allocate first cluster
+    let first_cluster = fat32_alloc_cluster(0)
+    if first_cluster < 2 { return -2 }
+
+    // Write data to clusters
+    let mut bytes_written: i64 = 0
+    let mut cur_cluster = first_cluster
+    while bytes_written < data_len {
+        // Fill cluster buffer
+        let to_write = if data_len - bytes_written > cluster_bytes { cluster_bytes } else { data_len - bytes_written }
+
+        // Clear buffer first
+        memset_buf(FAT32_DIR_BUF, 0, cluster_bytes)
+
+        // Copy data
+        memcpy_buf(FAT32_DIR_BUF, data + bytes_written, to_write)
+
+        // Write cluster
+        let ws = fat32_write_cluster(cur_cluster, FAT32_DIR_BUF)
+        if ws != 0 { return -3 }
+
+        bytes_written = bytes_written + to_write
+
+        // Allocate next cluster if needed
+        if bytes_written < data_len {
+            let next = fat32_alloc_cluster(cur_cluster)
+            if next < 2 { return -4 }
+            cur_cluster = next
+        }
+    }
+
+    // Create directory entry
+    let de = fat32_create_dir_entry(root, name, first_cluster, data_len, 0)
+    if de != 0 { return -5 }
+    0
+}
+
+@kernel fn fat32_delete_file(name: i64) -> i64 {
+    if fat32_state_read(0) != 1 { return -1 }
+    let root = fat32_state_read(48)
+    let cluster_bytes = fat32_state_read(80)
+
+    // Find file in directory
+    let result = fat32_find_in_dir(root, name)
+    if result == -1 { return -2 }
+
+    let shifted = result >> 32
+    let file_cluster = shifted & 0x7FFFFFFF
+
+    // Free cluster chain
+    fat32_free_chain(file_cluster)
+
+    // Mark directory entry as deleted (0xE5)
+    let mut cluster = root
+    while fat32_is_end_of_chain(cluster) == 0 && cluster >= 2 {
+        let status = fat32_read_cluster(cluster, FAT32_DIR_BUF)
+        if status != 0 { return -3 }
+
+        let entries = cluster_bytes / 32
+        let mut idx: i64 = 0
+        while idx < entries {
+            let first = volatile_read_u8(FAT32_DIR_BUF + idx * 32)
+            if first != 0 && first != 0xE5 {
+                let name_len = fat32_dir_entry_name(FAT32_DIR_BUF, idx, FAT32_NAME_BUF)
+                if name_len > 0 && fat32_str_eq_nocase(FAT32_NAME_BUF, name) == 1 {
+                    volatile_write_u8(FAT32_DIR_BUF + idx * 32, 0xE5)
+                    fat32_write_cluster(cluster, FAT32_DIR_BUF)
+                    return 0
+                }
+            }
+            idx = idx + 1
+        }
+        cluster = fat32_read_fat_entry(cluster)
+    }
+    -4
+}
+
+// ── FAT32 Write Shell Commands ──
+
+@kernel fn cmd_fatwrite() {
+    // "fatwrite <name> <text>" — create file with content
+    if fat32_state_read(0) != 1 { cprintln("FAT32 not mounted", RED_ON_BLACK); return }
+
+    // Parse: skip "fatwrite " (9 chars), get filename until space, rest is content
+    let mut pos: i64 = 9
+    let mut fname_len: i64 = 0
+    while pos < 64 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 0 || ch == 32 { pos = 64 }
+        else { volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, ch); fname_len = fname_len + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, 0)
+
+    if fname_len == 0 { cprintln("Usage: fatwrite <file> <text>", YELLOW_ON_BLACK); return }
+
+    // Skip space after filename, rest is content
+    let mut content_start: i64 = 9 + fname_len
+    if volatile_read_u8(0x6F800 + content_start) == 32 { content_start = content_start + 1 }
+    let mut content_len: i64 = 0
+    while volatile_read_u8(0x6F800 + content_start + content_len) != 0 { content_len = content_len + 1 }
+
+    if content_len == 0 { cprintln("No content provided", YELLOW_ON_BLACK); return }
+
+    // Copy content to buffer
+    let content_buf: i64 = 0x830000
+    memcpy_buf(content_buf, 0x6F800 + content_start, content_len)
+
+    let result = fat32_create_file(FAT32_NAME_BUF + 512, content_buf, content_len)
+    if result == 0 {
+        cprint("Created: ", GREEN_ON_BLACK)
+        let mut k: i64 = 0
+        while k < fname_len { console_putchar(volatile_read_u8(FAT32_NAME_BUF + 512 + k), CYAN_ON_BLACK); k = k + 1 }
+        cprint(" (", WHITE_ON_BLACK)
+        cprint_decimal(content_len, CYAN_ON_BLACK)
+        cprintln(" bytes)", WHITE_ON_BLACK)
+    } else {
+        cprint("Write failed: ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_fatrm() {
+    // "fatrm <name>" — delete file
+    if fat32_state_read(0) != 1 { cprintln("FAT32 not mounted", RED_ON_BLACK); return }
+
+    let mut fname_len: i64 = 0
+    let mut i: i64 = 6
+    while i < 64 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 0 { i = 64 }
+        else { volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, ch); fname_len = fname_len + 1; i = i + 1 }
+    }
+    volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, 0)
+
+    if fname_len == 0 { cprintln("Usage: fatrm <file>", YELLOW_ON_BLACK); return }
+
+    let result = fat32_delete_file(FAT32_NAME_BUF + 512)
+    if result == 0 {
+        cprintln("Deleted", GREEN_ON_BLACK)
+    } else {
+        cprint("Delete failed: ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
 // ── Shell Commands ──
 
 @kernel fn cmd_fat32_mount() {
@@ -7088,6 +7414,10 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 5 && buf_eq4(102, 97, 116, 108) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_fat32_ls(); handled = 1 }
     // fatcat — "fatcat ..." (102,97,116,99,97,116)
     if handled == 0 && len >= 7 && buf_eq4(102, 97, 116, 99) == 1 && volatile_read_u8(0x6F804) == 97 && volatile_read_u8(0x6F805) == 116 { cmd_fat32_cat(); handled = 1 }
+    // fatwrite — "fatwrite ..." (102,97,116,119)
+    if handled == 0 && len >= 11 && buf_eq4(102, 97, 116, 119) == 1 { cmd_fatwrite(); handled = 1 }
+    // fatrm — "fatrm ..." (102,97,116,114,109)
+    if handled == 0 && len >= 7 && buf_eq4(102, 97, 116, 114) == 1 && volatile_read_u8(0x6F804) == 109 { cmd_fatrm(); handled = 1 }
     // mounts — "mounts" (109,111,117,110,116,115)
     if handled == 0 && len == 6 && buf_eq4(109, 111, 117, 110) == 1 && volatile_read_u8(0x6F804) == 116 && volatile_read_u8(0x6F805) == 115 { cmd_vfs_mounts(); handled = 1 }
     // devtest — "devtest" (100,101,118,116,101,115,116)
