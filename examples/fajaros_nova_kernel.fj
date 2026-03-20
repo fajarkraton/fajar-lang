@@ -3458,6 +3458,368 @@ const SYS_BRK: i64 = 7
 }
 
 // ═══════════════════════════════════════════════
+// Process Management v2 (Sprint B6)
+// Fork, exec, waitpid, exit with proper cleanup
+// ═══════════════════════════════════════════════
+
+const PROC_TABLE_V2: i64 = 0x890000  // 16 procs × 256 bytes
+// Per proc: +0=state, +8=pid, +16=ppid, +24=entry, +32=user_rsp,
+//           +40=kernel_rsp, +48=page_table, +56=exit_code, +64=name[32]
+
+const PROC_STATE_FREE: i64 = 0
+const PROC_STATE_READY: i64 = 1
+const PROC_STATE_RUNNING: i64 = 2
+const PROC_STATE_BLOCKED: i64 = 3
+const PROC_STATE_ZOMBIE: i64 = 4
+const PROC_V2_MAX: i64 = 16
+const PROC_V2_SIZE: i64 = 256
+
+@kernel fn proc_v2_init() {
+    let mut i: i64 = 0
+    while i < PROC_V2_MAX * PROC_V2_SIZE {
+        volatile_write_u8(PROC_TABLE_V2 + i, 0)
+        i = i + 1
+    }
+    // PID 0 = kernel/idle
+    volatile_write_u64(PROC_TABLE_V2, PROC_STATE_RUNNING) // state
+    volatile_write_u64(PROC_TABLE_V2 + 8, 0)  // pid
+    volatile_write_u64(PROC_TABLE_V2 + 16, 0) // ppid
+    frame_mark_used(PROC_TABLE_V2 / FRAME_SIZE)
+}
+
+@kernel fn proc_v2_alloc() -> i64 {
+    let mut pid: i64 = 1
+    while pid < PROC_V2_MAX {
+        let state = volatile_read_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE)
+        if state == PROC_STATE_FREE { return pid }
+        pid = pid + 1
+    }
+    -1
+}
+
+@kernel fn proc_v2_set(pid: i64, field: i64, val: i64) {
+    volatile_write_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE + field, val)
+}
+
+@kernel fn proc_v2_get(pid: i64, field: i64) -> i64 {
+    volatile_read_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE + field)
+}
+
+@kernel fn proc_v2_fork(parent_pid: i64) -> i64 {
+    let child_pid = proc_v2_alloc()
+    if child_pid < 0 { return -1 }
+
+    // Copy parent state to child
+    proc_v2_set(child_pid, 0, PROC_STATE_READY)
+    proc_v2_set(child_pid, 8, child_pid) // pid
+    proc_v2_set(child_pid, 16, parent_pid) // ppid
+    proc_v2_set(child_pid, 24, proc_v2_get(parent_pid, 24)) // entry
+    proc_v2_set(child_pid, 56, 0) // exit_code
+
+    // Allocate kernel stack for child
+    let stack_frame = frame_alloc()
+    if stack_frame != -1 {
+        let stack_addr = stack_frame * FRAME_SIZE + FRAME_SIZE // top of stack
+        proc_v2_set(child_pid, 40, stack_addr)
+    }
+
+    child_pid
+}
+
+@kernel fn proc_v2_exit(pid: i64, code: i64) {
+    proc_v2_set(pid, 0, PROC_STATE_ZOMBIE)
+    proc_v2_set(pid, 56, code)
+    // TODO: signal parent, free resources
+}
+
+@kernel fn proc_v2_waitpid(parent_pid: i64, child_pid: i64) -> i64 {
+    // Check if child is zombie
+    let state = proc_v2_get(child_pid, 0)
+    if state == PROC_STATE_ZOMBIE {
+        let code = proc_v2_get(child_pid, 56)
+        proc_v2_set(child_pid, 0, PROC_STATE_FREE) // Reap
+        return code
+    }
+    -1 // Not ready yet
+}
+
+@kernel fn cmd_proc_v2() {
+    cprintln("Process Table v2:", YELLOW_ON_BLACK)
+    let mut pid: i64 = 0
+    while pid < PROC_V2_MAX {
+        let state = proc_v2_get(pid, 0)
+        if state != PROC_STATE_FREE {
+            cprint("  PID ", WHITE_ON_BLACK)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint(" PPID=", WHITE_ON_BLACK)
+            cprint_decimal(proc_v2_get(pid, 16), CYAN_ON_BLACK)
+            cprint(" state=", WHITE_ON_BLACK)
+            if state == PROC_STATE_READY { cprint("READY", GREEN_ON_BLACK) }
+            else if state == PROC_STATE_RUNNING { cprint("RUNNING", CYAN_ON_BLACK) }
+            else if state == PROC_STATE_BLOCKED { cprint("BLOCKED", YELLOW_ON_BLACK) }
+            else if state == PROC_STATE_ZOMBIE { cprint("ZOMBIE", RED_ON_BLACK) }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        pid = pid + 1
+    }
+}
+
+@kernel fn cmd_fork_test() {
+    cprintln("Fork test:", YELLOW_ON_BLACK)
+    let child = proc_v2_fork(0)
+    if child >= 0 {
+        cprint("  Forked child PID ", WHITE_ON_BLACK)
+        cprint_decimal(child, GREEN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        // Simulate child exit
+        proc_v2_exit(child, 42)
+        let code = proc_v2_waitpid(0, child)
+        cprint("  Child exited with code ", WHITE_ON_BLACK)
+        cprint_decimal(code, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        cprintln("  Fork failed: no free PID", RED_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// PS/2 Keyboard Driver (Sprint B7)
+// Uses port_inb(0x60) for scancode, IRQ1
+// ═══════════════════════════════════════════════
+
+const KB_DATA_PORT: i64 = 0x60
+const KB_STATUS_PORT: i64 = 0x64
+const KB_BUFFER: i64 = 0x892000  // 256-byte ring buffer
+// +0: head, +8: tail, +16: buffer[256]
+
+@kernel fn kb_init() {
+    volatile_write_u64(KB_BUFFER, 0)      // head = 0
+    volatile_write_u64(KB_BUFFER + 8, 0)  // tail = 0
+    frame_mark_used(KB_BUFFER / FRAME_SIZE)
+}
+
+@kernel fn kb_push_char(ch: i64) {
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    let new_tail = (tail + 1) % 256
+    let head = volatile_read_u64(KB_BUFFER)
+    if new_tail != head { // Not full
+        volatile_write_u8(KB_BUFFER + 16 + tail, ch)
+        volatile_write_u64(KB_BUFFER + 8, new_tail)
+    }
+}
+
+@kernel fn kb_pop_char() -> i64 {
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    if head == tail { return -1 } // Empty
+    let ch = volatile_read_u8(KB_BUFFER + 16 + head)
+    volatile_write_u64(KB_BUFFER, (head + 1) % 256)
+    ch
+}
+
+@kernel fn kb_has_char() -> i64 {
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    if head != tail { 1 } else { 0 }
+}
+
+// Scancode set 1 → ASCII (basic mapping)
+@kernel fn scancode_to_ascii(sc: i64) -> i64 {
+    // Row 1: 1234567890-=
+    if sc == 0x02 { return 49 } // '1'
+    if sc == 0x03 { return 50 } // '2'
+    if sc == 0x04 { return 51 } // '3'
+    if sc == 0x05 { return 52 } // '4'
+    if sc == 0x06 { return 53 } // '5'
+    if sc == 0x07 { return 54 } // '6'
+    if sc == 0x08 { return 55 } // '7'
+    if sc == 0x09 { return 56 } // '8'
+    if sc == 0x0A { return 57 } // '9'
+    if sc == 0x0B { return 48 } // '0'
+    if sc == 0x0C { return 45 } // '-'
+    if sc == 0x0D { return 61 } // '='
+    // Row 2: qwertyuiop
+    if sc == 0x10 { return 113 }
+    if sc == 0x11 { return 119 }
+    if sc == 0x12 { return 101 }
+    if sc == 0x13 { return 114 }
+    if sc == 0x14 { return 116 }
+    if sc == 0x15 { return 121 }
+    if sc == 0x16 { return 117 }
+    if sc == 0x17 { return 105 }
+    if sc == 0x18 { return 111 }
+    if sc == 0x19 { return 112 }
+    // Row 3: asdfghjkl
+    if sc == 0x1E { return 97 }
+    if sc == 0x1F { return 115 }
+    if sc == 0x20 { return 100 }
+    if sc == 0x21 { return 102 }
+    if sc == 0x22 { return 103 }
+    if sc == 0x23 { return 104 }
+    if sc == 0x24 { return 106 }
+    if sc == 0x25 { return 107 }
+    if sc == 0x26 { return 108 }
+    // Row 4: zxcvbnm
+    if sc == 0x2C { return 122 }
+    if sc == 0x2D { return 120 }
+    if sc == 0x2E { return 99 }
+    if sc == 0x2F { return 118 }
+    if sc == 0x30 { return 98 }
+    if sc == 0x31 { return 110 }
+    if sc == 0x32 { return 109 }
+    // Special
+    if sc == 0x1C { return 10 }  // Enter
+    if sc == 0x39 { return 32 }  // Space
+    if sc == 0x0E { return 8 }   // Backspace
+    if sc == 0x01 { return 27 }  // Escape
+    if sc == 0x34 { return 46 }  // '.'
+    if sc == 0x33 { return 44 }  // ','
+    if sc == 0x35 { return 47 }  // '/'
+    0 // Unknown
+}
+
+@kernel fn kb_handle_irq() {
+    // Read scancode from PS/2 data port
+    let sc = port_inb(KB_DATA_PORT)
+    // Only process make codes (bit 7 = 0)
+    if sc < 0x80 {
+        let ascii = scancode_to_ascii(sc)
+        if ascii > 0 {
+            kb_push_char(ascii)
+        }
+    }
+}
+
+@kernel fn cmd_kb_test() {
+    cprintln("Keyboard Buffer:", YELLOW_ON_BLACK)
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    cprint("  Head: ", WHITE_ON_BLACK)
+    cprint_decimal(head, CYAN_ON_BLACK)
+    cprint("  Tail: ", WHITE_ON_BLACK)
+    cprint_decimal(tail, CYAN_ON_BLACK)
+    let buffered = if tail >= head { tail - head } else { 256 - head + tail }
+    cprint("  Buffered: ", WHITE_ON_BLACK)
+    cprint_decimal(buffered, CYAN_ON_BLACK)
+    cprintln(" chars", WHITE_ON_BLACK)
+
+    // Drain and print
+    let mut count: i64 = 0
+    while kb_has_char() == 1 && count < 64 {
+        let ch = kb_pop_char()
+        if ch > 31 && ch < 127 { console_putchar(ch, GREEN_ON_BLACK) }
+        count = count + 1
+    }
+    if count > 0 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// USB XHCI Detection (Sprint B8)
+// ═══════════════════════════════════════════════
+
+@kernel fn usb_find_xhci() -> i64 {
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let cl = pci_read32(0, dev, 0, 8)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            let progif = (cl >> 8) & 0xFF
+            // USB: class 0x0C, subclass 0x03, progif 0x30=XHCI
+            if class == 0x0C && subclass == 0x03 && progif == 0x30 { return dev }
+        }
+        dev = dev + 1
+    }
+    -1
+}
+
+@kernel fn cmd_lsusb() {
+    cprintln("USB Controllers:", YELLOW_ON_BLACK)
+    let mut dev: i64 = 0
+    let mut found: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let cl = pci_read32(0, dev, 0, 8)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            let progif = (cl >> 8) & 0xFF
+            if class == 0x0C && subclass == 0x03 {
+                cprint("  PCI ", WHITE_ON_BLACK)
+                cprint_decimal(dev, CYAN_ON_BLACK)
+                cprint(": USB ", WHITE_ON_BLACK)
+                if progif == 0x00 { cprint("UHCI", WHITE_ON_BLACK) }
+                else if progif == 0x10 { cprint("OHCI", WHITE_ON_BLACK) }
+                else if progif == 0x20 { cprint("EHCI", WHITE_ON_BLACK) }
+                else if progif == 0x30 { cprint("XHCI", GREEN_ON_BLACK) }
+                else { cprint("Unknown", RED_ON_BLACK) }
+                let vid = id & 0xFFFF
+                let did = (id >> 16) & 0xFFFF
+                cprint(" (", WHITE_ON_BLACK)
+                cprint_hex(vid, 4, CYAN_ON_BLACK)
+                cprint(":", WHITE_ON_BLACK)
+                cprint_hex(did, 4, CYAN_ON_BLACK)
+                cprintln(")", WHITE_ON_BLACK)
+
+                // Read BAR0 for MMIO base
+                let bar0 = pci_read32(0, dev, 0, 0x10)
+                if bar0 != 0 {
+                    cprint("    BAR0: 0x", WHITE_ON_BLACK)
+                    cprint_hex(bar0 & 0xFFFFF000, 8, CYAN_ON_BLACK)
+                    console_putchar(10, WHITE_ON_BLACK)
+                }
+                found = found + 1
+            }
+        }
+        dev = dev + 1
+    }
+    if found == 0 { cprintln("  No USB controllers found", YELLOW_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// Virtio-Blk Driver (Sprint B9)
+// PCI vendor 0x1AF4, device 0x1001
+// ═══════════════════════════════════════════════
+
+@kernel fn virtio_blk_find() -> i64 {
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let vendor = id & 0xFFFF
+            let device_id = (id >> 16) & 0xFFFF
+            if vendor == 0x1AF4 && device_id == 0x1001 { return dev }
+        }
+        dev = dev + 1
+    }
+    -1
+}
+
+@kernel fn cmd_virtio_blk() {
+    cprintln("Virtio Block Devices:", YELLOW_ON_BLACK)
+    let dev = virtio_blk_find()
+    if dev == -1 {
+        cprintln("  No virtio-blk found", YELLOW_ON_BLACK)
+        return
+    }
+    let id = pci_read32(0, dev, 0, 0)
+    cprint("  PCI ", WHITE_ON_BLACK)
+    cprint_decimal(dev, CYAN_ON_BLACK)
+    cprint(": virtio-blk (", WHITE_ON_BLACK)
+    cprint_hex(id & 0xFFFF, 4, CYAN_ON_BLACK)
+    cprint(":", WHITE_ON_BLACK)
+    cprint_hex((id >> 16) & 0xFFFF, 4, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    let bar0 = pci_read32(0, dev, 0, 0x10)
+    cprint("  BAR0: 0x", WHITE_ON_BLACK)
+    cprint_hex(bar0, 8, CYAN_ON_BLACK)
+    if bar0 & 1 != 0 { cprintln(" (I/O port)", WHITE_ON_BLACK) }
+    else { cprintln(" (MMIO)", WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
 // GPU Detection (Phase 9 Sprint 27)
 // ═══════════════════════════════════════════════
 
@@ -7476,6 +7838,16 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len >= 9 && buf_eq4(114, 101, 97, 100) == 1 && volatile_read_u8(0x6F804) == 101 && volatile_read_u8(0x6F805) == 108 && volatile_read_u8(0x6F806) == 102 { cmd_readelf(); handled = 1 }
     // exec — "exec ..." (101,120,101,99)
     if handled == 0 && len >= 6 && buf_eq4(101, 120, 101, 99) == 1 && volatile_read_u8(0x6F804) == 32 { cmd_exec(); handled = 1 }
+    // procs — "procs" (112,114,111,99,115)
+    if handled == 0 && len == 5 && buf_eq4(112, 114, 111, 99) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_proc_v2(); handled = 1 }
+    // forktest — "forktest" (102,111,114,107)
+    if handled == 0 && len == 8 && buf_eq4(102, 111, 114, 107) == 1 { cmd_fork_test(); handled = 1 }
+    // kbtest — "kbtest" (107,98,116,101,115,116)
+    if handled == 0 && len == 6 && buf_eq4(107, 98, 116, 101) == 1 { cmd_kb_test(); handled = 1 }
+    // lsusb — "lsusb" (108,115,117,115,98)
+    if handled == 0 && len == 5 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 115 && volatile_read_u8(0x6F802) == 117 && volatile_read_u8(0x6F803) == 115 && volatile_read_u8(0x6F804) == 98 { cmd_lsusb(); handled = 1 }
+    // virtioblk — "virtioblk" (118,105,114,116)
+    if handled == 0 && len == 9 && buf_eq4(118, 105, 114, 116) == 1 { cmd_virtio_blk(); handled = 1 }
 
     if handled == 0 && len > 0 {
         cprint("Unknown: ", RED_ON_BLACK)
@@ -7590,6 +7962,12 @@ const FS_ENTRY_SIZE: i64 = 128
     // Initialize syscall dispatch table
     syscall_init()
     println("[ELF] Syscall table ready")
+
+    // Initialize process table v2 + keyboard buffer
+    proc_v2_init()
+    kb_init()
+    println("[PROC] Process table v2 ready")
+    println("[KB] Keyboard buffer ready")
 
     // Enable interrupts
     irq_enable()
