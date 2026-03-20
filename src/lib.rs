@@ -1,3 +1,6 @@
+// Edition 2024: collapsible_if lint expanded scope — allow project-wide
+#![allow(clippy::collapsible_if)]
+
 //! # Fajar Lang
 //!
 //! A statically-typed systems programming language for OS development and AI/ML.

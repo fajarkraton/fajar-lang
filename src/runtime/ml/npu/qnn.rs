@@ -944,7 +944,7 @@ impl QnnBackend {
         })?;
 
         #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        if let (Some(ref qnn_lib), Some(graph_handle)) = (&self.qnn_lib, model.graph_handle) {
+        if let (Some(qnn_lib), Some(graph_handle)) = (&self.qnn_lib, model.graph_handle) {
             // ── Real QNN execution ──
             // The QNN graphExecute expects arrays of Qnn_Tensor_t.
             // Full tensor struct layout will be validated during
@@ -1002,7 +1002,7 @@ impl QnnBackend {
 
         // Free QNN context if real SDK was used.
         #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        if let (Some(ref qnn_lib), Some(context_handle)) = (&self.qnn_lib, model.context_handle) {
+        if let (Some(qnn_lib), Some(context_handle)) = (&self.qnn_lib, model.context_handle) {
             qnn_lib.free_context(context_handle);
         }
 

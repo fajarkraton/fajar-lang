@@ -1,3 +1,6 @@
+// Edition 2024: collapsible_if lint expanded scope
+#![allow(clippy::collapsible_if)]
+
 //! Fajar Lang CLI entry point.
 //!
 //! Binary name: `fj`
