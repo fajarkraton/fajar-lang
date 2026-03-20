@@ -284,6 +284,7 @@ impl TypeChecker {
             ),
             ("buffer_read_u16_be", vec![Type::I64], Type::I64),
             ("buffer_read_u32_be", vec![Type::I64], Type::I64),
+            ("buffer_read_u64_be", vec![Type::I64], Type::I64),
             (
                 "buffer_write_u16_be",
                 vec![Type::I64, Type::I64],
@@ -291,6 +292,11 @@ impl TypeChecker {
             ),
             (
                 "buffer_write_u32_be",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "buffer_write_u64_be",
                 vec![Type::I64, Type::I64],
                 Type::Void,
             ),

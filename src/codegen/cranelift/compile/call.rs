@@ -100,6 +100,46 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
 
     let fn_name = match callee {
         Expr::Ident { name, .. } => name.clone(),
+        // TODO: Support array-indexed fn ptr calls (e.g., `handlers[i](x)`)
+        // This requires tracking fn_ptr_array_sigs for arrays of function pointers.
+        Expr::Index { object, .. } => {
+            // Check if the array variable is tracked in fn_ptr_sigs (same
+            // signature for all elements). If so, compile the index
+            // expression to get the fn pointer and call_indirect.
+            if let Expr::Ident { name: arr_name, .. } = object.as_ref() {
+                if let Some((param_types, ret_type)) = cx.fn_ptr_sigs.get(arr_name).cloned() {
+                    let fn_addr = compile_expr(builder, cx, callee)?;
+                    let mut sig = cranelift_codegen::ir::Signature::new(
+                        cranelift_codegen::isa::CallConv::SystemV,
+                    );
+                    for &pt in &param_types {
+                        sig.params.push(cranelift_codegen::ir::AbiParam::new(pt));
+                    }
+                    if let Some(rt) = ret_type {
+                        sig.returns.push(cranelift_codegen::ir::AbiParam::new(rt));
+                    }
+                    let sig_ref = builder.import_signature(sig);
+                    let mut call_args = Vec::new();
+                    for a in args {
+                        call_args.push(compile_expr(builder, cx, &a.value)?);
+                    }
+                    let call = builder.ins().call_indirect(sig_ref, fn_addr, &call_args);
+                    let results = builder.inst_results(call);
+                    if let Some(rt) = ret_type {
+                        cx.last_expr_type = Some(rt);
+                        if results.is_empty() {
+                            return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+                        }
+                        return Ok(results[0]);
+                    }
+                    cx.last_expr_type = Some(clif_types::default_int_type());
+                    return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+                }
+            }
+            return Err(CodegenError::NotImplemented(
+                "call on array-indexed callee without known fn_ptr signature".into(),
+            ));
+        }
         _ => {
             return Err(CodegenError::NotImplemented(
                 "call on non-ident callee".into(),
@@ -376,7 +416,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
             }
             // Buffer read helpers (LE + BE): (addr) -> i64
             "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
-            | "buffer_read_u16_be" | "buffer_read_u32_be" => {
+            | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 1 argument (address)"
@@ -399,7 +439,8 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
             | "buffer_write_u32_le"
             | "buffer_write_u64_le"
             | "buffer_write_u16_be"
-            | "buffer_write_u32_be" => {
+            | "buffer_write_u32_be"
+            | "buffer_write_u64_be" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 2 arguments (address, value)"

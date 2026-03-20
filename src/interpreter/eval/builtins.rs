@@ -1428,12 +1428,15 @@ impl Interpreter {
             "volatile_write_u64" => Ok(Value::Null),
             // Buffer read/write — simulation stubs
             "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
-            | "buffer_read_u16_be" | "buffer_read_u32_be" => Ok(Value::Int(0)),
+            | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be" => {
+                Ok(Value::Int(0))
+            }
             "buffer_write_u16_le"
             | "buffer_write_u32_le"
             | "buffer_write_u64_le"
             | "buffer_write_u16_be"
-            | "buffer_write_u32_be" => Ok(Value::Null),
+            | "buffer_write_u32_be"
+            | "buffer_write_u64_be" => Ok(Value::Null),
             "acpi_shutdown" => Ok(Value::Null),
             "acpi_find_rsdp" | "acpi_get_cpu_count" => Ok(Value::Int(0)),
             "rdtsc" => Ok(Value::Int(0)),

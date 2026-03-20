@@ -2124,3 +2124,75 @@ pub extern "C" fn fj_rt_bare_cpuid(leaf: i64, subleaf: i64) -> i64 {
         0
     }
 }
+
+/// CPUID — returns eax register for a given leaf.
+/// Single-argument variant (subleaf defaults to 0).
+/// On non-x86_64 targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cpuid_eax(leaf: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: cpuid is safe on x86_64, does not modify machine state
+        let result = unsafe { std::arch::x86_64::__cpuid_count(leaf as u32, 0) };
+        result.eax as i64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = leaf;
+        0
+    }
+}
+
+/// CPUID — returns ebx register for a given leaf.
+/// Single-argument variant (subleaf defaults to 0).
+/// On non-x86_64 targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cpuid_ebx(leaf: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: cpuid is safe on x86_64, does not modify machine state
+        let result = unsafe { std::arch::x86_64::__cpuid_count(leaf as u32, 0) };
+        result.ebx as i64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = leaf;
+        0
+    }
+}
+
+/// CPUID — returns ecx register for a given leaf.
+/// Single-argument variant (subleaf defaults to 0).
+/// On non-x86_64 targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cpuid_ecx(leaf: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: cpuid is safe on x86_64, does not modify machine state
+        let result = unsafe { std::arch::x86_64::__cpuid_count(leaf as u32, 0) };
+        result.ecx as i64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = leaf;
+        0
+    }
+}
+
+/// CPUID — returns edx register for a given leaf.
+/// Single-argument variant (subleaf defaults to 0).
+/// On non-x86_64 targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cpuid_edx(leaf: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: cpuid is safe on x86_64, does not modify machine state
+        let result = unsafe { std::arch::x86_64::__cpuid_count(leaf as u32, 0) };
+        result.edx as i64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = leaf;
+        0
+    }
+}

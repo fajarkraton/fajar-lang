@@ -15,6 +15,66 @@ use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr, UnaryOp};
 // Re-use sibling functions via the parent module's re-exports.
 use super::{compile_expr, compile_heap_array_init};
 
+/// Extracts the function name from the tail expression of a block, if it's a
+/// bare `Expr::Ident`. Used to detect patterns like
+/// `let f = if cond { handler_a } else { handler_b }`.
+fn extract_block_tail_fn_name(stmts: &[Stmt], tail: &Option<Box<Expr>>) -> Option<String> {
+    // If there's an explicit tail expression, check it.
+    if let Some(tail_expr) = tail {
+        return extract_expr_fn_name(tail_expr);
+    }
+    // Otherwise check the last statement — if it's an expression statement.
+    if let Some(Stmt::Expr { expr, .. }) = stmts.last() {
+        return extract_expr_fn_name(expr);
+    }
+    None
+}
+
+/// Extracts a function name from an expression that might be a bare ident,
+/// a grouped ident, or a block containing a single ident.
+fn extract_expr_fn_name(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Ident { name, .. } => Some(name.clone()),
+        Expr::Grouped { expr: inner, .. } => extract_expr_fn_name(inner),
+        Expr::Block {
+            stmts, expr: tail, ..
+        } => extract_block_tail_fn_name(stmts, tail),
+        _ => None,
+    }
+}
+
+/// Collects ALL leaf function names from an if/else/else-if chain.
+/// Returns `Some(vec)` only if every leaf branch is a known function ident.
+fn collect_if_chain_fn_names(expr: &Expr) -> Option<Vec<String>> {
+    match expr {
+        Expr::If {
+            then_branch,
+            else_branch: Some(else_branch),
+            ..
+        } => {
+            let then_fn = match then_branch.as_ref() {
+                Expr::Block {
+                    stmts, expr: tail, ..
+                } => extract_block_tail_fn_name(stmts, tail),
+                other => extract_expr_fn_name(other),
+            };
+            let then_name = then_fn?;
+            // Else branch may be another if-expression (else if chain)
+            let else_names = match else_branch.as_ref() {
+                Expr::If { .. } => collect_if_chain_fn_names(else_branch)?,
+                Expr::Block {
+                    stmts, expr: tail, ..
+                } => vec![extract_block_tail_fn_name(stmts, tail)?],
+                other => vec![extract_expr_fn_name(other)?],
+            };
+            let mut all = vec![then_name];
+            all.extend(else_names);
+            Some(all)
+        }
+        _ => None,
+    }
+}
+
 /// Attempts to evaluate a constant expression at compile time.
 ///
 /// Supports integer literals, arithmetic (`+`, `-`, `*`, `/`, `%`),
@@ -498,6 +558,82 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                     }
                 }
             }
+            // If RHS is an if/else-if/else chain where ALL leaf branches resolve
+            // to known function names with the same signature, infer fn_ptr_sigs.
+            // Handles: `let f = if a { x } else if b { y } else { z }`
+            if !cx.fn_ptr_sigs.contains_key(name) {
+                if let Some(leaf_names) = collect_if_chain_fn_names(value.as_ref()) {
+                    // Verify all leaf names are known functions with matching signatures
+                    let fn_ids: Vec<_> = leaf_names
+                        .iter()
+                        .filter_map(|n| cx.functions.get(n).copied())
+                        .collect();
+                    if fn_ids.len() == leaf_names.len() && !fn_ids.is_empty() {
+                        let first_decl = cx.module.declarations().get_function_decl(fn_ids[0]);
+                        let all_same = fn_ids.iter().skip(1).all(|&fid| {
+                            let d = cx.module.declarations().get_function_decl(fid);
+                            d.signature.params.len() == first_decl.signature.params.len()
+                                && d.signature.returns.len() == first_decl.signature.returns.len()
+                        });
+                        if all_same {
+                            let param_types: Vec<_> = first_decl
+                                .signature
+                                .params
+                                .iter()
+                                .map(|p| p.value_type)
+                                .collect();
+                            let ret_type =
+                                first_decl.signature.returns.first().map(|r| r.value_type);
+                            cx.fn_ptr_sigs.insert(name.clone(), (param_types, ret_type));
+                        }
+                    }
+                }
+            }
+            // If RHS is an array literal where all elements are known function
+            // names with the same signature, record fn_ptr_sigs for the array
+            // variable so that `arr[i](x)` can be compiled as call_indirect.
+            if !cx.fn_ptr_sigs.contains_key(name) {
+                if let Expr::Array { elements, .. } = value.as_ref() {
+                    if !elements.is_empty() {
+                        let fn_names: Vec<Option<String>> =
+                            elements.iter().map(extract_expr_fn_name).collect();
+                        if fn_names.iter().all(|n| n.is_some()) {
+                            let fn_names: Vec<String> =
+                                fn_names.into_iter().map(|n| n.unwrap()).collect();
+                            // Check all names are known functions
+                            let fn_ids: Vec<_> = fn_names
+                                .iter()
+                                .filter_map(|n| cx.functions.get(n).copied())
+                                .collect();
+                            if fn_ids.len() == fn_names.len() {
+                                // Verify all have the same signature
+                                let first_decl =
+                                    cx.module.declarations().get_function_decl(fn_ids[0]);
+                                let all_same = fn_ids.iter().skip(1).all(|&fid| {
+                                    let d = cx.module.declarations().get_function_decl(fid);
+                                    d.signature.params.len() == first_decl.signature.params.len()
+                                        && d.signature.returns.len()
+                                            == first_decl.signature.returns.len()
+                                });
+                                if all_same {
+                                    let param_types: Vec<_> = first_decl
+                                        .signature
+                                        .params
+                                        .iter()
+                                        .map(|p| p.value_type)
+                                        .collect();
+                                    let ret_type =
+                                        first_decl.signature.returns.first().map(|r| r.value_type);
+                                    cx.fn_ptr_sigs.insert(name.clone(), (param_types, ret_type));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // If RHS is a function call that returns a function pointer and we
+            // have a fn-type annotation, the annotation handler above already
+            // registered it. No extra work needed here.
             Ok(None)
         }
         Stmt::Const {

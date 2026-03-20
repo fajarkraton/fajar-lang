@@ -2487,7 +2487,71 @@ pub extern "C" fn fj_rt_buffer_write_u32_be(addr: *mut u8, value: i64) {
     }
 }
 
-// ── PCI Configuration Space Write ──
+/// Read a u64 from a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_read_u64_be(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 8 bytes
+    unsafe {
+        let mut val: i64 = 0;
+        for i in 0..8 {
+            val |= (*addr.add(i) as i64) << ((7 - i) * 8);
+        }
+        val
+    }
+}
+
+/// Write a u64 to a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_write_u64_be(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 8 bytes
+    unsafe {
+        for i in 0..8 {
+            *addr.add(i) = ((value >> ((7 - i) * 8)) & 0xFF) as u8;
+        }
+    }
+}
+
+// ── PCI Configuration Space Read/Write ──
+
+/// Read a 32-bit value from PCI configuration space.
+/// Used for device discovery and BAR reading.
+pub extern "C" fn fj_rt_bare_pci_read32(bus: i64, device: i64, func: i64, offset: i64) -> i64 {
+    let addr: u32 = 0x8000_0000
+        | ((bus as u32 & 0xFF) << 16)
+        | ((device as u32 & 0x1F) << 11)
+        | ((func as u32 & 0x07) << 8)
+        | (offset as u32 & 0xFC);
+
+    // SAFETY: PCI config space access via x86 I/O ports
+    // On hosted targets: simulation returns 0xFFFFFFFF (no device)
+    #[cfg(target_arch = "x86_64")]
+    {
+        let result: u32;
+        // SAFETY: cpuid-guarded PCI I/O port access on x86_64
+        unsafe {
+            std::arch::asm!(
+                "mov dx, 0x0CF8",
+                "out dx, eax",
+                in("eax") addr,
+                out("dx") _,
+                options(nomem, nostack)
+            );
+            std::arch::asm!(
+                "mov dx, 0x0CFC",
+                "in eax, dx",
+                out("eax") result,
+                out("dx") _,
+                options(nomem, nostack)
+            );
+        }
+        result as i64
+    }
+
+    // Non-x86 targets: no PCI config I/O ports (MMIO on ARM)
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = addr;
+        0xFFFF_FFFF_i64
+    }
+}
 
 /// Write a 32-bit value to PCI configuration space.
 /// Required for enabling NVMe memory BAR (bus master + memory space).
@@ -7304,9 +7368,12 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_buffer_write_u64_le" => Some(fj_rt_buffer_write_u64_le as *const u8),
         "fj_rt_buffer_read_u16_be" => Some(fj_rt_buffer_read_u16_be as *const u8),
         "fj_rt_buffer_read_u32_be" => Some(fj_rt_buffer_read_u32_be as *const u8),
+        "fj_rt_buffer_read_u64_be" => Some(fj_rt_buffer_read_u64_be as *const u8),
         "fj_rt_buffer_write_u16_be" => Some(fj_rt_buffer_write_u16_be as *const u8),
         "fj_rt_buffer_write_u32_be" => Some(fj_rt_buffer_write_u32_be as *const u8),
-        // PCI config write
+        "fj_rt_buffer_write_u64_be" => Some(fj_rt_buffer_write_u64_be as *const u8),
+        // PCI config read/write
+        "fj_rt_bare_pci_read32" => Some(fj_rt_bare_pci_read32 as *const u8),
         "fj_rt_bare_pci_write32" => Some(fj_rt_bare_pci_write32 as *const u8),
         "fj_rt_waker_clone" => Some(fj_rt_waker_clone as *const u8),
         "fj_rt_waker_drop" => Some(fj_rt_waker_drop as *const u8),
@@ -7448,6 +7515,10 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_cli" => Some(runtime_bare::fj_rt_bare_cli as *const u8),
         "fj_rt_bare_sti" => Some(runtime_bare::fj_rt_bare_sti as *const u8),
         "fj_rt_bare_cpuid" => Some(runtime_bare::fj_rt_bare_cpuid as *const u8),
+        "fj_rt_bare_cpuid_eax" => Some(runtime_bare::fj_rt_bare_cpuid_eax as *const u8),
+        "fj_rt_bare_cpuid_ebx" => Some(runtime_bare::fj_rt_bare_cpuid_ebx as *const u8),
+        "fj_rt_bare_cpuid_ecx" => Some(runtime_bare::fj_rt_bare_cpuid_ecx as *const u8),
+        "fj_rt_bare_cpuid_edx" => Some(runtime_bare::fj_rt_bare_cpuid_edx as *const u8),
         _ => None,
     }
 }

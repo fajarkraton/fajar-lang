@@ -16901,3 +16901,322 @@ fn s5_interrupt_wrapper_assembly() {
     assert!(wrapper.contains("stp     x28, x29"));
     assert!(wrapper.contains("ldp     x28, x29"));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: volatile_u64 write + read roundtrip
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_volatile_u64_write_read_roundtrip() {
+    // Write a u64 value to a memory region, then read it back via volatile ops.
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            volatile_write_u64(buf, 42)
+            let val = volatile_read_u64(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_volatile_u64_multiple_offsets() {
+    // Write two different u64 values at different offsets using pointer math, read both back.
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(32)
+            volatile_write_u64(buf, 100)
+            let buf2 = buf + 8
+            volatile_write_u64(buf2, 200)
+            let a = volatile_read_u64(buf)
+            let b = volatile_read_u64(buf2)
+            dealloc(buf, 32)
+            a + b
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 300);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: buffer LE/BE read/write roundtrip
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_buffer_u16_le_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u16_le(buf, 0x1234)
+            let val = buffer_read_u16_le(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x1234);
+}
+
+#[test]
+fn native_buffer_u32_le_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u32_le(buf, 0x12345678)
+            let val = buffer_read_u32_le(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x12345678);
+}
+
+#[test]
+fn native_buffer_u64_le_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u64_le(buf, 0x0102030405060708)
+            let val = buffer_read_u64_le(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x0102030405060708_i64);
+}
+
+#[test]
+fn native_buffer_u16_be_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u16_be(buf, 0xABCD)
+            let val = buffer_read_u16_be(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0xABCD);
+}
+
+#[test]
+fn native_buffer_u32_be_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u32_be(buf, 0xDEADBEEF)
+            let val = buffer_read_u32_be(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0xDEADBEEF_u32 as i64);
+}
+
+#[test]
+fn native_buffer_u64_be_roundtrip() {
+    let src = r#"
+        fn main() -> i64 {
+            let buf = alloc(16)
+            buffer_write_u64_be(buf, 0x0807060504030201)
+            let val = buffer_read_u64_be(buf)
+            dealloc(buf, 16)
+            val
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 0x0807060504030201_i64);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: pci_write32 compiles (requires no_std, can't run on hosted)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_pci_write32_compiles() {
+    // pci_write32 accesses I/O ports — can't run on hosted Linux, but must compile.
+    let src = r#"
+        @kernel
+        fn main() -> i64 {
+            pci_write32(0, 0, 0, 0, 0)
+            42
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).expect("compile");
+    // Verify the function was compiled (don't execute — would SIGSEGV on hosted)
+    assert!(compiler.get_fn_ptr("main").is_ok());
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: hlt / cli / sti compile (requires no_std, privileged on hosted)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_hlt_cli_sti_compiles() {
+    // These are privileged instructions — can't run on hosted Linux, but must compile.
+    let src = r#"
+        @kernel
+        fn main() -> i64 {
+            cli()
+            sti()
+            99
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).expect("compile");
+    assert!(compiler.get_fn_ptr("main").is_ok());
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: cpuid returns a value (non-zero on x86_64, requires no_std)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_cpuid_returns_value() {
+    // cpuid(0, 0) returns the maximum leaf; on x86_64 this is always > 0.
+    let src = r#"
+        @kernel
+        fn main() -> i64 {
+            let val = cpuid(0, 0)
+            val
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    let result = main_fn();
+    #[cfg(target_arch = "x86_64")]
+    assert!(
+        result > 0,
+        "cpuid(0,0) should return max leaf > 0 on x86_64"
+    );
+    #[cfg(not(target_arch = "x86_64"))]
+    assert_eq!(result, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: fn ptr — basic call + conditional selection
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_fn_ptr_basic_no_annotation() {
+    // Assign function to variable without explicit fn type annotation.
+    let src = r#"
+        fn double(x: i64) -> i64 { x * 2 }
+        fn main() -> i64 {
+            let f = double
+            f(21)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_fn_ptr_conditional_selection() {
+    // Select between two functions based on a condition.
+    let src = r#"
+        fn handler_a(x: i64) -> i64 { x + 10 }
+        fn handler_b(x: i64) -> i64 { x + 20 }
+        fn main() -> i64 {
+            let cond = 1 > 0
+            let f: fn(i64) -> i64 = if cond { handler_a } else { handler_b }
+            f(5)
+        }
+    "#;
+    // cond is true, so handler_a(5) = 15
+    assert_eq!(compile_and_run(src), 15);
+}
+
+#[test]
+fn native_fn_ptr_conditional_selection_false_branch() {
+    // Same pattern, but condition is false to exercise the else branch.
+    let src = r#"
+        fn handler_a(x: i64) -> i64 { x + 10 }
+        fn handler_b(x: i64) -> i64 { x + 20 }
+        fn main() -> i64 {
+            let cond = 0 > 1
+            let f: fn(i64) -> i64 = if cond { handler_a } else { handler_b }
+            f(5)
+        }
+    "#;
+    // cond is false, so handler_b(5) = 25
+    assert_eq!(compile_and_run(src), 25);
+}
+
+#[test]
+fn native_fn_ptr_conditional_inferred_sig() {
+    // Select without explicit fn type annotation — signature inferred from branches.
+    let src = r#"
+        fn inc(x: i64) -> i64 { x + 1 }
+        fn dec(x: i64) -> i64 { x - 1 }
+        fn main() -> i64 {
+            let up = 1 == 1
+            let f = if up { inc } else { dec }
+            f(100)
+        }
+    "#;
+    // up is true, so inc(100) = 101
+    assert_eq!(compile_and_run(src), 101);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Audit: cpuid_eax / cpuid_ebx / cpuid_ecx / cpuid_edx (requires no_std)
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn native_cpuid_eax_returns_value() {
+    let src = r#"
+        @kernel
+        fn main() -> i64 {
+            cpuid_eax(0)
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    let result = main_fn();
+    #[cfg(target_arch = "x86_64")]
+    assert!(result > 0, "cpuid_eax(0) should be max leaf > 0");
+    #[cfg(not(target_arch = "x86_64"))]
+    assert_eq!(result, 0);
+}
+
+#[test]
+fn native_cpuid_ebx_returns_value() {
+    // leaf=0: ebx contains part of the vendor string ("Genu" = 0x756E6547 for Intel)
+    let src = r#"
+        @kernel
+        fn main() -> i64 {
+            cpuid_ebx(0)
+        }
+    "#;
+    let tokens = tokenize(src).expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("init");
+    compiler.set_no_std(true);
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    let result = main_fn();
+    #[cfg(target_arch = "x86_64")]
+    assert!(
+        result != 0,
+        "cpuid_ebx(0) should contain vendor string bytes"
+    );
+    #[cfg(not(target_arch = "x86_64"))]
+    assert_eq!(result, 0);
+}

@@ -2828,6 +2828,7 @@ impl CraneliftCompiler {
             "buffer_read_u64_le",
             "buffer_read_u16_be",
             "buffer_read_u32_be",
+            "buffer_read_u64_be",
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -2849,6 +2850,7 @@ impl CraneliftCompiler {
             "buffer_write_u64_le",
             "buffer_write_u16_be",
             "buffer_write_u32_be",
+            "buffer_write_u64_be",
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -9759,6 +9761,7 @@ impl ObjectCompiler {
             "buffer_read_u64_le",
             "buffer_read_u16_be",
             "buffer_read_u32_be",
+            "buffer_read_u64_be",
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -9780,6 +9783,7 @@ impl ObjectCompiler {
             "buffer_write_u64_le",
             "buffer_write_u16_be",
             "buffer_write_u32_be",
+            "buffer_write_u64_be",
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
