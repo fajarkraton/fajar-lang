@@ -28,7 +28,7 @@ Phase 3: FajarOS Memory Safety    [██████████]  4 sprints   
 Phase 4: FajarOS Microkernel      [██████████]  4 sprints   — IPC v2 + services               ✅ COMPLETE
 Phase 5: Fajar Lang Polish        [██████████]  6 sprints   — const-in-body, match, stdlib   ✅ COMPLETE
 Phase 6: Q6A Full Deployment      [░░░░░░░░░░]  4 sprints   — GPIO, NPU, camera, demo
-Phase 7: FajarOS Drivers          [░░░░░░░░░░]  4 sprints   — VirtIO, NVMe, display, network
+Phase 7: FajarOS Drivers          [██████████]  4 sprints   — VirtIO, VFS, network, display   ✅ COMPLETE
 Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   — blog, video, tutorial, v3.2
 ```
 
@@ -457,11 +457,64 @@ Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   
 **Estimated:** 16-20 hours
 
 ### Sprint 25: VirtIO Block Device (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 25.1 | VirtIO device discovery | PCI scan for VirtIO vendor (0x1AF4), device types | [x] |
+| 25.2 | Virtqueue implementation | Split virtqueue: descriptor table, available ring, used ring | [x] |
+| 25.3 | VirtIO block device init | Negotiate features, setup queues, driver OK status | [x] |
+| 25.4 | Block read operation | Submit read request via virtqueue, poll for completion | [x] |
+| 25.5 | Block write operation | Submit write request via virtqueue, poll for completion | [x] |
+| 25.6 | Block device capacity | Read device config for total sectors and block size | [x] |
+| 25.7 | Sector cache | Simple LRU cache for recently read sectors | [x] |
+| 25.8 | Builtin: `virtio_blk_read(dev, sector, buf)` | Runtime function for block reads | [x] |
+| 25.9 | Builtin: `virtio_blk_write(dev, sector, buf)` | Runtime function for block writes | [x] |
+| 25.10 | Test: VirtIO block device | Read/write sectors, verify round-trip | [x] |
+
 ### Sprint 26: Simple Filesystem (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 26.1 | VFS layer | Mount table, inode abstraction, file descriptor table | [x] |
+| 26.2 | Ramfs enhanced | Dynamic allocation, unlimited files, directory tree | [x] |
+| 26.3 | FAT16 read support | Parse boot sector, FAT table, root directory | [x] |
+| 26.4 | FAT16 file read | Follow cluster chain, read file content | [x] |
+| 26.5 | FAT16 directory listing | Enumerate 8.3 filenames from directory entries | [x] |
+| 26.6 | Builtin: `vfs_read_dir(path)` | List directory contents | [x] |
+| 26.7 | Builtin: `vfs_create(path)` | Create new file | [x] |
+| 26.8 | Builtin: `vfs_delete(path)` | Delete file | [x] |
+| 26.9 | Builtin: `vfs_rename(old, new)` | Rename/move file | [x] |
+| 26.10 | Test: filesystem operations | Create, write, read, delete, list | [x] |
+
 ### Sprint 27: Network Stack (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 27.1 | Ethernet frame parsing | Parse MAC header, ethertype dispatch | [x] |
+| 27.2 | ARP protocol | ARP request/reply, MAC address table | [x] |
+| 27.3 | IPv4 header parsing | Parse source/dest IP, protocol, checksum | [x] |
+| 27.4 | ICMP echo (ping) | Handle echo request, send echo reply | [x] |
+| 27.5 | UDP protocol | Parse/build UDP datagrams, port demux | [x] |
+| 27.6 | Simple TCP | 3-way handshake, data transfer, connection close | [x] |
+| 27.7 | Socket API | `net_socket`, `net_bind`, `net_send`, `net_recv` | [x] |
+| 27.8 | DHCP client | Send DISCOVER, receive OFFER, request IP | [x] |
+| 27.9 | DNS resolver | Build DNS query, parse A record response | [x] |
+| 27.10 | Test: network stack | Ping, UDP echo, TCP connect | [x] |
+
 ### Sprint 28: Display Driver (10 tasks)
 
-*(Detail tasks to be expanded when Phase 3 is complete)*
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 28.1 | Framebuffer abstraction | Generic framebuffer: width, height, bpp, pitch, buffer | [x] |
+| 28.2 | VGA graphics mode | Mode 13h (320x200x8) or VESA mode setup | [x] |
+| 28.3 | Pixel drawing | `fb_set_pixel(x, y, color)` — write to framebuffer | [x] |
+| 28.4 | Rectangle drawing | `fb_fill_rect(x, y, w, h, color)` — filled rectangle | [x] |
+| 28.5 | Bitmap font rendering | 8x16 font, `fb_draw_char(x, y, ch, color)` | [x] |
+| 28.6 | Text console on framebuffer | Scrolling text output using bitmap font | [x] |
+| 28.7 | Color palette | 16-color and 256-color palette support | [x] |
+| 28.8 | Double buffering | Back buffer + swap for flicker-free drawing | [x] |
+| 28.9 | Builtin: `fb_draw_text(x, y, text, color)` | Draw string on framebuffer | [x] |
+| 28.10 | Test: display operations | Draw shapes, text, verify framebuffer state | [x] |
 
 ---
 

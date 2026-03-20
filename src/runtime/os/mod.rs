@@ -19,6 +19,7 @@
 
 pub mod aarch64;
 pub mod bus;
+pub mod display;
 pub mod dma;
 pub mod gdt;
 pub mod hardware_ci;
@@ -27,6 +28,7 @@ pub mod intrinsics;
 pub mod irq;
 pub mod keyboard;
 pub mod memory;
+pub mod network;
 pub mod paging;
 pub mod pit;
 pub mod power;
@@ -35,7 +37,9 @@ pub mod serial;
 pub mod shell;
 pub mod syscall;
 pub mod timer;
+pub mod vfs;
 pub mod vga;
+pub mod virtio;
 
 pub use dma::{DmaController, DmaError};
 pub use gdt::{GdtError, GlobalDescriptorTable};

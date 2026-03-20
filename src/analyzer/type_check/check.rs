@@ -280,8 +280,7 @@ impl TypeChecker {
                 span,
             } => {
                 let val_type = self.check_expr(value);
-                let is_inferred =
-                    matches!(ty, TypeExpr::Simple { name, .. } if name == "_");
+                let is_inferred = matches!(ty, TypeExpr::Simple { name, .. } if name == "_");
                 let final_ty = if is_inferred {
                     val_type
                 } else {

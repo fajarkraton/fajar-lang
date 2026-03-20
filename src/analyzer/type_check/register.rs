@@ -1186,8 +1186,7 @@ impl TypeChecker {
                 }
             }
             Item::ConstDef(cdef) => {
-                let is_inferred =
-                    matches!(&cdef.ty, TypeExpr::Simple { name, .. } if name == "_");
+                let is_inferred = matches!(&cdef.ty, TypeExpr::Simple { name, .. } if name == "_");
                 let ty = if is_inferred {
                     self.check_expr(&cdef.value)
                 } else {
