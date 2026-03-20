@@ -563,6 +563,37 @@ impl TypeChecker {
             ("gpu_mul", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
             ("gpu_transpose", vec![dyn_t.clone()], dyn_t.clone()),
             ("gpu_sum", vec![dyn_t.clone()], Type::F64),
+            // Short aliases for common tensor ops (match interpreter builtins)
+            ("matmul", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
+            ("relu", vec![dyn_t.clone()], dyn_t.clone()),
+            ("sigmoid", vec![dyn_t.clone()], dyn_t.clone()),
+            ("tanh", vec![dyn_t.clone()], dyn_t.clone()),
+            ("softmax", vec![dyn_t.clone()], dyn_t.clone()),
+            ("gelu", vec![dyn_t.clone()], dyn_t.clone()),
+            ("argmax", vec![dyn_t.clone()], Type::I64),
+            (
+                "from_data",
+                vec![Type::Unknown, Type::I64, Type::I64],
+                dyn_t.clone(),
+            ),
+            ("transpose", vec![dyn_t.clone()], dyn_t.clone()),
+            ("reshape", vec![dyn_t.clone(), Type::Unknown], dyn_t.clone()),
+            ("flatten", vec![dyn_t.clone()], dyn_t.clone()),
+            ("eye", vec![Type::I64], dyn_t.clone()),
+            ("xavier", vec![Type::I64, Type::I64], dyn_t.clone()),
+            ("backward", vec![dyn_t.clone()], Type::Void),
+            ("grad", vec![dyn_t.clone()], dyn_t.clone()),
+            ("requires_grad", vec![dyn_t.clone()], Type::Void),
+            (
+                "mse_loss",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            (
+                "cross_entropy_loss",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
         ];
         for (name, params, ret) in ml_fns {
             self.symbols.define(Symbol {

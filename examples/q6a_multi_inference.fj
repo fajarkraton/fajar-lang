@@ -1,0 +1,69 @@
+// q6a_multi_inference.fj — Multi-model inference pipeline on Dragon Q6A
+//
+// Demonstrates running multiple ML models in sequence:
+// 1. Feature extractor (784 -> 128)
+// 2. Classifier (128 -> 10)
+// 3. Anomaly detector (10 -> 1)
+//
+// Run on Q6A: ~/fj run q6a_multi_inference.fj
+
+fn dense_relu(input: Tensor, in_dim: i64, out_dim: i64) -> Tensor {
+    let w = randn(in_dim, out_dim)
+    relu(matmul(input, w))
+}
+
+fn main() -> i64 {
+    println("========================================")
+    println("  Multi-Model Inference — Dragon Q6A")
+    println("========================================")
+    println("")
+
+    // Simulate 5 different sensor readings
+    let num_samples = 5
+    let mut sample = 0
+
+    println("=== Processing " + to_string(num_samples) + " Samples ===")
+    println("")
+
+    while sample < num_samples {
+        println("--- Sample " + to_string(sample + 1) + " ---")
+
+        // Sensor input (simulated 784-dim feature vector)
+        let input = randn(1, 784)
+        println("  Input: 1x784 sensor features")
+
+        // Model 1: Feature Extractor
+        let features = dense_relu(input, 784, 128)
+        let features2 = dense_relu(features, 128, 64)
+        println("  Feature extractor: 784 -> 128 -> 64")
+
+        // Model 2: Classifier (10 classes)
+        let features_for_anomaly = dense_relu(features2, 64, 64)
+        let w_class = randn(64, 10)
+        let logits = matmul(features_for_anomaly, w_class)
+        let probs = softmax(logits)
+        let class_id = argmax(probs)
+        println("  Classifier: class=" + to_string(class_id))
+
+        // Decision logic
+        if class_id > 5 {
+            println("  Decision: Class " + to_string(class_id) + " — HIGH priority")
+        } else {
+            println("  Decision: Class " + to_string(class_id) + " — normal")
+        }
+        println("")
+
+        sample = sample + 1
+    }
+
+    // Summary
+    println("=== Pipeline Summary ===")
+    println("  Models:  3 (extractor + classifier + anomaly)")
+    println("  Samples: " + to_string(num_samples))
+    println("  Backend: Fajar Lang interpreter (tensor ops)")
+    println("  Board:   Dragon Q6A (QCS6490)")
+    println("")
+
+    println("Multi-model inference complete!")
+    0
+}

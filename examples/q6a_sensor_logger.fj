@@ -1,0 +1,139 @@
+// q6a_sensor_logger.fj — Real-time sensor data logger for Dragon Q6A
+//
+// Reads actual hardware sensors and logs readings to a CSV file.
+// Samples every second for configurable number of readings.
+//
+// Run on Q6A: ~/fj run q6a_sensor_logger.fj
+// Output: /tmp/q6a_sensors.csv
+
+fn read_sysfs(path: str) -> str {
+    if file_exists(path) {
+        match read_file(path) {
+            Ok(content) => content.trim(),
+            Err(_) => ""
+        }
+    } else {
+        ""
+    }
+}
+
+fn read_temp(zone: str) -> i64 {
+    let raw = read_sysfs("/sys/class/thermal/thermal_zone" + zone + "/temp")
+    if raw == "" { return -1 }
+    match raw.parse_int() {
+        Ok(v) => v,
+        Err(_) => -1
+    }
+}
+
+fn read_meminfo_field(field: str) -> i64 {
+    let raw = read_sysfs("/proc/meminfo")
+    if raw == "" { return -1 }
+    let lines = raw.split("\n")
+    let mut result = -1
+    let mut i: usize = 0
+    while i < len(lines) {
+        if lines[i].contains(field) {
+            let parts = lines[i].split(":")
+            if len(parts) > 1 {
+                let val_str = parts[1].trim().split(" ")
+                if len(val_str) > 0 {
+                    result = match val_str[0].parse_int() {
+                        Ok(v) => v,
+                        Err(_) => -1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    result
+}
+
+fn read_loadavg() -> str {
+    let raw = read_sysfs("/proc/loadavg")
+    if raw == "" { return "0.0" }
+    let parts = raw.split(" ")
+    if len(parts) > 0 { parts[0] } else { "0.0" }
+}
+
+fn main() -> i64 {
+    let samples = 10
+    let interval_ms = 1000
+    let log_path = "/tmp/q6a_sensors.csv"
+
+    println("========================================")
+    println("  Dragon Q6A Sensor Logger")
+    println("  " + to_string(samples) + " samples @ 1s interval")
+    println("  Output: " + log_path)
+    println("========================================")
+    println("")
+
+    // Write CSV header
+    let header = "sample,cpu0_mc,cpu1_mc,gpu0_mc,gpu1_mc,npu0_mc,npu1_mc,ddr_mc,nvme_mc,mem_used_kb,load1m\n"
+    write_file(log_path, header)
+
+    let mut i = 0
+    while i < samples {
+        let cpu0 = read_temp("23")
+        let cpu1 = read_temp("6")
+        let gpu0 = read_temp("7")
+        let gpu1 = read_temp("8")
+        let npu0 = read_temp("9")
+        let npu1 = read_temp("10")
+        let ddr = read_temp("13")
+        let nvme = read_temp("20")
+
+        let mem_total = read_meminfo_field("MemTotal")
+        let mem_avail = read_meminfo_field("MemAvailable")
+        let mem_used = mem_total - mem_avail
+
+        let load = read_loadavg()
+
+        let line = to_string(i + 1) + ","
+            + to_string(cpu0) + ","
+            + to_string(cpu1) + ","
+            + to_string(gpu0) + ","
+            + to_string(gpu1) + ","
+            + to_string(npu0) + ","
+            + to_string(npu1) + ","
+            + to_string(ddr) + ","
+            + to_string(nvme) + ","
+            + to_string(mem_used) + ","
+            + load + "\n"
+
+        append_file(log_path, line)
+
+        let cpu_deg = cpu0 / 1000
+        let gpu_deg = gpu0 / 1000
+        let npu_deg = npu0 / 1000
+        let mem_mb = mem_used / 1024
+        println("  [" + to_string(i + 1) + "/" + to_string(samples) + "] "
+            + "CPU:" + to_string(cpu_deg) + "C "
+            + "GPU:" + to_string(gpu_deg) + "C "
+            + "NPU:" + to_string(npu_deg) + "C "
+            + "MEM:" + to_string(mem_mb) + "MB "
+            + "LOAD:" + load)
+
+        if i < samples - 1 {
+            sleep_ms(interval_ms)
+        }
+
+        i = i + 1
+    }
+
+    println("")
+    println("Logging complete. " + to_string(samples) + " samples written to " + log_path)
+
+    // Verify file
+    match read_file(log_path) {
+        Ok(csv) => {
+            let lines = csv.split("\n")
+            println("CSV lines: " + to_string(len(lines) - 1))
+        },
+        Err(_) => println("Could not read back CSV")
+    }
+    println("")
+    println("Done!")
+    0
+}

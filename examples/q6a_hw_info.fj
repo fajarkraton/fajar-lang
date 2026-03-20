@@ -1,0 +1,208 @@
+// q6a_hw_info.fj — Real hardware info reader for Dragon Q6A
+//
+// Reads ACTUAL hardware information from Linux sysfs/procfs.
+// No simulation — all data comes from real hardware!
+//
+// Run on Q6A: ~/fj run q6a_hw_info.fj
+
+fn read_sysfs(path: str) -> str {
+    if file_exists(path) {
+        match read_file(path) {
+            Ok(content) => content.trim(),
+            Err(_) => "N/A"
+        }
+    } else {
+        "N/A"
+    }
+}
+
+fn read_meminfo_kb(field: str) -> i64 {
+    let raw = read_sysfs("/proc/meminfo")
+    if raw == "N/A" { return -1 }
+    let lines = raw.split("\n")
+    let mut result = -1
+    let mut i: usize = 0
+    while i < len(lines) {
+        if lines[i].contains(field) {
+            let parts = lines[i].split(":")
+            if len(parts) > 1 {
+                let val_str = parts[1].trim().split(" ")
+                if len(val_str) > 0 {
+                    result = match val_str[0].parse_int() {
+                        Ok(v) => v,
+                        Err(_) => -1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    result
+}
+
+fn main() -> i64 {
+    println("==========================================")
+    println("  Dragon Q6A Hardware Information")
+    println("  Read from real hardware via sysfs")
+    println("==========================================")
+    println("")
+
+    // CPU info
+    println("=== CPU ===")
+    let cpuinfo_raw = read_sysfs("/proc/cpuinfo")
+    if cpuinfo_raw != "N/A" {
+        let lines = cpuinfo_raw.split("\n")
+        let mut cores = 0
+        let mut i: usize = 0
+        while i < len(lines) {
+            if lines[i].starts_with("processor") {
+                cores = cores + 1
+            }
+            i = i + 1
+        }
+        println("  Cores:     " + to_string(cores))
+    }
+
+    // CPU frequencies
+    let mut core = 0
+    while core < 8 {
+        let freq_path = "/sys/devices/system/cpu/cpu" + to_string(core) + "/cpufreq/scaling_cur_freq"
+        let freq_str = read_sysfs(freq_path)
+        if freq_str != "N/A" {
+            match freq_str.parse_int() {
+                Ok(freq_khz) => {
+                    let freq_mhz = freq_khz / 1000
+                    let cluster = if core < 4 { "A55" } else { "A78" }
+                    println("  CPU" + to_string(core) + " (" + cluster + "): " + to_string(freq_mhz) + " MHz")
+                },
+                Err(_) => println("  CPU" + to_string(core) + ": " + freq_str)
+            }
+        }
+        core = core + 1
+    }
+    println("")
+
+    // Memory
+    println("=== Memory ===")
+    let mem_total = read_meminfo_kb("MemTotal")
+    let mem_free = read_meminfo_kb("MemFree")
+    let mem_avail = read_meminfo_kb("MemAvailable")
+    let mem_buffers = read_meminfo_kb("Buffers")
+    let mem_cached = read_meminfo_kb("Cached")
+    let swap_total = read_meminfo_kb("SwapTotal")
+    let swap_free = read_meminfo_kb("SwapFree")
+
+    println("  Total:     " + to_string(mem_total / 1024) + " MB")
+    println("  Free:      " + to_string(mem_free / 1024) + " MB")
+    println("  Available: " + to_string(mem_avail / 1024) + " MB")
+    println("  Used:      " + to_string((mem_total - mem_avail) / 1024) + " MB")
+    println("  Buffers:   " + to_string(mem_buffers / 1024) + " MB")
+    println("  Cached:    " + to_string(mem_cached / 1024) + " MB")
+    println("  Swap:      " + to_string((swap_total - swap_free) / 1024) + "/" + to_string(swap_total / 1024) + " MB")
+    println("")
+
+    // Kernel
+    println("=== Kernel ===")
+    let kernel = read_sysfs("/proc/sys/kernel/osrelease")
+    let hostname = read_sysfs("/proc/sys/kernel/hostname")
+    println("  Version:   " + kernel)
+    println("  Hostname:  " + hostname)
+    println("")
+
+    // Uptime
+    println("=== Uptime ===")
+    let uptime_raw = read_sysfs("/proc/uptime")
+    if uptime_raw != "N/A" {
+        let parts = uptime_raw.split(" ")
+        if len(parts) > 0 {
+            let uptime_parts = parts[0].split(".")
+            if len(uptime_parts) > 0 {
+                match uptime_parts[0].parse_int() {
+                    Ok(secs) => {
+                        let days = secs / 86400
+                        let hours = (secs % 86400) / 3600
+                        let mins = (secs % 3600) / 60
+                        println("  Up: " + to_string(days) + "d " + to_string(hours) + "h " + to_string(mins) + "m")
+                    },
+                    Err(_) => println("  Up: " + parts[0] + " seconds")
+                }
+            }
+        }
+    }
+    println("")
+
+    // Load average
+    println("=== Load Average ===")
+    println("  " + read_sysfs("/proc/loadavg"))
+    println("")
+
+    // Thermal summary (zones > 60C)
+    println("=== Thermal (Zones > 60C) ===")
+    let mut zone = 0
+    while zone < 36 {
+        let zone_str = to_string(zone)
+        let temp_path = "/sys/class/thermal/thermal_zone" + zone_str + "/temp"
+        if file_exists(temp_path) {
+            let name = read_sysfs("/sys/class/thermal/thermal_zone" + zone_str + "/type")
+            let temp_raw = read_sysfs(temp_path)
+            match temp_raw.parse_int() {
+                Ok(mc) => {
+                    let deg = mc / 1000
+                    if deg > 60 {
+                        let mut padded = name
+                        while len(padded) < 20 {
+                            padded = padded + " "
+                        }
+                        println("  " + padded + to_string(deg) + " C")
+                    }
+                },
+                Err(_) => {}
+            }
+        }
+        zone = zone + 1
+    }
+    println("")
+
+    // GPIO
+    println("=== GPIO ===")
+    let mut chip = 0
+    while chip < 6 {
+        let chip_path = "/dev/gpiochip" + to_string(chip)
+        if file_exists(chip_path) {
+            println("  gpiochip" + to_string(chip) + ": available")
+        }
+        chip = chip + 1
+    }
+    println("")
+
+    // I2C
+    println("=== I2C Buses ===")
+    let buses = [0, 2, 6, 10, 13, 20]
+    let mut b: usize = 0
+    while b < len(buses) {
+        let bus_path = "/dev/i2c-" + to_string(buses[b])
+        if file_exists(bus_path) {
+            println("  i2c-" + to_string(buses[b]) + ": available")
+        }
+        b = b + 1
+    }
+    println("")
+
+    // NVMe
+    println("=== Storage ===")
+    println("  NVMe Model:    " + read_sysfs("/sys/class/nvme/nvme0/model"))
+    println("  NVMe Serial:   " + read_sysfs("/sys/class/nvme/nvme0/serial"))
+    println("  NVMe Firmware: " + read_sysfs("/sys/class/nvme/nvme0/firmware_rev"))
+    println("")
+
+    // RTC
+    println("=== RTC ===")
+    if file_exists("/dev/rtc0") {
+        println("  /dev/rtc0: available")
+        println("  Name: " + read_sysfs("/sys/class/rtc/rtc0/name"))
+    }
+    println("")
+
+    println("Hardware scan complete!")
+    0
+}

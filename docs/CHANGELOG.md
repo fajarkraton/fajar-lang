@@ -24,6 +24,12 @@ Kategori perubahan:
 - **`const` in function body** — `const SIZE: i64 = 4096 * 16` inside functions, with compile-time folding and immutability enforcement (SE007)
 - **Or-patterns in match** — `match x { 0 | 1 => "small", 2 | 3 | 4 => "medium", _ => "big" }`
 - **`Pattern::Or`** AST variant with parser, interpreter, analyzer, and formatter support
+- **Tensor short aliases** — `matmul()`, `relu()`, `sigmoid()`, `softmax()`, `argmax()`, `from_data()`, `transpose()`, `flatten()`, `xavier()`, `gelu()`, `mse_loss()`, `cross_entropy_loss()` now work in both interpreter and analyzer (alongside `tensor_*` prefixed names)
+- **Real hardware sensor monitoring** — `read_file()` + sysfs integration for 34 thermal zones on Q6A
+- **8 new Q6A examples** — thermal_monitor, sensor_logger, hw_info, gpio_input, qnn_benchmark, multi_inference, anomaly_sensor, deploy_demo
+- **Q6A GPIO pinout documentation** — `docs/Q6A_GPIO_PINOUT.md` with 6 GPIO chips, 6 I2C buses, 34 thermal zones
+- **OS driver modules** — VirtIO (virtio.rs), VFS (vfs.rs), Network (network.rs), Display (display.rs) — 40 tests
+- **Edge deployment patterns** — systemd service template, config management, health monitoring, crash recovery
 
 ### Added — FajarOS v3.1 "Surya Rising"
 - **16-PID priority scheduler** — IDLE(0), NORMAL(1), HIGH(2), REALTIME(3) with round-robin within same priority

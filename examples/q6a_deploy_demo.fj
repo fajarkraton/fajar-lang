@@ -1,0 +1,141 @@
+// q6a_deploy_demo.fj — Edge deployment demo for Dragon Q6A
+//
+// Demonstrates production deployment patterns:
+// - Health monitoring, config management, logging, crash recovery
+//
+// Run on Q6A: ~/fj run q6a_deploy_demo.fj
+
+fn read_sysfs(path: str) -> str {
+    if file_exists(path) {
+        match read_file(path) {
+            Ok(content) => content.trim(),
+            Err(_) => ""
+        }
+    } else {
+        ""
+    }
+}
+
+fn read_temp(zone: i64) -> i64 {
+    let raw = read_sysfs("/sys/class/thermal/thermal_zone" + to_string(zone) + "/temp")
+    if raw == "" { return -1 }
+    match raw.parse_int() {
+        Ok(v) => v / 1000,
+        Err(_) => -1
+    }
+}
+
+fn read_mem_avail_mb() -> i64 {
+    let raw = read_sysfs("/proc/meminfo")
+    if raw == "" { return -1 }
+    let lines = raw.split("\n")
+    let mut result = -1
+    let mut i: usize = 0
+    while i < len(lines) {
+        if lines[i].contains("MemAvailable") {
+            let parts = lines[i].split(":")
+            if len(parts) > 1 {
+                let val_str = parts[1].trim().split(" ")
+                if len(val_str) > 0 {
+                    result = match val_str[0].parse_int() {
+                        Ok(v) => v / 1024,
+                        Err(_) => -1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    result
+}
+
+fn health_check() -> str {
+    let cpu = read_temp(5)
+    let mem = read_mem_avail_mb()
+    if cpu > 85 { "critical" }
+    else if cpu > 75 { "warning" }
+    else if mem < 500 { "warning" }
+    else { "healthy" }
+}
+
+fn main() -> i64 {
+    println("========================================")
+    println("  Edge Deployment Demo — Dragon Q6A")
+    println("========================================")
+    println("")
+
+    // 1. Config
+    println("[1] Configuration")
+    let config = "service_name=fj-edge\ncheck_interval=5000\nmax_temp=85\nrestart_max=3\n"
+    write_file("/tmp/q6a_service.conf", config)
+    println("  Config: /tmp/q6a_service.conf (4 settings)")
+    println("")
+
+    // 2. Health check
+    println("[2] Health Check")
+    let status = health_check()
+    let cpu = read_temp(5)
+    let gpu = read_temp(16)
+    let mem = read_mem_avail_mb()
+    println("  Status: " + status)
+    println("  CPU: " + to_string(cpu) + "C  GPU: " + to_string(gpu) + "C  MEM: " + to_string(mem) + "MB")
+    println("")
+
+    // 3. Logging
+    println("[3] Sensor Logging")
+    write_file("/tmp/q6a_service.log", "ts,cpu,gpu,mem,status\n")
+    let mut cycle = 0
+    while cycle < 3 {
+        let c = read_temp(5)
+        let g = read_temp(16)
+        let m = read_mem_avail_mb()
+        let s = health_check()
+        let line = to_string(cycle) + "," + to_string(c) + "," + to_string(g) + "," + to_string(m) + "," + s + "\n"
+        append_file("/tmp/q6a_service.log", line)
+        println("  [" + to_string(cycle + 1) + "/3] CPU:" + to_string(c) + "C GPU:" + to_string(g) + "C MEM:" + to_string(m) + "MB " + s)
+        sleep_ms(1000)
+        cycle = cycle + 1
+    }
+    println("")
+
+    // 4. Crash recovery
+    println("[4] Crash Recovery Simulation")
+    let mut attempts = 0
+    let mut running = false
+    while !running {
+        attempts = attempts + 1
+        println("  Attempt " + to_string(attempts) + "...")
+        if attempts < 3 {
+            println("    CRASHED — backoff " + to_string(attempts * 500) + "ms")
+            sleep_ms(attempts * 500)
+        } else {
+            println("    STARTED successfully!")
+            running = true
+        }
+    }
+    println("")
+
+    // 5. Systemd template
+    println("[5] Systemd Service")
+    let unit = "[Unit]\nDescription=Fajar Lang Edge Service\nAfter=network.target\n\n[Service]\nExecStart=/home/radxa/fj run /opt/fj/service.fj\nRestart=on-failure\nRestartSec=5\nWatchdogSec=30\nMemoryMax=512M\n\n[Install]\nWantedBy=multi-user.target\n"
+    write_file("/tmp/fj-edge.service", unit)
+    println("  Written: /tmp/fj-edge.service")
+    println("  Install: sudo cp /tmp/fj-edge.service /etc/systemd/system/")
+    println("  Enable:  sudo systemctl enable --now fj-edge")
+    println("")
+
+    // 6. Resource summary
+    println("[6] Resource Summary")
+    let cpu2 = read_temp(5)
+    let gpu2 = read_temp(16)
+    let npu = read_temp(18)
+    let nvme = read_temp(20)
+    println("  CPU:  " + to_string(cpu2) + "C " + if cpu2 < 75 { "[OK]" } else { "[WARN]" })
+    println("  GPU:  " + to_string(gpu2) + "C " + if gpu2 < 75 { "[OK]" } else { "[WARN]" })
+    println("  NPU:  " + to_string(npu) + "C " + if npu < 75 { "[OK]" } else { "[WARN]" })
+    println("  NVMe: " + to_string(nvme) + "C " + if nvme < 65 { "[OK]" } else { "[WARN]" })
+    println("")
+
+    println("Edge deployment demo complete!")
+    0
+}

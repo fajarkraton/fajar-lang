@@ -1,0 +1,146 @@
+// q6a_thermal_monitor.fj — Real hardware thermal monitoring on Dragon Q6A
+//
+// Reads ACTUAL CPU/GPU/NPU/DDR temperatures from Linux sysfs.
+// No simulation — this is real hardware sensor data!
+//
+// Run on Q6A: ~/fj run q6a_thermal_monitor.fj
+// Run on x86: fj run examples/q6a_thermal_monitor.fj (reads host sensors)
+
+fn read_sysfs(path: str) -> str {
+    if file_exists(path) {
+        match read_file(path) {
+            Ok(content) => content.trim(),
+            Err(_) => ""
+        }
+    } else {
+        ""
+    }
+}
+
+fn read_temp(zone: str) -> i64 {
+    let path = "/sys/class/thermal/thermal_zone" + zone + "/temp"
+    let raw = read_sysfs(path)
+    if raw == "" {
+        return -1
+    }
+    match raw.parse_int() {
+        Ok(v) => v,
+        Err(_) => -1
+    }
+}
+
+fn read_zone_type(zone: str) -> str {
+    let path = "/sys/class/thermal/thermal_zone" + zone + "/type"
+    let raw = read_sysfs(path)
+    if raw == "" { "unknown" } else { raw }
+}
+
+fn format_temp(millideg: i64) -> str {
+    if millideg < 0 {
+        "N/A"
+    } else {
+        let deg = millideg / 1000
+        let frac = (millideg % 1000) / 100
+        to_string(deg) + "." + to_string(frac) + " C"
+    }
+}
+
+fn main() -> i64 {
+    println("========================================")
+    println("  Dragon Q6A Thermal Monitor")
+    println("  Real Hardware Sensor Data")
+    println("========================================")
+    println("")
+
+    let mut zone = 0
+    let mut max_temp = 0
+    let mut hottest = "none"
+    let mut count = 0
+
+    println("Zone  Type                  Temp")
+    println("----  ----                  ----")
+
+    while zone < 36 {
+        let zone_str = to_string(zone)
+        let path = "/sys/class/thermal/thermal_zone" + zone_str + "/temp"
+        if file_exists(path) {
+            let name = read_zone_type(zone_str)
+            let temp = read_temp(zone_str)
+            let temp_str = format_temp(temp)
+
+            let mut padded = name
+            while len(padded) < 22 {
+                padded = padded + " "
+            }
+
+            println("  " + to_string(zone) + "    " + padded + temp_str)
+
+            if temp > max_temp {
+                max_temp = temp
+                hottest = name
+            }
+            count = count + 1
+        }
+        zone = zone + 1
+    }
+
+    println("")
+    println("Total sensors: " + to_string(count))
+    println("Hottest zone:  " + hottest + " @ " + format_temp(max_temp))
+    println("")
+
+    // CPU cluster summary
+    println("=== CPU Cluster Summary ===")
+    let cpu0 = read_temp("23")
+    let cpu1 = read_temp("6")
+    let cpu2 = read_temp("29")
+    let cpu3 = read_temp("30")
+
+    println("  CPU0 (A55): " + format_temp(cpu0))
+    println("  CPU1 (A55): " + format_temp(cpu1))
+    println("  CPU2 (A78): " + format_temp(cpu2))
+    println("  CPU3 (A78): " + format_temp(cpu3))
+    println("")
+
+    // GPU temperature
+    println("=== GPU (Adreno 643) ===")
+    let gpu0 = read_temp("7")
+    let gpu1 = read_temp("8")
+    println("  GPU0: " + format_temp(gpu0))
+    println("  GPU1: " + format_temp(gpu1))
+    println("")
+
+    // NPU temperature
+    println("=== NPU (Hexagon 770) ===")
+    let nsp0 = read_temp("9")
+    let nsp1 = read_temp("10")
+    println("  NSP0: " + format_temp(nsp0))
+    println("  NSP1: " + format_temp(nsp1))
+    println("")
+
+    // DDR temperature
+    println("=== DDR Memory ===")
+    let ddr = read_temp("13")
+    println("  DDR:  " + format_temp(ddr))
+    println("")
+
+    // NVMe temperature
+    println("=== NVMe SSD ===")
+    let nvme = read_temp("20")
+    println("  NVMe: " + format_temp(nvme))
+    println("")
+
+    // Thermal status
+    let avg = max_temp / 1000
+    if avg > 80 {
+        println("WARNING: High temperature detected!")
+    } else if avg > 70 {
+        println("Status: WARM — consider improving airflow")
+    } else {
+        println("Status: OK — temperatures within normal range")
+    }
+
+    println("")
+    println("Monitor complete.")
+    0
+}

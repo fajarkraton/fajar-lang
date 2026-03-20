@@ -1,0 +1,111 @@
+// q6a_gpio_input.fj — GPIO input reading demo for Dragon Q6A
+//
+// Demonstrates GPIO input: reads pin state and responds.
+// Uses simulated GPIO with real board context.
+//
+// Hardware (if connected):
+//   Pin 13 (GPIO0) → Push button → GND
+//   Pin 11 (GPIO25) → 220Ω → LED → GND
+//
+// Run: ~/fj run q6a_gpio_input.fj
+
+fn main() -> i64 {
+    println("=== Dragon Q6A GPIO Input Demo ===")
+    println("")
+
+    // Q6A 40-pin header GPIO mapping
+    // gpiochip4, PIN_13=GPIO0, PIN_15=GPIO1, PIN_27=GPIO8, PIN_28=GPIO9
+
+    // Setup: LED output + button input
+    let led_pin = 25
+    let btn_pin = 0
+
+    gpio_open(led_pin)
+    gpio_set_direction(led_pin, "out")
+    println("LED pin " + to_string(led_pin) + " -> OUTPUT")
+
+    gpio_open(btn_pin)
+    gpio_set_direction(btn_pin, "in")
+    println("BTN pin " + to_string(btn_pin) + " -> INPUT")
+    println("")
+
+    // Poll button and control LED
+    println("=== Polling Button (5 cycles) ===")
+    let mut cycle = 0
+    while cycle < 5 {
+        let btn = gpio_read(btn_pin)
+        gpio_write(led_pin, btn)
+        let led = gpio_read(led_pin)
+
+        let btn_state = if btn == 1 { "PRESSED" } else { "released" }
+        let led_state = if led == 1 { "ON" } else { "off" }
+
+        println("  Cycle " + to_string(cycle + 1)
+            + ": BTN=" + btn_state
+            + " LED=" + led_state)
+
+        // Simulate button press on cycle 2 and 4
+        if cycle == 1 || cycle == 3 {
+            gpio_set_direction(btn_pin, "out")
+            gpio_write(btn_pin, 1)
+            gpio_set_direction(btn_pin, "in")
+        } else {
+            gpio_set_direction(btn_pin, "out")
+            gpio_write(btn_pin, 0)
+            gpio_set_direction(btn_pin, "in")
+        }
+
+        sleep_ms(200)
+        cycle = cycle + 1
+    }
+
+    println("")
+
+    // Debounce demo
+    println("=== Debounce Demo ===")
+    println("  Reading pin 3 times with 50ms delay...")
+    let mut reads = 0
+    let mut stable = 0
+    while reads < 3 {
+        let val = gpio_read(btn_pin)
+        println("  Read " + to_string(reads + 1) + ": " + to_string(val))
+        if val == 0 {
+            stable = stable + 1
+        }
+        sleep_ms(50)
+        reads = reads + 1
+    }
+    let debounced = if stable >= 2 { 0 } else { 1 }
+    println("  Debounced value: " + to_string(debounced))
+    println("")
+
+    // Edge detection concept
+    println("=== Edge Detection ===")
+    let mut prev = gpio_read(btn_pin)
+    println("  Initial state: " + to_string(prev))
+
+    // Simulate transitions
+    let transitions = [0, 1, 1, 0, 1, 0]
+    let mut t: usize = 0
+    while t < len(transitions) {
+        let curr = transitions[t]
+        gpio_set_direction(btn_pin, "out")
+        gpio_write(btn_pin, curr)
+        gpio_set_direction(btn_pin, "in")
+        let now = gpio_read(btn_pin)
+
+        if now != prev {
+            let edge = if now > prev { "RISING" } else { "FALLING" }
+            println("  " + edge + " edge at step " + to_string(t))
+        }
+        prev = now
+        t = t + 1
+    }
+    println("")
+
+    // Cleanup
+    gpio_close(led_pin)
+    gpio_close(btn_pin)
+    println("GPIO input demo complete!")
+    0
+}
