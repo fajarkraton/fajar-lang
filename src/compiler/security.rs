@@ -1422,11 +1422,11 @@ mod tests {
 
     #[test]
     fn s17_3_canary_generator_deterministic() {
-        let gen = CanaryGenerator::new(42);
-        let c1 = gen.generate_canary("main");
-        let c2 = gen.generate_canary("main");
+        let canary_gen = CanaryGenerator::new(42);
+        let c1 = canary_gen.generate_canary("main");
+        let c2 = canary_gen.generate_canary("main");
         assert_eq!(c1, c2, "same fn_name must produce same canary");
-        let c3 = gen.generate_canary("other");
+        let c3 = canary_gen.generate_canary("other");
         assert_ne!(c1, c3, "different fn_name should produce different canary");
     }
 

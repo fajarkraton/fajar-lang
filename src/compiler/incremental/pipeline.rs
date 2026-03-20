@@ -149,7 +149,7 @@ impl FileWatcher {
         let mut modified: Vec<String> = self
             .file_timestamps
             .iter()
-            .filter(|(_, &ts)| ts > since)
+            .filter(|(_, ts)| **ts > since)
             .map(|(path, _)| path.clone())
             .collect();
         modified.sort();

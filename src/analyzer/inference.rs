@@ -435,7 +435,7 @@ mod tests {
         let result = infer_type_args(&formal, &actual, &generics, span);
         assert!(matches!(
             result.as_ref().map_err(|e| e.as_ref()),
-            Err(InferError::Unbound { ref param, .. }) if param == "U"
+            Err(InferError::Unbound { param, .. }) if param == "U"
         ));
     }
 

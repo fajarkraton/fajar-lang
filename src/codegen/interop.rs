@@ -1746,8 +1746,8 @@ mod tests {
 
     #[test]
     fn s21_1_c_header_include_guard() {
-        let gen = CHeaderGenerator::new("sensor");
-        let header = gen.generate();
+        let hdr_gen = CHeaderGenerator::new("sensor");
+        let header = hdr_gen.generate();
         assert!(header.contains("#ifndef FJ_SENSOR_H"));
         assert!(header.contains("#define FJ_SENSOR_H"));
         assert!(header.contains("#endif /* FJ_SENSOR_H */"));
@@ -1755,24 +1755,24 @@ mod tests {
 
     #[test]
     fn s21_2_c_header_extern_c() {
-        let gen = CHeaderGenerator::new("test");
-        let header = gen.generate();
+        let hdr_gen = CHeaderGenerator::new("test");
+        let header = hdr_gen.generate();
         assert!(header.contains("#ifdef __cplusplus"));
         assert!(header.contains("extern \"C\" {"));
     }
 
     #[test]
     fn s21_3_c_header_stdint_include() {
-        let gen = CHeaderGenerator::new("test");
-        let header = gen.generate();
+        let hdr_gen = CHeaderGenerator::new("test");
+        let header = hdr_gen.generate();
         assert!(header.contains("#include <stdint.h>"));
         assert!(header.contains("#include <stdbool.h>"));
     }
 
     #[test]
     fn s21_4_c_struct_generation() {
-        let mut gen = CHeaderGenerator::new("data");
-        gen.add_struct(CStructDef {
+        let mut hdr_gen = CHeaderGenerator::new("data");
+        hdr_gen.add_struct(CStructDef {
             name: "Point".to_string(),
             fields: vec![
                 ("x".to_string(), CType::Double),
@@ -1781,7 +1781,7 @@ mod tests {
             packed: false,
             doc_comment: Some("A 2D point.".to_string()),
         });
-        let header = gen.generate();
+        let header = hdr_gen.generate();
         assert!(header.contains("struct Point {"));
         assert!(header.contains("double x;"));
         assert!(header.contains("double y;"));
@@ -1791,8 +1791,8 @@ mod tests {
 
     #[test]
     fn s21_5_c_packed_struct() {
-        let mut gen = CHeaderGenerator::new("hw");
-        gen.add_struct(CStructDef {
+        let mut hdr_gen = CHeaderGenerator::new("hw");
+        hdr_gen.add_struct(CStructDef {
             name: "Register".to_string(),
             fields: vec![
                 ("status".to_string(), CType::UInt8),
@@ -1801,14 +1801,14 @@ mod tests {
             packed: true,
             doc_comment: None,
         });
-        let header = gen.generate();
+        let header = hdr_gen.generate();
         assert!(header.contains("__attribute__((packed))"));
     }
 
     #[test]
     fn s21_6_c_enum_generation() {
-        let mut gen = CHeaderGenerator::new("color");
-        gen.add_enum(CEnumDef {
+        let mut hdr_gen = CHeaderGenerator::new("color");
+        hdr_gen.add_enum(CEnumDef {
             name: "Color".to_string(),
             variants: vec![
                 ("COLOR_RED".to_string(), Some(0)),
@@ -1817,7 +1817,7 @@ mod tests {
             ],
             doc_comment: None,
         });
-        let header = gen.generate();
+        let header = hdr_gen.generate();
         assert!(header.contains("typedef enum Color {"));
         assert!(header.contains("COLOR_RED = 0"));
         assert!(header.contains("COLOR_GREEN = 1"));
@@ -1827,8 +1827,8 @@ mod tests {
 
     #[test]
     fn s21_7_c_function_declaration() {
-        let mut gen = CHeaderGenerator::new("math");
-        gen.add_function(CFunctionDecl {
+        let mut hdr_gen = CHeaderGenerator::new("math");
+        hdr_gen.add_function(CFunctionDecl {
             name: "fj_add".to_string(),
             return_type: CType::Int32,
             params: vec![
@@ -1838,22 +1838,22 @@ mod tests {
             doc_comment: Some("Adds two integers.".to_string()),
             is_variadic: false,
         });
-        let header = gen.generate();
+        let header = hdr_gen.generate();
         assert!(header.contains("int32_t fj_add(int32_t a, int32_t b);"));
         assert!(header.contains("Adds two integers."));
     }
 
     #[test]
     fn s21_8_c_variadic_function() {
-        let mut gen = CHeaderGenerator::new("log");
-        gen.add_function(CFunctionDecl {
+        let mut hdr_gen = CHeaderGenerator::new("log");
+        hdr_gen.add_function(CFunctionDecl {
             name: "fj_printf".to_string(),
             return_type: CType::Void,
             params: vec![("fmt".to_string(), CType::CharPtr)],
             doc_comment: None,
             is_variadic: true,
         });
-        let header = gen.generate();
+        let header = hdr_gen.generate();
         assert!(header.contains("void fj_printf(const char* fmt, ...);"));
     }
 
@@ -1878,8 +1878,8 @@ mod tests {
 
     #[test]
     fn s22_1_py_module_header() {
-        let gen = PyBindgenGenerator::new("fj_math");
-        let init = gen.generate_init_py();
+        let py_gen = PyBindgenGenerator::new("fj_math");
+        let init = py_gen.generate_init_py();
         assert!(init.contains("Auto-generated Python bindings"));
         assert!(init.contains("fj_math"));
         assert!(init.contains("from typing import Optional, List, Dict, Tuple"));
@@ -1887,8 +1887,8 @@ mod tests {
 
     #[test]
     fn s22_2_py_class_generation() {
-        let mut gen = PyBindgenGenerator::new("shapes");
-        gen.add_class(PyClassDef {
+        let mut py_gen = PyBindgenGenerator::new("shapes");
+        py_gen.add_class(PyClassDef {
             name: "Circle".to_string(),
             fields: vec![("radius".to_string(), PyType::Float)],
             methods: vec![PyFunctionDef {
@@ -1900,7 +1900,7 @@ mod tests {
             doc_comment: Some("A circle shape.".to_string()),
             bases: vec![],
         });
-        let init = gen.generate_init_py();
+        let init = py_gen.generate_init_py();
         assert!(init.contains("class Circle:"));
         assert!(init.contains("\"\"\"A circle shape.\"\"\""));
         assert!(init.contains("def __init__(self, radius: float):"));
@@ -1910,8 +1910,8 @@ mod tests {
 
     #[test]
     fn s22_3_py_enum_generation() {
-        let mut gen = PyBindgenGenerator::new("colors");
-        gen.add_enum(PyEnumDef {
+        let mut py_gen = PyBindgenGenerator::new("colors");
+        py_gen.add_enum(PyEnumDef {
             name: "Color".to_string(),
             variants: vec![
                 ("Red".to_string(), None),
@@ -1919,7 +1919,7 @@ mod tests {
                 ("Blue".to_string(), None),
             ],
         });
-        let init = gen.generate_init_py();
+        let init = py_gen.generate_init_py();
         assert!(init.contains("class Color:"));
         assert!(init.contains("Red = 0"));
         assert!(init.contains("Green = 1"));
@@ -1928,8 +1928,8 @@ mod tests {
 
     #[test]
     fn s22_4_py_function_generation() {
-        let mut gen = PyBindgenGenerator::new("math");
-        gen.add_function(PyFunctionDef {
+        let mut py_gen = PyBindgenGenerator::new("math");
+        py_gen.add_function(PyFunctionDef {
             name: "add".to_string(),
             params: vec![
                 ("a".to_string(), PyType::Int),
@@ -1938,21 +1938,21 @@ mod tests {
             return_type: PyType::Int,
             doc_comment: Some("Add two integers.".to_string()),
         });
-        let init = gen.generate_init_py();
+        let init = py_gen.generate_init_py();
         assert!(init.contains("def add(a: int, b: int) -> int:"));
         assert!(init.contains("\"\"\"Add two integers.\"\"\""));
     }
 
     #[test]
     fn s22_5_py_ndarray_import() {
-        let mut gen = PyBindgenGenerator::new("ml");
-        gen.add_function(PyFunctionDef {
+        let mut py_gen = PyBindgenGenerator::new("ml");
+        py_gen.add_function(PyFunctionDef {
             name: "predict".to_string(),
             params: vec![("x".to_string(), PyType::NdArray)],
             return_type: PyType::NdArray,
             doc_comment: None,
         });
-        let init = gen.generate_init_py();
+        let init = py_gen.generate_init_py();
         assert!(init.contains("import numpy as np"));
     }
 
@@ -1975,28 +1975,28 @@ mod tests {
 
     #[test]
     fn s22_8_py_pyi_stubs() {
-        let mut gen = PyBindgenGenerator::new("test");
-        gen.add_function(PyFunctionDef {
+        let mut py_gen = PyBindgenGenerator::new("test");
+        py_gen.add_function(PyFunctionDef {
             name: "greet".to_string(),
             params: vec![("name".to_string(), PyType::Str)],
             return_type: PyType::Str,
             doc_comment: None,
         });
-        let stubs = gen.generate_pyi_stubs();
+        let stubs = py_gen.generate_pyi_stubs();
         assert!(stubs.contains("def greet(name: str) -> str: ..."));
     }
 
     #[test]
     fn s22_9_py_class_inheritance() {
-        let mut gen = PyBindgenGenerator::new("shapes");
-        gen.add_class(PyClassDef {
+        let mut py_gen = PyBindgenGenerator::new("shapes");
+        py_gen.add_class(PyClassDef {
             name: "Square".to_string(),
             fields: vec![("side".to_string(), PyType::Float)],
             methods: vec![],
             doc_comment: None,
             bases: vec!["Shape".to_string()],
         });
-        let init = gen.generate_init_py();
+        let init = py_gen.generate_init_py();
         assert!(init.contains("class Square(Shape):"));
     }
 
@@ -2011,8 +2011,8 @@ mod tests {
 
     #[test]
     fn s23_1_wit_interface_generation() {
-        let mut gen = WitGenerator::new("math-ops");
-        gen.add_function(WitFunction {
+        let mut wit_gen = WitGenerator::new("math-ops");
+        wit_gen.add_function(WitFunction {
             name: "add".to_string(),
             params: vec![
                 ("a".to_string(), WitType::S32),
@@ -2020,7 +2020,7 @@ mod tests {
             ],
             results: vec![WitType::S32],
         });
-        let wit = gen.generate_wit();
+        let wit = wit_gen.generate_wit();
         assert!(wit.contains("interface math-ops {"));
         assert!(wit.contains("add: func(a: s32, b: s32) -> s32;"));
         assert!(wit.contains("}"));
@@ -2028,15 +2028,15 @@ mod tests {
 
     #[test]
     fn s23_2_wit_record_type() {
-        let mut gen = WitGenerator::new("geometry");
-        gen.add_type(WitTypeDef {
+        let mut wit_gen = WitGenerator::new("geometry");
+        wit_gen.add_type(WitTypeDef {
             name: "point".to_string(),
             kind: WitType::Record(vec![
                 ("x".to_string(), WitType::F64),
                 ("y".to_string(), WitType::F64),
             ]),
         });
-        let wit = gen.generate_wit();
+        let wit = wit_gen.generate_wit();
         assert!(wit.contains("record point {"));
         assert!(wit.contains("x: f64,"));
         assert!(wit.contains("y: f64,"));
@@ -2044,8 +2044,8 @@ mod tests {
 
     #[test]
     fn s23_3_wit_variant_type() {
-        let mut gen = WitGenerator::new("shapes");
-        gen.add_type(WitTypeDef {
+        let mut wit_gen = WitGenerator::new("shapes");
+        wit_gen.add_type(WitTypeDef {
             name: "shape".to_string(),
             kind: WitType::Variant(vec![
                 ("circle".to_string(), Some(WitType::F64)),
@@ -2053,7 +2053,7 @@ mod tests {
                 ("none".to_string(), None),
             ]),
         });
-        let wit = gen.generate_wit();
+        let wit = wit_gen.generate_wit();
         assert!(wit.contains("variant shape {"));
         assert!(wit.contains("circle(f64),"));
         assert!(wit.contains("none,"));
@@ -2061,8 +2061,8 @@ mod tests {
 
     #[test]
     fn s23_4_wit_world_generation() {
-        let gen = WitGenerator::new("api");
-        let world = gen.generate_world("my-app");
+        let wit_gen = WitGenerator::new("api");
+        let world = wit_gen.generate_world("my-app");
         assert!(world.contains("world my-app {"));
         assert!(world.contains("export api;"));
     }

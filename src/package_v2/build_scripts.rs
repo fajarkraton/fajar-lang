@@ -418,9 +418,9 @@ mod tests {
     // S22.4 — Code Generation
     #[test]
     fn s22_4_generate_source() {
-        let gen = generate_source("generated.fj", "const VERSION: str = \"1.0\"");
-        assert_eq!(gen.path, "generated.fj");
-        assert!(gen.content.contains("VERSION"));
+        let generated = generate_source("generated.fj", "const VERSION: str = \"1.0\"");
+        assert_eq!(generated.path, "generated.fj");
+        assert!(generated.content.contains("VERSION"));
     }
 
     // S22.5 — Rerun Triggers

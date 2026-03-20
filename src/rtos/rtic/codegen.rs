@@ -451,8 +451,8 @@ fn generate_trampolines(app: &RticApp) -> Vec<IsrTrampoline> {
 fn generate_locks(ceilings: &HashMap<String, u8>) -> Vec<BasepriLock> {
     let mut locks: Vec<BasepriLock> = ceilings
         .iter()
-        .filter(|(_, &ceil)| ceil > 0)
-        .map(|(name, &ceil)| BasepriLock::new(name, ceil))
+        .filter(|(_, ceil)| **ceil > 0)
+        .map(|(name, ceil)| BasepriLock::new(name, *ceil))
         .collect();
     locks.sort_by(|a, b| a.resource.cmp(&b.resource));
     locks

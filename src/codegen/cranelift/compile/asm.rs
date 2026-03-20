@@ -179,12 +179,12 @@ pub(crate) fn compile_inline_asm<M: Module>(
                 let a = input_vals[0];
                 let b = input_vals[1];
                 // Write b to first output, a to second output
-                if let Some(Some(ref name)) = out_names.first() {
+                if let Some(Some(name)) = out_names.first() {
                     if let Some(&var) = cx.var_map.get(name) {
                         builder.def_var(var, b);
                     }
                 }
-                if let Some(Some(ref name)) = out_names.get(1) {
+                if let Some(Some(name)) = out_names.get(1) {
                     if let Some(&var) = cx.var_map.get(name) {
                         builder.def_var(var, a);
                     }

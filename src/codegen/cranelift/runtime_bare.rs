@@ -42,7 +42,7 @@ static HEAP_END: AtomicU64 = AtomicU64::new(0x4600_0000); // 64MB default
 ///
 /// # Safety
 /// Caller must ensure `dst` and `src` are valid, non-overlapping pointers.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_memcpy(dst: *mut u8, src: *const u8, n: i64) -> *mut u8 {
     if dst.is_null() || src.is_null() || n <= 0 {
         return dst;
@@ -77,7 +77,7 @@ pub extern "C" fn fj_rt_bare_memcpy(dst: *mut u8, src: *const u8, n: i64) -> *mu
 ///
 /// # Safety
 /// Caller must ensure `dst` is a valid pointer.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_memset(dst: *mut u8, val: i64, n: i64) -> *mut u8 {
     if dst.is_null() || n <= 0 {
         return dst;
@@ -115,7 +115,7 @@ pub extern "C" fn fj_rt_bare_memset(dst: *mut u8, val: i64, n: i64) -> *mut u8 {
 
 /// Bare-metal memcmp: compare `n` bytes at `a` and `b`.
 /// Returns 0 if equal, <0 if a<b, >0 if a>b.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_memcmp(a: *const u8, b: *const u8, n: i64) -> i64 {
     if n <= 0 {
         return 0;
@@ -146,7 +146,7 @@ fn uart_putc(c: u8) {
 }
 
 /// Bare-metal print: write `len` bytes from `ptr` to UART.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_print(ptr: *const u8, len: i64) {
     if ptr.is_null() || len <= 0 {
         return;
@@ -157,14 +157,14 @@ pub extern "C" fn fj_rt_bare_print(ptr: *const u8, len: i64) {
 }
 
 /// Bare-metal println: write `len` bytes + newline to UART.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_println(ptr: *const u8, len: i64) {
     fj_rt_bare_print(ptr, len);
     uart_putc(b'\n');
 }
 
 /// Bare-metal print integer to UART.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_print_i64(val: i64) {
     if val == 0 {
         uart_putc(b'0');
@@ -199,7 +199,7 @@ pub extern "C" fn fj_rt_bare_print_i64(val: i64) {
 }
 
 /// Set the UART base address (for switching from QEMU to QCS6490).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_set_uart_base(addr: u64) {
     UART_BASE.store(addr, Ordering::Relaxed);
 }
@@ -209,7 +209,7 @@ pub extern "C" fn fj_rt_bare_set_uart_base(addr: u64) {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Bare-metal panic: print "PANIC" + halt CPU in WFE loop.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_panic() {
     let msg = b"PANIC: kernel halt\n";
     fj_rt_bare_print(msg.as_ptr(), msg.len() as i64);
@@ -217,7 +217,7 @@ pub extern "C" fn fj_rt_bare_panic() {
 }
 
 /// Halt the CPU in an infinite WFE (wait-for-event) loop.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_halt() {
     loop {
         // On real hardware, this would be `wfe` instruction.
@@ -231,7 +231,7 @@ pub extern "C" fn fj_rt_bare_halt() {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Initialize the bump allocator with heap base and size.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_heap_init(base: u64, size: u64) {
     HEAP_BASE.store(base, Ordering::Relaxed);
     HEAP_END.store(base + size, Ordering::Relaxed);
@@ -240,7 +240,7 @@ pub extern "C" fn fj_rt_bare_heap_init(base: u64, size: u64) {
 
 /// Bump allocator: allocate `size` bytes aligned to 8 bytes.
 /// Returns pointer to allocated memory, or 0 (null) if OOM.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_alloc(size: i64) -> u64 {
     if size <= 0 {
         return 0;
@@ -257,13 +257,13 @@ pub extern "C" fn fj_rt_bare_alloc(size: i64) -> u64 {
 }
 
 /// Free: no-op for bump allocator. Full freelist allocator in Sprint 5.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_free(_ptr: u64, _size: i64) {
     // No-op: bump allocator doesn't support individual frees
 }
 
 /// Returns the current heap usage in bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_heap_used() -> u64 {
     let base = HEAP_BASE.load(Ordering::Relaxed);
     let ptr = BUMP_PTR.load(Ordering::Relaxed);
@@ -297,7 +297,7 @@ static GPIO_PULLS: [AtomicU64; GPIO_MAX_PINS] = {
 
 /// Configure a GPIO pin: function, direction, pull.
 /// Returns 0 on success, -1 on invalid pin.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_config(pin: i64, func: i64, output: i64, pull: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -310,7 +310,7 @@ pub extern "C" fn fj_rt_bare_gpio_config(pin: i64, func: i64, output: i64, pull:
 }
 
 /// Set a GPIO pin as output.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_set_output(pin: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -320,7 +320,7 @@ pub extern "C" fn fj_rt_bare_gpio_set_output(pin: i64) -> i64 {
 }
 
 /// Set a GPIO pin as input.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_set_input(pin: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -330,7 +330,7 @@ pub extern "C" fn fj_rt_bare_gpio_set_input(pin: i64) -> i64 {
 }
 
 /// Write a value (0 or 1) to a GPIO output pin.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_write(pin: i64, value: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -340,7 +340,7 @@ pub extern "C" fn fj_rt_bare_gpio_write(pin: i64, value: i64) -> i64 {
 }
 
 /// Read the current value of a GPIO pin. Returns 0 or 1, or -1 on error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_read(pin: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -349,7 +349,7 @@ pub extern "C" fn fj_rt_bare_gpio_read(pin: i64) -> i64 {
 }
 
 /// Toggle a GPIO output pin.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_toggle(pin: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -361,7 +361,7 @@ pub extern "C" fn fj_rt_bare_gpio_toggle(pin: i64) -> i64 {
 }
 
 /// Set pull resistor: 0=none, 1=pull-down, 2=pull-up.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_set_pull(pin: i64, pull: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -371,7 +371,7 @@ pub extern "C" fn fj_rt_bare_gpio_set_pull(pin: i64, pull: i64) -> i64 {
 }
 
 /// Configure GPIO interrupt edge trigger: 0=none, 1=rising, 2=falling, 3=both.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_gpio_set_irq(pin: i64, _edge: i64) -> i64 {
     if pin < 0 || pin as usize >= GPIO_MAX_PINS {
         return -1;
@@ -406,7 +406,7 @@ static UART_BASES: [AtomicU64; UART_MAX_PORTS] = {
 };
 
 /// Initialize a UART port with baud rate. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_init(port: i64, baud: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS || baud <= 0 {
         return -1;
@@ -422,7 +422,7 @@ pub extern "C" fn fj_rt_bare_uart_init(port: i64, baud: i64) -> i64 {
 }
 
 /// Write a single byte to a UART port. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_write_byte(port: i64, byte: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS {
         return -1;
@@ -436,7 +436,7 @@ pub extern "C" fn fj_rt_bare_uart_write_byte(port: i64, byte: i64) -> i64 {
 }
 
 /// Read a single byte from a UART port. Returns byte value, or -1 if none available.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_read_byte(port: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS {
         return -1;
@@ -455,7 +455,7 @@ pub extern "C" fn fj_rt_bare_uart_read_byte(port: i64) -> i64 {
 }
 
 /// Write a buffer to a UART port. Returns number of bytes written.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_write_buf(port: i64, ptr: *const u8, len: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS || ptr.is_null() || len <= 0 {
         return 0;
@@ -473,7 +473,7 @@ pub extern "C" fn fj_rt_bare_uart_write_buf(port: i64, ptr: *const u8, len: i64)
 }
 
 /// Read up to `max_len` bytes from UART into buffer. Returns bytes read.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_read_buf(port: i64, ptr: *mut u8, max_len: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS || ptr.is_null() || max_len <= 0 {
         return 0;
@@ -496,7 +496,7 @@ pub extern "C" fn fj_rt_bare_uart_read_buf(port: i64, ptr: *mut u8, max_len: i64
 }
 
 /// Check bytes available in UART RX. Returns count or 0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_available(port: i64) -> i64 {
     if port < 0 || port as usize >= UART_MAX_PORTS {
         return 0;
@@ -515,7 +515,7 @@ pub extern "C" fn fj_rt_bare_uart_available(port: i64) -> i64 {
 }
 
 /// Set the MMIO base address for a UART port.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_uart_set_base(port: i64, addr: u64) {
     if port >= 0 && (port as usize) < UART_MAX_PORTS {
         UART_BASES[port as usize].store(addr, Ordering::Relaxed);
@@ -548,7 +548,7 @@ static SPI_CS: [AtomicU64; SPI_MAX_BUSES] = {
 };
 
 /// Initialize SPI bus. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_spi_init(bus: i64, clock_hz: i64) -> i64 {
     if bus < 0 || bus as usize >= SPI_MAX_BUSES || clock_hz <= 0 {
         return -1;
@@ -559,7 +559,7 @@ pub extern "C" fn fj_rt_bare_spi_init(bus: i64, clock_hz: i64) -> i64 {
 
 /// Full-duplex SPI transfer: send `tx_byte`, return received byte.
 /// In simulation mode, loopback: previous TX becomes current RX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_spi_transfer(bus: i64, tx_byte: i64) -> i64 {
     if bus < 0 || bus as usize >= SPI_MAX_BUSES {
         return -1;
@@ -574,7 +574,7 @@ pub extern "C" fn fj_rt_bare_spi_transfer(bus: i64, tx_byte: i64) -> i64 {
 }
 
 /// Assert or deassert chip select. active=1 means CS asserted (low).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_spi_cs_set(bus: i64, _cs: i64, active: i64) -> i64 {
     if bus < 0 || bus as usize >= SPI_MAX_BUSES {
         return -1;
@@ -604,7 +604,7 @@ static I2C_INIT: [AtomicU64; I2C_MAX_BUSES] = {
 };
 
 /// Initialize I2C bus with clock speed. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_i2c_init(bus: i64, clock_hz: i64) -> i64 {
     if bus < 0 || bus as usize >= I2C_MAX_BUSES || clock_hz <= 0 {
         return -1;
@@ -614,7 +614,7 @@ pub extern "C" fn fj_rt_bare_i2c_init(bus: i64, clock_hz: i64) -> i64 {
 }
 
 /// Write data to I2C device. Returns 0 on success, -1 on NACK/error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_i2c_write(bus: i64, addr: i64, ptr: *const u8, len: i64) -> i64 {
     if bus < 0 || bus as usize >= I2C_MAX_BUSES || addr < 0 || addr > 127 {
         return -1;
@@ -636,7 +636,7 @@ pub extern "C" fn fj_rt_bare_i2c_write(bus: i64, addr: i64, ptr: *const u8, len:
 }
 
 /// Read data from I2C device. Returns bytes read, or -1 on error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_i2c_read(bus: i64, addr: i64, ptr: *mut u8, len: i64) -> i64 {
     if bus < 0 || bus as usize >= I2C_MAX_BUSES || addr < 0 || addr > 127 {
         return -1;
@@ -661,7 +661,7 @@ pub extern "C" fn fj_rt_bare_i2c_read(bus: i64, addr: i64, ptr: *mut u8, len: i6
 }
 
 /// Combined write-then-read I2C transaction. Returns bytes read, or -1 on error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_i2c_write_read(
     bus: i64,
     addr: i64,
@@ -689,20 +689,20 @@ static SIM_FREQ: AtomicU64 = AtomicU64::new(62_500_000); // 62.5 MHz (QEMU defau
 static BOOT_TICKS: AtomicU64 = AtomicU64::new(0);
 
 /// Get current timer ticks. On host: simulated counter. On bare-metal: CNTPCT_EL0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_get_ticks() -> i64 {
     // In hosted mode, use simulated ticks
     SIM_TICKS.fetch_add(1, Ordering::Relaxed) as i64
 }
 
 /// Get timer frequency in Hz. Returns ticks per second.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_get_freq() -> i64 {
     SIM_FREQ.load(Ordering::Relaxed) as i64
 }
 
 /// Set absolute deadline for virtual timer (CNTV_CVAL_EL0 on bare-metal).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_set_deadline(ticks: i64) {
     // Simulation: just store the deadline (no real interrupt)
     static DEADLINE: AtomicU64 = AtomicU64::new(0);
@@ -710,19 +710,19 @@ pub extern "C" fn fj_rt_bare_timer_set_deadline(ticks: i64) {
 }
 
 /// Enable virtual timer (CNTV_CTL_EL0.ENABLE=1, IMASK=0).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_enable_virtual() {
     // Simulation: no-op (bare-metal assembly stub does the real work)
 }
 
 /// Disable virtual timer.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_disable_virtual() {
     // Simulation: no-op
 }
 
 /// Sleep for `ms` milliseconds. On host: thread::sleep. On bare-metal: busy-wait.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sleep_ms(ms: i64) {
     if ms <= 0 {
         return;
@@ -744,7 +744,7 @@ pub extern "C" fn fj_rt_bare_sleep_ms(ms: i64) {
 }
 
 /// Sleep for `us` microseconds.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sleep_us(us: i64) {
     if us <= 0 {
         return;
@@ -765,7 +765,7 @@ pub extern "C" fn fj_rt_bare_sleep_us(us: i64) {
 }
 
 /// Return milliseconds since boot.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_time_since_boot() -> i64 {
     let current = SIM_TICKS.load(Ordering::Relaxed);
     let boot = BOOT_TICKS.load(Ordering::Relaxed);
@@ -777,7 +777,7 @@ pub extern "C" fn fj_rt_bare_time_since_boot() -> i64 {
 }
 
 /// Mark current time as boot time (call once at startup).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_timer_mark_boot() {
     let ticks = SIM_TICKS.load(Ordering::Relaxed);
     BOOT_TICKS.store(ticks, Ordering::Relaxed);
@@ -815,7 +815,7 @@ static DMA_LEN: [AtomicU64; DMA_MAX_CHANNELS] = {
 };
 
 /// Allocate a physically contiguous DMA buffer. Returns address or 0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_alloc(size: i64) -> u64 {
     // Use the bump allocator for DMA buffers (aligned to 64 bytes for cache lines)
     if size <= 0 {
@@ -832,13 +832,13 @@ pub extern "C" fn fj_rt_bare_dma_alloc(size: i64) -> u64 {
 }
 
 /// Free a DMA buffer (no-op for bump allocator).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_free(_ptr: u64, _size: i64) {
     // No-op: bump allocator doesn't support individual frees
 }
 
 /// Configure DMA channel: source, destination, length.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_config(channel: i64, src: u64, dst: u64, len: i64) -> i64 {
     if channel < 0 || channel as usize >= DMA_MAX_CHANNELS || len <= 0 {
         return -1;
@@ -852,7 +852,7 @@ pub extern "C" fn fj_rt_bare_dma_config(channel: i64, src: u64, dst: u64, len: i
 }
 
 /// Start DMA transfer. In simulation: immediate memcpy.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_start(channel: i64) -> i64 {
     if channel < 0 || channel as usize >= DMA_MAX_CHANNELS {
         return -1;
@@ -877,7 +877,7 @@ pub extern "C" fn fj_rt_bare_dma_start(channel: i64) -> i64 {
 }
 
 /// Wait for DMA transfer completion. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_wait(channel: i64) -> i64 {
     if channel < 0 || channel as usize >= DMA_MAX_CHANNELS {
         return -1;
@@ -892,7 +892,7 @@ pub extern "C" fn fj_rt_bare_dma_wait(channel: i64) -> i64 {
 }
 
 /// Get DMA channel status: 0=idle, 1=configured, 2=running, 3=done.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_status(channel: i64) -> i64 {
     if channel < 0 || channel as usize >= DMA_MAX_CHANNELS {
         return -1;
@@ -901,7 +901,7 @@ pub extern "C" fn fj_rt_bare_dma_status(channel: i64) -> i64 {
 }
 
 /// DMA memory barrier: cache flush/invalidate.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_dma_barrier() {
     // Host: atomic fence. Bare-metal: dc civac loop + dsb (assembly stub).
     std::sync::atomic::fence(Ordering::SeqCst);
@@ -917,14 +917,14 @@ const BLOCK_COUNT: usize = 2048;
 static BLOCK_DEV_INIT: AtomicU64 = AtomicU64::new(0);
 
 /// Initialize NVMe block device. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_nvme_init() -> i64 {
     BLOCK_DEV_INIT.store(1, Ordering::Relaxed);
     0
 }
 
 /// Read `count` blocks starting at `lba` into buffer. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_nvme_read(lba: i64, count: i64, buf: *mut u8) -> i64 {
     if buf.is_null() || lba < 0 || count <= 0 {
         return -1;
@@ -941,7 +941,7 @@ pub extern "C" fn fj_rt_bare_nvme_read(lba: i64, count: i64, buf: *mut u8) -> i6
 }
 
 /// Write `count` blocks starting at `lba` from buffer. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_nvme_write(lba: i64, count: i64, buf: *const u8) -> i64 {
     if buf.is_null() || lba < 0 || count <= 0 {
         return -1;
@@ -954,19 +954,19 @@ pub extern "C" fn fj_rt_bare_nvme_write(lba: i64, count: i64, buf: *const u8) ->
 }
 
 /// Initialize SD/eMMC block device. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sd_init() -> i64 {
     0
 }
 
 /// Read single block from SD at `lba`. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sd_read_block(lba: i64, buf: *mut u8) -> i64 {
     fj_rt_bare_nvme_read(lba, 1, buf)
 }
 
 /// Write single block to SD at `lba`. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sd_write_block(lba: i64, buf: *const u8) -> i64 {
     fj_rt_bare_nvme_write(lba, 1, buf)
 }
@@ -988,13 +988,13 @@ static VFS_FD_STATE: [AtomicU64; VFS_MAX_FDS] = {
 static VFS_NEXT_FD: AtomicU64 = AtomicU64::new(3); // 0=stdin, 1=stdout, 2=stderr
 
 /// Mount a filesystem at a path. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_mount(_path_ptr: *const u8, _path_len: i64, _fs_type: i64) -> i64 {
     0 // simulation: always succeeds
 }
 
 /// Open a file. Returns file descriptor (>= 0) or -1 on error.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_open(_path_ptr: *const u8, _path_len: i64, flags: i64) -> i64 {
     let fd = VFS_NEXT_FD.fetch_add(1, Ordering::Relaxed);
     if fd as usize >= VFS_MAX_FDS {
@@ -1007,7 +1007,7 @@ pub extern "C" fn fj_rt_bare_vfs_open(_path_ptr: *const u8, _path_len: i64, flag
 }
 
 /// Read from file descriptor. Returns bytes read or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_read(fd: i64, buf: *mut u8, count: i64) -> i64 {
     if fd < 0 || fd as usize >= VFS_MAX_FDS || buf.is_null() || count <= 0 {
         return -1;
@@ -1021,7 +1021,7 @@ pub extern "C" fn fj_rt_bare_vfs_read(fd: i64, buf: *mut u8, count: i64) -> i64 
 }
 
 /// Write to file descriptor. Returns bytes written or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_write(fd: i64, buf: *const u8, count: i64) -> i64 {
     if fd < 0 || fd as usize >= VFS_MAX_FDS || buf.is_null() || count <= 0 {
         return -1;
@@ -1038,7 +1038,7 @@ pub extern "C" fn fj_rt_bare_vfs_write(fd: i64, buf: *const u8, count: i64) -> i
 }
 
 /// Close file descriptor. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_close(fd: i64) -> i64 {
     if fd < 0 || fd as usize >= VFS_MAX_FDS {
         return -1;
@@ -1048,7 +1048,7 @@ pub extern "C" fn fj_rt_bare_vfs_close(fd: i64) -> i64 {
 }
 
 /// Stat a file. Returns file size or -1 if not found.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_vfs_stat(_path_ptr: *const u8, _path_len: i64) -> i64 {
     0 // simulation: file exists with size 0
 }
@@ -1070,25 +1070,25 @@ static NET_SOCK_STATE: [AtomicU64; NET_MAX_SOCKETS] = {
 static NET_NEXT_SOCK: AtomicU64 = AtomicU64::new(0);
 
 /// Initialize Ethernet interface. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_eth_init() -> i64 {
     0
 }
 
 /// Send raw Ethernet frame. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_eth_send(_frame: *const u8, _len: i64) -> i64 {
     0 // simulation: discard
 }
 
 /// Receive raw Ethernet frame. Returns frame length or 0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_eth_recv(_buf: *mut u8, _max_len: i64) -> i64 {
     0 // simulation: nothing to receive
 }
 
 /// Create a network socket. type: 0=TCP, 1=UDP. Returns socket ID or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_socket(sock_type: i64) -> i64 {
     if sock_type < 0 || sock_type > 1 {
         return -1;
@@ -1103,7 +1103,7 @@ pub extern "C" fn fj_rt_bare_net_socket(sock_type: i64) -> i64 {
 }
 
 /// Bind socket to port. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_bind(sock: i64, port: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS || port < 0 || port > 65535 {
         return -1;
@@ -1116,7 +1116,7 @@ pub extern "C" fn fj_rt_bare_net_bind(sock: i64, port: i64) -> i64 {
 }
 
 /// Listen on socket. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_listen(sock: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS {
         return -1;
@@ -1129,7 +1129,7 @@ pub extern "C" fn fj_rt_bare_net_listen(sock: i64) -> i64 {
 }
 
 /// Accept connection. Returns new socket ID or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_accept(sock: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS {
         return -1;
@@ -1146,7 +1146,7 @@ pub extern "C" fn fj_rt_bare_net_accept(sock: i64) -> i64 {
 }
 
 /// Connect to remote address. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_connect(sock: i64, _addr: u64, _port: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS {
         return -1;
@@ -1156,7 +1156,7 @@ pub extern "C" fn fj_rt_bare_net_connect(sock: i64, _addr: u64, _port: i64) -> i
 }
 
 /// Send data on connected socket. Returns bytes sent or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_send(sock: i64, _buf: *const u8, len: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS || len < 0 {
         return -1;
@@ -1168,7 +1168,7 @@ pub extern "C" fn fj_rt_bare_net_send(sock: i64, _buf: *const u8, len: i64) -> i
 }
 
 /// Receive data from socket. Returns bytes received or 0 (nothing available).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_recv(sock: i64, _buf: *mut u8, _max_len: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS {
         return -1;
@@ -1180,7 +1180,7 @@ pub extern "C" fn fj_rt_bare_net_recv(sock: i64, _buf: *mut u8, _max_len: i64) -
 }
 
 /// Close socket. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_net_close(sock: i64) -> i64 {
     if sock < 0 || sock as usize >= NET_MAX_SOCKETS {
         return -1;
@@ -1202,7 +1202,7 @@ static FB_CURSOR_X: AtomicU64 = AtomicU64::new(0);
 static FB_CURSOR_Y: AtomicU64 = AtomicU64::new(0);
 
 /// Initialize framebuffer with resolution. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_fb_init(width: i64, height: i64) -> i64 {
     if width <= 0 || height <= 0 {
         return -1;
@@ -1216,7 +1216,7 @@ pub extern "C" fn fj_rt_bare_fb_init(width: i64, height: i64) -> i64 {
 }
 
 /// Write a pixel at (x, y) with color (ARGB). Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_fb_write_pixel(x: i64, y: i64, color: i64) -> i64 {
     let w = FB_WIDTH.load(Ordering::Relaxed) as i64;
     let h = FB_HEIGHT.load(Ordering::Relaxed) as i64;
@@ -1228,7 +1228,7 @@ pub extern "C" fn fj_rt_bare_fb_write_pixel(x: i64, y: i64, color: i64) -> i64 {
 }
 
 /// Fill rectangle with color. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_fb_fill_rect(x: i64, y: i64, w: i64, h: i64, color: i64) -> i64 {
     if FB_INIT.load(Ordering::Relaxed) == 0 || w <= 0 || h <= 0 {
         return -1;
@@ -1238,13 +1238,13 @@ pub extern "C" fn fj_rt_bare_fb_fill_rect(x: i64, y: i64, w: i64, h: i64, color:
 }
 
 /// Get framebuffer width.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_fb_width() -> i64 {
     FB_WIDTH.load(Ordering::Relaxed) as i64
 }
 
 /// Get framebuffer height.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_fb_height() -> i64 {
     FB_HEIGHT.load(Ordering::Relaxed) as i64
 }
@@ -1254,20 +1254,20 @@ static KB_LAST_KEY: AtomicU64 = AtomicU64::new(0);
 static KB_INIT: AtomicU64 = AtomicU64::new(0);
 
 /// Initialize keyboard input. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_kb_init() -> i64 {
     KB_INIT.store(1, Ordering::Relaxed);
     0
 }
 
 /// Read key event. Returns ASCII code or 0 (no key).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_kb_read() -> i64 {
     KB_LAST_KEY.swap(0, Ordering::Relaxed) as i64
 }
 
 /// Check if key is available. Returns 1 if key ready, 0 if not.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_kb_available() -> i64 {
     if KB_LAST_KEY.load(Ordering::Relaxed) != 0 {
         1
@@ -1284,7 +1284,7 @@ pub extern "C" fn fj_rt_bare_kb_available() -> i64 {
 static NEXT_PID: AtomicU64 = AtomicU64::new(2); // PID 0=idle, 1=init
 
 /// Spawn a new process. Returns PID or -1.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_proc_spawn(_entry_addr: i64) -> i64 {
     let pid = NEXT_PID.fetch_add(1, Ordering::Relaxed);
     if pid > 255 {
@@ -1295,13 +1295,13 @@ pub extern "C" fn fj_rt_bare_proc_spawn(_entry_addr: i64) -> i64 {
 }
 
 /// Wait for process to exit. Returns exit code.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_proc_wait(_pid: i64) -> i64 {
     0 // simulation: process exited with 0
 }
 
 /// Kill a process. Returns 0 on success.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_proc_kill(pid: i64) -> i64 {
     if pid <= 1 {
         return -1; // can't kill idle or init
@@ -1310,31 +1310,31 @@ pub extern "C" fn fj_rt_bare_proc_kill(pid: i64) -> i64 {
 }
 
 /// Get current process ID.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_proc_self() -> i64 {
     1 // simulation: always init process
 }
 
 /// Yield CPU to scheduler.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_proc_yield() {
     // simulation: no-op
 }
 
 /// Context switch: read saved SP (written by exception vector stub).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sched_get_saved_sp() -> i64 {
     0 // simulation: no saved SP
 }
 
 /// Context switch: set next process SP (checked by vector stub after handler returns).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sched_set_next_sp(_sp: i64) {
     // simulation: no-op
 }
 
 /// Read a value from process table (IRQ-safe, no register clobber).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sched_read_proc(addr: i64) -> i64 {
     if addr == 0 {
         return 0;
@@ -1344,37 +1344,37 @@ pub extern "C" fn fj_rt_bare_sched_read_proc(addr: i64) -> i64 {
 }
 
 /// Write a value to process table (IRQ-safe, no register clobber).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sched_write_proc(_addr: i64, _value: i64) {
     // simulation: no-op
 }
 
 /// Power off the system.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sys_poweroff() {
     // simulation: no-op (on real hardware: PSCI shutdown)
 }
 
 /// Reboot the system.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sys_reboot() {
     // simulation: no-op
 }
 
 /// Get CPU temperature in millidegrees Celsius.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sys_cpu_temp() -> i64 {
     45_000 // simulation: 45.0°C
 }
 
 /// Get total RAM in bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sys_ram_total() -> i64 {
     8 * 1024 * 1024 * 1024 // 8 GB
 }
 
 /// Get free RAM in bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sys_ram_free() -> i64 {
     6 * 1024 * 1024 * 1024 // 6 GB free
 }
@@ -1865,44 +1865,44 @@ mod tests {
 // Syscall builtins (simulation — bare-metal uses assembly stubs)
 
 /// Read syscall argument 0 from saved exception stack.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_syscall_arg0() -> i64 {
     0
 }
 
 /// Read syscall argument 1 from saved exception stack.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_syscall_arg1() -> i64 {
     0
 }
 
 /// Read syscall argument 2 from saved exception stack.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_syscall_arg2() -> i64 {
     0
 }
 
 /// Set syscall return value (write to saved x0 on exception stack).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_syscall_set_return(_val: i64) {}
 
 /// User-mode syscall: svc(num, arg1, arg2) -> result.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_svc(_num: i64, _arg1: i64, _arg2: i64) -> i64 {
     0
 }
 
 /// Switch TTBR0 + TLB flush (simulation: no-op).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_switch_ttbr0(_ttbr0: i64) {}
 
 /// Read current TTBR0 (simulation: return 0).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_read_ttbr0() -> i64 {
     0
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_tlbi_va(_va: i64) {}
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1919,7 +1919,7 @@ pub extern "C" fn fj_rt_bare_tlbi_va(_va: i64) {}
 
 /// x86_64 port output: write a byte to an I/O port.
 /// In hosted mode, this simulates COM1 serial output.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_outb(port: i64, value: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -1936,7 +1936,7 @@ pub extern "C" fn fj_rt_bare_port_outb(port: i64, value: i64) -> i64 {
 
 /// x86_64 port input: read a byte from an I/O port.
 /// In hosted mode, returns simulated values.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_inb(port: i64) -> i64 {
     // Simulation: COM1 LSR (0x3FD) — TX empty + TX holding empty
     if port == 0x3FD {
@@ -1955,7 +1955,7 @@ pub extern "C" fn fj_rt_bare_port_inb(port: i64) -> i64 {
 ///
 /// In hosted simulation, this just marks the port as initialized.
 /// In bare-metal AOT, the .fj code calls port_outb() directly.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_x86_serial_init(port: i64, baud: i64) -> i64 {
     let base: i64 = match port {
         0 => 0x3F8, // COM1
@@ -1995,7 +1995,7 @@ pub extern "C" fn fj_rt_bare_x86_serial_init(port: i64, baud: i64) -> i64 {
 static UART_MODE: AtomicU64 = AtomicU64::new(0);
 
 /// Set UART mode to x86_64 port I/O (call once at boot).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_set_uart_mode_x86(base_port: i64) {
     UART_MODE.store(1, Ordering::Relaxed);
     // Store the port base in UART_BASE (reuse the atomic)

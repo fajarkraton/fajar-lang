@@ -1,7 +1,7 @@
 [package]
 name = "fajar-lang"
 version = "3.2.1"
-edition = "2021"
+edition = "2024"
 description = "Fajar Lang — Systems programming language for OS and AI/ML"
 license = "MIT"
 

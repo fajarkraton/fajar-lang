@@ -559,7 +559,7 @@ impl Default for CorpusManager {
 /// and result collection for fuzz testing Fajar Lang compiler stages.
 pub struct FuzzHarness {
     /// Grammar-aware input generator.
-    gen: GrammarGen,
+    grammar_gen: GrammarGen,
     /// Corpus manager for seeds and crash tracking.
     corpus: CorpusManager,
 }
@@ -568,7 +568,7 @@ impl FuzzHarness {
     /// Creates a new fuzz harness with the given seed.
     pub fn new(seed: u64) -> Self {
         Self {
-            gen: GrammarGen::new(seed),
+            grammar_gen: GrammarGen::new(seed),
             corpus: CorpusManager::new(),
         }
     }
@@ -645,23 +645,23 @@ impl FuzzHarness {
         let raw = match target {
             FuzzTarget::Lexer => {
                 // For lexer: mix valid tokens with random bytes
-                let stmt_count = 1 + (self.gen.next_usize(3));
-                self.gen.gen_program(stmt_count)
+                let stmt_count = 1 + (self.grammar_gen.next_usize(3));
+                self.grammar_gen.gen_program(stmt_count)
             }
             FuzzTarget::Parser => {
                 // For parser: generate syntactically plausible code
-                let stmt_count = 1 + (self.gen.next_usize(5));
-                self.gen.gen_program(stmt_count)
+                let stmt_count = 1 + (self.grammar_gen.next_usize(5));
+                self.grammar_gen.gen_program(stmt_count)
             }
             FuzzTarget::Analyzer | FuzzTarget::Interpreter | FuzzTarget::Vm => {
                 // For deeper stages: generate more complete programs
-                let stmt_count = 2 + (self.gen.next_usize(5));
-                self.gen.gen_program(stmt_count)
+                let stmt_count = 2 + (self.grammar_gen.next_usize(5));
+                self.grammar_gen.gen_program(stmt_count)
             }
             FuzzTarget::Formatter => {
                 // For formatter: generate varied formatting
-                let stmt_count = 1 + (self.gen.next_usize(4));
-                self.gen.gen_program(stmt_count)
+                let stmt_count = 1 + (self.grammar_gen.next_usize(4));
+                self.grammar_gen.gen_program(stmt_count)
             }
         };
         if raw.len() > max_size {
@@ -3034,18 +3034,18 @@ mod tests {
 
     #[test]
     fn s1_1_grammar_gen_produces_valid_identifier() {
-        let mut gen = GrammarGen::new(42);
-        let ident = gen.gen_identifier();
+        let mut grammar_gen = GrammarGen::new(42);
+        let ident = grammar_gen.gen_identifier();
         assert!(!ident.is_empty());
         assert!(ident.chars().next().unwrap().is_alphabetic());
     }
 
     #[test]
     fn s1_2_grammar_gen_produces_varied_types() {
-        let mut gen = GrammarGen::new(123);
+        let mut grammar_gen = GrammarGen::new(123);
         let mut types = std::collections::HashSet::new();
         for _ in 0..50 {
-            types.insert(gen.gen_type());
+            types.insert(grammar_gen.gen_type());
         }
         // Should produce at least a few different types
         assert!(
@@ -3058,9 +3058,9 @@ mod tests {
 
     #[test]
     fn s1_3_grammar_gen_expressions_have_balanced_parens() {
-        let mut gen = GrammarGen::new(999);
+        let mut grammar_gen = GrammarGen::new(999);
         for _ in 0..20 {
-            let expr = gen.gen_expr(0);
+            let expr = grammar_gen.gen_expr(0);
             let opens = expr.chars().filter(|c| *c == '(').count();
             let closes = expr.chars().filter(|c| *c == ')').count();
             assert_eq!(opens, closes, "unbalanced parens in: {expr}");
@@ -3069,8 +3069,8 @@ mod tests {
 
     #[test]
     fn s1_4_grammar_gen_program_produces_multiple_statements() {
-        let mut gen = GrammarGen::new(77);
-        let program = gen.gen_program(5);
+        let mut grammar_gen = GrammarGen::new(77);
+        let program = grammar_gen.gen_program(5);
         // At least 5 lines (one per statement)
         let lines: Vec<&str> = program.lines().collect();
         assert!(

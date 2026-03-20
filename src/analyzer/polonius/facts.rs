@@ -972,8 +972,8 @@ mod tests {
             22,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // Should have at least one loan_issued_at for the borrow of x.
         assert!(
@@ -1009,8 +1009,8 @@ mod tests {
             27,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         assert!(!facts.loan_issued_at.is_empty());
         let (_, loan, _) = &facts.loan_issued_at[0];
@@ -1048,8 +1048,8 @@ mod tests {
             32,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // Two borrow expressions should generate two distinct loans.
         assert!(
@@ -1110,8 +1110,8 @@ mod tests {
             span: span(0, 41),
         };
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate(&program);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate(&program);
 
         // The function body should produce a loan for &x.
         assert!(
@@ -1164,8 +1164,8 @@ mod tests {
             46,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         assert!(!facts.loan_issued_at.is_empty());
         let (_, loan, _) = &facts.loan_issued_at[0];
@@ -1195,8 +1195,8 @@ mod tests {
             32,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // Sequential statements should produce CFG edges connecting them.
         assert!(
@@ -1258,8 +1258,8 @@ mod tests {
             52,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // Should have CFG edges for: sequential stmts + if branching.
         assert!(
@@ -1302,8 +1302,8 @@ mod tests {
             32,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         assert!(
             !facts.loan_invalidated_at.is_empty(),
@@ -1336,8 +1336,8 @@ mod tests {
             26,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // The origin for "r" should be live at the use point.
         assert!(
@@ -1384,8 +1384,8 @@ mod tests {
             40,
         );
 
-        let gen = FactGenerator::new();
-        let facts = gen.generate_from_expr(&body);
+        let fact_gen = FactGenerator::new();
+        let facts = fact_gen.generate_from_expr(&body);
 
         // A while loop should produce a back-edge from the loop body to the header.
         // Check that there's at least one back-edge (edge to a lower block).

@@ -176,7 +176,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             // B3.2: Coerce value to match declared sub-I64 integer type.
             // Truncates (e.g., I64 → I32 → I64) to enforce width semantics
             // while keeping uniform I64 storage for all variables.
-            let val = if let Some(TypeExpr::Simple { name: ref tn, .. }) = ty {
+            let val = if let Some(TypeExpr::Simple { name: tn, .. }) = ty {
                 coerce_int_to_declared_type(builder, val, tn)
             } else {
                 val
@@ -235,7 +235,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                             | Expr::MethodCall { .. }
                             | Expr::If { .. }
                             | Expr::Index { .. }
-                    ) || matches!(value.as_ref(), Expr::Ident { name: ref vn, .. } if cx.string_lens.contains_key(vn))
+                    ) || matches!(value.as_ref(), Expr::Ident { name: vn, .. } if cx.string_lens.contains_key(vn))
                         || matches!(value.as_ref(), Expr::Binary { op: BinOp::Add, .. });
                     if is_string_rhs {
                         let len_var = builder.declare_var(clif_types::default_int_type());
@@ -264,7 +264,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             }
             // If RHS is an identifier that's a heap array, propagate (e.g., let out = arr)
             if let Expr::Ident {
-                name: ref rhs_name, ..
+                name: rhs_name, ..
             } = value.as_ref()
             {
                 if cx.heap_arrays.contains(rhs_name) {
@@ -500,7 +500,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             }
             let semantic_type = clif_types::lower_type(ty);
             // B3.2: Coerce value for sub-I64 integer types
-            let val = if let TypeExpr::Simple { name: ref tn, .. } = ty {
+            let val = if let TypeExpr::Simple { name: tn, .. } = ty {
                 coerce_int_to_declared_type(builder, val, tn)
             } else {
                 val

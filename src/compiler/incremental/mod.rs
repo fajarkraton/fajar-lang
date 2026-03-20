@@ -410,7 +410,7 @@ pub fn topological_sort(graph: &DependencyGraph) -> Result<Vec<String>, Incremen
     // Seed queue with zero in-degree nodes (sorted for determinism)
     let mut seeds: Vec<String> = in_degree
         .iter()
-        .filter(|(_, &deg)| deg == 0)
+        .filter(|(_, deg)| **deg == 0)
         .map(|(path, _)| path.clone())
         .collect();
     seeds.sort();

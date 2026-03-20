@@ -160,8 +160,8 @@ impl FailureDetector {
         let timeout_ms = self.timeout.as_millis() as u64;
         self.last_heartbeat
             .iter()
-            .filter(|(_, &last)| now_ms - last > timeout_ms)
-            .map(|(&id, _)| id)
+            .filter(|(_, last)| now_ms - **last > timeout_ms)
+            .map(|(id, _)| *id)
             .collect()
     }
 

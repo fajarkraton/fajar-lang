@@ -150,63 +150,66 @@ impl FfiManager {
         args: &[i64],
         ret_type: FfiType,
     ) -> Result<i64, String> {
-        match (args.len(), ret_type) {
-            (0, FfiType::Void) => {
-                let f: libloading::Symbol<unsafe extern "C" fn()> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                f();
-                Ok(0)
-            }
-            (0, _) => {
-                let f: libloading::Symbol<unsafe extern "C" fn() -> i64> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                Ok(f())
-            }
-            (1, FfiType::Void) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64)> =
-                    lib.get(symbol.as_bytes())
+        // SAFETY: caller guarantees argument types match the function signature.
+        unsafe {
+            match (args.len(), ret_type) {
+                (0, FfiType::Void) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn()> = lib
+                        .get(symbol.as_bytes())
                         .map_err(|e| format!("symbol error: {}", e))?;
-                f(args[0]);
-                Ok(0)
+                    f();
+                    Ok(0)
+                }
+                (0, _) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn() -> i64> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    Ok(f())
+                }
+                (1, FfiType::Void) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64)> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    f(args[0]);
+                    Ok(0)
+                }
+                (1, _) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64) -> i64> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    Ok(f(args[0]))
+                }
+                (2, FfiType::Void) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64, i64)> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    f(args[0], args[1]);
+                    Ok(0)
+                }
+                (2, _) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64, i64) -> i64> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    Ok(f(args[0], args[1]))
+                }
+                (3, FfiType::Void) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64, i64, i64)> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    f(args[0], args[1], args[2]);
+                    Ok(0)
+                }
+                (3, _) => {
+                    let f: libloading::Symbol<unsafe extern "C" fn(i64, i64, i64) -> i64> = lib
+                        .get(symbol.as_bytes())
+                        .map_err(|e| format!("symbol error: {}", e))?;
+                    Ok(f(args[0], args[1], args[2]))
+                }
+                (n, _) => Err(format!(
+                    "FFI call with {} arguments not supported (max 3)",
+                    n
+                )),
             }
-            (1, _) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64) -> i64> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                Ok(f(args[0]))
-            }
-            (2, FfiType::Void) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64, i64)> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                f(args[0], args[1]);
-                Ok(0)
-            }
-            (2, _) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64, i64) -> i64> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                Ok(f(args[0], args[1]))
-            }
-            (3, FfiType::Void) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64, i64, i64)> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                f(args[0], args[1], args[2]);
-                Ok(0)
-            }
-            (3, _) => {
-                let f: libloading::Symbol<unsafe extern "C" fn(i64, i64, i64) -> i64> = lib
-                    .get(symbol.as_bytes())
-                    .map_err(|e| format!("symbol error: {}", e))?;
-                Ok(f(args[0], args[1], args[2]))
-            }
-            (n, _) => Err(format!(
-                "FFI call with {} arguments not supported (max 3)",
-                n
-            )),
         }
     }
 

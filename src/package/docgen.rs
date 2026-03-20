@@ -932,14 +932,14 @@ fn add(a: i32, b: i32) -> i32 { a + b }
 /// A 2D vector.
 struct Vec2 { x: f64, y: f64 }
 "#;
-        let mut gen = DocGenerator::new(DocOutput::Html);
-        gen.add_source("math", source);
-        gen.build_cross_refs();
+        let mut doc_gen = DocGenerator::new(DocOutput::Html);
+        doc_gen.add_source("math", source);
+        doc_gen.build_cross_refs();
 
-        assert_eq!(gen.module_count(), 1);
-        assert_eq!(gen.total_items(), 2);
+        assert_eq!(doc_gen.module_count(), 1);
+        assert_eq!(doc_gen.total_items(), 2);
 
-        let html = gen.generate();
+        let html = doc_gen.generate();
         assert!(html.contains("Math utilities."));
         assert!(html.contains("add"));
         assert!(html.contains("Vec2"));

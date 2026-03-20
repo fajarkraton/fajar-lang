@@ -20,12 +20,12 @@ pub fn precision(predictions: &[i64], labels: &[i64], class: i64) -> f64 {
     let tp = predictions
         .iter()
         .zip(labels.iter())
-        .filter(|(&p, &l)| p == class && l == class)
+        .filter(|(p, l)| **p == class && **l == class)
         .count();
     let fp = predictions
         .iter()
         .zip(labels.iter())
-        .filter(|(&p, &l)| p == class && l != class)
+        .filter(|(p, l)| **p == class && **l != class)
         .count();
     if tp + fp == 0 {
         return 0.0;
@@ -38,12 +38,12 @@ pub fn recall(predictions: &[i64], labels: &[i64], class: i64) -> f64 {
     let tp = predictions
         .iter()
         .zip(labels.iter())
-        .filter(|(&p, &l)| p == class && l == class)
+        .filter(|(p, l)| **p == class && **l == class)
         .count();
     let fn_count = predictions
         .iter()
         .zip(labels.iter())
-        .filter(|(&p, &l)| p != class && l == class)
+        .filter(|(p, l)| **p != class && **l == class)
         .count();
     if tp + fn_count == 0 {
         return 0.0;

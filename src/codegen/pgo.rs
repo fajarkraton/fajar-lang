@@ -681,7 +681,7 @@ fn collect_by_class(analysis: &HotColdAnalysis, class: HotColdClass) -> Vec<Stri
     let mut names: Vec<String> = analysis
         .classifications
         .iter()
-        .filter(|(_, &c)| c == class)
+        .filter(|(_, c)| **c == class)
         .map(|(name, _)| name.clone())
         .collect();
     names.sort();

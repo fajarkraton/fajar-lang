@@ -159,7 +159,7 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
                     // to prevent double-free at cleanup (both would alias the same ptr).
                     if matches!(op, AssignOp::Assign) && cx.heap_arrays.contains(name) {
                         if let Expr::Ident {
-                            name: ref rhs_name, ..
+                            name: rhs_name, ..
                         } = value.as_ref()
                         {
                             if cx.heap_arrays.contains(rhs_name) {

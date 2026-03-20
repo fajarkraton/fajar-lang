@@ -543,7 +543,7 @@ impl Parser {
                     });
                 }
                 // Check for global_asm!("...") at top level
-                if let TokenKind::Ident(ref name) = self.peek_kind() {
+                if let TokenKind::Ident(name) = self.peek_kind() {
                     if name == "global_asm" {
                         return Ok(Item::GlobalAsm(self.parse_global_asm()?));
                     }
