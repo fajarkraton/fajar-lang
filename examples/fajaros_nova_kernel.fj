@@ -1226,20 +1226,25 @@ const BLK_MAX_DEVS: i64 = 4
 }
 
 @kernel fn nvme_full_init() -> i64 {
+    println("[NVMe] Initializing controller...")
     cprintln("[NVMe] Initializing controller...", CYAN_ON_BLACK)
     let result = nvme_init()
     if result != 0 {
+        println("[NVMe] Init failed")
         cprint("[NVMe] Init failed: ", RED_ON_BLACK)
         cprint_decimal(result, RED_ON_BLACK)
         console_putchar(10, WHITE_ON_BLACK)
         // Fallback: register ramdisk
         blk_register(0, 2, RAMDISK_SIZE / 512, 512)
+        println("[NVMe] Using ramdisk fallback (1MB)")
         cprintln("[NVMe] Using ramdisk fallback (1MB)", YELLOW_ON_BLACK)
         return -1
     }
+    println("[NVMe] Controller enabled")
     cprintln("[NVMe] Controller enabled", GREEN_ON_BLACK)
 
     // Identify Controller
+    println("[NVMe] Identify Controller...")
     let idc = nvme_identify_controller()
     if idc == 0 {
         // Print model string (bytes 24-63 of identify data)
@@ -1254,6 +1259,7 @@ const BLK_MAX_DEVS: i64 = 4
     }
 
     // Identify Namespace
+    println("[NVMe] Identify Namespace...")
     let idn = nvme_identify_namespace()
     if idn == 0 {
         let ns_size = nvme_state_read(80)
@@ -1264,6 +1270,7 @@ const BLK_MAX_DEVS: i64 = 4
     }
 
     // Create I/O queues
+    println("[NVMe] Creating I/O queues...")
     let ioq = nvme_create_io_queues()
     if ioq != 0 {
         cprint("[NVMe] I/O queue creation failed: ", RED_ON_BLACK)
@@ -1272,6 +1279,7 @@ const BLK_MAX_DEVS: i64 = 4
         blk_register(0, 2, RAMDISK_SIZE / 512, 512)
         return -2
     }
+    println("[NVMe] I/O queues ready")
     cprintln("[NVMe] I/O queues ready", GREEN_ON_BLACK)
 
     // Register as block device 0
