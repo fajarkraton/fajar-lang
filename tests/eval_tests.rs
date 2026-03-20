@@ -5900,3 +5900,231 @@ fn hal_process_interpreter() {
     assert_eq!(out[2], "0"); // exit code
     assert_eq!(out[3], "45000"); // 45°C in millidegrees
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sprint 16: Pattern Matching Enhancement Tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn s16_1_match_on_integers() {
+    let src = r#"
+        fn classify(n: i64) -> str {
+            match n {
+                0 => "zero",
+                1 => "one",
+                2 => "two",
+                _ => "many"
+            }
+        }
+        fn main() -> void {
+            println(classify(0))
+            println(classify(1))
+            println(classify(2))
+            println(classify(99))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["zero", "one", "two", "many"]);
+}
+
+#[test]
+fn s16_2_match_on_strings() {
+    let src = r#"
+        fn handle(cmd: str) -> str {
+            match cmd {
+                "help" => "showing help",
+                "ps" => "listing processes",
+                "exit" => "goodbye",
+                _ => "unknown command"
+            }
+        }
+        fn main() -> void {
+            println(handle("help"))
+            println(handle("ps"))
+            println(handle("exit"))
+            println(handle("foo"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(
+        out,
+        vec![
+            "showing help",
+            "listing processes",
+            "goodbye",
+            "unknown command"
+        ]
+    );
+}
+
+#[test]
+fn s16_3_match_guard_expressions() {
+    let src = r#"
+        fn describe(n: i64) -> str {
+            match n {
+                x if x < 0 => "negative",
+                0 => "zero",
+                x if x > 100 => "big",
+                _ => "positive"
+            }
+        }
+        fn main() -> void {
+            println(describe(-5))
+            println(describe(0))
+            println(describe(200))
+            println(describe(42))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["negative", "zero", "big", "positive"]);
+}
+
+#[test]
+fn s16_4_match_on_tuples() {
+    let src = r#"
+        fn origin(p: (i64, i64)) -> str {
+            match p {
+                (0, 0) => "origin",
+                (0, _) => "y-axis",
+                (_, 0) => "x-axis",
+                _ => "elsewhere"
+            }
+        }
+        fn main() -> void {
+            println(origin((0, 0)))
+            println(origin((0, 5)))
+            println(origin((3, 0)))
+            println(origin((1, 1)))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["origin", "y-axis", "x-axis", "elsewhere"]);
+}
+
+#[test]
+fn s16_5_or_patterns() {
+    let src = r#"
+        fn size(n: i64) -> str {
+            match n {
+                0 | 1 => "tiny",
+                2 | 3 | 4 => "small",
+                _ => "big"
+            }
+        }
+        fn main() -> void {
+            println(size(0))
+            println(size(1))
+            println(size(3))
+            println(size(10))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["tiny", "tiny", "small", "big"]);
+}
+
+#[test]
+fn s16_6_range_patterns() {
+    let src = r#"
+        fn classify(n: i64) -> str {
+            match n {
+                0..=9 => "digit",
+                10..=99 => "two-digit",
+                _ => "large"
+            }
+        }
+        fn main() -> void {
+            println(classify(5))
+            println(classify(42))
+            println(classify(100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["digit", "two-digit", "large"]);
+}
+
+#[test]
+fn s16_7_nested_patterns() {
+    let src = r#"
+        enum Option { Some(i64), None }
+        fn unwrap_or(opt: Option, default: i64) -> i64 {
+            match opt {
+                Some(x) => x,
+                None => default
+            }
+        }
+        fn main() -> void {
+            println(unwrap_or(Some(42), 0))
+            println(unwrap_or(None, -1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "-1"]);
+}
+
+#[test]
+fn s16_8_match_with_enum_and_guard() {
+    let src = r#"
+        enum Result { Ok(i64), Err(str) }
+        fn check(r: Result) -> str {
+            match r {
+                Ok(n) if n > 0 => "positive ok",
+                Ok(_) => "non-positive ok",
+                Err(msg) => msg
+            }
+        }
+        fn main() -> void {
+            println(check(Ok(42)))
+            println(check(Ok(-1)))
+            println(check(Err("failure")))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["positive ok", "non-positive ok", "failure"]);
+}
+
+#[test]
+fn s16_9_match_exhaustiveness_with_wildcard() {
+    // This should compile and run fine (wildcard covers remaining cases)
+    let src = r#"
+        fn label(n: i64) -> str {
+            match n {
+                1 => "one",
+                _ => "other"
+            }
+        }
+        fn main() -> void {
+            println(label(1))
+            println(label(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["one", "other"]);
+}
+
+#[test]
+fn s16_10_match_all_pattern_types_combined() {
+    let src = r#"
+        fn test_int() -> str {
+            let x = 5
+            match x {
+                0 | 1 => "low",
+                2..=8 => "mid",
+                _ => "high"
+            }
+        }
+        fn test_guard() -> str {
+            let x = 42
+            match x {
+                n if n > 100 => "big",
+                n if n > 10 => "medium",
+                _ => "small"
+            }
+        }
+        fn main() -> void {
+            println(test_int())
+            println(test_guard())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["mid", "medium"]);
+}

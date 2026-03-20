@@ -4144,9 +4144,36 @@ impl Interpreter {
                     None
                 }
             }
-            Pattern::Range { .. } => {
-                // Phase 1: basic range matching not yet supported
-                None
+            Pattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                // Extract literal bounds from AST (range patterns use literal expressions)
+                let in_range = match value {
+                    Value::Int(v) => {
+                        let lo = Self::expr_as_i64(start)?;
+                        let hi = Self::expr_as_i64(end)?;
+                        *v >= lo && (if *inclusive { *v <= hi } else { *v < hi })
+                    }
+                    Value::Float(v) => {
+                        let lo = Self::expr_as_f64(start)?;
+                        let hi = Self::expr_as_f64(end)?;
+                        *v >= lo && (if *inclusive { *v <= hi } else { *v < hi })
+                    }
+                    Value::Char(v) => {
+                        let lo = Self::expr_as_char(start)?;
+                        let hi = Self::expr_as_char(end)?;
+                        *v >= lo && (if *inclusive { *v <= hi } else { *v < hi })
+                    }
+                    _ => return None,
+                };
+                if in_range {
+                    Some(HashMap::new())
+                } else {
+                    None
+                }
             }
             Pattern::Or { patterns, .. } => {
                 // Try each alternative — first match wins
@@ -4157,6 +4184,47 @@ impl Interpreter {
                 }
                 None
             }
+        }
+    }
+
+    /// Extracts an i64 from a literal expression (for range pattern bounds).
+    fn expr_as_i64(expr: &Expr) -> Option<i64> {
+        if let Expr::Literal {
+            kind: LiteralKind::Int(v),
+            ..
+        } = expr
+        {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+
+    /// Extracts an f64 from a literal expression (for range pattern bounds).
+    fn expr_as_f64(expr: &Expr) -> Option<f64> {
+        match expr {
+            Expr::Literal {
+                kind: LiteralKind::Float(v),
+                ..
+            } => Some(*v),
+            Expr::Literal {
+                kind: LiteralKind::Int(v),
+                ..
+            } => Some(*v as f64),
+            _ => None,
+        }
+    }
+
+    /// Extracts a char from a literal expression (for range pattern bounds).
+    fn expr_as_char(expr: &Expr) -> Option<char> {
+        if let Expr::Literal {
+            kind: LiteralKind::Char(c),
+            ..
+        } = expr
+        {
+            Some(*c)
+        } else {
+            None
         }
     }
 

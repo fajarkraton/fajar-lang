@@ -26,7 +26,7 @@ Phase 1: Q6A Quick Wins           [██████████]  2 sprints   
 Phase 2: FajarOS Interactive      [██████████]  4 sprints   — shell + process lifecycle       ✅ COMPLETE
 Phase 3: FajarOS Memory Safety    [██████████]  4 sprints   — MMU per-process + EL0           ✅ COMPLETE
 Phase 4: FajarOS Microkernel      [██████████]  4 sprints   — IPC v2 + services               ✅ COMPLETE
-Phase 5: Fajar Lang Polish        [██░░░░░░░░]  6 sprints   — const-in-body, match, stdlib   (S15 DONE)
+Phase 5: Fajar Lang Polish        [████░░░░░░]  6 sprints   — const-in-body, match, stdlib   (S15-S16 DONE)
 Phase 6: Q6A Full Deployment      [░░░░░░░░░░]  4 sprints   — GPIO, NPU, camera, demo
 Phase 7: FajarOS Drivers          [░░░░░░░░░░]  4 sprints   — VirtIO, NVMe, display, network
 Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   — blog, video, tutorial, v3.2
@@ -305,20 +305,20 @@ Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   
 | 15.9 | Test: const immutability | `const X = 5; X = 10` → compile error | [x] |
 | 15.10 | Test: const in native codegen | JIT + AOT both produce correct const values | [x] |
 
-### Sprint 16: Pattern Matching Enhancement (10 tasks)
+### Sprint 16: Pattern Matching Enhancement (10 tasks) — 10/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 16.1 | Match on integers | `match x { 0 => ..., 1 => ..., _ => ... }` | [ ] |
-| 16.2 | Match on strings | `match cmd { "help" => ..., "ps" => ..., _ => ... }` | [ ] |
-| 16.3 | Match guard expressions | `match x { n if n > 0 => ..., _ => ... }` | [ ] |
-| 16.4 | Match on tuples | `match (a, b) { (0, 0) => ..., (x, y) => ... }` | [ ] |
-| 16.5 | Or patterns | `match x { 0 \| 1 => "small", _ => "big" }` | [ ] |
-| 16.6 | Range patterns | `match x { 0..=9 => "digit", _ => "other" }` | [ ] |
-| 16.7 | Nested patterns | `match opt { Some(Some(x)) => x, _ => 0 }` | [ ] |
-| 16.8 | Match in codegen (JIT) | Cranelift compilation for all pattern types | [ ] |
-| 16.9 | Exhaustiveness check | Warn if match doesn't cover all cases | [ ] |
-| 16.10 | Test: all pattern types | Integration tests for each pattern variant | [ ] |
+| 16.1 | Match on integers | `match x { 0 => ..., 1 => ..., _ => ... }` | [x] |
+| 16.2 | Match on strings | `match cmd { "help" => ..., "ps" => ..., _ => ... }` | [x] |
+| 16.3 | Match guard expressions | `match x { n if n > 0 => ..., _ => ... }` | [x] |
+| 16.4 | Match on tuples | `match (a, b) { (0, 0) => ..., (x, y) => ... }` | [x] |
+| 16.5 | Or patterns | `match x { 0 \| 1 => "small", _ => "big" }` | [x] |
+| 16.6 | Range patterns | `match x { 0..=9 => "digit", _ => "other" }` | [x] |
+| 16.7 | Nested patterns | `match opt { Some(Some(x)) => x, _ => 0 }` | [x] |
+| 16.8 | Match in codegen (JIT) | Cranelift compilation for all pattern types | [x] |
+| 16.9 | Exhaustiveness check | Warn if match doesn't cover all cases | [x] |
+| 16.10 | Test: all pattern types | Integration tests for each pattern variant | [x] |
 
 ### Sprint 17: String Methods in Native Codegen (10 tasks)
 
