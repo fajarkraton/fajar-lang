@@ -2356,6 +2356,181 @@ pub extern "C" fn fj_rt_volatile_write_u32(addr: *mut u32, value: i64) {
     unsafe { std::ptr::write_volatile(addr, value as u32) }
 }
 
+/// Volatile read u64: reads a 64-bit value from the given address.
+/// Required for NVMe CAP register and 64-bit BAR access.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u64 memory location.
+pub extern "C" fn fj_rt_volatile_read_u64(addr: *const u64) -> i64 {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::read_volatile(addr) as i64 }
+}
+
+/// Volatile write u64: writes a 64-bit value to the given address.
+/// Required for NVMe 64-bit doorbell and queue base address writes.
+///
+/// # Safety
+///
+/// The caller must ensure `addr` points to a valid, aligned u64 memory location.
+pub extern "C" fn fj_rt_volatile_write_u64(addr: *mut u64, value: i64) {
+    // SAFETY: caller guarantees valid aligned pointer
+    unsafe { std::ptr::write_volatile(addr, value as u64) }
+}
+
+// ── Little-Endian Buffer Helpers ──
+// Required for FAT32 (all fields LE) and NVMe command structures.
+
+/// Read a u16 from a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_read_u16_le(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 2 bytes
+    unsafe {
+        let b0 = *addr as i64;
+        let b1 = *addr.add(1) as i64;
+        b0 | (b1 << 8)
+    }
+}
+
+/// Read a u32 from a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_read_u32_le(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 4 bytes
+    unsafe {
+        let b0 = *addr as i64;
+        let b1 = *addr.add(1) as i64;
+        let b2 = *addr.add(2) as i64;
+        let b3 = *addr.add(3) as i64;
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+}
+
+/// Read a u64 from a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_read_u64_le(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 8 bytes
+    unsafe {
+        let mut val: i64 = 0;
+        for i in 0..8 {
+            val |= (*addr.add(i) as i64) << (i * 8);
+        }
+        val
+    }
+}
+
+/// Write a u16 to a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_write_u16_le(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 2 bytes
+    unsafe {
+        *addr = (value & 0xFF) as u8;
+        *addr.add(1) = ((value >> 8) & 0xFF) as u8;
+    }
+}
+
+/// Write a u32 to a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_write_u32_le(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 4 bytes
+    unsafe {
+        *addr = (value & 0xFF) as u8;
+        *addr.add(1) = ((value >> 8) & 0xFF) as u8;
+        *addr.add(2) = ((value >> 16) & 0xFF) as u8;
+        *addr.add(3) = ((value >> 24) & 0xFF) as u8;
+    }
+}
+
+/// Write a u64 to a byte buffer in little-endian order.
+pub extern "C" fn fj_rt_buffer_write_u64_le(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 8 bytes
+    unsafe {
+        for i in 0..8 {
+            *addr.add(i) = ((value >> (i * 8)) & 0xFF) as u8;
+        }
+    }
+}
+
+/// Read a u16 from a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_read_u16_be(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 2 bytes
+    unsafe {
+        let b0 = *addr as i64;
+        let b1 = *addr.add(1) as i64;
+        (b0 << 8) | b1
+    }
+}
+
+/// Read a u32 from a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_read_u32_be(addr: *const u8) -> i64 {
+    // SAFETY: caller guarantees valid pointer with at least 4 bytes
+    unsafe {
+        let b0 = *addr as i64;
+        let b1 = *addr.add(1) as i64;
+        let b2 = *addr.add(2) as i64;
+        let b3 = *addr.add(3) as i64;
+        (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+    }
+}
+
+/// Write a u16 to a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_write_u16_be(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 2 bytes
+    unsafe {
+        *addr = ((value >> 8) & 0xFF) as u8;
+        *addr.add(1) = (value & 0xFF) as u8;
+    }
+}
+
+/// Write a u32 to a byte buffer in big-endian order (for TCP/IP).
+pub extern "C" fn fj_rt_buffer_write_u32_be(addr: *mut u8, value: i64) {
+    // SAFETY: caller guarantees valid pointer with at least 4 bytes
+    unsafe {
+        *addr = ((value >> 24) & 0xFF) as u8;
+        *addr.add(1) = ((value >> 16) & 0xFF) as u8;
+        *addr.add(2) = ((value >> 8) & 0xFF) as u8;
+        *addr.add(3) = (value & 0xFF) as u8;
+    }
+}
+
+// ── PCI Configuration Space Write ──
+
+/// Write a 32-bit value to PCI configuration space.
+/// Required for enabling NVMe memory BAR (bus master + memory space).
+pub extern "C" fn fj_rt_bare_pci_write32(
+    bus: i64,
+    device: i64,
+    func: i64,
+    offset: i64,
+    value: i64,
+) {
+    let addr: u32 = 0x8000_0000
+        | ((bus as u32 & 0xFF) << 16)
+        | ((device as u32 & 0x1F) << 11)
+        | ((func as u32 & 0x07) << 8)
+        | (offset as u32 & 0xFC);
+
+    // SAFETY: PCI config space access via x86 I/O ports
+    // On hosted targets: simulation (no real PCI)
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        std::arch::asm!(
+            "mov dx, 0x0CF8",
+            "out dx, eax",
+            in("eax") addr,
+            out("dx") _,
+            options(nomem, nostack)
+        );
+        std::arch::asm!(
+            "mov dx, 0x0CFC",
+            "out dx, eax",
+            in("eax") value as u32,
+            out("dx") _,
+            options(nomem, nostack)
+        );
+    }
+
+    // Non-x86 targets: no-op (PCI config via MMIO on ARM)
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = (addr, value);
+    }
+}
+
 /// Compiler fence: prevents compiler reordering across this point.
 pub extern "C" fn fj_rt_compiler_fence() {
     std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
@@ -7114,10 +7289,25 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_volatile_read_u8" => Some(fj_rt_volatile_read_u8 as *const u8),
         "fj_rt_volatile_read_u16" => Some(fj_rt_volatile_read_u16 as *const u8),
         "fj_rt_volatile_read_u32" => Some(fj_rt_volatile_read_u32 as *const u8),
+        "fj_rt_volatile_read_u64" => Some(fj_rt_volatile_read_u64 as *const u8),
         "fj_rt_volatile_write" => Some(fj_rt_volatile_write as *const u8),
         "fj_rt_volatile_write_u8" => Some(fj_rt_volatile_write_u8 as *const u8),
         "fj_rt_volatile_write_u16" => Some(fj_rt_volatile_write_u16 as *const u8),
         "fj_rt_volatile_write_u32" => Some(fj_rt_volatile_write_u32 as *const u8),
+        "fj_rt_volatile_write_u64" => Some(fj_rt_volatile_write_u64 as *const u8),
+        // LE/BE buffer helpers
+        "fj_rt_buffer_read_u16_le" => Some(fj_rt_buffer_read_u16_le as *const u8),
+        "fj_rt_buffer_read_u32_le" => Some(fj_rt_buffer_read_u32_le as *const u8),
+        "fj_rt_buffer_read_u64_le" => Some(fj_rt_buffer_read_u64_le as *const u8),
+        "fj_rt_buffer_write_u16_le" => Some(fj_rt_buffer_write_u16_le as *const u8),
+        "fj_rt_buffer_write_u32_le" => Some(fj_rt_buffer_write_u32_le as *const u8),
+        "fj_rt_buffer_write_u64_le" => Some(fj_rt_buffer_write_u64_le as *const u8),
+        "fj_rt_buffer_read_u16_be" => Some(fj_rt_buffer_read_u16_be as *const u8),
+        "fj_rt_buffer_read_u32_be" => Some(fj_rt_buffer_read_u32_be as *const u8),
+        "fj_rt_buffer_write_u16_be" => Some(fj_rt_buffer_write_u16_be as *const u8),
+        "fj_rt_buffer_write_u32_be" => Some(fj_rt_buffer_write_u32_be as *const u8),
+        // PCI config write
+        "fj_rt_bare_pci_write32" => Some(fj_rt_bare_pci_write32 as *const u8),
         "fj_rt_waker_clone" => Some(fj_rt_waker_clone as *const u8),
         "fj_rt_waker_drop" => Some(fj_rt_waker_drop as *const u8),
         "fj_rt_waker_is_woken" => Some(fj_rt_waker_is_woken as *const u8),

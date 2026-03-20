@@ -2775,6 +2775,7 @@ impl CraneliftCompiler {
             ("u8", "__volatile_read_u8"),
             ("u16", "__volatile_read_u16"),
             ("u32", "__volatile_read_u32"),
+            ("u64", "__volatile_read_u64"),
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -2794,11 +2795,12 @@ impl CraneliftCompiler {
             self.functions.insert(internal.to_string(), id);
         }
 
-        // fj_rt_volatile_write_u8/u16/u32(addr, value) -> void
+        // fj_rt_volatile_write_u8/u16/u32/u64(addr, value) -> void
         for (suffix, internal) in &[
             ("u8", "__volatile_write_u8"),
             ("u16", "__volatile_write_u16"),
             ("u32", "__volatile_write_u32"),
+            ("u64", "__volatile_write_u64"),
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -2816,6 +2818,50 @@ impl CraneliftCompiler {
                 )
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(internal.to_string(), id);
+        }
+
+        // ── Buffer read/write helpers (LE + BE) ─────────────────────────
+        // buffer_read_*: (addr: i64) -> i64
+        for name in &[
+            "buffer_read_u16_le",
+            "buffer_read_u32_le",
+            "buffer_read_u64_le",
+            "buffer_read_u16_be",
+            "buffer_read_u32_be",
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
+        }
+        // buffer_write_*: (addr: i64, value: i64) -> void
+        for name in &[
+            "buffer_write_u16_le",
+            "buffer_write_u32_le",
+            "buffer_write_u64_le",
+            "buffer_write_u16_be",
+            "buffer_write_u32_be",
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
         }
 
         // fj_rt_compiler_fence() -> void
@@ -6064,6 +6110,16 @@ impl CraneliftCompiler {
             ));
             s
         };
+        // pci_write32(bus, dev, fn, offset, val) -> void — 5-arg function
+        let sig_5i64_void = {
+            let mut s = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..5 {
+                s.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            s
+        };
         {
             let id = self
                 .module
@@ -6074,6 +6130,13 @@ impl CraneliftCompiler {
                 )
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("fb_fill_rect".to_string(), id);
+        }
+        {
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_pci_write32", Linkage::Import, &sig_5i64_void)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("pci_write32".to_string(), id);
         }
 
         for (extern_name, builtin_name, sig) in hal_fns {
@@ -7029,8 +7092,8 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__volatile_read".to_string(), vr_id);
 
-        // volatile_write_u8/u16/u32 + volatile_read_u8/u16/u32
-        for suffix in ["_u8", "_u16", "_u32"] {
+        // volatile_write_u8/u16/u32/u64 + volatile_read_u8/u16/u32/u64
+        for suffix in ["_u8", "_u16", "_u32", "_u64"] {
             let write_name = format!("fj_rt_volatile_write{suffix}");
             let read_name = format!("fj_rt_volatile_read{suffix}");
             let wid = self
@@ -7255,6 +7318,20 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_pci_read32", Linkage::Import, &sig_gpio4)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("pci_read32".to_string(), pci_id);
+        // pci_write32(bus, dev, fn, offset, val) -> void — 5-arg
+        {
+            let mut sig_5v = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..5 {
+                sig_5v.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
+            }
+            let id = self
+                .module
+                .declare_function("fj_rt_bare_pci_write32", Linkage::Import, &sig_5v)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("pci_write32".to_string(), id);
+        }
 
         // Phase 8: ACPI + SMP
         let acpi_shutdown_id = self
@@ -9599,6 +9676,7 @@ impl ObjectCompiler {
             ("u8", "__volatile_read_u8"),
             ("u16", "__volatile_read_u16"),
             ("u32", "__volatile_read_u32"),
+            ("u64", "__volatile_read_u64"),
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -9618,11 +9696,12 @@ impl ObjectCompiler {
             self.functions.insert(internal.to_string(), id);
         }
 
-        // fj_rt_volatile_write_u8/u16/u32(addr, value) -> void
+        // fj_rt_volatile_write_u8/u16/u32/u64(addr, value) -> void
         for (suffix, internal) in &[
             ("u8", "__volatile_write_u8"),
             ("u16", "__volatile_write_u16"),
             ("u32", "__volatile_write_u32"),
+            ("u64", "__volatile_write_u64"),
         ] {
             let mut sig = self.module.make_signature();
             sig.params.push(cranelift_codegen::ir::AbiParam::new(
@@ -9640,6 +9719,50 @@ impl ObjectCompiler {
                 )
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(internal.to_string(), id);
+        }
+
+        // ── Buffer read/write helpers (LE + BE) ─────────────────────────
+        // buffer_read_*: (addr: i64) -> i64
+        for name in &[
+            "buffer_read_u16_le",
+            "buffer_read_u32_le",
+            "buffer_read_u64_le",
+            "buffer_read_u16_be",
+            "buffer_read_u32_be",
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
+        }
+        // buffer_write_*: (addr: i64, value: i64) -> void
+        for name in &[
+            "buffer_write_u16_le",
+            "buffer_write_u32_le",
+            "buffer_write_u64_le",
+            "buffer_write_u16_be",
+            "buffer_write_u32_be",
+        ] {
+            let mut sig = self.module.make_signature();
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
         }
 
         // fj_rt_compiler_fence() -> void

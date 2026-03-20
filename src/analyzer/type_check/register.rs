@@ -255,6 +255,45 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64, Type::I64],
                 Type::I64,
             ),
+            (
+                "pci_write32",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            // Volatile read/write u64
+            ("volatile_read_u64", vec![Type::I64], Type::I64),
+            ("volatile_write_u64", vec![Type::I64, Type::I64], Type::Void),
+            // Buffer read/write helpers (LE + BE)
+            ("buffer_read_u16_le", vec![Type::I64], Type::I64),
+            ("buffer_read_u32_le", vec![Type::I64], Type::I64),
+            ("buffer_read_u64_le", vec![Type::I64], Type::I64),
+            (
+                "buffer_write_u16_le",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "buffer_write_u32_le",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "buffer_write_u64_le",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
+            ("buffer_read_u16_be", vec![Type::I64], Type::I64),
+            ("buffer_read_u32_be", vec![Type::I64], Type::I64),
+            (
+                "buffer_write_u16_be",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "buffer_write_u32_be",
+                vec![Type::I64, Type::I64],
+                Type::Void,
+            ),
             // Phase 8: ACPI + SMP
             ("acpi_shutdown", vec![], Type::Void),
             ("acpi_find_rsdp", vec![], Type::I64),

@@ -336,7 +336,8 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(addr);
             }
-            "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32" => {
+            "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32"
+            | "volatile_read_u64" => {
                 if args.is_empty() {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 1 argument (address)"
@@ -354,7 +355,51 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
                 cx.last_expr_type = Some(clif_types::default_int_type());
                 return Ok(result);
             }
-            "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32" => {
+            "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32"
+            | "volatile_write_u64" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "{fn_name} requires 2 arguments (address, value)"
+                    )));
+                }
+                let addr = compile_expr(builder, cx, &args[0].value)?;
+                let value = compile_expr(builder, cx, &args[1].value)?;
+                let internal = format!("__{fn_name}");
+                let fn_id = *cx
+                    .functions
+                    .get(&internal)
+                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                builder.ins().call(callee, &[addr, value]);
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+            }
+            // Buffer read helpers (LE + BE): (addr) -> i64
+            "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
+            | "buffer_read_u16_be" | "buffer_read_u32_be" => {
+                if args.is_empty() {
+                    return Err(CodegenError::NotImplemented(format!(
+                        "{fn_name} requires 1 argument (address)"
+                    )));
+                }
+                let addr = compile_expr(builder, cx, &args[0].value)?;
+                let internal = format!("__{fn_name}");
+                let fn_id = *cx
+                    .functions
+                    .get(&internal)
+                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[addr]);
+                let result = builder.inst_results(call)[0];
+                cx.last_expr_type = Some(clif_types::default_int_type());
+                return Ok(result);
+            }
+            // Buffer write helpers (LE + BE): (addr, value) -> void
+            "buffer_write_u16_le"
+            | "buffer_write_u32_le"
+            | "buffer_write_u64_le"
+            | "buffer_write_u16_be"
+            | "buffer_write_u32_be" => {
                 if args.len() < 2 {
                     return Err(CodegenError::NotImplemented(format!(
                         "{fn_name} requires 2 arguments (address, value)"
