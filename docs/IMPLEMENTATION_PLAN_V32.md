@@ -26,7 +26,7 @@ Phase 1: Q6A Quick Wins           [██████████]  2 sprints   
 Phase 2: FajarOS Interactive      [██████████]  4 sprints   — shell + process lifecycle       ✅ COMPLETE
 Phase 3: FajarOS Memory Safety    [██████████]  4 sprints   — MMU per-process + EL0           ✅ COMPLETE
 Phase 4: FajarOS Microkernel      [██████████]  4 sprints   — IPC v2 + services               ✅ COMPLETE
-Phase 5: Fajar Lang Polish        [████░░░░░░]  6 sprints   — const-in-body, match, stdlib   (S15-S16 DONE)
+Phase 5: Fajar Lang Polish        [██████████]  6 sprints   — const-in-body, match, stdlib   ✅ COMPLETE
 Phase 6: Q6A Full Deployment      [░░░░░░░░░░]  4 sprints   — GPIO, NPU, camera, demo
 Phase 7: FajarOS Drivers          [░░░░░░░░░░]  4 sprints   — VirtIO, NVMe, display, network
 Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   — blog, video, tutorial, v3.2
@@ -290,7 +290,7 @@ Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   
 **Depends on:** None (independent of FajarOS)
 **Estimated:** 20-24 hours
 
-### Sprint 15: `const` in Function Body (10 tasks) — 9/10 DONE
+### Sprint 15: `const` in Function Body (10 tasks) — 10/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
@@ -300,7 +300,7 @@ Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   
 | 15.4 | Const in codegen (JIT) | Apply `try_const_eval()` for compile-time folding | [x] |
 | 15.5 | Const in codegen (AOT) | Same as JIT — const values folded at compile time | [x] |
 | 15.6 | Immutability enforcement | Analyzer: reject assignment to const variable (SE error) | [x] |
-| 15.7 | Const in REPL | `const X = 42` persists across REPL lines | [ ] |
+| 15.7 | Const in REPL | `const X = 42` persists across REPL lines | [x] |
 | 15.8 | Test: const arithmetic | `const SIZE: i64 = 4096 * 16; let arr_len = SIZE` | [x] |
 | 15.9 | Test: const immutability | `const X = 5; X = 10` → compile error | [x] |
 | 15.10 | Test: const in native codegen | JIT + AOT both produce correct const values | [x] |
@@ -320,65 +320,65 @@ Phase 8: Release & Documentation  [░░░░░░░░░░]  4 sprints   
 | 16.9 | Exhaustiveness check | Warn if match doesn't cover all cases | [x] |
 | 16.10 | Test: all pattern types | Integration tests for each pattern variant | [x] |
 
-### Sprint 17: String Methods in Native Codegen (10 tasks)
+### Sprint 17: String Methods in Native Codegen (10 tasks) — 10/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 17.1 | `str.len()` in codegen | Read string length from stored variable | [ ] |
-| 17.2 | `str.contains(s)` in codegen | Runtime function for substring search | [ ] |
-| 17.3 | `str.starts_with(s)` in codegen | Compare prefix bytes | [ ] |
-| 17.4 | `str.ends_with(s)` in codegen | Compare suffix bytes | [ ] |
-| 17.5 | `str.chars()` in codegen | Return array of char values | [ ] |
-| 17.6 | `str.trim()` in codegen | Strip whitespace (view, not allocation) | [ ] |
-| 17.7 | `str.to_uppercase()` in codegen | Allocate + transform (heap) | [ ] |
-| 17.8 | `str.parse_int()` in codegen | String → i64 conversion | [ ] |
-| 17.9 | f-string in codegen | `f"x = {value}"` → string interpolation | [ ] |
-| 17.10 | Test: all string methods native | JIT execution of string operations | [ ] |
+| 17.1 | `str.len()` in codegen | Read string length from stored variable | [x] |
+| 17.2 | `str.contains(s)` in codegen | Runtime function for substring search | [x] |
+| 17.3 | `str.starts_with(s)` in codegen | Compare prefix bytes | [x] |
+| 17.4 | `str.ends_with(s)` in codegen | Compare suffix bytes | [x] |
+| 17.5 | `str.chars()` in codegen | Return array of char values | [x] |
+| 17.6 | `str.trim()` in codegen | Strip whitespace (view, not allocation) | [x] |
+| 17.7 | `str.to_uppercase()` in codegen | Allocate + transform (heap) | [x] |
+| 17.8 | `str.parse_int()` in codegen | String → i64 conversion | [x] |
+| 17.9 | f-string in codegen | `f"x = {value}"` → string interpolation | [x] |
+| 17.10 | Test: all string methods native | JIT execution of string operations | [x] |
 
-### Sprint 18: Array/Collection Methods in Codegen (10 tasks)
-
-| # | Task | Detail | Status |
-|---|------|--------|--------|
-| 18.1 | `arr.push(val)` in codegen | Heap array append | [ ] |
-| 18.2 | `arr.pop()` in codegen | Remove + return last element | [ ] |
-| 18.3 | `arr.len()` in codegen | Array length accessor | [ ] |
-| 18.4 | `arr.contains(val)` in codegen | Linear search | [ ] |
-| 18.5 | `arr.sort()` in codegen | In-place sort (quicksort runtime fn) | [ ] |
-| 18.6 | `arr.reverse()` in codegen | In-place reverse | [ ] |
-| 18.7 | `arr.map(fn)` in codegen | Apply function to each element | [ ] |
-| 18.8 | `arr.filter(fn)` in codegen | Filter elements by predicate | [ ] |
-| 18.9 | `arr.fold(init, fn)` in codegen | Reduce array to single value | [ ] |
-| 18.10 | Test: collection pipeline native | `[1,2,3].map(double).filter(is_even).fold(0, add)` in JIT | [ ] |
-
-### Sprint 19: Error Handling Enhancement (10 tasks)
+### Sprint 18: Array/Collection Methods in Codegen (10 tasks) — 10/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 19.1 | `try { } catch { }` syntax | Sugar for Result matching | [ ] |
-| 19.2 | `?` operator in codegen | Propagate errors in native compilation | [ ] |
-| 19.3 | Custom error types | `enum MyError { NotFound, Invalid(String) }` | [ ] |
-| 19.4 | Error context/chaining | `.context("failed to open file")` | [ ] |
-| 19.5 | Stack traces | Capture call stack on error for debugging | [ ] |
-| 19.6 | `panic!` with message in codegen | Native panic with string message output | [ ] |
-| 19.7 | Catch-unwind mechanism | Recover from panic in controlled manner | [ ] |
-| 19.8 | Error display formatting | Pretty-print errors with source location | [ ] |
-| 19.9 | Test: error propagation chain | Function A → B → C, error in C propagates to A | [ ] |
-| 19.10 | Test: ? operator native | JIT compilation of ? chains | [ ] |
+| 18.1 | `arr.push(val)` in codegen | Heap array append | [x] |
+| 18.2 | `arr.pop()` in codegen | Remove + return last element | [x] |
+| 18.3 | `arr.len()` in codegen | Array length accessor | [x] |
+| 18.4 | `arr.contains(val)` in codegen | Linear search | [x] |
+| 18.5 | `arr.sort()` in codegen | In-place sort (quicksort runtime fn) | [x] |
+| 18.6 | `arr.reverse()` in codegen | In-place reverse | [x] |
+| 18.7 | `arr.map(fn)` in codegen | Apply function to each element | [x] |
+| 18.8 | `arr.filter(fn)` in codegen | Filter elements by predicate | [x] |
+| 18.9 | `arr.fold(init, fn)` in codegen | Reduce array to single value | [x] |
+| 18.10 | Test: collection pipeline native | `[1,2,3].map(double).filter(is_even).fold(0, add)` in JIT | [x] |
 
-### Sprint 20: Closures in Native Codegen (10 tasks)
+### Sprint 19: Error Handling Enhancement (10 tasks) — 10/10 DONE
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 20.1 | Closure capture analysis | Identify free variables in closure body | [ ] |
-| 20.2 | Closure environment struct | Pack captured variables into heap-allocated struct | [ ] |
-| 20.3 | Closure call compilation | Load environment, bind captured vars, call body | [ ] |
-| 20.4 | Closure as argument | Pass closure to higher-order functions (map, filter) | [ ] |
-| 20.5 | Closure return | Return closure from function (with captured env) | [ ] |
-| 20.6 | Mutable captures | `let mut x = 0; let f = \|\| { x = x + 1; x }` | [ ] |
-| 20.7 | Move semantics for closures | Move captured values into closure (ownership transfer) | [ ] |
-| 20.8 | Closure size optimization | Inline small closures (no heap allocation) | [ ] |
-| 20.9 | Test: closure captures | Verify captured variable values are correct | [ ] |
-| 20.10 | Test: closure as callback | `arr.map(\|x\| x * 2)` in native codegen | [ ] |
+| 19.1 | `try { } catch { }` syntax | Sugar for Result matching | [x] |
+| 19.2 | `?` operator in codegen | Propagate errors in native compilation | [x] |
+| 19.3 | Custom error types | `enum MyError { NotFound, Invalid(String) }` | [x] |
+| 19.4 | Error context/chaining | `.context("failed to open file")` | [x] |
+| 19.5 | Stack traces | Capture call stack on error for debugging | [x] |
+| 19.6 | `panic!` with message in codegen | Native panic with string message output | [x] |
+| 19.7 | Catch-unwind mechanism | Recover from panic in controlled manner | [x] |
+| 19.8 | Error display formatting | Pretty-print errors with source location | [x] |
+| 19.9 | Test: error propagation chain | Function A → B → C, error in C propagates to A | [x] |
+| 19.10 | Test: ? operator native | JIT compilation of ? chains | [x] |
+
+### Sprint 20: Closures in Native Codegen (10 tasks) — 10/10 DONE
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| 20.1 | Closure capture analysis | Identify free variables in closure body | [x] |
+| 20.2 | Closure environment struct | Pack captured variables into heap-allocated struct | [x] |
+| 20.3 | Closure call compilation | Load environment, bind captured vars, call body | [x] |
+| 20.4 | Closure as argument | Pass closure to higher-order functions (map, filter) | [x] |
+| 20.5 | Closure return | Return closure from function (with captured env) | [x] |
+| 20.6 | Mutable captures | `let mut x = 0; let f = \|\| { x = x + 1; x }` | [x] |
+| 20.7 | Move semantics for closures | Move captured values into closure (ownership transfer) | [x] |
+| 20.8 | Closure size optimization | Inline small closures (no heap allocation) | [x] |
+| 20.9 | Test: closure captures | Verify captured variable values are correct | [x] |
+| 20.10 | Test: closure as callback | `arr.map(\|x\| x * 2)` in native codegen | [x] |
 
 ---
 

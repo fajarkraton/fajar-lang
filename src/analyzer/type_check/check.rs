@@ -170,14 +170,18 @@ impl TypeChecker {
     /// Checks a const definition.
     fn check_const_def(&mut self, cdef: &ConstDef) {
         let val_type = self.check_expr(&cdef.value);
-        let declared = self.resolve_type(&cdef.ty);
-        if !declared.is_compatible(&val_type) {
-            self.errors.push(SemanticError::TypeMismatch {
-                expected: declared.display_name(),
-                found: val_type.display_name(),
-                span: cdef.span,
-                hint: None,
-            });
+        // Skip type check if type is inferred (written as `const X = expr` without annotation)
+        let is_inferred = matches!(&cdef.ty, TypeExpr::Simple { name, .. } if name == "_");
+        if !is_inferred {
+            let declared = self.resolve_type(&cdef.ty);
+            if !declared.is_compatible(&val_type) {
+                self.errors.push(SemanticError::TypeMismatch {
+                    expected: declared.display_name(),
+                    found: val_type.display_name(),
+                    span: cdef.span,
+                    hint: None,
+                });
+            }
         }
     }
 
@@ -276,18 +280,25 @@ impl TypeChecker {
                 span,
             } => {
                 let val_type = self.check_expr(value);
-                let declared = self.resolve_type(ty);
-                if !declared.is_compatible(&val_type) {
-                    self.errors.push(SemanticError::TypeMismatch {
-                        expected: declared.display_name(),
-                        found: val_type.display_name(),
-                        span: *span,
-                        hint: None,
-                    });
-                }
+                let is_inferred =
+                    matches!(ty, TypeExpr::Simple { name, .. } if name == "_");
+                let final_ty = if is_inferred {
+                    val_type
+                } else {
+                    let declared = self.resolve_type(ty);
+                    if !declared.is_compatible(&val_type) {
+                        self.errors.push(SemanticError::TypeMismatch {
+                            expected: declared.display_name(),
+                            found: val_type.display_name(),
+                            span: *span,
+                            hint: None,
+                        });
+                    }
+                    declared
+                };
                 self.symbols.define(Symbol {
                     name: name.clone(),
-                    ty: declared,
+                    ty: final_ty,
                     mutable: false,
                     span: *span,
                     used: false,

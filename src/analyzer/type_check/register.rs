@@ -1186,7 +1186,13 @@ impl TypeChecker {
                 }
             }
             Item::ConstDef(cdef) => {
-                let ty = self.resolve_type(&cdef.ty);
+                let is_inferred =
+                    matches!(&cdef.ty, TypeExpr::Simple { name, .. } if name == "_");
+                let ty = if is_inferred {
+                    self.check_expr(&cdef.value)
+                } else {
+                    self.resolve_type(&cdef.ty)
+                };
                 self.symbols.define(Symbol {
                     name: cdef.name.clone(),
                     ty,
@@ -1540,7 +1546,15 @@ impl TypeChecker {
                         });
                     }
                     Item::ConstDef(cdef) => {
-                        let ty = self.resolve_type(&cdef.ty);
+                        let is_inferred = matches!(
+                            &cdef.ty,
+                            TypeExpr::Simple { name, .. } if name == "_"
+                        );
+                        let ty = if is_inferred {
+                            self.check_expr(&cdef.value)
+                        } else {
+                            self.resolve_type(&cdef.ty)
+                        };
                         let qualified = format!("{}::{}", prefix, cdef.name);
                         self.symbols.define(Symbol {
                             name: qualified,

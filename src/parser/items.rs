@@ -662,9 +662,15 @@ impl Parser {
         };
 
         self.expect(&TokenKind::Const)?;
-        let (name, _) = self.expect_ident()?;
-        self.expect(&TokenKind::Colon)?;
-        let ty = self.parse_type_expr()?;
+        let (name, name_span) = self.expect_ident()?;
+        let ty = if self.eat(&TokenKind::Colon) {
+            self.parse_type_expr()?
+        } else {
+            TypeExpr::Simple {
+                name: "_".to_string(),
+                span: name_span,
+            }
+        };
         self.expect(&TokenKind::Eq)?;
         let value = Box::new(self.parse_expr(0)?);
         let end = value.span().end;
@@ -809,9 +815,15 @@ impl Parser {
     fn parse_const_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Const)?;
-        let (name, _) = self.expect_ident()?;
-        self.expect(&TokenKind::Colon)?;
-        let ty = self.parse_type_expr()?;
+        let (name, name_span) = self.expect_ident()?;
+        let ty = if self.eat(&TokenKind::Colon) {
+            self.parse_type_expr()?
+        } else {
+            TypeExpr::Simple {
+                name: "_".to_string(),
+                span: name_span,
+            }
+        };
         self.expect(&TokenKind::Eq)?;
         let value = Box::new(self.parse_expr(0)?);
         let end = value.span().end;
