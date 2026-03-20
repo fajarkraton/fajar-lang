@@ -1689,6 +1689,146 @@ fj_rt_volatile_read_u32:
     ret
 .size fj_rt_volatile_read_u32, . - fj_rt_volatile_read_u32
 
+/* volatile_write_u64(addr: rdi, value: rsi) -> void */
+.global fj_rt_volatile_write_u64
+.type fj_rt_volatile_write_u64, @function
+fj_rt_volatile_write_u64:
+    mov     [rdi], rsi
+    ret
+.size fj_rt_volatile_write_u64, . - fj_rt_volatile_write_u64
+
+/* volatile_read_u64(addr: rdi) -> rax */
+.global fj_rt_volatile_read_u64
+.type fj_rt_volatile_read_u64, @function
+fj_rt_volatile_read_u64:
+    mov     rax, [rdi]
+    ret
+.size fj_rt_volatile_read_u64, . - fj_rt_volatile_read_u64
+
+/* memory_fence() — full memory barrier */
+.global fj_rt_memory_fence
+.type fj_rt_memory_fence, @function
+fj_rt_memory_fence:
+    mfence
+    ret
+.size fj_rt_memory_fence, . - fj_rt_memory_fence
+
+/* compiler_fence() — compiler barrier (just ret, no reorder across) */
+.global fj_rt_compiler_fence
+.type fj_rt_compiler_fence, @function
+fj_rt_compiler_fence:
+    ret
+.size fj_rt_compiler_fence, . - fj_rt_compiler_fence
+
+/* buffer_read_u16_le(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u16_le
+.type fj_rt_buffer_read_u16_le, @function
+fj_rt_buffer_read_u16_le:
+    xor     eax, eax
+    mov     ax, [rdi]
+    ret
+.size fj_rt_buffer_read_u16_le, . - fj_rt_buffer_read_u16_le
+
+/* buffer_read_u32_le(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u32_le
+.type fj_rt_buffer_read_u32_le, @function
+fj_rt_buffer_read_u32_le:
+    xor     eax, eax
+    mov     eax, [rdi]
+    ret
+.size fj_rt_buffer_read_u32_le, . - fj_rt_buffer_read_u32_le
+
+/* buffer_read_u64_le(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u64_le
+.type fj_rt_buffer_read_u64_le, @function
+fj_rt_buffer_read_u64_le:
+    mov     rax, [rdi]
+    ret
+.size fj_rt_buffer_read_u64_le, . - fj_rt_buffer_read_u64_le
+
+/* buffer_write_u16_le(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u16_le
+.type fj_rt_buffer_write_u16_le, @function
+fj_rt_buffer_write_u16_le:
+    mov     [rdi], si
+    ret
+.size fj_rt_buffer_write_u16_le, . - fj_rt_buffer_write_u16_le
+
+/* buffer_write_u32_le(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u32_le
+.type fj_rt_buffer_write_u32_le, @function
+fj_rt_buffer_write_u32_le:
+    mov     [rdi], esi
+    ret
+.size fj_rt_buffer_write_u32_le, . - fj_rt_buffer_write_u32_le
+
+/* buffer_write_u64_le(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u64_le
+.type fj_rt_buffer_write_u64_le, @function
+fj_rt_buffer_write_u64_le:
+    mov     [rdi], rsi
+    ret
+.size fj_rt_buffer_write_u64_le, . - fj_rt_buffer_write_u64_le
+
+/* buffer_read_u16_be(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u16_be
+.type fj_rt_buffer_read_u16_be, @function
+fj_rt_buffer_read_u16_be:
+    xor     eax, eax
+    mov     ax, [rdi]
+    xchg    al, ah
+    ret
+.size fj_rt_buffer_read_u16_be, . - fj_rt_buffer_read_u16_be
+
+/* buffer_read_u32_be(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u32_be
+.type fj_rt_buffer_read_u32_be, @function
+fj_rt_buffer_read_u32_be:
+    xor     eax, eax
+    mov     eax, [rdi]
+    bswap   eax
+    ret
+.size fj_rt_buffer_read_u32_be, . - fj_rt_buffer_read_u32_be
+
+/* buffer_read_u64_be(addr: rdi) -> rax */
+.global fj_rt_buffer_read_u64_be
+.type fj_rt_buffer_read_u64_be, @function
+fj_rt_buffer_read_u64_be:
+    mov     rax, [rdi]
+    bswap   rax
+    ret
+.size fj_rt_buffer_read_u64_be, . - fj_rt_buffer_read_u64_be
+
+/* buffer_write_u16_be(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u16_be
+.type fj_rt_buffer_write_u16_be, @function
+fj_rt_buffer_write_u16_be:
+    mov     ax, si
+    xchg    al, ah
+    mov     [rdi], ax
+    ret
+.size fj_rt_buffer_write_u16_be, . - fj_rt_buffer_write_u16_be
+
+/* buffer_write_u32_be(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u32_be
+.type fj_rt_buffer_write_u32_be, @function
+fj_rt_buffer_write_u32_be:
+    mov     eax, esi
+    bswap   eax
+    mov     [rdi], eax
+    ret
+.size fj_rt_buffer_write_u32_be, . - fj_rt_buffer_write_u32_be
+
+/* buffer_write_u64_be(addr: rdi, val: rsi) -> void */
+.global fj_rt_buffer_write_u64_be
+.type fj_rt_buffer_write_u64_be, @function
+fj_rt_buffer_write_u64_be:
+    mov     rax, rsi
+    bswap   rax
+    mov     [rdi], rax
+    ret
+.size fj_rt_buffer_write_u64_be, . - fj_rt_buffer_write_u64_be
+
 /* fj_rt_bare_alloc(size: rdi) -> rax (bump allocator) */
 /* Simple bump allocator starting at 0x300000 (3MB), grows up to 0x3E0000 */
 .global fj_rt_bare_alloc
@@ -2296,6 +2436,27 @@ fj_rt_bare_pci_read32:
     in      eax, dx
     ret
 .size fj_rt_bare_pci_read32, . - fj_rt_bare_pci_read32
+
+/* pci_write32(bus: rdi, dev: rsi, func: rdx, offset: rcx, value: r8) -> void */
+.global fj_rt_bare_pci_write32
+.type fj_rt_bare_pci_write32, @function
+fj_rt_bare_pci_write32:
+    mov     eax, 0x80000000
+    shl     edi, 16
+    or      eax, edi
+    shl     esi, 11
+    or      eax, esi
+    shl     edx, 8
+    or      eax, edx
+    and     ecx, 0xFC
+    or      eax, ecx
+    mov     dx, 0xCF8
+    out     dx, eax
+    mov     eax, r8d
+    mov     dx, 0xCFC
+    out     dx, eax
+    ret
+.size fj_rt_bare_pci_write32, . - fj_rt_bare_pci_write32
 
 /* ── Phase 8: ACPI + SMP ── */
 

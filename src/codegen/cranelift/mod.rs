@@ -7395,6 +7395,65 @@ impl ObjectCompiler {
         self.functions
             .insert("acpi_get_cpu_count".to_string(), acpi_cpu_id);
 
+        // ── Memory barriers (needed by NVMe driver) ──
+        let sig_void_void = cranelift_codegen::ir::Signature::new(call_conv);
+        let fence_id = self
+            .module
+            .declare_function("fj_rt_memory_fence", Linkage::Import, &sig_void_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__memory_fence".to_string(), fence_id);
+        let cfence_id = self
+            .module
+            .declare_function("fj_rt_compiler_fence", Linkage::Import, &sig_void_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("__compiler_fence".to_string(), cfence_id);
+
+        // ── LE/BE buffer helpers (needed by FAT32 + NVMe) ──
+        for name in &[
+            "buffer_read_u16_le",
+            "buffer_read_u32_le",
+            "buffer_read_u64_le",
+            "buffer_read_u16_be",
+            "buffer_read_u32_be",
+            "buffer_read_u64_be",
+        ] {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
+        }
+        for name in &[
+            "buffer_write_u16_le",
+            "buffer_write_u32_le",
+            "buffer_write_u64_le",
+            "buffer_write_u16_be",
+            "buffer_write_u32_be",
+            "buffer_write_u64_be",
+        ] {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
+                .declare_function(&format!("fj_rt_{name}"), Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(format!("__{name}"), id);
+        }
+
         Ok(())
     }
 
