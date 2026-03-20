@@ -1181,6 +1181,13 @@ impl TypeChecker {
             "fxrstor",
             "iretq_to_user",
             "rdrand",
+            // FajarOS Nova v0.2 system builtins
+            "hlt",
+            "cli",
+            "sti",
+            "cpuid",
+            "rdmsr",
+            "wrmsr",
             // Phase 3 HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

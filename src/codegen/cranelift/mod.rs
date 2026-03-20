@@ -6095,6 +6095,14 @@ impl CraneliftCompiler {
             ("fj_rt_bare_invlpg", "invlpg", &sig_i64_void),
             ("fj_rt_bare_fxsave", "fxsave", &sig_i64_void),
             ("fj_rt_bare_fxrstor", "fxrstor", &sig_i64_void),
+            // FajarOS Nova v0.2: system builtins
+            ("fj_rt_bare_hlt", "hlt", &sig_void),
+            ("fj_rt_bare_cli", "cli", &sig_void),
+            ("fj_rt_bare_sti", "sti", &sig_void),
+            ("fj_rt_bare_cpuid", "cpuid", &sig_2i64_ret_i64),
+            // rdmsr/wrmsr aliases (map to same runtime as read_msr/write_msr)
+            ("fj_rt_bare_read_msr", "rdmsr", &sig_i64_ret_i64),
+            ("fj_rt_bare_write_msr", "wrmsr", &sig_2i64_ret_i64),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7235,6 +7243,28 @@ impl ObjectCompiler {
             .declare_function("fj_rt_bare_write_msr", Linkage::Import, &sig_2i64_ret_i64)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("write_msr".to_string(), write_msr_id);
+
+        // rdmsr/wrmsr aliases (reuse same function IDs as read_msr/write_msr)
+        self.functions.insert("rdmsr".to_string(), read_msr_id);
+        self.functions.insert("wrmsr".to_string(), write_msr_id);
+
+        // FajarOS Nova v0.2: hlt/cli/sti (void), cpuid (2i64 -> i64)
+        for (name, builtin) in [
+            ("fj_rt_bare_hlt", "hlt"),
+            ("fj_rt_bare_cli", "cli"),
+            ("fj_rt_bare_sti", "sti"),
+        ] {
+            let id = self
+                .module
+                .declare_function(name, Linkage::Import, &sig_halt)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert(builtin.to_string(), id);
+        }
+        let cpuid_id = self
+            .module
+            .declare_function("fj_rt_bare_cpuid", Linkage::Import, &sig_2i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("cpuid".to_string(), cpuid_id);
 
         // String byte access
         let str_byte_at_id = self

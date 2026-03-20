@@ -314,6 +314,13 @@ impl TypeChecker {
                 Type::I64,
             ),
             ("rdrand", vec![], Type::I64),
+            // FajarOS Nova v0.2: system builtins
+            ("hlt", vec![], Type::Void),
+            ("cli", vec![], Type::Void),
+            ("sti", vec![], Type::Void),
+            ("cpuid", vec![Type::I64, Type::I64], Type::I64),
+            ("rdmsr", vec![Type::I64], Type::I64),
+            ("wrmsr", vec![Type::I64, Type::I64], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (

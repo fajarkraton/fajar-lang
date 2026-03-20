@@ -2078,3 +2078,49 @@ pub extern "C" fn fj_rt_bare_read_msr(_msr: i64) -> i64 {
 pub extern "C" fn fj_rt_bare_write_msr(_msr: i64, _val: i64) -> i64 {
     0
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// x86_64 System Builtins (FajarOS Nova v0.2)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Halt CPU until next interrupt (HLT instruction).
+/// On hosted targets: yields the current thread.
+/// On bare-metal: `asm!("hlt")`.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_hlt() {
+    std::thread::yield_now();
+}
+
+/// Disable interrupts (clear IF flag).
+/// On hosted targets: no-op.
+/// On bare-metal: `asm!("cli")`.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cli() {
+    // no-op on hosted targets
+}
+
+/// Enable interrupts (set IF flag).
+/// On hosted targets: no-op.
+/// On bare-metal: `asm!("sti")`.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_sti() {
+    // no-op on hosted targets
+}
+
+/// Query CPU features via CPUID instruction.
+/// Returns eax register value for the given leaf/subleaf.
+/// On non-x86_64 targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_cpuid(leaf: i64, subleaf: i64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: cpuid is safe on x86_64, does not modify machine state
+        let result = unsafe { std::arch::x86_64::__cpuid_count(leaf as u32, subleaf as u32) };
+        result.eax as i64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = (leaf, subleaf);
+        0
+    }
+}

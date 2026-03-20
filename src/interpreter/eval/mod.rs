@@ -756,6 +756,13 @@ impl Interpreter {
             "fxrstor",
             "iretq_to_user",
             "rdrand",
+            // FajarOS Nova v0.2 system builtins
+            "hlt",
+            "cli",
+            "sti",
+            "cpuid",
+            "rdmsr",
+            "wrmsr",
         ]
     }
 
