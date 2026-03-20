@@ -6007,12 +6007,16 @@ impl CraneliftCompiler {
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp", &sig_ret_i64),
             ("fj_rt_bare_acpi_get_cpu_count", "acpi_get_cpu_count", &sig_i64_ret_i64),
             ("fj_rt_bare_rdtsc", "rdtsc", &sig_ret_i64),
-            // Phase 5+8: MSR, CR4, INVLPG for NX/SMEP/SMAP/TLB
+            ("fj_rt_bare_rdrand", "rdrand", &sig_ret_i64),
+            // Phase 5+8: MSR, CR4, INVLPG, FPU, iretq
+            ("fj_rt_bare_iretq_to_user", "iretq_to_user", &sig_3i64_ret_i64),
             ("fj_rt_bare_read_msr", "read_msr", &sig_i64_ret_i64),
             ("fj_rt_bare_write_msr", "write_msr", &sig_2i64_ret_i64),
             ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
             ("fj_rt_bare_write_cr4", "write_cr4", &sig_i64_void),
             ("fj_rt_bare_invlpg", "invlpg", &sig_i64_void),
+            ("fj_rt_bare_fxsave", "fxsave", &sig_i64_void),
+            ("fj_rt_bare_fxrstor", "fxrstor", &sig_i64_void),
         ];
 
         // fb_fill_rect(x, y, w, h, color) -> i64 — 5-arg function
@@ -7119,6 +7123,14 @@ impl ObjectCompiler {
             self.functions.insert(builtin.to_string(), id);
         }
 
+        // iretq_to_user (Phase 5: Ring 3 transition)
+        let iretq_id = self
+            .module
+            .declare_function("fj_rt_bare_iretq_to_user", Linkage::Import, &sig_3i64_ret_i64)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions
+            .insert("iretq_to_user".to_string(), iretq_id);
+
         // MSR read/write (Phase 5+8)
         let read_msr_id = self
             .module
@@ -7228,6 +7240,7 @@ impl ObjectCompiler {
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp"),
             ("fj_rt_bare_rdtsc", "rdtsc"),
             ("fj_rt_bare_read_cr4", "read_cr4"),
+            ("fj_rt_bare_rdrand", "rdrand"),
         ] {
             let id = self
                 .module

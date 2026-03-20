@@ -262,6 +262,11 @@ impl TypeChecker {
             ("read_cr4", vec![], Type::I64),
             ("write_cr4", vec![Type::I64], Type::Void),
             ("invlpg", vec![Type::I64], Type::Void),
+            // Phase 5: FPU, Ring 3, SMP
+            ("fxsave", vec![Type::I64], Type::Void),
+            ("fxrstor", vec![Type::I64], Type::Void),
+            ("iretq_to_user", vec![Type::I64, Type::I64, Type::I64], Type::I64),
+            ("rdrand", vec![], Type::I64),
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             // GPIO
             (

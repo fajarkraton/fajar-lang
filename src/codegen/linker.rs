@@ -2476,6 +2476,63 @@ fj_rt_bare_invlpg:
     ret
 .size fj_rt_bare_invlpg, . - fj_rt_bare_invlpg
 
+/* ═══ Phase 5: FPU save/restore + Ring 3 iretq + SMP ═══ */
+
+/* fxsave(addr) — save 512-byte FPU/SSE state */
+.global fj_rt_bare_fxsave
+.type fj_rt_bare_fxsave, @function
+fj_rt_bare_fxsave:
+    fxsave  [rdi]
+    ret
+.size fj_rt_bare_fxsave, . - fj_rt_bare_fxsave
+
+/* fxrstor(addr) — restore 512-byte FPU/SSE state */
+.global fj_rt_bare_fxrstor
+.type fj_rt_bare_fxrstor, @function
+fj_rt_bare_fxrstor:
+    fxrstor [rdi]
+    ret
+.size fj_rt_bare_fxrstor, . - fj_rt_bare_fxrstor
+
+/* iretq_to_user(rip: rdi, rsp: rsi, rflags: rdx) -> noreturn */
+.global fj_rt_bare_iretq_to_user
+.type fj_rt_bare_iretq_to_user, @function
+fj_rt_bare_iretq_to_user:
+    push    0x1B                /* SS = User Data (0x18 | RPL=3) */
+    push    rsi                 /* RSP = user stack */
+    push    rdx                 /* RFLAGS */
+    push    0x23                /* CS = User Code (0x20 | RPL=3) */
+    push    rdi                 /* RIP = user entry */
+    xor     eax, eax
+    xor     ebx, ebx
+    xor     ecx, ecx
+    xor     edx, edx
+    xor     esi, esi
+    xor     edi, edi
+    xor     ebp, ebp
+    xor     r8d, r8d
+    xor     r9d, r9d
+    xor     r10d, r10d
+    xor     r11d, r11d
+    xor     r12d, r12d
+    xor     r13d, r13d
+    xor     r14d, r14d
+    xor     r15d, r15d
+    iretq
+.size fj_rt_bare_iretq_to_user, . - fj_rt_bare_iretq_to_user
+
+/* rdrand() -> rax (hardware random number) */
+.global fj_rt_bare_rdrand
+.type fj_rt_bare_rdrand, @function
+fj_rt_bare_rdrand:
+    rdrand  rax
+    jnc     .Lrdrand_fail
+    ret
+.Lrdrand_fail:
+    xor     eax, eax
+    ret
+.size fj_rt_bare_rdrand, . - fj_rt_bare_rdrand
+
 /* Stubs for ARM64-specific builtins (no-op on x86_64) */
 .global fj_rt_bare_timer_count
 .global fj_rt_bare_timer_freq

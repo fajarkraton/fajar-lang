@@ -623,6 +623,10 @@ impl Interpreter {
             "read_cr4",
             "write_cr4",
             "invlpg",
+            "fxsave",
+            "fxrstor",
+            "iretq_to_user",
+            "rdrand",
             // Phase 3 bare-metal HAL builtins (v3.0 FajarOS)
             "gpio_config",
             "gpio_set_output",

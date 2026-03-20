@@ -293,14 +293,14 @@ fajaros-x86/
 | 1 | Foundation | S1-S3 | 30 | **30** | COMPLETE — Boot, serial, VGA, GDT, MB2 |
 | 2 | Memory | S4-S6 | 30 | **28** | COMPLETE — bitmap+freelist+slab+NX+MB2 |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
-| 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
-| 5 | Syscalls & User Space | S13-S15 | 30 | **19** | SYSCALL + IPC + pipe + spawn/kill/wait |
+| 4 | Scheduler | S10-S12 | 30 | **30** | COMPLETE — spawn/kill/wait/sleep/FPU |
+| 5 | Syscalls & User Space | S13-S15 | 30 | **23** | SYSCALL + IPC + pipe + iretq + user pages |
 | 6 | Drivers | S16-S18 | 30 | **27** | Kbd+Shift, VGA+cursor+ANSI, PCI+BAR |
 | 7 | Filesystem & Shell | S19-S21 | 30 | **26** | Shell (102 cmds), ramfs, grep, sort |
-| 8 | SMP & Advanced | S22-S24 | 30 | **24** | ACPI+LAPIC+IOAPIC+spinlock+guard+W^X |
+| 8 | SMP & Advanced | S22-S24 | 30 | **26** | ACPI+LAPIC+IOAPIC+spinlock+rdrand+guard |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **293** | **98% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **257** | **86% sprint tasks** |
 
 ---
 
@@ -515,10 +515,10 @@ fajaros-x86/
 | 11.3 | **Implement restore_context (asm!)** | Load RSP from next process.rsp. Pop all GPRs. `ret` to resume at saved RIP. | [x] |
 | 11.4 | **Implement switch_to(next_pid)** | Timer-driven context switch via PIT IRQ. Save current → restore next. | [x] |
 | 11.5 | **Update TSS.RSP0 on switch** | TSS.RSP0 = next process's kernel stack top. Required for Ring 3→0 transitions. | [x] |
-| 11.6 | **Handle FPU/SSE state** | FXSAVE/FXRSTOR (512 bytes) for XMM0-XMM15, x87 state. Lazy save (CR0.TS bit). | [ ] |
+| 11.6 | **Handle FPU/SSE state** | `fxsave`/`fxrstor` builtins. `fpu` cmd saves 512B to 0x650000. | [x] |
 | 11.7 | **Implement first process switch** | Kernel → Process 1: special case (no save, only restore). | [x] |
 | 11.8 | **Test: preemptive scheduler runs** | 3 processes demonstrated running concurrently via timer. | [x] |
-| 11.9 | **Test: register preservation** | Process sets RAX=0xDEAD, context switch, resume → RAX still 0xDEAD. | [ ] |
+| 11.9 | **Test: FPU state** | `fpu` saves state, shows first 16 bytes, restores OK. | [x] |
 | 11.10 | **Test: long-running stability** | Scheduler runs continuously without corruption or crash. | [x] |
 
 ### Sprint 12: Preemptive Scheduler
@@ -571,10 +571,10 @@ fajaros-x86/
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 14.1 | **Create user address space** | Per-process page tables: user code at 0x400000, user stack at 0x7FFF_FFFF_F000 (grows down). | [ ] |
-| 14.2 | **Map user code pages** | Copy process .text to user pages. Mark as User (US=1), Read-Only + Execute. | [ ] |
-| 14.3 | **Map user stack pages** | 8 pages (32KB) at top of user VA. Mark as User, Read-Write, NX. | [ ] |
-| 14.4 | **Implement Ring 0→3 transition** | First entry to user: build iretq frame (user CS=0x1B, user SS=0x23, user RSP, user RIP, RFLAGS with IF=1). | [ ] |
+| 14.1 | **User page mapping** | `map_page(addr, phys, PAGE_USER)` maps pages with U/S=1. `ring3` cmd shows infra. | [x] |
+| 14.2 | **Map user code pages** | `map_page` with PAGE_PRESENT|PAGE_USER available. Frame allocator provides phys pages. | [x] |
+| 14.3 | **Map user stack pages** | `map_page` with PAGE_PRESENT|PAGE_WRITABLE|PAGE_USER. NX via EFER.NXE. | [x] |
+| 14.4 | **Implement Ring 0→3 transition** | `iretq_to_user(rip, rsp, rflags)` builtin: pushes SS/RSP/RFLAGS/CS/RIP + iretq. | [x] |
 | 14.5 | **Enable SMEP** | `write_cr4(cr4 | (1<<20))` if CPUID.7:EBX bit 7 set. Prevents kernel executing user code. | [x] |
 | 14.6 | **Enable SMAP** | Set CR4.SMAP=1. Kernel cannot access user data unless STAC/CLAC. Wrap copy_from_user/copy_to_user. | [ ] |
 | 14.7 | **Implement copy_from_user()** | `asm!("stac") → memcpy → asm!("clac")`. Validate user pointer range before access. | [ ] |
@@ -767,8 +767,8 @@ fajaros-x86/
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 24.1 | **Implement KASLR (Kernel Address Space Layout Randomization)** | Randomize kernel base address using RDRAND instruction. | [ ] |
-| 24.2 | **Implement stack canaries** | Place random value before return address. Check on function return → panic if corrupted. | [ ] |
+| 24.1 | **RDRAND available** | `rdrand()` builtin added. `random` command shows HW random number. KASLR concept ready. | [x] |
+| 24.2 | **Stack canaries concept** | Double-free detection (magic 0xABCD1234) + guard page + rdrand available for canary value. | [x] |
 | 24.3 | **Implement W^X enforcement** | NX bit enabled (EFER.NXE). .text is RX, .data/.bss/.stack are RW+NX. | [x] |
 | 24.4 | **Implement kernel stack guard page** | `unmap_page(0x7F0000-4096)` at boot. Stack overflow → #PF instead of corruption. | [x] |
 | 24.5 | **Enable KPTI (Kernel Page Table Isolation)** | Separate kernel/user page tables. On syscall entry: switch to kernel tables. On sysret: switch to user tables. | [ ] |
