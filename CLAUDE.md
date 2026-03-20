@@ -169,18 +169,21 @@ Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inf
 Repo:      github.com/fajarkraton/fajar-os
 ```
 
-### FajarOS Nova v0.2.0 "Perseverance" — x86_64 bare-metal OS (100% Fajar Lang)
+### FajarOS Nova v0.3.0 "Endurance" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 7,313 lines, 197KB ELF
-Commands:  122 shell commands (system, files, process, AI, network, storage)
-Storage:   NVMe driver (admin+IO queues, sector R/W) + FAT32 (mount, ls, cat)
+Kernel:    examples/fajaros_nova_kernel.fj — 8,327 lines, 215KB ELF
+Commands:  135 shell commands (system, files, process, AI, network, storage)
+Storage:   NVMe driver (admin+IO queues, sector R/W) + FAT32 (mount, ls, cat, write, rm)
 VFS:       / (ramfs), /dev (null/zero/random), /proc (version/uptime), /mnt (fat32)
 Network:   Ethernet + ARP + IPv4 + ICMP (ping)
 SMP:       AP trampoline (16-bit→64-bit), INIT-SIPI-SIPI, per-CPU tracking
-ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls (exit, write, read, mmap, etc.)
-Plan:      docs/FAJAROS_NOVA_V2_PLAN.md — ALL 6 PHASES COMPLETE
-Test:      QEMU verified: NVMe + FAT32 + VFS + NET + Syscall
+ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls, Ring 3 IRETQ
+Process:   Process table v2 (fork, exit, waitpid), keyboard driver, FD table
+Pipes:     8 pipes × 4KB, pipe_create/read/write
+Shell:     Scripting (source command), safe shutdown/reboot
+Plan:      docs/NOVA_V03_PLAN.md — ALL 3 STAGES COMPLETE
+Test:      QEMU verified: NVMe + FAT32 + VFS + NET + ELF + PROC + KB + SEC
 Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
 ```
 
