@@ -1942,6 +1942,8 @@ __syscall_entry:
     je      .Lsys_exit
     cmp     rax, 1              /* SYS_WRITE */
     je      .Lsys_write
+    cmp     rax, 2              /* SYS_READ */
+    je      .Lsys_read
     cmp     rax, 9              /* SYS_GETPID */
     je      .Lsys_getpid
     cmp     rax, 10             /* SYS_YIELD */
@@ -2008,6 +2010,26 @@ __syscall_entry:
     pop     rsi
     pop     rdi
     mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    pop     r11
+    pop     rcx
+    mov     rsp, QWORD PTR [0x6FE10]
+    sysretq
+
+.Lsys_read:
+    /* SYS_READ(fd=RDI, buf=RSI, len=RDX): read from keyboard buffer */
+    pop     rdx                 /* len (max bytes to read) */
+    pop     rsi                 /* buf (destination) */
+    pop     rdi                 /* fd (0=stdin) */
+    xor     rax, rax            /* bytes read = 0 */
+    /* Simple: read one byte from keyboard port 0x60 if available */
+    /* Check keyboard status port 0x64 bit 0 */
+    in      al, 0x64
+    test    al, 1
+    jz      .Lsys_read_done    /* no key available */
+    in      al, 0x60            /* read scancode */
+    mov     BYTE PTR [rsi], al  /* store to user buffer */
+    mov     rax, 1              /* 1 byte read */
+.Lsys_read_done:
     pop     r11
     pop     rcx
     mov     rsp, QWORD PTR [0x6FE10]
