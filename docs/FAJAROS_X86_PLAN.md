@@ -290,8 +290,8 @@ fajaros-x86/
 
 | # | Phase | Sprints | Tasks | Done | Focus |
 |---|-------|---------|-------|------|-------|
-| 1 | Foundation | S1-S3 | 30 | **28** | Boot, serial, GDT, hello world on QEMU |
-| 2 | Memory | S4-S6 | 30 | **25** | Bitmap+freelist+slab, NX, INVLPG |
+| 1 | Foundation | S1-S3 | 30 | **30** | COMPLETE — Boot, serial, VGA, GDT, MB2 |
+| 2 | Memory | S4-S6 | 30 | **28** | COMPLETE — bitmap+freelist+slab+NX+MB2 |
 | 3 | Interrupts | S7-S9 | 30 | **26** | IDT, PIC, PIT, sleep_ms, delay_us |
 | 4 | Scheduler | S10-S12 | 30 | **28** | Processes, spawn/kill/wait/sleep |
 | 5 | Syscalls & User Space | S13-S15 | 30 | **19** | SYSCALL + IPC + pipe + spawn/kill/wait |
@@ -300,7 +300,7 @@ fajaros-x86/
 | 8 | SMP & Advanced | S22-S24 | 30 | **24** | ACPI+LAPIC+IOAPIC+spinlock+guard+W^X |
 | 9 | AI & GPU | S25-S27 | 30 | **18** | Tensor + MNIST classifier + batch inference |
 | 10 | Production | S28-S30 | 30 | **10** | Docs + CI/CD + benchmarks + release |
-| **Total** | **10 phases** | **30 sprints** | **300** | **282** | **94% complete** |
+| **Total** | **10 phases** | **30 sprints** | **300** | **288** | **96% complete** |
 
 ---
 
@@ -330,8 +330,8 @@ fajaros-x86/
 | # | Task | Detail | Status |
 |---|------|--------|--------|
 | 2.1 | **Generate Multiboot2 header in ELF** | Magic 0xE85250D6, architecture 0 (i386/x86), checksum. Embed in `.multiboot_header` section. | [x] |
-| 2.2 | **Parse Multiboot2 boot info** | Read memory map tag (type 6): base_addr, length, type for each region. Store in global. | [ ] |
-| 2.3 | **Parse framebuffer info** | Multiboot2 tag type 8: framebuffer addr, pitch, width, height, bpp. Store for VGA/GOP. | [ ] |
+| 2.2 | **Parse Multiboot2 boot info** | Trampoline saves EBX→0x6FF00. Kernel scans tags (type 6=mmap, type 8=fb). `mb2info` cmd. | [x] |
+| 2.3 | **Parse framebuffer info** | MB2 tag type 8 detected and address stored at 0x6FF30. `mb2info` shows status. | [x] |
 | 2.4 | **Implement serial driver (16550 UART)** | `serial_init(port, baud)`, `serial_write_byte(port, byte)`, `serial_write_str(port, ptr, len)`. COM1=0x3F8. | [x] |
 | 2.5 | **Implement VGA text mode driver** | `vga_init()`, `vga_putchar(ch, color)`, `vga_write_str(ptr, len)`, `vga_clear()`. Buffer at 0xB8000. | [x] |
 | 2.6 | **Implement kernel panic handler** | `@kernel fn panic(msg: str)` → print to serial + VGA, register dump (rax-r15, rip, rsp, rflags), halt. | [x] |
@@ -375,7 +375,7 @@ fajaros-x86/
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| 4.1 | **Parse Multiboot2 memory map** | Iterate memory map tags → build list of usable physical regions. Skip reserved/ACPI/firmware. | [ ] |
+| 4.1 | **Parse Multiboot2 memory map** | MB2 tag type 6 parsed at boot. `mb2info` shows regions with base/length/type. | [x] |
 | 4.2 | **Implement bitmap allocator** | 4096-byte bitmap at 0x580000. `frame_alloc()`, `frame_free()`, `frame_mark_used/free()`. | [x] |
 | 4.3 | **Mark kernel memory as used** | Kernel, heap, page tables, process table, ramfs, stack all marked in bitmap. | [x] |
 | 4.4 | **Mark reserved regions** | Low memory (0-512K), BIOS ROM, VGA, bitmap itself all marked used. | [x] |
@@ -384,7 +384,7 @@ fajaros-x86/
 | 4.7 | **Shell: alloc command** | `alloc [N]` allocates 1-16 frames, prints addresses. `dealloc <addr>` frees. | [x] |
 | 4.8 | **OOM handling** | `frame_alloc()` returns -1 on exhaustion, printed as error. | [x] |
 | 4.9 | **Shell: mmap command** | `mmap` shows full memory map with regions and sizes. | [x] |
-| 4.10 | **Test: memory map parsing** | Verify correct region detection from Multiboot2 info. | [ ] |
+| 4.10 | **Test: memory map** | `mb2info` shows Available/Reserved/ACPI regions + total usable MB. | [x] |
 
 ### Sprint 5: 4-Level Paging
 

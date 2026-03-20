@@ -1335,8 +1335,9 @@ _start64:
     /* Actually stack is at RAM + 0x4000 (16KB after BSS) */
     mov     rsp, 0x7F00000     /* Stack near top of 128MB mapped region */
 
-    /* Save Multiboot2 info pointer */
+    /* Save Multiboot2 info pointer to R12 and fixed memory location */
     mov     r12, rdi
+    mov     QWORD PTR [0x6FF00], rdi    /* MB2 info ptr at 0x6FF00 */
 
     /* BSS is small in bare-metal — kernel_main() handles init */
     /* Skip BSS zeroing here (Cranelift _start wrapper already zeros BSS) */

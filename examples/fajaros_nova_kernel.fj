@@ -809,6 +809,67 @@ const MAX_HEAP_ALLOCS: i64 = 1024
     cprintln(" bytes", WHITE_ON_BLACK)
 }
 
+@kernel fn cmd_mb2info() {
+    cprintln("Multiboot2 Info:", YELLOW_ON_BLACK)
+    let ptr = volatile_read(0x6FF10)
+    if ptr == 0 { cprintln("  Not available (no MB2 info)", RED_ON_BLACK); return }
+    cprint("  Address:  0x", WHITE_ON_BLACK)
+    cprint_hex(ptr, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Size:     ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read(0x6FF18), CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+    let mmap = volatile_read(0x6FF20)
+    if mmap != 0 {
+        cprint("  MemMap:   0x", WHITE_ON_BLACK)
+        cprint_hex(mmap, 8, CYAN_ON_BLACK)
+        cprint(" (", WHITE_ON_BLACK)
+        cprint_decimal(volatile_read(0x6FF28), CYAN_ON_BLACK)
+        cprintln(" bytes)", WHITE_ON_BLACK)
+        // Parse memory map entries
+        // Tag layout: type(4) + size(4) + entry_size(4) + entry_ver(4) + entries...
+        // Each entry: base_addr(8) + length(8) + type(4) + reserved(4) = 24 bytes
+        let entry_size = volatile_read_u32(mmap + 8)
+        if entry_size > 0 {
+            let data_start = mmap + 16
+            let data_end = mmap + volatile_read(0x6FF28)
+            let mut e = data_start
+            let mut total_usable: i64 = 0
+            cprintln("  Regions:", WHITE_ON_BLACK)
+            while e + 20 <= data_end {
+                let base = volatile_read(e)
+                let length = volatile_read(e + 8)
+                let rtype = volatile_read_u32(e + 16)
+                cprint("    0x", WHITE_ON_BLACK)
+                cprint_hex(base, 10, CYAN_ON_BLACK)
+                cprint(" - 0x", WHITE_ON_BLACK)
+                cprint_hex(base + length, 10, CYAN_ON_BLACK)
+                cprint(" ", WHITE_ON_BLACK)
+                if rtype == 1 { cprint("Available", GREEN_ON_BLACK); total_usable = total_usable + length }
+                else if rtype == 2 { cprint("Reserved", RED_ON_BLACK) }
+                else if rtype == 3 { cprint("ACPI", YELLOW_ON_BLACK) }
+                else if rtype == 4 { cprint("NVS", YELLOW_ON_BLACK) }
+                else { cprint("Other", WHITE_ON_BLACK) }
+                console_putchar(10, WHITE_ON_BLACK)
+                e = e + entry_size
+            }
+            cprint("  Total usable: ", WHITE_ON_BLACK)
+            cprint_decimal(total_usable / 1048576, CYAN_ON_BLACK)
+            cprintln(" MB", WHITE_ON_BLACK)
+        }
+    } else {
+        cprintln("  MemMap:   not found", YELLOW_ON_BLACK)
+    }
+    let fb = volatile_read(0x6FF30)
+    if fb != 0 {
+        cprint("  Framebuf: 0x", WHITE_ON_BLACK)
+        cprint_hex(fb, 8, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        cprintln("  Framebuf: not present (VGA text mode)", WHITE_ON_BLACK)
+    }
+}
+
 @kernel fn cmd_ansi() {
     // ANSI escape code demo — VGA attribute mapping
     cprintln("ANSI Color Mapping:", YELLOW_ON_BLACK)
@@ -4421,6 +4482,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 8 && buf_eq4(115, 112, 105, 110) == 1 { cmd_spinlock(); handled = 1 }
     // ansi (97,110,115,105) — ANSI color test
     if handled == 0 && len == 4 && buf_eq4(97, 110, 115, 105) == 1 { cmd_ansi(); handled = 1 }
+    // mb2info
+    if handled == 0 && len == 7 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 98 && volatile_read_u8(0x6F802) == 50 { cmd_mb2info(); handled = 1 }
     // limits (108,105,109,105,116,115)
     if handled == 0 && len == 6 && buf_eq4(108, 105, 109, 105) == 1 { cmd_limits(); handled = 1 }
     // timer (already dispatched as "time" — use "timer" for full test)
@@ -4466,6 +4529,36 @@ const FS_ENTRY_SIZE: i64 = 128
     // Enable NX bit (EFER.NXE, MSR 0xC0000080 bit 11)
     let efer = read_msr(0xC0000080)
     write_msr(0xC0000080, efer | (1 << 11))
+
+    // Parse Multiboot2 info (pointer saved at 0x6FF00 by trampoline)
+    let mb2_ptr = volatile_read(0x6FF00)
+    if mb2_ptr != 0 {
+        // MB2 info: first 4 bytes = total size, next 4 = reserved
+        // Tags start at mb2_ptr + 8, each tag: type(u32) + size(u32) + data
+        // Store parsed info at 0x6FF10
+        volatile_write(0x6FF10, mb2_ptr)  // mb2 base
+        let mb2_size = volatile_read_u32(mb2_ptr)
+        volatile_write(0x6FF18, mb2_size) // total size
+        // Scan for memory map tag (type 6) and framebuffer tag (type 8)
+        let mut offset: i64 = 8
+        while offset < mb2_size {
+            let tag_type = volatile_read_u32(mb2_ptr + offset)
+            let tag_size = volatile_read_u32(mb2_ptr + offset + 4)
+            if tag_type == 6 {
+                // Memory map tag
+                volatile_write(0x6FF20, mb2_ptr + offset) // mmap tag addr
+                volatile_write(0x6FF28, tag_size)         // mmap tag size
+            }
+            if tag_type == 8 {
+                // Framebuffer tag
+                volatile_write(0x6FF30, mb2_ptr + offset) // fb tag addr
+            }
+            if tag_type == 0 { offset = mb2_size } // end tag
+            // Align to 8 bytes
+            offset = offset + ((tag_size + 7) & (0 - 8))
+            if tag_size == 0 { offset = mb2_size }
+        }
+    }
 
     // Note: SMEP (CR4 bit 20) NOT enabled — our identity-mapped 2MB pages
     // use P|RW|PS flags without explicit Supervisor-only marking.
