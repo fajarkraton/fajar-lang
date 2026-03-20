@@ -3418,7 +3418,43 @@ const SYS_BRK: i64 = 7
     cprint("  Entry: 0x", WHITE_ON_BLACK)
     cprint_hex(entry, 16, CYAN_ON_BLACK)
     console_putchar(10, WHITE_ON_BLACK)
-    cprintln("  (Execution deferred — Ring 3 transition needed)", YELLOW_ON_BLACK)
+
+    // Setup user stack (64KB at ELF_STACK_TOP - 0x10000)
+    let user_stack_base = ELF_STACK_TOP - 0x10000
+    let mut pg: i64 = user_stack_base
+    while pg < ELF_STACK_TOP {
+        let frame = frame_alloc()
+        if frame != -1 {
+            map_page(pg, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+        }
+        pg = pg + FRAME_SIZE
+    }
+
+    let user_rsp = ELF_STACK_TOP - 8 // Stack grows down, leave room
+    cprintln("  Transitioning to Ring 3...", YELLOW_ON_BLACK)
+
+    // Setup SYSCALL/SYSRET MSRs for return path
+    // IA32_STAR (0xC0000081): SYSRET CS/SS in bits 63:48, SYSCALL CS/SS in 47:32
+    // Kernel CS=0x08, Kernel SS=0x10, User CS=0x20|3=0x23, User SS=0x18|3=0x1B
+    // STAR: (user_cs_base << 48) | (kernel_cs << 32)
+    // SYSRET loads CS from STAR[63:48]+16, SS from STAR[63:48]+8
+    // So user_cs_base = 0x18 (SYSRET adds 16 → 0x28? No...)
+    // Actually: SYSRET 64-bit loads CS = STAR[63:48]+16, SS = STAR[63:48]+8
+    // We want CS=0x23 (0x20|RPL3). STAR[63:48] = 0x13 → CS = 0x13+16 = 0x23. SS = 0x13+8 = 0x1B.
+    let star_val = (0x13 << 48) | (0x08 << 32)
+    wrmsr(0xC0000081, star_val)
+
+    // IA32_LSTAR (0xC0000082): SYSCALL entry point
+    // For now, set to a simple handler that writes to VGA and halts
+    // We'll use a fixed kernel address for the syscall handler
+    // Actually, without a real SYSCALL handler in the kernel binary,
+    // we can't safely transition. Use IRETQ instead (which we have).
+
+    // IRETQ to Ring 3: push SS, RSP, RFLAGS, CS, RIP on stack
+    // iretq_to_user(rip, rsp, rflags) does this for us
+    iretq_to_user(entry, user_rsp, 0x202) // IF=1 (interrupts enabled)
+    // Note: we only reach here if user program returns via exception/syscall
+    cprintln("  User program returned", GREEN_ON_BLACK)
 }
 
 // ═══════════════════════════════════════════════
