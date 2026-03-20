@@ -1003,15 +1003,15 @@ const NVME_STATE: i64 = 0x804000
     let cq_head = nvme_state_read(16)
     let phase = nvme_state_read(24)
 
-    // Poll CQ for completion (phase bit must match)
+    // Poll CQ for completion (phase tag = bit 16 of DW3)
     let mut timeout: i64 = 1000000
     let mut status: i64 = 0
     while timeout > 0 {
-        let dw3 = nvme_admin_cq_read(cq_head, 3) // Status field + phase bit
-        let cq_phase = dw3 & 1
+        let dw3 = nvme_admin_cq_read(cq_head, 3) // Status field + phase tag + CID
+        let cq_phase = (dw3 >> 16) & 1  // Phase tag is bit 16
         if cq_phase == (phase & 1) {
             // Completion arrived
-            status = (dw3 >> 17) & 0x7FFF // Status code (bits 31:17, excluding phase)
+            status = (dw3 >> 17) & 0x7FFF // Status code (bits 31:17)
             // Advance CQ head
             let new_head = (cq_head + 1) % NVME_QUEUE_ENTRIES
             nvme_state_write(16, new_head)
@@ -1073,18 +1073,31 @@ const NVME_STATE: i64 = 0x804000
     // CDW11: PC(0)=1 (physically contiguous) | IEN(1)=0 | IV(31:16)=0
     let cdw10_cq = ((NVME_QUEUE_ENTRIES - 1) << 16) | 1
     let cdw11_cq = 1 // PC=1, no interrupt
+    println("[NVMe] Submit Create I/O CQ...")
     nvme_admin_submit(0x05, 0, cdw10_cq, cdw11_cq, NVME_ICQ, 0)
+    println("[NVMe] Waiting CQ completion...")
     let status = nvme_admin_wait_completion()
-    if status != 0 { return -1 }
+    println("[NVMe] CQ status received")
+    if status != 0 {
+        println("[NVMe] Create I/O CQ failed")
+        return -1
+    }
+    println("[NVMe] I/O CQ created")
 
     // Create I/O Submission Queue: admin opcode 0x01
     // CDW10: QSIZE(31:16) | QID(15:0) = (entries-1)<<16 | 1
     // CDW11: PC(0)=1 | QPRIO(2:1)=0 | CQID(31:16)=1
     let cdw10_sq = ((NVME_QUEUE_ENTRIES - 1) << 16) | 1
     let cdw11_sq = 1 | (1 << 16) // PC=1, CQID=1
+    println("[NVMe] Submit Create I/O SQ...")
     nvme_admin_submit(0x01, 0, cdw10_sq, cdw11_sq, NVME_ISQ, 0)
+    println("[NVMe] Waiting SQ completion...")
     let status2 = nvme_admin_wait_completion()
-    if status2 != 0 { return -2 }
+    println("[NVMe] SQ status received")
+    if status2 != 0 {
+        println("[NVMe] Create I/O SQ failed")
+        return -2
+    }
     0
 }
 
@@ -1142,7 +1155,7 @@ const NVME_STATE: i64 = 0x804000
     let mut timeout: i64 = 1000000
     while timeout > 0 {
         let dw3 = nvme_io_cq_read(cq_head, 3)
-        let cq_phase = dw3 & 1
+        let cq_phase = (dw3 >> 16) & 1  // Phase tag is bit 16
         if cq_phase == (phase & 1) {
             let status = (dw3 >> 17) & 0x7FFF
             let new_head = (cq_head + 1) % NVME_QUEUE_ENTRIES
