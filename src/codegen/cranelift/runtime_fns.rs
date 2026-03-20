@@ -7249,6 +7249,10 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_set_uart_mode_x86" => {
             Some(runtime_bare::fj_rt_bare_set_uart_mode_x86 as *const u8)
         }
+        "fj_rt_bare_rdtsc" => Some(runtime_bare::fj_rt_bare_rdtsc as *const u8),
+        "fj_rt_bare_read_cr0" => Some(runtime_bare::fj_rt_bare_read_cr0 as *const u8),
+        "fj_rt_bare_read_msr" => Some(runtime_bare::fj_rt_bare_read_msr as *const u8),
+        "fj_rt_bare_write_msr" => Some(runtime_bare::fj_rt_bare_write_msr as *const u8),
         _ => None,
     }
 }

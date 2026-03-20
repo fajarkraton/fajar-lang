@@ -7106,6 +7106,8 @@ impl ObjectCompiler {
             ("fj_rt_bare_read_cr0", "read_cr0"),
             ("fj_rt_bare_read_cr4", "read_cr4"),
             ("fj_rt_bare_read_timer_ticks", "read_timer_ticks"),
+            ("fj_rt_bare_rdrand", "rdrand"),
+            ("fj_rt_bare_rdtsc", "rdtsc"),
         ] {
             let id = self
                 .module
@@ -7137,6 +7139,8 @@ impl ObjectCompiler {
             ("fj_rt_bare_pit_init", "pit_init"),
             ("fj_rt_bare_write_cr4", "write_cr4"),
             ("fj_rt_bare_invlpg", "invlpg"),
+            ("fj_rt_bare_fxsave", "fxsave"),
+            ("fj_rt_bare_fxrstor", "fxrstor"),
         ] {
             let id = self
                 .module

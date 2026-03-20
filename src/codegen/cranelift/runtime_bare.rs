@@ -2049,3 +2049,32 @@ pub extern "C" fn fj_rt_bare_write_cr4(_val: i64) {}
 /// On hosted targets: no-op stub.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_invlpg(_addr: i64) {}
+
+/// Read timestamp counter (RDTSC).
+/// On hosted targets: returns monotonic counter.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_rdtsc() -> i64 {
+    static TSC: AtomicU64 = AtomicU64::new(0);
+    TSC.fetch_add(1, Ordering::Relaxed) as i64
+}
+
+/// Read CR0 control register.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_cr0() -> i64 {
+    0
+}
+
+/// Read MSR (Model Specific Register).
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_msr(_msr: i64) -> i64 {
+    0
+}
+
+/// Write MSR (Model Specific Register).
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_msr(_msr: i64, _val: i64) -> i64 {
+    0
+}
