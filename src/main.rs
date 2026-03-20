@@ -15,11 +15,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+use fajar_lang::FjDiagnostic;
 use fajar_lang::analyzer::analyze;
 use fajar_lang::interpreter::Interpreter;
 use fajar_lang::lexer::tokenize;
 use fajar_lang::parser::parse;
-use fajar_lang::FjDiagnostic;
 
 /// Fajar Lang — A systems programming language for OS and AI/ML.
 #[derive(Parser)]
@@ -1197,7 +1197,9 @@ fn cmd_build_native(
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: {e}");
-            eprintln!("hint: supported targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-unknown-none, riscv64gc-unknown-linux-gnu, riscv64gc-unknown-none-elf");
+            eprintln!(
+                "hint: supported targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-unknown-none, riscv64gc-unknown-linux-gnu, riscv64gc-unknown-none-elf"
+            );
             return ExitCode::from(EXIT_USAGE);
         }
     };
@@ -2089,7 +2091,7 @@ fn cmd_bench(path: &PathBuf, filter: Option<&str>) -> ExitCode {
 
 /// Searches the package registry for packages matching a query.
 fn cmd_search(query: &str, limit: usize) -> ExitCode {
-    use fajar_lang::package::client::{format_search_results, SearchResultDisplay};
+    use fajar_lang::package::client::{SearchResultDisplay, format_search_results};
 
     // Build display from the 7 standard packages
     let std_packages = [

@@ -456,9 +456,11 @@ mod tests {
         let violations = check(src, &NoStdConfig::default());
         // 3 violations: tensor_randn, read_file, "x" (string literal)
         assert_eq!(violations.len(), 3);
-        assert!(violations
-            .iter()
-            .any(|v| v.message.contains("tensor_randn")));
+        assert!(
+            violations
+                .iter()
+                .any(|v| v.message.contains("tensor_randn"))
+        );
         assert!(violations.iter().any(|v| v.message.contains("read_file")));
     }
 

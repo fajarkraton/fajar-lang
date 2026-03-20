@@ -26,7 +26,9 @@ pub enum TensorError {
     },
 
     /// TE002: Incompatible shapes for matrix multiplication.
-    #[error("TE002: matmul shape mismatch: {left:?} @ {right:?} — inner dims {left_inner} != {right_inner}")]
+    #[error(
+        "TE002: matmul shape mismatch: {left:?} @ {right:?} — inner dims {left_inner} != {right_inner}"
+    )]
     MatmulShapeMismatch {
         /// Left operand shape.
         left: Vec<usize>,
@@ -165,8 +167,8 @@ impl TensorValue {
 
     /// Creates a tensor with random values from standard normal distribution.
     pub fn randn(shape: &[usize]) -> Self {
-        use ndarray_rand::rand_distr::StandardNormal;
         use ndarray_rand::RandomExt;
+        use ndarray_rand::rand_distr::StandardNormal;
         let arr = ArrayD::random(shape, StandardNormal);
         Self::new(arr, false)
     }

@@ -1415,7 +1415,7 @@ impl Parser {
                     line: token.line,
                     col: token.col,
                     span: token.span,
-                })
+                });
             }
         };
         self.advance();

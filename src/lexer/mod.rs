@@ -15,7 +15,7 @@ pub mod cursor;
 pub mod token;
 
 use cursor::Cursor;
-use token::{lookup_annotation, lookup_keyword, Span, Token, TokenKind};
+use token::{Span, Token, TokenKind, lookup_annotation, lookup_keyword};
 
 use thiserror::Error;
 
@@ -541,7 +541,7 @@ fn scan_identifier_or_keyword(cursor: &mut Cursor<'_>) -> TokenKind {
                         )));
                     }
                     cursor.advance(); // consume '{'
-                                      // Read expression until '}'
+                    // Read expression until '}'
                     let mut expr_src = String::new();
                     let mut depth = 1;
                     while !cursor.is_eof() {

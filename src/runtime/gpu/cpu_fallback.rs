@@ -4,10 +4,10 @@
 //! on the CPU using the same API surface, enabling development
 //! and testing without GPU hardware.
 
+use super::GpuError;
 use super::buffer::{BackendData, GpuBuffer};
 use super::device::{GpuBackend, GpuDevice, GpuDeviceInfo};
 use super::kernel::{BuiltinKernel, GpuKernel, KernelSource, WorkgroupSize};
-use super::GpuError;
 
 /// CPU fallback "GPU" device.
 ///
@@ -140,11 +140,7 @@ impl GpuDevice for CpuFallbackDevice {
             }
             id if id == BuiltinKernel::VectorDiv as u64 => {
                 cpu_elementwise_op(buffers, total_invocations as usize, |a, b| {
-                    if b != 0.0 {
-                        a / b
-                    } else {
-                        0.0
-                    }
+                    if b != 0.0 { a / b } else { 0.0 }
                 })
             }
             id if id == BuiltinKernel::Relu as u64 => {

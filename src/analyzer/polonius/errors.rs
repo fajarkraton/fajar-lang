@@ -546,10 +546,11 @@ mod tests {
         let diag = ErrorFormatter::format(&error);
         assert!(diag.message.contains("does not live long enough"));
         assert_eq!(diag.code, "ME002");
-        assert!(diag
-            .suggestions
-            .iter()
-            .any(|s| s.kind == SuggestionKind::Clone));
+        assert!(
+            diag.suggestions
+                .iter()
+                .any(|s| s.kind == SuggestionKind::Clone)
+        );
     }
 
     // ── S12.3: Conflicting borrow error formatting ────────────────────
@@ -571,9 +572,11 @@ mod tests {
         let suggestions = suggest_for_move("value");
         assert!(suggestions.len() >= 2);
         assert!(suggestions.iter().any(|s| s.kind == SuggestionKind::Clone));
-        assert!(suggestions
-            .iter()
-            .any(|s| s.kind == SuggestionKind::UseReference));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.kind == SuggestionKind::UseReference)
+        );
     }
 
     // ── S12.5: Loan timeline rendering ────────────────────────────────

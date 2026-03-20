@@ -467,15 +467,21 @@ mod tests {
 
         // Should include train + prune + export
         assert!(stages.len() >= 3);
-        assert!(stages
-            .iter()
-            .any(|s| matches!(s, CompressionStage::Train { .. })));
-        assert!(stages
-            .iter()
-            .any(|s| matches!(s, CompressionStage::Prune { .. })));
-        assert!(stages
-            .iter()
-            .any(|s| matches!(s, CompressionStage::Export { .. })));
+        assert!(
+            stages
+                .iter()
+                .any(|s| matches!(s, CompressionStage::Train { .. }))
+        );
+        assert!(
+            stages
+                .iter()
+                .any(|s| matches!(s, CompressionStage::Prune { .. }))
+        );
+        assert!(
+            stages
+                .iter()
+                .any(|s| matches!(s, CompressionStage::Export { .. }))
+        );
     }
 
     #[test]
@@ -483,12 +489,16 @@ mod tests {
         let stages = auto_select_pipeline(100000, 10000).unwrap();
 
         // Should include distillation and quantization
-        assert!(stages
-            .iter()
-            .any(|s| matches!(s, CompressionStage::Distill { .. })));
-        assert!(stages
-            .iter()
-            .any(|s| matches!(s, CompressionStage::Quantize)));
+        assert!(
+            stages
+                .iter()
+                .any(|s| matches!(s, CompressionStage::Distill { .. }))
+        );
+        assert!(
+            stages
+                .iter()
+                .any(|s| matches!(s, CompressionStage::Quantize))
+        );
     }
 
     #[test]

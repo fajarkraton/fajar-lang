@@ -534,11 +534,15 @@ mod tests {
 
     #[test]
     fn s21_10_error_display() {
-        assert!(WorkspaceError::CyclicDependency
-            .to_string()
-            .contains("Cyclic"));
-        assert!(WorkspaceError::MemberNotFound("x".into())
-            .to_string()
-            .contains("x"));
+        assert!(
+            WorkspaceError::CyclicDependency
+                .to_string()
+                .contains("Cyclic")
+        );
+        assert!(
+            WorkspaceError::MemberNotFound("x".into())
+                .to_string()
+                .contains("x")
+        );
     }
 }

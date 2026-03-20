@@ -694,9 +694,11 @@ mod tests {
     fn s25_1_api_routes_cover_all_endpoints() {
         let routes = api_routes();
         assert!(routes.len() >= 8);
-        assert!(routes
-            .iter()
-            .any(|r| r.path.contains("packages") && r.method == HttpMethod::Post));
+        assert!(
+            routes
+                .iter()
+                .any(|r| r.path.contains("packages") && r.method == HttpMethod::Post)
+        );
         assert!(routes.iter().any(|r| r.path.contains("search")));
         assert!(routes.iter().any(|r| r.path.contains("yank")));
         assert!(routes.iter().any(|r| r.path.contains("login")));

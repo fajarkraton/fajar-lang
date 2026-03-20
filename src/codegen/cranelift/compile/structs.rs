@@ -144,7 +144,7 @@ pub(in crate::codegen::cranelift) fn compile_field_access<M: Module>(
         _ => {
             return Err(CodegenError::NotImplemented(
                 "field access on non-ident object".into(),
-            ))
+            ));
         }
     };
 
@@ -285,7 +285,7 @@ pub(in crate::codegen::cranelift) fn compile_field_assign<M: Module>(
         _ => {
             return Err(CodegenError::NotImplemented(
                 "field assign on non-ident object".into(),
-            ))
+            ));
         }
     };
 
@@ -330,7 +330,7 @@ pub(in crate::codegen::cranelift) fn compile_field_assign<M: Module>(
                         _ => {
                             return Err(CodegenError::NotImplemented(format!(
                                 "bitfield compound assign '{op}'"
-                            )))
+                            )));
                         }
                     };
                     builder.ins().band_imm(combined, mask)
@@ -394,7 +394,7 @@ pub(in crate::codegen::cranelift) fn compile_field_assign<M: Module>(
                     _ => {
                         return Err(CodegenError::NotImplemented(format!(
                             "float compound field assign '{op}'"
-                        )))
+                        )));
                     }
                 }
             } else {

@@ -3,8 +3,8 @@
 //! Generates GNU ld-compatible linker scripts with proper ELF sections
 //! for text, data, bss, and stack layout.
 
-use super::target::{Arch, TargetConfig};
 use super::CodegenError;
+use super::target::{Arch, TargetConfig};
 
 /// Memory region definition for linker scripts.
 #[derive(Debug, Clone)]

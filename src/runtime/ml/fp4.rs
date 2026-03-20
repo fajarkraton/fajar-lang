@@ -74,11 +74,7 @@ impl Fp4E2M1 {
         let sign = (self.0 >> 3) & 1;
         let idx = self.0 & 0x07;
         let value = Self::VALUES[idx as usize];
-        if sign == 1 {
-            -value
-        } else {
-            value
-        }
+        if sign == 1 { -value } else { value }
     }
 
     /// Check if zero.

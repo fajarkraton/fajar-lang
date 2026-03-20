@@ -7,10 +7,10 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::analyzer::{analyze, SemanticError};
+use crate::analyzer::{SemanticError, analyze};
 use crate::lexer::token::Span;
-use crate::lexer::{tokenize, LexError};
-use crate::parser::{parse, ParseError};
+use crate::lexer::{LexError, tokenize};
+use crate::parser::{ParseError, parse};
 
 /// Per-document state cached by the server.
 struct DocumentState {
@@ -697,26 +697,46 @@ fn is_ident_char(b: u8) -> bool {
 fn keyword_info(word: &str) -> Option<String> {
     let info = match word {
         "let" => "**let** — Variable binding\n```fajar\nlet x: i32 = 42\nlet mut y = 0\n```",
-        "mut" => "**mut** — Mutable variable modifier\n```fajar\nlet mut counter = 0\ncounter = counter + 1\n```",
-        "fn" => "**fn** — Function definition\n```fajar\nfn add(a: i32, b: i32) -> i32 { a + b }\n```",
-        "if" => "**if** — Conditional expression\n```fajar\nlet max = if a > b { a } else { b }\n```",
+        "mut" => {
+            "**mut** — Mutable variable modifier\n```fajar\nlet mut counter = 0\ncounter = counter + 1\n```"
+        }
+        "fn" => {
+            "**fn** — Function definition\n```fajar\nfn add(a: i32, b: i32) -> i32 { a + b }\n```"
+        }
+        "if" => {
+            "**if** — Conditional expression\n```fajar\nlet max = if a > b { a } else { b }\n```"
+        }
         "else" => "**else** — Alternative branch of if expression",
-        "while" => "**while** — Loop while condition is true\n```fajar\nwhile x < 10 { x = x + 1 }\n```",
-        "for" => "**for** — Iterate over a range or collection\n```fajar\nfor i in 0..10 { println(i) }\n```",
-        "match" => "**match** — Pattern matching expression\n```fajar\nmatch x { 0 => \"zero\", _ => \"other\" }\n```",
+        "while" => {
+            "**while** — Loop while condition is true\n```fajar\nwhile x < 10 { x = x + 1 }\n```"
+        }
+        "for" => {
+            "**for** — Iterate over a range or collection\n```fajar\nfor i in 0..10 { println(i) }\n```"
+        }
+        "match" => {
+            "**match** — Pattern matching expression\n```fajar\nmatch x { 0 => \"zero\", _ => \"other\" }\n```"
+        }
         "return" => "**return** — Return a value from a function",
         "break" => "**break** — Exit a loop, optionally with a value",
         "continue" => "**continue** — Skip to next loop iteration",
-        "struct" => "**struct** — Define a data structure\n```fajar\nstruct Point { x: f64, y: f64 }\n```",
-        "enum" => "**enum** — Define a sum type\n```fajar\nenum Shape { Circle(f64), Rect(f64, f64) }\n```",
-        "impl" => "**impl** — Implement methods on a type\n```fajar\nimpl Point { fn origin() -> Point { ... } }\n```",
+        "struct" => {
+            "**struct** — Define a data structure\n```fajar\nstruct Point { x: f64, y: f64 }\n```"
+        }
+        "enum" => {
+            "**enum** — Define a sum type\n```fajar\nenum Shape { Circle(f64), Rect(f64, f64) }\n```"
+        }
+        "impl" => {
+            "**impl** — Implement methods on a type\n```fajar\nimpl Point { fn origin() -> Point { ... } }\n```"
+        }
         "trait" => "**trait** — Define a shared interface",
         "const" => "**const** — Compile-time constant\n```fajar\nconst MAX: usize = 1024\n```",
         "use" => "**use** — Import items from a module\n```fajar\nuse math::sqrt\n```",
         "mod" => "**mod** — Define a module",
         "pub" => "**pub** — Make item publicly visible",
         "as" => "**as** — Type cast\n```fajar\nlet y = x as f64\n```",
-        "loop" => "**loop** — Infinite loop (exit with break)\n```fajar\nloop { if done { break } }\n```",
+        "loop" => {
+            "**loop** — Infinite loop (exit with break)\n```fajar\nloop { if done { break } }\n```"
+        }
         "in" => "**in** — Part of for-in loop syntax",
         "true" | "false" => &format!("**{word}** — Boolean literal (`bool`)"),
         "null" => "**null** — Null value (void type)",
@@ -734,26 +754,48 @@ fn builtin_info(name: &str) -> Option<String> {
     let info = match name {
         "print" => "```fajar\nfn print(value: any) -> void\n```\nPrint a value without newline.",
         "println" => "```fajar\nfn println(value: any) -> void\n```\nPrint a value with newline.",
-        "len" => "```fajar\nfn len(collection: Array | Str) -> i64\n```\nReturn the length of an array or string.",
-        "type_of" => "```fajar\nfn type_of(value: any) -> str\n```\nReturn the type name of a value as a string.",
-        "to_string" => "```fajar\nfn to_string(value: any) -> str\n```\nConvert any value to its string representation.",
-        "to_int" => "```fajar\nfn to_int(value: any) -> i64\n```\nConvert to integer (from float, string, bool).",
-        "to_float" => "```fajar\nfn to_float(value: any) -> f64\n```\nConvert to float (from int, string).",
+        "len" => {
+            "```fajar\nfn len(collection: Array | Str) -> i64\n```\nReturn the length of an array or string."
+        }
+        "type_of" => {
+            "```fajar\nfn type_of(value: any) -> str\n```\nReturn the type name of a value as a string."
+        }
+        "to_string" => {
+            "```fajar\nfn to_string(value: any) -> str\n```\nConvert any value to its string representation."
+        }
+        "to_int" => {
+            "```fajar\nfn to_int(value: any) -> i64\n```\nConvert to integer (from float, string, bool)."
+        }
+        "to_float" => {
+            "```fajar\nfn to_float(value: any) -> f64\n```\nConvert to float (from int, string)."
+        }
         "abs" => "```fajar\nfn abs(x: i64 | f64) -> i64 | f64\n```\nAbsolute value.",
         "sqrt" => "```fajar\nfn sqrt(x: f64) -> f64\n```\nSquare root.",
         "pow" => "```fajar\nfn pow(base: f64, exp: f64) -> f64\n```\nRaise base to power.",
-        "log" | "log2" | "log10" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nLogarithm function."),
-        "sin" | "cos" | "tan" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nTrigonometric function (radians)."),
-        "floor" | "ceil" | "round" => &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nRounding function."),
+        "log" | "log2" | "log10" => {
+            &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nLogarithm function.")
+        }
+        "sin" | "cos" | "tan" => {
+            &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nTrigonometric function (radians).")
+        }
+        "floor" | "ceil" | "round" => {
+            &format!("```fajar\nfn {name}(x: f64) -> f64\n```\nRounding function.")
+        }
         "min" => "```fajar\nfn min(a: f64, b: f64) -> f64\n```\nReturn the smaller value.",
         "max" => "```fajar\nfn max(a: f64, b: f64) -> f64\n```\nReturn the larger value.",
-        "clamp" => "```fajar\nfn clamp(x: f64, lo: f64, hi: f64) -> f64\n```\nClamp value to range [lo, hi].",
-        "assert" => "```fajar\nfn assert(condition: bool) -> void\n```\nPanic if condition is false.",
+        "clamp" => {
+            "```fajar\nfn clamp(x: f64, lo: f64, hi: f64) -> f64\n```\nClamp value to range [lo, hi]."
+        }
+        "assert" => {
+            "```fajar\nfn assert(condition: bool) -> void\n```\nPanic if condition is false."
+        }
         "assert_eq" => "```fajar\nfn assert_eq(a: any, b: any) -> void\n```\nPanic if a != b.",
         "panic" => "```fajar\nfn panic(msg: str) -> never\n```\nAbort with error message.",
         "todo" => "```fajar\nfn todo(msg: str) -> never\n```\nMark unimplemented code.",
         "dbg" => "```fajar\nfn dbg(value: any) -> any\n```\nDebug-print and return the value.",
-        "push" => "```fajar\nfn push(arr: Array, value: any) -> void\n```\nAppend element to array.",
+        "push" => {
+            "```fajar\nfn push(arr: Array, value: any) -> void\n```\nAppend element to array."
+        }
         "pop" => "```fajar\nfn pop(arr: Array) -> any\n```\nRemove and return last element.",
         "PI" => "**PI** — `3.141592653589793` (`f64`)",
         "E" => "**E** — `2.718281828459045` (`f64`)",
@@ -1107,9 +1149,11 @@ mod tests {
         let source = "fn main() -> i64 { unknown_var }";
         let doc = DocumentState::new(source.into());
         let diags = collect_diagnostics(source, &doc);
-        assert!(diags
-            .iter()
-            .any(|d| { d.code == Some(NumberOrString::String("SE001".into())) }));
+        assert!(
+            diags
+                .iter()
+                .any(|d| { d.code == Some(NumberOrString::String("SE001".into())) })
+        );
     }
 
     #[test]

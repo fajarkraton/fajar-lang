@@ -2727,9 +2727,11 @@ mod tests {
             .find(|s| s.category == ChangeCategory::Breaking);
         assert!(breaking.is_some());
         assert_eq!(breaking.unwrap().items.len(), 1);
-        assert!(breaking.unwrap().items[0]
-            .description
-            .contains("AST node layout"));
+        assert!(
+            breaking.unwrap().items[0]
+                .description
+                .contains("AST node layout")
+        );
     }
 
     #[test]

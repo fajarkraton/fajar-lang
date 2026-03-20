@@ -11,9 +11,9 @@
 pub mod config;
 pub mod pretty;
 
+use crate::FjError;
 use crate::lexer::tokenize_with_comments;
 use crate::parser::parse;
-use crate::FjError;
 
 /// Formats Fajar Lang source code to canonical style.
 ///

@@ -871,7 +871,9 @@ pub enum SemanticError {
     },
 
     /// SE014: Trait bound not satisfied.
-    #[error("SE014: type '{concrete_type}' does not implement trait '{trait_name}' (required by generic bound on '{param_name}')")]
+    #[error(
+        "SE014: type '{concrete_type}' does not implement trait '{trait_name}' (required by generic bound on '{param_name}')"
+    )]
     TraitBoundNotSatisfied {
         /// The concrete type that doesn't satisfy the bound.
         concrete_type: String,
@@ -904,7 +906,9 @@ pub enum SemanticError {
     },
 
     /// SE016: Trait method signature mismatch.
-    #[error("SE016: method '{method}' in impl {trait_name} for {target_type} has wrong signature: {detail}")]
+    #[error(
+        "SE016: method '{method}' in impl {trait_name} for {target_type} has wrong signature: {detail}"
+    )]
     TraitMethodSignatureMismatch {
         /// Method name.
         method: String,
@@ -1508,78 +1512,96 @@ mod tests {
     #[test]
     fn error_undefined_variable() {
         let errors = check_errors("x + 1");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::UndefinedVariable { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UndefinedVariable { .. }))
+        );
     }
 
     #[test]
     fn error_type_mismatch_let() {
         let errors = check_errors("let x: i64 = \"hello\"");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_immutable_assignment() {
         let errors = check_errors("let x = 1\nx = 2");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::ImmutableAssignment { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::ImmutableAssignment { .. }))
+        );
     }
 
     #[test]
     fn error_arity_mismatch() {
         let src = "fn f(a: i64) -> i64 { a }\nf(1, 2)";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::ArgumentCountMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::ArgumentCountMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_missing_struct_field() {
         let src = "struct Point { x: f64, y: f64 }\nlet p = Point { x: 1.0 }";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::MissingField { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::MissingField { .. }))
+        );
     }
 
     #[test]
     fn error_struct_field_type_mismatch() {
         let src = "struct Point { x: f64, y: f64 }\nlet p = Point { x: \"hi\", y: 2.0 }";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_mixed_array_types() {
         let errors = check_errors("[1, \"hello\"]");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_fn_return_type_mismatch() {
         let src = "fn f() -> i64 { \"hello\" }";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_argument_type_mismatch() {
         let src = "fn f(a: i64) -> i64 { a }\nf(\"hello\")";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -1623,18 +1645,22 @@ mod tests {
     fn error_i32_not_assignable_to_i64() {
         let src = "fn f(x: i32) -> i32 { x }\nlet y: i64 = f(1)";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
     fn error_f32_not_assignable_to_f64() {
         let src = "fn f(x: f32) -> f32 { x }\nlet y: f64 = f(1.0)";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -1645,9 +1671,11 @@ mod tests {
             let x = get_i32() + get_i64()
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -1701,9 +1729,11 @@ mod tests {
             let x = a() & b()
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -1802,9 +1832,11 @@ mod tests {
             }
         "#;
         let diags = check_all_diagnostics(src);
-        assert!(diags
-            .iter()
-            .any(|e| matches!(e, SemanticError::UnreachableCode { .. })));
+        assert!(
+            diags
+                .iter()
+                .any(|e| matches!(e, SemanticError::UnreachableCode { .. }))
+        );
     }
 
     #[test]
@@ -1849,9 +1881,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     #[test]
@@ -1902,9 +1936,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::BreakOutsideLoop { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::BreakOutsideLoop { .. }))
+        );
     }
 
     #[test]
@@ -1915,9 +1951,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::BreakOutsideLoop { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::BreakOutsideLoop { .. }))
+        );
     }
 
     #[test]
@@ -1962,9 +2000,11 @@ mod tests {
     #[test]
     fn error_return_outside_function() {
         let errors = check_errors("return 42");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::ReturnOutsideFunction { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::ReturnOutsideFunction { .. }))
+        );
     }
 
     #[test]
@@ -1989,9 +2029,11 @@ mod tests {
     fn device_fn_cannot_call_os_builtins() {
         let src = "@device fn bad() { mem_alloc(4096, 8) }";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. }))
+        );
     }
 
     #[test]
@@ -2001,9 +2043,11 @@ mod tests {
             @device fn bad() -> i64 { kern_init() }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::KernelCallInDevice { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::KernelCallInDevice { .. }))
+        );
     }
 
     #[test]
@@ -2013,9 +2057,11 @@ mod tests {
             @kernel fn bad() -> i64 { infer() }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::DeviceCallInKernel { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::DeviceCallInKernel { .. }))
+        );
     }
 
     #[test]
@@ -2032,18 +2078,22 @@ mod tests {
     fn device_fn_cannot_call_irq_register() {
         let src = r#"@device fn bad() { irq_register(32, "handler") }"#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. }))
+        );
     }
 
     #[test]
     fn device_fn_cannot_call_port_write() {
         let src = "@device fn bad() { port_write(128, 42) }";
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::RawPointerInDevice { .. }))
+        );
     }
 
     // ── Sprint 3.10: KE001/KE002 enforcement ──
@@ -2057,18 +2107,22 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. }))
+        );
     }
 
     #[test]
     fn kernel_fn_cannot_call_to_string() {
         let src = r#"@kernel fn bad() { to_string(42) }"#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. }))
+        );
     }
 
     #[test]
@@ -2080,9 +2134,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. }))
+        );
     }
 
     #[test]
@@ -2112,12 +2168,16 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. })));
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::DeviceCallInKernel { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::HeapAllocInKernel { .. }))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::DeviceCallInKernel { .. }))
+        );
     }
 
     // ── S6.1/S6.2 Trait system ──
@@ -2142,9 +2202,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::DuplicateDefinition { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::DuplicateDefinition { .. }))
+        );
     }
 
     #[test]
@@ -2182,9 +2244,11 @@ mod tests {
         "#;
         // No missing method errors
         let diagnostics = check_all_diagnostics(src);
-        assert!(!diagnostics
-            .iter()
-            .any(|e| matches!(e, SemanticError::MissingField { .. })));
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::MissingField { .. }))
+        );
     }
 
     #[test]
@@ -2236,9 +2300,11 @@ mod tests {
             }
         "#;
         let errors = check_all_diagnostics(src);
-        assert!(!errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TraitMethodSignatureMismatch { .. })));
+        assert!(
+            !errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TraitMethodSignatureMismatch { .. }))
+        );
     }
 
     #[test]
@@ -2279,9 +2345,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::FfiUnsafeType { .. })));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::FfiUnsafeType { .. }))
+        );
     }
 
     #[test]
@@ -2293,9 +2360,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::FfiUnsafeType { .. })));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::FfiUnsafeType { .. }))
+        );
     }
 
     #[test]
@@ -2426,9 +2494,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     #[test]
@@ -2476,9 +2545,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     #[test]
@@ -2510,9 +2581,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     #[test]
@@ -2544,9 +2617,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     // ── v0.4 S4: Future/Poll type system ──
@@ -2576,9 +2651,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::NonExhaustiveMatch { .. }))
+        );
     }
 
     #[test]
@@ -2591,9 +2668,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. }))
+        );
     }
 
     #[test]
@@ -2637,9 +2716,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a"))
+        );
     }
 
     #[test]
@@ -2672,9 +2752,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a"))
+        );
     }
 
     #[test]
@@ -2835,9 +2916,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "x")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "x"))
+        );
     }
 
     #[test]
@@ -2868,9 +2950,11 @@ mod tests {
             }
         "#;
         let diags = check_all_diagnostics(src);
-        assert!(diags
-            .iter()
-            .any(|e| matches!(e, SemanticError::UnreachableCode { .. })));
+        assert!(
+            diags
+                .iter()
+                .any(|e| matches!(e, SemanticError::UnreachableCode { .. }))
+        );
     }
 
     #[test]
@@ -2883,9 +2967,11 @@ mod tests {
             }
         "#;
         let diags = check_all_diagnostics(src);
-        assert!(diags
-            .iter()
-            .any(|e| matches!(e, SemanticError::UnreachableCode { .. })));
+        assert!(
+            diags
+                .iter()
+                .any(|e| matches!(e, SemanticError::UnreachableCode { .. }))
+        );
     }
 
     // ── self/&self validation ──────────────────────────────────────────
@@ -2969,9 +3055,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::MoveWhileBorrowed { name, .. } if name == "a")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::MoveWhileBorrowed { name, .. } if name == "a"))
+        );
     }
 
     #[test]
@@ -3020,9 +3107,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::MutBorrowConflict { name, .. } if name == "x")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::MutBorrowConflict { name, .. } if name == "x"))
+        );
     }
 
     #[test]
@@ -3054,9 +3142,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::ImmBorrowConflict { name, .. } if name == "x")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::ImmBorrowConflict { name, .. } if name == "x"))
+        );
     }
 
     #[test]
@@ -3073,9 +3162,10 @@ mod tests {
         let result = check(src);
         assert!(result.is_err());
         let errs = result.unwrap_err();
-        assert!(errs
-            .iter()
-            .any(|e| matches!(e, SemanticError::MutBorrowConflict { name, .. } if name == "x")));
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, SemanticError::MutBorrowConflict { name, .. } if name == "x"))
+        );
     }
 
     #[test]
@@ -3466,9 +3556,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -3492,9 +3584,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -3519,9 +3613,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -3544,9 +3640,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TypeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -3559,9 +3657,11 @@ mod tests {
             }
         "#;
         let errors = check_errors(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. }))
+        );
     }
 
     #[test]
@@ -4023,15 +4123,19 @@ mod tests {
     fn is_send_returns_true_for_composites() {
         assert!(Type::Array(Box::new(Type::I64)).is_send());
         assert!(Type::Tuple(vec![Type::I64, Type::F64]).is_send());
-        assert!(Type::Enum {
-            name: "Option".into()
-        }
-        .is_send());
-        assert!(Type::Function {
-            params: vec![Type::I64],
-            ret: Box::new(Type::I64),
-        }
-        .is_send());
+        assert!(
+            Type::Enum {
+                name: "Option".into()
+            }
+            .is_send()
+        );
+        assert!(
+            Type::Function {
+                params: vec![Type::I64],
+                ret: Box::new(Type::I64),
+            }
+            .is_send()
+        );
     }
 
     #[test]

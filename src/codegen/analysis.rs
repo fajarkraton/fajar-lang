@@ -679,7 +679,7 @@ mod tests {
 
         let info = &report.functions[0];
         assert_eq!(info.local_count, 3); // 1 param + 2 locals
-                                         // frame = 8 (i64 param) + 4 (i32 local) + 8 (f64 local) + 8 (ret addr)
+        // frame = 8 (i64 param) + 4 (i32 local) + 8 (f64 local) + 8 (ret addr)
         assert_eq!(info.frame_bytes, 8 + 4 + 8 + PTR_SIZE);
     }
 
@@ -762,10 +762,12 @@ mod tests {
 
         let recursive_count = report.functions.iter().filter(|f| f.is_recursive).count();
         assert!(recursive_count >= 1);
-        assert!(report
-            .warnings
-            .iter()
-            .any(|w| matches!(w, StackWarning::Recursion { .. })));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| matches!(w, StackWarning::Recursion { .. }))
+        );
     }
 
     #[test]

@@ -733,11 +733,7 @@ pub fn name_similarity(prefix: &str, candidate: &str) -> u32 {
         (ratio * 100.0) as u32
     } else {
         // Check for substring match
-        if candidate.contains(prefix) {
-            30
-        } else {
-            0
-        }
+        if candidate.contains(prefix) { 30 } else { 0 }
     }
 }
 
@@ -855,9 +851,11 @@ mod tests {
         ];
         let suggestions = suggest_imports("HashMap", &available);
         assert_eq!(suggestions.len(), 1);
-        assert!(suggestions[0]
-            .use_statement
-            .contains("std::collections::HashMap"));
+        assert!(
+            suggestions[0]
+                .use_statement
+                .contains("std::collections::HashMap")
+        );
     }
 
     #[test]

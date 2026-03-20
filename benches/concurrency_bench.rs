@@ -6,7 +6,7 @@
 
 #[cfg(feature = "native")]
 mod benches {
-    use criterion::{criterion_group, Criterion};
+    use criterion::{Criterion, criterion_group};
     use fajar_lang::codegen::cranelift::runtime_fns::{
         fj_rt_atomic_add, fj_rt_atomic_cas, fj_rt_atomic_free, fj_rt_atomic_load, fj_rt_atomic_new,
         fj_rt_channel_free, fj_rt_channel_new, fj_rt_channel_recv, fj_rt_channel_send,

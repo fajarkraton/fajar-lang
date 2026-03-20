@@ -7,9 +7,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicU64;
 
+use cranelift_codegen::Context;
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::settings::{self, Configurable};
-use cranelift_codegen::Context;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataId, FuncId, Linkage, Module};
@@ -26,11 +26,11 @@ mod tests;
 
 use closures::scan_closures_in_body;
 use compile::*;
-use context::{emit_owned_cleanup, CodegenCtx};
+use context::{CodegenCtx, emit_owned_cleanup};
 use generics::{collect_called_fns, collect_generic_calls, compute_reachable, specialize_fndef};
 
-use super::types as clif_types;
 use super::CodegenError;
+use super::types as clif_types;
 use crate::parser::ast::{Expr, ExternFn, FnDef, Item, LiteralKind, Program, Stmt, TypeExpr};
 
 // ═══════════════════════════════════════════════════════════════════════

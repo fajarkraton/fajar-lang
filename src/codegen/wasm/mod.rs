@@ -976,7 +976,7 @@ impl WasmModule {
         encode_unsigned_leb128(self.data.len() as u64, &mut payload);
         for seg in &self.data {
             payload.push(0x00); // active segment, memory 0
-                                // offset is i32.const + end
+            // offset is i32.const + end
             WasmInstruction::I32Const(seg.offset as i32).encode(&mut payload);
             payload.push(0x0B); // end of offset expr
             encode_unsigned_leb128(seg.data.len() as u64, &mut payload);
@@ -1556,7 +1556,7 @@ impl WasmCompiler {
                     _ => {
                         return Err(WasmError::UnsupportedExpr(
                             "non-numeric constant".to_string(),
-                        ))
+                        ));
                     }
                 }
                 Ok(())
@@ -1797,7 +1797,7 @@ impl WasmCompiler {
             _ => {
                 return Err(WasmError::NotImplemented(
                     "indirect function call".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2069,7 +2069,7 @@ impl WasmCompiler {
             _ => {
                 return Err(WasmError::NotImplemented(
                     "complex assignment target".to_string(),
-                ))
+                ));
             }
         };
 
@@ -2506,9 +2506,10 @@ mod tests {
         compiler.compile_stmt(&stmt, &mut out).unwrap();
         // Should have I64Const(42) + LocalSet
         assert!(out.contains(&WasmInstruction::I64Const(42)));
-        assert!(out
-            .iter()
-            .any(|i| matches!(i, WasmInstruction::LocalSet(_))));
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, WasmInstruction::LocalSet(_)))
+        );
     }
 
     #[test]
@@ -2525,9 +2526,10 @@ mod tests {
         };
         compiler.compile_stmt(&let_stmt, &mut out).unwrap();
         compiler.compile_ident("x", &mut out).unwrap();
-        assert!(out
-            .iter()
-            .any(|i| matches!(i, WasmInstruction::LocalGet(_))));
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, WasmInstruction::LocalGet(_)))
+        );
     }
 
     #[test]
@@ -2680,9 +2682,10 @@ mod tests {
         };
         compiler.compile_expr(&call_expr, &mut out).unwrap();
         assert!(out.contains(&WasmInstruction::I64Const(21)));
-        assert!(out
-            .iter()
-            .any(|i| matches!(i, WasmInstruction::Call(idx) if *idx == func_idx)));
+        assert!(
+            out.iter()
+                .any(|i| matches!(i, WasmInstruction::Call(idx) if *idx == func_idx))
+        );
     }
 
     #[test]

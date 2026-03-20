@@ -736,10 +736,11 @@ mod tests {
         let tutorials = builtin_tutorials();
         for t in &tutorials {
             assert!(!t.slug.is_empty());
-            assert!(t
-                .slug
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-'));
+            assert!(
+                t.slug
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            );
             assert!(t.estimated_minutes > 0);
         }
     }

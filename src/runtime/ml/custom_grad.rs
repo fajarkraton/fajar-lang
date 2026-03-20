@@ -32,7 +32,9 @@ pub enum CustomGradError {
     },
 
     /// Numerical gradient check failed.
-    #[error("numerical gradient check failed: max error {max_error:.6} exceeds tolerance {tolerance:.6}")]
+    #[error(
+        "numerical gradient check failed: max error {max_error:.6} exceeds tolerance {tolerance:.6}"
+    )]
     GradientCheckFailed {
         /// Maximum absolute error between analytical and numerical gradients.
         max_error: f64,

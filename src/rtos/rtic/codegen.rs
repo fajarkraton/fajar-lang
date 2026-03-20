@@ -18,8 +18,8 @@
 use std::collections::HashMap;
 
 use super::{
-    compute_ceilings, validate_app, CriticalSectionAnalysis, DeadlockFreedomProof, RticApp,
-    RticError, StackAnalysis,
+    CriticalSectionAnalysis, DeadlockFreedomProof, RticApp, RticError, StackAnalysis,
+    compute_ceilings, validate_app,
 };
 
 // ═══════════════════════════════════════════════════════════════════════

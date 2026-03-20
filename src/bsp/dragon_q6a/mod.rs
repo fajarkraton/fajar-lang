@@ -1841,12 +1841,16 @@ mod tests {
 
     #[test]
     fn q6a_camera_module_rsetup_overlay() {
-        assert!(CameraModule::Camera12M577
-            .rsetup_overlay()
-            .contains("IMX577"));
-        assert!(CameraModule::Camera8M219
-            .rsetup_overlay()
-            .contains("IMX219"));
+        assert!(
+            CameraModule::Camera12M577
+                .rsetup_overlay()
+                .contains("IMX577")
+        );
+        assert!(
+            CameraModule::Camera8M219
+                .rsetup_overlay()
+                .contains("IMX219")
+        );
     }
 
     #[test]

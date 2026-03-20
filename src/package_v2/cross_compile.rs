@@ -495,20 +495,26 @@ mod tests {
     #[test]
     fn s24_5_x86_features() {
         let feats = features_for_arch("x86_64");
-        assert!(feats
-            .iter()
-            .any(|f| f.name == "sse2" && f.enabled_by_default));
-        assert!(feats
-            .iter()
-            .any(|f| f.name == "avx2" && !f.enabled_by_default));
+        assert!(
+            feats
+                .iter()
+                .any(|f| f.name == "sse2" && f.enabled_by_default)
+        );
+        assert!(
+            feats
+                .iter()
+                .any(|f| f.name == "avx2" && !f.enabled_by_default)
+        );
     }
 
     #[test]
     fn s24_5_aarch64_features() {
         let feats = features_for_arch("aarch64");
-        assert!(feats
-            .iter()
-            .any(|f| f.name == "neon" && f.enabled_by_default));
+        assert!(
+            feats
+                .iter()
+                .any(|f| f.name == "neon" && f.enabled_by_default)
+        );
     }
 
     // S24.6 — QEMU Testing

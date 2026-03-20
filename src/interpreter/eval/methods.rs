@@ -234,7 +234,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "substring() requires integer arguments".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let end = match arg_vals.get(1) {
@@ -661,15 +661,16 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("gpu_matmul: first arg must be tensor".into()).into(),
-                )
+                );
             }
         };
         let b = match &args[1] {
             Value::Tensor(t) => t.clone(),
             _ => {
-                return Err(
-                    RuntimeError::TypeError("gpu_matmul: second arg must be tensor".into()).into(),
+                return Err(RuntimeError::TypeError(
+                    "gpu_matmul: second arg must be tensor".into(),
                 )
+                .into());
             }
         };
         // CPU fallback — delegates to existing tensor_matmul
@@ -695,7 +696,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("gpu_add: first arg must be tensor".into()).into(),
-                )
+                );
             }
         };
         let b = match &args[1] {
@@ -703,7 +704,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("gpu_add: second arg must be tensor".into()).into(),
-                )
+                );
             }
         };
         // CPU fallback — delegates to existing tensor_add
@@ -920,7 +921,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("log_to_file: path must be string".into()).into(),
-                )
+                );
             }
         };
         let message = match &args[1] {
@@ -928,7 +929,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("log_to_file: message must be string".into()).into(),
-                )
+                );
             }
         };
         use std::io::Write;
@@ -965,12 +966,12 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "watchdog_start: timeout must be integer (ms)".into(),
                 )
-                .into())
+                .into());
             }
         };
         use std::sync::{
-            atomic::{AtomicBool, Ordering},
             Arc,
+            atomic::{AtomicBool, Ordering},
         };
         let alive = Arc::new(AtomicBool::new(true));
         let alive_clone = alive.clone();
@@ -1013,7 +1014,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("watchdog_kick: id must be integer".into()).into(),
-                )
+                );
             }
         };
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -1037,7 +1038,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("watchdog_stop: id must be integer".into()).into(),
-                )
+                );
             }
         };
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -1062,7 +1063,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "sleep_ms: duration must be integer (ms)".into(),
                 )
-                .into())
+                .into());
             }
         };
         std::thread::sleep(std::time::Duration::from_millis(ms));
@@ -1081,7 +1082,7 @@ impl Interpreter {
         let key = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("cache_set: key must be string".into()).into())
+                return Err(RuntimeError::TypeError("cache_set: key must be string".into()).into());
             }
         };
         let val = match &args[1] {
@@ -1104,7 +1105,7 @@ impl Interpreter {
         let key = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("cache_get: key must be string".into()).into())
+                return Err(RuntimeError::TypeError("cache_get: key must be string".into()).into());
             }
         };
         match self.inference_cache.get(&key) {
@@ -1125,7 +1126,9 @@ impl Interpreter {
         let path = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("file_size: path must be string".into()).into())
+                return Err(
+                    RuntimeError::TypeError("file_size: path must be string".into()).into(),
+                );
             }
         };
         match std::fs::metadata(&path) {
@@ -1146,7 +1149,7 @@ impl Interpreter {
         let path = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("dir_list: path must be string".into()).into())
+                return Err(RuntimeError::TypeError("dir_list: path must be string".into()).into());
             }
         };
         let mut entries = Vec::new();

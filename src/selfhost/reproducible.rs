@@ -478,12 +478,16 @@ mod tests {
 
     #[test]
     fn s28_1_non_determinism_display() {
-        assert!(NonDeterminismSource::HashMapIteration
-            .to_string()
-            .contains("HashMap"));
-        assert!(NonDeterminismSource::Timestamp
-            .to_string()
-            .contains("timestamp"));
+        assert!(
+            NonDeterminismSource::HashMapIteration
+                .to_string()
+                .contains("HashMap")
+        );
+        assert!(
+            NonDeterminismSource::Timestamp
+                .to_string()
+                .contains("timestamp")
+        );
     }
 
     // S28.2 — Source Hash Embedding

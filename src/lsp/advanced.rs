@@ -1038,11 +1038,7 @@ fn extract_present_fields(line: &str) -> Vec<&str> {
             let part = part.trim();
             if let Some(colon_pos) = part.find(':') {
                 let field = part[..colon_pos].trim();
-                if !field.is_empty() {
-                    Some(field)
-                } else {
-                    None
-                }
+                if !field.is_empty() { Some(field) } else { None }
             } else {
                 None
             }
@@ -2105,9 +2101,11 @@ mod tests {
         let source = "let x = 42";
         let provider = CodeActionProvider::new();
         let actions = provider.actions_for_line(source, 0);
-        assert!(actions
-            .iter()
-            .any(|a| a.title.contains("Add type annotation")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.title.contains("Add type annotation"))
+        );
     }
 
     #[test]
@@ -2134,9 +2132,11 @@ mod tests {
         let source = "let x = Math::sqrt(4.0)";
         let provider = CodeActionProvider::new();
         let actions = provider.actions_for_line(source, 0);
-        assert!(actions
-            .iter()
-            .any(|a| a.title.contains("Add missing import")));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.title.contains("Add missing import"))
+        );
     }
 
     // ====================================================================
@@ -2148,9 +2148,11 @@ mod tests {
         let source = "// This is a comment";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::Comment));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::Comment)
+        );
     }
 
     #[test]
@@ -2158,9 +2160,11 @@ mod tests {
         let source = "let x = 42";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::Keyword && t.start_char == 0));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::Keyword && t.start_char == 0)
+        );
     }
 
     #[test]
@@ -2174,9 +2178,11 @@ mod tests {
             .collect();
         assert!(!fn_tokens.is_empty());
         // "add" should have declaration modifier
-        assert!(fn_tokens[0]
-            .modifiers
-            .contains(SemanticTokenModifier::DECLARATION));
+        assert!(
+            fn_tokens[0]
+                .modifiers
+                .contains(SemanticTokenModifier::DECLARATION)
+        );
     }
 
     #[test]
@@ -2184,9 +2190,11 @@ mod tests {
         let source = "let name = \"hello world\"";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::String));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::String)
+        );
     }
 
     #[test]
@@ -2194,9 +2202,11 @@ mod tests {
         let source = "let x = 42";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::Number));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::Number)
+        );
     }
 
     #[test]
@@ -2204,9 +2214,11 @@ mod tests {
         let source = "let p: Point = Point { x: 0.0 }";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::Type));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::Type)
+        );
     }
 
     #[test]
@@ -2214,9 +2226,11 @@ mod tests {
         let source = "@kernel fn setup_page_table() {}";
         let tokenizer = SemanticTokenizer::new();
         let tokens = tokenizer.tokenize(source);
-        assert!(tokens
-            .iter()
-            .any(|t| t.token_type == SemanticTokenType::Decorator));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == SemanticTokenType::Decorator)
+        );
     }
 
     #[test]

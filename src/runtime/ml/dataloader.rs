@@ -291,7 +291,7 @@ impl<'a, D: Dataset> DataLoaderIter<'a, D> {
                 None => {
                     return Some(Err(TensorError::InvalidData {
                         reason: format!("index {idx} out of bounds"),
-                    }))
+                    }));
                 }
             }
         }

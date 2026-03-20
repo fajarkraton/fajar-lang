@@ -14,8 +14,8 @@ pub mod compiler;
 pub mod engine;
 pub mod instruction;
 
-use crate::interpreter::value::Value;
 use crate::interpreter::RuntimeError;
+use crate::interpreter::value::Value;
 use crate::parser::ast::Program;
 
 /// Compiles and runs a program using the bytecode VM.

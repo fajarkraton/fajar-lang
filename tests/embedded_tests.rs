@@ -7,7 +7,7 @@ mod embedded;
 
 #[cfg(feature = "native")]
 mod framework_tests {
-    use super::embedded::{has_tools, link_and_run, EmbeddedTestConfig, TestArch};
+    use super::embedded::{EmbeddedTestConfig, TestArch, has_tools, link_and_run};
     use fajar_lang::codegen::cranelift::ObjectCompiler;
     use fajar_lang::codegen::target::TargetConfig;
     use fajar_lang::lexer::tokenize;

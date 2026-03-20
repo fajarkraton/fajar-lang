@@ -8,7 +8,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{emit_owned_cleanup, push_owned, CodegenCtx, OwnedKind};
+use super::super::context::{CodegenCtx, OwnedKind, emit_owned_cleanup, push_owned};
 use crate::codegen::CodegenError;
 use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr, UnaryOp};
 
@@ -263,10 +263,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                 cx.last_heap_array_return = false;
             }
             // If RHS is an identifier that's a heap array, propagate (e.g., let out = arr)
-            if let Expr::Ident {
-                name: rhs_name, ..
-            } = value.as_ref()
-            {
+            if let Expr::Ident { name: rhs_name, .. } = value.as_ref() {
                 if cx.heap_arrays.contains(rhs_name) {
                     cx.heap_arrays.insert(name.clone());
                 }

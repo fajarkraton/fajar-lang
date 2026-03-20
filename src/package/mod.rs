@@ -17,7 +17,7 @@ pub mod server;
 pub mod signing;
 pub mod verification;
 
-pub use manifest::{find_project_root, ProjectConfig};
+pub use manifest::{ProjectConfig, find_project_root};
 pub use publish::{publish_to_registry, validate_package};
 pub use registry::{Registry, SemVer, VersionConstraint};
-pub use resolver::{resolve_full, LockFile};
+pub use resolver::{LockFile, resolve_full};

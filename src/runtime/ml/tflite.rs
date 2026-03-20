@@ -1454,7 +1454,7 @@ mod tests {
         // Just magic, no content after counts
         data.push(1); // 1 subgraph
         data.push(0); // 0 buffers
-                      // Missing subgraph data
+        // Missing subgraph data
         assert!(tflite_load(&data).is_err());
     }
 }

@@ -14,7 +14,7 @@ use crate::parser::ast::{
     AssignOp, BinOp, Expr, FieldInit, Item, LiteralKind, MatchArm, ModDecl, Pattern, Stmt,
     TypeExpr, UseDecl, UseKind,
 };
-use crate::runtime::ml::{tensor_ops, TensorValue};
+use crate::runtime::ml::{TensorValue, tensor_ops};
 
 use super::{ControlFlow, EvalError, EvalResult, Interpreter, RuntimeError};
 
@@ -133,7 +133,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "format() first argument must be a string".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let mut result = String::new();
@@ -586,7 +586,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "optimizer_sgd: lr must be a number".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let momentum = match &args[1] {
@@ -596,7 +596,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "optimizer_sgd: momentum must be a number".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 Ok(Value::Optimizer(OptimizerValue::Sgd(
@@ -618,7 +618,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "optimizer_adam: lr must be a number".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 Ok(Value::Optimizer(OptimizerValue::Adam(
@@ -639,7 +639,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "optimizer_step: first arg must be an optimizer".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let mut tensor = match args[1].clone() {
@@ -648,7 +648,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "optimizer_step: second arg must be a tensor".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 // Apply gradient stored from last backward
@@ -705,7 +705,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "model_save: first arg must be a string path".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let mut named = Vec::new();
@@ -717,7 +717,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "model_save: name args must be strings".into(),
                             )
-                            .into())
+                            .into());
                         }
                     };
                     let tensor = match &args[i + 1] {
@@ -726,7 +726,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "model_save: tensor args must be tensors".into(),
                             )
-                            .into())
+                            .into());
                         }
                     };
                     named.push(crate::runtime::ml::serialize::NamedTensor { name, tensor });
@@ -758,7 +758,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "model_save_quantized: first arg must be a string path".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let mut named = Vec::new();
@@ -770,7 +770,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "model_save_quantized: name args must be strings".into(),
                             )
-                            .into())
+                            .into());
                         }
                     };
                     let tensor = match &args[i + 1] {
@@ -779,7 +779,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "model_save_quantized: tensor args must be tensors".into(),
                             )
-                            .into())
+                            .into());
                         }
                     };
                     let qt = crate::runtime::ml::quantize::QuantizedTensor::quantize(&tensor);
@@ -813,7 +813,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "layer_dense: in_features must be int".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let out_f = match &args[1] {
@@ -822,7 +822,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "layer_dense: out_features must be int".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 Ok(Value::Layer(Box::new(LayerValue::Dense(
@@ -843,7 +843,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "layer_forward: first arg must be a layer".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 let input = match &args[1] {
@@ -852,7 +852,7 @@ impl Interpreter {
                         return Err(RuntimeError::TypeError(
                             "layer_forward: second arg must be a tensor".into(),
                         )
-                        .into())
+                        .into());
                     }
                 };
                 match layer.as_ref() {
@@ -1598,7 +1598,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("mem_write_u8: value must be int".into()).into(),
-                )
+                );
             }
         };
         match self.os.memory.write_u8(addr, val) {
@@ -1622,7 +1622,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("mem_write_u32: value must be int".into()).into(),
-                )
+                );
             }
         };
         match self.os.memory.write_u32(addr, val) {
@@ -1646,7 +1646,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("mem_write_u64: value must be int".into()).into(),
-                )
+                );
             }
         };
         match self.os.memory.write_u64(addr, val) {
@@ -1672,7 +1672,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "page_map: phys_addr must be int/pointer".into(),
                 )
-                .into())
+                .into());
             }
         };
         let flags_val = match &args[2] {
@@ -1709,7 +1709,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("irq_register: irq num must be int".into()).into(),
-                )
+                );
             }
         };
         let handler = match &args[1] {
@@ -1717,7 +1717,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("irq_register: handler must be string".into()).into(),
-                )
+                );
             }
         };
         match self.os.irq.register(irq_num, handler) {
@@ -1740,7 +1740,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("irq_unregister: irq num must be int".into()).into(),
-                )
+                );
             }
         };
         match self.os.irq.unregister(irq_num) {
@@ -1807,7 +1807,7 @@ impl Interpreter {
         let value = match &args[1] {
             Value::Int(n) => *n as u8,
             _ => {
-                return Err(RuntimeError::TypeError("port_write: value must be int".into()).into())
+                return Err(RuntimeError::TypeError("port_write: value must be int".into()).into());
             }
         };
         self.os.port_io.write(port, value);
@@ -1828,7 +1828,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("syscall_define: num must be int".into()).into(),
-                )
+                );
             }
         };
         let handler_name = match &args[1] {
@@ -1837,15 +1837,16 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "syscall_define: handler must be string".into(),
                 )
-                .into())
+                .into());
             }
         };
         let arg_count = match &args[2] {
             Value::Int(n) => *n as usize,
             _ => {
-                return Err(
-                    RuntimeError::TypeError("syscall_define: arg_count must be int".into()).into(),
+                return Err(RuntimeError::TypeError(
+                    "syscall_define: arg_count must be int".into(),
                 )
+                .into());
             }
         };
         match self.os.syscall.define(num, handler_name, arg_count) {
@@ -1868,7 +1869,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("syscall_dispatch: num must be int".into()).into(),
-                )
+                );
             }
         };
         let syscall_args = args.len() - 1;
@@ -1930,7 +1931,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("gpio_set_direction: pin must be int".into()).into(),
-                )
+                );
             }
         };
         let dir = match &args[1] {
@@ -1939,7 +1940,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "gpio_set_direction: direction must be string (\"in\" or \"out\")".into(),
                 )
-                .into())
+                .into());
             }
         };
         let dir_val = match dir.as_str() {
@@ -1950,7 +1951,7 @@ impl Interpreter {
                     "gpio_set_direction: invalid direction '{}' (use \"in\" or \"out\")",
                     dir
                 ))
-                .into())
+                .into());
             }
         };
         if let Some(state) = self.gpio_pins.get_mut(&pin) {
@@ -1994,9 +1995,10 @@ impl Interpreter {
                 }
             }
             _ => {
-                return Err(
-                    RuntimeError::TypeError("gpio_write: level must be int or bool".into()).into(),
+                return Err(RuntimeError::TypeError(
+                    "gpio_write: level must be int or bool".into(),
                 )
+                .into());
             }
         };
         if let Some(state) = self.gpio_pins.get_mut(&pin) {
@@ -2121,7 +2123,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("uart_write_byte: port must be int".into()).into(),
-                )
+                );
             }
         };
         let byte = match &args[1] {
@@ -2129,7 +2131,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("uart_write_byte: byte must be int".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.uart_ports.get_mut(&port) {
@@ -2158,7 +2160,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("uart_read_byte: port must be int".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.uart_ports.get_mut(&port) {
@@ -2187,7 +2189,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("uart_write_str: port must be int".into()).into(),
-                )
+                );
             }
         };
         let s = match &args[1] {
@@ -2195,7 +2197,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("uart_write_str: data must be string".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.uart_ports.get_mut(&port) {
@@ -2224,7 +2226,9 @@ impl Interpreter {
         let ms = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError("delay_ms: argument must be int".into()).into())
+                return Err(
+                    RuntimeError::TypeError("delay_ms: argument must be int".into()).into(),
+                );
             }
         };
         if ms > 0 {
@@ -2245,7 +2249,9 @@ impl Interpreter {
         let us = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError("delay_us: argument must be int".into()).into())
+                return Err(
+                    RuntimeError::TypeError("delay_us: argument must be int".into()).into(),
+                );
             }
         };
         if us > 0 {
@@ -2268,7 +2274,7 @@ impl Interpreter {
         let ch = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError("pwm_open: channel must be int".into()).into())
+                return Err(RuntimeError::TypeError("pwm_open: channel must be int".into()).into());
             }
         };
         // Store PWM state: channel -> (frequency_hz, duty_percent, enabled)
@@ -2288,7 +2294,9 @@ impl Interpreter {
         let ch = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError("pwm_close: channel must be int".into()).into())
+                return Err(
+                    RuntimeError::TypeError("pwm_close: channel must be int".into()).into(),
+                );
             }
         };
         self.pwm_channels.remove(&ch);
@@ -2310,7 +2318,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "pwm_set_frequency: channel must be int".into(),
                 )
-                .into())
+                .into());
             }
         };
         let hz = match &args[1] {
@@ -2318,7 +2326,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("pwm_set_frequency: hz must be int".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.pwm_channels.get_mut(&ch) {
@@ -2347,7 +2355,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("pwm_set_duty: channel must be int".into()).into(),
-                )
+                );
             }
         };
         let duty = match &args[1] {
@@ -2355,7 +2363,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("pwm_set_duty: percent must be int".into()).into(),
-                )
+                );
             }
         };
         if !(0..=100).contains(&duty) {
@@ -2391,7 +2399,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("pwm_enable: channel must be int".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.pwm_channels.get_mut(&ch) {
@@ -2418,7 +2426,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("pwm_disable: channel must be int".into()).into(),
-                )
+                );
             }
         };
         if let Some(state) = self.pwm_channels.get_mut(&ch) {
@@ -2484,13 +2492,15 @@ impl Interpreter {
         let bus = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError("spi_transfer: bus must be int".into()).into())
+                return Err(RuntimeError::TypeError("spi_transfer: bus must be int".into()).into());
             }
         };
         let byte = match &args[1] {
             Value::Int(n) => *n as u8,
             _ => {
-                return Err(RuntimeError::TypeError("spi_transfer: byte must be int".into()).into())
+                return Err(
+                    RuntimeError::TypeError("spi_transfer: byte must be int".into()).into(),
+                );
             }
         };
         if let Some(state) = self.spi_buses.get_mut(&bus) {
@@ -2518,7 +2528,9 @@ impl Interpreter {
         let data = match &args[1] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("spi_write: data must be string".into()).into())
+                return Err(
+                    RuntimeError::TypeError("spi_write: data must be string".into()).into(),
+                );
             }
         };
         if let Some(state) = self.spi_buses.get_mut(&bus) {
@@ -2605,7 +2617,7 @@ impl Interpreter {
         let path = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("npu_load: path must be string".into()).into())
+                return Err(RuntimeError::TypeError("npu_load: path must be string".into()).into());
             }
         };
         // Simulation: assign incrementing model ID
@@ -2628,7 +2640,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("npu_infer: model must be int handle".into()).into(),
-                )
+                );
             }
         };
         let _input = match &args[1] {
@@ -2638,7 +2650,7 @@ impl Interpreter {
                     "npu_infer: input must be int, got {:?}",
                     v
                 ))
-                .into())
+                .into());
             }
         };
         if !self.npu_models.contains_key(&model_id) {
@@ -2670,7 +2682,7 @@ impl Interpreter {
                     "qnn_quantize: first argument must be Tensor, got {:?}",
                     v
                 ))
-                .into())
+                .into());
             }
         };
         let dtype_str = match &args[1] {
@@ -2680,7 +2692,7 @@ impl Interpreter {
                     "qnn_quantize: second argument must be string dtype, got {:?}",
                     v
                 ))
-                .into())
+                .into());
             }
         };
         let dtype = match dtype_str.as_str() {
@@ -2694,7 +2706,7 @@ impl Interpreter {
                     "qnn_quantize: unsupported dtype '{}', expected uint8/int8/f32/f16/bf16",
                     other
                 ))
-                .into())
+                .into());
             }
         };
         let buf = crate::runtime::ml::npu::QnnBuffer::from_tensor(&tensor, dtype).map_err(|e| {
@@ -2721,7 +2733,7 @@ impl Interpreter {
                     "qnn_dequantize: argument must be int handle, got {:?}",
                     v
                 ))
-                .into())
+                .into());
             }
         };
         let buf = self.qnn_buffers.get(&handle).ok_or_else(|| {
@@ -2750,7 +2762,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "shape elements must be non-negative integers".into(),
                             )
-                            .into())
+                            .into());
                         }
                     }
                 }
@@ -2861,7 +2873,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(
                                 "tensor data must be numeric".into(),
                             )
-                            .into())
+                            .into());
                         }
                     }
                 }
@@ -2907,7 +2919,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("tensor_reshape: expected tensor".into()).into(),
-                )
+                );
             }
         };
         let new_shape = Self::extract_shape(&args, 1)?;
@@ -2959,7 +2971,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(format!(
                     "tensor_{op}: first arg must be tensor"
                 ))
-                .into())
+                .into());
             }
         };
         let b = match &args[1] {
@@ -2968,7 +2980,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(format!(
                     "tensor_{op}: second arg must be tensor"
                 ))
-                .into())
+                .into());
             }
         };
         // Use tracked ops when either input requires grad and tape is recording
@@ -3026,7 +3038,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "tensor_matmul: first arg must be tensor".into(),
                 )
-                .into())
+                .into());
             }
         };
         let b = match &args[1] {
@@ -3035,7 +3047,7 @@ impl Interpreter {
                 return Err(RuntimeError::TypeError(
                     "tensor_matmul: second arg must be tensor".into(),
                 )
-                .into())
+                .into());
             }
         };
         let use_tracked = (a.requires_grad() || b.requires_grad()) && self.tape.is_recording();
@@ -3206,7 +3218,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("tensor_linspace: steps must be int".into()).into(),
-                )
+                );
             }
         };
         tensor_ops::linspace(start, end, steps)
@@ -3471,7 +3483,7 @@ impl Interpreter {
                     return Err(RuntimeError::TypeError(
                         "tensor_leaky_relu: alpha must be a number".into(),
                     )
-                    .into())
+                    .into());
                 }
             }
         } else {
@@ -4171,11 +4183,7 @@ impl Interpreter {
                     }
                     _ => return None,
                 };
-                if in_range {
-                    Some(HashMap::new())
-                } else {
-                    None
-                }
+                if in_range { Some(HashMap::new()) } else { None }
             }
             Pattern::Or { patterns, .. } => {
                 // Try each alternative — first match wins
@@ -4356,7 +4364,7 @@ impl Interpreter {
                 _ => {
                     return Err(
                         RuntimeError::TypeError("range bounds must be integers".into()).into(),
-                    )
+                    );
                 }
             },
             None => 0,
@@ -4368,11 +4376,11 @@ impl Interpreter {
                 _ => {
                     return Err(
                         RuntimeError::TypeError("range bounds must be integers".into()).into(),
-                    )
+                    );
                 }
             },
             None => {
-                return Err(RuntimeError::TypeError("range must have an end bound".into()).into())
+                return Err(RuntimeError::TypeError("range must have an end bound".into()).into());
             }
         };
 
@@ -4474,7 +4482,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("math function requires a number".into()).into(),
-                )
+                );
             }
         };
         Ok(Value::Float(f(v)))
@@ -4495,7 +4503,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("math function requires a number".into()).into(),
-                )
+                );
             }
         };
         let b = match &args[1] {
@@ -4504,7 +4512,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("math function requires a number".into()).into(),
-                )
+                );
             }
         };
         Ok(Value::Float(f(a, b)))
@@ -4567,7 +4575,7 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("cast to complex types not supported".into()).into(),
-                )
+                );
             }
         };
         match (&val, type_name) {
@@ -5130,7 +5138,7 @@ impl Interpreter {
                             return Err(RuntimeError::TypeError(format!(
                                 "{fn_name} requires array of integers"
                             ))
-                            .into())
+                            .into());
                         }
                     }
                 }
@@ -5158,13 +5166,17 @@ impl Interpreter {
         let a = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into())
+                return Err(
+                    RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into(),
+                );
             }
         };
         let b = match &args[1] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into())
+                return Err(
+                    RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into(),
+                );
             }
         };
         Ok((a, b))
@@ -5179,19 +5191,25 @@ impl Interpreter {
         let a = match &args[0] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into())
+                return Err(
+                    RuntimeError::TypeError(format!("{fn_name}: arg 0 must be i64")).into(),
+                );
             }
         };
         let b = match &args[1] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into())
+                return Err(
+                    RuntimeError::TypeError(format!("{fn_name}: arg 1 must be i64")).into(),
+                );
             }
         };
         let c = match &args[2] {
             Value::Int(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(format!("{fn_name}: arg 2 must be i64")).into())
+                return Err(
+                    RuntimeError::TypeError(format!("{fn_name}: arg 2 must be i64")).into(),
+                );
             }
         };
         Ok((a, b, c))

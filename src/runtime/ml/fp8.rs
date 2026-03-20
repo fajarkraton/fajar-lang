@@ -176,11 +176,7 @@ impl Fp8E5M2 {
         let real_exp = exp as i32 - Self::EXP_BIAS;
         let mantissa = 1.0 + (man as f32) / (1 << Self::MAN_BITS) as f32;
         let value = mantissa * 2.0_f32.powi(real_exp);
-        if sign == 1 {
-            -value
-        } else {
-            value
-        }
+        if sign == 1 { -value } else { value }
     }
 
     /// Check if this value is NaN.
@@ -348,11 +344,7 @@ impl Fp8E4M3 {
         let real_exp = exp as i32 - Self::EXP_BIAS;
         let mantissa = 1.0 + (man as f32) / (1 << Self::MAN_BITS) as f32;
         let value = mantissa * 2.0_f32.powi(real_exp);
-        if sign == 1 {
-            -value
-        } else {
-            value
-        }
+        if sign == 1 { -value } else { value }
     }
 
     /// Check if this value is NaN.

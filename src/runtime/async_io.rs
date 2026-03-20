@@ -1336,7 +1336,7 @@ pub fn encode_ws_frame(frame: &WsFrame) -> Vec<u8> {
     let len = frame.payload.len() as u8;
     if frame.masked {
         out.push(0x80 | len); // mask bit set
-                              // Use a fixed mask key for simulation
+        // Use a fixed mask key for simulation
         let mask_key: [u8; 4] = [0x37, 0xFA, 0x21, 0x3D];
         out.extend_from_slice(&mask_key);
         for (i, b) in frame.payload.iter().enumerate() {

@@ -2361,9 +2361,11 @@ mod tests {
             "Float64Array"
         );
         // Tensor unsupported in WASM
-        assert!(mapper
-            .map_type(&FajarType::Tensor, TargetLanguage::Wasm)
-            .is_err());
+        assert!(
+            mapper
+                .map_type(&FajarType::Tensor, TargetLanguage::Wasm)
+                .is_err()
+        );
     }
 
     #[test]

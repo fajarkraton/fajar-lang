@@ -94,8 +94,8 @@ impl Dropout {
             return x.clone();
         }
 
-        use ndarray_rand::rand_distr::Uniform;
         use ndarray_rand::RandomExt;
+        use ndarray_rand::rand_distr::Uniform;
         let mask = ndarray::ArrayD::random(x.shape(), Uniform::new(0.0, 1.0));
         let scale = 1.0 / (1.0 - self.p);
         let result = x.data().mapv(|v| v) * mask.mapv(|v| if v > self.p { scale } else { 0.0 });

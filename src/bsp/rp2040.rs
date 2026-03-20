@@ -448,7 +448,7 @@ mod tests {
         let uf2 = binary_to_uf2(&firmware, 0x1000_0000);
 
         assert_eq!(uf2.len(), 3 * 512); // 3 UF2 blocks
-                                        // First block: addr = 0x1000_0000
+        // First block: addr = 0x1000_0000
         assert_eq!(
             u32::from_le_bytes([uf2[12], uf2[13], uf2[14], uf2[15]]),
             0x1000_0000

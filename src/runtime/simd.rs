@@ -1338,8 +1338,8 @@ fn estimate_speedup_for_ops(ops: &[LoopOp], vw: usize) -> f64 {
         return 1.0;
     }
     let base = vw as f64; // ideal: width-fold speedup
-                          // Penalise: divisions are slower, conditionals need masking, reductions
-                          // lose some parallelism.
+    // Penalise: divisions are slower, conditionals need masking, reductions
+    // lose some parallelism.
     let penalty: f64 = ops
         .iter()
         .map(|op| match op {

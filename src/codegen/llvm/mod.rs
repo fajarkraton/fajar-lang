@@ -22,6 +22,7 @@ pub mod types;
 use std::collections::HashMap;
 use std::path::Path;
 
+use inkwell::OptimizationLevel;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -31,7 +32,6 @@ use inkwell::targets::{
 };
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::OptimizationLevel;
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
@@ -731,7 +731,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     return Err(CodegenError::NotImplemented(format!(
                         "LLVM float binop: {:?}",
                         op
-                    )))
+                    )));
                 }
             };
             return Ok(result.into());
@@ -875,7 +875,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 return Err(CodegenError::NotImplemented(format!(
                     "LLVM int binop: {:?}",
                     op
-                )))
+                )));
             }
         };
         Ok(result)
@@ -1519,7 +1519,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             _ => {
                 return Err(CodegenError::NotImplemented(
                     "LLVM for loop only supports range iterables".into(),
-                ))
+                ));
             }
         };
 
@@ -1806,7 +1806,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     return Err(CodegenError::NotImplemented(format!(
                         "LLVM match pattern: {:?}",
                         std::mem::discriminant(&arm.pattern)
-                    )))
+                    )));
                 }
             }
         }

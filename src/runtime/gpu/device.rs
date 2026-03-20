@@ -1,8 +1,8 @@
 //! GPU device trait — backend-agnostic interface for GPU computation.
 
+use super::GpuError;
 use super::buffer::GpuBuffer;
 use super::kernel::{GpuKernel, KernelSource, WorkgroupSize};
-use super::GpuError;
 
 /// GPU backend identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use super::nat::{check_nat_eq, NatError, NatValue};
+use super::nat::{NatError, NatValue, check_nat_eq};
 
 // ═══════════════════════════════════════════════════════════════════════
 // S3.1: Tensor<N, M> Type

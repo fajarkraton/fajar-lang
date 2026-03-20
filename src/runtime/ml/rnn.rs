@@ -3,7 +3,7 @@
 //! Implements Long Short-Term Memory (LSTM) and Gated Recurrent Unit (GRU)
 //! cells with forward and backward (BPTT) support.
 
-use ndarray::{s, Array2, Axis};
+use ndarray::{Array2, Axis, s};
 
 use super::tensor::{TensorError, TensorValue};
 

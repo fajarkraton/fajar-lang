@@ -72,7 +72,7 @@ impl TargetConfig {
             other => {
                 return Err(CodegenError::AbiError(format!(
                     "unsupported architecture: {other}"
-                )))
+                )));
             }
         };
 

@@ -601,20 +601,23 @@ mod tests {
         assert_eq!(pc.wake_sources().len(), 4);
 
         // Invalid: interrupt line > 255
-        assert!(pc
-            .configure_wake_source(WakeSource::Interrupt(300))
-            .is_err());
+        assert!(
+            pc.configure_wake_source(WakeSource::Interrupt(300))
+                .is_err()
+        );
         // Invalid: GPIO pin > 127
-        assert!(pc
-            .configure_wake_source(WakeSource::GpioPin {
+        assert!(
+            pc.configure_wake_source(WakeSource::GpioPin {
                 pin: 200,
                 edge: Edge::Both,
             })
-            .is_err());
+            .is_err()
+        );
         // Invalid: zero duration timer
-        assert!(pc
-            .configure_wake_source(WakeSource::WakeupTimer { duration_ms: 0 })
-            .is_err());
+        assert!(
+            pc.configure_wake_source(WakeSource::WakeupTimer { duration_ms: 0 })
+                .is_err()
+        );
     }
 
     // S25.4: Stop/Standby require wake sources

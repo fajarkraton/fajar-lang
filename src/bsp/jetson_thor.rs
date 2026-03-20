@@ -1140,7 +1140,11 @@ impl ThorPlatform {
             self.board.sdk,
             self.power.mode,
             self.power.current_watts(),
-            if self.mig.mig_enabled { "enabled" } else { "disabled" }
+            if self.mig.mig_enabled {
+                "enabled"
+            } else {
+                "disabled"
+            }
         )
     }
 }

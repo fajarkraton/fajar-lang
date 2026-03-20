@@ -3,8 +3,8 @@
 //! Tests memory safety, integer overflow, bounds checking, null safety,
 //! move semantics, context isolation, and type safety across the full pipeline.
 
-use fajar_lang::interpreter::{Interpreter, RuntimeError, Value};
 use fajar_lang::FjError;
+use fajar_lang::interpreter::{Interpreter, RuntimeError, Value};
 
 /// Helper: run source through full pipeline (lex → parse → analyze → eval).
 /// Extracts RuntimeError from FjError for convenient matching.

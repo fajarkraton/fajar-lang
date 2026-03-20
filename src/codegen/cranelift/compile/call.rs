@@ -103,7 +103,7 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
         _ => {
             return Err(CodegenError::NotImplemented(
                 "call on non-ident callee".into(),
-            ))
+            ));
         }
     };
 

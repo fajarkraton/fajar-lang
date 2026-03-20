@@ -800,9 +800,11 @@ mod tests {
         let cors = CorsConfig::permissive();
         assert!(cors.is_origin_allowed("https://example.com"));
         let headers = cors.headers("https://example.com");
-        assert!(headers
-            .iter()
-            .any(|(k, v)| k == "Access-Control-Allow-Origin" && v == "*"));
+        assert!(
+            headers
+                .iter()
+                .any(|(k, v)| k == "Access-Control-Allow-Origin" && v == "*")
+        );
     }
 
     #[test]

@@ -288,7 +288,7 @@ impl NetworkStack {
         reply.extend_from_slice(&[0x40, 0x01, 0x00, 0x00]); // ttl=64, proto=ICMP
         reply.extend_from_slice(&self.ip.to_be_bytes()); // src ip
         reply.extend_from_slice(&src_ip.to_be_bytes()); // dst ip
-                                                        // ICMP echo reply (8 bytes)
+        // ICMP echo reply (8 bytes)
         reply.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // type=0 (reply), checksum
         reply.extend_from_slice(&[0x00, 0x01, 0x00, 0x01]); // id, seq
         reply

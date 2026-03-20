@@ -14,8 +14,8 @@
 //! - [`ZephyrTimer`] — Periodic and one-shot timers
 
 use super::zephyr::{
-    ZephyrError, ZephyrMsgqHandle, ZephyrMutexHandle, ZephyrSemHandle, ZephyrSim,
-    ZephyrThreadHandle, ZephyrThreadState, ZephyrTimerHandle, K_FOREVER, K_NO_WAIT,
+    K_FOREVER, K_NO_WAIT, ZephyrError, ZephyrMsgqHandle, ZephyrMutexHandle, ZephyrSemHandle,
+    ZephyrSim, ZephyrThreadHandle, ZephyrThreadState, ZephyrTimerHandle,
 };
 
 // ═══════════════════════════════════════════════════════════════════════

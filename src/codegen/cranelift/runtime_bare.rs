@@ -507,11 +507,7 @@ pub extern "C" fn fj_rt_bare_uart_available(port: i64) -> i64 {
     }
     // PL011: check UARTFR bit 4 (RXFE)
     let flags = unsafe { core::ptr::read_volatile((base + 0x18) as *const u32) };
-    if flags & (1 << 4) != 0 {
-        0
-    } else {
-        1
-    }
+    if flags & (1 << 4) != 0 { 0 } else { 1 }
 }
 
 /// Set the MMIO base address for a UART port.
@@ -884,11 +880,7 @@ pub extern "C" fn fj_rt_bare_dma_wait(channel: i64) -> i64 {
     }
     // In simulation, DMA is synchronous so always done immediately
     let state = DMA_STATE[channel as usize].load(Ordering::Relaxed);
-    if state == 3 {
-        0
-    } else {
-        -1
-    }
+    if state == 3 { 0 } else { -1 }
 }
 
 /// Get DMA channel status: 0=idle, 1=configured, 2=running, 3=done.
@@ -1577,7 +1569,7 @@ mod tests {
         // First transfer: send 0xAB, receive previous loopback (0)
         let rx1 = fj_rt_bare_spi_transfer(0, 0xAB);
         assert_eq!(rx1, 0); // no previous data
-                            // Second transfer: send 0xCD, receive 0xAB (loopback)
+        // Second transfer: send 0xCD, receive 0xAB (loopback)
         let rx2 = fj_rt_bare_spi_transfer(0, 0xCD);
         assert_eq!(rx2, 0xAB);
     }
@@ -2001,3 +1993,59 @@ pub extern "C" fn fj_rt_bare_set_uart_mode_x86(base_port: i64) {
     // Store the port base in UART_BASE (reuse the atomic)
     UART_BASE.store(base_port as u64, Ordering::Relaxed);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// x86_64 FPU / SSE state + misc (FajarOS Nova)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Save x87/SSE state to a 512-byte buffer (FXSAVE).
+/// On hosted targets: no-op stub (buffer untouched).
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_fxsave(_buf: i64) {
+    // Bare-metal: `fxsave [rdi]` — not meaningful on hosted Linux
+}
+
+/// Restore x87/SSE state from a 512-byte buffer (FXRSTOR).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_fxrstor(_buf: i64) {
+    // Bare-metal: `fxrstor [rdi]` — not meaningful on hosted Linux
+}
+
+/// Return a hardware random number via RDRAND.
+/// On hosted targets: returns a pseudo-random value.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_rdrand() -> i64 {
+    // Use a simple LCG on hosted targets
+    static SEED: AtomicU64 = AtomicU64::new(0x5DEE_CE66_D1A4_F87D);
+    let old = SEED.load(Ordering::Relaxed);
+    let next = old
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    SEED.store(next, Ordering::Relaxed);
+    next as i64
+}
+
+/// Transition to user-mode via IRETQ (x86_64 Ring 0 → Ring 3).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_iretq_to_user(_rip: i64, _rsp: i64, _rflags: i64) {
+    // Bare-metal: push SS/RSP/RFLAGS/CS/RIP and IRETQ
+}
+
+/// Read CR4 control register (x86_64).
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_cr4() -> i64 {
+    0
+}
+
+/// Write CR4 control register (x86_64).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_cr4(_val: i64) {}
+
+/// Invalidate TLB entry for a specific virtual address (INVLPG).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_invlpg(_addr: i64) {}

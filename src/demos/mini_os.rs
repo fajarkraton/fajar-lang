@@ -435,9 +435,15 @@ impl RegisterDump {
     pub fn format(&self) -> String {
         format!(
             "RAX={:#018x} RBX={:#018x} RCX={:#018x}\nRDX={:#018x} RSP={:#018x} RBP={:#018x}\nRIP={:#018x} RFLAGS={:#018x} CR2={:#018x}",
-            self.rax, self.rbx, self.rcx,
-            self.rdx, self.rsp, self.rbp,
-            self.rip, self.rflags, self.cr2,
+            self.rax,
+            self.rbx,
+            self.rcx,
+            self.rdx,
+            self.rsp,
+            self.rbp,
+            self.rip,
+            self.rflags,
+            self.cr2,
         )
     }
 }

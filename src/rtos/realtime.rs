@@ -23,7 +23,9 @@ use super::freertos::TaskPriority;
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum RealtimeError {
     /// Deadline violation detected statically.
-    #[error("deadline violation: WCET {wcet_us}us exceeds deadline {deadline_us}us for task '{task_name}'")]
+    #[error(
+        "deadline violation: WCET {wcet_us}us exceeds deadline {deadline_us}us for task '{task_name}'"
+    )]
     DeadlineViolation {
         /// Task name.
         task_name: String,
@@ -43,7 +45,9 @@ pub enum RealtimeError {
     },
 
     /// Priority inversion detected.
-    #[error("priority inversion: task '{high_task}' (prio {high_prio}) blocked on mutex held by '{low_task}' (prio {low_prio})")]
+    #[error(
+        "priority inversion: task '{high_task}' (prio {high_prio}) blocked on mutex held by '{low_task}' (prio {low_prio})"
+    )]
     PriorityInversion {
         /// High-priority task name.
         high_task: String,
@@ -56,7 +60,9 @@ pub enum RealtimeError {
     },
 
     /// Stack overflow risk detected.
-    #[error("stack overflow risk in task '{task_name}': estimated {estimated_words} words, allocated {allocated_words} words")]
+    #[error(
+        "stack overflow risk in task '{task_name}': estimated {estimated_words} words, allocated {allocated_words} words"
+    )]
     StackOverflowRisk {
         /// Task name.
         task_name: String,

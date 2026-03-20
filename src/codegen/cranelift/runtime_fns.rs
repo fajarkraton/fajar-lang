@@ -444,22 +444,14 @@ pub extern "C" fn fj_rt_array_free(arr: *mut u8) {
 pub extern "C" fn fj_rt_array_contains(arr: *mut u8, val: i64) -> i64 {
     // SAFETY: arr was created by fj_rt_array_new
     let vec = unsafe { &*(arr as *mut Vec<i64>) };
-    if vec.contains(&val) {
-        1
-    } else {
-        0
-    }
+    if vec.contains(&val) { 1 } else { 0 }
 }
 
 /// Runtime: checks if a heap array is empty.
 pub extern "C" fn fj_rt_array_is_empty(arr: *mut u8) -> i64 {
     // SAFETY: arr was created by fj_rt_array_new
     let vec = unsafe { &*(arr as *mut Vec<i64>) };
-    if vec.is_empty() {
-        1
-    } else {
-        0
-    }
+    if vec.is_empty() { 1 } else { 0 }
 }
 
 /// Runtime: reverses a heap array in place, returns 0.
@@ -517,11 +509,7 @@ pub extern "C" fn fj_rt_str_eq(a_ptr: *const u8, a_len: i64, b_ptr: *const u8, b
     // SAFETY: caller guarantees valid string slices
     let a = unsafe { std::slice::from_raw_parts(a_ptr, a_len as usize) };
     let b = unsafe { std::slice::from_raw_parts(b_ptr, b_len as usize) };
-    if a == b {
-        1
-    } else {
-        0
-    }
+    if a == b { 1 } else { 0 }
 }
 
 /// Runtime: checks if haystack contains needle.
@@ -538,11 +526,7 @@ pub extern "C" fn fj_rt_str_contains(
     let needle = unsafe { std::slice::from_raw_parts(n_ptr, n_len as usize) };
     let h = unsafe { std::str::from_utf8_unchecked(haystack) };
     let n = unsafe { std::str::from_utf8_unchecked(needle) };
-    if h.contains(n) {
-        1
-    } else {
-        0
-    }
+    if h.contains(n) { 1 } else { 0 }
 }
 
 /// Runtime: checks whether `haystack` starts with `prefix`.
@@ -561,11 +545,7 @@ pub extern "C" fn fj_rt_str_starts_with(
     let prefix = unsafe { std::slice::from_raw_parts(p_ptr, p_len as usize) };
     let h = unsafe { std::str::from_utf8_unchecked(haystack) };
     let p = unsafe { std::str::from_utf8_unchecked(prefix) };
-    if h.starts_with(p) {
-        1
-    } else {
-        0
-    }
+    if h.starts_with(p) { 1 } else { 0 }
 }
 
 /// Runtime: checks whether `haystack` ends with `suffix`.
@@ -584,11 +564,7 @@ pub extern "C" fn fj_rt_str_ends_with(
     let suffix = unsafe { std::slice::from_raw_parts(s_ptr, s_len as usize) };
     let h = unsafe { std::str::from_utf8_unchecked(haystack) };
     let s = unsafe { std::str::from_utf8_unchecked(suffix) };
-    if h.ends_with(s) {
-        1
-    } else {
-        0
-    }
+    if h.ends_with(s) { 1 } else { 0 }
 }
 
 /// Runtime: finds the first occurrence of `needle` in `haystack`.
@@ -1263,11 +1239,7 @@ pub extern "C" fn fj_rt_map_contains(map_ptr: *mut u8, key_ptr: *const u8, key_l
         let map = &*(map_ptr as *const HashMap<String, i64>);
         let key =
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(key_ptr, key_len as usize));
-        if map.contains_key(key) {
-            1
-        } else {
-            0
-        }
+        if map.contains_key(key) { 1 } else { 0 }
     }
 }
 
@@ -1287,11 +1259,7 @@ pub extern "C" fn fj_rt_map_remove(map_ptr: *mut u8, key_ptr: *const u8, key_len
         let map = &mut *(map_ptr as *mut HashMap<String, i64>);
         let key =
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(key_ptr, key_len as usize));
-        if map.remove(key).is_some() {
-            1
-        } else {
-            0
-        }
+        if map.remove(key).is_some() { 1 } else { 0 }
     }
 }
 
@@ -3443,8 +3411,8 @@ pub extern "C" fn fj_rt_tensor_fill(rows: i64, cols: i64, val_bits: i64) -> *mut
 
 /// Creates a tensor with random values from [0, 1).
 pub extern "C" fn fj_rt_tensor_rand(rows: i64, cols: i64) -> *mut u8 {
-    use ndarray_rand::rand_distr::Uniform;
     use ndarray_rand::RandomExt;
+    use ndarray_rand::rand_distr::Uniform;
     let arr = Array2::random(
         (rows.max(1) as usize, cols.max(1) as usize),
         Uniform::new(0.0, 1.0),
@@ -3455,8 +3423,8 @@ pub extern "C" fn fj_rt_tensor_rand(rows: i64, cols: i64) -> *mut u8 {
 
 /// Xavier initialization: random values in [-limit, limit] where limit = sqrt(6 / (rows+cols)).
 pub extern "C" fn fj_rt_tensor_xavier(rows: i64, cols: i64) -> *mut u8 {
-    use ndarray_rand::rand_distr::Uniform;
     use ndarray_rand::RandomExt;
+    use ndarray_rand::rand_distr::Uniform;
     let r = rows.max(1) as usize;
     let c = cols.max(1) as usize;
     let limit = (6.0 / (r + c) as f64).sqrt();
@@ -3557,8 +3525,8 @@ pub extern "C" fn fj_rt_saturating_mul(a: i64, b: i64) -> i64 {
 // Arc (atomic reference counting)
 // ═══════════════════════════════════════════════════════════════════════
 
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 /// Opaque Arc handle: heap-allocated Arc<AtomicI64>.
 struct ArcHandle {
@@ -3745,7 +3713,7 @@ pub extern "C" fn fj_rt_freelist_alloc(ptr: *mut u8, size: i64) -> i64 {
     // SAFETY: caller guarantees valid FreeListAlloc pointer
     let state = unsafe { &mut *(ptr as *mut FreeListAlloc) };
     let sz = (size as usize + 7) & !7; // align to 8
-                                       // First-fit search
+    // First-fit search
     for i in 0..state.free_list.len() {
         if state.free_list[i].size >= sz {
             let offset = state.free_list[i].offset;
@@ -3919,11 +3887,7 @@ pub extern "C" fn fj_rt_future_new() -> *mut u8 {
 pub extern "C" fn fj_rt_future_poll(ptr: *mut u8) -> i64 {
     // SAFETY: caller guarantees valid FutureHandle pointer
     let handle = unsafe { &*(ptr as *const FutureHandle) };
-    if handle.is_ready {
-        1
-    } else {
-        0
-    }
+    if handle.is_ready { 1 } else { 0 }
 }
 
 /// Gets the result value of a completed future.
@@ -4148,11 +4112,7 @@ pub extern "C" fn fj_rt_waker_is_woken(ptr: *mut u8) -> i64 {
     }
     // SAFETY: caller guarantees valid WakerHandle pointer
     let waker = unsafe { &*(ptr as *const WakerHandle) };
-    if waker.woken {
-        1
-    } else {
-        0
-    }
+    if waker.woken { 1 } else { 0 }
 }
 
 /// Runtime: resets the waker's wake flag.
@@ -5765,7 +5725,7 @@ mod onnx_proto {
         let mut buf = Vec::new();
         // ir_version: int64, field 1
         encode_varint_field(&mut buf, 1, 7); // ONNX IR version 7
-                                             // opset_import: repeated OperatorSetIdProto, field 8
+        // opset_import: repeated OperatorSetIdProto, field 8
         {
             let mut opset = Vec::new();
             // version: int64, field 2
@@ -6071,11 +6031,7 @@ pub extern "C" fn fj_rt_tensor_to_f16(ptr: *mut u8) -> *mut u8 {
         let (h_exp, h_mant) = if exp == 0 || exp - 127 + 15 <= 0 {
             (0u16, 0u16)
         } else if exp == 0xFF || exp - 127 + 15 >= 31 {
-            if mant == 0 {
-                (0x1F, 0)
-            } else {
-                (0x1F, 0x200)
-            }
+            if mant == 0 { (0x1F, 0) } else { (0x1F, 0x200) }
         } else {
             ((exp - 127 + 15) as u16, (mant >> 13) as u16)
         };
@@ -7282,6 +7238,17 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_switch_ttbr0" => Some(runtime_bare::fj_rt_bare_switch_ttbr0 as *const u8),
         "fj_rt_bare_read_ttbr0" => Some(runtime_bare::fj_rt_bare_read_ttbr0 as *const u8),
         "fj_rt_bare_tlbi_va" => Some(runtime_bare::fj_rt_bare_tlbi_va as *const u8),
+        // x86_64 FPU/SSE/misc (FajarOS Nova)
+        "fj_rt_bare_fxsave" => Some(runtime_bare::fj_rt_bare_fxsave as *const u8),
+        "fj_rt_bare_fxrstor" => Some(runtime_bare::fj_rt_bare_fxrstor as *const u8),
+        "fj_rt_bare_rdrand" => Some(runtime_bare::fj_rt_bare_rdrand as *const u8),
+        "fj_rt_bare_iretq_to_user" => Some(runtime_bare::fj_rt_bare_iretq_to_user as *const u8),
+        "fj_rt_bare_read_cr4" => Some(runtime_bare::fj_rt_bare_read_cr4 as *const u8),
+        "fj_rt_bare_write_cr4" => Some(runtime_bare::fj_rt_bare_write_cr4 as *const u8),
+        "fj_rt_bare_invlpg" => Some(runtime_bare::fj_rt_bare_invlpg as *const u8),
+        "fj_rt_bare_set_uart_mode_x86" => {
+            Some(runtime_bare::fj_rt_bare_set_uart_mode_x86 as *const u8)
+        }
         _ => None,
     }
 }

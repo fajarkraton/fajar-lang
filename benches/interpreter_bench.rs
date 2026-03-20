@@ -2,7 +2,7 @@
 //!
 //! Sprint 7.2: criterion benchmark suite.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use fajar_lang::interpreter::Interpreter;
 use fajar_lang::lexer::tokenize;
 use fajar_lang::parser::parse;

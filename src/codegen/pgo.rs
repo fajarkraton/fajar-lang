@@ -32,7 +32,9 @@ use thiserror::Error;
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum PgoError {
     /// Function hash mismatch between profile and source.
-    #[error("PGO001: profile hash mismatch for function '{name}': expected {expected:#x}, got {actual:#x}")]
+    #[error(
+        "PGO001: profile hash mismatch for function '{name}': expected {expected:#x}, got {actual:#x}"
+    )]
     HashMismatch {
         /// Function name.
         name: String,
@@ -755,11 +757,7 @@ pub fn apply_pgo_speedup(opts: &PgoOptimizations) -> f64 {
 
     let total = hot_bonus + cold_bonus + branch_bonus + loop_bonus + inline_bonus;
     // Cap at 40% — PGO rarely exceeds this in practice
-    if total > 40.0 {
-        40.0
-    } else {
-        total
-    }
+    if total > 40.0 { 40.0 } else { total }
 }
 
 /// Bonus from hot function optimization (inlining, layout).
@@ -774,11 +772,7 @@ fn compute_hot_bonus(hot_count: usize) -> f64 {
 
 /// Bonus from cold code separation.
 fn compute_cold_bonus(cold_count: usize) -> f64 {
-    if cold_count > 0 {
-        2.0
-    } else {
-        0.0
-    }
+    if cold_count > 0 { 2.0 } else { 0.0 }
 }
 
 /// Bonus from branch weight annotations.

@@ -525,7 +525,7 @@ mod tests {
         let logits = vec![1.0, 5.0, 3.0, 2.0, 4.0];
         let filtered = apply_top_k(&logits, 2);
         assert_eq!(argmax(&filtered), 1); // 5.0 is max
-                                          // Only 2 values should be non-neg-inf
+        // Only 2 values should be non-neg-inf
         let valid: Vec<_> = filtered
             .iter()
             .filter(|&&v| v > f64::NEG_INFINITY)

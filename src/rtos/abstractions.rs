@@ -1102,7 +1102,7 @@ mod tests {
         // Wait for bits 0 and 1, clear on exit
         let result = eg.wait_bits(0x03, true, true).unwrap();
         assert_eq!(result & 0x07, 0x07); // all were set
-                                         // Bits 0 and 1 should be cleared
+        // Bits 0 and 1 should be cleared
         assert_eq!(eg.bits(), 0x04); // only bit 2 remains
     }
 

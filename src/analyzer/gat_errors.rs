@@ -537,11 +537,13 @@ mod tests {
         assert!(!diag.suggestions.is_empty());
         // Should suggest Item<'a>
         let suggestion = &diag.suggestions[0];
-        assert!(suggestion
-            .replacement
-            .as_ref()
-            .map(|r| r.contains("Item<'a>"))
-            .unwrap_or(false),);
+        assert!(
+            suggestion
+                .replacement
+                .as_ref()
+                .map(|r| r.contains("Item<'a>"))
+                .unwrap_or(false),
+        );
     }
 
     #[test]
@@ -566,9 +568,10 @@ mod tests {
         };
         let diag = diagnose_gat_error(&error);
         assert_eq!(diag.code, "GE003");
-        assert!(diag
-            .message
-            .contains("borrowed data does not live long enough"));
+        assert!(
+            diag.message
+                .contains("borrowed data does not live long enough")
+        );
         assert!(diag.suggestions.len() >= 2);
         assert!(diag.suggestions[0].message.contains("where Self: 'a"));
     }

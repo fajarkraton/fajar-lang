@@ -4,14 +4,14 @@
 //! Implements the full [`GpuDevice`] trait: buffer management,
 //! WGSL kernel compilation, compute pipeline dispatch.
 
+use super::GpuError;
 use super::buffer::{BackendData, GpuBuffer};
 use super::device::{GpuBackend, GpuDevice, GpuDeviceInfo};
 use super::kernel::{BuiltinKernel, GpuKernel, KernelSource, WorkgroupSize};
-use super::GpuError;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
 
@@ -207,7 +207,7 @@ impl GpuDevice for WgpuDevice {
             _ => {
                 return Err(GpuError::InvalidKernel(
                     "wgpu backend requires WGSL or Builtin kernel".into(),
-                ))
+                ));
             }
         };
 

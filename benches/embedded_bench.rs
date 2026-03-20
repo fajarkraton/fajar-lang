@@ -3,9 +3,9 @@
 //! Benchmarks stack-allocated tensor operations and fixed-point arithmetic
 //! to measure embedded inference performance without heap allocation.
 
-use criterion::{criterion_group, criterion_main, Criterion};
-use fajar_lang::runtime::ml::fixed_point::{Q16_16, Q8_8};
-use fajar_lang::runtime::ml::stack_tensor::{stack_dense_forward, stack_matmul, StackTensor};
+use criterion::{Criterion, criterion_group, criterion_main};
+use fajar_lang::runtime::ml::fixed_point::{Q8_8, Q16_16};
+use fajar_lang::runtime::ml::stack_tensor::{StackTensor, stack_dense_forward, stack_matmul};
 
 fn bench_stack_tensor_add(c: &mut Criterion) {
     let a = StackTensor::<256>::from_slice(&[1.0; 64], &[8, 8]).unwrap();

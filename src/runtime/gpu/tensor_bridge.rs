@@ -3,10 +3,10 @@
 //! Connects the ML runtime's [`TensorValue`] to GPU compute via
 //! the [`GpuDevice`] abstraction layer.
 
+use super::GpuError;
 use super::buffer::GpuBuffer;
 use super::device::GpuDevice;
 use super::kernel::{BuiltinKernel, KernelSource};
-use super::GpuError;
 
 use crate::runtime::ml::tensor::TensorValue;
 use ndarray::ArrayD;

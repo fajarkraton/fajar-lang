@@ -579,9 +579,11 @@ mod tests {
 
     #[test]
     fn s12_2_backend_display() {
-        assert!(CheckpointBackend::ObjectStorage("s3://bucket".into())
-            .to_string()
-            .contains("ObjectStorage"));
+        assert!(
+            CheckpointBackend::ObjectStorage("s3://bucket".into())
+                .to_string()
+                .contains("ObjectStorage")
+        );
     }
 
     // S12.3 — Recovery

@@ -18,8 +18,8 @@ use std::collections::HashMap;
 
 use super::cache::{ArtifactCache, ArtifactType, CacheKey, CacheStats, CachedArtifact};
 use super::{
-    build_dependency_graph, compute_content_hash, detect_changes, topological_sort,
-    transitive_dependents, DependencyGraph, IncrementalError,
+    DependencyGraph, IncrementalError, build_dependency_graph, compute_content_hash,
+    detect_changes, topological_sort, transitive_dependents,
 };
 
 // ═══════════════════════════════════════════════════════════════════════

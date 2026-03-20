@@ -3,8 +3,8 @@
 //! Tests verify that backward() produces correct gradients for each operation,
 //! and that no_grad / detach work correctly.
 
-use fajar_lang::interpreter::{Interpreter, Value};
 use fajar_lang::FjError;
+use fajar_lang::interpreter::{Interpreter, Value};
 
 /// Helper: run source and return the result.
 fn eval(source: &str) -> Result<Value, FjError> {

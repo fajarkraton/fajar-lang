@@ -439,15 +439,21 @@ mod tests {
     fn s30_7_keyboard_shortcuts() {
         let shortcuts = keyboard_shortcuts();
         assert!(shortcuts.len() >= 4);
-        assert!(shortcuts
-            .iter()
-            .any(|s| s.key == "Ctrl+Enter" && s.action == "run"));
-        assert!(shortcuts
-            .iter()
-            .any(|s| s.key == "Ctrl+S" && s.action == "save"));
-        assert!(shortcuts
-            .iter()
-            .any(|s| s.key == "Ctrl+L" && s.action == "clear"));
+        assert!(
+            shortcuts
+                .iter()
+                .any(|s| s.key == "Ctrl+Enter" && s.action == "run")
+        );
+        assert!(
+            shortcuts
+                .iter()
+                .any(|s| s.key == "Ctrl+S" && s.action == "save")
+        );
+        assert!(
+            shortcuts
+                .iter()
+                .any(|s| s.key == "Ctrl+L" && s.action == "clear")
+        );
     }
 
     // S30.8: Responsive layout

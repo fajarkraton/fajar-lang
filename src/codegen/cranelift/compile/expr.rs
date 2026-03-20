@@ -9,7 +9,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{emit_owned_cleanup, emit_scope_cleanup, CodegenCtx};
+use super::super::context::{CodegenCtx, emit_owned_cleanup, emit_scope_cleanup};
 use crate::codegen::CodegenError;
 use crate::lexer::token::Span;
 use crate::parser::ast::{BinOp, Expr, LiteralKind, UnaryOp};
@@ -133,7 +133,7 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
                                     _ => {
                                         return Err(CodegenError::NotImplemented(
                                             "float compound assign".into(),
-                                        ))
+                                        ));
                                     }
                                 }
                             } else {
@@ -158,10 +158,7 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
                     // (e.g., `values = new_vals`), remove the target from owned_ptrs
                     // to prevent double-free at cleanup (both would alias the same ptr).
                     if matches!(op, AssignOp::Assign) && cx.heap_arrays.contains(name) {
-                        if let Expr::Ident {
-                            name: rhs_name, ..
-                        } = value.as_ref()
-                        {
+                        if let Expr::Ident { name: rhs_name, .. } = value.as_ref() {
                             if cx.heap_arrays.contains(rhs_name) {
                                 cx.owned_ptrs.retain(|(n, _)| n != name);
                             }
@@ -220,7 +217,7 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
                         _ => {
                             return Err(CodegenError::NotImplemented(
                                 "pipe to non-ident callee".into(),
-                            ))
+                            ));
                         }
                     };
                     let mut compiled_args = Vec::new();
@@ -232,7 +229,7 @@ pub(in crate::codegen::cranelift) fn compile_expr<M: Module>(
                 _ => {
                     return Err(CodegenError::NotImplemented(
                         "pipe to non-ident/call expression".into(),
-                    ))
+                    ));
                 }
             };
             let func_id = *cx

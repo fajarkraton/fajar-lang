@@ -2842,9 +2842,11 @@ mod tests {
         )];
         let validator = DocValidator::from_items(&items);
         let issues = validator.validate(&items);
-        assert!(issues
-            .iter()
-            .any(|i| i.issue_kind == DocIssueKind::BrokenLink));
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.issue_kind == DocIssueKind::BrokenLink)
+        );
     }
 
     #[test]

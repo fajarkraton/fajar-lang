@@ -683,10 +683,11 @@ mod tests {
         assert!(empty.is_empty());
 
         let bp = info.breakpoint_manager.set_breakpoint("test.fj", 5);
-        assert!(info
-            .breakpoint_manager
-            .check_breakpoint("test.fj", 5)
-            .is_some());
+        assert!(
+            info.breakpoint_manager
+                .check_breakpoint("test.fj", 5)
+                .is_some()
+        );
         assert_eq!(bp.line, 5);
     }
 }

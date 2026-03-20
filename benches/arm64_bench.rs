@@ -6,7 +6,7 @@
 //! Run on Q6A: `cargo bench --bench arm64_bench`
 //! Run on host: `cargo bench --bench arm64_bench` (works cross-platform)
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use fajar_lang::interpreter::Interpreter;
 
 fn bench_interpreter_fibonacci(c: &mut Criterion) {

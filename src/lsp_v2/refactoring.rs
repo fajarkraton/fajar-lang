@@ -550,11 +550,7 @@ pub fn change_signature(
             for (idx, _, _) in &adds {
                 let default = changes.iter().find_map(|c| {
                     if let ParamChange::Add { index, default, .. } = c {
-                        if index == idx {
-                            default.clone()
-                        } else {
-                            None
-                        }
+                        if index == idx { default.clone() } else { None }
                     } else {
                         None
                     }
@@ -819,9 +815,11 @@ mod tests {
         assert_eq!(result.file_move.0, "src/utils.fj");
         assert_eq!(result.file_move.1, "src/helpers/utils.fj");
         assert_eq!(result.import_updates.len(), 2);
-        assert!(result.import_updates[0]
-            .new_import
-            .contains("helpers::utils"));
+        assert!(
+            result.import_updates[0]
+                .new_import
+                .contains("helpers::utils")
+        );
     }
 
     // S32.7 — Extract Trait

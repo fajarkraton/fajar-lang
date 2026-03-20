@@ -134,8 +134,8 @@ pub(in crate::codegen::cranelift) fn compile_method_call<M: Module>(
                     let callee = cx.module.declare_func_in_func(try_lock_id, builder.func);
                     let call = builder.ins().call(callee, &[mutex_ptr, out_addr]);
                     let success = builder.inst_results(call)[0]; // 1=success, 0=fail
-                                                                 // Convert to Option: Some=1, None=0 (built-in tag convention)
-                                                                 // success already maps: 1→Some(1), 0→None(0)
+                    // Convert to Option: Some=1, None=0 (built-in tag convention)
+                    // success already maps: 1→Some(1), 0→None(0)
                     let tag = success;
                     // payload = select(success, loaded_value, 0)
                     let payload_val =

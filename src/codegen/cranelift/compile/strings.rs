@@ -11,7 +11,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{DataDescription, Linkage, Module};
 
 use super::super::context::CodegenCtx;
-use super::super::{clif_types, DATA_COUNTER};
+use super::super::{DATA_COUNTER, clif_types};
 use super::compile_expr;
 use crate::codegen::CodegenError;
 use crate::parser::ast::{CallArg, Expr};

@@ -316,7 +316,7 @@ mod tests {
         let b_id = tape.fresh_id(); // 1
         let c_id = tape.fresh_id(); // 2
         let s_id = tape.fresh_id(); // 3
-                                    // c = a + b
+        // c = a + b
         tape.record(
             c_id,
             vec![a_id, b_id],

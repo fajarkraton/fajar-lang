@@ -309,7 +309,9 @@ pub struct ResolvedType {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum GatError {
     /// GE001: Required GAT parameters are missing in usage.
-    #[error("GE001: associated type '{assoc_type}' on trait '{trait_name}' requires {expected} {param_kind} parameter(s), found {found}")]
+    #[error(
+        "GE001: associated type '{assoc_type}' on trait '{trait_name}' requires {expected} {param_kind} parameter(s), found {found}"
+    )]
     MissingParams {
         /// The trait name.
         trait_name: String,
@@ -326,7 +328,9 @@ pub enum GatError {
     },
 
     /// GE002: GAT bound does not match between trait definition and impl.
-    #[error("GE002: bound mismatch for associated type '{assoc_type}': trait requires '{expected}', impl has '{found}'")]
+    #[error(
+        "GE002: bound mismatch for associated type '{assoc_type}': trait requires '{expected}', impl has '{found}'"
+    )]
     BoundMismatch {
         /// The associated type name.
         assoc_type: String,
@@ -339,7 +343,9 @@ pub enum GatError {
     },
 
     /// GE003: Borrowed data does not live long enough for GAT projection.
-    #[error("GE003: lifetime capture error in '{assoc_type}': borrowed data does not live long enough for GAT projection")]
+    #[error(
+        "GE003: lifetime capture error in '{assoc_type}': borrowed data does not live long enough for GAT projection"
+    )]
     LifetimeCapture {
         /// The associated type name.
         assoc_type: String,
@@ -350,7 +356,9 @@ pub enum GatError {
     },
 
     /// GE004: Async trait method requires boxing for object safety.
-    #[error("GE004: async trait method '{method}' on '{trait_name}' is not object-safe without `#[async_trait]`")]
+    #[error(
+        "GE004: async trait method '{method}' on '{trait_name}' is not object-safe without `#[async_trait]`"
+    )]
     AsyncTraitObjectSafety {
         /// The trait name.
         trait_name: String,
@@ -383,7 +391,9 @@ pub enum GatError {
     },
 
     /// GE007: GAT parameter kind mismatch (lifetime vs type).
-    #[error("GE007: parameter kind mismatch for '{param}' in '{assoc_type}': expected {expected}, found {found}")]
+    #[error(
+        "GE007: parameter kind mismatch for '{param}' in '{assoc_type}': expected {expected}, found {found}"
+    )]
     ParamKindMismatch {
         /// The associated type name.
         assoc_type: String,

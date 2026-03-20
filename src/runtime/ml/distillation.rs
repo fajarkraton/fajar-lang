@@ -156,11 +156,7 @@ fn kl_divergence(teacher: &Array2<f64>, student: &Array2<f64>) -> f64 {
         total += t_safe * (t_safe / s_safe).ln();
     }
     let n = teacher.nrows();
-    if n > 0 {
-        total / n as f64
-    } else {
-        0.0
-    }
+    if n > 0 { total / n as f64 } else { 0.0 }
 }
 
 /// Computes the hard loss (cross-entropy) between student output and true targets.
@@ -174,11 +170,7 @@ fn hard_loss(student_probs: &Array2<f64>, targets: &Array2<f64>) -> f64 {
         total -= t * s_safe.ln();
     }
     let n = student_probs.nrows();
-    if n > 0 {
-        total / n as f64
-    } else {
-        0.0
-    }
+    if n > 0 { total / n as f64 } else { 0.0 }
 }
 
 /// Computes the combined distillation loss.

@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use crate::interpreter::value::Value;
 use crate::interpreter::RuntimeError;
+use crate::interpreter::value::Value;
 
 use super::chunk::Chunk;
 use super::instruction::Op;
@@ -211,7 +211,7 @@ impl VM {
                 return Err(RuntimeError::TypeError(format!(
                     "'{}' is not callable",
                     callee.type_name()
-                )))
+                )));
             }
         }
         Ok(())
@@ -294,7 +294,7 @@ impl VM {
                         return Err(RuntimeError::TypeError(format!(
                             "cannot negate {}",
                             v.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -316,7 +316,7 @@ impl VM {
                         return Err(RuntimeError::TypeError(format!(
                             "cannot apply ! to {}",
                             v.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -333,7 +333,7 @@ impl VM {
                         return Err(RuntimeError::TypeError(format!(
                             "cannot apply ~ to {}",
                             v.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -458,14 +458,14 @@ impl VM {
                             None => {
                                 return Err(RuntimeError::UndefinedVariable(format!(
                                     "field '{name}'"
-                                )))
+                                )));
                             }
                         },
                         _ => {
                             return Err(RuntimeError::TypeError(format!(
                                 "cannot access field on {}",
                                 obj.type_name()
-                            )))
+                            )));
                         }
                     }
                 }
@@ -483,7 +483,7 @@ impl VM {
                         return Err(RuntimeError::TypeError(format!(
                             "cannot set field on {}",
                             obj.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -520,7 +520,7 @@ impl VM {
                             "cannot index {} with {}",
                             obj.type_name(),
                             index.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -546,7 +546,7 @@ impl VM {
                         return Err(RuntimeError::TypeError(format!(
                             "cannot set index on {}",
                             obj.type_name()
-                        )))
+                        )));
                     }
                 }
             }

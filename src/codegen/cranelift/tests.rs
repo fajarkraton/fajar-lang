@@ -2900,7 +2900,7 @@ fn native_write_file_returns_ok() {
         }
     "#;
     assert_eq!(compile_and_run(src), 0); // 0 = Ok tag
-                                         // Cleanup
+    // Cleanup
     let _ = std::fs::remove_file("/tmp/fj_native_test.txt");
 }
 
@@ -12332,7 +12332,7 @@ fn native_mnist_parse_images_synthetic() {
     data.extend_from_slice(&2u32.to_be_bytes()); // n_images
     data.extend_from_slice(&2u32.to_be_bytes()); // n_rows
     data.extend_from_slice(&2u32.to_be_bytes()); // n_cols
-                                                 // Image 0: [10, 20, 30, 40]
+    // Image 0: [10, 20, 30, 40]
     data.extend_from_slice(&[10, 20, 30, 40]);
     // Image 1: [50, 60, 70, 80]
     data.extend_from_slice(&[50, 60, 70, 80]);

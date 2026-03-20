@@ -308,11 +308,7 @@ pub fn argmax(a: &TensorValue) -> TensorValue {
             .iter()
             .enumerate()
             .fold((0, f64::NEG_INFINITY), |(best_i, best_v), (i, &v)| {
-                if v > best_v {
-                    (i, v)
-                } else {
-                    (best_i, best_v)
-                }
+                if v > best_v { (i, v) } else { (best_i, best_v) }
             });
     TensorValue::new(
         ArrayD::from_shape_vec(vec![], vec![idx as f64]).expect("argmax: scalar"),
@@ -370,8 +366,8 @@ pub fn linspace(start: f64, end: f64, steps: usize) -> Result<TensorValue, Tenso
 ///
 /// Values drawn from uniform(-limit, limit) where limit = sqrt(6 / (rows + cols)).
 pub fn xavier(rows: usize, cols: usize) -> TensorValue {
-    use ndarray_rand::rand_distr::Uniform;
     use ndarray_rand::RandomExt;
+    use ndarray_rand::rand_distr::Uniform;
     let limit = (6.0 / (rows + cols) as f64).sqrt();
     let arr = ArrayD::random(vec![rows, cols], Uniform::new(-limit, limit));
     let mut t = TensorValue::new(arr, false);

@@ -226,7 +226,7 @@ fn ml_mnist_forward_pass() {
     // Input: [1, 784] (batch=1, 28x28 image flattened)
     // Layer 1: [784, 128] weights → relu → [1, 128]
     // Layer 2: [128, 10] weights → softmax → [1, 10]
-    use fajar_lang::runtime::ml::{tensor_ops, TensorValue};
+    use fajar_lang::runtime::ml::{TensorValue, tensor_ops};
 
     let input = TensorValue::randn(&[1, 784]);
     let w1 = TensorValue::randn(&[784, 128]);
@@ -255,7 +255,7 @@ fn ml_mnist_forward_pass() {
 #[test]
 fn ml_xor_gradient_flow() {
     // Test that gradients flow correctly through a simple computation
-    use fajar_lang::runtime::ml::{tensor_ops, Tape, TensorValue};
+    use fajar_lang::runtime::ml::{Tape, TensorValue, tensor_ops};
 
     let mut tape = Tape::new();
     let data = vec![0.5, -0.3, 1.2];
@@ -279,7 +279,7 @@ fn ml_xor_gradient_flow() {
 
 #[test]
 fn ml_gradient_correctness_mul_chain() {
-    use fajar_lang::runtime::ml::{tensor_ops, Tape, TensorValue};
+    use fajar_lang::runtime::ml::{Tape, TensorValue, tensor_ops};
 
     let mut tape = Tape::new();
     let data_x = vec![2.0, 3.0];

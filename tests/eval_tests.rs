@@ -2664,7 +2664,9 @@ fn s44_self_hosted_lexer_keywords_match_rust_lexer() {
         .collect();
     assert_eq!(
         rust_kinds,
-        vec!["If", "Else", "While", "For", "Fn", "Let", "Mut", "Return", "Struct", "Enum"]
+        vec![
+            "If", "Else", "While", "For", "Fn", "Let", "Mut", "Return", "Struct", "Enum"
+        ]
     );
 }
 
@@ -4795,12 +4797,14 @@ fn e2e_q6a_npu_classify_example() {
     assert!(out.iter().any(|l| l.contains("Quantized to UINT8")));
     assert!(out.iter().any(|l| l.contains("NPU inference complete")));
     assert!(out.iter().any(|l| l.contains("Output dequantized")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("All 5 formats roundtrip: OK")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("q6a_npu_classify demo complete")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("All 5 formats roundtrip: OK"))
+    );
+    assert!(
+        out.iter()
+            .any(|l| l.contains("q6a_npu_classify demo complete"))
+    );
 }
 
 #[test]
@@ -4818,9 +4822,10 @@ fn e2e_q6a_npu_detect_example() {
     assert!(out.iter().any(|l| l.contains("dog")));
     assert!(out.iter().any(|l| l.contains("IoU")));
     assert!(out.iter().any(|l| l.contains("All roundtrips: OK")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("q6a_npu_detect demo complete")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("q6a_npu_detect demo complete"))
+    );
 }
 
 #[test]
@@ -5433,9 +5438,10 @@ fn e2e_q6a_activity_recognition_example() {
     assert!(out.iter().any(|l| l.contains("Running:")));
     assert!(out.iter().any(|l| l.contains("Standing:")));
     assert!(out.iter().any(|l| l.contains("Sitting:")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("activity_recognition complete")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("activity_recognition complete"))
+    );
 }
 
 #[test]
@@ -5467,9 +5473,10 @@ fn e2e_q6a_websocket_stream_example() {
     let code = std::fs::read_to_string("examples/q6a_websocket_stream.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("WebSocket Streaming")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("WebSocket streaming stopped.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("WebSocket streaming stopped."))
+    );
 }
 
 #[test]
@@ -5477,21 +5484,24 @@ fn e2e_q6a_gpu_forward_backward_example() {
     let code = std::fs::read_to_string("examples/q6a_gpu_forward_backward.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("GPU Forward/Backward Pass")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("GPU forward/backward demo complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("GPU forward/backward demo complete."))
+    );
 }
 
 #[test]
 fn e2e_q6a_multi_stream_example() {
     let code = std::fs::read_to_string("examples/q6a_multi_stream.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Multi-Stream Camera Pipeline")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Multi-stream pipeline complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Multi-Stream Camera Pipeline"))
+    );
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Multi-stream pipeline complete."))
+    );
 }
 
 #[test]
@@ -5499,18 +5509,20 @@ fn e2e_q6a_gpu_optimizer_example() {
     let code = std::fs::read_to_string("examples/q6a_gpu_optimizer.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("GPU-Accelerated Optimizer")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("GPU optimizer demo complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("GPU optimizer demo complete."))
+    );
 }
 
 #[test]
 fn e2e_q6a_gpu_benchmark_example() {
     let code = std::fs::read_to_string("examples/q6a_gpu_benchmark.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("GPU vs CPU Training Benchmark")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("GPU vs CPU Training Benchmark"))
+    );
     assert!(out.iter().any(|l| l.contains("GPU benchmark complete.")));
 }
 
@@ -5519,9 +5531,10 @@ fn e2e_q6a_spi_adc_example() {
     let code = std::fs::read_to_string("examples/q6a_spi_adc.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("SPI ADC Data Acquisition")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("SPI ADC acquisition complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("SPI ADC acquisition complete."))
+    );
 }
 
 #[test]
@@ -5529,18 +5542,20 @@ fn e2e_q6a_gpu_mempool_example() {
     let code = std::fs::read_to_string("examples/q6a_gpu_mempool.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("GPU Memory Pool")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("GPU memory pool demo complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("GPU memory pool demo complete."))
+    );
 }
 
 #[test]
 fn e2e_q6a_sensor_benchmark_example() {
     let code = std::fs::read_to_string("examples/q6a_sensor_benchmark.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Sensor Read Latency Benchmark")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Sensor Read Latency Benchmark"))
+    );
     assert!(out.iter().any(|l| l.contains("Sensor benchmark complete.")));
 }
 
@@ -5588,9 +5603,10 @@ fn e2e_q6a_video_benchmark_example() {
 fn e2e_q6a_npu_benchmark_example() {
     let code = std::fs::read_to_string("examples/q6a_npu_benchmark.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("CPU vs NPU Inference Benchmark")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("CPU vs NPU Inference Benchmark"))
+    );
     assert!(out.iter().any(|l| l.contains("Small Model Benchmark")));
     assert!(out.iter().any(|l| l.contains("Medium Model Benchmark")));
     assert!(out.iter().any(|l| l.contains("Large Model Benchmark")));
@@ -5602,9 +5618,10 @@ fn e2e_q6a_npu_benchmark_example() {
 fn e2e_q6a_tls_server_example() {
     let code = std::fs::read_to_string("examples/q6a_tls_server.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("TLS Secure Inference Server")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("TLS Secure Inference Server"))
+    );
     assert!(out.iter().any(|l| l.contains("TLS OK | Auth OK")));
     assert!(out.iter().any(|l| l.contains("TLS OK | Auth FAIL")));
     assert!(out.iter().any(|l| l.contains("Server Statistics")));
@@ -5621,23 +5638,26 @@ fn e2e_q6a_qnn_gpu_infer_example() {
     assert!(out.iter().any(|l| l.contains("GPU Status")));
     assert!(out.iter().any(|l| l.contains("Model Inference Benchmarks")));
     assert!(out.iter().any(|l| l.contains("Benchmark Summary")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("QNN GPU inference complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("QNN GPU inference complete."))
+    );
 }
 
 #[test]
 fn e2e_q6a_predictive_maintenance_example() {
     let code = std::fs::read_to_string("examples/q6a_predictive_maintenance.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Predictive Maintenance System")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Predictive Maintenance System"))
+    );
     assert!(out.iter().any(|l| l.contains("Equipment Health Report")));
     assert!(out.iter().any(|l| l.contains("Normal")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Predictive maintenance analysis complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Predictive maintenance analysis complete."))
+    );
 }
 
 #[test]
@@ -5647,9 +5667,10 @@ fn e2e_q6a_federated_edge_example() {
     assert!(out.iter().any(|l| l.contains("Federated Learning on Edge")));
     assert!(out.iter().any(|l| l.contains("Federation Configuration")));
     assert!(out.iter().any(|l| l.contains("Federation Summary")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Federated edge learning complete.")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Federated edge learning complete."))
+    );
 }
 
 #[test]
@@ -5657,17 +5678,20 @@ fn e2e_q6a_data_pipeline_example() {
     let code = std::fs::read_to_string("examples/q6a_data_pipeline.fj").unwrap();
     let out = eval_output(&code);
     assert!(out.iter().any(|l| l.contains("Data Pipeline (Dragon Q6A)")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[1/5] Ingesting sensor data")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[1/5] Ingesting sensor data"))
+    );
     assert!(out.iter().any(|l| l.contains("[2/5] Cleaning data")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[3/5] Computing windowed aggregations")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[3/5] Computing windowed aggregations"))
+    );
     assert!(out.iter().any(|l| l.contains("[4/5] Storing results")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[5/5] Querying pipeline results")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[5/5] Querying pipeline results"))
+    );
     assert!(out.iter().any(|l| l.contains("Pipeline Statistics")));
     assert!(out.iter().any(|l| l.contains("Total points ingested:")));
     assert!(out.iter().any(|l| l.contains("Data pipeline complete.")));
@@ -5677,15 +5701,18 @@ fn e2e_q6a_data_pipeline_example() {
 fn e2e_q6a_anomaly_pipeline_example() {
     let code = std::fs::read_to_string("examples/q6a_anomaly_pipeline.fj").unwrap();
     let out = eval_output(&code);
-    assert!(out
-        .iter()
-        .any(|l| l.contains("Anomaly Detection Pipeline (Dragon Q6A)")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[1/3] Initializing autoencoder")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[2/3] Processing sensor data")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("Anomaly Detection Pipeline (Dragon Q6A)"))
+    );
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[1/3] Initializing autoencoder"))
+    );
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[2/3] Processing sensor data"))
+    );
     assert!(out.iter().any(|l| l.contains("[3/3] Pipeline summary")));
     assert!(out.iter().any(|l| l.contains("Anomaly Pipeline Results")));
     assert!(out.iter().any(|l| l.contains("Total alerts:")));
@@ -5840,12 +5867,14 @@ fn fajaros_kernel_example() {
     assert!(out.iter().any(|l| l.contains("FajarOS v3.0 Surya")));
     assert!(out.iter().any(|l| l.contains("FajarOS Ready")));
     assert!(out.iter().any(|l| l.contains("[OK] NVMe SSD initialized")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[OK] Ethernet RGMII link up")));
-    assert!(out
-        .iter()
-        .any(|l| l.contains("[OK] Framebuffer: 1920x1080")));
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[OK] Ethernet RGMII link up"))
+    );
+    assert!(
+        out.iter()
+            .any(|l| l.contains("[OK] Framebuffer: 1920x1080"))
+    );
     assert!(out.iter().any(|l| l.contains("[OK] Init process PID=1")));
     assert!(out.iter().any(|l| l.contains("fjsh>")));
 }

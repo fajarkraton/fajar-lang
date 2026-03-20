@@ -6,7 +6,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use super::super::clif_types;
-use super::super::context::{push_owned, CodegenCtx, OwnedKind};
+use super::super::context::{CodegenCtx, OwnedKind, push_owned};
 use super::compile_expr;
 use crate::codegen::CodegenError;
 use crate::parser::ast::{CallArg, Expr};
@@ -252,7 +252,7 @@ pub(in crate::codegen::cranelift) fn compile_index_assign<M: Module>(
         _ => {
             return Err(CodegenError::NotImplemented(
                 "index assign on non-ident".into(),
-            ))
+            ));
         }
     };
 
@@ -285,7 +285,7 @@ pub(in crate::codegen::cranelift) fn compile_index_assign<M: Module>(
                 _ => {
                     return Err(CodegenError::NotImplemented(
                         "compound heap array index assign".into(),
-                    ))
+                    ));
                 }
             }
         };
@@ -338,7 +338,7 @@ pub(in crate::codegen::cranelift) fn compile_index_assign<M: Module>(
                     _ => {
                         return Err(CodegenError::NotImplemented(
                             "float compound array index assign".into(),
-                        ))
+                        ));
                     }
                 }
             } else {
@@ -351,7 +351,7 @@ pub(in crate::codegen::cranelift) fn compile_index_assign<M: Module>(
                     _ => {
                         return Err(CodegenError::NotImplemented(
                             "compound array index assign".into(),
-                        ))
+                        ));
                     }
                 }
             }

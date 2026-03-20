@@ -3,10 +3,10 @@
 //! Enabled with `--features cuda`.
 //! Dynamically loads `libcuda.so` at runtime — no compile-time CUDA dependency.
 
+use super::GpuError;
 use super::buffer::{BackendData, GpuBuffer};
 use super::device::{GpuBackend, GpuDevice, GpuDeviceInfo};
 use super::kernel::{GpuKernel, KernelSource, WorkgroupSize};
-use super::GpuError;
 
 use libloading::{Library, Symbol};
 use std::ffi::c_void;

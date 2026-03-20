@@ -3,8 +3,8 @@
 //! Maps the high-level Fajar type system to Cranelift's low-level
 //! type representation for native code generation.
 
-use cranelift_codegen::ir::types;
 use cranelift_codegen::ir::Type as ClifType;
+use cranelift_codegen::ir::types;
 
 use crate::parser::ast::TypeExpr;
 

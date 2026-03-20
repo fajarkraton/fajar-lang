@@ -615,10 +615,12 @@ mod tests {
     fn s12_5_unbounded_irq_loop() {
         let analysis = check_irq_latency("bad_handler", true, false, false);
         assert!(!analysis.is_bounded);
-        assert!(analysis
-            .unbounded_reason
-            .unwrap()
-            .contains("unbounded loop"));
+        assert!(
+            analysis
+                .unbounded_reason
+                .unwrap()
+                .contains("unbounded loop")
+        );
     }
 
     #[test]

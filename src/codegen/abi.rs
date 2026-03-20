@@ -6,8 +6,8 @@
 use cranelift_codegen::ir::{AbiParam, Signature};
 use cranelift_codegen::isa::CallConv;
 
-use super::types as clif_types;
 use super::CodegenError;
+use super::types as clif_types;
 use crate::parser::ast::{Param, TypeExpr};
 
 /// Builds a Cranelift function signature from Fajar Lang function parameters.

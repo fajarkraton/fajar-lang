@@ -863,12 +863,12 @@ impl Compiler {
                     // Swap: remove the subject under the dup
                     // Actually for wildcard on last arm, just pop dup and compile body
                     self.emit(Op::Pop, 0); // pop original subject (under the dup we already popped)
-                                           // Wait, let me think about this more carefully...
-                                           // Stack: [subject, subject_dup]
-                                           // Wildcard: pop dup, then pop original, compile body
-                                           // No — we Dup'd, so stack is [subject, subject_copy]
-                                           // For wildcard: pop the copy (done above), then we still have original
-                                           // We need to pop the original before body
+                    // Wait, let me think about this more carefully...
+                    // Stack: [subject, subject_dup]
+                    // Wildcard: pop dup, then pop original, compile body
+                    // No — we Dup'd, so stack is [subject, subject_copy]
+                    // For wildcard: pop the copy (done above), then we still have original
+                    // We need to pop the original before body
                     self.compile_expr(&arm.body);
                     if let Pattern::Ident { .. } = &arm.pattern {
                         self.end_scope();

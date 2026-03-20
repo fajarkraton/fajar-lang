@@ -499,7 +499,7 @@ mod tests {
     // S33.1: Lexer token
     #[test]
     fn s33_1_infer_token_recognized() {
-        use crate::lexer::token::{TokenKind, ANNOTATIONS};
+        use crate::lexer::token::{ANNOTATIONS, TokenKind};
         assert_eq!(ANNOTATIONS.get("infer"), Some(&TokenKind::AtInfer));
     }
 
