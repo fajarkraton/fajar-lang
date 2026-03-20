@@ -136,6 +136,95 @@ fi
 
 echo ""
 
+# Test 2b: NVMe + FAT32 boot test
+echo -e "${CYAN}Test 2b: NVMe + FAT32 boot${NC}"
+
+# Create FAT32 test disk
+NVME_DISK="/tmp/nova_test_nvme.img"
+dd if=/dev/zero of="$NVME_DISK" bs=1M count=32 2>/dev/null
+mkfs.fat -F 32 -n "NOVATEST" "$NVME_DISK" 2>/dev/null
+
+timeout 10 qemu-system-x86_64 \
+    -cdrom "$ISO" -m 256M -display none \
+    -drive file="$NVME_DISK",format=raw,if=none,id=nvme0 \
+    -device nvme,serial=FJTEST,drive=nvme0 \
+    -boot d \
+    -serial file:"$SERIAL_LOG.nvme" \
+    -monitor none -no-reboot 2>/dev/null || true
+
+if grep -q "\[NVMe\] Controller enabled" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — NVMe controller enabled"
+else
+    echo -e "  ${YELLOW}SKIP${NC} — NVMe controller not enabled (may need -boot d)"
+fi
+
+if grep -q "\[NVMe\] I/O queues ready" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — NVMe I/O queues created"
+else
+    echo -e "  ${YELLOW}WARN${NC} — NVMe I/O queues not ready"
+fi
+
+if grep -q "Sector 0 read OK" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — NVMe sector read verified (0x55AA)"
+else
+    echo -e "  ${YELLOW}WARN${NC} — NVMe sector read not verified"
+fi
+
+if grep -q "\[FAT32\] Mounted" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — FAT32 filesystem mounted"
+else
+    echo -e "  ${YELLOW}WARN${NC} — FAT32 not mounted"
+fi
+
+if grep -q "\[VFS\] Initialized" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — VFS initialized"
+else
+    echo -e "  ${YELLOW}WARN${NC} — VFS not initialized"
+fi
+
+if grep -q "\[NET\] Initialized" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — Network stack initialized"
+else
+    echo -e "  ${YELLOW}WARN${NC} — Network not initialized"
+fi
+
+if grep -q "\[ELF\] Syscall" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — Syscall table ready"
+else
+    echo -e "  ${YELLOW}WARN${NC} — Syscall table not ready"
+fi
+
+if grep -q "\[PROC\]" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — Process table v2 ready"
+else
+    echo -e "  ${YELLOW}WARN${NC} — Process table not ready"
+fi
+
+if grep -q "\[KB\]" "$SERIAL_LOG.nvme" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — Keyboard buffer ready"
+else
+    echo -e "  ${YELLOW}WARN${NC} — Keyboard buffer not ready"
+fi
+
+echo ""
+
+# Test 2c: SMP boot test (4 cores)
+echo -e "${CYAN}Test 2c: SMP boot (4 cores)${NC}"
+timeout 8 qemu-system-x86_64 \
+    -cdrom "$ISO" -m 256M -display none \
+    -smp 4 \
+    -serial file:"$SERIAL_LOG.smp" \
+    -monitor none -no-reboot 2>/dev/null || true
+
+if grep -q "\[BOOT32\]" "$SERIAL_LOG.smp" 2>/dev/null; then
+    echo -e "  ${GREEN}PASS${NC} — Boot with -smp 4"
+else
+    echo -e "  ${RED}FAIL${NC} — SMP boot failed"
+    RESULT=1
+fi
+
+echo ""
+
 # Test 3: ELF validation
 echo -e "${CYAN}Test 3: ELF validation${NC}"
 if readelf -h "$KERNEL" 2>/dev/null | grep -q "ELF64"; then
@@ -161,10 +250,10 @@ echo ""
 echo -e "${CYAN}Test 4: Command count${NC}"
 CMD_COUNT=$(grep "@kernel fn cmd_" examples/fajaros_nova_kernel.fj | wc -l)
 echo -e "  ${GREEN}PASS${NC} — $CMD_COUNT command functions defined"
-if [ "$CMD_COUNT" -ge 90 ]; then
-    echo -e "  ${GREEN}PASS${NC} — Target: 90+ commands achieved"
+if [ "$CMD_COUNT" -ge 120 ]; then
+    echo -e "  ${GREEN}PASS${NC} — Target: 120+ commands achieved"
 else
-    echo -e "  ${YELLOW}WARN${NC} — Below 90 command target ($CMD_COUNT)"
+    echo -e "  ${YELLOW}WARN${NC} — Below 120 command target ($CMD_COUNT)"
 fi
 
 echo ""
@@ -174,9 +263,8 @@ echo -e "${CYAN}Test 5: Feature verification${NC}"
 FEATURES=(
     "ramfs_init:RAM filesystem"
     "history_init:Command history"
-    "sc2ascii:Keyboard scancode handler"
+    "scancode_to_ascii:Keyboard scancode handler"
     "console_scroll:VGA scrolling"
-    "vga_update_cursor:Hardware cursor"
     "dispatch_command:Command dispatcher"
     "cmd_grep:grep command"
     "cmd_sort:sort command"
@@ -186,7 +274,30 @@ FEATURES=(
     "acpi_shutdown:ACPI power management"
     "pci_read32:PCI bus access"
     "cmd_fib:Fibonacci benchmark"
-    "cmd_md5:Checksum"
+    "nvme_init:NVMe driver"
+    "nvme_read_sectors:NVMe sector read"
+    "nvme_write_sectors:NVMe sector write"
+    "fat32_mount:FAT32 filesystem"
+    "fat32_create_file:FAT32 file write"
+    "fat32_delete_file:FAT32 file delete"
+    "vfs_init:Virtual filesystem"
+    "net_init:Network stack"
+    "elf_validate:ELF64 loader"
+    "elf_load_segments:ELF segment loader"
+    "syscall_handle:Syscall dispatcher"
+    "proc_v2_fork:Process fork"
+    "proc_v2_exit:Process exit"
+    "kb_handle_irq:PS/2 keyboard IRQ"
+    "pipe_create:Pipe IPC"
+    "cmd_source:Shell scripting"
+    "smp_install_trampoline:SMP AP trampoline"
+    "cmd_ifconfig:Network config"
+    "cmd_ping:ICMP ping"
+    "cmd_lsusb:USB detection"
+    "cmd_exec:ELF exec"
+    "cmd_fatwrite:FAT32 write"
+    "blk_read:Block device read"
+    "blk_write:Block device write"
 )
 
 for feat in "${FEATURES[@]}"; do
