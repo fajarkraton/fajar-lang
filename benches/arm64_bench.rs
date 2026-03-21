@@ -14,9 +14,9 @@ fn bench_interpreter_fibonacci(c: &mut Criterion) {
 fn fib(n: i64) -> i64 {
     if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 }
-fib(20)
+fib(15)
 "#;
-    c.bench_function("arm64_fib_20_interpreted", |b| {
+    c.bench_function("arm64_fib_15_interpreted", |b| {
         b.iter(|| {
             let mut interp = Interpreter::new();
             interp.eval_source(code).unwrap();
