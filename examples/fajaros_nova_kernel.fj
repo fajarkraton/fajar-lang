@@ -1122,32 +1122,52 @@ const NVME_STATE: i64 = 0x804000
 // ── Sprint 31.3-31.5: Controller Enable ──
 
 @kernel fn nvme_init() -> i64 {
+    println("[NVMe] Finding controller...")
     let dev = nvme_find_controller()
-    if dev == -1 { return -1 }
+    if dev == -1 { println("[NVMe] No controller found"); return -1 }
+    println("[NVMe] Found at PCI slot")
 
     // Get BAR0 (MMIO base)
     let bar0 = pci_read32(0, dev, 0, 0x10)
-    if (bar0 & 1) != 0 || bar0 == 0 { return -2 }
+    // Check for invalid BAR: I/O space, zero, or unassigned (0xFFFFFFFF)
+    let bar0_masked = bar0 & 0xFFFFFFFF
+    if (bar0 & 1) != 0 || bar0 == 0 || bar0_masked == 0xFFFFFFFF || (bar0 & 0xFFFFF000) >= 0xFFF00000 {
+        println("[NVMe] BAR0 not assigned by firmware")
+        return -2
+    }
     let bar_addr = bar0 & 0xFFFFF000
+    // Reject BAR addresses beyond 128MB identity map (need explicit mapping)
+    if bar_addr >= 0x8000000 && bar_addr < 0xFEC00000 {
+        // Address is in unmapped region but we can map it
+        println("[NVMe] BAR0 in high memory, mapping...")
+    }
+    println("[NVMe] BAR0 address read")
 
     // Enable bus master + memory space in PCI command register
     let cmd = pci_read32(0, dev, 0, 0x04)
     pci_write32(0, dev, 0, 0x04, cmd | 0x06)
+    println("[NVMe] Bus master enabled")
 
     // Map BAR0 pages (may need multiple pages for large register sets)
+    println("[NVMe] Mapping BAR0...")
     map_page(bar_addr, bar_addr, PAGE_PRESENT | PAGE_WRITABLE)
+    println("[NVMe] BAR0 page 0 mapped")
     map_page(bar_addr + 0x1000, bar_addr + 0x1000, PAGE_PRESENT | PAGE_WRITABLE)
+    println("[NVMe] BAR0 page 1 mapped")
 
     // Store BAR address
     nvme_state_write(0, bar_addr)
 
     // Read CAP for doorbell stride and max queue entries
+    println("[NVMe] Reading CAP register...")
     let cap_lo = volatile_read_u32(bar_addr + NVME_REG_CAP)
     let cap_hi = volatile_read_u32(bar_addr + NVME_REG_CAP + 4)
+    println("[NVMe] CAP read OK")
     let dstride = ((cap_hi >> 0) & 0xF)  // DSTRIDE field is bits 35:32 of CAP
     nvme_state_write(40, dstride)
 
     // Disable controller (CC.EN = 0)
+    println("[NVMe] Disabling controller...")
     nvme_reg_write32(NVME_REG_CC, 0)
 
     // Wait for CSTS.RDY = 0 (controller not ready)
@@ -1156,7 +1176,8 @@ const NVME_STATE: i64 = 0x804000
         pause()
         timeout = timeout - 1
     }
-    if timeout == 0 { return -3 }
+    if timeout == 0 { println("[NVMe] Disable timeout!"); return -3 }
+    println("[NVMe] Controller disabled")
 
     // Clear admin queues
     nvme_clear_queue(NVME_ASQ, NVME_QUEUE_ENTRIES * NVME_SQE_SIZE)
@@ -1201,6 +1222,7 @@ const NVME_STATE: i64 = 0x804000
 
     // Enable controller: CC = MPS=0 | CSS=NVM(0) | EN=1
     // CC bits: EN(0), CSS(4:6)=0, MPS(7:10)=0, AMS(11:13)=0, SHN(14:15)=0, IOSQES(16:19)=6, IOCQES(20:23)=4
+    println("[NVMe] Enabling controller...")
     let cc = 1 | (6 << 16) | (4 << 20)  // EN=1, IOSQES=64B(2^6), IOCQES=16B(2^4)
     nvme_reg_write32(NVME_REG_CC, cc)
 
@@ -1210,7 +1232,8 @@ const NVME_STATE: i64 = 0x804000
         pause()
         timeout = timeout - 1
     }
-    if timeout == 0 { return -4 }
+    if timeout == 0 { println("[NVMe] Enable timeout!"); return -4 }
+    println("[NVMe] Controller enabled OK")
 
     nvme_state_write(96, 1) // initialized = 1
     0
@@ -1551,23 +1574,27 @@ const BLK_MAX_DEVS: i64 = 4
         return -2
     }
     println("[NVMe] I/O queues ready")
-    cprintln("[NVMe] I/O queues ready", GREEN_ON_BLACK)
+    println("[NVMe] Registering block devices...")
 
     // Register as block device 0
     let ns_size = nvme_state_read(80)
     let sector_sz = nvme_state_read(88)
     blk_register(0, 1, ns_size, sector_sz)
+    println("[NVMe] Block device 0 registered")
 
     // Also register ramdisk as device 1
     blk_register(1, 2, RAMDISK_SIZE / 512, 512)
+    println("[NVMe] Block device 1 registered")
     // Mark ramdisk memory as used
     let mut f: i64 = RAMDISK_BASE / FRAME_SIZE
     while f < (RAMDISK_BASE + RAMDISK_SIZE) / FRAME_SIZE { frame_mark_used(f); f = f + 1 }
 
     // Quick sector 0 read test
+    println("[NVMe] Registering block devices...")
     println("[NVMe] Testing sector read...")
     nvme_clear_queue(NVME_DMA, 512)
     let rs = nvme_read_sectors(0, 1, NVME_DMA)
+    println("[NVMe] Read sectors returned")
     if rs == 0 {
         let b510 = volatile_read_u8(NVME_DMA + 510)
         let b511 = volatile_read_u8(NVME_DMA + 511)
