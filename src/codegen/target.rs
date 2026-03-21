@@ -42,6 +42,9 @@ pub struct TargetConfig {
     pub os: Os,
     /// Whether this is a bare-metal target (no OS).
     pub is_bare_metal: bool,
+    /// Whether this is a user-mode target (Ring 3 programs for FajarOS).
+    /// Uses SYSCALL for I/O instead of direct hardware access.
+    pub is_user_mode: bool,
     /// Calling convention for this target.
     pub call_conv: CallConv,
 }
@@ -57,10 +60,20 @@ impl TargetConfig {
     /// - `riscv64gc-unknown-none-elf` (bare metal RISC-V)
     /// - Host triple via `host`
     pub fn from_triple(target: &str) -> Result<Self, CodegenError> {
-        let triple = if target == "host" {
+        // Handle special target aliases
+        let is_user_mode = target == "x86_64-user" || target == "x86_64-user-none";
+        let effective_target = if is_user_mode {
+            "x86_64-unknown-none" // user-mode ELF uses bare-metal triple for Cranelift
+        } else if target == "x86_64-none" {
+            "x86_64-unknown-none"
+        } else {
+            target
+        };
+
+        let triple = if effective_target == "host" {
             Triple::host()
         } else {
-            target.parse::<Triple>().map_err(|e| {
+            effective_target.parse::<Triple>().map_err(|e| {
                 CodegenError::AbiError(format!("invalid target triple '{target}': {e}"))
             })?
         };
@@ -111,7 +124,8 @@ impl TargetConfig {
             triple,
             arch,
             os,
-            is_bare_metal,
+            is_bare_metal: is_bare_metal && !is_user_mode,
+            is_user_mode,
             call_conv,
         })
     }

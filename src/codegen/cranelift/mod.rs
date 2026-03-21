@@ -151,6 +151,8 @@ pub struct CraneliftCompiler {
     module_fns: HashMap<String, String>,
     /// When true, disables standard library (IO, heap) runtime declarations.
     no_std: bool,
+    /// When true, generates user-mode (Ring 3) ELF with SYSCALL-based runtime.
+    user_mode: bool,
     /// User-defined panic handler function name.
     panic_handler_fn: Option<String>,
     /// Set of async function names (their return is wrapped in a future handle).
@@ -436,6 +438,7 @@ impl CraneliftCompiler {
             closure_span_to_fn: HashMap::new(),
             module_fns: HashMap::new(),
             no_std: false,
+            user_mode: false,
             panic_handler_fn: None,
             async_fns: HashSet::new(),
             global_asm_sections: Vec::new(),
@@ -6290,6 +6293,8 @@ pub struct ObjectCompiler {
     module_fns: HashMap<String, String>,
     /// When true, disables standard library (IO, heap) runtime declarations.
     no_std: bool,
+    /// When true, generates user-mode (Ring 3) ELF with SYSCALL-based runtime.
+    user_mode: bool,
     /// User-defined panic handler function name.
     panic_handler_fn: Option<String>,
     /// Set of async function names (their return is wrapped in a future handle).
@@ -6367,6 +6372,7 @@ impl ObjectCompiler {
             closure_span_to_fn: HashMap::new(),
             module_fns: HashMap::new(),
             no_std: false,
+            user_mode: false,
             panic_handler_fn: None,
             async_fns: HashSet::new(),
             global_asm_sections: Vec::new(),
@@ -6427,6 +6433,7 @@ impl ObjectCompiler {
             closure_span_to_fn: HashMap::new(),
             module_fns: HashMap::new(),
             no_std: false,
+            user_mode: false,
             panic_handler_fn: None,
             async_fns: HashSet::new(),
             global_asm_sections: Vec::new(),
@@ -11120,6 +11127,12 @@ impl ObjectCompiler {
         self.no_std = enabled;
     }
 
+    /// Enables user-mode compilation (Ring 3 programs for FajarOS).
+    /// Uses SYSCALL for I/O instead of direct hardware access.
+    pub fn set_user_mode(&mut self, enabled: bool) {
+        self.user_mode = enabled;
+    }
+
     /// Enables debug information generation.
     pub fn set_debug_info(&mut self, enabled: bool, source_file: Option<String>) {
         self.debug_info = enabled;
@@ -11744,6 +11757,43 @@ impl ObjectCompiler {
                         self.module.clear_context(&mut ctx);
                     }
                     break;
+                }
+            }
+        }
+
+        // User-mode _start: calls main() then SYS_EXIT(0)
+        if self.user_mode {
+            if let Some(main_id) = self.functions.get("main").copied() {
+                let sig = cranelift_codegen::ir::Signature {
+                    params: vec![],
+                    returns: vec![],
+                    call_conv: self.module.isa().default_call_conv(),
+                };
+                if let Ok(start_id) =
+                    self.module
+                        .declare_function("_start", Linkage::Export, &sig)
+                {
+                    let mut ctx = self.module.make_context();
+                    ctx.func.signature = sig;
+                    let mut builder_ctx = FunctionBuilderContext::new();
+                    {
+                        let mut builder =
+                            FunctionBuilder::new(&mut ctx.func, &mut builder_ctx);
+                        let entry_block = builder.create_block();
+                        builder.switch_to_block(entry_block);
+                        builder.seal_block(entry_block);
+
+                        // Call main()
+                        let main_ref = self.module.declare_func_in_func(main_id, builder.func);
+                        builder.ins().call(main_ref, &[]);
+
+                        // After main() returns, _start should exit.
+                        // Return from _start — the linker will add a halt/exit after it.
+                        builder.ins().return_(&[]);
+                    }
+                    self.module
+                        .define_function(start_id, &mut ctx)
+                        .map_err(|e| vec![CodegenError::FunctionError(e.to_string())])?;
                 }
             }
         }

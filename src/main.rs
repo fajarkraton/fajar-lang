@@ -1201,7 +1201,7 @@ fn cmd_build_native(
         Err(e) => {
             eprintln!("error: {e}");
             eprintln!(
-                "hint: supported targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, aarch64-unknown-none, riscv64gc-unknown-linux-gnu, riscv64gc-unknown-none-elf"
+                "hint: supported targets: x86_64-unknown-linux-gnu, x86_64-user, x86_64-none, aarch64-unknown-linux-gnu, aarch64-unknown-none, riscv64gc-unknown-linux-gnu, riscv64gc-unknown-none-elf"
             );
             return ExitCode::from(EXIT_USAGE);
         }
@@ -1260,9 +1260,13 @@ fn cmd_build_native(
         }
     };
 
-    // Enable no_std mode: --no-std flag, bare-metal target, or @no_std annotation
-    if no_std || target.is_bare_metal {
+    // Enable no_std mode: --no-std flag, bare-metal target, user-mode, or @no_std annotation
+    if no_std || target.is_bare_metal || target.is_user_mode {
         compiler.set_no_std(true);
+    }
+    // Enable user-mode: generates SYSCALL-based runtime instead of bare-metal
+    if target.is_user_mode {
+        compiler.set_user_mode(true);
     }
     for item in &program.items {
         if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
@@ -1300,8 +1304,8 @@ fn cmd_build_native(
     }
 
     // Determine linker command
-    let linker = if target.is_bare_metal {
-        "ld".to_string() // bare-metal always uses ld directly (no libc)
+    let linker = if target.is_bare_metal || target.is_user_mode {
+        "ld".to_string() // bare-metal and user-mode use ld directly (no libc)
     } else if is_cross {
         cross_linker(&target)
     } else {
@@ -1312,8 +1316,8 @@ fn cmd_build_native(
     let generated_script_path;
     let script_path = if let Some(ls) = linker_script {
         Some(std::path::PathBuf::from(ls))
-    } else if target.is_bare_metal {
-        // Auto-generate a default linker script for bare-metal targets
+    } else if target.is_bare_metal || target.is_user_mode {
+        // Auto-generate a default linker script for bare-metal/user-mode targets
         let config = fajar_lang::codegen::linker::LinkerConfig::for_target(&target);
         let script_result = if target.arch == fajar_lang::codegen::target::Arch::X86_64 {
             fajar_lang::codegen::linker::generate_x86_64_linker_script(&config)
@@ -1398,9 +1402,8 @@ fn cmd_build_native(
         None
     };
 
-    if target.is_bare_metal {
-        // Bare-metal: use linker script, no standard libs
-        // Using `ld` directly — no -nostdlib/-nostartfiles needed (those are gcc flags)
+    if target.is_bare_metal || target.is_user_mode {
+        // Bare-metal/user-mode: use linker script, no standard libs
         if let Some(ref sp) = script_path {
             link_cmd.arg("-T").arg(sp);
         }
@@ -1413,7 +1416,7 @@ fn cmd_build_native(
     }
 
     // Add platform-specific dead-code stripping flags
-    if target.is_bare_metal {
+    if target.is_bare_metal || target.is_user_mode {
         link_cmd.arg("--gc-sections"); // ld (not cc) syntax
     } else if cfg!(target_os = "macos") {
         link_cmd.arg("-Wl,-dead_strip");
