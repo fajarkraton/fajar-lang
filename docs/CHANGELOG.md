@@ -18,6 +18,40 @@ Kategori perubahan:
 
 ---
 
+## [3.5.0] — 2026-03-21
+
+### Added — Fajar Lang
+- **`const fn` codegen** — Compile-time evaluation of `const fn` calls in native codegen (`const FIB10 = fib(10)` → 55 at compile time)
+- **Recursive const fn** — `const fn fib(n) { if n <= 1 { n } else { fib(n-1) + fib(n-2) } }` with 128-level recursion limit
+- **Comparison operators in const eval** — `==`, `!=`, `<`, `<=`, `>`, `>=` for compile-time conditionals
+- **10 const fn tests** — 6 native codegen + 4 interpreter (basic, multiply, recursive fib, conditional, runtime call)
+
+### Added — FajarOS Nova v0.5.0
+- **Virtio-net real TX/RX** — Virtqueue setup (16 descriptors, RX/TX), `net_send_frame()`, `net_rx_poll()`, `net_check_icmp_reply()` with 5s timeout
+- **XHCI full init** — DCBAA, command ring (64 TRBs), event ring + ERST, controller start, `xhci_enable_slot()`, `xhci_address_device()`
+- **`usbinit` command** — Full XHCI init + slot enable + device address for first connected USB device
+- **Modular fajaros-x86 repo** — 35 `.fj` files, concatenation build system, synced with monolithic kernel
+
+### Fixed
+- **NVMe BAR validation** — Reject unassigned BAR0 (0xFFFFFFFF) to prevent page fault on boot
+- **QEMU NVMe boot order** — `-boot d` forces CD-ROM first when NVMe disk attached
+- **Ring 3 auto-run** — Deferred to `runhello` command (SYS_EXIT halts CPU, was blocking shell)
+
+### Verified — QEMU
+- Basic boot (serial): **PASS** — all subsystems init, shell prompt
+- KVM acceleration: **PASS**
+- Virtio-net: **PASS** — `[NET] Virtqueues configured (RX=0, TX=1)`
+- XHCI USB: **PASS** — boots without crash
+- SMP 4 cores: **PASS**
+- NVMe + FAT32: **PASS** — sector read OK, FAT32 mounted (`-boot d`)
+
+### Stats
+- Nova: 9,637 LOC, 365 @kernel fns, 148 commands
+- Fajar Lang: 6,061 tests (0 failures), clippy clean, fmt clean
+- fajaros-x86: 35 modular `.fj` files
+
+---
+
 ## [3.4.0] — 2026-03-21
 
 ### Added — Fajar Lang

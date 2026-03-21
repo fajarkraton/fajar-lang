@@ -9529,15 +9529,15 @@ const FS_ENTRY_SIZE: i64 = 128
     irq_enable()
 
     // Serial confirmation
-    println("[NOVA] FajarOS Nova v0.5.0 Transcendence booted")
-    println("[NOVA] 9000+ LOC | 145 commands | 100% Fajar Lang")
+    println("[NOVA] FajarOS Nova v0.6.0 Ascension booted")
+    println("[NOVA] 9600+ LOC | 148 commands | 100% Fajar Lang")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
     println("[NOVA] VGA console active at 0xB8000")
 
     // Boot banner
     cprintln("============================================", WHITE_ON_BLUE)
-    cprintln("  FajarOS Nova v0.1.0 — x86_64 Shell", WHITE_ON_BLUE)
+    cprintln("  FajarOS Nova v0.6.0 — x86_64 Shell", WHITE_ON_BLUE)
     cprintln("  Written 100% in Fajar Lang", WHITE_ON_BLUE)
     cprintln("============================================", WHITE_ON_BLUE)
     cprintln("", WHITE_ON_BLACK)
