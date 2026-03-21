@@ -119,6 +119,11 @@ impl Compiler {
                     span: s.span,
                 });
             }
+            Item::ServiceDef(svc) => {
+                for handler in &svc.handlers {
+                    self.compile_fn_def(handler);
+                }
+            }
             Item::Stmt(stmt) => self.compile_stmt(stmt),
             Item::ImplBlock(imp) => {
                 for method in &imp.methods {

@@ -995,6 +995,21 @@ impl Interpreter {
                 self.env.borrow_mut().define(sdef.name.clone(), val);
                 Ok(Value::Null)
             }
+            Item::ServiceDef(svc) => {
+                // Register each handler as a regular function
+                for handler in &svc.handlers {
+                    let fn_val = FnValue {
+                        name: handler.name.clone(),
+                        params: handler.params.clone(),
+                        body: handler.body.clone(),
+                        closure_env: std::rc::Rc::clone(&self.env),
+                    };
+                    self.env
+                        .borrow_mut()
+                        .define(handler.name.clone(), Value::Function(fn_val));
+                }
+                Ok(Value::Null)
+            }
             Item::Stmt(stmt) => self.eval_stmt(stmt),
             Item::ImplBlock(impl_block) => {
                 self.eval_impl_block(impl_block)?;

@@ -545,6 +545,32 @@ impl Parser {
                     Ok(Item::ConstDef(cd))
                 }
             }
+            TokenKind::Service => {
+                // service name { fn handler1() { ... } fn handler2() { ... } }
+                let start = self.peek().span.start;
+                self.advance(); // consume `service`
+                let (name, _name_span) = self.expect_ident()?;
+                self.expect(&TokenKind::LBrace)?;
+
+                let mut handlers = Vec::new();
+                while !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+                    if matches!(self.peek_kind(), TokenKind::Fn) {
+                        let fndef = self.parse_fn_def(false, annotation.clone())?;
+                        handlers.push(fndef);
+                    } else {
+                        self.advance(); // skip unknown tokens
+                    }
+                }
+                self.expect(&TokenKind::RBrace)?;
+                let end = self.prev_span().end;
+
+                Ok(Item::ServiceDef(ServiceDef {
+                    name,
+                    annotation,
+                    handlers,
+                    span: Span::new(start, end),
+                }))
+            }
             TokenKind::Static => {
                 // static [mut] NAME[: TYPE] = VALUE
                 let start = self.peek().span.start;

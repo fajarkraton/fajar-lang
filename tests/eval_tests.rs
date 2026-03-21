@@ -6546,3 +6546,25 @@ fn async_ipc_try_recv_compiles() {
     let analysis = fajar_lang::analyzer::analyze(&program);
     assert!(analysis.is_ok(), "ipc_try_recv should be allowed in @safe");
 }
+
+// ── service keyword tests (E10) ──
+
+#[test]
+fn service_keyword_basic() {
+    let src = r#"
+        service vfs {
+            fn handle_open() -> i64 {
+                42
+            }
+            fn handle_close() -> i64 {
+                0
+            }
+        }
+        fn main() -> void {
+            println(handle_open())
+            println(handle_close())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "0"]);
+}

@@ -60,6 +60,8 @@ pub enum Item {
     ConstDef(ConstDef),
     /// Static variable definition: `static mut NAME: Type = value`
     StaticDef(StaticDef),
+    /// Service definition: `service name { handler functions }`
+    ServiceDef(ServiceDef),
     /// Use declaration: `use path::to::item`
     UseDecl(UseDecl),
     /// Module declaration: `mod name { items }`
@@ -398,6 +400,23 @@ pub struct StaticDef {
     pub ty: TypeExpr,
     /// Initial value.
     pub value: Box<Expr>,
+    /// Source span.
+    pub span: Span,
+}
+
+/// Service definition: `service name { fn handlers... }`
+///
+/// Syntactic sugar for a process with an IPC message loop.
+/// The compiler generates a `main()` that loops on `ipc_recv` and
+/// dispatches to the handler functions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServiceDef {
+    /// Service name (e.g., "vfs", "net", "shell").
+    pub name: String,
+    /// Optional annotation (e.g., @safe, @device("net")).
+    pub annotation: Option<Annotation>,
+    /// Handler functions defined inside the service block.
+    pub handlers: Vec<FnDef>,
     /// Source span.
     pub span: Span,
 }

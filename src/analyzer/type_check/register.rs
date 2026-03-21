@@ -1361,6 +1361,11 @@ impl TypeChecker {
                     used: false,
                 });
             }
+            Item::ServiceDef(svc) => {
+                for h in &svc.handlers {
+                    self.register_item(&Item::FnDef(h.clone()));
+                }
+            }
             Item::StaticDef(sdef) => {
                 let is_inferred = matches!(&sdef.ty, TypeExpr::Simple { name, .. } if name == "_");
                 let ty = if is_inferred {

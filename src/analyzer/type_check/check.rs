@@ -30,6 +30,11 @@ impl TypeChecker {
                 // Treat static mut like a const def for type checking
                 self.check_expr(&sdef.value);
             }
+            Item::ServiceDef(svc) => {
+                for h in &svc.handlers {
+                    self.check_fn_def(h);
+                }
+            }
             Item::ImplBlock(impl_block) => {
                 for method in &impl_block.methods {
                     self.check_fn_def(method);

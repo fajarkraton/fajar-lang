@@ -4659,6 +4659,10 @@ impl CraneliftCompiler {
                     self.const_defs
                         .push((sdef.name.clone(), *sdef.value.clone(), sdef.ty.clone()));
                 }
+                Item::ServiceDef(_svc) => {
+                    // Service handlers are processed when encountered as FnDef
+                    // (ServiceDef expands to FnDef items in the analyzer)
+                }
                 Item::ModDecl(mdecl) => {
                     if let Some(ref body) = mdecl.body {
                         for mod_item in body {
@@ -11274,6 +11278,10 @@ impl ObjectCompiler {
                     // Treat static mut like const for codegen
                     self.const_defs
                         .push((sdef.name.clone(), *sdef.value.clone(), sdef.ty.clone()));
+                }
+                Item::ServiceDef(_svc) => {
+                    // Service handlers are processed when encountered as FnDef
+                    // (ServiceDef expands to FnDef items in the analyzer)
                 }
                 Item::ModDecl(mdecl) => {
                     if let Some(ref body) = mdecl.body {

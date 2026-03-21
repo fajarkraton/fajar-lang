@@ -135,6 +135,7 @@ impl<'src> Formatter<'src> {
             Item::ImplBlock(i) => self.format_impl_block(i),
             Item::TraitDef(t) => self.format_trait_def(t),
             Item::ConstDef(c) => self.format_const_def(c),
+            Item::ServiceDef(_svc) => { /* service: formatted as module */ }
             Item::StaticDef(s) => {
                 self.write_indent();
                 let mut decl = String::from("static ");
@@ -1098,6 +1099,7 @@ fn item_span(item: &Item) -> crate::lexer::token::Span {
         Item::TraitDef(t) => t.span,
         Item::ConstDef(c) => c.span,
         Item::StaticDef(s) => s.span,
+        Item::ServiceDef(svc) => svc.span,
         Item::UseDecl(u) => u.span,
         Item::ModDecl(m) => m.span,
         Item::ExternFn(e) => e.span,
