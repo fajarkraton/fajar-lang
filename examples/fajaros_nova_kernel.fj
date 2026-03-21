@@ -4454,40 +4454,48 @@ const CC_SUCCESS: i64 = 1
     xhci_ring_doorbell(0, 0)
     println("[XHCI] Doorbell rung, polling event ring...")
 
-    // Poll event ring for completion
-    let evt_idx = xhci_state_read(112)
-    let evt_cycle = xhci_state_read(128)
-    let mut timeout: i64 = 1000000
+    // Poll event ring for Command Completion Event (skip Port Status Change Events)
+    let mut cur_evt_idx = xhci_state_read(112)
+    let mut cur_evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
     while timeout > 0 {
-        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 3)
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt_idx, 3)
         let c_bit = dw3_evt & 1
-        if c_bit == (evt_cycle & 1) {
+        if c_bit == (cur_evt_cycle & 1) {
             // Event ready
             let trb_type_evt = (dw3_evt >> 10) & 0x3F
-            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) >> 24) & 0xFF
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt_idx, 2) >> 24) & 0xFF
             let slot_id = (dw3_evt >> 24) & 0xFF
 
             // Advance event dequeue
-            let next_evt = evt_idx + 1
+            let next_evt = cur_evt_idx + 1
             if next_evt >= XHCI_EVT_RING_SIZE {
-                xhci_state_write(112, 0)
-                xhci_state_write(128, 1 - evt_cycle)
+                cur_evt_idx = 0
+                cur_evt_cycle = 1 - cur_evt_cycle
             } else {
-                xhci_state_write(112, next_evt)
+                cur_evt_idx = next_evt
             }
+            // Save state
+            xhci_state_write(112, cur_evt_idx)
+            xhci_state_write(128, cur_evt_cycle)
 
             // Update ERDP
             let base = xhci_state_read(0)
             let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
             let ir0 = base + rtsoff + 0x20
-            let new_erdp = XHCI_EVT_RING + next_evt * XHCI_TRB_SIZE
+            let new_erdp = XHCI_EVT_RING + cur_evt_idx * XHCI_TRB_SIZE
             volatile_write_u32(ir0 + 0x18, (new_erdp & 0xFFFFFFFF) | 0x08) // EHB
             volatile_write_u32(ir0 + 0x1C, 0)
 
-            if cc == CC_SUCCESS {
-                return slot_id
+            // Only process Command Completion Events (type 33)
+            if trb_type_evt == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS {
+                    return slot_id
+                }
+                return -(cc)
             }
-            return -(cc)
+            // Skip non-command events (Port Status Change = 34, etc.) and continue
+            // Don't decrement timeout for skipped events
         }
         pause()
         timeout = timeout - 1
@@ -4559,6 +4567,7 @@ const CBW_SIGNATURE: i64 = 0x43425355
 const CSW_SIGNATURE: i64 = 0x53425355
 
 @kernel fn xhci_address_device(slot_id: i64, port_num: i64, speed: i64) -> i64 {
+    println("[XHCI] Address Device: setup input context...")
     let ictx = XHCI_INPUT_CTX
     // Map extra pages for EP0 ring, bulk rings, data buffer
     let mut pg: i64 = XHCI_EP0_RING
@@ -4573,22 +4582,32 @@ const CSW_SIGNATURE: i64 = 0x53425355
     i = 0
     while i < 0x3000 { volatile_write_u8(XHCI_EP0_RING + i, 0); i = i + 1 }
 
+    // Check Context Size: HCCPARAMS1 bit 2 (CSZ)
+    let base = xhci_state_read(0)
+    let hccparams1 = volatile_read_u32(base + 0x10)
+    let csz = (hccparams1 >> 2) & 1 // 0=32-byte, 1=64-byte contexts
+    let ctx_size = if csz == 1 { 64 } else { 32 }
+    println("[XHCI] Context size: 32 or 64 bytes")
+
     // Input Control Context: Add Slot (A0) + EP0 (A1)
+    // Add Context Flags at offset 4 of Input Control Context
     volatile_write_u32(ictx + 4, 0x03)
 
-    // Slot Context (offset 32)
-    let slot_ctx = ictx + 32
+    // Slot Context (at offset ctx_size from start of Input Context)
+    let slot_ctx = ictx + ctx_size
     let speed_val = if speed == 0 { 3 } else { speed }
+    // DW0: Route String=0, Speed (bits 23:20), Context Entries=1 (bits 31:27)
     volatile_write_u32(slot_ctx, (1 << 27) | (speed_val << 20))
+    // DW1: Root Hub Port Number (bits 23:16)
     volatile_write_u32(slot_ctx + 4, (port_num << 16) & 0xFF0000)
 
-    // EP0 Context (offset 64)
-    let ep0_ctx = ictx + 64
+    // EP0 Context (at offset 2 * ctx_size from start)
+    let ep0_ctx = ictx + ctx_size * 2
     let max_pkt = if speed_val == 1 { 8 }
                   else if speed_val == 2 { 8 }
                   else if speed_val == 3 { 64 }
                   else { 512 }
-    // DW1: CErr=3, EPType=4 (Control Bidi), MaxPacketSize
+    // DW1: CErr=3 (bits 2:1), EPType=4 (bits 5:3), MaxPacketSize (bits 31:16)
     volatile_write_u32(ep0_ctx + 4, (3 << 1) | (4 << 3) | (max_pkt << 16))
     // DW2-DW3: TR Dequeue Pointer (EP0 ring) with DCS=1
     volatile_write_u32(ep0_ctx + 8, (XHCI_EP0_RING & 0xFFFFFFFF) | 1)
@@ -4600,9 +4619,14 @@ const CSW_SIGNATURE: i64 = 0x53425355
     xhci_write_trb(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1,
         XHCI_EP0_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
 
-    // Output Device Context
-    let out_ctx = XHCI_DEV_CTX + (slot_id - 1) * 2048
+    // Output Device Context (allocate per context size: 32 or 64 bytes × 32 entries = 1KB or 2KB)
+    let dev_ctx_sz = ctx_size * 32 // Slot + 31 EP contexts
+    let out_ctx = XHCI_DEV_CTX + (slot_id - 1) * dev_ctx_sz
+    // Zero output context
+    i = 0
+    while i < dev_ctx_sz { volatile_write_u8(out_ctx + i, 0); i = i + 1 }
     volatile_write_u64(XHCI_DCBAA + slot_id * 8, out_ctx)
+    println("[XHCI] DCBAA + output context set")
 
     // Save state
     xhci_state_write(144, slot_id)
@@ -4611,11 +4635,16 @@ const CSW_SIGNATURE: i64 = 0x53425355
     xhci_state_write(184, 1)  // ep0_cycle = 1
 
     // Submit Address Device command
-    // DW0-DW1: Input Context pointer, DW3: slot_id in bits [31:24], type in [15:10]
+    println("[XHCI] Submitting Address Device command...")
     let idx = xhci_state_read(104)
     let cycle = xhci_state_read(120)
+    // DW0: Input Context pointer (low 32), must be 16-byte aligned
+    // DW1: Input Context pointer (high 32) = 0
+    // DW2: reserved = 0
+    // DW3: Slot ID [31:24] | BSR [9] = 0 | Type [15:10] = 11 | C [0]
     let dw3 = ((slot_id & 0xFF) << 24) | (TRB_ADDRESS_DEVICE << 10) | (cycle & 1)
     xhci_write_trb(XHCI_CMD_RING, idx, ictx & 0xFFFFFFFF, 0, 0, dw3)
+    println("[XHCI] TRB written to cmd ring")
 
     let next = idx + 1
     if next >= XHCI_CMD_RING_SIZE - 1 {
@@ -4629,34 +4658,52 @@ const CSW_SIGNATURE: i64 = 0x53425355
     }
 
     xhci_ring_doorbell(0, 0)
+    println("[XHCI] Doorbell rung for Address Device")
 
-    // Poll event ring for completion
+    // Poll event ring for completion — may get Port Status Change Events first
     let evt_idx = xhci_state_read(112)
     let evt_cycle = xhci_state_read(128)
-    let mut timeout: i64 = 1000000
+    let mut timeout: i64 = 2000000
+    let mut cur_evt = evt_idx
+    let mut cur_cycle = evt_cycle
     while timeout > 0 {
-        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 3)
-        if (dw3_evt & 1) == (evt_cycle & 1) {
-            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) >> 24) & 0xFF
-            let next_evt = evt_idx + 1
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            // Advance event dequeue
+            let next_evt = cur_evt + 1
             if next_evt >= XHCI_EVT_RING_SIZE {
-                xhci_state_write(112, 0)
-                xhci_state_write(128, 1 - evt_cycle)
+                cur_evt = 0
+                cur_cycle = 1 - cur_cycle
             } else {
-                xhci_state_write(112, next_evt)
+                cur_evt = next_evt
             }
             // Update ERDP
             let base = xhci_state_read(0)
             let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
             let ir0 = base + rtsoff + 0x20
-            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + next_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
             volatile_write_u32(ir0 + 0x1C, 0)
-            if cc == CC_SUCCESS { return 0 }
-            return -(cc)
+            // Save updated event ring state
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+
+            if evt_type == TRB_CMD_COMPLETION {
+                // Command Completion Event — this is what we want
+                println("[XHCI] Address Device completion received")
+                if cc == CC_SUCCESS { return 0 }
+                println("[XHCI] Address Device failed with CC")
+                return -(cc)
+            }
+            // Port Status Change or other event — skip and continue polling
+            println("[XHCI] Skipping non-command event, continuing...")
+        } else {
+            pause()
+            timeout = timeout - 1
         }
-        pause()
-        timeout = timeout - 1
     }
+    println("[XHCI] Address Device timeout!")
     -99
 }
 
@@ -4706,32 +4753,42 @@ const CSW_SIGNATURE: i64 = 0x53425355
     // Ring EP0 doorbell (slot_id, target=1 for EP0)
     xhci_ring_doorbell(slot_id, 1)
 
-    // Poll for Transfer Event completion
-    let evt_idx = xhci_state_read(112)
-    let evt_cycle = xhci_state_read(128)
+    // Poll for Transfer Event completion (skip Port Status Change Events)
+    let mut xfer_evt_idx = xhci_state_read(112)
+    let mut xfer_evt_cycle = xhci_state_read(128)
     let mut timeout: i64 = 2000000
     while timeout > 0 {
-        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 3)
-        if (dw3_evt & 1) == (evt_cycle & 1) {
-            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) >> 24) & 0xFF
-            let transferred = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) & 0xFFFFFF
-            let next_evt = evt_idx + 1
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 3)
+        if (dw3_evt & 1) == (xfer_evt_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 2) >> 24) & 0xFF
+            let residual = xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 2) & 0xFFFFFF
+            // Advance
+            let next_evt = xfer_evt_idx + 1
             if next_evt >= XHCI_EVT_RING_SIZE {
-                xhci_state_write(112, 0)
-                xhci_state_write(128, 1 - evt_cycle)
+                xfer_evt_idx = 0
+                xfer_evt_cycle = 1 - xfer_evt_cycle
             } else {
-                xhci_state_write(112, next_evt)
+                xfer_evt_idx = next_evt
             }
+            xhci_state_write(112, xfer_evt_idx)
+            xhci_state_write(128, xfer_evt_cycle)
+            // Update ERDP
             let base = xhci_state_read(0)
             let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
             let ir0 = base + rtsoff + 0x20
-            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + next_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + xfer_evt_idx * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
             volatile_write_u32(ir0 + 0x1C, 0)
-            if cc == CC_SUCCESS || cc == 13 { return w_length - transferred } // 13 = Short Packet (OK)
-            return -(cc)
+            // Only process Transfer Events (type 32) or Command Completion (type 33)
+            if evt_type == TRB_TRANSFER_EVENT || evt_type == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS || cc == 13 { return w_length - residual }
+                return -(cc)
+            }
+            // Skip other event types
+        } else {
+            pause()
+            timeout = timeout - 1
         }
-        pause()
-        timeout = timeout - 1
     }
     -99
 }
@@ -4891,15 +4948,16 @@ const CSW_SIGNATURE: i64 = 0x53425355
 
     // Enable slot
     let slot = xhci_enable_slot()
-    if slot < 0 {
+    println("[USB] Enable slot returned")
+    if slot <= 0 {
+        println("[USB] Enable slot failed or returned 0")
         cprint("  Enable slot failed: ", RED_ON_BLACK)
         cprint_decimal(slot, RED_ON_BLACK)
         console_putchar(10, WHITE_ON_BLACK)
         return
     }
-    cprint("  Slot ", WHITE_ON_BLACK)
-    cprint_decimal(slot, GREEN_ON_BLACK)
-    cprintln(" enabled", WHITE_ON_BLACK)
+    println("[USB] Slot enabled successfully")
+    println("[USB] About to call xhci_address_device...")
 
     // Find first connected port
     let op_base = xhci_state_read(64)
@@ -4936,70 +4994,56 @@ const CSW_SIGNATURE: i64 = 0x53425355
         console_putchar(10, WHITE_ON_BLACK)
         return
     }
-    cprintln("  Device addressed", GREEN_ON_BLACK)
+    println("[USB] Device addressed OK")
 
     // GET_DESCRIPTOR (device, 18 bytes)
+    println("[USB] GET_DESCRIPTOR device...")
     let dev_desc = usb_get_descriptor(slot, USB_DESC_DEVICE, 0, 18)
+    println("[USB] GET_DESCRIPTOR returned")
     if dev_desc >= 0 {
+        println("[USB] Device descriptor OK")
         let vid = volatile_read_u8(XHCI_DATA_BUF + 8) | (volatile_read_u8(XHCI_DATA_BUF + 9) << 8)
         let pid = volatile_read_u8(XHCI_DATA_BUF + 10) | (volatile_read_u8(XHCI_DATA_BUF + 11) << 8)
         let dev_class = volatile_read_u8(XHCI_DATA_BUF + 4)
-        cprint("  VID:PID = ", WHITE_ON_BLACK)
-        cprint_hex(vid, 4, CYAN_ON_BLACK)
-        cprint(":", WHITE_ON_BLACK)
-        cprint_hex(pid, 4, CYAN_ON_BLACK)
-        cprint(" class=", WHITE_ON_BLACK)
-        cprint_hex(dev_class, 2, CYAN_ON_BLACK)
-        console_putchar(10, WHITE_ON_BLACK)
+        println("[USB] VID/PID parsed")
     } else {
-        cprint("  GET_DESCRIPTOR(device) failed: ", RED_ON_BLACK)
-        cprint_decimal(dev_desc, RED_ON_BLACK)
-        console_putchar(10, WHITE_ON_BLACK)
+        println("[USB] GET_DESCRIPTOR(device) FAILED")
         return
     }
 
     // GET_DESCRIPTOR (config, 255 bytes)
+    println("[USB] GET_DESCRIPTOR config...")
     let cfg_desc = usb_get_descriptor(slot, USB_DESC_CONFIGURATION, 0, 255)
+    println("[USB] Config descriptor returned")
     if cfg_desc >= 0 {
+        println("[USB] Config descriptor OK")
         let cfg_val = volatile_read_u8(XHCI_DATA_BUF + 5)
         let num_ifaces = volatile_read_u8(XHCI_DATA_BUF + 4)
-        cprint("  Config ", WHITE_ON_BLACK)
-        cprint_decimal(cfg_val, CYAN_ON_BLACK)
-        cprint(": ", WHITE_ON_BLACK)
-        cprint_decimal(num_ifaces, CYAN_ON_BLACK)
-        cprintln(" interface(s)", WHITE_ON_BLACK)
-
-        // SET_CONFIGURATION
+        println("[USB] SET_CONFIGURATION...")
         let set_cfg = usb_set_configuration(slot, cfg_val)
         if set_cfg >= 0 {
-            cprintln("  Configuration set", GREEN_ON_BLACK)
+            println("[USB] Configuration set OK")
         } else {
-            cprint("  SET_CONFIGURATION failed: ", RED_ON_BLACK)
-            cprint_decimal(set_cfg, RED_ON_BLACK)
-            console_putchar(10, WHITE_ON_BLACK)
+            println("[USB] SET_CONFIGURATION failed")
         }
 
         // Find mass storage interface
+        println("[USB] Finding mass storage interface...")
         let ms = usb_find_mass_storage()
         if ms == 0 {
             let bulk_in = xhci_state_read(160)
             let bulk_out = xhci_state_read(168)
-            cprintln("  USB Mass Storage detected!", GREEN_ON_BLACK)
-            cprint("    Bulk IN:  EP 0x", WHITE_ON_BLACK)
-            cprint_hex(bulk_in, 2, CYAN_ON_BLACK)
-            console_putchar(10, WHITE_ON_BLACK)
-            cprint("    Bulk OUT: EP 0x", WHITE_ON_BLACK)
-            cprint_hex(bulk_out, 2, CYAN_ON_BLACK)
-            console_putchar(10, WHITE_ON_BLACK)
+            println("[USB] Mass Storage detected!")
             xhci_state_write(224, 1) // mass storage ready
         } else {
-            cprintln("  No mass storage interface found", YELLOW_ON_BLACK)
+            println("[USB] No mass storage interface found")
         }
     } else {
-        cprint("  GET_DESCRIPTOR(config) failed: ", RED_ON_BLACK)
-        cprint_decimal(cfg_desc, RED_ON_BLACK)
-        console_putchar(10, WHITE_ON_BLACK)
+        println("[USB] Config descriptor FAILED")
     }
+
+    // Boot complete
+    println("[USB] Enumeration complete")
 }
 
 // ═══════════════════════════════════════════════
