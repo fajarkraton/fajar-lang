@@ -2048,11 +2048,14 @@ pub extern "C" fn fj_rt_bare_write_cr4(_val: i64) {}
 /// Read CR3 control register (page table base address, x86_64).
 /// On hosted targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_read_cr3() -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
         let val: u64;
-        unsafe { core::arch::asm!("mov {}, cr3", out(reg) val); }
+        unsafe {
+            core::arch::asm!("mov {}, cr3", out(reg) val);
+        }
         val as i64
     }
     #[cfg(not(target_arch = "x86_64"))]
@@ -2062,6 +2065,7 @@ pub extern "C" fn fj_rt_bare_read_cr3() -> i64 {
 /// Write CR3 control register (switch page table, x86_64).
 /// On hosted targets: no-op stub.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_write_cr3(val: i64) {
     #[cfg(target_arch = "x86_64")]
     unsafe {
@@ -2072,11 +2076,14 @@ pub extern "C" fn fj_rt_bare_write_cr3(val: i64) {
 /// Read CR2 control register (page fault linear address, x86_64).
 /// On hosted targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_read_cr2() -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
         let val: u64;
-        unsafe { core::arch::asm!("mov {}, cr2", out(reg) val); }
+        unsafe {
+            core::arch::asm!("mov {}, cr2", out(reg) val);
+        }
         val as i64
     }
     #[cfg(not(target_arch = "x86_64"))]
