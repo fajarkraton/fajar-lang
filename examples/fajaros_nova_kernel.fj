@@ -1,4 +1,4 @@
-// FajarOS Nova v0.5.0 "Transcendence" — x86_64 Bare-Metal OS
+// FajarOS Nova v1.0.0 "Transcendence" — x86_64 Bare-Metal OS
 // 142 commands, Ring 3 "Hello Ring 3!", NVMe + FAT32 + VFS + SMP + Net
 // Written 100% in Fajar Lang — 8,800+ lines
 // Milestone: User program calls SYSCALL from Ring 3 and prints to serial
@@ -2697,7 +2697,7 @@ const VFS_MOUNT_NAMES: i64 = 0x806200
 @kernel fn proc_read(name_addr: i64, buf: i64) -> i64 {
     let c0 = volatile_read_u8(name_addr)
 
-    // /proc/version — "FajarOS Nova v0.5.0"
+    // /proc/version — "FajarOS Nova v1.0.0"
     if c0 == 118 { // 'v' for version
         let ver_str: i64 = 0x806500
         volatile_write_u8(ver_str, 70)  // F
@@ -6725,7 +6725,7 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 
 @kernel fn cmd_login() {
     cprintln("", WHITE_ON_BLACK)
-    cprintln("FajarOS Nova v0.5.0", CYAN_ON_BLACK)
+    cprintln("FajarOS Nova v1.0.0", CYAN_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
     cprint("login: ", WHITE_ON_BLACK)
     cprintln("root", GREEN_ON_BLACK)
@@ -6749,12 +6749,12 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 @kernel fn cmd_neofetch_v2() {
     cprintln("", WHITE_ON_BLACK)
     cprintln("  ╔══════════════════════════╗", CYAN_ON_BLACK)
-    cprintln("  ║   FajarOS Nova v0.5.0    ║", CYAN_ON_BLACK)
+    cprintln("  ║   FajarOS Nova v1.0.0    ║", CYAN_ON_BLACK)
     cprintln("  ║   x86_64 bare-metal      ║", CYAN_ON_BLACK)
     cprintln("  ╚══════════════════════════╝", CYAN_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
     cprint("  OS:      ", WHITE_ON_BLACK)
-    cprintln("FajarOS Nova v0.5.0 \"Resilience\"", GREEN_ON_BLACK)
+    cprintln("FajarOS Nova v1.0.0 \"Resilience\"", GREEN_ON_BLACK)
     cprint("  Arch:    ", WHITE_ON_BLACK)
     cprintln("x86_64", CYAN_ON_BLACK)
     cprint("  Lang:    ", WHITE_ON_BLACK)
@@ -7918,7 +7918,7 @@ const HIST_SLOT_SIZE: i64 = 64
 }
 
 @kernel fn cmd_version() {
-    cprintln("FajarOS Nova v0.1.0 \"Nova\"", WHITE_ON_BLUE)
+    cprintln("FajarOS Nova v1.0.0 \"Nova\"", WHITE_ON_BLUE)
     cprintln("  Kernel:   x86_64 bare-metal", WHITE_ON_BLACK)
     cprintln("  Language: 100% Fajar Lang", WHITE_ON_BLACK)
     cprintln("  Compiler: Fajar Lang + Cranelift", WHITE_ON_BLACK)
@@ -7931,7 +7931,7 @@ const HIST_SLOT_SIZE: i64 = 64
 }
 
 @kernel fn cmd_uname() {
-    cprintln("FajarOS Nova v0.1.0 x86_64 (Fajar Lang)", CYAN_ON_BLACK)
+    cprintln("FajarOS Nova v1.0.0 x86_64 (Fajar Lang)", CYAN_ON_BLACK)
 }
 
 @kernel fn cmd_uptime() {
@@ -8759,7 +8759,7 @@ const MNIST_PIXELS: i64 = 0x560000   // 7×7 = 49 pixel values per digit
 }
 
 @kernel fn cmd_about() {
-    cprintln("FajarOS Nova v0.1.0", WHITE_ON_BLUE)
+    cprintln("FajarOS Nova v1.0.0", WHITE_ON_BLUE)
     cprintln("", WHITE_ON_BLACK)
     cprintln("  The world's first OS written 100% in a single", WHITE_ON_BLACK)
     cprintln("  language that unifies kernel (@kernel), AI", WHITE_ON_BLACK)
@@ -9275,7 +9275,7 @@ const FS_ENTRY_SIZE: i64 = 128
 }
 
 @kernel fn cmd_dmesg() {
-    cprintln("[0.000] FajarOS Nova v0.1.0 starting", WHITE_ON_BLACK)
+    cprintln("[0.000] FajarOS Nova v1.0.0 starting", WHITE_ON_BLACK)
     cprintln("[0.001] Serial: COM1 (0x3F8) 115200 baud", WHITE_ON_BLACK)
     cprintln("[0.002] SSE: enabled", WHITE_ON_BLACK)
     cprintln("[0.003] IDT: 256 vectors loaded", WHITE_ON_BLACK)
@@ -10567,7 +10567,7 @@ const FS_ENTRY_SIZE: i64 = 128
     cprintln("  ##  #### ##   ##  ## ##  ##   ##", CYAN_ON_BLACK)
     cprintln("  ##   ###  #####   ###   ##   ##", CYAN_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
-    cprintln("     FajarOS Nova v0.1.0 x86_64", YELLOW_ON_BLACK)
+    cprintln("     FajarOS Nova v1.0.0 x86_64", YELLOW_ON_BLACK)
     cprintln("   100% Fajar Lang — 100 commands", WHITE_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
 }
@@ -10839,7 +10839,7 @@ const FS_ENTRY_SIZE: i64 = 128
     cprintln("", WHITE_ON_BLACK)
     // Left side: ASCII logo, Right side: info
     cprint("  ####  ##   ", CYAN_ON_BLACK)
-    cprintln("OS:      FajarOS Nova v0.1.0", WHITE_ON_BLACK)
+    cprintln("OS:      FajarOS Nova v1.0.0", WHITE_ON_BLACK)
     cprint("  #     # #  ", CYAN_ON_BLACK)
     cprintln("Kernel:  x86_64 bare-metal", WHITE_ON_BLACK)
     cprint("  ###  ##### ", CYAN_ON_BLACK)
@@ -11522,15 +11522,15 @@ const FS_ENTRY_SIZE: i64 = 128
     irq_enable()
 
     // Serial confirmation
-    println("[NOVA] FajarOS Nova v0.6.0 Ascension booted")
-    println("[NOVA] 10900+ LOC | 155 commands | Preemptive | 100% Fajar Lang")
+    println("[NOVA] FajarOS Nova v1.0.0 Genesis booted")
+    println("[NOVA] 11600+ LOC | 160 commands | Preemptive | 100% Fajar Lang")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
     println("[NOVA] VGA console active at 0xB8000")
 
     // Boot banner
     cprintln("============================================", WHITE_ON_BLUE)
-    cprintln("  FajarOS Nova v0.6.0 — x86_64 Shell", WHITE_ON_BLUE)
+    cprintln("  FajarOS Nova v1.0.0 — x86_64 Shell", WHITE_ON_BLUE)
     cprintln("  Written 100% in Fajar Lang", WHITE_ON_BLUE)
     cprintln("============================================", WHITE_ON_BLUE)
     cprintln("", WHITE_ON_BLACK)

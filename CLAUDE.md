@@ -152,13 +152,13 @@ Sprints:   8/8 complete
 ### Current Totals
 
 ```
-Tests:     4,903 lib + 566 integration = 5,469 total (0 failures)
-LOC:       ~152,000 lines of Rust (220+ files)
+Tests:     6,051 lib + 616 integration = 6,667 total (0 failures)
+LOC:       ~287,000 lines of Rust (220+ files)
 Examples:  126 .fj programs (incl. fajaros_nova_kernel, fajaros_kernel, q6a_showcase)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
-Builtins:  90+ bare-metal runtime functions + tensor short aliases
+Builtins:  121 bare-metal runtime functions + tensor short aliases
 CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
-Release:   v3.2.0 "Surya Rising" (2026-03-20)
+Release:   v4.0.0 "Genesis" (2026-03-22)
 ```
 
 ### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
@@ -169,22 +169,25 @@ Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inf
 Repo:      github.com/fajarkraton/fajar-os
 ```
 
-### FajarOS Nova v0.5.0 "Transcendence" — x86_64 bare-metal OS (100% Fajar Lang)
+### FajarOS Nova v1.0.0 "Genesis" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 8,796 lines, 224KB ELF
-Commands:  142 shell commands
-RING 3:    "Hello Ring 3!" — user program calls SYSCALL from Ring 3!
-SYSCALL:   Entry stub at 0x8200 (SYS_WRITE + SYS_EXIT), STAR/LSTAR/SFMASK MSRs
-Storage:   NVMe driver + FAT32 (mount, ls, cat, write, rm) + ramdisk
+Kernel:    examples/fajaros_nova_kernel.fj — 11,615 lines, 408 @kernel fns
+Commands:  160+ shell commands
+Scheduler: Preemptive multitasking (timer-driven context switch, round-robin)
+Memory:    Per-process page tables (CR3 switch), page fault → kill process
+RING 3:    3 user programs (hello/goodbye/fajar), all return to kernel
+SYSCALL:   Linker dispatch (EXIT/WRITE/READ/GETPID/YIELD), SYS_EXIT returns to shell
+Storage:   NVMe + FAT32 + USB Mass Storage (XHCI→SCSI→FAT32) + ramdisk
 VFS:       / (ramfs), /dev (null/zero/random), /proc (version/uptime), /mnt (fat32)
-Network:   Ethernet + ARP + IPv4 + ICMP (ping)
-SMP:       AP trampoline, INIT-SIPI-SIPI, per-CPU, KVM+SMP=24 verified
-ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls
-Process:   Process table v2 (fork, exit, waitpid), keyboard driver, FD table, pipes
-Plan:      docs/NEXT_SESSION_PLAN.md — Fix 1-3 COMPLETE, Fix 4-6 pending
-Test:      QEMU + KVM (i9-14900HX) verified, 52 integration checks
+Network:   DHCP + ARP + IPv4 + ICMP (real ping!) + UDP + TCP + HTTP wget
+SMP:       AP trampoline, INIT-SIPI-SIPI, per-CPU
+ELF:       ELF64 parser, PT_LOAD loader, exec from FAT32
+Process:   Init (PID 1), 16-PID table, fork/exit/waitpid, pipes, FD table
+Modular:   fajaros-x86 repo — 35 .fj files, concatenation build
+Test:      QEMU + KVM verified (boot, NVMe, USB, virtio-net, SMP, Ring 3)
 Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
+Compiler:  x86_64-user target for Ring 3 ELF compilation
 ```
 
 > **Task lists:** `docs/V05_PLAN.md` (v0.5), `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
