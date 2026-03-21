@@ -421,12 +421,33 @@ fn read_source_dir(dir: &PathBuf) -> Result<String, ExitCode> {
     }
 
     collect_fj_files(dir, &mut files, &mut main_file);
-    files.sort();
 
-    // Append main.fj last (if exists)
-    if let Some(main) = main_file {
-        files.push(main);
+    // E8: Auto-include shared/ directory for cross-service type definitions
+    let mut shared_files: Vec<PathBuf> = Vec::new();
+    let mut shared_main: Option<PathBuf> = None;
+    for candidate in [dir.join("../shared"), dir.join("../../shared")] {
+        if candidate.is_dir() {
+            collect_fj_files(&candidate, &mut shared_files, &mut shared_main);
+            if !shared_files.is_empty() {
+                eprintln!(
+                    "info: including {} shared type files from '{}'",
+                    shared_files.len(),
+                    candidate.display()
+                );
+                break;
+            }
+        }
     }
+
+    // Build final file list: shared first, then service files, main.fj last
+    shared_files.sort();
+    files.sort();
+    let mut final_files = shared_files;
+    final_files.extend(files);
+    if let Some(main) = main_file {
+        final_files.push(main);
+    }
+    let files = final_files;
 
     if files.is_empty() {
         eprintln!("error: no .fj files found in '{}'", dir.display());
