@@ -9946,10 +9946,24 @@ const FS_ENTRY_SIZE: i64 = 128
 // Phase 8 — Process Demo + Interactive Features
 // ═══════════════════════════════════════════════
 
-@kernel fn cmd_spawn() {
-    // spawn <name> — create simulated process entry
-    let len = cmdbuf_len()
-    if len <= 6 { cprintln("Usage: spawn <name>", YELLOW_ON_BLACK); return }
+// ── Real Process Spawning (Preemptive Scheduler) ──
+// The linker's timer ISR saves/restores all 15 GPRs via push/pop.
+// To spawn a new process, we set up a fake stack frame that looks like
+// the timer ISR just interrupted it. When the scheduler switches to it,
+// the pop sequence + IRETQ will "return" to the process entry point.
+//
+// Stack layout (top to bottom, grows down):
+// [SS]      = 0x10 (kernel data) or 0x1B (user data)
+// [RSP]     = process stack pointer
+// [RFLAGS]  = 0x202 (IF=1)
+// [CS]      = 0x08 (kernel code) or 0x23 (user code)
+// [RIP]     = entry point
+// [RAX]     = 0
+// [RBX]     = 0
+// ...15 GPRs...
+// [R15]     = 0
+
+@kernel fn sched_spawn_kernel(entry_addr: i64) -> i64 {
     // Find free PID
     let mut pid: i64 = -1
     let mut i: i64 = 1
@@ -9957,24 +9971,104 @@ const FS_ENTRY_SIZE: i64 = 128
         if volatile_read(0x600000 + i * 256 + 8) == 0 { pid = i }
         i = i + 1
     }
-    if pid == -1 { cprintln("spawn: no free PIDs", RED_ON_BLACK); return }
-    // Set process state
+    if pid == -1 { return -1 }
+
+    // Allocate process stack: 16KB at 0x700000 + pid*0x4000
+    let stack_base = 0x700000 + pid * 0x4000
+    let stack_top = stack_base + 0x3FF0
+    // Map stack pages
+    let mut pg: i64 = stack_base
+    while pg < stack_base + 0x4000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // Build fake interrupt frame on the stack
+    // The timer ISR pushes 15 GPRs then does IRETQ.
+    // We build the stack so that pop × 15 + IRETQ = jump to entry_addr
+    let mut sp = stack_top
+
+    // IRETQ frame (pushed by CPU on interrupt, popped by IRETQ)
+    sp = sp - 8; volatile_write_u64(sp, 0x10)       // SS (kernel data)
+    sp = sp - 8; volatile_write_u64(sp, stack_top)    // RSP
+    sp = sp - 8; volatile_write_u64(sp, 0x202)       // RFLAGS (IF=1)
+    sp = sp - 8; volatile_write_u64(sp, 0x08)        // CS (kernel code)
+    sp = sp - 8; volatile_write_u64(sp, entry_addr)  // RIP
+
+    // 15 GPRs (pushed by timer ISR, popped on restore)
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RAX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RBX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RCX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RDX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RSI
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RDI
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RBP
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R8
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R9
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R10
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R11
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R12
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R13
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R14
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R15
+
+    // Set process table entry
     let base = 0x600000 + pid * 256
-    volatile_write(base + 8, 1)    // state = ready
-    volatile_write(base + 32, 0)   // ticks = 0
-    // Copy name (up to 16 chars)
+    volatile_write(base + 8, 1)      // state = READY
+    volatile_write(base + 16, sp)    // saved RSP (points to R15 on stack)
+    volatile_write(base + 32, 0)     // ticks = 0
+
+    pid
+}
+
+@kernel fn cmd_spawn() {
+    // spawn <name> — create a real kernel process
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: spawn <name>", YELLOW_ON_BLACK); return }
+
+    // Check if name matches a registered program
+    // For now, spawn a kernel-mode "busy loop" process that prints periodically
+    // TODO: look up program registry for Ring 3 programs
+
+    // Create a kernel process that runs a simple counter function
+    let pid = sched_spawn_kernel(fn_addr("sched_test_process"))
+    if pid < 0 {
+        cprintln("spawn: no free PIDs", RED_ON_BLACK)
+        return
+    }
+
+    // Copy name
+    let base = 0x600000 + pid * 256
     let mut j: i64 = 0
     while j < 16 && j + 6 < len {
         volatile_write_u8(base + 64 + j, volatile_read_u8(0x6F800 + 6 + j))
         j = j + 1
     }
     volatile_write_u8(base + 64 + j, 0)
+
     cprint("Spawned PID ", GREEN_ON_BLACK)
     cprint_decimal(pid, CYAN_ON_BLACK)
-    cprint(" (", WHITE_ON_BLACK)
-    let mut k: i64 = 6
-    while k < len { console_putchar(volatile_read_u8(0x6F800 + k), WHITE_ON_BLACK); k = k + 1 }
-    cprintln(")", WHITE_ON_BLACK)
+    cprintln(" (preemptive)", WHITE_ON_BLACK)
+}
+
+// Simple test process: prints its PID every ~1 second
+@kernel fn sched_test_process() {
+    let pid = volatile_read(0x6FE00) // current PID
+    let mut count: i64 = 0
+    while count < 5 {
+        // Busy-wait for ~1 second (100 ticks at 100Hz)
+        let target = read_timer_ticks() + 100
+        while read_timer_ticks() < target {}
+        // Print PID + count
+        println("[PROC] tick from spawned process")
+        count = count + 1
+    }
+    // Exit: mark self as dead
+    let base = 0x600000 + pid * 256
+    volatile_write(base + 8, 0) // state = FREE
+    // Yield to scheduler (halt this process)
+    while 1 == 1 { hlt() }
 }
 
 @kernel fn cmd_wait() {
@@ -10673,23 +10767,12 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Test all 3 programs via deferred run pattern
-    // Note: iretq_to_user zeroes all GPRs, so loop counter must be in volatile memory
-    volatile_write_u64(0x652060, 0)  // test_slot counter
-    while volatile_read_u64(0x652060) < 3 {
-        let ts = volatile_read_u64(0x652060)
-        cmd_run_program(ts)
-        if volatile_read_u64(RUN_PENDING) == 1 {
-            volatile_write_u64(RUN_PENDING, 0)
-            let run_code = volatile_read_u64(RUN_PENDING + 8)
-            let run_stack = volatile_read_u64(RUN_PENDING + 16)
-            volatile_write_u64(0x6FC04, 0x7F0000)
-            iretq_to_user(run_code, run_stack, 0x202)
-            // SYS_EXIT returns here — GPRs zeroed, only RSP restored
-        }
-        volatile_write_u64(0x652060, volatile_read_u64(0x652060) + 1)
+    // Test preemptive scheduling: spawn a kernel process
+    println("[SCHED] Spawning test process...")
+    let test_pid = sched_spawn_kernel(fn_addr("sched_test_process"))
+    if test_pid > 0 {
+        println("[SCHED] Test process spawned — timer ISR will schedule it")
     }
-    println("[RING3] All 3 programs executed and returned to kernel!")
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
