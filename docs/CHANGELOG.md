@@ -18,6 +18,50 @@ Kategori perubahan:
 
 ---
 
+## [3.4.0] — 2026-03-21
+
+### Added — Fajar Lang
+- **`const fn`** — `const fn add(a: i64, b: i64) -> i64 { a + b }` — compile-time evaluable functions
+- **`[expr; count]` array repeat** — `[0; 512]` creates 512-element zero-initialized array
+- **Edition 2024** — Migrated from Rust edition 2021 to 2024 (22 files updated)
+- **Parser fix** — `(expr)` on new line no longer chains as function call
+- **Function pointer calls** — `let f = add; f(3, 4)` works in native codegen (direct, conditional, array dispatch)
+- **30+ OS builtins** — volatile_u64, port_inb/inw/ind/outw/outd, ltr, lgdt_mem, lidt_mem, swapgs, pause, stac, clac, cpuid_eax/ebx/ecx/edx, memcmp_buf, memcpy_buf, memset_buf, buffer LE/BE (12 functions), pci_write32
+- **17 native codegen tests** — volatile_u64, buffer LE/BE, fn pointer, cpuid
+
+### Added — FajarOS Nova v0.5.0 "Transcendence"
+- **Ring 3 user-space execution** — User program prints "Hello Ring 3!" via SYSCALL from CPL=3
+- **SYSCALL/SYSRET handler** — 93-byte entry stub at 0x8200, IA32_STAR/LSTAR/SFMASK MSRs
+- **NVMe block device** — Admin+IO queues, sector read/write, 50M poll timeout for KVM+SMP=24
+- **FAT32 read + write** — mount, ls, cat, create, delete, persist across reboot
+- **VFS** — /, /dev (null/zero/random), /proc (version/uptime), /mnt (fat32)
+- **SMP** — AP trampoline (16→32→64 bit), INIT-SIPI-SIPI, verified 24 cores on KVM
+- **TCP/IP** — Ethernet, ARP cache, IPv4+checksum, ICMP ping
+- **Virtio-net** — PCI discovery, legacy device init, MAC read, DRIVER_OK
+- **USB XHCI** — Controller init, halt/reset, port status, speed detection
+- **ELF loader** — ELF64 parser, PT_LOAD segments, 8 syscalls
+- **Process management** — fork, exit, waitpid, 16-PID table
+- **PS/2 keyboard** — Scancode set 1 → ASCII, ring buffer, port_inb(0x60)
+- **Pipes** — 8 × 4KB, create/read/write, per-process FD table
+- **Shell scripting** — `source` command, init autorun
+- **Security** — SMEP/SMAP/NX detection, safe shutdown/reboot
+
+### Fixed
+- **NVMe phase bit** — CQE DW3 bit 0 → bit 16 (Phase Tag per NVMe spec)
+- **TSS RSP0** — Was 0x7F00000 (127MB), fixed to 0x7F0000 (7.9MB)
+- **HLT privilege** — Ring 3 can't HLT, use SYSCALL(EXIT) instead
+- **SYSCALL loop offset** — Stub loop jumped to wrong instruction (off by 1)
+- **PAGE_USER propagation** — 2MB huge pages now get USER bit on all PT levels
+- **QEMU boot order** — `-boot d` needed when NVMe disk attached
+- **Parser `(expr)`** — New line `(` no longer parsed as function call argument
+
+### Verified
+- **QEMU** — 52 integration checks, all pass
+- **KVM** — i9-14900HX, 9 configs (SMP 4/8/24, NVMe, XHCI)
+- **Q6A** — fj v3.4.0 deployed to Radxa Dragon Q6A (aarch64)
+
+---
+
 ## [3.2.0] — 2026-03-19 "Surya Rising"
 
 ### Added — Fajar Lang
