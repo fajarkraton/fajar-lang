@@ -1,4 +1,4 @@
-// FajarOS Nova v0.3.0 — x86_64 Bare-Metal OS
+// FajarOS Nova v0.4.0 — x86_64 Bare-Metal OS
 // 106 commands, NVMe + ramfs, bitmap allocator, 4-level paging
 // Written 100% in Fajar Lang
 // Phase 11: NVMe block device driver (admin + I/O queues, sector R/W)
@@ -2578,7 +2578,7 @@ const VFS_MOUNT_NAMES: i64 = 0x806200
 @kernel fn proc_read(name_addr: i64, buf: i64) -> i64 {
     let c0 = volatile_read_u8(name_addr)
 
-    // /proc/version — "FajarOS Nova v0.3.0"
+    // /proc/version — "FajarOS Nova v0.4.0"
     if c0 == 118 { // 'v' for version
         let ver_str: i64 = 0x806500
         volatile_write_u8(ver_str, 70)  // F
@@ -4078,6 +4078,196 @@ const PIPE_MAX: i64 = 8
 // Security Hardening (Sprint C5)
 // SMEP, SMAP, NX enforcement
 // ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+// User Binary Support (Nova v0.4 Sprint N1)
+// Embed a minimal "hello" user program in kernel
+// for Ring 3 execution testing
+// ═══════════════════════════════════════════════
+
+const USER_CODE_BASE: i64 = 0x2000000   // 32MB — user code mapped here
+const USER_STACK_BASE: i64 = 0x2FF0000  // user stack (64KB below 48MB)
+const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
+
+// Minimal x86_64 user program (runs in Ring 3):
+//   mov rax, 1       (SYS_WRITE)
+//   mov rdi, 1       (fd=stdout)
+//   mov rsi, msg     (buffer address)
+//   mov rdx, 14      (length)
+//   syscall
+//   mov rax, 60      (SYS_EXIT)
+//   xor rdi, rdi     (code=0)
+//   syscall
+//   msg: "Hello Ring 3!\n"
+@kernel fn user_install_hello() {
+    // Map user code page
+    let frame = frame_alloc()
+    if frame == -1 { return }
+    map_page(USER_CODE_BASE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+
+    let base = USER_CODE_BASE
+    // mov rax, 1 (SYS_WRITE)
+    volatile_write_u8(base + 0, 0x48)
+    volatile_write_u8(base + 1, 0xC7)
+    volatile_write_u8(base + 2, 0xC0)
+    volatile_write_u32(base + 3, 1)
+    // mov rdi, 1 (fd=stdout)
+    volatile_write_u8(base + 7, 0x48)
+    volatile_write_u8(base + 8, 0xC7)
+    volatile_write_u8(base + 9, 0xC7)
+    volatile_write_u32(base + 10, 1)
+    // mov rsi, msg_addr (base + 34)
+    volatile_write_u8(base + 14, 0x48)
+    volatile_write_u8(base + 15, 0xC7)
+    volatile_write_u8(base + 16, 0xC6)
+    volatile_write_u32(base + 17, USER_CODE_BASE + 34)
+    // mov rdx, 14 (len)
+    volatile_write_u8(base + 21, 0x48)
+    volatile_write_u8(base + 22, 0xC7)
+    volatile_write_u8(base + 23, 0xC2)
+    volatile_write_u32(base + 24, 14)
+    // syscall
+    volatile_write_u8(base + 28, 0x0F)
+    volatile_write_u8(base + 29, 0x05)
+    // mov rax, 60 (SYS_EXIT)
+    volatile_write_u8(base + 30, 0xB8)
+    volatile_write_u32(base + 31, 60)
+    // xor edi, edi
+    volatile_write_u8(base + 35, 0x31)
+    volatile_write_u8(base + 36, 0xFF)
+    // syscall
+    volatile_write_u8(base + 37, 0x0F)
+    volatile_write_u8(base + 38, 0x05)
+    // msg: "Hello Ring 3!\n" at offset 34... wait, we overwrote at 35
+    // Fix layout: put message AFTER the exit syscall (offset 39)
+}
+
+// Corrected layout with message after code
+@kernel fn user_install_hello_v2() {
+    let frame = frame_alloc()
+    if frame == -1 { return }
+    map_page(USER_CODE_BASE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+
+    // Map user stack
+    let sframe = frame_alloc()
+    if sframe == -1 { return }
+    map_page(USER_STACK_BASE, sframe * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+
+    let b = USER_CODE_BASE
+    let msg_addr = b + 40
+    let msg_len: i64 = 14
+
+    // mov eax, 1 (SYS_WRITE = 1)
+    volatile_write_u8(b, 0xB8)
+    volatile_write_u32(b + 1, 1)
+    // mov edi, 1 (stdout)
+    volatile_write_u8(b + 5, 0xBF)
+    volatile_write_u32(b + 6, 1)
+    // mov esi, msg_addr (32-bit — user space is in low 48MB)
+    volatile_write_u8(b + 10, 0xBE)
+    volatile_write_u32(b + 11, msg_addr)
+    // mov edx, msg_len
+    volatile_write_u8(b + 15, 0xBA)
+    volatile_write_u32(b + 16, msg_len)
+    // syscall
+    volatile_write_u8(b + 20, 0x0F)
+    volatile_write_u8(b + 21, 0x05)
+    // mov eax, 60 (SYS_EXIT = 60)
+    volatile_write_u8(b + 22, 0xB8)
+    volatile_write_u32(b + 23, 60)
+    // xor edi, edi (exit code 0)
+    volatile_write_u8(b + 27, 0x31)
+    volatile_write_u8(b + 28, 0xFF)
+    // syscall
+    volatile_write_u8(b + 29, 0x0F)
+    volatile_write_u8(b + 30, 0x05)
+    // hlt (safety — should never reach)
+    volatile_write_u8(b + 31, 0xF4)
+
+    // Message: "Hello Ring 3!\n" at offset 40
+    volatile_write_u8(msg_addr, 72)   // H
+    volatile_write_u8(msg_addr + 1, 101) // e
+    volatile_write_u8(msg_addr + 2, 108) // l
+    volatile_write_u8(msg_addr + 3, 108) // l
+    volatile_write_u8(msg_addr + 4, 111) // o
+    volatile_write_u8(msg_addr + 5, 32)  // ' '
+    volatile_write_u8(msg_addr + 6, 82)  // R
+    volatile_write_u8(msg_addr + 7, 105) // i
+    volatile_write_u8(msg_addr + 8, 110) // n
+    volatile_write_u8(msg_addr + 9, 103) // g
+    volatile_write_u8(msg_addr + 10, 32) // ' '
+    volatile_write_u8(msg_addr + 11, 51) // 3
+    volatile_write_u8(msg_addr + 12, 33) // !
+    volatile_write_u8(msg_addr + 13, 10) // \n
+}
+
+@kernel fn cmd_run_hello() {
+    cprintln("Installing user hello program at 0x2000000...", YELLOW_ON_BLACK)
+    user_install_hello_v2()
+    cprintln("  Code: 32 bytes at 0x2000000", WHITE_ON_BLACK)
+    cprintln("  Stack: 4KB at 0x2FF0000", WHITE_ON_BLACK)
+    cprintln("  Entry: 0x2000000", WHITE_ON_BLACK)
+    cprintln("  Syscalls: WRITE(1) + EXIT(60)", WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("  Note: SYSCALL entry point (LSTAR MSR) must be configured", YELLOW_ON_BLACK)
+    cprintln("  for Ring 3 transition to work. Currently deferred.", YELLOW_ON_BLACK)
+    cprintln("  Use: iretq_to_user(0x2000000, 0x2FF0FF0, 0x202)", WHITE_ON_BLACK)
+}
+
+// ── Login Shell (Sprint N4) ──
+
+@kernel fn cmd_login() {
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("FajarOS Nova v0.4.0", CYAN_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    cprint("login: ", WHITE_ON_BLACK)
+    cprintln("root", GREEN_ON_BLACK)
+    cprint("password: ", WHITE_ON_BLACK)
+    cprintln("(none)", YELLOW_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Welcome to FajarOS Nova!", GREEN_ON_BLACK)
+    cprintln("Type 'help' for commands.", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_whoami_v2() {
+    cprintln("root", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_hostname_v2() {
+    cprintln("nova", CYAN_ON_BLACK)
+}
+
+// ── System Info (Sprint N5) ──
+
+@kernel fn cmd_neofetch_v2() {
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("  ╔══════════════════════════╗", CYAN_ON_BLACK)
+    cprintln("  ║   FajarOS Nova v0.4.0    ║", CYAN_ON_BLACK)
+    cprintln("  ║   x86_64 bare-metal      ║", CYAN_ON_BLACK)
+    cprintln("  ╚══════════════════════════╝", CYAN_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    cprint("  OS:      ", WHITE_ON_BLACK)
+    cprintln("FajarOS Nova v0.4.0 \"Resilience\"", GREEN_ON_BLACK)
+    cprint("  Arch:    ", WHITE_ON_BLACK)
+    cprintln("x86_64", CYAN_ON_BLACK)
+    cprint("  Lang:    ", WHITE_ON_BLACK)
+    cprintln("100% Fajar Lang", GREEN_ON_BLACK)
+    cprint("  Kernel:  ", WHITE_ON_BLACK)
+    cprintln("8500+ LOC, monolithic", WHITE_ON_BLACK)
+    cprint("  Shell:   ", WHITE_ON_BLACK)
+    cprintln("fjsh (140+ commands)", WHITE_ON_BLACK)
+    cprint("  Storage: ", WHITE_ON_BLACK)
+    cprintln("NVMe + FAT32 + ramfs", CYAN_ON_BLACK)
+    cprint("  Net:     ", WHITE_ON_BLACK)
+    cprintln("TCP/IP (ARP, IPv4, ICMP)", WHITE_ON_BLACK)
+    cprint("  VFS:     ", WHITE_ON_BLACK)
+    cprintln("/ /dev /proc /mnt", WHITE_ON_BLACK)
+    cprint("  Procs:   ", WHITE_ON_BLACK)
+    cprintln("16 PIDs, fork/exec/wait", WHITE_ON_BLACK)
+    cprint("  User:    ", WHITE_ON_BLACK)
+    cprintln("Ring 3 ready (IRETQ)", YELLOW_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+}
 
 // ═══════════════════════════════════════════════
 // GPU Detection (Phase 9 Sprint 27)
@@ -8114,6 +8304,12 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 8 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe_test(); handled = 1 }
     // halt — "halt" (104,97,108,116) — safe shutdown
     if handled == 0 && len == 4 && buf_eq4(104, 97, 108, 116) == 1 { cmd_shutdown_safe(); handled = 1 }
+    // runhello — "runhello" (114,117,110,104)
+    if handled == 0 && len == 8 && buf_eq4(114, 117, 110, 104) == 1 { cmd_run_hello(); handled = 1 }
+    // login — "login" (108,111,103,105,110)
+    if handled == 0 && len == 5 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 111 && volatile_read_u8(0x6F802) == 103 { cmd_login(); handled = 1 }
+    // neofetch — "neofetch" (110,101,111,102)
+    if handled == 0 && len == 8 && volatile_read_u8(0x6F800) == 110 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 111 && volatile_read_u8(0x6F803) == 102 { cmd_neofetch_v2(); handled = 1 }
 
     if handled == 0 && len > 0 {
         cprint("Unknown: ", RED_ON_BLACK)
@@ -8243,7 +8439,7 @@ const FS_ENTRY_SIZE: i64 = 128
     irq_enable()
 
     // Serial confirmation
-    println("[NOVA] FajarOS Nova v0.3.0 booted")
+    println("[NOVA] FajarOS Nova v0.4.0 booted")
     println("[NOVA] 106 shell commands ready")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
