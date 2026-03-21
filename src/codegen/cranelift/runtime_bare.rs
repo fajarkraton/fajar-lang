@@ -2156,6 +2156,7 @@ pub extern "C" fn fj_rt_bare_sti() {
 /// Returns eax register value for the given leaf/subleaf.
 /// On non-x86_64 targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_cpuid(leaf: i64, subleaf: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2174,6 +2175,7 @@ pub extern "C" fn fj_rt_bare_cpuid(leaf: i64, subleaf: i64) -> i64 {
 /// Single-argument variant (subleaf defaults to 0).
 /// On non-x86_64 targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_cpuid_eax(leaf: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2192,6 +2194,7 @@ pub extern "C" fn fj_rt_bare_cpuid_eax(leaf: i64) -> i64 {
 /// Single-argument variant (subleaf defaults to 0).
 /// On non-x86_64 targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_cpuid_ebx(leaf: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2210,6 +2213,7 @@ pub extern "C" fn fj_rt_bare_cpuid_ebx(leaf: i64) -> i64 {
 /// Single-argument variant (subleaf defaults to 0).
 /// On non-x86_64 targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_cpuid_ecx(leaf: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
@@ -2228,6 +2232,7 @@ pub extern "C" fn fj_rt_bare_cpuid_ecx(leaf: i64) -> i64 {
 /// Single-argument variant (subleaf defaults to 0).
 /// On non-x86_64 targets: returns 0.
 #[unsafe(no_mangle)]
+#[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_cpuid_edx(leaf: i64) -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
