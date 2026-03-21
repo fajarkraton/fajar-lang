@@ -1497,6 +1497,9 @@ const BLK_MAX_DEVS: i64 = 4
             i = i + 1
         }
         0
+    } else if dev_type == 3 {
+        // USB Mass Storage
+        usb_blk_read(lba, count, buf)
     } else {
         -1
     }
@@ -5043,7 +5046,418 @@ const CSW_SIGNATURE: i64 = 0x53425355
     }
 
     // Boot complete
+    // If mass storage detected, configure bulk endpoints and probe SCSI
+    if xhci_state_read(224) == 1 {
+        println("[USB] Configuring bulk endpoints...")
+        let cfg_ep = xhci_configure_bulk_endpoints(slot)
+        if cfg_ep >= 0 {
+            println("[USB] Bulk endpoints configured")
+            // SCSI INQUIRY
+            println("[USB] SCSI INQUIRY...")
+            let inq = usb_scsi_inquiry_full()
+            if inq >= 0 {
+                println("[USB] SCSI INQUIRY OK")
+            } else {
+                println("[USB] SCSI INQUIRY failed")
+            }
+            // SCSI READ CAPACITY
+            println("[USB] SCSI READ_CAPACITY...")
+            let cap = usb_scsi_read_capacity_full()
+            if cap >= 0 {
+                println("[USB] READ_CAPACITY OK")
+                // Register as block device 2 (USB)
+                let usb_sectors = xhci_state_read(232)
+                let usb_sector_sz = xhci_state_read(240)
+                blk_register(2, 3, usb_sectors, usb_sector_sz) // type 3 = USB
+                println("[USB] Registered as block device 2")
+                // Try FAT32 mount
+                let mnt = fat32_mount(2)
+                if mnt == 0 {
+                    println("[USB-FAT32] Mounted from USB!")
+                } else {
+                    println("[USB-FAT32] No FAT32 on USB (or mount failed)")
+                }
+            } else {
+                println("[USB] READ_CAPACITY failed")
+            }
+        } else {
+            println("[USB] Configure bulk endpoints failed")
+        }
+    }
+
     println("[USB] Enumeration complete")
+}
+
+// ── Sprint C3: XHCI Bulk Endpoint Configuration ──
+
+@kernel fn xhci_configure_bulk_endpoints(slot_id: i64) -> i64 {
+    let bulk_in_ep = xhci_state_read(160)  // e.g., 0x81
+    let bulk_out_ep = xhci_state_read(168) // e.g., 0x02
+    if bulk_in_ep == 0 || bulk_out_ep == 0 { return -1 }
+
+    // DCI (Device Context Index) = 2 * ep_num + direction
+    // For IN endpoint 0x81: ep_num=1, dir=1 → DCI = 2*1 + 1 = 3
+    // For OUT endpoint 0x02: ep_num=2, dir=0 → DCI = 2*2 + 0 = 4
+    let in_ep_num = bulk_in_ep & 0x0F
+    let out_ep_num = bulk_out_ep & 0x0F
+    let in_dci = in_ep_num * 2 + 1
+    let out_dci = out_ep_num * 2
+
+    // Check context size
+    let base = xhci_state_read(0)
+    let hccparams1 = volatile_read_u32(base + 0x10)
+    let csz = (hccparams1 >> 2) & 1
+    let ctx_size = if csz == 1 { 64 } else { 32 }
+
+    // Build Input Context for Configure Endpoint
+    let ictx = XHCI_INPUT_CTX
+    let mut i: i64 = 0
+    while i < 2048 { volatile_write_u8(ictx + i, 0); i = i + 1 }
+
+    // Zero bulk transfer rings
+    i = 0
+    while i < 0x1000 { volatile_write_u8(XHCI_BULK_IN_RING + i, 0); i = i + 1 }
+    i = 0
+    while i < 0x1000 { volatile_write_u8(XHCI_BULK_OUT_RING + i, 0); i = i + 1 }
+
+    // Write Link TRBs at end of bulk rings
+    xhci_write_trb(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1,
+        XHCI_BULK_IN_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+    xhci_write_trb(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1,
+        XHCI_BULK_OUT_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+
+    // Input Control Context: Add flags for Slot + EP contexts
+    // Add Context Flags: bit 0 (Slot) + bit for each endpoint DCI
+    let add_flags = 1 | (1 << in_dci) | (1 << out_dci)
+    volatile_write_u32(ictx + 4, add_flags)
+
+    // Slot Context (at ctx_size offset): update Context Entries to max DCI
+    let slot_ctx = ictx + ctx_size
+    let max_dci = if in_dci > out_dci { in_dci } else { out_dci }
+    // Copy existing slot context DW0 but update Context Entries field
+    let speed_val = 3 // High speed default (from address device)
+    volatile_write_u32(slot_ctx, (max_dci << 27) | (speed_val << 20))
+
+    // Bulk IN Endpoint Context (at ctx_size * (in_dci + 1) offset)
+    let in_ctx = ictx + ctx_size * (in_dci + 1)
+    // DW1: CErr=3, EPType=6 (Bulk IN), MaxPacketSize=512
+    volatile_write_u32(in_ctx + 4, (3 << 1) | (6 << 3) | (512 << 16))
+    // DW2-DW3: TR Dequeue Pointer with DCS=1
+    volatile_write_u32(in_ctx + 8, (XHCI_BULK_IN_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(in_ctx + 12, 0)
+    // DW4: Average TRB Length = 1024, Max Burst = 0
+    volatile_write_u32(in_ctx + 16, 1024)
+
+    // Bulk OUT Endpoint Context (at ctx_size * (out_dci + 1) offset)
+    let out_ctx = ictx + ctx_size * (out_dci + 1)
+    // DW1: CErr=3, EPType=2 (Bulk OUT), MaxPacketSize=512
+    volatile_write_u32(out_ctx + 4, (3 << 1) | (2 << 3) | (512 << 16))
+    // DW2-DW3: TR Dequeue Pointer with DCS=1
+    volatile_write_u32(out_ctx + 8, (XHCI_BULK_OUT_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(out_ctx + 12, 0)
+    // DW4: Average TRB Length = 1024, Max Burst = 0
+    volatile_write_u32(out_ctx + 16, 1024)
+
+    // Init bulk ring enqueue/cycle state
+    xhci_state_write(192, 0) // bulk_in_enqueue = 0
+    xhci_state_write(200, 1) // bulk_in_cycle = 1
+    xhci_state_write(208, 0) // bulk_out_enqueue = 0
+    xhci_state_write(216, 1) // bulk_out_cycle = 1
+
+    // Submit Configure Endpoint command
+    let idx = xhci_state_read(104)
+    let cycle = xhci_state_read(120)
+    let dw3 = ((slot_id & 0xFF) << 24) | (TRB_CONFIGURE_EP << 10) | (cycle & 1)
+    xhci_write_trb(XHCI_CMD_RING, idx, ictx & 0xFFFFFFFF, 0, 0, dw3)
+
+    let next = idx + 1
+    if next >= XHCI_CMD_RING_SIZE - 1 {
+        xhci_state_write(104, 0)
+        xhci_state_write(120, 1 - cycle)
+    } else {
+        xhci_state_write(104, next)
+    }
+    xhci_ring_doorbell(0, 0)
+
+    // Poll for Command Completion
+    xhci_submit_command(0, 0, 0, TRB_NO_OP) // dummy — use the existing poll mechanism
+    // Actually: we already wrote the TRB, just need to poll. Reuse the poll pattern:
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS { return 0 }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+// ── Sprint C3: Bulk Transfer Functions ──
+
+@kernel fn xhci_bulk_out(data: i64, length: i64) -> i64 {
+    let slot_id = xhci_state_read(144)
+    let out_ep = xhci_state_read(168) & 0x0F
+    let out_dci = out_ep * 2
+    let enq = xhci_state_read(208)
+    let cycle = xhci_state_read(216)
+
+    // Write Normal TRB for bulk OUT
+    let dw3 = (TRB_NORMAL << 10) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_BULK_OUT_RING, enq, data & 0xFFFFFFFF, 0, length, dw3)
+
+    let next = enq + 1
+    if next >= XHCI_BULK_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1,
+            XHCI_BULK_OUT_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(208, 0)
+        xhci_state_write(216, 1 - cycle)
+    } else {
+        xhci_state_write(208, next)
+    }
+
+    // Ring doorbell for bulk OUT endpoint
+    xhci_ring_doorbell(slot_id, out_dci)
+
+    // Poll for Transfer Event
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_TRANSFER_EVENT {
+                if cc == CC_SUCCESS || cc == 13 { return 0 }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+@kernel fn xhci_bulk_in(data: i64, length: i64) -> i64 {
+    let slot_id = xhci_state_read(144)
+    let in_ep = xhci_state_read(160) & 0x0F
+    let in_dci = in_ep * 2 + 1
+    let enq = xhci_state_read(192)
+    let cycle = xhci_state_read(200)
+
+    // Write Normal TRB for bulk IN
+    let dw3 = (TRB_NORMAL << 10) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_BULK_IN_RING, enq, data & 0xFFFFFFFF, 0, length, dw3)
+
+    let next = enq + 1
+    if next >= XHCI_BULK_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1,
+            XHCI_BULK_IN_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(192, 0)
+        xhci_state_write(200, 1 - cycle)
+    } else {
+        xhci_state_write(192, next)
+    }
+
+    // Ring doorbell for bulk IN endpoint
+    xhci_ring_doorbell(slot_id, in_dci)
+
+    // Poll for Transfer Event
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let residual = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) & 0xFFFFFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_TRANSFER_EVENT {
+                if cc == CC_SUCCESS || cc == 13 { return length - residual }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+// ── Sprint C3: BOT (Bulk-Only Transport) Full Sequence ──
+// CBW (31 bytes) → Data IN/OUT → CSW (13 bytes)
+
+@kernel fn usb_bot_command(scsi_cmd: i64, scsi_cmd_len: i64, data_buf: i64, data_len: i64, direction: i64) -> i64 {
+    // Build CBW at XHCI_DATA_BUF + 4096
+    let cbw = XHCI_DATA_BUF + 4096
+    let tag = xhci_state_read(248) + 1  // increment tag
+    xhci_state_write(248, tag)
+
+    volatile_write_u32(cbw, CBW_SIGNATURE)
+    volatile_write_u32(cbw + 4, tag)
+    volatile_write_u32(cbw + 8, data_len)
+    volatile_write_u8(cbw + 12, direction) // 0x80=IN, 0x00=OUT
+    volatile_write_u8(cbw + 13, 0)         // LUN
+    volatile_write_u8(cbw + 14, scsi_cmd_len)
+    // Copy SCSI command bytes (up to 16)
+    let mut i: i64 = 0
+    while i < 16 {
+        if i < scsi_cmd_len {
+            volatile_write_u8(cbw + 15 + i, volatile_read_u8(scsi_cmd + i))
+        } else {
+            volatile_write_u8(cbw + 15 + i, 0)
+        }
+        i = i + 1
+    }
+
+    // Step 1: Send CBW via Bulk OUT (31 bytes)
+    let cbw_result = xhci_bulk_out(cbw, 31)
+    if cbw_result < 0 { return -1 }
+
+    // Step 2: Data phase (if data_len > 0)
+    if data_len > 0 {
+        if direction == 0x80 {
+            // Data IN
+            let data_result = xhci_bulk_in(data_buf, data_len)
+            if data_result < 0 { return -2 }
+        } else {
+            // Data OUT
+            let data_result = xhci_bulk_out(data_buf, data_len)
+            if data_result < 0 { return -3 }
+        }
+    }
+
+    // Step 3: Receive CSW via Bulk IN (13 bytes)
+    let csw = XHCI_DATA_BUF + 4608 // after CBW
+    let csw_result = xhci_bulk_in(csw, 13)
+    if csw_result < 0 { return -4 }
+
+    // Verify CSW
+    let csw_sig = volatile_read_u32(csw)
+    let csw_tag = volatile_read_u32(csw + 4)
+    let csw_residue = volatile_read_u32(csw + 8)
+    let csw_status = volatile_read_u8(csw + 12)
+
+    if csw_sig != CSW_SIGNATURE { return -5 }
+    if csw_tag != tag { return -6 }
+    if csw_status != 0 { return -7 } // Command failed
+
+    0 // success
+}
+
+// ── Sprint C3: SCSI Commands via BOT ──
+
+@kernel fn usb_scsi_inquiry_full() -> i64 {
+    // Build SCSI INQUIRY command (6 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_INQUIRY)     // opcode
+    volatile_write_u8(cmd + 4, 36)            // allocation length
+
+    let result = usb_bot_command(cmd, 6, XHCI_DATA_BUF + 5120, 36, 0x80)
+    if result < 0 { return result }
+
+    // Parse INQUIRY response at XHCI_DATA_BUF + 5120
+    // Byte 0: Peripheral device type (0x00 = direct access = disk)
+    // Bytes 8-15: Vendor ID
+    // Bytes 16-31: Product ID
+    let dev_type = volatile_read_u8(XHCI_DATA_BUF + 5120) & 0x1F
+    println("[SCSI] Device type: disk")
+    0
+}
+
+@kernel fn usb_scsi_read_capacity_full() -> i64 {
+    // Build SCSI READ CAPACITY(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_READ_CAPACITY) // opcode 0x25
+
+    let result = usb_bot_command(cmd, 10, XHCI_DATA_BUF + 5120, 8, 0x80)
+    if result < 0 { return result }
+
+    // Parse READ CAPACITY response (8 bytes, big-endian)
+    // Bytes 0-3: Last Logical Block Address
+    // Bytes 4-7: Block Length
+    let lba3 = volatile_read_u8(XHCI_DATA_BUF + 5120)
+    let lba2 = volatile_read_u8(XHCI_DATA_BUF + 5121)
+    let lba1 = volatile_read_u8(XHCI_DATA_BUF + 5122)
+    let lba0 = volatile_read_u8(XHCI_DATA_BUF + 5123)
+    let last_lba = (lba3 << 24) | (lba2 << 16) | (lba1 << 8) | lba0
+
+    let bs3 = volatile_read_u8(XHCI_DATA_BUF + 5124)
+    let bs2 = volatile_read_u8(XHCI_DATA_BUF + 5125)
+    let bs1 = volatile_read_u8(XHCI_DATA_BUF + 5126)
+    let bs0 = volatile_read_u8(XHCI_DATA_BUF + 5127)
+    let block_size = (bs3 << 24) | (bs2 << 16) | (bs1 << 8) | bs0
+
+    xhci_state_write(232, last_lba + 1) // total sectors
+    xhci_state_write(240, block_size)    // sector size
+
+    println("[SCSI] Capacity read OK")
+    0
+}
+
+@kernel fn usb_scsi_read(lba: i64, count: i64, buf: i64) -> i64 {
+    // Build SCSI READ(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_READ_10) // opcode 0x28
+    // LBA (bytes 2-5, big-endian)
+    volatile_write_u8(cmd + 2, (lba >> 24) & 0xFF)
+    volatile_write_u8(cmd + 3, (lba >> 16) & 0xFF)
+    volatile_write_u8(cmd + 4, (lba >> 8) & 0xFF)
+    volatile_write_u8(cmd + 5, lba & 0xFF)
+    // Transfer length (bytes 7-8, big-endian)
+    volatile_write_u8(cmd + 7, (count >> 8) & 0xFF)
+    volatile_write_u8(cmd + 8, count & 0xFF)
+
+    let sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { return -1 }
+    let data_len = count * sector_sz
+
+    usb_bot_command(cmd, 10, buf, data_len, 0x80)
+}
+
+// ── blk_read extension for USB (type 3) ──
+
+@kernel fn usb_blk_read(lba: i64, count: i64, buf: i64) -> i64 {
+    usb_scsi_read(lba, count, buf)
 }
 
 // ═══════════════════════════════════════════════
