@@ -44,6 +44,7 @@ impl Parser {
 
         Ok(FnDef {
             is_pub,
+            is_const: false,
             is_async,
             is_test: false,
             should_panic: false,
@@ -632,6 +633,7 @@ impl Parser {
 
         Ok(FnDef {
             is_pub: false,
+            is_const: false,
             is_async,
             is_test: false,
             should_panic: false,

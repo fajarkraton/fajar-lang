@@ -94,6 +94,8 @@ pub struct GlobalAsm {
 pub struct FnDef {
     /// Whether the function is declared `pub`.
     pub is_pub: bool,
+    /// Whether the function is declared `const`.
+    pub is_const: bool,
     /// Whether the function is declared `async`.
     pub is_async: bool,
     /// Whether this function is a test (`@test`).
@@ -1961,6 +1963,7 @@ mod tests {
     fn fndef_construction() {
         let fndef = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,

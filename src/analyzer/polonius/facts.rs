@@ -1073,6 +1073,7 @@ mod tests {
         // fn get_ref(x: i32) -> &i32 { &x }
         let fn_def = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,

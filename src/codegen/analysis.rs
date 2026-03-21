@@ -562,6 +562,7 @@ mod tests {
     fn make_fn(name: &str, params: Vec<Param>, body: Expr) -> FnDef {
         FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,

@@ -532,9 +532,18 @@ impl Parser {
                 Ok(Item::TraitDef(td))
             }
             TokenKind::Const => {
-                let mut cd = self.parse_const_def(is_pub, annotation)?;
-                cd.doc_comment = doc_comment;
-                Ok(Item::ConstDef(cd))
+                // Check if next is `fn` → const fn
+                if matches!(self.peek_at(1).kind, TokenKind::Fn) {
+                    self.advance(); // consume `const`
+                    let mut fd = self.parse_fn_def(is_pub, annotation)?;
+                    fd.is_const = true;
+                    fd.doc_comment = doc_comment;
+                    Ok(Item::FnDef(fd))
+                } else {
+                    let mut cd = self.parse_const_def(is_pub, annotation)?;
+                    cd.doc_comment = doc_comment;
+                    Ok(Item::ConstDef(cd))
+                }
             }
             TokenKind::Use => Ok(Item::UseDecl(self.parse_use_decl()?)),
             TokenKind::Mod => Ok(Item::ModDecl(self.parse_mod_decl()?)),
