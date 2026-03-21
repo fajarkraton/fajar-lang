@@ -264,7 +264,9 @@ jobs:
           grep -q "\[BOOT32\]" /tmp/serial.log || (echo "FAIL: no [BOOT32]" && exit 1)
           grep -q "\[NOVA\].*booted" /tmp/serial.log || (echo "FAIL: kernel not booted" && exit 1)
           grep -q "shell commands ready" /tmp/serial.log || (echo "FAIL: shell not ready" && exit 1)
-          echo "FajarOS Nova boot test PASSED"
+          grep -q "\[SYSCALL\]" /tmp/serial.log || (echo "FAIL: SYSCALL not configured" && exit 1)
+          grep -q "Hello Ring 3" /tmp/serial.log || (echo "FAIL: Ring 3 execution failed" && exit 1)
+          echo "FajarOS Nova boot test PASSED (Ring 3 verified)"
 
       - name: Upload kernel artifact
         uses: actions/upload-artifact@v4

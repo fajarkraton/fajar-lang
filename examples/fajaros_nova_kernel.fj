@@ -1,7 +1,7 @@
-// FajarOS Nova v0.4.0 — x86_64 Bare-Metal OS
-// 106 commands, NVMe + ramfs, bitmap allocator, 4-level paging
-// Written 100% in Fajar Lang
-// Phase 11: NVMe block device driver (admin + I/O queues, sector R/W)
+// FajarOS Nova v0.5.0 "Transcendence" — x86_64 Bare-Metal OS
+// 142 commands, Ring 3 "Hello Ring 3!", NVMe + FAT32 + VFS + SMP + Net
+// Written 100% in Fajar Lang — 8,800+ lines
+// Milestone: User program calls SYSCALL from Ring 3 and prints to serial
 
 const VGA_BASE: i64 = 0xB8000
 const VGA_COLS: i64 = 80
@@ -2594,7 +2594,7 @@ const VFS_MOUNT_NAMES: i64 = 0x806200
 @kernel fn proc_read(name_addr: i64, buf: i64) -> i64 {
     let c0 = volatile_read_u8(name_addr)
 
-    // /proc/version — "FajarOS Nova v0.4.0"
+    // /proc/version — "FajarOS Nova v0.5.0"
     if c0 == 118 { // 'v' for version
         let ver_str: i64 = 0x806500
         volatile_write_u8(ver_str, 70)  // F
@@ -4428,7 +4428,7 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 
 @kernel fn cmd_login() {
     cprintln("", WHITE_ON_BLACK)
-    cprintln("FajarOS Nova v0.4.0", CYAN_ON_BLACK)
+    cprintln("FajarOS Nova v0.5.0", CYAN_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
     cprint("login: ", WHITE_ON_BLACK)
     cprintln("root", GREEN_ON_BLACK)
@@ -4452,12 +4452,12 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 @kernel fn cmd_neofetch_v2() {
     cprintln("", WHITE_ON_BLACK)
     cprintln("  ╔══════════════════════════╗", CYAN_ON_BLACK)
-    cprintln("  ║   FajarOS Nova v0.4.0    ║", CYAN_ON_BLACK)
+    cprintln("  ║   FajarOS Nova v0.5.0    ║", CYAN_ON_BLACK)
     cprintln("  ║   x86_64 bare-metal      ║", CYAN_ON_BLACK)
     cprintln("  ╚══════════════════════════╝", CYAN_ON_BLACK)
     cprintln("", WHITE_ON_BLACK)
     cprint("  OS:      ", WHITE_ON_BLACK)
-    cprintln("FajarOS Nova v0.4.0 \"Resilience\"", GREEN_ON_BLACK)
+    cprintln("FajarOS Nova v0.5.0 \"Resilience\"", GREEN_ON_BLACK)
     cprint("  Arch:    ", WHITE_ON_BLACK)
     cprintln("x86_64", CYAN_ON_BLACK)
     cprint("  Lang:    ", WHITE_ON_BLACK)
@@ -8712,7 +8712,7 @@ const FS_ENTRY_SIZE: i64 = 128
     irq_enable()
 
     // Serial confirmation
-    println("[NOVA] FajarOS Nova v0.4.0 booted")
+    println("[NOVA] FajarOS Nova v0.5.0 booted")
     println("[NOVA] 106 shell commands ready")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
