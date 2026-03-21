@@ -4382,8 +4382,40 @@ const CC_SUCCESS: i64 = 1
 
     xhci_state_write(136, 0) // slot_count = 0
 
+    // Wait a bit for devices to settle after controller start
+    // Note: can't use sleep_ms here — IRQs may not be enabled yet
+    delay_us(100000) // 100ms via TSC busy-wait
+
+    // Re-scan ports after controller is running
+    // For each port with CCS=1, issue a port reset (PR bit = bit 4)
+    let max_ports = xhci_state_read(24)
+    let port_base = op_base + 0x400
+    let mut connected2: i64 = 0
+    let mut p: i64 = 0
+    while p < max_ports {
+        let portsc = volatile_read_u32(port_base + p * 0x10)
+        let ccs = portsc & 1  // Current Connect Status
+        if ccs != 0 {
+            // Port has a device — issue warm/hot reset
+            // Write PR (bit 4) to trigger reset, preserve RW1S bits
+            volatile_write_u32(port_base + p * 0x10, (portsc & 0x0E01C3E0) | (1 << 4))
+            // Wait for reset to complete (PRC = bit 21 set)
+            let mut rw: i64 = 100000
+            while rw > 0 {
+                let ps = volatile_read_u32(port_base + p * 0x10)
+                if (ps >> 21) & 1 != 0 { rw = 0 }  // PRC set = reset complete
+                else { pause(); rw = rw - 1 }
+            }
+            // Clear PRC by writing 1 to bit 21
+            let ps2 = volatile_read_u32(port_base + p * 0x10)
+            volatile_write_u32(port_base + p * 0x10, (ps2 & 0x0E01C3E0) | (1 << 21))
+            connected2 = connected2 + 1
+        }
+        p = p + 1
+    }
+
     println("[XHCI] Controller running")
-    connected
+    if connected2 > connected { connected2 } else { connected }
 }
 
 @kernel fn xhci_ring_doorbell(slot: i64, target: i64) {
@@ -4420,6 +4452,7 @@ const CC_SUCCESS: i64 = 1
 
     // Ring doorbell 0 (host controller) target 0 (command ring)
     xhci_ring_doorbell(0, 0)
+    println("[XHCI] Doorbell rung, polling event ring...")
 
     // Poll event ring for completion
     let evt_idx = xhci_state_read(112)
@@ -4464,7 +4497,9 @@ const CC_SUCCESS: i64 = 1
 
 @kernel fn xhci_enable_slot() -> i64 {
     // Send Enable Slot command, returns slot_id or negative error
+    println("[XHCI] Submitting Enable Slot command...")
     let result = xhci_submit_command(0, 0, 0, TRB_ENABLE_SLOT)
+    println("[XHCI] Enable Slot result received")
     if result > 0 {
         let slots = xhci_state_read(136) + 1
         xhci_state_write(136, slots)
@@ -4472,117 +4507,498 @@ const CC_SUCCESS: i64 = 1
     result
 }
 
-@kernel fn xhci_address_device(slot_id: i64, port_num: i64, speed: i64) -> i64 {
-    // Set up Input Context for Address Device
-    let ictx = XHCI_INPUT_CTX
+// Extended XHCI memory layout for USB mass storage
+const XHCI_EP0_RING: i64 = 0x8A6000     // EP0 transfer ring: 32 TRBs
+const XHCI_BULK_IN_RING: i64 = 0x8A7000 // Bulk IN transfer ring: 32 TRBs
+const XHCI_BULK_OUT_RING: i64 = 0x8A8000 // Bulk OUT transfer ring: 32 TRBs
+const XHCI_DATA_BUF: i64 = 0x8A9000     // Data buffer for control/bulk transfers: 8KB
+const XHCI_EP0_RING_SIZE: i64 = 32
+const XHCI_BULK_RING_SIZE: i64 = 32
 
-    // Zero input context (33 × 32 bytes = 1056 bytes)
+// USB extended state (XHCI_STATE + 144...)
+// +144: slot_id (for current device)
+// +152: max_packet_size (EP0)
+// +160: bulk_in_ep (endpoint address, e.g., 0x81)
+// +168: bulk_out_ep (endpoint address, e.g., 0x02)
+// +176: ep0_enqueue
+// +184: ep0_cycle
+// +192: bulk_in_enqueue
+// +200: bulk_in_cycle
+// +208: bulk_out_enqueue
+// +216: bulk_out_cycle
+// +224: usb_mass_storage_ready (1 if SCSI mass storage detected)
+
+// TRB types for transfers
+const TRB_NORMAL: i64 = 1
+const TRB_SETUP: i64 = 2
+const TRB_DATA: i64 = 3
+const TRB_STATUS: i64 = 4
+
+// USB request types
+const USB_DIR_IN: i64 = 0x80
+const USB_DIR_OUT: i64 = 0x00
+const USB_REQ_GET_DESCRIPTOR: i64 = 6
+const USB_REQ_SET_CONFIGURATION: i64 = 9
+const USB_DESC_DEVICE: i64 = 1
+const USB_DESC_CONFIGURATION: i64 = 2
+
+// USB Mass Storage class
+const USB_CLASS_MASS_STORAGE: i64 = 0x08
+const USB_SUBCLASS_SCSI: i64 = 0x06
+const USB_PROTOCOL_BOT: i64 = 0x50
+
+// SCSI commands
+const SCSI_INQUIRY: i64 = 0x12
+const SCSI_TEST_UNIT_READY: i64 = 0x00
+const SCSI_READ_CAPACITY: i64 = 0x25
+const SCSI_READ_10: i64 = 0x28
+const SCSI_WRITE_10: i64 = 0x2A
+
+// CBW/CSW signatures
+const CBW_SIGNATURE: i64 = 0x43425355
+const CSW_SIGNATURE: i64 = 0x53425355
+
+@kernel fn xhci_address_device(slot_id: i64, port_num: i64, speed: i64) -> i64 {
+    let ictx = XHCI_INPUT_CTX
+    // Map extra pages for EP0 ring, bulk rings, data buffer
+    let mut pg: i64 = XHCI_EP0_RING
+    while pg < XHCI_DATA_BUF + 0x2000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+    // Zero all
     let mut i: i64 = 0
     while i < 2048 { volatile_write_u8(ictx + i, 0); i = i + 1 }
+    i = 0
+    while i < 0x3000 { volatile_write_u8(XHCI_EP0_RING + i, 0); i = i + 1 }
 
-    // Input Control Context (first 32 bytes)
-    // Add Context Flags: A0 (Slot) + A1 (EP0)
-    volatile_write_u32(ictx + 4, 0x03) // Add flags: bit 0 (Slot) + bit 1 (EP0)
+    // Input Control Context: Add Slot (A0) + EP0 (A1)
+    volatile_write_u32(ictx + 4, 0x03)
 
-    // Slot Context (at offset 32, 32 bytes)
+    // Slot Context (offset 32)
     let slot_ctx = ictx + 32
-    // DW0: Route String=0, Speed, Context Entries=1 (EP0 only)
-    let speed_val = if speed == 0 { 3 } else { speed } // default High
-    volatile_write_u32(slot_ctx, (1 << 27) | (speed_val << 20)) // entries=1, speed
-    // DW1: Root Hub Port Number
+    let speed_val = if speed == 0 { 3 } else { speed }
+    volatile_write_u32(slot_ctx, (1 << 27) | (speed_val << 20))
     volatile_write_u32(slot_ctx + 4, (port_num << 16) & 0xFF0000)
 
-    // EP0 Context (at offset 64, 32 bytes)
+    // EP0 Context (offset 64)
     let ep0_ctx = ictx + 64
-    // DW1: EP Type=4 (Control Bidirectional), Max Packet Size
-    let max_pkt = if speed_val == 1 { 8 }       // Full Speed
-                  else if speed_val == 2 { 8 }   // Low Speed
-                  else if speed_val == 3 { 64 }   // High Speed
-                  else { 512 }                    // Super Speed
-    volatile_write_u32(ep0_ctx + 4, (4 << 3) | (3 << 1)) // EPType=Control, CErr=3
-    volatile_write_u32(ep0_ctx + 8, max_pkt << 16) // Max Packet Size in DW2 bits 31:16 — wait
-    // Actually: DW1 bits [15:0] = Max Packet Size for EP context
-    // Rewrite: EP Context DW1 = (CErr << 1) | (EPType << 3) | (MaxPktSize << 16)
+    let max_pkt = if speed_val == 1 { 8 }
+                  else if speed_val == 2 { 8 }
+                  else if speed_val == 3 { 64 }
+                  else { 512 }
+    // DW1: CErr=3, EPType=4 (Control Bidi), MaxPacketSize
     volatile_write_u32(ep0_ctx + 4, (3 << 1) | (4 << 3) | (max_pkt << 16))
-
-    // EP0 TR Dequeue Pointer (DW2-DW3): allocate a transfer ring for EP0
-    let ep0_ring = XHCI_XFER_BUF // reuse transfer buffer as EP0 ring
-    volatile_write_u32(ep0_ctx + 8, (ep0_ring & 0xFFFFFFFF) | 1) // DCS=1
+    // DW2-DW3: TR Dequeue Pointer (EP0 ring) with DCS=1
+    volatile_write_u32(ep0_ctx + 8, (XHCI_EP0_RING & 0xFFFFFFFF) | 1)
     volatile_write_u32(ep0_ctx + 12, 0)
+    // DW4: Average TRB Length = 8 (for control)
+    volatile_write_u32(ep0_ctx + 16, 8)
 
-    // Allocate Output Device Context for this slot
+    // Write Link TRB at end of EP0 ring
+    xhci_write_trb(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1,
+        XHCI_EP0_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+
+    // Output Device Context
     let out_ctx = XHCI_DEV_CTX + (slot_id - 1) * 2048
-    // Set DCBAA entry for this slot
     volatile_write_u64(XHCI_DCBAA + slot_id * 8, out_ctx)
 
+    // Save state
+    xhci_state_write(144, slot_id)
+    xhci_state_write(152, max_pkt)
+    xhci_state_write(176, 0)  // ep0_enqueue = 0
+    xhci_state_write(184, 1)  // ep0_cycle = 1
+
     // Submit Address Device command
-    // Input Context pointer in DW0-DW1
-    let result = xhci_submit_command(ictx & 0xFFFFFFFF, 0,
-        0, TRB_ADDRESS_DEVICE | ((slot_id & 0xFF) << 14))
-    // Note: slot_id goes in DW3 bits [31:24] but we pass it via trb_type param...
-    // Actually, the slot_id should be in DW3[31:24]. Let me fix the command format.
-    result
+    // DW0-DW1: Input Context pointer, DW3: slot_id in bits [31:24], type in [15:10]
+    let idx = xhci_state_read(104)
+    let cycle = xhci_state_read(120)
+    let dw3 = ((slot_id & 0xFF) << 24) | (TRB_ADDRESS_DEVICE << 10) | (cycle & 1)
+    xhci_write_trb(XHCI_CMD_RING, idx, ictx & 0xFFFFFFFF, 0, 0, dw3)
+
+    let next = idx + 1
+    if next >= XHCI_CMD_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1,
+            XHCI_CMD_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(104, 0)
+        xhci_state_write(120, 1 - cycle)
+    } else {
+        xhci_state_write(104, next)
+    }
+
+    xhci_ring_doorbell(0, 0)
+
+    // Poll event ring for completion
+    let evt_idx = xhci_state_read(112)
+    let evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 1000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 3)
+        if (dw3_evt & 1) == (evt_cycle & 1) {
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) >> 24) & 0xFF
+            let next_evt = evt_idx + 1
+            if next_evt >= XHCI_EVT_RING_SIZE {
+                xhci_state_write(112, 0)
+                xhci_state_write(128, 1 - evt_cycle)
+            } else {
+                xhci_state_write(112, next_evt)
+            }
+            // Update ERDP
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + next_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if cc == CC_SUCCESS { return 0 }
+            return -(cc)
+        }
+        pause()
+        timeout = timeout - 1
+    }
+    -99
 }
 
+// ── USB Control Transfer (Setup → Data → Status TRBs) ──
+
+@kernel fn xhci_control_transfer(slot_id: i64, bm_request: i64, b_request: i64,
+                                  w_value: i64, w_index: i64, w_length: i64,
+                                  data_buf: i64, direction: i64) -> i64 {
+    let enq = xhci_state_read(176)
+    let cycle = xhci_state_read(184)
+
+    // Setup TRB (8 bytes of setup packet in DW0-DW1)
+    let setup_lo = (bm_request & 0xFF) | ((b_request & 0xFF) << 8) | ((w_value & 0xFFFF) << 16)
+    let setup_hi = (w_index & 0xFFFF) | ((w_length & 0xFFFF) << 16)
+    // DW2: TRB Transfer Length = 8 (setup packet always 8 bytes)
+    // DW3: TRT(16:17) = 3 (IN data stage) or 2 (OUT data stage) or 0 (no data), IDT=1(6), Type=Setup
+    let trt = if w_length == 0 { 0 } else if direction == USB_DIR_IN { 3 } else { 2 }
+    let setup_dw3 = (TRB_SETUP << 10) | (1 << 6) | (trt << 16) | (cycle & 1)
+    xhci_write_trb(XHCI_EP0_RING, enq, setup_lo, setup_hi, 8, setup_dw3)
+    let mut idx = enq + 1
+
+    // Data TRB (if w_length > 0)
+    if w_length > 0 {
+        let data_dir = if direction == USB_DIR_IN { 1 } else { 0 } // DIR bit in DW3[16]
+        let data_dw3 = (TRB_DATA << 10) | (data_dir << 16) | (cycle & 1)
+        xhci_write_trb(XHCI_EP0_RING, idx, data_buf & 0xFFFFFFFF, 0, w_length, data_dw3)
+        idx = idx + 1
+    }
+
+    // Status TRB
+    let status_dir = if w_length == 0 || direction == USB_DIR_OUT { 1 } else { 0 }
+    let status_dw3 = (TRB_STATUS << 10) | (status_dir << 16) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_EP0_RING, idx, 0, 0, 0, status_dw3)
+    idx = idx + 1
+
+    // Handle wrap
+    if idx >= XHCI_EP0_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1,
+            XHCI_EP0_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(176, 0)
+        xhci_state_write(184, 1 - cycle)
+    } else {
+        xhci_state_write(176, idx)
+    }
+
+    // Ring EP0 doorbell (slot_id, target=1 for EP0)
+    xhci_ring_doorbell(slot_id, 1)
+
+    // Poll for Transfer Event completion
+    let evt_idx = xhci_state_read(112)
+    let evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 3)
+        if (dw3_evt & 1) == (evt_cycle & 1) {
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) >> 24) & 0xFF
+            let transferred = xhci_read_trb_dw(XHCI_EVT_RING, evt_idx, 2) & 0xFFFFFF
+            let next_evt = evt_idx + 1
+            if next_evt >= XHCI_EVT_RING_SIZE {
+                xhci_state_write(112, 0)
+                xhci_state_write(128, 1 - evt_cycle)
+            } else {
+                xhci_state_write(112, next_evt)
+            }
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + next_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if cc == CC_SUCCESS || cc == 13 { return w_length - transferred } // 13 = Short Packet (OK)
+            return -(cc)
+        }
+        pause()
+        timeout = timeout - 1
+    }
+    -99
+}
+
+@kernel fn usb_get_descriptor(slot_id: i64, desc_type: i64, desc_idx: i64, length: i64) -> i64 {
+    // Zero data buffer
+    let mut i: i64 = 0
+    while i < length && i < 4096 { volatile_write_u8(XHCI_DATA_BUF + i, 0); i = i + 1 }
+    xhci_control_transfer(slot_id, USB_DIR_IN, USB_REQ_GET_DESCRIPTOR,
+        (desc_type << 8) | desc_idx, 0, length, XHCI_DATA_BUF, USB_DIR_IN)
+}
+
+@kernel fn usb_set_configuration(slot_id: i64, config_val: i64) -> i64 {
+    xhci_control_transfer(slot_id, USB_DIR_OUT, USB_REQ_SET_CONFIGURATION,
+        config_val, 0, 0, 0, USB_DIR_OUT)
+}
+
+// ── USB Mass Storage Detection ──
+
+@kernel fn usb_find_mass_storage() -> i64 {
+    // Parse configuration descriptor to find mass storage interface
+    // Config descriptor at XHCI_DATA_BUF (after GET_DESCRIPTOR config)
+    let total_len = volatile_read_u8(XHCI_DATA_BUF + 2) | (volatile_read_u8(XHCI_DATA_BUF + 3) << 8)
+    let mut offset: i64 = 0
+    while offset + 2 < total_len && offset < 4096 {
+        let desc_len = volatile_read_u8(XHCI_DATA_BUF + offset)
+        let desc_type = volatile_read_u8(XHCI_DATA_BUF + offset + 1)
+        if desc_len < 2 { return -1 } // invalid
+        // Interface descriptor: type = 4, length >= 9
+        if desc_type == 4 && desc_len >= 9 {
+            let iface_class = volatile_read_u8(XHCI_DATA_BUF + offset + 5)
+            let iface_subclass = volatile_read_u8(XHCI_DATA_BUF + offset + 6)
+            let iface_protocol = volatile_read_u8(XHCI_DATA_BUF + offset + 7)
+            if iface_class == USB_CLASS_MASS_STORAGE && iface_subclass == USB_SUBCLASS_SCSI && iface_protocol == USB_PROTOCOL_BOT {
+                // Found! Now find bulk endpoints
+                let ep_offset = offset + desc_len
+                let mut ep_off = ep_offset
+                while ep_off + 2 < total_len && ep_off < 4096 {
+                    let ep_len = volatile_read_u8(XHCI_DATA_BUF + ep_off)
+                    let ep_type = volatile_read_u8(XHCI_DATA_BUF + ep_off + 1)
+                    if ep_type == 4 { ep_off = total_len } // next interface, stop
+                    else if ep_type == 5 && ep_len >= 7 {
+                        // Endpoint descriptor
+                        let ep_addr = volatile_read_u8(XHCI_DATA_BUF + ep_off + 2)
+                        let ep_attr = volatile_read_u8(XHCI_DATA_BUF + ep_off + 3)
+                        if (ep_attr & 0x03) == 2 { // Bulk transfer type
+                            if (ep_addr & 0x80) != 0 {
+                                xhci_state_write(160, ep_addr) // Bulk IN
+                            } else {
+                                xhci_state_write(168, ep_addr) // Bulk OUT
+                            }
+                        }
+                    }
+                    ep_off = ep_off + ep_len
+                }
+                return 0 // found
+            }
+        }
+        offset = offset + desc_len
+    }
+    -1 // not found
+}
+
+// ── SCSI via Bulk-Only Transport (BOT) ──
+
+@kernel fn usb_bot_cbw(tag: i64, data_len: i64, direction: i64, lun: i64, cb_len: i64, cb: i64) {
+    // Build CBW at XHCI_DATA_BUF + 4096 (31 bytes)
+    let cbw = XHCI_DATA_BUF + 4096
+    volatile_write_u32(cbw, CBW_SIGNATURE)  // dCBWSignature
+    volatile_write_u32(cbw + 4, tag)         // dCBWTag
+    volatile_write_u32(cbw + 8, data_len)    // dCBWDataTransferLength
+    volatile_write_u8(cbw + 12, direction)   // bmCBWFlags (0x80=IN, 0x00=OUT)
+    volatile_write_u8(cbw + 13, lun)         // bCBWLUN
+    volatile_write_u8(cbw + 14, cb_len)      // bCBWCBLength
+    // Copy command block (up to 16 bytes)
+    let mut i: i64 = 0
+    while i < 16 {
+        if i < cb_len {
+            volatile_write_u8(cbw + 15 + i, volatile_read_u8(cb + i))
+        } else {
+            volatile_write_u8(cbw + 15 + i, 0)
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn usb_scsi_inquiry() -> i64 {
+    // SCSI INQUIRY command
+    let cb = XHCI_DATA_BUF + 4200
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cb + i, 0); i = i + 1 }
+    volatile_write_u8(cb, SCSI_INQUIRY)
+    volatile_write_u8(cb + 4, 36) // allocation length = 36 bytes
+
+    usb_bot_cbw(1, 36, 0x80, 0, 6, cb)
+    // TODO: actually send CBW via bulk OUT, receive data via bulk IN, receive CSW
+    // For now, report what we have
+    0
+}
+
+@kernel fn usb_scsi_read_capacity() -> i64 {
+    let cb = XHCI_DATA_BUF + 4200
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cb + i, 0); i = i + 1 }
+    volatile_write_u8(cb, SCSI_READ_CAPACITY)
+    usb_bot_cbw(2, 8, 0x80, 0, 10, cb)
+    0
+}
+
+// ── cmd_usb_init: Full USB enumeration ──
+
 @kernel fn cmd_usb_init() {
+    println("[USB] cmd_usb_init starting...")
     cprintln("USB Init (XHCI):", YELLOW_ON_BLACK)
     let connected = xhci_full_init()
     if connected < 0 {
+        println("[USB] XHCI init failed")
         cprint("  XHCI init failed: ", RED_ON_BLACK)
         cprint_decimal(connected, RED_ON_BLACK)
         console_putchar(10, WHITE_ON_BLACK)
         return
     }
+    println("[USB] XHCI running, checking devices...")
+
+    // Debug: dump all port status registers
+    let dbg_base = xhci_state_read(0)
+    let dbg_cap = xhci_state_read(8)
+    let dbg_op = dbg_base + dbg_cap
+    let dbg_ports = xhci_state_read(24)
+    let dbg_port_base = dbg_op + 0x400
+    let mut dp: i64 = 0
+    while dp < dbg_ports && dp < 8 {
+        let ps = volatile_read_u32(dbg_port_base + dp * 0x10)
+        if ps != 0 {
+            println("[USB] Port PORTSC non-zero")
+        }
+        dp = dp + 1
+    }
+
     cprint("  Controller running, ", GREEN_ON_BLACK)
     cprint_decimal(connected, CYAN_ON_BLACK)
     cprintln(" device(s) connected", WHITE_ON_BLACK)
 
-    if connected > 0 {
-        // Try to enable a slot for the first connected device
-        let slot = xhci_enable_slot()
-        if slot > 0 {
-            cprint("  Slot ", WHITE_ON_BLACK)
-            cprint_decimal(slot, GREEN_ON_BLACK)
-            cprintln(" enabled", WHITE_ON_BLACK)
-
-            // Find first connected port and its speed
-            let base = xhci_state_read(0)
-            let op_base = xhci_state_read(64)
-            let max_ports = xhci_state_read(24)
-            let port_base = op_base + 0x400
-            let mut port: i64 = 0
-            let mut port_speed: i64 = 0
-            let mut found_port: i64 = 0
-            while port < max_ports && found_port == 0 {
-                let portsc = volatile_read_u32(port_base + port * 0x10)
-                if portsc & 1 != 0 { // CCS
-                    port_speed = (portsc >> 10) & 0xF
-                    found_port = port + 1 // 1-based
-                }
-                port = port + 1
-            }
-
-            if found_port > 0 {
-                cprint("  Port ", WHITE_ON_BLACK)
-                cprint_decimal(found_port, CYAN_ON_BLACK)
-                cprint(" speed=", WHITE_ON_BLACK)
-                cprint_decimal(port_speed, CYAN_ON_BLACK)
-                console_putchar(10, WHITE_ON_BLACK)
-
-                let addr = xhci_address_device(slot, found_port, port_speed)
-                if addr >= 0 {
-                    cprintln("  Device addressed", GREEN_ON_BLACK)
-                } else {
-                    cprint("  Address device failed: ", RED_ON_BLACK)
-                    cprint_decimal(addr, RED_ON_BLACK)
-                    console_putchar(10, WHITE_ON_BLACK)
-                }
-            }
+    if connected == 0 {
+        println("[USB] No devices connected, trying xhci command test...")
+        // Try NoOp command to test command ring works
+        let noop = xhci_submit_command(0, 0, 0, TRB_NO_OP)
+        if noop >= 0 {
+            println("[USB] NoOp command succeeded")
         } else {
-            cprint("  Enable slot failed: ", RED_ON_BLACK)
-            cprint_decimal(slot, RED_ON_BLACK)
+            println("[USB] NoOp command failed/timeout")
+        }
+        cprintln("  No devices to enumerate", YELLOW_ON_BLACK)
+        return
+    }
+    println("[USB] Proceeding to enumerate...")
+
+    // Enable slot
+    let slot = xhci_enable_slot()
+    if slot < 0 {
+        cprint("  Enable slot failed: ", RED_ON_BLACK)
+        cprint_decimal(slot, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    cprint("  Slot ", WHITE_ON_BLACK)
+    cprint_decimal(slot, GREEN_ON_BLACK)
+    cprintln(" enabled", WHITE_ON_BLACK)
+
+    // Find first connected port
+    let op_base = xhci_state_read(64)
+    let max_ports = xhci_state_read(24)
+    let port_base = op_base + 0x400
+    let mut port: i64 = 0
+    let mut port_speed: i64 = 0
+    let mut found_port: i64 = 0
+    while port < max_ports && found_port == 0 {
+        let portsc = volatile_read_u32(port_base + port * 0x10)
+        if portsc & 1 != 0 {
+            port_speed = (portsc >> 10) & 0xF
+            found_port = port + 1
+        }
+        port = port + 1
+    }
+    if found_port == 0 {
+        cprintln("  No connected port found", RED_ON_BLACK)
+        return
+    }
+    cprint("  Port ", WHITE_ON_BLACK)
+    cprint_decimal(found_port, CYAN_ON_BLACK)
+    cprint(" speed=", WHITE_ON_BLACK)
+    if port_speed == 3 { cprint("High(480M)", WHITE_ON_BLACK) }
+    else if port_speed == 4 { cprint("Super(5G)", CYAN_ON_BLACK) }
+    else { cprint_decimal(port_speed, WHITE_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Address device
+    let addr = xhci_address_device(slot, found_port, port_speed)
+    if addr < 0 {
+        cprint("  Address device failed: ", RED_ON_BLACK)
+        cprint_decimal(addr, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    cprintln("  Device addressed", GREEN_ON_BLACK)
+
+    // GET_DESCRIPTOR (device, 18 bytes)
+    let dev_desc = usb_get_descriptor(slot, USB_DESC_DEVICE, 0, 18)
+    if dev_desc >= 0 {
+        let vid = volatile_read_u8(XHCI_DATA_BUF + 8) | (volatile_read_u8(XHCI_DATA_BUF + 9) << 8)
+        let pid = volatile_read_u8(XHCI_DATA_BUF + 10) | (volatile_read_u8(XHCI_DATA_BUF + 11) << 8)
+        let dev_class = volatile_read_u8(XHCI_DATA_BUF + 4)
+        cprint("  VID:PID = ", WHITE_ON_BLACK)
+        cprint_hex(vid, 4, CYAN_ON_BLACK)
+        cprint(":", WHITE_ON_BLACK)
+        cprint_hex(pid, 4, CYAN_ON_BLACK)
+        cprint(" class=", WHITE_ON_BLACK)
+        cprint_hex(dev_class, 2, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        cprint("  GET_DESCRIPTOR(device) failed: ", RED_ON_BLACK)
+        cprint_decimal(dev_desc, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+
+    // GET_DESCRIPTOR (config, 255 bytes)
+    let cfg_desc = usb_get_descriptor(slot, USB_DESC_CONFIGURATION, 0, 255)
+    if cfg_desc >= 0 {
+        let cfg_val = volatile_read_u8(XHCI_DATA_BUF + 5)
+        let num_ifaces = volatile_read_u8(XHCI_DATA_BUF + 4)
+        cprint("  Config ", WHITE_ON_BLACK)
+        cprint_decimal(cfg_val, CYAN_ON_BLACK)
+        cprint(": ", WHITE_ON_BLACK)
+        cprint_decimal(num_ifaces, CYAN_ON_BLACK)
+        cprintln(" interface(s)", WHITE_ON_BLACK)
+
+        // SET_CONFIGURATION
+        let set_cfg = usb_set_configuration(slot, cfg_val)
+        if set_cfg >= 0 {
+            cprintln("  Configuration set", GREEN_ON_BLACK)
+        } else {
+            cprint("  SET_CONFIGURATION failed: ", RED_ON_BLACK)
+            cprint_decimal(set_cfg, RED_ON_BLACK)
             console_putchar(10, WHITE_ON_BLACK)
         }
+
+        // Find mass storage interface
+        let ms = usb_find_mass_storage()
+        if ms == 0 {
+            let bulk_in = xhci_state_read(160)
+            let bulk_out = xhci_state_read(168)
+            cprintln("  USB Mass Storage detected!", GREEN_ON_BLACK)
+            cprint("    Bulk IN:  EP 0x", WHITE_ON_BLACK)
+            cprint_hex(bulk_in, 2, CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
+            cprint("    Bulk OUT: EP 0x", WHITE_ON_BLACK)
+            cprint_hex(bulk_out, 2, CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
+            xhci_state_write(224, 1) // mass storage ready
+        } else {
+            cprintln("  No mass storage interface found", YELLOW_ON_BLACK)
+        }
+    } else {
+        cprint("  GET_DESCRIPTOR(config) failed: ", RED_ON_BLACK)
+        cprint_decimal(cfg_desc, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
     }
 }
 
@@ -9501,6 +9917,13 @@ const FS_ENTRY_SIZE: i64 = 128
     // Initialize network stack
     net_init()
     println("[NET] Initialized")
+
+    // Auto-detect + init USB XHCI
+    let xhci_dev = usb_find_xhci()
+    if xhci_dev >= 0 {
+        println("[USB] XHCI controller detected, initializing...")
+        cmd_usb_init()
+    }
 
     // Initialize syscall dispatch table
     syscall_init()
