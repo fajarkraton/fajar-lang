@@ -6452,3 +6452,40 @@ fn kernel_fn_allows_port_outb() {
     let analysis = fajar_lang::analyzer::analyze(&program);
     assert!(analysis.is_ok(), "@kernel should allow port_outb");
 }
+
+// ── @message struct tests (E5) ──
+
+#[test]
+fn message_struct_basic() {
+    let src = r#"
+        @message struct VfsOpen {
+            path_ptr: i64,
+            path_len: i64,
+            flags: i64
+        }
+        fn main() -> void {
+            let msg = VfsOpen { path_ptr: 0x1000, path_len: 10, flags: 0 }
+            println(msg.path_len)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10"]);
+}
+
+#[test]
+fn message_struct_too_many_fields() {
+    let src = r#"
+        @message struct TooBig {
+            a: i64, b: i64, c: i64, d: i64,
+            e: i64, f: i64, g: i64, h: i64
+        }
+        fn main() -> void {}
+    "#;
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(
+        analysis.is_err(),
+        "@message struct with 8 fields should be rejected"
+    );
+}

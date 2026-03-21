@@ -264,6 +264,8 @@ pub enum TokenKind {
     AtInfer,
     /// `@interrupt`
     AtInterrupt,
+    /// `@message`
+    AtMessage,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -574,6 +576,7 @@ impl fmt::Display for TokenKind {
             // Special
             TokenKind::AtInfer => write!(f, "@infer"),
             TokenKind::AtInterrupt => write!(f, "@interrupt"),
+            TokenKind::AtMessage => write!(f, "@message"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -683,6 +686,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("section", TokenKind::AtSection);
     m.insert("infer", TokenKind::AtInfer);
     m.insert("interrupt", TokenKind::AtInterrupt);
+    m.insert("message", TokenKind::AtMessage);
     m
 });
 

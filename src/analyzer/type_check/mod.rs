@@ -1087,6 +1087,8 @@ pub struct TypeChecker {
     os_builtins: std::collections::HashSet<String>,
     /// Hardware builtins blocked in @safe context (microkernel isolation).
     safe_blocked_builtins: std::collections::HashSet<String>,
+    /// Structs annotated with @message (IPC message types, max 64 bytes).
+    message_structs: std::collections::HashSet<String>,
     /// Builtins that perform heap allocation (forbidden in @kernel).
     heap_builtins: std::collections::HashSet<String>,
     /// Builtins that perform tensor/ML operations (forbidden in @kernel).
@@ -1420,6 +1422,7 @@ impl TypeChecker {
             npu_fns: std::collections::HashSet::new(),
             os_builtins,
             safe_blocked_builtins,
+            message_structs: std::collections::HashSet::new(),
             heap_builtins,
             tensor_builtins,
             traits: HashMap::new(),

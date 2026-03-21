@@ -1227,6 +1227,23 @@ impl TypeChecker {
                 for field in &sdef.fields {
                     fields.insert(field.name.clone(), self.resolve_type(&field.ty));
                 }
+                // Track @message structs for IPC type safety
+                if let Some(ref ann) = sdef.annotation {
+                    if ann.name == "message" {
+                        self.message_structs.insert(sdef.name.clone());
+                        // Validate: @message structs must fit in 64 bytes
+                        // (max 8 fields × 8 bytes each)
+                        if sdef.fields.len() > 7 {
+                            // 7 data fields + 1 implied type_id = 64 bytes
+                            self.errors.push(SemanticError::TypeMismatch {
+                                expected: "at most 7 fields for @message struct (56 bytes + 8 type header)".into(),
+                                found: format!("{} fields", sdef.fields.len()),
+                                span: sdef.span,
+                                hint: Some("@message structs must fit in 64-byte IPC messages".into()),
+                            });
+                        }
+                    }
+                }
                 self.symbols.define(Symbol {
                     name: sdef.name.clone(),
                     ty: Type::Struct {
