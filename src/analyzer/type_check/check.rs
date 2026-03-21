@@ -150,9 +150,7 @@ impl TypeChecker {
     fn check_const_fn_body(&mut self, expr: &Expr, fn_name: &str, fn_span: Span) {
         match expr {
             // Allowed: literals, identifiers, binary/unary ops, if/match, blocks
-            Expr::Literal { .. }
-            | Expr::Ident { .. }
-            | Expr::Grouped { .. } => {}
+            Expr::Literal { .. } | Expr::Ident { .. } | Expr::Grouped { .. } => {}
             Expr::Binary { left, right, .. } => {
                 self.check_const_fn_body(left, fn_name, fn_span);
                 self.check_const_fn_body(right, fn_name, fn_span);
@@ -160,14 +158,21 @@ impl TypeChecker {
             Expr::Unary { operand, .. } => {
                 self.check_const_fn_body(operand, fn_name, fn_span);
             }
-            Expr::If { condition, then_branch, else_branch, .. } => {
+            Expr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.check_const_fn_body(condition, fn_name, fn_span);
                 self.check_const_fn_body(then_branch, fn_name, fn_span);
                 if let Some(eb) = else_branch {
                     self.check_const_fn_body(eb, fn_name, fn_span);
                 }
             }
-            Expr::Block { stmts, expr: tail, .. } => {
+            Expr::Block {
+                stmts, expr: tail, ..
+            } => {
                 for stmt in stmts {
                     match stmt {
                         Stmt::Let { value, .. } | Stmt::Const { value, .. } => {

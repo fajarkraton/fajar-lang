@@ -1330,7 +1330,7 @@ fn cmd_build_native(
                __bss_end = .;\n\
                __data_start = ADDR(.data);\n\
                /DISCARD/ : { *(.multiboot_header) *(.comment) *(.note*) }\n\
-             }\n"
+             }\n",
         );
         generated_script_path = obj_path.with_extension("ld");
         match std::fs::write(&generated_script_path, &user_script) {

@@ -62,9 +62,7 @@ impl TargetConfig {
     pub fn from_triple(target: &str) -> Result<Self, CodegenError> {
         // Handle special target aliases
         let is_user_mode = target == "x86_64-user" || target == "x86_64-user-none";
-        let effective_target = if is_user_mode {
-            "x86_64-unknown-none" // user-mode ELF uses bare-metal triple for Cranelift
-        } else if target == "x86_64-none" {
+        let effective_target = if is_user_mode || target == "x86_64-none" {
             "x86_64-unknown-none"
         } else {
             target

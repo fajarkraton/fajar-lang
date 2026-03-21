@@ -3808,6 +3808,7 @@ mod tests {
             arch: crate::codegen::target::Arch::X86_64,
             os: crate::codegen::target::Os::None,
             is_bare_metal: true,
+            is_user_mode: false,
             call_conv: cranelift_codegen::isa::CallConv::SystemV,
         });
         let script = generate_x86_64_linker_script(&config).unwrap();
@@ -3828,6 +3829,7 @@ mod tests {
             arch: crate::codegen::target::Arch::X86_64,
             os: crate::codegen::target::Os::None,
             is_bare_metal: true,
+            is_user_mode: false,
             call_conv: cranelift_codegen::isa::CallConv::SystemV,
         });
         let script = generate_x86_64_linker_script(&config).unwrap();

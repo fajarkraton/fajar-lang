@@ -2050,10 +2050,10 @@ pub extern "C" fn fj_rt_bare_write_cr4(_val: i64) {}
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_read_cr3() -> i64 {
     #[cfg(target_arch = "x86_64")]
-    unsafe {
+    {
         let val: u64;
-        core::arch::asm!("mov {}, cr3", out(reg) val);
-        return val as i64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) val); }
+        val as i64
     }
     #[cfg(not(target_arch = "x86_64"))]
     0
@@ -2074,10 +2074,10 @@ pub extern "C" fn fj_rt_bare_write_cr3(val: i64) {
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_read_cr2() -> i64 {
     #[cfg(target_arch = "x86_64")]
-    unsafe {
+    {
         let val: u64;
-        core::arch::asm!("mov {}, cr2", out(reg) val);
-        return val as i64;
+        unsafe { core::arch::asm!("mov {}, cr2", out(reg) val); }
+        val as i64
     }
     #[cfg(not(target_arch = "x86_64"))]
     0

@@ -549,12 +549,15 @@ impl Parser {
                 // static [mut] NAME[: TYPE] = VALUE
                 let start = self.peek().span.start;
                 self.advance(); // consume `static`
-                let is_mut = if self.eat(&TokenKind::Mut) { true } else { false };
+                let is_mut = self.eat(&TokenKind::Mut);
                 let (name, name_span) = self.expect_ident()?;
                 let ty = if self.eat(&TokenKind::Colon) {
                     self.parse_type_expr()?
                 } else {
-                    TypeExpr::Simple { name: "i64".to_string(), span: name_span }
+                    TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: name_span,
+                    }
                 };
                 self.expect(&TokenKind::Eq)?;
                 let value = Box::new(self.parse_expr(0)?);

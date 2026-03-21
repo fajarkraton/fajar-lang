@@ -152,6 +152,7 @@ pub struct CraneliftCompiler {
     /// When true, disables standard library (IO, heap) runtime declarations.
     no_std: bool,
     /// When true, generates user-mode (Ring 3) ELF with SYSCALL-based runtime.
+    #[allow(dead_code)]
     user_mode: bool,
     /// User-defined panic handler function name.
     panic_handler_fn: Option<String>,
@@ -5620,11 +5621,14 @@ impl CraneliftCompiler {
             // Inject top-level const definitions as variables.
             // Try compile-time constant folding first for integer expressions.
             // Build const fn ref table for this scope
-            let const_fn_refs: HashMap<String, &FnDef> = self.const_fn_defs.iter()
+            let const_fn_refs: HashMap<String, &FnDef> = self
+                .const_fn_defs
+                .iter()
                 .map(|(k, v)| (k.clone(), v))
                 .collect();
             for (cname, cexpr, cty) in &self.const_defs {
-                let const_folded = compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
+                let const_folded =
+                    compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
                 let val = if let Some(cv) = const_folded {
                     builder.ins().iconst(clif_types::default_int_type(), cv)
                 } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {
@@ -6294,6 +6298,7 @@ pub struct ObjectCompiler {
     /// When true, disables standard library (IO, heap) runtime declarations.
     no_std: bool,
     /// When true, generates user-mode (Ring 3) ELF with SYSCALL-based runtime.
+    #[allow(dead_code)]
     user_mode: bool,
     /// User-defined panic handler function name.
     panic_handler_fn: Option<String>,
@@ -11769,16 +11774,15 @@ impl ObjectCompiler {
                     returns: vec![],
                     call_conv: self.module.isa().default_call_conv(),
                 };
-                if let Ok(start_id) =
-                    self.module
-                        .declare_function("_start", Linkage::Export, &sig)
+                if let Ok(start_id) = self
+                    .module
+                    .declare_function("_start", Linkage::Export, &sig)
                 {
                     let mut ctx = self.module.make_context();
                     ctx.func.signature = sig;
                     let mut builder_ctx = FunctionBuilderContext::new();
                     {
-                        let mut builder =
-                            FunctionBuilder::new(&mut ctx.func, &mut builder_ctx);
+                        let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_ctx);
                         let entry_block = builder.create_block();
                         builder.switch_to_block(entry_block);
                         builder.seal_block(entry_block);
@@ -12367,11 +12371,14 @@ impl ObjectCompiler {
             // Inject top-level const definitions as variables.
             // Try compile-time constant folding first for integer expressions.
             // Build const fn ref table for this scope
-            let const_fn_refs: HashMap<String, &FnDef> = self.const_fn_defs.iter()
+            let const_fn_refs: HashMap<String, &FnDef> = self
+                .const_fn_defs
+                .iter()
                 .map(|(k, v)| (k.clone(), v))
                 .collect();
             for (cname, cexpr, cty) in &self.const_defs {
-                let const_folded = compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
+                let const_folded =
+                    compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
                 let val = if let Some(cv) = const_folded {
                     builder.ins().iconst(clif_types::default_int_type(), cv)
                 } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {

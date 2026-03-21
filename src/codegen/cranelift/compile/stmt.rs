@@ -110,7 +110,9 @@ pub(in crate::codegen::cranelift) fn try_const_eval_array(
         Expr::ArrayRepeat { value, count, .. } => {
             let v = try_const_eval_with_fns(value, const_table, const_fns, 0)?;
             let n = try_const_eval_with_fns(count, const_table, const_fns, 0)?;
-            if n < 0 || n > 65536 { return None; }
+            if !(0..=65536).contains(&n) {
+                return None;
+            }
             Some(vec![v; n as usize])
         }
         Expr::Ident { name, .. } => const_arrays.get(name).cloned(),
@@ -240,9 +242,7 @@ pub(in crate::codegen::cranelift) fn try_const_eval_with_fns(
         }
         // Block expression: evaluate statements, return last expression
         Expr::Block {
-            stmts,
-            expr: tail,
-            ..
+            stmts, expr: tail, ..
         } => {
             let mut local_table = const_table.clone();
             for stmt in stmts {
@@ -275,7 +275,9 @@ pub(in crate::codegen::cranelift) fn try_const_eval_with_fns(
             // Try to get the array from const_arrays (empty map for now — callers pass it separately)
             // For now, handle inline array literals: [1,2,3][1] → 2
             if let Expr::Array { elements, .. } = object.as_ref() {
-                if idx < 0 || idx as usize >= elements.len() { return None; }
+                if idx < 0 || idx as usize >= elements.len() {
+                    return None;
+                }
                 try_const_eval_with_fns(&elements[idx as usize], const_table, const_fns, depth)
             } else {
                 None
@@ -284,7 +286,6 @@ pub(in crate::codegen::cranelift) fn try_const_eval_with_fns(
         _ => None,
     }
 }
-
 
 /// Coerces an integer value to match a declared sub-I64 integer type.
 ///

@@ -18,6 +18,59 @@ Kategori perubahan:
 
 ---
 
+## [4.0.0] — 2026-03-22 "Genesis"
+
+### Added — Fajar Lang
+- **`static mut` global variables** — `static mut COUNTER: i64 = 0` with mutable global state
+- **`static` immutable globals** — `static PI: f64 = 3.14159`
+- **`--target x86_64-user`** — compile .fj to Ring 3 user-mode ELF (entry at 0x400000, no Multiboot2)
+- **`write_cr3()` / `read_cr3()` / `read_cr2()`** — x86_64 page table + page fault builtins
+- **const array evaluation** — `const TABLE = [1,2,3]; const X = TABLE[1]`
+- **const fn body validation** — analyzer rejects non-const operations in const fn
+
+### Added — FajarOS Nova v1.0.0 "Genesis"
+- **Preemptive multitasking** — timer-driven context switch (15 GPR save/restore, round-robin)
+- **Per-process page tables** — CR3 switch on context switch, clone_kernel_pml4
+- **Page fault handler** — kills Ring 3 process on invalid access (kernel survives)
+- **3 Ring 3 user programs** — hello/goodbye/fajar, all return to kernel via SYS_EXIT
+- **DHCP client** — Discover → Offer → Request → Ack, dynamic IP assignment
+- **Real ICMP ping** — ARP resolution + ICMP echo reply verified in QEMU
+- **TCP client** — 3-way handshake (SYN → SYN-ACK → ACK), data transfer
+- **HTTP wget** — `wget` command: TCP connect → HTTP GET → response
+- **UDP** — header construction for DHCP
+- **USB Mass Storage** — XHCI init → SCSI INQUIRY/READ_CAPACITY → FAT32 mount from USB!
+- **Init process (PID 1)** — spawned at boot, monitors system health
+- **Clean shutdown** — kill all processes → sync → ACPI power off
+- **sched_spawn_kernel** — create real preemptive processes with fake interrupt frame
+- **Deferred run pattern** — shell commands trigger Ring 3 execution safely
+- **User program registry** — 8-slot registry with install/list/run
+
+### Fixed
+- **PROC_TABLE_V2 / VQ_RX_BASE collision** — both at 0x890000! Moved proc table to 0x8C0000
+- **VQ_NUM_ENTRIES=16 vs QEMU 256** — used ring offset mismatch broke RX
+- **SYS_EXIT=60 vs 0** — FajarOS convention mismatch
+- **SYSCALL stub JMP offset** — SYS_WRITE return jumped to wrong target
+- **iretq_to_user GPR zeroing** — volatile loop counter for sequential execution
+- **NVMe BAR0 unassigned** — reject 0xFFFFFFFF BAR
+- **QEMU boot order** — -boot d for NVMe+CD-ROM
+- **Clippy clean** — all warnings fixed
+
+### Verified — QEMU
+- Boot: serial, KVM, VGA, SMP 4 cores
+- NVMe + FAT32: sector read + mount
+- USB: XHCI → SCSI → FAT32 mount
+- Virtio-net: DHCP + ARP + ping (real ICMP reply!)
+- Ring 3: 3 programs run + return
+- Preemptive: timer switches between shell + spawned process
+
+### Stats
+- Nova: 11,615 LOC, 408 @kernel fns, 160+ commands
+- Fajar Lang: 6,051+ tests (0 failures), clippy clean, fmt clean
+- fajaros-x86: 35 modular .fj files
+- Session: 64 commits across 2 repos
+
+---
+
 ## [3.5.0] — 2026-03-21
 
 ### Added — Fajar Lang

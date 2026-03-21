@@ -138,7 +138,9 @@ impl<'src> Formatter<'src> {
             Item::StaticDef(s) => {
                 self.write_indent();
                 let mut decl = String::from("static ");
-                if s.is_mut { decl.push_str("mut "); }
+                if s.is_mut {
+                    decl.push_str("mut ");
+                }
                 decl.push_str(&s.name);
                 decl.push_str(": ");
                 decl.push_str(&format!("{:?}", s.ty));
