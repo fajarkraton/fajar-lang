@@ -698,6 +698,16 @@ pub enum Expr {
         span: Span,
     },
 
+    /// Array repeat: `[expr; count]`.
+    ArrayRepeat {
+        /// The value to repeat.
+        value: Box<Expr>,
+        /// Number of repetitions.
+        count: Box<Expr>,
+        /// Source span.
+        span: Span,
+    },
+
     /// Tuple literal: `(1, "hello", true)`.
     Tuple {
         /// Tuple elements.
@@ -863,6 +873,7 @@ impl Expr {
             | Expr::Assign { span, .. }
             | Expr::Pipe { span, .. }
             | Expr::Array { span, .. }
+            | Expr::ArrayRepeat { span, .. }
             | Expr::Tuple { span, .. }
             | Expr::Range { span, .. }
             | Expr::Cast { span, .. }

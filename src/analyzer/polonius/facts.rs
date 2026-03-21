@@ -566,6 +566,10 @@ impl FactGenerator {
                     self.visit_expr(elem);
                 }
             }
+            Expr::ArrayRepeat { value, count, .. } => {
+                self.visit_expr(value);
+                self.visit_expr(count);
+            }
             Expr::Closure { body, .. } => {
                 self.visit_expr(body);
             }

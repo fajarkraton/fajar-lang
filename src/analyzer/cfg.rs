@@ -198,6 +198,10 @@ impl UseCollector {
                     self.visit_expr(elem);
                 }
             }
+            Expr::ArrayRepeat { value, count, .. } => {
+                self.visit_expr(value);
+                self.visit_expr(count);
+            }
             Expr::Range { start, end, .. } => {
                 if let Some(s) = start {
                     self.visit_expr(s);

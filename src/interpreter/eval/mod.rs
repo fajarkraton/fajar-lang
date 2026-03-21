@@ -1122,6 +1122,19 @@ impl Interpreter {
             } => self.eval_assign(target, *op, value),
             Expr::Match { subject, arms, .. } => self.eval_match(subject, arms),
             Expr::Array { elements, .. } => self.eval_array(elements),
+            Expr::ArrayRepeat { value, count, .. } => {
+                let val = self.eval_expr(value)?;
+                let n = match self.eval_expr(count)? {
+                    Value::Int(n) => n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "array repeat count must be integer".into(),
+                        )
+                        .into());
+                    }
+                };
+                Ok(Value::Array(vec![val; n]))
+            }
             Expr::Tuple { elements, .. } => self.eval_tuple(elements),
             Expr::Pipe { left, right, .. } => self.eval_pipe(left, right),
             Expr::StructInit { name, fields, .. } => self.eval_struct_init(name, fields),

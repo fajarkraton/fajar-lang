@@ -649,6 +649,13 @@ impl<'src> Formatter<'src> {
                 }
                 self.push_char(']');
             }
+            Expr::ArrayRepeat { value, count, .. } => {
+                self.push_char('[');
+                self.format_expr(value);
+                self.push("; ");
+                self.format_expr(count);
+                self.push_char(']');
+            }
             Expr::Tuple { elements, .. } => {
                 self.push_char('(');
                 for (i, el) in elements.iter().enumerate() {

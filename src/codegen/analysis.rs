@@ -213,6 +213,10 @@ fn analyze_expr(
                 analyze_expr(e, local_count, frame_bytes, calls);
             }
         }
+        Expr::ArrayRepeat { value, count, .. } => {
+            analyze_expr(value, local_count, frame_bytes, calls);
+            analyze_expr(count, local_count, frame_bytes, calls);
+        }
         Expr::Match { subject, arms, .. } => {
             analyze_expr(subject, local_count, frame_bytes, calls);
             for arm in arms {

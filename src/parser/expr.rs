@@ -740,12 +740,36 @@ impl Parser {
         let start = self.peek().span.start;
         self.expect(&TokenKind::LBracket)?;
 
-        let mut elements = Vec::new();
-        while !self.at(&TokenKind::RBracket) && !self.at_eof() {
-            elements.push(self.parse_expr(0)?);
-            if !self.eat(&TokenKind::Comma) {
-                break;
+        // Check for empty array
+        if self.at(&TokenKind::RBracket) {
+            let end_tok = self.expect(&TokenKind::RBracket)?;
+            return Ok(Expr::Array {
+                elements: Vec::new(),
+                span: Span::new(start, end_tok.span.end),
+            });
+        }
+
+        // Parse first element
+        let first = self.parse_expr(0)?;
+
+        // Check for repeat syntax: [expr; count]
+        if self.eat(&TokenKind::Semi) {
+            let count = self.parse_expr(0)?;
+            let end_tok = self.expect(&TokenKind::RBracket)?;
+            return Ok(Expr::ArrayRepeat {
+                value: Box::new(first),
+                count: Box::new(count),
+                span: Span::new(start, end_tok.span.end),
+            });
+        }
+
+        // Regular array: [a, b, c, ...]
+        let mut elements = vec![first];
+        while self.eat(&TokenKind::Comma) {
+            if self.at(&TokenKind::RBracket) {
+                break; // trailing comma
             }
+            elements.push(self.parse_expr(0)?);
         }
 
         let end_tok = self.expect(&TokenKind::RBracket)?;

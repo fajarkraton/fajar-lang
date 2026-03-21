@@ -431,6 +431,14 @@ impl TypeChecker {
                 span,
             } => self.check_match(subject, arms, *span),
             Expr::Array { elements, span } => self.check_array(elements, *span),
+            Expr::ArrayRepeat {
+                value, count, span, ..
+            } => {
+                let elem_ty = self.check_expr(value);
+                self.check_expr(count);
+                let _ = span;
+                Type::Array(Box::new(elem_ty))
+            }
             Expr::Tuple { elements, .. } => {
                 let types: Vec<Type> = elements.iter().map(|e| self.check_expr(e)).collect();
                 Type::Tuple(types)

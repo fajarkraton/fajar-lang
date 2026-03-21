@@ -466,6 +466,23 @@ impl Compiler {
                 }
                 self.emit(Op::NewArray(elements.len() as u32), 0);
             }
+            Expr::ArrayRepeat { value, count, .. } => {
+                // Evaluate count at compile time if it's an int literal;
+                // otherwise fall back to emitting a single-element array.
+                let n = if let Expr::Literal {
+                    kind: LiteralKind::Int(n),
+                    ..
+                } = count.as_ref()
+                {
+                    *n as usize
+                } else {
+                    1
+                };
+                for _ in 0..n {
+                    self.compile_expr(value);
+                }
+                self.emit(Op::NewArray(n as u32), 0);
+            }
             Expr::Tuple { elements, .. } => {
                 for el in elements {
                     self.compile_expr(el);
