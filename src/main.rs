@@ -381,10 +381,79 @@ const EXIT_USAGE: u8 = 3;
 
 /// Reads a source file, returning its contents or printing an error.
 fn read_source(path: &PathBuf) -> Result<String, ExitCode> {
-    std::fs::read_to_string(path).map_err(|e| {
-        eprintln!("error: cannot read '{}': {e}", path.display());
-        ExitCode::from(EXIT_USAGE)
-    })
+    if path.is_dir() {
+        // Directory mode: concatenate all .fj files in the directory
+        read_source_dir(path)
+    } else {
+        std::fs::read_to_string(path).map_err(|e| {
+            eprintln!("error: cannot read '{}': {e}", path.display());
+            ExitCode::from(EXIT_USAGE)
+        })
+    }
+}
+
+/// Reads all .fj files in a directory and concatenates them.
+/// Files are sorted alphabetically, except main.fj is always last.
+fn read_source_dir(dir: &PathBuf) -> Result<String, ExitCode> {
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut main_file: Option<PathBuf> = None;
+
+    // Collect all .fj files recursively
+    fn collect_fj_files(
+        dir: &std::path::Path,
+        files: &mut Vec<PathBuf>,
+        main_file: &mut Option<PathBuf>,
+    ) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_fj_files(&path, files, main_file);
+                } else if path.extension().is_some_and(|e| e == "fj") {
+                    if path.file_name().is_some_and(|n| n == "main.fj") {
+                        *main_file = Some(path);
+                    } else {
+                        files.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    collect_fj_files(dir, &mut files, &mut main_file);
+    files.sort();
+
+    // Append main.fj last (if exists)
+    if let Some(main) = main_file {
+        files.push(main);
+    }
+
+    if files.is_empty() {
+        eprintln!("error: no .fj files found in '{}'", dir.display());
+        return Err(ExitCode::from(EXIT_USAGE));
+    }
+
+    let mut combined = String::new();
+    for f in &files {
+        match std::fs::read_to_string(f) {
+            Ok(content) => {
+                combined.push_str(&format!("\n// ── Source: {} ──\n", f.display()));
+                combined.push_str(&content);
+                combined.push('\n');
+            }
+            Err(e) => {
+                eprintln!("error: cannot read '{}': {e}", f.display());
+                return Err(ExitCode::from(EXIT_USAGE));
+            }
+        }
+    }
+
+    eprintln!(
+        "info: concatenated {} .fj files from '{}'",
+        files.len(),
+        dir.display()
+    );
+    Ok(combined)
 }
 
 /// Executes a Fajar Lang program file.
