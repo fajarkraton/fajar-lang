@@ -225,6 +225,9 @@ impl TypeChecker {
             ("cpuid_edx", vec![Type::I64], Type::I64),
             ("sse_enable", vec![], Type::Void),
             ("read_cr0", vec![], Type::I64),
+            ("read_cr3", vec![], Type::I64),
+            ("write_cr3", vec![Type::I64], Type::Void),
+            ("read_cr2", vec![], Type::I64),
             ("read_cr4", vec![], Type::I64),
             // x86_64 IDT + PIC + PIT builtins (Phase 3)
             ("idt_init", vec![], Type::Void),
@@ -305,9 +308,12 @@ impl TypeChecker {
             ("acpi_find_rsdp", vec![], Type::I64),
             ("acpi_get_cpu_count", vec![Type::I64], Type::I64),
             ("rdtsc", vec![], Type::I64),
-            // Phase 5+8: MSR, CR4, INVLPG
+            // Phase 5+8: MSR, CR3, CR2, CR4, INVLPG
             ("read_msr", vec![Type::I64], Type::I64),
             ("write_msr", vec![Type::I64, Type::I64], Type::I64),
+            ("read_cr3", vec![], Type::I64),
+            ("write_cr3", vec![Type::I64], Type::Void),
+            ("read_cr2", vec![], Type::I64),
             ("read_cr4", vec![], Type::I64),
             ("write_cr4", vec![Type::I64], Type::Void),
             ("invlpg", vec![Type::I64], Type::Void),

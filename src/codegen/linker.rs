@@ -2613,6 +2613,30 @@ fj_rt_bare_write_msr:
     ret
 .size fj_rt_bare_write_msr, . - fj_rt_bare_write_msr
 
+/* read_cr3() -> rax — page table base (PML4 physical address) */
+.global fj_rt_bare_read_cr3
+.type fj_rt_bare_read_cr3, @function
+fj_rt_bare_read_cr3:
+    mov     rax, cr3
+    ret
+.size fj_rt_bare_read_cr3, . - fj_rt_bare_read_cr3
+
+/* write_cr3(value) — switch page table (flushes TLB) */
+.global fj_rt_bare_write_cr3
+.type fj_rt_bare_write_cr3, @function
+fj_rt_bare_write_cr3:
+    mov     cr3, rdi
+    ret
+.size fj_rt_bare_write_cr3, . - fj_rt_bare_write_cr3
+
+/* read_cr2() -> rax — page fault linear address */
+.global fj_rt_bare_read_cr2
+.type fj_rt_bare_read_cr2, @function
+fj_rt_bare_read_cr2:
+    mov     rax, cr2
+    ret
+.size fj_rt_bare_read_cr2, . - fj_rt_bare_read_cr2
+
 /* read_cr4() -> rax */
 .global fj_rt_bare_read_cr4
 .type fj_rt_bare_read_cr4, @function

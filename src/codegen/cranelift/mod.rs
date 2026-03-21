@@ -6057,6 +6057,9 @@ impl CraneliftCompiler {
             ("fj_rt_bare_cpuid_edx", "cpuid_edx", &sig_i64_ret_i64),
             ("fj_rt_bare_sse_enable", "sse_enable", &sig_void),
             ("fj_rt_bare_read_cr0", "read_cr0", &sig_ret_i64),
+            ("fj_rt_bare_read_cr3", "read_cr3", &sig_ret_i64),
+            ("fj_rt_bare_write_cr3", "write_cr3", &sig_i64_void),
+            ("fj_rt_bare_read_cr2", "read_cr2", &sig_ret_i64),
             ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
             // x86_64 IDT + PIC + PIT builtins
             ("fj_rt_bare_idt_init", "idt_init", &sig_void),
@@ -6124,6 +6127,9 @@ impl CraneliftCompiler {
             ),
             ("fj_rt_bare_read_msr", "read_msr", &sig_i64_ret_i64),
             ("fj_rt_bare_write_msr", "write_msr", &sig_2i64_ret_i64),
+            ("fj_rt_bare_read_cr3", "read_cr3", &sig_ret_i64),
+            ("fj_rt_bare_write_cr3", "write_cr3", &sig_i64_void),
+            ("fj_rt_bare_read_cr2", "read_cr2", &sig_ret_i64),
             ("fj_rt_bare_read_cr4", "read_cr4", &sig_ret_i64),
             ("fj_rt_bare_write_cr4", "write_cr4", &sig_i64_void),
             ("fj_rt_bare_invlpg", "invlpg", &sig_i64_void),
@@ -7231,6 +7237,8 @@ impl ObjectCompiler {
         // () -> i64 builtins (no params, returns i64)
         for (name, builtin) in [
             ("fj_rt_bare_read_cr0", "read_cr0"),
+            ("fj_rt_bare_read_cr3", "read_cr3"),
+            ("fj_rt_bare_read_cr2", "read_cr2"),
             ("fj_rt_bare_read_cr4", "read_cr4"),
             ("fj_rt_bare_read_timer_ticks", "read_timer_ticks"),
             ("fj_rt_bare_rdrand", "rdrand"),
@@ -7264,6 +7272,7 @@ impl ObjectCompiler {
         for (name, builtin) in [
             ("fj_rt_bare_pic_eoi", "pic_eoi"),
             ("fj_rt_bare_pit_init", "pit_init"),
+            ("fj_rt_bare_write_cr3", "write_cr3"),
             ("fj_rt_bare_write_cr4", "write_cr4"),
             ("fj_rt_bare_invlpg", "invlpg"),
             ("fj_rt_bare_fxsave", "fxsave"),
@@ -7515,6 +7524,8 @@ impl ObjectCompiler {
         for (name, builtin) in [
             ("fj_rt_bare_acpi_find_rsdp", "acpi_find_rsdp"),
             ("fj_rt_bare_rdtsc", "rdtsc"),
+            ("fj_rt_bare_read_cr3", "read_cr3"),
+            ("fj_rt_bare_read_cr2", "read_cr2"),
             ("fj_rt_bare_read_cr4", "read_cr4"),
             ("fj_rt_bare_rdrand", "rdrand"),
         ] {
@@ -7524,6 +7535,12 @@ impl ObjectCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(builtin.to_string(), id);
         }
+        // write_cr3 (i64 → void) for ObjectCompiler
+        let wcr3_id = self
+            .module
+            .declare_function("fj_rt_bare_write_cr3", Linkage::Import, &sig_i64_void)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("write_cr3".to_string(), wcr3_id);
         let acpi_cpu_id = self
             .module
             .declare_function(
