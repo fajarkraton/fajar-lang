@@ -169,21 +169,21 @@ Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inf
 Repo:      github.com/fajarkraton/fajar-os
 ```
 
-### FajarOS Nova v0.3.0 "Endurance" — x86_64 bare-metal OS (100% Fajar Lang)
+### FajarOS Nova v0.5.0 "Transcendence" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 8,327 lines, 215KB ELF
-Commands:  135 shell commands (system, files, process, AI, network, storage)
-Storage:   NVMe driver (admin+IO queues, sector R/W) + FAT32 (mount, ls, cat, write, rm)
+Kernel:    examples/fajaros_nova_kernel.fj — 8,796 lines, 224KB ELF
+Commands:  142 shell commands
+RING 3:    "Hello Ring 3!" — user program calls SYSCALL from Ring 3!
+SYSCALL:   Entry stub at 0x8200 (SYS_WRITE + SYS_EXIT), STAR/LSTAR/SFMASK MSRs
+Storage:   NVMe driver + FAT32 (mount, ls, cat, write, rm) + ramdisk
 VFS:       / (ramfs), /dev (null/zero/random), /proc (version/uptime), /mnt (fat32)
 Network:   Ethernet + ARP + IPv4 + ICMP (ping)
-SMP:       AP trampoline (16-bit→64-bit), INIT-SIPI-SIPI, per-CPU tracking
-ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls, Ring 3 IRETQ
-Process:   Process table v2 (fork, exit, waitpid), keyboard driver, FD table
-Pipes:     8 pipes × 4KB, pipe_create/read/write
-Shell:     Scripting (source command), safe shutdown/reboot
-Plan:      docs/NOVA_V03_PLAN.md — ALL 3 STAGES COMPLETE
-Test:      QEMU verified: NVMe + FAT32 + VFS + NET + ELF + PROC + KB + SEC
+SMP:       AP trampoline, INIT-SIPI-SIPI, per-CPU, KVM+SMP=24 verified
+ELF:       ELF64 parser, PT_LOAD loader, 8 syscalls
+Process:   Process table v2 (fork, exit, waitpid), keyboard driver, FD table, pipes
+Plan:      docs/NEXT_SESSION_PLAN.md — Fix 1-3 COMPLETE, Fix 4-6 pending
+Test:      QEMU + KVM (i9-14900HX) verified, 52 integration checks
 Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
 ```
 
