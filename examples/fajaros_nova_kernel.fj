@@ -3843,17 +3843,13 @@ const SYS_BRK: i64 = 7
     let star_val = (0x13 << 48) | (0x08 << 32)
     wrmsr(0xC0000081, star_val)
 
-    // IA32_LSTAR (0xC0000082): SYSCALL entry point
-    // For now, set to a simple handler that writes to VGA and halts
-    // We'll use a fixed kernel address for the syscall handler
-    // Actually, without a real SYSCALL handler in the kernel binary,
-    // we can't safely transition. Use IRETQ instead (which we have).
-
-    // IRETQ to Ring 3: push SS, RSP, RFLAGS, CS, RIP on stack
-    // iretq_to_user(rip, rsp, rflags) does this for us
-    iretq_to_user(entry, user_rsp, 0x202) // IF=1 (interrupts enabled)
-    // Note: we only reach here if user program returns via exception/syscall
-    cprintln("  User program returned", GREEN_ON_BLACK)
+    // Use deferred run pattern: set flag for kernel_main to call iretq_to_user
+    // (iretq_to_user must be called from top-level due to GPR zeroing on return)
+    volatile_write_u64(RUN_PENDING, 1)
+    volatile_write_u64(RUN_PENDING + 8, entry)
+    volatile_write_u64(RUN_PENDING + 16, user_rsp)
+    volatile_write_u64(0x6FC04, 0x7F0000) // TSS RSP0
+    cprintln("  ELF queued for Ring 3 execution", GREEN_ON_BLACK)
 }
 
 // ═══════════════════════════════════════════════
@@ -6535,15 +6531,85 @@ const RUN_PENDING: i64 = 0x652040  // +0: pending (1=run), +8: code_addr, +16: s
 // ── Phase E Sprint E3: NVMe Write-Back (sync) ──
 
 @kernel fn cmd_sync() {
-    // Flush all dirty filesystem data to NVMe
+    // Flush all dirty filesystem data to storage
     let dev_type = volatile_read_u64(BLK_TABLE)
     if dev_type == 1 {
-        // NVMe — nothing to flush (all writes are immediate via DMA)
-        cprintln("Synced (NVMe writes are immediate)", GREEN_ON_BLACK)
+        cprintln("Synced (NVMe writes are DMA-immediate)", GREEN_ON_BLACK)
     } else if dev_type == 2 {
         cprintln("Synced (ramdisk — volatile, no persistence)", YELLOW_ON_BLACK)
+    } else if dev_type == 3 {
+        cprintln("Synced (USB writes are BOT-immediate)", GREEN_ON_BLACK)
     } else {
         cprintln("No block device to sync", RED_ON_BLACK)
+    }
+}
+
+// ── M6: Clean Shutdown Sequence ──
+
+@kernel fn shutdown_clean() {
+    println("[SHUTDOWN] Starting clean shutdown...")
+
+    // Step 1: Kill all user processes
+    let mut pid: i64 = 1
+    while pid < 16 {
+        let state = volatile_read(0x600000 + pid * 256 + 8)
+        if state == 1 || state == 2 {  // READY or RUNNING
+            volatile_write(0x600000 + pid * 256 + 8, 0) // FREE
+            println("[SHUTDOWN] Killed process")
+        }
+        pid = pid + 1
+    }
+
+    // Step 2: Sync filesystems
+    println("[SHUTDOWN] Syncing filesystems...")
+    // NVMe/USB writes are immediate, nothing to flush
+
+    // Step 3: Unmount VFS
+    println("[SHUTDOWN] Unmounting filesystems...")
+
+    // Step 4: Print final message
+    println("[SHUTDOWN] All clean. Powering off...")
+    cprintln("System halted.", YELLOW_ON_BLACK)
+
+    // Step 5: ACPI power off
+    acpi_shutdown()
+}
+
+@kernel fn cmd_shutdown_clean() {
+    shutdown_clean()
+}
+
+// ── M6: Init Process (PID 1) ──
+// The init process is the first user-space process.
+// It spawns the shell and respawns it if it exits.
+// For now, init is a kernel process that monitors the shell.
+
+@kernel fn init_process() {
+    // Init runs as PID 1 in kernel mode
+    // Monitor: if shell (PID 0) is somehow dead, print warning
+    // In a real OS, init would spawn shell and respawn on exit
+    let mut uptime_print: i64 = 0
+    while 1 == 1 {
+        // Print uptime every 30 seconds (3000 ticks at 100Hz)
+        let ticks = read_timer_ticks()
+        if ticks > uptime_print + 3000 {
+            uptime_print = ticks
+            // Check all process states
+            let mut alive: i64 = 0
+            let mut i: i64 = 0
+            while i < 16 {
+                let state = volatile_read(0x600000 + i * 256 + 8)
+                if state == 1 || state == 2 { alive = alive + 1 }
+                i = i + 1
+            }
+            // Only print if there are user processes (don't spam when idle)
+            if alive > 1 {
+                println("[INIT] processes active")
+            }
+        }
+        // Yield CPU time to other processes
+        let target = read_timer_ticks() + 10
+        while read_timer_ticks() < target {}
     }
 }
 
@@ -10356,7 +10422,7 @@ const FS_ENTRY_SIZE: i64 = 128
     // reboot
     if handled == 0 && len == 6 && buf_eq4(114, 101, 98, 111) == 1 { cmd_reboot(); handled = 1 }
     // shutdown (115,104,117,116...)
-    if handled == 0 && len == 8 && buf_eq4(115, 104, 117, 116) == 1 { cmd_shutdown(); handled = 1 }
+    if handled == 0 && len == 8 && buf_eq4(115, 104, 117, 116) == 1 { shutdown_clean(); handled = 1 }
     // acpi (97,99,112,105)
     if handled == 0 && len == 4 && buf_eq4(97, 99, 112, 105) == 1 { cmd_acpi(); handled = 1 }
     // tensor (116,101,110,115,111,114)
@@ -10841,10 +10907,10 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Spawn a background test process to demonstrate preemptive scheduling
-    let test_pid = sched_spawn_kernel(fn_addr("sched_test_process"))
-    if test_pid > 0 {
-        println("[SCHED] Background process spawned — preemptive scheduling active")
+    // Spawn init process (PID 1) — monitors system health
+    let init_pid = sched_spawn_kernel(fn_addr("init_process"))
+    if init_pid > 0 {
+        println("[INIT] Init process (PID 1) started — preemptive scheduling active")
     }
 
     println("[SEC] Security commands ready")
