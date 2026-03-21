@@ -6611,3 +6611,41 @@ fn protocol_missing_method_rejected() {
         "service missing 'close' and 'read' should be rejected"
     );
 }
+
+// ── Formal verification tests (E12) ──
+
+#[test]
+fn requires_annotation_parses() {
+    let src = r#"
+        fn divide(a: i64, b: i64) -> i64
+        @requires(b != 0)
+        @ensures(true)
+        {
+            a / b
+        }
+        fn main() -> void {
+            println(divide(10, 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn multiple_requires() {
+    let src = r#"
+        fn clamp(x: i64, lo: i64, hi: i64) -> i64
+        @requires(lo <= hi)
+        @requires(x >= 0)
+        {
+            if x < lo { lo }
+            else if x > hi { hi }
+            else { x }
+        }
+        fn main() -> void {
+            println(clamp(50, 0, 100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["50"]);
+}

@@ -253,6 +253,8 @@ fn build_closure_info(
         params: all_params,
         return_type: return_type.as_deref().cloned(),
         where_clauses: Vec::new(),
+        requires: vec![],
+        ensures: vec![],
         body: Box::new(body.clone()),
         span: *span,
     };

@@ -38,6 +38,29 @@ impl Parser {
         // Optional where clause
         let where_clauses = self.parse_where_clauses()?;
 
+        // Optional verification annotations: @requires(expr) @ensures(expr)
+        let mut requires = Vec::new();
+        let mut ensures = Vec::new();
+        while matches!(
+            self.peek_kind(),
+            TokenKind::AtRequires | TokenKind::AtEnsures
+        ) {
+            let is_requires = matches!(self.peek_kind(), TokenKind::AtRequires);
+            self.advance(); // consume @requires or @ensures
+            if matches!(self.peek_kind(), TokenKind::LParen) {
+                self.advance(); // consume '('
+                let expr = self.parse_expr(0)?;
+                if matches!(self.peek_kind(), TokenKind::RParen) {
+                    self.advance(); // consume ')'
+                }
+                if is_requires {
+                    requires.push(Box::new(expr));
+                } else {
+                    ensures.push(Box::new(expr));
+                }
+            }
+        }
+
         // Body
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
@@ -57,6 +80,8 @@ impl Parser {
             params,
             return_type,
             where_clauses,
+            requires,
+            ensures,
             body,
             span: Span::new(start, end),
         })
@@ -646,6 +671,8 @@ impl Parser {
             params,
             return_type,
             where_clauses,
+            requires: vec![],
+            ensures: vec![],
             body,
             span: Span::new(start, end),
         })

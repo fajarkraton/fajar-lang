@@ -124,6 +124,10 @@ pub struct FnDef {
     pub return_type: Option<TypeExpr>,
     /// Where clause bounds: `where T: Display, U: Ord`.
     pub where_clauses: Vec<WhereClause>,
+    /// Preconditions: `@requires(expr)` — must hold on function entry.
+    pub requires: Vec<Box<Expr>>,
+    /// Postconditions: `@ensures(expr)` — must hold on function exit.
+    pub ensures: Vec<Box<Expr>>,
     /// Function body.
     pub body: Box<Expr>,
     /// Source span.
