@@ -1139,8 +1139,9 @@ const NVME_STATE: i64 = 0x804000
     nvme_reg_write32(NVME_REG_CC, 0)
 
     // Wait for CSTS.RDY = 0 (controller not ready)
-    let mut timeout: i64 = 500000
+    let mut timeout: i64 = 50000000
     while (nvme_reg_read32(NVME_REG_CSTS) & 1) != 0 && timeout > 0 {
+        pause()
         timeout = timeout - 1
     }
     if timeout == 0 { return -3 }
@@ -1192,8 +1193,9 @@ const NVME_STATE: i64 = 0x804000
     nvme_reg_write32(NVME_REG_CC, cc)
 
     // Wait for CSTS.RDY = 1
-    timeout = 500000
+    timeout = 50000000
     while (nvme_reg_read32(NVME_REG_CSTS) & 1) == 0 && timeout > 0 {
+        pause()
         timeout = timeout - 1
     }
     if timeout == 0 { return -4 }
@@ -1246,7 +1248,7 @@ const NVME_STATE: i64 = 0x804000
     let phase = nvme_state_read(24)
 
     // Poll CQ for completion (phase tag = bit 16 of DW3)
-    let mut timeout: i64 = 1000000
+    let mut timeout: i64 = 50000000
     let mut status: i64 = 0
     while timeout > 0 {
         let dw3 = nvme_admin_cq_read(cq_head, 3) // Status field + phase tag + CID
@@ -1268,6 +1270,7 @@ const NVME_STATE: i64 = 0x804000
             volatile_write_u32(bar + cq_db_offset, new_head)
             return status
         }
+        pause()
         timeout = timeout - 1
     }
     -1 // Timeout
@@ -1394,7 +1397,7 @@ const NVME_STATE: i64 = 0x804000
     let cq_head = nvme_state_read(56)
     let phase = nvme_state_read(64)
 
-    let mut timeout: i64 = 1000000
+    let mut timeout: i64 = 50000000
     while timeout > 0 {
         let dw3 = nvme_io_cq_read(cq_head, 3)
         let cq_phase = (dw3 >> 16) & 1  // Phase tag is bit 16
@@ -1412,6 +1415,7 @@ const NVME_STATE: i64 = 0x804000
             volatile_write_u32(bar + cq_db, new_head)
             return status
         }
+        pause()
         timeout = timeout - 1
     }
     -1
