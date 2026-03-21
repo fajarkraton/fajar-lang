@@ -18,6 +18,38 @@ Kategori perubahan:
 
 ---
 
+## [4.1.0] — 2026-03-22 "Sovereignty"
+
+### Added — Compiler Enhancements for Microkernel (12 total)
+
+**Safety Enforcement (E1-E2):**
+- **SE020: @safe rejects hardware access** — 150+ bare-metal builtins blocked (port_outb, volatile_write, cli, hlt, etc.)
+- **SE021: @safe → @kernel call gate** — @safe code cannot call @kernel functions directly, must use syscall
+- `ScopeKind::Safe` added to analyzer with `is_inside_safe()` check
+
+**Build System (E3-E4):**
+- **Directory build mode** — `fj build services/vfs/` concatenates all .fj files in directory, main.fj last
+- **User-mode runtime library** — `runtime_user.rs` with 15 SYSCALL wrappers (print, exit, getpid, yield, read, ipc_send/recv/call/reply, ipc_try_recv/notify/select, mmap)
+- **User-mode startup assembly** — `fj_rt_bare_println` implemented via SYS_WRITE SYSCALL for x86_64-user target
+
+**IPC & Types (E5-E9):**
+- **`@message` struct annotation** — marks structs as IPC-compatible (max 7 fields = 56 bytes + 8 header)
+- **Capability-based `@device("net")`** — restricts @device functions to capability-specific builtins (5 cap sets: port_io, irq, dma, net, blk)
+- **Cross-service type sharing** — `shared/` directory auto-included when building any service
+- **Async IPC** — `ipc_try_recv` (non-blocking), `ipc_notify` (async signal), `ipc_select` (multi-source wait)
+
+**Language Features (E10-E12):**
+- **`service` keyword** — `service vfs { fn handle_open() { ... } }` top-level declaration
+- **`protocol` keyword** — `protocol VfsProto { fn open() { ... } fn close() { ... } }` interface definition
+- **`implements` clause** — `service vfs implements VfsProto` with compiler completeness check
+- **`@requires(expr)` / `@ensures(expr)`** — formal verification annotations on functions
+
+### Stats
+- 6,052 tests (0 failures), clippy clean, fmt clean
+- 12 compiler enhancements implemented in one session
+
+---
+
 ## [4.0.0] — 2026-03-22 "Genesis"
 
 ### Added — Fajar Lang

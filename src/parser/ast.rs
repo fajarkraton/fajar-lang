@@ -2041,6 +2041,8 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
             body: Box::new(Expr::Block {
                 stmts: vec![],
                 expr: None,

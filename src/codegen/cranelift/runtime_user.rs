@@ -140,10 +140,12 @@ pub extern "C" fn fj_rt_user_println() {
 
 /// Exit the process with given exit code.
 #[unsafe(no_mangle)]
+#[allow(clippy::empty_loop)]
 pub extern "C" fn fj_rt_user_exit(code: i64) -> ! {
     syscall1(SYS_EXIT, code);
-    // Should never reach here
-    loop {}
+    loop {
+        core::hint::spin_loop();
+    }
 }
 
 /// Get current process ID.

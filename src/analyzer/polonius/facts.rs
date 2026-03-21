@@ -1101,6 +1101,8 @@ mod tests {
                 span: span(28, 33),
             }),
             where_clauses: Vec::new(),
+            requires: vec![],
+            ensures: vec![],
             body: Box::new(block_expr(
                 vec![],
                 Some(borrow_expr(ident_expr("x", 38, 39), 37, 39)),

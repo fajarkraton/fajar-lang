@@ -394,7 +394,7 @@ fn read_source(path: &PathBuf) -> Result<String, ExitCode> {
 
 /// Reads all .fj files in a directory and concatenates them.
 /// Files are sorted alphabetically, except main.fj is always last.
-fn read_source_dir(dir: &PathBuf) -> Result<String, ExitCode> {
+fn read_source_dir(dir: &std::path::Path) -> Result<String, ExitCode> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut main_file: Option<PathBuf> = None;
 

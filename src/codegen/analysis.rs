@@ -575,6 +575,8 @@ mod tests {
             params,
             return_type: None,
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
             body: Box::new(body),
             span: dummy_span(),
         }
