@@ -3883,7 +3883,7 @@ const SYS_BRK: i64 = 7
 // Fork, exec, waitpid, exit with proper cleanup
 // ═══════════════════════════════════════════════
 
-const PROC_TABLE_V2: i64 = 0x890000  // 16 procs × 256 bytes
+const PROC_TABLE_V2: i64 = 0x8C0000  // 16 procs × 256 bytes (moved from 0x890000 to avoid VQ_RX_BASE conflict)
 // Per proc: +0=state, +8=pid, +16=ppid, +24=entry, +32=user_rsp,
 //           +40=kernel_rsp, +48=page_table, +56=exit_code, +64=name[32]
 
@@ -10933,269 +10933,105 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Network test
+    // Network: ARP + ping (simplified)
     if net_state_read(56) != 0 {
         let gw = net_state_read(24)
-        println("[NET] Sending ARP for gateway...")
+        delay_us(500000) // let device settle
+
+        // Send ARP request
+        println("[NET] Sending ARP request...")
         let arp_len = arp_build_request(gw)
         let bcast: i64 = NET_PKT_BUF + 3072
         let mut bj: i64 = 0
         while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
         let arp_frame = eth_build_frame(bcast, 0x0806, NET_PKT_BUF, arp_len)
-        let tx = net_send_frame(NET_TX_BUF, arp_frame)
-        if tx == 0 {
-            delay_us(300000) // wait 300ms
-            let mut tries: i64 = 0
-            let mut got: i64 = -1
-            while tries < 50 && got <= 0 {
-                got = net_rx_poll()
-                if got <= 0 { delay_us(10000) }
-                tries = tries + 1
-            }
-            if got > 0 {
-                println("[NET] PACKET RECEIVED! Network RX works!")
-            } else {
-                // Debug: check raw used ring
-                let used_off = vq_used_offset(VQ_RX_BASE)
-                let used_flags = volatile_read_u16(used_off)
-                let used_idx_raw = volatile_read_u16(used_off + 2)
-                let last_proc = net_state_read(80)
-                // If used_idx_raw > 0 but equals last_proc, the packet was
-                // processed but we missed it. If used_idx_raw == 0, device
-                // didn't write to the used ring.
-                if used_idx_raw > 0 {
-                    println("[NET] Used ring has entries!")
-                } else {
-                    // Write sentinel at used ring idx location, check if device clears it
-                    volatile_write_u16(used_off + 2, 0xBEEF)
-                    delay_us(100000)
-                    let after = volatile_read_u16(used_off + 2) & 0xFFFF
-                    if after != 0xBEEF {
-                        println("[NET] Device wrote to used ring! (offset may be right)")
-                    } else {
-                        // Scan memory for device write — look for non-zero u16 in queue region
-                        let mut scan: i64 = 0
-                        let mut found_off: i64 = -1
-                        while scan < 16384 && found_off == -1 {
-                            let v = volatile_read_u16(VQ_RX_BASE + scan)
-                            // Look for used ring idx = 1 (one packet received)
-                            if v == 1 && scan > 4096 {
-                                found_off = scan
+        net_send_frame(NET_TX_BUF, arp_frame)
+
+        // Wait for reply, then scan ALL 16 RX buffers for ARP ethertype
+        delay_us(500000) // 500ms for ARP reply
+
+        let mut found_arp: i64 = 0
+        let mut buf_idx: i64 = 0
+        while buf_idx < 16 && found_arp == 0 {
+            let buf = VQ_RX_BUFS + buf_idx * 2048
+            // Scan for 0x08 0x06 (ARP ethertype) in first 30 bytes
+            let mut off: i64 = 0
+            while off < 30 && found_arp == 0 {
+                if volatile_read_u8(buf + off) == 0x08 && volatile_read_u8(buf + off + 1) == 0x06 {
+                    found_arp = 1
+                    println("[NET] ARP reply found!")
+                    // Extract gateway MAC: sender hardware addr at ARP offset
+                    // ARP header starts 14 bytes after ethertype position - 12
+                    // ethertype at off means eth header starts at off - 12
+                    // ARP sender MAC at eth+14+8 = off - 12 + 14 + 8 = off + 10
+                    let gw_mac_off = buf + off + 10
+                    arp_cache_add(gw, gw_mac_off)
+
+                    // Now send ICMP ping with real gateway MAC
+                    println("[NET] Sending ICMP ping...")
+                    let icmp_len = icmp_build_echo_request(1)
+                    let ip_len = ip_build_header(gw, 1, icmp_len)
+                    let pkt: i64 = NET_PKT_BUF + 2048
+                    let mut ci: i64 = 0
+                    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+                    ci = 0
+                    while ci < icmp_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1024 + ci)); ci = ci + 1 }
+                    let gw_mac = arp_cache_lookup(gw)
+                    if gw_mac >= 0 {
+                        let flen = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + icmp_len)
+                        net_send_frame(NET_TX_BUF, flen)
+                        println("[NET] ICMP ping sent!")
+                        // Check for reply after 500ms
+                        delay_us(500000)
+                        let mut buf2: i64 = 0
+                        let mut found_icmp: i64 = 0
+                        while buf2 < 16 && found_icmp == 0 {
+                            let rb = VQ_RX_BUFS + buf2 * 2048
+                            let mut o2: i64 = 0
+                            while o2 < 50 && found_icmp == 0 {
+                                // Look for ICMP type 0 (echo reply) after IP header
+                                // IP protocol=1 (ICMP) at IP+9
+                                if volatile_read_u8(rb + o2) == 0x45 { // IP version+IHL
+                                    if volatile_read_u8(rb + o2 + 9) == 1 { // protocol=ICMP
+                                        let icmp_off = o2 + 20
+                                        if volatile_read_u8(rb + icmp_off) == 0 { // type=Echo Reply
+                                            found_icmp = 1
+                                            println("[NET] PING REPLY RECEIVED! NETWORK IS LIVE!")
+                                        }
+                                    }
+                                }
+                                o2 = o2 + 1
                             }
-                            scan = scan + 2
+                            buf2 = buf2 + 1
                         }
-                        if found_off >= 0 {
-                            // Print the offset as hex to serial
-                            println("[NET] Used ring idx=1 found!")
-                            // Store offset for later analysis
-                            volatile_write_u64(0x652070, found_off)
-                            // The idx field is at +2 in the used ring struct
-                            // So actual used ring base = VQ_RX_BASE + found_off - 2
-                            // Let's use this to read the actual packet!
-                            let real_used_base = VQ_RX_BASE + found_off - 2
-                            let desc_id = volatile_read_u32(real_used_base + 4) & 0xFFFF
-                            let pkt_len = volatile_read_u32(real_used_base + 8)
-                            println("[NET] Extracting packet...")
-                            // Copy received packet to NET_RX_BUF
-                            let src = VQ_RX_BUFS + desc_id * 2048
-                            let copy_len = if pkt_len > 0 && pkt_len < 2048 { pkt_len } else { 128 }
-                            let mut cp: i64 = 0
-                            while cp < copy_len { volatile_write_u8(NET_RX_BUF + cp, volatile_read_u8(src + cp)); cp = cp + 1 }
-                            println("[NET] PACKET RECEIVED!")
-
-                            // Store discovered used ring offset for future net_rx_poll calls
-                            net_state_write(96, found_off - 2)
-                            // Advance our last-processed counter
-                            net_state_write(80, 1)
-
-                            // Debug: print ethertype candidates at various offsets
-                            // Check byte 12-13 at offset 0, 10, 12 from NET_RX_BUF
-                            let b12 = volatile_read_u8(NET_RX_BUF + 12)
-                            let b13 = volatile_read_u8(NET_RX_BUF + 13)
-                            let b22 = volatile_read_u8(NET_RX_BUF + 22)
-                            let b23 = volatile_read_u8(NET_RX_BUF + 23)
-                            let b24 = volatile_read_u8(NET_RX_BUF + 24)
-                            let b25 = volatile_read_u8(NET_RX_BUF + 25)
-                            // Check if ethertype 0x0806 appears anywhere in first 30 bytes
-                            let mut scan_et: i64 = 0
-                            let mut et_found: i64 = -1
-                            while scan_et < 30 && et_found == -1 {
-                                if volatile_read_u8(NET_RX_BUF + scan_et) == 0x08 && volatile_read_u8(NET_RX_BUF + scan_et + 1) == 0x06 {
-                                    et_found = scan_et
-                                }
-                                scan_et = scan_et + 1
-                            }
-                            if et_found >= 0 {
-                                println("[NET] ARP ethertype found! Parsing as ARP...")
-                                // Override eth_off to use the found position
-                                // ethertype is at eth_off + 12, so eth_off = et_found - 12
-                                // But et_found might be < 12 if virtio header is short
-                            }
-
-                            // Scan for QEMU gateway MAC (52:55:0a) in received data
-                            let mut mac_scan: i64 = 0
-                            let mut mac_found: i64 = -1
-                            while mac_scan < 100 && mac_found == -1 {
-                                if volatile_read_u8(NET_RX_BUF + mac_scan) == 0x52 && volatile_read_u8(NET_RX_BUF + mac_scan + 1) == 0x55 && volatile_read_u8(NET_RX_BUF + mac_scan + 2) == 0x0A {
-                                    mac_found = mac_scan
-                                    println("[NET] Gateway MAC pattern found in packet!")
-                                }
-                                mac_scan = mac_scan + 1
-                            }
-
-                            // Check for more packets (ARP reply might be 2nd packet)
-                            delay_us(200000)
-                            let u_base2 = VQ_RX_BASE + found_off - 2
-                            let u_idx2 = volatile_read_u16(u_base2 + 2) & 0xFFFF
-                            let u_last2 = net_state_read(80) & 0xFFFF
-                            if u_idx2 > u_last2 {
-                                println("[NET] More packets available! Reading next...")
-                                let ring_pos2 = u_last2 % VQ_NUM_ENTRIES
-                                let d_id2 = volatile_read_u32(u_base2 + 4 + ring_pos2 * 8) & 0xFFFF
-                                let p_len2 = volatile_read_u32(u_base2 + 4 + ring_pos2 * 8 + 4)
-                                let s2 = VQ_RX_BUFS + d_id2 * 2048
-                                let mut c3: i64 = 0
-                                let cl3 = if p_len2 > 0 && p_len2 < 2048 { p_len2 } else { 128 }
-                                while c3 < cl3 { volatile_write_u8(NET_RX_BUF + c3, volatile_read_u8(s2 + c3)); c3 = c3 + 1 }
-                                net_state_write(80, u_last2 + 1)
-
-                                // Check for ARP in this packet
-                                let mut scan2: i64 = 0
-                                let mut arp2: i64 = -1
-                                while scan2 < 40 && arp2 == -1 {
-                                    if volatile_read_u8(NET_RX_BUF + scan2) == 0x08 && volatile_read_u8(NET_RX_BUF + scan2 + 1) == 0x06 {
-                                        arp2 = scan2
-                                    }
-                                    scan2 = scan2 + 1
-                                }
-                                if arp2 >= 0 {
-                                    println("[NET] ARP REPLY found in packet 2!")
-                                    // Extract gateway MAC: ARP sender MAC is at arp_offset + 14 + 8
-                                    // (arp header starts 14 bytes after ethertype)
-                                    // sender MAC = ethertype_pos - 12 + 14 + 8 = ethertype_pos + 10
-                                    // Actually: ethertype is at eth_header+12
-                                    // ARP header starts at eth_header+14
-                                    // Sender MAC is at ARP+8
-                                    // So: sender_mac = (arp2 - 12) + 14 + 8 = arp2 + 10
-                                    let gw_mac_off = arp2 + 10
-                                    arp_cache_add(gw, NET_RX_BUF + gw_mac_off)
-                                    println("[NET] Gateway MAC cached! Sending ICMP ping...")
-
-                                    // Build and send ICMP ping
-                                    let icmp_len = icmp_build_echo_request(1)
-                                    let ip_len = ip_build_header(gw, 1, icmp_len)
-                                    let pkt_buf: i64 = NET_PKT_BUF + 2048
-                                    let mut ci: i64 = 0
-                                    while ci < ip_len { volatile_write_u8(pkt_buf + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
-                                    ci = 0
-                                    while ci < icmp_len { volatile_write_u8(pkt_buf + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1024 + ci)); ci = ci + 1 }
-                                    let gw_mac = arp_cache_lookup(gw)
-                                    if gw_mac >= 0 {
-                                        let frame_len = eth_build_frame(gw_mac, 0x0800, pkt_buf, ip_len + icmp_len)
-                                        let ping_tx = net_send_frame(NET_TX_BUF, frame_len)
-                                        if ping_tx == 0 {
-                                            println("[NET] ICMP ping sent!")
-                                            delay_us(500000)
-                                            // Check for ping reply
-                                            let u_idx3 = volatile_read_u16(u_base2 + 2) & 0xFFFF
-                                            let u_last3 = net_state_read(80) & 0xFFFF
-                                            if u_idx3 > u_last3 {
-                                                println("[NET] PING REPLY RECEIVED! NETWORK IS LIVE!")
-                                            } else {
-                                                println("[NET] Ping sent, no reply yet")
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    println("[NET] Packet 2 is also not ARP")
-                                }
-                            }
-
-                            // Parse packet: find ethertype
-                            // Try different virtio header sizes (10 for legacy, 12 for mergeable)
-                            // Also try no header (raw ethernet at offset 0)
-                            let mut eth_off: i64 = 0
-                            let mut found_arp: i64 = 0
-                            while eth_off <= 12 && found_arp == 0 {
-                                let et0 = volatile_read_u8(NET_RX_BUF + eth_off + 12)
-                                let et1 = volatile_read_u8(NET_RX_BUF + eth_off + 13)
-                                if et0 == 0x08 && et1 == 0x06 { found_arp = 1 }
-                                else { eth_off = eth_off + 2 }
-                            }
-
-                            if found_arp == 1 {
-                                // ARP reply! Sender MAC at ARP header offset 8 (after eth header)
-                                let arp_off = eth_off + 14 // ethernet header = 14 bytes
-                                let sender_mac_off = arp_off + 8 // sender MAC in ARP
-                                println("[NET] ARP REPLY received! Caching gateway MAC...")
-                                arp_cache_add(gw, NET_RX_BUF + sender_mac_off)
-
-                                // Now send ICMP ping using the real gateway MAC
-                                println("[NET] Sending ICMP ping with real MAC...")
-                                let icmp_len = icmp_build_echo_request(1)
-                                let ip_len = ip_build_header(gw, 1, icmp_len)
-                                let pkt_buf: i64 = NET_PKT_BUF + 2048
-                                let mut ci: i64 = 0
-                                while ci < ip_len { volatile_write_u8(pkt_buf + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
-                                ci = 0
-                                while ci < icmp_len { volatile_write_u8(pkt_buf + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1024 + ci)); ci = ci + 1 }
-
-                                // Use gateway MAC from ARP cache
-                                let gw_mac = arp_cache_lookup(gw)
-                                if gw_mac >= 0 {
-                                    let frame_len = eth_build_frame(gw_mac, 0x0800, pkt_buf, ip_len + icmp_len)
-                                    let ping_tx = net_send_frame(NET_TX_BUF, frame_len)
-                                    if ping_tx == 0 {
-                                        println("[NET] ICMP ping sent! Waiting for reply...")
-                                        delay_us(300000) // 300ms
-
-                                        // Poll for ICMP reply using discovered offset
-                                        let mut ping_tries: i64 = 0
-                                        let mut ping_got: i64 = 0
-                                        while ping_tries < 50 && ping_got == 0 {
-                                            // Read used ring at discovered offset
-                                            let u_base = VQ_RX_BASE + found_off - 2
-                                            let u_idx = volatile_read_u16(u_base + 2) & 0xFFFF
-                                            let u_last = net_state_read(80) & 0xFFFF
-                                            if u_idx != u_last {
-                                                // New packet!
-                                                let ring_pos = u_last % VQ_NUM_ENTRIES
-                                                let d_id = volatile_read_u32(u_base + 4 + ring_pos * 8) & 0xFFFF
-                                                let p_len = volatile_read_u32(u_base + 4 + ring_pos * 8 + 4)
-                                                let s = VQ_RX_BUFS + d_id * 2048
-                                                let mut c2: i64 = 0
-                                                let cl2 = if p_len > 0 && p_len < 2048 { p_len } else { 128 }
-                                                while c2 < cl2 { volatile_write_u8(NET_RX_BUF + c2, volatile_read_u8(s + c2)); c2 = c2 + 1 }
-                                                net_state_write(80, u_last + 1)
-
-                                                // Check for ICMP echo reply (type 0)
-                                                let ip2 = VIRTIO_NET_HDR_SIZE + 14 // skip virtio + eth
-                                                let proto = volatile_read_u8(NET_RX_BUF + ip2 + 9)
-                                                if proto == 1 { // ICMP
-                                                    let icmp2 = ip2 + 20
-                                                    let icmp_type = volatile_read_u8(NET_RX_BUF + icmp2)
-                                                    if icmp_type == 0 { // Echo Reply
-                                                        println("[NET] PING REPLY RECEIVED! Network is LIVE!")
-                                                        ping_got = 1
-                                                    }
-                                                }
-                                            }
-                                            if ping_got == 0 { delay_us(10000); ping_tries = ping_tries + 1 }
-                                        }
-                                        if ping_got == 0 {
-                                            println("[NET] Ping timeout (ARP OK, ICMP no reply)")
-                                        }
-                                    }
-                                }
-                            } else {
-                                println("[NET] Non-ARP packet received")
-                            }
-                        } else {
-                            println("[NET] No used ring entry found in 16KB scan")
+                        if found_icmp == 0 {
+                            println("[NET] Ping sent (reply not found in buffers)")
                         }
                     }
                 }
+                off = off + 1
             }
+            buf_idx = buf_idx + 1
+        }
+        if found_arp == 0 {
+            // Debug: verify RX descriptor 0 is intact
+            let d0_addr = volatile_read_u64(VQ_RX_BASE)
+            let d0_len = volatile_read_u32(VQ_RX_BASE + 8)
+            let d0_flags = volatile_read_u16(VQ_RX_BASE + 12)
+            if d0_addr == VQ_RX_BUFS && d0_len == 2048 && d0_flags == 2 {
+                println("[NET] Desc OK but no data — device not using our queue")
+                // Possible fix: the RX queue PFN was set for 256 entries but
+                // our descriptors are only 16. The device may read desc[16+] which are empty.
+                // Check: is the avail ring idx set to 16?
+                let avail = vq_avail_offset(VQ_RX_BASE)
+                let avail_idx = volatile_read_u16(avail + 2)
+                if avail_idx == 16 {
+                    println("[NET] Avail idx=16 (only 16 of 256 slots filled)")
+                }
+            } else {
+                println("[NET] Desc 0 modified — device DID write to queue!")
+            }
+            println("[NET] ARP not found in buffers")
         }
     }
 
