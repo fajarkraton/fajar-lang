@@ -2094,23 +2094,35 @@ __syscall_entry:
     jmp     .Lsys_return
 
 .Lsys_exit:
-    /* SYS_EXIT(code): mark process as dead, yield to next */
+    /* SYS_EXIT(code): store exit code, restore kernel state, return to shell */
+    /* Save exit code from RDI (arg0) to 0x652028 (exit_code) */
+    mov     QWORD PTR [0x652028], rdi
+
+    /* Mark current process as ZOMBIE in old process table */
     mov     rax, QWORD PTR [0x6FE00]   /* current pid */
     shl     rax, 8
     add     rax, 0x600000
     mov     QWORD PTR [rax + 8], 0     /* state = dead */
-    /* Fall through to yield */
+
+    /* Set "user_exited" flag at 0x652038 */
+    mov     QWORD PTR [0x652038], 1
+
+    /* Restore kernel RSP saved before iretq_to_user (at 0x652020) */
+    mov     rsp, QWORD PTR [0x652020]
+
+    /* Return to the caller of iretq_to_user (kernel code) */
+    /* The kernel saved RSP before calling iretq_to_user, so RET goes back to kernel */
+    ret
 
 .Lsys_yield:
-    /* SYS_YIELD: trigger timer interrupt to reschedule */
+    /* SYS_YIELD: pop args and return 0 to userspace */
+    /* (Full preemptive scheduling comes in Phase 2) */
     pop     rdx
     pop     rsi
     pop     rdi
     pop     r11
     pop     rcx
     mov     rsp, QWORD PTR [0x6FE10]   /* restore user RSP */
-    int     32                          /* trigger scheduler via timer ISR */
-    /* After scheduler returns here */
     xor     eax, eax
     sysretq
 
@@ -2679,10 +2691,15 @@ fj_rt_bare_fxrstor:
     ret
 .size fj_rt_bare_fxrstor, . - fj_rt_bare_fxrstor
 
-/* iretq_to_user(rip: rdi, rsp: rsi, rflags: rdx) -> noreturn */
+/* iretq_to_user(rip: rdi, rsp: rsi, rflags: rdx) */
+/* Saves kernel RSP at 0x652020 so SYS_EXIT can return here */
 .global fj_rt_bare_iretq_to_user
 .type fj_rt_bare_iretq_to_user, @function
 fj_rt_bare_iretq_to_user:
+    /* Save kernel RSP for SYS_EXIT return path */
+    mov     QWORD PTR [0x652020], rsp
+    /* Clear user_exited flag */
+    mov     QWORD PTR [0x652038], 0
     push    0x1B                /* SS = User Data (0x18 | RPL=3) */
     push    rsi                 /* RSP = user stack */
     push    rdx                 /* RFLAGS */
