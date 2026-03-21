@@ -34,6 +34,29 @@ impl TypeChecker {
                 for h in &svc.handlers {
                     self.check_fn_def(h);
                 }
+                // E11: protocol completeness check
+                if let Some(ref proto_name) = svc.implements {
+                    if let Some(required_methods) = self.traits.get(proto_name) {
+                        let handler_names: std::collections::HashSet<String> =
+                            svc.handlers.iter().map(|h| h.name.clone()).collect();
+                        for method_sig in required_methods {
+                            if !handler_names.contains(&method_sig.name) {
+                                self.errors.push(SemanticError::TypeMismatch {
+                                    expected: format!(
+                                        "method '{}' required by protocol '{}'",
+                                        method_sig.name, proto_name
+                                    ),
+                                    found: format!("service '{}' is missing this method", svc.name),
+                                    span: svc.span,
+                                    hint: Some(format!(
+                                        "add 'fn {}(...)' to service '{}'",
+                                        method_sig.name, svc.name
+                                    )),
+                                });
+                            }
+                        }
+                    }
+                }
             }
             Item::ImplBlock(impl_block) => {
                 for method in &impl_block.methods {

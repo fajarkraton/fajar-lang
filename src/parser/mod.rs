@@ -545,20 +545,55 @@ impl Parser {
                     Ok(Item::ConstDef(cd))
                 }
             }
+            TokenKind::Protocol => {
+                // protocol Name { fn method() -> Type ... }
+                // Parsed same as trait but stored as TraitDef
+                self.advance(); // consume `protocol`
+                let (name, _) = self.expect_ident()?;
+                self.expect(&TokenKind::LBrace)?;
+                let mut methods = Vec::new();
+                while !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+                    if matches!(self.peek_kind(), TokenKind::Fn) {
+                        let fndef = self.parse_fn_def(false, None)?;
+                        methods.push(fndef);
+                    } else {
+                        self.advance();
+                    }
+                }
+                self.expect(&TokenKind::RBrace)?;
+                let end = self.prev_span().end;
+                Ok(Item::TraitDef(TraitDef {
+                    is_pub,
+                    doc_comment,
+                    name,
+                    lifetime_params: vec![],
+                    generic_params: vec![],
+                    methods,
+                    span: Span::new(0, end),
+                }))
+            }
             TokenKind::Service => {
-                // service name { fn handler1() { ... } fn handler2() { ... } }
+                // service name [implements Proto] { fn handler... }
                 let start = self.peek().span.start;
                 self.advance(); // consume `service`
                 let (name, _name_span) = self.expect_ident()?;
-                self.expect(&TokenKind::LBrace)?;
 
+                // Optional: implements ProtocolName
+                let implements = if self.eat(&TokenKind::Implements) {
+                    let (proto_name, _) = self.expect_ident()?;
+                    Some(proto_name)
+                } else {
+                    None
+                };
+
+                self.expect(&TokenKind::LBrace)?;
                 let mut handlers = Vec::new();
                 while !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
                     if matches!(self.peek_kind(), TokenKind::Fn) {
                         let fndef = self.parse_fn_def(false, annotation.clone())?;
                         handlers.push(fndef);
                     } else {
-                        self.advance(); // skip unknown tokens
+                        self.advance();
                     }
                 }
                 self.expect(&TokenKind::RBrace)?;
@@ -567,6 +602,7 @@ impl Parser {
                 Ok(Item::ServiceDef(ServiceDef {
                     name,
                     annotation,
+                    implements,
                     handlers,
                     span: Span::new(start, end),
                 }))

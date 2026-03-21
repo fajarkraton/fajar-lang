@@ -415,6 +415,8 @@ pub struct ServiceDef {
     pub name: String,
     /// Optional annotation (e.g., @safe, @device("net")).
     pub annotation: Option<Annotation>,
+    /// Protocol this service implements (e.g., "VfsProtocol").
+    pub implements: Option<String>,
     /// Handler functions defined inside the service block.
     pub handlers: Vec<FnDef>,
     /// Source span.

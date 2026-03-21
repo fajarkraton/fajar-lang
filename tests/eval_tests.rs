@@ -6568,3 +6568,46 @@ fn service_keyword_basic() {
     let out = eval_output(src);
     assert_eq!(out, vec!["42", "0"]);
 }
+
+// ── protocol + implements tests (E11) ──
+
+#[test]
+fn protocol_complete_service() {
+    let src = r#"
+        protocol VfsProto {
+            fn open() -> i64 { 0 }
+            fn close() -> i64 { 0 }
+        }
+        service vfs implements VfsProto {
+            fn open() -> i64 { 42 }
+            fn close() -> i64 { 0 }
+        }
+        fn main() -> void {
+            println(open())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn protocol_missing_method_rejected() {
+    let src = r#"
+        protocol VfsProto {
+            fn open() -> i64 { 0 }
+            fn close() -> i64 { 0 }
+            fn read() -> i64 { 0 }
+        }
+        service vfs implements VfsProto {
+            fn open() -> i64 { 42 }
+        }
+        fn main() -> void {}
+    "#;
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(
+        analysis.is_err(),
+        "service missing 'close' and 'read' should be rejected"
+    );
+}
