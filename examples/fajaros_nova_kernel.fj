@@ -3618,6 +3618,232 @@ const DHCP_XID: i64 = 0xFAFA1234  // Transaction ID
     0
 }
 
+// ── TCP Client ──
+
+// TCP state at 0x87F000 (256 bytes)
+const TCP_STATE: i64 = 0x87F000
+// +0: state (0=closed, 1=syn_sent, 2=established, 3=fin_wait)
+// +8: local_port
+// +16: remote_port
+// +24: remote_ip
+// +32: seq_num (our sequence number)
+// +40: ack_num (their sequence number)
+// +48: remote_seq (for tracking)
+
+const TCP_DATA_BUF: i64 = 0x87F100 // 3KB for TCP send/recv data
+
+@kernel fn tcp_state_write(off: i64, val: i64) { volatile_write_u64(TCP_STATE + off, val) }
+@kernel fn tcp_state_read(off: i64) -> i64 { volatile_read_u64(TCP_STATE + off) }
+
+@kernel fn tcp_build_header(src_port: i64, dst_port: i64, seq: i64, ack: i64, flags: i64, payload_len: i64) -> i64 {
+    // Build TCP header at NET_PKT_BUF + 1792 (20 bytes, no options)
+    let buf = NET_PKT_BUF + 1792
+    buffer_write_u16_be(buf, src_port)        // Source port
+    buffer_write_u16_be(buf + 2, dst_port)    // Destination port
+    buffer_write_u32_be(buf + 4, seq)          // Sequence number
+    buffer_write_u32_be(buf + 8, ack)          // Acknowledgment number
+    // Data offset (5 = 20 bytes, in upper 4 bits of byte) + reserved
+    volatile_write_u8(buf + 12, 0x50)          // 5 << 4 = 0x50 (20-byte header)
+    volatile_write_u8(buf + 13, flags & 0xFF)  // Flags: FIN=1, SYN=2, RST=4, PSH=8, ACK=16
+    buffer_write_u16_be(buf + 14, 8192)        // Window size
+    buffer_write_u16_be(buf + 16, 0)           // Checksum (0 for now — QEMU accepts without)
+    buffer_write_u16_be(buf + 18, 0)           // Urgent pointer
+    20 // TCP header length
+}
+
+@kernel fn tcp_send_packet(flags: i64, payload: i64, payload_len: i64) -> i64 {
+    let src_port = tcp_state_read(8)
+    let dst_port = tcp_state_read(16)
+    let remote_ip = tcp_state_read(24)
+    let seq = tcp_state_read(32)
+    let ack = tcp_state_read(40)
+
+    // Build TCP header
+    let tcp_len = tcp_build_header(src_port, dst_port, seq, ack, flags, payload_len)
+
+    // Copy payload after TCP header
+    let tcp_buf = NET_PKT_BUF + 1792
+    let mut i: i64 = 0
+    while i < payload_len { volatile_write_u8(tcp_buf + tcp_len + i, volatile_read_u8(payload + i)); i = i + 1 }
+
+    // Build IP header (proto=6 for TCP)
+    let ip_len = ip_build_header(remote_ip, 6, tcp_len + payload_len)
+
+    // Combine IP + TCP into packet
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+    ci = 0
+    while ci < tcp_len + payload_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(tcp_buf + ci)); ci = ci + 1 }
+
+    // Get destination MAC from ARP cache
+    let dst_mac = arp_cache_lookup(remote_ip)
+    if dst_mac < 0 {
+        // Use gateway MAC
+        let gw = net_state_read(24)
+        let gw_mac = arp_cache_lookup(gw)
+        if gw_mac < 0 { return -1 }
+        let frame_len = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + tcp_len + payload_len)
+        return net_send_frame(NET_TX_BUF, frame_len)
+    }
+    let frame_len = eth_build_frame(dst_mac, 0x0800, pkt, ip_len + tcp_len + payload_len)
+    net_send_frame(NET_TX_BUF, frame_len)
+}
+
+@kernel fn tcp_find_response() -> i64 {
+    // Scan RX buffers for TCP packet (IP proto=6)
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        let mut off: i64 = 0
+        while off < 50 {
+            // Look for IPv4 header (0x45) followed by proto=6 (TCP) at +9
+            if volatile_read_u8(rb + off) == 0x45 && volatile_read_u8(rb + off + 9) == 6 {
+                // Found TCP packet! Return buffer offset
+                // Copy to TCP_DATA_BUF for parsing
+                let mut c: i64 = 0
+                while c < 1500 { volatile_write_u8(TCP_DATA_BUF + c, volatile_read_u8(rb + off + c)); c = c + 1 }
+                return off
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+    -1
+}
+
+@kernel fn tcp_connect(remote_ip: i64, remote_port: i64) -> i64 {
+    // TCP 3-way handshake: SYN → SYN-ACK → ACK
+    let local_port: i64 = 49152 + (rdtsc() % 16384) // ephemeral port
+
+    tcp_state_write(0, 0)  // closed
+    tcp_state_write(8, local_port)
+    tcp_state_write(16, remote_port)
+    tcp_state_write(24, remote_ip)
+    tcp_state_write(32, rdtsc() & 0xFFFFFFFF) // initial seq number
+    tcp_state_write(40, 0)  // ack = 0
+
+    // Step 1: Send SYN (flags = 0x02)
+    println("[TCP] Sending SYN...")
+    tcp_state_write(0, 1)  // syn_sent
+    let syn_result = tcp_send_packet(0x02, 0, 0) // SYN flag
+    if syn_result < 0 { println("[TCP] SYN send failed"); return -1 }
+
+    // Step 2: Wait for SYN-ACK
+    delay_us(500000) // 500ms
+    let resp = tcp_find_response()
+    if resp < 0 { println("[TCP] No SYN-ACK received"); return -2 }
+
+    // Parse SYN-ACK: TCP header at IP offset 20
+    let tcp_off: i64 = 20 // after IP header
+    let flags = volatile_read_u8(TCP_DATA_BUF + tcp_off + 13)
+    if (flags & 0x12) != 0x12 { // SYN+ACK = 0x12
+        println("[TCP] Not a SYN-ACK")
+        return -3
+    }
+    println("[TCP] SYN-ACK received!")
+
+    // Extract server's seq number and ack
+    let server_seq = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 4)
+    let server_ack = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 8)
+
+    // Update state
+    tcp_state_write(32, server_ack) // our next seq = their ack
+    tcp_state_write(40, server_seq + 1) // our ack = their seq + 1
+    tcp_state_write(48, server_seq)
+
+    // Step 3: Send ACK (flags = 0x10)
+    println("[TCP] Sending ACK...")
+    tcp_send_packet(0x10, 0, 0) // ACK flag
+    tcp_state_write(0, 2) // established
+    println("[TCP] Connection ESTABLISHED!")
+    0
+}
+
+@kernel fn tcp_send(data: i64, len: i64) -> i64 {
+    // Send data on established connection (PSH+ACK = 0x18)
+    if tcp_state_read(0) != 2 { return -1 } // not established
+    let result = tcp_send_packet(0x18, data, len)
+    // Advance seq number
+    tcp_state_write(32, tcp_state_read(32) + len)
+    result
+}
+
+@kernel fn tcp_recv() -> i64 {
+    // Check for received TCP data, return length or -1
+    delay_us(500000) // wait for response
+    let resp = tcp_find_response()
+    if resp < 0 { return -1 }
+
+    let tcp_off: i64 = 20
+    let flags = volatile_read_u8(TCP_DATA_BUF + tcp_off + 13)
+    let data_off_byte = volatile_read_u8(TCP_DATA_BUF + tcp_off + 12)
+    let tcp_hdr_len = ((data_off_byte >> 4) & 0xF) * 4
+    let ip_total = buffer_read_u16_be(TCP_DATA_BUF + 2)
+    let data_len = ip_total - 20 - tcp_hdr_len
+
+    if data_len > 0 {
+        // Copy data payload to TCP_DATA_BUF + 512
+        let data_start = tcp_off + tcp_hdr_len
+        let mut i: i64 = 0
+        while i < data_len && i < 1024 {
+            volatile_write_u8(TCP_DATA_BUF + 512 + i, volatile_read_u8(TCP_DATA_BUF + data_start + i))
+            i = i + 1
+        }
+
+        // Send ACK for received data
+        let server_seq = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 4)
+        tcp_state_write(40, server_seq + data_len) // ack their data
+        tcp_send_packet(0x10, 0, 0) // ACK
+    }
+
+    data_len
+}
+
+@kernel fn cmd_wget() {
+    // wget — simple HTTP GET via TCP
+    // Connects to 10.0.2.2:80 (QEMU host)
+    if net_state_read(0) != 1 { cprintln("Network not ready", RED_ON_BLACK); return }
+
+    let host_ip = ip_pack(10, 0, 2, 2) // QEMU host gateway
+    println("[HTTP] Connecting to 10.0.2.2:80...")
+    let conn = tcp_connect(host_ip, 80)
+    if conn < 0 {
+        println("[HTTP] Connection failed")
+        return
+    }
+
+    // Send HTTP GET request
+    let req = TCP_DATA_BUF + 1024
+    // "GET / HTTP/1.0\r\nHost: 10.0.2.2\r\n\r\n"
+    let mut ri: i64 = 0
+    let http_req_bytes: [i64; 38] = [71, 69, 84, 32, 47, 32, 72, 84, 84, 80, 47, 49, 46, 48, 13, 10, 72, 111, 115, 116, 58, 32, 49, 48, 46, 48, 46, 50, 46, 50, 13, 10, 13, 10, 0, 0, 0, 0]
+    while ri < 34 { volatile_write_u8(req + ri, http_req_bytes[ri]); ri = ri + 1 }
+
+    println("[HTTP] Sending GET /...")
+    tcp_send(req, 34)
+
+    // Receive response
+    let recv_len = tcp_recv()
+    if recv_len > 0 {
+        println("[HTTP] Response received!")
+        // Print first 200 bytes of response to serial
+        let mut pi: i64 = 0
+        while pi < recv_len && pi < 200 {
+            let ch = volatile_read_u8(TCP_DATA_BUF + 512 + pi)
+            if ch > 31 && ch < 127 {
+                port_outb(0x3F8, ch) // print to serial
+            } else if ch == 10 || ch == 13 {
+                port_outb(0x3F8, ch)
+            }
+            pi = pi + 1
+        }
+        port_outb(0x3F8, 10) // newline
+    } else {
+        println("[HTTP] No response data")
+    }
+}
+
 // ── IP address helpers ──
 
 @kernel fn ip_pack(a: i64, b: i64, c: i64, d: i64) -> i64 {
@@ -11025,6 +11251,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 50) == 1 { cmd_run_program(2); handled = 1 }
     // sync — "sync" (115,121,110,99)
     if handled == 0 && len == 4 && buf_eq4(115, 121, 110, 99) == 1 { cmd_sync(); handled = 1 }
+    // wget — "wget" (119,103,101,116)
+    if handled == 0 && len == 4 && buf_eq4(119, 103, 101, 116) == 1 { cmd_wget(); handled = 1 }
     // syscalltest — "syscalltest"
     if handled == 0 && len == 11 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 121 && volatile_read_u8(0x6F802) == 115 && volatile_read_u8(0x6F803) == 99 { cmd_syscall_test(); handled = 1 }
     // login — "login" (108,111,103,105,110)
