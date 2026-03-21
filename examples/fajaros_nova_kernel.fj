@@ -4169,7 +4169,7 @@ const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
     volatile_write_u8(b + 39, 0xEE)
     // loop .write_loop (dec rcx, jnz)
     volatile_write_u8(b + 40, 0xE2)
-    volatile_write_u8(b + 41, 0xF7)  // -9 (back to lodsb)
+    volatile_write_u8(b + 41, 0xF8)  // -8 (back to lodsb at offset 34)
     // mov rax, rdx (return bytes written... but rdx was clobbered)
     // Actually return original len from stack
     volatile_write_u8(b + 42, 0x48)
@@ -4353,14 +4353,10 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 
 // Corrected layout with message after code
 @kernel fn user_install_hello_v2() {
-    let frame = frame_alloc()
-    if frame == -1 { return }
-    map_page(USER_CODE_BASE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
-
-    // Map user stack
-    let sframe = frame_alloc()
-    if sframe == -1 { return }
-    map_page(USER_STACK_BASE, sframe * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+    // USER_CODE_BASE (0x2000000) is within the 2MB identity-mapped region.
+    // Just set PAGE_USER on the huge page and write code directly.
+    map_page(USER_CODE_BASE, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+    map_page(USER_STACK_BASE, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
 
     let b = USER_CODE_BASE
     let msg_addr = b + 40
@@ -8652,8 +8648,62 @@ const FS_ENTRY_SIZE: i64 = 128
     syscall_setup()
     println("[SYSCALL] Entry stub + MSRs configured")
 
-    // Ring 3 ready — use 'runhello' command to test
-    println("[RING3] User mode infrastructure ready (use 'runhello')")
+    // Ring 3 test: SYS_WRITE("Hello Ring 3!\n") + SYS_EXIT(0)
+    println("[RING3] Installing user program...")
+    map_page(0x2000000, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+    map_page(0x2F00000, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+
+    let b: i64 = 0x2000000
+    let msg_off: i64 = 40
+    // mov eax, 1 (SYS_WRITE)
+    volatile_write_u8(b, 0xB8)
+    volatile_write_u32(b + 1, 1)
+    // mov edi, 1 (stdout)
+    volatile_write_u8(b + 5, 0xBF)
+    volatile_write_u32(b + 6, 1)
+    // lea rsi, [rip + msg] — use absolute: mov esi, msg_addr
+    volatile_write_u8(b + 10, 0xBE)
+    volatile_write_u32(b + 11, b + msg_off)
+    // mov edx, 14 (len)
+    volatile_write_u8(b + 15, 0xBA)
+    volatile_write_u32(b + 16, 14)
+    // syscall
+    volatile_write_u8(b + 20, 0x0F)
+    volatile_write_u8(b + 21, 0x05)
+    // mov eax, 60 (SYS_EXIT)
+    volatile_write_u8(b + 22, 0xB8)
+    volatile_write_u32(b + 23, 60)
+    // xor edi, edi
+    volatile_write_u8(b + 27, 0x31)
+    volatile_write_u8(b + 28, 0xFF)
+    // syscall
+    volatile_write_u8(b + 29, 0x0F)
+    volatile_write_u8(b + 30, 0x05)
+    // nop nop (safety)
+    volatile_write_u8(b + 31, 0x90)
+    volatile_write_u8(b + 32, 0x90)
+
+    // Message at offset 40: "Hello Ring 3!\n"
+    volatile_write_u8(b + msg_off, 72)      // H
+    volatile_write_u8(b + msg_off + 1, 101)  // e
+    volatile_write_u8(b + msg_off + 2, 108)  // l
+    volatile_write_u8(b + msg_off + 3, 108)  // l
+    volatile_write_u8(b + msg_off + 4, 111)  // o
+    volatile_write_u8(b + msg_off + 5, 32)   // ' '
+    volatile_write_u8(b + msg_off + 6, 82)   // R
+    volatile_write_u8(b + msg_off + 7, 105)  // i
+    volatile_write_u8(b + msg_off + 8, 110)  // n
+    volatile_write_u8(b + msg_off + 9, 103)  // g
+    volatile_write_u8(b + msg_off + 10, 32)  // ' '
+    volatile_write_u8(b + msg_off + 11, 51)  // 3
+    volatile_write_u8(b + msg_off + 12, 33)  // !
+    volatile_write_u8(b + msg_off + 13, 10)  // \n
+    // Force-set TSS.RSP0 right before transition
+    volatile_write_u64(0x6FC04, 0x7F0000)
+    println("[RING3] TSS.RSP0 = 0x7F0000")
+    println("[RING3] IRETQ to user HLT...")
+    iretq_to_user(0x2000000, 0x2F00FF0, 0x202)
+    println("[RING3] Returned (should not reach here)")
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
