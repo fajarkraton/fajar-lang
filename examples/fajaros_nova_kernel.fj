@@ -163,18 +163,24 @@ const PAGE_NX: i64 = 0  // Would be bit 63, needs EFER.NXE
     let pd_idx = (virt >> 21) & 0x1FF
     let pt_idx = (virt >> 12) & 0x1FF
 
+    // Propagate USER flag to intermediate entries if requested
+    let user_flag = flags & PAGE_USER
+
     // Get or create PDPT
     let mut pdpt_addr: i64 = 0
     let pml4_entry = page_table_entry(PML4_BASE, pml4_idx)
     if (pml4_entry & PAGE_PRESENT) != 0 {
         pdpt_addr = pml4_entry & 0xFFFFF000
+        // Add USER flag to existing entry if needed
+        if user_flag != 0 && (pml4_entry & PAGE_USER) == 0 {
+            page_table_set(PML4_BASE, pml4_idx, pml4_entry | PAGE_USER)
+        }
     } else {
         pdpt_addr = frame_alloc()
         if pdpt_addr == -1 { return }
-        // Zero the new table
         let mut i: i64 = 0
         while i < 4096 { volatile_write_u8(pdpt_addr + i, 0); i = i + 1 }
-        page_table_set(PML4_BASE, pml4_idx, pdpt_addr | PAGE_PRESENT | PAGE_WRITABLE)
+        page_table_set(PML4_BASE, pml4_idx, pdpt_addr | PAGE_PRESENT | PAGE_WRITABLE | user_flag)
     }
 
     // Get or create PD
@@ -182,18 +188,24 @@ const PAGE_NX: i64 = 0  // Would be bit 63, needs EFER.NXE
     let pdpt_entry = page_table_entry(pdpt_addr, pdpt_idx)
     if (pdpt_entry & PAGE_PRESENT) != 0 {
         pd_addr = pdpt_entry & 0xFFFFF000
+        if user_flag != 0 && (pdpt_entry & PAGE_USER) == 0 {
+            page_table_set(pdpt_addr, pdpt_idx, pdpt_entry | PAGE_USER)
+        }
     } else {
         pd_addr = frame_alloc()
         if pd_addr == -1 { return }
         let mut i: i64 = 0
         while i < 4096 { volatile_write_u8(pd_addr + i, 0); i = i + 1 }
-        page_table_set(pdpt_addr, pdpt_idx, pd_addr | PAGE_PRESENT | PAGE_WRITABLE)
+        page_table_set(pdpt_addr, pdpt_idx, pd_addr | PAGE_PRESENT | PAGE_WRITABLE | user_flag)
     }
 
-    // Check if PD entry is a 2MB huge page (don't split existing huge pages)
+    // Check if PD entry is a 2MB huge page
     let pd_entry = page_table_entry(pd_addr, pd_idx)
     if (pd_entry & PAGE_HUGE) != 0 {
-        // Already mapped as 2MB page, skip (don't split)
+        // Add USER flag to existing huge page if needed
+        if user_flag != 0 && (pd_entry & PAGE_USER) == 0 {
+            page_table_set(pd_addr, pd_idx, pd_entry | PAGE_USER)
+        }
         return
     }
 
@@ -4399,16 +4411,21 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
 }
 
 @kernel fn cmd_run_hello() {
-    cprintln("Installing user hello program at 0x2000000...", YELLOW_ON_BLACK)
+    cprintln("Installing user hello program...", YELLOW_ON_BLACK)
     user_install_hello_v2()
-    cprintln("  Code: 32 bytes at 0x2000000", WHITE_ON_BLACK)
+    cprintln("  Code:  32 bytes at 0x2000000", WHITE_ON_BLACK)
     cprintln("  Stack: 4KB at 0x2FF0000", WHITE_ON_BLACK)
     cprintln("  Entry: 0x2000000", WHITE_ON_BLACK)
-    cprintln("  Syscalls: WRITE(1) + EXIT(60)", WHITE_ON_BLACK)
-    cprintln("", WHITE_ON_BLACK)
-    cprintln("  Note: SYSCALL entry point (LSTAR MSR) must be configured", YELLOW_ON_BLACK)
-    cprintln("  for Ring 3 transition to work. Currently deferred.", YELLOW_ON_BLACK)
-    cprintln("  Use: iretq_to_user(0x2000000, 0x2FF0FF0, 0x202)", WHITE_ON_BLACK)
+    cprintln("  Transitioning to Ring 3...", YELLOW_ON_BLACK)
+    println("[RING3] Entering user mode")
+
+    // Transition to Ring 3 via IRETQ
+    // User code will SYSCALL(SYS_WRITE) → serial output → SYSCALL(SYS_EXIT) → halt
+    iretq_to_user(USER_CODE_BASE, USER_STACK_BASE + 0xFF0, 0x202)
+
+    // We reach here only if user program returns (SYS_EXIT halts, so we won't)
+    println("[RING3] User program returned")
+    cprintln("  User program completed", GREEN_ON_BLACK)
 }
 
 // ── Login Shell (Sprint N4) ──
@@ -8634,6 +8651,9 @@ const FS_ENTRY_SIZE: i64 = 128
     // Configure SYSCALL/SYSRET for Ring 3
     syscall_setup()
     println("[SYSCALL] Entry stub + MSRs configured")
+
+    // Ring 3 ready — use 'runhello' command to test
+    println("[RING3] User mode infrastructure ready (use 'runhello')")
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
