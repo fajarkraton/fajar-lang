@@ -1316,8 +1316,33 @@ fn cmd_build_native(
     let generated_script_path;
     let script_path = if let Some(ls) = linker_script {
         Some(std::path::PathBuf::from(ls))
-    } else if target.is_bare_metal || target.is_user_mode {
-        // Auto-generate a default linker script for bare-metal/user-mode targets
+    } else if target.is_user_mode {
+        // User-mode: simple linker script at user address (no Multiboot2)
+        let user_script = String::from(
+            "ENTRY(_start)\n\
+             SECTIONS {\n\
+               . = 0x400000;\n\
+               .text : { *(.text*) }\n\
+               .rodata : { *(.rodata*) }\n\
+               .data : { *(.data*) }\n\
+               __bss_start = .;\n\
+               .bss : { *(.bss*) }\n\
+               __bss_end = .;\n\
+               __data_start = ADDR(.data);\n\
+               /DISCARD/ : { *(.multiboot_header) *(.comment) *(.note*) }\n\
+             }\n"
+        );
+        generated_script_path = obj_path.with_extension("ld");
+        match std::fs::write(&generated_script_path, &user_script) {
+            Ok(_) => Some(generated_script_path.clone()),
+            Err(e) => {
+                eprintln!("error: cannot write user linker script: {e}");
+                let _ = std::fs::remove_file(&obj_path);
+                return ExitCode::from(EXIT_COMPILE);
+            }
+        }
+    } else if target.is_bare_metal {
+        // Auto-generate a default linker script for bare-metal targets
         let config = fajar_lang::codegen::linker::LinkerConfig::for_target(&target);
         let script_result = if target.arch == fajar_lang::codegen::target::Arch::X86_64 {
             fajar_lang::codegen::linker::generate_x86_64_linker_script(&config)
