@@ -3133,7 +3133,50 @@ __isr_13:
 
 /* Vector 14: #PF Page Fault (has error code) */
 __isr_14:
-    /* CPU pushes error code */
+    /* Stack: [error_code] [rip] [cs] [rflags] [rsp] [ss] */
+    /* Check if fault from Ring 3 (CS RPL == 3) */
+    push    rax
+    mov     rax, QWORD PTR [rsp + 16]  /* CS from exception frame (after push rax + error_code) */
+    and     rax, 3                      /* RPL bits */
+    cmp     rax, 3
+    pop     rax
+    jne     .Lpf_kernel                 /* kernel fault → panic */
+
+    /* User-mode page fault: kill process, return to kernel */
+    /* Print "[PF-KILL]" to serial */
+    push    rdx
+    push    rax
+    mov     dx, 0x3F8
+    mov     al, '['; out dx, al
+    mov     al, 'P'; out dx, al
+    mov     al, 'F'; out dx, al
+    mov     al, '-'; out dx, al
+    mov     al, 'K'; out dx, al
+    mov     al, 'I'; out dx, al
+    mov     al, 'L'; out dx, al
+    mov     al, 'L'; out dx, al
+    mov     al, ']'; out dx, al
+    mov     al, 0x0A; out dx, al
+    pop     rax
+    pop     rdx
+
+    /* Mark current process as dead */
+    push    rax
+    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    shl     rax, 8
+    add     rax, 0x600000
+    mov     QWORD PTR [rax + 8], 0     /* state = FREE */
+    pop     rax
+
+    /* Remove error code from stack */
+    add     rsp, 8
+
+    /* Restore kernel state: load kernel RSP and return to shell */
+    mov     rsp, QWORD PTR [0x652020]  /* saved kernel RSP */
+    ret                                 /* return to after iretq_to_user */
+
+.Lpf_kernel:
+    /* Kernel page fault — fatal */
     push    14
     jmp     __isr_common
 
@@ -3232,11 +3275,13 @@ __isr_timer:
     /* Increment tick counter */
     lock add QWORD PTR [rip + __timer_ticks], 1
 
-    /* Save current process RSP */
+    /* Save current process RSP + CR3 */
     mov     rax, QWORD PTR [0x6FE00]   /* current pid */
     shl     rax, 8                      /* pid * 256 */
     add     rax, 0x600000               /* + table base */
     mov     QWORD PTR [rax + 16], rsp  /* save rsp */
+    mov     rdx, cr3
+    mov     QWORD PTR [rax + 40], rdx  /* save cr3 (page table) */
     /* Increment current process ticks */
     add     QWORD PTR [rax + 32], 1
 
@@ -3281,8 +3326,13 @@ __isr_timer:
     add     rax, 0x600000
     mov     QWORD PTR [rax + 8], 2     /* state = running */
 
-    /* Restore process RSP */
+    /* Restore process RSP + CR3 */
     mov     rsp, QWORD PTR [rax + 16]  /* restore rsp */
+    mov     rdx, QWORD PTR [rax + 40]  /* load saved cr3 */
+    test    rdx, rdx                    /* if cr3 != 0, switch page table */
+    jz      .Lsched_no_cr3
+    mov     cr3, rdx                    /* switch page table (TLB flush) */
+.Lsched_no_cr3:
 
     /* Update TSS.RSP0 for Ring 3→0 transitions */
     /* Each process has a kernel stack at 0x700000 + pid*0x4000 + 0x3FF0 */

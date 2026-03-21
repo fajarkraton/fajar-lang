@@ -249,6 +249,79 @@ const PAGE_NX: i64 = 0  // Would be bit 63, needs EFER.NXE
     invlpg(virt)
 }
 
+// ── Per-Process Page Tables (Phase 3) ──
+
+@kernel fn clone_kernel_pml4() -> i64 {
+    // Allocate a new PML4 page and copy kernel entries from the shared PML4
+    let new_pml4 = frame_alloc()
+    if new_pml4 == -1 { return -1 }
+
+    // Zero the new PML4
+    let mut i: i64 = 0
+    while i < 4096 { volatile_write_u8(new_pml4 + i, 0); i = i + 1 }
+
+    // Copy all entries from kernel PML4 (identity map + kernel pages)
+    // PML4 has 512 entries × 8 bytes = 4096 bytes
+    i = 0
+    while i < 512 {
+        let entry = page_table_entry(PML4_BASE, i)
+        if entry != 0 {
+            page_table_set(new_pml4, i, entry)
+        }
+        i = i + 1
+    }
+
+    new_pml4
+}
+
+@kernel fn sched_spawn_user(code_addr: i64, stack_addr: i64) -> i64 {
+    // Spawn a Ring 3 process with its own page table
+    let mut pid: i64 = -1
+    let mut i: i64 = 1
+    while i < 16 && pid == -1 {
+        if volatile_read(0x600000 + i * 256 + 8) == 0 { pid = i }
+        i = i + 1
+    }
+    if pid == -1 { return -1 }
+
+    // Clone kernel page tables for this process
+    let pml4 = clone_kernel_pml4()
+    if pml4 == -1 { return -2 }
+
+    // Allocate process kernel stack
+    let kstack_base = 0x700000 + pid * 0x4000
+    let kstack_top = kstack_base + 0x3FF0
+    let mut pg: i64 = kstack_base
+    while pg < kstack_base + 0x4000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // Build fake interrupt frame for Ring 3 process
+    let mut sp = kstack_top
+
+    // IRETQ frame: Ring 3
+    sp = sp - 8; volatile_write_u64(sp, 0x1B)         // SS = user data (0x18 | RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, stack_addr)    // RSP = user stack
+    sp = sp - 8; volatile_write_u64(sp, 0x202)        // RFLAGS (IF=1)
+    sp = sp - 8; volatile_write_u64(sp, 0x23)         // CS = user code (0x20 | RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, code_addr)    // RIP = user entry
+
+    // 15 GPRs (zeroed)
+    let mut r: i64 = 0
+    while r < 15 { sp = sp - 8; volatile_write_u64(sp, 0); r = r + 1 }
+
+    // Set process table entry
+    let base = 0x600000 + pid * 256
+    volatile_write(base + 8, 1)      // state = READY
+    volatile_write(base + 16, sp)    // saved RSP
+    volatile_write(base + 32, 0)     // ticks = 0
+    volatile_write(base + 40, pml4)  // CR3 = per-process page table
+
+    pid
+}
+
 // ═══════════════════════════════════════════════
 // Memory Commands
 // ═══════════════════════════════════════════════
@@ -10661,7 +10734,8 @@ const FS_ENTRY_SIZE: i64 = 128
     while i < 4096 { volatile_write(0x600000 + i, 0); i = i + 8 }
     volatile_write(0x6FE08, 0)
     set_current_pid(0)
-    volatile_write(0x600000 + 8, 2)
+    volatile_write(0x600000 + 8, 2)       // PID 0 state = running
+    volatile_write(0x600000 + 40, PML4_BASE) // PID 0 CR3 = kernel PML4
     volatile_write(0x6FBF0, 0)
     volatile_write(0x6FBF8, 0)
 
