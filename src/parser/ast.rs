@@ -58,6 +58,8 @@ pub enum Item {
     TraitDef(TraitDef),
     /// Constant definition: `const NAME: Type = value`
     ConstDef(ConstDef),
+    /// Static variable definition: `static mut NAME: Type = value`
+    StaticDef(StaticDef),
     /// Use declaration: `use path::to::item`
     UseDecl(UseDecl),
     /// Module declaration: `mod name { items }`
@@ -371,6 +373,30 @@ pub struct ConstDef {
     /// Constant type.
     pub ty: TypeExpr,
     /// Constant value.
+    pub value: Box<Expr>,
+    /// Source span.
+    pub span: Span,
+}
+
+/// A static mutable variable definition: `static mut NAME: TYPE = VALUE`.
+///
+/// Static variables are global mutable state, accessible from any function.
+/// In bare-metal mode, they are placed in the `.data` or `.bss` section.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaticDef {
+    /// Whether the static is declared `pub`.
+    pub is_pub: bool,
+    /// Whether the static is mutable (`static mut`).
+    pub is_mut: bool,
+    /// Doc comment lines.
+    pub doc_comment: Option<String>,
+    /// Optional annotation.
+    pub annotation: Option<Annotation>,
+    /// Variable name.
+    pub name: String,
+    /// Variable type.
+    pub ty: TypeExpr,
+    /// Initial value.
     pub value: Box<Expr>,
     /// Source span.
     pub span: Span,

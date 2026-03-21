@@ -6344,3 +6344,47 @@ fn const_fn_bitwise_ops() {
     let out = eval_output(src);
     assert_eq!(out, vec!["5", "15"]);
 }
+
+// ── static mut tests ──
+
+#[test]
+fn static_mut_basic() {
+    let src = r#"
+        static mut COUNTER: i64 = 0
+        fn increment() { COUNTER = COUNTER + 1 }
+        fn main() -> void {
+            increment()
+            increment()
+            increment()
+            println(COUNTER)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
+
+#[test]
+fn static_mut_default_type() {
+    let src = r#"
+        static mut X = 42
+        fn main() -> void {
+            println(X)
+            X = 100
+            println(X)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "100"]);
+}
+
+#[test]
+fn static_immutable() {
+    let src = r#"
+        static PI: f64 = 3.14159
+        fn main() -> void {
+            println(PI)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3.14159"]);
+}

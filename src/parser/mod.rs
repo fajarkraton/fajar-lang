@@ -545,6 +545,34 @@ impl Parser {
                     Ok(Item::ConstDef(cd))
                 }
             }
+            TokenKind::Static => {
+                // static [mut] NAME[: TYPE] = VALUE
+                let start = self.peek().span.start;
+                self.advance(); // consume `static`
+                let is_mut = if self.eat(&TokenKind::Mut) { true } else { false };
+                let (name, name_span) = self.expect_ident()?;
+                let ty = if self.eat(&TokenKind::Colon) {
+                    self.parse_type_expr()?
+                } else {
+                    TypeExpr::Simple { name: "i64".to_string(), span: name_span }
+                };
+                self.expect(&TokenKind::Eq)?;
+                let value = Box::new(self.parse_expr(0)?);
+                let end = value.span().end;
+                self.eat_semi();
+                let mut sd = StaticDef {
+                    is_pub,
+                    is_mut,
+                    doc_comment: None,
+                    annotation,
+                    name,
+                    ty,
+                    value,
+                    span: Span::new(start, end),
+                };
+                sd.doc_comment = doc_comment;
+                Ok(Item::StaticDef(sd))
+            }
             TokenKind::Use => Ok(Item::UseDecl(self.parse_use_decl()?)),
             TokenKind::Mod => Ok(Item::ModDecl(self.parse_mod_decl()?)),
             TokenKind::Extern => Ok(Item::ExternFn(self.parse_extern_fn(annotation)?)),

@@ -989,6 +989,12 @@ impl Interpreter {
                 self.env.borrow_mut().define(cdef.name.clone(), val);
                 Ok(Value::Null)
             }
+            Item::StaticDef(sdef) => {
+                // Static mut: define as mutable global variable
+                let val = self.eval_expr(&sdef.value)?;
+                self.env.borrow_mut().define(sdef.name.clone(), val);
+                Ok(Value::Null)
+            }
             Item::Stmt(stmt) => self.eval_stmt(stmt),
             Item::ImplBlock(impl_block) => {
                 self.eval_impl_block(impl_block)?;

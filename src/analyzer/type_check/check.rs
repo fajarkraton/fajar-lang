@@ -26,6 +26,10 @@ impl TypeChecker {
                 self.check_fn_def(fndef);
             }
             Item::ConstDef(cdef) => self.check_const_def(cdef),
+            Item::StaticDef(sdef) => {
+                // Treat static mut like a const def for type checking
+                self.check_expr(&sdef.value);
+            }
             Item::ImplBlock(impl_block) => {
                 for method in &impl_block.methods {
                     self.check_fn_def(method);

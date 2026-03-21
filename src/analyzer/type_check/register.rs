@@ -1319,6 +1319,21 @@ impl TypeChecker {
                     used: false,
                 });
             }
+            Item::StaticDef(sdef) => {
+                let is_inferred = matches!(&sdef.ty, TypeExpr::Simple { name, .. } if name == "_");
+                let ty = if is_inferred {
+                    self.check_expr(&sdef.value)
+                } else {
+                    self.resolve_type(&sdef.ty)
+                };
+                self.symbols.define(Symbol {
+                    name: sdef.name.clone(),
+                    ty,
+                    mutable: sdef.is_mut,
+                    span: sdef.span,
+                    used: false,
+                });
+            }
             Item::ImplBlock(impl_block) => {
                 self.register_impl_block(impl_block);
             }

@@ -130,6 +130,8 @@ pub enum TokenKind {
     Type,
     /// `const`
     Const,
+    /// `static`
+    Static,
     /// `dyn`
     Dyn,
 
@@ -440,6 +442,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Trait => write!(f, "trait"),
             TokenKind::Type => write!(f, "type"),
             TokenKind::Const => write!(f, "const"),
+            TokenKind::Static => write!(f, "static"),
             TokenKind::Dyn => write!(f, "dyn"),
             TokenKind::Use => write!(f, "use"),
             TokenKind::Mod => write!(f, "mod"),
@@ -606,6 +609,7 @@ pub static KEYWORDS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::new(
     m.insert("trait", TokenKind::Trait);
     m.insert("type", TokenKind::Type);
     m.insert("const", TokenKind::Const);
+    m.insert("static", TokenKind::Static);
     m.insert("dyn", TokenKind::Dyn);
     // Module
     m.insert("use", TokenKind::Use);

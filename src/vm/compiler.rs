@@ -107,6 +107,18 @@ impl Compiler {
             Item::UnionDef(_) => {}  // Registered similarly to struct
             Item::EnumDef(e) => self.compile_enum_def(e),
             Item::ConstDef(c) => self.compile_const_def(c),
+            Item::StaticDef(s) => {
+                // For VM, treat static mut like a const def
+                self.compile_const_def(&ConstDef {
+                    is_pub: s.is_pub,
+                    doc_comment: s.doc_comment.clone(),
+                    annotation: s.annotation.clone(),
+                    name: s.name.clone(),
+                    ty: s.ty.clone(),
+                    value: s.value.clone(),
+                    span: s.span,
+                });
+            }
             Item::Stmt(stmt) => self.compile_stmt(stmt),
             Item::ImplBlock(imp) => {
                 for method in &imp.methods {

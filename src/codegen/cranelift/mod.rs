@@ -4649,6 +4649,11 @@ impl CraneliftCompiler {
                         }
                     }
                 }
+                Item::StaticDef(sdef) => {
+                    // Treat static mut like const for codegen
+                    self.const_defs
+                        .push((sdef.name.clone(), *sdef.value.clone(), sdef.ty.clone()));
+                }
                 Item::ModDecl(mdecl) => {
                     if let Some(ref body) = mdecl.body {
                         for mod_item in body {
@@ -11245,6 +11250,11 @@ impl ObjectCompiler {
                             }
                         }
                     }
+                }
+                Item::StaticDef(sdef) => {
+                    // Treat static mut like const for codegen
+                    self.const_defs
+                        .push((sdef.name.clone(), *sdef.value.clone(), sdef.ty.clone()));
                 }
                 Item::ModDecl(mdecl) => {
                     if let Some(ref body) = mdecl.body {
