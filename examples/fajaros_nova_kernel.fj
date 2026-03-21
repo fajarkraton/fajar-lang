@@ -6413,6 +6413,12 @@ const PROG_ENTRY_SIZE: i64 = 64
     prog_register(2, 102, 97, 106, 97, 0x2080000, 48) // "faja"(r)
 }
 
+// "Deferred run" pattern: cmd_run_program sets a flag + address,
+// the shell loop in kernel_main calls iretq_to_user directly.
+// This avoids the callee-save register corruption issue when
+// iretq_to_user is called from a nested function.
+const RUN_PENDING: i64 = 0x652040  // +0: pending (1=run), +8: code_addr, +16: stack_addr
+
 @kernel fn cmd_run_program(slot: i64) {
     if slot < 0 || slot >= PROG_MAX { return }
     let base = PROG_REGISTRY + slot * PROG_ENTRY_SIZE
@@ -6422,15 +6428,10 @@ const PROG_ENTRY_SIZE: i64 = 64
         return
     }
     let code_addr = volatile_read_u64(base + 16)
-
-    // Debug: verify code_addr
-    println("[RUN] code_addr read from registry")
-
-    // Set TSS.RSP0 for kernel stack on SYSCALL return
-    volatile_write_u64(0x6FC04, 0x7F0000)
-
-    // IRETQ to user mode
-    iretq_to_user(code_addr, code_addr + 0xF00FF0, 0x202)
+    // Set deferred run: kernel_main's shell loop will execute this
+    volatile_write_u64(RUN_PENDING, 1)
+    volatile_write_u64(RUN_PENDING + 8, code_addr)
+    volatile_write_u64(RUN_PENDING + 16, code_addr + 0xF00FF0)
 }
 
 @kernel fn cmd_programs() {
@@ -10672,11 +10673,23 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Run hello directly (cmd_run_program has stack depth issue, TODO)
-    println("[RING3] Running hello (Ring 3 → kernel return test)...")
-    volatile_write_u64(0x6FC04, 0x7F0000)
-    iretq_to_user(0x2040000, 0x2F40FF0, 0x202)
-    println("[RING3] Ring 3 program returned to kernel!")
+    // Test all 3 programs via deferred run pattern
+    // Note: iretq_to_user zeroes all GPRs, so loop counter must be in volatile memory
+    volatile_write_u64(0x652060, 0)  // test_slot counter
+    while volatile_read_u64(0x652060) < 3 {
+        let ts = volatile_read_u64(0x652060)
+        cmd_run_program(ts)
+        if volatile_read_u64(RUN_PENDING) == 1 {
+            volatile_write_u64(RUN_PENDING, 0)
+            let run_code = volatile_read_u64(RUN_PENDING + 8)
+            let run_stack = volatile_read_u64(RUN_PENDING + 16)
+            volatile_write_u64(0x6FC04, 0x7F0000)
+            iretq_to_user(run_code, run_stack, 0x202)
+            // SYS_EXIT returns here — GPRs zeroed, only RSP restored
+        }
+        volatile_write_u64(0x652060, volatile_read_u64(0x652060) + 1)
+    }
+    println("[RING3] All 3 programs executed and returned to kernel!")
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
@@ -10748,6 +10761,15 @@ const FS_ENTRY_SIZE: i64 = 128
                     console_putchar(10, WHITE_ON_BLACK)
                     history_push()
                     dispatch_command()
+                    // Check for deferred user program run
+                    if volatile_read_u64(RUN_PENDING) == 1 {
+                        volatile_write_u64(RUN_PENDING, 0)
+                        let run_code = volatile_read_u64(RUN_PENDING + 8)
+                        let run_stack = volatile_read_u64(RUN_PENDING + 16)
+                        volatile_write_u64(0x6FC04, 0x7F0000) // TSS RSP0
+                        iretq_to_user(run_code, run_stack, 0x202)
+                        // SYS_EXIT returns here via RSP restore
+                    }
                     cmdbuf_clear()
                     cprint("nova> ", GREEN_ON_BLACK)
                 } else if ascii == 8 {
