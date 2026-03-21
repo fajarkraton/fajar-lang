@@ -2974,6 +2974,12 @@ const VRING_DESC_F_WRITE: i64 = 2  // buffer is write-only (for device → drive
     // Store our tracking indices
     net_state_write(64, VQ_NUM_ENTRIES)  // rx_avail_idx = N (we filled N entries)
     net_state_write(80, 0)               // rx_used_last = 0
+
+    // CRITICAL: Notify the device that RX buffers are available (kick RX queue 0)
+    let io_base = net_state_read(56)
+    if io_base != 0 {
+        port_outw(io_base + 0x10, 0) // Notify queue 0 (RX)
+    }
 }
 
 @kernel fn net_tx_packet(data: i64, len: i64) -> i64 {
@@ -10906,6 +10912,13 @@ const FS_ENTRY_SIZE: i64 = 128
     // Install user programs
     prog_install_all()
     println("[RING3] 3 user programs installed")
+
+    // Network status: virtio-net TX works, RX needs investigation
+    // (ARP request sent but no reply received — used ring not advancing)
+    // TODO: debug virtio RX descriptor/used ring alignment
+    if net_state_read(56) != 0 {
+        println("[NET] Virtio-net TX active (RX pending investigation)")
+    }
 
     // Spawn init process (PID 1) — monitors system health
     let init_pid = sched_spawn_kernel(fn_addr("init_process"))
