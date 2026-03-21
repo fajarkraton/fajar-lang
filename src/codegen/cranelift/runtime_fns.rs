@@ -10,6 +10,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use super::runtime_bare;
+use super::runtime_user;
 
 // ═══════════════════════════════════════════════════════════════════════
 // I/O: Integer, Float, Bool, String print
@@ -7538,6 +7539,19 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_memcmp_buf" => Some(runtime_bare::fj_rt_bare_memcmp_buf as *const u8),
         "fj_rt_bare_memcpy_buf" => Some(runtime_bare::fj_rt_bare_memcpy_buf as *const u8),
         "fj_rt_bare_memset_buf" => Some(runtime_bare::fj_rt_bare_memset_buf as *const u8),
+        // User-mode runtime (for @safe services via x86_64-user target)
+        "fj_rt_user_print" => Some(runtime_user::fj_rt_user_print as *const u8),
+        "fj_rt_user_print_i64" => Some(runtime_user::fj_rt_user_print_i64 as *const u8),
+        "fj_rt_user_println" => Some(runtime_user::fj_rt_user_println as *const u8),
+        "fj_rt_user_exit" => Some(runtime_user::fj_rt_user_exit as *const u8),
+        "fj_rt_user_getpid" => Some(runtime_user::fj_rt_user_getpid as *const u8),
+        "fj_rt_user_yield" => Some(runtime_user::fj_rt_user_yield as *const u8),
+        "fj_rt_user_read" => Some(runtime_user::fj_rt_user_read as *const u8),
+        "fj_rt_user_ipc_send" => Some(runtime_user::fj_rt_user_ipc_send as *const u8),
+        "fj_rt_user_ipc_recv" => Some(runtime_user::fj_rt_user_ipc_recv as *const u8),
+        "fj_rt_user_ipc_call" => Some(runtime_user::fj_rt_user_ipc_call as *const u8),
+        "fj_rt_user_ipc_reply" => Some(runtime_user::fj_rt_user_ipc_reply as *const u8),
+        "fj_rt_user_mmap" => Some(runtime_user::fj_rt_user_mmap as *const u8),
         _ => None,
     }
 }

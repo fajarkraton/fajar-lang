@@ -1442,8 +1442,101 @@ fn cmd_build_native(
     let mut link_cmd = std::process::Command::new(&linker);
     link_cmd.arg(&obj_path).arg("-o").arg(&bin_path);
 
-    // Bare-metal startup assembly object (assembled alongside the main .o)
-    let startup_obj_path = if target.is_bare_metal {
+    // User-mode or bare-metal startup assembly
+    let startup_obj_path = if target.is_user_mode {
+        // User-mode: provide syscall-based runtime stubs
+        let startup_s = obj_path.with_extension("start.S");
+        let startup_o = obj_path.with_extension("start.o");
+
+        let user_asm = r#"
+.intel_syntax noprefix
+.text
+
+/* User-mode println: SYS_WRITE(fd=1, buf=rdi, len=rsi) */
+.global fj_rt_bare_println
+.type fj_rt_bare_println, @function
+fj_rt_bare_println:
+    mov     rax, 1          /* SYS_WRITE */
+    mov     rdx, rsi        /* len → arg2 */
+    mov     rsi, rdi        /* buf → arg1 */
+    mov     rdi, 1          /* fd=stdout → arg0 */
+    syscall
+    ret
+.size fj_rt_bare_println, . - fj_rt_bare_println
+
+/* User-mode print_i64: convert to decimal + SYS_WRITE */
+.global fj_rt_bare_print_i64
+.type fj_rt_bare_print_i64, @function
+fj_rt_bare_print_i64:
+    push    rbx
+    push    r12
+    sub     rsp, 24
+    mov     r12, rdi        /* save value */
+    lea     rbx, [rsp + 20] /* end of buffer */
+    mov     byte ptr [rbx], 0x0A  /* newline */
+    cmp     r12, 0
+    je      .Lpi_zero
+    mov     rax, r12
+    test    rax, rax
+    jns     .Lpi_loop
+    neg     rax
+.Lpi_loop:
+    xor     edx, edx
+    mov     rcx, 10
+    div     rcx
+    add     dl, '0'
+    dec     rbx
+    mov     [rbx], dl
+    test    rax, rax
+    jnz     .Lpi_loop
+    test    r12, r12
+    jns     .Lpi_write
+    dec     rbx
+    mov     byte ptr [rbx], '-'
+    jmp     .Lpi_write
+.Lpi_zero:
+    dec     rbx
+    mov     byte ptr [rbx], '0'
+.Lpi_write:
+    mov     rax, 1          /* SYS_WRITE */
+    mov     rdi, 1          /* stdout */
+    mov     rsi, rbx        /* buf */
+    lea     rdx, [rsp + 21]
+    sub     rdx, rbx        /* len */
+    syscall
+    add     rsp, 24
+    pop     r12
+    pop     rbx
+    ret
+.size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64
+
+/* User-mode memory fence (no-op in user space) */
+.global fj_rt_bare_memory_fence
+.type fj_rt_bare_memory_fence, @function
+fj_rt_bare_memory_fence:
+    mfence
+    ret
+.size fj_rt_bare_memory_fence, . - fj_rt_bare_memory_fence
+"#;
+
+        if let Err(e) = std::fs::write(&startup_s, user_asm) {
+            eprintln!("error: cannot write user startup assembly: {e}");
+        }
+        let status = std::process::Command::new("as")
+            .arg("--64")
+            .arg("-o")
+            .arg(&startup_o)
+            .arg(&startup_s)
+            .status();
+        let _ = std::fs::remove_file(&startup_s);
+        match status {
+            Ok(s) if s.success() => Some(startup_o),
+            _ => {
+                eprintln!("warning: cannot assemble user runtime (as failed)");
+                None
+            }
+        }
+    } else if target.is_bare_metal {
         use fajar_lang::codegen::target::Arch;
 
         // Find the @entry function name, default to "kernel_main"

@@ -488,6 +488,23 @@ impl TypeChecker {
             ("switch_ttbr0", vec![Type::I64], Type::Void),
             ("read_ttbr0", vec![], Type::I64),
             ("tlbi_va", vec![Type::I64], Type::Void),
+            // User-mode runtime (for @safe services)
+            ("user_print", vec![Type::I64, Type::I64], Type::I64),
+            ("user_print_i64", vec![Type::I64], Type::Void),
+            ("user_println", vec![], Type::Void),
+            ("user_exit", vec![Type::I64], Type::Void),
+            ("user_getpid", vec![], Type::I64),
+            ("user_yield", vec![], Type::Void),
+            ("user_read", vec![Type::I64, Type::I64], Type::I64),
+            ("ipc_send", vec![Type::I64, Type::I64], Type::I64),
+            ("ipc_recv", vec![Type::I64, Type::I64], Type::I64),
+            ("ipc_call", vec![Type::I64, Type::I64, Type::I64], Type::I64),
+            ("ipc_reply", vec![Type::I64, Type::I64], Type::I64),
+            (
+                "user_mmap",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

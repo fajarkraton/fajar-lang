@@ -21,6 +21,7 @@ mod context;
 mod generics;
 pub mod runtime_bare;
 pub mod runtime_fns;
+pub mod runtime_user;
 #[cfg(test)]
 mod tests;
 
