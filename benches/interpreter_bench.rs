@@ -26,10 +26,10 @@ fn bench_fibonacci(c: &mut Criterion) {
             if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
         }
         fn main() -> void {
-            println(fib(20))
+            println(fib(15))
         }
     "#;
-    c.bench_function("fibonacci_20_treewalk", |b| {
+    c.bench_function("fibonacci_15_treewalk", |b| {
         b.iter(|| {
             let mut interp = Interpreter::new_capturing();
             interp.eval_source(src).unwrap();
