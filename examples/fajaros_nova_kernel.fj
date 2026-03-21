@@ -5847,26 +5847,28 @@ const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
     volatile_write_u8(b + 46, 20)  // skip to sysret
 
     // skip_write: (offset 51)
-    // cmp rax, 60 (SYS_EXIT)
+    // cmp rax, 0 (SYS_EXIT = 0, FajarOS convention)
     volatile_write_u8(b + 51, 0x48)
     volatile_write_u8(b + 52, 0x83)
     volatile_write_u8(b + 53, 0xF8)
-    volatile_write_u8(b + 54, 60)
+    volatile_write_u8(b + 54, 0)
     // jne unknown_syscall
     volatile_write_u8(b + 55, 0x75)
     volatile_write_u8(b + 56, 10) // skip 10 bytes
 
-    // SYS_EXIT: halt (user program terminated)
-    volatile_write_u8(b + 57, 0xF4) // hlt
-    volatile_write_u8(b + 58, 0xEB) // jmp -2
-    volatile_write_u8(b + 59, 0xFD)
-    // padding
-    volatile_write_u8(b + 60, 0x90)
-    volatile_write_u8(b + 61, 0x90)
-    volatile_write_u8(b + 62, 0x90)
-    volatile_write_u8(b + 63, 0x90)
-    volatile_write_u8(b + 64, 0x90)
-    volatile_write_u8(b + 65, 0x90)
+    // SYS_EXIT: restore kernel RSP from 0x652020 and RET to kernel
+    // mov rsp, [abs 0x652020] = 48 8B 24 25 20 20 65 00
+    volatile_write_u8(b + 57, 0x48)
+    volatile_write_u8(b + 58, 0x8B)
+    volatile_write_u8(b + 59, 0x24)
+    volatile_write_u8(b + 60, 0x25)
+    volatile_write_u8(b + 61, 0x20)  // addr low byte
+    volatile_write_u8(b + 62, 0x20)
+    volatile_write_u8(b + 63, 0x65)
+    volatile_write_u8(b + 64, 0x00)  // addr high byte
+    // ret
+    volatile_write_u8(b + 65, 0xC3)
+    // nop (safety)
     volatile_write_u8(b + 66, 0x90)
 
     // unknown_syscall: (offset 67)
@@ -5908,13 +5910,27 @@ const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
 }
 
 @kernel fn syscall_setup() {
-    // syscall_init() (linker builtin) already configures:
-    // - IA32_STAR: kernel CS=0x08, user CS base=0x10
-    // - IA32_LSTAR: points to __syscall_entry in linker (proper dispatch)
-    // - IA32_SFMASK: masks IF (interrupts disabled during syscall)
-    // - EFER.SCE: enables SYSCALL/SYSRET
-    // We just call syscall_init() — don't override LSTAR with the old 0x8200 stub
+    // Call linker's syscall_init — this sets STAR/LSTAR/SFMASK/EFER
     syscall_init()
+
+    // Verify LSTAR was set to linker's __syscall_entry (not 0)
+    let lstar = rdmsr(0xC0000082)
+    if lstar == 0 {
+        // Linker's syscall_init didn't set LSTAR properly
+        // Fallback: use the kernel's volatile_write stub at 0x8200
+        println("[SYSCALL] LSTAR=0, using fallback stub")
+        syscall_install_stub()
+        wrmsr(0xC0000082, SYSCALL_ENTRY_ADDR)
+        // Also set STAR, SFMASK, EFER in case syscall_init was a no-op
+        let star = (0x0013 << 48) | (0x0008 << 32)
+        wrmsr(0xC0000081, star)
+        wrmsr(0xC0000083, 0x200)
+        let efer = rdmsr(0xC0000080)
+        wrmsr(0xC0000080, efer | 1)
+        volatile_write_u64(KERNEL_RSP_SAVE, 0x7F0000)
+    } else {
+        println("[SYSCALL] Using linker dispatch")
+    }
 }
 
 @kernel fn cmd_syscall_test() {
@@ -10652,6 +10668,8 @@ const FS_ENTRY_SIZE: i64 = 128
     // Install user programs
     prog_install_all()
     println("[RING3] 3 user programs installed (type 'run0' to test)")
+    // Note: SYS_EXIT now returns to kernel via RSP restore (0x652020)
+    // User programs use SYS_EXIT=0 (FajarOS convention)
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")

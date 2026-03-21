@@ -2696,10 +2696,11 @@ fj_rt_bare_fxrstor:
 .global fj_rt_bare_iretq_to_user
 .type fj_rt_bare_iretq_to_user, @function
 fj_rt_bare_iretq_to_user:
-    /* Save kernel RSP for SYS_EXIT return path */
+    /* Save kernel RSP BEFORE pushing iretq frame */
+    /* This RSP has the return address from "call iretq_to_user" on it */
     mov     QWORD PTR [0x652020], rsp
-    /* Clear user_exited flag */
-    mov     QWORD PTR [0x652038], 0
+    mov     QWORD PTR [0x652038], 0       /* clear user_exited flag */
+    /* Build IRETQ frame: SS, RSP, RFLAGS, CS, RIP */
     push    0x1B                /* SS = User Data (0x18 | RPL=3) */
     push    rsi                 /* RSP = user stack */
     push    rdx                 /* RFLAGS */
