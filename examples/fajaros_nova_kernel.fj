@@ -4339,17 +4339,18 @@ const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
     volatile_write_u8(b + 55, 0x75)
     volatile_write_u8(b + 56, 10) // skip 10 bytes
 
-    // SYS_EXIT: halt the CPU (process terminated)
-    // Print "[EXIT]" to serial
-    volatile_write_u8(b + 57, 0xB0)  // mov al, '['
-    volatile_write_u8(b + 58, 91)
-    volatile_write_u8(b + 59, 0x66)
-    volatile_write_u8(b + 60, 0xBA)
-    volatile_write_u16(b + 61, 0x3F8)
-    volatile_write_u8(b + 63, 0xEE)  // out dx, al
-    volatile_write_u8(b + 64, 0xF4)  // hlt
-    volatile_write_u8(b + 65, 0xEB)  // jmp -2 (halt loop)
-    volatile_write_u8(b + 66, 0xFD)
+    // SYS_EXIT: halt (user program terminated)
+    volatile_write_u8(b + 57, 0xF4) // hlt
+    volatile_write_u8(b + 58, 0xEB) // jmp -2
+    volatile_write_u8(b + 59, 0xFD)
+    // padding
+    volatile_write_u8(b + 60, 0x90)
+    volatile_write_u8(b + 61, 0x90)
+    volatile_write_u8(b + 62, 0x90)
+    volatile_write_u8(b + 63, 0x90)
+    volatile_write_u8(b + 64, 0x90)
+    volatile_write_u8(b + 65, 0x90)
+    volatile_write_u8(b + 66, 0x90)
 
     // unknown_syscall: (offset 67)
     // xor rax, rax; dec rax (return -1)
@@ -8923,10 +8924,9 @@ const FS_ENTRY_SIZE: i64 = 128
     volatile_write_u8(b + msg_off + 13, 10)  // \n
     // Force-set TSS.RSP0 right before transition
     volatile_write_u64(0x6FC04, 0x7F0000)
-    println("[RING3] TSS.RSP0 = 0x7F0000")
-    println("[RING3] IRETQ to user HLT...")
+    println("[RING3] IRETQ to user mode...")
     iretq_to_user(0x2000000, 0x2F00FF0, 0x202)
-    println("[RING3] Returned (should not reach here)")
+    // Note: SYS_EXIT currently halts. Future: return to shell.
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
