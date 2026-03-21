@@ -2809,21 +2809,41 @@ const NET_PKT_BUF: i64 = 0x87C000  // Temp packet build buffer (4KB)
         return 0
     }
 
-    // Enable PCI bus master
+    // Enable PCI bus master + I/O space
     let cmd = pci_read32(0, dev, 0, 0x04)
     pci_write32(0, dev, 0, 0x04, cmd | 0x07)
 
-    // Get BAR0
+    // Get BAR0 (I/O port base for legacy virtio)
     let bar0 = pci_read32(0, dev, 0, 0x10)
-    net_state_write(56, bar0 & 0xFFFFFFF0)
+    let io_base = bar0 & 0xFFFFFFFC
+    net_state_write(56, io_base)
 
-    // Use QEMU default MAC for now (full virtio driver deferred)
-    volatile_write_u8(NET_STATE + 8, 0x52)
-    volatile_write_u8(NET_STATE + 9, 0x54)
-    volatile_write_u8(NET_STATE + 10, 0x00)
-    volatile_write_u8(NET_STATE + 11, 0x12)
-    volatile_write_u8(NET_STATE + 12, 0x34)
-    volatile_write_u8(NET_STATE + 13, 0x56)
+    // Virtio legacy device initialization sequence
+    // 1. Reset device: write 0 to status register (offset 0x12)
+    port_outb(io_base + 0x12, 0)
+    // 2. Set ACKNOWLEDGE status bit (1)
+    port_outb(io_base + 0x12, 1)
+    // 3. Set DRIVER status bit (2)
+    port_outb(io_base + 0x12, 3)
+
+    // 4. Read device features (offset 0x00, 32-bit)
+    let features = port_ind(io_base)
+    // 5. Write accepted features (offset 0x04) — accept MAC feature
+    port_outd(io_base + 4, features & 0x20) // VIRTIO_NET_F_MAC (bit 5)
+
+    // 6. Set FEATURES_OK (8)
+    port_outb(io_base + 0x12, 11) // ACKNOWLEDGE | DRIVER | FEATURES_OK
+
+    // 7. Read MAC address from device config (offset 0x14-0x19)
+    let mut i: i64 = 0
+    while i < 6 {
+        let mac_byte = port_inb(io_base + 0x14 + i) & 0xFF
+        volatile_write_u8(NET_STATE + 8 + i, mac_byte)
+        i = i + 1
+    }
+
+    // 8. Set DRIVER_OK (4) — device is live
+    port_outb(io_base + 0x12, 15) // ACKNOWLEDGE | DRIVER | FEATURES_OK | DRIVER_OK
 
     // Default IP config (QEMU user-mode networking)
     net_state_write(16, 0x0A00020F) // 10.0.2.15
