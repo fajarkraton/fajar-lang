@@ -53,7 +53,11 @@ impl TypeChecker {
     fn check_fn_def(&mut self, fndef: &FnDef) {
         let scope_kind = match &fndef.annotation {
             Some(ann) if ann.name == "kernel" => crate::analyzer::scope::ScopeKind::Kernel,
-            Some(ann) if ann.name == "device" => crate::analyzer::scope::ScopeKind::Device,
+            Some(ann) if ann.name == "device" => {
+                // Track device capability parameter for E6/E7 enforcement
+                self.current_device_cap = ann.param.clone();
+                crate::analyzer::scope::ScopeKind::Device
+            }
             Some(ann) if ann.name == "npu" => crate::analyzer::scope::ScopeKind::Npu,
             Some(ann) if ann.name == "unsafe" => crate::analyzer::scope::ScopeKind::Unsafe,
             Some(ann) if ann.name == "safe" => crate::analyzer::scope::ScopeKind::Safe,
@@ -1202,6 +1206,34 @@ impl TypeChecker {
             // @device cannot use OS builtins (raw pointer operations)
             if self.os_builtins.contains(callee_name) {
                 self.errors.push(SemanticError::RawPointerInDevice { span });
+            }
+            // E6/E7: @device("cap") restricts to capability-specific builtins
+            if let Some(ref cap) = self.current_device_cap {
+                let allowed = match cap.as_str() {
+                    "net" => &self.cap_net,
+                    "blk" => &self.cap_blk,
+                    "port_io" => &self.cap_port_io,
+                    "irq" => &self.cap_irq,
+                    "dma" => &self.cap_dma,
+                    _ => &self.cap_port_io, // unknown cap → allow port_io as default
+                };
+                // Check: if callee is a hardware builtin but NOT in the allowed set
+                if (self.cap_port_io.contains(callee_name)
+                    || self.cap_irq.contains(callee_name)
+                    || self.cap_dma.contains(callee_name)
+                    || self.cap_net.contains(callee_name)
+                    || self.cap_blk.contains(callee_name))
+                    && !allowed.contains(callee_name)
+                {
+                    self.errors.push(SemanticError::TypeMismatch {
+                        expected: format!("builtin allowed by @device(\"{cap}\") capability"),
+                        found: format!("'{}' requires different capability", callee_name),
+                        span,
+                        hint: Some(format!(
+                            "@device(\"{cap}\") cannot call '{callee_name}'; add the correct capability"
+                        )),
+                    });
+                }
             }
         }
 

@@ -1089,6 +1089,16 @@ pub struct TypeChecker {
     safe_blocked_builtins: std::collections::HashSet<String>,
     /// Structs annotated with @message (IPC message types, max 64 bytes).
     message_structs: std::collections::HashSet<String>,
+    /// Capability sets: which hardware builtins each capability allows.
+    /// @device functions have a capability parameter (e.g., @device("net"))
+    /// that restricts which builtins they can call.
+    /// Current @device capability parameter (e.g., "net", "blk", "port_io").
+    current_device_cap: Option<String>,
+    cap_port_io: std::collections::HashSet<String>,
+    cap_irq: std::collections::HashSet<String>,
+    cap_dma: std::collections::HashSet<String>,
+    cap_net: std::collections::HashSet<String>,
+    cap_blk: std::collections::HashSet<String>,
     /// Builtins that perform heap allocation (forbidden in @kernel).
     heap_builtins: std::collections::HashSet<String>,
     /// Builtins that perform tensor/ML operations (forbidden in @kernel).
@@ -1423,6 +1433,70 @@ impl TypeChecker {
             os_builtins,
             safe_blocked_builtins,
             message_structs: std::collections::HashSet::new(),
+            current_device_cap: None,
+            cap_port_io: [
+                "port_outb",
+                "port_inb",
+                "port_outw",
+                "port_inw",
+                "port_outd",
+                "port_ind",
+                "port_read",
+                "port_write",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            cap_irq: [
+                "irq_register",
+                "irq_unregister",
+                "irq_enable",
+                "irq_disable",
+                "cli",
+                "sti",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            cap_dma: [
+                "dma_alloc",
+                "dma_free",
+                "dma_config",
+                "dma_start",
+                "dma_wait",
+                "dma_status",
+                "dma_barrier",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            cap_net: [
+                "eth_init",
+                "eth_send",
+                "eth_recv",
+                "net_socket",
+                "net_bind",
+                "net_listen",
+                "net_accept",
+                "net_connect",
+                "net_send",
+                "net_recv",
+                "net_close",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            cap_blk: [
+                "nvme_init",
+                "nvme_read",
+                "nvme_write",
+                "sd_init",
+                "sd_read_block",
+                "sd_write_block",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
             heap_builtins,
             tensor_builtins,
             traits: HashMap::new(),

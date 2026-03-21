@@ -627,7 +627,25 @@ impl Parser {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
-                    TokenKind::AtDevice => ("device", None),
+                    TokenKind::AtDevice => {
+                        // Parse optional capability parameter: @device("net")
+                        let cap_param = if matches!(self.peek_kind(), TokenKind::LParen) {
+                            self.advance(); // consume '('
+                            let s = if let TokenKind::StringLit(val) = self.peek_kind().clone() {
+                                self.advance(); // consume string
+                                val
+                            } else {
+                                String::new()
+                            };
+                            if matches!(self.peek_kind(), TokenKind::RParen) {
+                                self.advance(); // consume ')'
+                            }
+                            Some(s)
+                        } else {
+                            None
+                        };
+                        ("device", cap_param)
+                    }
                     TokenKind::AtNpu => ("npu", None),
                     TokenKind::AtSafe => ("safe", None),
                     TokenKind::AtUnsafe => ("unsafe", None),
