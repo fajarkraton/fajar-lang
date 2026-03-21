@@ -130,10 +130,103 @@ impl TypeChecker {
             });
         }
 
+        // Validate const fn body: only allow const-evaluable operations
+        if fndef.is_const {
+            self.check_const_fn_body(&fndef.body, &fndef.name, fndef.span);
+        }
+
         // Restore outer NLL info (for nested functions)
         self.nll_info = outer_nll;
 
         self.emit_unused_warnings();
+    }
+
+    /// Validates that a const fn body only contains const-evaluable expressions.
+    /// Produces warnings for non-const operations (I/O, heap allocation, etc.).
+    fn check_const_fn_body(&mut self, expr: &Expr, fn_name: &str, fn_span: Span) {
+        match expr {
+            // Allowed: literals, identifiers, binary/unary ops, if/match, blocks
+            Expr::Literal { .. }
+            | Expr::Ident { .. }
+            | Expr::Grouped { .. } => {}
+            Expr::Binary { left, right, .. } => {
+                self.check_const_fn_body(left, fn_name, fn_span);
+                self.check_const_fn_body(right, fn_name, fn_span);
+            }
+            Expr::Unary { operand, .. } => {
+                self.check_const_fn_body(operand, fn_name, fn_span);
+            }
+            Expr::If { condition, then_branch, else_branch, .. } => {
+                self.check_const_fn_body(condition, fn_name, fn_span);
+                self.check_const_fn_body(then_branch, fn_name, fn_span);
+                if let Some(eb) = else_branch {
+                    self.check_const_fn_body(eb, fn_name, fn_span);
+                }
+            }
+            Expr::Block { stmts, expr: tail, .. } => {
+                for stmt in stmts {
+                    match stmt {
+                        Stmt::Let { value, .. } | Stmt::Const { value, .. } => {
+                            self.check_const_fn_body(value, fn_name, fn_span);
+                        }
+                        Stmt::Return { value, .. } => {
+                            if let Some(v) = value {
+                                self.check_const_fn_body(v, fn_name, fn_span);
+                            }
+                        }
+                        Stmt::Expr { expr, .. } => {
+                            self.check_const_fn_body(expr, fn_name, fn_span);
+                        }
+                        _ => {
+                            // While/for/assignment not allowed in const fn
+                            self.errors.push(SemanticError::TypeMismatch {
+                                expected: "const-evaluable statement".into(),
+                                found: "non-const statement in const fn".into(),
+                                span: fn_span,
+                                hint: Some(format!(
+                                    "const fn '{}' contains a statement that cannot be evaluated at compile time",
+                                    fn_name
+                                )),
+                            });
+                        }
+                    }
+                }
+                if let Some(t) = tail {
+                    self.check_const_fn_body(t, fn_name, fn_span);
+                }
+            }
+            Expr::Call { callee, args, .. } => {
+                // Allow calling other const fns (we check at codegen time if they're actually const)
+                self.check_const_fn_body(callee, fn_name, fn_span);
+                for arg in args {
+                    self.check_const_fn_body(&arg.value, fn_name, fn_span);
+                }
+            }
+            Expr::Array { elements, .. } => {
+                for elem in elements {
+                    self.check_const_fn_body(elem, fn_name, fn_span);
+                }
+            }
+            Expr::Index { object, index, .. } => {
+                self.check_const_fn_body(object, fn_name, fn_span);
+                self.check_const_fn_body(index, fn_name, fn_span);
+            }
+            // Disallowed in const fn
+            Expr::MethodCall { span, .. } => {
+                self.errors.push(SemanticError::TypeMismatch {
+                    expected: "const-evaluable expression".into(),
+                    found: "method call in const fn".into(),
+                    span: *span,
+                    hint: Some(format!(
+                        "const fn '{}': method calls cannot be evaluated at compile time",
+                        fn_name
+                    )),
+                });
+            }
+            _ => {
+                // Other expressions: allow (may fail at codegen const eval, which is OK)
+            }
+        }
     }
 
     /// Pops the current scope and emits SE009 warnings for unused variables.

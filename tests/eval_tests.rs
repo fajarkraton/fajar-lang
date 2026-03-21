@@ -6214,3 +6214,133 @@ fn const_fn_conditional() {
     let out = eval_output(src);
     assert_eq!(out, vec!["7", "10"]);
 }
+
+// ── const array tests ──
+
+#[test]
+fn const_array_literal() {
+    let src = r#"
+        const TABLE: [i64; 4] = [10, 20, 30, 40]
+        fn main() -> void {
+            println(TABLE[2])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30"]);
+}
+
+#[test]
+fn const_array_repeat() {
+    let src = r#"
+        const ZEROS: [i64; 5] = [0; 5]
+        fn main() -> void {
+            println(len(ZEROS))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn const_array_index_in_const() {
+    let src = r#"
+        const DATA: [i64; 3] = [100, 200, 300]
+        const SECOND: i64 = DATA[1]
+        fn main() -> void {
+            println(SECOND)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["200"]);
+}
+
+#[test]
+fn const_fn_with_if_and_comparison() {
+    let src = r#"
+        const fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+            if x < lo { lo }
+            else if x > hi { hi }
+            else { x }
+        }
+        fn main() -> void {
+            println(clamp(-5, 0, 100))
+            println(clamp(50, 0, 100))
+            println(clamp(999, 0, 100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "50", "100"]);
+}
+
+// ── const fn validation tests (Sprint D2) ──
+
+#[test]
+fn const_fn_valid_basic() {
+    // This should compile and run without issues
+    let src = r#"
+        const fn double(x: i64) -> i64 { x * 2 }
+        fn main() -> void {
+            println(double(21))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn const_fn_valid_recursive() {
+    let src = r#"
+        const fn factorial(n: i64) -> i64 {
+            if n <= 1 { 1 } else { n * factorial(n - 1) }
+        }
+        fn main() -> void {
+            println(factorial(5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["120"]);
+}
+
+#[test]
+fn const_fn_valid_nested_calls() {
+    let src = r#"
+        const fn add(a: i64, b: i64) -> i64 { a + b }
+        const fn mul(a: i64, b: i64) -> i64 { a * b }
+        const fn compute(x: i64) -> i64 { add(mul(x, x), x) }
+        fn main() -> void {
+            println(compute(5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30"]); // 5*5 + 5 = 30
+}
+
+#[test]
+fn const_fn_with_let_binding() {
+    let src = r#"
+        const fn abs_diff(a: i64, b: i64) -> i64 {
+            let diff = a - b
+            if diff < 0 { 0 - diff } else { diff }
+        }
+        fn main() -> void {
+            println(abs_diff(3, 7))
+            println(abs_diff(10, 4))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4", "6"]);
+}
+
+#[test]
+fn const_fn_bitwise_ops() {
+    let src = r#"
+        const fn flags(a: i64, b: i64) -> i64 { a | b }
+        const fn mask(x: i64, m: i64) -> i64 { x & m }
+        fn main() -> void {
+            println(flags(0x01, 0x04))
+            println(mask(0xFF, 0x0F))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5", "15"]);
+}

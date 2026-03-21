@@ -89,6 +89,35 @@ pub(in crate::codegen::cranelift) fn try_const_eval(
     try_const_eval_with_fns(expr, const_table, &std::collections::HashMap::new(), 0)
 }
 
+/// Try to evaluate an array expression at compile time.
+/// Returns the array elements as a Vec<i64>, or None if not const-evaluable.
+#[allow(dead_code)]
+pub(in crate::codegen::cranelift) fn try_const_eval_array(
+    expr: &Expr,
+    const_table: &std::collections::HashMap<String, i64>,
+    const_arrays: &std::collections::HashMap<String, Vec<i64>>,
+    const_fns: &std::collections::HashMap<String, &FnDef>,
+) -> Option<Vec<i64>> {
+    match expr {
+        Expr::Array { elements, .. } => {
+            let mut vals = Vec::new();
+            for elem in elements {
+                let v = try_const_eval_with_fns(elem, const_table, const_fns, 0)?;
+                vals.push(v);
+            }
+            Some(vals)
+        }
+        Expr::ArrayRepeat { value, count, .. } => {
+            let v = try_const_eval_with_fns(value, const_table, const_fns, 0)?;
+            let n = try_const_eval_with_fns(count, const_table, const_fns, 0)?;
+            if n < 0 || n > 65536 { return None; }
+            Some(vec![v; n as usize])
+        }
+        Expr::Ident { name, .. } => const_arrays.get(name).cloned(),
+        _ => None,
+    }
+}
+
 /// Extended const evaluation that supports const fn calls.
 /// `const_fns` maps function name → FnDef for functions marked `const fn`.
 /// `depth` tracks recursion to prevent infinite loops (max 128).
@@ -238,6 +267,18 @@ pub(in crate::codegen::cranelift) fn try_const_eval_with_fns(
                 try_const_eval_with_fns(t, &local_table, const_fns, depth)
             } else {
                 Some(0)
+            }
+        }
+        // Array indexing: TABLE[2] where TABLE is a const array
+        Expr::Index { object, index, .. } => {
+            let idx = try_const_eval_with_fns(index, const_table, const_fns, depth)?;
+            // Try to get the array from const_arrays (empty map for now — callers pass it separately)
+            // For now, handle inline array literals: [1,2,3][1] → 2
+            if let Expr::Array { elements, .. } = object.as_ref() {
+                if idx < 0 || idx as usize >= elements.len() { return None; }
+                try_const_eval_with_fns(&elements[idx as usize], const_table, const_fns, depth)
+            } else {
+                None
             }
         }
         _ => None,
