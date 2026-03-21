@@ -30,6 +30,8 @@ pub enum ScopeKind {
     Npu,
     /// `@unsafe` annotated block/function scope.
     Unsafe,
+    /// `@safe` annotated function scope (explicit user-space safety).
+    Safe,
     /// `async fn` body scope.
     AsyncFn,
 }
@@ -218,6 +220,12 @@ impl SymbolTable {
     /// Returns `true` if currently inside a `@npu` scope.
     pub fn is_inside_npu(&self) -> bool {
         self.scopes.iter().rev().any(|s| s.kind == ScopeKind::Npu)
+    }
+
+    /// Returns `true` if currently inside a `@safe` scope.
+    /// Functions annotated with @safe or implicitly safe (no annotation).
+    pub fn is_inside_safe(&self) -> bool {
+        self.scopes.iter().rev().any(|s| s.kind == ScopeKind::Safe)
     }
 
     /// Returns `true` if currently inside a `@unsafe` scope.

@@ -6388,3 +6388,67 @@ fn static_immutable() {
     let out = eval_output(src);
     assert_eq!(out, vec!["3.14159"]);
 }
+
+// ── @safe enforcement tests (E1+E2) ──
+
+#[test]
+fn safe_fn_rejects_port_outb() {
+    let src = r#"
+        @safe fn hack() {
+            port_outb(0x3F8, 65)
+        }
+        fn main() -> void {}
+    "#;
+    let mut interp = fajar_lang::interpreter::Interpreter::new();
+    // This should produce a semantic error, not crash
+    let result = interp.eval_source(src);
+    // In interpreter, @safe doesn't enforce (enforcement is in analyzer)
+    // But let's test the analyzer directly
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(analysis.is_err(), "@safe should reject port_outb");
+}
+
+#[test]
+fn safe_fn_rejects_volatile_write() {
+    let src = r#"
+        @safe fn hack() {
+            volatile_write_u64(0xB8000, 0)
+        }
+        fn main() -> void {}
+    "#;
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(analysis.is_err(), "@safe should reject volatile_write_u64");
+}
+
+#[test]
+fn safe_fn_allows_println() {
+    let src = r#"
+        @safe fn greet() {
+            println("Hello from @safe!")
+        }
+        fn main() -> void {
+            greet()
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hello from @safe!"]);
+}
+
+#[test]
+fn kernel_fn_allows_port_outb() {
+    // @kernel should still allow hardware access
+    let src = r#"
+        @kernel fn driver() {
+            port_outb(0x3F8, 65)
+        }
+        fn main() -> void {}
+    "#;
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(analysis.is_ok(), "@kernel should allow port_outb");
+}

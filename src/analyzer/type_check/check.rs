@@ -56,6 +56,7 @@ impl TypeChecker {
             Some(ann) if ann.name == "device" => crate::analyzer::scope::ScopeKind::Device,
             Some(ann) if ann.name == "npu" => crate::analyzer::scope::ScopeKind::Npu,
             Some(ann) if ann.name == "unsafe" => crate::analyzer::scope::ScopeKind::Unsafe,
+            Some(ann) if ann.name == "safe" => crate::analyzer::scope::ScopeKind::Safe,
             _ if fndef.is_async => crate::analyzer::scope::ScopeKind::AsyncFn,
             _ => crate::analyzer::scope::ScopeKind::Function,
         };
@@ -1228,6 +1229,24 @@ impl TypeChecker {
             // @kernel cannot call @npu functions
             if self.npu_fns.contains(callee_name) {
                 self.errors.push(SemanticError::DeviceCallInKernel { span });
+            }
+        }
+
+        // @safe context: cannot access hardware builtins (microkernel isolation)
+        let in_safe = self.symbols.is_inside_safe();
+        if in_safe {
+            // SE020: @safe cannot use hardware/OS builtins
+            if self.safe_blocked_builtins.contains(callee_name) {
+                self.errors
+                    .push(SemanticError::HardwareAccessInSafe { span });
+            }
+            // SE021: @safe cannot call @kernel functions directly
+            if self.kernel_fns.contains(callee_name) {
+                self.errors.push(SemanticError::KernelCallInSafe { span });
+            }
+            // SE021: @safe cannot call @device functions directly
+            if self.device_fns.contains(callee_name) {
+                self.errors.push(SemanticError::KernelCallInSafe { span });
             }
         }
     }

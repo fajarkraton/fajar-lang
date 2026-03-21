@@ -785,6 +785,20 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// SE020: Hardware access in @safe context (microkernel isolation).
+    #[error("SE020: hardware access not allowed in @safe context — use syscall instead")]
+    HardwareAccessInSafe {
+        /// Source location.
+        span: Span,
+    },
+
+    /// SE021: Direct @kernel function call from @safe context.
+    #[error("SE021: cannot call @kernel function from @safe context — use syscall")]
+    KernelCallInSafe {
+        /// Source location.
+        span: Span,
+    },
+
     /// KE005: Inline assembly in @safe context.
     #[error("KE005: inline assembly not allowed in @safe context")]
     AsmInSafeContext {
@@ -1002,6 +1016,8 @@ impl SemanticError {
             | SemanticError::DeviceCallInKernel { span, .. }
             | SemanticError::RawPointerInDevice { span, .. }
             | SemanticError::KernelCallInDevice { span, .. }
+            | SemanticError::HardwareAccessInSafe { span, .. }
+            | SemanticError::KernelCallInSafe { span, .. }
             | SemanticError::AsmInSafeContext { span, .. }
             | SemanticError::AsmInDeviceContext { span, .. }
             | SemanticError::AwaitOutsideAsync { span, .. }
@@ -1069,6 +1085,8 @@ pub struct TypeChecker {
     npu_fns: std::collections::HashSet<String>,
     /// Functions that are OS builtins (only callable from @kernel/@unsafe).
     os_builtins: std::collections::HashSet<String>,
+    /// Hardware builtins blocked in @safe context (microkernel isolation).
+    safe_blocked_builtins: std::collections::HashSet<String>,
     /// Builtins that perform heap allocation (forbidden in @kernel).
     heap_builtins: std::collections::HashSet<String>,
     /// Builtins that perform tensor/ML operations (forbidden in @kernel).
@@ -1295,6 +1313,50 @@ impl TypeChecker {
         .map(|s| s.to_string())
         .collect();
 
+        // @safe blocked builtins = os_builtins + volatile + CR3/CR2 + buffer LE/BE
+        // Basically: everything that accesses hardware directly
+        let mut safe_blocked_builtins = os_builtins.clone();
+        for extra in [
+            "volatile_read",
+            "volatile_write",
+            "volatile_read_u8",
+            "volatile_write_u8",
+            "volatile_read_u16",
+            "volatile_write_u16",
+            "volatile_read_u32",
+            "volatile_write_u32",
+            "volatile_read_u64",
+            "volatile_write_u64",
+            "read_cr3",
+            "write_cr3",
+            "read_cr2",
+            "write_cr4",
+            "invlpg",
+            "memory_fence",
+            "fn_addr",
+            "read_msr",
+            "write_msr",
+            "rdtsc",
+            "buffer_read_u16_le",
+            "buffer_read_u32_le",
+            "buffer_read_u64_le",
+            "buffer_write_u16_le",
+            "buffer_write_u32_le",
+            "buffer_write_u64_le",
+            "buffer_read_u16_be",
+            "buffer_read_u32_be",
+            "buffer_read_u64_be",
+            "buffer_write_u16_be",
+            "buffer_write_u32_be",
+            "buffer_write_u64_be",
+            "acpi_find_rsdp",
+            "acpi_get_cpu_count",
+            "acpi_shutdown",
+            "sleep_ms",
+        ] {
+            safe_blocked_builtins.insert(extra.to_string());
+        }
+
         let heap_builtins: std::collections::HashSet<String> = ["push", "pop", "to_string"]
             .iter()
             .map(|s| s.to_string())
@@ -1357,6 +1419,7 @@ impl TypeChecker {
             device_fns: std::collections::HashSet::new(),
             npu_fns: std::collections::HashSet::new(),
             os_builtins,
+            safe_blocked_builtins,
             heap_builtins,
             tensor_builtins,
             traits: HashMap::new(),
