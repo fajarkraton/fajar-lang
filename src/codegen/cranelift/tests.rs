@@ -15776,6 +15776,90 @@ fn native_const_arithmetic() {
     assert_eq!(compile_and_run(src), 142);
 }
 
+// ── Const fn compile-time evaluation ──
+
+#[test]
+fn native_const_fn_basic() {
+    // const fn add should be evaluated at compile time
+    let src = r#"
+        const fn add(a: i64, b: i64) -> i64 { a + b }
+        const RESULT: i64 = add(10, 32)
+        fn main() -> i64 {
+            RESULT
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_const_fn_multiply() {
+    let src = r#"
+        const fn mul(a: i64, b: i64) -> i64 { a * b }
+        const PAGE_SIZE: i64 = 4096
+        const PAGES: i64 = mul(PAGE_SIZE, 8)
+        fn main() -> i64 {
+            PAGES
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 32768);
+}
+
+#[test]
+fn native_const_fn_recursive_fib() {
+    // const fn fib should evaluate recursively at compile time
+    let src = r#"
+        const fn fib(n: i64) -> i64 {
+            if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+        }
+        const FIB10: i64 = fib(10)
+        fn main() -> i64 {
+            FIB10
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 55);
+}
+
+#[test]
+fn native_const_fn_with_const_args() {
+    // const fn using other constants as arguments
+    let src = r#"
+        const fn square(x: i64) -> i64 { x * x }
+        const BASE: i64 = 7
+        const SQ: i64 = square(BASE)
+        fn main() -> i64 {
+            SQ
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 49);
+}
+
+#[test]
+fn native_const_fn_conditional() {
+    let src = r#"
+        const fn abs(x: i64) -> i64 {
+            if x < 0 { 0 - x } else { x }
+        }
+        const VAL: i64 = abs(-42)
+        fn main() -> i64 {
+            VAL
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_const_fn_called_at_runtime() {
+    // const fn should also work as a regular function at runtime
+    let src = r#"
+        const fn add(a: i64, b: i64) -> i64 { a + b }
+        fn main() -> i64 {
+            let x = 10
+            add(x, 20)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 30);
+}
+
 // ── B4: Bare-metal _start generation ──
 
 #[test]

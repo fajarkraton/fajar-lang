@@ -6157,3 +6157,60 @@ fn s16_10_match_all_pattern_types_combined() {
     let out = eval_output(src);
     assert_eq!(out, vec!["mid", "medium"]);
 }
+
+// ── const fn tests ──
+
+#[test]
+fn const_fn_basic_arithmetic() {
+    let src = r#"
+        const fn add(a: i64, b: i64) -> i64 { a + b }
+        const RESULT: i64 = add(10, 32)
+        fn main() -> void {
+            println(RESULT)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn const_fn_recursive_fib() {
+    let src = r#"
+        const fn fib(n: i64) -> i64 {
+            if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+        }
+        fn main() -> void {
+            println(fib(10))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["55"]);
+}
+
+#[test]
+fn const_fn_used_in_const_declaration() {
+    let src = r#"
+        const fn square(x: i64) -> i64 { x * x }
+        const SQ7: i64 = square(7)
+        fn main() -> void {
+            println(SQ7)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["49"]);
+}
+
+#[test]
+fn const_fn_conditional() {
+    let src = r#"
+        const fn max(a: i64, b: i64) -> i64 {
+            if a > b { a } else { b }
+        }
+        fn main() -> void {
+            println(max(3, 7))
+            println(max(10, 5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["7", "10"]);
+}

@@ -127,6 +127,8 @@ pub struct CraneliftCompiler {
     trait_impls: HashMap<(String, String), Vec<String>>,
     /// Top-level const definitions: (name, value expr, type).
     const_defs: Vec<(String, Expr, TypeExpr)>,
+    /// Const fn definitions: fn_name → FnDef (for compile-time evaluation).
+    const_fn_defs: HashMap<String, FnDef>,
     /// Functions that return fixed-size arrays: fn_name → (array_len, elem_type).
     fn_array_returns: HashMap<String, (usize, cranelift_codegen::ir::Type)>,
     /// Functions that return strings (two return values: ptr, len).
@@ -422,6 +424,7 @@ impl CraneliftCompiler {
             trait_defs: HashMap::new(),
             trait_impls: HashMap::new(),
             const_defs: Vec::new(),
+            const_fn_defs: HashMap::new(),
             fn_array_returns: HashMap::new(),
             fn_returns_string: HashSet::new(),
             fn_returns_heap_array: HashSet::new(),
@@ -4742,6 +4745,13 @@ impl CraneliftCompiler {
             }
         }
 
+        // Collect const fn definitions for compile-time evaluation
+        for fndef in &concrete_fns {
+            if fndef.is_const {
+                self.const_fn_defs.insert(fndef.name.clone(), fndef.clone());
+            }
+        }
+
         // Collect impl blocks: mangle methods as TypeName_method_name
         for item in &program.items {
             if let Item::ImplBlock(impl_block) = item {
@@ -5601,8 +5611,12 @@ impl CraneliftCompiler {
 
             // Inject top-level const definitions as variables.
             // Try compile-time constant folding first for integer expressions.
+            // Build const fn ref table for this scope
+            let const_fn_refs: HashMap<String, &FnDef> = self.const_fn_defs.iter()
+                .map(|(k, v)| (k.clone(), v))
+                .collect();
             for (cname, cexpr, cty) in &self.const_defs {
-                let const_folded = compile::try_const_eval(cexpr, &cx.const_values);
+                let const_folded = compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
                 let val = if let Some(cv) = const_folded {
                     builder.ins().iconst(clif_types::default_int_type(), cv)
                 } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {
@@ -6241,6 +6255,8 @@ pub struct ObjectCompiler {
     trait_impls: HashMap<(String, String), Vec<String>>,
     /// Top-level const definitions: (name, value expr, type).
     const_defs: Vec<(String, Expr, TypeExpr)>,
+    /// Const fn definitions: fn_name → FnDef (for compile-time evaluation).
+    const_fn_defs: HashMap<String, FnDef>,
     /// Functions that return fixed-size arrays: fn_name → (array_len, elem_type).
     fn_array_returns: HashMap<String, (usize, cranelift_codegen::ir::Type)>,
     /// Functions that return strings (two return values: ptr, len).
@@ -6328,6 +6344,7 @@ impl ObjectCompiler {
             trait_defs: HashMap::new(),
             trait_impls: HashMap::new(),
             const_defs: Vec::new(),
+            const_fn_defs: HashMap::new(),
             fn_array_returns: HashMap::new(),
             fn_returns_string: HashSet::new(),
             fn_returns_heap_array: HashSet::new(),
@@ -6387,6 +6404,7 @@ impl ObjectCompiler {
             trait_defs: HashMap::new(),
             trait_impls: HashMap::new(),
             const_defs: Vec::new(),
+            const_fn_defs: HashMap::new(),
             fn_array_returns: HashMap::new(),
             fn_returns_string: HashSet::new(),
             fn_returns_heap_array: HashSet::new(),
@@ -11307,6 +11325,13 @@ impl ObjectCompiler {
             }
         }
 
+        // Collect const fn definitions for compile-time evaluation
+        for fndef in &concrete_fns {
+            if fndef.is_const {
+                self.const_fn_defs.insert(fndef.name.clone(), fndef.clone());
+            }
+        }
+
         // Collect impl blocks: mangle methods as TypeName_method_name
         for item in &program.items {
             if let Item::ImplBlock(impl_block) = item {
@@ -12264,8 +12289,12 @@ impl ObjectCompiler {
 
             // Inject top-level const definitions as variables.
             // Try compile-time constant folding first for integer expressions.
+            // Build const fn ref table for this scope
+            let const_fn_refs: HashMap<String, &FnDef> = self.const_fn_defs.iter()
+                .map(|(k, v)| (k.clone(), v))
+                .collect();
             for (cname, cexpr, cty) in &self.const_defs {
-                let const_folded = compile::try_const_eval(cexpr, &cx.const_values);
+                let const_folded = compile::try_const_eval_with_fns(cexpr, &cx.const_values, &const_fn_refs, 0);
                 let val = if let Some(cv) = const_folded {
                     builder.ins().iconst(clif_types::default_int_type(), cv)
                 } else if let Ok(v) = compile_expr(&mut builder, &mut cx, cexpr) {

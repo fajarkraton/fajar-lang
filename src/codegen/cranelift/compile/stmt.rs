@@ -10,7 +10,7 @@ use cranelift_module::Module;
 use super::super::clif_types;
 use super::super::context::{CodegenCtx, OwnedKind, emit_owned_cleanup, push_owned};
 use crate::codegen::CodegenError;
-use crate::parser::ast::{BinOp, Expr, LiteralKind, Stmt, TypeExpr, UnaryOp};
+use crate::parser::ast::{BinOp, Expr, FnDef, LiteralKind, Stmt, TypeExpr, UnaryOp};
 
 // Re-use sibling functions via the parent module's re-exports.
 use super::{compile_expr, compile_heap_array_init};
@@ -86,6 +86,21 @@ pub(in crate::codegen::cranelift) fn try_const_eval(
     expr: &Expr,
     const_table: &std::collections::HashMap<String, i64>,
 ) -> Option<i64> {
+    try_const_eval_with_fns(expr, const_table, &std::collections::HashMap::new(), 0)
+}
+
+/// Extended const evaluation that supports const fn calls.
+/// `const_fns` maps function name → FnDef for functions marked `const fn`.
+/// `depth` tracks recursion to prevent infinite loops (max 128).
+pub(in crate::codegen::cranelift) fn try_const_eval_with_fns(
+    expr: &Expr,
+    const_table: &std::collections::HashMap<String, i64>,
+    const_fns: &std::collections::HashMap<String, &FnDef>,
+    depth: usize,
+) -> Option<i64> {
+    if depth > 128 {
+        return None; // Recursion limit
+    }
     match expr {
         Expr::Literal {
             kind: LiteralKind::Int(n),
@@ -96,9 +111,9 @@ pub(in crate::codegen::cranelift) fn try_const_eval(
             ..
         } => Some(if *b { 1 } else { 0 }),
         Expr::Ident { name, .. } => const_table.get(name).copied(),
-        Expr::Grouped { expr, .. } => try_const_eval(expr, const_table),
+        Expr::Grouped { expr, .. } => try_const_eval_with_fns(expr, const_table, const_fns, depth),
         Expr::Unary { op, operand, .. } => {
-            let val = try_const_eval(operand, const_table)?;
+            let val = try_const_eval_with_fns(operand, const_table, const_fns, depth)?;
             match op {
                 UnaryOp::Neg => Some(-val),
                 UnaryOp::BitNot => Some(!val),
@@ -108,8 +123,8 @@ pub(in crate::codegen::cranelift) fn try_const_eval(
         Expr::Binary {
             op, left, right, ..
         } => {
-            let l = try_const_eval(left, const_table)?;
-            let r = try_const_eval(right, const_table)?;
+            let l = try_const_eval_with_fns(left, const_table, const_fns, depth)?;
+            let r = try_const_eval_with_fns(right, const_table, const_fns, depth)?;
             match op {
                 BinOp::Add => l.checked_add(r),
                 BinOp::Sub => l.checked_sub(r),
@@ -140,12 +155,95 @@ pub(in crate::codegen::cranelift) fn try_const_eval(
                         Some(l.wrapping_pow(r as u32))
                     }
                 }
+                BinOp::Eq => Some(if l == r { 1 } else { 0 }),
+                BinOp::Ne => Some(if l != r { 1 } else { 0 }),
+                BinOp::Lt => Some(if l < r { 1 } else { 0 }),
+                BinOp::Le => Some(if l <= r { 1 } else { 0 }),
+                BinOp::Gt => Some(if l > r { 1 } else { 0 }),
+                BinOp::Ge => Some(if l >= r { 1 } else { 0 }),
                 _ => None,
+            }
+        }
+        // If-expression: evaluate condition, then branch
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let cond = try_const_eval_with_fns(condition, const_table, const_fns, depth)?;
+            if cond != 0 {
+                try_const_eval_with_fns(then_branch, const_table, const_fns, depth)
+            } else if let Some(eb) = else_branch {
+                try_const_eval_with_fns(eb, const_table, const_fns, depth)
+            } else {
+                Some(0)
+            }
+        }
+        // Function call: try const fn evaluation
+        Expr::Call { callee, args, .. } => {
+            // Extract function name
+            let fn_name = match callee.as_ref() {
+                Expr::Ident { name, .. } => name.clone(),
+                _ => return None,
+            };
+            // Look up const fn definition
+            let fndef = const_fns.get(&fn_name)?;
+            if !fndef.is_const {
+                return None;
+            }
+            // Evaluate all arguments (CallArg has .value field)
+            let mut arg_vals = Vec::new();
+            for arg in args {
+                let val = try_const_eval_with_fns(&arg.value, const_table, const_fns, depth)?;
+                arg_vals.push(val);
+            }
+            if arg_vals.len() != fndef.params.len() {
+                return None;
+            }
+            // Build local const table with parameter bindings
+            let mut local_table = const_table.clone();
+            for (param, val) in fndef.params.iter().zip(arg_vals.iter()) {
+                local_table.insert(param.name.clone(), *val);
+            }
+            // Evaluate body
+            try_const_eval_with_fns(&fndef.body, &local_table, const_fns, depth + 1)
+        }
+        // Block expression: evaluate statements, return last expression
+        Expr::Block {
+            stmts,
+            expr: tail,
+            ..
+        } => {
+            let mut local_table = const_table.clone();
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { name, value, .. } | Stmt::Const { name, value, .. } => {
+                        let val = try_const_eval_with_fns(value, &local_table, const_fns, depth)?;
+                        local_table.insert(name.clone(), val);
+                    }
+                    Stmt::Return { value, .. } => {
+                        if let Some(v) = value {
+                            return try_const_eval_with_fns(v, &local_table, const_fns, depth);
+                        }
+                        return Some(0);
+                    }
+                    Stmt::Expr { expr, .. } => {
+                        try_const_eval_with_fns(expr, &local_table, const_fns, depth)?;
+                    }
+                    _ => return None, // Non-const statement
+                }
+            }
+            if let Some(t) = tail {
+                try_const_eval_with_fns(t, &local_table, const_fns, depth)
+            } else {
+                Some(0)
             }
         }
         _ => None,
     }
 }
+
 
 /// Coerces an integer value to match a declared sub-I64 integer type.
 ///
