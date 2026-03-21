@@ -3379,6 +3379,245 @@ const VQ_RX_FILL: i64 = 16  // Only pre-fill 16 RX buffers (not all 256)
     pkt_len
 }
 
+// ── UDP ──
+
+@kernel fn udp_build(src_port: i64, dst_port: i64, payload: i64, payload_len: i64) -> i64 {
+    // Build UDP header at NET_PKT_BUF + 1536
+    let buf = NET_PKT_BUF + 1536
+    let udp_len = 8 + payload_len
+    buffer_write_u16_be(buf, src_port)       // Source port
+    buffer_write_u16_be(buf + 2, dst_port)   // Destination port
+    buffer_write_u16_be(buf + 4, udp_len)    // Length (header + data)
+    buffer_write_u16_be(buf + 6, 0)          // Checksum (0 = disabled)
+    // Copy payload after header
+    let mut i: i64 = 0
+    while i < payload_len { volatile_write_u8(buf + 8 + i, volatile_read_u8(payload + i)); i = i + 1 }
+    udp_len
+}
+
+// ── DHCP Client ──
+
+const DHCP_BUF: i64 = 0x87E000  // 2KB DHCP packet buffer
+const DHCP_XID: i64 = 0xFAFA1234  // Transaction ID
+
+@kernel fn dhcp_build_discover() -> i64 {
+    // Build DHCP Discover packet at DHCP_BUF (236 + options bytes)
+    let buf = DHCP_BUF
+    let mut i: i64 = 0
+    while i < 576 { volatile_write_u8(buf + i, 0); i = i + 1 }
+
+    volatile_write_u8(buf, 1)          // op: BOOTREQUEST
+    volatile_write_u8(buf + 1, 1)      // htype: Ethernet
+    volatile_write_u8(buf + 2, 6)      // hlen: 6 bytes MAC
+    volatile_write_u8(buf + 3, 0)      // hops: 0
+    buffer_write_u32_be(buf + 4, DHCP_XID)  // xid: transaction ID
+
+    // chaddr: our MAC address (at NET_STATE + 8)
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 28 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+
+    // Magic cookie: 0x63825363
+    volatile_write_u8(buf + 236, 0x63)
+    volatile_write_u8(buf + 237, 0x82)
+    volatile_write_u8(buf + 238, 0x53)
+    volatile_write_u8(buf + 239, 0x63)
+
+    // DHCP options
+    let mut opt: i64 = 240
+    // Option 53: DHCP Message Type = 1 (Discover)
+    volatile_write_u8(buf + opt, 53); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1   // Discover
+
+    // Option 55: Parameter Request List
+    volatile_write_u8(buf + opt, 55); opt = opt + 1
+    volatile_write_u8(buf + opt, 3); opt = opt + 1   // 3 params
+    volatile_write_u8(buf + opt, 1); opt = opt + 1   // Subnet Mask
+    volatile_write_u8(buf + opt, 3); opt = opt + 1   // Router
+    volatile_write_u8(buf + opt, 6); opt = opt + 1   // DNS
+
+    // End option
+    volatile_write_u8(buf + opt, 255); opt = opt + 1
+
+    opt // total DHCP packet length
+}
+
+@kernel fn dhcp_build_request(server_ip: i64, offered_ip: i64) -> i64 {
+    let buf = DHCP_BUF
+    let mut i: i64 = 0
+    while i < 576 { volatile_write_u8(buf + i, 0); i = i + 1 }
+
+    volatile_write_u8(buf, 1)          // op: BOOTREQUEST
+    volatile_write_u8(buf + 1, 1)      // htype: Ethernet
+    volatile_write_u8(buf + 2, 6)      // hlen: 6
+    buffer_write_u32_be(buf + 4, DHCP_XID)
+
+    // chaddr: our MAC
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 28 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+
+    // Magic cookie
+    volatile_write_u8(buf + 236, 0x63)
+    volatile_write_u8(buf + 237, 0x82)
+    volatile_write_u8(buf + 238, 0x53)
+    volatile_write_u8(buf + 239, 0x63)
+
+    let mut opt: i64 = 240
+    // Option 53: DHCP Message Type = 3 (Request)
+    volatile_write_u8(buf + opt, 53); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1
+    volatile_write_u8(buf + opt, 3); opt = opt + 1
+
+    // Option 50: Requested IP
+    volatile_write_u8(buf + opt, 50); opt = opt + 1
+    volatile_write_u8(buf + opt, 4); opt = opt + 1
+    buffer_write_u32_be(buf + opt, offered_ip); opt = opt + 4
+
+    // Option 54: Server Identifier
+    volatile_write_u8(buf + opt, 54); opt = opt + 1
+    volatile_write_u8(buf + opt, 4); opt = opt + 1
+    buffer_write_u32_be(buf + opt, server_ip); opt = opt + 4
+
+    // End
+    volatile_write_u8(buf + opt, 255); opt = opt + 1
+    opt
+}
+
+@kernel fn dhcp_parse_offer(buf: i64, len: i64) -> i64 {
+    // Parse DHCP Offer/Ack. Returns offered IP or -1.
+    // DHCP response: op=2 (BOOTREPLY), yiaddr at offset 16
+    if volatile_read_u8(buf) != 2 { return -1 }  // not a reply
+    let xid = buffer_read_u32_be(buf + 4)
+    if xid != DHCP_XID { return -2 }  // wrong transaction
+
+    let offered_ip = buffer_read_u32_be(buf + 16) // yiaddr
+    if offered_ip == 0 { return -3 }
+
+    // Find DHCP message type in options (after magic cookie at 236+4=240)
+    let mut opt: i64 = 240
+    let mut msg_type: i64 = 0
+    let mut server_ip: i64 = 0
+    let mut subnet: i64 = 0
+    let mut router: i64 = 0
+    while opt < len && opt < 576 {
+        let code = volatile_read_u8(buf + opt)
+        if code == 255 { opt = len }  // end
+        else if code == 0 { opt = opt + 1 }  // pad
+        else {
+            let olen = volatile_read_u8(buf + opt + 1)
+            if code == 53 { msg_type = volatile_read_u8(buf + opt + 2) }
+            if code == 54 { server_ip = buffer_read_u32_be(buf + opt + 2) }
+            if code == 1 { subnet = buffer_read_u32_be(buf + opt + 2) }
+            if code == 3 { router = buffer_read_u32_be(buf + opt + 2) }
+            opt = opt + 2 + olen
+        }
+    }
+
+    // Store parsed values
+    net_state_write(104, server_ip) // DHCP server IP
+    net_state_write(112, subnet)    // subnet mask
+    if router != 0 { net_state_write(24, router) } // gateway
+
+    // Return: msg_type in high byte, offered_ip
+    // Pack as msg_type * 0x100000000 + offered_ip (64-bit)
+    (msg_type << 32) | (offered_ip & 0xFFFFFFFF)
+}
+
+@kernel fn dhcp_do() -> i64 {
+    // Full DHCP: Discover → Offer → Request → Ack
+    println("[DHCP] Sending Discover...")
+
+    // Build DHCP Discover
+    let dhcp_len = dhcp_build_discover()
+    // Wrap in UDP: src=68, dst=67
+    let udp_len = udp_build(68, 67, DHCP_BUF, dhcp_len)
+    // Wrap in IP: src=0.0.0.0, dst=255.255.255.255, proto=17 (UDP)
+    // Special: for DHCP, src IP must be 0.0.0.0
+    let old_ip = net_state_read(16)
+    net_state_write(16, 0) // temporarily set src IP to 0.0.0.0
+    let ip_len = ip_build_header(0xFFFFFFFF, 17, udp_len) // broadcast, UDP
+    net_state_write(16, old_ip) // restore
+
+    // Combine IP + UDP into packet
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+    ci = 0
+    while ci < udp_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci)); ci = ci + 1 }
+
+    // Send as broadcast ethernet frame
+    let bcast: i64 = NET_PKT_BUF + 3072
+    let mut bj: i64 = 0
+    while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
+    let frame_len = eth_build_frame(bcast, 0x0800, pkt, ip_len + udp_len)
+    net_send_frame(NET_TX_BUF, frame_len)
+
+    // Wait for Offer
+    delay_us(500000) // 500ms
+    let mut found_offer: i64 = 0
+    let mut offered_ip: i64 = 0
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 && found_offer == 0 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        // Scan for DHCP magic cookie (0x63825363) starting after IP+UDP headers
+        let mut off: i64 = 0
+        while off < 300 && found_offer == 0 {
+            if volatile_read_u8(rb + off) == 0x63 && volatile_read_u8(rb + off + 1) == 0x82 && volatile_read_u8(rb + off + 2) == 0x53 && volatile_read_u8(rb + off + 3) == 0x63 {
+                // Found DHCP packet! Parse from start of DHCP header (off - 236)
+                let dhcp_start = off - 236
+                if dhcp_start >= 0 {
+                    let result = dhcp_parse_offer(rb + dhcp_start, 576)
+                    let msg = (result >> 32) & 0xFF
+                    let ip = result & 0xFFFFFFFF
+                    if msg == 2 && ip > 0 { // Offer
+                        offered_ip = ip
+                        found_offer = 1
+                        println("[DHCP] Offer received!")
+                    } else if msg == 5 && ip > 0 { // Ack (if server skips to Ack)
+                        offered_ip = ip
+                        found_offer = 2 // already acked
+                        println("[DHCP] Ack received directly!")
+                    }
+                }
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+
+    if found_offer == 0 {
+        println("[DHCP] No offer received")
+        return -1
+    }
+
+    // Configure IP from offer
+    net_state_write(16, offered_ip)
+    println("[DHCP] IP address assigned!")
+
+    if found_offer == 1 {
+        // Send DHCP Request
+        println("[DHCP] Sending Request...")
+        let server_ip = net_state_read(104)
+        let req_len = dhcp_build_request(server_ip, offered_ip)
+        let req_udp = udp_build(68, 67, DHCP_BUF, req_len)
+        net_state_write(16, 0)
+        let req_ip = ip_build_header(0xFFFFFFFF, 17, req_udp)
+        net_state_write(16, offered_ip)
+        let req_pkt: i64 = NET_PKT_BUF + 2048
+        ci = 0
+        while ci < req_ip { volatile_write_u8(req_pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+        ci = 0
+        while ci < req_udp { volatile_write_u8(req_pkt + req_ip + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci)); ci = ci + 1 }
+        let req_frame = eth_build_frame(bcast, 0x0800, req_pkt, req_ip + req_udp)
+        net_send_frame(NET_TX_BUF, req_frame)
+        println("[DHCP] Request sent, waiting for Ack...")
+        delay_us(500000)
+    }
+
+    println("[DHCP] Configuration complete")
+    0
+}
+
 // ── IP address helpers ──
 
 @kernel fn ip_pack(a: i64, b: i64, c: i64, d: i64) -> i64 {
@@ -10933,8 +11172,15 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Network: ARP + ping (simplified)
+    // Network: DHCP + ARP + ping
     if net_state_read(56) != 0 {
+        // Try DHCP first
+        let dhcp_result = dhcp_do()
+        if dhcp_result == 0 {
+            println("[NET] DHCP successful!")
+        } else {
+            println("[NET] DHCP failed, using static IP 10.0.2.15")
+        }
         let gw = net_state_read(24)
         delay_us(500000) // let device settle
 
