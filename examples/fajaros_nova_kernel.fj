@@ -5842,9 +5842,9 @@ const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
     volatile_write_u8(b + 42, 0x48)
     volatile_write_u8(b + 43, 0x31)
     volatile_write_u8(b + 44, 0xC0) // xor rax, rax (return 0 = success)
-    // jmp sysret_path
+    // jmp sysret_path (offset 73)
     volatile_write_u8(b + 45, 0xEB)
-    volatile_write_u8(b + 46, 20)  // skip to sysret
+    volatile_write_u8(b + 46, 26)  // 47 + 26 = 73 (sysret_path)
 
     // skip_write: (offset 51)
     // cmp rax, 0 (SYS_EXIT = 0, FajarOS convention)
@@ -6369,8 +6369,8 @@ const PROG_ENTRY_SIZE: i64 = 64
     volatile_write_u8(hello_msg + 11, 51) // 3
     volatile_write_u8(hello_msg + 12, 33) // !
     volatile_write_u8(hello_msg + 13, 10) // \n
-    prog_install_at(0, 0x2000000, hello_msg, 14)
-    prog_register(0, 104, 101, 108, 108, 0x2000000, 48) // "hell"(o)
+    prog_install_at(0, 0x2040000, hello_msg, 14)
+    prog_register(0, 104, 101, 108, 108, 0x2040000, 48) // "hell"(o)
 
     // Program 1: "goodbye" — prints "Goodbye Ring 3!\n"
     let bye_msg = PROG_REGISTRY + 0x900
@@ -6390,8 +6390,8 @@ const PROG_ENTRY_SIZE: i64 = 64
     volatile_write_u8(bye_msg + 13, 51)  // 3
     volatile_write_u8(bye_msg + 14, 33)  // !
     volatile_write_u8(bye_msg + 15, 10)  // \n
-    prog_install_at(1, 0x2010000, bye_msg, 16)
-    prog_register(1, 103, 111, 111, 100, 0x2010000, 48) // "good"(bye)
+    prog_install_at(1, 0x2060000, bye_msg, 16)
+    prog_register(1, 103, 111, 111, 100, 0x2060000, 48) // "good"(bye)
 
     // Program 2: "fajar" — prints "FajarOS Nova — Ring 3 User Space!\n"
     let fj_msg = PROG_REGISTRY + 0xA00
@@ -6409,8 +6409,8 @@ const PROG_ENTRY_SIZE: i64 = 64
     volatile_write_u8(fj_msg + 11, 97)   // a
     volatile_write_u8(fj_msg + 12, 33)   // !
     volatile_write_u8(fj_msg + 13, 10)   // \n
-    prog_install_at(2, 0x2020000, fj_msg, 14)
-    prog_register(2, 102, 97, 106, 97, 0x2020000, 48) // "faja"(r)
+    prog_install_at(2, 0x2080000, fj_msg, 14)
+    prog_register(2, 102, 97, 106, 97, 0x2080000, 48) // "faja"(r)
 }
 
 @kernel fn cmd_run_program(slot: i64) {
@@ -6422,6 +6422,9 @@ const PROG_ENTRY_SIZE: i64 = 64
         return
     }
     let code_addr = volatile_read_u64(base + 16)
+
+    // Debug: verify code_addr
+    println("[RUN] code_addr read from registry")
 
     // Set TSS.RSP0 for kernel stack on SYSCALL return
     volatile_write_u64(0x6FC04, 0x7F0000)
@@ -10667,9 +10670,13 @@ const FS_ENTRY_SIZE: i64 = 128
     // (Auto-running Ring 3 halts the kernel because SYS_EXIT does hlt)
     // Install user programs
     prog_install_all()
-    println("[RING3] 3 user programs installed (type 'run0' to test)")
-    // Note: SYS_EXIT now returns to kernel via RSP restore (0x652020)
-    // User programs use SYS_EXIT=0 (FajarOS convention)
+    println("[RING3] 3 user programs installed")
+
+    // Run hello directly (cmd_run_program has stack depth issue, TODO)
+    println("[RING3] Running hello (Ring 3 → kernel return test)...")
+    volatile_write_u64(0x6FC04, 0x7F0000)
+    iretq_to_user(0x2040000, 0x2F40FF0, 0x202)
+    println("[RING3] Ring 3 program returned to kernel!")
 
     println("[SEC] Security commands ready")
     println("[INIT] Script engine ready")
