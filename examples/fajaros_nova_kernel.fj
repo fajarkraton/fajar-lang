@@ -4556,6 +4556,48 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
     volatile_write_u8(msg_addr + 13, 10) // \n
 }
 
+@kernel fn user_install_program(addr: i64, msg_start: i64, msg_bytes: i64) {
+    // Generic user program installer: SYS_WRITE(msg) + SYS_EXIT(0)
+    map_page(addr, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+
+    let b = addr
+    let msg_addr = b + 40
+
+    // mov eax, 1 (SYS_WRITE)
+    volatile_write_u8(b, 0xB8)
+    volatile_write_u32(b + 1, 1)
+    // mov edi, 1 (stdout)
+    volatile_write_u8(b + 5, 0xBF)
+    volatile_write_u32(b + 6, 1)
+    // mov esi, msg_addr
+    volatile_write_u8(b + 10, 0xBE)
+    volatile_write_u32(b + 11, msg_addr)
+    // mov edx, msg_len
+    volatile_write_u8(b + 15, 0xBA)
+    volatile_write_u32(b + 16, msg_bytes)
+    // syscall
+    volatile_write_u8(b + 20, 0x0F)
+    volatile_write_u8(b + 21, 0x05)
+    // mov eax, 60 (SYS_EXIT)
+    volatile_write_u8(b + 22, 0xB8)
+    volatile_write_u32(b + 23, 60)
+    // xor edi, edi
+    volatile_write_u8(b + 27, 0x31)
+    volatile_write_u8(b + 28, 0xFF)
+    // syscall
+    volatile_write_u8(b + 29, 0x0F)
+    volatile_write_u8(b + 30, 0x05)
+    // nop
+    volatile_write_u8(b + 31, 0x90)
+
+    // Copy message bytes
+    let mut i: i64 = 0
+    while i < msg_bytes {
+        volatile_write_u8(msg_addr + i, volatile_read_u8(msg_start + i))
+        i = i + 1
+    }
+}
+
 @kernel fn cmd_run_hello() {
     cprintln("Installing user hello program...", YELLOW_ON_BLACK)
     user_install_hello_v2()
@@ -4572,6 +4614,33 @@ const USER_HELLO_SIZE: i64 = 48         // minimal hello program bytes
     // We reach here only if user program returns (SYS_EXIT halts, so we won't)
     println("[RING3] User program returned")
     cprintln("  User program completed", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_run_fajaros() {
+    // Second user program: prints "FajarOS Nova!\n"
+    let msg_buf: i64 = 0x830500
+    volatile_write_u8(msg_buf, 70)      // F
+    volatile_write_u8(msg_buf + 1, 97)  // a
+    volatile_write_u8(msg_buf + 2, 106) // j
+    volatile_write_u8(msg_buf + 3, 97)  // a
+    volatile_write_u8(msg_buf + 4, 114) // r
+    volatile_write_u8(msg_buf + 5, 79)  // O
+    volatile_write_u8(msg_buf + 6, 83)  // S
+    volatile_write_u8(msg_buf + 7, 32)  // ' '
+    volatile_write_u8(msg_buf + 8, 78)  // N
+    volatile_write_u8(msg_buf + 9, 111) // o
+    volatile_write_u8(msg_buf + 10, 118) // v
+    volatile_write_u8(msg_buf + 11, 97)  // a
+    volatile_write_u8(msg_buf + 12, 33)  // !
+    volatile_write_u8(msg_buf + 13, 10)  // \n
+
+    // Install at different address (0x2001000)
+    cprintln("Installing user 'FajarOS' program...", YELLOW_ON_BLACK)
+    user_install_program(0x2001000, msg_buf, 14)
+    map_page(0x2F00000, 0, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+    volatile_write_u64(0x6FC04, 0x7F0000)
+    println("[RING3] Running program 2: FajarOS Nova!")
+    iretq_to_user(0x2001000, 0x2F00FF0, 0x202)
 }
 
 // ── Login Shell (Sprint N4) ──
@@ -8668,6 +8737,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(104, 97, 108, 116) == 1 { cmd_shutdown_safe(); handled = 1 }
     // runhello — "runhello" (114,117,110,104)
     if handled == 0 && len == 8 && buf_eq4(114, 117, 110, 104) == 1 { cmd_run_hello(); handled = 1 }
+    // runfajar — "runfajar" (114,117,110,102)
+    if handled == 0 && len == 8 && buf_eq4(114, 117, 110, 102) == 1 { cmd_run_fajaros(); handled = 1 }
     // syscalltest — "syscalltest"
     if handled == 0 && len == 11 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 121 && volatile_read_u8(0x6F802) == 115 && volatile_read_u8(0x6F803) == 99 { cmd_syscall_test(); handled = 1 }
     // login — "login" (108,111,103,105,110)
