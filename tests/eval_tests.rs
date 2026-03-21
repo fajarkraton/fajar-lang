@@ -6524,3 +6524,25 @@ fn device_net_rejects_nvme_builtins() {
         "@device(\"net\") should reject nvme_read"
     );
 }
+
+// ── Async IPC tests (E9) ──
+
+#[test]
+fn async_ipc_try_recv_compiles() {
+    let src = r#"
+        @safe fn service_loop() {
+            let buf: i64 = 0
+            let sender = ipc_try_recv(0, buf)
+            if sender > 0 {
+                println("got message!")
+            }
+        }
+        fn main() -> void {
+            service_loop()
+        }
+    "#;
+    let tokens = fajar_lang::lexer::tokenize(src).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+    let analysis = fajar_lang::analyzer::analyze(&program);
+    assert!(analysis.is_ok(), "ipc_try_recv should be allowed in @safe");
+}

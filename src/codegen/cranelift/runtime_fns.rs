@@ -7551,6 +7551,9 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_user_ipc_recv" => Some(runtime_user::fj_rt_user_ipc_recv as *const u8),
         "fj_rt_user_ipc_call" => Some(runtime_user::fj_rt_user_ipc_call as *const u8),
         "fj_rt_user_ipc_reply" => Some(runtime_user::fj_rt_user_ipc_reply as *const u8),
+        "fj_rt_user_ipc_try_recv" => Some(runtime_user::fj_rt_user_ipc_try_recv as *const u8),
+        "fj_rt_user_ipc_notify" => Some(runtime_user::fj_rt_user_ipc_notify as *const u8),
+        "fj_rt_user_ipc_select" => Some(runtime_user::fj_rt_user_ipc_select as *const u8),
         "fj_rt_user_mmap" => Some(runtime_user::fj_rt_user_mmap as *const u8),
         _ => None,
     }

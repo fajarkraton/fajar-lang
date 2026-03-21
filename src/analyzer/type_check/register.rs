@@ -500,6 +500,14 @@ impl TypeChecker {
             ("ipc_recv", vec![Type::I64, Type::I64], Type::I64),
             ("ipc_call", vec![Type::I64, Type::I64, Type::I64], Type::I64),
             ("ipc_reply", vec![Type::I64, Type::I64], Type::I64),
+            // Async IPC (E9)
+            ("ipc_try_recv", vec![Type::I64, Type::I64], Type::I64),
+            ("ipc_notify", vec![Type::I64, Type::I64], Type::I64),
+            (
+                "ipc_select",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             (
                 "user_mmap",
                 vec![Type::I64, Type::I64, Type::I64],

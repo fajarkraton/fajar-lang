@@ -86,6 +86,9 @@ const SYS_IPC_SEND: i64 = 10;
 const SYS_IPC_RECV: i64 = 11;
 const SYS_IPC_CALL: i64 = 12;
 const SYS_IPC_REPLY: i64 = 13;
+const SYS_IPC_NOTIFY: i64 = 14;
+const SYS_IPC_TRY_RECV: i64 = 15;
+const SYS_IPC_SELECT: i64 = 16;
 const SYS_MMAP: i64 = 20;
 
 // ── User-mode Runtime Functions ──
@@ -186,6 +189,27 @@ pub extern "C" fn fj_rt_user_ipc_call(dst_pid: i64, msg_ptr: i64, reply_ptr: i64
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_user_ipc_reply(dst_pid: i64, msg_ptr: i64) -> i64 {
     syscall3(SYS_IPC_REPLY, dst_pid, msg_ptr, 0)
+}
+
+/// Non-blocking IPC receive. Returns sender_pid if message available, 0 if none.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_user_ipc_try_recv(src_filter: i64, buf_ptr: i64) -> i64 {
+    syscall3(SYS_IPC_TRY_RECV, src_filter, buf_ptr, 64)
+}
+
+/// Async notification — non-blocking signal with bitmask.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_user_ipc_notify(dst_pid: i64, bits: i64) -> i64 {
+    syscall3(SYS_IPC_NOTIFY, dst_pid, bits, 0)
+}
+
+/// Select: wait for message from any of multiple sources.
+/// sources_ptr: array of PIDs to listen on
+/// count: number of sources
+/// Returns: index of source that has a message, or -1 on timeout.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_user_ipc_select(sources_ptr: i64, buf_ptr: i64, count: i64) -> i64 {
+    syscall3(SYS_IPC_SELECT, sources_ptr, buf_ptr, count)
 }
 
 /// Allocate memory pages.
