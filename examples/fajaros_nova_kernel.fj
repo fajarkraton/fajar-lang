@@ -10056,18 +10056,18 @@ const FS_ENTRY_SIZE: i64 = 128
 @kernel fn sched_test_process() {
     let pid = volatile_read(0x6FE00) // current PID
     let mut count: i64 = 0
-    while count < 5 {
-        // Busy-wait for ~1 second (100 ticks at 100Hz)
-        let target = read_timer_ticks() + 100
+    while count < 3 {
+        // Busy-wait for ~3 seconds (300 ticks at 100Hz)
+        let target = read_timer_ticks() + 300
         while read_timer_ticks() < target {}
-        // Print PID + count
-        println("[PROC] tick from spawned process")
+        println("[PROC] background process alive")
         count = count + 1
     }
+    println("[PROC] background process exiting")
     // Exit: mark self as dead
-    let base = 0x600000 + pid * 256
-    volatile_write(base + 8, 0) // state = FREE
-    // Yield to scheduler (halt this process)
+    let me = 0x600000 + volatile_read(0x6FE00) * 256
+    volatile_write(me + 8, 0) // state = FREE
+    // Halt (scheduler will skip this PID now)
     while 1 == 1 { hlt() }
 }
 
@@ -10767,11 +10767,10 @@ const FS_ENTRY_SIZE: i64 = 128
     prog_install_all()
     println("[RING3] 3 user programs installed")
 
-    // Test preemptive scheduling: spawn a kernel process
-    println("[SCHED] Spawning test process...")
+    // Spawn a background test process to demonstrate preemptive scheduling
     let test_pid = sched_spawn_kernel(fn_addr("sched_test_process"))
     if test_pid > 0 {
-        println("[SCHED] Test process spawned — timer ISR will schedule it")
+        println("[SCHED] Background process spawned — preemptive scheduling active")
     }
 
     println("[SEC] Security commands ready")
