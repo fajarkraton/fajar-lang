@@ -10855,7 +10855,7 @@ const FS_ENTRY_SIZE: i64 = 128
 
     // Serial confirmation
     println("[NOVA] FajarOS Nova v0.6.0 Ascension booted")
-    println("[NOVA] 10700+ LOC | 155 commands | 100% Fajar Lang")
+    println("[NOVA] 10900+ LOC | 155 commands | Preemptive | 100% Fajar Lang")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
     println("[NOVA] VGA console active at 0xB8000")
