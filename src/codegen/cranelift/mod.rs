@@ -5794,7 +5794,9 @@ impl CraneliftCompiler {
 
         self.module
             .define_function(func_id, &mut self.ctx)
-            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            .map_err(|e| {
+                CodegenError::FunctionError(format!("Compilation error in '{}': {e}", fndef.name))
+            })?;
 
         self.module.clear_context(&mut self.ctx);
         Ok(())
@@ -12875,7 +12877,9 @@ impl ObjectCompiler {
 
         self.module
             .define_function(func_id, &mut self.ctx)
-            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            .map_err(|e| {
+                CodegenError::FunctionError(format!("Compilation error in '{}': {e}", fndef.name))
+            })?;
 
         self.module.clear_context(&mut self.ctx);
         Ok(())
