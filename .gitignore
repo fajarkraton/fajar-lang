@@ -40,3 +40,6 @@ release/
 *.raw
 *.tar.gz
 fajaros_arm64_boot
+fajaros_arm64_ipc
+fajaros_arm64_mmu
+fajaros_arm64_multi
