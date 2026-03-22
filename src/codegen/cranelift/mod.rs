@@ -7725,11 +7725,11 @@ impl ObjectCompiler {
     fn declare_user_mode_runtime(&mut self) -> Result<(), CodegenError> {
         let call_conv = self.module.target_config().default_call_conv;
 
-        // --- I/O: println(val: i64) via SYS_WRITE(1) ---
+        // --- I/O: println(val: i64) via fj_rt_bare_print_i64 ---
         let mut sig_1i = cranelift_codegen::ir::Signature::new(call_conv);
         sig_1i.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
         let println_id = self.module
-            .declare_function("fj_rt_bare_print", Linkage::Import, &sig_1i)
+            .declare_function("fj_rt_bare_print_i64", Linkage::Import, &sig_1i)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("println".to_string(), println_id);
 
@@ -7814,19 +7814,18 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("str_byte_at".to_string(), str_byte_id);
 
-        // --- String printing: __println_str(ptr: i64, len: i64) -> void ---
-        // This internal name is used by the compiler for `println("string literal")`
+        // --- String printing: use fj_rt_bare_println/fj_rt_bare_print ---
+        // (same symbols as x86 bare-metal; user startup .o provides SYSCALL-based versions)
         let mut sig_2i_void2 = cranelift_codegen::ir::Signature::new(call_conv);
         sig_2i_void2.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
         sig_2i_void2.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
         let println_str_id = self.module
-            .declare_function("fj_rt_println_str", Linkage::Import, &sig_2i_void2)
+            .declare_function("fj_rt_bare_println", Linkage::Import, &sig_2i_void2)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__println_str".to_string(), println_str_id);
 
-        // __print_str(ptr: i64, len: i64) -> void
         let print_str_id = self.module
-            .declare_function("fj_rt_print_str", Linkage::Import, &sig_2i_void2)
+            .declare_function("fj_rt_bare_print", Linkage::Import, &sig_2i_void2)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("__print_str".to_string(), print_str_id);
 
