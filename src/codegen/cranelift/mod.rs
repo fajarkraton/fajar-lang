@@ -7739,6 +7739,14 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("exit".to_string(), exit_id);
 
+        // --- Getpid: getpid() -> i64 via SYS_GETPID(3) ---
+        let mut sig_0_r = cranelift_codegen::ir::Signature::new(call_conv);
+        sig_0_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
+        let getpid_id = self.module
+            .declare_function("fj_user_getpid", Linkage::Import, &sig_0_r)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("getpid".to_string(), getpid_id);
+
         // --- IPC: send(dst: i64, msg: i64) -> i64 via SYS_SEND(10) ---
         let mut sig_2i_r = cranelift_codegen::ir::Signature::new(call_conv);
         sig_2i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));

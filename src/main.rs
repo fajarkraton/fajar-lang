@@ -1575,6 +1575,16 @@ fj_user_exit:
     /* never returns */
 .size fj_user_exit, . - fj_user_exit
 
+/* User-mode getpid: SYS_GETPID() -> rax */
+.global fj_user_getpid
+.type fj_user_getpid, @function
+fj_user_getpid:
+    mov     rax, 3          /* SYS_GETPID */
+    syscall
+    ret
+.size fj_user_getpid, . - fj_user_getpid
+.size fj_user_exit, . - fj_user_exit
+
 /* User-mode memory fence (no-op in user space) */
 .global fj_rt_bare_memory_fence
 .type fj_rt_bare_memory_fence, @function
