@@ -147,12 +147,28 @@ EL0 (User)          EL1 (Kernel)
 ## Execution Order
 
 ```
-Step 1: Real MNIST on Q6A          ← NOW (quick win, impressive)
-Step 2: EL0 User Space             ← next session (big architecture)
-Step 3: Labeled break/continue     ← compiler polish
-Step 4: v3.1 Release               ← ship everything
+Step 1: Real MNIST on Q6A          ✅ COMPLETE (99% accuracy, CPU+GPU)
+Step 2: EL0 User Space             ✅ COMPLETE (14 runtime fns, 15 asm stubs)
+Step 3: Labeled break/continue     ✅ COMPLETE (already done in v4.1.0)
+Step 4: v3.1 Release               ✅ COMPLETE (already done in v4.1.0)
 ```
+
+## Sprint 5.5-5.6: ARM64 Bare-Metal Boot (2026-03-22)
+
+**STATUS: COMPLETE**
+
+| Milestone | Result |
+|-----------|--------|
+| ARM64 kernel boots on QEMU | `qemu-system-aarch64 -M virt,gic-version=3` |
+| GICv3 full pipeline | GICD + GICR + ICC, PPI 30 timer IRQ |
+| Timer IRQ at 10 Hz | Verified ~50 dots in 5 seconds |
+| UART shell | PL011 TX+RX, prompt, 'q' to quit |
+| String literals in @kernel | `println("text")` → .rodata, no putc() |
+| EL0 runtime ready | ERET, SP_EL0, TTBR0/1, AP bits |
+| QEMU boot test | 7/7 automated checks pass |
+| Q6A deployment | EL0 18/18, MNIST 99%, fj 4.1.0 |
 
 ---
 
 *Plan created 2026-03-18 by Claude Opus 4.6*
+*Last updated 2026-03-22: ALL STEPS COMPLETE*
