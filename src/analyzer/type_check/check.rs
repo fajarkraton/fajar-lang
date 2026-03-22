@@ -70,6 +70,31 @@ impl TypeChecker {
                     }
                 }
             }
+            Item::EffectDecl(ed) => {
+                // Register the effect in the registry
+                let kind = crate::analyzer::effects::effect_kind_from_name(&ed.name)
+                    .unwrap_or(crate::analyzer::effects::EffectKind::State);
+                let ops: Vec<crate::analyzer::effects::EffectOp> = ed
+                    .operations
+                    .iter()
+                    .map(|op| {
+                        crate::analyzer::effects::EffectOp::new(
+                            op.name.clone(),
+                            op.params.iter().map(|(_, _)| "any".to_string()).collect(),
+                            op.return_type
+                                .as_ref()
+                                .map_or("void".to_string(), |_| "any".to_string()),
+                        )
+                    })
+                    .collect();
+                let decl = crate::analyzer::effects::EffectDecl::new(ed.name.clone(), kind, ops);
+                if self.effect_registry.register(decl).is_err() {
+                    self.errors.push(SemanticError::DuplicateEffectDecl {
+                        name: ed.name.clone(),
+                        span: ed.span,
+                    });
+                }
+            }
             Item::Stmt(stmt) => {
                 self.check_stmt(stmt);
             }
@@ -170,6 +195,49 @@ impl TypeChecker {
         // Validate const fn body: only allow const-evaluable operations
         if fndef.is_const {
             self.check_const_fn_body(&fndef.body, &fndef.name, fndef.span);
+        }
+
+        // ── Effect System Validation ────────────────────────────────────
+        // 1. Validate all declared effect names exist in the registry
+        for effect_name in &fndef.effects {
+            if self.effect_registry.lookup(effect_name).is_none() {
+                self.errors.push(SemanticError::UnknownEffect {
+                    name: effect_name.clone(),
+                    span: fndef.span,
+                });
+            }
+        }
+
+        // 2. Check context-effect compatibility: effects declared in `with`
+        //    must be allowed by the function's context annotation
+        if let Some(ref ann) = fndef.annotation {
+            let ctx = match ann.name.as_str() {
+                "kernel" => Some(crate::analyzer::effects::ContextAnnotation::Kernel),
+                "device" => Some(crate::analyzer::effects::ContextAnnotation::Device),
+                "safe" => Some(crate::analyzer::effects::ContextAnnotation::Safe),
+                "unsafe" => Some(crate::analyzer::effects::ContextAnnotation::Unsafe),
+                _ => None,
+            };
+            if let Some(ctx) = ctx {
+                let forbidden = crate::analyzer::effects::forbidden_effects(ctx);
+                for effect_name in &fndef.effects {
+                    if let Some(decl) = self.effect_registry.lookup(effect_name) {
+                        if forbidden.contains(&decl.kind) {
+                            self.errors.push(SemanticError::EffectForbiddenInContext {
+                                effect: effect_name.clone(),
+                                context: format!("@{}", ann.name),
+                                span: fndef.span,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Register function's effect signature for callee checking
+        if !fndef.effects.is_empty() {
+            self.fn_effects
+                .insert(fndef.name.clone(), fndef.effects.clone());
         }
 
         // Restore outer NLL info (for nested functions)
@@ -754,6 +822,31 @@ impl TypeChecker {
                     }
                 }
                 Type::Unknown
+            }
+            Expr::HandleEffect { body, handlers, .. } => {
+                let old_in_handle = self.in_handle_expr;
+                self.in_handle_expr = true;
+                let body_type = self.check_expr(body);
+                // Check each handler arm
+                for arm in handlers {
+                    // Validate effect exists
+                    if self.effect_registry.lookup(&arm.effect_name).is_none() {
+                        self.errors.push(SemanticError::UnknownEffect {
+                            name: arm.effect_name.clone(),
+                            span: arm.span,
+                        });
+                    }
+                    self.check_expr(&arm.body);
+                }
+                self.in_handle_expr = old_in_handle;
+                body_type
+            }
+            Expr::ResumeExpr { value, span, .. } => {
+                if !self.in_handle_expr {
+                    self.errors
+                        .push(SemanticError::ResumeOutsideHandler { span: *span });
+                }
+                self.check_expr(value)
             }
         }
     }

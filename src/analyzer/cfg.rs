@@ -250,6 +250,15 @@ impl UseCollector {
                     self.visit_expr(&field.value);
                 }
             }
+            Expr::HandleEffect { body, handlers, .. } => {
+                self.visit_expr(body);
+                for handler in handlers {
+                    self.visit_expr(&handler.body);
+                }
+            }
+            Expr::ResumeExpr { value, .. } => {
+                self.visit_expr(value);
+            }
         }
     }
 

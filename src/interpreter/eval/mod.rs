@@ -1048,6 +1048,10 @@ impl Interpreter {
                 // Global assembly is only meaningful in native codegen; no-op in interpreter.
                 Ok(Value::Null)
             }
+            Item::EffectDecl(_) => {
+                // Effect declarations are registered at analysis time; no runtime effect yet.
+                Ok(Value::Null)
+            }
         }
     }
 
@@ -1240,6 +1244,18 @@ impl Interpreter {
                     }
                 }
                 Ok(Value::Str(result))
+            }
+            Expr::HandleEffect { body, .. } => {
+                // In interpreter mode, handle expressions simply run the body.
+                // Effect handler dispatch is a compile-time + type-system feature;
+                // at runtime the body executes with the default (host) handlers.
+                self.eval_expr(body)
+            }
+            Expr::ResumeExpr { value, .. } => {
+                // Resume evaluates its argument and returns it.
+                // In full algebraic effect semantics this would continue a delimited
+                // continuation, but in the interpreter we treat it as identity.
+                self.eval_expr(value)
             }
         }
     }

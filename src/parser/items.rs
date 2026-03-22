@@ -61,6 +61,9 @@ impl Parser {
             }
         }
 
+        // Optional effect clause: `with IO, Alloc`
+        let effects = self.parse_effect_clause()?;
+
         // Body
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
@@ -82,6 +85,7 @@ impl Parser {
             where_clauses,
             requires,
             ensures,
+            effects,
             body,
             span: Span::new(start, end),
         })
@@ -169,6 +173,91 @@ impl Parser {
             is_pub,
             name,
             ty,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parses an optional effect clause: `with IO, Alloc, Console`.
+    ///
+    /// Returns an empty vec if no `with` keyword is present.
+    fn parse_effect_clause(&mut self) -> Result<Vec<String>, ParseError> {
+        // `with` is a contextual keyword — check for Ident("with")
+        if !matches!(self.peek_kind(), TokenKind::Ident(s) if s == "with") {
+            return Ok(Vec::new());
+        }
+        self.advance(); // consume `with`
+
+        let mut effects = Vec::new();
+        // Parse comma-separated effect names
+        let (name, _) = self.expect_ident()?;
+        effects.push(name);
+        while self.eat(&TokenKind::Comma) {
+            // Stop if we see `{` (start of body)
+            if self.at(&TokenKind::LBrace) {
+                break;
+            }
+            let (name, _) = self.expect_ident()?;
+            effects.push(name);
+        }
+        Ok(effects)
+    }
+
+    /// Parses an effect declaration: `effect Name { fn op(params) -> RetType }`.
+    pub(super) fn parse_effect_decl(&mut self, is_pub: bool) -> Result<EffectDeclItem, ParseError> {
+        let start = self.peek().span.start;
+        self.expect(&TokenKind::Effect)?;
+        let (name, _) = self.expect_ident()?;
+
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut operations = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            let op = self.parse_effect_op()?;
+            operations.push(op);
+        }
+
+        let end = self.peek().span.end;
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(EffectDeclItem {
+            is_pub,
+            name,
+            operations,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parses a single effect operation: `fn name(params) -> RetType`.
+    fn parse_effect_op(&mut self) -> Result<EffectOpDef, ParseError> {
+        let start = self.peek().span.start;
+        self.expect(&TokenKind::Fn)?;
+        let (name, _) = self.expect_ident()?;
+
+        self.expect(&TokenKind::LParen)?;
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            let (pname, _) = self.expect_ident()?;
+            self.expect(&TokenKind::Colon)?;
+            let ty = self.parse_type_expr()?;
+            params.push((pname, ty));
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen)?;
+
+        let return_type = if self.eat(&TokenKind::Arrow) {
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
+
+        let end = self.prev_span().end;
+
+        Ok(EffectOpDef {
+            name,
+            params,
+            return_type,
             span: Span::new(start, end),
         })
     }
@@ -673,6 +762,7 @@ impl Parser {
             where_clauses,
             requires: vec![],
             ensures: vec![],
+            effects: Vec::new(),
             body,
             span: Span::new(start, end),
         })

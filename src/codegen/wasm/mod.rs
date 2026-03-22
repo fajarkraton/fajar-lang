@@ -2292,6 +2292,7 @@ mod tests {
     fn make_fn(name: &str, params: Vec<Param>, ret: Option<&str>, body: Expr) -> FnDef {
         FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2304,6 +2305,9 @@ mod tests {
             params,
             return_type: ret.map(simple_ty),
             where_clauses: Vec::new(),
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(body),
             span: span(),
         }

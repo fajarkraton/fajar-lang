@@ -1002,6 +1002,56 @@ pub enum SemanticError {
         /// Source location.
         span: Span,
     },
+
+    // ── Effect System Errors ────────────────────────────────────────────
+    /// EE001: Undeclared effect — function performs an effect not in its `with` clause.
+    #[error(
+        "EE001: function '{function}' performs effect '{effect}' not declared in its `with` clause"
+    )]
+    UndeclaredEffect {
+        /// Function name.
+        function: String,
+        /// Effect name that was performed but not declared.
+        effect: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// EE002: Unknown effect — effect name not found in registry.
+    #[error("EE002: unknown effect '{name}'")]
+    UnknownEffect {
+        /// The unknown effect name.
+        name: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// EE006: Effect forbidden by context — effect not allowed in @kernel/@device/@safe.
+    #[error("EE006: effect '{effect}' is forbidden in {context} context")]
+    EffectForbiddenInContext {
+        /// The forbidden effect.
+        effect: String,
+        /// The context (e.g., "@kernel").
+        context: String,
+        /// Source location.
+        span: Span,
+    },
+
+    /// EE005: Resume outside handler — `resume()` used outside a `handle` expression.
+    #[error("EE005: `resume` can only be used inside a `handle` expression")]
+    ResumeOutsideHandler {
+        /// Source location.
+        span: Span,
+    },
+
+    /// EE004: Duplicate effect declaration.
+    #[error("EE004: effect '{name}' is already declared")]
+    DuplicateEffectDecl {
+        /// The duplicate effect name.
+        name: String,
+        /// Source location.
+        span: Span,
+    },
 }
 
 impl SemanticError {
@@ -1052,7 +1102,12 @@ impl SemanticError {
             | SemanticError::RawPointerInNpu { span, .. }
             | SemanticError::HeapAllocInNpu { span, .. }
             | SemanticError::OsPrimitiveInNpu { span, .. }
-            | SemanticError::KernelCallInNpu { span, .. } => *span,
+            | SemanticError::KernelCallInNpu { span, .. }
+            | SemanticError::UndeclaredEffect { span, .. }
+            | SemanticError::UnknownEffect { span, .. }
+            | SemanticError::EffectForbiddenInContext { span, .. }
+            | SemanticError::ResumeOutsideHandler { span, .. }
+            | SemanticError::DuplicateEffectDecl { span, .. } => *span,
         }
     }
 
@@ -1131,6 +1186,12 @@ pub struct TypeChecker {
     imports: Vec<(String, Span, bool)>,
     /// Linear variables: name → (span, consumed). Must be consumed exactly once.
     linear_vars: HashMap<String, (Span, bool)>,
+    /// Effect registry: tracks declared effects and their operations.
+    effect_registry: crate::analyzer::effects::EffectRegistry,
+    /// Function effect signatures: fn name → declared effect names.
+    fn_effects: HashMap<String, Vec<String>>,
+    /// Whether we are inside a handle expression (allows resume).
+    in_handle_expr: bool,
 }
 
 /// A trait method signature for validation.
@@ -1521,6 +1582,9 @@ impl TypeChecker {
             enum_variants: HashMap::new(),
             imports: Vec::new(),
             linear_vars: HashMap::new(),
+            effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
+            fn_effects: HashMap::new(),
+            in_handle_expr: false,
         };
         tc.register_builtins();
         tc.register_builtin_traits();

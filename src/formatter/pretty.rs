@@ -156,6 +156,9 @@ impl<'src> Formatter<'src> {
                 self.push(&format!("global_asm!(\"{}\")", ga.template));
                 self.newline();
             }
+            Item::EffectDecl(_) => {
+                // Effect declarations: formatting not yet implemented
+            }
             Item::Stmt(s) => self.format_stmt(s),
         }
     }
@@ -778,6 +781,13 @@ impl<'src> Formatter<'src> {
             Expr::Path { segments, .. } => {
                 self.push(&segments.join("::"));
             }
+            Expr::HandleEffect { .. } => {
+                // Effect handle expression: formatting not yet implemented
+                self.push("handle { ... }");
+            }
+            Expr::ResumeExpr { .. } => {
+                self.push("resume");
+            }
         }
     }
 
@@ -1105,6 +1115,7 @@ fn item_span(item: &Item) -> crate::lexer::token::Span {
         Item::ExternFn(e) => e.span,
         Item::TypeAlias(ta) => ta.span,
         Item::GlobalAsm(ga) => ga.span,
+        Item::EffectDecl(ed) => ed.span,
         Item::Stmt(s) => stmt_span(s),
     }
 }

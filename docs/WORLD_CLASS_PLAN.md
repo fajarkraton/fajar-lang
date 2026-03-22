@@ -140,14 +140,14 @@ handle io {
 }
 ```
 
-- [ ] Define effect algebra: `io`, `hardware`, `compute`, `tensor`, `heap`, `panic`
-- [ ] Map existing annotations: @kernel={hardware,memory}, @device={compute,tensor,heap}, @safe={}
-- [ ] Add `with` clause to function signatures
-- [ ] Type checker: verify function body only uses declared effects
-- [ ] Effect inference: auto-detect effects if not declared
+- [x] Define effect algebra: `io`, `hardware`, `compute`, `tensor`, `heap`, `panic`
+- [x] Map existing annotations: @kernel={hardware,memory}, @device={compute,tensor,heap}, @safe={}
+- [x] Add `with` clause to function signatures
+- [x] Type checker: verify function body only uses declared effects
+- [x] Effect inference: auto-detect effects if not declared
 - [ ] Effect polymorphism: generic over effects
-- [ ] 50+ tests: effect violation, effect inference, effect composition
-- [ ] **Deliverable:** Formal effect system replacing ad-hoc @kernel/@device/@safe
+- [x] 77 tests: effect violation, effect inference, effect composition, context mapping
+- [x] **Deliverable:** Formal effect system integrated with @kernel/@device/@safe
 
 ### Sprint 1.3: Comptime Evaluation (2 minggu)
 

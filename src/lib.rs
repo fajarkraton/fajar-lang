@@ -335,6 +335,11 @@ impl FjDiagnostic {
             SemanticError::OsPrimitiveInNpu { .. } => "NE003",
             SemanticError::KernelCallInNpu { .. } => "NE004",
             SemanticError::LinearNotConsumed { .. } => "ME010",
+            SemanticError::UndeclaredEffect { .. } => "EE001",
+            SemanticError::UnknownEffect { .. } => "EE002",
+            SemanticError::EffectForbiddenInContext { .. } => "EE006",
+            SemanticError::ResumeOutsideHandler { .. } => "EE005",
+            SemanticError::DuplicateEffectDecl { .. } => "EE004",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

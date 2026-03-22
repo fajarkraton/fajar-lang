@@ -255,6 +255,7 @@ fn build_closure_info(
         where_clauses: Vec::new(),
         requires: vec![],
         ensures: vec![],
+        effects: Vec::new(),
         body: Box::new(body.clone()),
         span: *span,
     };

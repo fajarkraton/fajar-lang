@@ -533,6 +533,10 @@ impl Parser {
                 td.doc_comment = doc_comment;
                 Ok(Item::TraitDef(td))
             }
+            TokenKind::Effect => {
+                let ed = self.parse_effect_decl(is_pub)?;
+                Ok(Item::EffectDecl(ed))
+            }
             TokenKind::Const => {
                 // Check if next is `fn` → const fn
                 if matches!(self.peek_at(1).kind, TokenKind::Fn) {

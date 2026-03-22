@@ -649,6 +649,11 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::OsPrimitiveInNpu { .. } => "NE003",
         SemanticError::KernelCallInNpu { .. } => "NE004",
         SemanticError::LinearNotConsumed { .. } => "ME010",
+        SemanticError::UndeclaredEffect { .. } => "EE001",
+        SemanticError::UnknownEffect { .. } => "EE002",
+        SemanticError::EffectForbiddenInContext { .. } => "EE006",
+        SemanticError::ResumeOutsideHandler { .. } => "EE005",
+        SemanticError::DuplicateEffectDecl { .. } => "EE004",
     };
     Diagnostic {
         range,

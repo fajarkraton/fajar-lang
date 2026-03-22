@@ -389,10 +389,87 @@ impl Parser {
         }
     }
 
+    /// Parses one arm of a handle expression: `Effect::op(p1, p2) => { body }`.
+    fn parse_effect_handler_arm(&mut self) -> Result<EffectHandlerArm, ParseError> {
+        let start = self.peek().span.start;
+
+        // Parse Effect::op
+        let (effect_name, _) = self.expect_ident()?;
+        self.expect(&TokenKind::ColonColon)?;
+        let (op_name, _) = self.expect_ident()?;
+
+        // Parse (param_names)
+        self.expect(&TokenKind::LParen)?;
+        let mut param_names = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at_eof() {
+            let (pname, _) = self.expect_ident()?;
+            param_names.push(pname);
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen)?;
+
+        // => { body }
+        self.expect(&TokenKind::FatArrow)?;
+        let body = self.parse_block_expr()?;
+        let end = body.span().end;
+
+        Ok(EffectHandlerArm {
+            effect_name,
+            op_name,
+            param_names,
+            body: Box::new(body),
+            span: Span::new(start, end),
+        })
+    }
+
     /// Parses an identifier expression, potentially a path (`a::b::c`) or struct init.
     fn parse_ident_expr(&mut self) -> Result<Expr, ParseError> {
         let start = self.peek().span.start;
         let (name, name_span) = self.expect_ident()?;
+
+        // Contextual keyword: `handle { body } with { handlers }`
+        if name == "handle" && self.at(&TokenKind::LBrace) {
+            let body = self.parse_block_expr()?;
+            // Expect contextual `with`
+            if !matches!(self.peek_kind(), TokenKind::Ident(s) if s == "with") {
+                let tok = self.peek().clone();
+                return Err(ParseError::UnexpectedToken {
+                    expected: "`with` after handle body".into(),
+                    found: format!("{}", tok.kind),
+                    line: tok.line,
+                    col: tok.col,
+                    span: tok.span,
+                });
+            }
+            self.advance(); // eat `with`
+            self.expect(&TokenKind::LBrace)?;
+            let mut handlers = Vec::new();
+            while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+                let arm = self.parse_effect_handler_arm()?;
+                handlers.push(arm);
+            }
+            let end = self.peek().span.end;
+            self.expect(&TokenKind::RBrace)?;
+            return Ok(Expr::HandleEffect {
+                body: Box::new(body),
+                handlers,
+                span: Span::new(start, end),
+            });
+        }
+
+        // Contextual keyword: `resume(value)`
+        if name == "resume" && self.at(&TokenKind::LParen) {
+            self.advance(); // eat `(`
+            let value = self.parse_expr(0)?;
+            let end = self.peek().span.end;
+            self.expect(&TokenKind::RParen)?;
+            return Ok(Expr::ResumeExpr {
+                value: Box::new(value),
+                span: Span::new(start, end),
+            });
+        }
 
         // Handle asm!(...) — inline assembly macro
         if name == "asm" && self.at(&TokenKind::Bang) {

@@ -620,6 +620,15 @@ impl FactGenerator {
                     }
                 }
             }
+            Expr::HandleEffect { body, handlers, .. } => {
+                self.visit_expr(body);
+                for handler in handlers {
+                    self.visit_expr(&handler.body);
+                }
+            }
+            Expr::ResumeExpr { value, .. } => {
+                self.visit_expr(value);
+            }
             Expr::Literal { .. } | Expr::Path { .. } => {}
         }
     }
@@ -1104,6 +1113,7 @@ mod tests {
             where_clauses: Vec::new(),
             requires: vec![],
             ensures: vec![],
+            effects: vec![],
             body: Box::new(block_expr(
                 vec![],
                 Some(borrow_expr(ident_expr("x", 38, 39), 37, 39)),

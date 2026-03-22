@@ -142,6 +142,12 @@ pub enum TokenKind {
     Implements,
     /// `dyn`
     Dyn,
+    /// `effect` — effect declaration keyword
+    Effect,
+    /// `handle` — effect handler keyword
+    Handle,
+    /// `resume` — resume continuation in effect handler
+    Resume,
 
     // ── Module Keywords ────────────────────────────────────────────────
     /// `use`
@@ -464,6 +470,9 @@ impl fmt::Display for TokenKind {
             TokenKind::Protocol => write!(f, "protocol"),
             TokenKind::Implements => write!(f, "implements"),
             TokenKind::Dyn => write!(f, "dyn"),
+            TokenKind::Effect => write!(f, "effect"),
+            TokenKind::Handle => write!(f, "handle"),
+            TokenKind::Resume => write!(f, "resume"),
             TokenKind::Use => write!(f, "use"),
             TokenKind::Mod => write!(f, "mod"),
             TokenKind::Pub => write!(f, "pub"),
@@ -639,6 +648,9 @@ pub static KEYWORDS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::new(
     m.insert("protocol", TokenKind::Protocol);
     m.insert("implements", TokenKind::Implements);
     m.insert("dyn", TokenKind::Dyn);
+    m.insert("effect", TokenKind::Effect);
+    // `handle` and `resume` are contextual keywords — parsed as Ident
+    // and recognized by the expression parser when in effect context.
     // Module
     m.insert("use", TokenKind::Use);
     m.insert("mod", TokenKind::Mod);

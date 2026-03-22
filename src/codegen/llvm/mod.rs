@@ -1953,6 +1953,7 @@ mod tests {
     fn make_simple_fn(name: &str, body: Expr) -> FnDef {
         FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -1968,6 +1969,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(body),
             span: dummy_span(),
         }
@@ -2063,6 +2067,7 @@ mod tests {
         // fn double(x: i64) -> i64 { x + x }
         let double_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2085,6 +2090,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(make_binop(make_ident("x"), BinOp::Add, make_ident("x"))),
             span: dummy_span(),
         };
@@ -2165,6 +2173,7 @@ mod tests {
         // fn main() -> f64 { 3.14 }
         let main_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2180,6 +2189,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(make_float_lit(3.14)),
             span: dummy_span(),
         };
@@ -2215,6 +2227,7 @@ mod tests {
         // fn main() -> str { "hello" }
         let main_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2230,6 +2243,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(Expr::Literal {
                 kind: LiteralKind::String("hello".to_string()),
                 span: dummy_span(),
@@ -2349,6 +2365,7 @@ mod tests {
 
         let main_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2364,6 +2381,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(Expr::Cast {
                 expr: Box::new(make_int_lit(42)),
                 ty: TypeExpr::Simple {
@@ -2823,6 +2843,7 @@ mod tests {
 
         let fib_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2845,6 +2866,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(fib_body),
             span: dummy_span(),
         };
@@ -2876,6 +2900,7 @@ mod tests {
         // fn add3(a: i64, b: i64, c: i64) -> i64 { a + b + c }
         let add3_fn = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2916,6 +2941,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(make_binop(
                 make_binop(make_ident("a"), BinOp::Add, make_ident("b")),
                 BinOp::Add,
@@ -2977,6 +3005,7 @@ mod tests {
         // }
         let is_even = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -2999,6 +3028,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(Expr::If {
                 condition: Box::new(make_binop(make_ident("n"), BinOp::Eq, make_int_lit(0))),
                 then_branch: Box::new(make_int_lit(1)),
@@ -3021,6 +3053,7 @@ mod tests {
         // }
         let is_odd = FnDef {
             is_pub: false,
+            is_const: false,
             is_async: false,
             is_test: false,
             should_panic: false,
@@ -3043,6 +3076,9 @@ mod tests {
                 span: dummy_span(),
             }),
             where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
             body: Box::new(Expr::If {
                 condition: Box::new(make_binop(make_ident("n"), BinOp::Eq, make_int_lit(0))),
                 then_branch: Box::new(make_int_lit(0)),

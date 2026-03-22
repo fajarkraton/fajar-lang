@@ -146,8 +146,9 @@ impl Compiler {
             | Item::TraitDef(_)
             | Item::ExternFn(_)
             | Item::TypeAlias(_)
-            | Item::GlobalAsm(_) => {
-                // Module/use/trait/extern/type-alias/global_asm handled by pre-processing
+            | Item::GlobalAsm(_)
+            | Item::EffectDecl(_) => {
+                // Module/use/trait/extern/type-alias/global_asm/effect handled by pre-processing
             }
         }
     }
@@ -560,6 +561,9 @@ impl Compiler {
             }
             Expr::FString { .. } => {
                 // F-strings are not supported in VM mode
+            }
+            Expr::HandleEffect { .. } | Expr::ResumeExpr { .. } => {
+                // Effect system is not supported in VM mode
             }
         }
     }

@@ -76,6 +76,10 @@ pub enum EffectKind {
     State,
     /// Exception throwing and catching.
     Exception,
+    /// Hardware access (registers, IRQ, port I/O) — @kernel domain.
+    Hardware,
+    /// Tensor/ML compute operations — @device domain.
+    Tensor,
 }
 
 impl fmt::Display for EffectKind {
@@ -87,7 +91,24 @@ impl fmt::Display for EffectKind {
             EffectKind::Async => write!(f, "Async"),
             EffectKind::State => write!(f, "State"),
             EffectKind::Exception => write!(f, "Exception"),
+            EffectKind::Hardware => write!(f, "Hardware"),
+            EffectKind::Tensor => write!(f, "Tensor"),
         }
+    }
+}
+
+/// Maps an effect name to its kind, if it's a built-in effect.
+pub fn effect_kind_from_name(name: &str) -> Option<EffectKind> {
+    match name {
+        "IO" | "io" => Some(EffectKind::IO),
+        "Alloc" | "alloc" | "heap" => Some(EffectKind::Alloc),
+        "Panic" | "panic" => Some(EffectKind::Panic),
+        "Async" | "async" => Some(EffectKind::Async),
+        "State" | "state" => Some(EffectKind::State),
+        "Exception" | "exception" => Some(EffectKind::Exception),
+        "Hardware" | "hardware" => Some(EffectKind::Hardware),
+        "Tensor" | "tensor" | "compute" => Some(EffectKind::Tensor),
+        _ => None,
     }
 }
 
@@ -329,6 +350,49 @@ impl EffectRegistry {
             vec![EffectOp::new("throw", vec!["str".into()], "never")],
         );
         let _ = self.register(exception);
+
+        let async_eff = EffectDecl::new(
+            "Async",
+            EffectKind::Async,
+            vec![
+                EffectOp::new("spawn", vec!["fn".into()], "void"),
+                EffectOp::new("await_result", vec![], "any"),
+            ],
+        );
+        let _ = self.register(async_eff);
+
+        let state_eff = EffectDecl::new(
+            "State",
+            EffectKind::State,
+            vec![
+                EffectOp::new("get", vec![], "any"),
+                EffectOp::new("set", vec!["any".into()], "void"),
+            ],
+        );
+        let _ = self.register(state_eff);
+
+        let hardware = EffectDecl::new(
+            "Hardware",
+            EffectKind::Hardware,
+            vec![
+                EffectOp::new("volatile_read", vec!["i64".into()], "i64"),
+                EffectOp::new("volatile_write", vec!["i64".into(), "i64".into()], "void"),
+                EffectOp::new("port_read", vec!["u16".into()], "u8"),
+                EffectOp::new("port_write", vec!["u16".into(), "u8".into()], "void"),
+            ],
+        );
+        let _ = self.register(hardware);
+
+        let tensor_eff = EffectDecl::new(
+            "Tensor",
+            EffectKind::Tensor,
+            vec![
+                EffectOp::new("matmul", vec!["tensor".into(), "tensor".into()], "tensor"),
+                EffectOp::new("relu", vec!["tensor".into()], "tensor"),
+                EffectOp::new("softmax", vec!["tensor".into()], "tensor"),
+            ],
+        );
+        let _ = self.register(tensor_eff);
     }
 
     /// Registers a new effect. Returns `Err` if the name is already taken.
@@ -794,17 +858,55 @@ impl fmt::Display for ContextAnnotation {
 
 /// Returns the set of effect kinds forbidden in a given context.
 ///
-/// - `@kernel`: forbids Alloc (heap) effects
-/// - `@device`: forbids IO effects
-/// - `@safe`: forbids IO and Alloc
-/// - `@unsafe`: forbids nothing
+/// - `@kernel`: allows Hardware, State, IO, Panic — forbids Alloc, Tensor
+/// - `@device`: allows Tensor, Alloc, IO, Panic — forbids Hardware
+/// - `@safe`: forbids Hardware, Tensor, IO, Alloc (most restrictive)
+/// - `@unsafe`: forbids nothing (full access)
 pub fn forbidden_effects(ctx: ContextAnnotation) -> Vec<EffectKind> {
     match ctx {
-        ContextAnnotation::Safe => vec![EffectKind::IO, EffectKind::Alloc],
-        ContextAnnotation::Kernel => vec![EffectKind::Alloc],
-        ContextAnnotation::Device => vec![EffectKind::IO],
+        ContextAnnotation::Safe => vec![
+            EffectKind::IO,
+            EffectKind::Alloc,
+            EffectKind::Hardware,
+            EffectKind::Tensor,
+        ],
+        ContextAnnotation::Kernel => vec![EffectKind::Alloc, EffectKind::Tensor],
+        ContextAnnotation::Device => vec![EffectKind::Hardware],
         ContextAnnotation::Unsafe => vec![],
     }
+}
+
+/// Returns the set of effect names allowed in a given context.
+pub fn allowed_effects(ctx: ContextAnnotation) -> EffectSet {
+    let mut set = EffectSet::empty();
+    match ctx {
+        ContextAnnotation::Kernel => {
+            set.insert("Hardware".to_string());
+            set.insert("State".to_string());
+            set.insert("IO".to_string());
+            set.insert("Panic".to_string());
+        }
+        ContextAnnotation::Device => {
+            set.insert("Tensor".to_string());
+            set.insert("Alloc".to_string());
+            set.insert("IO".to_string());
+            set.insert("Panic".to_string());
+        }
+        ContextAnnotation::Safe => {
+            set.insert("Panic".to_string());
+        }
+        ContextAnnotation::Unsafe => {
+            set.insert("Hardware".to_string());
+            set.insert("Tensor".to_string());
+            set.insert("Alloc".to_string());
+            set.insert("IO".to_string());
+            set.insert("Panic".to_string());
+            set.insert("Async".to_string());
+            set.insert("State".to_string());
+            set.insert("Exception".to_string());
+        }
+    }
+    set
 }
 
 /// Checks that a function's effect set is compatible with its context.
@@ -1591,9 +1693,9 @@ mod tests {
     }
 
     #[test]
-    fn s3_5_context_device_forbids_io() {
+    fn s3_5_context_device_forbids_hardware() {
         let registry = EffectRegistry::with_builtins();
-        let effects = EffectSet::collect_from(vec!["IO".into()]);
+        let effects = EffectSet::collect_from(vec!["Hardware".into()]);
         let errors = check_context_effects(&effects, ContextAnnotation::Device, &registry);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].to_string().contains("@device"));

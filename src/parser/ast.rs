@@ -72,6 +72,8 @@ pub enum Item {
     TypeAlias(TypeAlias),
     /// Global assembly: `global_asm!(".section .text\n...")`
     GlobalAsm(GlobalAsm),
+    /// Effect declaration: `effect Console { fn log(msg: str) -> void }`
+    EffectDecl(EffectDeclItem),
     /// A statement at the top level (for REPL / scripts).
     Stmt(Stmt),
 }
@@ -85,6 +87,43 @@ pub enum Item {
 pub struct GlobalAsm {
     /// Assembly template string.
     pub template: String,
+    /// Source span.
+    pub span: Span,
+}
+
+/// An operation declared inside an effect block.
+///
+/// ```text
+/// fn log(msg: str) -> void
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectOpDef {
+    /// Operation name (e.g., `"log"`).
+    pub name: String,
+    /// Parameter names and types.
+    pub params: Vec<(String, TypeExpr)>,
+    /// Return type (None = void).
+    pub return_type: Option<TypeExpr>,
+    /// Source span.
+    pub span: Span,
+}
+
+/// Effect declaration item.
+///
+/// ```text
+/// effect Console {
+///     fn log(msg: str) -> void
+///     fn read_line() -> str
+/// }
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectDeclItem {
+    /// Whether the effect is declared `pub`.
+    pub is_pub: bool,
+    /// Effect name (e.g., `"Console"`).
+    pub name: String,
+    /// Operations provided by this effect.
+    pub operations: Vec<EffectOpDef>,
     /// Source span.
     pub span: Span,
 }
@@ -128,6 +167,8 @@ pub struct FnDef {
     pub requires: Vec<Box<Expr>>,
     /// Postconditions: `@ensures(expr)` — must hold on function exit.
     pub ensures: Vec<Box<Expr>>,
+    /// Effect annotations: `with IO, Alloc` — effects this function may perform.
+    pub effects: Vec<String>,
     /// Function body.
     pub body: Box<Expr>,
     /// Source span.
@@ -860,6 +901,43 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// Handle effect expression: `handle body with { Effect::op(args) => { handler_body } }`.
+    HandleEffect {
+        /// The body expression to run under the handler.
+        body: Box<Expr>,
+        /// Effect handler arms: (effect_name, op_name, param_names, handler_body).
+        handlers: Vec<EffectHandlerArm>,
+        /// Source span.
+        span: Span,
+    },
+
+    /// Resume continuation in an effect handler: `resume(value)`.
+    ResumeExpr {
+        /// The value to resume with.
+        value: Box<Expr>,
+        /// Source span.
+        span: Span,
+    },
+}
+
+/// A single arm in a handle expression.
+///
+/// ```text
+/// Effect::op(param1, param2) => { handler_body }
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectHandlerArm {
+    /// Effect name (e.g., `"Console"`).
+    pub effect_name: String,
+    /// Operation name (e.g., `"log"`).
+    pub op_name: String,
+    /// Parameter names bound in the handler.
+    pub param_names: Vec<String>,
+    /// Handler body expression.
+    pub body: Box<Expr>,
+    /// Source span.
+    pub span: Span,
 }
 
 /// A part of an f-string expression (post-parsing).
@@ -938,7 +1016,9 @@ impl Expr {
             | Expr::Grouped { span, .. }
             | Expr::Path { span, .. }
             | Expr::InlineAsm { span, .. }
-            | Expr::FString { span, .. } => *span,
+            | Expr::FString { span, .. }
+            | Expr::HandleEffect { span, .. }
+            | Expr::ResumeExpr { span, .. } => *span,
         }
     }
 }
@@ -2046,6 +2126,7 @@ mod tests {
             where_clauses: vec![],
             requires: vec![],
             ensures: vec![],
+            effects: Vec::new(),
             body: Box::new(Expr::Block {
                 stmts: vec![],
                 expr: None,

@@ -253,6 +253,15 @@ fn analyze_expr(
                 analyze_expr(&f.value, local_count, frame_bytes, calls);
             }
         }
+        Expr::HandleEffect { body, handlers, .. } => {
+            analyze_expr(body, local_count, frame_bytes, calls);
+            for handler in handlers {
+                analyze_expr(&handler.body, local_count, frame_bytes, calls);
+            }
+        }
+        Expr::ResumeExpr { value, .. } => {
+            analyze_expr(value, local_count, frame_bytes, calls);
+        }
         // Leaf nodes — no locals, no calls
         Expr::Literal { .. }
         | Expr::Ident { .. }
@@ -578,6 +587,7 @@ mod tests {
             where_clauses: vec![],
             requires: vec![],
             ensures: vec![],
+            effects: vec![],
             body: Box::new(body),
             span: dummy_span(),
         }
