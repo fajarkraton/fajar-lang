@@ -4841,8 +4841,12 @@ impl CraneliftCompiler {
             }
         }
 
-        // Filter concrete_fns to only reachable functions
-        concrete_fns.retain(|f| reachable.contains(&f.name));
+        // Filter concrete_fns to only reachable functions.
+        // In bare-metal (no_std) JIT mode, skip DCE — OS kernels use fn_addr,
+        // interrupt vectors, and asm trampolines invisible to static analysis.
+        if !self.no_std {
+            concrete_fns.retain(|f| reachable.contains(&f.name));
+        }
 
         // First pass: declare concrete functions (forward declarations)
         for fndef in &concrete_fns {
