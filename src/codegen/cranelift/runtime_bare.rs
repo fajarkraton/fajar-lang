@@ -1898,6 +1898,197 @@ pub extern "C" fn fj_rt_bare_read_ttbr0() -> i64 {
 pub extern "C" fn fj_rt_bare_tlbi_va(_va: i64) {}
 
 // ═══════════════════════════════════════════════════════════════════════
+// AArch64 EL0 User Space Support
+// ═══════════════════════════════════════════════════════════════════════
+//
+// ARM64 Exception Levels:
+//   EL0 — User space (unprivileged, no MMIO, no page table access)
+//   EL1 — Kernel (privileged, full hardware control)
+//
+// Transition EL1→EL0: set SPSR_EL1.M[3:0]=0b0000 (EL0t), set ELR_EL1
+//   to user entry point, set SP_EL0 to user stack, then ERET.
+// Transition EL0→EL1: SVC instruction (sync) or IRQ (async).
+
+/// Transition from EL1 to EL0 (kernel → user mode).
+///
+/// Sets ELR_EL1 = entry (return address), SP_EL0 = user stack,
+/// SPSR_EL1 = 0x0 (EL0t, IRQs enabled, all flags clear), then ERET.
+///
+/// On hosted targets: no-op stub (returns immediately).
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_eret_to_el0(_entry: i64, _sp_el0: i64, _spsr: i64) {
+    // On bare-metal aarch64: implemented in linker.rs startup assembly.
+    // On hosted: no-op stub.
+}
+
+/// Read current exception level (CurrentEL register).
+///
+/// Returns: 0 = EL0, 1 = EL1, 2 = EL2, 3 = EL3.
+/// On hosted targets: returns 1 (simulates kernel mode).
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_current_el() -> i64 {
+    1 // Hosted: simulate EL1
+}
+
+/// Read SPSR_EL1 (Saved Program Status Register).
+///
+/// Contains the saved PSTATE from the last exception entry.
+/// Bits [3:0] = M (exception level), Bit [6] = FIQ mask, Bit [7] = IRQ mask,
+/// Bit [8] = SError mask, Bit [9] = Debug mask.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_spsr_el1() -> i64 {
+    0
+}
+
+/// Write SPSR_EL1 (sets PSTATE that will be restored on ERET).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_spsr_el1(_val: i64) {}
+
+/// Read ELR_EL1 (Exception Link Register).
+///
+/// Contains the return address for ERET instruction.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_elr_el1() -> i64 {
+    0
+}
+
+/// Write ELR_EL1 (sets return address for next ERET).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_elr_el1(_val: i64) {}
+
+/// Read SP_EL0 (user-mode stack pointer).
+///
+/// ARM64 has a separate SP for EL0. When executing at EL1, SP_EL0 can
+/// be read/written as a system register.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_sp_el0() -> i64 {
+    0
+}
+
+/// Write SP_EL0 (set user-mode stack pointer).
+///
+/// Used when setting up a new EL0 process or restoring process state.
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_sp_el0(_val: i64) {}
+
+/// Read TTBR1_EL1 (kernel page table base register).
+///
+/// TTBR1 maps the upper VA range (0xFFFF_0000_0000_0000+) for kernel.
+/// TTBR0 maps the lower VA range (0x0000_0000_0000_0000+) for user space.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_ttbr1() -> i64 {
+    0
+}
+
+/// Write TTBR1_EL1 (set kernel page table base).
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_write_ttbr1(_val: i64) {}
+
+/// Read ESR_EL1 (Exception Syndrome Register).
+///
+/// EC field [31:26] identifies exception class:
+///   0x15 = SVC from AArch64 (syscall from EL0)
+///   0x24 = Data abort from lower EL
+///   0x20 = Instruction abort from lower EL
+/// ISS field [24:0] contains exception-specific info.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_esr_el1() -> i64 {
+    0
+}
+
+/// Read FAR_EL1 (Fault Address Register).
+///
+/// Contains the virtual address that caused a data/instruction abort.
+/// On hosted targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_read_far_el1() -> i64 {
+    0
+}
+
+/// TLB invalidate all (TLBI VMALLE1).
+///
+/// Flushes all TLB entries for EL1 and EL0.
+/// Used after switching TTBR0 for a new process.
+/// On hosted targets: no-op stub.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_tlbi_all() {}
+
+/// ISB (Instruction Synchronization Barrier).
+///
+/// Ensures all previous context-altering operations complete before
+/// executing any subsequent instructions. Required after:
+/// - Writing VBAR_EL1, TTBR0_EL1, SPSR_EL1, ELR_EL1
+/// - Any system register write that affects instruction execution
+/// On hosted targets: compiler fence.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_isb() {
+    std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+}
+
+/// DSB (Data Synchronization Barrier).
+///
+/// Ensures all previous memory accesses complete before proceeding.
+/// Required before TLBI and after page table modifications.
+/// On hosted targets: compiler fence.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_dsb() {
+    std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AArch64 EL0 Constants (for Fajar Lang @kernel code)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// SPSR value for EL0t: M[3:0]=0b0000, DAIF=0 (all interrupts enabled).
+pub const SPSR_EL0T: i64 = 0x0000_0000;
+
+/// SPSR value for EL0t with IRQ masked: M[3:0]=0b0000, I=1.
+pub const SPSR_EL0T_IRQ_MASKED: i64 = 0x0000_0080;
+
+/// ESR EC field for SVC from AArch64 (syscall).
+pub const ESR_EC_SVC_AARCH64: i64 = 0x15;
+
+/// ESR EC field for Data Abort from lower EL.
+pub const ESR_EC_DATA_ABORT_LOWER: i64 = 0x24;
+
+/// ESR EC field for Instruction Abort from lower EL.
+pub const ESR_EC_INST_ABORT_LOWER: i64 = 0x20;
+
+/// Page table descriptor: AP[2:1] for EL0 access.
+/// AP=0b01: RW at EL1, no access at EL0 (kernel-only).
+pub const PTE_AP_KERNEL_RW: i64 = 0x0000_0000_0000_0040;
+
+/// AP=0b00: RW at both EL0 and EL1 (user read-write).
+pub const PTE_AP_USER_RW: i64 = 0x0000_0000_0000_0000;
+
+/// AP=0b11: RO at both EL0 and EL1 (user read-only).
+pub const PTE_AP_USER_RO: i64 = 0x0000_0000_0000_00C0;
+
+/// Page table descriptor: UXN (User eXecute Never) bit.
+pub const PTE_UXN: i64 = 1 << 54;
+
+/// Page table descriptor: PXN (Privileged eXecute Never) bit.
+pub const PTE_PXN: i64 = 1 << 53;
+
+/// Page table descriptor: AF (Access Flag) — must be set.
+pub const PTE_AF: i64 = 1 << 10;
+
+/// Page table descriptor: valid block/page entry.
+pub const PTE_VALID: i64 = 0x1;
+
+/// Page table descriptor: table entry (for non-leaf entries).
+pub const PTE_TABLE: i64 = 0x3;
+
+// ═══════════════════════════════════════════════════════════════════════
 // x86_64 Port I/O (IN/OUT instructions)
 // ═══════════════════════════════════════════════════════════════════════
 //

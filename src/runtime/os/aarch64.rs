@@ -32,6 +32,9 @@ pub enum Aarch64Error {
     /// UART not initialized.
     #[error("UART not initialized")]
     UartNotInit,
+    /// Process table is full (max 16 EL0 processes).
+    #[error("EL0 process table full (max {MAX_EL0_PROCESSES})")]
+    ProcessTableFull,
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -398,6 +401,296 @@ impl Default for ExceptionVectorTable {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// EL0 User Space Process Model
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Context frame size in bytes (saved by SAVE_CONTEXT macro).
+///
+/// Layout: 30 GP regs (x0-x29) + LR + ELR_EL1 + SPSR_EL1 + SP_EL0 = 288 bytes.
+pub const CONTEXT_FRAME_SIZE: usize = 288;
+
+/// Offset of SP_EL0 in the saved context frame.
+pub const CONTEXT_SP_EL0_OFFSET: usize = 264;
+
+/// Offset of SPSR_EL1 in the saved context frame.
+pub const CONTEXT_SPSR_OFFSET: usize = 256;
+
+/// Offset of ELR_EL1 in the saved context frame.
+pub const CONTEXT_ELR_OFFSET: usize = 248;
+
+/// Maximum number of EL0 processes.
+pub const MAX_EL0_PROCESSES: usize = 16;
+
+/// Default user stack size (64 KB per process).
+pub const USER_STACK_SIZE: u64 = 64 * 1024;
+
+/// Default kernel stack size per process (16 KB).
+pub const KERNEL_STACK_SIZE: u64 = 16 * 1024;
+
+/// SPSR value for EL0t with interrupts enabled.
+pub const SPSR_EL0T: u64 = 0x0000_0000;
+
+/// EL0 process state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum El0State {
+    /// Process slot is unused.
+    Free,
+    /// Process is ready to run.
+    Ready,
+    /// Process is currently running on CPU.
+    Running,
+    /// Process is blocked (waiting for syscall/event).
+    Blocked,
+    /// Process has exited.
+    Exited(i64),
+}
+
+/// ARM64 page table Access Permission bits for EL0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageAccess {
+    /// RW at EL1, no access at EL0 (kernel-only page).
+    KernelRW,
+    /// RW at both EL1 and EL0 (user read-write page).
+    UserRW,
+    /// RO at both EL1 and EL0 (user read-only page).
+    UserRO,
+    /// No access from EL0, RO from EL1.
+    KernelRO,
+}
+
+impl PageAccess {
+    /// Convert to AP[2:1] bits for page table descriptor.
+    ///
+    /// ARM64 Stage 1 AP encoding:
+    ///   AP[2:1] = 0b00 → EL1 RW, EL0 RW
+    ///   AP[2:1] = 0b01 → EL1 RW, EL0 no access
+    ///   AP[2:1] = 0b10 → EL1 RO, EL0 RO
+    ///   AP[2:1] = 0b11 → EL1 RO, EL0 no access
+    pub fn to_ap_bits(self) -> u64 {
+        match self {
+            PageAccess::UserRW => 0b00 << 6,    // AP[2:1] = 00
+            PageAccess::KernelRW => 0b01 << 6,  // AP[2:1] = 01
+            PageAccess::UserRO => 0b10 << 6,    // AP[2:1] = 10
+            PageAccess::KernelRO => 0b11 << 6,  // AP[2:1] = 11
+        }
+    }
+
+    /// Check if this page is accessible from EL0.
+    pub fn is_user_accessible(self) -> bool {
+        matches!(self, PageAccess::UserRW | PageAccess::UserRO)
+    }
+}
+
+/// An EL0 user-space process.
+///
+/// Represents a process that runs at Exception Level 0 (unprivileged).
+/// The kernel manages its page tables, stacks, and saved context.
+#[derive(Debug, Clone)]
+pub struct El0Process {
+    /// Process ID (1-based, 0 = invalid).
+    pub pid: u16,
+    /// Process state.
+    pub state: El0State,
+    /// Entry point address (ELR_EL1 for first ERET).
+    pub entry: u64,
+    /// User stack pointer (SP_EL0).
+    pub user_sp: u64,
+    /// User stack base (bottom of allocated stack region).
+    pub user_stack_base: u64,
+    /// Kernel stack pointer (used when handling exceptions from this process).
+    pub kernel_sp: u64,
+    /// Kernel stack base.
+    pub kernel_stack_base: u64,
+    /// TTBR0 value (physical address of user page table L0).
+    pub ttbr0: u64,
+    /// Saved context frame pointer (points into kernel stack).
+    /// After preemption, this holds the SP at exception entry.
+    pub saved_sp: u64,
+    /// Exit code (valid when state == Exited).
+    pub exit_code: i64,
+}
+
+impl El0Process {
+    /// Create a new EL0 process.
+    ///
+    /// - `pid`: Process ID
+    /// - `entry`: Code entry point (will be loaded into ELR_EL1)
+    /// - `user_stack_top`: Top of user stack (grows downward)
+    /// - `kernel_stack_top`: Top of kernel stack for exception handling
+    /// - `ttbr0`: Physical address of per-process page table
+    pub fn new(
+        pid: u16,
+        entry: u64,
+        user_stack_top: u64,
+        user_stack_base: u64,
+        kernel_stack_top: u64,
+        kernel_stack_base: u64,
+        ttbr0: u64,
+    ) -> Self {
+        Self {
+            pid,
+            state: El0State::Ready,
+            entry,
+            user_sp: user_stack_top,
+            user_stack_base,
+            kernel_sp: kernel_stack_top,
+            kernel_stack_base,
+            ttbr0,
+            saved_sp: 0,
+            exit_code: 0,
+        }
+    }
+
+    /// Get the SPSR value for entering this process at EL0.
+    pub fn spsr(&self) -> u64 {
+        SPSR_EL0T // M[3:0]=0000 (EL0t), all interrupts enabled
+    }
+}
+
+/// Process table for EL0 processes.
+///
+/// Manages up to `MAX_EL0_PROCESSES` user-space processes.
+/// The kernel uses this table for scheduling, context switching,
+/// and syscall dispatch.
+#[derive(Debug)]
+pub struct El0ProcessTable {
+    /// Process slots (index 0 = PID 1).
+    processes: Vec<Option<El0Process>>,
+    /// Currently running PID (0 = none/kernel).
+    current_pid: u16,
+}
+
+impl El0ProcessTable {
+    /// Create an empty process table.
+    pub fn new() -> Self {
+        let mut processes = Vec::with_capacity(MAX_EL0_PROCESSES);
+        for _ in 0..MAX_EL0_PROCESSES {
+            processes.push(None);
+        }
+        Self {
+            processes,
+            current_pid: 0,
+        }
+    }
+
+    /// Spawn a new EL0 process. Returns PID on success.
+    pub fn spawn(
+        &mut self,
+        entry: u64,
+        user_stack_top: u64,
+        user_stack_base: u64,
+        kernel_stack_top: u64,
+        kernel_stack_base: u64,
+        ttbr0: u64,
+    ) -> Result<u16, Aarch64Error> {
+        // Find free slot
+        for (i, slot) in self.processes.iter_mut().enumerate() {
+            if slot.is_none() {
+                let pid = (i + 1) as u16;
+                *slot = Some(El0Process::new(
+                    pid,
+                    entry,
+                    user_stack_top,
+                    user_stack_base,
+                    kernel_stack_top,
+                    kernel_stack_base,
+                    ttbr0,
+                ));
+                return Ok(pid);
+            }
+        }
+        Err(Aarch64Error::ProcessTableFull)
+    }
+
+    /// Get a process by PID.
+    pub fn get(&self, pid: u16) -> Option<&El0Process> {
+        if pid == 0 || pid as usize > self.processes.len() {
+            return None;
+        }
+        self.processes[(pid - 1) as usize].as_ref()
+    }
+
+    /// Get a mutable process by PID.
+    pub fn get_mut(&mut self, pid: u16) -> Option<&mut El0Process> {
+        if pid == 0 || pid as usize > self.processes.len() {
+            return None;
+        }
+        self.processes[(pid - 1) as usize].as_mut()
+    }
+
+    /// Get the currently running PID.
+    pub fn current_pid(&self) -> u16 {
+        self.current_pid
+    }
+
+    /// Set the currently running PID.
+    pub fn set_current(&mut self, pid: u16) {
+        self.current_pid = pid;
+    }
+
+    /// Mark a process as exited.
+    pub fn exit(&mut self, pid: u16, code: i64) -> bool {
+        if let Some(proc) = self.get_mut(pid) {
+            proc.state = El0State::Exited(code);
+            proc.exit_code = code;
+            if self.current_pid == pid {
+                self.current_pid = 0;
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Remove an exited process, freeing the slot.
+    pub fn reap(&mut self, pid: u16) -> bool {
+        if pid == 0 || pid as usize > self.processes.len() {
+            return false;
+        }
+        let idx = (pid - 1) as usize;
+        if let Some(proc) = &self.processes[idx] {
+            if matches!(proc.state, El0State::Exited(_)) {
+                self.processes[idx] = None;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Count of active (non-exited, non-free) processes.
+    pub fn active_count(&self) -> usize {
+        self.processes
+            .iter()
+            .filter(|s| {
+                s.as_ref()
+                    .map(|p| !matches!(p.state, El0State::Exited(_)))
+                    .unwrap_or(false)
+            })
+            .count()
+    }
+
+    /// Get next ready process for round-robin scheduling.
+    pub fn next_ready(&self, after_pid: u16) -> Option<u16> {
+        let start = after_pid as usize; // 0-based after PID
+        for offset in 1..=MAX_EL0_PROCESSES {
+            let idx = (start + offset - 1) % MAX_EL0_PROCESSES;
+            if let Some(proc) = &self.processes[idx] {
+                if proc.state == El0State::Ready {
+                    return Some(proc.pid);
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Default for El0ProcessTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -495,5 +788,218 @@ mod tests {
         );
         assert_eq!(vt.get_handler(0, ExceptionType::Irq), None);
         assert_eq!(vt.handler_count(), 2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // EL0 Process Model tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[test]
+    fn el0_process_creation() {
+        let proc = El0Process::new(
+            1,              // pid
+            0x1_0000,       // entry
+            0x8_0000,       // user_stack_top
+            0x7_0000,       // user_stack_base
+            0x4_8000,       // kernel_stack_top
+            0x4_4000,       // kernel_stack_base
+            0x20_0000,      // ttbr0
+        );
+        assert_eq!(proc.pid, 1);
+        assert_eq!(proc.state, El0State::Ready);
+        assert_eq!(proc.entry, 0x1_0000);
+        assert_eq!(proc.user_sp, 0x8_0000);
+        assert_eq!(proc.kernel_sp, 0x4_8000);
+        assert_eq!(proc.ttbr0, 0x20_0000);
+        assert_eq!(proc.spsr(), SPSR_EL0T); // EL0t, IRQs enabled
+    }
+
+    #[test]
+    fn el0_process_table_spawn() {
+        let mut table = El0ProcessTable::new();
+        assert_eq!(table.active_count(), 0);
+
+        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        assert_eq!(pid, 1);
+        assert_eq!(table.active_count(), 1);
+
+        let proc = table.get(pid).unwrap();
+        assert_eq!(proc.entry, 0x1000);
+        assert_eq!(proc.state, El0State::Ready);
+    }
+
+    #[test]
+    fn el0_process_table_multiple_spawn() {
+        let mut table = El0ProcessTable::new();
+
+        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+        let pid3 = table.spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000).unwrap();
+
+        assert_eq!(pid1, 1);
+        assert_eq!(pid2, 2);
+        assert_eq!(pid3, 3);
+        assert_eq!(table.active_count(), 3);
+    }
+
+    #[test]
+    fn el0_process_table_full() {
+        let mut table = El0ProcessTable::new();
+
+        for i in 0..MAX_EL0_PROCESSES {
+            let pid = table.spawn(
+                (i as u64 + 1) * 0x1000,
+                0x8_0000 + (i as u64) * 0x1_0000,
+                0x7_0000 + (i as u64) * 0x1_0000,
+                0x4_0000 + (i as u64) * 0x4000,
+                0x3_C000 + (i as u64) * 0x4000,
+                (i as u64 + 1) * 0x20_0000,
+            ).unwrap();
+            assert_eq!(pid, (i + 1) as u16);
+        }
+
+        // 17th spawn should fail
+        let result = table.spawn(0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF);
+        assert_eq!(result, Err(Aarch64Error::ProcessTableFull));
+    }
+
+    #[test]
+    fn el0_process_exit_and_reap() {
+        let mut table = El0ProcessTable::new();
+        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+
+        // Set as running
+        table.set_current(pid);
+        table.get_mut(pid).unwrap().state = El0State::Running;
+        assert_eq!(table.current_pid(), pid);
+
+        // Exit
+        assert!(table.exit(pid, 42));
+        assert_eq!(table.current_pid(), 0); // auto-cleared
+        assert_eq!(table.get(pid).unwrap().state, El0State::Exited(42));
+        assert_eq!(table.get(pid).unwrap().exit_code, 42);
+
+        // Reap
+        assert!(table.reap(pid));
+        assert!(table.get(pid).is_none());
+    }
+
+    #[test]
+    fn el0_process_reap_only_exited() {
+        let mut table = El0ProcessTable::new();
+        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+
+        // Cannot reap a Ready process
+        assert!(!table.reap(pid));
+
+        // Can reap after exit
+        table.exit(pid, 0);
+        assert!(table.reap(pid));
+    }
+
+    #[test]
+    fn el0_process_next_ready_round_robin() {
+        let mut table = El0ProcessTable::new();
+        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+        let pid3 = table.spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000).unwrap();
+
+        // From PID 0 (kernel), next ready should be PID 1
+        assert_eq!(table.next_ready(0), Some(pid1));
+
+        // From PID 1, next ready should be PID 2
+        assert_eq!(table.next_ready(pid1), Some(pid2));
+
+        // From PID 2, next ready should be PID 3
+        assert_eq!(table.next_ready(pid2), Some(pid3));
+
+        // From PID 3, wraps around to PID 1
+        assert_eq!(table.next_ready(pid3), Some(pid1));
+    }
+
+    #[test]
+    fn el0_process_next_ready_skips_running() {
+        let mut table = El0ProcessTable::new();
+        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+
+        // Mark PID 1 as Running
+        table.get_mut(pid1).unwrap().state = El0State::Running;
+
+        // From PID 0, skip Running PID 1, find Ready PID 2
+        assert_eq!(table.next_ready(0), Some(pid2));
+    }
+
+    #[test]
+    fn el0_process_next_ready_none_available() {
+        let mut table = El0ProcessTable::new();
+        assert_eq!(table.next_ready(0), None);
+
+        // All processes exited
+        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        table.exit(pid, 0);
+        assert_eq!(table.next_ready(0), None);
+    }
+
+    #[test]
+    fn el0_process_spawn_reuse_slot() {
+        let mut table = El0ProcessTable::new();
+        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        assert_eq!(pid1, 1);
+
+        // Exit and reap PID 1
+        table.exit(pid1, 0);
+        table.reap(pid1);
+
+        // New spawn should reuse slot 0 → PID 1
+        let pid_new = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+        assert_eq!(pid_new, 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Page Access tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[test]
+    fn page_access_ap_bits() {
+        // AP[2:1] encoding
+        assert_eq!(PageAccess::UserRW.to_ap_bits(), 0b00 << 6);    // 0x00
+        assert_eq!(PageAccess::KernelRW.to_ap_bits(), 0b01 << 6);  // 0x40
+        assert_eq!(PageAccess::UserRO.to_ap_bits(), 0b10 << 6);    // 0x80
+        assert_eq!(PageAccess::KernelRO.to_ap_bits(), 0b11 << 6);  // 0xC0
+    }
+
+    #[test]
+    fn page_access_user_accessible() {
+        assert!(PageAccess::UserRW.is_user_accessible());
+        assert!(PageAccess::UserRO.is_user_accessible());
+        assert!(!PageAccess::KernelRW.is_user_accessible());
+        assert!(!PageAccess::KernelRO.is_user_accessible());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Context frame layout tests
+    // ═══════════════════════════════════════════════════════════════
+
+    #[test]
+    fn context_frame_layout() {
+        // 288 bytes = 36 × 8-byte slots, 16-byte aligned
+        assert_eq!(CONTEXT_FRAME_SIZE, 288);
+        assert_eq!(CONTEXT_FRAME_SIZE % 16, 0);
+
+        // SP_EL0 at offset 264 (slot 33)
+        assert_eq!(CONTEXT_SP_EL0_OFFSET, 264);
+
+        // SPSR at offset 256 (slot 32)
+        assert_eq!(CONTEXT_SPSR_OFFSET, 256);
+
+        // ELR at offset 248 (slot 31, paired with LR at 240)
+        assert_eq!(CONTEXT_ELR_OFFSET, 248);
+    }
+
+    #[test]
+    fn spsr_el0t_value() {
+        // EL0t: M[3:0] = 0b0000, all DAIF clear
+        assert_eq!(SPSR_EL0T, 0);
     }
 }

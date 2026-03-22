@@ -296,9 +296,22 @@ __vectors:
 
 /* ─── Exception stubs: save context, call handler, restore ─── */
 
-/* Macro: save all GP registers to stack (256 bytes) */
+/* Macro: save all GP registers + ELR + SPSR + SP_EL0 to stack (288 bytes) */
+/* Frame layout (offsets):
+     0-15:   x0, x1          128-143: x16, x17
+    16-31:   x2, x3          144-159: x18, x19
+    32-47:   x4, x5          160-175: x20, x21
+    48-63:   x6, x7          176-191: x22, x23
+    64-79:   x8, x9          192-207: x24, x25
+    80-95:   x10, x11        208-223: x26, x27
+    96-111:  x12, x13        224-239: x28, x29
+   112-127:  x14, x15        240-255: x30, ELR_EL1
+   256:      SPSR_EL1        264:     SP_EL0 (user stack)
+   272:      (padding)        280:     (padding)
+   Total: 288 bytes (16-byte aligned)
+*/
 .macro SAVE_CONTEXT
-    sub     sp, sp, #272
+    sub     sp, sp, #288
     stp     x0, x1, [sp, #0]
     stp     x2, x3, [sp, #16]
     stp     x4, x5, [sp, #32]
@@ -317,10 +330,14 @@ __vectors:
     mrs     x0, ELR_EL1
     mrs     x1, SPSR_EL1
     stp     x30, x0, [sp, #240]
-    str     x1, [sp, #256]          /* SPSR_EL1 saved! */
+    str     x1, [sp, #256]          /* SPSR_EL1 */
+    mrs     x1, SP_EL0
+    str     x1, [sp, #264]          /* SP_EL0 (user stack pointer) */
 .endm
 
 .macro RESTORE_CONTEXT
+    ldr     x1, [sp, #264]          /* restore SP_EL0 */
+    msr     SP_EL0, x1
     ldr     x1, [sp, #256]          /* restore SPSR_EL1 */
     msr     SPSR_EL1, x1
     ldp     x30, x0, [sp, #240]
@@ -340,7 +357,7 @@ __vectors:
     ldp     x24, x25, [sp, #192]
     ldp     x26, x27, [sp, #208]
     ldp     x28, x29, [sp, #224]
-    add     sp, sp, #272
+    add     sp, sp, #288
 .endm
 
 /* Sync exception from current EL (includes SVC syscalls) */
@@ -541,6 +558,174 @@ fj_rt_bare_halt:
     wfe
     b       fj_rt_bare_halt
 .size fj_rt_bare_halt, . - fj_rt_bare_halt
+
+/* ═══════════════════════════════════════════════════════════════════
+   EL0 User Space Support (AArch64)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Transition from EL1 → EL0 via ERET.
+   x0 = entry address (→ ELR_EL1)
+   x1 = user stack pointer (→ SP_EL0)
+   x2 = SPSR value (typically 0x0 for EL0t, IRQs enabled)
+
+   After ERET, CPU drops to EL0 at address x0 with SP=x1.
+   This function does NOT return to the caller.
+*/
+.global fj_rt_bare_eret_to_el0
+.type fj_rt_bare_eret_to_el0, @function
+fj_rt_bare_eret_to_el0:
+    msr     ELR_EL1, x0            /* return address = user entry */
+    msr     SP_EL0, x1             /* user stack pointer */
+    msr     SPSR_EL1, x2           /* saved PSTATE: EL0t + flags */
+    isb                            /* sync register writes */
+    eret                           /* drop to EL0 */
+.size fj_rt_bare_eret_to_el0, . - fj_rt_bare_eret_to_el0
+
+/* Read current exception level.
+   Returns 0 (EL0), 1 (EL1), 2 (EL2), 3 (EL3) in x0.
+   CurrentEL register contains EL in bits [3:2].
+*/
+.global fj_rt_bare_read_current_el
+.type fj_rt_bare_read_current_el, @function
+fj_rt_bare_read_current_el:
+    mrs     x0, CurrentEL
+    lsr     x0, x0, #2             /* shift bits [3:2] → [1:0] */
+    and     x0, x0, #3             /* mask to 2 bits */
+    ret
+.size fj_rt_bare_read_current_el, . - fj_rt_bare_read_current_el
+
+/* Read SPSR_EL1 */
+.global fj_rt_bare_read_spsr_el1
+.type fj_rt_bare_read_spsr_el1, @function
+fj_rt_bare_read_spsr_el1:
+    mrs     x0, SPSR_EL1
+    ret
+.size fj_rt_bare_read_spsr_el1, . - fj_rt_bare_read_spsr_el1
+
+/* Write SPSR_EL1 */
+.global fj_rt_bare_write_spsr_el1
+.type fj_rt_bare_write_spsr_el1, @function
+fj_rt_bare_write_spsr_el1:
+    msr     SPSR_EL1, x0
+    isb
+    ret
+.size fj_rt_bare_write_spsr_el1, . - fj_rt_bare_write_spsr_el1
+
+/* Read ELR_EL1 */
+.global fj_rt_bare_read_elr_el1
+.type fj_rt_bare_read_elr_el1, @function
+fj_rt_bare_read_elr_el1:
+    mrs     x0, ELR_EL1
+    ret
+.size fj_rt_bare_read_elr_el1, . - fj_rt_bare_read_elr_el1
+
+/* Write ELR_EL1 */
+.global fj_rt_bare_write_elr_el1
+.type fj_rt_bare_write_elr_el1, @function
+fj_rt_bare_write_elr_el1:
+    msr     ELR_EL1, x0
+    isb
+    ret
+.size fj_rt_bare_write_elr_el1, . - fj_rt_bare_write_elr_el1
+
+/* Read SP_EL0 (user stack pointer, accessible from EL1) */
+.global fj_rt_bare_read_sp_el0
+.type fj_rt_bare_read_sp_el0, @function
+fj_rt_bare_read_sp_el0:
+    mrs     x0, SP_EL0
+    ret
+.size fj_rt_bare_read_sp_el0, . - fj_rt_bare_read_sp_el0
+
+/* Write SP_EL0 */
+.global fj_rt_bare_write_sp_el0
+.type fj_rt_bare_write_sp_el0, @function
+fj_rt_bare_write_sp_el0:
+    msr     SP_EL0, x0
+    isb
+    ret
+.size fj_rt_bare_write_sp_el0, . - fj_rt_bare_write_sp_el0
+
+/* Read ESR_EL1 (Exception Syndrome Register) */
+.global fj_rt_bare_read_esr_el1
+.type fj_rt_bare_read_esr_el1, @function
+fj_rt_bare_read_esr_el1:
+    mrs     x0, ESR_EL1
+    ret
+.size fj_rt_bare_read_esr_el1, . - fj_rt_bare_read_esr_el1
+
+/* Read FAR_EL1 (Fault Address Register) */
+.global fj_rt_bare_read_far_el1
+.type fj_rt_bare_read_far_el1, @function
+fj_rt_bare_read_far_el1:
+    mrs     x0, FAR_EL1
+    ret
+.size fj_rt_bare_read_far_el1, . - fj_rt_bare_read_far_el1
+
+/* Read TTBR1_EL1 (kernel page table base) */
+.global fj_rt_bare_read_ttbr1
+.type fj_rt_bare_read_ttbr1, @function
+fj_rt_bare_read_ttbr1:
+    mrs     x0, TTBR1_EL1
+    ret
+.size fj_rt_bare_read_ttbr1, . - fj_rt_bare_read_ttbr1
+
+/* Write TTBR1_EL1 */
+.global fj_rt_bare_write_ttbr1
+.type fj_rt_bare_write_ttbr1, @function
+fj_rt_bare_write_ttbr1:
+    msr     TTBR1_EL1, x0
+    isb
+    ret
+.size fj_rt_bare_write_ttbr1, . - fj_rt_bare_write_ttbr1
+
+/* Switch TTBR0_EL1 + full TLB invalidate (for process switch) */
+.global fj_rt_bare_switch_ttbr0
+.type fj_rt_bare_switch_ttbr0, @function
+fj_rt_bare_switch_ttbr0:
+    dsb     ish
+    msr     TTBR0_EL1, x0
+    tlbi    vmalle1
+    dsb     ish
+    isb
+    ret
+.size fj_rt_bare_switch_ttbr0, . - fj_rt_bare_switch_ttbr0
+
+/* TLB invalidate all entries */
+.global fj_rt_bare_tlbi_all
+.type fj_rt_bare_tlbi_all, @function
+fj_rt_bare_tlbi_all:
+    dsb     ish
+    tlbi    vmalle1
+    dsb     ish
+    isb
+    ret
+.size fj_rt_bare_tlbi_all, . - fj_rt_bare_tlbi_all
+
+/* ISB — instruction synchronization barrier */
+.global fj_rt_bare_isb
+.type fj_rt_bare_isb, @function
+fj_rt_bare_isb:
+    isb
+    ret
+.size fj_rt_bare_isb, . - fj_rt_bare_isb
+
+/* DSB — data synchronization barrier */
+.global fj_rt_bare_dsb
+.type fj_rt_bare_dsb, @function
+fj_rt_bare_dsb:
+    dsb     ish
+    ret
+.size fj_rt_bare_dsb, . - fj_rt_bare_dsb
+
+/* SVC wrapper: syscall from EL0 user mode
+   x0 = syscall number, x1 = arg1, x2 = arg2
+   Returns result in x0 */
+.global fj_rt_bare_svc
+.type fj_rt_bare_svc, @function
+fj_rt_bare_svc:
+    svc     #0
+    ret
+.size fj_rt_bare_svc, . - fj_rt_bare_svc
 
 .global fj_rt_bare_print_i64
 .type fj_rt_bare_print_i64, @function
