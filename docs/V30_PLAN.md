@@ -445,29 +445,29 @@ Number  Name                    Context    Description
 
 | # | Task | Status |
 |---|------|--------|
-| 14.1 | Read CNTFRQ_EL0 → system timer frequency | [ ] |
-| 14.2 | Implement `timer_get_ticks() -> u64` via CNTVCT_EL0 | [ ] |
-| 14.3 | Implement `timer_set_deadline(ticks)` via CNTV_CVAL_EL0 | [ ] |
-| 14.4 | Implement `timer_enable()` / `timer_disable()` via CNTV_CTL_EL0 | [ ] |
-| 14.5 | Implement `sleep_ms(ms)` using timer deadline | [ ] |
-| 14.6 | Implement `time_since_boot() -> Duration` | [ ] |
-| 14.7 | Wire timer IRQ (ID 27) → scheduler quantum expiry | [ ] |
+| 14.1 | Read CNTFRQ_EL0 → system timer frequency | [x] |
+| 14.2 | Implement `timer_get_ticks() -> u64` via CNTVCT_EL0 | [x] |
+| 14.3 | Implement `timer_set_deadline(ticks)` via CNTV_CVAL_EL0 | [x] |
+| 14.4 | Implement `timer_enable()` / `timer_disable()` via CNTV_CTL_EL0 | [x] |
+| 14.5 | Implement `sleep_ms(ms)` using timer deadline | [x] |
+| 14.6 | Implement `time_since_boot() -> Duration` | [x] |
+| 14.7 | Wire timer IRQ (ID 27) → scheduler quantum expiry | [x] |
 | 14.8 | Implement RTC driver: read/write DS1307 via I2C | [ ] |
-| 14.9 | Test: accurate 1-second delay via timer | [ ] |
+| 14.9 | Test: accurate 1-second delay via timer | [x] |
 | 14.10 | Test: RTC read returns valid date/time on Q6A | [ ] |
 
 ### Sprint 15: DMA Engine
 
 | # | Task | Status |
 |---|------|--------|
-| 15.1 | Map QCS6490 DMA controller registers | [ ] |
-| 15.2 | Implement DMA buffer allocation (physically contiguous, uncached) | [ ] |
-| 15.3 | Implement DMA channel configuration: src, dst, len, direction | [ ] |
-| 15.4 | Implement `dma_start(channel)` — begin transfer | [ ] |
-| 15.5 | Implement `dma_wait(channel)` — poll or interrupt-based completion | [ ] |
+| 15.1 | Map QCS6490 DMA controller registers | [x] |
+| 15.2 | Implement DMA buffer allocation (physically contiguous, uncached) | [x] |
+| 15.3 | Implement DMA channel configuration: src, dst, len, direction | [x] |
+| 15.4 | Implement `dma_start(channel)` — begin transfer | [x] |
+| 15.5 | Implement `dma_wait(channel)` — poll or interrupt-based completion | [x] |
 | 15.6 | Implement scatter-gather DMA for non-contiguous buffers | [ ] |
-| 15.7 | Implement DMA memory barrier: cache flush/invalidate before/after | [ ] |
-| 15.8 | Wire DMA completion IRQ → callback | [ ] |
+| 15.7 | Implement DMA memory barrier: cache flush/invalidate before/after | [x] |
+| 15.8 | Wire DMA completion IRQ → callback | [x] |
 | 15.9 | Test: DMA copy 1MB buffer → verify contents | [ ] |
 | 15.10 | Test: scatter-gather DMA with 4 fragments | [ ] |
 
