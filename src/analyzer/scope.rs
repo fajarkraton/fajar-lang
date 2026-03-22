@@ -169,7 +169,9 @@ impl SymbolTable {
         if self.scopes.len() <= 1 {
             return Vec::new();
         }
-        let scope = self.scopes.pop().unwrap();
+        let Some(scope) = self.scopes.pop() else {
+            return Vec::new();
+        };
         scope
             .symbols
             .into_iter()
