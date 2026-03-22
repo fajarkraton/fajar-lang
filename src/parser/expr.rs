@@ -542,6 +542,10 @@ impl Parser {
                 | TokenKind::Break
                 | TokenKind::Continue => {
                     stmts.push(self.parse_stmt()?);
+                    // Drain pending stmts from tuple destructuring
+                    while let Some(pending) = self.pending_stmts.pop() {
+                        stmts.push(pending);
+                    }
                 }
                 TokenKind::Fn | TokenKind::Struct | TokenKind::Union | TokenKind::Enum => {
                     let item = self.parse_item_or_stmt()?;

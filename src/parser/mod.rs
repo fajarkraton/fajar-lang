@@ -209,6 +209,8 @@ struct Parser {
     pos: usize,
     /// Collected parse errors.
     errors: Vec<ParseError>,
+    /// Pending statements to inject after the current statement (for desugaring).
+    pending_stmts: Vec<Stmt>,
 }
 
 impl Parser {
@@ -218,6 +220,7 @@ impl Parser {
             tokens,
             pos: 0,
             errors: Vec::new(),
+            pending_stmts: Vec::new(),
         }
     }
 

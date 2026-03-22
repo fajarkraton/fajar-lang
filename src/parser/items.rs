@@ -865,12 +865,19 @@ impl Parser {
         })
     }
 
-    /// Parses a let statement: `let [mut] name [: Type] = value`.
+    /// Parses a let statement: `let [mut] name [: Type] = value`
+    /// or tuple destructuring: `let (a, b, ...) = expr`
     fn parse_let_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Let)?;
 
         let mutable = self.eat(&TokenKind::Mut);
+
+        // Tuple destructuring: let (a, b) = expr
+        if *self.peek_kind() == TokenKind::LParen {
+            return self.parse_let_tuple_destructure(start, mutable);
+        }
+
         let (name, _) = self.expect_ident()?;
 
         let ty = if self.eat(&TokenKind::Colon) {
@@ -890,6 +897,76 @@ impl Parser {
             ty,
             value,
             span: Span::new(start, end),
+        })
+    }
+
+    /// Parses `let (a, b, ...) = expr` as sugar for:
+    /// `let _tmp = expr; let a = _tmp.0; let b = _tmp.1; ...`
+    /// Returns a block statement containing the desugared lets.
+    fn parse_let_tuple_destructure(
+        &mut self,
+        start: usize,
+        mutable: bool,
+    ) -> Result<Stmt, ParseError> {
+        self.expect(&TokenKind::LParen)?;
+        let mut names = Vec::new();
+        loop {
+            let (name, _) = self.expect_ident()?;
+            names.push(name);
+            if !self.eat(&TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen)?;
+        self.expect(&TokenKind::Eq)?;
+        let value = self.parse_expr(0)?;
+        let end = value.span().end;
+        self.eat_semi();
+
+        // Store tuple destructuring info in first let binding.
+        // The value is the tuple expression.
+        // Variable names are stored with index-based field access.
+        // We create a single let binding for the first variable with the
+        // tuple value wrapped in a TupleIndex (field ".0"), and push
+        // pending lets for remaining variables into self.pending_stmts.
+        let span = Span::new(start, end);
+
+        // For each name, create a let binding with tuple.N access
+        // First: let a = (expr).0
+        // Remaining: let b = a.__tuple_src.1 -- but we need the original tuple
+        // Simplest: evaluate tuple once, access by index
+        // Since tuples are values (stored as Tuple variant), field access .0/.1 works
+
+        // Store the remaining lets for the parent block to consume
+        // First: let __tup = expr
+        // Then: let a = __tup.0, let b = __tup.1, ...
+        // Pending stmts are pushed in reverse order (popped = correct order)
+        let tup_name = format!("_tup{}", start);
+
+        for i in (0..names.len()).rev() {
+            self.pending_stmts.push(Stmt::Let {
+                mutable,
+                name: names[i].clone(),
+                ty: None,
+                value: Box::new(Expr::Field {
+                    object: Box::new(Expr::Ident {
+                        name: tup_name.clone(),
+                        span,
+                    }),
+                    field: format!("{i}"),
+                    span,
+                }),
+                span,
+            });
+        }
+
+        // Return the tuple let binding
+        Ok(Stmt::Let {
+            mutable: false,
+            name: tup_name,
+            ty: None,
+            value: Box::new(value),
+            span,
         })
     }
 
