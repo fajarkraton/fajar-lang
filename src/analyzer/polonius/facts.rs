@@ -924,6 +924,7 @@ mod tests {
     fn let_stmt(name: &str, mutable: bool, value: Expr, s: usize, e: usize) -> Stmt {
         Stmt::Let {
             mutable,
+            linear: false,
             name: name.to_string(),
             ty: None,
             value: Box::new(value),

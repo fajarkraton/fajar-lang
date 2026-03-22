@@ -271,12 +271,23 @@ impl TypeChecker {
         }
     }
 
-    /// Pops the current scope and emits SE009 warnings for unused variables.
+    /// Pops the current scope and emits SE009 warnings for unused variables
+    /// and ME010 errors for unconsumed linear variables.
     fn emit_unused_warnings(&mut self) {
         let unused = self.symbols.pop_scope_unused();
-        for sym in unused {
+        for sym in &unused {
+            // Check if this is a linear variable that wasn't consumed
+            if let Some((span, consumed)) = self.linear_vars.get(&sym.name) {
+                if !consumed {
+                    self.errors.push(SemanticError::LinearNotConsumed {
+                        name: sym.name.clone(),
+                        span: *span,
+                    });
+                    continue;
+                }
+            }
             self.errors.push(SemanticError::UnusedVariable {
-                name: sym.name,
+                name: sym.name.clone(),
                 span: sym.span,
             });
         }
@@ -325,12 +336,18 @@ impl TypeChecker {
         match stmt {
             Stmt::Let {
                 mutable,
+                linear,
                 name,
                 ty,
                 value,
                 span,
             } => {
                 let val_type = self.check_expr(value);
+
+                // Track linear ownership
+                if *linear {
+                    self.linear_vars.insert(name.clone(), (*span, false));
+                }
 
                 if let Some(ty_expr) = ty {
                     let declared = self.resolve_type(ty_expr);

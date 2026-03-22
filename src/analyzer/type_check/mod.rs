@@ -683,6 +683,17 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// ME010: Linear value not consumed (error).
+    /// Linear types must be used exactly once. Failing to consume a linear
+    /// value means a resource was leaked (e.g., file handle not closed).
+    #[error("ME010: linear value '{name}' not consumed — must be used exactly once")]
+    LinearNotConsumed {
+        /// Variable name.
+        name: String,
+        /// Source location.
+        span: Span,
+    },
+
     /// SE010: Unreachable code (warning).
     #[error("SE010: unreachable code")]
     UnreachableCode {
@@ -1006,6 +1017,7 @@ impl SemanticError {
             | SemanticError::ImmutableAssignment { span, .. }
             | SemanticError::MissingReturn { span, .. }
             | SemanticError::UnusedVariable { span, .. }
+            | SemanticError::LinearNotConsumed { span, .. }
             | SemanticError::UnreachableCode { span, .. }
             | SemanticError::NonExhaustiveMatch { span, .. }
             | SemanticError::BreakOutsideLoop { span, .. }
@@ -1117,6 +1129,8 @@ pub struct TypeChecker {
     enum_variants: HashMap<String, Vec<String>>,
     /// Tracked imports: (import name, span, used) — for unused import detection.
     imports: Vec<(String, Span, bool)>,
+    /// Linear variables: name → (span, consumed). Must be consumed exactly once.
+    linear_vars: HashMap<String, (Span, bool)>,
 }
 
 /// A trait method signature for validation.
@@ -1506,6 +1520,7 @@ impl TypeChecker {
             nll_info: None,
             enum_variants: HashMap::new(),
             imports: Vec::new(),
+            linear_vars: HashMap::new(),
         };
         tc.register_builtins();
         tc.register_builtin_traits();

@@ -114,6 +114,8 @@ pub enum TokenKind {
     Let,
     /// `mut`
     Mut,
+    /// `linear` — linear type modifier (value must be used exactly once)
+    Linear,
     /// `fn`
     Fn,
     /// `struct`
@@ -448,6 +450,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Await => write!(f, "await"),
             TokenKind::Let => write!(f, "let"),
             TokenKind::Mut => write!(f, "mut"),
+            TokenKind::Linear => write!(f, "linear"),
             TokenKind::Fn => write!(f, "fn"),
             TokenKind::Struct => write!(f, "struct"),
             TokenKind::Enum => write!(f, "enum"),
@@ -622,6 +625,7 @@ pub static KEYWORDS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::new(
     // Declarations
     m.insert("let", TokenKind::Let);
     m.insert("mut", TokenKind::Mut);
+    m.insert("linear", TokenKind::Linear);
     m.insert("fn", TokenKind::Fn);
     m.insert("struct", TokenKind::Struct);
     m.insert("enum", TokenKind::Enum);

@@ -334,6 +334,7 @@ impl FjDiagnostic {
             SemanticError::HeapAllocInNpu { .. } => "NE002",
             SemanticError::OsPrimitiveInNpu { .. } => "NE003",
             SemanticError::KernelCallInNpu { .. } => "NE004",
+            SemanticError::LinearNotConsumed { .. } => "ME010",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

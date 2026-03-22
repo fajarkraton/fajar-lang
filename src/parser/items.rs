@@ -865,13 +865,14 @@ impl Parser {
         })
     }
 
-    /// Parses a let statement: `let [mut] name [: Type] = value`
+    /// Parses a let statement: `let [mut] [linear] name [: Type] = value`
     /// or tuple destructuring: `let (a, b, ...) = expr`
     fn parse_let_stmt(&mut self) -> Result<Stmt, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Let)?;
 
         let mutable = self.eat(&TokenKind::Mut);
+        let linear = self.eat(&TokenKind::Linear);
 
         // Tuple destructuring: let (a, b) = expr
         if *self.peek_kind() == TokenKind::LParen {
@@ -893,6 +894,7 @@ impl Parser {
 
         Ok(Stmt::Let {
             mutable,
+            linear,
             name,
             ty,
             value,
@@ -946,6 +948,7 @@ impl Parser {
         for i in (0..names.len()).rev() {
             self.pending_stmts.push(Stmt::Let {
                 mutable,
+                linear: false,
                 name: names[i].clone(),
                 ty: None,
                 value: Box::new(Expr::Field {
@@ -963,6 +966,7 @@ impl Parser {
         // Return the tuple let binding
         Ok(Stmt::Let {
             mutable: false,
+            linear: false,
             name: tup_name,
             ty: None,
             value: Box::new(value),

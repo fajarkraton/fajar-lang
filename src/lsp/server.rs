@@ -648,6 +648,7 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::HeapAllocInNpu { .. } => "NE002",
         SemanticError::OsPrimitiveInNpu { .. } => "NE003",
         SemanticError::KernelCallInNpu { .. } => "NE004",
+        SemanticError::LinearNotConsumed { .. } => "ME010",
     };
     Diagnostic {
         range,

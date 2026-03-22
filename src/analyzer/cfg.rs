@@ -342,6 +342,7 @@ mod tests {
     fn let_stmt(name: &str, value: Expr, start: usize, end: usize) -> Stmt {
         Stmt::Let {
             mutable: false,
+            linear: false,
             name: name.to_string(),
             ty: None,
             value: Box::new(value),

@@ -482,10 +482,12 @@ pub struct Annotation {
 /// Statements do not produce values (expressions with `;` become statements).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    /// Let binding: `let [mut] name [: Type] = value`
+    /// Let binding: `let [mut] [linear] name [: Type] = value`
     Let {
         /// Whether the binding is mutable.
         mutable: bool,
+        /// Whether the value has linear ownership (must be used exactly once).
+        linear: bool,
         /// Variable name.
         name: String,
         /// Optional type annotation.
@@ -1985,6 +1987,7 @@ mod tests {
     fn stmt_let_construction() {
         let stmt = Stmt::Let {
             mutable: true,
+            linear: false,
             name: "x".into(),
             ty: Some(TypeExpr::Simple {
                 name: "i32".into(),

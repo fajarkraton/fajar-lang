@@ -552,6 +552,7 @@ mod tests {
     fn let_stmt(name: &str, ty: Option<TypeExpr>, value: Expr) -> Stmt {
         Stmt::Let {
             mutable: false,
+            linear: false,
             name: name.into(),
             ty,
             value: Box::new(value),
