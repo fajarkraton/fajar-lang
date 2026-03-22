@@ -725,9 +725,29 @@ pub(in crate::codegen::cranelift) fn compile_assert_eq_builtin<M: Module>(
     }
     let a = compile_expr(builder, cx, &args[0].value)?;
     let a_type = cx.last_expr_type;
+    let a_str_len = cx.last_string_len.take();
     let b = compile_expr(builder, cx, &args[1].value)?;
+    let b_str_len = cx.last_string_len.take();
 
-    // Widen bools
+    // String comparison: use runtime fj_rt_str_eq(a_ptr, a_len, b_ptr, b_len) -> i64
+    if let (Some(a_len), Some(b_len)) = (a_str_len, b_str_len) {
+        if let Some(&str_eq_id) = cx.functions.get("__str_eq") {
+            let str_eq_ref = cx.module.declare_func_in_func(str_eq_id, builder.func);
+            let call = builder.ins().call(str_eq_ref, &[a, a_len, b, b_len]);
+            let eq_result = builder.inst_results(call)[0];
+            // str_eq returns 1 if equal, 0 if not
+            let zero = builder.ins().iconst(clif_types::default_int_type(), 0);
+            let not_equal = builder.ins().icmp(IntCC::Equal, eq_result, zero);
+            builder.ins().trapnz(
+                not_equal,
+                cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 is valid"),
+            );
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
+        }
+    }
+
+    // Integer/float comparison
     let a_wide = if builder.func.dfg.value_type(a) == clif_types::bool_type() {
         builder.ins().uextend(clif_types::default_int_type(), a)
     } else {
@@ -740,28 +760,22 @@ pub(in crate::codegen::cranelift) fn compile_assert_eq_builtin<M: Module>(
     };
 
     let is_float = a_type.is_some_and(clif_types::is_float);
-    let cmp = if is_float {
+    let not_equal = if is_float {
         builder.ins().fcmp(
-            cranelift_codegen::ir::condcodes::FloatCC::Equal,
+            cranelift_codegen::ir::condcodes::FloatCC::NotEqual,
             a_wide,
             b_wide,
         )
     } else {
-        builder.ins().icmp(IntCC::Equal, a_wide, b_wide)
+        builder.ins().icmp(IntCC::NotEqual, a_wide, b_wide)
     };
 
-    let ok_block = builder.create_block();
-    let fail_block = builder.create_block();
-    builder.ins().brif(cmp, ok_block, &[], fail_block, &[]);
+    // Use trapnz: trap if values are NOT equal (no extra blocks needed)
+    builder.ins().trapnz(
+        not_equal,
+        cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 is valid"),
+    );
 
-    builder.switch_to_block(fail_block);
-    builder.seal_block(fail_block);
-    builder
-        .ins()
-        .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 is valid"));
-
-    builder.switch_to_block(ok_block);
-    builder.seal_block(ok_block);
     cx.last_expr_type = Some(clif_types::default_int_type());
     Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
 }
