@@ -148,7 +148,9 @@ pub(crate) fn compile_inline_asm<M: Module>(
         }
         "hlt" => {
             // hlt = halt CPU, mapped to trap (Cranelift trap stops execution)
-            builder.ins().trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
+            builder
+                .ins()
+                .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
             builder.ins().iconst(clif_types::default_int_type(), 0)
         }
         "cli" | "sti" => {

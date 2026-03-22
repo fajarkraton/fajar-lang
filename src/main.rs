@@ -285,7 +285,14 @@ fn main() -> ExitCode {
                 cmd_build_llvm(&path, output.as_deref(), opt_level)
             } else {
                 let start = std::time::Instant::now();
-                let result = cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref(), linker.as_deref());
+                let result = cmd_build(
+                    &path,
+                    &target,
+                    output.as_deref(),
+                    no_std,
+                    ls.as_deref(),
+                    linker.as_deref(),
+                );
                 if verbose {
                     let elapsed = start.elapsed();
                     eprintln!("[verbose] Compile time: {:.2}s", elapsed.as_secs_f64());
@@ -1421,12 +1428,8 @@ fn cmd_build_native(
         if is_cross {
             // Cross bare-metal: use target-specific ld (e.g., aarch64-linux-gnu-ld)
             match target.arch {
-                fajar_lang::codegen::target::Arch::Aarch64 => {
-                    "aarch64-linux-gnu-ld".to_string()
-                }
-                fajar_lang::codegen::target::Arch::Riscv64 => {
-                    "riscv64-linux-gnu-ld".to_string()
-                }
+                fajar_lang::codegen::target::Arch::Aarch64 => "aarch64-linux-gnu-ld".to_string(),
+                fajar_lang::codegen::target::Arch::Riscv64 => "riscv64-linux-gnu-ld".to_string(),
                 fajar_lang::codegen::target::Arch::X86_64 => "ld".to_string(),
             }
         } else {
@@ -1689,16 +1692,28 @@ fj_rt_bare_memory_fence:
         // Link bare-metal runtime library if available (arch-specific)
         // Only link for cross-architecture (e.g., x86 host → aarch64 target).
         // Same-arch bare-metal (x86→x86-none) has runtime in startup .o already.
-        let cross_arch = target.arch != fajar_lang::codegen::target::Arch::X86_64 || !cfg!(target_arch = "x86_64");
+        let cross_arch = target.arch != fajar_lang::codegen::target::Arch::X86_64
+            || !cfg!(target_arch = "x86_64");
         if cross_arch {
-            let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()));
             let runtime_name = "libfj_runtime_bare.a";
             let triple_str = target.triple.to_string();
             let runtime_paths = [
                 exe_dir.as_ref().map(|d| d.join(runtime_name)),
-                exe_dir.as_ref().map(|d| d.join("..").join("runtime_bare").join("target")
-                    .join(&triple_str).join("release").join(runtime_name)),
-                Some(std::path::PathBuf::from(format!("runtime_bare/target/{}/release/{}", triple_str, runtime_name))),
+                exe_dir.as_ref().map(|d| {
+                    d.join("..")
+                        .join("runtime_bare")
+                        .join("target")
+                        .join(&triple_str)
+                        .join("release")
+                        .join(runtime_name)
+                }),
+                Some(std::path::PathBuf::from(format!(
+                    "runtime_bare/target/{}/release/{}",
+                    triple_str, runtime_name
+                ))),
             ];
             for candidate in &runtime_paths {
                 if let Some(p) = candidate {

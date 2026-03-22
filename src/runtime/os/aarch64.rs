@@ -468,10 +468,10 @@ impl PageAccess {
     ///   AP[2:1] = 0b11 → EL1 RO, EL0 no access
     pub fn to_ap_bits(self) -> u64 {
         match self {
-            PageAccess::UserRW => 0b00 << 6,    // AP[2:1] = 00
-            PageAccess::KernelRW => 0b01 << 6,  // AP[2:1] = 01
-            PageAccess::UserRO => 0b10 << 6,    // AP[2:1] = 10
-            PageAccess::KernelRO => 0b11 << 6,  // AP[2:1] = 11
+            PageAccess::UserRW => 0b00 << 6,   // AP[2:1] = 00
+            PageAccess::KernelRW => 0b01 << 6, // AP[2:1] = 01
+            PageAccess::UserRO => 0b10 << 6,   // AP[2:1] = 10
+            PageAccess::KernelRO => 0b11 << 6, // AP[2:1] = 11
         }
     }
 
@@ -797,13 +797,13 @@ mod tests {
     #[test]
     fn el0_process_creation() {
         let proc = El0Process::new(
-            1,              // pid
-            0x1_0000,       // entry
-            0x8_0000,       // user_stack_top
-            0x7_0000,       // user_stack_base
-            0x4_8000,       // kernel_stack_top
-            0x4_4000,       // kernel_stack_base
-            0x20_0000,      // ttbr0
+            1,         // pid
+            0x1_0000,  // entry
+            0x8_0000,  // user_stack_top
+            0x7_0000,  // user_stack_base
+            0x4_8000,  // kernel_stack_top
+            0x4_4000,  // kernel_stack_base
+            0x20_0000, // ttbr0
         );
         assert_eq!(proc.pid, 1);
         assert_eq!(proc.state, El0State::Ready);
@@ -819,7 +819,9 @@ mod tests {
         let mut table = El0ProcessTable::new();
         assert_eq!(table.active_count(), 0);
 
-        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
         assert_eq!(pid, 1);
         assert_eq!(table.active_count(), 1);
 
@@ -832,9 +834,15 @@ mod tests {
     fn el0_process_table_multiple_spawn() {
         let mut table = El0ProcessTable::new();
 
-        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
-        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
-        let pid3 = table.spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000).unwrap();
+        let pid1 = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
+        let pid2 = table
+            .spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000)
+            .unwrap();
+        let pid3 = table
+            .spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000)
+            .unwrap();
 
         assert_eq!(pid1, 1);
         assert_eq!(pid2, 2);
@@ -847,14 +855,16 @@ mod tests {
         let mut table = El0ProcessTable::new();
 
         for i in 0..MAX_EL0_PROCESSES {
-            let pid = table.spawn(
-                (i as u64 + 1) * 0x1000,
-                0x8_0000 + (i as u64) * 0x1_0000,
-                0x7_0000 + (i as u64) * 0x1_0000,
-                0x4_0000 + (i as u64) * 0x4000,
-                0x3_C000 + (i as u64) * 0x4000,
-                (i as u64 + 1) * 0x20_0000,
-            ).unwrap();
+            let pid = table
+                .spawn(
+                    (i as u64 + 1) * 0x1000,
+                    0x8_0000 + (i as u64) * 0x1_0000,
+                    0x7_0000 + (i as u64) * 0x1_0000,
+                    0x4_0000 + (i as u64) * 0x4000,
+                    0x3_C000 + (i as u64) * 0x4000,
+                    (i as u64 + 1) * 0x20_0000,
+                )
+                .unwrap();
             assert_eq!(pid, (i + 1) as u16);
         }
 
@@ -866,7 +876,9 @@ mod tests {
     #[test]
     fn el0_process_exit_and_reap() {
         let mut table = El0ProcessTable::new();
-        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
 
         // Set as running
         table.set_current(pid);
@@ -887,7 +899,9 @@ mod tests {
     #[test]
     fn el0_process_reap_only_exited() {
         let mut table = El0ProcessTable::new();
-        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
 
         // Cannot reap a Ready process
         assert!(!table.reap(pid));
@@ -900,9 +914,15 @@ mod tests {
     #[test]
     fn el0_process_next_ready_round_robin() {
         let mut table = El0ProcessTable::new();
-        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
-        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
-        let pid3 = table.spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000).unwrap();
+        let pid1 = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
+        let pid2 = table
+            .spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000)
+            .unwrap();
+        let pid3 = table
+            .spawn(0x3000, 0xA000, 0x9000, 0x6800, 0x6400, 0x40000)
+            .unwrap();
 
         // From PID 0 (kernel), next ready should be PID 1
         assert_eq!(table.next_ready(0), Some(pid1));
@@ -920,8 +940,12 @@ mod tests {
     #[test]
     fn el0_process_next_ready_skips_running() {
         let mut table = El0ProcessTable::new();
-        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
-        let pid2 = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+        let pid1 = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
+        let pid2 = table
+            .spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000)
+            .unwrap();
 
         // Mark PID 1 as Running
         table.get_mut(pid1).unwrap().state = El0State::Running;
@@ -936,7 +960,9 @@ mod tests {
         assert_eq!(table.next_ready(0), None);
 
         // All processes exited
-        let pid = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
         table.exit(pid, 0);
         assert_eq!(table.next_ready(0), None);
     }
@@ -944,7 +970,9 @@ mod tests {
     #[test]
     fn el0_process_spawn_reuse_slot() {
         let mut table = El0ProcessTable::new();
-        let pid1 = table.spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000).unwrap();
+        let pid1 = table
+            .spawn(0x1000, 0x8000, 0x7000, 0x4800, 0x4400, 0x20000)
+            .unwrap();
         assert_eq!(pid1, 1);
 
         // Exit and reap PID 1
@@ -952,7 +980,9 @@ mod tests {
         table.reap(pid1);
 
         // New spawn should reuse slot 0 → PID 1
-        let pid_new = table.spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000).unwrap();
+        let pid_new = table
+            .spawn(0x2000, 0x9000, 0x8000, 0x5800, 0x5400, 0x30000)
+            .unwrap();
         assert_eq!(pid_new, 1);
     }
 
@@ -963,10 +993,10 @@ mod tests {
     #[test]
     fn page_access_ap_bits() {
         // AP[2:1] encoding
-        assert_eq!(PageAccess::UserRW.to_ap_bits(), 0b00 << 6);    // 0x00
-        assert_eq!(PageAccess::KernelRW.to_ap_bits(), 0b01 << 6);  // 0x40
-        assert_eq!(PageAccess::UserRO.to_ap_bits(), 0b10 << 6);    // 0x80
-        assert_eq!(PageAccess::KernelRO.to_ap_bits(), 0b11 << 6);  // 0xC0
+        assert_eq!(PageAccess::UserRW.to_ap_bits(), 0b00 << 6); // 0x00
+        assert_eq!(PageAccess::KernelRW.to_ap_bits(), 0b01 << 6); // 0x40
+        assert_eq!(PageAccess::UserRO.to_ap_bits(), 0b10 << 6); // 0x80
+        assert_eq!(PageAccess::KernelRO.to_ap_bits(), 0b11 << 6); // 0xC0
     }
 
     #[test]

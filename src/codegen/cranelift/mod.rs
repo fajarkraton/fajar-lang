@@ -7645,11 +7645,20 @@ impl ObjectCompiler {
         // atomic_cas(addr: i64, expected: i64, desired: i64) -> i64 (returns old value)
         {
             let mut sig_cas = cranelift_codegen::ir::Signature::new(call_conv);
-            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_cas.returns.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
+            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_cas.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_cas.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
                 .declare_function("fj_rt_bare_atomic_cas", Linkage::Import, &sig_cas)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("atomic_cas".to_string(), id);
@@ -7658,9 +7667,14 @@ impl ObjectCompiler {
         // atomic_load(addr: i64) -> i64
         {
             let mut sig_load = cranelift_codegen::ir::Signature::new(call_conv);
-            sig_load.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_load.returns.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
+            sig_load.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_load.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
                 .declare_function("fj_rt_bare_atomic_load", Linkage::Import, &sig_load)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("atomic_load".to_string(), id);
@@ -7669,9 +7683,14 @@ impl ObjectCompiler {
         // atomic_store(addr: i64, value: i64)
         {
             let mut sig_store = cranelift_codegen::ir::Signature::new(call_conv);
-            sig_store.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_store.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
+            sig_store.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_store.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
                 .declare_function("fj_rt_bare_atomic_store", Linkage::Import, &sig_store)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("atomic_store".to_string(), id);
@@ -7681,10 +7700,17 @@ impl ObjectCompiler {
         // atomic_sub(addr: i64, value: i64) -> i64 (returns old value)
         for name in ["atomic_add", "atomic_sub"] {
             let mut sig_op = cranelift_codegen::ir::Signature::new(call_conv);
-            sig_op.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_op.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig_op.returns.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
+            sig_op.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_op.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig_op.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
                 .declare_function(&format!("fj_rt_bare_{name}"), Linkage::Import, &sig_op)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert(name.to_string(), id);
@@ -7695,9 +7721,12 @@ impl ObjectCompiler {
         {
             let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
             for _ in 0..6 {
-                sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+                sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                    clif_types::default_int_type(),
+                ));
             }
-            let id = self.module
+            let id = self
+                .module
                 .declare_function("fj_rt_str_concat", Linkage::Import, &sig)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("__str_concat".to_string(), id);
@@ -7708,9 +7737,14 @@ impl ObjectCompiler {
         // to_string(val) -> ptr (integer to decimal string)
         {
             let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
-            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig.returns.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(
+                clif_types::default_int_type(),
+            ));
+            let id = self
+                .module
                 .declare_function("fj_rt_to_string", Linkage::Import, &sig)
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("to_string".to_string(), id);
@@ -7727,121 +7761,186 @@ impl ObjectCompiler {
 
         // --- I/O: println(val: i64) via fj_rt_bare_print_i64 ---
         let mut sig_1i = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_1i.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let println_id = self.module
+        sig_1i.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let println_id = self
+            .module
             .declare_function("fj_rt_bare_print_i64", Linkage::Import, &sig_1i)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("println".to_string(), println_id);
 
         // --- Exit: exit(code: i64) via SYS_EXIT(0) ---
-        let exit_id = self.module
+        let exit_id = self
+            .module
             .declare_function("fj_user_exit", Linkage::Import, &sig_1i)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("exit".to_string(), exit_id);
 
         // --- Getpid: getpid() -> i64 via SYS_GETPID(3) ---
         let mut sig_0_r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_0_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let getpid_id = self.module
+        sig_0_r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let getpid_id = self
+            .module
             .declare_function("fj_user_getpid", Linkage::Import, &sig_0_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("getpid".to_string(), getpid_id);
 
         // --- IPC: send(dst: i64, msg: i64) -> i64 via SYS_SEND(10) ---
         let mut sig_2i_r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_2i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_2i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_2i_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let send_id = self.module
+        sig_2i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_2i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_2i_r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let send_id = self
+            .module
             .declare_function("fj_user_ipc_send", Linkage::Import, &sig_2i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("ipc_send".to_string(), send_id);
 
         // --- IPC: recv(src: i64, buf: i64) -> i64 via SYS_RECV(11) ---
-        let recv_id = self.module
+        let recv_id = self
+            .module
             .declare_function("fj_user_ipc_recv", Linkage::Import, &sig_2i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("ipc_recv".to_string(), recv_id);
 
         // --- IPC: call(dst: i64, msg: i64, reply: i64) -> i64 via SYS_CALL(12) ---
         let mut sig_3i_r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_3i_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let call_id = self.module
+        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_3i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_3i_r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let call_id = self
+            .module
             .declare_function("fj_user_ipc_call", Linkage::Import, &sig_3i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("ipc_call".to_string(), call_id);
 
         // --- IPC: reply(caller: i64, msg: i64) -> i64 via SYS_REPLY(13) ---
-        let reply_id = self.module
+        let reply_id = self
+            .module
             .declare_function("fj_user_ipc_reply", Linkage::Import, &sig_2i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("ipc_reply".to_string(), reply_id);
 
         // --- Memory: mmap(size: i64) -> i64 via SYS_MMAP(6) ---
         let mut sig_1i_r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_1i_r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_1i_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let mmap_id = self.module
+        sig_1i_r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_1i_r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let mmap_id = self
+            .module
             .declare_function("fj_user_mmap", Linkage::Import, &sig_1i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("mmap".to_string(), mmap_id);
 
         // --- Process: getpid() -> i64 via SYS_GETPID(3) ---
         let mut sig_0_r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_0_r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let getpid_id = self.module
+        sig_0_r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let getpid_id = self
+            .module
             .declare_function("fj_user_getpid", Linkage::Import, &sig_0_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("getpid".to_string(), getpid_id);
 
         // --- Volatile reads/writes (for shared memory regions) ---
-        let vol_read_id = self.module
+        let vol_read_id = self
+            .module
             .declare_function("fj_rt_volatile_read_u64", Linkage::Import, &sig_1i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("volatile_read_u64".to_string(), vol_read_id);
+        self.functions
+            .insert("volatile_read_u64".to_string(), vol_read_id);
 
         let mut sig_2i_void = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_2i_void.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_2i_void.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let vol_write_id = self.module
+        sig_2i_void
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+        sig_2i_void
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+        let vol_write_id = self
+            .module
             .declare_function("fj_rt_volatile_write_u64", Linkage::Import, &sig_2i_void)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("volatile_write_u64".to_string(), vol_write_id);
+        self.functions
+            .insert("volatile_write_u64".to_string(), vol_write_id);
 
         // Also need string builtins for println
-        let str_len_id = self.module
+        let str_len_id = self
+            .module
             .declare_function("fj_rt_bare_str_len", Linkage::Import, &sig_1i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("str_len".to_string(), str_len_id);
 
-        let str_byte_id = self.module
+        let str_byte_id = self
+            .module
             .declare_function("fj_rt_bare_str_byte_at", Linkage::Import, &sig_2i_r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("str_byte_at".to_string(), str_byte_id);
+        self.functions
+            .insert("str_byte_at".to_string(), str_byte_id);
 
         // --- String printing: use fj_rt_bare_println/fj_rt_bare_print ---
         // (same symbols as x86 bare-metal; user startup .o provides SYSCALL-based versions)
         let mut sig_2i_void2 = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_2i_void2.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_2i_void2.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let println_str_id = self.module
+        sig_2i_void2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+        sig_2i_void2
+            .params
+            .push(cranelift_codegen::ir::AbiParam::new(
+                cranelift_codegen::ir::types::I64,
+            ));
+        let println_str_id = self
+            .module
             .declare_function("fj_rt_bare_println", Linkage::Import, &sig_2i_void2)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("__println_str".to_string(), println_str_id);
+        self.functions
+            .insert("__println_str".to_string(), println_str_id);
 
-        let print_str_id = self.module
+        let print_str_id = self
+            .module
             .declare_function("fj_rt_bare_print", Linkage::Import, &sig_2i_void2)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-        self.functions.insert("__print_str".to_string(), print_str_id);
+        self.functions
+            .insert("__print_str".to_string(), print_str_id);
 
         // to_string(val: i64) -> (ptr, len) — returns string representation of integer
         let mut sig_1i_2r = cranelift_codegen::ir::Signature::new(call_conv);
-        sig_1i_2r.params.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        sig_1i_2r.returns.push(cranelift_codegen::ir::AbiParam::new(cranelift_codegen::ir::types::I64));
-        let to_str_id = self.module
+        sig_1i_2r.params.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        sig_1i_2r.returns.push(cranelift_codegen::ir::AbiParam::new(
+            cranelift_codegen::ir::types::I64,
+        ));
+        let to_str_id = self
+            .module
             .declare_function("fj_rt_to_string", Linkage::Import, &sig_1i_2r)
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("to_string".to_string(), to_str_id);
@@ -12028,7 +12127,8 @@ impl ObjectCompiler {
 
                         // After main() returns, call exit(0) via SYSCALL
                         if let Some(&exit_fn_id) = self.functions.get("exit") {
-                            let exit_ref = self.module.declare_func_in_func(exit_fn_id, builder.func);
+                            let exit_ref =
+                                self.module.declare_func_in_func(exit_fn_id, builder.func);
                             let zero = builder.ins().iconst(cranelift_codegen::ir::types::I64, 0);
                             builder.ins().call(exit_ref, &[zero]);
                         }
