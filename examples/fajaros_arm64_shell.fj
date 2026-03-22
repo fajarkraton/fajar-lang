@@ -1,13 +1,11 @@
-// fajaros_arm64_shell.fj — FajarOS ARM64 interactive shell
-//
-// Commands: help, halt, uptime, info
-//
-// Build: fj build examples/fajaros_arm64_shell.fj --target aarch64-unknown-none --no-std
-// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
-//          -kernel fajaros_arm64_shell
-
 @kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {}
-@kernel fn fj_exception_irq() {}
+@kernel fn fj_exception_irq() {
+    let intid = gic_ack()
+    timer_set(timer_freq() / 100)
+    let t = volatile_read(0x41100000)
+    volatile_write(0x41100000, t + 1)
+    gic_eoi(intid)
+}
 @kernel fn print_dec(val: i64) {
     if val == 0 { print("0"); return }
     let mut v = val
@@ -15,34 +13,36 @@
     let mut count: i64 = 0
     while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
     let mut i = count - 1
-    while i >= 0 {
-        volatile_write_u8(0x09000000, 48 + buf[i])
-        i = i - 1
-    }
+    while i >= 0 { volatile_write_u8(0x09000000, 48 + buf[i]); i = i - 1 }
 }
 @kernel fn gic_init() {
-    let ctlr = volatile_read_u32(0x08000000)
-    volatile_write_u32(0x08000000, ctlr | 0x12)
-    let waker = volatile_read_u32(0x080A0014)
-    volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
-    let grp = volatile_read_u32(0x080B0080)
-    volatile_write_u32(0x080B0080, grp | (1 << 30))
+    volatile_write_u32(0x08000000, volatile_read_u32(0x08000000) | 0x12)
+    volatile_write_u32(0x080A0014, volatile_read_u32(0x080A0014) & 0xFFFFFFFD)
+    volatile_write_u32(0x080B0080, volatile_read_u32(0x080B0080) | (1 << 30))
     volatile_write_u32(0x080B0100, 1 << 30)
     volatile_write_u8(0x080B041E, 0xA0)
     gic_cpu_init(255)
 }
 @kernel fn kernel_main() {
-    println("=== FajarOS Shell ===")
+    println("")
+    println("=== FajarOS v3.0 ARM64 Shell ===")
+    println("")
     gic_init()
     timer_set(timer_freq() / 100)
     volatile_write(0x41100000, 0)
     volatile_write(0x41100008, 0)
     irq_enable()
-    print("fjsh> ")
+    print("EL:")
+    print_dec(read_el())
+    print(" Timer:")
+    print_dec(timer_freq() / 1000000)
+    println("MHz")
+    println("GIC+Timer ready | Type help")
+    println("")
     let base: i64 = 0x41100100
-    let cmd_help: i64 = 104 + 101 * 256 + 108 * 65536 + 112 * 16777216
-    let cmd_halt: i64 = 104 + 97 * 256 + 108 * 65536 + 116 * 16777216
-    let cmd_info: i64 = 105 + 110 * 256 + 102 * 65536 + 111 * 16777216
+    let h1: i64 = 104 + 101 * 256 + 108 * 65536 + 112 * 16777216
+    let h2: i64 = 104 + 97 * 256 + 108 * 65536 + 116 * 16777216
+    let h3: i64 = 105 + 110 * 256 + 102 * 65536 + 111 * 16777216
     let mut running: i64 = 1
     while running > 0 {
         let fr = volatile_read_u32(0x09000018)
@@ -56,18 +56,26 @@
                 let c2 = volatile_read_u8(base + 2)
                 let c3 = volatile_read_u8(base + 3)
                 let id = c0 + c1 * 256 + c2 * 65536 + c3 * 16777216
-                if id == cmd_help { println("Commands: help halt uptime info") }
-                if id == cmd_halt { running = 0 }
-                if id == cmd_info { println("FajarOS v3.0 ARM64 | QEMU virt | Cortex-A72") }
+                if id == h1 { println("Commands: help halt uptime info ps") }
+                if id == h2 { running = 0 }
+                if id == h3 { println("FajarOS v3.0 ARM64 | QEMU virt | Cortex-A72") }
+                if len == 2 {
+                    if c0 == 112 {
+                        println("PID  STATE   NAME")
+                        println("  0  run     kernel")
+                    }
+                }
                 if len == 6 {
                     if c0 == 117 {
-                        let ticks = volatile_read(0x41100000)
-                        print_dec(ticks)
+                        let t = volatile_read(0x41100000)
+                        print_dec(t / 100)
+                        print(".")
+                        print_dec((t % 100) / 10)
                         println("s")
                     }
                 }
                 volatile_write(0x41100008, 0)
-                print("fjsh> ")
+                print("> ")
             }
             if ch >= 32 {
                 if ch < 127 {
@@ -80,6 +88,5 @@
             }
         }
     }
-    println("[HALT]")
     __halt()
 }
