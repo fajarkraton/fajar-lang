@@ -109,6 +109,9 @@ enum Command {
         /// Override linker binary (e.g., aarch64-linux-gnu-ld, ld.lld).
         #[arg(long)]
         linker: Option<String>,
+        /// Verbose codegen output (function count, DCE stats, compile time).
+        #[arg(long, short)]
+        verbose: bool,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -255,6 +258,7 @@ fn main() -> ExitCode {
             opt_level,
             board,
             linker,
+            verbose,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -280,7 +284,17 @@ fn main() -> ExitCode {
             if backend == "llvm" {
                 cmd_build_llvm(&path, output.as_deref(), opt_level)
             } else {
-                cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref(), linker.as_deref())
+                let start = std::time::Instant::now();
+                let result = cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref(), linker.as_deref());
+                if verbose {
+                    let elapsed = start.elapsed();
+                    eprintln!("[verbose] Compile time: {:.2}s", elapsed.as_secs_f64());
+                    eprintln!("[verbose] Target: {target}");
+                    if let Ok(meta) = std::fs::metadata(&path) {
+                        eprintln!("[verbose] Source: {} bytes", meta.len());
+                    }
+                }
+                result
             }
         }
         Command::Doc { file, output, open } => {

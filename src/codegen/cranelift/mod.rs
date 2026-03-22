@@ -7702,20 +7702,9 @@ impl ObjectCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions.insert("__str_concat".to_string(), id);
         }
-        // println_str(ptr, len) — print string + newline
-        {
-            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
-            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
-            let id = self.module
-                .declare_function("fj_rt_println_str", Linkage::Import, &sig)
-                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-            self.functions.insert("__println_str".to_string(), id);
-            let id2 = self.module
-                .declare_function("fj_rt_print_str", Linkage::Import, &sig)
-                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
-            self.functions.insert("__print_str".to_string(), id2);
-        }
+        // Note: __println_str and __print_str are already declared above
+        // (mapped to fj_rt_bare_println / fj_rt_bare_print at lines ~6525-6532).
+        // Do NOT re-declare with fj_rt_println_str — that symbol doesn't exist in x86 startup .o.
         // to_string(val) -> ptr (integer to decimal string)
         {
             let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
