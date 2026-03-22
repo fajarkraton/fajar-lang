@@ -223,6 +223,11 @@ pub enum Value {
     Layer(Box<LayerValue>),
     /// A lazy iterator value.
     Iterator(Rc<RefCell<IteratorValue>>),
+    /// An async future value (result of calling an async fn).
+    Future {
+        /// Unique task ID for the executor.
+        task_id: u64,
+    },
     /// A trait object with dynamic dispatch via vtable.
     TraitObject {
         /// The trait name this object conforms to.
@@ -301,6 +306,8 @@ impl PartialEq for Value {
                     ..
                 },
             ) => t1 == t2 && c1 == c2,
+            // Futures are equal if same task ID
+            (Value::Future { task_id: a }, Value::Future { task_id: b }) => a == b,
             // Functions, optimizers, layers are never equal (no structural comparison)
             (Value::Function(_), Value::Function(_)) => false,
             (Value::Optimizer(_), Value::Optimizer(_)) => false,
@@ -384,6 +391,7 @@ impl fmt::Display for Value {
                 LayerValue::Dense(_) => write!(f, "<layer Dense>"),
             },
             Value::Iterator(_) => write!(f, "<iterator>"),
+            Value::Future { task_id } => write!(f, "<future:{task_id}>"),
             Value::TraitObject {
                 trait_name,
                 concrete_type,
@@ -431,6 +439,7 @@ impl Value {
             Value::Optimizer(_) => "optimizer",
             Value::Layer(_) => "layer",
             Value::Iterator(_) => "iterator",
+            Value::Future { .. } => "future",
             Value::TraitObject { .. } => "trait_object",
         }
     }

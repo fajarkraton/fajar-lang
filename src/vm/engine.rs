@@ -1083,6 +1083,7 @@ fn format_value(v: &Value) -> String {
             format!("{{{}}}", items.join(", "))
         }
         Value::Iterator(_) => "<iterator>".to_string(),
+        Value::Future { task_id } => format!("<future:{task_id}>"),
         Value::TraitObject {
             trait_name,
             concrete_type,

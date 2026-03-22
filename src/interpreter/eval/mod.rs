@@ -207,6 +207,10 @@ pub struct Interpreter {
     qnn_buffers: HashMap<i64, crate::runtime::ml::npu::QnnBuffer>,
     /// Inference result cache: key (string) → cached result (string).
     inference_cache: HashMap<String, String>,
+    /// Async task queue: task_id → (function body expr, captured env).
+    async_tasks: HashMap<u64, (Box<Expr>, Rc<RefCell<Environment>>)>,
+    /// Next async task ID.
+    next_task_id: u64,
 }
 
 impl Interpreter {
@@ -240,6 +244,8 @@ impl Interpreter {
             npu_models: HashMap::new(),
             qnn_buffers: HashMap::new(),
             inference_cache: HashMap::new(),
+            async_tasks: HashMap::new(),
+            next_task_id: 1,
         };
         interp.register_builtins();
         interp
@@ -275,6 +281,8 @@ impl Interpreter {
             npu_models: HashMap::new(),
             qnn_buffers: HashMap::new(),
             inference_cache: HashMap::new(),
+            async_tasks: HashMap::new(),
+            next_task_id: 1,
         };
         interp.register_builtins();
         interp
@@ -1186,14 +1194,36 @@ impl Interpreter {
             } => self.eval_method_call(receiver, method, args),
             Expr::Try { expr, .. } => self.eval_try(expr),
             Expr::Cast { expr, ty, .. } => self.eval_cast(expr, ty),
-            Expr::Await { .. } => Err(RuntimeError::TypeError(
-                "await is not supported in interpreter mode".into(),
-            )
-            .into()),
-            Expr::AsyncBlock { .. } => Err(RuntimeError::TypeError(
-                "async blocks are not supported in interpreter mode".into(),
-            )
-            .into()),
+            Expr::Await { expr, .. } => {
+                // Evaluate the expression — should produce a Future value
+                let val = self.eval_expr(expr)?;
+                match val {
+                    Value::Future { task_id } => {
+                        // Execute the async task's body immediately (cooperative)
+                        if let Some((body, task_env)) = self.async_tasks.remove(&task_id) {
+                            let prev_env = self.env.clone();
+                            self.env = task_env;
+                            let result = self.eval_expr(&body);
+                            self.env = prev_env;
+                            result
+                        } else {
+                            // Task already completed or doesn't exist
+                            Ok(Value::Null)
+                        }
+                    }
+                    // If it's not a Future, just return the value (already resolved)
+                    other => Ok(other),
+                }
+            }
+            Expr::AsyncBlock { body, .. } => {
+                // Create a Future by capturing the body and environment
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+                let captured_env = self.env.clone();
+                self.async_tasks
+                    .insert(task_id, (body.clone(), captured_env));
+                Ok(Value::Future { task_id })
+            }
             Expr::InlineAsm { .. } => Err(RuntimeError::TypeError(
                 "inline assembly is not supported in interpreter mode".into(),
             )
