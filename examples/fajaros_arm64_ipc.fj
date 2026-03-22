@@ -1,0 +1,144 @@
+// fajaros_arm64_ipc.fj — FajarOS ARM64 IPC demo
+//
+// 2 processes communicate via shared memory mailbox:
+//   P0 (producer): writes incrementing counter via SVC #2 (SEND)
+//   P1 (consumer): reads counter via SVC #3 (RECV), prints it
+//   Timer IRQ: preemptive round-robin at 100 Hz
+//
+// Build: fj build examples/fajaros_arm64_ipc.fj --target aarch64-unknown-none --no-std
+// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
+//          -kernel fajaros_arm64_ipc
+//
+// Mailbox layout (0x41110000):
+//   +0x00: message value (i64)
+//   +0x08: message ready flag (0=empty, 1=full)
+//   +0x10: send count
+//   +0x18: recv count
+
+@kernel fn print_dec(val: i64) {
+    if val == 0 { print("0"); return }
+    let mut v = val
+    let mut buf: [i64; 20] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    let mut count: i64 = 0
+    while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
+    let mut i = count - 1
+    while i >= 0 {
+        volatile_write_u8(0x09000000, 48 + buf[i])
+        i = i - 1
+    }
+}
+
+@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
+    let ec = (esr >> 26) & 63
+    if ec == 21 {
+        let svc_num = esr & 0xFFFF
+        if svc_num == 2 {
+            // SVC #2 = SEND: write value to mailbox
+            let send_count = volatile_read(0x41110010)
+            volatile_write(0x41110000, send_count)  // message = counter
+            volatile_write(0x41110008, 1)            // ready = true
+            volatile_write(0x41110010, send_count + 1)
+        }
+        if svc_num == 3 {
+            // SVC #3 = RECV: read from mailbox if ready
+            let ready = volatile_read(0x41110008)
+            if ready == 1 {
+                let msg = volatile_read(0x41110000)
+                volatile_write(0x41110008, 0)  // consumed
+                let recv_count = volatile_read(0x41110018)
+                volatile_write(0x41110018, recv_count + 1)
+                // Print received message
+                print("[R:")
+                print_dec(msg)
+                print("]")
+            }
+        }
+        if svc_num == 1 {
+            // SVC #1 = WRITE
+            let pid = volatile_read(0x41100008)
+            if pid == 0 { print("S") }
+            if pid == 1 { print("R") }
+        }
+        return
+    }
+    print("[E:")
+    print_dec(ec)
+    print("]")
+}
+
+@kernel fn fj_exception_irq() {
+    let intid = gic_ack()
+    timer_set(timer_freq() / 100)
+    let ticks = volatile_read(0x41100000)
+    volatile_write(0x41100000, ticks + 1)
+    // Round-robin
+    let cur = volatile_read(0x41100008)
+    let next = 1 - cur
+    volatile_write(0x41100008, next)
+    let saved_sp = volatile_read(0x47001018)
+    volatile_write(0x41100010 + cur * 8, saved_sp)
+    let next_sp = volatile_read(0x41100010 + next * 8)
+    if next_sp != 0 {
+        volatile_write(0x47001010, next_sp)
+    }
+    gic_eoi(intid)
+}
+
+@kernel fn gic_init() {
+    let ctlr = volatile_read_u32(0x08000000)
+    volatile_write_u32(0x08000000, ctlr | 0x12)
+    let waker = volatile_read_u32(0x080A0014)
+    volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
+    let grp = volatile_read_u32(0x080B0080)
+    volatile_write_u32(0x080B0080, grp | (1 << 30))
+    volatile_write_u32(0x080B0100, 1 << 30)
+    volatile_write_u8(0x080B041E, 0xA0)
+    gic_cpu_init(255)
+}
+
+@kernel fn kernel_main() {
+    println("=== FajarOS ARM64 IPC Demo ===")
+    println("")
+    print("EL:")
+    print_dec(read_el())
+    println("")
+
+    gic_init()
+    timer_set(timer_freq() / 100)
+    println("GIC+Timer ready")
+
+    // Producer (P0): SVC #2 (send), SVC #1 (print 'S'), loop
+    // Encoding: SVC #2 = 0xD4000041, SVC #1 = 0xD4000021
+    let p0: i64 = 0x41200000
+    volatile_write_u32(p0, 0xD4000041)      // SVC #2 (send)
+    volatile_write_u32(p0 + 4, 0xD4000021)  // SVC #1 (print)
+    volatile_write_u32(p0 + 8, 0x17FFFFFE)  // B #-8 (loop to SVC #2)
+
+    // Consumer (P1): SVC #3 (recv), SVC #1 (print 'R'), loop
+    // Encoding: SVC #3 = 0xD4000061
+    let p1: i64 = 0x41220000
+    volatile_write_u32(p1, 0xD4000061)      // SVC #3 (recv)
+    volatile_write_u32(p1 + 4, 0xD4000021)  // SVC #1 (print)
+    volatile_write_u32(p1 + 8, 0x17FFFFFE)  // B #-8 (loop to SVC #3)
+
+    // Clear mailbox + process table
+    volatile_write(0x41100000, 0)   // ticks
+    volatile_write(0x41100008, 0)   // current PID
+    volatile_write(0x41100010, 0)   // P0 saved SP
+    volatile_write(0x41100018, 0)   // P1 saved SP
+    volatile_write(0x41110000, 0)   // mailbox value
+    volatile_write(0x41110008, 0)   // mailbox ready
+    volatile_write(0x41110010, 0)   // send count
+    volatile_write(0x41110018, 0)   // recv count
+
+    println("")
+    println("P0 (producer): SVC #2 → send counter")
+    println("P1 (consumer): SVC #3 → recv + print [R:N]")
+    println("S=send, R=recv, [R:N]=received message N")
+    println("")
+
+    irq_enable()
+    print("IPC: ")
+    eret_to_el0(p0, 0x41210000, 0)
+    __halt()
+}
