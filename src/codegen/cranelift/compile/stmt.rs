@@ -948,10 +948,8 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
             builder.seal_block(after);
             Ok(None)
         }
-        _ => Err(CodegenError::UnsupportedStmt(format!(
-            "{:?}",
-            std::mem::discriminant(stmt)
-        ))),
+        // Nested items (fn, struct, enum, impl): skip — extracted at module level.
+        Stmt::Item(_) => Ok(None),
     }
 }
 

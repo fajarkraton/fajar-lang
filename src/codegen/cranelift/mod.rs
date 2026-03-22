@@ -197,6 +197,54 @@ fn coerce_ret(
 
 /// H4: Scans an expression tree for function calls forbidden in the given context.
 ///
+/// Extracts nested `FnDef` items from a function body expression tree.
+///
+/// Nested functions (e.g., `fn inner(x: i64) -> i64 { ... }` inside another fn)
+/// are extracted and added to the concrete_fns list so they get declared and compiled
+/// at the module level. The body compilation skips `Expr::Item(FnDef)` nodes.
+fn extract_nested_fns(body: &Expr, out: &mut Vec<FnDef>) {
+    match body {
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                extract_nested_fns_stmt(stmt, out);
+            }
+            if let Some(tail_expr) = expr {
+                extract_nested_fns_expr(tail_expr, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_nested_fns_stmt(stmt: &Stmt, out: &mut Vec<FnDef>) {
+    match stmt {
+        Stmt::Item(item) => {
+            if let Item::FnDef(fndef) = item.as_ref() {
+                if fndef.generic_params.is_empty() {
+                    out.push(fndef.clone());
+                    extract_nested_fns(&fndef.body, out);
+                }
+            }
+        }
+        Stmt::Expr { expr, .. } => extract_nested_fns_expr(expr, out),
+        _ => {}
+    }
+}
+
+fn extract_nested_fns_expr(expr: &Expr, out: &mut Vec<FnDef>) {
+    match expr {
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                extract_nested_fns_stmt(stmt, out);
+            }
+            if let Some(tail_expr) = expr {
+                extract_nested_fns_expr(tail_expr, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Returns a list of violation descriptions (empty = no violations).
 /// - `"kernel"`: forbids tensor ops, heap allocation, string ops
 /// - `"device"`: forbids raw pointer ops, IRQ ops
@@ -4735,6 +4783,8 @@ impl CraneliftCompiler {
             if let Item::FnDef(fndef) = item {
                 if fndef.generic_params.is_empty() {
                     concrete_fns.push(fndef.clone());
+                    // Extract nested function definitions from body
+                    extract_nested_fns(&fndef.body, &mut concrete_fns);
                 } else {
                     self.generic_fns.insert(fndef.name.clone(), fndef.clone());
                 }
@@ -11684,6 +11734,8 @@ impl ObjectCompiler {
             if let Item::FnDef(fndef) = item {
                 if fndef.generic_params.is_empty() {
                     concrete_fns.push(fndef.clone());
+                    // Extract nested function definitions from body
+                    extract_nested_fns(&fndef.body, &mut concrete_fns);
                 } else {
                     self.generic_fns.insert(fndef.name.clone(), fndef.clone());
                 }
