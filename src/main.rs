@@ -106,6 +106,9 @@ enum Command {
         /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
         #[arg(long)]
         board: Option<String>,
+        /// Override linker binary (e.g., aarch64-linux-gnu-ld, ld.lld).
+        #[arg(long)]
+        linker: Option<String>,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -251,6 +254,7 @@ fn main() -> ExitCode {
             backend,
             opt_level,
             board,
+            linker,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -276,7 +280,7 @@ fn main() -> ExitCode {
             if backend == "llvm" {
                 cmd_build_llvm(&path, output.as_deref(), opt_level)
             } else {
-                cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref())
+                cmd_build(&path, &target, output.as_deref(), no_std, ls.as_deref(), linker.as_deref())
             }
         }
         Command::Doc { file, output, open } => {
@@ -1025,8 +1029,9 @@ fn cmd_build(
     output: Option<&std::path::Path>,
     no_std: bool,
     linker_script: Option<&str>,
+    linker_override: Option<&str>,
 ) -> ExitCode {
-    cmd_build_native(path, target, output, no_std, linker_script)
+    cmd_build_native(path, target, output, no_std, linker_script, linker_override)
 }
 
 /// Stub when native feature is not enabled.
@@ -1037,6 +1042,7 @@ fn cmd_build(
     _output: Option<&std::path::Path>,
     _no_std: bool,
     _linker_script: Option<&str>,
+    _linker_override: Option<&str>,
 ) -> ExitCode {
     eprintln!("error: native compilation not available");
     eprintln!("hint: rebuild with `cargo build --features native`");
@@ -1139,7 +1145,7 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
         fajar_lang::bsp::BspArch::Aarch64Linux => {
             let target_triple = board.arch().to_string();
             println!("\nCross-compiling for {target_triple}...");
-            return cmd_build(path, &target_triple, output, false, None);
+            return cmd_build(path, &target_triple, output, false, None, None);
         }
         _ => {
             // Bare-metal MCU boards: generate BSP artifacts only
@@ -1278,6 +1284,7 @@ fn cmd_build_native(
     output: Option<&std::path::Path>,
     no_std: bool,
     linker_script: Option<&str>,
+    linker_override: Option<&str>,
 ) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
@@ -1393,8 +1400,10 @@ fn cmd_build_native(
         return ExitCode::from(EXIT_USAGE);
     }
 
-    // Determine linker command
-    let linker = if target.is_bare_metal || target.is_user_mode {
+    // Determine linker command (--linker flag overrides default)
+    let linker = if let Some(custom_linker) = linker_override {
+        custom_linker.to_string()
+    } else if target.is_bare_metal || target.is_user_mode {
         "ld".to_string() // bare-metal and user-mode use ld directly (no libc)
     } else if is_cross {
         cross_linker(&target)

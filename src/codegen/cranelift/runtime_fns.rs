@@ -2379,6 +2379,59 @@ pub extern "C" fn fj_rt_volatile_write_u64(addr: *mut u64, value: i64) {
     unsafe { std::ptr::write_volatile(addr, value as u64) }
 }
 
+// ── Bare-Metal Atomic Primitives (address-based) ──
+// For OS kernels: operate directly on memory addresses using x86 LOCK-prefixed ops.
+// Unlike standard runtime atomics, these don't use heap allocation.
+
+/// Compare-and-swap: if *addr == expected, set *addr = desired. Returns old value.
+pub extern "C" fn fj_rt_bare_atomic_cas(addr: *mut i64, expected: i64, desired: i64) -> i64 {
+    // SAFETY: caller guarantees valid aligned i64 pointer
+    unsafe {
+        let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
+        match atomic.compare_exchange(
+            expected,
+            desired,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        ) {
+            Ok(old) => old,
+            Err(old) => old,
+        }
+    }
+}
+
+/// Atomic load with SeqCst ordering.
+pub extern "C" fn fj_rt_bare_atomic_load(addr: *const i64) -> i64 {
+    unsafe {
+        let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
+        atomic.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// Atomic store with SeqCst ordering.
+pub extern "C" fn fj_rt_bare_atomic_store(addr: *mut i64, value: i64) {
+    unsafe {
+        let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
+        atomic.store(value, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Atomic fetch-add: returns old value, stores old + value.
+pub extern "C" fn fj_rt_bare_atomic_add(addr: *mut i64, value: i64) -> i64 {
+    unsafe {
+        let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
+        atomic.fetch_add(value, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// Atomic fetch-sub: returns old value, stores old - value.
+pub extern "C" fn fj_rt_bare_atomic_sub(addr: *mut i64, value: i64) -> i64 {
+    unsafe {
+        let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
+        atomic.fetch_sub(value, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
 // ── Little-Endian Buffer Helpers ──
 // Required for FAT32 (all fields LE) and NVMe command structures.
 
@@ -7360,6 +7413,12 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_volatile_write_u16" => Some(fj_rt_volatile_write_u16 as *const u8),
         "fj_rt_volatile_write_u32" => Some(fj_rt_volatile_write_u32 as *const u8),
         "fj_rt_volatile_write_u64" => Some(fj_rt_volatile_write_u64 as *const u8),
+        // Bare-metal atomics
+        "fj_rt_bare_atomic_cas" => Some(fj_rt_bare_atomic_cas as *const u8),
+        "fj_rt_bare_atomic_load" => Some(fj_rt_bare_atomic_load as *const u8),
+        "fj_rt_bare_atomic_store" => Some(fj_rt_bare_atomic_store as *const u8),
+        "fj_rt_bare_atomic_add" => Some(fj_rt_bare_atomic_add as *const u8),
+        "fj_rt_bare_atomic_sub" => Some(fj_rt_bare_atomic_sub as *const u8),
         // LE/BE buffer helpers
         "fj_rt_buffer_read_u16_le" => Some(fj_rt_buffer_read_u16_le as *const u8),
         "fj_rt_buffer_read_u32_le" => Some(fj_rt_buffer_read_u32_le as *const u8),
