@@ -5,7 +5,6 @@
 //! and release engineering for the Fajar Lang compiler pipeline.
 
 pub mod benchmark;
-pub mod comptime;
 pub mod edition;
 pub mod incremental;
 pub mod performance;

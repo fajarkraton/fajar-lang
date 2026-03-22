@@ -20,7 +20,6 @@
 pub mod ast;
 mod expr;
 mod items;
-pub mod macros;
 pub mod pratt;
 pub mod recovery;
 
