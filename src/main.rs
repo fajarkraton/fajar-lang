@@ -1628,6 +1628,29 @@ fj_rt_bare_memory_fence:
         if let Some(ref so) = startup_obj_path {
             link_cmd.arg(so);
         }
+        // Link bare-metal runtime library if available (arch-specific)
+        // Only link for cross-architecture (e.g., x86 host → aarch64 target).
+        // Same-arch bare-metal (x86→x86-none) has runtime in startup .o already.
+        let cross_arch = target.arch != fajar_lang::codegen::target::Arch::X86_64 || !cfg!(target_arch = "x86_64");
+        if cross_arch {
+            let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            let runtime_name = "libfj_runtime_bare.a";
+            let triple_str = target.triple.to_string();
+            let runtime_paths = [
+                exe_dir.as_ref().map(|d| d.join(runtime_name)),
+                exe_dir.as_ref().map(|d| d.join("..").join("runtime_bare").join("target")
+                    .join(&triple_str).join("release").join(runtime_name)),
+                Some(std::path::PathBuf::from(format!("runtime_bare/target/{}/release/{}", triple_str, runtime_name))),
+            ];
+            for candidate in &runtime_paths {
+                if let Some(p) = candidate {
+                    if p.exists() {
+                        link_cmd.arg(p);
+                        break;
+                    }
+                }
+            }
+        }
     } else {
         link_cmd.arg("-lm");
     }
@@ -1635,6 +1658,7 @@ fj_rt_bare_memory_fence:
     // Add platform-specific dead-code stripping flags
     if target.is_bare_metal || target.is_user_mode {
         link_cmd.arg("--gc-sections"); // ld (not cc) syntax
+        link_cmd.arg("--allow-multiple-definition"); // runtime .a may overlap startup .o
     } else if cfg!(target_os = "macos") {
         link_cmd.arg("-Wl,-dead_strip");
     } else {
