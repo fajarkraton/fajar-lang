@@ -1,0 +1,213 @@
+// fajaros_arm64_mmu.fj — FajarOS ARM64 MMU + EL0 isolation demo
+//
+// Sets up identity-mapped 4KB-granule page tables:
+//   - Kernel pages: AP=01 (RW EL1, no EL0 access)
+//   - User pages: AP=00 (RW EL1+EL0)
+//   - Device MMIO: nGnRnE (non-cacheable, device memory)
+//
+// Then spawns EL0 process with restricted memory access.
+//
+// Build: fj build examples/fajaros_arm64_mmu.fj --target aarch64-unknown-none --no-std
+// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
+//          -kernel fajaros_arm64_mmu
+//
+// ARM64 Translation Table (4KB granule, 48-bit VA):
+//   Level 0 (PGD):  512 entries × 512GB each
+//   Level 1 (PUD):  512 entries × 1GB each
+//   Level 2 (PMD):  512 entries × 2MB blocks (we use this for identity map)
+//
+// Page table base: 0x41080000 (L0: 4KB, L1: 4KB, L2: 4KB × N)
+
+@kernel fn print_dec(val: i64) {
+    if val == 0 { print("0"); return }
+    let mut v = val
+    let mut buf: [i64; 20] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    let mut count: i64 = 0
+    while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
+    let mut i = count - 1
+    while i >= 0 {
+        volatile_write_u8(0x09000000, 48 + buf[i])
+        i = i - 1
+    }
+}
+
+@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
+    let ec = (esr >> 26) & 63
+    if ec == 21 {
+        // SVC
+        let svc = esr & 0xFFFF
+        if svc == 1 { print("U") }  // user print
+        if svc == 0 { print("[exit]") }
+        return
+    }
+    if ec == 36 {
+        // Data abort from lower EL (EC=0x24)
+        // This means EL0 tried to access kernel-only memory!
+        print("[FAULT:DA:")
+        print_dec(far & 0xFFFF)
+        print("]")
+        return
+    }
+    print("[E:")
+    print_dec(ec)
+    print("]")
+}
+
+@kernel fn fj_exception_irq() {
+    let intid = gic_ack()
+    timer_set(timer_freq() / 10)
+    gic_eoi(intid)
+}
+
+@kernel fn gic_init() {
+    let ctlr = volatile_read_u32(0x08000000)
+    volatile_write_u32(0x08000000, ctlr | 0x12)
+    let waker = volatile_read_u32(0x080A0014)
+    volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
+    let grp = volatile_read_u32(0x080B0080)
+    volatile_write_u32(0x080B0080, grp | (1 << 30))
+    volatile_write_u32(0x080B0100, 1 << 30)
+    volatile_write_u8(0x080B041E, 0xA0)
+    gic_cpu_init(255)
+}
+
+// ── Page Table Setup ──
+//
+// MAIR_EL1:
+//   Attr0 = 0xFF (Normal, Write-Back cacheable)
+//   Attr1 = 0x00 (Device-nGnRnE, strongly ordered)
+//
+// TCR_EL1:
+//   T0SZ = 16 (48-bit VA space)
+//   TG0 = 0b00 (4KB granule)
+//   SH0 = 0b11 (Inner Shareable)
+//   ORGN0 = 0b01 (Write-Back)
+//   IRGN0 = 0b01 (Write-Back)
+//
+// L0 table at 0x41080000 (4KB)
+// L1 table at 0x41081000 (4KB)
+// L2 table at 0x41082000 (4KB) — for first 1GB
+
+@kernel fn setup_page_tables() {
+    let l0: i64 = 0x41080000   // Level 0 page table (PGD)
+    let l1: i64 = 0x41081000   // Level 1 table
+    let l2: i64 = 0x41082000   // Level 2 table (2MB blocks)
+
+    // Zero all tables (3 × 4KB = 512 × 8 bytes each)
+    let mut i: i64 = 0
+    while i < 4096 {
+        volatile_write(l0 + i, 0)
+        volatile_write(l1 + i, 0)
+        volatile_write(l2 + i, 0)
+        i = i + 8
+    }
+
+    // L0[0] → L1 table (table descriptor: valid + table)
+    // Bits: [47:12] = next level addr, [1:0] = 0b11 (table)
+    volatile_write(l0, l1 | 3)
+
+    // L1[0] → L2 table (first 1GB)
+    volatile_write(l1, l2 | 3)
+
+    // L2: identity-map first 1GB as 2MB blocks
+    // Block descriptor format:
+    //   [47:21] = physical address (2MB aligned)
+    //   [11:10] = AF (must be 1)
+    //   [7:6]   = AP (access permissions)
+    //   [4:2]   = AttrIndx (MAIR index)
+    //   [1:0]   = 0b01 (block entry)
+    //
+    // Regions:
+    //   0x00000000-0x07FFFFFF: Device MMIO (UART, GIC) — Attr1, AP=00, kernel+user
+    //   0x08000000-0x09FFFFFF: Device MMIO — Attr1, AP=01, kernel-only
+    //   0x40000000-0x40FFFFFF: Kernel code — Attr0, AP=01, kernel-only
+    //   0x41000000-0x411FFFFF: Kernel data — Attr0, AP=01, kernel-only
+    //   0x41200000-0x412FFFFF: User code/data — Attr0, AP=00, kernel+user
+
+    let af: i64 = 1 << 10           // Access Flag
+    let ap_kernel: i64 = 1 << 6     // AP=01: kernel-only
+    let ap_user: i64 = 0            // AP=00: kernel+user
+    let attr_normal: i64 = 0 << 2   // AttrIndx=0 (Normal)
+    let attr_device: i64 = 1 << 2   // AttrIndx=1 (Device)
+    let block: i64 = 1              // Block entry
+
+    i = 0
+    while i < 512 {
+        let phys = i * 0x200000  // 2MB per block
+        let mut flags: i64 = af | block
+
+        // Determine region type
+        if phys < 0x40000000 {
+            // Device MMIO
+            flags = flags | attr_device | ap_user
+        }
+        if phys >= 0x40000000 {
+            if phys < 0x41200000 {
+                // Kernel code+data
+                flags = flags | attr_normal | ap_kernel
+            }
+        }
+        if phys >= 0x41200000 {
+            if phys < 0x41400000 {
+                // User region
+                flags = flags | attr_normal | ap_user
+            }
+        }
+        if phys >= 0x41400000 {
+            // Unmapped (leave zero = invalid)
+            flags = 0
+        }
+
+        if flags != 0 {
+            volatile_write(l2 + i * 8, phys | flags)
+        }
+        i = i + 1
+    }
+
+    println("  Page tables at 0x41080000 (L0→L1→L2)")
+    println("  Kernel: 0x40000000-0x411FFFFF (AP=01, kernel-only)")
+    println("  User:   0x41200000-0x413FFFFF (AP=00, user+kernel)")
+    println("  Device: 0x00000000-0x3FFFFFFF (MMIO)")
+}
+
+@kernel fn kernel_main() {
+    println("=== FajarOS ARM64 MMU Demo ===")
+    println("")
+
+    print("EL:")
+    print_dec(read_el())
+    println("")
+
+    // Setup page tables
+    println("=== Page Table Setup ===")
+    setup_page_tables()
+
+    // Enable MMU
+    // MAIR: Attr0=0xFF (Normal WB), Attr1=0x00 (Device nGnRnE)
+    let mair: i64 = 0xFF | (0x00 << 8)
+    // TCR: T0SZ=16, TG0=4KB, SH0=Inner-Share, ORGN0/IRGN0=WB
+    let tcr: i64 = 16 | (0 << 14) | (3 << 12) | (1 << 10) | (1 << 8)
+    let ttbr0: i64 = 0x41080000
+
+    mmu_enable(mair, tcr, ttbr0)
+    println("  MMU enabled!")
+    println("")
+
+    // Init GIC + timer
+    gic_init()
+    timer_set(timer_freq() / 10)
+    irq_enable()
+    println("GIC+Timer ready")
+    println("")
+
+    // Spawn EL0 process in user region (0x41200000)
+    println("=== EL0 Process with MMU ===")
+    let user_code: i64 = 0x41200000
+    volatile_write_u32(user_code, 0xD4000021)      // SVC #1 (print)
+    volatile_write_u32(user_code + 4, 0x17FFFFFF)  // B #-4 (loop)
+    println("  User code at 0x41200000 (AP=00, user-accessible)")
+    println("  ERET to EL0...")
+
+    eret_to_el0(user_code, 0x41210000, 0)
+    __halt()
+}
