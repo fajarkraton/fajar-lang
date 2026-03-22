@@ -1,242 +1,67 @@
 // fajaros_arm64_boot.fj — FajarOS ARM64 bare-metal kernel
 //
-// Boots on qemu-system-aarch64 -M virt and prints to PL011 UART.
-// Uses string literals (compiled to .rodata) — no more putc()!
-//
-// Build:
-//   fj build examples/fajaros_arm64_boot.fj --target aarch64-unknown-none --no-std
-//
-// Run:
-//   qemu-system-aarch64 -M virt -cpu cortex-a72 -nographic \
-//     -kernel fajaros_arm64_boot
+// Build: fj build examples/fajaros_arm64_boot.fj --target aarch64-unknown-none --no-std
+// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
+//          -kernel fajaros_arm64_boot
 
-// ── Helper: print decimal number to UART ──
+@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {}
+@kernel fn fj_exception_irq() {
+    let intid = gic_ack()
+    timer_set(timer_freq() / 10)
+    let ticks = volatile_read(0x41100000)
+    volatile_write(0x41100000, ticks + 1)
+    gic_eoi(intid)
+}
 
-@kernel
-fn print_dec(val: i64) {
-    if val == 0 {
-        print("0")
-        return
-    }
+@kernel fn print_dec(val: i64) {
+    if val == 0 { print("0"); return }
     let mut v = val
-    if v < 0 {
-        print("-")
-        v = 0 - v
-    }
-    let mut buf: [i64; 20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut buf: [i64; 20] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     let mut count: i64 = 0
-    while v > 0 {
-        buf[count] = v % 10
-        v = v / 10
-        count = count + 1
-    }
+    while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
     let mut i = count - 1
     while i >= 0 {
-        let d = buf[i]
-        if d == 0 { print("0") }
-        else if d == 1 { print("1") }
-        else if d == 2 { print("2") }
-        else if d == 3 { print("3") }
-        else if d == 4 { print("4") }
-        else if d == 5 { print("5") }
-        else if d == 6 { print("6") }
-        else if d == 7 { print("7") }
-        else if d == 8 { print("8") }
-        else if d == 9 { print("9") }
+        volatile_write_u8(0x09000000, 48 + buf[i])
         i = i - 1
     }
 }
 
-@kernel
-fn print_hex(val: i64) {
-    print("0x")
-    let mut i: i64 = 0
-    while i < 16 {
-        let shift = (15 - i) * 4
-        let nibble = (val >> shift) & 15
-        if nibble == 0 { print("0") }
-        else if nibble == 1 { print("1") }
-        else if nibble == 2 { print("2") }
-        else if nibble == 3 { print("3") }
-        else if nibble == 4 { print("4") }
-        else if nibble == 5 { print("5") }
-        else if nibble == 6 { print("6") }
-        else if nibble == 7 { print("7") }
-        else if nibble == 8 { print("8") }
-        else if nibble == 9 { print("9") }
-        else if nibble == 10 { print("A") }
-        else if nibble == 11 { print("B") }
-        else if nibble == 12 { print("C") }
-        else if nibble == 13 { print("D") }
-        else if nibble == 14 { print("E") }
-        else if nibble == 15 { print("F") }
-        i = i + 1
-    }
-}
-
-// ── GICv3 Distributor + Redistributor init ──
-//
-// QEMU virt GICv3 memory map:
-//   GICD (Distributor):    0x0800_0000
-//   GICR (Redistributor):  0x080A_0000
-//     GICR_RD_BASE:        0x080A_0000 (RD frame, 64KB)
-//     GICR_SGI_BASE:       0x080B_0000 (SGI frame, 64KB)
-//
-// Physical timer = PPI 30 (INTID 30), Group 1
-
-@kernel
-fn gic_dist_init() {
-    // GICD_CTLR (0x0000): Enable ARE + Group1
-    // Bit 4 = ARE_S (affinity routing), Bit 1 = EnableGrp1NS
-    let gicd_base: i64 = 0x08000000
-    let ctlr = volatile_read_u32(gicd_base)
-    volatile_write_u32(gicd_base, ctlr | 0x12)  // ARE_S + EnableGrp1NS
-    println("  [GIC] Distributor enabled (ARE + Grp1)")
-}
-
-@kernel
-fn gic_redist_init() {
-    let gicr_rd: i64 = 0x080A0000    // GICR RD frame
-    let gicr_sgi: i64 = 0x080B0000   // GICR SGI frame
-
-    // GICR_WAKER (0x0014): Clear ProcessorSleep bit (bit 1)
-    let waker = volatile_read_u32(gicr_rd + 0x14)
-    volatile_write_u32(gicr_rd + 0x14, waker & 0xFFFFFFFD)  // clear bit 1
-
-    // Wait for ChildrenAsleep (bit 2) to clear
-    let mut attempts: i64 = 0
-    let mut asleep: i64 = 1
-    while asleep == 1 {
-        let w = volatile_read_u32(gicr_rd + 0x14)
-        if (w & 4) == 0 {
-            asleep = 0
-        }
-        attempts = attempts + 1
-        if attempts > 10000 {
-            asleep = 0  // timeout, proceed anyway
-        }
-    }
-    println("  [GIC] Redistributor awake")
-
-    // GICR_IGROUPR0 (SGI+0x0080): Set INTID 30 as Group 1 (bit 30 = 1)
-    let grp = volatile_read_u32(gicr_sgi + 0x80)
-    volatile_write_u32(gicr_sgi + 0x80, grp | (1 << 30))
-
-    // GICR_ISENABLER0 (SGI+0x0100): Enable INTID 30 (bit 30 = 1)
-    volatile_write_u32(gicr_sgi + 0x100, 1 << 30)
-
-    // GICR_IPRIORITYR7 (SGI+0x041C): Set priority for INTID 30
-    // INTID 30 is in priority register 7 (30/4=7), byte offset 2 (30%4=2)
-    // Set priority = 0xA0 (lower number = higher priority)
-    let prio_addr = gicr_sgi + 0x400 + 30
-    volatile_write_u8(prio_addr, 0xA0)
-
-    println("  [GIC] PPI 30 (timer) enabled, priority=0xA0")
-}
-
-// ── Exception handlers (called from vector table) ──
-
-@kernel
-fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
-    let ec = (esr >> 26) & 63
-    print("[EXC] Sync EC=")
-    print_dec(ec)
-    print(" ELR=")
-    print_hex(elr)
-    print(" FAR=")
-    print_hex(far)
-    println("")
-}
-
-@kernel
-fn fj_exception_irq() {
-    let intid = gic_ack()
-    // Rearm timer (10 Hz)
-    timer_set(timer_freq() / 10)
-    // Increment tick counter at 0x41100000 (RAM region)
-    let ticks = volatile_read(0x41100000)
-    volatile_write(0x41100000, ticks + 1)
-    // Print dot for each tick
-    print(".")
-    gic_eoi(intid)
-}
-
-// ── Kernel entry point ──
-
-@kernel
-fn kernel_main() {
-    println("")
-    println("=== FajarOS ARM64 Boot ===")
-    println("")
-
-    println("[BOOT] UART PL011 @ 0x09000000 ... OK")
-
-    print("[BOOT] Exception level: EL")
-    print_dec(read_el())
-    println("")
-
-    print("[BOOT] Timer frequency: ")
-    print_dec(timer_freq() / 1000000)
-    println(" MHz")
-
-    print("[BOOT] CPU MIDR: ")
-    print_hex(read_midr())
-    println("")
-
-    println("[BOOT] Exception vectors installed")
-    println("[BOOT] Context frame: 288 bytes (SP_EL0 saved)")
-    println("")
-
-    // Memory layout
-    println("=== Memory Map ===")
-    println("  FLASH: 0x40000000 - 0x41000000 (16 MB)")
-    println("  RAM:   0x41000000 - 0x49000000 (128 MB)")
-    println("  Stack: 0x41000000 (64 KB, grows down)")
-    println("  UART:  0x09000000 (PL011)")
-    println("")
-
-    // EL0 readiness
-    println("=== EL0 User Space ===")
-    println("  ERET-to-EL0:     ready")
-    println("  SP_EL0 save:     ready (context frame offset 264)")
-    println("  TTBR0/TTBR1:     ready (per-process page tables)")
-    println("  SVC handler:     __exc_sync_lower")
-    println("  IRQ preemption:  __exc_irq_lower")
-    println("  Page AP bits:    UserRW=0x00, KernelRW=0x40")
-    println("")
-
-    // Initialize GICv3 + timer
-    println("=== GICv3 Init ===")
-    gic_dist_init()
-    gic_redist_init()
+@kernel fn gic_init() {
+    let ctlr = volatile_read_u32(0x08000000)
+    volatile_write_u32(0x08000000, ctlr | 0x12)
+    let waker = volatile_read_u32(0x080A0014)
+    volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
+    let grp = volatile_read_u32(0x080B0080)
+    volatile_write_u32(0x080B0080, grp | (1 << 30))
+    volatile_write_u32(0x080B0100, 1 << 30)
+    volatile_write_u8(0x080B041E, 0xA0)
     gic_cpu_init(255)
-    println("  [GIC] CPU interface ready (PMR=255)")
+}
 
-    // Arm physical timer at 10 Hz
-    let freq = timer_freq()
-    timer_set(freq / 10)
-    print("  [TIMER] Armed @ 10 Hz (")
-    print_dec(freq / 10)
-    println(" ticks/interval)")
-
-    // Initialize tick counter
+@kernel fn kernel_main() {
+    println("=== FajarOS ARM64 ===")
+    print("EL:")
+    print_dec(read_el())
+    print(" Timer:")
+    print_dec(timer_freq() / 1000000)
+    println("MHz")
+    gic_init()
+    timer_set(timer_freq() / 10)
     volatile_write(0x41100000, 0)
-
-    // Enable IRQs
     irq_enable()
-    println("  [IRQ] Unmasked")
+    println("GIC+Timer ready")
+    print("fjsh> ")
+    let mut running: i64 = 1
+    while running > 0 {
+        let fr = volatile_read_u32(0x09000018)
+        if (fr & 16) == 0 {
+            let ch = volatile_read_u8(0x09000000)
+            if ch == 113 {
+                running = 0
+            }
+        }
+    }
     println("")
-
-    println("=== FajarOS Ready ===")
-    println("")
-    println("  Board:    QEMU virt (Cortex-A72)")
-    println("  Kernel:   FajarOS v3.0 ARM64")
-    println("  Language: 100% Fajar Lang")
-    println("  Compiler: Cranelift AOT (aarch64-unknown-none)")
-    println("")
-
-    print("fjsh> Timer ticks: ")
-    // WFE loop — CPU sleeps, wakes on IRQ, IRQ handler prints dots
+    println("[HALT]")
     __halt()
 }
