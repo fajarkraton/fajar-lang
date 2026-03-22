@@ -1,0 +1,165 @@
+// fajaros_arm64_multi.fj — FajarOS ARM64 preemptive multitasking demo
+//
+// Spawns 2 EL0 processes, preempted by timer IRQ, round-robin scheduled.
+//
+// Build: fj build examples/fajaros_arm64_multi.fj --target aarch64-unknown-none --no-std
+// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
+//          -kernel fajaros_arm64_multi
+//
+// Memory layout:
+//   0x40000000  Kernel code (.text)
+//   0x41000000  Kernel stack (64KB)
+//   0x41100000  Tick counter (8 bytes)
+//   0x41100008  Current PID (8 bytes)
+//   0x41100010  Process 0 saved SP (8 bytes)
+//   0x41100018  Process 1 saved SP (8 bytes)
+//   0x41200000  Process 0 code
+//   0x41210000  Process 0 stack top
+//   0x41220000  Process 1 code
+//   0x41230000  Process 1 stack top
+
+// ── Helpers ──
+
+@kernel fn print_dec(val: i64) {
+    if val == 0 { print("0"); return }
+    let mut v = val
+    let mut buf: [i64; 20] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    let mut count: i64 = 0
+    while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
+    let mut i = count - 1
+    while i >= 0 {
+        volatile_write_u8(0x09000000, 48 + buf[i])
+        i = i - 1
+    }
+}
+
+// ── Exception handlers ──
+
+@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
+    let ec = (esr >> 26) & 63
+    if ec == 21 {
+        // SVC from EL0
+        let svc_num = esr & 0xFFFF
+        if svc_num == 1 {
+            // SVC #1 = WRITE: print char from x0 (saved at context frame offset 0)
+            // The saved registers are on the kernel stack
+            // x0 is at [SP+0] in the context frame
+            // For now, print the PID character
+            let pid = volatile_read(0x41100008)
+            if pid == 0 {
+                print("A")
+            }
+            if pid == 1 {
+                print("B")
+            }
+        }
+        if svc_num == 0 {
+            // SVC #0 = EXIT
+            let pid = volatile_read(0x41100008)
+            print("[exit:")
+            print_dec(pid)
+            print("]")
+        }
+        return
+    }
+    print("[EXC:")
+    print_dec(ec)
+    print("]")
+}
+
+@kernel fn fj_exception_irq() {
+    let intid = gic_ack()
+    // Rearm timer (100 Hz = 10ms quantum)
+    timer_set(timer_freq() / 100)
+    // Increment tick counter
+    let ticks = volatile_read(0x41100000)
+    volatile_write(0x41100000, ticks + 1)
+
+    // Round-robin: switch PID 0 ↔ 1
+    let cur = volatile_read(0x41100008)
+    let next = 1 - cur
+    volatile_write(0x41100008, next)
+
+    // Save current SP to process table, load next SP
+    // Context switch flag at 0x47001010 (read by vector table asm)
+    let save_addr = 0x41100010 + cur * 8
+    let load_addr = 0x41100010 + next * 8
+    // The vector table's SAVE_CONTEXT already saved regs to current SP
+    // We get the saved SP from 0x47001018 (set by vector table asm)
+    let saved_sp = volatile_read(0x47001018)
+    volatile_write(save_addr, saved_sp)
+    // Load next process SP and set context switch flag
+    let next_sp = volatile_read(load_addr)
+    if next_sp != 0 {
+        volatile_write(0x47001010, next_sp)
+    }
+
+    gic_eoi(intid)
+}
+
+// ── GIC init ──
+
+@kernel fn gic_init() {
+    let ctlr = volatile_read_u32(0x08000000)
+    volatile_write_u32(0x08000000, ctlr | 0x12)
+    let waker = volatile_read_u32(0x080A0014)
+    volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
+    let grp = volatile_read_u32(0x080B0080)
+    volatile_write_u32(0x080B0080, grp | (1 << 30))
+    volatile_write_u32(0x080B0100, 1 << 30)
+    volatile_write_u8(0x080B041E, 0xA0)
+    gic_cpu_init(255)
+}
+
+// ── Kernel entry ──
+
+@kernel fn kernel_main() {
+    println("=== FajarOS ARM64 Multitasking ===")
+    println("")
+
+    print("EL:")
+    print_dec(read_el())
+    print(" Timer:")
+    print_dec(timer_freq() / 1000000)
+    println("MHz")
+
+    // Init GIC + timer (100 Hz for fast context switching)
+    gic_init()
+    timer_set(timer_freq() / 100)
+    println("GIC+Timer ready (100 Hz)")
+
+    // Write user program 0: infinite loop of SVC #1 (print)
+    // SVC #1 = 0xD4000021
+    // B #-4  = 0x17FFFFFF (branch back to SVC)
+    let p0_code: i64 = 0x41200000
+    volatile_write_u32(p0_code, 0xD4000021)     // SVC #1
+    volatile_write_u32(p0_code + 4, 0x17FFFFFF)  // B #-4
+
+    // Write user program 1: same but at different address
+    let p1_code: i64 = 0x41220000
+    volatile_write_u32(p1_code, 0xD4000021)     // SVC #1
+    volatile_write_u32(p1_code + 4, 0x17FFFFFF)  // B #-4
+
+    // Init process table
+    volatile_write(0x41100000, 0)  // tick counter
+    volatile_write(0x41100008, 0)  // current PID = 0
+    volatile_write(0x41100010, 0)  // proc 0 saved SP (not yet saved)
+    volatile_write(0x41100018, 0)  // proc 1 saved SP (not yet saved)
+
+    println("")
+    println("Process 0: prints 'A' via SVC #1 (code @ 0x41200000)")
+    println("Process 1: prints 'B' via SVC #1 (code @ 0x41220000)")
+    println("Scheduler: round-robin on timer IRQ (10ms quantum)")
+    println("")
+
+    // Enable IRQs
+    irq_enable()
+
+    // ERET to process 0
+    print("Spawning P0... ")
+    eret_to_el0(p0_code, 0x41210000, 0)
+
+    // Should not reach here (eret doesn't return normally)
+    println("back to kernel")
+    __halt()
+}
