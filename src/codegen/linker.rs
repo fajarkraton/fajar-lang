@@ -678,17 +678,7 @@ fj_rt_bare_write_ttbr1:
     ret
 .size fj_rt_bare_write_ttbr1, . - fj_rt_bare_write_ttbr1
 
-/* Switch TTBR0_EL1 + full TLB invalidate (for process switch) */
-.global fj_rt_bare_switch_ttbr0
-.type fj_rt_bare_switch_ttbr0, @function
-fj_rt_bare_switch_ttbr0:
-    dsb     ish
-    msr     TTBR0_EL1, x0
-    tlbi    vmalle1
-    dsb     ish
-    isb
-    ret
-.size fj_rt_bare_switch_ttbr0, . - fj_rt_bare_switch_ttbr0
+/* NOTE: fj_rt_bare_switch_ttbr0 defined below in Context Switch Builtins section */
 
 /* TLB invalidate all entries */
 .global fj_rt_bare_tlbi_all
@@ -717,15 +707,7 @@ fj_rt_bare_dsb:
     ret
 .size fj_rt_bare_dsb, . - fj_rt_bare_dsb
 
-/* SVC wrapper: syscall from EL0 user mode
-   x0 = syscall number, x1 = arg1, x2 = arg2
-   Returns result in x0 */
-.global fj_rt_bare_svc
-.type fj_rt_bare_svc, @function
-fj_rt_bare_svc:
-    svc     #0
-    ret
-.size fj_rt_bare_svc, . - fj_rt_bare_svc
+/* NOTE: fj_rt_bare_svc defined below in Context Switch Builtins section */
 
 .global fj_rt_bare_print_i64
 .type fj_rt_bare_print_i64, @function

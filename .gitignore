@@ -39,3 +39,4 @@ release/
 *.onnx.tmp
 *.raw
 *.tar.gz
+fajaros_arm64_boot

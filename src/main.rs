@@ -1418,7 +1418,20 @@ fn cmd_build_native(
     let linker = if let Some(custom_linker) = linker_override {
         custom_linker.to_string()
     } else if target.is_bare_metal || target.is_user_mode {
-        "ld".to_string() // bare-metal and user-mode use ld directly (no libc)
+        if is_cross {
+            // Cross bare-metal: use target-specific ld (e.g., aarch64-linux-gnu-ld)
+            match target.arch {
+                fajar_lang::codegen::target::Arch::Aarch64 => {
+                    "aarch64-linux-gnu-ld".to_string()
+                }
+                fajar_lang::codegen::target::Arch::Riscv64 => {
+                    "riscv64-linux-gnu-ld".to_string()
+                }
+                fajar_lang::codegen::target::Arch::X86_64 => "ld".to_string(),
+            }
+        } else {
+            "ld".to_string() // native bare-metal: host ld
+        }
     } else if is_cross {
         cross_linker(&target)
     } else {
