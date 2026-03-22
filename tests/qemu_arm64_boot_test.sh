@@ -4,6 +4,9 @@
 # Builds the kernel, boots in QEMU, captures serial output, verifies boot.
 # Exit code: 0 = PASS, 1 = FAIL
 #
+# IMPORTANT: Requires gic-version=3 (default QEMU virt uses GICv2 which
+# doesn't have GICR at 0x080A0000, causing data abort)
+#
 # Usage: bash tests/qemu_arm64_boot_test.sh
 
 set -e

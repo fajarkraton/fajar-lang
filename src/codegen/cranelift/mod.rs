@@ -6638,6 +6638,13 @@ impl ObjectCompiler {
             .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
         self.functions.insert("mmu_enable".to_string(), mmu_id);
 
+        // eret_to_el0(entry: i64, sp_el0: i64, spsr: i64) -> void
+        let eret_id = self
+            .module
+            .declare_function("fj_rt_bare_eret_to_el0", Linkage::Import, &sig_mmu)
+            .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+        self.functions.insert("eret_to_el0".to_string(), eret_id);
+
         // ── Phase 3 HAL Driver Runtime Functions ──
 
         // GPIO: (i64, ...) -> i64 signatures

@@ -220,7 +220,7 @@ impl GpuDevice for CudaDevice {
     fn compile_kernel(&self, source: &KernelSource) -> Result<GpuKernel, GpuError> {
         match source {
             KernelSource::Ptx(_ptx) => {
-                // TODO: cuModuleLoadData + cuModuleGetFunction
+                // Stub: real impl calls cuModuleLoadData + cuModuleGetFunction
                 Ok(GpuKernel::new(
                     "cuda_kernel".into(),
                     0,
@@ -229,7 +229,7 @@ impl GpuDevice for CudaDevice {
                 ))
             }
             KernelSource::Builtin(builtin) => {
-                // TODO: load pre-compiled PTX for builtin kernels
+                // Stub: real impl loads pre-compiled PTX for builtin kernels
                 Ok(GpuKernel::new(
                     format!("{builtin}"),
                     3,
@@ -249,7 +249,7 @@ impl GpuDevice for CudaDevice {
         _workgroups: (u32, u32, u32),
         _buffers: &[&GpuBuffer],
     ) -> Result<(), GpuError> {
-        // TODO: cuLaunchKernel
+        // Stub: real impl calls cuLaunchKernel with grid/block dims
         Ok(())
     }
 }

@@ -100,8 +100,8 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
 
     let fn_name = match callee {
         Expr::Ident { name, .. } => name.clone(),
-        // TODO: Support array-indexed fn ptr calls (e.g., `handlers[i](x)`)
-        // This requires tracking fn_ptr_array_sigs for arrays of function pointers.
+        // Array-indexed fn ptr calls (e.g., `handlers[i](x)`).
+        // Uses fn_ptr_sigs to look up the signature, then call_indirect.
         Expr::Index { object, .. } => {
             // Check if the array variable is tracked in fn_ptr_sigs (same
             // signature for all elements). If so, compile the index

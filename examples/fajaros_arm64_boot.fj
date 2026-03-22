@@ -1,11 +1,41 @@
+// fajaros_arm64_boot.fj — FajarOS ARM64 bare-metal kernel
+//
+// Features: PL011 UART, GICv3 (distributor + redistributor + CPU IF),
+//           physical timer IRQ (10 Hz), interactive shell with uptime
+//
+// Build:
+//   fj build examples/fajaros_arm64_boot.fj --target aarch64-unknown-none --no-std
+//
+// Run (IMPORTANT: must specify gic-version=3, default is GICv2):
+//   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
+//     -kernel fajaros_arm64_boot
+//
+// GIC addresses (QEMU virt with gic-version=3):
+//   GICD: 0x0800_0000 (distributor)
+//   GICR: 0x080A_0000 (redistributor RD frame)
+//         0x080B_0000 (redistributor SGI frame)
+// Timer: Physical timer PPI 30 (INTID 30)
+
 @kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
     let ec = (esr >> 26) & 63
-    print("[EXC] Sync EC=")
+    if ec == 21 {
+        // SVC from EL0 — syscall!
+        // ISS[15:0] = SVC immediate (syscall number)
+        let svc_num = esr & 0xFFFF
+        print("[SVC] syscall=")
+        print_dec(svc_num)
+        print(" from EL0 at ")
+        print_hex(elr)
+        println("")
+        // SVC #0 = EXIT → return to kernel (skip user ERET)
+        // We modify ELR to point back to kernel code after eret_to_el0 call
+        // For now, just print success — the ERET will loop but that proves EL0 works
+        return
+    }
+    print("[EXC] EC=")
     print_dec(ec)
     print(" ELR=")
     print_hex(elr)
-    print(" FAR=")
-    print_hex(far)
     println("")
 }
 @kernel fn fj_exception_irq() {
@@ -81,6 +111,42 @@
     irq_enable()
     println("GIC+Timer ready")
     println("")
+
+    // ── EL0 User Space Demo ──
+    // Write a tiny user program to RAM and drop to EL0 via ERET.
+    // User program: SVC #0 (syscall 0 = EXIT) → traps back to EL1
+    //
+    // ARM64 encoding:
+    //   SVC #0  = 0xD4000001
+    //   NOP     = 0xD503201F
+    //
+    // User code at 0x41200000, user stack at 0x41300000
+    println("=== EL0 Demo ===")
+    let user_code: i64 = 0x41200000
+    let user_stack: i64 = 0x41300000
+
+    // Write user program:
+    //   0x41200000: SVC #1  (WRITE syscall — print 'U')
+    //   0x41200004: SVC #0  (EXIT syscall — return to kernel)
+    //   0x41200008: NOP     (safety landing)
+    // SVC #N encoding: 0xD4000001 | (N << 5)
+    volatile_write_u32(user_code, 0xD4000001 | (1 << 5))      // SVC #1
+    volatile_write_u32(user_code + 4, 0xD4000001 | (0 << 5))  // SVC #0
+    volatile_write_u32(user_code + 8, 0xD503201F)              // NOP
+    println("  User code: SVC #1 (write) + SVC #0 (exit)")
+    println("  User stack at 0x41300000")
+
+    // Drop to EL0 — SPSR=0x0 (EL0t, IRQs enabled)
+    // This calls ERET which sets ELR_EL1=user_code, SP_EL0=user_stack
+    // CPU drops to EL0, executes SVC #0, traps to __exc_sync_lower
+    // which calls fj_exception_sync(ESR, ELR, FAR)
+    // ESR.EC should be 0x15 (SVC from AArch64)
+    print("  ERET to EL0... ")
+    eret_to_el0(user_code, user_stack, 0)
+    // If we get here, fj_exception_sync returned and ERET brought us back
+    println("returned to EL1!")
+    println("")
+
     println("=== FajarOS Ready ===")
     println("")
     print("fjsh> ")

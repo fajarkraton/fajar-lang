@@ -123,3 +123,13 @@ Output: tensor "output_0" [1,10]      float32 (40 bytes)
 - Re-quantize INT8 model with proper calibration data
 - Test HTP backend (requires Qualcomm testsig)
 - Camera→NPU real-time pipeline (requires camera module)
+
+## 9. ARM64 Bare-Metal Boot (2026-03-22)
+
+FajarOS ARM64 kernel verified on QEMU:
+- `qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic`
+- **IMPORTANT:** Must use `gic-version=3` flag (default is GICv2, which causes data abort at GICR address 0x080A0000)
+- GICv3: GICD (0x08000000), GICR (0x080A0000/0x080B0000), ICC system registers
+- Timer: 10 Hz physical timer PPI 30, verified ~50 IRQ ticks in 5 seconds
+- Shell: UART PL011 RX polling, uptime on Enter, 'q' to quit
+- Binary: 82KB ELF, aarch64, statically linked
