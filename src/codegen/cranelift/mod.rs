@@ -12018,9 +12018,18 @@ impl ObjectCompiler {
                         let main_ref = self.module.declare_func_in_func(main_id, builder.func);
                         builder.ins().call(main_ref, &[]);
 
-                        // After main() returns, _start should exit.
-                        // Return from _start — the linker will add a halt/exit after it.
-                        builder.ins().return_(&[]);
+                        // After main() returns, call exit(0) via SYSCALL
+                        if let Some(&exit_fn_id) = self.functions.get("exit") {
+                            let exit_ref = self.module.declare_func_in_func(exit_fn_id, builder.func);
+                            let zero = builder.ins().iconst(cranelift_codegen::ir::types::I64, 0);
+                            builder.ins().call(exit_ref, &[zero]);
+                        }
+                        // Halt loop as safety net (exit should never return)
+                        let halt = builder.create_block();
+                        builder.ins().jump(halt, &[]);
+                        builder.switch_to_block(halt);
+                        builder.ins().jump(halt, &[]);
+                        builder.seal_block(halt);
                     }
                     self.module
                         .define_function(start_id, &mut ctx)

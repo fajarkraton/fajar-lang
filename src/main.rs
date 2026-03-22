@@ -1554,6 +1554,27 @@ fj_rt_bare_print_i64:
     ret
 .size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64
 
+/* User-mode print (no newline): SYS_WRITE(fd=1, buf=rdi, len=rsi) */
+.global fj_rt_bare_print
+.type fj_rt_bare_print, @function
+fj_rt_bare_print:
+    mov     rax, 1          /* SYS_WRITE */
+    mov     rdx, rsi        /* len → arg2 */
+    mov     rsi, rdi        /* buf → arg1 */
+    mov     rdi, 1          /* fd=stdout → arg0 */
+    syscall
+    ret
+.size fj_rt_bare_print, . - fj_rt_bare_print
+
+/* User-mode exit: SYS_EXIT(code=rdi) */
+.global fj_user_exit
+.type fj_user_exit, @function
+fj_user_exit:
+    mov     rax, 60         /* SYS_EXIT */
+    syscall
+    /* never returns */
+.size fj_user_exit, . - fj_user_exit
+
 /* User-mode memory fence (no-op in user space) */
 .global fj_rt_bare_memory_fence
 .type fj_rt_bare_memory_fence, @function
