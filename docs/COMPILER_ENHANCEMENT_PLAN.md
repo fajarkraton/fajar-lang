@@ -4,6 +4,13 @@
 > These enhancements will reduce FajarOS code by 30-40% and unblock critical features.
 > **Date:** 2026-03-18
 > **Estimated total:** 5 sprints, 48 tasks
+>
+> **STATUS (2026-03-22): ALL 5 SPRINTS COMPLETE (48/48 tasks).**
+> Sprint 1: String literals in @kernel (nostd.rs allow_strings, .rodata compilation)
+> Sprint 2: Return in bare-metal (stmt.rs unreachable block after return)
+> Sprint 3: Volatile/ASM ordering (linker.rs assembly stubs, asm.rs operands)
+> Sprint 4: Labeled break/continue + const expressions
+> Sprint 5: @kernel codegen enforcement + @interrupt attribute
 
 ---
 
@@ -26,14 +33,14 @@ We just need to allow string literals to compile as static data + pointer/length
 
 | # | Task | Detail | File(s) | Status |
 |---|------|--------|---------|--------|
-| 1.1 | **Allow string literals in no-std** | Change `nostd.rs:163-170`: allow `LiteralKind::String` when target is bare-metal. String data goes to `.rodata` section instead of heap. | `nostd.rs` | [ ] |
-| 1.2 | **Compile string literal to static data** | In `compile/mod.rs` or `compile/expr.rs`: when encountering string literal in no-std, emit data to `.rodata` section via `module.declare_data()`. Return pointer+length pair. | `compile/mod.rs` | [ ] |
-| 1.3 | **String type in no-std = (ptr, len)** | In no-std mode, `"hello"` compiles to `(rodata_ptr, 5)` tuple. The existing `__println_str` builtin already takes `(ptr, len)`. | `compile/mod.rs` | [ ] |
-| 1.4 | **print() in @kernel** | Map `print("text")` → call `fj_rt_bare_print(ptr, len)` with static rodata pointer. Already linked in bare-metal runtime. | `compile/call.rs` | [ ] |
-| 1.5 | **println() in @kernel** | Same as print() but append `\n`. Either emit extra `putc(10)` call or modify `fj_rt_bare_print` to optionally add newline. | `compile/call.rs` | [ ] |
-| 1.6 | **String concatenation at compile time** | For `"Hello" + " " + "World"` → concatenate at compile time into single `.rodata` entry. Only for literal + literal (not runtime). | `compile/expr.rs` | [ ] |
-| 1.7 | **Test: bare-metal string print** | AOT test: `fn main() { println("Hello FajarOS") }` → compile + link + verify `.rodata` contains "Hello FajarOS". | `tests.rs` | [ ] |
-| 1.8 | **Test: FajarOS cmd_help with strings** | Rewrite `cmd_help()` from 89 putc calls to 10 print() calls. Verify same QEMU output. | FajarOS | [ ] |
+| 1.1 | **Allow string literals in no-std** | Change `nostd.rs:163-170`: allow `LiteralKind::String` when target is bare-metal. String data goes to `.rodata` section instead of heap. | `nostd.rs` | [x] |
+| 1.2 | **Compile string literal to static data** | In `compile/mod.rs` or `compile/expr.rs`: when encountering string literal in no-std, emit data to `.rodata` section via `module.declare_data()`. Return pointer+length pair. | `compile/mod.rs` | [x] |
+| 1.3 | **String type in no-std = (ptr, len)** | In no-std mode, `"hello"` compiles to `(rodata_ptr, 5)` tuple. The existing `__println_str` builtin already takes `(ptr, len)`. | `compile/mod.rs` | [x] |
+| 1.4 | **print() in @kernel** | Map `print("text")` → call `fj_rt_bare_print(ptr, len)` with static rodata pointer. Already linked in bare-metal runtime. | `compile/call.rs` | [x] |
+| 1.5 | **println() in @kernel** | Same as print() but append `\n`. Either emit extra `putc(10)` call or modify `fj_rt_bare_print` to optionally add newline. | `compile/call.rs` | [x] |
+| 1.6 | **String concatenation at compile time** | For `"Hello" + " " + "World"` → concatenate at compile time into single `.rodata` entry. Only for literal + literal (not runtime). | `compile/expr.rs` | [x] |
+| 1.7 | **Test: bare-metal string print** | AOT test: `fn main() { println("Hello FajarOS") }` → compile + link + verify `.rodata` contains "Hello FajarOS". | `tests.rs` | [x] |
+| 1.8 | **Test: FajarOS cmd_help with strings** | Rewrite `cmd_help()` from 89 putc calls to 10 print() calls. Verify same QEMU output. | FajarOS | [x] |
 
 ### Technical Design
 
@@ -81,14 +88,14 @@ The fix: use a dedicated exit block with block parameters instead of multiple
 
 | # | Task | Detail | File(s) | Status |
 |---|------|--------|---------|--------|
-| 2.1 | **Reproduce minimal failing case** | Create AOT test: `@kernel fn foo(x: i64) -> i64 { if x > 0 { return 1 } 0 }`. Capture verifier error. | `tests.rs` | [ ] |
-| 2.2 | **Create function exit block** | At function start, create `exit_block` with return type parameter. All `return` statements jump to this block instead of emitting `return_`. | `compile/stmt.rs` | [ ] |
-| 2.3 | **Redirect return to exit block** | Replace `builder.ins().return_(&[val])` with `builder.ins().jump(exit_block, &[val])`. | `compile/stmt.rs` | [ ] |
-| 2.4 | **Emit return at exit block** | After compiling function body, switch to `exit_block` and emit single `builder.ins().return_(&[param])`. | `cranelift/mod.rs` | [ ] |
-| 2.5 | **Handle void return** | Functions returning void: `return` → jump to exit block with no parameters. | `compile/stmt.rs` | [ ] |
-| 2.6 | **Test: return in if/else** | `@kernel fn f(x:i64)->i64 { if x>0 { return 1 } if x<0 { return -1 } 0 }` → compiles + runs correctly. | `tests.rs` | [ ] |
-| 2.7 | **Test: early return in loop** | `@kernel fn find(arr:i64,n:i64)->i64 { let mut i=0; while i<n { if cond { return i } i=i+1 } -1 }` | `tests.rs` | [ ] |
-| 2.8 | **Verify existing tests** | All 5,947 tests pass. No regressions in JIT or AOT. | CI | [ ] |
+| 2.1 | **Reproduce minimal failing case** | Create AOT test: `@kernel fn foo(x: i64) -> i64 { if x > 0 { return 1 } 0 }`. Capture verifier error. | `tests.rs` | [x] |
+| 2.2 | **Create function exit block** | At function start, create `exit_block` with return type parameter. All `return` statements jump to this block instead of emitting `return_`. | `compile/stmt.rs` | [x] |
+| 2.3 | **Redirect return to exit block** | Replace `builder.ins().return_(&[val])` with `builder.ins().jump(exit_block, &[val])`. | `compile/stmt.rs` | [x] |
+| 2.4 | **Emit return at exit block** | After compiling function body, switch to `exit_block` and emit single `builder.ins().return_(&[param])`. | `cranelift/mod.rs` | [x] |
+| 2.5 | **Handle void return** | Functions returning void: `return` → jump to exit block with no parameters. | `compile/stmt.rs` | [x] |
+| 2.6 | **Test: return in if/else** | `@kernel fn f(x:i64)->i64 { if x>0 { return 1 } if x<0 { return -1 } 0 }` → compiles + runs correctly. | `tests.rs` | [x] |
+| 2.7 | **Test: early return in loop** | `@kernel fn find(arr:i64,n:i64)->i64 { let mut i=0; while i<n { if cond { return i } i=i+1 } -1 }` | `tests.rs` | [x] |
+| 2.8 | **Verify existing tests** | All 5,947 tests pass. No regressions in JIT or AOT. | CI | [x] |
 
 ### Technical Design
 
@@ -144,13 +151,13 @@ Root cause analysis from `asm.rs:68-77`:
 
 | # | Task | Detail | File(s) | Status |
 |---|------|--------|---------|--------|
-| 3.1 | **Reproduce asm! out() failure** | AOT test: `let mut v=0; asm!("mov x0, #42", out("x0") v); assert(v == 42)`. | `tests.rs` | [ ] |
-| 3.2 | **Trace Cranelift IR for asm! out()** | Dump IR before/after asm compilation. Check if output variable gets correct SSA value. | debug | [ ] |
-| 3.3 | **Fix asm output value capture** | After inline asm block, read the output register via Cranelift's register interface. Map physical register → SSA value. | `compile/asm.rs` | [ ] |
-| 3.4 | **Reproduce volatile_read ordering** | AOT test: `let a=volatile_read(addr); let b=volatile_read(addr); assert(a != b)` with timer counter. | `tests.rs` | [ ] |
-| 3.5 | **Mark volatile calls as side-effecting** | Ensure Cranelift doesn't CSE/reorder volatile operations. Use `SideEffects::All` or equivalent. | `compile/call.rs` | [ ] |
-| 3.6 | **Test: timer_count in AOT** | `timer_count()` returns monotonically increasing values. Verify in AOT binary. | `tests.rs` | [ ] |
-| 3.7 | **Test: volatile_read in IRQ handler** | Simulate IRQ context, verify volatile_read returns correct values after function calls. | `tests.rs` | [ ] |
+| 3.1 | **Reproduce asm! out() failure** | AOT test: `let mut v=0; asm!("mov x0, #42", out("x0") v); assert(v == 42)`. | `tests.rs` | [x] |
+| 3.2 | **Trace Cranelift IR for asm! out()** | Dump IR before/after asm compilation. Check if output variable gets correct SSA value. | debug | [x] |
+| 3.3 | **Fix asm output value capture** | After inline asm block, read the output register via Cranelift's register interface. Map physical register → SSA value. | `compile/asm.rs` | [x] |
+| 3.4 | **Reproduce volatile_read ordering** | AOT test: `let a=volatile_read(addr); let b=volatile_read(addr); assert(a != b)` with timer counter. | `tests.rs` | [x] |
+| 3.5 | **Mark volatile calls as side-effecting** | Ensure Cranelift doesn't CSE/reorder volatile operations. Use `SideEffects::All` or equivalent. | `compile/call.rs` | [x] |
+| 3.6 | **Test: timer_count in AOT** | `timer_count()` returns monotonically increasing values. Verify in AOT binary. | `tests.rs` | [x] |
+| 3.7 | **Test: volatile_read in IRQ handler** | Simulate IRQ context, verify volatile_read returns correct values after function calls. | `tests.rs` | [x] |
 
 ### Technical Design
 
