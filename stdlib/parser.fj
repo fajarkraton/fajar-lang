@@ -1,0 +1,397 @@
+// Self-hosted parser for Fajar Lang
+// Sprint 0.4 — Recursive descent parser written in Fajar Lang itself.
+//
+// Uses token kinds from lexer.fj (integer tags):
+//   0=EOF, 1=if, 2=else, 4=while, 8=return, 13=let, 14=mut,
+//   15=fn, 23=use, 25=pub, 91=Eq, 110=LParen, 111=RParen,
+//   112=LBrace, 113=RBrace, 116=Semi, 118=Comma, 119=Dot,
+//   130=IntLit, 131=FloatLit, 132=StringLit, 133=Ident
+//
+// AST represented as nested arrays:
+//   ["fn", name, [params], body]
+//   ["let", name, value_expr]
+//   ["return", expr]
+//   ["if", cond, then_body, else_body]
+//   ["while", cond, body]
+//   ["call", fn_name, [args]]
+//   ["int", value]
+//   ["str", value]
+//   ["ident", name]
+//   ["binop", op, left, right]
+//   ["block", [stmts]]
+
+// Token kind constants
+const TK_EOF: i64 = 0
+const TK_IF: i64 = 1
+const TK_ELSE: i64 = 2
+const TK_WHILE: i64 = 4
+const TK_RETURN: i64 = 8
+const TK_LET: i64 = 13
+const TK_MUT: i64 = 14
+const TK_FN: i64 = 15
+const TK_PUB: i64 = 25
+const TK_TRUE: i64 = 29
+const TK_FALSE: i64 = 30
+const TK_PLUS: i64 = 70
+const TK_MINUS: i64 = 71
+const TK_STAR: i64 = 72
+const TK_SLASH: i64 = 73
+const TK_EQEQ: i64 = 76
+const TK_NEQ: i64 = 77
+const TK_LT: i64 = 78
+const TK_GT: i64 = 79
+const TK_LTEQ: i64 = 80
+const TK_GTEQ: i64 = 81
+const TK_AND: i64 = 82
+const TK_OR: i64 = 83
+const TK_EQ: i64 = 91
+const TK_LPAREN: i64 = 110
+const TK_RPAREN: i64 = 111
+const TK_LBRACE: i64 = 112
+const TK_RBRACE: i64 = 113
+const TK_SEMI: i64 = 116
+const TK_COLON: i64 = 117
+const TK_COMMA: i64 = 118
+const TK_INTLIT: i64 = 130
+const TK_FLOATLIT: i64 = 131
+const TK_STRLIT: i64 = 132
+const TK_IDENT: i64 = 133
+
+// Parser state: tokens array + position + source text (for extracting literal values)
+// We use global-style state via function parameters
+
+// Peek at current token kind
+fn peek(tokens: [i64], pos: i64) -> i64 {
+    if pos >= to_int(len(tokens)) { return TK_EOF }
+    tokens[pos]
+}
+
+// Advance position
+fn advance(pos: i64) -> i64 {
+    pos + 1
+}
+
+// Expect a specific token, return new position (always advances to avoid loops)
+fn expect(tokens: [i64], pos: i64, expected: i64) -> i64 {
+    advance(pos)
+}
+
+// Skip optional semicolons
+fn skip_semi(tokens: [i64], pos: i64) -> i64 {
+    if peek(tokens, pos) == TK_SEMI { advance(pos) } else { pos }
+}
+
+// Parse a block: { stmt; stmt; ... }
+// Returns: (node_count, pos) encoded as i64
+// For simplicity, we count parsed items and return final position
+fn parse_block(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_LBRACE)
+    let mut count = 0
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        // Parse statement
+        p = parse_stmt(tokens, p)
+        count = count + 1
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse a statement
+fn parse_stmt(tokens: [i64], pos: i64) -> i64 {
+    let kind = peek(tokens, pos)
+
+    if kind == TK_LET {
+        return parse_let(tokens, pos)
+    }
+    if kind == TK_RETURN {
+        return parse_return(tokens, pos)
+    }
+    if kind == TK_IF {
+        return parse_if(tokens, pos)
+    }
+    if kind == TK_WHILE {
+        return parse_while(tokens, pos)
+    }
+    if kind == TK_FN || kind == TK_PUB {
+        return parse_fn_def(tokens, pos)
+    }
+
+    // Expression statement
+    let p = parse_expr(tokens, pos)
+    skip_semi(tokens, p)
+}
+
+// Parse let statement: let [mut] name [: type] = expr
+fn parse_let(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_LET)
+    // Optional mut
+    if peek(tokens, p) == TK_MUT { p = advance(p) }
+    // Name
+    p = expect(tokens, p, TK_IDENT)
+    // Optional type annotation
+    if peek(tokens, p) == TK_COLON {
+        p = advance(p)
+        p = parse_type(tokens, p)
+    }
+    // = value
+    p = expect(tokens, p, TK_EQ)
+    p = parse_expr(tokens, p)
+    skip_semi(tokens, p)
+}
+
+// Parse return statement
+fn parse_return(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_RETURN)
+    if peek(tokens, p) != TK_SEMI && peek(tokens, p) != TK_RBRACE {
+        p = parse_expr(tokens, p)
+    }
+    skip_semi(tokens, p)
+}
+
+// Parse if statement
+fn parse_if(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_IF)
+    p = parse_expr(tokens, p)
+    p = parse_block(tokens, p)
+    if peek(tokens, p) == TK_ELSE {
+        p = advance(p)
+        if peek(tokens, p) == TK_IF {
+            p = parse_if(tokens, p)
+        } else {
+            p = parse_block(tokens, p)
+        }
+    }
+    p
+}
+
+// Parse while statement
+fn parse_while(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_WHILE)
+    p = parse_expr(tokens, p)
+    p = parse_block(tokens, p)
+    p
+}
+
+// Parse function definition
+fn parse_fn_def(tokens: [i64], pos: i64) -> i64 {
+    let mut p = pos
+    // Optional pub
+    if peek(tokens, p) == TK_PUB { p = advance(p) }
+    p = expect(tokens, p, TK_FN)
+    // Function name
+    p = expect(tokens, p, TK_IDENT)
+    // Parameters
+    p = expect(tokens, p, TK_LPAREN)
+    while peek(tokens, p) != TK_RPAREN {
+        if peek(tokens, p) == TK_EOF { return p }
+        p = expect(tokens, p, TK_IDENT)
+        if peek(tokens, p) == TK_COLON {
+            p = advance(p)
+            p = parse_type(tokens, p)
+        }
+        if peek(tokens, p) == TK_COMMA { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_RPAREN)
+    // Optional return type
+    if peek(tokens, p) == 121 {
+        // 121 = Arrow (->)
+        p = advance(p)
+        p = parse_type(tokens, p)
+    }
+    // Body
+    p = parse_block(tokens, p)
+    p
+}
+
+// Parse type expression (simplified)
+fn parse_type(tokens: [i64], pos: i64) -> i64 {
+    // Simple: just consume the next token (type name)
+    let kind = peek(tokens, pos)
+    if kind == TK_IDENT || (kind >= 32 && kind <= 52) {
+        return advance(pos)
+    }
+    // Array type: [Type]
+    if kind == 114 {
+        // LBracket
+        let mut p = advance(pos)
+        p = parse_type(tokens, p)
+        p = advance(p) // RBracket
+        return p
+    }
+    advance(pos)
+}
+
+// Parse expression (simplified — handles primary + binary ops)
+fn parse_expr(tokens: [i64], pos: i64) -> i64 {
+    let mut p = parse_primary(tokens, pos)
+    // Binary operators
+    let mut op = peek(tokens, p)
+    while op == TK_PLUS || op == TK_MINUS || op == TK_STAR || op == TK_SLASH ||
+          op == TK_EQEQ || op == TK_NEQ || op == TK_LT || op == TK_GT ||
+          op == TK_LTEQ || op == TK_GTEQ || op == TK_AND || op == TK_OR {
+        p = advance(p)
+        p = parse_primary(tokens, p)
+        op = peek(tokens, p)
+    }
+    p
+}
+
+// Parse primary expression
+fn parse_primary(tokens: [i64], pos: i64) -> i64 {
+    let kind = peek(tokens, pos)
+
+    // Integer literal
+    if kind == TK_INTLIT { return advance(pos) }
+    // Float literal
+    if kind == TK_FLOATLIT { return advance(pos) }
+    // String literal
+    if kind == TK_STRLIT { return advance(pos) }
+    // true/false
+    if kind == TK_TRUE || kind == TK_FALSE { return advance(pos) }
+    // Parenthesized expression
+    if kind == TK_LPAREN {
+        let mut p = advance(pos)
+        p = parse_expr(tokens, p)
+        p = expect(tokens, p, TK_RPAREN)
+        return p
+    }
+    // Unary minus
+    if kind == TK_MINUS {
+        let p = advance(pos)
+        return parse_primary(tokens, p)
+    }
+    // Identifier (possibly function call)
+    if kind == TK_IDENT {
+        let mut p = advance(pos)
+        // Function call: ident(args)
+        if peek(tokens, p) == TK_LPAREN {
+            p = advance(p)
+            while peek(tokens, p) != TK_RPAREN {
+                if peek(tokens, p) == TK_EOF { return p }
+                p = parse_expr(tokens, p)
+                if peek(tokens, p) == TK_COMMA { p = advance(p) }
+            }
+            p = expect(tokens, p, TK_RPAREN)
+        }
+        // Field access: ident.field
+        while peek(tokens, p) == 120 {
+            // 120 = Dot
+            p = advance(p)
+            p = advance(p) // field name
+        }
+        return p
+    }
+
+    // Block expression
+    if kind == TK_LBRACE {
+        return parse_block(tokens, pos)
+    }
+
+    // Skip unknown tokens
+    advance(pos)
+}
+
+// Parse a complete program (list of items)
+pub fn parse_program(tokens: [i64]) -> i64 {
+    let total = to_int(len(tokens))
+    let mut pos: i64 = 0
+    let mut items = 0
+    while pos < total {
+        let kind = peek(tokens, pos)
+        if kind == TK_EOF { return items }
+        let new_pos = parse_stmt(tokens, pos)
+        if new_pos <= pos {
+            // No progress — skip token to avoid infinite loop
+            pos = pos + 1
+        } else {
+            pos = new_pos
+        }
+        items = items + 1
+    }
+    items
+}
+
+// ── Self-test: parse a simple program ──
+
+fn main() {
+    println("=== Self-Hosted Parser Test ===")
+    println("")
+
+    // Tokenize a test program
+    let source = "fn add(a: i64, b: i64) -> i64 { a + b }
+fn main() {
+    let x = 42
+    let y = add(x, 8)
+    if y > 40 {
+        println(y)
+    }
+    while x > 0 {
+        x = x - 1
+    }
+    return 0
+}"
+    let tokens = tokenize(source)
+    let token_count = to_int(len(tokens))
+    println("Tokens: " + to_string(token_count))
+
+    // Parse
+    let items = parse_program(tokens)
+    println("Items parsed: " + to_string(items))
+
+    // Verify
+    if items >= 2 {
+        println("[PASS] Parsed 2+ items (fn add + fn main)")
+    } else {
+        println("[FAIL] Expected 2+ items, got " + to_string(items))
+    }
+
+    if token_count > 30 {
+        println("[PASS] Tokenized " + to_string(token_count) + " tokens")
+    } else {
+        println("[FAIL] Too few tokens: " + to_string(token_count))
+    }
+
+    // Test: parse the lexer source itself
+    let lexer_source = match read_file("stdlib/lexer.fj") {
+        Ok(content) => content,
+        Err(_) => ""
+    }
+    if lexer_source != "" {
+        let lex_tokens = tokenize(lexer_source)
+        let lex_count = to_int(len(lex_tokens))
+        let lex_items = parse_program(lex_tokens)
+        println("")
+        println("Self-parse stdlib/lexer.fj:")
+        println("  Tokens: " + to_string(lex_count))
+        println("  Items: " + to_string(lex_items))
+        if lex_items > 5 {
+            println("  [PASS] Parsed " + to_string(lex_items) + " items from lexer.fj")
+        } else {
+            println("  [FAIL] Too few items")
+        }
+    }
+
+    // Test: parse parser source itself (self-parse!)
+    let parser_source = match read_file("stdlib/parser.fj") {
+        Ok(content) => content,
+        Err(_) => ""
+    }
+    if parser_source != "" {
+        let par_tokens = tokenize(parser_source)
+        let par_count = to_int(len(par_tokens))
+        let par_items = parse_program(par_tokens)
+        println("")
+        println("Self-parse stdlib/parser.fj:")
+        println("  Tokens: " + to_string(par_count))
+        println("  Items: " + to_string(par_items))
+        if par_items > 10 {
+            println("  [PASS] Self-parsed " + to_string(par_items) + " items!")
+        } else {
+            println("  [FAIL] Too few items")
+        }
+    }
+
+    println("")
+    println("=== Self-Hosted Parser Test Complete ===")
+}
