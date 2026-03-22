@@ -75,6 +75,66 @@ fn print_hex(val: i64) {
     }
 }
 
+// ── GICv3 Distributor + Redistributor init ──
+//
+// QEMU virt GICv3 memory map:
+//   GICD (Distributor):    0x0800_0000
+//   GICR (Redistributor):  0x080A_0000
+//     GICR_RD_BASE:        0x080A_0000 (RD frame, 64KB)
+//     GICR_SGI_BASE:       0x080B_0000 (SGI frame, 64KB)
+//
+// Physical timer = PPI 30 (INTID 30), Group 1
+
+@kernel
+fn gic_dist_init() {
+    // GICD_CTLR (0x0000): Enable ARE + Group1
+    // Bit 4 = ARE_S (affinity routing), Bit 1 = EnableGrp1NS
+    let gicd_base: i64 = 0x08000000
+    let ctlr = volatile_read_u32(gicd_base)
+    volatile_write_u32(gicd_base, ctlr | 0x12)  // ARE_S + EnableGrp1NS
+    println("  [GIC] Distributor enabled (ARE + Grp1)")
+}
+
+@kernel
+fn gic_redist_init() {
+    let gicr_rd: i64 = 0x080A0000    // GICR RD frame
+    let gicr_sgi: i64 = 0x080B0000   // GICR SGI frame
+
+    // GICR_WAKER (0x0014): Clear ProcessorSleep bit (bit 1)
+    let waker = volatile_read_u32(gicr_rd + 0x14)
+    volatile_write_u32(gicr_rd + 0x14, waker & 0xFFFFFFFD)  // clear bit 1
+
+    // Wait for ChildrenAsleep (bit 2) to clear
+    let mut attempts: i64 = 0
+    let mut asleep: i64 = 1
+    while asleep == 1 {
+        let w = volatile_read_u32(gicr_rd + 0x14)
+        if (w & 4) == 0 {
+            asleep = 0
+        }
+        attempts = attempts + 1
+        if attempts > 10000 {
+            asleep = 0  // timeout, proceed anyway
+        }
+    }
+    println("  [GIC] Redistributor awake")
+
+    // GICR_IGROUPR0 (SGI+0x0080): Set INTID 30 as Group 1 (bit 30 = 1)
+    let grp = volatile_read_u32(gicr_sgi + 0x80)
+    volatile_write_u32(gicr_sgi + 0x80, grp | (1 << 30))
+
+    // GICR_ISENABLER0 (SGI+0x0100): Enable INTID 30 (bit 30 = 1)
+    volatile_write_u32(gicr_sgi + 0x100, 1 << 30)
+
+    // GICR_IPRIORITYR7 (SGI+0x041C): Set priority for INTID 30
+    // INTID 30 is in priority register 7 (30/4=7), byte offset 2 (30%4=2)
+    // Set priority = 0xA0 (lower number = higher priority)
+    let prio_addr = gicr_sgi + 0x400 + 30
+    volatile_write_u8(prio_addr, 0xA0)
+
+    println("  [GIC] PPI 30 (timer) enabled, priority=0xA0")
+}
+
 // ── Exception handlers (called from vector table) ──
 
 @kernel
@@ -92,11 +152,13 @@ fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
 @kernel
 fn fj_exception_irq() {
     let intid = gic_ack()
-    // Rearm timer
-    timer_set(timer_freq() / 100)
-    // Increment tick counter
-    let ticks = volatile_read(0x47001000)
-    volatile_write(0x47001000, ticks + 1)
+    // Rearm timer (10 Hz)
+    timer_set(timer_freq() / 10)
+    // Increment tick counter at 0x41100000 (RAM region)
+    let ticks = volatile_read(0x41100000)
+    volatile_write(0x41100000, ticks + 1)
+    // Print dot for each tick
+    print(".")
     gic_eoi(intid)
 }
 
@@ -144,16 +206,26 @@ fn kernel_main() {
     println("  Page AP bits:    UserRW=0x00, KernelRW=0x40")
     println("")
 
-    // Initialize timer (without GIC for now)
-    println("=== Starting Timer ===")
+    // Initialize GICv3 + timer
+    println("=== GICv3 Init ===")
+    gic_dist_init()
+    gic_redist_init()
+    gic_cpu_init(255)
+    println("  [GIC] CPU interface ready (PMR=255)")
+
+    // Arm physical timer at 10 Hz
     let freq = timer_freq()
-    print("[BOOT] Timer: ")
-    print_dec(freq)
-    println(" Hz")
     timer_set(freq / 10)
-    println("[BOOT] Timer armed (10 Hz)")
+    print("  [TIMER] Armed @ 10 Hz (")
+    print_dec(freq / 10)
+    println(" ticks/interval)")
+
+    // Initialize tick counter
+    volatile_write(0x41100000, 0)
+
+    // Enable IRQs
     irq_enable()
-    println("[BOOT] IRQs enabled")
+    println("  [IRQ] Unmasked")
     println("")
 
     println("=== FajarOS Ready ===")
@@ -164,8 +236,7 @@ fn kernel_main() {
     println("  Compiler: Cranelift AOT (aarch64-unknown-none)")
     println("")
 
-    println("fjsh> Timer running — IRQ ticks will appear above.")
-    println("      (Kernel halts with WFE, wakes on IRQ)")
-    println("")
+    print("fjsh> Timer ticks: ")
+    // WFE loop — CPU sleeps, wakes on IRQ, IRQ handler prints dots
     __halt()
 }
