@@ -327,6 +327,9 @@ pub fn is_copy_type(ty: &Type) -> bool {
             | Type::FloatLiteral
             | Type::Bool
             | Type::Char
+            // NOTE: Str is Copy because the interpreter uses Rc<String> (refcounted).
+            // This matches runtime behavior. In a future ownership overhaul (Phase 1),
+            // strings will be Move types with explicit .clone() for copies.
             | Type::Str
             | Type::Unknown
             | Type::TypeVar(_)
@@ -352,7 +355,7 @@ mod tests {
     #[test]
     fn move_types_are_not_copy() {
         // Str is now Copy (runtime uses Rc-based cloning for strings)
-        assert!(is_copy_type(&Type::Str));
+        assert!(is_copy_type(&Type::Str)); // Str is Copy (Rc<String> in interpreter)
         assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
         assert!(!is_copy_type(&Type::Tuple(vec![Type::Str])));
     }
@@ -550,5 +553,189 @@ mod tests {
             tracker.get_borrow_state("anything"),
             BorrowState::Unborrowed
         ));
+    }
+
+    // ── Sprint 0.2: Edge case tests ──
+
+    #[test]
+    fn move_then_reassign_allows_reuse() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.mark_moved("x", Span::new(5, 6));
+        assert!(tracker.check_use("x").is_some()); // moved
+        // Reassign: re-declare as owned
+        tracker.declare("x", Span::new(10, 11));
+        assert!(tracker.check_use("x").is_none()); // owned again
+    }
+
+    #[test]
+    fn nested_scope_move_does_not_affect_outer() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.push_scope();
+        tracker.declare("y", Span::new(5, 6));
+        tracker.mark_moved("y", Span::new(10, 11));
+        assert!(tracker.check_use("y").is_some());
+        tracker.pop_scope();
+        // x should still be owned
+        assert!(tracker.check_use("x").is_none());
+    }
+
+    #[test]
+    fn borrow_released_on_scope_exit() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.push_scope();
+        tracker.borrow_imm("x", Span::new(5, 6)).unwrap();
+        tracker.register_borrow_ref("r", "x", false);
+        assert!(matches!(
+            tracker.get_borrow_state("x"),
+            BorrowState::ImmBorrowed { .. }
+        ));
+        tracker.pop_scope(); // should release borrow
+        assert!(matches!(
+            tracker.get_borrow_state("x"),
+            BorrowState::Unborrowed
+        ));
+    }
+
+    #[test]
+    fn mut_borrow_released_on_scope_exit() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.push_scope();
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        tracker.register_borrow_ref("r", "x", true);
+        tracker.pop_scope();
+        // After scope exit, should be able to borrow again
+        assert!(tracker.borrow_mut("x", Span::new(10, 11)).is_ok());
+    }
+
+    #[test]
+    fn cannot_move_while_borrowed() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_imm("x", Span::new(5, 6)).unwrap();
+        // check_can_move should return the borrow span
+        assert!(tracker.check_can_move("x").is_some());
+    }
+
+    #[test]
+    fn cannot_move_while_mut_borrowed() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        assert!(tracker.check_can_move("x").is_some());
+    }
+
+    #[test]
+    fn multiple_imm_borrows_allowed() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        assert!(tracker.borrow_imm("x", Span::new(5, 6)).is_ok());
+        assert!(tracker.borrow_imm("x", Span::new(7, 8)).is_ok());
+        assert!(tracker.borrow_imm("x", Span::new(9, 10)).is_ok());
+        if let BorrowState::ImmBorrowed { count, .. } = tracker.get_borrow_state("x") {
+            assert_eq!(count, 3);
+        } else {
+            panic!("expected ImmBorrowed");
+        }
+    }
+
+    #[test]
+    fn copy_types_are_correct() {
+        // Numeric types: Copy
+        assert!(is_copy_type(&Type::I8));
+        assert!(is_copy_type(&Type::I16));
+        assert!(is_copy_type(&Type::I32));
+        assert!(is_copy_type(&Type::I64));
+        assert!(is_copy_type(&Type::I128));
+        assert!(is_copy_type(&Type::U8));
+        assert!(is_copy_type(&Type::U16));
+        assert!(is_copy_type(&Type::U32));
+        assert!(is_copy_type(&Type::U64));
+        assert!(is_copy_type(&Type::U128));
+        assert!(is_copy_type(&Type::ISize));
+        assert!(is_copy_type(&Type::USize));
+        assert!(is_copy_type(&Type::F32));
+        assert!(is_copy_type(&Type::F64));
+        assert!(is_copy_type(&Type::Bool));
+        assert!(is_copy_type(&Type::Char));
+        // Str is Copy (Rc<String> in interpreter)
+        assert!(is_copy_type(&Type::Str));
+        // References are Copy
+        assert!(is_copy_type(&Type::Ref(Box::new(Type::I64))));
+        // Non-Copy types
+        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
+        assert!(!is_copy_type(&Type::Struct {
+            name: "Point".into(),
+            fields: std::collections::HashMap::new()
+        }));
+    }
+
+    #[test]
+    fn move_in_inner_scope_visible_in_outer() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.push_scope();
+        tracker.mark_moved("x", Span::new(5, 6));
+        tracker.pop_scope();
+        // x was moved inside inner scope, should still be moved
+        assert!(tracker.check_use("x").is_some());
+    }
+
+    #[test]
+    fn double_mut_borrow_error() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        let err = tracker.borrow_mut("x", Span::new(10, 11)).unwrap_err();
+        assert!(matches!(err, BorrowError::DoubleMutBorrow { .. }));
+    }
+
+    #[test]
+    fn imm_borrow_during_mut_borrow_error() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        let err = tracker.borrow_imm("x", Span::new(10, 11)).unwrap_err();
+        assert!(matches!(err, BorrowError::ImmWhileMutBorrowed { .. }));
+    }
+
+    #[test]
+    fn mut_borrow_during_imm_borrow_error() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_imm("x", Span::new(5, 6)).unwrap();
+        let err = tracker.borrow_mut("x", Span::new(10, 11)).unwrap_err();
+        assert!(matches!(err, BorrowError::MutWhileImmBorrowed { .. }));
+    }
+
+    #[test]
+    fn release_borrow_allows_new_borrow() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        tracker.release_borrow("x", true);
+        // Now should allow new borrow
+        assert!(tracker.borrow_imm("x", Span::new(10, 11)).is_ok());
+    }
+
+    #[test]
+    fn deeply_nested_scopes() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        for _ in 0..10 {
+            tracker.push_scope();
+        }
+        // x should still be visible from innermost scope
+        assert!(tracker.check_use("x").is_none());
+        tracker.mark_moved("x", Span::new(50, 51));
+        assert!(tracker.check_use("x").is_some());
+        for _ in 0..10 {
+            tracker.pop_scope();
+        }
+        // Still moved
+        assert!(tracker.check_use("x").is_some());
     }
 }
