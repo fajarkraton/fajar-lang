@@ -7690,6 +7690,43 @@ impl ObjectCompiler {
             self.functions.insert(name.to_string(), id);
         }
 
+        // ── Dynamic string operations for bare-metal ──
+        // str_concat(a_ptr, a_len, b_ptr, b_len, out_ptr, out_len_ptr)
+        {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            for _ in 0..6 {
+                sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+            }
+            let id = self.module
+                .declare_function("fj_rt_str_concat", Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("__str_concat".to_string(), id);
+        }
+        // println_str(ptr, len) — print string + newline
+        {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+            let id = self.module
+                .declare_function("fj_rt_println_str", Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("__println_str".to_string(), id);
+            let id2 = self.module
+                .declare_function("fj_rt_print_str", Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("__print_str".to_string(), id2);
+        }
+        // to_string(val) -> ptr (integer to decimal string)
+        {
+            let mut sig = cranelift_codegen::ir::Signature::new(call_conv);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(clif_types::default_int_type()));
+            let id = self.module
+                .declare_function("fj_rt_to_string", Linkage::Import, &sig)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions.insert("to_string".to_string(), id);
+        }
+
         Ok(())
     }
 

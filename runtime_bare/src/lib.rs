@@ -168,6 +168,75 @@ pub extern "C" fn fj_rt_bare_println(ptr: *const u8, len: i64) {
     }
 }
 
+// ── String Concatenation (bare-metal heap-free: uses caller-provided buffer) ──
+
+/// Concatenate two strings into output buffer.
+/// out_ptr must point to a buffer of at least a_len + b_len bytes.
+/// out_len_ptr receives the total length.
+#[no_mangle]
+pub extern "C" fn fj_rt_str_concat(
+    a_ptr: *const u8, a_len: i64,
+    b_ptr: *const u8, b_len: i64,
+    out_ptr: *mut u8, out_len_ptr: *mut i64,
+) {
+    unsafe {
+        for i in 0..a_len as usize {
+            *out_ptr.add(i) = *a_ptr.add(i);
+        }
+        for i in 0..b_len as usize {
+            *out_ptr.add(a_len as usize + i) = *b_ptr.add(i);
+        }
+        *out_len_ptr = a_len + b_len;
+    }
+}
+
+/// Print string (ptr + len) to UART.
+#[no_mangle]
+pub extern "C" fn fj_rt_println_str(ptr: *const u8, len: i64) {
+    fj_rt_bare_print(ptr, len);
+    let uart = UART_BASE as *mut u8;
+    unsafe {
+        ptr::write_volatile(uart, b'\r');
+        ptr::write_volatile(uart, b'\n');
+    }
+}
+
+/// Print string (ptr + len) without newline.
+#[no_mangle]
+pub extern "C" fn fj_rt_print_str(ptr: *const u8, len: i64) {
+    fj_rt_bare_print(ptr, len);
+}
+
+/// Convert integer to decimal string. Returns pointer to static buffer.
+/// WARNING: uses a single static buffer — not reentrant.
+static mut TO_STRING_BUF: [u8; 24] = [0; 24];
+
+#[no_mangle]
+pub extern "C" fn fj_rt_to_string(val: i64) -> *const u8 {
+    unsafe {
+        let mut n = val;
+        let negative = n < 0;
+        if negative { n = -n; }
+        let mut pos = 23usize;
+        TO_STRING_BUF[pos] = 0; // null terminator
+        if n == 0 {
+            pos -= 1;
+            TO_STRING_BUF[pos] = b'0';
+        } else {
+            while n > 0 && pos > 0 {
+                pos -= 1;
+                TO_STRING_BUF[pos] = b'0' + (n % 10) as u8;
+                n /= 10;
+            }
+        }
+        if negative && pos > 0 {
+            pos -= 1;
+            TO_STRING_BUF[pos] = b'-';
+        }
+        TO_STRING_BUF.as_ptr().add(pos)
+    }
+}
+
 // ── Atomic Operations ──
 
 #[no_mangle]
