@@ -858,9 +858,16 @@ fj_rt_bare_mmu_enable:
 .type fj_rt_bare_gic_cpu_init, @function
 fj_rt_bare_gic_cpu_init:
     /* x0 = PMR value */
+    /* Step 1: Enable GICv3 system register interface */
+    mrs     x1, ICC_SRE_EL1
+    orr     x1, x1, #1     /* SRE bit = enable system registers */
+    msr     ICC_SRE_EL1, x1
+    isb
+    /* Step 2: Set priority mask + enable group 1 */
     msr     ICC_PMR_EL1, x0
     mov     x1, #1
     msr     ICC_IGRPEN1_EL1, x1
+    /* Step 3: Unmask IRQs */
     msr     DAIFClr, #2
     isb
     ret

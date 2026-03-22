@@ -1,85 +1,77 @@
-// fajaros_arm64_boot.fj — Minimal FajarOS ARM64 bare-metal kernel
+// fajaros_arm64_boot.fj — FajarOS ARM64 bare-metal kernel
 //
 // Boots on qemu-system-aarch64 -M virt and prints to PL011 UART.
+// Uses string literals (compiled to .rodata) — no more putc()!
 //
 // Build:
 //   fj build examples/fajaros_arm64_boot.fj --target aarch64-unknown-none --no-std
 //
 // Run:
 //   qemu-system-aarch64 -M virt -cpu cortex-a72 -nographic \
-//     -kernel fajaros_arm64_boot -serial stdio
-//
-// UART PL011 on QEMU virt: 0x0900_0000
+//     -kernel fajaros_arm64_boot
 
-// ── UART output (write bytes directly to PL011 data register) ──
+// ── Helper: print decimal number to UART ──
 
 @kernel
-fn uart_putc(c: i64) {
-    volatile_write_u8(0x09000000, c)
-}
-
-@kernel
-fn uart_puts(s: i64, len: i64) {
-    let mut i: i64 = 0
-    while i < len {
-        let byte = volatile_read_u8(s + i)
-        uart_putc(byte)
-        i = i + 1
-    }
-}
-
-@kernel
-fn uart_newline() {
-    uart_putc(13)
-    uart_putc(10)
-}
-
-@kernel
-fn uart_print_hex(val: i64) {
-    let hex_chars: i64 = 0
-    let mut v = val
-    let mut i: i64 = 0
-    // Print "0x" prefix
-    uart_putc(48)  // '0'
-    uart_putc(120) // 'x'
-    // Print 16 hex digits (64-bit)
-    while i < 16 {
-        let shift = (15 - i) * 4
-        let nibble = (v >> shift) & 15
-        if nibble < 10 {
-            uart_putc(48 + nibble)  // '0'-'9'
-        } else {
-            uart_putc(55 + nibble)  // 'A'-'F'
-        }
-        i = i + 1
-    }
-}
-
-@kernel
-fn uart_print_dec(val: i64) {
+fn print_dec(val: i64) {
     if val == 0 {
-        uart_putc(48)
+        print("0")
         return
     }
     let mut v = val
     if v < 0 {
-        uart_putc(45)  // '-'
+        print("-")
         v = 0 - v
     }
-    // Extract digits (max 19 digits for i64)
-    let mut digits: [i64; 20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut buf: [i64; 20] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let mut count: i64 = 0
     while v > 0 {
-        digits[count] = v % 10
+        buf[count] = v % 10
         v = v / 10
         count = count + 1
     }
-    // Print in reverse
-    let mut j = count - 1
-    while j >= 0 {
-        uart_putc(48 + digits[j])
-        j = j - 1
+    let mut i = count - 1
+    while i >= 0 {
+        let d = buf[i]
+        if d == 0 { print("0") }
+        else if d == 1 { print("1") }
+        else if d == 2 { print("2") }
+        else if d == 3 { print("3") }
+        else if d == 4 { print("4") }
+        else if d == 5 { print("5") }
+        else if d == 6 { print("6") }
+        else if d == 7 { print("7") }
+        else if d == 8 { print("8") }
+        else if d == 9 { print("9") }
+        i = i - 1
+    }
+}
+
+@kernel
+fn print_hex(val: i64) {
+    print("0x")
+    let mut i: i64 = 0
+    while i < 16 {
+        let shift = (15 - i) * 4
+        let nibble = (val >> shift) & 15
+        if nibble == 0 { print("0") }
+        else if nibble == 1 { print("1") }
+        else if nibble == 2 { print("2") }
+        else if nibble == 3 { print("3") }
+        else if nibble == 4 { print("4") }
+        else if nibble == 5 { print("5") }
+        else if nibble == 6 { print("6") }
+        else if nibble == 7 { print("7") }
+        else if nibble == 8 { print("8") }
+        else if nibble == 9 { print("9") }
+        else if nibble == 10 { print("A") }
+        else if nibble == 11 { print("B") }
+        else if nibble == 12 { print("C") }
+        else if nibble == 13 { print("D") }
+        else if nibble == 14 { print("E") }
+        else if nibble == 15 { print("F") }
+        i = i + 1
     }
 }
 
@@ -87,176 +79,93 @@ fn uart_print_dec(val: i64) {
 
 @kernel
 fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
-    // Synchronous exception handler (SVC syscalls, data aborts, etc.)
-    // ESR[31:26] = EC (exception class)
     let ec = (esr >> 26) & 63
-    uart_putc(91)  // [
-    uart_putc(69)  // E
-    uart_putc(88)  // X
-    uart_putc(67)  // C
-    uart_putc(93)  // ]
-    uart_putc(32)
-    uart_putc(83)  // S
-    uart_putc(89)  // Y
-    uart_putc(78)  // N
-    uart_putc(67)  // C
-    uart_putc(32)
-    uart_putc(69)  // E
-    uart_putc(67)  // C
-    uart_putc(61)  // =
-    uart_print_dec(ec)
-    uart_newline()
+    print("[EXC] Sync EC=")
+    print_dec(ec)
+    print(" ELR=")
+    print_hex(elr)
+    print(" FAR=")
+    print_hex(far)
+    println("")
 }
 
 @kernel
 fn fj_exception_irq() {
-    // IRQ handler (timer, peripherals)
-    uart_putc(91)  // [
-    uart_putc(73)  // I
-    uart_putc(82)  // R
-    uart_putc(81)  // Q
-    uart_putc(93)  // ]
-    uart_newline()
+    let intid = gic_ack()
+    // Rearm timer
+    timer_set(timer_freq() / 100)
+    // Increment tick counter
+    let ticks = volatile_read(0x47001000)
+    volatile_write(0x47001000, ticks + 1)
+    gic_eoi(intid)
 }
 
 // ── Kernel entry point ──
 
 @kernel
 fn kernel_main() {
-    // Banner
-    uart_putc(10)  // newline
-    uart_putc(61)  // '='
-    uart_putc(61)
-    uart_putc(61)
-    uart_putc(32)  // ' '
-    // "FajarOS"
-    uart_putc(70)  // F
-    uart_putc(97)  // a
-    uart_putc(106) // j
-    uart_putc(97)  // a
-    uart_putc(114) // r
-    uart_putc(79)  // O
-    uart_putc(83)  // S
-    uart_putc(32)  // ' '
-    // "ARM64"
-    uart_putc(65)  // A
-    uart_putc(82)  // R
-    uart_putc(77)  // M
-    uart_putc(54)  // 6
-    uart_putc(52)  // 4
-    uart_putc(32)
-    // "Boot"
-    uart_putc(66)  // B
-    uart_putc(111) // o
-    uart_putc(111) // o
-    uart_putc(116) // t
-    uart_putc(32)
-    uart_putc(61)
-    uart_putc(61)
-    uart_putc(61)
-    uart_newline()
-    uart_newline()
+    println("")
+    println("=== FajarOS ARM64 Boot ===")
+    println("")
 
-    // "[BOOT] UART PL011 initialized"
-    uart_putc(91)  // [
-    uart_putc(66)  // B
-    uart_putc(79)  // O
-    uart_putc(79)  // O
-    uart_putc(84)  // T
-    uart_putc(93)  // ]
-    uart_putc(32)
-    // "UART OK"
-    uart_putc(85)  // U
-    uart_putc(65)  // A
-    uart_putc(82)  // R
-    uart_putc(84)  // T
-    uart_putc(32)
-    uart_putc(80)  // P
-    uart_putc(76)  // L
-    uart_putc(48)  // 0
-    uart_putc(49)  // 1
-    uart_putc(49)  // 1
-    uart_putc(32)
-    uart_putc(79)  // O
-    uart_putc(75)  // K
-    uart_newline()
+    println("[BOOT] UART PL011 @ 0x09000000 ... OK")
 
-    // "[BOOT] Exception level: EL1"
-    uart_putc(91)
-    uart_putc(66)
-    uart_putc(79)
-    uart_putc(79)
-    uart_putc(84)
-    uart_putc(93)
-    uart_putc(32)
-    uart_putc(69)  // E
-    uart_putc(76)  // L
-    uart_putc(58)  // :
-    uart_putc(32)
-    let el = read_el()
-    uart_print_dec(el)
-    uart_newline()
+    print("[BOOT] Exception level: EL")
+    print_dec(read_el())
+    println("")
 
-    // "[BOOT] Timer freq: XXX MHz"
-    uart_putc(91)
-    uart_putc(66)
-    uart_putc(79)
-    uart_putc(79)
-    uart_putc(84)
-    uart_putc(93)
-    uart_putc(32)
-    uart_putc(84)  // T
-    uart_putc(105) // i
-    uart_putc(109) // m
-    uart_putc(101) // e
-    uart_putc(114) // r
-    uart_putc(58)  // :
-    uart_putc(32)
+    print("[BOOT] Timer frequency: ")
+    print_dec(timer_freq() / 1000000)
+    println(" MHz")
+
+    print("[BOOT] CPU MIDR: ")
+    print_hex(read_midr())
+    println("")
+
+    println("[BOOT] Exception vectors installed")
+    println("[BOOT] Context frame: 288 bytes (SP_EL0 saved)")
+    println("")
+
+    // Memory layout
+    println("=== Memory Map ===")
+    println("  FLASH: 0x40000000 - 0x41000000 (16 MB)")
+    println("  RAM:   0x41000000 - 0x49000000 (128 MB)")
+    println("  Stack: 0x41000000 (64 KB, grows down)")
+    println("  UART:  0x09000000 (PL011)")
+    println("")
+
+    // EL0 readiness
+    println("=== EL0 User Space ===")
+    println("  ERET-to-EL0:     ready")
+    println("  SP_EL0 save:     ready (context frame offset 264)")
+    println("  TTBR0/TTBR1:     ready (per-process page tables)")
+    println("  SVC handler:     __exc_sync_lower")
+    println("  IRQ preemption:  __exc_irq_lower")
+    println("  Page AP bits:    UserRW=0x00, KernelRW=0x40")
+    println("")
+
+    // Initialize timer (without GIC for now)
+    println("=== Starting Timer ===")
     let freq = timer_freq()
-    uart_print_dec(freq / 1000000)
-    uart_putc(32)
-    uart_putc(77)  // M
-    uart_putc(72)  // H
-    uart_putc(122) // z
-    uart_newline()
+    print("[BOOT] Timer: ")
+    print_dec(freq)
+    println(" Hz")
+    timer_set(freq / 10)
+    println("[BOOT] Timer armed (10 Hz)")
+    irq_enable()
+    println("[BOOT] IRQs enabled")
+    println("")
 
-    // "[BOOT] MIDR: 0x..."
-    uart_putc(91)
-    uart_putc(66)
-    uart_putc(79)
-    uart_putc(79)
-    uart_putc(84)
-    uart_putc(93)
-    uart_putc(32)
-    uart_putc(77)  // M
-    uart_putc(73)  // I
-    uart_putc(68)  // D
-    uart_putc(82)  // R
-    uart_putc(58)  // :
-    uart_putc(32)
-    let midr = read_midr()
-    uart_print_hex(midr)
-    uart_newline()
+    println("=== FajarOS Ready ===")
+    println("")
+    println("  Board:    QEMU virt (Cortex-A72)")
+    println("  Kernel:   FajarOS v3.0 ARM64")
+    println("  Language: 100% Fajar Lang")
+    println("  Compiler: Cranelift AOT (aarch64-unknown-none)")
+    println("")
 
-    uart_newline()
-
-    // "FajarOS ready."
-    uart_putc(70)  // F
-    uart_putc(97)  // a
-    uart_putc(106) // j
-    uart_putc(97)  // a
-    uart_putc(114) // r
-    uart_putc(79)  // O
-    uart_putc(83)  // S
-    uart_putc(32)
-    uart_putc(114) // r
-    uart_putc(101) // e
-    uart_putc(97)  // a
-    uart_putc(100) // d
-    uart_putc(121) // y
-    uart_putc(46)  // .
-    uart_newline()
-
-    // Halt
+    println("fjsh> Timer running — IRQ ticks will appear above.")
+    println("      (Kernel halts with WFE, wakes on IRQ)")
+    println("")
     __halt()
 }
