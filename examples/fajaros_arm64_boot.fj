@@ -1,10 +1,13 @@
-// fajaros_arm64_boot.fj — FajarOS ARM64 bare-metal kernel
-//
-// Build: fj build examples/fajaros_arm64_boot.fj --target aarch64-unknown-none --no-std
-// Run:   qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72 -nographic \
-//          -kernel fajaros_arm64_boot
-
-@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {}
+@kernel fn fj_exception_sync(esr: i64, elr: i64, far: i64) {
+    let ec = (esr >> 26) & 63
+    print("[EXC] Sync EC=")
+    print_dec(ec)
+    print(" ELR=")
+    print_hex(elr)
+    print(" FAR=")
+    print_hex(far)
+    println("")
+}
 @kernel fn fj_exception_irq() {
     let intid = gic_ack()
     timer_set(timer_freq() / 10)
@@ -12,10 +15,10 @@
     volatile_write(0x41100000, ticks + 1)
     gic_eoi(intid)
 }
-
 @kernel fn print_dec(val: i64) {
     if val == 0 { print("0"); return }
     let mut v = val
+    if v < 0 { print("-"); v = 0 - v }
     let mut buf: [i64; 20] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     let mut count: i64 = 0
     while v > 0 { buf[count] = v % 10; v = v / 10; count = count + 1 }
@@ -25,40 +28,78 @@
         i = i - 1
     }
 }
-
-@kernel fn gic_init() {
+@kernel fn print_hex(val: i64) {
+    print("0x")
+    let mut i: i64 = 0
+    while i < 16 {
+        let shift = (15 - i) * 4
+        let nibble = (val >> shift) & 15
+        if nibble < 10 {
+            volatile_write_u8(0x09000000, 48 + nibble)
+        } else {
+            volatile_write_u8(0x09000000, 55 + nibble)
+        }
+        i = i + 1
+    }
+}
+@kernel fn gic_dist_init() {
     let ctlr = volatile_read_u32(0x08000000)
     volatile_write_u32(0x08000000, ctlr | 0x12)
+}
+@kernel fn gic_redist_init() {
     let waker = volatile_read_u32(0x080A0014)
     volatile_write_u32(0x080A0014, waker & 0xFFFFFFFD)
     let grp = volatile_read_u32(0x080B0080)
     volatile_write_u32(0x080B0080, grp | (1 << 30))
     volatile_write_u32(0x080B0100, 1 << 30)
     volatile_write_u8(0x080B041E, 0xA0)
-    gic_cpu_init(255)
 }
-
 @kernel fn kernel_main() {
-    println("=== FajarOS ARM64 ===")
-    print("EL:")
+    println("")
+    println("=== FajarOS ARM64 Boot ===")
+    println("")
+    print("[BOOT] EL: ")
     print_dec(read_el())
-    print(" Timer:")
+    println("")
+    print("[BOOT] Timer: ")
     print_dec(timer_freq() / 1000000)
-    println("MHz")
-    gic_init()
+    println(" MHz")
+    print("[BOOT] MIDR: ")
+    print_hex(read_midr())
+    println("")
+    println("[BOOT] UART PL011 OK")
+    println("")
+    println("=== Memory Map ===")
+    println("  FLASH: 0x40000000")
+    println("  RAM:   0x41000000")
+    println("")
+    gic_dist_init()
+    gic_redist_init()
+    gic_cpu_init(255)
     timer_set(timer_freq() / 10)
     volatile_write(0x41100000, 0)
     irq_enable()
     println("GIC+Timer ready")
+    println("")
+    println("=== FajarOS Ready ===")
+    println("")
     print("fjsh> ")
     let mut running: i64 = 1
     while running > 0 {
         let fr = volatile_read_u32(0x09000018)
         if (fr & 16) == 0 {
             let ch = volatile_read_u8(0x09000000)
-            if ch == 113 {
-                running = 0
+            if ch == 13 {
+                println("")
+                let ticks = volatile_read(0x41100000)
+                print("  uptime: ")
+                print_dec(ticks / 10)
+                print(".")
+                print_dec(ticks % 10)
+                println(" s")
+                print("fjsh> ")
             }
+            if ch == 113 { running = 0 }
         }
     }
     println("")

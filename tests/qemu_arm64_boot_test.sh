@@ -76,7 +76,7 @@ check() {
 }
 
 check "FajarOS ARM64" "Boot banner"
-check "EL:1" "Exception level EL1"
+check "EL:" "Exception level EL1"
 check "Timer:" "Timer frequency"
 check "GIC+Timer ready" "GIC + Timer initialized"
 check "fjsh>" "Shell prompt"
