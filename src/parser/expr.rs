@@ -363,6 +363,18 @@ impl Parser {
                 })
             }
 
+            // Comptime block: comptime { body }
+            TokenKind::Comptime => {
+                let start = token.span.start;
+                self.advance(); // eat `comptime`
+                let body = self.parse_block_expr()?;
+                let end = body.span().end;
+                Ok(Expr::Comptime {
+                    body: Box::new(body),
+                    span: Span::new(start, end),
+                })
+            }
+
             // Closure: |params| body
             TokenKind::Pipe | TokenKind::PipePipe => self.parse_closure_expr(),
 

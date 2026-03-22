@@ -243,6 +243,8 @@ pub struct GenericParam {
     pub name: String,
     /// Trait bounds.
     pub bounds: Vec<TraitBound>,
+    /// Whether this is a comptime (compile-time constant) parameter.
+    pub is_comptime: bool,
     /// Source span.
     pub span: Span,
 }
@@ -919,6 +921,16 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// Compile-time evaluation block: `comptime { expr }`.
+    ///
+    /// The body is evaluated at compile time and replaced with the resulting literal.
+    Comptime {
+        /// The body expression to evaluate at compile time.
+        body: Box<Expr>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 /// A single arm in a handle expression.
@@ -1018,7 +1030,8 @@ impl Expr {
             | Expr::InlineAsm { span, .. }
             | Expr::FString { span, .. }
             | Expr::HandleEffect { span, .. }
-            | Expr::ResumeExpr { span, .. } => *span,
+            | Expr::ResumeExpr { span, .. }
+            | Expr::Comptime { span, .. } => *span,
         }
     }
 }

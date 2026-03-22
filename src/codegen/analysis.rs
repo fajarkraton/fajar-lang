@@ -262,6 +262,9 @@ fn analyze_expr(
         Expr::ResumeExpr { value, .. } => {
             analyze_expr(value, local_count, frame_bytes, calls);
         }
+        Expr::Comptime { body, .. } => {
+            analyze_expr(body, local_count, frame_bytes, calls);
+        }
         // Leaf nodes — no locals, no calls
         Expr::Literal { .. }
         | Expr::Ident { .. }

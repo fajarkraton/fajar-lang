@@ -788,6 +788,10 @@ impl<'src> Formatter<'src> {
             Expr::ResumeExpr { .. } => {
                 self.push("resume");
             }
+            Expr::Comptime { body, .. } => {
+                self.push("comptime ");
+                self.format_expr(body);
+            }
         }
     }
 

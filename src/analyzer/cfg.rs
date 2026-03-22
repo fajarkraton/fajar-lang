@@ -259,6 +259,9 @@ impl UseCollector {
             Expr::ResumeExpr { value, .. } => {
                 self.visit_expr(value);
             }
+            Expr::Comptime { body, .. } => {
+                self.visit_expr(body);
+            }
         }
     }
 

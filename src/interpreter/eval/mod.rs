@@ -1257,6 +1257,11 @@ impl Interpreter {
                 // continuation, but in the interpreter we treat it as identity.
                 self.eval_expr(value)
             }
+            Expr::Comptime { body, .. } => {
+                // In interpreter mode, comptime blocks are evaluated eagerly
+                // just like normal expressions.
+                self.eval_expr(body)
+            }
         }
     }
 

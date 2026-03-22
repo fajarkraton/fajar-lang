@@ -386,9 +386,13 @@ impl Parser {
             }
         }
 
-        // Parse type params
+        // Parse type params (and comptime params)
         while !self.at(&TokenKind::Gt) && !self.at_eof() {
             let start = self.peek().span.start;
+
+            // Check for `comptime` modifier: `comptime N: i64`
+            let is_comptime = self.eat(&TokenKind::Comptime);
+
             let (name, _) = self.expect_ident()?;
 
             let mut bounds = Vec::new();
@@ -406,6 +410,7 @@ impl Parser {
             generic_params.push(GenericParam {
                 name,
                 bounds,
+                is_comptime,
                 span: Span::new(start, end),
             });
 

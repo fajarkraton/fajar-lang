@@ -537,18 +537,22 @@ impl Parser {
                 let ed = self.parse_effect_decl(is_pub)?;
                 Ok(Item::EffectDecl(ed))
             }
-            TokenKind::Const => {
-                // Check if next is `fn` → const fn
+            TokenKind::Const | TokenKind::Comptime => {
+                // `const fn` or `comptime fn` → const fn
                 if matches!(self.peek_at(1).kind, TokenKind::Fn) {
-                    self.advance(); // consume `const`
+                    self.advance(); // consume `const`/`comptime`
                     let mut fd = self.parse_fn_def(is_pub, annotation)?;
                     fd.is_const = true;
                     fd.doc_comment = doc_comment;
                     Ok(Item::FnDef(fd))
-                } else {
+                } else if matches!(self.peek_kind(), TokenKind::Const) {
                     let mut cd = self.parse_const_def(is_pub, annotation)?;
                     cd.doc_comment = doc_comment;
                     Ok(Item::ConstDef(cd))
+                } else {
+                    // `comptime { ... }` as a top-level expression
+                    let stmt = self.parse_stmt()?;
+                    Ok(Item::Stmt(stmt))
                 }
             }
             TokenKind::Protocol => {

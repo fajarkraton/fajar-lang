@@ -848,6 +848,7 @@ impl TypeChecker {
                 }
                 self.check_expr(value)
             }
+            Expr::Comptime { body, .. } => self.check_expr(body),
         }
     }
 

@@ -565,6 +565,10 @@ impl Compiler {
             Expr::HandleEffect { .. } | Expr::ResumeExpr { .. } => {
                 // Effect system is not supported in VM mode
             }
+            Expr::Comptime { body, .. } => {
+                // In VM mode, comptime blocks are compiled normally.
+                self.compile_expr(body);
+            }
         }
     }
 

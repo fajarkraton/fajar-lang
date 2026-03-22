@@ -6,6 +6,7 @@
 pub mod async_trait;
 pub mod borrow_lite;
 pub mod cfg;
+pub mod comptime;
 pub mod effects;
 pub mod gat;
 pub mod gat_errors;
