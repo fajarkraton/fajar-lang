@@ -18,6 +18,52 @@ Kategori perubahan:
 
 ---
 
+## [4.2.0] — 2026-03-22 "Horizon"
+
+### Added — ARM64 Bare-Metal Boot
+
+**FajarOS ARM64 kernel boots on QEMU aarch64:**
+- `fajaros_arm64_boot.fj` — full kernel: GICv3 + timer IRQ + UART shell
+- GICv3 distributor (0x08000000) + redistributor (0x080A0000) + CPU interface
+- Physical timer IRQ at 10 Hz (PPI 30), verified ~50 ticks/5s
+- PL011 UART TX+RX, interactive shell with uptime display
+- String literals in @kernel compile to .rodata (no more putc!)
+- `qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a72` verified
+- Automated QEMU boot test: `tests/qemu_arm64_boot_test.sh` (7/7 pass)
+
+**ARM64 EL0 User Space:**
+- 14 runtime functions: `eret_to_el0`, `read/write_spsr_el1`, `read/write_elr_el1`, `read/write_sp_el0`, `read/write_ttbr1`, `read_esr_el1`, `read_far_el1`, `tlbi_all`, `isb`, `dsb`
+- 15 assembly stubs in linker.rs (real aarch64 instructions)
+- `SAVE/RESTORE_CONTEXT` expanded to 288 bytes (saves SP_EL0 at offset 264)
+- `El0Process` + `El0ProcessTable` (16 slots, round-robin scheduler)
+- `PageAccess` AP bits: UserRW, UserRO, KernelRW, KernelRO
+- EL0 demo verified on QEMU: ERET → SVC #1 (write) → SVC #0 (exit), EC=0x15
+
+**MNIST Inference on Q6A:**
+- QNN CPU: 99/100 = 99%, 0.33ms/inference
+- QNN GPU (Adreno 643): 99/100 = 99%, 3.6ms/inference
+- `q6a_mnist_inference.fj` runs end-to-end on real hardware
+- INT8 re-quantized with calibration: 99% accuracy (was 1%)
+- `q6a_el0_test.fj`: 18/18 pass on Q6A ARM64
+
+### Fixed
+
+- **B1:** Bare-metal AOT verifier error with many @kernel functions (cargo fmt fix)
+- **B2:** `unwrap()` in `scope.rs:172` replaced with `let-else`
+- **B3:** INT8 MNIST model re-quantized with 50 calibration samples (1% → 99%)
+- **B4:** GICv3 QEMU flag requirement documented (default is GICv2)
+- Cross bare-metal linker: auto-selects `aarch64-linux-gnu-ld` for cross compilation
+- Duplicate symbol fix: `#[cfg(not(target_arch = "aarch64"))]` guards on hosted stubs
+
+### Changed
+
+- Compiler Enhancement Plan: all 48/48 tasks verified COMPLETE (Sprint 1-5)
+- Zero TODOs in src/ (removed stale TODO in call.rs, documented CUDA stubs)
+- NEXT_STEPS_PLAN: all 4 steps + Sprint 5.5-5.6 marked complete
+- Context frame size: 272 → 288 bytes (added SP_EL0 field)
+
+---
+
 ## [4.1.0] — 2026-03-22 "Sovereignty"
 
 ### Added — Compiler Enhancements for Microkernel (12 total)
