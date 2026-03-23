@@ -275,12 +275,13 @@ let nums = vec![1, 2, 3, 4, 5]
 - [x] **Deliverable:** PubGrub resolver + registry protocol + package bundling
 
 ### Sprint 4.2: Online Playground (1 minggu)
-- [ ] Build web playground: editor + compile + run
-- [ ] WebAssembly backend: compile Fajar Lang to Wasm, run in browser
-- [ ] Share snippets via URL
-- [ ] Pre-loaded examples (hello world, ML demo, OS kernel snippet)
-- [ ] Host at play.fajarlang.org
-- [ ] **Deliverable:** "Try Fajar Lang in 5 seconds" experience
+- [x] `fj playground` command generates static HTML playground
+- [x] WebAssembly backend handles new AST nodes (effects, comptime, macros)
+- [x] Share snippets via URL (encode/decode, short IDs, clipboard copy)
+- [x] 8 pre-loaded examples (hello, fib, effects, comptime, matching, macros, structs, context safety)
+- [x] Monaco editor config with Fajar Lang syntax highlighting
+- [x] 12 new integration tests (sharing, examples, editor config, wasm)
+- [x] **Deliverable:** `fj playground` → static HTML with editor + examples + sharing
 
 ### Sprint 4.3: LSP Advanced Features (1 minggu)
 - [ ] Implement rename (all references)

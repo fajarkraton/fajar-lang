@@ -1627,6 +1627,14 @@ impl WasmCompiler {
                     Err(WasmError::UnsupportedExpr("empty path".to_string()))
                 }
             }
+            // Effect system: handle evaluates body (effects are compile-time checked)
+            Expr::HandleEffect { body, .. } => self.compile_expr(body, out),
+            // Resume: evaluate the value
+            Expr::ResumeExpr { value, .. } => self.compile_expr(value, out),
+            // Comptime: evaluate body (should be folded by analyzer)
+            Expr::Comptime { body, .. } => self.compile_expr(body, out),
+            // Macro invocations: should be expanded before codegen
+            Expr::MacroInvocation { .. } => Ok(()),
             _ => Err(WasmError::NotImplemented(format!(
                 "expression type: {:?}",
                 std::mem::discriminant(expr)
