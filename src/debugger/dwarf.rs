@@ -109,6 +109,10 @@ impl DwarfBaseType {
             "f32" => Some(DwarfBaseType::Float { byte_size: 4 }),
             "f64" => Some(DwarfBaseType::Float { byte_size: 8 }),
             "str" => Some(DwarfBaseType::Utf8String),
+            "char" => Some(DwarfBaseType::UnsignedInt { byte_size: 4 }),
+            "never" => Some(DwarfBaseType::UnsignedInt { byte_size: 0 }),
+            // Tensor/ML types map to opaque pointer (8 bytes)
+            "tensor" | "Tensor" => Some(DwarfBaseType::UnsignedInt { byte_size: 8 }),
             _ => None,
         }
     }

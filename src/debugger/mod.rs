@@ -106,6 +106,131 @@ pub struct SourceLocation {
     pub column: usize,
     /// Byte offset in source.
     pub offset: usize,
+    /// Context annotation of the enclosing function (e.g., "@kernel", "@device").
+    pub context: Option<String>,
+}
+
+/// Debug information about a stack frame for display.
+#[derive(Debug, Clone)]
+pub struct DebugFrame {
+    /// Function name.
+    pub name: String,
+    /// Source file.
+    pub file: String,
+    /// Line number.
+    pub line: usize,
+    /// Context annotation (e.g., "@kernel", "@device", "@safe").
+    pub context: Option<String>,
+    /// Effect annotations on the function (e.g., ["IO", "Hardware"]).
+    pub effects: Vec<String>,
+    /// Whether the function is comptime.
+    pub is_comptime: bool,
+}
+
+impl DebugFrame {
+    /// Creates a new debug frame.
+    pub fn new(name: String, file: String, line: usize) -> Self {
+        Self {
+            name,
+            file,
+            line,
+            context: None,
+            effects: Vec::new(),
+            is_comptime: false,
+        }
+    }
+
+    /// Sets the context annotation.
+    pub fn with_context(mut self, ctx: impl Into<String>) -> Self {
+        self.context = Some(ctx.into());
+        self
+    }
+
+    /// Sets the effect annotations.
+    pub fn with_effects(mut self, effects: Vec<String>) -> Self {
+        self.effects = effects;
+        self
+    }
+
+    /// Marks this frame as comptime.
+    pub fn as_comptime(mut self) -> Self {
+        self.is_comptime = true;
+        self
+    }
+
+    /// Returns a display string for the frame (used in stack traces).
+    pub fn display_name(&self) -> String {
+        let mut parts = Vec::new();
+        if self.is_comptime {
+            parts.push("comptime".to_string());
+        }
+        if let Some(ref ctx) = self.context {
+            parts.push(format!("@{ctx}"));
+        }
+        parts.push(self.name.clone());
+        if !self.effects.is_empty() {
+            parts.push(format!("with {}", self.effects.join(", ")));
+        }
+        parts.join(" ")
+    }
+}
+
+/// A variable value with debug metadata for display in the debugger.
+#[derive(Debug, Clone)]
+pub struct DebugVariable {
+    /// Variable name.
+    pub name: String,
+    /// Display value.
+    pub value: String,
+    /// Type name.
+    pub type_name: String,
+    /// Whether this is a comptime-evaluated constant.
+    pub is_comptime: bool,
+    /// Whether this variable has linear ownership (must be consumed).
+    pub is_linear: bool,
+    /// Number of child variables (for expandable types like structs/arrays).
+    pub children_count: usize,
+}
+
+impl DebugVariable {
+    /// Creates a new debug variable.
+    pub fn new(name: String, value: String, type_name: String) -> Self {
+        Self {
+            name,
+            value,
+            type_name,
+            is_comptime: false,
+            is_linear: false,
+            children_count: 0,
+        }
+    }
+
+    /// Marks this variable as comptime-evaluated.
+    pub fn as_comptime(mut self) -> Self {
+        self.is_comptime = true;
+        self
+    }
+
+    /// Marks this variable as linear ownership.
+    pub fn as_linear(mut self) -> Self {
+        self.is_linear = true;
+        self
+    }
+
+    /// Returns a formatted display string for the debugger tooltip.
+    pub fn tooltip(&self) -> String {
+        let mut parts = vec![format!(
+            "{}: {} = {}",
+            self.name, self.type_name, self.value
+        )];
+        if self.is_comptime {
+            parts.push("[comptime]".to_string());
+        }
+        if self.is_linear {
+            parts.push("[linear — must be consumed]".to_string());
+        }
+        parts.join(" ")
+    }
 }
 
 /// Reason why execution stopped.
@@ -295,6 +420,7 @@ impl DebugState {
             line,
             column,
             offset: span_start,
+            context: None,
         });
 
         // Check stop-on-entry for first statement

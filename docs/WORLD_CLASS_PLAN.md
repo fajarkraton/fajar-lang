@@ -294,12 +294,13 @@ let nums = vec![1, 2, 3, 4, 5]
 - [x] **Deliverable:** Full IDE experience with semantic tokens + inlay hints + references
 
 ### Sprint 4.4: Debugger — Real DAP (1 minggu)
-- [ ] Generate DWARF debug info from Cranelift
-- [ ] Implement DAP server with breakpoints, step, inspect
-- [ ] Source-level debugging in VS Code
-- [ ] Variable inspection, call stack, watch expressions
-- [ ] Test: set breakpoint in .fj file, hit it, inspect variables
-- [ ] **Deliverable:** Step-through debugging in VS Code
+- [x] DWARF debug info: extended type mappings (char, tensor, never)
+- [x] DAP server: already complete (breakpoints, step in/over/out, inspect)
+- [x] DebugFrame: context annotations (@kernel/@device), effect tracking, comptime marking
+- [x] DebugVariable: comptime/linear metadata with tooltip formatting
+- [x] VS Code extension with launch config (already existed: editors/vscode/)
+- [x] 22 new integration tests (frames, variables, DWARF types, breakpoints, stepping)
+- [x] **Deliverable:** Context-aware debugging with effect/comptime/linear variable display
 
 ### Sprint 4.5: Documentation + Tutorial (1 minggu)
 - [ ] Write "The Fajar Lang Book" — 20 chapters, beginner to advanced

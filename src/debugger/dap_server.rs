@@ -655,6 +655,7 @@ mod tests {
                 line: 42,
                 column: 5,
                 offset: 100,
+                context: None,
             }),
             ..DapState::new()
         };
