@@ -1,32 +1,100 @@
 # Fajar Lang — Master Implementation Plan
 
-> **Versi:** 6.0 FINAL | **Tanggal:** 2026-03-23
+> **Versi:** 7.0 | **Tanggal:** 2026-03-23
 > **Status:** Dokumen referensi utama pengembangan Fajar Lang
-> **Tim:** 10 Engineer + AI Assistant per orang
+> **Tim:** 1 Engineer (Fajar) + Claude AI
 > **Target OS:** FajarOS x86_64 + FajarOS ARM64 (Radxa Dragon Q6A)
 > **Durasi:** 24 minggu (6 bulan)
+> **Metode:** AI-first — AI generates 70% code, engineer reviews + directs
 > **Referensi:** HuggingFace Candle, seL4, Rust, Zig, Koka
 
 ---
 
 ## Daftar Isi
 
+0. [Cara Kerja 1 Engineer + AI](#bagian-0-cara-kerja-1-engineer--ai)
 1. [Posisi Saat Ini](#bagian-1-posisi-saat-ini)
-2. [Organisasi Tim & Proses](#bagian-2-organisasi-tim--proses)
-3. [Onboarding Plan](#bagian-3-onboarding-plan)
-4. [Dependency Graph & Critical Path](#bagian-4-dependency-graph--critical-path)
-5. [Implementation Plan Detail](#bagian-5-implementation-plan-detail-24-minggu)
-6. [Definition of Done](#bagian-6-definition-of-done)
-7. [Arsitektur Target](#bagian-7-arsitektur-target)
-8. [ML Runtime & Candle Strategy](#bagian-8-ml-runtime--candle-strategy)
-9. [Migration Strategy FajarOS](#bagian-9-migration-strategy-fajaros)
-10. [Performance Budget](#bagian-10-performance-budget)
-11. [Infrastructure & Hardware](#bagian-11-infrastructure--hardware)
-12. [API Stability Policy](#bagian-12-api-stability-policy)
-13. [Quality Gates](#bagian-13-quality-gates)
-14. [Code Review & PR Process](#bagian-14-code-review--pr-process)
-15. [Risk Matrix & Fallback Plans](#bagian-15-risk-matrix--fallback-plans)
-16. [Metrik Sukses](#bagian-16-metrik-sukses)
+2. [Prioritas & Urutan Kerja](#bagian-2-prioritas--urutan-kerja)
+3. [Implementation Plan](#bagian-3-implementation-plan-24-minggu)
+4. [Definition of Done](#bagian-4-definition-of-done)
+5. [Arsitektur Target](#bagian-5-arsitektur-target)
+6. [ML Runtime & Candle Strategy](#bagian-6-ml-runtime--candle-strategy)
+7. [Migration Strategy FajarOS](#bagian-7-migration-strategy-fajaros)
+8. [Performance Budget](#bagian-8-performance-budget)
+9. [Infrastructure](#bagian-9-infrastructure)
+10. [API Stability Policy](#bagian-10-api-stability-policy)
+11. [Quality Gates](#bagian-11-quality-gates)
+12. [Risk & Fallback](#bagian-12-risk--fallback)
+13. [Metrik Sukses](#bagian-13-metrik-sukses)
+
+---
+
+## Bagian 0: Cara Kerja 1 Engineer + AI
+
+### Workflow Harian
+
+```
+Pagi (08:00-12:00) — FOCUS BLOCK: Coding berat
+  1. Buka Claude Code session
+  2. Load context: "Resume docs/MASTER_IMPLEMENTATION_PLAN.md → Sprint X.Y"
+  3. AI generates implementation (code + tests)
+  4. Engineer reviews: logic benar? edge cases?
+  5. cargo test + clippy + fmt
+  6. Commit jika pass
+
+Siang (13:00-15:00) — REVIEW & FIX
+  7. Fix issues dari pagi
+  8. Run FajarOS regression test
+  9. Update plan: mark [x] yang selesai
+
+Sore (15:00-17:00) — EXPLORATION & DESIGN
+  10. Study next sprint requirements
+  11. AI research (WebFetch, code exploration)
+  12. Design decisions untuk besok
+```
+
+### Pembagian Kerja Engineer vs AI
+
+| Aktivitas | Engineer | AI (Claude) |
+|-----------|----------|-------------|
+| Architecture decisions | ✅ Decides | Proposes options |
+| Sprint prioritization | ✅ Decides | Suggests order |
+| Code generation | Reviews + adjusts | ✅ Generates 70%+ |
+| Test generation | Reviews | ✅ Generates 90%+ |
+| Debugging | Analyzes root cause | ✅ Proposes fixes |
+| Code review | ✅ Final approve | Pre-review (style, bugs) |
+| Documentation | Approves | ✅ Generates |
+| FajarOS testing | ✅ Runs QEMU, verifies | Generates test scripts |
+| Hardware testing (Q6A) | ✅ Physical access required | Remote via SSH |
+| Design trade-offs | ✅ Makes call | Presents pros/cons |
+
+### Session Protocol
+
+Setiap Claude Code session HARUS mengikuti urutan ini:
+
+```
+1. LOAD  → MASTER_IMPLEMENTATION_PLAN.md (dokumen ini)
+2. CHECK → Sprint berapa sekarang? Task mana yang in-progress?
+3. READ  → File source yang relevan untuk sprint ini
+4. CODE  → Implement task, AI generates + engineer reviews
+5. TEST  → cargo test + clippy + fmt + FajarOS regression
+6. MARK  → Update checklist di dokumen ini: [ ] → [x]
+7. COMMIT→ git commit dengan conventional format
+```
+
+### Keunggulan 1 Engineer + AI vs 10 Engineer
+
+```
+✅ Zero coordination overhead   (no meetings, no PR wait, no merge conflicts)
+✅ One vision, one codebase      (no design disagreements)
+✅ AI never forgets context       (1M token window = entire codebase)
+✅ AI generates tests faster      (50 tests in minutes, not hours)
+✅ AI handles boring parts        (boilerplate, serialization, format code)
+✅ 24/7 availability              (AI doesn't sleep)
+
+⚠️ Bottleneck: engineer's review capacity (~30h/week focused coding)
+⚠️ Risk: single point of failure (engineer sick = project stops)
+```
 
 ---
 
@@ -40,512 +108,352 @@ Tests:           5,582 (0 failures)
 Self-hosted:     1,268 LOC Fajar Lang (lexer + parser + analyzer + codegen)
 Backends:        Cranelift (dev) + LLVM (release) + Wasm (browser)
 Targets:         x86_64, ARM64, RISC-V, Wasm
-IDE:             VS Code (LSP semantic tokens + inlay hints + DAP debugger)
-Examples:        130+ program .fj
-Packages:        7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
-Builtins:        121 bare-metal runtime functions + tensor aliases
+IDE:             VS Code (LSP + DAP debugger)
+Examples:        130+ programs (.fj)
+Packages:        7 standard
 Error Codes:     80+ across 10 categories
 ```
 
-### Fitur Unik (Tidak Ada di Bahasa Lain)
+### Fitur Unik
 
-| Fitur | Status | Deskripsi |
-|-------|--------|-----------|
-| `@kernel/@device/@safe` | ✅ Implemented | Context annotations enforce domain isolation |
-| Effect system (`with IO, Hardware`) | ✅ Implemented | Formal effect tracking, 8 built-in effects |
-| Linear types (`linear struct`) | ✅ Implemented | Must-use-exactly-once, ME010 error |
-| Comptime evaluation (`comptime {}`) | ✅ Implemented | Zig-style, CT001-CT008 errors |
-| First-class tensors | ✅ Implemented | zeros/matmul/relu/softmax native |
-| Macro system (`vec![]`, `@derive`) | ✅ Implemented | 11 built-in macros + macro_rules! |
+| Fitur | Status |
+|-------|--------|
+| `@kernel/@device/@safe` context isolation | ✅ Implemented |
+| Effect system (`with IO, Hardware`) | ✅ Implemented |
+| Linear types (`linear struct`) | ✅ Implemented |
+| Comptime evaluation (`comptime {}`) | ✅ Implemented |
+| First-class tensor operations | ✅ Implemented |
+| Macro system (`vec![]`, `@derive`) | ✅ Implemented |
+| Dual backend (Cranelift + LLVM) | ✅ Implemented |
+| Incremental compilation | ✅ Implemented |
+| Self-hosted compiler (1,268 LOC .fj) | ✅ Implemented |
 
 ### 10 Problem Kritis
 
-| # | Problem | Dampak | Prioritas |
-|---|---------|--------|-----------|
-| P1 | **Concatenation hack** — FajarOS cat 75 file jadi 1 | Tidak bisa pisah kernel/userspace | CRITICAL |
-| P2 | **@safe tidak fully enforced** — bisa panggil port_outb | Security model bocor | CRITICAL |
-| P3 | **Tidak ada multi-binary build** | Microkernel butuh kernel.elf + service ELFs | CRITICAL |
-| P4 | **Tidak ada user-mode runtime** | @safe program tak bisa println | HIGH |
-| P5 | **IPC raw bytes** — 64-byte buffer tanpa tipe | Bug IPC di runtime | HIGH |
-| P6 | **Tensor hanya f64** — tidak ada f16/bf16/INT8 | Embedded AI butuh quantized | HIGH |
-| P7 | **Tidak ada device abstraction** | Code harus jalan di CPU/GPU/NPU | HIGH |
-| P8 | **Macro system basic** — $ patterns belum work | Metaprogramming terbatas | MEDIUM |
-| P9 | **Effect polymorphism belum ada** | Generic over effects tidak bisa | MEDIUM |
-| P10 | **Tidak ada cross-service type sharing** | Struct harus di-copy antar ELF | MEDIUM |
+| # | Problem | Prioritas |
+|---|---------|-----------|
+| P1 | **Concatenation hack** — FajarOS cat 75 file jadi 1 | CRITICAL |
+| P2 | **@safe tidak fully enforced** — bisa panggil port_outb | CRITICAL |
+| P3 | **Tidak ada multi-binary build** (kernel + services) | CRITICAL |
+| P4 | **Tidak ada user-mode runtime** (@safe println) | HIGH |
+| P5 | **IPC raw bytes** — 64-byte buffer tanpa tipe | HIGH |
+| P6 | **Tensor hanya f64** — tidak ada f16/bf16/INT8 | HIGH |
+| P7 | **Tidak ada device abstraction** (CPU/GPU/NPU) | HIGH |
+| P8 | **Macro $ patterns belum work** | MEDIUM |
+| P9 | **Effect polymorphism belum ada** | MEDIUM |
+| P10 | **Tidak ada cross-service type sharing** | MEDIUM |
 
 ---
 
-## Bagian 2: Organisasi Tim & Proses
+## Bagian 2: Prioritas & Urutan Kerja
 
-### 5 Workstream, 10 Engineer
+### Prinsip: Sequential, Impact-First
 
-| Tim | ID | Engineer | Fokus | Required Skills |
-|-----|----|----------|-------|-----------------|
-| **Build System** | A | E1, E2 | Multi-file, multi-binary, linker | Rust codegen, ELF/linker internals |
-| **Safety** | B | E3, E4 | @safe enforcement, call gates, capabilities | Type systems, static analysis |
-| **IPC & Protocol** | C | E5, E6 | Typed IPC, @message, protocol, service | Parser, code generation |
-| **ML Runtime** | D | E7, E8 | Multi-dtype tensor, GPU/NPU, quantization | ML systems, Vulkan/QNN |
-| **Platform & Test** | E | E9, E10 | User runtime, QEMU CI, FajarOS migration | OS internals, CI/CD |
+Karena 1 orang, TIDAK bisa parallel. Urutan berdasarkan:
+1. **Apa yang unblock paling banyak hal lain** (critical path)
+2. **Apa yang paling impactful untuk FajarOS** (user value)
+3. **Apa yang AI bisa generate paling efisien** (leverage AI)
 
-### AI Assistant per Engineer
-
-| Engineer | AI Task |
-|----------|---------|
-| E1-E2 | Generate linker scripts, ELF validation tests, module resolution tests |
-| E3-E4 | Generate 200+ safety test cases, audit @safe blocked builtins |
-| E5-E6 | Generate IPC serialization code, protocol client stubs |
-| E7-E8 | Study Candle architecture, generate dtype conversion tests |
-| E9-E10 | Generate QEMU test harness, FajarOS boot scripts, migration scripts |
-
-### Sprint Ceremonies
-
-| Ceremony | Frekuensi | Durasi | Peserta | Format |
-|----------|-----------|--------|---------|--------|
-| **Daily standup** | Setiap hari, 09:00 | 5 min | Per-tim (2 orang) | Slack async: done/doing/blocked |
-| **Weekly sync** | Senin 10:00 | 30 min | Semua 10 engineer | Video call: progress + blockers |
-| **Sprint review** | Setiap 2 minggu | 1 jam | Semua + stakeholder | Demo working features |
-| **Sprint retro** | Setiap 2 minggu | 30 min | Semua 10 engineer | What worked / what didn't / action items |
-| **Demo day** | Bulanan | 2 jam | Publik (community) | Record + publish to YouTube |
-| **Architecture review** | Per-phase | 2 jam | Lead dari tiap tim | Design review sebelum phase baru |
-
-### Repository Structure
+### Critical Path
 
 ```
-fajar-lang/                  ← Compiler (repo utama, ~290K LOC)
-├── src/                     ← Compiler source (Rust)
-│   ├── lexer/               ← Tokenizer
-│   ├── parser/              ← Recursive descent + Pratt
-│   ├── analyzer/            ← Type check, effects, borrow, comptime
-│   ├── codegen/             ← Cranelift, LLVM, Wasm, optimizer
-│   ├── interpreter/         ← Tree-walking interpreter
-│   ├── debugger/            ← DAP server + DWARF
-│   ├── lsp/                 ← Language Server Protocol
-│   ├── macros.rs            ← Macro expansion engine
-│   └── ...
-├── stdlib/                  ← Self-hosted compiler (.fj)
-│   ├── lexer.fj             ← 381 LOC tokenizer
-│   ├── parser.fj            ← 397 LOC parser
-│   ├── analyzer.fj          ← 210 LOC type checker
-│   └── codegen.fj           ← 280 LOC C emitter
-├── tests/                   ← 5,582+ tests
-├── examples/                ← 130+ programs including drone_controller.fj
-├── book/                    ← The Fajar Lang Book (60+ chapters)
-├── editors/vscode/          ← VS Code extension
-├── packaging/               ← Docker, Homebrew, Snap
-└── docs/                    ← THIS document + specs + plans
+P2 (@safe block) → P1 (multi-file) → P3 (multi-binary) → P4 (user runtime) → FajarOS migration
+      W1-2              W3-5              W6-8               W9-10              W11-12
+```
 
-fajaros-x86/                 ← OS target x86_64 (20,416 LOC)
-├── kernel/                  ← Microkernel (@kernel)
-│   ├── core/                ← mm, sched, ipc, syscall, boot, security
-│   ├── mm/                  ← Frame allocator, paging, heap, slab
-│   ├── sched/               ← Process, scheduler, SMP, spinlock
-│   ├── ipc/                 ← Message, pipe, channel, notify, shm
-│   ├── syscall/             ← Entry, dispatch, ELF loader
-│   ├── interrupts/          ← LAPIC, timer
-│   ├── security/            ← Capability, limits, hardening
-│   └── hw/                  ← ACPI, PCIe, UEFI, detect
-├── drivers/                 ← Device drivers (@kernel)
-│   ├── serial.fj, vga.fj, keyboard.fj, pci.fj
-│   ├── nvme.fj, virtio_blk.fj, virtio_net.fj
-│   └── xhci.fj, gpu.fj
-├── services/                ← Userspace services (@safe)
-│   ├── init/, shell/, vfs/, blk/, net/, display/, input/, gpu/, gui/, auth/
-├── fs/                      ← Filesystems
-│   ├── ramfs.fj, fat32.fj, vfs.fj
-├── shell/                   ← Shell (200+ commands)
-├── apps/                    ← User applications
-└── tests/                   ← Kernel tests, context enforcement
+P2 dikerjakan PERTAMA karena:
+- Paling kecil effort (2 minggu)
+- Unblock security model yang merupakan USP
+- AI bisa generate 121+ test cases otomatis
 
-fajaros-arm64/               ← OS target ARM64 (Radxa Dragon Q6A)
-├── kernel/                  ← Same structure, ARM64 specifics
-├── arch/aarch64/            ← GICv3, MMU, EL0/EL1
-├── bsp/dragon_q6a/          ← Board Support Package
-└── drivers/                 ← ARM64 drivers
+### Dependency Chain
+
+```
+Week 1-2:   P2 (@safe enforcement) ←── standalone, no dependency
+Week 3-5:   P1 (multi-file build)  ←── standalone
+Week 6-8:   P3 (multi-binary)      ←── depends on P1
+Week 9-10:  P4 (user runtime)      ←── depends on P3
+Week 11-12: FajarOS migration      ←── depends on P3 + P4
+Week 13-14: P5 (typed IPC)         ←── depends on P3
+Week 15-16: P6 (multi-dtype tensor) ←── standalone
+Week 17-18: P7 (device backend)    ←── depends on P6
+Week 19-20: P8 (macros) + P9 (effect poly) ←── standalone
+Week 21-22: P10 (shared types) + ML models ←── depends on P6 + P7
+Week 23-24: FajarOS v3.0 release   ←── depends on everything
 ```
 
 ---
 
-## Bagian 3: Onboarding Plan
+## Bagian 3: Implementation Plan (24 Minggu)
 
-### Minggu 0 (Sebelum Sprint 1): Engineer Onboarding
+### Phase 1: Safety & Build (Minggu 1-12)
 
-| Hari | Aktivitas | Durasi | Output |
-|------|-----------|--------|--------|
-| **Hari 1** | Setup environment: clone repo, `cargo build`, `cargo test` | 2h | Build succeeds, 5,582 tests pass |
-| **Hari 1** | Read: CLAUDE.md (project identity + architecture) | 1h | Understand compilation pipeline |
-| **Hari 1** | Read: docs/V1_RULES.md (coding rules) | 1h | Understand code style + safety rules |
-| **Hari 2** | Read: docs/FAJAR_LANG_SPEC.md (language spec) | 2h | Understand syntax + keywords |
-| **Hari 2** | Run: `fj run examples/hello.fj`, `fj repl`, `fj doc` | 1h | See compiler in action |
-| **Hari 2** | Study: assigned workstream source files (Bagian 5) | 2h | Understand code you'll modify |
-| **Hari 3** | Read: docs/MASTER_IMPLEMENTATION_PLAN.md (THIS doc) | 2h | Understand full plan |
-| **Hari 3** | Read: fajaros-x86 CLAUDE.md + README.md | 1h | Understand OS target |
-| **Hari 3** | Study: docs/COMPILER_ENHANCEMENTS.md dari fajaros-x86 | 1h | Understand what OS needs |
-| **Hari 4** | Pair programming session with existing maintainer | 4h | First PR: trivial fix or doc |
-| **Hari 5** | Submit first PR (small test, doc fix, or comment) | 2h | CI passes, PR merged |
+#### Sprint 1: @safe Complete Enforcement (Minggu 1-2)
 
-### Per-Workstream Reading List
+**Goal:** @safe code CANNOT access hardware. Period.
 
-| Tim | Files yang HARUS Dibaca | Estimasi |
-|-----|------------------------|----------|
-| A (Build) | `src/main.rs`, `src/codegen/cranelift/mod.rs`, `src/codegen/linker.rs`, `src/package/manifest.rs` | 8h |
-| B (Safety) | `src/analyzer/type_check/`, `src/analyzer/scope.rs`, `src/analyzer/effects.rs`, `src/analyzer/borrow_lite.rs` | 8h |
-| C (IPC) | `src/parser/ast.rs`, `src/parser/items.rs`, `src/parser/expr.rs`, `src/macros.rs` | 6h |
-| D (ML) | `src/runtime/ml/`, `src/codegen/cranelift/compile/`, HuggingFace Candle `candle-core/src/tensor.rs` | 10h |
-| E (Platform) | `src/codegen/cranelift/runtime_fns.rs`, `src/codegen/nostd.rs`, `src/codegen/target.rs`, fajaros-x86 `Makefile` | 8h |
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 1.1 | Define 121+ blocked builtins in analyzer | 3h | 80% | List complete, no false positives |
+| 1.2 | SE020 error: "@safe cannot access hardware" | 1h | 90% | Error with suggestion |
+| 1.3 | Whitelist safe builtins (println, len, math) | 2h | 80% | 30+ builtins whitelisted |
+| 1.4 | Block asm!() in @safe and @device | 1h | 90% | asm!() → error in @safe |
+| 1.5 | SE021: @safe → @kernel call blocked | 2h | 80% | "use syscall instead" |
+| 1.6 | SE022: @safe → @device call blocked | 2h | 80% | "use IPC instead" |
+| 1.7 | `fj check --call-graph` command | 3h | 70% | Shows all cross-context calls |
+| 1.8 | Tests: 80+ (AI generates) | 4h | 95% | Every blocked builtin verified |
+| 1.9 | FajarOS context_enforcement.fj passes | 2h | 50% | Existing OS tests work |
 
----
-
-## Bagian 4: Dependency Graph & Critical Path
-
-### Task Dependencies
+**Total: ~20h | AI generates: ~70%**
 
 ```
-A1 (Module Resolution)
- ├── A2 (Multi-Binary) ──── depends on A1
- │    ├── A3 (Linker) ──── depends on A2
- │    ├── C1 (@message IPC) ──── depends on A2 (separate services)
- │    └── E1 (User Runtime) ──── depends on A2 (x86_64-user target)
- │         └── E3 (FajarOS Migration) ──── depends on A2 + E1
- │
-B1 (@safe Block) ──── independent, start immediately
- ├── B2 (Call Gates) ──── depends on B1
- │    └── B3 (Capabilities) ──── depends on B2
- │
-D1 (Multi-DType) ──── independent, start Minggu 7
- ├── D2 (Device Backend) ──── depends on D1
- │    └── D3 (Quantization) ──── depends on D2
- │         └── G2 (Real ML Models) ──── depends on D3
- │
-C1 (@message) ──── depends on A2
- ├── C2 (Protocol) ──── depends on C1
- │    └── C3 (Service Syntax) ──── depends on C2
- │
-F1 (Macros) ──── independent
-F2 (Effect Poly) ──── independent
-F3 (Async IPC) ──── depends on C1
+Hari 1-2: Task 1.1-1.4 (block builtins)
+Hari 3-4: Task 1.5-1.7 (call gates)
+Hari 5-6: Task 1.8-1.9 (tests + FajarOS verification)
+Hari 7-8: Buffer untuk edge cases + documentation
 ```
 
-### Critical Path (Longest Dependency Chain)
+#### Sprint 2-3: Multi-File Module System (Minggu 3-5)
+
+**Goal:** `fj build dir/` compiles multi-file project tanpa concatenation.
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 2.1 | Multi-file compilation: `fj build dir/` | 8h | 60% | Compiles all .fj in directory |
+| 2.2 | Import resolution: `use kernel::mm::frame_alloc` | 8h | 50% | Cross-file function calls work |
+| 2.3 | Symbol table per module | 4h | 70% | Private scope per file |
+| 2.4 | Pub visibility enforcement | 3h | 80% | Non-pub → error from outside |
+| 2.5 | Dependency ordering (topological sort) | 3h | 80% | Files compiled in correct order |
+| 2.6 | Circular dependency detection | 2h | 90% | Clear error with file names |
+| 2.7 | Incremental multi-file rebuild | 4h | 60% | Only changed files recompiled |
+| 2.8 | Tests: 50+ | 4h | 95% | Cross-file, visibility, cycles |
+| 2.9 | Parse ALL 75 FajarOS x86 files | 4h | 70% | 0 parse errors |
+
+**Total: ~40h | AI generates: ~70%**
+
+#### Sprint 4-5: Multi-Binary Build (Minggu 6-8)
+
+**Goal:** 1 project → kernel.elf + N service ELFs.
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 4.1 | fj.toml `[[service]]` sections | 3h | 80% | Multiple targets in manifest |
+| 4.2 | `fj build --all` command | 8h | 60% | Produces kernel + service ELFs |
+| 4.3 | Per-target configuration (none/user) | 3h | 70% | kernel=x86_64-none, svc=x86_64-user |
+| 4.4 | Per-target entry point | 2h | 80% | Each service has @entry main() |
+| 4.5 | Output structure: build/kernel.elf + build/services/*.elf | 2h | 80% | Files in correct locations |
+| 4.6 | Custom linker script per target | 4h | 60% | Kernel@0x100000, user@0x400000 |
+| 4.7 | .initramfs section (embed services in kernel) | 4h | 60% | Kernel ELF contains service data |
+| 4.8 | `fj pack` command | 3h | 70% | Creates cpio archive |
+| 4.9 | ARM64 multi-target | 4h | 60% | Same project → x86+aarch64 ELFs |
+| 4.10 | Tests: 40+ | 4h | 95% | 4 ELFs from 1 project |
+
+**Total: ~37h | AI generates: ~70%**
+
+#### Sprint 6: User-Mode Runtime (Minggu 9-10)
+
+**Goal:** @safe programs can println, exit, malloc, IPC via syscalls.
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 6.1 | fj_user_println → SYS_WRITE | 3h | 70% | @safe program prints to console |
+| 6.2 | fj_user_exit → SYS_EXIT | 1h | 90% | Clean exit |
+| 6.3 | fj_user_malloc/free → SYS_BRK | 4h | 60% | User heap works |
+| 6.4 | fj_user_ipc_send/recv/call/reply | 6h | 60% | IPC via SYSCALL instruction |
+| 6.5 | Auto-link for x86_64-user target | 2h | 70% | Compiler auto-links runtime |
+| 6.6 | Auto-link for aarch64-user target | 2h | 70% | ARM64 user runtime |
+| 6.7 | Tests: 30+ | 3h | 95% | User programs compile and link |
+
+**Total: ~21h | AI generates: ~70%**
+
+#### Sprint 7: FajarOS Migration (Minggu 11-12)
+
+**Goal:** FajarOS builds with `fj build --all` instead of concatenation Makefile.
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 7.1 | Add `use` imports to all 75 FajarOS files | 8h | 50% | Each file declares dependencies |
+| 7.2 | Write fj.toml with kernel + 9 services | 2h | 80% | Manifest complete |
+| 7.3 | Build kernel.elf with multi-file | 4h | 50% | Same binary as concatenation |
+| 7.4 | Build 3 service ELFs (vfs, shell, net) | 4h | 50% | Services compile as user ELFs |
+| 7.5 | QEMU boot test: kernel + services | 4h | 40% | Serial output verified |
+| 7.6 | Verify 200+ shell commands via IPC | 8h | 30% | All commands work |
+| 7.7 | Remove concatenation Makefile | 1h | 90% | Old path deleted |
+| 7.8 | ARM64 migration | 4h | 50% | Same structure for aarch64 |
+
+**Total: ~35h | AI generates: ~50%** (paling banyak manual — real OS code)
+
+---
+
+### Phase 2: IPC & ML (Minggu 13-18)
+
+#### Sprint 8: Typed IPC (Minggu 13-14)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 8.1 | `@message` struct annotation | 3h | 80% | Parser recognizes @message |
+| 8.2 | Auto serialize struct → 64-byte buffer | 6h | 70% | Compile-time pack |
+| 8.3 | Auto deserialize buffer → struct | 6h | 70% | Compile-time unpack |
+| 8.4 | Message ID auto-assignment | 1h | 90% | Unique tag per type |
+| 8.5 | Type-check ipc_send/ipc_recv | 4h | 70% | Wrong type → compile error |
+| 8.6 | Size validation (≤64 bytes) | 1h | 90% | Overflow → compile error |
+| 8.7 | Tests: 30+ | 3h | 95% | Type mismatch, size overflow |
+
+**Total: ~24h | AI generates: ~75%**
+
+#### Sprint 9: Protocol & Service (Minggu 15-16)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 9.1 | `protocol` keyword + parsing | 4h | 70% | Protocol block parses |
+| 9.2 | `implements` clause | 3h | 70% | Service declares protocol |
+| 9.3 | Completeness check | 3h | 80% | Missing method → error |
+| 9.4 | Client stub auto-generation | 8h | 60% | VfsClient::open() → IPC |
+| 9.5 | `service` block + `on` handlers | 6h | 60% | Auto IPC loop generated |
+| 9.6 | Tests: 25+ | 3h | 95% | Incomplete service → error |
+
+**Total: ~27h | AI generates: ~70%**
+
+#### Sprint 10: Multi-DType Tensor (Minggu 17-18)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 10.1 | DType enum (F16, BF16, F32, F64, I8, U8) | 3h | 80% | All dtypes defined |
+| 10.2 | Tensor storage per dtype | 8h | 60% | Buffer adapts to dtype |
+| 10.3 | Dtype conversion (.to_f16(), .to_i8()) | 3h | 70% | Conversions work |
+| 10.4 | Compile-time shape tracking | 6h | 50% | Shape mismatch → error |
+| 10.5 | Creation per dtype (zeros::\<F16\>) | 3h | 80% | All dtypes creatable |
+| 10.6 | Tests: 30+ | 3h | 95% | All dtypes, conversions |
+
+**Total: ~26h | AI generates: ~70%**
+
+---
+
+### Phase 3: Advanced & ML Backends (Minggu 19-22)
+
+#### Sprint 11: Device Backend Abstraction (Minggu 19-20)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 11.1 | Device enum (Cpu, Gpu, Npu) | 3h | 80% | Enum + traits |
+| 11.2 | Backend trait (matmul, relu, softmax) | 6h | 60% | Interface defined |
+| 11.3 | CPU backend (ndarray, existing) | 3h | 70% | Existing code adapted |
+| 11.4 | GPU backend (Adreno/Vulkan) | 12h | 40% | Vulkan compute on Q6A |
+| 11.5 | NPU backend (Hexagon/QNN) | 10h | 40% | QNN SDK integration |
+| 11.6 | Tests: 25+ | 3h | 95% | Same result across backends |
+
+**Total: ~37h | AI generates: ~55%** (GPU/NPU needs hardware knowledge)
+
+#### Sprint 12: Quantization & Models (Minggu 21-22)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 12.1 | GGUF format parser | 8h | 60% | Load llama.cpp models |
+| 12.2 | Safetensors parser | 6h | 70% | Load HuggingFace models |
+| 12.3 | Q4_0/Q8_0 dequantize | 6h | 60% | Quantized matmul works |
+| 12.4 | INT8 quantize (full → INT8) | 3h | 70% | Accuracy within 1% |
+| 12.5 | Model inference pipeline | 6h | 50% | Load → infer → output |
+| 12.6 | Tests: 20+ | 3h | 95% | GGUF load, accuracy check |
+
+**Total: ~32h | AI generates: ~65%**
+
+---
+
+### Phase 4: Polish & Release (Minggu 23-24)
+
+#### Sprint 13: Release Preparation (Minggu 23-24)
+
+| # | Task | Effort | AI% | Acceptance |
+|---|------|--------|-----|-----------|
+| 13.1 | Complete macro system ($ patterns) | 8h | 70% | vec!, format! with repetition |
+| 13.2 | Effect polymorphism (basic) | 6h | 60% | Generic over effects |
+| 13.3 | Cross-service type sharing | 4h | 70% | @shared module works |
+| 13.4 | FajarOS x86 v3.0 final test | 8h | 30% | Boot + all services + 200 cmds |
+| 13.5 | FajarOS ARM64 v3.0 on Q6A | 8h | 30% | Hardware verified |
+| 13.6 | TinyLLaMA on Hexagon NPU | 8h | 40% | Inference works on Q6A |
+| 13.7 | Documentation update | 4h | 80% | Book chapters updated |
+| 13.8 | Blog post + demo video | 4h | 60% | Publication ready |
+| 13.9 | Version bump v5.0.0 | 1h | 90% | Cargo.toml, CHANGELOG |
+
+**Total: ~51h | AI generates: ~55%**
+
+---
+
+### Effort Summary
+
+| Phase | Minggu | Hours | AI% | Focus |
+|-------|--------|-------|-----|-------|
+| Phase 1: Safety & Build | 1-12 | 153h | ~65% | The foundation — enables everything else |
+| Phase 2: IPC & ML | 13-18 | 77h | ~72% | Type-safe OS + tensor runtime |
+| Phase 3: Advanced | 19-22 | 69h | ~60% | GPU/NPU backends, quantization |
+| Phase 4: Release | 23-24 | 51h | ~55% | Polish, FajarOS v3.0, publication |
+| **TOTAL** | **24** | **350h** | **~65%** | **~15h/week average** |
 
 ```
-A1 (W1-2) → A2 (W3-4) → E1 (W7-8) → E3 (W11-12) → G3 (W23-24)
-   2 wk      2 wk         2 wk         2 wk           2 wk
+350h ÷ 24 weeks = 14.6 hours/week
+Dengan buffer 30%: 14.6 × 1.3 = 19h/week
 
-Total critical path: 10 minggu kerja dalam 24 minggu timeline
-Slack: 14 minggu (buffer untuk delays + parallel work)
-```
-
-### Parallel Execution Map
-
-```
-Minggu    1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19  20  21  22  23  24
-Tim A:  [--A1--][--A2--][--A3--]
-Tim B:  [--B1--][--B2--][--B3--]
-Tim C:                          [--C1--][--C2--][--C3--]
-Tim D:                          [--D1--][--D2--][--D3--]                          [----G2----]
-Tim E:                          [--E1--][--E2--][--E3--]                                      [--G3--]
-Adv:                                                      [--F1--][--F2--][--F3--][--G1--]
+Sangat achievable untuk 1 engineer full-time (40h/week).
+Sisa 20h/week untuk: review, debugging, hardware testing, thinking.
 ```
 
 ---
 
-## Bagian 5: Implementation Plan Detail (24 Minggu)
+## Bagian 4: Definition of Done
 
-### Phase 1: Foundation — Multi-File & Safety (Minggu 1-6)
-
-#### Workstream A: Multi-File Build System
-
-##### Sprint A1: Real Module Resolution (Minggu 1-2)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| A1.1 | Multi-file compilation | E1 | 12h | `fj build dir/` compiles all .fj files, produces 1 ELF |
-| A1.2 | Import resolution | E1 | 12h | `use kernel::mm::frame_alloc` finds function across files |
-| A1.3 | Symbol table per module | E2 | 8h | Each file has private scope; only `pub` items exported |
-| A1.4 | Pub visibility enforcement | E2 | 4h | Non-pub function → SE024 error from other module |
-| A1.5 | Dependency graph | E1 | 4h | Files compiled in topological order |
-| A1.6 | Circular dependency detection | E2 | 4h | Cycle → error with file names |
-| A1.7 | Incremental multi-file | E1 | 8h | Changed file + dependents recompiled, rest cached |
-| A1.8 | Tests: 40+ | E2+AI | 8h | Cross-file calls, visibility, cycles, incremental |
-
-##### Sprint A2: Multi-Binary Build (Minggu 3-4)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| A2.1 | fj.toml `[[service]]` | E1 | 4h | Parse multiple build targets from manifest |
-| A2.2 | `fj build --all` | E1 | 12h | Produces kernel.elf + N service ELFs |
-| A2.3 | Per-target config | E2 | 4h | kernel=x86_64-none, service=x86_64-user |
-| A2.4 | Per-target entry point | E2 | 4h | Each service has `@entry fn main()` |
-| A2.5 | Output structure | E1 | 2h | `build/{kernel,services/vfs,services/shell}.elf` |
-| A2.6 | ARM64 multi-target | E2 | 8h | Same project → both x86_64 + aarch64 ELFs |
-| A2.7 | Tests: 30+ | AI | 8h | 4 ELFs from 1 project, both architectures |
-
-##### Sprint A3: Linker & ELF (Minggu 5-6)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| A3.1 | Custom linker script per target | E1 | 6h | Kernel@0x100000, user@0x400000 |
-| A3.2 | .initramfs section | E2 | 6h | Kernel ELF embeds service ELFs as data |
-| A3.3 | `fj pack` command | E1 | 4h | Creates cpio/tar archive of service ELFs |
-| A3.4 | PIE for user ELFs | E2 | 8h | User ELFs position-independent |
-| A3.5 | ARM64 ELF | E1 | 8h | aarch64 ELF headers + relocations |
-| A3.6 | Debug info per binary | E2 | 4h | DWARF sections in each ELF |
-| A3.7 | Tests: 20+ | AI | 4h | ELF layout, sections, entry points |
-
----
-
-#### Workstream B: Safety Enforcement
-
-##### Sprint B1: @safe Hardware Block (Minggu 1-2)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| B1.1 | Define 121+ blocked builtins | E3 | 6h | Complete list in analyzer |
-| B1.2 | SE020 error | E3 | 2h | Clear error: "hardware access not allowed in @safe" |
-| B1.3 | Whitelist safe builtins | E4 | 4h | println, len, type_of, math, strings always OK |
-| B1.4 | Block asm!() in @safe | E3 | 1h | asm!() → SE020 in @safe |
-| B1.5 | Block asm!() in @device | E3 | 1h | asm!() → error in @device |
-| B1.6 | Tests: 50+ | E4+AI | 8h | Every blocked builtin tested |
-
-##### Sprint B2: Call Gate Enforcement (Minggu 3-4)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| B2.1 | SE021: @safe→@kernel blocked | E3 | 4h | Error with suggestion "use syscall" |
-| B2.2 | SE022: @safe→@device blocked | E3 | 4h | Error with suggestion "use IPC" |
-| B2.3 | SE023: @device→@kernel blocked | E4 | 4h | Except defined bridge functions |
-| B2.4 | Same-context calls OK | E4 | 2h | @kernel→@kernel always allowed |
-| B2.5 | `fj check --call-graph` | E3 | 4h | Report all cross-context calls |
-| B2.6 | Syscall whitelist for @safe | E4 | 4h | sys_write, sys_exit, sys_send etc OK |
-| B2.7 | Tests: 40+ | AI | 8h | Every cell in call matrix |
-
-##### Sprint B3: Capability Types (Minggu 5-6)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| B3.1 | `Cap<T>` phantom type | E3 | 8h | New generic type in type system |
-| B3.2 | 12 capability kinds | E4 | 4h | PortIO, IRQ, DMA, Memory, Timer, IPC, Net, Blk, GPU, NPU, SPI, I2C |
-| B3.3 | Function requires Cap | E3 | 4h | `fn driver(cap: Cap<PortIO>)` → checked |
-| B3.4 | Kernel grants capability | E4 | 4h | `kernel_grant::<PortIO>(pid)` |
-| B3.5 | Revocation | E3 | 4h | `kernel_revoke(pid, cap)` |
-| B3.6 | @device(net) auto-cap | E4 | 4h | `@device(net)` auto-grants Cap<Net> |
-| B3.7 | Tests: 30+ | AI | 6h | Missing cap → compile error |
-
----
-
-### Phase 2: IPC, Protocol & Runtime (Minggu 7-12)
-
-#### Workstream C: Type-Safe IPC
-
-##### Sprint C1: @message Typed IPC (Minggu 7-8)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| C1.1 | `@message` struct annotation | E5 | 4h | Parser recognizes @message |
-| C1.2 | Auto serialize | E6 | 8h | Struct → 64-byte buffer at compile time |
-| C1.3 | Auto deserialize | E6 | 8h | Buffer → struct at compile time |
-| C1.4 | Message ID | E5 | 2h | Unique tag per @message type |
-| C1.5 | Type-check ipc_send | E5 | 4h | Wrong type → compile error |
-| C1.6 | Type-check ipc_recv | E5 | 4h | Wrong type → compile error |
-| C1.7 | Size validation | E6 | 2h | >64 bytes → compile error |
-| C1.8 | Tests: 30+ | AI | 6h | Type mismatch, size overflow |
-
-##### Sprint C2: Protocol Definitions (Minggu 9-10)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| C2.1 | `protocol` keyword | E5 | 4h | `protocol VfsProto { fn open(...) }` parses |
-| C2.2 | `implements` clause | E5 | 4h | `service vfs implements VfsProto` |
-| C2.3 | Completeness check | E6 | 4h | Missing method → compile error |
-| C2.4 | Client stub auto-gen | E6 | 12h | `VfsClient::open(path)` generates IPC call |
-| C2.5 | Version negotiation | E5 | 4h | Protocol version in handshake |
-| C2.6 | Tests: 25+ | AI | 6h | Incomplete service → error |
-
-##### Sprint C3: Service Syntax (Minggu 11-12)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| C3.1 | `service` block | E5 | 6h | Top-level declaration parses |
-| C3.2 | `on` handler | E6 | 6h | `on VfsOpen(msg) { ... }` |
-| C3.3 | Auto IPC loop | E6 | 8h | Compiler generates recv→match→reply |
-| C3.4 | Lifecycle hooks | E5 | 4h | `init {}` and `shutdown {}` |
-| C3.5 | Health check | E5 | 2h | Kernel can ping service |
-| C3.6 | Tests: 20+ | AI | 4h | Service compiles and responds |
-
----
-
-#### Workstream D: ML Runtime (Candle-Inspired)
-
-##### Sprint D1: Multi-DType Tensor (Minggu 7-8)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| D1.1 | DType enum | E7 | 4h | F16, BF16, F32, F64, I8, U8, I32, I64 |
-| D1.2 | Storage per dtype | E7 | 12h | Buffer size matches dtype |
-| D1.3 | Dtype conversion | E8 | 4h | `.to_f16()`, `.to_i8()` work |
-| D1.4 | Compile-time shape | E8 | 8h | Shape mismatch → compile error |
-| D1.5 | Creation per dtype | E7 | 4h | `zeros::<F16>(3, 4)` |
-| D1.6 | Tests: 30+ | AI | 6h | All dtypes, conversions, ops |
-
-##### Sprint D2: Device Backend (Minggu 9-10)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| D2.1 | Device enum | E7 | 4h | Cpu, Gpu(id), Npu |
-| D2.2 | Backend trait | E8 | 8h | matmul/relu/softmax per backend |
-| D2.3 | CPU backend | E7 | 4h | ndarray (existing) |
-| D2.4 | GPU backend | E8 | 16h | Vulkan compute for Adreno 643 |
-| D2.5 | NPU backend | E8 | 12h | QNN SDK for Hexagon 770 |
-| D2.6 | Auto device select | E7 | 4h | Best available |
-| D2.7 | Tests: 25+ | AI | 6h | Same result across backends |
-
-##### Sprint D3: Quantization & Models (Minggu 11-12)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| D3.1 | GGUF parser | E7 | 12h | Load llama.cpp format |
-| D3.2 | Safetensors parser | E8 | 8h | Load HuggingFace format |
-| D3.3 | Q4/Q8 dequantize | E7 | 8h | Quantized matmul correct |
-| D3.4 | INT8 quantize | E8 | 4h | Full → INT8 |
-| D3.5 | Inference pipeline | E7 | 8h | Load→quantize→infer→output |
-| D3.6 | Tests: 20+ | AI | 4h | Accuracy within 1% of f32 |
-
----
-
-#### Workstream E: Platform & Testing
-
-##### Sprint E1: User-Mode Runtime (Minggu 7-8)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| E1.1 | println via SYS_WRITE | E9 | 4h | @safe program prints to console |
-| E1.2 | exit via SYS_EXIT | E9 | 2h | Clean process exit |
-| E1.3 | malloc/free via SYS_BRK | E10 | 6h | User heap works |
-| E1.4 | IPC wrappers | E9 | 8h | send/recv/call/reply via SYSCALL |
-| E1.5 | Auto-link x86_64-user | E10 | 4h | Compiler links user runtime |
-| E1.6 | Auto-link aarch64-user | E10 | 4h | ARM64 user runtime |
-| E1.7 | Tests: 25+ | AI | 6h | User programs run in QEMU |
-
-##### Sprint E2: QEMU CI (Minggu 9-10)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| E2.1 | Parse ALL 75 FajarOS x86 files | E9 | 8h | 0 parse errors |
-| E2.2 | Parse FajarOS ARM64 files | E10 | 4h | 0 parse errors |
-| E2.3 | QEMU x86_64 boot test | E9 | 8h | Serial output "FajarOS" verified |
-| E2.4 | QEMU aarch64 boot test | E10 | 8h | ARM64 kernel boots |
-| E2.5 | GitHub Actions CI | E9 | 4h | PR auto-tests build+boot |
-| E2.6 | Perf regression tracking | E10 | 4h | Compile speed per commit |
-| E2.7 | Tests: 30+ | AI | 6h | Boot + service communication |
-
-##### Sprint E3: FajarOS Migration (Minggu 11-12)
-
-| # | Task | Owner | Effort | Acceptance Criteria |
-|---|------|-------|--------|-------------------|
-| E3.1 | Migrate x86 to multi-file | E9 | 16h | `fj build --all` replaces `make build` |
-| E3.2 | Split into kernel + 9 services | E10 | 16h | 10 separate ELFs |
-| E3.3 | Migrate ARM64 | E9 | 8h | Same structure |
-| E3.4 | Verify 200+ commands | E10 | 8h | All shell commands work via IPC |
-| E3.5 | Performance comparison | E9 | 4h | Boot time monolith vs micro |
-
----
-
-### Phase 3: Advanced Features (Minggu 13-18)
-
-| Sprint | Owner | Tasks | Tests |
-|--------|-------|-------|-------|
-| F1: Complete Macros | E5, E6 | `$` token, fragment specs, repetition, hygiene | 30+ |
-| F2: Effect Polymorphism | E3, E4 | Effect vars, inference, subtyping | 20+ |
-| F3: Async IPC | E9, E10 | Non-blocking recv, event loop, multi-client | 20+ |
-
-### Phase 4: Production (Minggu 19-24)
-
-| Sprint | Owner | Tasks | Tests |
-|--------|-------|-------|-------|
-| G1: Formal Verification | E3, E4 | @requires/@ensures enforcement | 20+ |
-| G2: Real ML Models | E7, E8 | TinyLLaMA, YOLO, Whisper on Q6A | 20+ |
-| G3: v3.0 Release | E9, E10 | Both platforms boot, paper, beta users | 30+ |
-
----
-
-## Bagian 6: Definition of Done
-
-### Per-Task DoD
-
-Sebuah task dianggap **DONE** jika dan hanya jika:
+### Per-Task
 
 ```
 1. Code committed to feature branch
-2. All new functions have at least 1 test
-3. cargo test — ALL pass (existing + new)
+2. New functions have at least 1 test
+3. cargo test — ALL pass
 4. cargo clippy -- -D warnings — ZERO warnings
 5. cargo fmt — formatted
-6. No .unwrap() in src/ (only in tests/)
-7. All pub items have /// doc comments
-8. PR created with description
-9. AI review passed (no obvious bugs)
-10. Human review passed (1 reviewer from same workstream)
-11. CI green (build + test + clippy + fmt)
-12. PR merged to main
+6. No .unwrap() in src/
+7. AI review: no obvious bugs
+8. Self-review: logic correct, edge cases covered
+9. Commit with conventional format
 ```
 
-### Per-Sprint DoD
+### Per-Sprint
 
 ```
-1. All tasks in sprint are DONE (per above)
-2. Acceptance criteria met (defined per sprint)
-3. 20+ new tests added
-4. FajarOS x86 regression: all 75 files still parse
-5. FajarOS ARM64 regression: boot files still parse
-6. Sprint review demo delivered
-7. Documentation updated if user-facing change
+1. All tasks [x] checked
+2. Acceptance criteria met
+3. 20+ new tests
+4. FajarOS x86 regression: 75 files parse
+5. Sprint goal achieved (stated at top of sprint)
 ```
 
-### Per-Phase DoD
+### Per-Phase
 
 ```
-1. Phase gate criteria met (Bagian 13)
-2. Architecture review completed
-3. Performance regression check passed
-4. All blockers for next phase resolved
-5. Updated Gantt if timeline shifted
+1. Phase gate criteria met (Bagian 11)
+2. Performance budget not violated (Bagian 8)
+3. No open blockers for next phase
 ```
 
 ---
 
-## Bagian 7: Arsitektur Target
+## Bagian 5: Arsitektur Target
 
 ### FajarOS x86_64
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Applications (@safe)        — Ring 3                         │
-│   apps/compiler/main.fj     Self-hosted Fajar Lang compiler  │
-│   apps/editor/main.fj       Text editor                      │
-│   apps/mnist.fj             MNIST classifier (@device)       │
+│   compiler, editor, mnist classifier                         │
 ├─────────────────────────────────────────────────────────────┤
 │ Services (@safe, separate ELFs)  — Ring 3, IPC              │
-│   services/shell/    200+ commands, scripting                │
-│   services/vfs/      VFS + FAT32 + RamFS                     │
-│   services/net/      TCP/IP, DNS, HTTP, TLS                  │
-│   services/blk/      NVMe + VirtIO block + journal           │
-│   services/display/  VGA + framebuffer                       │
-│   services/input/    Keyboard + mouse                        │
-│   services/gpu/      GPU compute dispatch                    │
-│   services/gui/      Window compositor                       │
-│   services/auth/     Authentication                          │
+│   shell (200+ cmds), vfs, net, blk, display, input, gpu,    │
+│   gui, auth                                                  │
 ├─────────────────────────────────────────────────────────────┤
 │ Microkernel (@kernel, ~2,500 LOC)  — Ring 0                 │
-│   mm.fj        Frame alloc, paging, heap, slab               │
-│   sched.fj     Process table (16 PIDs), round-robin, SMP     │
-│   ipc.fj       Synchronous rendezvous (seL4-style)           │
-│   syscall.fj   SYSCALL/SYSRET, 20+ syscalls                  │
-│   boot.fj      IDT, TSS, GDT, panic                          │
-│   security.fj  Capabilities (12 kinds), limits                │
+│   mm, sched (16 PIDs, SMP), ipc (seL4-style), syscall,      │
+│   boot (IDT/TSS/GDT), security (12 capabilities)            │
 ├─────────────────────────────────────────────────────────────┤
 │ Hardware — Intel Core i9-14900HX                              │
-│   24 cores / 32 threads, 5.8 GHz, 32 GB DDR5                │
-│   NVIDIA RTX 4090 Laptop, NVMe Gen4, UEFI boot              │
+│   24C/32T 5.8GHz, RTX 4090, NVMe Gen4, 32GB DDR5            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -553,412 +461,264 @@ Sebuah task dianggap **DONE** jika dan hanya jika:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Applications (@safe)        — EL0                            │
-│   AI inference, sensor fusion, drone navigation              │
+│ Applications (@safe) — EL0                                   │
+│   AI inference, sensor fusion, navigation                    │
 ├─────────────────────────────────────────────────────────────┤
-│ Services (@safe/@device)    — EL0, IPC                      │
-│   npu/       Hexagon NPU inference (12 TOPS, QNN SDK)        │
-│   gpu/       Adreno 643 Vulkan compute (773 GFLOPS)          │
-│   camera/    IMX219/IMX577, libcamera, 4K pipeline           │
-│   net/       WiFi (WCN6750) + Ethernet                       │
-│   sensor/    GPIO (40-pin), I2C, SPI                         │
+│ Services (@safe/@device) — EL0, IPC                         │
+│   npu (Hexagon 12 TOPS), gpu (Adreno 643 Vulkan),           │
+│   camera (4K), net (WiFi), sensor (GPIO/I2C/SPI)            │
 ├─────────────────────────────────────────────────────────────┤
-│ Microkernel (@kernel)       — EL1                            │
-│   core/      Same as x86 (arch-independent IPC/sched/mm)     │
-│   aarch64/   GICv3 interrupt controller, MMU (48-bit VA)     │
-│   q6a/       BSP: 40-pin GPIO pinout, clock config, DTS      │
+│ Microkernel (@kernel) — EL1                                  │
+│   core (arch-independent), aarch64 (GICv3, MMU),             │
+│   bsp/dragon_q6a (pinout, clocks)                            │
 ├─────────────────────────────────────────────────────────────┤
 │ Hardware — Qualcomm QCS6490                                   │
-│   Kryo 670: 1×A78@2.7 + 3×A78@2.4 + 4×A55@1.9 GHz          │
-│   Adreno 643 GPU @ 812 MHz, Vulkan 1.3                       │
-│   Hexagon 770 DSP/NPU, 12 TOPS                               │
-│   7.4 GB LPDDR4X, NVMe PCIe Gen3                             │
+│   Kryo 670 8-core, Adreno 643, Hexagon 770, 7.4GB           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Bagian 8: ML Runtime & Candle Strategy
+## Bagian 6: ML Runtime & Candle Strategy
 
 ### Adopt dari Candle
 
-| Pattern | Candle Asli | Adaptasi Fajar Lang |
-|---------|-----------|-------------------|
-| `Device` enum | `Cpu`, `Cuda(id)`, `Metal` | `Cpu`, `Gpu(id)`, `Npu` |
-| `DType` enum | f16, bf16, f32, f64, u8, u32, i64 | Sama + I8 untuk quantization |
-| `Storage` backend | Per-device buffer management | Fajar `@device` auto-routes |
-| GGUF format | llama.cpp compatible | Load pre-quantized LLMs |
-| Safetensors | HuggingFace native | Load pre-trained weights |
-| `Variable` + backprop | Autograd graph | Extend existing autograd |
-| `candle-nn` layers | Linear, Conv2d, LayerNorm | Extend fj-nn package |
+| Pattern | Adaptasi Fajar Lang | Sprint |
+|---------|-------------------|--------|
+| Device enum (Cpu/Cuda/Metal) | Device::Cpu, Device::Gpu, Device::Npu | Sprint 11 |
+| DType enum (f16/bf16/f32/f64) | Native dtype support | Sprint 10 |
+| Storage backend per device | @device auto-routes | Sprint 11 |
+| GGUF quantization | Load llama.cpp models | Sprint 12 |
+| Safetensors format | Load HuggingFace models | Sprint 12 |
 
-### Skip dari Candle
+### Skip
 
-| Feature | Alasan |
-|---------|--------|
-| Python bindings (pyo3) | Bukan Python ecosystem |
-| Flash Attention v3 | Terlalu advanced untuk embedded |
-| 80+ model implementations | Fokus 5 model embedded-friendly |
-| MKL/Accelerate | Target ARM64, bukan desktop Intel |
-| CUDA langsung | Q6A pakai Vulkan + QNN, bukan CUDA |
+Python bindings, Flash Attention, 80+ models, MKL, CUDA langsung.
 
-### Target Model Matrix
+### Target Models
 
-| Model | Size | Backend | Latency Target | Platform |
-|-------|------|---------|---------------|----------|
-| MNIST MLP | 100KB | CPU | <1ms | x86+ARM64 |
-| MobileNet v2 | 14MB | GPU | <10ms | Both |
-| YOLO-tiny | 15MB | GPU (Vulkan) | <30ms | ARM64 |
-| TinyLLaMA 1.1B | 600MB Q4 | NPU (Hexagon) | <100ms/token | ARM64 |
-| Whisper-tiny | 75MB | CPU+NPU | <500ms | ARM64 |
+| Model | Size | Backend | Sprint |
+|-------|------|---------|--------|
+| MNIST MLP | 100KB | CPU | Existing |
+| MobileNet v2 | 14MB | GPU | Sprint 12 |
+| YOLO-tiny | 15MB | GPU (Vulkan) | Sprint 12 |
+| TinyLLaMA 1.1B | 600MB Q4 | NPU (Hexagon) | Sprint 13 |
+| Whisper-tiny | 75MB | CPU+NPU | Sprint 13 |
 
 ---
 
-## Bagian 9: Migration Strategy FajarOS
+## Bagian 7: Migration Strategy FajarOS
 
-### Prinsip: Dual-Path Selama Transisi
+### Dual-Path Principle
 
 ```
-Minggu 1-10:  KEDUA path work — concatenation (existing) + multi-file (new)
-Minggu 11:    Multi-file validated, concatenation path deprecated
-Minggu 12:    Concatenation Makefile removed, multi-file is the only path
+Minggu 1-10:  KEDUA path work (concatenation + multi-file)
+Minggu 11:    Multi-file validated → concatenation deprecated
+Minggu 12:    Concatenation removed → multi-file only
 ```
 
-### Step-by-Step Migration
+### Step-by-Step
 
 | Step | Minggu | Action | Fallback |
 |------|--------|--------|----------|
-| 1 | 1-2 | `fj build kernel/` works (single ELF, same as concatenation) | `make build` still works |
-| 2 | 3-4 | `fj build --all` produces kernel.elf + 1 service ELF | Fall back to step 1 |
-| 3 | 5-6 | 3+ service ELFs, kernel embeds initramfs | Fall back to step 2 |
-| 4 | 7-8 | User runtime: services can println via syscall | Fall back to step 3 |
-| 5 | 9-10 | All 9 services compile as separate ELFs | Fall back to step 4 |
-| 6 | 11 | QEMU boot test: microkernel + services running | Fall back to step 5 |
-| 7 | 12 | Remove concatenation Makefile, multi-file only | Step 6 is stable fallback |
-
-### FajarOS Code Changes Required
-
-| File/Module | Current | After Migration |
-|------------|---------|----------------|
-| Makefile | 50+ lines cat command | `fj build --all` (1 line) |
-| kernel/main.fj | Last in concat order | Standalone entry, `use kernel::*` |
-| services/shell/ | Part of monolith | Separate ELF with `@safe` annotation |
-| drivers/ | @kernel but in mono | @kernel, linked into kernel.elf |
-| shell/commands.fj | Direct fn calls | IPC calls to kernel services |
+| 1 | 3-5 | `fj build kernel/` = single ELF | make build still works |
+| 2 | 6-8 | `fj build --all` = kernel + 1 service | Step 1 |
+| 3 | 9-10 | User runtime: services println via syscall | Step 2 |
+| 4 | 11 | All 9 services compile as separate ELFs | Step 3 |
+| 5 | 12 | QEMU boot: microkernel + services | Step 4 |
+| 6 | 12 | Remove concatenation Makefile | Step 5 is stable |
 
 ---
 
-## Bagian 10: Performance Budget
+## Bagian 8: Performance Budget
 
-### Compilation Speed
+### Compilation
 
-| Metric | Target | How to Measure |
-|--------|--------|---------------|
-| Hello world (1 file) | <50ms | `time fj build hello.fj` |
-| FajarOS kernel (20+ files) | <3s | `time fj build kernel/` |
-| FajarOS all (75+ files) | <10s | `time fj build --all` |
-| Incremental (1 file changed) | <500ms | Change 1 file, measure rebuild |
-| ARM64 cross-compile | <15s | `fj build --target aarch64-unknown-none` |
+| Metric | Target |
+|--------|--------|
+| Hello world (1 file) | <50ms |
+| FajarOS kernel (20+ files) | <3s |
+| FajarOS all (75+ files) | <10s |
+| Incremental (1 file changed) | <500ms |
 
-### Runtime Performance
+### Runtime
 
-| Metric | Target | How to Measure |
-|--------|--------|---------------|
-| IPC round-trip | <5μs | Ping-pong between 2 services |
-| Context switch | <2μs | Scheduler benchmark |
-| Syscall overhead | <1μs | SYS_GETPID benchmark |
-| Boot to shell | <500ms | QEMU serial timestamp |
-| MNIST inference | <1ms | CPU inference benchmark |
-| YOLO-tiny inference | <30ms | Adreno GPU via Vulkan |
-| TinyLLaMA token | <100ms | Hexagon NPU via QNN |
+| Metric | Target |
+|--------|--------|
+| IPC round-trip | <5μs |
+| Syscall overhead | <1μs |
+| Boot to shell | <500ms |
+| MNIST inference | <1ms |
+| YOLO-tiny (Adreno GPU) | <30ms |
+| TinyLLaMA (Hexagon NPU) | <100ms/token |
 
 ### Binary Size
 
-| Target | Max Size | Current |
-|--------|---------|---------|
-| Hello world ELF | <50KB | ~80KB |
-| FajarOS kernel ELF | <100KB | ~22KB (microkernel) |
-| FajarOS full (kernel + services) | <1MB | ~405KB (monolith) |
-| User service ELF | <200KB | N/A (new) |
+| Target | Max Size |
+|--------|---------|
+| Hello world ELF | <50KB |
+| Microkernel ELF | <100KB |
+| Full OS (kernel + services) | <1MB |
 
 ---
 
-## Bagian 11: Infrastructure & Hardware
+## Bagian 9: Infrastructure
 
 ### Development Environment
 
-| Item | Specification | Qty | Purpose |
-|------|-------------|-----|---------|
-| Dev machine | Linux x86_64, 16GB+ RAM, Rust stable | 10 | Per engineer |
-| QEMU | qemu-system-x86_64, qemu-system-aarch64 | 10 | Local testing |
-| Dragon Q6A | Radxa Dragon Q6A (QCS6490) | 2 | ARM64 hardware testing |
-| CI server | GitHub Actions (Linux) | 1 | Automated build + test |
-| NVMe test disk | Samsung PM9C1a or similar | 1 | NVMe driver testing |
+```
+Machine:     Linux x86_64, 16GB+ RAM, Rust stable 1.85+
+QEMU:        qemu-system-x86_64, qemu-system-aarch64 (v8.2+)
+Hardware:    Radxa Dragon Q6A (SSH: radxa@192.168.50.94)
+CI:          GitHub Actions (auto on every push)
+Editor:      VS Code + Fajar Lang extension
+AI:          Claude Code (Claude Opus 4.6, 1M context)
+```
 
-### CI Pipeline
+### CI Pipeline (Automated)
 
 ```
-PR Created → GitHub Actions:
+Push/PR → GitHub Actions:
   1. cargo fmt -- --check
   2. cargo clippy -- -D warnings
-  3. cargo test (all 5,582+ tests)
-  4. cargo test --features native (codegen tests)
-  5. Parse FajarOS x86 files (regression)
-  6. Parse FajarOS ARM64 files (regression)
-  7. QEMU x86_64 boot test (weekly, or on kernel changes)
-  8. QEMU aarch64 boot test (weekly, or on kernel changes)
-  9. Performance benchmark (compile speed, tracked over time)
+  3. cargo test (5,582+ tests)
+  4. cargo test --features native
+  5. Parse 75 FajarOS x86 files (regression)
+  6. QEMU x86_64 boot test (weekly)
+  7. Performance benchmark tracking
 ```
 
-### External Dependencies
+### External Dependencies (Pinned)
 
-| Dependency | Version | Purpose | Upgrade Policy |
-|-----------|---------|---------|---------------|
-| Rust toolchain | stable (1.85+) | Compiler host | Follow stable releases |
-| Cranelift | Latest compatible | Dev backend | Pin in Cargo.toml |
-| LLVM (inkwell) | 18.1 | Release backend | Major version only |
-| ndarray | 0.16 | Tensor backend | Minor/patch only |
-| tower-lsp | 0.20 | LSP server | Pin |
-| QEMU | 8.2+ | Testing | System package |
-| QNN SDK | 2.40+ | Hexagon NPU | Follow Qualcomm |
-| Vulkan (ash) | Latest | GPU compute | Follow Mesa |
+| Dependency | Version | Purpose |
+|-----------|---------|---------|
+| Rust | stable 1.85+ | Compiler host |
+| Cranelift | Cargo.toml pinned | Dev backend |
+| inkwell/LLVM | 0.8.0 / 18.1 | Release backend |
+| ndarray | 0.16 | Tensor ops |
+| tower-lsp | 0.20 | LSP server |
+| QNN SDK | 2.40+ | Hexagon NPU |
 
 ---
 
-## Bagian 12: API Stability Policy
+## Bagian 10: API Stability Policy
 
-### Syntax Stability Levels
+| Level | Policy | Examples |
+|-------|--------|---------|
+| **Stable** | No breaking changes | fn, let, struct, enum, match, @kernel |
+| **Beta** | May change with notice | with clause, comptime, @derive |
+| **Experimental** | May change any time | service, protocol, Cap\<T\>, @message |
 
-| Level | What Changes | Policy | Example |
-|-------|-------------|--------|---------|
-| **Stable** | Cannot change without deprecation | 6-month notice | `fn`, `let`, `struct`, `enum`, `match` |
-| **Beta** | May change with 2-sprint notice | Notify in sprint review | `with` clause, `comptime`, `@derive` |
-| **Experimental** | May change any time | Only in feature-gated code | `service`, `protocol`, `Cap<T>` |
-| **Internal** | No stability guarantee | Only compiler internals | AST node structure, codegen details |
-
-### FajarOS Compatibility During Development
+### Versioning
 
 ```
-Rule 1: Existing FajarOS code MUST continue to parse (regression test)
-Rule 2: New features behind feature flags until Phase gate passes
-Rule 3: If syntax must change, provide migration script
-Rule 4: Compiler warns on deprecated syntax for 2 sprints before removal
+Week 1-12:   v5.0.0-alpha.N
+Week 13-18:  v5.0.0-beta.N
+Week 19-24:  v5.0.0-rc.N → v5.0.0 release
 ```
 
-### Versioning During 24 Weeks
+### FajarOS Compatibility Rule
 
 ```
-Week 1-6:   v5.0.0-alpha.1 through alpha.6
-Week 7-12:  v5.0.0-beta.1 through beta.6
-Week 13-18: v5.0.0-rc.1 through rc.6
-Week 19-24: v5.0.0 release
+Rule: Existing FajarOS code MUST continue to parse after every commit.
+Test: Parse 75 .fj files in CI — regression check.
+If syntax changes: provide migration script or compiler warning.
 ```
 
 ---
 
-## Bagian 13: Quality Gates
+## Bagian 11: Quality Gates
 
-### Per-Sprint Gate
+### Per-Phase Gate
 
-```
-□ cargo test — ALL pass (5,582+ dan bertambah)
-□ cargo clippy -- -D warnings — ZERO warnings
-□ cargo fmt -- --check — formatted
-□ No .unwrap() added to src/
-□ Acceptance criteria dari sprint terpenuhi
-□ 20+ new tests per sprint minimum
-□ FajarOS x86 regression: 75 files parse
-□ FajarOS ARM64 regression: boot files parse
-□ PR reviews completed (AI + human)
-□ Sprint review demo delivered
-```
-
-### Phase Gates
-
-| Phase | Gate Criteria |
-|-------|-------------|
-| **Phase 1** (W6) | `fj build --all` → kernel.elf + 3 service ELFs; @safe→port_outb → SE020; 200+ safety tests |
-| **Phase 2** (W12) | Typed IPC works in QEMU; user println via SYS_WRITE; tensor f16 matmul; FajarOS migrated |
-| **Phase 3** (W18) | Macro $patterns; effect polymorphism; async IPC 2+ clients; GGUF model loads |
-| **Phase 4** (W24) | FajarOS x86 v3.0 boots; ARM64 v3.0 on Q6A; TinyLLaMA on NPU; paper submitted |
+| Phase | Minggu | Gate |
+|-------|--------|------|
+| 1 | W12 | `fj build --all` → kernel.elf + 3 services; @safe→port_outb → SE020; FajarOS boots |
+| 2 | W18 | Typed IPC compiles; tensor f16 matmul works; protocol generates client stub |
+| 3 | W22 | GPU backend works on Adreno; GGUF model loads; quantized inference correct |
+| 4 | W24 | FajarOS v3.0 boots (x86+ARM64); TinyLLaMA on NPU; paper submitted |
 
 ### Release Criteria (FajarOS v3.0)
 
 ```
-□ ZERO concatenation — pure `fj build --all`
+□ ZERO concatenation — pure fj build --all
 □ Kernel ≤ 2,500 LOC in Ring 0
 □ 9+ services as separate ELFs
-□ ALL @safe code CANNOT access hardware (0 bypass)
+□ ALL @safe → hardware = compile error
 □ Typed IPC — wrong message = compile error
-□ Both x86_64 and ARM64 boot and run
-□ 200+ shell commands work via IPC
-□ ≥1 ML model runs on Q6A NPU
-□ 6,500+ tests (5,582 + 1,000+ new)
-□ Book updated with new features
-□ Performance budgets met (Bagian 10)
+□ Both x86_64 and ARM64 boot
+□ 200+ shell commands via IPC
+□ ≥1 ML model on Q6A NPU
+□ 6,500+ tests
+□ Documentation updated
 ```
 
 ---
 
-## Bagian 14: Code Review & PR Process
+## Bagian 12: Risk & Fallback
 
-### PR Workflow
-
-```
-1. Engineer creates feature branch: feat/A1-module-resolution
-2. Implement + write tests
-3. Run locally: cargo test && cargo clippy -- -D warnings && cargo fmt
-4. Push branch, create PR with template
-5. AI assistant reviews (auto-triggered):
-   - Check for .unwrap() in src/
-   - Check pub items have doc comments
-   - Check test coverage for new functions
-   - Check FajarOS regression (parse test)
-6. Human reviewer from same workstream reviews:
-   - Logic correctness
-   - Architecture fit
-   - Performance implications
-7. CI passes (all checks green)
-8. Merge to main (squash or rebase, clean commit message)
-9. Delete feature branch
-```
-
-### Review Matrix
-
-| PR Author | Reviewer 1 (Same Tim) | Reviewer 2 (Cross Tim) |
-|-----------|----------------------|----------------------|
-| E1 | E2 | E9 (testing perspective) |
-| E2 | E1 | E3 (safety perspective) |
-| E3 | E4 | E5 (parser perspective) |
-| E4 | E3 | E1 (build perspective) |
-| E5 | E6 | E3 (type system perspective) |
-| E6 | E5 | E7 (ML perspective) |
-| E7 | E8 | E9 (platform perspective) |
-| E8 | E7 | E10 (testing perspective) |
-| E9 | E10 | E1 (build perspective) |
-| E10 | E9 | E5 (integration perspective) |
-
-### Commit Convention
-
-```
-Format: <type>(<scope>): <description>
-
-Types: feat, fix, test, refactor, docs, perf, ci, chore
-Scope: lexer, parser, analyzer, codegen, runtime, cli, ipc, ml, safety
-
-Examples:
-  feat(analyzer): implement SE020 @safe hardware restriction
-  feat(codegen): add multi-binary build support
-  fix(ipc): correct @message serialization alignment
-  test(safety): add 50 @safe builtin block tests
-```
-
----
-
-## Bagian 15: Risk Matrix & Fallback Plans
-
-| # | Risk | Prob | Impact | Mitigation | Fallback |
-|---|------|------|--------|-----------|----------|
-| R1 | Multi-file build too complex | Med | High | Start with 2 files, expand | Keep concatenation path as backup |
-| R2 | FajarOS breaks during migration | High | Med | Dual-path (Bagian 9) | Revert to concatenation |
-| R3 | Async IPC too ambitious | Med | Low | Defer to post-v3.0 | Blocking IPC sufficient |
-| R4 | Hexagon NPU backend fails | High | Med | QNN SDK complexity | CPU fallback always available |
-| R5 | Team coordination overhead | Med | Med | Per-workstream CLAUDE.md | Reduce to 3 workstreams |
-| R6 | Capability types too academic | Low | Low | Simple annotation first | Runtime checks (existing) |
-| R7 | ARM64 codegen bugs | Med | High | Test every commit on QEMU | x86 as primary, ARM64 secondary |
-| R8 | Performance regression | Low | Med | Benchmark CI per commit | Profile + fix before gate |
-| R9 | Engineer leaves team | Low | High | Document everything, pair programming | AI can cover gap temporarily |
-| R10 | External dep breaks (LLVM, Cranelift) | Low | High | Pin versions in Cargo.toml | Delay upgrade, patch locally |
+| Risk | Prob | Mitigation | Fallback |
+|------|------|-----------|----------|
+| Multi-file build too complex | Med | Start with 2 files | Keep concatenation |
+| FajarOS breaks during migration | High | Dual-path (Bagian 7) | Revert to concatenation |
+| Hexagon NPU backend fails | High | QNN SDK complexity | CPU fallback |
+| ARM64 codegen bugs | Med | QEMU test per commit | x86 as primary |
+| Burnout (1 person) | Med | 15h/week max coding | Take breaks, AI handles rest |
+| Context overload | Med | 1 sprint at a time | Never start next before current done |
+| Performance regression | Low | Benchmark per commit | Profile + fix |
 
 ### Contingency Timeline
 
 ```
-If Phase 1 takes 8 weeks instead of 6:
-  → Compress Phase 3 (macros less critical for FajarOS)
-  → Phase 4 starts Week 21 instead of 19
+If Phase 1 takes 14 weeks instead of 12:
+  → Skip Sprint 13.1 (macros) and 13.2 (effect poly) — nice-to-have
+  → Phase 4 becomes 2 weeks: FajarOS v3.0 + release only
 
-If Phase 2 is blocked by Phase 1:
-  → D (ML) and F (macros) can start independently
-  → C (IPC) shifts to Week 9 start
-
-If ARM64 not ready by Week 24:
-  → Ship x86 v3.0 first
-  → ARM64 as v3.1 (4 weeks later)
+If GPU/NPU backend fails:
+  → CPU fallback for all ML models
+  → FajarOS v3.0 ships without GPU/NPU
+  → Add GPU/NPU in v3.1 patch release
 ```
 
 ---
 
-## Bagian 16: Metrik Sukses
+## Bagian 13: Metrik Sukses
 
-| Metrik | Saat Ini | Target W12 | Target W24 | World-Class |
-|--------|----------|-----------|-----------|-------------|
-| Tests | 5,582 | 6,200+ | 7,000+ | 15,000+ |
-| FajarOS build | Concatenation | Multi-file | `fj build --all` | 1 command |
-| @safe enforcement | Partial | Complete (121+ blocked) | Formally verified | seL4-level |
-| IPC safety | Raw bytes | @message types | Protocol + verification | Zero-copy typed |
-| Tensor dtypes | f64 only | f16/f32/f64 | + bf16/i8/u8 | Full Candle parity |
-| ML models | MNIST MLP | +MobileNet | +YOLO +LLaMA +Whisper | 20+ |
-| Platforms | x86_64 | + ARM64 QEMU | + ARM64 Q6A hardware | + RISC-V |
-| Production users | 0 | Internal testing | 3 beta | 10+ |
-| Conference papers | 0 | Draft | 1 submitted | 1 accepted |
-| Self-hosting | 1,268 LOC | 2,000 LOC | 3,000 LOC | Full bootstrap |
-| Services (separate ELF) | 0 | 3 | 9+ | 20+ |
-| Compile speed (FajarOS) | N/A (concat) | <5s | <3s | <1s |
-| Boot time (microkernel) | N/A | <1s | <500ms | <100ms |
-| IPC latency | N/A | <50μs | <5μs | <1μs |
+| Metrik | Saat Ini | W12 | W24 |
+|--------|----------|-----|-----|
+| Tests | 5,582 | 6,200+ | 7,000+ |
+| FajarOS build | Concatenation | Multi-file | `fj build --all` |
+| @safe enforcement | Partial | Complete | Verified |
+| IPC safety | Raw bytes | @message types | Protocol stubs |
+| Tensor dtypes | f64 only | f16/f32/f64 | + bf16/i8 |
+| ML models | MNIST | + MobileNet | + YOLO + LLaMA |
+| Platforms | x86_64 | + ARM64 QEMU | + Q6A hardware |
+| Services (ELF) | 0 | 3 | 9+ |
+| Compile speed | N/A | <5s FajarOS | <3s |
+| IPC latency | N/A | <50μs | <5μs |
 
 ---
 
-## Lampiran A: Effort Summary
-
-### Total Hours per Phase
-
-| Phase | Tim A | Tim B | Tim C | Tim D | Tim E | Total |
-|-------|-------|-------|-------|-------|-------|-------|
-| Phase 1 (W1-6) | 120h | 100h | — | — | — | **220h** |
-| Phase 2 (W7-12) | — | — | 120h | 130h | 120h | **370h** |
-| Phase 3 (W13-18) | — | 24h | 40h | — | 28h | **92h** |
-| Phase 4 (W19-24) | — | 24h | — | 64h | 60h | **148h** |
-| **Total** | **120h** | **148h** | **160h** | **194h** | **208h** | **830h** |
-
-### Per-Engineer Load (24 weeks)
-
-| Engineer | Hours | Avg/Week | Note |
-|----------|-------|----------|------|
-| E1 | ~80h | 3.3h | Build system focus |
-| E2 | ~80h | 3.3h | Build system focus |
-| E3 | ~80h | 3.3h | Safety + verification |
-| E4 | ~68h | 2.8h | Safety + capabilities |
-| E5 | ~80h | 3.3h | IPC + protocols |
-| E6 | ~80h | 3.3h | IPC + code gen |
-| E7 | ~100h | 4.2h | ML runtime (heaviest) |
-| E8 | ~94h | 3.9h | GPU/NPU backends |
-| E9 | ~104h | 4.3h | Platform + migration |
-| E10 | ~104h | 4.3h | Testing + migration |
-
----
-
-## Lampiran B: Glossary
+## Lampiran: Glossary
 
 | Term | Definition |
 |------|-----------|
-| @kernel | Context annotation for Ring 0 / EL1 code — hardware access allowed |
-| @device | Context annotation for compute/ML code — tensor ops allowed |
-| @safe | Context annotation for userspace — no hardware, no tensor |
-| Effect | Declared side effect (`with IO, Hardware`) on function signature |
+| @kernel | Ring 0 / EL1 — hardware access allowed |
+| @device | Compute domain — tensor ops allowed |
+| @safe | Userspace — no hardware, no tensor |
+| Effect | Declared side effect: `with IO, Hardware` |
 | Comptime | Compile-time evaluation block |
-| Linear type | Value that MUST be consumed exactly once |
-| IPC | Inter-Process Communication (seL4-style synchronous rendezvous) |
-| Capability | Type-safe permission token (`Cap<PortIO>`) |
-| Concatenation hack | Current FajarOS build: cat 75 files → 1 combined.fj |
+| Linear type | Must be consumed exactly once |
+| IPC | Inter-Process Communication (seL4-style) |
+| Capability | Type-safe permission: `Cap<PortIO>` |
 | GGUF | Quantized model format (llama.cpp) |
-| QNN | Qualcomm Neural Network SDK for Hexagon NPU |
-| PubGrub | Conflict-driven dependency resolution algorithm |
+| QNN | Qualcomm Neural Network SDK (Hexagon) |
+| Concatenation hack | Current FajarOS: cat 75 files → 1 combined.fj |
 
 ---
 
-*Dokumen ini adalah sumber referensi utama untuk pengembangan Fajar Lang.*
-*Setiap engineer WAJIB membaca dokumen ini sebelum memulai sprint pertama.*
+*Dokumen referensi utama pengembangan Fajar Lang.*
+*1 Engineer + AI. Sequential. Impact-first.*
+*Setiap session dimulai dengan membaca dokumen ini.*
 
-*Versi 6.0 FINAL — 2026-03-23*
-*Target: x86_64 (Intel i9-14900HX) + ARM64 (Qualcomm QCS6490 / Radxa Dragon Q6A)*
+*v7.0 — 2026-03-23*
