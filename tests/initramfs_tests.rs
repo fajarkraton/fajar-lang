@@ -80,7 +80,8 @@ mod native_tests {
 
     #[test]
     fn kernel_mode_config_not_user() {
-        let target = fajar_lang::codegen::target::TargetConfig::bare_metal(Arch::X86_64);
+        let target =
+            fajar_lang::codegen::target::TargetConfig::from_triple("x86_64-unknown-none").unwrap();
         let config = LinkerConfig::for_target(&target);
         assert_eq!(config.entry, "_start");
         assert!(!config.is_user_mode());
@@ -100,7 +101,8 @@ mod native_tests {
 
     #[test]
     fn generate_kernel_linker_script() {
-        let target = fajar_lang::codegen::target::TargetConfig::bare_metal(Arch::X86_64);
+        let target =
+            fajar_lang::codegen::target::TargetConfig::from_triple("x86_64-unknown-none").unwrap();
         let config = LinkerConfig::for_target(&target);
         let script = generate_linker_script(&config).unwrap();
         assert!(script.contains("ENTRY(_start)"));

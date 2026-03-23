@@ -3,7 +3,7 @@
 //! Verifies that all benchmark programs parse, analyze, and run correctly.
 
 use fajar_lang::codegen::benchmarks::*;
-use fajar_lang::interpreter::{Interpreter, Value};
+use fajar_lang::interpreter::Interpreter;
 use std::path::Path;
 
 /// Helper: run a .fj example through the interpreter.

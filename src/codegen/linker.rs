@@ -125,7 +125,16 @@ impl LinkerConfig {
     ///
     /// The initramfs section holds embedded service ELFs.
     pub fn for_kernel_with_initramfs(arch: Arch, initramfs_size: u64) -> Self {
-        let mut config = Self::for_target(&TargetConfig::bare_metal(arch));
+        let triple = match arch {
+            Arch::X86_64 => "x86_64-unknown-none",
+            Arch::Aarch64 => "aarch64-unknown-none",
+            Arch::Riscv64 => "riscv64gc-unknown-none-elf",
+        };
+        let target = TargetConfig::from_triple(triple).unwrap_or_else(|_| {
+            // Fallback: create minimal config
+            TargetConfig::from_triple("x86_64-unknown-none").unwrap()
+        });
+        let mut config = Self::for_target(&target);
         // Reserve space for initramfs after .bss
         config.regions.push(MemoryRegion {
             name: "INITRAMFS".into(),
