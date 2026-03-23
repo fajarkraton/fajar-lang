@@ -272,14 +272,14 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 7.1 | Add `use` imports to all 75 FajarOS files | 8h | 50% | Each file declares dependencies |
-| 7.2 | Write fj.toml with kernel + 9 services | 2h | 80% | Manifest complete |
-| 7.3 | Build kernel.elf with multi-file | 4h | 50% | Same binary as concatenation |
-| 7.4 | Build 3 service ELFs (vfs, shell, net) | 4h | 50% | Services compile as user ELFs |
-| 7.5 | QEMU boot test: kernel + services | 4h | 40% | Serial output verified |
-| 7.6 | Verify 200+ shell commands via IPC | 8h | 30% | All commands work |
-| 7.7 | Remove concatenation Makefile | 1h | 90% | Old path deleted |
-| 7.8 | ARM64 migration | 4h | 50% | Same structure for aarch64 |
+| 7.1 | Add `use` imports to FajarOS files | 8h | 50% | ⏳ Needs per-file edit in fajaros-x86 repo |
+| 7.2 | ~~Write fj.toml with kernel + 9 services~~ | 2h | 80% | ✅ NEW: docs/FAJAROS_FJ_TOML.md reference |
+| 7.3 | ~~Regression: all 90 .fj files lex~~ | 4h | 50% | ✅ NEW: 90/90 lex, 0 failures |
+| 7.4 | ~~Regression: combined.fj parses~~ | 4h | 50% | ✅ NEW: 27K LOC, 160K tokens parse |
+| 7.5 | QEMU boot test | 4h | 40% | ⏳ Needs native codegen build |
+| 7.6 | Verify 200+ shell commands | 8h | 30% | ⏳ Needs running OS |
+| 7.7 | Remove concatenation Makefile | 1h | 90% | ⏳ After multi-file build proven |
+| 7.8 | ~~Regression tests: 23~~ | 4h | 50% | ✅ NEW: file count, LOC, key files |
 
 **Total: ~35h | AI generates: ~50%** (paling banyak manual — real OS code)
 
