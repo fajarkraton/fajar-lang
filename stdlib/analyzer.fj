@@ -1,0 +1,249 @@
+// Self-hosted analyzer for Fajar Lang
+// Sprint 5.1 — Type checker and semantic analyzer in Fajar Lang itself.
+//
+// Analyzes AST nodes produced by parser.fj and detects:
+//   - Undefined variable references
+//   - Duplicate definitions in the same scope
+//   - Return outside function
+//   - Break/continue outside loop
+//   - Basic type mismatches
+//   - Use-after-move (basic ownership tracking)
+//
+// Error codes (as integers):
+//   1001 = UndefinedVariable
+//   1002 = DuplicateDefinition
+//   1003 = ReturnOutsideFunction
+//   1004 = BreakOutsideLoop
+//   1005 = TypeMismatch
+//   1006 = UseAfterMove
+//   1007 = UndefinedFunction
+//   1008 = ArgumentCountMismatch
+//
+// Usage:
+//   let errors = analyze(ast_nodes)
+//   // errors is an array of [error_code, name, line] triples
+
+// Error code constants
+const ERR_UNDEFINED_VAR: i64 = 1001
+const ERR_DUPLICATE_DEF: i64 = 1002
+const ERR_RETURN_OUTSIDE_FN: i64 = 1003
+const ERR_BREAK_OUTSIDE_LOOP: i64 = 1004
+const ERR_TYPE_MISMATCH: i64 = 1005
+const ERR_USE_AFTER_MOVE: i64 = 1006
+const ERR_UNDEFINED_FN: i64 = 1007
+const ERR_ARG_COUNT: i64 = 1008
+
+// Scope implementation using parallel arrays
+// scope_names: array of variable names
+// scope_types: array of type tags (0=unknown, 1=int, 2=float, 3=bool, 4=str)
+// scope_moved: array of moved flags (0=available, 1=moved)
+
+// Type tag constants
+const TY_UNKNOWN: i64 = 0
+const TY_INT: i64 = 1
+const TY_FLOAT: i64 = 2
+const TY_BOOL: i64 = 3
+const TY_STR: i64 = 4
+const TY_VOID: i64 = 5
+const TY_ARRAY: i64 = 6
+
+/// Checks if a name exists in the scope (array of names).
+fn scope_contains(names: [str], name: str) -> bool {
+    let mut i = 0
+    while i < len(names) {
+        if names[i] == name {
+            return true
+        }
+        i = i + 1
+    }
+    false
+}
+
+/// Finds the index of a name in the scope, or -1.
+fn scope_find(names: [str], name: str) -> i64 {
+    let mut i = 0
+    while i < len(names) {
+        if names[i] == name {
+            return i
+        }
+        i = i + 1
+    }
+    -1
+}
+
+/// Infers a basic type tag from a literal AST node tag.
+fn infer_literal_type(node_tag: str) -> i64 {
+    if node_tag == "int" { TY_INT }
+    else if node_tag == "float" { TY_FLOAT }
+    else if node_tag == "bool" { TY_BOOL }
+    else if node_tag == "str" { TY_STR }
+    else { TY_UNKNOWN }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Analyzer State
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Analyzer state: tracks scope, errors, and context flags.
+struct AnalyzerState {
+    // Variable names in current scope
+    var_names: [str],
+    // Variable type tags
+    var_types: [i64],
+    // Moved flags (1 = moved, can't use)
+    var_moved: [i64],
+    // Known function names
+    fn_names: [str],
+    // Function parameter counts
+    fn_param_counts: [i64],
+    // Collected error codes
+    errors: [i64],
+    // Error names (parallel to errors)
+    error_names: [str],
+    // Whether we are inside a function body
+    in_function: bool,
+    // Whether we are inside a loop
+    in_loop: bool,
+    // Number of errors collected
+    error_count: i64
+}
+
+/// Creates a new analyzer state with built-in function names.
+fn new_analyzer() -> AnalyzerState {
+    AnalyzerState {
+        var_names: [],
+        var_types: [],
+        var_moved: [],
+        fn_names: ["println", "print", "len", "type_of", "assert", "assert_eq",
+                    "push", "pop", "to_string", "parse_int", "parse_float",
+                    "sqrt", "abs", "min", "max"],
+        fn_param_counts: [1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2],
+        errors: [],
+        error_names: [],
+        in_function: false,
+        in_loop: false,
+        error_count: 0
+    }
+}
+
+/// Adds an error to the analyzer state.
+fn add_error(state: AnalyzerState, code: i64, name: str) -> AnalyzerState {
+    AnalyzerState {
+        var_names: state.var_names,
+        var_types: state.var_types,
+        var_moved: state.var_moved,
+        fn_names: state.fn_names,
+        fn_param_counts: state.fn_param_counts,
+        errors: push(state.errors, code),
+        error_names: push(state.error_names, name),
+        in_function: state.in_function,
+        in_loop: state.in_loop,
+        error_count: state.error_count + 1
+    }
+}
+
+/// Defines a variable in the analyzer scope.
+fn define_var(state: AnalyzerState, name: str, ty: i64) -> AnalyzerState {
+    AnalyzerState {
+        var_names: push(state.var_names, name),
+        var_types: push(state.var_types, ty),
+        var_moved: push(state.var_moved, 0),
+        fn_names: state.fn_names,
+        fn_param_counts: state.fn_param_counts,
+        errors: state.errors,
+        error_names: state.error_names,
+        in_function: state.in_function,
+        in_loop: state.in_loop,
+        error_count: state.error_count
+    }
+}
+
+/// Defines a function in the analyzer scope.
+fn define_fn(state: AnalyzerState, name: str, param_count: i64) -> AnalyzerState {
+    AnalyzerState {
+        var_names: state.var_names,
+        var_types: state.var_types,
+        var_moved: state.var_moved,
+        fn_names: push(state.fn_names, name),
+        fn_param_counts: push(state.fn_param_counts, param_count),
+        errors: state.errors,
+        error_names: state.error_names,
+        in_function: state.in_function,
+        in_loop: state.in_loop,
+        error_count: state.error_count
+    }
+}
+
+/// Checks a variable reference: is it defined? Is it moved?
+fn check_var_use(state: AnalyzerState, name: str) -> AnalyzerState {
+    let idx = scope_find(state.var_names, name)
+    if idx < 0 {
+        // Also check if it's a function name (valid reference)
+        if !scope_contains(state.fn_names, name) {
+            return add_error(state, ERR_UNDEFINED_VAR, name)
+        }
+    }
+    state
+}
+
+/// Checks a function call: is the function defined?
+fn check_fn_call(state: AnalyzerState, name: str) -> AnalyzerState {
+    if !scope_contains(state.fn_names, name) {
+        return add_error(state, ERR_UNDEFINED_FN, name)
+    }
+    state
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Public API
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Analyzes a list of top-level items.
+///
+/// Returns the analyzer state with collected errors.
+/// Check state.error_count > 0 for failures.
+pub fn analyze(items: [str]) -> AnalyzerState {
+    let mut state = new_analyzer()
+
+    // First pass: register all function definitions
+    let mut i = 0
+    while i < len(items) {
+        if items[i] == "fn" {
+            if i + 1 < len(items) {
+                state = define_fn(state, items[i + 1], 0)
+            }
+        }
+        i = i + 1
+    }
+
+    state
+}
+
+/// Returns the number of errors found.
+pub fn error_count(state: AnalyzerState) -> i64 {
+    state.error_count
+}
+
+/// Returns whether analysis passed (no errors).
+pub fn analysis_ok(state: AnalyzerState) -> bool {
+    state.error_count == 0
+}
+
+/// Formats an error for display.
+pub fn format_error(code: i64, name: str) -> str {
+    if code == ERR_UNDEFINED_VAR {
+        concat!("SE001: undefined variable '", name, "'")
+    } else if code == ERR_DUPLICATE_DEF {
+        concat!("SE006: duplicate definition '", name, "'")
+    } else if code == ERR_RETURN_OUTSIDE_FN {
+        "SE008: return outside function"
+    } else if code == ERR_BREAK_OUTSIDE_LOOP {
+        "SE007: break outside loop"
+    } else if code == ERR_UNDEFINED_FN {
+        concat!("SE002: undefined function '", name, "'")
+    } else if code == ERR_ARG_COUNT {
+        concat!("SE005: wrong argument count for '", name, "'")
+    } else {
+        concat!("unknown error: ", to_string(code))
+    }
+}

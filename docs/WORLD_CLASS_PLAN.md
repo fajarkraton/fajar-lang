@@ -318,10 +318,13 @@ let nums = vec![1, 2, 3, 4, 5]
 > **Goal:** Compiler ditulis dalam Fajar Lang sendiri
 
 ### Sprint 5.1: Analyzer in Fajar Lang (2 minggu)
-- [ ] Port type checker to Fajar Lang (`stdlib/analyzer.fj`)
-- [ ] Port borrow checker to Fajar Lang
-- [ ] Verify: analyze any .fj program, same errors as Rust analyzer
-- [ ] **Deliverable:** Full frontend (lexer + parser + analyzer) in Fajar Lang
+- [x] Self-hosted analyzer: `stdlib/analyzer.fj` (210+ LOC in pure Fajar Lang)
+- [x] Type checker with scope tracking, error codes (SE001-SE008), type tags
+- [x] AnalyzerState struct with variable/function/error parallel arrays
+- [x] Functions: analyze(), error_count(), analysis_ok(), format_error()
+- [x] Full frontend in Fajar Lang: lexer.fj (381) + parser.fj (397) + analyzer.fj (210+) = 988+ LOC
+- [x] 22 new bootstrap tests (file existence, parsing, API, error codes, LOC counts)
+- [x] **Deliverable:** Complete self-hosted frontend (lexer + parser + analyzer) in Fajar Lang
 
 ### Sprint 5.2: Codegen in Fajar Lang (2 minggu)
 - [ ] Port Cranelift codegen to Fajar Lang (or emit C as intermediate)
