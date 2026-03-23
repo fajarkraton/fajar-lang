@@ -242,9 +242,9 @@ Hari 7-8: Buffer untuk edge cases + documentation
 | 4.3 | ~~Per-target configuration~~ | 3h | 70% | ✅ NEW: kernel=x86_64-none, svc=x86_64-user |
 | 4.4 | ~~Per-target entry point~~ | 2h | 80% | ✅ NEW: each service has entry field |
 | 4.5 | ~~Output structure~~ | 2h | 80% | ✅ NEW: build/kernel.elf + build/services/*.elf |
-| 4.6 | Custom linker script per target | 4h | 60% | ⏳ Deferred — needs per-target codegen |
-| 4.7 | .initramfs section | 4h | 60% | ⏳ Deferred — needs linker integration |
-| 4.8 | `fj pack` command | 3h | 70% | ⏳ Deferred — needs compiled ELFs |
+| 4.6 | ~~Custom linker script per target~~ | 4h | 60% | ✅ NEW: for_user_mode() + for_kernel_with_initramfs() |
+| 4.7 | ~~.initramfs section~~ | 4h | 60% | ✅ NEW: pack_initramfs() / unpack_initramfs() |
+| 4.8 | ~~`fj pack` command~~ | 3h | 70% | ✅ NEW: CLI command, auto-detect from build/services/ |
 | 4.9 | ~~ARM64 multi-target~~ | 4h | 60% | ✅ NEW: aarch64-user target supported |
 | 4.10 | ~~Tests: 16~~ | 4h | 95% | ✅ NEW: 16 manifest + multi-binary tests |
 

@@ -79,6 +79,14 @@ enum Command {
     },
     /// Start the Language Server Protocol server (for IDE integration).
     Lsp,
+    /// Pack service ELFs into an initramfs archive.
+    Pack {
+        /// Output file for the initramfs archive.
+        #[arg(short, long, default_value = "build/initramfs.img")]
+        output: String,
+        /// Service ELF files to pack (or auto-detect from build/services/).
+        files: Vec<PathBuf>,
+    },
     /// Generate a static playground HTML page with examples.
     Playground {
         /// Output directory for playground files.
@@ -271,6 +279,7 @@ fn main() -> ExitCode {
         Command::DumpAst { file } => cmd_dump_ast(&file),
         Command::Fmt { file, check } => cmd_fmt(&file, check),
         Command::Lsp => cmd_lsp(),
+        Command::Pack { output, files } => cmd_pack(&output, &files),
         Command::Playground { output } => cmd_playground(&output),
         Command::New { name } => cmd_new(&name),
         Command::Build {
@@ -1451,6 +1460,101 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
         ExitCode::from(EXIT_COMPILE)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// Packs service ELFs into an initramfs archive.
+fn cmd_pack(output: &str, files: &[PathBuf]) -> ExitCode {
+    let mut elf_files: Vec<(String, Vec<u8>)> = Vec::new();
+
+    if files.is_empty() {
+        // Auto-detect from build/services/
+        let services_dir = std::path::Path::new("build/services");
+        if services_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(services_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|e| e == "elf") {
+                        let name = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        match std::fs::read(&path) {
+                            Ok(data) => {
+                                println!("  packing: {} ({} bytes)", path.display(), data.len());
+                                elf_files.push((name, data));
+                            }
+                            Err(e) => {
+                                eprintln!("error: cannot read '{}': {e}", path.display());
+                                return ExitCode::from(EXIT_USAGE);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        for path in files {
+            let name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            match std::fs::read(path) {
+                Ok(data) => {
+                    println!("  packing: {} ({} bytes)", path.display(), data.len());
+                    elf_files.push((name, data));
+                }
+                Err(e) => {
+                    eprintln!("error: cannot read '{}': {e}", path.display());
+                    return ExitCode::from(EXIT_USAGE);
+                }
+            }
+        }
+    }
+
+    if elf_files.is_empty() {
+        eprintln!("error: no ELF files to pack");
+        eprintln!("hint: build services first with `fj build --all`, or specify files");
+        return ExitCode::from(EXIT_USAGE);
+    }
+
+    // Pack into initramfs
+    let file_refs: Vec<(&str, &[u8])> = elf_files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+
+    // Simple initramfs format: [count(8)] [name_len(8) name data_len(8) data]...
+    let mut archive = Vec::new();
+    archive.extend_from_slice(&(file_refs.len() as u64).to_le_bytes());
+    for (name, data) in &file_refs {
+        let name_bytes = name.as_bytes();
+        archive.extend_from_slice(&(name_bytes.len() as u64).to_le_bytes());
+        archive.extend_from_slice(name_bytes);
+        archive.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        archive.extend_from_slice(data);
+    }
+
+    // Write output
+    if let Some(parent) = std::path::Path::new(output).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::write(output, &archive) {
+        Ok(()) => {
+            println!(
+                "\nPacked {} services into {} ({} bytes)",
+                elf_files.len(),
+                output,
+                archive.len()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("error: cannot write '{}': {e}", output);
+            ExitCode::from(EXIT_USAGE)
+        }
     }
 }
 

@@ -91,6 +91,51 @@ impl LinkerConfig {
         }
     }
 
+    /// Creates a user-mode linker config (for microkernel services).
+    ///
+    /// User-mode binaries load at 0x400000 (above kernel space).
+    pub fn for_user_mode(arch: Arch) -> Self {
+        let (text_origin, ram_origin) = match arch {
+            Arch::X86_64 => (0x0040_0000, 0x0080_0000), // 4MB text, 8MB data
+            Arch::Aarch64 => (0x0040_0000, 0x0080_0000), // Same for ARM64
+            Arch::Riscv64 => (0x0040_0000, 0x0080_0000),
+        };
+
+        Self {
+            regions: vec![
+                MemoryRegion {
+                    name: "TEXT".into(),
+                    origin: text_origin,
+                    size: 4 * 1024 * 1024, // 4MB user .text
+                    attrs: "rx".into(),
+                },
+                MemoryRegion {
+                    name: "DATA".into(),
+                    origin: ram_origin,
+                    size: 16 * 1024 * 1024, // 16MB user data+heap
+                    attrs: "rwx".into(),
+                },
+            ],
+            stack_size: 8 * 1024, // 8KB user stack
+            entry: "main".into(),
+        }
+    }
+
+    /// Creates a kernel linker config with .initramfs section.
+    ///
+    /// The initramfs section holds embedded service ELFs.
+    pub fn for_kernel_with_initramfs(arch: Arch, initramfs_size: u64) -> Self {
+        let mut config = Self::for_target(&TargetConfig::bare_metal(arch));
+        // Reserve space for initramfs after .bss
+        config.regions.push(MemoryRegion {
+            name: "INITRAMFS".into(),
+            origin: 0x0800_0000,                   // 128MB offset
+            size: initramfs_size.max(1024 * 1024), // At least 1MB
+            attrs: "r".into(),                     // Read-only
+        });
+        config
+    }
+
     /// Sets the stack size.
     pub fn with_stack_size(mut self, size: u64) -> Self {
         self.stack_size = size;
@@ -102,6 +147,80 @@ impl LinkerConfig {
         self.entry = entry.to_string();
         self
     }
+
+    /// Returns whether this is a user-mode config.
+    pub fn is_user_mode(&self) -> bool {
+        self.entry == "main"
+    }
+}
+
+/// Packs multiple ELF files into a simple initramfs archive.
+///
+/// Format: [count(8)] [name_len(8) name(N) data_len(8) data(M)]...
+pub fn pack_initramfs(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut archive = Vec::new();
+
+    // Header: file count (8 bytes, little-endian)
+    archive.extend_from_slice(&(files.len() as u64).to_le_bytes());
+
+    for (name, data) in files {
+        // Name length (8 bytes)
+        let name_bytes = name.as_bytes();
+        archive.extend_from_slice(&(name_bytes.len() as u64).to_le_bytes());
+        // Name
+        archive.extend_from_slice(name_bytes);
+        // Data length (8 bytes)
+        archive.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        // Data
+        archive.extend_from_slice(data);
+    }
+
+    archive
+}
+
+/// Unpacks an initramfs archive into individual files.
+///
+/// Returns (name, data) pairs.
+pub fn unpack_initramfs(archive: &[u8]) -> Vec<(String, Vec<u8>)> {
+    let mut result = Vec::new();
+    if archive.len() < 8 {
+        return result;
+    }
+
+    let count = u64::from_le_bytes(archive[0..8].try_into().unwrap_or([0; 8])) as usize;
+    let mut offset = 8;
+
+    for _ in 0..count {
+        if offset + 8 > archive.len() {
+            break;
+        }
+        let name_len =
+            u64::from_le_bytes(archive[offset..offset + 8].try_into().unwrap_or([0; 8])) as usize;
+        offset += 8;
+
+        if offset + name_len > archive.len() {
+            break;
+        }
+        let name = String::from_utf8_lossy(&archive[offset..offset + name_len]).to_string();
+        offset += name_len;
+
+        if offset + 8 > archive.len() {
+            break;
+        }
+        let data_len =
+            u64::from_le_bytes(archive[offset..offset + 8].try_into().unwrap_or([0; 8])) as usize;
+        offset += 8;
+
+        if offset + data_len > archive.len() {
+            break;
+        }
+        let data = archive[offset..offset + data_len].to_vec();
+        offset += data_len;
+
+        result.push((name, data));
+    }
+
+    result
 }
 
 /// Generates a GNU ld-compatible linker script.
