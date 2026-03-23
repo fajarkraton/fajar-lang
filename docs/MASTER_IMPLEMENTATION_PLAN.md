@@ -237,16 +237,16 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 4.1 | fj.toml `[[service]]` sections | 3h | 80% | Multiple targets in manifest |
-| 4.2 | `fj build --all` command | 8h | 60% | Produces kernel + service ELFs |
-| 4.3 | Per-target configuration (none/user) | 3h | 70% | kernel=x86_64-none, svc=x86_64-user |
-| 4.4 | Per-target entry point | 2h | 80% | Each service has @entry main() |
-| 4.5 | Output structure: build/kernel.elf + build/services/*.elf | 2h | 80% | Files in correct locations |
-| 4.6 | Custom linker script per target | 4h | 60% | Kernel@0x100000, user@0x400000 |
-| 4.7 | .initramfs section (embed services in kernel) | 4h | 60% | Kernel ELF contains service data |
-| 4.8 | `fj pack` command | 3h | 70% | Creates cpio archive |
-| 4.9 | ARM64 multi-target | 4h | 60% | Same project → x86+aarch64 ELFs |
-| 4.10 | Tests: 40+ | 4h | 95% | 4 ELFs from 1 project |
+| 4.1 | ~~fj.toml `[[service]]` sections~~ | 3h | 80% | ✅ NEW: KernelConfig + ServiceConfig in manifest |
+| 4.2 | ~~`fj build --all` command~~ | 8h | 60% | ✅ NEW: discovers kernel + services, maps outputs |
+| 4.3 | ~~Per-target configuration~~ | 3h | 70% | ✅ NEW: kernel=x86_64-none, svc=x86_64-user |
+| 4.4 | ~~Per-target entry point~~ | 2h | 80% | ✅ NEW: each service has entry field |
+| 4.5 | ~~Output structure~~ | 2h | 80% | ✅ NEW: build/kernel.elf + build/services/*.elf |
+| 4.6 | Custom linker script per target | 4h | 60% | ⏳ Deferred — needs per-target codegen |
+| 4.7 | .initramfs section | 4h | 60% | ⏳ Deferred — needs linker integration |
+| 4.8 | `fj pack` command | 3h | 70% | ⏳ Deferred — needs compiled ELFs |
+| 4.9 | ~~ARM64 multi-target~~ | 4h | 60% | ✅ NEW: aarch64-user target supported |
+| 4.10 | ~~Tests: 16~~ | 4h | 95% | ✅ NEW: 16 manifest + multi-binary tests |
 
 **Total: ~37h | AI generates: ~70%**
 

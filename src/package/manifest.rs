@@ -17,6 +17,58 @@ pub struct ProjectConfig {
     /// The `[dev-dependencies]` section (optional).
     #[serde(default, rename = "dev-dependencies")]
     pub dev_dependencies: std::collections::HashMap<String, String>,
+    /// The `[kernel]` section for OS kernel builds (optional).
+    #[serde(default)]
+    pub kernel: Option<KernelConfig>,
+    /// The `[[service]]` array for microkernel services (optional).
+    #[serde(default)]
+    pub service: Vec<ServiceConfig>,
+}
+
+/// Kernel build configuration for `[kernel]` section.
+#[derive(Debug, Clone, Deserialize)]
+pub struct KernelConfig {
+    /// Entry point file.
+    pub entry: String,
+    /// Target triple (e.g., "x86_64-unknown-none").
+    pub target: String,
+    /// Source directories to include.
+    #[serde(default)]
+    pub sources: Vec<String>,
+    /// Linker script path.
+    #[serde(default, rename = "linker-script")]
+    pub linker_script: Option<String>,
+}
+
+/// Service build configuration for `[[service]]` entries.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServiceConfig {
+    /// Service name (used for output ELF name).
+    pub name: String,
+    /// Entry point file.
+    pub entry: String,
+    /// Target triple (e.g., "x86_64-user").
+    #[serde(default = "default_service_target")]
+    pub target: String,
+    /// Source directories to include (optional).
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+fn default_service_target() -> String {
+    "x86_64-user".into()
+}
+
+impl ProjectConfig {
+    /// Returns true if this project has multi-binary configuration.
+    pub fn is_multi_binary(&self) -> bool {
+        self.kernel.is_some() || !self.service.is_empty()
+    }
+
+    /// Returns all service names.
+    pub fn service_names(&self) -> Vec<String> {
+        self.service.iter().map(|s| s.name.clone()).collect()
+    }
 }
 
 /// The `[package]` section of `fj.toml`.
