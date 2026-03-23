@@ -115,6 +115,12 @@
 - [Mini OS Kernel](./demos/mini-os.md)
 - [Package Project](./demos/package-project.md)
 
+# Migration Guides
+
+- [Fajar Lang for Rust Developers](./migration/from-rust.md)
+- [Fajar Lang for C++ Developers](./migration/from-cpp.md)
+- [Fajar Lang for Python/ML Developers](./migration/from-python.md)
+
 # Appendix
 
 - [Error Codes](./appendix/error-codes.md)
