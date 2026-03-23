@@ -224,13 +224,17 @@ fn fn_graph_empty_source() {
     assert_eq!(graph.function_count(), 0);
 }
 
+fn temp_path(name: &str) -> String {
+    std::env::temp_dir().join(name).display().to_string()
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // 5. Artifact cache
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn cache_store_and_lookup() {
-    let mut cache = ArtifactCache::new("/tmp/fj-test-cache".into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
     let key = CacheKey::new("hash1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Object, vec![1, 2, 3], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
@@ -241,14 +245,14 @@ fn cache_store_and_lookup() {
 
 #[test]
 fn cache_miss_for_unknown_key() {
-    let mut cache = ArtifactCache::new("/tmp/fj-test-cache".into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
     let key = CacheKey::new("unknown".into(), "v1".into(), "x86".into(), "O2".into());
     assert!(cache.cache_lookup(&key).is_none());
 }
 
 #[test]
 fn cache_invalidation() {
-    let mut cache = ArtifactCache::new("/tmp/fj-test-cache".into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
     let key = CacheKey::new("h1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Ast, vec![42], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
@@ -259,7 +263,7 @@ fn cache_invalidation() {
 
 #[test]
 fn cache_stats_tracking() {
-    let mut cache = ArtifactCache::new("/tmp/fj-test-cache".into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
     let key = CacheKey::new("h1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Object, vec![1], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
@@ -350,8 +354,8 @@ fn incremental_clean_cache() {
 
 #[test]
 fn disk_save_and_load_graph() {
-    let cache_dir = "/tmp/fj-inc-test";
-    let _ = std::fs::remove_dir_all(cache_dir);
+    let cache_dir = temp_path("fj-inc-test");
+    let _ = std::fs::remove_dir_all(&cache_dir);
 
     let mut graph = DependencyGraph::new();
     graph.add_file("a.fj".into(), "hash_a".into(), vec![], vec!["fn_a".into()]);
@@ -362,20 +366,20 @@ fn disk_save_and_load_graph() {
         vec!["fn_b".into()],
     );
 
-    save_graph_snapshot(&graph, cache_dir).unwrap();
-    let loaded = load_graph_snapshot(cache_dir).unwrap();
+    save_graph_snapshot(&graph, &cache_dir).unwrap();
+    let loaded = load_graph_snapshot(&cache_dir).unwrap();
 
     assert_eq!(loaded.file_count(), 2);
     assert!(loaded.nodes.contains_key("a.fj"));
     assert!(loaded.nodes.contains_key("b.fj"));
     assert_eq!(loaded.nodes.get("a.fj").unwrap().content_hash, "hash_a");
 
-    let _ = std::fs::remove_dir_all(cache_dir);
+    let _ = std::fs::remove_dir_all(&cache_dir);
 }
 
 #[test]
 fn disk_load_nonexistent_returns_empty() {
-    let graph = load_graph_snapshot("/tmp/nonexistent-fj-cache-12345").unwrap();
+    let graph = load_graph_snapshot(&temp_path("nonexistent-fj-cache-12345")).unwrap();
     assert_eq!(graph.file_count(), 0);
 }
 

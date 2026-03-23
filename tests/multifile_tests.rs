@@ -8,7 +8,10 @@ use std::fs;
 use std::path::Path;
 
 fn create_test_project(name: &str, files: &[(&str, &str)]) -> String {
-    let dir = format!("/tmp/fj-test-{name}");
+    let dir = std::env::temp_dir()
+        .join(format!("fj-test-{name}"))
+        .display()
+        .to_string();
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     for (filename, content) in files {

@@ -1774,6 +1774,7 @@ fn security_array_out_of_bounds() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn file_read_nonexistent() {
     let src = r#"
         fn main() -> void {

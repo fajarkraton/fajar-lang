@@ -151,7 +151,10 @@ fn wasm_browser_loader_html() {
 
 #[test]
 fn playground_generates_files() {
-    let dir = "/tmp/fj-playground-test";
+    let dir = &std::env::temp_dir()
+        .join("fj-playground-test")
+        .display()
+        .to_string();
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir).unwrap();
 
