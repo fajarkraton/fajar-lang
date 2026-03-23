@@ -53,17 +53,24 @@ impl Device {
     ///
     /// Checks NPU first, then GPU, falls back to CPU.
     pub fn best_available() -> Self {
-        // In a real implementation, this would probe hardware.
-        // For now, default to CPU.
+        #[cfg(feature = "vulkan")]
+        {
+            if crate::bsp::dragon_q6a::vulkan::VulkanCompute::is_available() {
+                return Device::Gpu(0);
+            }
+        }
         Device::Cpu
     }
 
     /// Returns true if this device is available on the current platform.
     pub fn is_available(&self) -> bool {
         match self {
-            Device::Cpu => true,     // CPU always available
-            Device::Gpu(_) => false, // Needs runtime detection
-            Device::Npu => false,    // Needs QNN SDK
+            Device::Cpu => true,
+            #[cfg(feature = "vulkan")]
+            Device::Gpu(_) => crate::bsp::dragon_q6a::vulkan::VulkanCompute::is_available(),
+            #[cfg(not(feature = "vulkan"))]
+            Device::Gpu(_) => false,
+            Device::Npu => false,
         }
     }
 
@@ -268,17 +275,180 @@ impl TensorBackend for CpuBackend {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Vulkan GPU Backend (requires --features vulkan)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// GPU-based tensor backend using Vulkan compute shaders.
+///
+/// Wraps `VulkanCompute` from `bsp::dragon_q6a::vulkan`.
+/// Provides massive speedup for large matrix operations.
+/// Falls back to CpuBackend if Vulkan is not available.
+#[cfg(feature = "vulkan")]
+pub struct VulkanBackend {
+    vk: crate::bsp::dragon_q6a::vulkan::VulkanCompute,
+}
+
+#[cfg(feature = "vulkan")]
+impl VulkanBackend {
+    /// Attempts to create a Vulkan backend.
+    pub fn new() -> Result<Self, BackendError> {
+        let vk = crate::bsp::dragon_q6a::vulkan::VulkanCompute::new().map_err(|e| {
+            BackendError::DeviceUnavailable {
+                device: format!("vulkan: {e}"),
+            }
+        })?;
+        Ok(Self { vk })
+    }
+
+    /// Returns the GPU device name.
+    pub fn device_name(&self) -> &str {
+        self.vk.device_name()
+    }
+}
+
+#[cfg(feature = "vulkan")]
+impl TensorBackend for VulkanBackend {
+    fn device(&self) -> Device {
+        Device::Gpu(0)
+    }
+
+    fn matmul(&self, a: &ArrayD<f64>, b: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
+        let a_shape = a.shape();
+        let b_shape = b.shape();
+        if a_shape.len() != 2 || b_shape.len() != 2 || a_shape[1] != b_shape[0] {
+            return Err(BackendError::ShapeMismatch {
+                op: "gpu_matmul".into(),
+                detail: format!("{:?} vs {:?}", a_shape, b_shape),
+            });
+        }
+        let m = a_shape[0];
+        let k = a_shape[1];
+        let n = b_shape[1];
+
+        // Convert f64 → f32 for GPU
+        let a_f32: Vec<f32> = a.iter().map(|&v| v as f32).collect();
+        let b_f32: Vec<f32> = b.iter().map(|&v| v as f32).collect();
+
+        let result_f32 = self
+            .vk
+            .tensor_matmul(&a_f32, &b_f32, m as u32, k as u32, n as u32)
+            .map_err(|e| BackendError::Unsupported {
+                op: "matmul".into(),
+                backend: format!("vulkan: {e}"),
+            })?;
+
+        // Convert f32 → f64
+        let result_f64: Vec<f64> = result_f32.iter().map(|&v| v as f64).collect();
+        Ok(ArrayD::from_shape_vec(vec![m, n], result_f64).unwrap())
+    }
+
+    fn add(&self, a: &ArrayD<f64>, b: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
+        if a.shape() != b.shape() {
+            return Err(BackendError::ShapeMismatch {
+                op: "gpu_add".into(),
+                detail: format!("{:?} vs {:?}", a.shape(), b.shape()),
+            });
+        }
+        let a_f32: Vec<f32> = a.iter().map(|&v| v as f32).collect();
+        let b_f32: Vec<f32> = b.iter().map(|&v| v as f32).collect();
+        let result = self
+            .vk
+            .tensor_add(&a_f32, &b_f32)
+            .map_err(|e| BackendError::Unsupported {
+                op: "add".into(),
+                backend: format!("vulkan: {e}"),
+            })?;
+        let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
+        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data).unwrap())
+    }
+
+    fn mul(&self, a: &ArrayD<f64>, b: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
+        if a.shape() != b.shape() {
+            return Err(BackendError::ShapeMismatch {
+                op: "gpu_mul".into(),
+                detail: format!("{:?} vs {:?}", a.shape(), b.shape()),
+            });
+        }
+        let a_f32: Vec<f32> = a.iter().map(|&v| v as f32).collect();
+        let b_f32: Vec<f32> = b.iter().map(|&v| v as f32).collect();
+        let result = self
+            .vk
+            .tensor_mul(&a_f32, &b_f32)
+            .map_err(|e| BackendError::Unsupported {
+                op: "mul".into(),
+                backend: format!("vulkan: {e}"),
+            })?;
+        let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
+        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data).unwrap())
+    }
+
+    fn relu(&self, x: &ArrayD<f64>) -> ArrayD<f64> {
+        let f32_data: Vec<f32> = x.iter().map(|&v| v as f32).collect();
+        match self.vk.tensor_relu(&f32_data) {
+            Ok(result) => {
+                let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
+                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data).unwrap()
+            }
+            Err(_) => x.mapv(|v| if v > 0.0 { v } else { 0.0 }), // CPU fallback
+        }
+    }
+
+    fn softmax(&self, x: &ArrayD<f64>) -> ArrayD<f64> {
+        // Softmax not in VulkanCompute yet — use CPU
+        let max = x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let exp = x.mapv(|v| (v - max).exp());
+        let sum: f64 = exp.iter().sum();
+        if sum > 0.0 { exp / sum } else { exp }
+    }
+
+    fn sigmoid(&self, x: &ArrayD<f64>) -> ArrayD<f64> {
+        let f32_data: Vec<f32> = x.iter().map(|&v| v as f32).collect();
+        match self.vk.tensor_sigmoid(&f32_data) {
+            Ok(result) => {
+                let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
+                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data).unwrap()
+            }
+            Err(_) => x.mapv(|v| 1.0 / (1.0 + (-v).exp())), // CPU fallback
+        }
+    }
+
+    fn transpose(&self, x: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
+        if x.ndim() != 2 {
+            return Err(BackendError::ShapeMismatch {
+                op: "gpu_transpose".into(),
+                detail: format!("expected 2D, got {}D", x.ndim()),
+            });
+        }
+        Ok(x.clone().reversed_axes())
+    }
+
+    fn sum(&self, x: &ArrayD<f64>) -> f64 {
+        x.iter().sum()
+    }
+
+    fn name(&self) -> &str {
+        "gpu (vulkan)"
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Global backend dispatch
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Returns the active backend for a device.
 ///
-/// Currently only CPU is implemented. GPU and NPU return CPU fallback.
+/// With `--features vulkan`: GPU returns VulkanBackend.
+/// Without vulkan feature or if init fails: falls back to CPU.
 pub fn get_backend(device: Device) -> Box<dyn TensorBackend> {
     match device {
         Device::Cpu => Box::new(CpuBackend::new()),
         Device::Gpu(_) => {
-            // GPU not yet implemented — fallback to CPU
+            #[cfg(feature = "vulkan")]
+            {
+                if let Ok(vk) = VulkanBackend::new() {
+                    return Box::new(vk);
+                }
+            }
             Box::new(CpuBackend::new())
         }
         Device::Npu => {
@@ -419,9 +589,15 @@ mod tests {
     }
 
     #[test]
-    fn get_backend_gpu_fallback() {
+    fn get_backend_gpu() {
         let b = get_backend(Device::Gpu(0));
-        assert_eq!(b.device(), Device::Cpu); // fallback
+        // With vulkan feature + RTX 4090: returns Gpu(0)
+        // Without vulkan or no GPU: returns Cpu (fallback)
+        let dev = b.device();
+        assert!(
+            dev == Device::Gpu(0) || dev == Device::Cpu,
+            "expected Gpu(0) or Cpu fallback, got {dev:?}"
+        );
     }
 
     #[test]
