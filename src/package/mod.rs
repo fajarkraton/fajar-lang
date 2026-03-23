@@ -9,6 +9,7 @@ pub mod docgen;
 pub mod documentation;
 pub mod manifest;
 pub mod portal;
+pub mod pubgrub;
 pub mod publish;
 pub mod registry;
 pub mod resolver;

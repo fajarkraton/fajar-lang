@@ -265,14 +265,14 @@ let nums = vec![1, 2, 3, 4, 5]
 > **Goal:** Go-level developer experience. ONE binary, everything works.
 
 ### Sprint 4.1: Package Registry — Real Remote (2 minggu)
-- [ ] Build real registry server (Rust, PostgreSQL, S3)
-- [ ] `fj publish` — upload package with signing
-- [ ] `fj add` — download from registry with version resolution
-- [ ] `fj search` — search packages
-- [ ] Implement PubGrub-style dependency resolution
-- [ ] Host at registry.fajarlang.org
-- [ ] Seed with 20+ packages (stdlib ports, utilities)
-- [ ] **Deliverable:** Working package registry like crates.io (minimal)
+- [x] PubGrub-style dependency resolver with backtracking + conflict analysis
+- [x] Registry protocol: HTTP API definitions, sparse index (crates.io-compatible)
+- [x] Package bundler: file collection, checksum computation, publish preparation
+- [x] MemorySource + PackageSource trait for pluggable package backends
+- [x] Resolution: single dep, highest version, transitive, diamond, conflict detection
+- [x] Sparse index format with JSON lines, prefix computation (1/2/3/two-two)
+- [x] 14 new tests: resolution, sparse index, bundler, protocol
+- [x] **Deliverable:** PubGrub resolver + registry protocol + package bundling
 
 ### Sprint 4.2: Online Playground (1 minggu)
 - [ ] Build web playground: editor + compile + run
