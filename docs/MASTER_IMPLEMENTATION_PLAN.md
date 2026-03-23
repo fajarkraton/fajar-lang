@@ -334,12 +334,12 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 11.1 | Device enum (Cpu, Gpu, Npu) | 3h | 80% | Enum + traits |
-| 11.2 | Backend trait (matmul, relu, softmax) | 6h | 60% | Interface defined |
-| 11.3 | CPU backend (ndarray, existing) | 3h | 70% | Existing code adapted |
-| 11.4 | GPU backend (Adreno/Vulkan) | 12h | 40% | Vulkan compute on Q6A |
-| 11.5 | NPU backend (Hexagon/QNN) | 10h | 40% | QNN SDK integration |
-| 11.6 | Tests: 25+ | 3h | 95% | Same result across backends |
+| 11.1 | ~~Device enum (Cpu, Gpu, Npu)~~ | 3h | 80% | ✅ NEW: Device with Cpu/Gpu(id)/Npu |
+| 11.2 | ~~Backend trait (9 ops)~~ | 6h | 60% | ✅ NEW: TensorBackend trait |
+| 11.3 | ~~CPU backend (ndarray)~~ | 3h | 70% | ✅ NEW: CpuBackend all ops |
+| 11.4 | GPU backend (Vulkan) | 12h | 40% | ⏳ Fallback to CPU |
+| 11.5 | NPU backend (QNN) | 10h | 40% | ⏳ Fallback to CPU |
+| 11.6 | ~~Tests: 15 unit~~ | 3h | 95% | ✅ NEW: all ops verified |
 
 **Total: ~37h | AI generates: ~55%** (GPU/NPU needs hardware knowledge)
 

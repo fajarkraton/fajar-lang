@@ -3,6 +3,7 @@
 //! Only accessible from `@device` or `@unsafe` context.
 
 pub mod autograd;
+pub mod backend;
 pub mod bf16;
 pub mod compression;
 pub mod custom_grad;
