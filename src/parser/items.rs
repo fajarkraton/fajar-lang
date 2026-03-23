@@ -461,10 +461,17 @@ impl Parser {
             // Check for `comptime` modifier: `comptime N: i64`
             let is_comptime = self.eat(&TokenKind::Comptime);
 
+            // Check for effect variable: identifier followed by `: Effect`
+            // e.g., `fn map<E: Effect>(...)` or just `<E>` in effect position
             let (name, _) = self.expect_ident()?;
 
             let mut bounds = Vec::new();
+            let mut is_effect = false;
             if self.eat(&TokenKind::Colon) {
+                // Check if bound is "Effect" — marks as effect variable
+                if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "Effect") {
+                    is_effect = true;
+                }
                 loop {
                     let bound = self.parse_trait_bound()?;
                     bounds.push(bound);
@@ -479,6 +486,7 @@ impl Parser {
                 name,
                 bounds,
                 is_comptime,
+                is_effect,
                 span: Span::new(start, end),
             });
 

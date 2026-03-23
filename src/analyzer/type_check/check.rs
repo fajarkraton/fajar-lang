@@ -198,9 +198,20 @@ impl TypeChecker {
         }
 
         // ── Effect System Validation ────────────────────────────────────
+        // Collect effect variable names from generic params
+        let effect_vars: std::collections::HashSet<String> = fndef
+            .generic_params
+            .iter()
+            .filter(|p| p.is_effect)
+            .map(|p| p.name.clone())
+            .collect();
+
         // 1. Validate all declared effect names exist in the registry
+        //    (skip effect variables — they're resolved at call site)
         for effect_name in &fndef.effects {
-            if self.effect_registry.lookup(effect_name).is_none() {
+            if !effect_vars.contains(effect_name)
+                && self.effect_registry.lookup(effect_name).is_none()
+            {
                 self.errors.push(SemanticError::UnknownEffect {
                     name: effect_name.clone(),
                     span: fndef.span,
@@ -221,6 +232,10 @@ impl TypeChecker {
             if let Some(ctx) = ctx {
                 let forbidden = crate::analyzer::effects::forbidden_effects(ctx);
                 for effect_name in &fndef.effects {
+                    // Skip effect variables (resolved at call site)
+                    if effect_vars.contains(effect_name) {
+                        continue;
+                    }
                     if let Some(decl) = self.effect_registry.lookup(effect_name) {
                         if forbidden.contains(&decl.kind) {
                             self.errors.push(SemanticError::EffectForbiddenInContext {

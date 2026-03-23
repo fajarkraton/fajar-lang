@@ -275,6 +275,9 @@ pub struct GenericParam {
     pub bounds: Vec<TraitBound>,
     /// Whether this is a comptime (compile-time constant) parameter.
     pub is_comptime: bool,
+    /// Whether this is an effect variable (generic over effects).
+    /// `fn map<E: Effect>(f: fn(A)->B with E) with E`
+    pub is_effect: bool,
     /// Source span.
     pub span: Span,
 }

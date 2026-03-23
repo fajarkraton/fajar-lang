@@ -1071,6 +1071,7 @@ impl TypeChecker {
             "Ord",
             "Default",
             "Hash",
+            "Effect", // Effect polymorphism marker trait
         ];
         for name in &builtin_trait_names {
             self.traits.entry(name.to_string()).or_default();

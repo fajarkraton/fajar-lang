@@ -145,7 +145,7 @@ handle io {
 - [x] Add `with` clause to function signatures
 - [x] Type checker: verify function body only uses declared effects
 - [x] Effect inference: auto-detect effects if not declared
-- [ ] Effect polymorphism: generic over effects (deferred — requires higher-kinded type integration)
+- [x] Effect polymorphism: `fn apply<E: Effect>(x: i64) with E` — generic over effects
 - [x] 77 tests: effect violation, effect inference, effect composition, context mapping
 - [x] **Deliverable:** Formal effect system integrated with @kernel/@device/@safe
 
