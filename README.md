@@ -6,8 +6,9 @@ A statically-typed systems programming language for embedded ML and OS integrati
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fajarkraton/fajar-lang)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-5%2C469_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-152K_Rust-blue)]()
+[![Tests](https://img.shields.io/badge/tests-5%2C844_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-290K_Rust-blue)]()
+[![Version](https://img.shields.io/badge/version-5.0.0_Sovereignty-orange)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Fajar Lang?
@@ -92,6 +93,66 @@ Existing languages force you to choose: **Rust** for systems, **Python** for ML,
 - **Doc generation** — `///` comments, `fj doc` HTML output
 - **Package manager** — `fj.toml`, registry, `fj add`, signing, SBOM
 - **VS Code extension** — syntax highlighting, snippets, LSP client
+
+## What's New in v5.0.0 "Sovereignty"
+
+### Multi-Binary Build for Microkernel OS
+```bash
+fj build --all          # kernel.elf + 9 service ELFs from fj.toml
+fj build --release      # LLVM O2 optimized
+fj pack                 # initramfs archive for services
+fj check --call-graph   # cross-context analysis
+```
+
+### @safe Complete Enforcement
+```fajar
+@safe fn user_app() {
+    println("safe!")          // OK — safe builtin
+    // port_outb(0x3F8, 65)  // SE020: BLOCKED — hardware access
+    // kernel_fn()            // SE021: BLOCKED — use syscall
+    // device_fn()            // SE022: BLOCKED — use IPC
+}
+```
+
+### 9-DType Tensor System (Candle-Inspired)
+```fajar
+@device fn inference(image: Tensor) -> i64 with Tensor {
+    // Supports: F16, BF16, F32, F64, I8, U8, I32, I64, Bool
+    let weights = load_model("model.gguf")  // GGUF + Safetensors
+    let result = matmul(image, weights)      // Routes to CPU/GPU/NPU
+    argmax(softmax(result))
+}
+```
+
+### Typed IPC for Microkernel
+```fajar
+@message struct VfsOpen { path_len: i64, flags: i64 }  // ≤64 bytes enforced
+@message struct VfsReply { fd: i64, status: i64 }
+
+protocol VfsProtocol {
+    fn open(path_len: i64, flags: i64) -> i64 { 0 }
+    fn close(fd: i64) -> i64 { 0 }
+}
+
+service vfs implements VfsProtocol {
+    fn open(path_len: i64, flags: i64) -> i64 { 42 }
+    fn close(fd: i64) -> i64 { 0 }
+}
+```
+
+### Stats
+
+| Metric | Value |
+|--------|-------|
+| Tests | 5,844 (0 failures) |
+| Compiler LOC | ~290,000 Rust |
+| Self-hosted | 1,268 LOC Fajar Lang |
+| Backends | Cranelift + LLVM + Wasm |
+| Targets | x86_64, ARM64, RISC-V, Wasm |
+| DTypes | 9 (F16/BF16/F32/F64/I8/U8/I32/I64/Bool) |
+| Model Formats | GGUF + Safetensors + FJML |
+| Examples | 130+ programs |
+| FajarOS | 90/90 files lex, 60K LOC OS |
 
 ## Quickstart
 
