@@ -292,6 +292,8 @@ pub enum TokenKind {
     AtDerive,
     /// `@pure`
     AtPure,
+    /// `@shared` — cross-service type sharing
+    AtShared,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -410,6 +412,8 @@ pub enum TokenKind {
     FatArrow,
     /// `?`
     Question,
+    /// `$` — macro capture prefix (e.g., `$x:expr`)
+    Dollar,
 
     // ── Doc Comments ──────────────────────────────────────────────────
     /// A `///` doc comment line (content after `///`, trimmed of leading space).
@@ -594,6 +598,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Arrow => write!(f, "->"),
             TokenKind::FatArrow => write!(f, "=>"),
             TokenKind::Question => write!(f, "?"),
+            TokenKind::Dollar => write!(f, "$"),
             // Doc comments
             TokenKind::DocComment(s) => write!(f, "/// {s}"),
             TokenKind::FStringLit(_) => write!(f, "f\"...\""),
@@ -616,6 +621,7 @@ impl fmt::Display for TokenKind {
             TokenKind::AtInvariant => write!(f, "@invariant"),
             TokenKind::AtDerive => write!(f, "@derive"),
             TokenKind::AtPure => write!(f, "@pure"),
+            TokenKind::AtShared => write!(f, "@shared"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -739,6 +745,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("invariant", TokenKind::AtInvariant);
     m.insert("derive", TokenKind::AtDerive);
     m.insert("pure", TokenKind::AtPure);
+    m.insert("shared", TokenKind::AtShared);
     m
 });
 

@@ -1191,6 +1191,7 @@ fn scan_operator_or_punct(
             }
         }
         '?' => TokenKind::Question,
+        '$' => TokenKind::Dollar,
         _ => {
             errors.push(LexError::UnexpectedChar {
                 ch,
@@ -1771,7 +1772,9 @@ mod tests {
 
     #[test]
     fn tokenize_collects_multiple_errors() {
-        let err = tokenize(r#"# $ %"#).unwrap_err();
+        // $ is now a valid token (macro capture), % is modulo operator
+        // Use characters that are actually invalid
+        let err = tokenize(r#"# ` #"#).unwrap_err();
         assert!(err.len() >= 2);
     }
 

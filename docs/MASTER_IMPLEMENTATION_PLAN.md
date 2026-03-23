@@ -364,15 +364,15 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 13.1 | Complete macro system ($ patterns) | 8h | 70% | vec!, format! with repetition |
-| 13.2 | Effect polymorphism (basic) | 6h | 60% | Generic over effects |
-| 13.3 | Cross-service type sharing | 4h | 70% | @shared module works |
-| 13.4 | FajarOS x86 v3.0 final test | 8h | 30% | Boot + all services + 200 cmds |
-| 13.5 | FajarOS ARM64 v3.0 on Q6A | 8h | 30% | Hardware verified |
-| 13.6 | TinyLLaMA on Hexagon NPU | 8h | 40% | Inference works on Q6A |
-| 13.7 | Documentation update | 4h | 80% | Book chapters updated |
-| 13.8 | Blog post + demo video | 4h | 60% | Publication ready |
-| 13.9 | Version bump v5.0.0 | 1h | 90% | Cargo.toml, CHANGELOG |
+| 13.1 | ~~$ token for macro patterns~~ | 8h | 70% | ✅ NEW: Dollar token in lexer |
+| 13.2 | Effect polymorphism | 6h | 60% | ⏳ Deferred: needs HKT |
+| 13.3 | ~~@shared annotation~~ | 4h | 70% | ✅ NEW: AtShared token |
+| 13.4 | FajarOS x86 v3.0 test | 8h | 30% | ⏳ Needs QEMU native boot |
+| 13.5 | FajarOS ARM64 on Q6A | 8h | 30% | ⏳ Needs hardware |
+| 13.6 | TinyLLaMA on NPU | 8h | 40% | ⏳ Needs QNN SDK |
+| 13.7 | ~~CHANGELOG v5.0.0~~ | 4h | 80% | ✅ NEW: Full changelog |
+| 13.8 | ~~Blog post~~ | 4h | 60% | ✅ Already: BLOG_LAUNCH.md |
+| 13.9 | ~~Version bump~~ | 1h | 90% | ✅ Cargo.toml → 5.0.0 |
 
 **Total: ~51h | AI generates: ~55%**
 

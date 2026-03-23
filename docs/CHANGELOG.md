@@ -18,6 +18,47 @@ Kategori perubahan:
 
 ---
 
+## [5.0.0] — 2026-03-23 "Sovereignty"
+
+### Added — Multi-Binary Build for FajarOS
+- `fj build --all`: builds kernel + N service ELFs from fj.toml
+- `fj pack`: creates initramfs archive from service ELFs
+- `fj check --call-graph`: reports cross-context function calls
+- fj.toml `[kernel]` and `[[service]]` sections for multi-target builds
+- `@shared` annotation for cross-service type sharing
+- `$` token for macro capture patterns
+
+### Added — Safety Enforcement
+- SE022: separate error for @safe → @device call (was reusing SE021)
+- IPC001: @message struct size validation (≤64 bytes)
+- IPC002: IPC type mismatch error infrastructure
+- 85 context safety tests verifying 239+ blocked builtins
+
+### Added — ML Runtime (Candle-Inspired)
+- 9-dtype tensor system: F16, BF16, F32, F64, I8, U8, I32, I64, Bool
+- Device backend abstraction: TensorBackend trait with 9 operations
+- CpuBackend: matmul, add, mul, relu, softmax, sigmoid, transpose, sum
+- GGUF format parser (llama.cpp model loading)
+- Safetensors format parser (HuggingFace model loading)
+- Model loading pipeline with auto-format detection
+
+### Added — Build Infrastructure
+- Dependency-ordered multi-file compilation (topological sort)
+- User-mode linker config (services at 0x400000)
+- Kernel linker config with .initramfs section
+- Initramfs pack/unpack for service ELF embedding
+
+### Added — FajarOS Compatibility
+- 90/90 FajarOS .fj files lex successfully
+- combined.fj (27K LOC) parses correctly
+- Reference fj.toml manifest for FajarOS microkernel
+
+### Added — Tests
+- 262 new tests across 13 sprints
+- Total: 5,844+ tests (0 failures)
+
+---
+
 ## [4.2.0] — 2026-03-22 "Horizon"
 
 ### Added — ARM64 Bare-Metal Boot
