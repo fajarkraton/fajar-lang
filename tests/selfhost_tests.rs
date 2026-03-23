@@ -4,6 +4,8 @@
 //! (written in pure Fajar Lang) work correctly when run through
 //! the interpreter.
 
+#![allow(dead_code)]
+
 use fajar_lang::interpreter::{Interpreter, Value};
 
 /// Helper: evaluate source and return the final value.

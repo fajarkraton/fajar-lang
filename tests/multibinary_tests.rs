@@ -4,6 +4,8 @@
 //! multi-target build configuration, and service discovery.
 //! Sprint 4 of Master Implementation Plan v7.0.
 
+#![allow(unused_imports)]
+
 use fajar_lang::package::manifest::{KernelConfig, ProjectConfig, ServiceConfig};
 
 fn parse_toml(content: &str) -> ProjectConfig {

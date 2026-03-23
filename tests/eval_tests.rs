@@ -6401,7 +6401,7 @@ fn safe_fn_rejects_port_outb() {
     "#;
     let mut interp = fajar_lang::interpreter::Interpreter::new();
     // This should produce a semantic error, not crash
-    let result = interp.eval_source(src);
+    let _result = interp.eval_source(src);
     // In interpreter, @safe doesn't enforce (enforcement is in analyzer)
     // But let's test the analyzer directly
     let tokens = fajar_lang::lexer::tokenize(src).unwrap();
