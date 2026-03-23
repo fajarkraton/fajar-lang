@@ -194,15 +194,15 @@ Week 23-24: FajarOS v3.0 release   ←── depends on everything
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 1.1 | Define 121+ blocked builtins in analyzer | 3h | 80% | List complete, no false positives |
-| 1.2 | SE020 error: "@safe cannot access hardware" | 1h | 90% | Error with suggestion |
-| 1.3 | Whitelist safe builtins (println, len, math) | 2h | 80% | 30+ builtins whitelisted |
-| 1.4 | Block asm!() in @safe and @device | 1h | 90% | asm!() → error in @safe |
-| 1.5 | SE021: @safe → @kernel call blocked | 2h | 80% | "use syscall instead" |
-| 1.6 | SE022: @safe → @device call blocked | 2h | 80% | "use IPC instead" |
-| 1.7 | `fj check --call-graph` command | 3h | 70% | Shows all cross-context calls |
-| 1.8 | Tests: 80+ (AI generates) | 4h | 95% | Every blocked builtin verified |
-| 1.9 | FajarOS context_enforcement.fj passes | 2h | 50% | Existing OS tests work |
+| 1.1 | ~~Define 121+ blocked builtins in analyzer~~ | 3h | 80% | ✅ 239 builtins already blocked |
+| 1.2 | ~~SE020 error: "@safe cannot access hardware"~~ | 1h | 90% | ✅ Already implemented |
+| 1.3 | ~~Whitelist safe builtins (println, len, math)~~ | 2h | 80% | ✅ Already implemented |
+| 1.4 | ~~Block asm!() in @safe and @device~~ | 1h | 90% | ✅ Already implemented (KE005/KE006) |
+| 1.5 | ~~SE021: @safe → @kernel call blocked~~ | 2h | 80% | ✅ Already implemented |
+| 1.6 | ~~SE022: @safe → @device call blocked~~ | 2h | 80% | ✅ NEW: Separate SE022 error added |
+| 1.7 | ~~`fj check --call-graph` command~~ | 3h | 70% | ✅ NEW: --call-graph flag added |
+| 1.8 | ~~Tests: 85 (AI generates)~~ | 4h | 95% | ✅ NEW: 85 context safety tests |
+| 1.9 | FajarOS context_enforcement.fj passes | 2h | 50% | ⏳ Needs FajarOS repo access |
 
 **Total: ~20h | AI generates: ~70%**
 

@@ -1416,9 +1416,9 @@ impl TypeChecker {
             if self.kernel_fns.contains(callee_name) {
                 self.errors.push(SemanticError::KernelCallInSafe { span });
             }
-            // SE021: @safe cannot call @device functions directly
+            // SE022: @safe cannot call @device functions directly — use IPC
             if self.device_fns.contains(callee_name) {
-                self.errors.push(SemanticError::KernelCallInSafe { span });
+                self.errors.push(SemanticError::DeviceCallInSafe { span });
             }
         }
     }
