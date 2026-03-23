@@ -539,6 +539,360 @@ fn reconstruct_cycle(cycle_node: &str, parent: &HashMap<String, String>) -> Stri
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Function-level dependency tracking
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A function node in the function-level dependency graph.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionNode {
+    /// Fully-qualified function name (e.g., `"main"`, `"math::add"`).
+    pub name: String,
+    /// Containing file path.
+    pub file: String,
+    /// Content hash of the function body (for change detection).
+    pub body_hash: String,
+    /// Functions this function calls (callees).
+    pub calls: Vec<String>,
+    /// Whether this function is a `const fn` / `comptime fn`.
+    pub is_const: bool,
+}
+
+/// Function-level dependency graph for fine-grained incremental compilation.
+///
+/// Tracks which functions call which, allowing recompilation of only the
+/// functions affected by a change rather than entire files.
+#[derive(Debug, Clone)]
+pub struct FunctionGraph {
+    /// Function nodes by name.
+    pub functions: HashMap<String, FunctionNode>,
+    /// Reverse call graph: function → callers.
+    pub callers: HashMap<String, Vec<String>>,
+}
+
+impl FunctionGraph {
+    /// Creates an empty function graph.
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+            callers: HashMap::new(),
+        }
+    }
+
+    /// Adds a function to the graph.
+    pub fn add_function(&mut self, node: FunctionNode) {
+        let name = node.name.clone();
+        // Build reverse edges
+        for callee in &node.calls {
+            self.callers
+                .entry(callee.clone())
+                .or_default()
+                .push(name.clone());
+        }
+        self.functions.insert(name, node);
+    }
+
+    /// Returns functions that directly call the given function.
+    pub fn callers_of(&self, name: &str) -> Vec<String> {
+        self.callers.get(name).cloned().unwrap_or_default()
+    }
+
+    /// Detects which functions changed between two snapshots.
+    pub fn detect_changed_functions(&self, old: &FunctionGraph) -> Vec<String> {
+        let mut changed = Vec::new();
+        for (name, node) in &self.functions {
+            match old.functions.get(name) {
+                Some(old_node) if old_node.body_hash == node.body_hash => {}
+                _ => changed.push(name.clone()),
+            }
+        }
+        // Removed functions
+        for name in old.functions.keys() {
+            if !self.functions.contains_key(name) {
+                changed.push(name.clone());
+            }
+        }
+        changed.sort();
+        changed
+    }
+
+    /// Returns all functions transitively affected by changes to the given functions.
+    pub fn transitive_callers(&self, changed: &[String]) -> Vec<String> {
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut queue: VecDeque<String> = VecDeque::new();
+
+        for name in changed {
+            if visited.insert(name.clone()) {
+                queue.push_back(name.clone());
+            }
+        }
+
+        while let Some(current) = queue.pop_front() {
+            for caller in self.callers_of(&current) {
+                if visited.insert(caller.clone()) {
+                    queue.push_back(caller);
+                }
+            }
+        }
+
+        let mut result: Vec<String> = visited.into_iter().collect();
+        result.sort();
+        result
+    }
+
+    /// Returns the number of functions in the graph.
+    pub fn function_count(&self) -> usize {
+        self.functions.len()
+    }
+}
+
+impl Default for FunctionGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Builds a function graph from source code by extracting function definitions and calls.
+pub fn build_function_graph(files: &[(String, String)]) -> FunctionGraph {
+    let mut graph = FunctionGraph::new();
+
+    for (file_path, source) in files {
+        extract_function_nodes(file_path, source, &mut graph);
+    }
+
+    graph
+}
+
+/// Extracts function definitions and their call dependencies from source.
+fn extract_function_nodes(file_path: &str, source: &str, graph: &mut FunctionGraph) {
+    let mut current_fn: Option<(String, usize, bool)> = None; // (name, brace_depth, is_const)
+    let mut brace_depth: usize = 0;
+    let mut fn_body = String::new();
+    let mut fn_calls = Vec::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Track brace depth
+        let open_count = trimmed.chars().filter(|c| *c == '{').count();
+        let close_count = trimmed.chars().filter(|c| *c == '}').count();
+
+        // Detect function start
+        if current_fn.is_none() {
+            let is_const = trimmed.starts_with("const fn ")
+                || trimmed.starts_with("pub const fn ")
+                || trimmed.starts_with("comptime fn ")
+                || trimmed.starts_with("pub comptime fn ");
+
+            let fn_name = extract_fn_name(trimmed);
+            if let Some(name) = fn_name {
+                current_fn = Some((name, brace_depth, is_const));
+                fn_body.clear();
+                fn_calls.clear();
+            }
+        }
+
+        brace_depth += open_count;
+        brace_depth = brace_depth.saturating_sub(close_count);
+
+        if let Some((ref name, start_depth, is_const)) = current_fn {
+            fn_body.push_str(line);
+            fn_body.push('\n');
+
+            // Extract function calls from this line
+            extract_calls_from_line(trimmed, &mut fn_calls);
+
+            // Function ends when we return to the starting brace depth
+            if brace_depth <= start_depth && fn_body.contains('{') {
+                let body_hash = compute_content_hash(&fn_body);
+                let node = FunctionNode {
+                    name: name.clone(),
+                    file: file_path.to_string(),
+                    body_hash,
+                    calls: fn_calls.clone(),
+                    is_const,
+                };
+                graph.add_function(node);
+                current_fn = None;
+            }
+        }
+    }
+}
+
+/// Extracts function name from a line like `fn foo(...)` or `pub fn bar(...)`.
+fn extract_fn_name(line: &str) -> Option<String> {
+    // Strip annotations and modifiers
+    let stripped = line
+        .trim_start_matches("pub ")
+        .trim_start_matches("const ")
+        .trim_start_matches("comptime ")
+        .trim_start_matches("async ");
+
+    if let Some(rest) = stripped.strip_prefix("fn ") {
+        let name = rest.split(['(', '<']).next()?.trim();
+        if !name.is_empty() {
+            let first = name.as_bytes()[0];
+            if first.is_ascii_alphabetic() || first == b'_' {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Extracts function call names from a source line (simple heuristic).
+fn extract_calls_from_line(line: &str, calls: &mut Vec<String>) {
+    // Simple pattern: identifier followed by (
+    let chars = line.chars();
+    let mut current_ident = String::new();
+
+    for ch in chars {
+        if ch.is_alphanumeric() || ch == '_' {
+            current_ident.push(ch);
+        } else {
+            if ch == '(' && !current_ident.is_empty() {
+                // Skip keywords that look like calls
+                if !matches!(
+                    current_ident.as_str(),
+                    "if" | "while"
+                        | "for"
+                        | "match"
+                        | "loop"
+                        | "return"
+                        | "let"
+                        | "fn"
+                        | "struct"
+                        | "enum"
+                ) {
+                    if !calls.contains(&current_ident) {
+                        calls.push(current_ident.clone());
+                    }
+                }
+            }
+            current_ident.clear();
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Disk-persistent cache
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Saves a dependency graph snapshot to disk as JSON.
+pub fn save_graph_snapshot(
+    graph: &DependencyGraph,
+    cache_dir: &str,
+) -> Result<(), IncrementalError> {
+    let dir = std::path::Path::new(cache_dir);
+    if !dir.exists() {
+        std::fs::create_dir_all(dir).map_err(|e| IncrementalError::IoError {
+            message: format!("cannot create cache dir: {e}"),
+        })?;
+    }
+
+    let path = dir.join("dep_graph.json");
+    let mut data = String::from("{\n");
+
+    // Serialize nodes as simple JSON
+    data.push_str("  \"files\": {\n");
+    let mut first = true;
+    for (file_path, node) in &graph.nodes {
+        if !first {
+            data.push_str(",\n");
+        }
+        first = false;
+        data.push_str(&format!(
+            "    \"{}\": {{\"hash\": \"{}\", \"deps\": [{}], \"exports\": [{}]}}",
+            file_path,
+            node.content_hash,
+            node.dependencies
+                .iter()
+                .map(|d| format!("\"{d}\""))
+                .collect::<Vec<_>>()
+                .join(", "),
+            node.exports
+                .iter()
+                .map(|e| format!("\"{e}\""))
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    }
+    data.push_str("\n  }\n}\n");
+
+    std::fs::write(&path, &data).map_err(|e| IncrementalError::IoError {
+        message: format!("cannot write graph snapshot: {e}"),
+    })?;
+
+    Ok(())
+}
+
+/// Loads a dependency graph snapshot from disk.
+pub fn load_graph_snapshot(cache_dir: &str) -> Result<DependencyGraph, IncrementalError> {
+    let path = std::path::Path::new(cache_dir).join("dep_graph.json");
+    if !path.exists() {
+        return Ok(DependencyGraph::new());
+    }
+
+    let data = std::fs::read_to_string(&path).map_err(|e| IncrementalError::IoError {
+        message: format!("cannot read graph snapshot: {e}"),
+    })?;
+
+    // Simple JSON parser for our format (avoid serde_json dependency for this)
+    parse_graph_json(&data)
+}
+
+/// Parses the simple JSON format for dependency graph snapshots.
+fn parse_graph_json(json: &str) -> Result<DependencyGraph, IncrementalError> {
+    let mut graph = DependencyGraph::new();
+
+    // Extract file entries using simple string parsing
+    // Format: "filepath": {"hash": "...", "deps": [...], "exports": [...]}
+    for line in json.lines() {
+        let trimmed = line.trim().trim_end_matches(',');
+        if trimmed.starts_with('"') && trimmed.contains("\"hash\"") {
+            if let Some((path, rest)) = trimmed.split_once(": {") {
+                let file_path = path.trim().trim_matches('"').to_string();
+                let rest = rest.trim_end_matches('}');
+
+                let hash = extract_json_string(rest, "hash").unwrap_or_default();
+                let deps = extract_json_array(rest, "deps");
+                let exports = extract_json_array(rest, "exports");
+
+                graph.add_file(file_path, hash, deps, exports);
+            }
+        }
+    }
+
+    Ok(graph)
+}
+
+/// Extracts a string value from simple JSON.
+fn extract_json_string(json: &str, key: &str) -> Option<String> {
+    let pattern = format!("\"{key}\": \"");
+    let start = json.find(&pattern)? + pattern.len();
+    let end = json[start..].find('"')? + start;
+    Some(json[start..end].to_string())
+}
+
+/// Extracts a string array from simple JSON.
+fn extract_json_array(json: &str, key: &str) -> Vec<String> {
+    let pattern = format!("\"{key}\": [");
+    let start = match json.find(&pattern) {
+        Some(s) => s + pattern.len(),
+        None => return Vec::new(),
+    };
+    let end = match json[start..].find(']') {
+        Some(e) => e + start,
+        None => return Vec::new(),
+    };
+    let inner = &json[start..end];
+    inner
+        .split(',')
+        .map(|s| s.trim().trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 

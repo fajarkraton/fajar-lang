@@ -112,6 +112,9 @@ enum Command {
         /// Verbose codegen output (function count, DCE stats, compile time).
         #[arg(long, short)]
         verbose: bool,
+        /// Enable incremental compilation (cache unchanged functions).
+        #[arg(long)]
+        incremental: bool,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -259,6 +262,7 @@ fn main() -> ExitCode {
             board,
             linker,
             verbose,
+            incremental,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -285,14 +289,37 @@ fn main() -> ExitCode {
                 cmd_build_llvm(&path, output.as_deref(), opt_level)
             } else {
                 let start = std::time::Instant::now();
-                let result = cmd_build(
-                    &path,
-                    &target,
-                    output.as_deref(),
-                    no_std,
-                    ls.as_deref(),
-                    linker.as_deref(),
-                );
+
+                // Incremental compilation: check if source is unchanged
+                let skip_compile = if incremental {
+                    check_incremental_cache(&path, &target)
+                } else {
+                    false
+                };
+
+                let result = if skip_compile {
+                    if verbose {
+                        eprintln!(
+                            "[incremental] Cache hit — source unchanged, skipping compilation"
+                        );
+                    }
+                    ExitCode::SUCCESS
+                } else {
+                    let r = cmd_build(
+                        &path,
+                        &target,
+                        output.as_deref(),
+                        no_std,
+                        ls.as_deref(),
+                        linker.as_deref(),
+                    );
+                    // Update incremental cache on success
+                    if incremental && r == ExitCode::SUCCESS {
+                        update_incremental_cache(&path, &target);
+                    }
+                    r
+                };
+
                 if verbose {
                     let elapsed = start.elapsed();
                     eprintln!("[verbose] Compile time: {:.2}s", elapsed.as_secs_f64());
@@ -1004,6 +1031,55 @@ fn cmd_fmt(path: &PathBuf, check: bool) -> ExitCode {
 }
 
 /// Resolves the entry point from fj.toml in the current or parent directory.
+/// Checks if the incremental cache indicates the source is unchanged.
+///
+/// Reads the cached content hash from `.fj-cache/` and compares with the
+/// current source hash. Also checks that the output binary exists.
+fn check_incremental_cache(path: &std::path::Path, target: &str) -> bool {
+    let cache_dir = ".fj-cache";
+    let cache_file = std::path::Path::new(cache_dir).join("build_hash.txt");
+    let bin_path = path.with_extension("");
+
+    // Output binary must exist
+    if !bin_path.exists() {
+        return false;
+    }
+
+    // Read source and compute hash
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let current_hash = fajar_lang::compiler::incremental::compute_content_hash(&source);
+    let key = format!("{current_hash}:{target}");
+
+    // Compare with cached hash
+    match std::fs::read_to_string(&cache_file) {
+        Ok(cached) => cached.trim() == key,
+        Err(_) => false,
+    }
+}
+
+/// Updates the incremental cache after a successful build.
+fn update_incremental_cache(path: &std::path::Path, target: &str) {
+    let cache_dir = ".fj-cache";
+    let _ = std::fs::create_dir_all(cache_dir);
+    let cache_file = std::path::Path::new(cache_dir).join("build_hash.txt");
+
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let current_hash = fajar_lang::compiler::incremental::compute_content_hash(&source);
+    let key = format!("{current_hash}:{target}");
+    let _ = std::fs::write(&cache_file, &key);
+
+    // Also save the dependency graph snapshot
+    let files = vec![(path.display().to_string(), source)];
+    let graph = fajar_lang::compiler::incremental::build_dependency_graph(&files);
+    let _ = fajar_lang::compiler::incremental::save_graph_snapshot(&graph, cache_dir);
+}
+
 fn resolve_project_entry() -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("cannot get working directory: {e}"))?;
     let root = fajar_lang::package::find_project_root(&cwd).ok_or_else(|| {
