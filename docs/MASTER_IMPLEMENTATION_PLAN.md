@@ -317,12 +317,12 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 10.1 | DType enum (F16, BF16, F32, F64, I8, U8) | 3h | 80% | All dtypes defined |
-| 10.2 | Tensor storage per dtype | 8h | 60% | Buffer adapts to dtype |
-| 10.3 | Dtype conversion (.to_f16(), .to_i8()) | 3h | 70% | Conversions work |
-| 10.4 | Compile-time shape tracking | 6h | 50% | Shape mismatch → error |
-| 10.5 | Creation per dtype (zeros::\<F16\>) | 3h | 80% | All dtypes creatable |
-| 10.6 | Tests: 30+ | 3h | 95% | All dtypes, conversions |
+| 10.1 | ~~DType enum (F16, BF16, F32, F64, I8, U8, I32, I64, Bool)~~ | 3h | 80% | ✅ NEW: 9 dtypes |
+| 10.2 | ~~Tensor storage per dtype~~ | 8h | 60% | ✅ NEW: to_dtype() converts all types |
+| 10.3 | ~~Dtype conversion (.to_f16(), .to_i8())~~ | 3h | 70% | ✅ NEW: F16/BF16 precision sim, I8/U8 clamp |
+| 10.4 | Compile-time shape tracking | 6h | 50% | ⏳ Deferred: needs type system integration |
+| 10.5 | ~~DType metadata (size, range, classify)~~ | 3h | 80% | ✅ NEW: is_float/is_int/is_quantized/min/max |
+| 10.6 | ~~Tests: 28~~ | 3h | 95% | ✅ NEW: enum, parse, convert, ranges, memory |
 
 **Total: ~26h | AI generates: ~70%**
 

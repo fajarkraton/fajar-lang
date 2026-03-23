@@ -13,22 +13,41 @@ use super::tensor::{TensorError, TensorValue};
 
 /// Data type for tensor storage precision.
 ///
-/// Currently supports F64 (full precision) and F32 (single precision).
-/// F16 and BF16 are reserved for future implementation with the `half` crate.
+/// Supports floating point (F16, BF16, F32, F64), integer (I8, U8, I32, I64),
+/// and boolean types. Inspired by HuggingFace Candle's DType system.
+///
+/// Internal storage remains f64 (ndarray). Reduced-precision dtypes simulate
+/// precision loss via roundtrip conversion (e.g., f64 → f16 → f64).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DType {
     /// 64-bit floating point (default, full precision).
     F64,
-    /// 32-bit floating point (reduced precision, faster compute).
+    /// 32-bit floating point (single precision).
     F32,
+    /// 16-bit floating point (IEEE 754 half precision).
+    F16,
+    /// Brain floating point 16 (truncated mantissa, same exponent range as F32).
+    BF16,
+    /// 8-bit signed integer (for quantized inference, -128..127).
+    I8,
+    /// 8-bit unsigned integer (0..255).
+    U8,
+    /// 32-bit signed integer.
+    I32,
+    /// 64-bit signed integer.
+    I64,
+    /// Boolean (stored as u8 internally: 0 or 1).
+    Bool,
 }
 
 impl DType {
     /// Returns the number of bytes per element for this dtype.
     pub fn size_bytes(&self) -> usize {
         match self {
-            DType::F64 => 8,
-            DType::F32 => 4,
+            DType::F64 | DType::I64 => 8,
+            DType::F32 | DType::I32 => 4,
+            DType::F16 | DType::BF16 => 2,
+            DType::I8 | DType::U8 | DType::Bool => 1,
         }
     }
 
@@ -37,6 +56,74 @@ impl DType {
         match self {
             DType::F64 => "f64",
             DType::F32 => "f32",
+            DType::F16 => "f16",
+            DType::BF16 => "bf16",
+            DType::I8 => "i8",
+            DType::U8 => "u8",
+            DType::I32 => "i32",
+            DType::I64 => "i64",
+            DType::Bool => "bool",
+        }
+    }
+
+    /// Returns true if this is a floating point type.
+    pub fn is_float(&self) -> bool {
+        matches!(self, DType::F64 | DType::F32 | DType::F16 | DType::BF16)
+    }
+
+    /// Returns true if this is an integer type.
+    pub fn is_int(&self) -> bool {
+        matches!(self, DType::I8 | DType::U8 | DType::I32 | DType::I64)
+    }
+
+    /// Returns true if this is a quantized type (I8/U8).
+    pub fn is_quantized(&self) -> bool {
+        matches!(self, DType::I8 | DType::U8)
+    }
+
+    /// Parses a dtype from a string name.
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "f64" => Some(DType::F64),
+            "f32" => Some(DType::F32),
+            "f16" => Some(DType::F16),
+            "bf16" => Some(DType::BF16),
+            "i8" => Some(DType::I8),
+            "u8" => Some(DType::U8),
+            "i32" => Some(DType::I32),
+            "i64" => Some(DType::I64),
+            "bool" => Some(DType::Bool),
+            _ => None,
+        }
+    }
+
+    /// Returns the minimum value representable by this dtype.
+    pub fn min_value(&self) -> f64 {
+        match self {
+            DType::F64 => f64::MIN,
+            DType::F32 => f32::MIN as f64,
+            DType::F16 => -65504.0,
+            DType::BF16 => -3.389e38,
+            DType::I8 => -128.0,
+            DType::U8 => 0.0,
+            DType::I32 => i32::MIN as f64,
+            DType::I64 => i64::MIN as f64,
+            DType::Bool => 0.0,
+        }
+    }
+
+    /// Returns the maximum value representable by this dtype.
+    pub fn max_value(&self) -> f64 {
+        match self {
+            DType::F64 => f64::MAX,
+            DType::F32 => f32::MAX as f64,
+            DType::F16 => 65504.0,
+            DType::BF16 => 3.389e38,
+            DType::I8 => 127.0,
+            DType::U8 => 255.0,
+            DType::I32 => i32::MAX as f64,
+            DType::I64 => i64::MAX as f64,
+            DType::Bool => 1.0,
         }
     }
 }
@@ -60,14 +147,36 @@ impl std::fmt::Display for DType {
 /// This simulates real mixed-precision behavior where F32 compute
 /// loses precision compared to F64.
 pub fn to_dtype(tensor: &TensorValue, dtype: DType) -> TensorValue {
-    match dtype {
-        DType::F64 => tensor.clone(),
-        DType::F32 => {
-            // Simulate f32 precision loss: f64 -> f32 -> f64
-            let converted = tensor.data().mapv(|v| v as f32 as f64);
-            TensorValue::new(converted, tensor.requires_grad())
+    let converted = match dtype {
+        DType::F64 => return tensor.clone(),
+        DType::F32 => tensor.data().mapv(|v| v as f32 as f64),
+        DType::F16 => {
+            // Simulate f16: clamp to [-65504, 65504], reduce mantissa
+            tensor.data().mapv(|v| {
+                let clamped = v.clamp(-65504.0, 65504.0);
+                // Simulate 10-bit mantissa by rounding
+                let bits = (clamped as f32).to_bits();
+                let truncated = bits & 0xFFFF_E000; // keep top 16 bits of f32
+                f32::from_bits(truncated) as f64
+            })
         }
-    }
+        DType::BF16 => {
+            // Simulate bf16: same range as f32, 7-bit mantissa
+            tensor.data().mapv(|v| {
+                let bits = (v as f32).to_bits();
+                let truncated = bits & 0xFFFF_0000; // keep top 16 bits
+                f32::from_bits(truncated) as f64
+            })
+        }
+        DType::I8 => tensor
+            .data()
+            .mapv(|v| (v.clamp(-128.0, 127.0) as i8) as f64),
+        DType::U8 => tensor.data().mapv(|v| (v.clamp(0.0, 255.0) as u8) as f64),
+        DType::I32 => tensor.data().mapv(|v| (v as i32) as f64),
+        DType::I64 => tensor.data().mapv(|v| (v as i64) as f64),
+        DType::Bool => tensor.data().mapv(|v| if v != 0.0 { 1.0 } else { 0.0 }),
+    };
+    TensorValue::new(converted, tensor.requires_grad())
 }
 
 /// Converts raw f64 data to simulate f32 precision.
