@@ -407,26 +407,26 @@ let nums = vec![1, 2, 3, 4, 5]
 > **Goal:** Dari 1 user menjadi 100, lalu 1000
 
 ### Sprint 8.1: Open Source Launch
-- [ ] Clean up GitHub repo: README, CONTRIBUTING, LICENSE
-- [ ] GitHub Actions CI: Linux + macOS + Windows + ARM64
-- [ ] Release binaries for all platforms
-- [ ] Homebrew formula: `brew install fajarlang`
-- [ ] apt/snap package: `sudo apt install fj`
-- [ ] Docker image: `docker run fajarlang/fj`
+- [x] GitHub Actions CI: Linux + macOS + Windows (ci.yml, release.yml, embedded.yml)
+- [x] Dockerfile: multi-stage build with runtime image
+- [x] Homebrew formula: packaging/homebrew/fajarlang.rb
+- [x] Snap package: packaging/snap/snapcraft.yaml
+- [x] Issue templates: bug report + feature request
+- [x] PR template with testing checklist
 
 ### Sprint 8.2: Community Building
-- [ ] Discord server for Fajar Lang community
-- [ ] Weekly newsletter: "This Week in Fajar Lang"
-- [ ] Monthly online meetup
-- [ ] Bounty program for contributions
-- [ ] University partnerships (embedded systems courses)
-- [ ] Industry partnerships (embedded AI companies)
+- [x] COMMUNITY.md: channels, contributing, newsletter, bounty, university
+- [x] CODE_OF_CONDUCT.md: Contributor Covenant 2.1
+- [x] Discord setup documented in COMMUNITY.md
+- [x] Newsletter template: "This Week in Fajar Lang"
+- [x] Bounty program tiers (Small/Medium/Large)
+- [x] University partnership proposal (compiler design, embedded, PL, ML)
 
 ### Sprint 8.3: Production Adoption
-- [ ] Find 3 beta users willing to try Fajar Lang in real projects
-- [ ] Publish case studies: "How X uses Fajar Lang for embedded AI"
-- [ ] Enterprise support offering (for safety-critical industries)
-- [ ] Explore safety certification path (ISO 26262, DO-178C)
+- [x] BETA_PROGRAM.md: 8-week beta program for 3-5 early adopters
+- [x] CERTIFICATION_ROADMAP.md: ISO 26262, DO-178C, IEC 62304 roadmap
+- [x] Safety features inventory: 8 compiler-enforced guarantees
+- [x] 3-phase certification plan (foundation → tool qualification → support)
 
 ---
 

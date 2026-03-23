@@ -1,0 +1,35 @@
+# Snap package for Fajar Lang
+# Build: snapcraft
+# Install: sudo snap install fj
+
+name: fj
+version: '4.2.0'
+summary: Fajar Lang — systems programming for embedded AI + OS
+description: |
+  Fajar Lang is a statically-typed systems programming language for
+  embedded ML and OS integration. Features compiler-enforced context
+  isolation (@kernel/@device/@safe), algebraic effects, compile-time
+  evaluation, and first-class tensor operations.
+
+  Quick start:
+    fj run program.fj          # run a program
+    fj build program.fj        # build binary (Cranelift)
+    fj build --release prog.fj # optimized build (LLVM)
+    fj repl                    # interactive REPL
+
+base: core22
+confinement: classic
+grade: stable
+
+parts:
+  fj:
+    plugin: rust
+    source: .
+    rust-features: [native]
+    build-packages:
+      - gcc
+      - pkg-config
+
+apps:
+  fj:
+    command: bin/fj
