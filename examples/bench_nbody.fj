@@ -1,0 +1,130 @@
+// N-Body simulation — Benchmarks Game
+// Simulates planetary orbits using Newtonian gravity.
+// Reference: https://benchmarksgame-team.pages.debian.net/benchmarksgame/
+
+const PI: f64 = 3.141592653589793
+const SOLAR_MASS: f64 = 39.47841760435743 // 4 * PI * PI
+const DAYS_PER_YEAR: f64 = 365.24
+
+// Planet state: x, y, z, vx, vy, vz, mass
+// Stored as parallel arrays for simplicity
+
+fn nbody(n: i64) -> f64 {
+    // Sun
+    let mut x0 = 0.0
+    let mut y0 = 0.0
+    let mut z0 = 0.0
+    let mut vx0 = 0.0
+    let mut vy0 = 0.0
+    let mut vz0 = 0.0
+    let m0 = SOLAR_MASS
+
+    // Jupiter
+    let mut x1 = 4.84143144246472090
+    let mut y1 = -1.16032004402742839
+    let mut z1 = -0.103622044471123109
+    let mut vx1 = 0.00166007664274403694 * DAYS_PER_YEAR
+    let mut vy1 = 0.00769901118419740425 * DAYS_PER_YEAR
+    let mut vz1 = -0.0000690460016972063023 * DAYS_PER_YEAR
+    let m1 = 0.000954791938424326609 * SOLAR_MASS
+
+    // Saturn
+    let mut x2 = 8.34336671824457987
+    let mut y2 = 4.12479856412430479
+    let mut z2 = -0.403523417114321381
+    let mut vx2 = -0.00276742510726862411 * DAYS_PER_YEAR
+    let mut vy2 = 0.00499852801234917238 * DAYS_PER_YEAR
+    let mut vz2 = 0.0000230417297573763929 * DAYS_PER_YEAR
+    let m2 = 0.000285885980666130812 * SOLAR_MASS
+
+    // Advance n steps
+    let dt = 0.01
+    let mut i = 0
+    while i < n {
+        // Sun-Jupiter interaction
+        let dx01 = x0 - x1
+        let dy01 = y0 - y1
+        let dz01 = z0 - z1
+        let dist01_sq = dx01 * dx01 + dy01 * dy01 + dz01 * dz01
+        let dist01 = sqrt(dist01_sq)
+        let mag01 = dt / (dist01_sq * dist01)
+
+        vx0 = vx0 - dx01 * m1 * mag01
+        vy0 = vy0 - dy01 * m1 * mag01
+        vz0 = vz0 - dz01 * m1 * mag01
+        vx1 = vx1 + dx01 * m0 * mag01
+        vy1 = vy1 + dy01 * m0 * mag01
+        vz1 = vz1 + dz01 * m0 * mag01
+
+        // Sun-Saturn interaction
+        let dx02 = x0 - x2
+        let dy02 = y0 - y2
+        let dz02 = z0 - z2
+        let dist02_sq = dx02 * dx02 + dy02 * dy02 + dz02 * dz02
+        let dist02 = sqrt(dist02_sq)
+        let mag02 = dt / (dist02_sq * dist02)
+
+        vx0 = vx0 - dx02 * m2 * mag02
+        vy0 = vy0 - dy02 * m2 * mag02
+        vz0 = vz0 - dz02 * m2 * mag02
+        vx2 = vx2 + dx02 * m0 * mag02
+        vy2 = vy2 + dy02 * m0 * mag02
+        vz2 = vz2 + dz02 * m0 * mag02
+
+        // Jupiter-Saturn interaction
+        let dx12 = x1 - x2
+        let dy12 = y1 - y2
+        let dz12 = z1 - z2
+        let dist12_sq = dx12 * dx12 + dy12 * dy12 + dz12 * dz12
+        let dist12 = sqrt(dist12_sq)
+        let mag12 = dt / (dist12_sq * dist12)
+
+        vx1 = vx1 - dx12 * m2 * mag12
+        vy1 = vy1 - dy12 * m2 * mag12
+        vz1 = vz1 - dz12 * m2 * mag12
+        vx2 = vx2 + dx12 * m1 * mag12
+        vy2 = vy2 + dy12 * m1 * mag12
+        vz2 = vz2 + dz12 * m1 * mag12
+
+        // Update positions
+        x0 = x0 + dt * vx0
+        y0 = y0 + dt * vy0
+        z0 = z0 + dt * vz0
+        x1 = x1 + dt * vx1
+        y1 = y1 + dt * vy1
+        z1 = z1 + dt * vz1
+        x2 = x2 + dt * vx2
+        y2 = y2 + dt * vy2
+        z2 = z2 + dt * vz2
+
+        i = i + 1
+    }
+
+    // Compute energy
+    let mut e = 0.0
+    // Kinetic energy
+    e = e + 0.5 * m0 * (vx0 * vx0 + vy0 * vy0 + vz0 * vz0)
+    e = e + 0.5 * m1 * (vx1 * vx1 + vy1 * vy1 + vz1 * vz1)
+    e = e + 0.5 * m2 * (vx2 * vx2 + vy2 * vy2 + vz2 * vz2)
+
+    // Potential energy
+    let dx01f = x0 - x1
+    let dy01f = y0 - y1
+    let dz01f = z0 - z1
+    e = e - m0 * m1 / sqrt(dx01f * dx01f + dy01f * dy01f + dz01f * dz01f)
+    let dx02f = x0 - x2
+    let dy02f = y0 - y2
+    let dz02f = z0 - z2
+    e = e - m0 * m2 / sqrt(dx02f * dx02f + dy02f * dy02f + dz02f * dz02f)
+    let dx12f = x1 - x2
+    let dy12f = y1 - y2
+    let dz12f = z1 - z2
+    e = e - m1 * m2 / sqrt(dx12f * dx12f + dy12f * dy12f + dz12f * dz12f)
+
+    e
+}
+
+fn main() {
+    let energy = nbody(1000)
+    println(energy)
+}

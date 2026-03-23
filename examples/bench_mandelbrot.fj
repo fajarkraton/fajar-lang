@@ -1,0 +1,42 @@
+// Mandelbrot — Benchmarks Game
+// Generates a Mandelbrot set bitmap.
+
+fn mandelbrot(size: i64) -> i64 {
+    let mut count = 0
+    let mut y = 0
+    while y < size {
+        let mut x = 0
+        while x < size {
+            let cr = 2.0 * (x as f64) / (size as f64) - 1.5
+            let ci = 2.0 * (y as f64) / (size as f64) - 1.0
+
+            let mut zr = 0.0
+            let mut zi = 0.0
+            let mut iter = 0
+            let max_iter = 50
+
+            while iter < max_iter {
+                let zr2 = zr * zr
+                let zi2 = zi * zi
+                if zr2 + zi2 > 4.0 {
+                    break
+                }
+                zi = 2.0 * zr * zi + ci
+                zr = zr2 - zi2 + cr
+                iter = iter + 1
+            }
+
+            if iter == max_iter {
+                count = count + 1
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    count
+}
+
+fn main() {
+    let pixels_in_set = mandelbrot(200)
+    println(pixels_in_set)
+}

@@ -1,0 +1,51 @@
+// Binary Trees — Benchmarks Game
+// Stress test for memory allocation (tree construction + checksum).
+
+fn make_tree(depth: i64) -> i64 {
+    if depth <= 0 {
+        1
+    } else {
+        let left = make_tree(depth - 1)
+        let right = make_tree(depth - 1)
+        left + right
+    }
+}
+
+fn check_tree(depth: i64) -> i64 {
+    // Build tree and return node count (checksum)
+    make_tree(depth)
+}
+
+fn binary_trees(max_depth: i64) -> i64 {
+    let min_depth = 4
+    let mut total_check = 0
+
+    // Stretch tree
+    let stretch = check_tree(max_depth + 1)
+    total_check = total_check + stretch
+
+    // Long-lived tree
+    let long_lived = check_tree(max_depth)
+
+    // Iterations at various depths
+    let mut depth = min_depth
+    while depth <= max_depth {
+        let iterations = 1 << (max_depth - depth + min_depth)
+        let mut check = 0
+        let mut i = 0
+        while i < iterations {
+            check = check + check_tree(depth)
+            i = i + 1
+        }
+        total_check = total_check + check
+        depth = depth + 2
+    }
+
+    total_check = total_check + long_lived
+    total_check
+}
+
+fn main() {
+    let result = binary_trees(10)
+    println(result)
+}

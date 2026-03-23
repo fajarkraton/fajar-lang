@@ -1,0 +1,42 @@
+// FASTA — Benchmarks Game
+// Generate DNA sequences using weighted random selection.
+
+fn random_next(seed: i64) -> i64 {
+    // Linear congruential generator
+    (seed * 3877 + 29573) % 139968
+}
+
+fn fasta(n: i64) -> i64 {
+    // Generate n random DNA nucleotides and count each type
+    let mut seed = 42
+    let mut count_a = 0
+    let mut count_c = 0
+    let mut count_g = 0
+    let mut count_t = 0
+
+    let mut i = 0
+    while i < n {
+        seed = random_next(seed)
+        let r = seed % 100
+
+        if r < 27 {
+            count_a = count_a + 1
+        } else if r < 39 {
+            count_c = count_c + 1
+        } else if r < 54 {
+            count_g = count_g + 1
+        } else {
+            count_t = count_t + 1
+        }
+
+        i = i + 1
+    }
+
+    // Return total (should equal n)
+    count_a + count_c + count_g + count_t
+}
+
+fn main() {
+    let total = fasta(100000)
+    println(total)
+}

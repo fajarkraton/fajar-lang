@@ -1,0 +1,87 @@
+// Fannkuch-Redux — Benchmarks Game
+// Pancake sorting: count the maximum number of reversals.
+
+fn fannkuch(n: i64) -> i64 {
+    let mut perm = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    let mut count = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut max_flips = 0
+    let mut checksum = 0
+    let mut sign = 1
+
+    // Initialize
+    let mut i = 0
+    while i < n {
+        perm[i] = i
+        count[i] = i + 1
+        i = i + 1
+    }
+
+    let mut iterations = 0
+    let max_iter = 100000 // limit for benchmark
+
+    while iterations < max_iter {
+        // Count flips for current permutation
+        if perm[0] != 0 {
+            let mut flips = 0
+            let mut temp = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            let mut j = 0
+            while j < n {
+                temp[j] = perm[j]
+                j = j + 1
+            }
+
+            while temp[0] != 0 {
+                let k = temp[0]
+                // Reverse first k+1 elements
+                let mut lo = 0
+                let mut hi = k
+                while lo < hi {
+                    let t = temp[lo]
+                    temp[lo] = temp[hi]
+                    temp[hi] = t
+                    lo = lo + 1
+                    hi = hi - 1
+                }
+                flips = flips + 1
+            }
+
+            if flips > max_flips {
+                max_flips = flips
+            }
+            checksum = checksum + sign * flips
+        }
+
+        // Generate next permutation
+        sign = -sign
+        let mut first = perm[1]
+        perm[1] = perm[0]
+        perm[0] = first
+
+        let mut ci = 1
+        count[ci] = count[ci] - 1
+        while count[ci] <= 0 {
+            count[ci] = ci + 1
+            ci = ci + 1
+            if ci >= n { break }
+            // Rotate
+            let new_first = perm[0]
+            let mut m = 0
+            while m < ci {
+                perm[m] = perm[m + 1]
+                m = m + 1
+            }
+            perm[ci] = new_first
+            count[ci] = count[ci] - 1
+        }
+        if ci >= n { break }
+
+        iterations = iterations + 1
+    }
+
+    max_flips
+}
+
+fn main() {
+    let result = fannkuch(7)
+    println(result)
+}

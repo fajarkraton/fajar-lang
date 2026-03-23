@@ -20,6 +20,7 @@ pub mod amx;
 pub mod analysis;
 pub mod avx10;
 pub mod avx512;
+pub mod benchmarks;
 pub mod interop;
 pub mod nostd;
 pub mod optimizer;
