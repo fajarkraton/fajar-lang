@@ -147,8 +147,9 @@ impl Compiler {
             | Item::ExternFn(_)
             | Item::TypeAlias(_)
             | Item::GlobalAsm(_)
-            | Item::EffectDecl(_) => {
-                // Module/use/trait/extern/type-alias/global_asm/effect handled by pre-processing
+            | Item::EffectDecl(_)
+            | Item::MacroRulesDef(_) => {
+                // Module/use/trait/extern/type-alias/global_asm/effect/macros handled by pre-processing
             }
         }
     }
@@ -568,6 +569,9 @@ impl Compiler {
             Expr::Comptime { body, .. } => {
                 // In VM mode, comptime blocks are compiled normally.
                 self.compile_expr(body);
+            }
+            Expr::MacroInvocation { .. } => {
+                // Macro invocations should be expanded before compilation.
             }
         }
     }

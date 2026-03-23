@@ -159,6 +159,11 @@ impl<'src> Formatter<'src> {
             Item::EffectDecl(_) => {
                 // Effect declarations: formatting not yet implemented
             }
+            Item::MacroRulesDef(m) => {
+                self.write_indent();
+                self.push(&format!("macro_rules! {} {{ ... }}", m.name));
+                self.newline();
+            }
             Item::Stmt(s) => self.format_stmt(s),
         }
     }
@@ -792,6 +797,16 @@ impl<'src> Formatter<'src> {
                 self.push("comptime ");
                 self.format_expr(body);
             }
+            Expr::MacroInvocation { name, args, .. } => {
+                self.push(&format!("{}!(", name));
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.push(", ");
+                    }
+                    self.format_expr(arg);
+                }
+                self.push(")");
+            }
         }
     }
 
@@ -1120,6 +1135,7 @@ fn item_span(item: &Item) -> crate::lexer::token::Span {
         Item::TypeAlias(ta) => ta.span,
         Item::GlobalAsm(ga) => ga.span,
         Item::EffectDecl(ed) => ed.span,
+        Item::MacroRulesDef(m) => m.span,
         Item::Stmt(s) => stmt_span(s),
     }
 }

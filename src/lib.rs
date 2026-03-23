@@ -43,6 +43,7 @@ pub mod jit;
 pub mod lexer;
 pub mod lsp;
 pub mod lsp_v2;
+pub mod macros;
 pub mod ml_advanced;
 pub mod package;
 pub mod package_v2;

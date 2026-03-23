@@ -288,6 +288,10 @@ pub enum TokenKind {
     AtEnsures,
     /// `@invariant`
     AtInvariant,
+    /// `@derive`
+    AtDerive,
+    /// `@pure`
+    AtPure,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -610,6 +614,8 @@ impl fmt::Display for TokenKind {
             TokenKind::AtRequires => write!(f, "@requires"),
             TokenKind::AtEnsures => write!(f, "@ensures"),
             TokenKind::AtInvariant => write!(f, "@invariant"),
+            TokenKind::AtDerive => write!(f, "@derive"),
+            TokenKind::AtPure => write!(f, "@pure"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -731,6 +737,8 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("requires", TokenKind::AtRequires);
     m.insert("ensures", TokenKind::AtEnsures);
     m.insert("invariant", TokenKind::AtInvariant);
+    m.insert("derive", TokenKind::AtDerive);
+    m.insert("pure", TokenKind::AtPure);
     m
 });
 

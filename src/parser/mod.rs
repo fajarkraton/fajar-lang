@@ -668,6 +668,10 @@ impl Parser {
                     if name == "global_asm" {
                         return Ok(Item::GlobalAsm(self.parse_global_asm()?));
                     }
+                    // macro_rules! name { pattern => { template } }
+                    if name == "macro_rules" {
+                        return self.parse_macro_rules_def();
+                    }
                 }
                 let stmt = self.parse_stmt()?;
                 Ok(Item::Stmt(stmt))
@@ -695,7 +699,9 @@ impl Parser {
             | TokenKind::AtMessage
             | TokenKind::AtTest
             | TokenKind::AtShouldPanic
-            | TokenKind::AtIgnore => {
+            | TokenKind::AtIgnore
+            | TokenKind::AtDerive
+            | TokenKind::AtPure => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -733,6 +739,34 @@ impl Parser {
                     TokenKind::AtIgnore => ("ignore", None),
                     TokenKind::AtInterrupt => ("interrupt", None),
                     TokenKind::AtMessage => ("message", None),
+                    TokenKind::AtPure => ("pure", None),
+                    TokenKind::AtDerive => {
+                        // Parse @derive(Trait1, Trait2, ...)
+                        let mut derive_params = Vec::new();
+                        if matches!(self.peek_kind(), TokenKind::LParen) {
+                            self.advance(); // consume '('
+                            while !matches!(self.peek_kind(), TokenKind::RParen | TokenKind::Eof) {
+                                if let TokenKind::Ident(name) = self.peek_kind().clone() {
+                                    self.advance();
+                                    derive_params.push(name);
+                                } else {
+                                    self.advance(); // skip unexpected
+                                }
+                                if !self.eat(&TokenKind::Comma) {
+                                    break;
+                                }
+                            }
+                            if matches!(self.peek_kind(), TokenKind::RParen) {
+                                self.advance(); // consume ')'
+                            }
+                        }
+                        return Some(Annotation {
+                            name: "derive".to_string(),
+                            param: None,
+                            params: derive_params,
+                            span: token.span,
+                        });
+                    }
                     TokenKind::AtSection => {
                         // Parse @section("section_name")
                         let section_name = if matches!(self.peek_kind(), TokenKind::LParen) {
@@ -758,6 +792,7 @@ impl Parser {
                 Some(Annotation {
                     name: name.to_string(),
                     param,
+                    params: vec![],
                     span: token.span,
                 })
             }

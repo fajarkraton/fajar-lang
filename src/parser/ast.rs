@@ -74,6 +74,8 @@ pub enum Item {
     GlobalAsm(GlobalAsm),
     /// Effect declaration: `effect Console { fn log(msg: str) -> void }`
     EffectDecl(EffectDeclItem),
+    /// Macro rules definition: `macro_rules! name { pattern => { template } }`
+    MacroRulesDef(MacroRulesItem),
     /// A statement at the top level (for REPL / scripts).
     Stmt(Stmt),
 }
@@ -87,6 +89,34 @@ pub enum Item {
 pub struct GlobalAsm {
     /// Assembly template string.
     pub template: String,
+    /// Source span.
+    pub span: Span,
+}
+
+/// A macro_rules! definition.
+///
+/// ```text
+/// macro_rules! vec {
+///     ($($x:expr),*) => { ... }
+/// }
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacroRulesItem {
+    /// Macro name.
+    pub name: String,
+    /// Macro arms (pattern → template pairs).
+    pub arms: Vec<MacroArm>,
+    /// Source span.
+    pub span: Span,
+}
+
+/// A single arm in a macro_rules! definition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacroArm {
+    /// Pattern tokens (raw string representation).
+    pub pattern: String,
+    /// Template body expression.
+    pub body: Box<Expr>,
     /// Source span.
     pub span: Span,
 }
@@ -512,6 +542,8 @@ pub struct Annotation {
     pub name: String,
     /// Optional parameter (e.g., `"C"` in `#[repr(C)]`).
     pub param: Option<String>,
+    /// Optional list of parameters (e.g., `["Debug", "Clone"]` in `@derive(Debug, Clone)`).
+    pub params: Vec<String>,
     /// Source span.
     pub span: Span,
 }
@@ -931,6 +963,19 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// Macro invocation: `name!(args)`.
+    ///
+    /// The macro name is followed by `!` and parenthesized arguments.
+    /// Built-in macros: `vec!`, `stringify!`, `concat!`, `dbg!`, `todo!`, `env!`.
+    MacroInvocation {
+        /// Macro name (e.g., `"vec"`, `"stringify"`).
+        name: String,
+        /// Raw argument tokens as strings (unparsed).
+        args: Vec<Box<Expr>>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 /// A single arm in a handle expression.
@@ -1031,7 +1076,8 @@ impl Expr {
             | Expr::FString { span, .. }
             | Expr::HandleEffect { span, .. }
             | Expr::ResumeExpr { span, .. }
-            | Expr::Comptime { span, .. } => *span,
+            | Expr::Comptime { span, .. }
+            | Expr::MacroInvocation { span, .. } => *span,
         }
     }
 }
@@ -2119,6 +2165,7 @@ mod tests {
             annotation: Some(Annotation {
                 name: "kernel".into(),
                 param: None,
+                params: vec![],
                 span: dummy_span(),
             }),
             name: "init".into(),

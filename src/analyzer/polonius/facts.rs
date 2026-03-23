@@ -632,6 +632,7 @@ impl FactGenerator {
             Expr::Comptime { body, .. } => {
                 self.visit_expr(body);
             }
+            Expr::MacroInvocation { .. } => {}
             Expr::Literal { .. } | Expr::Path { .. } => {}
         }
     }

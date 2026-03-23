@@ -1052,6 +1052,10 @@ impl Interpreter {
                 // Effect declarations are registered at analysis time; no runtime effect yet.
                 Ok(Value::Null)
             }
+            Item::MacroRulesDef(_) => {
+                // Macro definitions are processed during expansion; no runtime effect.
+                Ok(Value::Null)
+            }
         }
     }
 
@@ -1261,6 +1265,18 @@ impl Interpreter {
                 // In interpreter mode, comptime blocks are evaluated eagerly
                 // just like normal expressions.
                 self.eval_expr(body)
+            }
+            Expr::MacroInvocation { name, args, .. } => {
+                // Evaluate macro arguments
+                let mut arg_vals = Vec::new();
+                for arg in args {
+                    arg_vals.push(self.eval_expr(arg)?);
+                }
+                // Dispatch to built-in macro handler
+                match crate::macros::eval_builtin_macro(name, &arg_vals) {
+                    Ok(val) => Ok(val),
+                    Err(msg) => Err(RuntimeError::TypeError(msg).into()),
+                }
             }
         }
     }

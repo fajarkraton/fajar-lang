@@ -488,6 +488,40 @@ impl Parser {
             return self.parse_inline_asm(start);
         }
 
+        // General macro invocation: name!(args)
+        // Catches vec!, stringify!, concat!, dbg!, todo!, env!, and user-defined macros
+        if self.at(&TokenKind::Bang)
+            && name != "global_asm"
+            && self.pos + 1 < self.tokens.len()
+            && matches!(
+                self.tokens[self.pos + 1].kind,
+                TokenKind::LParen | TokenKind::LBracket
+            )
+        {
+            self.advance(); // eat `!`
+            let (open, close) = if self.at(&TokenKind::LBracket) {
+                (TokenKind::LBracket, TokenKind::RBracket)
+            } else {
+                (TokenKind::LParen, TokenKind::RParen)
+            };
+            self.expect(&open)?;
+            let mut args = Vec::new();
+            while !self.at(&close) && !self.at_eof() {
+                let arg = self.parse_expr(0)?;
+                args.push(Box::new(arg));
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            let end = self.peek().span.end;
+            self.expect(&close)?;
+            return Ok(Expr::MacroInvocation {
+                name,
+                args,
+                span: Span::new(start, end),
+            });
+        }
+
         // Check for path: ident::ident::...
         if self.at(&TokenKind::ColonColon) {
             let mut segments = vec![name];

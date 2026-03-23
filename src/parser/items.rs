@@ -262,6 +262,74 @@ impl Parser {
         })
     }
 
+    /// Parses a `macro_rules!` definition.
+    ///
+    /// ```text
+    /// macro_rules! name {
+    ///     (pattern) => { template }
+    /// }
+    /// ```
+    pub(super) fn parse_macro_rules_def(&mut self) -> Result<Item, ParseError> {
+        let start = self.peek().span.start;
+        // consume `macro_rules`
+        self.advance();
+        // consume `!`
+        self.expect(&TokenKind::Bang)?;
+        let (name, _) = self.expect_ident()?;
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut arms = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            let arm_start = self.peek().span.start;
+
+            // Parse pattern: (...)
+            self.expect(&TokenKind::LParen)?;
+            let mut pattern = String::new();
+            let mut depth = 1;
+            while depth > 0 && !self.at_eof() {
+                let tok = self.advance().clone();
+                match &tok.kind {
+                    TokenKind::LParen => {
+                        depth += 1;
+                        pattern.push('(');
+                    }
+                    TokenKind::RParen => {
+                        depth -= 1;
+                        if depth > 0 {
+                            pattern.push(')');
+                        }
+                    }
+                    _ => {
+                        if !pattern.is_empty() {
+                            pattern.push(' ');
+                        }
+                        pattern.push_str(&format!("{}", tok.kind));
+                    }
+                }
+            }
+
+            // => { template }
+            self.expect(&TokenKind::FatArrow)?;
+            let body = self.parse_block_expr()?;
+            let arm_end = body.span().end;
+
+            arms.push(MacroArm {
+                pattern: pattern.trim().to_string(),
+                body: Box::new(body),
+                span: Span::new(arm_start, arm_end),
+            });
+        }
+
+        let end = self.peek().span.end;
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(Item::MacroRulesDef(MacroRulesItem {
+            name,
+            arms,
+            span: Span::new(start, end),
+        }))
+    }
+
     /// Parses function parameters: `name: Type, name: Type`.
     ///
     /// Also handles `self`, `&self`, and `&mut self` sugar in impl methods.
