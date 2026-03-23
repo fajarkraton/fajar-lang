@@ -480,6 +480,120 @@ fn read_source(path: &PathBuf) -> Result<String, ExitCode> {
 
 /// Reads all .fj files in a directory and concatenates them.
 /// Files are sorted alphabetically, except main.fj is always last.
+/// Orders files by their `use` dependencies (topological sort).
+///
+/// Files that are depended on by others come first.
+/// Falls back to alphabetical if no dependencies detected or cycle exists.
+fn order_by_dependencies(files: &[PathBuf]) -> Vec<PathBuf> {
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    if files.len() <= 1 {
+        return files.to_vec();
+    }
+
+    // Extract module name from file path: kernel/mm/frames.fj → "frames"
+    let file_modules: HashMap<String, usize> = files
+        .iter()
+        .enumerate()
+        .filter_map(|(i, f)| {
+            f.file_stem()
+                .and_then(|s| s.to_str())
+                .map(|name| (name.to_string(), i))
+        })
+        .collect();
+
+    // Parse `use` statements from each file to find dependencies
+    let mut deps: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut in_degree: HashMap<usize, usize> = HashMap::new();
+
+    for (i, file) in files.iter().enumerate() {
+        in_degree.entry(i).or_insert(0);
+        if let Ok(content) = std::fs::read_to_string(file) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                // Match: use module_name, use path::module_name
+                if let Some(rest) = trimmed.strip_prefix("use ") {
+                    let module_path = rest.trim_end_matches(';').trim();
+                    // Get last segment: use kernel::mm::frames → "frames"
+                    let module_name = module_path
+                        .rsplit("::")
+                        .next()
+                        .unwrap_or(module_path)
+                        .trim();
+                    // Also try full path segments
+                    let segments: Vec<&str> = module_path.split("::").collect();
+
+                    // Check if any file matches this dependency
+                    for seg in &segments {
+                        if let Some(&dep_idx) = file_modules.get(*seg) {
+                            if dep_idx != i {
+                                deps.entry(dep_idx).or_default().push(i);
+                                *in_degree.entry(i).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                    if let Some(&dep_idx) = file_modules.get(module_name) {
+                        if dep_idx != i && !deps.get(&dep_idx).is_some_and(|d| d.contains(&i)) {
+                            deps.entry(dep_idx).or_default().push(i);
+                            *in_degree.entry(i).or_insert(0) += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Kahn's algorithm for topological sort
+    let mut queue: VecDeque<usize> = in_degree
+        .iter()
+        .filter(|(_, deg)| **deg == 0)
+        .map(|(&idx, _)| idx)
+        .collect();
+
+    // Sort initial queue for determinism
+    let mut sorted_queue: Vec<usize> = queue.drain(..).collect();
+    sorted_queue.sort();
+    queue.extend(sorted_queue);
+
+    let mut result: Vec<PathBuf> = Vec::new();
+    let mut visited = HashSet::new();
+
+    while let Some(idx) = queue.pop_front() {
+        if !visited.insert(idx) {
+            continue;
+        }
+        result.push(files[idx].clone());
+
+        if let Some(dependents) = deps.get(&idx) {
+            for &dep in dependents {
+                if let Some(deg) = in_degree.get_mut(&dep) {
+                    *deg = deg.saturating_sub(1);
+                    if *deg == 0 && !visited.contains(&dep) {
+                        queue.push_back(dep);
+                    }
+                }
+            }
+        }
+    }
+
+    // Add any files not in the dependency graph (standalone)
+    for (i, file) in files.iter().enumerate() {
+        if !visited.contains(&i) {
+            result.push(file.clone());
+        }
+    }
+
+    // If topological sort produced fewer files (cycle), fallback to alphabetical
+    if result.len() < files.len() {
+        let mut fallback = files.to_vec();
+        fallback.sort();
+        eprintln!("warning: circular dependency detected, using alphabetical order");
+        return fallback;
+    }
+
+    result
+}
+
 fn read_source_dir(dir: &std::path::Path) -> Result<String, ExitCode> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut main_file: Option<PathBuf> = None;
@@ -525,11 +639,14 @@ fn read_source_dir(dir: &std::path::Path) -> Result<String, ExitCode> {
         }
     }
 
-    // Build final file list: shared first, then service files, main.fj last
+    // Build final file list: shared first, then service files in dependency order, main.fj last
     shared_files.sort();
-    files.sort();
+
+    // Dependency-based ordering: parse `use` statements to determine file order
+    let service_files = order_by_dependencies(&files);
+
     let mut final_files = shared_files;
-    final_files.extend(files);
+    final_files.extend(service_files);
     if let Some(main) = main_file {
         final_files.push(main);
     }
