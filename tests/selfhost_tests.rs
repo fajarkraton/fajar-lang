@@ -179,10 +179,11 @@ fn bootstrap_total_selfhost_loc() {
     let lexer = load_stdlib("lexer.fj").lines().count();
     let parser = load_stdlib("parser.fj").lines().count();
     let analyzer = load_stdlib("analyzer.fj").lines().count();
-    let total = lexer + parser + analyzer;
+    let codegen = load_stdlib("codegen.fj").lines().count();
+    let total = lexer + parser + analyzer + codegen;
     assert!(
-        total >= 800,
-        "self-hosted frontend should have 800+ lines, got {total}"
+        total >= 1200,
+        "self-hosted compiler should have 1200+ lines, got {total}"
     );
 }
 
@@ -218,16 +219,123 @@ fn selfhost_analyzer_format_error() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 7. Self-hosting statistics
+// 7. Self-hosted codegen
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn selfhost_codegen_file_exists() {
+    assert!(std::path::Path::new("stdlib/codegen.fj").exists());
+}
+
+#[test]
+fn selfhost_codegen_parses() {
+    let source = load_stdlib("codegen.fj");
+    let tokens = fajar_lang::lexer::tokenize(&source).expect("codegen.fj should lex");
+    let _program = fajar_lang::parser::parse(tokens).expect("codegen.fj should parse");
+}
+
+#[test]
+fn selfhost_codegen_has_public_api() {
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("pub fn generate_c"));
+    assert!(source.contains("pub fn emit_preamble"));
+    assert!(source.contains("pub fn emit_function"));
+    assert!(source.contains("pub fn emit_let"));
+    assert!(source.contains("pub fn emit_return"));
+    assert!(source.contains("pub fn emit_if"));
+    assert!(source.contains("pub fn emit_while"));
+    assert!(source.contains("pub fn emit_println"));
+    assert!(source.contains("pub fn c_type_for"));
+    assert!(source.contains("pub fn c_operator"));
+    assert!(source.contains("pub fn generate_hello_c"));
+}
+
+#[test]
+fn selfhost_codegen_has_type_mapping() {
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("int64_t"));
+    assert!(source.contains("double"));
+    assert!(source.contains("const char*"));
+    assert!(source.contains("void"));
+}
+
+#[test]
+fn selfhost_codegen_has_operator_mapping() {
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("fn map_binop"));
+    // All standard C operators should be mapped
+    assert!(source.contains(r#""+""#));
+    assert!(source.contains(r#""-""#));
+    assert!(source.contains(r#""*""#));
+    assert!(source.contains(r#""/""#));
+}
+
+#[test]
+fn selfhost_codegen_has_runtime() {
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("fj_println_int"));
+    assert!(source.contains("fj_println_str"));
+    assert!(source.contains("fj_println_float"));
+    assert!(source.contains("fj_println_bool"));
+}
+
+#[test]
+fn selfhost_codegen_line_count() {
+    let source = load_stdlib("codegen.fj");
+    let lines = source.lines().count();
+    assert!(
+        lines >= 200,
+        "codegen.fj should have 200+ lines, got {lines}"
+    );
+}
+
+#[test]
+fn selfhost_codegen_state_struct() {
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("struct CodegenState"));
+    assert!(source.contains("lines:"));
+    assert!(source.contains("indent:"));
+    assert!(source.contains("next_tmp:"));
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 8. Bootstrap chain
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn bootstrap_full_compiler_loc() {
+    let lexer = load_stdlib("lexer.fj").lines().count();
+    let parser = load_stdlib("parser.fj").lines().count();
+    let analyzer = load_stdlib("analyzer.fj").lines().count();
+    let codegen = load_stdlib("codegen.fj").lines().count();
+    let total = lexer + parser + analyzer + codegen;
+    assert!(
+        total >= 1200,
+        "self-hosted compiler should have 1200+ lines, got {total} (lex:{lexer} parse:{parser} analyze:{analyzer} codegen:{codegen})"
+    );
+}
+
+#[test]
+fn bootstrap_3stage_design() {
+    // Verify the bootstrap chain is documented in codegen.fj
+    let source = load_stdlib("codegen.fj");
+    assert!(source.contains("Stage 0"));
+    assert!(source.contains("Stage 1"));
+    assert!(source.contains("Stage 2"));
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 9. Self-hosting statistics (updated)
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn selfhost_all_stdlib_files_parse() {
-    // hal.fj has doc comments inside trait bodies (not yet supported by parser)
+    // hal.fj and drivers.fj have doc comments inside trait bodies (not yet supported)
     for name in &[
         "lexer.fj",
         "parser.fj",
         "analyzer.fj",
+        "codegen.fj",
         "core.fj",
         "nn.fj",
         "os.fj",
