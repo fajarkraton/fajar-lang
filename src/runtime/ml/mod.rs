@@ -19,6 +19,7 @@ pub mod gpu;
 pub mod layers;
 pub mod metrics;
 pub mod mixed_precision;
+pub mod model_formats;
 pub mod npu;
 pub mod ops;
 pub mod optim;

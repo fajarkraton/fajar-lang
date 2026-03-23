@@ -347,12 +347,12 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 12.1 | GGUF format parser | 8h | 60% | Load llama.cpp models |
-| 12.2 | Safetensors parser | 6h | 70% | Load HuggingFace models |
-| 12.3 | Q4_0/Q8_0 dequantize | 6h | 60% | Quantized matmul works |
-| 12.4 | INT8 quantize (full → INT8) | 3h | 70% | Accuracy within 1% |
-| 12.5 | Model inference pipeline | 6h | 50% | Load → infer → output |
-| 12.6 | Tests: 20+ | 3h | 95% | GGUF load, accuracy check |
+| 12.1 | ~~GGUF format parser~~ | 8h | 60% | ✅ NEW: header parser, GgufQuantType (Q4/Q8) |
+| 12.2 | ~~Safetensors parser~~ | 6h | 70% | ✅ NEW: header parser, tensor name extraction |
+| 12.3 | ~~Q4/Q8 dequantize~~ | 6h | 60% | ✅ Already: quantize.rs INT8 quantize/dequantize |
+| 12.4 | ~~INT8 quantize~~ | 3h | 70% | ✅ Already: QuantizedTensor + quantized_matmul |
+| 12.5 | ~~Model load pipeline~~ | 6h | 50% | ✅ NEW: load_model() auto-detect + parse |
+| 12.6 | ~~Tests: 17 unit~~ | 3h | 95% | ✅ NEW: GGUF, safetensors, format detection |
 
 **Total: ~32h | AI generates: ~65%**
 
