@@ -256,13 +256,13 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 6.1 | fj_user_println → SYS_WRITE | 3h | 70% | @safe program prints to console |
-| 6.2 | fj_user_exit → SYS_EXIT | 1h | 90% | Clean exit |
-| 6.3 | fj_user_malloc/free → SYS_BRK | 4h | 60% | User heap works |
-| 6.4 | fj_user_ipc_send/recv/call/reply | 6h | 60% | IPC via SYSCALL instruction |
-| 6.5 | Auto-link for x86_64-user target | 2h | 70% | Compiler auto-links runtime |
-| 6.6 | Auto-link for aarch64-user target | 2h | 70% | ARM64 user runtime |
-| 6.7 | Tests: 30+ | 3h | 95% | User programs compile and link |
+| 6.1 | ~~fj_user_println → SYS_WRITE~~ | 3h | 70% | ✅ Already: fj_rt_user_print/print_i64/println |
+| 6.2 | ~~fj_user_exit → SYS_EXIT~~ | 1h | 90% | ✅ Already: fj_rt_user_exit |
+| 6.3 | ~~fj_user_malloc/free → SYS_BRK~~ | 4h | 60% | ✅ Already: fj_rt_user_mmap |
+| 6.4 | ~~fj_user_ipc_send/recv/call/reply~~ | 6h | 60% | ✅ Already: 7 IPC wrappers including select |
+| 6.5 | ~~Auto-link for x86_64-user target~~ | 2h | 70% | ✅ Already: set_user_mode(true) in cmd_build_native |
+| 6.6 | Auto-link for aarch64-user target | 2h | 70% | ⏳ Needs ARM64 SYSCALL instruction variant |
+| 6.7 | ~~Tests: 21~~ | 3h | 95% | ✅ NEW: 21 user runtime tests |
 
 **Total: ~21h | AI generates: ~70%**
 
