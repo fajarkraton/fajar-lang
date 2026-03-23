@@ -105,6 +105,39 @@ impl LanguageServer for FajarLspBackend {
                     work_done_progress_options: Default::default(),
                 }),
                 rename_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: SemanticTokensLegend {
+                                token_types: vec![
+                                    SemanticTokenType::KEYWORD,
+                                    SemanticTokenType::COMMENT,
+                                    SemanticTokenType::STRING,
+                                    SemanticTokenType::NUMBER,
+                                    SemanticTokenType::FUNCTION,
+                                    SemanticTokenType::VARIABLE,
+                                    SemanticTokenType::TYPE,
+                                    SemanticTokenType::OPERATOR,
+                                    SemanticTokenType::PARAMETER,
+                                    SemanticTokenType::PROPERTY,
+                                    SemanticTokenType::NAMESPACE,
+                                    SemanticTokenType::MACRO,
+                                    SemanticTokenType::DECORATOR,
+                                ],
+                                token_modifiers: vec![
+                                    SemanticTokenModifier::DECLARATION,
+                                    SemanticTokenModifier::DEFINITION,
+                                    SemanticTokenModifier::READONLY,
+                                ],
+                            },
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: None,
+                            ..Default::default()
+                        },
+                    ),
+                ),
+                inlay_hint_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -502,6 +535,305 @@ impl LanguageServer for FajarLspBackend {
             ..Default::default()
         }))
     }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let tokens = generate_semantic_tokens(&doc.source);
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: tokens,
+        })))
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let hints = generate_inlay_hints(&doc.source, doc);
+        Ok(Some(hints))
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        let locations = find_all_references(&doc.source, &word, &uri);
+        if locations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(locations))
+        }
+    }
+}
+
+// ── Semantic Tokens ─────────────────────────────────────────────────
+
+/// Generates semantic tokens for syntax highlighting via LSP.
+fn generate_semantic_tokens(source: &str) -> Vec<SemanticToken> {
+    let tokens = match tokenize(source) {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut result = Vec::new();
+    let mut prev_line: u32 = 0;
+    let mut prev_start: u32 = 0;
+
+    for token in &tokens {
+        let token_type = match &token.kind {
+            // Keywords (type 0)
+            crate::lexer::token::TokenKind::If
+            | crate::lexer::token::TokenKind::Else
+            | crate::lexer::token::TokenKind::Match
+            | crate::lexer::token::TokenKind::While
+            | crate::lexer::token::TokenKind::For
+            | crate::lexer::token::TokenKind::Loop
+            | crate::lexer::token::TokenKind::In
+            | crate::lexer::token::TokenKind::Return
+            | crate::lexer::token::TokenKind::Break
+            | crate::lexer::token::TokenKind::Continue
+            | crate::lexer::token::TokenKind::Let
+            | crate::lexer::token::TokenKind::Mut
+            | crate::lexer::token::TokenKind::Fn
+            | crate::lexer::token::TokenKind::Struct
+            | crate::lexer::token::TokenKind::Enum
+            | crate::lexer::token::TokenKind::Impl
+            | crate::lexer::token::TokenKind::Trait
+            | crate::lexer::token::TokenKind::Pub
+            | crate::lexer::token::TokenKind::Use
+            | crate::lexer::token::TokenKind::Mod
+            | crate::lexer::token::TokenKind::Const
+            | crate::lexer::token::TokenKind::Static
+            | crate::lexer::token::TokenKind::Async
+            | crate::lexer::token::TokenKind::Await
+            | crate::lexer::token::TokenKind::Linear
+            | crate::lexer::token::TokenKind::Comptime
+            | crate::lexer::token::TokenKind::Effect
+            | crate::lexer::token::TokenKind::Dyn
+            | crate::lexer::token::TokenKind::Extern
+            | crate::lexer::token::TokenKind::Type
+            | crate::lexer::token::TokenKind::Where
+            | crate::lexer::token::TokenKind::True
+            | crate::lexer::token::TokenKind::False
+            | crate::lexer::token::TokenKind::Null => Some(0u32), // KEYWORD
+
+            // Strings (type 2)
+            crate::lexer::token::TokenKind::StringLit(_)
+            | crate::lexer::token::TokenKind::RawStringLit(_)
+            | crate::lexer::token::TokenKind::CharLit(_) => Some(2), // STRING
+
+            // Numbers (type 3)
+            crate::lexer::token::TokenKind::IntLit(_)
+            | crate::lexer::token::TokenKind::FloatLit(_) => Some(3), // NUMBER
+
+            // Types (type 6)
+            crate::lexer::token::TokenKind::BoolType
+            | crate::lexer::token::TokenKind::I8
+            | crate::lexer::token::TokenKind::I16
+            | crate::lexer::token::TokenKind::I32
+            | crate::lexer::token::TokenKind::I64
+            | crate::lexer::token::TokenKind::I128
+            | crate::lexer::token::TokenKind::U8
+            | crate::lexer::token::TokenKind::U16
+            | crate::lexer::token::TokenKind::U32
+            | crate::lexer::token::TokenKind::U64
+            | crate::lexer::token::TokenKind::U128
+            | crate::lexer::token::TokenKind::F32Type
+            | crate::lexer::token::TokenKind::F64Type
+            | crate::lexer::token::TokenKind::StrType
+            | crate::lexer::token::TokenKind::CharType
+            | crate::lexer::token::TokenKind::Void
+            | crate::lexer::token::TokenKind::Never
+            | crate::lexer::token::TokenKind::Tensor => Some(6), // TYPE
+
+            // Operators (type 7)
+            crate::lexer::token::TokenKind::Plus
+            | crate::lexer::token::TokenKind::Minus
+            | crate::lexer::token::TokenKind::Star
+            | crate::lexer::token::TokenKind::Slash
+            | crate::lexer::token::TokenKind::Percent
+            | crate::lexer::token::TokenKind::StarStar
+            | crate::lexer::token::TokenKind::EqEq
+            | crate::lexer::token::TokenKind::BangEq
+            | crate::lexer::token::TokenKind::Lt
+            | crate::lexer::token::TokenKind::Gt
+            | crate::lexer::token::TokenKind::LtEq
+            | crate::lexer::token::TokenKind::GtEq
+            | crate::lexer::token::TokenKind::AmpAmp
+            | crate::lexer::token::TokenKind::PipePipe
+            | crate::lexer::token::TokenKind::PipeGt
+            | crate::lexer::token::TokenKind::Arrow
+            | crate::lexer::token::TokenKind::FatArrow => Some(7), // OPERATOR
+
+            // Annotations (type 12 = DECORATOR)
+            crate::lexer::token::TokenKind::AtKernel
+            | crate::lexer::token::TokenKind::AtDevice
+            | crate::lexer::token::TokenKind::AtSafe
+            | crate::lexer::token::TokenKind::AtUnsafe
+            | crate::lexer::token::TokenKind::AtNpu
+            | crate::lexer::token::TokenKind::AtFfi
+            | crate::lexer::token::TokenKind::AtTest
+            | crate::lexer::token::TokenKind::AtDerive
+            | crate::lexer::token::TokenKind::AtPure
+            | crate::lexer::token::TokenKind::AtEntry => Some(12), // DECORATOR
+
+            // Doc comments (type 1 = COMMENT)
+            crate::lexer::token::TokenKind::DocComment(_) => Some(1), // COMMENT
+
+            _ => None,
+        };
+
+        if let Some(tt) = token_type {
+            let line = token.line.saturating_sub(1);
+            let start = token.col.saturating_sub(1);
+            let length = token.span.len() as u32;
+
+            let delta_line = line - prev_line;
+            let delta_start = if delta_line == 0 {
+                start - prev_start
+            } else {
+                start
+            };
+
+            result.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length,
+                token_type: tt,
+                token_modifiers_bitset: 0,
+            });
+
+            prev_line = line;
+            prev_start = start;
+        }
+    }
+
+    result
+}
+
+// ── Inlay Hints ─────────────────────────────────────────────────────
+
+/// Generates inlay hints for type annotations on let bindings.
+fn generate_inlay_hints(source: &str, _doc: &DocumentState) -> Vec<InlayHint> {
+    let mut hints = Vec::new();
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Pattern: `let name = value` without explicit type annotation
+        if let Some(rest) = trimmed.strip_prefix("let ") {
+            let rest = rest
+                .trim_start_matches("mut ")
+                .trim_start_matches("linear ");
+            // Check if there's no `:` before `=` (no type annotation)
+            if let Some(eq_pos) = rest.find('=') {
+                let before_eq = &rest[..eq_pos].trim();
+                if !before_eq.contains(':') {
+                    let name = before_eq.trim();
+                    let after_eq = rest[eq_pos + 1..].trim();
+                    if let Some(inferred) = infer_type_hint(after_eq) {
+                        // Position: after the variable name
+                        let col = line.find(name).unwrap_or(0) + name.len();
+                        hints.push(InlayHint {
+                            position: Position {
+                                line: line_idx as u32,
+                                character: col as u32,
+                            },
+                            label: InlayHintLabel::String(format!(": {inferred}")),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: None,
+                            padding_right: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    hints
+}
+
+/// Simple type inference for inlay hints.
+fn infer_type_hint(expr: &str) -> Option<&'static str> {
+    let expr = expr.trim();
+    if expr.starts_with('"') || expr.starts_with("f\"") {
+        Some("str")
+    } else if expr == "true" || expr == "false" {
+        Some("bool")
+    } else if expr.contains('.') && expr.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        Some("f64")
+    } else if expr.chars().all(|c| c.is_ascii_digit() || c == '-') && !expr.is_empty() {
+        Some("i64")
+    } else if expr.starts_with('[') || expr.starts_with("vec![") {
+        Some("Array")
+    } else {
+        None
+    }
+}
+
+// ── References ──────────────────────────────────────────────────────
+
+/// Finds all references to a symbol in the document.
+fn find_all_references(source: &str, word: &str, uri: &Url) -> Vec<Location> {
+    let mut locations = Vec::new();
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let mut search_from = 0;
+        while let Some(col) = line[search_from..].find(word) {
+            let abs_col = search_from + col;
+            // Check word boundaries
+            let before_ok = abs_col == 0
+                || !line.as_bytes()[abs_col - 1].is_ascii_alphanumeric()
+                    && line.as_bytes()[abs_col - 1] != b'_';
+            let after_pos = abs_col + word.len();
+            let after_ok = after_pos >= line.len()
+                || !line.as_bytes()[after_pos].is_ascii_alphanumeric()
+                    && line.as_bytes()[after_pos] != b'_';
+
+            if before_ok && after_ok {
+                let start = Position {
+                    line: line_idx as u32,
+                    character: abs_col as u32,
+                };
+                let end = Position {
+                    line: line_idx as u32,
+                    character: after_pos as u32,
+                };
+                locations.push(Location {
+                    uri: uri.clone(),
+                    range: Range { start, end },
+                });
+            }
+            search_from = abs_col + word.len();
+        }
+    }
+
+    locations
 }
 
 // ── Diagnostic pipeline ─────────────────────────────────────────────
