@@ -555,6 +555,15 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             Expr::Match { subject, arms, .. } => self.compile_match(subject, arms),
 
+            // Effect system: handle expression runs body (effects are compile-time checked)
+            Expr::HandleEffect { body, .. } => self.compile_expr(body),
+
+            // Resume: evaluate the value (simplified — full continuation not in LLVM yet)
+            Expr::ResumeExpr { value, .. } => self.compile_expr(value),
+
+            // Comptime: evaluate the body (should be folded to literal by analyzer)
+            Expr::Comptime { body, .. } => self.compile_expr(body),
+
             _ => Err(CodegenError::NotImplemented(format!(
                 "LLVM expr: {:?}",
                 std::mem::discriminant(expr)

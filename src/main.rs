@@ -115,6 +115,9 @@ enum Command {
         /// Enable incremental compilation (cache unchanged functions).
         #[arg(long)]
         incremental: bool,
+        /// Release build: uses LLVM backend with -O2 for best codegen quality.
+        #[arg(long)]
+        release: bool,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -263,6 +266,7 @@ fn main() -> ExitCode {
             linker,
             verbose,
             incremental,
+            release,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -285,8 +289,22 @@ fn main() -> ExitCode {
             if let Some(ref board_name) = board {
                 return cmd_build_bsp(&path, board_name, output.as_deref());
             }
-            if backend == "llvm" {
-                cmd_build_llvm(&path, output.as_deref(), opt_level)
+            // --release flag: auto-select LLVM with O2
+            let effective_backend = if release { "llvm" } else { &backend };
+            let effective_opt = if release && opt_level == 0 {
+                2
+            } else {
+                opt_level
+            };
+
+            if effective_backend == "llvm" {
+                if verbose {
+                    eprintln!(
+                        "[verbose] Using LLVM backend (O{effective_opt}){}",
+                        if release { " [release mode]" } else { "" }
+                    );
+                }
+                cmd_build_llvm(&path, output.as_deref(), effective_opt)
             } else {
                 let start = std::time::Instant::now();
 
@@ -1290,6 +1308,21 @@ fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u
             return ExitCode::from(EXIT_COMPILE);
         }
     };
+
+    // Analyze (semantic checking before LLVM codegen)
+    if let Err(errors) = fajar_lang::analyzer::analyze(&program) {
+        let hard_errors: Vec<_> = errors.iter().filter(|e| !e.is_warning()).collect();
+        if !hard_errors.is_empty() {
+            for e in &errors {
+                FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+        // Print warnings but don't fail
+        for e in errors.iter().filter(|e| e.is_warning()) {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+    }
 
     // Initialize LLVM native target
     if let Err(e) = fajar_lang::codegen::llvm::LlvmCompiler::init_native_target() {
