@@ -24,6 +24,7 @@ pub mod benchmarks;
 pub mod interop;
 pub mod nostd;
 pub mod optimizer;
+pub mod perf_report;
 pub mod pgo;
 pub mod ptx;
 

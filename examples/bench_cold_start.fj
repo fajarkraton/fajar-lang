@@ -1,0 +1,7 @@
+// Cold Start Benchmark
+// Minimal program to measure startup-to-output time.
+// Target: <5ms from process start to first output.
+
+fn main() {
+    println(42)
+}

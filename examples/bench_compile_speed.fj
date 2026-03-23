@@ -1,0 +1,24 @@
+// Compilation Speed Benchmark
+// Generates a large Fajar Lang program as a string and measures
+// the time to process it (simulated — actual timing done in Rust tests).
+
+fn generate_large_program(n: i64) -> i64 {
+    // Simulate generating n functions worth of code
+    // Each "function" is ~10 lines: fn name(params) -> ret { body }
+    let mut total_chars = 0
+    let mut i = 0
+    while i < n {
+        // Approximate: each function is ~100 characters
+        // fn func_N(x: i64, y: i64) -> i64 { let z = x + y * 2\n z + i }
+        total_chars = total_chars + 100
+        i = i + 1
+    }
+    // Return estimated character count for n functions
+    total_chars
+}
+
+fn main() {
+    // Simulate 1000 functions (~100K characters)
+    let chars = generate_large_program(1000)
+    println(chars)
+}

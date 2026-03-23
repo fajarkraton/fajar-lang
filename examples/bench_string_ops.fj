@@ -1,0 +1,17 @@
+// String Operations Benchmark
+// Tests string creation, concatenation, and processing speed.
+
+fn string_benchmark(n: i64) -> i64 {
+    let mut result = ""
+    let mut i: i64 = 0
+    while i < n {
+        result = result + "x"
+        i = i + 1
+    }
+    len(result) as i64
+}
+
+fn main() {
+    let length = string_benchmark(1000)
+    println(length)
+}
