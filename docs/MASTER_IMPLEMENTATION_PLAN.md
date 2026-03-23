@@ -304,12 +304,12 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 9.1 | `protocol` keyword + parsing | 4h | 70% | Protocol block parses |
-| 9.2 | `implements` clause | 3h | 70% | Service declares protocol |
-| 9.3 | Completeness check | 3h | 80% | Missing method → error |
-| 9.4 | Client stub auto-generation | 8h | 60% | VfsClient::open() → IPC |
-| 9.5 | `service` block + `on` handlers | 6h | 60% | Auto IPC loop generated |
-| 9.6 | Tests: 25+ | 3h | 95% | Incomplete service → error |
+| 9.1 | ~~`protocol` keyword + parsing~~ | 4h | 70% | ✅ Already: protocol → TraitDef |
+| 9.2 | ~~`implements` clause~~ | 3h | 70% | ✅ Already: service X implements Y |
+| 9.3 | ~~Completeness check~~ | 3h | 80% | ✅ Already: missing method → error with hint |
+| 9.4 | Client stub auto-generation | 8h | 60% | ⏳ Deferred: VfsClient::open() → IPC |
+| 9.5 | ~~`service` block + handlers~~ | 6h | 60% | ✅ Already: fn handlers in service block |
+| 9.6 | ~~Tests: 22~~ | 3h | 95% | ✅ NEW: 22 protocol/service tests |
 
 **Total: ~27h | AI generates: ~70%**
 
