@@ -203,16 +203,13 @@ fn coerce_ret(
 /// are extracted and added to the concrete_fns list so they get declared and compiled
 /// at the module level. The body compilation skips `Expr::Item(FnDef)` nodes.
 fn extract_nested_fns(body: &Expr, out: &mut Vec<FnDef>) {
-    match body {
-        Expr::Block { stmts, expr, .. } => {
-            for stmt in stmts {
-                extract_nested_fns_stmt(stmt, out);
-            }
-            if let Some(tail_expr) = expr {
-                extract_nested_fns_expr(tail_expr, out);
-            }
+    if let Expr::Block { stmts, expr, .. } = body {
+        for stmt in stmts {
+            extract_nested_fns_stmt(stmt, out);
         }
-        _ => {}
+        if let Some(tail_expr) = expr {
+            extract_nested_fns_expr(tail_expr, out);
+        }
     }
 }
 
@@ -232,16 +229,13 @@ fn extract_nested_fns_stmt(stmt: &Stmt, out: &mut Vec<FnDef>) {
 }
 
 fn extract_nested_fns_expr(expr: &Expr, out: &mut Vec<FnDef>) {
-    match expr {
-        Expr::Block { stmts, expr, .. } => {
-            for stmt in stmts {
-                extract_nested_fns_stmt(stmt, out);
-            }
-            if let Some(tail_expr) = expr {
-                extract_nested_fns_expr(tail_expr, out);
-            }
+    if let Expr::Block { stmts, expr, .. } = expr {
+        for stmt in stmts {
+            extract_nested_fns_stmt(stmt, out);
         }
-        _ => {}
+        if let Some(tail_expr) = expr {
+            extract_nested_fns_expr(tail_expr, out);
+        }
     }
 }
 

@@ -579,6 +579,7 @@ impl Parser {
                     lifetime_params: vec![],
                     generic_params: vec![],
                     methods,
+                    is_protocol: true,
                     span: Span::new(0, end),
                 }))
             }

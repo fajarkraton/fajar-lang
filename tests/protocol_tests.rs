@@ -371,3 +371,102 @@ protocol Hashable {
 "#,
     );
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 9. Protocol client stub generation (Gap E)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn protocol_generates_client_struct() {
+    // VfsProtocol should auto-generate VfsProtocolClient { pid: i64 }
+    expect_ok(
+        r#"
+protocol VfsProtocol {
+    fn open(path_len: i64, flags: i64) -> i64 { 0 }
+}
+
+fn use_client() {
+    let client = VfsProtocolClient { pid: 42 }
+}
+"#,
+    );
+}
+
+#[test]
+fn protocol_client_method_callable() {
+    // VfsProtocolClient_open(pid, path_len, flags) -> i64 should exist
+    expect_ok(
+        r#"
+protocol VfsProtocol {
+    fn open(path_len: i64, flags: i64) -> i64 { 0 }
+    fn close(fd: i64) -> i64 { 0 }
+}
+
+fn use_methods() {
+    let result = VfsProtocolClient_open(1, 10, 0)
+    let status = VfsProtocolClient_close(1, 5)
+}
+"#,
+    );
+}
+
+#[test]
+fn protocol_client_not_generated_for_trait() {
+    // Regular trait should NOT generate client method functions
+    // DisplayClient_show should not exist as a function
+    let source = r#"
+trait Display {
+    fn show() -> i64 { 0 }
+}
+
+fn try_use_client() {
+    let result = DisplayClient_show(1)
+}
+"#;
+    let tokens = fajar_lang::lexer::tokenize(source).expect("lex failed");
+    let program = fajar_lang::parser::parse(tokens).expect("parse failed");
+    let result = fajar_lang::analyzer::analyze(&program);
+    // Should fail since DisplayClient_show is not defined
+    assert!(
+        result.is_err(),
+        "expected error: DisplayClient_show should not be auto-generated for regular trait"
+    );
+}
+
+#[test]
+fn protocol_client_multiple_methods() {
+    expect_ok(
+        r#"
+protocol NetProtocol {
+    fn send(dst: i64, data: i64) -> i64 { 0 }
+    fn recv(buf: i64, len: i64) -> i64 { 0 }
+    fn close(fd: i64) -> i64 { 0 }
+}
+
+fn net_client_usage() {
+    let s = NetProtocolClient_send(1, 100, 256)
+    let r = NetProtocolClient_recv(1, 200, 128)
+    let c = NetProtocolClient_close(1, 3)
+}
+"#,
+    );
+}
+
+#[test]
+fn protocol_client_with_service() {
+    expect_ok(
+        r#"
+protocol EchoProto {
+    fn echo(val: i64) -> i64 { 0 }
+}
+
+service echo_svc implements EchoProto {
+    fn echo(val: i64) -> i64 { val }
+}
+
+fn client_call() {
+    let result = EchoProtoClient_echo(2, 42)
+}
+"#,
+    );
+}

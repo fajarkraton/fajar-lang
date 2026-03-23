@@ -1377,72 +1377,72 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
 
     // Build kernel
     if let Some(ref kernel) = config.kernel {
-        let kernel_entry = root.join(&kernel.entry);
-        let _kernel_source_dir = kernel_entry.parent().unwrap_or(&root);
-
-        if verbose {
-            eprintln!(
-                "[build] kernel: {} (target: {})",
-                kernel.entry, kernel.target
-            );
-        }
-
-        // Use directory build if sources specified, otherwise single file
         let source_path = if !kernel.sources.is_empty() {
-            // Use first source directory
             root.join(&kernel.sources[0])
         } else {
-            kernel_entry.clone()
+            root.join(&kernel.entry)
         };
 
+        if verbose {
+            eprintln!("[build] kernel: {} (target: {})", kernel.entry, kernel.target);
+        }
+
         if source_path.exists() {
-            // For now, use the existing single-target build path
-            // The source is read from directory (concatenation) or file
-            eprintln!("  kernel: {} → build/kernel.elf", source_path.display());
-            built += 1;
-        } else {
-            eprintln!(
-                "  error: kernel source not found: {}",
-                source_path.display()
+            let output_path = build_dir.join("kernel.elf");
+            let ls = kernel.linker_script.as_ref().map(|s| root.join(s));
+            let result = cmd_build(
+                &source_path,
+                &kernel.target,
+                Some(output_path.as_path()),
+                true, // no_std
+                ls.as_ref().and_then(|p| p.to_str()),
+                None,
             );
+            if result == ExitCode::SUCCESS {
+                eprintln!("  ✅ kernel → {}", output_path.display());
+                built += 1;
+            } else {
+                eprintln!("  ❌ kernel build failed");
+                failed += 1;
+            }
+        } else {
+            eprintln!("  ❌ kernel source not found: {}", source_path.display());
             failed += 1;
         }
     }
 
     // Build services
     for service in &config.service {
-        let service_entry = root.join(&service.entry);
-
-        if verbose {
-            eprintln!(
-                "[build] service '{}': {} (target: {})",
-                service.name, service.entry, service.target
-            );
-        }
-
         let source_path = if !service.sources.is_empty() {
             root.join(&service.sources[0])
         } else {
-            service_entry
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or(root.clone())
+            let entry = root.join(&service.entry);
+            entry.parent().map(|p| p.to_path_buf()).unwrap_or(root.clone())
         };
 
+        if verbose {
+            eprintln!("[build] service '{}': {} (target: {})", service.name, service.entry, service.target);
+        }
+
         if source_path.exists() {
-            eprintln!(
-                "  service '{}': {} → build/services/{}.elf",
-                service.name,
-                source_path.display(),
-                service.name
+            let output_path = service_dir.join(format!("{}.elf", service.name));
+            let result = cmd_build(
+                &source_path,
+                &service.target,
+                Some(output_path.as_path()),
+                true, // no_std for user services too
+                None,
+                None,
             );
-            built += 1;
+            if result == ExitCode::SUCCESS {
+                eprintln!("  ✅ service '{}' → {}", service.name, output_path.display());
+                built += 1;
+            } else {
+                eprintln!("  ❌ service '{}' build failed", service.name);
+                failed += 1;
+            }
         } else {
-            eprintln!(
-                "  error: service '{}' source not found: {}",
-                service.name,
-                source_path.display()
-            );
+            eprintln!("  ❌ service '{}' source not found: {}", service.name, source_path.display());
             failed += 1;
         }
     }
@@ -2456,12 +2456,10 @@ fj_rt_bare_memory_fence:
                     triple_str, runtime_name
                 ))),
             ];
-            for candidate in &runtime_paths {
-                if let Some(p) = candidate {
-                    if p.exists() {
-                        link_cmd.arg(p);
-                        break;
-                    }
+            for p in runtime_paths.iter().flatten() {
+                if p.exists() {
+                    link_cmd.arg(p);
+                    break;
                 }
             }
         }

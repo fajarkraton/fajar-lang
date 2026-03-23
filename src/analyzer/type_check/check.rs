@@ -1201,6 +1201,24 @@ impl TypeChecker {
             }
         }
 
+        // IPC002: ipc_send/ipc_call with non-@message struct argument
+        if let Expr::Ident { name, .. } = callee {
+            if (name == "ipc_send" || name == "ipc_call") && args.len() >= 2 {
+                // Check if second arg is a struct init expression
+                if let Expr::StructInit {
+                    name: struct_name, ..
+                } = &args[1].value
+                {
+                    if !self.message_structs.contains(struct_name) {
+                        self.errors.push(SemanticError::IpcTypeMismatch {
+                            found: struct_name.clone(),
+                            span: args[1].value.span(),
+                        });
+                    }
+                }
+            }
+        }
+
         // Move tracking: if a move-type variable is passed as arg, mark moved
         // Exempt non-consuming builtins that logically take &T (read-only inspection)
         let is_non_consuming_builtin = if let Expr::Ident { name, .. } = callee {
@@ -1238,6 +1256,12 @@ impl TypeChecker {
         // Check if any args are named — if so, skip positional type checking
         // because the analyzer doesn't have parameter names to reorder against
         let has_named_args = args.iter().any(|a| a.name.is_some());
+
+        // Track callee name for IPC @message struct pass-through
+        let callee_name = match callee {
+            Expr::Ident { name, .. } => Some(name.as_str()),
+            _ => None,
+        };
 
         match callee_ty {
             Type::Function { params, ret } => {
@@ -1303,9 +1327,21 @@ impl TypeChecker {
                 } else {
                     // Non-generic: check argument types directly (skip Unknown params and named args)
                     if !is_variadic && !has_named_args {
+                        let is_ipc_fn = matches!(
+                            callee_name,
+                            Some("ipc_send" | "ipc_call")
+                        );
                         for (i, (expected, found)) in
                             params.iter().zip(arg_types.iter()).enumerate()
                         {
+                            // Allow @message struct as ipc_send/ipc_call second arg
+                            if is_ipc_fn && i == 1 {
+                                if let Expr::StructInit { name: sn, .. } = &args[i].value {
+                                    if self.message_structs.contains(sn) {
+                                        continue; // valid @message struct — skip type check
+                                    }
+                                }
+                            }
                             if !expected.is_compatible(found) {
                                 self.errors.push(SemanticError::TypeMismatch {
                                     expected: expected.display_name(),

@@ -779,6 +779,7 @@ impl Parser {
             lifetime_params,
             generic_params,
             methods,
+            is_protocol: false,
             span: Span::new(start, end_tok.span.end),
         })
     }

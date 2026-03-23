@@ -237,3 +237,69 @@ fn message_struct_with_derive() {
     // Double annotations not supported yet — @message takes priority
     parse_ok("@message struct DebugMsg { data: i64 }");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 9. IPC002: ipc_send type-checks @message struct args
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn ipc_send_message_struct_ok() {
+    expect_ok(
+        r#"
+@message struct VfsOpen { path_len: i64, flags: i64 }
+fn send_open() {
+    ipc_send(1, VfsOpen { path_len: 10, flags: 0 })
+}
+"#,
+    );
+}
+
+#[test]
+fn ipc_send_non_message_struct_error() {
+    expect_error(
+        r#"
+struct Point { x: i64, y: i64 }
+fn bad_send() {
+    ipc_send(1, Point { x: 1, y: 2 })
+}
+"#,
+        "IPC002",
+    );
+}
+
+#[test]
+fn ipc_send_raw_i64_ok() {
+    // Raw integer args are backward compatible
+    expect_ok(
+        r#"
+fn raw_send() {
+    ipc_send(1, 42)
+}
+"#,
+    );
+}
+
+#[test]
+fn ipc_call_message_struct_ok() {
+    expect_ok(
+        r#"
+@message struct BlkRead { sector: i64, count: i64 }
+fn do_read() {
+    ipc_call(2, BlkRead { sector: 0, count: 8 }, 0)
+}
+"#,
+    );
+}
+
+#[test]
+fn ipc_call_non_message_struct_error() {
+    expect_error(
+        r#"
+struct Foo { val: i64 }
+fn bad_call() {
+    ipc_call(2, Foo { val: 42 }, 0)
+}
+"#,
+        "IPC002",
+    );
+}

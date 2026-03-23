@@ -1187,6 +1187,8 @@ pub struct TypeChecker {
     safe_blocked_builtins: std::collections::HashSet<String>,
     /// Structs annotated with @message (IPC message types, max 64 bytes).
     message_structs: std::collections::HashSet<String>,
+    /// Auto-generated protocol client struct names (e.g., "VfsProtocolClient").
+    protocol_clients: std::collections::HashSet<String>,
     /// Message ID assignments: @message struct name → unique ID (auto-incremented).
     message_ids: HashMap<String, u32>,
     /// Next message ID to assign.
@@ -1543,6 +1545,7 @@ impl TypeChecker {
             os_builtins,
             safe_blocked_builtins,
             message_structs: std::collections::HashSet::new(),
+            protocol_clients: std::collections::HashSet::new(),
             message_ids: HashMap::new(),
             next_message_id: 1,
             current_device_cap: None,

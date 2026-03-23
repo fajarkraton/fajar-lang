@@ -244,3 +244,108 @@ fn safe_cannot_call_kernel_fn() {
     let result = fajar_lang::analyzer::analyze(&program);
     assert!(result.is_err());
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// Gap C: End-to-end user ELF structure tests
+// ════════════════════════════════════════════════════════════════════════
+
+mod user_elf_structure {
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    fn fj_binary() -> PathBuf {
+        PathBuf::from(env!("CARGO_BIN_EXE_fj"))
+    }
+
+    /// Returns true if the fj binary lacks native codegen (skip test).
+    fn skip_if_no_native() -> bool {
+        let path = fj_binary();
+        let dir = std::env::temp_dir().join("fj-native-check-user");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("t.fj"), "fn main() -> i64 { 0 }\n").unwrap();
+        let output = Command::new(&path)
+            .args(["build", "--target", "x86_64-unknown-none", dir.join("t.fj").to_str().unwrap()])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_dir_all(&dir);
+        stderr.contains("native compilation not available")
+    }
+
+    fn build_user_elf(source: &str, name: &str) -> (PathBuf, Vec<u8>) {
+        let dir = std::env::temp_dir().join(format!("fj-user-elf-{}", name));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let src_path = dir.join("prog.fj");
+        std::fs::write(&src_path, source).unwrap();
+
+        let elf_path = dir.join("prog.elf");
+        let output = Command::new(fj_binary())
+            .args([
+                "build",
+                "--target",
+                "x86_64-user",
+                src_path.to_str().unwrap(),
+                "-o",
+                elf_path.to_str().unwrap(),
+            ])
+            .output()
+            .expect("fj binary not found");
+
+        assert!(
+            elf_path.exists(),
+            "ELF not produced. stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let data = std::fs::read(&elf_path).unwrap();
+        (dir, data)
+    }
+
+    #[test]
+    fn user_elf_is_valid_elf64() {
+        if skip_if_no_native() { return; }
+        let (dir, data) = build_user_elf("fn main() -> i64 { 42 }\n", "valid-elf64");
+        assert_eq!(&data[0..4], b"\x7fELF", "not ELF");
+        assert_eq!(data[4], 2, "not 64-bit");      // EI_CLASS = ELFCLASS64
+        assert_eq!(data[5], 1, "not little-endian"); // EI_DATA = ELFDATA2LSB
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn user_elf_has_start_entry() {
+        if skip_if_no_native() { return; }
+        let (dir, data) = build_user_elf("fn main() -> i64 { 0 }\n", "start-entry");
+        // Entry point should be in the 0x400000 range
+        let entry = u64::from_le_bytes(data[24..32].try_into().unwrap());
+        assert!(
+            entry >= 0x400000 && entry < 0x500000,
+            "entry point {:#x} not in 0x400000..0x500000 range",
+            entry
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn user_elf_text_at_0x400000() {
+        if skip_if_no_native() { return; }
+        let (dir, data) = build_user_elf("fn main() -> i64 { 1 }\n", "text-addr");
+        // Find LOAD segment: program header offset at bytes 32-39
+        let phoff = u64::from_le_bytes(data[32..40].try_into().unwrap()) as usize;
+        let phentsize = u16::from_le_bytes(data[54..56].try_into().unwrap()) as usize;
+        // First LOAD segment virtual address at phoff + 16
+        let vaddr = u64::from_le_bytes(data[phoff + 16..phoff + 24].try_into().unwrap());
+        assert_eq!(vaddr, 0x400000, ".text segment not at 0x400000");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn user_elf_is_x86_64() {
+        if skip_if_no_native() { return; }
+        let (dir, data) = build_user_elf("fn main() -> i64 { 99 }\n", "x86-64");
+        assert_eq!(data[18], 0x3E, "e_machine not EM_X86_64");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

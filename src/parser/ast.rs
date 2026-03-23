@@ -437,6 +437,8 @@ pub struct TraitDef {
     pub generic_params: Vec<GenericParam>,
     /// Trait methods (body is optional for default impls).
     pub methods: Vec<FnDef>,
+    /// Whether this was declared with `protocol` keyword (auto-generates client stubs).
+    pub is_protocol: bool,
     /// Source span.
     pub span: Span,
 }

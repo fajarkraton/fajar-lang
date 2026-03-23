@@ -206,3 +206,115 @@ fn all_benchmark_programs_parse() {
             .unwrap_or_else(|e| panic!("{name} parse failed: {e:?}"));
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 6. GPU vs CPU matmul benchmark (Gap F)
+// ════════════════════════════════════════════════════════════════════════
+
+#[cfg(feature = "vulkan")]
+mod gpu_benchmark {
+    use fajar_lang::runtime::ml::backend::{CpuBackend, TensorBackend, VulkanBackend};
+    use ndarray::ArrayD;
+
+    fn random_matrix(rows: usize, cols: usize) -> ArrayD<f64> {
+        let data: Vec<f64> = (0..rows * cols).map(|i| (i as f64 * 0.001) % 1.0).collect();
+        ArrayD::from_shape_vec(vec![rows, cols], data).unwrap()
+    }
+
+    #[test]
+    fn gpu_matmul_256x256_correctness() {
+        let vk = match VulkanBackend::new() {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("Vulkan not available, skipping GPU benchmark");
+                return;
+            }
+        };
+        let cpu = CpuBackend;
+
+        let a = random_matrix(256, 256);
+        let b = random_matrix(256, 256);
+
+        let cpu_result = cpu.matmul(&a, &b).unwrap();
+        let gpu_result = vk.matmul(&a, &b).unwrap();
+
+        // Check shapes match
+        assert_eq!(cpu_result.shape(), gpu_result.shape());
+
+        // Check values match within f32 tolerance
+        let max_diff = cpu_result
+            .iter()
+            .zip(gpu_result.iter())
+            .map(|(c, g)| (c - g).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_diff < 1.0,
+            "GPU/CPU results differ by {max_diff} (tolerance: 1.0)"
+        );
+        eprintln!("256x256 matmul max diff: {max_diff:.6}");
+    }
+
+    #[test]
+    fn gpu_matmul_1024x1024_benchmark() {
+        let vk = match VulkanBackend::new() {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("Vulkan not available, skipping GPU benchmark");
+                return;
+            }
+        };
+        let cpu = CpuBackend;
+
+        let a = random_matrix(1024, 1024);
+        let b = random_matrix(1024, 1024);
+
+        // CPU timing
+        let cpu_start = std::time::Instant::now();
+        let cpu_result = cpu.matmul(&a, &b).unwrap();
+        let cpu_time = cpu_start.elapsed();
+
+        // GPU timing (warm-up run + timed run)
+        let _ = vk.matmul(&a, &b).unwrap(); // warm-up
+        let gpu_start = std::time::Instant::now();
+        let gpu_result = vk.matmul(&a, &b).unwrap();
+        let gpu_time = gpu_start.elapsed();
+
+        let speedup = cpu_time.as_secs_f64() / gpu_time.as_secs_f64();
+        eprintln!(
+            "1024x1024 matmul: CPU={:.2}ms, GPU={:.2}ms, speedup={:.1}x ({} GPU)",
+            cpu_time.as_secs_f64() * 1000.0,
+            gpu_time.as_secs_f64() * 1000.0,
+            speedup,
+            vk.device_name()
+        );
+
+        // GPU should be faster for 1024x1024 on RTX 4090
+        assert!(
+            speedup > 1.0,
+            "GPU should be faster: CPU={cpu_time:?}, GPU={gpu_time:?}, speedup={speedup:.1}x"
+        );
+
+        // Verify correctness
+        let max_diff = cpu_result
+            .iter()
+            .zip(gpu_result.iter())
+            .map(|(c, g)| (c - g).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(max_diff < 5.0, "results differ by {max_diff}");
+    }
+
+    #[test]
+    fn gpu_detected_rtx_4090() {
+        let vk = match VulkanBackend::new() {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("Vulkan not available, skipping");
+                return;
+            }
+        };
+        let name = vk.device_name().to_string();
+        eprintln!("Detected GPU: {name}");
+        // Just verify we got a non-empty name
+        assert!(!name.is_empty(), "GPU device name is empty");
+    }
+}

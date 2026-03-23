@@ -1442,7 +1442,47 @@ impl TypeChecker {
             });
         }
 
-        self.traits.insert(tdef.name.clone(), method_sigs);
+        self.traits.insert(tdef.name.clone(), method_sigs.clone());
+
+        // Auto-generate client stub struct + methods for protocol definitions
+        if tdef.is_protocol {
+            let client_name = format!("{}Client", tdef.name);
+
+            // Register client struct with pid field
+            let mut client_fields = HashMap::new();
+            client_fields.insert("pid".to_string(), Type::I64);
+
+            self.symbols.define(Symbol {
+                name: client_name.clone(),
+                ty: Type::Struct {
+                    name: client_name.clone(),
+                    fields: client_fields,
+                },
+                mutable: false,
+                span: tdef.span,
+                used: false,
+            });
+
+            // Register each protocol method as {Client}_{method}(pid, args...) -> ret
+            for msig in &method_sigs {
+                let mut params = vec![Type::I64]; // self.pid
+                params.extend(msig.param_types.clone());
+                let fn_name = format!("{}_{}", client_name, msig.name);
+                self.symbols.define(Symbol {
+                    name: fn_name,
+                    ty: Type::Function {
+                        params,
+                        ret: Box::new(msig.ret_type.clone()),
+                    },
+                    mutable: false,
+                    span: tdef.span,
+                    used: false,
+                });
+            }
+
+            // Store protocol client name for validation
+            self.protocol_clients.insert(client_name);
+        }
     }
 
     /// Registers a type alias, resolving the target type.
