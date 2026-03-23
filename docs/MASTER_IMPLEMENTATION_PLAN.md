@@ -291,13 +291,12 @@ Hari 7-8: Buffer untuk edge cases + documentation
 
 | # | Task | Effort | AI% | Acceptance |
 |---|------|--------|-----|-----------|
-| 8.1 | `@message` struct annotation | 3h | 80% | Parser recognizes @message |
-| 8.2 | Auto serialize struct → 64-byte buffer | 6h | 70% | Compile-time pack |
-| 8.3 | Auto deserialize buffer → struct | 6h | 70% | Compile-time unpack |
-| 8.4 | Message ID auto-assignment | 1h | 90% | Unique tag per type |
-| 8.5 | Type-check ipc_send/ipc_recv | 4h | 70% | Wrong type → compile error |
-| 8.6 | Size validation (≤64 bytes) | 1h | 90% | Overflow → compile error |
-| 8.7 | Tests: 30+ | 3h | 95% | Type mismatch, size overflow |
+| 8.1 | ~~`@message` struct annotation~~ | 3h | 80% | ✅ Already: parser + analyzer recognize @message |
+| 8.2 | Auto serialize/deserialize | 6h | 70% | ⏳ Needs codegen integration (compile to pack/unpack) |
+| 8.3 | ~~Message ID auto-assignment~~ | 1h | 90% | ✅ NEW: message_ids HashMap, next_message_id counter |
+| 8.4 | ~~IPC001: size validation (≤64 bytes)~~ | 4h | 70% | ✅ NEW: estimated_size check, IPC001 error |
+| 8.5 | IPC002: type-check ipc_send/recv | 1h | 90% | ⏳ Needs typed overload of ipc_send |
+| 8.6 | ~~Tests: 19~~ | 3h | 95% | ✅ NEW: parsing, size limits, contexts, FajarOS-style |
 
 **Total: ~24h | AI generates: ~75%**
 

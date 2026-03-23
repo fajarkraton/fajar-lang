@@ -987,6 +987,8 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::EffectForbiddenInContext { .. } => "EE006",
         SemanticError::ResumeOutsideHandler { .. } => "EE005",
         SemanticError::DuplicateEffectDecl { .. } => "EE004",
+        SemanticError::MessageTooLarge { .. } => "IPC001",
+        SemanticError::IpcTypeMismatch { .. } => "IPC002",
     };
     Diagnostic {
         range,

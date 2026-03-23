@@ -1059,6 +1059,27 @@ pub enum SemanticError {
         /// Source location.
         span: Span,
     },
+
+    // ── IPC Type Safety Errors ──────────────────────────────────────────
+    /// IPC001: @message struct exceeds 64-byte limit.
+    #[error("IPC001: @message struct '{name}' exceeds 64-byte IPC limit ({size} bytes)")]
+    MessageTooLarge {
+        /// Struct name.
+        name: String,
+        /// Actual size in bytes.
+        size: usize,
+        /// Source location.
+        span: Span,
+    },
+
+    /// IPC002: ipc_send/recv with non-@message type.
+    #[error("IPC002: ipc_send/recv expects @message struct, got '{found}'")]
+    IpcTypeMismatch {
+        /// The type that was passed.
+        found: String,
+        /// Source location.
+        span: Span,
+    },
 }
 
 impl SemanticError {
@@ -1115,7 +1136,9 @@ impl SemanticError {
             | SemanticError::UnknownEffect { span, .. }
             | SemanticError::EffectForbiddenInContext { span, .. }
             | SemanticError::ResumeOutsideHandler { span, .. }
-            | SemanticError::DuplicateEffectDecl { span, .. } => *span,
+            | SemanticError::DuplicateEffectDecl { span, .. }
+            | SemanticError::MessageTooLarge { span, .. }
+            | SemanticError::IpcTypeMismatch { span, .. } => *span,
         }
     }
 
@@ -1164,6 +1187,10 @@ pub struct TypeChecker {
     safe_blocked_builtins: std::collections::HashSet<String>,
     /// Structs annotated with @message (IPC message types, max 64 bytes).
     message_structs: std::collections::HashSet<String>,
+    /// Message ID assignments: @message struct name → unique ID (auto-incremented).
+    message_ids: HashMap<String, u32>,
+    /// Next message ID to assign.
+    next_message_id: u32,
     /// Capability sets: which hardware builtins each capability allows.
     /// @device functions have a capability parameter (e.g., @device("net"))
     /// that restricts which builtins they can call.
@@ -1516,6 +1543,8 @@ impl TypeChecker {
             os_builtins,
             safe_blocked_builtins,
             message_structs: std::collections::HashSet::new(),
+            message_ids: HashMap::new(),
+            next_message_id: 1,
             current_device_cap: None,
             cap_port_io: [
                 "port_outb",

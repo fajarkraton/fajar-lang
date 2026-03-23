@@ -1239,15 +1239,21 @@ impl TypeChecker {
                 if let Some(ref ann) = sdef.annotation {
                     if ann.name == "message" {
                         self.message_structs.insert(sdef.name.clone());
+
+                        // Assign unique message ID
+                        let msg_id = self.next_message_id;
+                        self.message_ids.insert(sdef.name.clone(), msg_id);
+                        self.next_message_id += 1;
+
                         // Validate: @message structs must fit in 64 bytes
-                        // (max 8 fields × 8 bytes each)
-                        if sdef.fields.len() > 7 {
-                            // 7 data fields + 1 implied type_id = 64 bytes
-                            self.errors.push(SemanticError::TypeMismatch {
-                                expected: "at most 7 fields for @message struct (56 bytes + 8 type header)".into(),
-                                found: format!("{} fields", sdef.fields.len()),
+                        // Layout: type_id(8) + data(56) = 64 bytes max
+                        // Each field is 8 bytes (i64/f64/ptr)
+                        let estimated_size = 8 + sdef.fields.len() * 8; // header + fields
+                        if estimated_size > 64 {
+                            self.errors.push(SemanticError::MessageTooLarge {
+                                name: sdef.name.clone(),
+                                size: estimated_size,
                                 span: sdef.span,
-                                hint: Some("@message structs must fit in 64-byte IPC messages".into()),
                             });
                         }
                     }

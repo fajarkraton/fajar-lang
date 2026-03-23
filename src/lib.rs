@@ -342,6 +342,8 @@ impl FjDiagnostic {
             SemanticError::EffectForbiddenInContext { .. } => "EE006",
             SemanticError::ResumeOutsideHandler { .. } => "EE005",
             SemanticError::DuplicateEffectDecl { .. } => "EE004",
+            SemanticError::MessageTooLarge { .. } => "IPC001",
+            SemanticError::IpcTypeMismatch { .. } => "IPC002",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning
