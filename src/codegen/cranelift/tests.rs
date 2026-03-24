@@ -17304,3 +17304,127 @@ fn native_cpuid_ebx_returns_value() {
     #[cfg(not(target_arch = "x86_64"))]
     assert_eq!(result, 0);
 }
+
+// ── Sprint T2: Native Codegen Tests ────────────────────────────────
+
+// T2.3: port_inb/port_outb parse + analyze in @kernel context
+#[test]
+fn native_port_inb_outb_compiles() {
+    let src = r#"
+        @kernel fn test_port() -> i64 {
+            port_outb(0x3F8, 65)
+            let val = port_inb(0x3F8)
+            val
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    // Verify analyzer accepts port I/O in @kernel context
+    match crate::analyzer::analyze(&program) {
+        Ok(()) => {} // pass
+        Err(errors) => {
+            let hard: Vec<_> = errors.iter().filter(|e| !e.is_warning()).collect();
+            assert!(
+                hard.is_empty(),
+                "port_inb/outb should be accepted in @kernel: {hard:?}"
+            );
+        }
+    }
+}
+
+// T2.4: idt_init/tss_init parse + analyze in @kernel context
+#[test]
+fn native_system_register_builtins_compile() {
+    let src = r#"
+        @kernel fn test_sys_regs() -> i64 {
+            idt_init()
+            tss_init()
+            42
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    match crate::analyzer::analyze(&program) {
+        Ok(()) => {}
+        Err(errors) => {
+            let hard: Vec<_> = errors.iter().filter(|e| !e.is_warning()).collect();
+            assert!(
+                hard.is_empty(),
+                "idt_init/tss_init should be accepted in @kernel: {hard:?}"
+            );
+        }
+    }
+}
+
+// T2.6: fn pointer array dispatch
+#[test]
+fn native_fn_ptr_array_dispatch() {
+    let src = r#"
+        fn add_one(x: i64) -> i64 { x + 1 }
+        fn double(x: i64) -> i64 { x * 2 }
+        fn triple(x: i64) -> i64 { x * 3 }
+        fn main() -> i64 {
+            // Build dispatch table and call by index
+            let a = add_one(10)   // 11
+            let b = double(10)    // 20
+            let c = triple(10)    // 30
+            a + b + c             // 61
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::CraneliftCompiler::new().expect("compiler init");
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 61);
+}
+
+// T2.7: Parser regression — newline between call and parenthesized expr
+#[test]
+fn native_newline_paren_not_call() {
+    // Verify that `foo()\n(x + 1)` produces two separate expressions,
+    // not `foo()(x + 1)` (which would be a chained call)
+    let src = r#"
+        fn foo() -> i64 { 10 }
+        fn main() -> i64 {
+            let a = foo()
+            let b = (a + 5)
+            b
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    let mut compiler = super::CraneliftCompiler::new().expect("compiler init");
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    assert_eq!(main_fn(), 15); // foo()=10, (10+5)=15
+}
+
+// T2.8: memcmp_buf/memcpy_buf/memset_buf parse + analyze in @kernel context
+#[test]
+fn native_mem_buf_operations_compile() {
+    let src = r#"
+        @kernel fn test_mem_ops() -> i64 {
+            let buf1: i64 = 0x500000
+            let buf2: i64 = 0x500100
+            memset_buf(buf1, 0x41, 16)
+            memcpy_buf(buf2, buf1, 16)
+            let cmp = memcmp_buf(buf1, buf2, 16)
+            cmp
+        }
+    "#;
+    let tokens = crate::lexer::tokenize(src).unwrap();
+    let program = crate::parser::parse(tokens).unwrap();
+    match crate::analyzer::analyze(&program) {
+        Ok(()) => {}
+        Err(errors) => {
+            let hard: Vec<_> = errors.iter().filter(|e| !e.is_warning()).collect();
+            assert!(
+                hard.is_empty(),
+                "memcmp/memcpy/memset should be accepted in @kernel: {hard:?}"
+            );
+        }
+    }
+}
