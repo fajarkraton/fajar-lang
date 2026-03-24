@@ -12963,3 +12963,182 @@ fn r2_benchmark_flops() {
     let out = eval_output(src);
     assert_eq!(out, vec!["1024", "8192", "21296"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase S: ext2-like Filesystem
+// Sprint S1: Inode + block layer
+// ═══════════════════════════════════════════════
+
+#[test]
+fn s1_ext2_layout() {
+    let src = r#"
+        const SB_SECTOR: i64 = 2
+        const BB_SECTOR: i64 = 4
+        const IB_SECTOR: i64 = 8
+        const IT_SECTOR: i64 = 12
+        const DATA_SECTOR: i64 = 140
+        fn main() -> void {
+            println(SB_SECTOR)
+            println(DATA_SECTOR)
+            // Inode table: 128 sectors (256 × 128B / 512)
+            println((256 * 128) / 512)
+            println(DATA_SECTOR - IT_SECTOR)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "140", "64", "128"]);
+}
+
+#[test]
+fn s1_superblock_magic() {
+    let src = r#"
+        const EXT2_SB_MAGIC: i64 = 0xEF53
+        fn main() -> void {
+            println(EXT2_SB_MAGIC)
+            println(EXT2_SB_MAGIC & 0xFF)
+            println((EXT2_SB_MAGIC >> 8) & 0xFF)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["61267", "83", "239"]);
+}
+
+#[test]
+fn s1_block_size() {
+    let src = r#"
+        const BLOCK_SIZE: i64 = 4096
+        const SECTORS_PER_BLOCK: i64 = 8
+        fn data_sector(block_num: i64) -> i64 { 140 + block_num * SECTORS_PER_BLOCK }
+        fn main() -> void {
+            println(BLOCK_SIZE)
+            println(data_sector(0))
+            println(data_sector(1))
+            println(data_sector(100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4096", "140", "148", "940"]);
+}
+
+#[test]
+fn s1_inode_size() {
+    let src = r#"
+        const INODE_SIZE: i64 = 128
+        const MAX_INODES: i64 = 256
+        fn inode_offset(num: i64) -> i64 { (num - 1) * INODE_SIZE }
+        fn inode_sector(num: i64) -> i64 { 12 + inode_offset(num) / 512 }
+        fn main() -> void {
+            println(INODE_SIZE)
+            println(MAX_INODES * INODE_SIZE)
+            println(inode_sector(1))
+            println(inode_sector(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["128", "32768", "12", "12"]);
+}
+
+#[test]
+fn s1_bitmap_capacity() {
+    let src = r#"
+        fn block_bitmap_capacity(sectors: i64) -> i64 { sectors * 512 * 8 }
+        fn inode_bitmap_capacity(bytes: i64) -> i64 { bytes * 8 }
+        fn main() -> void {
+            // 4 sectors = 2KB = 16384 blocks
+            println(block_bitmap_capacity(4))
+            // 32 bytes = 256 inodes
+            println(inode_bitmap_capacity(32))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16384", "256"]);
+}
+
+#[test]
+fn s1_bitmap_alloc() {
+    let src = r#"
+        fn find_free_bit(byte: i64) -> i64 {
+            if (byte & 1) == 0 { 0 }
+            else if (byte & 2) == 0 { 1 }
+            else if (byte & 4) == 0 { 2 }
+            else if (byte & 8) == 0 { 3 }
+            else if (byte & 16) == 0 { 4 }
+            else if (byte & 32) == 0 { 5 }
+            else if (byte & 64) == 0 { 6 }
+            else if (byte & 128) == 0 { 7 }
+            else { -1 }
+        }
+        fn main() -> void {
+            println(find_free_bit(0))
+            println(find_free_bit(1))
+            println(find_free_bit(3))
+            println(find_free_bit(255))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "2", "-1"]);
+}
+
+#[test]
+fn s1_inode_fields() {
+    let src = r#"
+        const INO_MODE: i64 = 0
+        const INO_SIZE: i64 = 4
+        const INO_LINKS: i64 = 26
+        const INO_BLOCK0: i64 = 40
+        const INO_INDIRECT: i64 = 88
+        fn main() -> void {
+            println(INO_MODE)
+            println(INO_BLOCK0)
+            println(INO_INDIRECT)
+            // 12 direct blocks × 4B = 48B
+            println(INO_INDIRECT - INO_BLOCK0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "40", "88", "48"]);
+}
+
+#[test]
+fn s1_direct_blocks() {
+    let src = r#"
+        fn max_direct_size(block_size: i64) -> i64 { 12 * block_size }
+        fn main() -> void {
+            // 12 direct blocks × 4KB = 48KB max file (direct only)
+            println(max_direct_size(4096))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["49152"]);
+}
+
+#[test]
+fn s1_root_inode() {
+    let src = r#"
+        const ROOT_INODE: i64 = 2
+        fn root_mode() -> i64 { 0x41ED }  // directory + 0755
+        fn main() -> void {
+            println(ROOT_INODE)
+            println(root_mode())
+            // Check directory bit (0x4000)
+            println(root_mode() & 0x4000)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "16877", "16384"]);
+}
+
+#[test]
+fn s1_ext2_state() {
+    let src = r#"
+        const EXT2_STATE: i64 = 0xA01000
+        const EXT2_BUF: i64 = 0xA00000
+        fn main() -> void {
+            println(EXT2_STATE)
+            println(EXT2_BUF)
+            println(EXT2_STATE - EXT2_BUF)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10489856", "10485760", "4096"]);
+}
