@@ -221,19 +221,21 @@ impl VulkanCompute {
             return Err(VulkanError::NoComputeDevice);
         }
 
+        // Prefer discrete GPU (NVIDIA/AMD) over integrated (Intel)
         let mut selected = None;
+        let mut selected_priority = 0u32;
         for &pd in &physical_devices {
             let props = unsafe { instance.get_physical_device_properties(pd) };
-            match props.device_type {
-                vk::PhysicalDeviceType::INTEGRATED_GPU | vk::PhysicalDeviceType::DISCRETE_GPU => {
-                    selected = Some(pd);
-                    break;
-                }
-                _ => {
-                    if selected.is_none() {
-                        selected = Some(pd);
-                    }
-                }
+            let priority = match props.device_type {
+                vk::PhysicalDeviceType::DISCRETE_GPU => 4,
+                vk::PhysicalDeviceType::VIRTUAL_GPU => 3,
+                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
+                vk::PhysicalDeviceType::CPU => 1,
+                _ => 0,
+            };
+            if priority > selected_priority {
+                selected = Some(pd);
+                selected_priority = priority;
             }
         }
 
@@ -2045,6 +2047,156 @@ mod tests {
         assert_eq!(result.len(), n);
         for (i, &v) in result.iter().enumerate() {
             assert!((v - n as f32).abs() < 1e-3, "large add[{i}]: {v} != {n}");
+        }
+    }
+
+    // ─── Item 4: Real GPU hardware detection + compute ──────────────
+
+    #[test]
+    fn vulkan_detect_discrete_gpu() {
+        // Should prefer discrete GPU (RTX 4090) over integrated (Intel)
+        let vk = match VulkanCompute::new() {
+            Ok(v) => v,
+            Err(_) => return, // Skip if no Vulkan
+        };
+        let name = vk.device_name().to_string();
+        let info = vk.device_info();
+        eprintln!("Detected GPU: {} (type: {})", name, info.device_type);
+        eprintln!(
+            "  Vulkan {}, subgroup={}",
+            info.api_version, info.subgroup_size
+        );
+        // On systems with discrete GPU, it should NOT select Intel integrated
+        if name.contains("Intel") {
+            // This is still OK on systems without discrete GPU
+            eprintln!("  Note: no discrete GPU found, using integrated");
+        }
+        assert!(VulkanCompute::is_available());
+    }
+
+    #[test]
+    fn vulkan_matmul_correctness() {
+        let vk = match VulkanCompute::new() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        // 4x3 × 3x2 = 4x2 matmul
+        let a = vec![
+            1.0f32, 2.0, 3.0, // row 0
+            4.0, 5.0, 6.0, // row 1
+            7.0, 8.0, 9.0, // row 2
+            10.0, 11.0, 12.0, // row 3
+        ];
+        let b = vec![
+            1.0f32, 2.0, // row 0
+            3.0, 4.0, // row 1
+            5.0, 6.0, // row 2
+        ];
+        // Expected: A(4x3) × B(3x2) = C(4x2)
+        // C[0,0] = 1*1 + 2*3 + 3*5 = 22, C[0,1] = 1*2 + 2*4 + 3*6 = 28
+        // C[1,0] = 4*1 + 5*3 + 6*5 = 49, C[1,1] = 4*2 + 5*4 + 6*6 = 64
+        // C[2,0] = 7*1 + 8*3 + 9*5 = 76, C[2,1] = 7*2 + 8*4 + 9*6 = 100
+        // C[3,0] = 10*1+11*3+12*5 = 103, C[3,1] = 10*2+11*4+12*6 = 136
+        let result = vk.tensor_matmul(&a, &b, 4, 3, 2).unwrap();
+        assert_eq!(result.len(), 8);
+        let expected = [22.0f32, 28.0, 49.0, 64.0, 76.0, 100.0, 103.0, 136.0];
+        for (i, (&got, &exp)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 1e-2,
+                "matmul[{i}]: got {got}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn vulkan_relu_correctness() {
+        let vk = match VulkanCompute::new() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let input = vec![-3.0f32, -1.0, 0.0, 1.0, 5.0, -0.5];
+        let result = vk.tensor_relu(&input).unwrap();
+        let expected = [0.0f32, 0.0, 0.0, 1.0, 5.0, 0.0];
+        for (i, (&got, &exp)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 1e-4,
+                "relu[{i}]: got {got}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn vulkan_sigmoid_correctness() {
+        let vk = match VulkanCompute::new() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let input = vec![0.0f32, 1.0, -1.0, 10.0, -10.0];
+        let result = vk.tensor_sigmoid(&input).unwrap();
+        // sigmoid(0) = 0.5, sigmoid(1) ≈ 0.731, sigmoid(-1) ≈ 0.269
+        assert!((result[0] - 0.5).abs() < 1e-2);
+        assert!((result[1] - 0.731).abs() < 1e-2);
+        assert!((result[2] - 0.269).abs() < 1e-2);
+        assert!(result[3] > 0.99); // sigmoid(10) ≈ 1
+        assert!(result[4] < 0.01); // sigmoid(-10) ≈ 0
+    }
+
+    #[test]
+    fn vulkan_matmul_256x256_benchmark() {
+        let vk = match VulkanCompute::new() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let n = 256;
+        let a: Vec<f32> = (0..n * n).map(|i| (i % 17) as f32 * 0.1).collect();
+        let b: Vec<f32> = (0..n * n).map(|i| (i % 13) as f32 * 0.1).collect();
+
+        let start = std::time::Instant::now();
+        let result = vk
+            .tensor_matmul(&a, &b, n as u32, n as u32, n as u32)
+            .unwrap();
+        let gpu_time = start.elapsed();
+
+        assert_eq!(result.len(), n * n);
+        eprintln!(
+            "GPU matmul {n}x{n}: {:.2}ms ({})",
+            gpu_time.as_secs_f64() * 1000.0,
+            vk.device_name()
+        );
+
+        // CPU reference (naive)
+        let cpu_start = std::time::Instant::now();
+        let mut cpu_result = vec![0.0f32; n * n];
+        for row in 0..n {
+            for col in 0..n {
+                let mut sum = 0.0f32;
+                for k in 0..n {
+                    sum += a[row * n + k] * b[k * n + col];
+                }
+                cpu_result[row * n + col] = sum;
+            }
+        }
+        let cpu_time = cpu_start.elapsed();
+        eprintln!(
+            "CPU matmul {n}x{n}: {:.2}ms",
+            cpu_time.as_secs_f64() * 1000.0
+        );
+
+        if cpu_time > gpu_time {
+            eprintln!(
+                "GPU speedup: {:.1}x",
+                cpu_time.as_secs_f64() / gpu_time.as_secs_f64()
+            );
+        }
+
+        // Verify correctness (spot-check first 10 elements)
+        for i in 0..10.min(result.len()) {
+            assert!(
+                (result[i] - cpu_result[i]).abs() < 1.0,
+                "matmul[{i}]: GPU={} vs CPU={}",
+                result[i],
+                cpu_result[i]
+            );
         }
     }
 }

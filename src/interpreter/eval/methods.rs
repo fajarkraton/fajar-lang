@@ -627,6 +627,13 @@ impl Interpreter {
             }
             .into());
         }
+        // Check Vulkan first, then OpenCL
+        #[cfg(feature = "vulkan")]
+        {
+            if crate::bsp::dragon_q6a::vulkan::VulkanCompute::is_available() {
+                return Ok(Value::Bool(true));
+            }
+        }
         Ok(Value::Bool(Self::detect_opencl()))
     }
 
@@ -638,6 +645,16 @@ impl Interpreter {
                 got: args.len(),
             }
             .into());
+        }
+        #[cfg(feature = "vulkan")]
+        {
+            if let Ok(vk) = crate::bsp::dragon_q6a::vulkan::VulkanCompute::new() {
+                let info = vk.device_info();
+                return Ok(Value::Str(format!(
+                    "{} (Vulkan {}, {}, subgroup={})",
+                    info.name, info.api_version, info.device_type, info.subgroup_size,
+                )));
+            }
         }
         match Self::query_opencl_info() {
             Some(info) => Ok(Value::Str(info)),
@@ -673,6 +690,32 @@ impl Interpreter {
                 .into());
             }
         };
+        // Try Vulkan GPU first, fall back to CPU
+        #[cfg(feature = "vulkan")]
+        {
+            if let Ok(vk) = crate::bsp::dragon_q6a::vulkan::VulkanCompute::new() {
+                let a_shape = a.shape();
+                let b_shape = b.shape();
+                if a_shape.len() == 2 && b_shape.len() == 2 && a_shape[1] == b_shape[0] {
+                    let m = a_shape[0] as u32;
+                    let k = a_shape[1] as u32;
+                    let n = b_shape[1] as u32;
+                    let a_f32: Vec<f32> = a.data().iter().map(|&v| v as f32).collect();
+                    let b_f32: Vec<f32> = b.data().iter().map(|&v| v as f32).collect();
+                    if let Ok(result_f32) = vk.tensor_matmul(&a_f32, &b_f32, m, k, n) {
+                        let result_f64: Vec<f64> = result_f32.iter().map(|&v| v as f64).collect();
+                        if let Ok(arr) = ndarray::ArrayD::from_shape_vec(
+                            vec![m as usize, n as usize],
+                            result_f64,
+                        ) {
+                            return Ok(Value::Tensor(
+                                crate::runtime::ml::tensor::TensorValue::new(arr, false),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         // CPU fallback — delegates to existing tensor_matmul
         match tensor_ops::matmul(&a, &b) {
             Ok(t) => Ok(Value::Tensor(t)),
