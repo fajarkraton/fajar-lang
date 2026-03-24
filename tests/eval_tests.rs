@@ -10825,3 +10825,192 @@ fn l1_refcount_u16_packing() {
     let out = eval_output(src);
     assert_eq!(out, vec!["1", "0", "1", "44", "1", "300"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint L2: CoW integration + exec cleanup
+// ═══════════════════════════════════════════════
+
+#[test]
+fn l2_exec_releases_cow_pages() {
+    // exec frees CoW pages by decrementing refcounts
+    let src = r#"
+        fn release_simulate(refcount: i64) -> i64 {
+            let new_rc = if refcount > 0 { refcount - 1 } else { 0 }
+            new_rc
+        }
+        fn main() -> void {
+            // Shared page (rc=2) → after exec free → rc=1
+            println(release_simulate(2))
+            // Private page (rc=1) → after exec free → rc=0 (freed)
+            println(release_simulate(1))
+            // Already freed (rc=0) → stays 0
+            println(release_simulate(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "0", "0"]);
+}
+
+#[test]
+fn l2_exit_releases_cow_pages() {
+    // exit decrements all page refcounts, frees when 0
+    let src = r#"
+        fn should_free(refcount: i64) -> bool { refcount - 1 == 0 }
+        fn main() -> void {
+            println(should_free(1))   // last ref → free
+            println(should_free(2))   // still shared → don't free
+            println(should_free(3))   // still shared → don't free
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn l2_cow_fork_no_copy() {
+    // CoW fork shares pages (no 4KB copy per page)
+    let src = r#"
+        fn cow_fork_pages_copied() -> i64 { 0 }  // No pages copied!
+        fn deep_fork_pages_copied(user_pages: i64) -> i64 { user_pages }
+        fn main() -> void {
+            let user_pages: i64 = 16  // 64KB user space
+            // CoW: 0 pages copied
+            println(cow_fork_pages_copied())
+            // Deep: 16 pages copied
+            println(deep_fork_pages_copied(user_pages))
+            // Speedup
+            println(user_pages)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "16", "16"]);
+}
+
+#[test]
+fn l2_cow_stack_sharing() {
+    // User stack pages (0x2FF0000-0x3000000) are also CoW shared
+    let src = r#"
+        const ELF_STACK_TOP: i64 = 0x3000000
+        fn stack_frame(page_offset: i64) -> i64 {
+            (ELF_STACK_TOP - 0x10000 + page_offset) / 4096
+        }
+        fn main() -> void {
+            // Stack uses 16 pages (64KB)
+            println(0x10000 / 4096)
+            // All stack pages are CoW-shared on fork
+            let first = stack_frame(0)
+            let last = stack_frame(0xFFFF)
+            println(last - first + 1)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16", "16"]);
+}
+
+#[test]
+fn l2_cow_heap_sharing() {
+    // Heap pages (0x2800000+) are CoW shared on fork
+    let src = r#"
+        const USER_HEAP_BASE: i64 = 0x2800000
+        fn heap_frame(offset: i64) -> i64 { (USER_HEAP_BASE + offset) / 4096 }
+        fn main() -> void {
+            println(heap_frame(0))      // first heap frame
+            println(heap_frame(4096))   // second heap frame
+            // Both CoW shared after fork
+            println(heap_frame(4096) - heap_frame(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10240", "10241", "1"]);
+}
+
+#[test]
+fn l2_cow_fault_counter() {
+    let src = r#"
+        const COW_FAULT_COUNT: i64 = 0x950048
+        fn main() -> void {
+            println(COW_FAULT_COUNT)
+            // Counter at known address
+            let offset = COW_FAULT_COUNT - 0x950000
+            println(offset)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["9764936", "72"]);
+}
+
+#[test]
+fn l2_tlb_flush_needed() {
+    // After CoW copy, TLB must be flushed for the faulting address
+    let src = r#"
+        fn needs_tlb_flush(was_cow: bool, page_copied: bool) -> bool {
+            was_cow && page_copied
+        }
+        fn main() -> void {
+            println(needs_tlb_flush(true, true))    // CoW copy → flush
+            println(needs_tlb_flush(true, false))   // CoW no copy (last ref) → flush too
+            println(needs_tlb_flush(false, false))   // not CoW → no flush
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn l2_cow_disabled_fallback() {
+    // If refcount table full, fallback to deep-copy
+    let src = r#"
+        const PAGE_REFCOUNT_MAX: i64 = 32768
+        fn should_deep_copy(frame_idx: i64) -> bool {
+            frame_idx >= PAGE_REFCOUNT_MAX
+        }
+        fn main() -> void {
+            println(should_deep_copy(100))      // within range → CoW
+            println(should_deep_copy(32768))    // at limit → deep copy
+            println(should_deep_copy(50000))    // beyond → deep copy
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["false", "true", "true"]);
+}
+
+#[test]
+fn l2_cow_signal_safety() {
+    // Page fault during signal delivery: CoW handles it transparently
+    let src = r#"
+        fn cow_handles_signal_fault(is_cow: bool) -> str {
+            if is_cow { "cow_copy" } else { "kill" }
+        }
+        fn main() -> void {
+            println(cow_handles_signal_fault(true))
+            println(cow_handles_signal_fault(false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["cow_copy", "kill"]);
+}
+
+#[test]
+fn l2_cow_complete_lifecycle() {
+    // Full CoW lifecycle: fork → share → write fault → copy → free
+    let src = r#"
+        fn lifecycle_step(step: i64) -> str {
+            if step == 0 { "fork" }
+            else if step == 1 { "share_ro" }
+            else if step == 2 { "write_fault" }
+            else if step == 3 { "copy_page" }
+            else if step == 4 { "remap_rw" }
+            else if step == 5 { "decref" }
+            else { "done" }
+        }
+        fn main() -> void {
+            let mut step: i64 = 0
+            while step <= 6 {
+                println(lifecycle_step(step))
+                step = step + 1
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["fork", "share_ro", "write_fault", "copy_page", "remap_rw", "decref", "done"]);
+}

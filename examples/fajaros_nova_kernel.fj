@@ -5088,8 +5088,10 @@ const PAGE_REFCOUNT_MAX: i64 = 32768
         cow_refcount_set(new_frame, 1)
     }
 
-    // L1.6: TLB flush for the faulting address
+    // L1.6: TLB flush + L2.7: increment fault counter
     cow_invlpg(fault_addr)
+    let faults = volatile_read_u64(COW_FAULT_COUNT)
+    volatile_write_u64(COW_FAULT_COUNT, faults + 1)
     0
 }
 
@@ -5163,6 +5165,9 @@ const PAGE_REFCOUNT_MAX: i64 = 32768
     }
 }
 
+// CoW fault counter at 0x950048
+const COW_FAULT_COUNT: i64 = 0x950048
+
 // L1.8: CoW statistics command
 @kernel fn cmd_cowstat() {
     cprintln("CoW Statistics:", YELLOW_ON_BLACK)
@@ -5183,6 +5188,9 @@ const PAGE_REFCOUNT_MAX: i64 = 32768
     console_putchar(10, WHITE_ON_BLACK)
     cprint("  Private: ", WHITE_ON_BLACK)
     cprint_decimal(total - shared, WHITE_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  CoW faults: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(COW_FAULT_COUNT), YELLOW_ON_BLACK)
     console_putchar(10, WHITE_ON_BLACK)
 }
 
@@ -5328,19 +5336,23 @@ const CTX_OFF_RIP: i64 = 120   // RIP: 15*8=120
         let entry = page_table_entry(parent_table, idx)
         if entry != 0 && (entry & PAGE_PRESENT) != 0 {
             if level == 1 {
-                // PT level: deep-copy the actual data page
-                let parent_phys = entry & 0xFFFFFFFFF000
-                let flags = entry & 0xFFF
-                let new_frame = frame_alloc()
-                if new_frame != -1 {
-                    let new_phys = new_frame * FRAME_SIZE
-                    // Copy 4KB page content
-                    let mut b: i64 = 0
-                    while b < 4096 {
-                        volatile_write_u8(new_phys + b, volatile_read_u8(parent_phys + b))
-                        b = b + 1
-                    }
-                    page_table_set(child_table, idx, new_phys | flags)
+                // L2.3: PT level — CoW share instead of deep-copy
+                if (entry & PAGE_USER) != 0 {
+                    // Share the page: mark parent read-only+CoW, child same
+                    let phys = entry & 0xFFFFFFFFF000
+                    let frame_idx = phys / FRAME_SIZE
+                    let cow_flags = (entry & (0xFFF ^ PAGE_WRITABLE)) | PAGE_COW
+                    // Mark parent as CoW (read-only)
+                    page_table_set(parent_table, idx, phys | cow_flags)
+                    // Child gets same mapping (CoW)
+                    page_table_set(child_table, idx, phys | cow_flags)
+                    // Set refcount
+                    let rc = cow_refcount_get(frame_idx)
+                    if rc == 0 { cow_refcount_set(frame_idx, 2) }
+                    else { cow_refcount_inc(frame_idx) }
+                } else {
+                    // Kernel page at PT level — share directly
+                    page_table_set(child_table, idx, entry)
                 }
             } else {
                 // Higher level: recurse
@@ -5525,17 +5537,13 @@ const ARGV_STR_SIZE: i64 = 256  // max 256 bytes per argument string
 
 // G2.2: Free all user pages for a process (pages with PAGE_USER flag)
 @kernel fn exec_free_user_pages(pid: i64) {
-    // Free user code pages (ELF_LOAD_BASE region: 0x2000000-0x3000000)
-    // Walk the page range and unmap any mapped pages
-    let mut addr: i64 = ELF_LOAD_BASE
-    while addr < ELF_STACK_TOP {
-        // Check if page is mapped by trying to read PTE
-        // Simple approach: just unmap the range we know user code uses
-        // This is safe because kernel pages are at different addresses
-        // TODO: walk actual page tables for precise cleanup
-        addr = addr + FRAME_SIZE
+    // L2.1: Use CoW-aware page cleanup on exec
+    // Release all CoW-tracked user pages (decrement refcounts)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let cr3 = volatile_read(base + PROC_OFF_CR3)
+    if cr3 != 0 && cr3 != PML4_BASE {
+        cow_release_pages(cr3)
     }
-    // For now, the new elf_load_segments will overwrite with fresh mappings
 }
 
 // G2.5: Setup argv on user stack, return adjusted RSP
@@ -6546,6 +6554,10 @@ const SIG_IGN: i64 = 1   // ignore signal
     }
 
     wake_waiting_parent(pid, exit_code)
+
+    // L2.2: Release CoW pages on exit
+    let cr3 = volatile_read(base + PROC_OFF_CR3)
+    if cr3 != 0 && cr3 != PML4_BASE { cow_release_pages(cr3) }
 
     // Close all FDs
     let mut fd: i64 = 0
@@ -15711,6 +15723,7 @@ const PROC_OFF_NAME: i64 = 64
     cow_init() // Initialize CoW page refcount table
     // Register cow_handle_fault fn pointer at 0x950040 for linker page fault handler
     volatile_write_u64(0x950040, fn_addr("cow_handle_fault"))
+    volatile_write_u64(COW_FAULT_COUNT, 0) // Reset CoW fault counter
     println("[PROC] Process table v2 ready")
     println("[KB] Keyboard buffer ready")
 
