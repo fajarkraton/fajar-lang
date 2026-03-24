@@ -11914,3 +11914,178 @@ fn n2_fsck_error_types() {
     let out = eval_output(src);
     assert_eq!(out, vec!["0", "1", "2"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase O: TCP Server & Sockets
+// Sprint O1: Socket API
+// ═══════════════════════════════════════════════
+
+#[test]
+fn o1_socket_table_layout() {
+    let src = r#"
+        const SOCKET_TABLE: i64 = 0x980000
+        const SOCKET_MAX: i64 = 16
+        const SOCKET_ENTRY_SIZE: i64 = 64
+        fn main() -> void {
+            println(SOCKET_MAX * SOCKET_ENTRY_SIZE)
+            println(SOCKET_TABLE)
+            println(SOCKET_MAX * SOCKET_ENTRY_SIZE < 4096)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "9961472", "true"]);
+}
+
+#[test]
+fn o1_socket_states() {
+    let src = r#"
+        const SOCK_FREE: i64 = 0
+        const SOCK_LISTEN: i64 = 3
+        const SOCK_ESTABLISHED: i64 = 5
+        const SOCK_CLOSED: i64 = 7
+        fn state_name(s: i64) -> str {
+            if s == 0 { "FREE" }
+            else if s == 3 { "LISTEN" }
+            else if s == 5 { "ESTABLISHED" }
+            else if s == 7 { "CLOSED" }
+            else { "OTHER" }
+        }
+        fn main() -> void {
+            println(state_name(0))
+            println(state_name(3))
+            println(state_name(5))
+            println(state_name(7))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["FREE", "LISTEN", "ESTABLISHED", "CLOSED"]);
+}
+
+#[test]
+fn o1_socket_types() {
+    let src = r#"
+        const SOCK_STREAM: i64 = 1
+        const SOCK_DGRAM: i64 = 2
+        fn main() -> void {
+            println(SOCK_STREAM)
+            println(SOCK_DGRAM)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "2"]);
+}
+
+#[test]
+fn o1_socket_syscall_numbers() {
+    let src = r#"
+        const SYS_SOCKET: i64 = 27
+        const SYS_BIND: i64 = 28
+        const SYS_LISTEN: i64 = 29
+        const SYS_ACCEPT: i64 = 30
+        const SYS_CONNECT: i64 = 31
+        fn main() -> void {
+            println(SYS_SOCKET)
+            println(SYS_CONNECT)
+            println(SYS_CONNECT - SYS_SOCKET + 1)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["27", "31", "5"]);
+}
+
+#[test]
+fn o1_fd_socket_type() {
+    let src = r#"
+        const FD_SOCKET: i64 = 6
+        const FD_FAT32: i64 = 5
+        fn main() -> void {
+            println(FD_SOCKET)
+            println(FD_SOCKET > FD_FAT32)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6", "true"]);
+}
+
+#[test]
+fn o1_ephemeral_port() {
+    let src = r#"
+        fn ephemeral_port(slot: i64) -> i64 { 49152 + slot }
+        fn main() -> void {
+            println(ephemeral_port(0))
+            println(ephemeral_port(5))
+            println(ephemeral_port(15))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["49152", "49157", "49167"]);
+}
+
+#[test]
+fn o1_socket_buffer_layout() {
+    let src = r#"
+        const SOCKET_BUF_BASE: i64 = 0x982000
+        const SOCKET_BUF_SIZE: i64 = 2048
+        fn rx_buf(slot: i64) -> i64 { SOCKET_BUF_BASE + slot * SOCKET_BUF_SIZE * 2 }
+        fn tx_buf(slot: i64) -> i64 { rx_buf(slot) + SOCKET_BUF_SIZE }
+        fn main() -> void {
+            println(rx_buf(0))
+            println(tx_buf(0))
+            println(tx_buf(0) - rx_buf(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["9969664", "9971712", "2048"]);
+}
+
+#[test]
+fn o1_bind_state_transition() {
+    let src = r#"
+        const SOCK_CREATED: i64 = 1
+        const SOCK_BOUND: i64 = 2
+        fn can_bind(state: i64) -> bool { state == SOCK_CREATED }
+        fn after_bind() -> i64 { SOCK_BOUND }
+        fn main() -> void {
+            println(can_bind(SOCK_CREATED))
+            println(can_bind(SOCK_BOUND))
+            println(after_bind())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "2"]);
+}
+
+#[test]
+fn o1_listen_backlog() {
+    let src = r#"
+        const SOCK_BOUND: i64 = 2
+        const SOCK_LISTEN: i64 = 3
+        fn can_listen(state: i64) -> bool { state == SOCK_BOUND }
+        fn main() -> void {
+            println(can_listen(SOCK_BOUND))
+            println(can_listen(SOCK_LISTEN))
+            println(SOCK_LISTEN)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "3"]);
+}
+
+#[test]
+fn o1_ip_packing() {
+    let src = r#"
+        fn pack_ip(a: i64, b: i64, c: i64, d: i64) -> i64 {
+            (a << 24) | (b << 16) | (c << 8) | d
+        }
+        fn unpack_a(ip: i64) -> i64 { (ip >> 24) & 0xFF }
+        fn unpack_d(ip: i64) -> i64 { ip & 0xFF }
+        fn main() -> void {
+            let ip = pack_ip(10, 0, 2, 2)
+            println(ip)
+            println(unpack_a(ip))
+            println(unpack_d(ip))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["167772674", "10", "2"]);
+}

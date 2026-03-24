@@ -4518,6 +4518,12 @@ const USER_HEAP_BASE: i64 = 0x2800000
     if num == SYS_PIPE { return sys_pipe(arg0) }
     if num == SYS_KILL { return sys_kill(arg0, arg1) }
     if num == SYS_SIGNAL { return sys_signal(arg0, arg1) }
+    // Socket syscalls (Phase O)
+    if num == SYS_SOCKET { return sys_socket(arg0) }
+    if num == SYS_BIND { return sys_bind(arg0, arg1) }
+    if num == SYS_LISTEN { return sys_listen(arg0, arg1) }
+    if num == SYS_ACCEPT { return sys_accept(arg0) }
+    if num == SYS_CONNECT_SOCK { return sys_connect_sock(arg0, arg1, arg2) }
     -1 // Unknown syscall
 }
 
@@ -4559,6 +4565,9 @@ const USER_HEAP_BASE: i64 = 0x2800000
     if ftype == FD_PIPE_WRITE {
         let slot = fd_v2_get_data(pid, fd)
         return pipe_write_circular(slot, buf_addr, len)
+    }
+    if ftype == FD_SOCKET {
+        return socket_write(fd_v2_get_data(pid, fd), buf_addr, len)
     }
     -1
 }
@@ -4604,6 +4613,9 @@ const USER_HEAP_BASE: i64 = 0x2800000
     if ftype == FD_PIPE_READ {
         let slot = fd_v2_get_data(pid, fd)
         return pipe_read_circular(slot, buf_addr, len)
+    }
+    if ftype == FD_SOCKET {
+        return socket_read(fd_v2_get_data(pid, fd), buf_addr, len)
     }
     -1
 }
@@ -6348,6 +6360,275 @@ const FS_DISK_FULL_THRESHOLD: i64 = 90 // refuse writes at 90% full
         cprint_decimal((used * 100) / total, CYAN_ON_BLACK)
         cprintln("%", WHITE_ON_BLACK)
     }
+}
+
+// ═══════════════════════════════════════════════
+// Socket API (Sprint O1 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// Socket table at 0x980000: 16 sockets × 64 bytes
+// Per socket: +0=state, +8=type, +16=local_port, +24=remote_ip, +32=remote_port,
+//             +40=rx_buf_addr, +48=tx_buf_addr, +56=backlog
+const SOCKET_TABLE: i64 = 0x980000
+const SOCKET_MAX: i64 = 16
+const SOCKET_ENTRY_SIZE: i64 = 64
+const SOCK_OFF_STATE: i64 = 0
+const SOCK_OFF_TYPE: i64 = 8
+const SOCK_OFF_LOCAL_PORT: i64 = 16
+const SOCK_OFF_REMOTE_IP: i64 = 24
+const SOCK_OFF_REMOTE_PORT: i64 = 32
+const SOCK_OFF_RX_BUF: i64 = 40
+const SOCK_OFF_TX_BUF: i64 = 48
+const SOCK_OFF_BACKLOG: i64 = 56
+
+// Socket states
+const SOCK_FREE: i64 = 0
+const SOCK_CREATED: i64 = 1
+const SOCK_BOUND: i64 = 2
+const SOCK_LISTEN: i64 = 3
+const SOCK_CONNECTING: i64 = 4
+const SOCK_ESTABLISHED: i64 = 5
+const SOCK_CLOSE_WAIT: i64 = 6
+const SOCK_CLOSED: i64 = 7
+
+// Socket types
+const SOCK_STREAM: i64 = 1    // TCP
+const SOCK_DGRAM: i64 = 2     // UDP
+
+// FD type for sockets
+const FD_SOCKET: i64 = 6
+
+// Socket buffer area: 0x982000 (16 sockets × 2KB rx + 2KB tx = 64KB)
+const SOCKET_BUF_BASE: i64 = 0x982000
+const SOCKET_BUF_SIZE: i64 = 2048
+
+// New syscall numbers for sockets
+const SYS_SOCKET: i64 = 27
+const SYS_BIND: i64 = 28
+const SYS_LISTEN: i64 = 29
+const SYS_ACCEPT: i64 = 30
+const SYS_CONNECT_SOCK: i64 = 31
+
+// O1.1: Initialize socket table
+@kernel fn socket_init() {
+    let mut i: i64 = 0
+    while i < SOCKET_MAX * SOCKET_ENTRY_SIZE {
+        volatile_write_u8(SOCKET_TABLE + i, 0)
+        i = i + 1
+    }
+}
+
+// O1.2: SYS_SOCKET(27) — create socket, return FD
+@kernel fn sys_socket(sock_type: i64) -> i64 {
+    // Find free socket slot
+    let mut slot: i64 = -1
+    let mut i: i64 = 0
+    while i < SOCKET_MAX && slot == -1 {
+        if volatile_read_u64(SOCKET_TABLE + i * SOCKET_ENTRY_SIZE + SOCK_OFF_STATE) == SOCK_FREE {
+            slot = i
+        }
+        i = i + 1
+    }
+    if slot == -1 { return -1 }
+
+    // Initialize socket
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_CREATED)
+    volatile_write_u64(entry + SOCK_OFF_TYPE, sock_type)
+    volatile_write_u64(entry + SOCK_OFF_LOCAL_PORT, 0)
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_IP, 0)
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_PORT, 0)
+    // Assign buffers
+    volatile_write_u64(entry + SOCK_OFF_RX_BUF, SOCKET_BUF_BASE + slot * SOCKET_BUF_SIZE * 2)
+    volatile_write_u64(entry + SOCK_OFF_TX_BUF, SOCKET_BUF_BASE + slot * SOCKET_BUF_SIZE * 2 + SOCKET_BUF_SIZE)
+    volatile_write_u64(entry + SOCK_OFF_BACKLOG, 0)
+
+    // Allocate FD
+    let pid = volatile_read_u64(0x6FE00)
+    let fd = fd_v2_alloc(pid)
+    if fd == -1 { volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_FREE); return -1 }
+    fd_v2_set(pid, fd, FD_SOCKET, slot)
+    fd
+}
+
+// O1.3: SYS_BIND(28) — bind socket to local port
+@kernel fn sys_bind(fd: i64, port: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd_v2_get_type(pid, fd) != FD_SOCKET { return -1 }
+    let slot = fd_v2_get_data(pid, fd)
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    let state = volatile_read_u64(entry + SOCK_OFF_STATE)
+    if state != SOCK_CREATED { return -1 }
+    // Check port not already bound
+    let mut i: i64 = 0
+    while i < SOCKET_MAX {
+        let e = SOCKET_TABLE + i * SOCKET_ENTRY_SIZE
+        if volatile_read_u64(e + SOCK_OFF_STATE) != SOCK_FREE &&
+           volatile_read_u64(e + SOCK_OFF_LOCAL_PORT) == port { return -2 } // port in use
+        i = i + 1
+    }
+    volatile_write_u64(entry + SOCK_OFF_LOCAL_PORT, port)
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_BOUND)
+    0
+}
+
+// O1.4: SYS_LISTEN(29) — mark socket as listening
+@kernel fn sys_listen(fd: i64, backlog: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd_v2_get_type(pid, fd) != FD_SOCKET { return -1 }
+    let slot = fd_v2_get_data(pid, fd)
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    if volatile_read_u64(entry + SOCK_OFF_STATE) != SOCK_BOUND { return -1 }
+    volatile_write_u64(entry + SOCK_OFF_BACKLOG, backlog)
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_LISTEN)
+    0
+}
+
+// O1.5: SYS_ACCEPT(30) — accept incoming connection
+@kernel fn sys_accept(fd: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd_v2_get_type(pid, fd) != FD_SOCKET { return -1 }
+    let slot = fd_v2_get_data(pid, fd)
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    if volatile_read_u64(entry + SOCK_OFF_STATE) != SOCK_LISTEN { return -1 }
+    // Create new socket for the accepted connection
+    let new_fd = sys_socket(SOCK_STREAM)
+    if new_fd < 0 { return -1 }
+    let new_slot = fd_v2_get_data(pid, new_fd)
+    let new_entry = SOCKET_TABLE + new_slot * SOCKET_ENTRY_SIZE
+    volatile_write_u64(new_entry + SOCK_OFF_STATE, SOCK_ESTABLISHED)
+    volatile_write_u64(new_entry + SOCK_OFF_LOCAL_PORT, volatile_read_u64(entry + SOCK_OFF_LOCAL_PORT))
+    // Remote IP/port would be filled by TCP stack on real connection
+    new_fd
+}
+
+// O1.6: SYS_CONNECT(31) — connect to remote
+@kernel fn sys_connect_sock(fd: i64, remote_ip: i64, remote_port: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd_v2_get_type(pid, fd) != FD_SOCKET { return -1 }
+    let slot = fd_v2_get_data(pid, fd)
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    let state = volatile_read_u64(entry + SOCK_OFF_STATE)
+    if state != SOCK_CREATED && state != SOCK_BOUND { return -1 }
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_IP, remote_ip)
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_PORT, remote_port)
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_ESTABLISHED)
+    // Assign ephemeral port if not bound
+    if volatile_read_u64(entry + SOCK_OFF_LOCAL_PORT) == 0 {
+        volatile_write_u64(entry + SOCK_OFF_LOCAL_PORT, 49152 + slot)
+    }
+    0
+}
+
+// O1.7: Socket read/write via FD (add to sys_read/sys_write)
+@kernel fn socket_read(slot: i64, buf: i64, len: i64) -> i64 {
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    if volatile_read_u64(entry + SOCK_OFF_STATE) != SOCK_ESTABLISHED { return -1 }
+    // Read from RX buffer (simple: first N bytes, or 0 if empty)
+    let rx_buf = volatile_read_u64(entry + SOCK_OFF_RX_BUF)
+    let rx_len = volatile_read_u64(rx_buf) // first 8 bytes = data length
+    if rx_len == 0 { return 0 }
+    let to_read = if len < rx_len { len } else { rx_len }
+    let mut i: i64 = 0
+    while i < to_read {
+        volatile_write_u8(buf + i, volatile_read_u8(rx_buf + 8 + i))
+        i = i + 1
+    }
+    // Shift remaining data
+    let remaining = rx_len - to_read
+    i = 0
+    while i < remaining {
+        volatile_write_u8(rx_buf + 8 + i, volatile_read_u8(rx_buf + 8 + to_read + i))
+        i = i + 1
+    }
+    volatile_write_u64(rx_buf, remaining)
+    to_read
+}
+
+@kernel fn socket_write(slot: i64, buf: i64, len: i64) -> i64 {
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    if volatile_read_u64(entry + SOCK_OFF_STATE) != SOCK_ESTABLISHED { return -1 }
+    let tx_buf = volatile_read_u64(entry + SOCK_OFF_TX_BUF)
+    let tx_len = volatile_read_u64(tx_buf)
+    let avail = SOCKET_BUF_SIZE - 8 - tx_len
+    if avail <= 0 { return 0 }
+    let to_write = if len < avail { len } else { avail }
+    let mut i: i64 = 0
+    while i < to_write {
+        volatile_write_u8(tx_buf + 8 + tx_len + i, volatile_read_u8(buf + i))
+        i = i + 1
+    }
+    volatile_write_u64(tx_buf, tx_len + to_write)
+    to_write
+}
+
+// O1.8: `netstat` command
+@kernel fn cmd_netstat() {
+    cprintln("Active sockets:", YELLOW_ON_BLACK)
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < SOCKET_MAX {
+        let entry = SOCKET_TABLE + i * SOCKET_ENTRY_SIZE
+        let state = volatile_read_u64(entry + SOCK_OFF_STATE)
+        if state != SOCK_FREE {
+            cprint("  [", WHITE_ON_BLACK)
+            cprint_decimal(i, CYAN_ON_BLACK)
+            cprint("] ", WHITE_ON_BLACK)
+            // Type
+            let stype = volatile_read_u64(entry + SOCK_OFF_TYPE)
+            if stype == SOCK_STREAM { cprint("TCP ", WHITE_ON_BLACK) }
+            else { cprint("UDP ", WHITE_ON_BLACK) }
+            // Local port
+            cprint(":", WHITE_ON_BLACK)
+            cprint_decimal(volatile_read_u64(entry + SOCK_OFF_LOCAL_PORT), CYAN_ON_BLACK)
+            cprint(" → ", WHITE_ON_BLACK)
+            // Remote
+            let rip = volatile_read_u64(entry + SOCK_OFF_REMOTE_IP)
+            if rip != 0 {
+                cprint_decimal((rip >> 24) & 0xFF, WHITE_ON_BLACK)
+                cprint(".", WHITE_ON_BLACK)
+                cprint_decimal((rip >> 16) & 0xFF, WHITE_ON_BLACK)
+                cprint(".", WHITE_ON_BLACK)
+                cprint_decimal((rip >> 8) & 0xFF, WHITE_ON_BLACK)
+                cprint(".", WHITE_ON_BLACK)
+                cprint_decimal(rip & 0xFF, WHITE_ON_BLACK)
+            } else { cprint("*", WHITE_ON_BLACK) }
+            cprint(":", WHITE_ON_BLACK)
+            cprint_decimal(volatile_read_u64(entry + SOCK_OFF_REMOTE_PORT), WHITE_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            // State name
+            if state == SOCK_CREATED { cprint("CREATED", WHITE_ON_BLACK) }
+            else if state == SOCK_BOUND { cprint("BOUND", YELLOW_ON_BLACK) }
+            else if state == SOCK_LISTEN { cprint("LISTEN", GREEN_ON_BLACK) }
+            else if state == SOCK_CONNECTING { cprint("CONNECTING", YELLOW_ON_BLACK) }
+            else if state == SOCK_ESTABLISHED { cprint("ESTABLISHED", GREEN_ON_BLACK) }
+            else if state == SOCK_CLOSE_WAIT { cprint("CLOSE_WAIT", YELLOW_ON_BLACK) }
+            else if state == SOCK_CLOSED { cprint("CLOSED", RED_ON_BLACK) }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (no active sockets)", WHITE_ON_BLACK) }
+}
+
+// O1.9: TCP RST — reset connection
+@kernel fn socket_reset(slot: i64) {
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_CLOSED)
+    // Clear buffers
+    let rx_buf = volatile_read_u64(entry + SOCK_OFF_RX_BUF)
+    let tx_buf = volatile_read_u64(entry + SOCK_OFF_TX_BUF)
+    if rx_buf != 0 { volatile_write_u64(rx_buf, 0) }
+    if tx_buf != 0 { volatile_write_u64(tx_buf, 0) }
+}
+
+@kernel fn socket_close(slot: i64) {
+    let entry = SOCKET_TABLE + slot * SOCKET_ENTRY_SIZE
+    volatile_write_u64(entry + SOCK_OFF_STATE, SOCK_FREE)
+    volatile_write_u64(entry + SOCK_OFF_LOCAL_PORT, 0)
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_IP, 0)
+    volatile_write_u64(entry + SOCK_OFF_REMOTE_PORT, 0)
 }
 
 // ═══════════════════════════════════════════════
@@ -16886,6 +17167,7 @@ const PROC_OFF_NAME: i64 = 64
     volatile_write_u64(LOGIN_HIST_IDX, 0) // Clear login history
     volatile_write_u64(SESSION_TIMEOUT, 0) // Session timeout disabled by default
     journal_init() // Initialize filesystem journal
+    socket_init() // Initialize socket table
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
