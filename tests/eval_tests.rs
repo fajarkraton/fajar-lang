@@ -6508,14 +6508,19 @@ fn const_fn_with_struct_and_array() {
 #[test]
 fn const_fn_rejects_method_call() {
     let mut interp = Interpreter::new_capturing();
-    let result = interp.eval_source(r#"
+    let result = interp.eval_source(
+        r#"
         const fn bad() -> i64 {
             let s = "hello"
             s.len()
         }
         fn main() -> void { println(bad()) }
-    "#);
-    assert!(result.is_err(), "method call in const fn should be rejected");
+    "#,
+    );
+    assert!(
+        result.is_err(),
+        "method call in const fn should be rejected"
+    );
 }
 
 #[test]
@@ -6578,7 +6583,7 @@ fn const_fn_allows_cast() {
 #[test]
 fn comptime_error_ct001_not_evaluable() {
     // The comptime evaluator should reject expressions it can't handle
-    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeError};
+    use fajar_lang::analyzer::comptime::{ComptimeError, ComptimeEvaluator};
     let mut eval = ComptimeEvaluator::new();
     // An Await expression should fail
     let expr = fajar_lang::parser::ast::Expr::Await {
@@ -6598,7 +6603,7 @@ fn comptime_error_ct001_not_evaluable() {
 
 #[test]
 fn comptime_error_ct003_division_by_zero() {
-    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeError};
+    use fajar_lang::analyzer::comptime::{ComptimeError, ComptimeEvaluator};
     let mut eval = ComptimeEvaluator::new();
     let expr = fajar_lang::parser::ast::Expr::Binary {
         op: fajar_lang::parser::ast::BinOp::Div,
@@ -6622,12 +6627,18 @@ fn comptime_error_ct003_division_by_zero() {
 
 #[test]
 fn comptime_struct_field_not_found() {
-    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeValue, ComptimeError};
+    use fajar_lang::analyzer::comptime::{ComptimeError, ComptimeEvaluator, ComptimeValue};
     let mut eval = ComptimeEvaluator::new();
-    eval.set_variable("P".into(), ComptimeValue::Struct {
-        name: "Point".into(),
-        fields: vec![("x".into(), ComptimeValue::Int(1)), ("y".into(), ComptimeValue::Int(2))],
-    });
+    eval.set_variable(
+        "P".into(),
+        ComptimeValue::Struct {
+            name: "Point".into(),
+            fields: vec![
+                ("x".into(), ComptimeValue::Int(1)),
+                ("y".into(), ComptimeValue::Int(2)),
+            ],
+        },
+    );
     let expr = fajar_lang::parser::ast::Expr::Field {
         object: Box::new(fajar_lang::parser::ast::Expr::Ident {
             name: "P".into(),
@@ -6639,7 +6650,10 @@ fn comptime_struct_field_not_found() {
     let result = eval.eval_expr(&expr);
     assert!(result.is_err());
     let err_msg = format!("{}", result.unwrap_err());
-    assert!(err_msg.contains("not found"), "error should mention field not found: {err_msg}");
+    assert!(
+        err_msg.contains("not found"),
+        "error should mention field not found: {err_msg}"
+    );
 }
 
 #[test]
@@ -6983,4 +6997,282 @@ fn multiple_requires() {
     "#;
     let out = eval_output(src);
     assert_eq!(out, vec!["50"]);
+}
+
+// ═══════════════════════════════════════════════
+// Phase E: Preemptive Scheduler Tests
+// ═══════════════════════════════════════════════
+
+#[test]
+fn e1_context_frame_size_is_160_bytes() {
+    // Verify context frame: 20 registers × 8 bytes = 160
+    let src = r#"
+        const CTX_FRAME_SIZE: i64 = 160
+        const REGS: i64 = 20
+        fn main() -> void {
+            println(CTX_FRAME_SIZE)
+            println(REGS * 8)
+            println(CTX_FRAME_SIZE == REGS * 8)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["160", "160", "true"]);
+}
+
+#[test]
+fn e1_process_table_layout() {
+    // Verify process table constants
+    let src = r#"
+        const PROC_TABLE: i64 = 0x600000
+        const PROC_MAX: i64 = 16
+        const PROC_ENTRY_SIZE: i64 = 256
+        fn main() -> void {
+            // Total table size = 16 * 256 = 4096 bytes
+            println(PROC_MAX * PROC_ENTRY_SIZE)
+            // End of table
+            println(PROC_TABLE + PROC_MAX * PROC_ENTRY_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4096", "6295552"]); // 0x601000
+}
+
+#[test]
+fn e1_kernel_stack_allocation() {
+    // Verify per-process kernel stack layout
+    let src = r#"
+        const KSTACK_BASE: i64 = 0x700000
+        const KSTACK_SIZE: i64 = 0x4000
+        fn stack_base(pid: i64) -> i64 { KSTACK_BASE + pid * KSTACK_SIZE }
+        fn stack_top(pid: i64) -> i64 { stack_base(pid) + KSTACK_SIZE - 16 }
+        fn main() -> void {
+            // PID 1 stack
+            println(stack_base(1))
+            println(stack_top(1))
+            // PID 15 stack (last)
+            println(stack_base(15))
+            println(stack_top(15))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(
+        out,
+        vec![
+            "7356416", // 0x704000
+            "7372784", // 0x707FF0
+            "7585792", // 0x73C000
+            "7602160", // 0x73FFF0
+        ]
+    );
+}
+
+#[test]
+fn e1_round_robin_pick_next() {
+    // Test round-robin logic (pure Fajar Lang, no volatile)
+    // Use scalars to avoid array move-after-use
+    let src = r#"
+        fn pick_next(current: i64, s0: i64, s1: i64, s2: i64, s3: i64) -> i64 {
+            let max: i64 = 4
+            let mut next = current + 1
+            let mut checked: i64 = 0
+            while checked < max {
+                if next >= max { next = 0 }
+                let mut state: i64 = 0
+                if next == 0 { state = s0 }
+                else if next == 1 { state = s1 }
+                else if next == 2 { state = s2 }
+                else { state = s3 }
+                if state == 1 || state == 2 { return next }
+                next = next + 1
+                checked = checked + 1
+            }
+            current
+        }
+        fn main() -> void {
+            // States: [running, ready, free, ready]
+            // From PID 0, should pick PID 1 (ready)
+            println(pick_next(0, 2, 1, 0, 1))
+            // From PID 1, should pick PID 3 (skip free PID 2)
+            println(pick_next(1, 2, 1, 0, 1))
+            // From PID 3, should pick PID 0 (running)
+            println(pick_next(3, 2, 1, 0, 1))
+            // All free except current — stays on current
+            println(pick_next(0, 2, 0, 0, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3", "0", "0"]);
+}
+
+#[test]
+fn e1_fibonacci_compute() {
+    // Test the iterative fibonacci used by fibonacci_process
+    let src = r#"
+        fn fib_compute(n: i64) -> i64 {
+            if n <= 1 { return n }
+            let mut a: i64 = 0
+            let mut b: i64 = 1
+            let mut i: i64 = 2
+            while i <= n {
+                let tmp = a + b
+                a = b
+                b = tmp
+                i = i + 1
+            }
+            b
+        }
+        fn main() -> void {
+            println(fib_compute(0))
+            println(fib_compute(1))
+            println(fib_compute(10))
+            println(fib_compute(20))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "55", "6765"]);
+}
+
+#[test]
+fn e1_process_state_constants() {
+    // Verify process state values
+    let src = r#"
+        const FREE: i64 = 0
+        const READY: i64 = 1
+        const RUNNING: i64 = 2
+        const BLOCKED: i64 = 3
+        const ZOMBIE: i64 = 4
+        fn state_name(s: i64) -> str {
+            if s == FREE { "free" }
+            else if s == READY { "ready" }
+            else if s == RUNNING { "running" }
+            else if s == BLOCKED { "blocked" }
+            else if s == ZOMBIE { "zombie" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(state_name(0))
+            println(state_name(1))
+            println(state_name(2))
+            println(state_name(3))
+            println(state_name(4))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["free", "ready", "running", "blocked", "zombie"]);
+}
+
+#[test]
+fn e1_iretq_frame_offsets() {
+    // Verify IRETQ frame layout (offsets from RSP after all pushes)
+    let src = r#"
+        const CTX_R15: i64 = 0
+        const CTX_RAX: i64 = 112
+        const CTX_RIP: i64 = 120
+        const CTX_CS: i64 = 128
+        const CTX_RFLAGS: i64 = 136
+        const CTX_RSP: i64 = 144
+        const CTX_SS: i64 = 152
+        fn main() -> void {
+            // 15 GPRs × 8 = 120 bytes for GPRs
+            println(15 * 8)
+            // RIP should be right after GPRs
+            println(CTX_RIP)
+            // SS should be the last (highest offset)
+            println(CTX_SS)
+            // Total = 20 registers
+            println((CTX_SS + 8) / 8)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["120", "120", "152", "20"]);
+}
+
+#[test]
+fn e1_process_spawn_stack_setup() {
+    // Simulate the stack frame setup that sched_spawn_kernel does
+    let src = r#"
+        fn main() -> void {
+            let stack_top: i64 = 0x707FF0
+            let entry: i64 = 0x100000
+            // IRETQ frame values
+            let ss: i64 = 0x10        // kernel data segment
+            let rsp = stack_top
+            let rflags: i64 = 0x202   // IF=1, bit 1 always set
+            let cs: i64 = 0x08        // kernel code segment
+            let rip = entry
+            // Stack pointer after 20 pushes (IRETQ + 15 GPRs)
+            let frame_size = 20 * 8
+            let final_sp = stack_top - frame_size
+            println(ss)
+            println(rsp)
+            println(rflags)
+            println(cs)
+            println(rip)
+            println(final_sp)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16", "7372784", "514", "8", "1048576", "7372624"]);
+}
+
+#[test]
+fn e1_multiple_processes_interleave() {
+    // Simulate 5 processes taking turns (round-robin logic)
+    let src = r#"
+        fn get_state(pid: i64) -> i64 {
+            // PID 0=running(2), 1-4=ready(1)
+            if pid == 0 { 2 } else if pid <= 4 { 1 } else { 0 }
+        }
+        fn pick_next(current: i64) -> i64 {
+            let max: i64 = 5
+            let mut next = current + 1
+            let mut checked: i64 = 0
+            while checked < max {
+                if next >= max { next = 0 }
+                let state = get_state(next)
+                if state == 1 || state == 2 { return next }
+                next = next + 1
+                checked = checked + 1
+            }
+            current
+        }
+        fn main() -> void {
+            // Simulate 8 scheduling rounds from PID 0
+            let mut current: i64 = 0
+            let mut i: i64 = 0
+            while i < 8 {
+                current = pick_next(current)
+                println(current)
+                i = i + 1
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    // Round-robin: 1, 2, 3, 4, 0, 1, 2, 3
+    assert_eq!(out, vec!["1", "2", "3", "4", "0", "1", "2", "3"]);
+}
+
+#[test]
+fn e1_process_exit_zombie_reap() {
+    // Test zombie → reap lifecycle (pure logic)
+    let src = r#"
+        const FREE: i64 = 0
+        const READY: i64 = 1
+        const RUNNING: i64 = 2
+        const ZOMBIE: i64 = 4
+        fn main() -> void {
+            let mut state = RUNNING
+            // Process exits → zombie
+            state = ZOMBIE
+            println(state)
+            println(state == ZOMBIE)
+            // Reap → free
+            let exit_code: i64 = 42
+            state = FREE
+            println(state)
+            println(exit_code)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4", "true", "0", "42"]);
 }

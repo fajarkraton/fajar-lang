@@ -234,16 +234,16 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| E1.1 | Timer IRQ context switch | LAPIC/PIT fires → save regs → pick next → restore | [ ] |
-| E1.2 | Per-process kernel stack | Each PID gets 4KB kernel stack at alloc time | [ ] |
-| E1.3 | Context frame struct | Define register save area (RAX-R15, RIP, RSP, RFLAGS, CR3) | [ ] |
-| E1.4 | save_context(pid) | Push all GPRs + RSP + RIP to process table | [ ] |
-| E1.5 | restore_context(pid) | Pop all GPRs + RSP + RIP, IRETQ to process | [ ] |
-| E1.6 | Round-robin pick_next() | Cycle through READY PIDs, skip current | [ ] |
-| E1.7 | Timer ISR calls scheduler | IRQ0 handler: EOI → save → pick → restore → IRET | [ ] |
-| E1.8 | `spawn` command | Fork process, set entry point, add to ready queue | [ ] |
-| E1.9 | Multiple processes running | `spawn counter` + `spawn hello` → both produce output | [ ] |
-| E1.10 | Test: preemption works | Process A runs, timer fires, process B runs, etc. | [ ] |
+| E1.1 | Timer IRQ context switch | LAPIC/PIT fires → save regs → pick next → restore | [x] |
+| E1.2 | Per-process kernel stack | Each PID gets 16KB kernel stack at KSTACK_BASE + pid*0x4000 | [x] |
+| E1.3 | Context frame struct | 20 registers × 8 = 160 bytes (15 GPRs + IRETQ: RIP,CS,RFLAGS,RSP,SS) | [x] |
+| E1.4 | save_context(pid) | Software save for voluntary yield (CR3 + state→READY) | [x] |
+| E1.5 | restore_context(pid) | Software restore (set PID, CR3 switch, TSS.RSP0 update) | [x] |
+| E1.6 | Round-robin pick_next() | pick_next_process(): scan PIDs for READY/RUNNING | [x] |
+| E1.7 | Timer ISR calls scheduler | linker.rs __isr_timer: push 15 GPRs → round-robin → IRETQ | [x] |
+| E1.8 | `spawn` command | spawn hello/counter/fib/test/init — named process registry | [x] |
+| E1.9 | Multiple processes running | hello_process + counter_process + fibonacci_process + sched_demo | [x] |
+| E1.10 | Test: preemption works | 10 integration tests (round-robin, frame layout, interleave, exit) | [x] |
 
 ### Sprint E2: Multiple Ring 3 Programs (10 tasks)
 

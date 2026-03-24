@@ -8619,18 +8619,39 @@ const MNIST_PIXELS: i64 = 0x560000   // 7×7 = 49 pixel values per digit
 
 @kernel fn cmd_ps() {
     cprintln("Processes:", YELLOW_ON_BLACK)
-    cprintln("  PID  STATE    TICKS", WHITE_ON_BLACK)
+    cprintln("  PID  STATE     TICKS   NAME", WHITE_ON_BLACK)
     let mut i: i64 = 0
-    while i < 16 {
-        let base = 0x600000 + i * 256
-        let state = volatile_read(base + 8)
+    while i < PROC_MAX {
+        let base = PROC_TABLE + i * PROC_ENTRY_SIZE
+        let state = volatile_read(base + PROC_OFF_STATE)
         if state != 0 {
             cprint("  ", WHITE_ON_BLACK)
+            if i < 10 { cprint(" ", WHITE_ON_BLACK) }
             cprint_decimal(i, CYAN_ON_BLACK)
-            if state == 1 { cprint("    ready    ", WHITE_ON_BLACK) }
-            else if state == 2 { cprint("    running  ", GREEN_ON_BLACK) }
-            else { cprint("    blocked  ", YELLOW_ON_BLACK) }
-            cprint_decimal(volatile_read(base + 32), WHITE_ON_BLACK)
+            if state == 1 { cprint("   ready    ", WHITE_ON_BLACK) }
+            else if state == 2 { cprint("   running  ", GREEN_ON_BLACK) }
+            else if state == 3 { cprint("   blocked  ", YELLOW_ON_BLACK) }
+            else if state == 4 { cprint("   zombie   ", RED_ON_BLACK) }
+            else { cprint("   ???      ", WHITE_ON_BLACK) }
+            let ticks = volatile_read(base + PROC_OFF_TICKS)
+            if ticks < 10 { cprint("    ", WHITE_ON_BLACK) }
+            else if ticks < 100 { cprint("   ", WHITE_ON_BLACK) }
+            else if ticks < 1000 { cprint("  ", WHITE_ON_BLACK) }
+            else { cprint(" ", WHITE_ON_BLACK) }
+            cprint_decimal(ticks, WHITE_ON_BLACK)
+            cprint("   ", WHITE_ON_BLACK)
+            // Print name (up to 16 chars)
+            if i == 0 { cprint("kernel", CYAN_ON_BLACK) }
+            else {
+                let mut j: i64 = 0
+                let mut has_name: i64 = 0
+                while j < 16 {
+                    let ch = volatile_read_u8(base + PROC_OFF_NAME + j)
+                    if ch == 0 { j = 16 }
+                    else { console_putchar(ch, CYAN_ON_BLACK); has_name = 1; j = j + 1 }
+                }
+                if has_name == 0 { cprint("<unnamed>", WHITE_ON_BLACK) }
+            }
             console_putchar(10, WHITE_ON_BLACK)
         }
         i = i + 1
@@ -9425,7 +9446,7 @@ const FS_ENTRY_SIZE: i64 = 128
 // ═══════════════════════════════════════════════
 
 @kernel fn cmd_kill() {
-    // kill <pid>
+    // kill <pid> — terminate process and free slot
     let len = cmdbuf_len()
     if len <= 5 { cprintln("Usage: kill <pid>", YELLOW_ON_BLACK); return }
     let mut pid: i64 = 0
@@ -9436,14 +9457,37 @@ const FS_ENTRY_SIZE: i64 = 128
         i = i + 1
     }
     if pid == 0 { cprintln("kill: cannot kill PID 0 (kernel)", RED_ON_BLACK); return }
-    if pid >= 16 { cprintln("kill: invalid PID", RED_ON_BLACK); return }
-    let base = 0x600000 + pid * 256
-    let state = volatile_read(base + 8)
+    if pid >= PROC_MAX { cprintln("kill: invalid PID (max 15)", RED_ON_BLACK); return }
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let state = volatile_read(base + PROC_OFF_STATE)
     if state == 0 { cprintln("kill: no such process", RED_ON_BLACK); return }
-    volatile_write(base + 8, 0)  // state = dead
-    cprint("Killed PID ", GREEN_ON_BLACK)
-    cprint_decimal(pid, GREEN_ON_BLACK)
-    console_putchar(10, WHITE_ON_BLACK)
+    // Mark as zombie first, then reap
+    if state == 4 {
+        // Already zombie — just reap
+        process_reap(pid)
+        cprint("Reaped zombie PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        volatile_write(base + PROC_OFF_STATE, 0)  // state = FREE
+        volatile_write(base + PROC_OFF_TICKS, 0)
+        volatile_write(base + PROC_OFF_ENTRY, 0)
+        cprint("Killed PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        // Show name
+        let ch0 = volatile_read_u8(base + PROC_OFF_NAME)
+        if ch0 != 0 {
+            cprint(" (", WHITE_ON_BLACK)
+            let mut j: i64 = 0
+            while j < 16 {
+                let ch = volatile_read_u8(base + PROC_OFF_NAME + j)
+                if ch == 0 { j = 16 }
+                else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 }
+            }
+            cprint(")", WHITE_ON_BLACK)
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
 }
 
 @kernel fn cmd_dmesg() {
@@ -10745,60 +10789,121 @@ const FS_ENTRY_SIZE: i64 = 128
 }
 
 // ═══════════════════════════════════════════════
-// Phase 8 — Process Demo + Interactive Features
+// Phase E — Preemptive Multitasking Scheduler
 // ═══════════════════════════════════════════════
 
-// ── Real Process Spawning (Preemptive Scheduler) ──
-// The linker's timer ISR saves/restores all 15 GPRs via push/pop.
-// To spawn a new process, we set up a fake stack frame that looks like
-// the timer ISR just interrupted it. When the scheduler switches to it,
-// the pop sequence + IRETQ will "return" to the process entry point.
+// ── E1.3: Context Frame Structure ──
+// The timer ISR (linker assembly, vector 32 = IRQ0) saves this frame
+// on the kernel stack every 10ms (100 Hz PIT). The scheduler then
+// switches RSP to the next process and the pop+IRETQ restores it.
 //
-// Stack layout (top to bottom, grows down):
-// [SS]      = 0x10 (kernel data) or 0x1B (user data)
-// [RSP]     = process stack pointer
-// [RFLAGS]  = 0x202 (IF=1)
-// [CS]      = 0x08 (kernel code) or 0x23 (user code)
-// [RIP]     = entry point
-// [RAX]     = 0
-// [RBX]     = 0
-// ...15 GPRs...
-// [R15]     = 0
+// Stack layout after timer ISR push (grows down):
+//
+// Offset  Register    Pushed by
+// ──────  ────────    ─────────
+// +0x98   SS          CPU (interrupt gate)
+// +0x90   RSP         CPU (interrupt gate)
+// +0x88   RFLAGS      CPU (interrupt gate)
+// +0x80   CS          CPU (interrupt gate)
+// +0x78   RIP         CPU (interrupt gate)
+// +0x70   RAX         ISR (push rax)
+// +0x68   RBX         ISR (push rbx)
+// +0x60   RCX         ISR (push rcx)
+// +0x58   RDX         ISR (push rdx)
+// +0x50   RSI         ISR (push rsi)
+// +0x48   RDI         ISR (push rdi)
+// +0x40   RBP         ISR (push rbp)
+// +0x38   R8          ISR (push r8)
+// +0x30   R9          ISR (push r9)
+// +0x28   R10         ISR (push r10)
+// +0x20   R11         ISR (push r11)
+// +0x18   R12         ISR (push r12)
+// +0x10   R13         ISR (push r13)
+// +0x08   R14         ISR (push r14)
+// +0x00   R15         ISR (push r15) ← RSP points here
+//
+// Total frame: 20 × 8 = 160 bytes (0xA0)
+
+const CTX_R15: i64 = 0
+const CTX_R14: i64 = 8
+const CTX_R13: i64 = 16
+const CTX_R12: i64 = 24
+const CTX_R11: i64 = 32
+const CTX_R10: i64 = 40
+const CTX_R9: i64 = 48
+const CTX_R8: i64 = 56
+const CTX_RBP: i64 = 64
+const CTX_RDI: i64 = 72
+const CTX_RSI: i64 = 80
+const CTX_RDX: i64 = 88
+const CTX_RCX: i64 = 96
+const CTX_RBX: i64 = 104
+const CTX_RAX: i64 = 112
+const CTX_RIP: i64 = 120
+const CTX_CS: i64 = 128
+const CTX_RFLAGS: i64 = 136
+const CTX_RSP: i64 = 144
+const CTX_SS: i64 = 152
+const CTX_FRAME_SIZE: i64 = 160
+
+// ── E1.2: Per-Process Kernel Stack ──
+// Each process gets 16KB kernel stack at KSTACK_BASE + pid * KSTACK_SIZE.
+// The timer ISR saves the context frame on this stack, and
+// TSS.RSP0 is updated on switch for Ring 3→0 transitions.
+const KSTACK_BASE: i64 = 0x700000
+const KSTACK_SIZE: i64 = 0x4000
+
+// Process Table Layout (256 bytes per process, 16 PIDs)
+const PROC_TABLE: i64 = 0x600000
+const PROC_MAX: i64 = 16
+const PROC_ENTRY_SIZE: i64 = 256
+const PROC_OFF_STATE: i64 = 8
+const PROC_OFF_RSP: i64 = 16
+const PROC_OFF_ENTRY: i64 = 24
+const PROC_OFF_TICKS: i64 = 32
+const PROC_OFF_CR3: i64 = 40
+const PROC_OFF_EXIT: i64 = 48
+const PROC_OFF_PPID: i64 = 56
+const PROC_OFF_NAME: i64 = 64
+
+// ── Spawn: build fake interrupt frame on kernel stack ──
+// When the scheduler switches to this process, the pop × 15 + IRETQ
+// sequence will "return" to the entry point as if the process was
+// interrupted mid-execution.
 
 @kernel fn sched_spawn_kernel(entry_addr: i64) -> i64 {
-    // Find free PID
+    // Find free PID (skip PID 0 = kernel/shell)
     let mut pid: i64 = -1
     let mut i: i64 = 1
-    while i < 16 && pid == -1 {
-        if volatile_read(0x600000 + i * 256 + 8) == 0 { pid = i }
+    while i < PROC_MAX && pid == -1 {
+        if volatile_read(PROC_TABLE + i * PROC_ENTRY_SIZE + PROC_OFF_STATE) == 0 {
+            pid = i
+        }
         i = i + 1
     }
     if pid == -1 { return -1 }
 
-    // Allocate process stack: 16KB at 0x700000 + pid*0x4000
-    let stack_base = 0x700000 + pid * 0x4000
-    let stack_top = stack_base + 0x3FF0
-    // Map stack pages
+    // E1.2: Allocate per-process kernel stack (16KB)
+    let stack_base = KSTACK_BASE + pid * KSTACK_SIZE
+    let stack_top = stack_base + KSTACK_SIZE - 16
     let mut pg: i64 = stack_base
-    while pg < stack_base + 0x4000 {
+    while pg < stack_base + KSTACK_SIZE {
         map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
         frame_mark_used(pg / FRAME_SIZE)
         pg = pg + FRAME_SIZE
     }
 
-    // Build fake interrupt frame on the stack
-    // The timer ISR pushes 15 GPRs then does IRETQ.
-    // We build the stack so that pop × 15 + IRETQ = jump to entry_addr
+    // E1.3: Build fake context frame on the stack
     let mut sp = stack_top
 
-    // IRETQ frame (pushed by CPU on interrupt, popped by IRETQ)
+    // IRETQ frame (popped by CPU on IRETQ)
     sp = sp - 8; volatile_write_u64(sp, 0x10)       // SS (kernel data)
-    sp = sp - 8; volatile_write_u64(sp, stack_top)    // RSP
+    sp = sp - 8; volatile_write_u64(sp, stack_top)   // RSP
     sp = sp - 8; volatile_write_u64(sp, 0x202)       // RFLAGS (IF=1)
     sp = sp - 8; volatile_write_u64(sp, 0x08)        // CS (kernel code)
-    sp = sp - 8; volatile_write_u64(sp, entry_addr)  // RIP
+    sp = sp - 8; volatile_write_u64(sp, entry_addr)  // RIP = entry point
 
-    // 15 GPRs (pushed by timer ISR, popped on restore)
+    // 15 GPRs (popped by ISR restore sequence)
     sp = sp - 8; volatile_write_u64(sp, 0)   // RAX
     sp = sp - 8; volatile_write_u64(sp, 0)   // RBX
     sp = sp - 8; volatile_write_u64(sp, 0)   // RCX
@@ -10816,61 +10921,337 @@ const FS_ENTRY_SIZE: i64 = 128
     sp = sp - 8; volatile_write_u64(sp, 0)   // R15
 
     // Set process table entry
-    let base = 0x600000 + pid * 256
-    volatile_write(base + 8, 1)      // state = READY
-    volatile_write(base + 16, sp)    // saved RSP (points to R15 on stack)
-    volatile_write(base + 32, 0)     // ticks = 0
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    volatile_write(base + PROC_OFF_STATE, 1)    // state = READY
+    volatile_write(base + PROC_OFF_RSP, sp)     // saved RSP → bottom of frame
+    volatile_write(base + PROC_OFF_ENTRY, entry_addr)
+    volatile_write(base + PROC_OFF_TICKS, 0)
+    volatile_write(base + PROC_OFF_CR3, PML4_BASE)
+    volatile_write(base + PROC_OFF_EXIT, 0)
+    volatile_write(base + PROC_OFF_PPID, volatile_read(0x6FE00))
 
     pid
 }
 
+// ── E1.4: save_context ──
+// Software context save for voluntary yield/sleep.
+// (Hardware timer ISR handles preemptive save automatically via asm.)
+@kernel fn save_context(pid: i64) {
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    // Save page table base (CR3)
+    volatile_write(base + PROC_OFF_CR3, read_cr3())
+    // RSP is saved by the timer ISR. For voluntary context switch,
+    // the caller's return address is on the stack — the timer ISR
+    // will save the full frame when it next fires.
+    // Mark process as READY (not running)
+    if volatile_read(base + PROC_OFF_STATE) == 2 {
+        volatile_write(base + PROC_OFF_STATE, 1)  // RUNNING → READY
+    }
+}
+
+// ── E1.5: restore_context ──
+// Software context restore for manual process switch.
+// After calling this + IRETQ, execution resumes at the process RIP.
+@kernel fn restore_context(pid: i64) {
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    // Update current PID
+    set_current_pid(pid)
+    volatile_write(base + PROC_OFF_STATE, 2)  // state = RUNNING
+
+    // Switch page table if different
+    let saved_cr3 = volatile_read(base + PROC_OFF_CR3)
+    if saved_cr3 != 0 && saved_cr3 != read_cr3() {
+        write_cr3(saved_cr3)
+    }
+
+    // Update TSS.RSP0 for Ring 3→0 transitions
+    let kstack_top = KSTACK_BASE + pid * KSTACK_SIZE + KSTACK_SIZE - 16
+    volatile_write_u64(0x6FC04, kstack_top)
+}
+
+// ── E1.6: pick_next_process ──
+// Round-robin scheduler: find next READY/RUNNING process after current.
+@kernel fn pick_next_process() -> i64 {
+    let current = volatile_read(0x6FE00)
+    let mut next = current + 1
+    let mut checked: i64 = 0
+    while checked < PROC_MAX {
+        if next >= PROC_MAX { next = 0 }
+        let state = volatile_read(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        // Pick READY (1) or RUNNING (2) processes
+        if state == 1 || state == 2 { return next }
+        next = next + 1
+        checked = checked + 1
+    }
+    current  // no other process → stay on current
+}
+
+// ── E1.7: Timer ISR integration ──
+// The timer ISR (linker.rs __isr_timer, vector 32) does the following
+// every 10ms (100 Hz PIT):
+//   1. Push 15 GPRs (RAX..R15)
+//   2. Increment __timer_ticks
+//   3. Save current RSP + CR3 to process table [0x600000 + pid*256]
+//   4. Round-robin: scan PIDs for next READY/RUNNING
+//   5. Switch: mark old→READY, new→RUNNING, load RSP+CR3
+//   6. Update TSS.RSP0 for new process
+//   7. EOI to PIC (port 0x20)
+//   8. Pop 15 GPRs + IRETQ
+//
+// This is fully automatic. Any process in READY state will be scheduled.
+
+// ── Process exit (clean) ──
+@kernel fn process_exit(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    volatile_write(base + PROC_OFF_STATE, 4)   // state = ZOMBIE
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+    // Print exit message
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+    // Halt — scheduler will skip ZOMBIE processes
+    while 1 == 1 { hlt() }
+}
+
+// ── Process cleanup (reap zombie) ──
+@kernel fn process_reap(pid: i64) -> i64 {
+    if pid < 1 || pid >= PROC_MAX { return -1 }
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let state = volatile_read(base + PROC_OFF_STATE)
+    if state != 4 { return -1 }  // not ZOMBIE
+    let exit_code = volatile_read(base + PROC_OFF_EXIT)
+    // Free the slot
+    volatile_write(base + PROC_OFF_STATE, 0)  // FREE
+    volatile_write(base + PROC_OFF_TICKS, 0)
+    volatile_write(base + PROC_OFF_ENTRY, 0)
+    exit_code
+}
+
+// ── E1.8: Enhanced spawn command ──
 @kernel fn cmd_spawn() {
-    // spawn <name> — create a real kernel process
     let len = cmdbuf_len()
-    if len <= 6 { cprintln("Usage: spawn <name>", YELLOW_ON_BLACK); return }
-
-    // Check if name matches a registered program
-    // For now, spawn a kernel-mode "busy loop" process that prints periodically
-    // TODO: look up program registry for Ring 3 programs
-
-    // Create a kernel process that runs a simple counter function
-    let pid = sched_spawn_kernel(fn_addr("sched_test_process"))
-    if pid < 0 {
-        cprintln("spawn: no free PIDs", RED_ON_BLACK)
+    if len <= 6 {
+        cprintln("Usage: spawn <name>", YELLOW_ON_BLACK)
+        cprintln("  Names: hello, counter, fib, test, init", WHITE_ON_BLACK)
         return
     }
 
-    // Copy name
-    let base = 0x600000 + pid * 256
+    // Parse process name from command buffer (after "spawn ")
+    let c0 = volatile_read_u8(0x6F800 + 6)
+    let c1 = volatile_read_u8(0x6F800 + 7)
+    let c2 = volatile_read_u8(0x6F800 + 8)
+    let c3 = volatile_read_u8(0x6F800 + 9)
+    let c4 = volatile_read_u8(0x6F800 + 10)
+
+    // Match process name to entry point
+    let mut entry_fn: i64 = 0
+
+    // "hello" → hello_process
+    if c0 == 104 && c1 == 101 && c2 == 108 && c3 == 108 && c4 == 111 {
+        entry_fn = fn_addr("hello_process")
+    }
+    // "counter" → counter_process
+    else if c0 == 99 && c1 == 111 && c2 == 117 && c3 == 110 && c4 == 116 {
+        entry_fn = fn_addr("counter_process")
+    }
+    // "fib" → fibonacci_process
+    else if c0 == 102 && c1 == 105 && c2 == 98 {
+        entry_fn = fn_addr("fibonacci_process")
+    }
+    // "test" → sched_test_process
+    else if c0 == 116 && c1 == 101 && c2 == 115 && c3 == 116 {
+        entry_fn = fn_addr("sched_test_process")
+    }
+    // "init" → init_process
+    else if c0 == 105 && c1 == 110 && c2 == 105 && c3 == 116 {
+        entry_fn = fn_addr("init_process")
+    }
+    else {
+        cprintln("spawn: unknown process name", RED_ON_BLACK)
+        cprintln("  Available: hello, counter, fib, test, init", YELLOW_ON_BLACK)
+        return
+    }
+
+    let pid = sched_spawn_kernel(entry_fn)
+    if pid < 0 {
+        cprintln("spawn: no free PIDs (max 16)", RED_ON_BLACK)
+        return
+    }
+
+    // Copy process name to table
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
     let mut j: i64 = 0
     while j < 16 && j + 6 < len {
-        volatile_write_u8(base + 64 + j, volatile_read_u8(0x6F800 + 6 + j))
+        volatile_write_u8(base + PROC_OFF_NAME + j, volatile_read_u8(0x6F800 + 6 + j))
         j = j + 1
     }
-    volatile_write_u8(base + 64 + j, 0)
+    volatile_write_u8(base + PROC_OFF_NAME + j, 0)
 
-    cprint("Spawned PID ", GREEN_ON_BLACK)
+    cprint("Spawned '", GREEN_ON_BLACK)
+    j = 0
+    while j < 16 {
+        let ch = volatile_read_u8(base + PROC_OFF_NAME + j)
+        if ch == 0 { j = 16 }  // break
+        else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 }
+    }
+    cprint("' as PID ", GREEN_ON_BLACK)
     cprint_decimal(pid, CYAN_ON_BLACK)
     cprintln(" (preemptive)", WHITE_ON_BLACK)
 }
 
-// Simple test process: prints its PID every ~1 second
-@kernel fn sched_test_process() {
-    let pid = volatile_read(0x6FE00) // current PID
-    let mut count: i64 = 0
-    while count < 3 {
-        // Busy-wait for ~3 seconds (300 ticks at 100Hz)
-        let target = read_timer_ticks() + 300
+// ── E1.9: Spawnable Process Functions ──
+
+// hello_process: prints greeting, sleeps, exits cleanly
+@kernel fn hello_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[hello:PID ", CYAN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] Hello from a preemptive process!", CYAN_ON_BLACK)
+
+    // Sleep 1 second
+    let target = read_timer_ticks() + 100
+    while read_timer_ticks() < target {}
+
+    cprint("[hello:PID ", CYAN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] Goodbye!", CYAN_ON_BLACK)
+
+    process_exit(0)
+}
+
+// counter_process: counts 1-10 with 500ms delays, demonstrates preemption
+@kernel fn counter_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[counter:PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, GREEN_ON_BLACK)
+    cprintln("] Starting count 1-10", GREEN_ON_BLACK)
+
+    let mut count: i64 = 1
+    while count <= 10 {
+        cprint("[counter:PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        cprint("] ", GREEN_ON_BLACK)
+        cprint_decimal(count, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+
+        // Sleep 500ms (50 ticks at 100Hz) — timer preempts during this wait
+        let target = read_timer_ticks() + 50
         while read_timer_ticks() < target {}
-        println("[PROC] background process alive")
+
         count = count + 1
     }
-    println("[PROC] background process exiting")
-    // Exit: mark self as dead
-    let me = 0x600000 + volatile_read(0x6FE00) * 256
-    volatile_write(me + 8, 0) // state = FREE
-    // Halt (scheduler will skip this PID now)
-    while 1 == 1 { hlt() }
+
+    cprint("[counter:PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, GREEN_ON_BLACK)
+    cprintln("] Done!", GREEN_ON_BLACK)
+
+    process_exit(0)
+}
+
+// fibonacci_process: computes fib(20), prints result
+@kernel fn fibonacci_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[fib:PID ", YELLOW_ON_BLACK)
+    cprint_decimal(pid, YELLOW_ON_BLACK)
+    cprintln("] Computing fibonacci(20)...", YELLOW_ON_BLACK)
+
+    let result = fib_compute(20)
+
+    cprint("[fib:PID ", YELLOW_ON_BLACK)
+    cprint_decimal(pid, YELLOW_ON_BLACK)
+    cprint("] fib(20) = ", YELLOW_ON_BLACK)
+    cprint_decimal(result, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    process_exit(0)
+}
+
+@kernel fn fib_compute(n: i64) -> i64 {
+    if n <= 1 { return n }
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut i: i64 = 2
+    while i <= n {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    b
+}
+
+// sched_test_process: original test — prints every 3 seconds, exits after 3 iterations
+@kernel fn sched_test_process() {
+    let pid = volatile_read(0x6FE00)
+    let mut count: i64 = 0
+    while count < 3 {
+        let target = read_timer_ticks() + 300
+        while read_timer_ticks() < target {}
+        cprint("[test:PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln("] background process alive", WHITE_ON_BLACK)
+        count = count + 1
+    }
+    cprint("[test:PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] exiting", WHITE_ON_BLACK)
+    process_exit(0)
+}
+
+// ── E1.10: Preemption demo command ──
+@kernel fn cmd_sched_demo() {
+    cprintln("=== Preemptive Scheduler Demo ===", YELLOW_ON_BLACK)
+    cprintln("Spawning 3 processes: hello + counter + fib", WHITE_ON_BLACK)
+    cprintln("Watch them interleave via timer preemption (10ms quantum):", WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+
+    // Spawn all three
+    let pid1 = sched_spawn_kernel(fn_addr("hello_process"))
+    if pid1 > 0 {
+        let base1 = PROC_TABLE + pid1 * PROC_ENTRY_SIZE
+        volatile_write_u8(base1 + PROC_OFF_NAME, 104)  // 'h'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 1, 101) // 'e'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 2, 108) // 'l'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 3, 108) // 'l'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 4, 111) // 'o'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 5, 0)
+        cprint("  Spawned hello as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid1, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    let pid2 = sched_spawn_kernel(fn_addr("counter_process"))
+    if pid2 > 0 {
+        let base2 = PROC_TABLE + pid2 * PROC_ENTRY_SIZE
+        volatile_write_u8(base2 + PROC_OFF_NAME, 99)   // 'c'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 1, 111) // 'o'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 2, 117) // 'u'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 3, 110) // 'n'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 4, 116) // 't'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 5, 0)
+        cprint("  Spawned counter as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid2, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    let pid3 = sched_spawn_kernel(fn_addr("fibonacci_process"))
+    if pid3 > 0 {
+        let base3 = PROC_TABLE + pid3 * PROC_ENTRY_SIZE
+        volatile_write_u8(base3 + PROC_OFF_NAME, 102)  // 'f'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 1, 105) // 'i'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 2, 98)  // 'b'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 3, 0)
+        cprint("  Spawned fib as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid3, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Processes running. Use 'ps' to see status.", YELLOW_ON_BLACK)
+    cprintln("Timer IRQ preempts every 10ms (100 Hz PIT).", WHITE_ON_BLACK)
 }
 
 @kernel fn cmd_wait() {
@@ -11270,7 +11651,7 @@ const FS_ENTRY_SIZE: i64 = 128
     // splash
     if handled == 0 && len == 6 && buf_eq4(115, 112, 108, 97) == 1 { cmd_splash(); handled = 1 }
 
-    // === Phase 8 commands ===
+    // === Phase 8 + Phase E commands ===
     // spawn (115,112,97,119,110) — "spawn <name>"
     if handled == 0 && len >= 5 && buf_eq4(115, 112, 97, 119) == 1 && volatile_read_u8(0x6F804) == 110 { cmd_spawn(); handled = 1 }
     // wait (119,97,105,116) — "wait <pid>"
@@ -11279,6 +11660,8 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(110, 105, 99, 101) == 1 { cmd_nice(); handled = 1 }
     // demo
     if handled == 0 && len == 4 && buf_eq4(100, 101, 109, 111) == 1 { cmd_demo(); handled = 1 }
+    // sched (115,99,104,101,100) — "sched" command for scheduler demo
+    if handled == 0 && len == 5 && buf_eq4(115, 99, 104, 101) == 1 && volatile_read_u8(0x6F804) == 100 { cmd_sched_demo(); handled = 1 }
     // neofetch (110,101,111,102,101,116,99,104)
     if handled == 0 && len == 8 && buf_eq4(110, 101, 111, 102) == 1 { cmd_neofetch(); handled = 1 }
 
@@ -11700,15 +12083,15 @@ const FS_ENTRY_SIZE: i64 = 128
     irq_enable()
 
     // Serial confirmation
-    println("[NOVA] FajarOS Nova v1.0.0 Genesis booted")
-    println("[NOVA] 11600+ LOC | 160 commands | Preemptive | 100% Fajar Lang")
+    println("[NOVA] FajarOS Nova v1.1.0 Ascension booted")
+    println("[NOVA] 12000+ LOC | 165 commands | Preemptive | 100% Fajar Lang")
     println("[NOVA] Frame allocator: 32768 frames (128MB)")
     println("[NOVA] RamFS: 64 entries, 832KB data")
     println("[NOVA] VGA console active at 0xB8000")
 
     // Boot banner
     cprintln("============================================", WHITE_ON_BLUE)
-    cprintln("  FajarOS Nova v1.0.0 — x86_64 Shell", WHITE_ON_BLUE)
+    cprintln("  FajarOS Nova v1.1.0 — x86_64 Shell", WHITE_ON_BLUE)
     cprintln("  Written 100% in Fajar Lang", WHITE_ON_BLUE)
     cprintln("============================================", WHITE_ON_BLUE)
     cprintln("", WHITE_ON_BLACK)
