@@ -11,9 +11,10 @@
 set -e
 
 FAJAROS_DIR="${FAJAROS_DIR:-/home/primecore/Documents/fajaros-x86}"
-FJ_BIN="${FJ_BIN:-$(dirname "$0")/../target/release/fj}"
-BOOT_LOG="/tmp/fajaros_boot_test.log"
-TIMEOUT="${TIMEOUT:-30}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FJ_BIN="${FJ_BIN:-$SCRIPT_DIR/../target/release/fj}"
+BOOT_LOG="${TMPDIR:-/tmp}/fajaros_boot_test.log"
+TIMEOUT="${TIMEOUT:-12}"
 
 echo "═══════════════════════════════════════════"
 echo "  FajarOS x86_64 QEMU Boot Test"
@@ -91,10 +92,13 @@ check() {
 
 check "BOOT32" "32-bit trampoline started"
 check "VFS" "VFS subsystem initialized"
+check "NET" "Network subsystem initialized"
 check "IPC2" "IPC subsystem ready"
 check "SYSCALL" "Syscall entry configured"
 check "PROC" "Process table ready"
+check "RING3" "Ring 3 user programs installed"
 check "FajarOS Nova\|NOVA" "FajarOS kernel banner"
+check "nova>" "Shell prompt appeared"
 
 echo ""
 echo "═══════════════════════════════════════════"
