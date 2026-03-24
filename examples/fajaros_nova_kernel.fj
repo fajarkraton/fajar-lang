@@ -4782,7 +4782,8 @@ const USER_HEAP_BASE: i64 = 0x2800000
         let entry_addr = ramfs_entry_addr(idx)
         let ftype = volatile_read(entry_addr + 48)
         if ftype != 1 { return -1 } // not a regular file
-        // Pack: data = (offset=0 << 32) | ramfs_index
+        // M2.5: Check read permission
+        if fs_check_perm(entry_addr, 4) != 0 { return -1 } // no read access
         fd_v2_set(pid, fd, FD_RAMFS, idx)
         return fd
     }
@@ -4961,7 +4962,9 @@ const USER_HEAP_BASE: i64 = 0x2800000
     let entry_addr = ramfs_entry_addr(idx)
     let ftype = volatile_read(entry_addr + 48)
     if ftype == 2 { return -1 } // can't unlink directory
-    // Mark entry as unused (clear name + type)
+    // M2.7: Check write permission
+    if fs_check_perm(entry_addr, 2) != 0 { return -1 }
+    // Mark entry as unused
     volatile_write_u8(entry_addr, 0)
     volatile_write(entry_addr + 32, 0) // size = 0
     volatile_write(entry_addr + 48, 0) // type = unused
@@ -5480,6 +5483,183 @@ const CURRENT_UID_ADDR: i64 = 0x652070
         i = i + 1
     }
     if count == 0 { cprintln("No users configured", WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// File Permissions (Sprint M2 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// Extended ramfs entry offsets (within 128-byte entry)
+// +0-31: name, +32: size, +40: data_ptr, +48: type
+// NEW: +56: owner_uid, +64: owner_gid, +72: mode (rwxrwxrwx as octal bits)
+const FS_OFF_OWNER_UID: i64 = 56
+const FS_OFF_OWNER_GID: i64 = 64
+const FS_OFF_MODE: i64 = 72
+
+// Default permissions
+const PERM_FILE_DEFAULT: i64 = 0x1A4  // 0644 = rw-r--r--
+const PERM_DIR_DEFAULT: i64 = 0x1ED   // 0755 = rwxr-xr-x
+
+// Permission bit masks
+const PERM_OWNER_R: i64 = 0x100  // owner read
+const PERM_OWNER_W: i64 = 0x080  // owner write
+const PERM_OWNER_X: i64 = 0x040  // owner execute
+const PERM_GROUP_R: i64 = 0x020  // group read
+const PERM_GROUP_W: i64 = 0x010  // group write
+const PERM_GROUP_X: i64 = 0x008  // group execute
+const PERM_OTHER_R: i64 = 0x004  // other read
+const PERM_OTHER_W: i64 = 0x002  // other write
+const PERM_OTHER_X: i64 = 0x001  // other execute
+
+// M2.2: Set default permissions when creating files/dirs
+@kernel fn fs_set_default_perms(entry_addr: i64, ftype: i64) {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    volatile_write(entry_addr + FS_OFF_OWNER_UID, uid)
+    volatile_write(entry_addr + FS_OFF_OWNER_GID, uid) // gid = uid for simplicity
+    let mode = if ftype == 2 { PERM_DIR_DEFAULT } else { PERM_FILE_DEFAULT }
+    volatile_write(entry_addr + FS_OFF_MODE, mode)
+}
+
+// M2.5: Check permission for access
+// access: 4=read, 2=write, 1=execute
+@kernel fn fs_check_perm(entry_addr: i64, access: i64) -> i64 {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    // M2.9: Root bypasses all permission checks
+    if uid == 0 { return 0 }
+
+    let owner_uid = volatile_read(entry_addr + FS_OFF_OWNER_UID)
+    let owner_gid = volatile_read(entry_addr + FS_OFF_OWNER_GID)
+    let mode = volatile_read(entry_addr + FS_OFF_MODE)
+    let proc_gid = volatile_read(PROC_TABLE + volatile_read_u64(0x6FE00) * PROC_ENTRY_SIZE + PROC_OFF_GID)
+
+    // Check owner permissions
+    if uid == owner_uid {
+        let owner_bits = (mode >> 6) & 7
+        if (owner_bits & access) == access { return 0 }
+        return -1
+    }
+
+    // Check group permissions
+    if proc_gid == owner_gid {
+        let group_bits = (mode >> 3) & 7
+        if (group_bits & access) == access { return 0 }
+        return -1
+    }
+
+    // Check other permissions
+    let other_bits = mode & 7
+    if (other_bits & access) == access { return 0 }
+    -1
+}
+
+// M2.3: `chmod` command — "chmod <mode> <file>"
+@kernel fn cmd_chmod() {
+    let len = cmdbuf_len()
+    if len <= 10 { cprintln("Usage: chmod <mode> <file>", YELLOW_ON_BLACK); return }
+    // Parse octal mode (3 digits)
+    let d0 = volatile_read_u8(0x6F800 + 6) - 48
+    let d1 = volatile_read_u8(0x6F800 + 7) - 48
+    let d2 = volatile_read_u8(0x6F800 + 8) - 48
+    let mode = d0 * 64 + d1 * 8 + d2
+    // Parse filename
+    let fname: i64 = 0x843D00
+    let mut fi: i64 = 0
+    let mut pos: i64 = 10
+    while pos < len && fi < 31 {
+        volatile_write_u8(fname + fi, volatile_read_u8(0x6F800 + pos))
+        fi = fi + 1; pos = pos + 1
+    }
+    volatile_write_u8(fname + fi, 0)
+    let idx = ramfs_find_by_addr(fname)
+    if idx < 0 { cprintln("File not found", RED_ON_BLACK); return }
+    let entry = ramfs_entry_addr(idx)
+    // Only owner or root can chmod
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    let owner = volatile_read(entry + FS_OFF_OWNER_UID)
+    if uid != 0 && uid != owner { cprintln("Permission denied", RED_ON_BLACK); return }
+    volatile_write(entry + FS_OFF_MODE, mode)
+    cprint("Mode set to ", WHITE_ON_BLACK)
+    cprint_decimal(d0, CYAN_ON_BLACK)
+    cprint_decimal(d1, CYAN_ON_BLACK)
+    cprint_decimal(d2, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M2.4: `chown` command — "chown <uid> <file>"
+@kernel fn cmd_chown() {
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: chown <uid> <file>", YELLOW_ON_BLACK); return }
+    // Only root can chown
+    if volatile_read_u64(CURRENT_UID_ADDR) != 0 { cprintln("Permission denied (root only)", RED_ON_BLACK); return }
+    let new_uid = volatile_read_u8(0x6F800 + 6) - 48
+    let fname: i64 = 0x843D00
+    let mut fi: i64 = 0
+    let mut pos: i64 = 8
+    while pos < len && fi < 31 {
+        volatile_write_u8(fname + fi, volatile_read_u8(0x6F800 + pos))
+        fi = fi + 1; pos = pos + 1
+    }
+    volatile_write_u8(fname + fi, 0)
+    let idx = ramfs_find_by_addr(fname)
+    if idx < 0 { cprintln("File not found", RED_ON_BLACK); return }
+    volatile_write(ramfs_entry_addr(idx) + FS_OFF_OWNER_UID, new_uid)
+    cprint("Owner set to uid=", WHITE_ON_BLACK)
+    cprint_decimal(new_uid, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M2.8: `ls -l` long listing with permissions
+@kernel fn cmd_ls_long() {
+    let count = volatile_read(FS_BASE)
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let ftype = volatile_read(addr + 48)
+        if ftype != 0 {
+            // Type indicator
+            if ftype == 2 { cprint("d", CYAN_ON_BLACK) } else { cprint("-", WHITE_ON_BLACK) }
+            // Permission bits
+            let mode = volatile_read(addr + FS_OFF_MODE)
+            if mode == 0 {
+                // Legacy file (no permissions set) — show default
+                cprint("rw-r--r--", WHITE_ON_BLACK)
+            } else {
+                fs_print_mode(mode)
+            }
+            cprint(" ", WHITE_ON_BLACK)
+            // Owner UID
+            cprint_decimal(volatile_read(addr + FS_OFF_OWNER_UID), CYAN_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            // Size
+            let size = volatile_read(addr + 32)
+            cprint_decimal(size, WHITE_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            // Name
+            let mut j: i64 = 0
+            while j < 32 {
+                let ch = volatile_read_u8(addr + j)
+                if ch == 0 { j = 32 } else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        i = i + 1
+    }
+}
+
+// Print rwxrwxrwx from mode bits
+@kernel fn fs_print_mode(mode: i64) {
+    let owner = (mode >> 6) & 7
+    let group = (mode >> 3) & 7
+    let other = mode & 7
+    fs_print_rwx(owner)
+    fs_print_rwx(group)
+    fs_print_rwx(other)
+}
+
+@kernel fn fs_print_rwx(bits: i64) {
+    if (bits & 4) != 0 { cprint("r", WHITE_ON_BLACK) } else { cprint("-", WHITE_ON_BLACK) }
+    if (bits & 2) != 0 { cprint("w", WHITE_ON_BLACK) } else { cprint("-", WHITE_ON_BLACK) }
+    if (bits & 1) != 0 { cprint("x", WHITE_ON_BLACK) } else { cprint("-", WHITE_ON_BLACK) }
 }
 
 // ═══════════════════════════════════════════════
@@ -13202,6 +13382,7 @@ const FS_ENTRY_SIZE: i64 = 128
     volatile_write(addr + 48, ftype)
     volatile_write(addr + 32, 0) // size = 0
     volatile_write(addr + 40, 0) // data_ptr = 0
+    fs_set_default_perms(addr, ftype) // M2.2: set owner + mode
     volatile_write(FS_BASE, count + 1)
     count
 }

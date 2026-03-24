@@ -11176,3 +11176,203 @@ fn m1_user_max_check() {
     let out = eval_output(src);
     assert_eq!(out, vec!["true", "true", "false"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint M2: File permission bits
+// ═══════════════════════════════════════════════
+
+#[test]
+fn m2_permission_constants() {
+    let src = r#"
+        const PERM_FILE_DEFAULT: i64 = 0x1A4
+        const PERM_DIR_DEFAULT: i64 = 0x1ED
+        fn main() -> void {
+            // 0644 in decimal = 420
+            println(PERM_FILE_DEFAULT)
+            // 0755 in decimal = 493
+            println(PERM_DIR_DEFAULT)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["420", "493"]);
+}
+
+#[test]
+fn m2_permission_bit_masks() {
+    let src = r#"
+        const PERM_OWNER_R: i64 = 0x100
+        const PERM_OWNER_W: i64 = 0x080
+        const PERM_OWNER_X: i64 = 0x040
+        fn main() -> void {
+            // Owner read = 256
+            println(PERM_OWNER_R)
+            // Owner write = 128
+            println(PERM_OWNER_W)
+            // rwx combined = 448 (0700)
+            println(PERM_OWNER_R + PERM_OWNER_W + PERM_OWNER_X)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["256", "128", "448"]);
+}
+
+#[test]
+fn m2_mode_extraction() {
+    let src = r#"
+        fn owner_bits(mode: i64) -> i64 { (mode >> 6) & 7 }
+        fn group_bits(mode: i64) -> i64 { (mode >> 3) & 7 }
+        fn other_bits(mode: i64) -> i64 { mode & 7 }
+        fn main() -> void {
+            // 0644 = 110 100 100
+            let m: i64 = 0x1A4
+            println(owner_bits(m))  // 6 = rw-
+            println(group_bits(m))  // 4 = r--
+            println(other_bits(m))  // 4 = r--
+            // 0755 = 111 101 101
+            let m2: i64 = 0x1ED
+            println(owner_bits(m2)) // 7 = rwx
+            println(group_bits(m2)) // 5 = r-x
+            println(other_bits(m2)) // 5 = r-x
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6", "4", "4", "7", "5", "5"]);
+}
+
+#[test]
+fn m2_perm_check_owner() {
+    let src = r#"
+        fn check_perm(uid: i64, owner: i64, mode: i64, access: i64) -> i64 {
+            if uid == 0 { return 0 }
+            if uid == owner {
+                let bits = (mode >> 6) & 7
+                if (bits & access) == access { return 0 }
+                return -1
+            }
+            let other = mode & 7
+            if (other & access) == access { 0 } else { -1 }
+        }
+        fn main() -> void {
+            // Owner reads 0644 → OK
+            println(check_perm(1, 1, 0x1A4, 4))
+            // Owner writes 0644 → OK
+            println(check_perm(1, 1, 0x1A4, 2))
+            // Other reads 0644 → OK
+            println(check_perm(2, 1, 0x1A4, 4))
+            // Other writes 0644 → DENIED
+            println(check_perm(2, 1, 0x1A4, 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "0", "0", "-1"]);
+}
+
+#[test]
+fn m2_root_bypass() {
+    let src = r#"
+        fn check_perm(uid: i64, access: i64) -> i64 {
+            if uid == 0 { 0 } else { -1 }
+        }
+        fn main() -> void {
+            println(check_perm(0, 4))
+            println(check_perm(0, 2))
+            println(check_perm(0, 1))
+            println(check_perm(5, 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "0", "0", "-1"]);
+}
+
+#[test]
+fn m2_chmod_octal_parse() {
+    let src = r#"
+        fn parse_octal(d0: i64, d1: i64, d2: i64) -> i64 { d0 * 64 + d1 * 8 + d2 }
+        fn main() -> void {
+            println(parse_octal(6, 4, 4))  // 0644 = 420
+            println(parse_octal(7, 5, 5))  // 0755 = 493
+            println(parse_octal(7, 7, 7))  // 0777 = 511
+            println(parse_octal(0, 0, 0))  // 0000 = 0
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["420", "493", "511", "0"]);
+}
+
+#[test]
+fn m2_fs_entry_offsets() {
+    let src = r#"
+        const FS_OFF_OWNER_UID: i64 = 56
+        const FS_OFF_OWNER_GID: i64 = 64
+        const FS_OFF_MODE: i64 = 72
+        const FS_ENTRY_SIZE: i64 = 128
+        fn main() -> void {
+            println(FS_OFF_OWNER_UID)
+            println(FS_OFF_MODE)
+            println(FS_OFF_MODE + 8 <= FS_ENTRY_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["56", "72", "true"]);
+}
+
+#[test]
+fn m2_rwx_display() {
+    let src = r#"
+        fn rwx(bits: i64) -> str {
+            let r = if (bits & 4) != 0 { "r" } else { "-" }
+            let w = if (bits & 2) != 0 { "w" } else { "-" }
+            let x = if (bits & 1) != 0 { "x" } else { "-" }
+            f"{r}{w}{x}"
+        }
+        fn main() -> void {
+            println(rwx(7))
+            println(rwx(6))
+            println(rwx(5))
+            println(rwx(4))
+            println(rwx(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["rwx", "rw-", "r-x", "r--", "---"]);
+}
+
+#[test]
+fn m2_chown_root_only() {
+    let src = r#"
+        fn can_chown(uid: i64) -> bool { uid == 0 }
+        fn can_chmod(uid: i64, owner: i64) -> bool { uid == 0 || uid == owner }
+        fn main() -> void {
+            println(can_chown(0))
+            println(can_chown(3))
+            println(can_chmod(0, 3))
+            println(can_chmod(3, 3))
+            println(can_chmod(5, 3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "true", "true", "false"]);
+}
+
+#[test]
+fn m2_open_denied() {
+    let src = r#"
+        fn open_check(uid: i64, owner: i64, mode: i64) -> str {
+            if uid == 0 { "ok" }
+            else if uid == owner { if ((mode >> 6) & 4) != 0 { "ok" } else { "denied" } }
+            else { if (mode & 4) != 0 { "ok" } else { "denied" } }
+        }
+        fn main() -> void {
+            // Root always OK
+            println(open_check(0, 1, 0))
+            // Owner reads 0644 → OK
+            println(open_check(1, 1, 0x1A4))
+            // Other reads 0644 → OK (other has r--)
+            println(open_check(2, 1, 0x1A4))
+            // Other reads 0600 → DENIED
+            println(open_check(2, 1, 0x180))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["ok", "ok", "ok", "denied"]);
+}
