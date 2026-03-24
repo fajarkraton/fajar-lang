@@ -11537,3 +11537,205 @@ fn m3_logout_resets_to_root() {
     let out = eval_output(src);
     assert_eq!(out, vec!["0", "true"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase N: Advanced Filesystem
+// Sprint N1: Directory tree & links
+// ═══════════════════════════════════════════════
+
+#[test]
+fn n1_path_split() {
+    let src = r#"
+        fn count_components(path: str) -> i64 {
+            let parts = path.split("/")
+            let mut count: i64 = 0
+            let n = len(parts) as i64
+            let mut i: i64 = 0
+            while i < n {
+                if len(parts[i]) as i64 > 0 { count = count + 1 }
+                i = i + 1
+            }
+            count
+        }
+        fn main() -> void {
+            println(count_components("/home/fajar/file.txt"))
+            println(count_components("/etc"))
+            println(count_components("/"))
+            println(count_components("/a/b/c/d"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "1", "0", "4"]);
+}
+
+#[test]
+fn n1_fs_entry_link_offsets() {
+    let src = r#"
+        const FS_OFF_PARENT: i64 = 80
+        const FS_OFF_LINK_TARGET: i64 = 88
+        const FS_OFF_LINK_TYPE: i64 = 96
+        const FS_ENTRY_SIZE: i64 = 128
+        fn main() -> void {
+            println(FS_OFF_PARENT)
+            println(FS_OFF_LINK_TARGET)
+            println(FS_OFF_LINK_TYPE)
+            println(FS_OFF_LINK_TYPE + 8 <= FS_ENTRY_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["80", "88", "96", "true"]);
+}
+
+#[test]
+fn n1_link_types() {
+    let src = r#"
+        const LINK_NONE: i64 = 0
+        const LINK_SYMLINK: i64 = 1
+        const LINK_HARDLINK: i64 = 2
+        fn link_name(lt: i64) -> str {
+            if lt == LINK_SYMLINK { "symlink" }
+            else if lt == LINK_HARDLINK { "hardlink" }
+            else { "none" }
+        }
+        fn main() -> void {
+            println(link_name(0))
+            println(link_name(1))
+            println(link_name(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["none", "symlink", "hardlink"]);
+}
+
+#[test]
+fn n1_path_resolution() {
+    let src = r#"
+        fn resolve(path: str) -> str {
+            let parts = path.split("/")
+            let n = len(parts) as i64
+            let mut last = ""
+            let mut i: i64 = 0
+            while i < n {
+                if len(parts[i]) as i64 > 0 { last = parts[i] }
+                i = i + 1
+            }
+            last
+        }
+        fn main() -> void {
+            println(resolve("/home/fajar/file.txt"))
+            println(resolve("/etc/passwd"))
+            println(resolve("/boot"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["file.txt", "passwd", "boot"]);
+}
+
+#[test]
+fn n1_mkdir_recursive() {
+    let src = r#"
+        fn depth(path: str) -> i64 {
+            let parts = path.split("/")
+            let mut d: i64 = 0
+            let n = len(parts) as i64
+            let mut i: i64 = 0
+            while i < n {
+                if len(parts[i]) as i64 > 0 { d = d + 1 }
+                i = i + 1
+            }
+            d
+        }
+        fn main() -> void {
+            println(depth("/a/b/c"))
+            println(depth("/home/fajar/docs"))
+            println(depth("/"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "3", "0"]);
+}
+
+#[test]
+fn n1_symlink_follow() {
+    let src = r#"
+        const LINK_SYMLINK: i64 = 1
+        fn follow_link(link_type: i64, target_idx: i64, current: i64) -> i64 {
+            if link_type == LINK_SYMLINK { target_idx }
+            else { current }
+        }
+        fn main() -> void {
+            println(follow_link(LINK_SYMLINK, 5, 3))
+            println(follow_link(0, 5, 3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5", "3"]);
+}
+
+#[test]
+fn n1_hardlink_shares_data() {
+    let src = r#"
+        fn hardlink_size(target_size: i64) -> i64 { target_size }
+        fn hardlink_data(target_data: i64) -> i64 { target_data }
+        fn main() -> void {
+            println(hardlink_size(1024))
+            println(hardlink_data(0x710000))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "7405568"]);
+}
+
+#[test]
+fn n1_rmdir_empty_check() {
+    let src = r#"
+        fn can_rmdir(child_count: i64, is_dir: bool) -> bool {
+            is_dir && child_count == 0
+        }
+        fn main() -> void {
+            println(can_rmdir(0, true))
+            println(can_rmdir(1, true))
+            println(can_rmdir(0, false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn n1_parent_index_tracking() {
+    let src = r#"
+        const FS_OFF_PARENT: i64 = 80
+        fn parent_addr(entry_base: i64) -> i64 { entry_base + FS_OFF_PARENT }
+        fn main() -> void {
+            let base: i64 = 0x700100
+            println(parent_addr(base))
+            println(parent_addr(base + 128))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["7340368", "7340496"]);
+}
+
+#[test]
+fn n1_component_extraction() {
+    let src = r#"
+        fn first_component(path: str) -> str {
+            let parts = path.split("/")
+            let n = len(parts) as i64
+            let mut i: i64 = 0
+            while i < n {
+                if len(parts[i]) as i64 > 0 { return parts[i] }
+                i = i + 1
+            }
+            ""
+        }
+        fn main() -> void {
+            println(first_component("/home/fajar"))
+            println(first_component("/etc/passwd"))
+            println(first_component("file.txt"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["home", "etc", "file.txt"]);
+}
