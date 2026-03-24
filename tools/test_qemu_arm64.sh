@@ -5,11 +5,12 @@
 set -e
 
 FAJAROS_DIR="${FAJAROS_DIR:-/home/primecore/Documents/fajaros-x86}"
-FJ_BIN="${FJ_BIN:-$(dirname "$0")/../target/release/fj}"
-BOOT_LOG="/tmp/fajaros_arm64_boot_test.log"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FJ_BIN="${FJ_BIN:-$SCRIPT_DIR/../target/release/fj}"
+BOOT_LOG="${TMPDIR:-/tmp}/fajaros_arm64_boot_test.log"
 ARM64_SRC="$FAJAROS_DIR/arch/aarch64/boot.fj"
-ARM64_ELF="/tmp/fajaros-arm64-test.elf"
-TIMEOUT="${TIMEOUT:-15}"
+ARM64_ELF="${TMPDIR:-/tmp}/fajaros-arm64-test.elf"
+TIMEOUT="${TIMEOUT:-10}"
 
 echo "═══════════════════════════════════════════"
 echo "  FajarOS ARM64 QEMU Boot Test"
@@ -56,6 +57,7 @@ check "FajarOS.*ARM64\|ARM64.*Microkernel" "ARM64 kernel banner"
 check "BOOT.*QEMU\|Board.*QEMU" "QEMU virt detected"
 check "UART" "UART initialized"
 check "MEM.*Frame\|Frame.*alloc" "Memory manager ready"
+check "TMR.*Timer\|Timer freq" "Timer initialized"
 check "READY.*running\|kernel running" "Kernel fully booted"
 
 echo ""
