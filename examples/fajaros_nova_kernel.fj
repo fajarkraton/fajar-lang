@@ -3307,7 +3307,7 @@ const VQ_RX_FILL: i64 = 16  // Only pre-fill 16 RX buffers (not all 256)
 
 // ── IPv4 ──
 
-@kernel fn ip_build_header(dst_ip: i64, protocol: i64, payload_len: i64) -> i64 {
+@kernel fn ip_build_header(dst_ip: i64, proto: i64, payload_len: i64) -> i64 {
     let buf = NET_PKT_BUF + 512 // Use offset 512 for IP header build
     let total_len = 20 + payload_len
     // Version(4) + IHL(5) = 0x45
@@ -3323,7 +3323,7 @@ const VQ_RX_FILL: i64 = 16  // Only pre-fill 16 RX buffers (not all 256)
     // TTL
     volatile_write_u8(buf + 8, 64)
     // Protocol (1=ICMP, 6=TCP, 17=UDP)
-    volatile_write_u8(buf + 9, protocol)
+    volatile_write_u8(buf + 9, proto)
     // Checksum (set to 0, compute later)
     buffer_write_u16_be(buf + 10, 0)
     // Source IP
@@ -5376,7 +5376,7 @@ const ARGV_STR_SIZE: i64 = 256  // max 256 bytes per argument string
         while volatile_read_u8(ARGV_BUF + ai * ARGV_STR_SIZE + slen) != 0 { slen = slen + 1 }
         // Push string onto user stack
         user_rsp = user_rsp - (slen + 1)
-        user_rsp = user_rsp & 0xFFFFFFFFFFFFFFF8 // 8-byte align
+        user_rsp = (user_rsp / 8) * 8 // 8-byte align
         let mut si: i64 = 0
         while si <= slen {
             volatile_write_u8(user_rsp + si, volatile_read_u8(ARGV_BUF + ai * ARGV_STR_SIZE + si))
@@ -5403,7 +5403,7 @@ const ARGV_STR_SIZE: i64 = 256  // max 256 bytes per argument string
     user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, argc)
 
     // Align to 16 bytes (System V ABI requirement)
-    user_rsp = user_rsp & 0xFFFFFFFFFFFFFFF0
+    user_rsp = (user_rsp / 16) * 16 // 16-byte align (System V ABI)
 
     user_rsp
 }
@@ -5501,22 +5501,36 @@ const PROC_OFF_PGID: i64 = 120
     // it will wake the parent by setting state=READY and storing the result.
     // For now, busy-wait fallback for PID 0 (shell doesn't get descheduled)
     if parent_pid == 0 {
-        while volatile_read(child_base + PROC_OFF_STATE) != PROC_STATE_ZOMBIE { }
-        let exit_code = volatile_read(child_base + PROC_OFF_EXIT)
-        let status = wait_pack_status(exit_code, 0)
-        if status_addr != 0 {
-            volatile_write_u64(status_addr, status)
-        }
-        volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
-        volatile_write(child_base + PROC_OFF_TICKS, 0)
-        volatile_write(child_base + PROC_OFF_ENTRY, 0)
-        volatile_write(PROC_TABLE + parent_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_RUNNING)
-        return pid
+        waitpid_busy_wait(pid, child_base, status_addr, parent_pid)
+    } else {
+        // For non-shell processes: the scheduler will resume us when child exits
+        0
     }
+}
 
-    // For non-shell processes: the scheduler will resume us when child exits
-    // Return value will be set by wake_waiting_parent()
-    0
+// Busy-wait fallback for PID 0 (shell)
+@kernel fn waitpid_busy_wait(pid: i64, child_base: i64, status_addr: i64, parent_pid: i64) -> i64 {
+    waitpid_spin(child_base)
+    let exit_code = volatile_read(child_base + PROC_OFF_EXIT)
+    let status = wait_pack_status(exit_code, 0)
+    waitpid_write_status(status_addr, status)
+    waitpid_reap_child(child_base, parent_pid)
+    pid
+}
+
+@kernel fn waitpid_spin(child_base: i64) {
+    while volatile_read(child_base + PROC_OFF_STATE) != PROC_STATE_ZOMBIE { hlt() }
+}
+
+@kernel fn waitpid_reap_child(child_base: i64, parent_pid: i64) {
+    volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
+    volatile_write(child_base + PROC_OFF_TICKS, 0)
+    volatile_write(child_base + PROC_OFF_ENTRY, 0)
+    volatile_write(PROC_TABLE + parent_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_RUNNING)
+}
+
+@kernel fn waitpid_write_status(addr: i64, status: i64) {
+    if addr != 0 { volatile_write_u64(addr, status) }
 }
 
 // G3.4: Wait for any child
@@ -5649,8 +5663,8 @@ const PROC_OFF_PGID: i64 = 120
     volatile_read(PROC_TABLE + target_pid * PROC_ENTRY_SIZE + PROC_OFF_PGID)
 }
 
-// G3.9: `wait` shell command
-@kernel fn cmd_wait() {
+// G3.9: `waitpid` shell command
+@kernel fn cmd_waitpid() {
     let len = cmdbuf_len()
     if len <= 5 {
         cprintln("Usage: wait <pid>", YELLOW_ON_BLACK)
@@ -6223,33 +6237,42 @@ const SIG_IGN: i64 = 1   // ignore signal
     let base = sig_entry_addr(pid)
     let pending = volatile_read_u64(base + SIG_OFF_PENDING)
     let mask = volatile_read_u64(base + SIG_OFF_MASK)
-    let deliverable = pending & (mask ^ 0xFF) // pending AND NOT masked (for 8 slots)
+    let xor_mask = mask ^ 0xFF
+    let deliverable = pending & xor_mask
 
-    if deliverable == 0 { return 0 } // no pending signals
+    if deliverable == 0 { 0 }
+    else { signal_deliver_first(pid, base, pending, deliverable) }
+}
 
-    // Find first pending signal
-    let mut slot: i64 = 0
-    while slot < SIG_MAX_SLOTS {
-        if (deliverable & (1 << slot)) != 0 {
-            // Clear pending bit
-            volatile_write_u64(base + SIG_OFF_PENDING, pending & (0xFF ^ (1 << slot)))
-
-            // Check handler
-            let handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
-            if handler == SIG_IGN {
-                // Ignored — skip
-            } else if handler == SIG_DFL {
-                // Default action
-                let signum = slot_to_signum(slot)
-                signal_deliver_default(pid, signum)
-            }
-            // Custom handlers (handler > 1) will be implemented when
-            // user-mode signal trampolines are ready (future sprint)
-            return slot + 1 // return 1-based slot number (nonzero = signal delivered)
+// Helper: deliver the first pending signal (avoids deep nesting)
+@kernel fn signal_deliver_first(pid: i64, base: i64, pending: i64, deliverable: i64) -> i64 {
+    let slot = signal_find_first_bit(deliverable)
+    if slot < 0 { 0 }
+    else {
+        // Clear pending bit
+        let clear_mask = 0xFF ^ (1 << slot)
+        volatile_write_u64(base + SIG_OFF_PENDING, pending & clear_mask)
+        // Dispatch to handler
+        let handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
+        if handler == SIG_DFL {
+            signal_deliver_default(pid, slot_to_signum(slot))
         }
-        slot = slot + 1
+        // SIG_IGN: do nothing. Custom handlers: future sprint.
+        slot + 1
     }
-    0
+}
+
+// Find lowest set bit in bitmap (0-7)
+@kernel fn signal_find_first_bit(bitmap: i64) -> i64 {
+    if (bitmap & 1) != 0 { 0 }
+    else if (bitmap & 2) != 0 { 1 }
+    else if (bitmap & 4) != 0 { 2 }
+    else if (bitmap & 8) != 0 { 3 }
+    else if (bitmap & 16) != 0 { 4 }
+    else if (bitmap & 32) != 0 { 5 }
+    else if (bitmap & 64) != 0 { 6 }
+    else if (bitmap & 128) != 0 { 7 }
+    else { -1 }
 }
 
 // Map slot back to POSIX signal number
@@ -6685,8 +6708,8 @@ const LAST_EXIT_CODE: i64 = 0x652060
     env_set(key_buf, val_buf)
 }
 
-// J1.3: `set` builtin
-@kernel fn cmd_set() {
+// J1.3: `set` builtin (env vars)
+@kernel fn cmd_setenv() {
     let len = cmdbuf_len()
     if len <= 4 {
         cmd_env_list()
