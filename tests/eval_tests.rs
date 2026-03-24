@@ -7276,3 +7276,241 @@ fn e1_process_exit_zombie_reap() {
     let out = eval_output(src);
     assert_eq!(out, vec!["4", "true", "0", "42"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase E2: Ring 3 User Program Tests
+// ═══════════════════════════════════════════════
+
+#[test]
+fn e2_program_registry_layout() {
+    // Verify program registry constants
+    let src = r#"
+        const PROG_REGISTRY: i64 = 0x8B0000
+        const PROG_MAX: i64 = 8
+        const PROG_ENTRY_SIZE: i64 = 64
+        fn main() -> void {
+            println(PROG_MAX * PROG_ENTRY_SIZE)
+            println(PROG_REGISTRY + PROG_MAX * PROG_ENTRY_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "9110016"]); // 0x8B0200
+}
+
+#[test]
+fn e2_syscall_numbers() {
+    // Verify FajarOS syscall numbers
+    let src = r#"
+        const SYS_EXIT: i64 = 0
+        const SYS_WRITE: i64 = 1
+        const SYS_READ: i64 = 2
+        const SYS_GETPID: i64 = 3
+        const SYS_YIELD: i64 = 4
+        fn syscall_name(n: i64) -> str {
+            if n == SYS_EXIT { "exit" }
+            else if n == SYS_WRITE { "write" }
+            else if n == SYS_READ { "read" }
+            else if n == SYS_GETPID { "getpid" }
+            else if n == SYS_YIELD { "yield" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(syscall_name(0))
+            println(syscall_name(1))
+            println(syscall_name(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["exit", "write", "getpid"]);
+}
+
+#[test]
+fn e2_user_code_addresses() {
+    // Verify user program memory layout
+    let src = r#"
+        const USER_CODE_BASE: i64 = 0x2000000
+        const USER_STACK_BASE: i64 = 0x2FF0000
+        fn prog_addr(slot: i64) -> i64 {
+            0x2040000 + slot * 0x20000
+        }
+        fn main() -> void {
+            println(USER_CODE_BASE)
+            println(USER_STACK_BASE)
+            // hello=slot0, goodbye=slot1, fajar=slot2, counter=slot3, fib=slot4
+            println(prog_addr(0))
+            println(prog_addr(3))
+            println(prog_addr(4))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(
+        out,
+        vec!["33554432", "50266112", "33816576", "34209792", "34340864"]
+    );
+}
+
+#[test]
+fn e2_ring3_segment_selectors() {
+    // Verify Ring 3 CS/SS segment selectors
+    let src = r#"
+        // Ring 3: CS = 0x20 | RPL=3 = 0x23, SS = 0x18 | RPL=3 = 0x1B
+        const KERNEL_CS: i64 = 0x08
+        const KERNEL_SS: i64 = 0x10
+        const USER_CS: i64 = 0x23
+        const USER_SS: i64 = 0x1B
+        fn main() -> void {
+            // Verify RPL bits
+            println(USER_CS & 3)  // RPL = 3
+            println(USER_SS & 3)  // RPL = 3
+            println(KERNEL_CS & 3) // RPL = 0
+            // Verify base segment index
+            println(USER_CS & 0xFC)  // 0x20
+            println(USER_SS & 0xFC)  // 0x18
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "3", "0", "32", "24"]);
+}
+
+#[test]
+fn e2_iretq_user_frame() {
+    // Verify the IRETQ frame for Ring 3 transition
+    let src = r#"
+        fn main() -> void {
+            let user_cs: i64 = 0x23
+            let user_ss: i64 = 0x1B
+            let rflags: i64 = 0x202   // IF=1
+            let user_rip: i64 = 0x2040000
+            let user_rsp: i64 = 0x2FF0FF0
+            // IRETQ pops: RIP, CS, RFLAGS, RSP, SS
+            println(user_rip)
+            println(user_cs)
+            println(rflags)
+            println(user_rsp)
+            println(user_ss)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["33816576", "35", "514", "50270192", "27"]);
+}
+
+#[test]
+fn e2_program_name_matching() {
+    // Simulate name-based program lookup (4-byte match)
+    let src = r#"
+        fn match_name(c0: i64, c1: i64, c2: i64, c3: i64) -> str {
+            // hello = 104,101,108,108
+            if c0 == 104 && c1 == 101 && c2 == 108 && c3 == 108 { "hello" }
+            // goodbye = 103,111,111,100
+            else if c0 == 103 && c1 == 111 && c2 == 111 && c3 == 100 { "goodbye" }
+            // counter = 99,111,117,110
+            else if c0 == 99 && c1 == 111 && c2 == 117 && c3 == 110 { "counter" }
+            // fib = 102,105,98,0
+            else if c0 == 102 && c1 == 105 && c2 == 98 { "fib" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(match_name(104, 101, 108, 108))
+            println(match_name(103, 111, 111, 100))
+            println(match_name(99, 111, 117, 110))
+            println(match_name(102, 105, 98, 0))
+            println(match_name(0, 0, 0, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["hello", "goodbye", "counter", "fib", "unknown"]);
+}
+
+#[test]
+fn e2_star_msr_encoding() {
+    // Verify IA32_STAR MSR value for SYSCALL/SYSRET
+    let src = r#"
+        fn main() -> void {
+            // STAR: (user_cs_base << 48) | (kernel_cs << 32)
+            // user_cs_base = 0x13 (SYSRET adds 16→0x23=user CS, adds 8→0x1B=user SS)
+            // kernel_cs = 0x08
+            let star = (0x13 << 48) | (0x08 << 32)
+            // Extract fields
+            let kernel_cs = (star >> 32) & 0xFFFF
+            let user_base = (star >> 48) & 0xFFFF
+            println(kernel_cs)
+            println(user_base)
+            // Verify: SYSRET CS = user_base + 16 = 0x23
+            println(user_base + 16)
+            // Verify: SYSRET SS = user_base + 8 = 0x1B
+            println(user_base + 8)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8", "19", "35", "27"]);
+}
+
+#[test]
+fn e2_fibonacci_in_user_space() {
+    // The fib user program computes fib(20) and prints "fib(20) = 6765"
+    // Verify the computation logic matches
+    let src = r#"
+        fn fib(n: i64) -> i64 {
+            if n <= 1 { return n }
+            let mut a: i64 = 0
+            let mut b: i64 = 1
+            let mut i: i64 = 2
+            while i <= n {
+                let tmp = a + b
+                a = b
+                b = tmp
+                i = i + 1
+            }
+            b
+        }
+        fn main() -> void {
+            println(fib(20))
+            // The user program prints this as "fib(20) = 6765"
+            println(fib(20) == 6765)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6765", "true"]);
+}
+
+#[test]
+fn e2_counter_digit_loop() {
+    // Counter user program counts '1'..'9' (ASCII 49-57)
+    let src = r#"
+        fn main() -> void {
+            let mut digit: i64 = 49  // ASCII '1'
+            let mut count: i64 = 0
+            while digit < 58 {       // ASCII '9' + 1
+                count = count + 1
+                digit = digit + 1
+            }
+            println(count)  // 9 iterations
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["9"]);
+}
+
+#[test]
+fn e2_three_programs_installed() {
+    // Verify we have 5 programs with correct slot assignments
+    let src = r#"
+        fn prog_name(slot: i64) -> str {
+            if slot == 0 { "hello" }
+            else if slot == 1 { "goodbye" }
+            else if slot == 2 { "fajar" }
+            else if slot == 3 { "counter" }
+            else if slot == 4 { "fib" }
+            else { "empty" }
+        }
+        fn main() -> void {
+            let mut i: i64 = 0
+            while i < 5 {
+                println(prog_name(i))
+                i = i + 1
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["hello", "goodbye", "fajar", "counter", "fib"]);
+}

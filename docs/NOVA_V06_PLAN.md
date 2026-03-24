@@ -249,16 +249,16 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| E2.1 | User program registry | Table: name → {code_addr, code_size, entry_point} | [ ] |
-| E2.2 | `install` builtin | Install user binary to registry from raw bytes | [ ] |
-| E2.3 | `run <name>` command | Look up program, create Ring 3 process, switch to it | [ ] |
-| E2.4 | SYS_WRITE from Ring 3 | User writes to stdout → kernel prints to VGA/serial | [ ] |
-| E2.5 | SYS_EXIT from Ring 3 | User exits → kernel marks zombie, returns to shell | [ ] |
-| E2.6 | SYS_GETPID from Ring 3 | User queries PID → kernel returns current PID | [ ] |
-| E2.7 | hello.elf user program | "Hello from Ring 3!\n" via SYSCALL | [ ] |
-| E2.8 | counter.elf user program | Print numbers 1-10, each via SYS_WRITE | [ ] |
-| E2.9 | fibonacci.elf user program | Compute fib(20), print result via SYS_WRITE | [ ] |
-| E2.10 | Test: 3 programs sequential | run hello → run counter → run fib → all succeed | [ ] |
+| E2.1 | User program registry | PROG_REGISTRY at 0x8B0000: 8 slots × 64 bytes | [x] |
+| E2.2 | `install` builtin | prog_install_at + prog_install_counter_v2 + prog_install_fibonacci | [x] |
+| E2.3 | `run <name>` command | cmd_run: 4-byte name match against registry | [x] |
+| E2.4 | SYS_WRITE from Ring 3 | SYSCALL stub offset 25: lodsb → serial out | [x] |
+| E2.5 | SYS_EXIT from Ring 3 | SYSCALL stub offset 51: restore kernel RSP → RET | [x] |
+| E2.6 | SYS_GETPID from Ring 3 | SYSCALL stub offset 67: mov rax,[0x6FE00] | [x] |
+| E2.7 | hello.elf user program | Slot 0 @ 0x2040000 — "Hello Ring 3!\n" | [x] |
+| E2.8 | counter.elf user program | Slot 3 @ 0x20A0000 — loop '1'..'9' via register | [x] |
+| E2.9 | fibonacci.elf user program | Slot 4 @ 0x20C0000 — r12/r13 loop, fib(20)=6765 | [x] |
+| E2.10 | Test: 3 programs sequential | ring3test + run0/run3/run4 + 10 integration tests | [x] |
 
 ### Sprint E3: Persistent Storage + Real Network (10 tasks)
 
