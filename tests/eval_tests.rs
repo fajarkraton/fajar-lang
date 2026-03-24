@@ -12627,3 +12627,174 @@ fn p2_gdb_active_check() {
     let out = eval_output(src);
     assert_eq!(out, vec!["true", "false", "false"]);
 }
+
+// ═══════════════════════════════════════════════
+// Nova v0.9 "Zenith" — Phase R: GPU Compute
+// Sprint R1: VirtIO-GPU driver
+// ═══════════════════════════════════════════════
+
+#[test]
+fn r1_virtio_gpu_pci_id() {
+    let src = r#"
+        const VIRTIO_GPU_VENDOR: i64 = 0x1AF4
+        const VIRTIO_GPU_DEVICE: i64 = 0x1050
+        fn main() -> void {
+            println(VIRTIO_GPU_VENDOR)
+            println(VIRTIO_GPU_DEVICE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6900", "4176"]);
+}
+
+#[test]
+fn r1_framebuffer_layout() {
+    let src = r#"
+        const GPU_FB_BASE: i64 = 0x9A1000
+        const GPU_FB_WIDTH: i64 = 320
+        const GPU_FB_HEIGHT: i64 = 200
+        const GPU_FB_BPP: i64 = 4
+        fn main() -> void {
+            println(GPU_FB_WIDTH * GPU_FB_HEIGHT * GPU_FB_BPP)
+            println(GPU_FB_BASE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["256000", "10096640"]);
+}
+
+#[test]
+fn r1_pixel_offset() {
+    let src = r#"
+        const W: i64 = 320
+        const BPP: i64 = 4
+        fn pixel_offset(x: i64, y: i64) -> i64 { (y * W + x) * BPP }
+        fn main() -> void {
+            println(pixel_offset(0, 0))
+            println(pixel_offset(1, 0))
+            println(pixel_offset(0, 1))
+            println(pixel_offset(319, 199))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "4", "1280", "255996"]);
+}
+
+#[test]
+fn r1_gpu_cmd_types() {
+    let src = r#"
+        const CMD_CREATE: i64 = 0x0101
+        const CMD_ATTACH: i64 = 0x0106
+        const CMD_SCANOUT: i64 = 0x0103
+        const CMD_TRANSFER: i64 = 0x0105
+        const CMD_FLUSH: i64 = 0x0104
+        fn main() -> void {
+            println(CMD_CREATE)
+            println(CMD_FLUSH)
+            println(CMD_TRANSFER)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["257", "260", "261"]);
+}
+
+#[test]
+fn r1_color_packing() {
+    let src = r#"
+        fn rgba(r: i64, g: i64, b: i64, a: i64) -> i64 {
+            (a << 24) | (r << 16) | (g << 8) | b
+        }
+        fn main() -> void {
+            let red = rgba(255, 0, 0, 255)
+            let green = rgba(0, 255, 0, 255)
+            let blue = rgba(0, 0, 255, 255)
+            println(red)
+            println(green)
+            println(blue)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4294901760", "4278255360", "4278190335"]);
+}
+
+#[test]
+fn r1_fill_rect_bounds() {
+    let src = r#"
+        const W: i64 = 320
+        const H: i64 = 200
+        fn clamp(val: i64, max: i64) -> i64 { if val < max { val } else { max } }
+        fn fill_pixels(x: i64, y: i64, w: i64, h: i64) -> i64 {
+            let ex = clamp(x + w, W) - x
+            let ey = clamp(y + h, H) - y
+            ex * ey
+        }
+        fn main() -> void {
+            println(fill_pixels(0, 0, 10, 10))
+            println(fill_pixels(310, 190, 20, 20))
+            println(fill_pixels(0, 0, 320, 200))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["100", "100", "64000"]);
+}
+
+#[test]
+fn r1_gpu_state_layout() {
+    let src = r#"
+        const GPU_STATE: i64 = 0x9A0000
+        fn main() -> void {
+            println(GPU_STATE)
+            // 6 fields × 8B = 48B state
+            println(6 * 8)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10092544", "48"]);
+}
+
+#[test]
+fn r1_gpu_header_size() {
+    // VirtIO-GPU command header = 24 bytes
+    let src = r#"
+        fn header_size() -> i64 { 4 + 4 + 8 + 4 + 4 }
+        fn main() -> void { println(header_size()) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["24"]);
+}
+
+#[test]
+fn r1_u32_le_packing() {
+    let src = r#"
+        fn lo(val: i64) -> i64 { val & 0xFF }
+        fn b1(val: i64) -> i64 { (val >> 8) & 0xFF }
+        fn b2(val: i64) -> i64 { (val >> 16) & 0xFF }
+        fn hi(val: i64) -> i64 { (val >> 24) & 0xFF }
+        fn main() -> void {
+            let v: i64 = 0x0101
+            println(lo(v))
+            println(b1(v))
+            println(b2(v))
+            println(hi(v))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "1", "0", "0"]);
+}
+
+#[test]
+fn r1_gpu_memory_regions() {
+    let src = r#"
+        const GPU_STATE: i64 = 0x9A0000
+        const GPU_FB_BASE: i64 = 0x9A1000
+        const GPU_CTRL_QUEUE: i64 = 0x9E0000
+        const GPU_CMD_BUF: i64 = 0x9E4000
+        fn main() -> void {
+            println(GPU_FB_BASE - GPU_STATE)
+            println(GPU_CTRL_QUEUE - GPU_FB_BASE)
+            println(GPU_CMD_BUF - GPU_CTRL_QUEUE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4096", "258048", "16384"]);
+}
