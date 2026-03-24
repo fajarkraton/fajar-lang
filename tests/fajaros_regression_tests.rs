@@ -5,10 +5,13 @@
 
 use std::path::Path;
 
-const FAJAROS_DIR: &str = "/home/primecore/Documents/fajaros-x86";
+fn fajaros_dir() -> String {
+    std::env::var("FAJAROS_DIR")
+        .unwrap_or_else(|_| "/home/primecore/Documents/fajaros-x86".to_string())
+}
 
 fn fajaros_exists() -> bool {
-    Path::new(FAJAROS_DIR).is_dir()
+    Path::new(&fajaros_dir()).is_dir()
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -17,12 +20,13 @@ fn fajaros_exists() -> bool {
 
 #[test]
 fn fajaros_repo_exists() {
+    let dir = fajaros_dir();
     if !fajaros_exists() {
-        eprintln!("SKIP: fajaros-x86 not cloned at {FAJAROS_DIR}");
+        eprintln!("SKIP: fajaros-x86 not cloned at {dir}");
         return;
     }
-    assert!(Path::new(FAJAROS_DIR).join("Makefile").exists());
-    assert!(Path::new(FAJAROS_DIR).join("kernel/main.fj").exists());
+    assert!(Path::new(&dir).join("Makefile").exists());
+    assert!(Path::new(&dir).join("kernel/main.fj").exists());
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -40,7 +44,7 @@ fn fajaros_all_files_lex() {
     let mut failed = 0;
     let mut failures = Vec::new();
 
-    for entry in walkdir(FAJAROS_DIR) {
+    for entry in walkdir(&fajaros_dir()) {
         if entry.ends_with(".fj") && !entry.contains("/build/") {
             total += 1;
             let source = match std::fs::read_to_string(&entry) {
@@ -72,7 +76,8 @@ fn fajaros_all_files_lex() {
 
 #[test]
 fn fajaros_combined_parses() {
-    let combined = format!("{FAJAROS_DIR}/build/combined.fj");
+    let dir = fajaros_dir();
+    let combined = format!("{dir}/build/combined.fj");
     if !Path::new(&combined).exists() {
         eprintln!("SKIP: build/combined.fj not found (run `make build` first)");
         return;
@@ -91,7 +96,8 @@ fn lex_file(relative_path: &str) {
     if !fajaros_exists() {
         return;
     }
-    let path = format!("{FAJAROS_DIR}/{relative_path}");
+    let dir = fajaros_dir();
+    let path = format!("{dir}/{relative_path}");
     if !Path::new(&path).exists() {
         return;
     }
@@ -174,7 +180,7 @@ fn fajaros_file_count() {
     if !fajaros_exists() {
         return;
     }
-    let count = walkdir(FAJAROS_DIR)
+    let count = walkdir(&fajaros_dir())
         .iter()
         .filter(|p| p.ends_with(".fj") && !p.contains("/build/"))
         .count();
@@ -187,7 +193,7 @@ fn fajaros_loc_count() {
         return;
     }
     let mut total_loc = 0;
-    for entry in walkdir(FAJAROS_DIR) {
+    for entry in walkdir(&fajaros_dir()) {
         if entry.ends_with(".fj") && !entry.contains("/build/") {
             if let Ok(source) = std::fs::read_to_string(&entry) {
                 total_loc += source.lines().count();
@@ -206,7 +212,8 @@ fn fajaros_fj_toml_exists() {
     if !fajaros_exists() {
         return;
     }
-    assert!(Path::new(&format!("{FAJAROS_DIR}/fj.toml")).exists());
+    let dir = fajaros_dir();
+    assert!(Path::new(&format!("{dir}/fj.toml")).exists());
 }
 
 #[test]
@@ -214,7 +221,8 @@ fn fajaros_fj_toml_parses() {
     if !fajaros_exists() {
         return;
     }
-    let path = format!("{FAJAROS_DIR}/fj.toml");
+    let dir = fajaros_dir();
+    let path = format!("{dir}/fj.toml");
     let content = std::fs::read_to_string(&path).unwrap();
     // Basic TOML parse (may not have [kernel]/[[service]] yet)
     assert!(content.contains("[project]") || content.contains("[package]"));

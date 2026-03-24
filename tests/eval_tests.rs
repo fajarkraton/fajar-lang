@@ -1774,18 +1774,23 @@ fn security_array_out_of_bounds() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 fn file_read_nonexistent() {
-    let src = r#"
-        fn main() -> void {
-            let result = read_file("/tmp/fajar_nonexistent_file_xyz.txt")
-            match result {
+    let nonexistent = std::env::temp_dir()
+        .join("fajar_nonexistent_file_xyz.txt")
+        .display()
+        .to_string();
+    let src = format!(
+        r#"
+        fn main() -> void {{
+            let result = read_file("{nonexistent}")
+            match result {{
                 Ok(s) => println(s),
                 Err(e) => println("error"),
-            }
-        }
-    "#;
-    let output = eval_output(src);
+            }}
+        }}
+    "#
+    );
+    let output = eval_output(&src);
     assert_eq!(output, vec!["error"]);
 }
 
@@ -5085,18 +5090,20 @@ fn e2e_sys_uptime_returns_positive() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 fn e2e_log_to_file_writes_message() {
+    let log_path = std::env::temp_dir()
+        .join("fj_test_log.txt")
+        .display()
+        .to_string();
     let mut interp = Interpreter::new();
-    let result = interp.eval_source(
-        "let ok = log_to_file(\"/tmp/fj_test_log.txt\", \"test message\")\nassert(ok == true)",
-    );
+    let src = format!("let ok = log_to_file(\"{log_path}\", \"test message\")\nassert(ok == true)");
+    let result = interp.eval_source(&src);
     assert!(result.is_ok());
     // Verify file was written
-    let content = std::fs::read_to_string("/tmp/fj_test_log.txt").unwrap();
+    let content = std::fs::read_to_string(&log_path).unwrap();
     assert!(content.contains("test message"));
     // Cleanup
-    let _ = std::fs::remove_file("/tmp/fj_test_log.txt");
+    let _ = std::fs::remove_file(&log_path);
 }
 
 #[test]
