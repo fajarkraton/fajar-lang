@@ -1327,10 +1327,7 @@ impl TypeChecker {
                 } else {
                     // Non-generic: check argument types directly (skip Unknown params and named args)
                     if !is_variadic && !has_named_args {
-                        let is_ipc_fn = matches!(
-                            callee_name,
-                            Some("ipc_send" | "ipc_call")
-                        );
+                        let is_ipc_fn = matches!(callee_name, Some("ipc_send" | "ipc_call"));
                         for (i, (expected, found)) in
                             params.iter().zip(arg_types.iter()).enumerate()
                         {

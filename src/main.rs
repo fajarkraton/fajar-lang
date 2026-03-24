@@ -1384,7 +1384,10 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
         };
 
         if verbose {
-            eprintln!("[build] kernel: {} (target: {})", kernel.entry, kernel.target);
+            eprintln!(
+                "[build] kernel: {} (target: {})",
+                kernel.entry, kernel.target
+            );
         }
 
         if source_path.exists() {
@@ -1417,11 +1420,17 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
             root.join(&service.sources[0])
         } else {
             let entry = root.join(&service.entry);
-            entry.parent().map(|p| p.to_path_buf()).unwrap_or(root.clone())
+            entry
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(root.clone())
         };
 
         if verbose {
-            eprintln!("[build] service '{}': {} (target: {})", service.name, service.entry, service.target);
+            eprintln!(
+                "[build] service '{}': {} (target: {})",
+                service.name, service.entry, service.target
+            );
         }
 
         if source_path.exists() {
@@ -1435,14 +1444,22 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
                 None,
             );
             if result == ExitCode::SUCCESS {
-                eprintln!("  ✅ service '{}' → {}", service.name, output_path.display());
+                eprintln!(
+                    "  ✅ service '{}' → {}",
+                    service.name,
+                    output_path.display()
+                );
                 built += 1;
             } else {
                 eprintln!("  ❌ service '{}' build failed", service.name);
                 failed += 1;
             }
         } else {
-            eprintln!("  ❌ service '{}' source not found: {}", service.name, source_path.display());
+            eprintln!(
+                "  ❌ service '{}' source not found: {}",
+                service.name,
+                source_path.display()
+            );
             failed += 1;
         }
     }

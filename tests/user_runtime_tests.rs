@@ -265,7 +265,12 @@ mod user_elf_structure {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("t.fj"), "fn main() -> i64 { 0 }\n").unwrap();
         let output = Command::new(&path)
-            .args(["build", "--target", "x86_64-unknown-none", dir.join("t.fj").to_str().unwrap()])
+            .args([
+                "build",
+                "--target",
+                "x86_64-unknown-none",
+                dir.join("t.fj").to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -306,17 +311,21 @@ mod user_elf_structure {
 
     #[test]
     fn user_elf_is_valid_elf64() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let (dir, data) = build_user_elf("fn main() -> i64 { 42 }\n", "valid-elf64");
         assert_eq!(&data[0..4], b"\x7fELF", "not ELF");
-        assert_eq!(data[4], 2, "not 64-bit");      // EI_CLASS = ELFCLASS64
+        assert_eq!(data[4], 2, "not 64-bit"); // EI_CLASS = ELFCLASS64
         assert_eq!(data[5], 1, "not little-endian"); // EI_DATA = ELFDATA2LSB
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn user_elf_has_start_entry() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let (dir, data) = build_user_elf("fn main() -> i64 { 0 }\n", "start-entry");
         // Entry point should be in the 0x400000 range
         let entry = u64::from_le_bytes(data[24..32].try_into().unwrap());
@@ -330,7 +339,9 @@ mod user_elf_structure {
 
     #[test]
     fn user_elf_text_at_0x400000() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let (dir, data) = build_user_elf("fn main() -> i64 { 1 }\n", "text-addr");
         // Find LOAD segment: program header offset at bytes 32-39
         let phoff = u64::from_le_bytes(data[32..40].try_into().unwrap()) as usize;
@@ -343,7 +354,9 @@ mod user_elf_structure {
 
     #[test]
     fn user_elf_is_x86_64() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let (dir, data) = build_user_elf("fn main() -> i64 { 99 }\n", "x86-64");
         assert_eq!(data[18], 0x3E, "e_machine not EM_X86_64");
         let _ = std::fs::remove_dir_all(&dir);

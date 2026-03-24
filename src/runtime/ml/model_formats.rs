@@ -327,15 +327,17 @@ fn read_gguf_string(data: &[u8], pos: &mut usize) -> Result<String, ModelLoadErr
 /// Skips a GGUF metadata value based on type code.
 fn skip_gguf_value(data: &[u8], pos: &mut usize, vtype: u32) -> Result<(), ModelLoadError> {
     match vtype {
-        0 => *pos += 1,               // UINT8
-        1 => *pos += 1,               // INT8
-        2 => *pos += 2,               // UINT16
-        3 => *pos += 2,               // INT16
-        4 => *pos += 4,               // UINT32
-        5 => *pos += 4,               // INT32
-        6 => *pos += 4,               // FLOAT32
-        7 => *pos += 1,               // BOOL
-        8 => { let _ = read_gguf_string(data, pos)?; } // STRING
+        0 => *pos += 1, // UINT8
+        1 => *pos += 1, // INT8
+        2 => *pos += 2, // UINT16
+        3 => *pos += 2, // INT16
+        4 => *pos += 4, // UINT32
+        5 => *pos += 4, // INT32
+        6 => *pos += 4, // FLOAT32
+        7 => *pos += 1, // BOOL
+        8 => {
+            let _ = read_gguf_string(data, pos)?;
+        } // STRING
         9 => {
             // ARRAY: [4B element_type] [8B count] [count × element]
             if *pos + 12 > data.len() {
@@ -351,9 +353,9 @@ fn skip_gguf_value(data: &[u8], pos: &mut usize, vtype: u32) -> Result<(), Model
                 skip_gguf_value(data, pos, elem_type)?;
             }
         }
-        10 => *pos += 8,              // UINT64
-        11 => *pos += 8,              // INT64
-        12 => *pos += 8,              // FLOAT64
+        10 => *pos += 8, // UINT64
+        11 => *pos += 8, // INT64
+        12 => *pos += 8, // FLOAT64
         _ => {
             return Err(ModelLoadError::InvalidData {
                 detail: format!("unknown GGUF value type: {vtype}"),
@@ -472,12 +474,8 @@ pub fn load_gguf_tensors(data: &[u8]) -> Result<Vec<ModelTensor>, ModelLoadError
                     })
                     .collect()
             }
-            GgufQuantType::Q8_0 => {
-                dequantize_q8_0(&data[tensor_offset..], numel)?
-            }
-            GgufQuantType::Q4_0 => {
-                dequantize_q4_0(&data[tensor_offset..], numel)?
-            }
+            GgufQuantType::Q8_0 => dequantize_q8_0(&data[tensor_offset..], numel)?,
+            GgufQuantType::Q4_0 => dequantize_q4_0(&data[tensor_offset..], numel)?,
             _ => {
                 // For unsupported types, fill with zeros
                 vec![0.0; numel]
@@ -513,9 +511,7 @@ fn dequantize_q8_0(data: &[u8], numel: usize) -> Result<Vec<f64>, ModelLoadError
     let mut result = Vec::with_capacity(numel);
     for block_idx in 0..num_blocks {
         let offset = block_idx * block_bytes;
-        let scale_bits = u16::from_le_bytes(
-            data[offset..offset + 2].try_into().unwrap_or([0; 2]),
-        );
+        let scale_bits = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2]));
         let scale = f16_to_f64(scale_bits);
 
         let values_start = offset + 2;
@@ -549,9 +545,7 @@ fn dequantize_q4_0(data: &[u8], numel: usize) -> Result<Vec<f64>, ModelLoadError
     let mut result = Vec::with_capacity(numel);
     for block_idx in 0..num_blocks {
         let offset = block_idx * block_bytes;
-        let scale_bits = u16::from_le_bytes(
-            data[offset..offset + 2].try_into().unwrap_or([0; 2]),
-        );
+        let scale_bits = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2]));
         let scale = f16_to_f64(scale_bits);
 
         let nibbles_start = offset + 2;
@@ -733,7 +727,10 @@ pub fn load_safetensors(data: &[u8]) -> Result<Vec<ModelTensor>, ModelLoadError>
 }
 
 /// Decodes raw bytes to f64 values based on dtype string.
-fn decode_safetensors_data(raw: &[u8], dtype_str: &str) -> Result<(DType, Vec<f64>), ModelLoadError> {
+fn decode_safetensors_data(
+    raw: &[u8],
+    dtype_str: &str,
+) -> Result<(DType, Vec<f64>), ModelLoadError> {
     match dtype_str {
         "F32" => {
             if !raw.len().is_multiple_of(4) {
@@ -807,7 +804,11 @@ fn decode_safetensors_data(raw: &[u8], dtype_str: &str) -> Result<(DType, Vec<f6
         }
         "U8" | "BOOL" => {
             let values: Vec<f64> = raw.iter().map(|&b| b as f64).collect();
-            let dt = if dtype_str == "BOOL" { DType::Bool } else { DType::U8 };
+            let dt = if dtype_str == "BOOL" {
+                DType::Bool
+            } else {
+                DType::U8
+            };
             Ok((dt, values))
         }
         _ => Err(ModelLoadError::InvalidData {
@@ -1206,10 +1207,10 @@ mod tests {
         let mut data = Vec::new();
 
         // Header
-        data.extend_from_slice(b"GGUF");                          // magic
-        data.extend_from_slice(&3u32.to_le_bytes());              // version
+        data.extend_from_slice(b"GGUF"); // magic
+        data.extend_from_slice(&3u32.to_le_bytes()); // version
         data.extend_from_slice(&(tensors.len() as u64).to_le_bytes()); // tensor_count
-        data.extend_from_slice(&0u64.to_le_bytes());              // metadata_kv_count = 0
+        data.extend_from_slice(&0u64.to_le_bytes()); // metadata_kv_count = 0
 
         // Build tensor data block
         let mut tensor_data = Vec::new();

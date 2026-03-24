@@ -18,6 +18,40 @@ Kategori perubahan:
 
 ---
 
+## [5.1.0] — 2026-03-24 "Ascension"
+
+### Added — Depth Completion (Zero "1 Inch Deep" Features)
+- `fj build --all` now **compiles real ELF binaries** (kernel.elf + service ELFs)
+- User ELF verified: `_start` entry at 0x400000, Ring 3 structure
+- `ipc_send` **type-checks** `@message` struct arguments (IPC002 error for non-@message)
+- `protocol` keyword auto-generates **client stub structs + methods** (`{Proto}Client`)
+- GPU **11x faster** than CPU for 1024×1024 matmul (Vulkan backend)
+- **Safetensors** loads real tensor data (F32/F64/F16/BF16/I8/I32)
+- **GGUF** loads tensor data with Q8_0/Q4_0 dequantization
+- End-to-end integration test: `tools/test_end_to_end.sh` (20/20 pass)
+
+### Added — FajarOS Nova Verification
+- **Serial I/O mirroring**: VGA output → COM1, shell reads COM1
+- Automated QEMU testing via `-serial stdio` piped commands
+- Phase A complete: 30/30 boot/storage/network tasks verified
+- 20 kernel self-tests pass during boot
+- NVMe detect, FAT32 CRUD, VFS, virtio-net, XHCI, Ring 3, SMP — all working
+
+### Changed
+- `TraitDef` now has `is_protocol` field (distinguishes `protocol` from `trait`)
+- `console_putchar` mirrors output to serial for automated testing
+
+### Fixed
+- `fj build --all` was only discovering targets, not compiling them
+- Build tests skip gracefully when native codegen unavailable
+
+### Metrics
+- Tests: 6,750+ (was 6,667)
+- LOC: ~290,000 Rust
+- FajarOS Nova: 29,000 LOC .fj, 160 commands, 20 kernel tests
+
+---
+
 ## [5.0.0] — 2026-03-23 "Sovereignty"
 
 ### Added — Multi-Binary Build for FajarOS

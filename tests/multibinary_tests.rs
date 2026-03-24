@@ -409,7 +409,12 @@ mod build_all_e2e {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("t.fj"), "fn main() -> i64 { 0 }\n").unwrap();
         let output = std::process::Command::new(&path)
-            .args(["build", "--target", "x86_64-unknown-none", dir.join("t.fj").to_str().unwrap()])
+            .args([
+                "build",
+                "--target",
+                "x86_64-unknown-none",
+                dir.join("t.fj").to_str().unwrap(),
+            ])
             .output()
             .unwrap_or_else(|_| panic!("fj binary not found at {:?}", path));
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -427,13 +432,19 @@ mod build_all_e2e {
 
     #[test]
     fn build_all_produces_kernel_elf() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let dir = create_test_project("kernel-elf");
 
         // Write fj.toml
         let mut f = std::fs::File::create(dir.join("fj.toml")).unwrap();
         writeln!(f, "[package]\nname = \"test\"\nversion = \"0.1.0\"\n").unwrap();
-        writeln!(f, "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\"").unwrap();
+        writeln!(
+            f,
+            "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\""
+        )
+        .unwrap();
 
         // Write kernel source
         std::fs::write(
@@ -461,7 +472,11 @@ mod build_all_e2e {
 
         // Verify it's a real ELF
         let data = std::fs::read(&kernel_elf).unwrap();
-        assert!(data.len() > 100, "kernel.elf too small: {} bytes", data.len());
+        assert!(
+            data.len() > 100,
+            "kernel.elf too small: {} bytes",
+            data.len()
+        );
         assert_eq!(&data[0..4], b"\x7fELF", "kernel.elf is not a valid ELF");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -469,7 +484,9 @@ mod build_all_e2e {
 
     #[test]
     fn build_all_produces_service_elf() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let dir = create_test_project("service-elf");
 
         let mut f = std::fs::File::create(dir.join("fj.toml")).unwrap();
@@ -506,12 +523,18 @@ mod build_all_e2e {
 
     #[test]
     fn build_all_kernel_plus_service() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let dir = create_test_project("full-os");
 
         let mut f = std::fs::File::create(dir.join("fj.toml")).unwrap();
         writeln!(f, "[package]\nname = \"test-os\"\nversion = \"0.1.0\"\n").unwrap();
-        writeln!(f, "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\"\n").unwrap();
+        writeln!(
+            f,
+            "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\"\n"
+        )
+        .unwrap();
         writeln!(f, "[[service]]\nname = \"echo\"\nentry = \"services/echo/main.fj\"\ntarget = \"x86_64-user\"").unwrap();
 
         std::fs::write(
@@ -562,7 +585,9 @@ mod build_all_e2e {
 
     #[test]
     fn build_all_missing_source_reports_failure() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let dir = create_test_project("missing-src");
 
         let mut f = std::fs::File::create(dir.join("fj.toml")).unwrap();
@@ -594,12 +619,18 @@ mod build_all_e2e {
 
     #[test]
     fn build_all_elf_is_x86_64() {
-        if skip_if_no_native() { return; }
+        if skip_if_no_native() {
+            return;
+        }
         let dir = create_test_project("elf-arch");
 
         let mut f = std::fs::File::create(dir.join("fj.toml")).unwrap();
         writeln!(f, "[package]\nname = \"test\"\nversion = \"0.1.0\"\n").unwrap();
-        writeln!(f, "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\"").unwrap();
+        writeln!(
+            f,
+            "[kernel]\nentry = \"kernel/main.fj\"\ntarget = \"x86_64-unknown-none\""
+        )
+        .unwrap();
 
         std::fs::write(
             dir.join("kernel/main.fj"),
