@@ -6632,6 +6632,236 @@ const SYS_CONNECT_SOCK: i64 = 31
 }
 
 // ═══════════════════════════════════════════════
+// HTTP Server (Sprint O2 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// HTTP request buffer at 0x990000 (4KB)
+const HTTP_REQ_BUF: i64 = 0x990000
+// HTTP response buffer at 0x991000 (8KB)
+const HTTP_RESP_BUF: i64 = 0x991000
+const HTTP_RESP_MAX: i64 = 8192
+// HTTP server state at 0x993000
+const HTTP_SERVER_PORT: i64 = 0x993000
+const HTTP_SERVER_ACTIVE: i64 = 0x993008
+const HTTP_REQ_COUNT: i64 = 0x993010
+
+// O2.1: `httpd` command — start HTTP server on port 80
+@kernel fn cmd_httpd() {
+    let len = cmdbuf_len()
+    let port: i64 = if len > 6 { volatile_read_u8(0x6F800 + 6) - 48 } else { 80 }
+    let actual_port = if port > 0 && port < 10 { port * 1000 } else { 80 }
+
+    volatile_write_u64(HTTP_SERVER_PORT, actual_port)
+    volatile_write_u64(HTTP_SERVER_ACTIVE, 1)
+    volatile_write_u64(HTTP_REQ_COUNT, 0)
+    cprint("HTTP server started on port ", WHITE_ON_BLACK)
+    cprint_decimal(actual_port, GREEN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprintln("  Serving files from ramfs", WHITE_ON_BLACK)
+    cprintln("  Endpoints: /proc/version, /proc/uptime, static files", WHITE_ON_BLACK)
+}
+
+// O2.2: Parse HTTP request — extract method + path
+// Returns path length in low 16 bits, method in high 16 bits (1=GET, 2=POST)
+@kernel fn http_parse_request(buf: i64, len: i64) -> i64 {
+    // Expect: "GET /path HTTP/1.1\r\n..."
+    let method: i64 = if volatile_read_u8(buf) == 71 && volatile_read_u8(buf + 1) == 69 && volatile_read_u8(buf + 2) == 84 { 1 } // GET
+    else if volatile_read_u8(buf) == 80 && volatile_read_u8(buf + 1) == 79 { 2 } // POST
+    else { 0 }
+
+    if method == 0 { return -1 }
+
+    // Find path start (after "GET " or "POST ")
+    let path_start = if method == 1 { 4 } else { 5 }
+    // Extract path to HTTP_REQ_BUF + 256
+    let path_buf = HTTP_REQ_BUF + 256
+    let mut pi: i64 = 0
+    let mut pos = path_start
+    while pos < len && pi < 127 {
+        let ch = volatile_read_u8(buf + pos)
+        if ch == 32 || ch == 13 || ch == 10 { pos = len } // space or CR/LF
+        else { volatile_write_u8(path_buf + pi, ch); pi = pi + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(path_buf + pi, 0)
+    (method << 16) | pi
+}
+
+// O2.3: Serve static file from ramfs
+@kernel fn http_serve_file(path_buf: i64, resp_buf: i64) -> i64 {
+    // Skip leading /
+    let file_path = if volatile_read_u8(path_buf) == 47 { path_buf + 1 } else { path_buf }
+    // Check for empty path → serve index
+    if volatile_read_u8(file_path) == 0 {
+        return http_write_response(resp_buf, 200, "text/html", "Welcome to FajarOS Nova HTTP Server!", 36)
+    }
+    let idx = ramfs_find_by_addr(file_path)
+    if idx < 0 { return http_write_404(resp_buf) }
+    let entry = ramfs_entry_addr(idx)
+    let ftype = volatile_read(entry + 48)
+    // O2.6: Directory listing
+    if ftype == 2 { return http_write_dirlist(resp_buf, idx) }
+    let size = volatile_read(entry + 32)
+    let data_ptr = volatile_read(entry + 40)
+    if data_ptr == 0 || size == 0 { return http_write_404(resp_buf) }
+    http_write_response_data(resp_buf, 200, "text/plain", data_ptr, size)
+}
+
+// O2.4: Write HTTP response headers + body
+@kernel fn http_write_response(buf: i64, status: i64, content_type: str, body: str, body_len: i64) -> i64 {
+    let mut pos: i64 = 0
+    // Status line
+    pos = http_write_str(buf, pos, "HTTP/1.1 ")
+    pos = http_write_decimal(buf, pos, status)
+    pos = http_write_str(buf, pos, " OK\r\nContent-Type: ")
+    pos = http_write_str(buf, pos, content_type)
+    pos = http_write_str(buf, pos, "\r\nContent-Length: ")
+    pos = http_write_decimal(buf, pos, body_len)
+    pos = http_write_str(buf, pos, "\r\nConnection: close\r\n\r\n")
+    pos = http_write_str(buf, pos, body)
+    pos
+}
+
+@kernel fn http_write_response_data(buf: i64, status: i64, content_type: str, data: i64, data_len: i64) -> i64 {
+    let mut pos: i64 = 0
+    pos = http_write_str(buf, pos, "HTTP/1.1 ")
+    pos = http_write_decimal(buf, pos, status)
+    pos = http_write_str(buf, pos, " OK\r\nContent-Type: ")
+    pos = http_write_str(buf, pos, content_type)
+    pos = http_write_str(buf, pos, "\r\nContent-Length: ")
+    pos = http_write_decimal(buf, pos, data_len)
+    pos = http_write_str(buf, pos, "\r\nConnection: close\r\n\r\n")
+    // Copy body data
+    let mut i: i64 = 0
+    while i < data_len && pos < HTTP_RESP_MAX {
+        volatile_write_u8(buf + pos, volatile_read_u8(data + i))
+        pos = pos + 1; i = i + 1
+    }
+    pos
+}
+
+// O2.5: 404 Not Found
+@kernel fn http_write_404(buf: i64) -> i64 {
+    let body = "404 Not Found"
+    http_write_response(buf, 404, "text/plain", body, 13)
+}
+
+// O2.6: Directory listing as HTML
+@kernel fn http_write_dirlist(buf: i64, dir_idx: i64) -> i64 {
+    let mut pos: i64 = 0
+    pos = http_write_str(buf, pos, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n")
+    pos = http_write_str(buf, pos, "<html><body><h1>Directory Listing</h1><ul>")
+    let count = volatile_read(FS_BASE)
+    let mut i: i64 = 0
+    while i < count {
+        let entry = ramfs_entry_addr(i)
+        let parent = volatile_read(entry + FS_OFF_PARENT)
+        let ftype = volatile_read(entry + 48)
+        if (parent == dir_idx || (dir_idx == 0 && parent == 0)) && ftype != 0 {
+            pos = http_write_str(buf, pos, "<li>")
+            let mut j: i64 = 0
+            while j < 32 && pos < HTTP_RESP_MAX {
+                let ch = volatile_read_u8(entry + j)
+                if ch == 0 { j = 32 } else { volatile_write_u8(buf + pos, ch); pos = pos + 1; j = j + 1 }
+            }
+            pos = http_write_str(buf, pos, "</li>")
+        }
+        i = i + 1
+    }
+    pos = http_write_str(buf, pos, "</ul></body></html>")
+    pos
+}
+
+// O2.7: /proc endpoint
+@kernel fn http_serve_proc(path_buf: i64, resp_buf: i64) -> i64 {
+    // /proc/version
+    if volatile_read_u8(path_buf + 6) == 118 { // 'v'
+        return http_write_response(resp_buf, 200, "application/json", "{\"kernel\":\"FajarOS Nova v1.3.0 Bastion\",\"arch\":\"x86_64\"}", 55)
+    }
+    // /proc/uptime
+    if volatile_read_u8(path_buf + 6) == 117 { // 'u'
+        let ticks = volatile_read_u64(0x6FE08)
+        let secs = ticks / 100
+        let mut body_buf: i64 = 0x993100
+        let mut bpos: i64 = 0
+        bpos = http_write_str(body_buf, bpos, "{\"uptime_seconds\":")
+        bpos = http_write_decimal(body_buf, bpos, secs)
+        bpos = http_write_str(body_buf, bpos, "}")
+        volatile_write_u8(body_buf + bpos, 0)
+        return http_write_response_data(resp_buf, 200, "application/json", body_buf, bpos)
+    }
+    http_write_404(resp_buf)
+}
+
+// O2.8: Log HTTP request to serial
+@kernel fn http_log_request(method: i64, path_buf: i64, status: i64) {
+    cprint("[HTTP] ", WHITE_ON_BLACK)
+    if method == 1 { cprint("GET ", GREEN_ON_BLACK) }
+    else { cprint("POST ", YELLOW_ON_BLACK) }
+    let mut i: i64 = 0
+    while i < 64 {
+        let ch = volatile_read_u8(path_buf + i)
+        if ch == 0 { i = 64 } else { console_putchar(ch, CYAN_ON_BLACK); i = i + 1 }
+    }
+    cprint(" → ", WHITE_ON_BLACK)
+    cprint_decimal(status, if status == 200 { GREEN_ON_BLACK } else { RED_ON_BLACK })
+    console_putchar(10, WHITE_ON_BLACK)
+    let count = volatile_read_u64(HTTP_REQ_COUNT) + 1
+    volatile_write_u64(HTTP_REQ_COUNT, count)
+}
+
+// O2.9: Handle single HTTP request
+@kernel fn http_handle_request(req_buf: i64, req_len: i64) -> i64 {
+    let parsed = http_parse_request(req_buf, req_len)
+    if parsed < 0 { return http_write_response(HTTP_RESP_BUF, 400, "text/plain", "Bad Request", 11) }
+    let method = (parsed >> 16) & 0xFFFF
+    let path_buf = HTTP_REQ_BUF + 256
+
+    let mut status: i64 = 200
+    let resp_len: i64 = if volatile_read_u8(path_buf + 1) == 112 && volatile_read_u8(path_buf + 2) == 114 {
+        // /proc/* endpoint
+        http_serve_proc(path_buf, HTTP_RESP_BUF)
+    } else {
+        http_serve_file(path_buf, HTTP_RESP_BUF)
+    }
+
+    // Detect 404 from response
+    if volatile_read_u8(HTTP_RESP_BUF + 9) == 52 { status = 404 } // '4' in "HTTP/1.1 4xx"
+    http_log_request(method, path_buf, status)
+    resp_len
+}
+
+// Helper: write string to buffer at offset, return new offset
+@kernel fn http_write_str(buf: i64, offset: i64, s: str) -> i64 {
+    let slen = str_len(s)
+    let mut i: i64 = 0
+    while i < slen && offset + i < HTTP_RESP_MAX {
+        volatile_write_u8(buf + offset + i, str_byte_at(s, i))
+        i = i + 1
+    }
+    offset + i
+}
+
+// Helper: write decimal number to buffer
+@kernel fn http_write_decimal(buf: i64, offset: i64, num: i64) -> i64 {
+    if num == 0 { volatile_write_u8(buf + offset, 48); return offset + 1 }
+    let tmp_buf: i64 = 0x993080
+    let mut n = num
+    let mut digits: i64 = 0
+    while n > 0 {
+        volatile_write_u8(tmp_buf + digits, 48 + (n % 10))
+        digits = digits + 1
+        n = n / 10
+    }
+    // Reverse
+    let mut i: i64 = 0
+    while i < digits {
+        volatile_write_u8(buf + offset + i, volatile_read_u8(tmp_buf + digits - 1 - i))
+        i = i + 1
+    }
+    offset + digits
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 

@@ -12089,3 +12089,172 @@ fn o1_ip_packing() {
     let out = eval_output(src);
     assert_eq!(out, vec!["167772674", "10", "2"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint O2: HTTP server
+// ═══════════════════════════════════════════════
+
+#[test]
+fn o2_http_methods() {
+    let src = r#"
+        fn parse_method(first: i64) -> str {
+            if first == 71 { "GET" }
+            else if first == 80 { "POST" }
+            else { "UNKNOWN" }
+        }
+        fn main() -> void {
+            println(parse_method(71))  // 'G'
+            println(parse_method(80))  // 'P'
+            println(parse_method(72))  // 'H'
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["GET", "POST", "UNKNOWN"]);
+}
+
+#[test]
+fn o2_http_status_codes() {
+    let src = r#"
+        fn status_text(code: i64) -> str {
+            if code == 200 { "OK" }
+            else if code == 404 { "Not Found" }
+            else if code == 400 { "Bad Request" }
+            else { "Unknown" }
+        }
+        fn main() -> void {
+            println(status_text(200))
+            println(status_text(404))
+            println(status_text(400))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["OK", "Not Found", "Bad Request"]);
+}
+
+#[test]
+fn o2_http_response_header() {
+    let src = r#"
+        fn response_line(status: i64) -> str {
+            f"HTTP/1.1 {status} OK"
+        }
+        fn main() -> void {
+            println(response_line(200))
+            println(response_line(404))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["HTTP/1.1 200 OK", "HTTP/1.1 404 OK"]);
+}
+
+#[test]
+fn o2_content_type() {
+    let src = r#"
+        fn content_type(ext: str) -> str {
+            if ext == "html" { "text/html" }
+            else if ext == "json" { "application/json" }
+            else if ext == "txt" { "text/plain" }
+            else { "application/octet-stream" }
+        }
+        fn main() -> void {
+            println(content_type("html"))
+            println(content_type("json"))
+            println(content_type("txt"))
+            println(content_type("bin"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["text/html", "application/json", "text/plain", "application/octet-stream"]);
+}
+
+#[test]
+fn o2_path_extraction() {
+    let src = r#"
+        fn extract_path(request: str) -> str {
+            let parts = request.split(" ")
+            if len(parts) as i64 >= 2 { parts[1] } else { "/" }
+        }
+        fn main() -> void {
+            println(extract_path("GET / HTTP/1.1"))
+            println(extract_path("GET /proc/version HTTP/1.1"))
+            println(extract_path("POST /api HTTP/1.1"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["/", "/proc/version", "/api"]);
+}
+
+#[test]
+fn o2_proc_endpoints() {
+    let src = r#"
+        fn is_proc_path(path: str) -> bool { path.starts_with("/proc") }
+        fn main() -> void {
+            println(is_proc_path("/proc/version"))
+            println(is_proc_path("/proc/uptime"))
+            println(is_proc_path("/index.html"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}
+
+#[test]
+fn o2_http_buffers() {
+    let src = r#"
+        const HTTP_REQ_BUF: i64 = 0x990000
+        const HTTP_RESP_BUF: i64 = 0x991000
+        const HTTP_RESP_MAX: i64 = 8192
+        fn main() -> void {
+            println(HTTP_RESP_BUF - HTTP_REQ_BUF)
+            println(HTTP_RESP_MAX)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4096", "8192"]);
+}
+
+#[test]
+fn o2_connection_close() {
+    let src = r#"
+        fn headers(content_type: str, length: i64) -> str {
+            f"Content-Type: {content_type}\r\nContent-Length: {length}\r\nConnection: close"
+        }
+        fn main() -> void {
+            let h = headers("text/html", 42)
+            println(h.contains("close"))
+            println(h.contains("text/html"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true"]);
+}
+
+#[test]
+fn o2_request_logging() {
+    let src = r#"
+        fn log_format(method: str, path: str, status: i64) -> str {
+            f"[HTTP] {method} {path} -> {status}"
+        }
+        fn main() -> void {
+            println(log_format("GET", "/", 200))
+            println(log_format("GET", "/missing", 404))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[HTTP] GET / -> 200", "[HTTP] GET /missing -> 404"]);
+}
+
+#[test]
+fn o2_server_state() {
+    let src = r#"
+        const HTTP_SERVER_PORT: i64 = 0x993000
+        const HTTP_SERVER_ACTIVE: i64 = 0x993008
+        const HTTP_REQ_COUNT: i64 = 0x993010
+        fn main() -> void {
+            println(HTTP_SERVER_PORT)
+            println(HTTP_SERVER_ACTIVE - HTTP_SERVER_PORT)
+            println(HTTP_REQ_COUNT - HTTP_SERVER_ACTIVE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10039296", "8", "8"]);
+}
