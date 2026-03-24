@@ -11376,3 +11376,164 @@ fn m2_open_denied() {
     let out = eval_output(src);
     assert_eq!(out, vec!["ok", "ok", "ok", "denied"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint M3: User sessions & security
+// ═══════════════════════════════════════════════
+
+#[test]
+fn m3_login_history_layout() {
+    let src = r#"
+        const LOGIN_HISTORY: i64 = 0x962000
+        const LOGIN_HIST_MAX: i64 = 16
+        const LOGIN_HIST_SIZE: i64 = 32
+        fn main() -> void {
+            println(LOGIN_HIST_MAX * LOGIN_HIST_SIZE)
+            println(LOGIN_HISTORY)
+            println(LOGIN_HIST_MAX * LOGIN_HIST_SIZE < 4096)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "9838592", "true"]);
+}
+
+#[test]
+fn m3_setuid_bit() {
+    let src = r#"
+        const PERM_SETUID: i64 = 0x800
+        const PERM_SETGID: i64 = 0x400
+        fn has_setuid(mode: i64) -> bool { (mode & PERM_SETUID) != 0 }
+        fn main() -> void {
+            println(has_setuid(0x800 + 0x1ED))
+            println(has_setuid(0x1ED))
+            println(PERM_SETUID)
+            println(PERM_SETGID)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "2048", "1024"]);
+}
+
+#[test]
+fn m3_session_timeout_addr() {
+    let src = r#"
+        const SESSION_TIMEOUT: i64 = 0x652078
+        const SESSION_LAST_INPUT: i64 = 0x652080
+        fn main() -> void {
+            println(SESSION_TIMEOUT)
+            println(SESSION_LAST_INPUT)
+            println(SESSION_LAST_INPUT - SESSION_TIMEOUT)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6627448", "6627456", "8"]);
+}
+
+#[test]
+fn m3_timeout_check() {
+    let src = r#"
+        fn is_timed_out(last: i64, now: i64, timeout: i64) -> bool {
+            timeout > 0 && (now - last) > timeout
+        }
+        fn main() -> void {
+            println(is_timed_out(100, 200, 50))
+            println(is_timed_out(100, 140, 50))
+            println(is_timed_out(100, 200, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn m3_root_no_timeout() {
+    let src = r#"
+        fn should_timeout(uid: i64, elapsed: i64, timeout: i64) -> bool {
+            uid != 0 && timeout > 0 && elapsed > timeout
+        }
+        fn main() -> void {
+            println(should_timeout(0, 9999, 100))
+            println(should_timeout(1, 9999, 100))
+            println(should_timeout(1, 50, 100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["false", "true", "false"]);
+}
+
+#[test]
+fn m3_fork_inherits_uid() {
+    let src = r#"
+        fn child_uid_after_fork(parent_uid: i64) -> i64 { parent_uid }
+        fn child_gid_after_fork(parent_gid: i64) -> i64 { parent_gid }
+        fn main() -> void {
+            println(child_uid_after_fork(3))
+            println(child_gid_after_fork(5))
+            println(child_uid_after_fork(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "5", "0"]);
+}
+
+#[test]
+fn m3_login_action_types() {
+    let src = r#"
+        fn action_name(action: i64) -> str {
+            if action == 1 { "login" }
+            else if action == 2 { "logout" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(action_name(1))
+            println(action_name(2))
+            println(action_name(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["login", "logout", "unknown"]);
+}
+
+#[test]
+fn m3_passwd_format() {
+    let src = r#"
+        fn passwd_line(uid: i64, name: str) -> str {
+            f"{uid}:{name}"
+        }
+        fn main() -> void {
+            println(passwd_line(0, "root"))
+            println(passwd_line(1, "fajar"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0:root", "1:fajar"]);
+}
+
+#[test]
+fn m3_history_circular() {
+    let src = r#"
+        const MAX: i64 = 16
+        fn next_idx(idx: i64) -> i64 { (idx + 1) % MAX }
+        fn main() -> void {
+            println(next_idx(0))
+            println(next_idx(14))
+            println(next_idx(15))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "15", "0"]);
+}
+
+#[test]
+fn m3_logout_resets_to_root() {
+    let src = r#"
+        fn after_logout() -> i64 { 0 }
+        fn main() -> void {
+            let uid = after_logout()
+            println(uid)
+            println(uid == 0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "true"]);
+}

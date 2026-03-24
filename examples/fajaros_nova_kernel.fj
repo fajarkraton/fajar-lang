@@ -5663,6 +5663,192 @@ const PERM_OTHER_X: i64 = 0x001  // other execute
 }
 
 // ═══════════════════════════════════════════════
+// User Sessions & Security (Sprint M3 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// Login history at 0x962000: 16 entries × 32 bytes
+// Per entry: +0=uid(i64), +8=timestamp(i64), +16=action(i64: 1=login, 2=logout), +24=reserved
+const LOGIN_HISTORY: i64 = 0x962000
+const LOGIN_HIST_MAX: i64 = 16
+const LOGIN_HIST_SIZE: i64 = 32
+const LOGIN_HIST_IDX: i64 = 0x962200 // current write index
+
+// Session timeout (ticks) — 0 = disabled
+const SESSION_TIMEOUT: i64 = 0x652078
+const SESSION_LAST_INPUT: i64 = 0x652080
+
+// Setuid bit in mode (bit 11 = 0x800)
+const PERM_SETUID: i64 = 0x800
+const PERM_SETGID: i64 = 0x400
+
+// M3.1: Login shell — spawn shell with user's UID
+@kernel fn session_login(uid: i64) {
+    volatile_write_u64(CURRENT_UID_ADDR, uid)
+    let pid = volatile_read_u64(0x6FE00)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_UID, uid)
+    let entry = USER_TABLE + uid * USER_ENTRY_SIZE
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_GID, volatile_read_u64(entry + USER_OFF_GID))
+    // Record login in history
+    login_history_record(uid, 1)
+    // Update last input time for session timeout
+    volatile_write_u64(SESSION_LAST_INPUT, volatile_read_u64(0x6FE08))
+}
+
+// M3.2: `logout` command
+@kernel fn cmd_logout() {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    if uid == 0 { cprintln("Cannot logout root (use 'shutdown')", YELLOW_ON_BLACK); return }
+    // Record logout
+    login_history_record(uid, 2)
+    // Switch back to root
+    volatile_write_u64(CURRENT_UID_ADDR, 0)
+    let pid = volatile_read_u64(0x6FE00)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_UID, 0)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_GID, 0)
+    cprintln("Logged out. Back to root.", WHITE_ON_BLACK)
+}
+
+// M3.3: Save user accounts to /etc/passwd in ramfs
+@kernel fn cmd_save_passwd() {
+    // Write user table to ramfs file "passwd"
+    let data_buf: i64 = 0x846800
+    let mut pos: i64 = 0
+    let mut i: i64 = 0
+    while i < USER_MAX {
+        let entry = USER_TABLE + i * USER_ENTRY_SIZE
+        if volatile_read_u64(entry + USER_OFF_ACTIVE) == 1 {
+            // Format: uid:name:hash:gid:home
+            // Write uid digit
+            let uid = volatile_read_u64(entry + USER_OFF_UID)
+            volatile_write_u8(data_buf + pos, 48 + (uid % 10))
+            pos = pos + 1
+            volatile_write_u8(data_buf + pos, 58) // ':'
+            pos = pos + 1
+            // Write name
+            let mut j: i64 = 0
+            while j < 16 {
+                let ch = volatile_read_u8(entry + USER_OFF_NAME + j)
+                if ch == 0 { j = 16 } else { volatile_write_u8(data_buf + pos, ch); pos = pos + 1; j = j + 1 }
+            }
+            volatile_write_u8(data_buf + pos, 58)
+            pos = pos + 1
+            // Write hash (as decimal, truncated)
+            let hash = volatile_read_u64(entry + USER_OFF_PASS)
+            let h_mod = hash % 10000
+            volatile_write_u8(data_buf + pos, 48 + ((h_mod / 1000) % 10))
+            volatile_write_u8(data_buf + pos + 1, 48 + ((h_mod / 100) % 10))
+            volatile_write_u8(data_buf + pos + 2, 48 + ((h_mod / 10) % 10))
+            volatile_write_u8(data_buf + pos + 3, 48 + (h_mod % 10))
+            pos = pos + 4
+            volatile_write_u8(data_buf + pos, 10) // newline
+            pos = pos + 1
+        }
+        i = i + 1
+    }
+    volatile_write_u8(data_buf + pos, 0)
+    // Write to ramfs
+    ramfs_write_file("passwd", data_buf, pos)
+    cprint("Saved ", WHITE_ON_BLACK)
+    cprint_decimal(pos, CYAN_ON_BLACK)
+    cprintln(" bytes to /etc/passwd", GREEN_ON_BLACK)
+}
+
+// Helper: write raw bytes to ramfs (variant that takes addr instead of str)
+@kernel fn ramfs_write_file_raw(name: str, data_addr: i64, dlen: i64) {
+    let mut idx = ramfs_find(name)
+    if idx == -1 { idx = ramfs_create_entry(name, 1) }
+    if idx == -1 { return }
+    let addr = ramfs_entry_addr(idx)
+    let data_offset = volatile_read(FS_BASE + 8)
+    let mut i: i64 = 0
+    while i < dlen { volatile_write_u8(data_offset + i, volatile_read_u8(data_addr + i)); i = i + 1 }
+    volatile_write(addr + 32, dlen)
+    volatile_write(addr + 40, data_offset)
+    volatile_write(addr + 48, 1)
+    volatile_write(FS_BASE + 8, data_offset + dlen)
+}
+
+// M3.5: Check setuid bit on exec
+@kernel fn fs_check_setuid(entry_addr: i64) -> i64 {
+    let mode = volatile_read(entry_addr + FS_OFF_MODE)
+    if (mode & PERM_SETUID) != 0 { return volatile_read(entry_addr + FS_OFF_OWNER_UID) }
+    -1 // no setuid
+}
+
+// M3.6: `groups` command
+@kernel fn cmd_groups() {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    let entry = USER_TABLE + uid * USER_ENTRY_SIZE
+    let gid = volatile_read_u64(entry + USER_OFF_GID)
+    cprint("Groups: ", WHITE_ON_BLACK)
+    cprint_decimal(gid, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M3.7: Fork inherits UID/GID — update sys_fork to copy UID/GID
+@kernel fn fork_copy_uid(parent_pid: i64, child_pid: i64) {
+    let parent_base = PROC_TABLE + parent_pid * PROC_ENTRY_SIZE
+    let child_base = PROC_TABLE + child_pid * PROC_ENTRY_SIZE
+    volatile_write(child_base + PROC_OFF_UID, volatile_read(parent_base + PROC_OFF_UID))
+    volatile_write(child_base + PROC_OFF_GID, volatile_read(parent_base + PROC_OFF_GID))
+}
+
+// M3.8: `last` command — show login history
+@kernel fn cmd_last() {
+    cprintln("Login history:", YELLOW_ON_BLACK)
+    let idx = volatile_read_u64(LOGIN_HIST_IDX)
+    let mut count: i64 = 0
+    let mut i: i64 = 0
+    while i < LOGIN_HIST_MAX {
+        let slot = (idx - 1 - i + LOGIN_HIST_MAX) % LOGIN_HIST_MAX
+        let entry = LOGIN_HISTORY + slot * LOGIN_HIST_SIZE
+        let uid = volatile_read_u64(entry)
+        let ts = volatile_read_u64(entry + 8)
+        let action = volatile_read_u64(entry + 16)
+        if action != 0 {
+            cprint("  uid=", WHITE_ON_BLACK)
+            cprint_decimal(uid, CYAN_ON_BLACK)
+            cprint(" tick=", WHITE_ON_BLACK)
+            cprint_decimal(ts, WHITE_ON_BLACK)
+            if action == 1 { cprintln(" login", GREEN_ON_BLACK) }
+            else { cprintln(" logout", YELLOW_ON_BLACK) }
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (no login history)", WHITE_ON_BLACK) }
+}
+
+// Record login/logout event
+@kernel fn login_history_record(uid: i64, action: i64) {
+    let idx = volatile_read_u64(LOGIN_HIST_IDX)
+    let entry = LOGIN_HISTORY + idx * LOGIN_HIST_SIZE
+    volatile_write_u64(entry, uid)
+    volatile_write_u64(entry + 8, volatile_read_u64(0x6FE08)) // tick count
+    volatile_write_u64(entry + 16, action)
+    volatile_write_u64(LOGIN_HIST_IDX, (idx + 1) % LOGIN_HIST_MAX)
+}
+
+// M3.9: Session timeout check (called at prompt)
+@kernel fn session_check_timeout() {
+    let timeout = volatile_read_u64(SESSION_TIMEOUT)
+    if timeout == 0 { return } // disabled
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    if uid == 0 { return } // root never times out
+    let last = volatile_read_u64(SESSION_LAST_INPUT)
+    let now = volatile_read_u64(0x6FE08)
+    if now - last > timeout {
+        cprintln("Session timed out. Logging out.", YELLOW_ON_BLACK)
+        cmd_logout()
+    }
+}
+
+// Update last input time on keypress
+@kernel fn session_touch() {
+    volatile_write_u64(SESSION_LAST_INPUT, volatile_read_u64(0x6FE08))
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -5710,6 +5896,7 @@ const CTX_OFF_RIP: i64 = 120   // RIP: 15*8=120
 
     // G1.3: Copy FD table from parent to child
     fork_copy_fd_table(parent_pid, child_pid)
+    fork_copy_uid(parent_pid, child_pid) // M3.7: inherit UID/GID
 
     // G1.4: Copy CWD, brk, and other proc fields
     let child_base = PROC_TABLE + child_pid * PROC_ENTRY_SIZE
@@ -16194,6 +16381,9 @@ const PROC_OFF_NAME: i64 = 64
     volatile_write_u64(0x950040, fn_addr("cow_handle_fault"))
     volatile_write_u64(COW_FAULT_COUNT, 0) // Reset CoW fault counter
     user_init() // Initialize user table with root account
+    volatile_write_u64(LOGIN_HIST_IDX, 0) // Clear login history
+    volatile_write_u64(SESSION_TIMEOUT, 0) // Session timeout disabled by default
+    volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
     println("[KB] Keyboard buffer ready")
 
