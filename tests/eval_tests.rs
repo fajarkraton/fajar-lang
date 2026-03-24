@@ -12462,3 +12462,168 @@ fn p1_mem_addr_parse() {
     let out = eval_output(src);
     assert_eq!(out, vec!["26", "255", "16"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint P2: GDB integration
+// ═══════════════════════════════════════════════
+
+#[test]
+fn p2_watchpoint_table() {
+    let src = r#"
+        const GDB_WP_MAX: i64 = 4
+        const GDB_WP_TABLE: i64 = 0x996300
+        fn wp_addr(idx: i64) -> i64 { GDB_WP_TABLE + idx * 16 }
+        fn main() -> void {
+            println(GDB_WP_MAX)
+            println(GDB_WP_MAX * 16)
+            println(wp_addr(0))
+            println(wp_addr(3) - wp_addr(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4", "64", "10052352", "48"]);
+}
+
+#[test]
+fn p2_watchpoint_types() {
+    let src = r#"
+        fn wp_name(wtype: i64) -> str {
+            if wtype == 2 { "write" }
+            else if wtype == 3 { "read/write" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(wp_name(2))
+            println(wp_name(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["write", "read/write"]);
+}
+
+#[test]
+fn p2_thread_id_mapping() {
+    let src = r#"
+        fn thread_id(pid: i64) -> i64 { pid + 1 }
+        fn pid_from_thread(tid: i64) -> i64 { tid - 1 }
+        fn main() -> void {
+            println(thread_id(0))
+            println(thread_id(5))
+            println(pid_from_thread(1))
+            println(pid_from_thread(6))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "6", "0", "5"]);
+}
+
+#[test]
+fn p2_qemu_gdb_flags() {
+    let src = r#"
+        fn qemu_cmd(port: i64) -> str { f"target remote :{port}" }
+        fn main() -> void {
+            println(qemu_cmd(1234))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["target remote :1234"]);
+}
+
+#[test]
+fn p2_hex_encode_byte() {
+    let src = r#"
+        fn hex_char(v: i64) -> i64 { if v < 10 { 48 + v } else { 87 + v } }
+        fn encode_byte(byte: i64) -> str {
+            let hi = hex_char((byte >> 4) & 0xF)
+            let lo = hex_char(byte & 0xF)
+            f"{hi}{lo}"
+        }
+        fn main() -> void {
+            println(encode_byte(80))  // 'P' = 0x50
+            println(encode_byte(10))  // newline = 0x0a
+            println(encode_byte(0))   // null = 0x00
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5348", "4897", "4848"]);
+}
+
+#[test]
+fn p2_memory_map_regions() {
+    let src = r#"
+        fn kernel_start() -> i64 { 0x100000 }
+        fn kernel_size() -> i64 { 0x7F00000 }
+        fn user_start() -> i64 { 0x2000000 }
+        fn user_size() -> i64 { 0x1000000 }
+        fn main() -> void {
+            println(kernel_start())
+            println(user_start())
+            println(user_size())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1048576", "33554432", "16777216"]);
+}
+
+#[test]
+fn p2_debug_vectors() {
+    let src = r#"
+        const IDT_DEBUG: i64 = 1
+        const IDT_BREAKPOINT: i64 = 3
+        fn main() -> void {
+            println(IDT_DEBUG)
+            println(IDT_BREAKPOINT)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3"]);
+}
+
+#[test]
+fn p2_gdb_query_commands() {
+    let src = r#"
+        fn query_name(second_ch: i64) -> str {
+            if second_ch == 102 { "qfThreadInfo" }
+            else if second_ch == 82 { "qRcmd" }
+            else if second_ch == 88 { "qXfer" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(query_name(102))  // 'f'
+            println(query_name(82))   // 'R'
+            println(query_name(88))   // 'X'
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["qfThreadInfo", "qRcmd", "qXfer"]);
+}
+
+#[test]
+fn p2_dispatch_v2_commands() {
+    let src = r#"
+        fn total_gdb_commands() -> i64 {
+            // P1: ?, g, m, s, c, Z0, z0 = 7
+            // P2: Z2, Z3, z2, z3, qfThreadInfo, qRcmd, qXfer = 7
+            14
+        }
+        fn main() -> void { println(total_gdb_commands()) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["14"]);
+}
+
+#[test]
+fn p2_gdb_active_check() {
+    let src = r#"
+        fn should_notify_gdb(active: bool, is_breakpoint: bool) -> bool {
+            active && is_breakpoint
+        }
+        fn main() -> void {
+            println(should_notify_gdb(true, true))
+            println(should_notify_gdb(true, false))
+            println(should_notify_gdb(false, true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}

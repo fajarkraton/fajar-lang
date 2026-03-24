@@ -7125,6 +7125,237 @@ const GDB_BP_MAX: i64 = 16
 }
 
 // ═══════════════════════════════════════════════
+// GDB Integration (Sprint P2 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// P2.1: QEMU GDB connection info
+@kernel fn cmd_gdb_info() {
+    cprintln("GDB Debug Info:", YELLOW_ON_BLACK)
+    cprintln("  QEMU: qemu-system-x86_64 -s -S (port 1234)", WHITE_ON_BLACK)
+    cprintln("  GDB:  target remote :1234", WHITE_ON_BLACK)
+    cprintln("  Stub: COM2 (0x2F8), RSP protocol", WHITE_ON_BLACK)
+    cprint("  Breakpoints: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(GDB_STATE + 16), CYAN_ON_BLACK)
+    cprint("/", WHITE_ON_BLACK)
+    cprint_decimal(GDB_BP_MAX, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Active: ", WHITE_ON_BLACK)
+    if volatile_read_u64(GDB_STATE) == 1 { cprintln("yes", GREEN_ON_BLACK) }
+    else { cprintln("no", WHITE_ON_BLACK) }
+}
+
+// P2.2: Symbol table — generate .sym file info for kernel functions
+@kernel fn cmd_symbols() {
+    cprintln("Kernel symbol map:", YELLOW_ON_BLACK)
+    cprint("  kernel_main      = 0x", WHITE_ON_BLACK)
+    cprint_hex(fn_addr("kernel_main"), 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  dispatch_command = 0x", WHITE_ON_BLACK)
+    cprint_hex(fn_addr("dispatch_command"), 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  syscall_dispatch = 0x", WHITE_ON_BLACK)
+    cprint_hex(fn_addr("syscall_dispatch"), 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  sys_fork         = 0x", WHITE_ON_BLACK)
+    cprint_hex(fn_addr("sys_fork"), 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// P2.3: Process-aware debugging — qRcmd handler
+@kernel fn gdb_handle_rcmd(pkt: i64, len: i64) {
+    // qRcmd,<hex-encoded-command>
+    // Decode hex command
+    let cmd_buf: i64 = 0x996200
+    let mut pos: i64 = 6 // skip "qRcmd,"
+    let mut ci: i64 = 0
+    while pos + 1 < len && ci < 63 {
+        let h = gdb_hex_digit(volatile_read_u8(pkt + pos)) * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos + 1))
+        volatile_write_u8(cmd_buf + ci, h)
+        ci = ci + 1
+        pos = pos + 2
+    }
+    volatile_write_u8(cmd_buf + ci, 0)
+
+    // Handle "info proc" — list processes
+    if volatile_read_u8(cmd_buf) == 105 { // 'i' for "info"
+        let resp = GDB_RESP_BUF
+        let mut rpos: i64 = 0
+        let mut pid: i64 = 0
+        while pid < PROC_MAX {
+            let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+            if state != PROC_STATE_FREE {
+                // Encode "PID N STATE\n" as hex
+                rpos = gdb_encode_hex_byte(resp, rpos, 80) // 'P'
+                rpos = gdb_encode_hex_byte(resp, rpos, 48 + pid) // digit
+                rpos = gdb_encode_hex_byte(resp, rpos, 32) // space
+                rpos = gdb_encode_hex_byte(resp, rpos, 48 + state)
+                rpos = gdb_encode_hex_byte(resp, rpos, 10) // newline
+            }
+            pid = pid + 1
+        }
+        gdb_send_packet(resp, rpos)
+        return
+    }
+    // Unknown command
+    let resp = GDB_RESP_BUF
+    volatile_write_u8(resp, 79) // 'O'
+    volatile_write_u8(resp + 1, 75) // 'K'
+    gdb_send_packet(resp, 2)
+}
+
+@kernel fn gdb_encode_hex_byte(buf: i64, pos: i64, byte: i64) -> i64 {
+    volatile_write_u8(buf + pos, gdb_hex_char((byte >> 4) & 0xF))
+    volatile_write_u8(buf + pos + 1, gdb_hex_char(byte & 0xF))
+    pos + 2
+}
+
+// P2.4: Hardware watchpoints via DR0-DR3
+const GDB_WP_MAX: i64 = 4
+const GDB_WP_TABLE: i64 = 0x996300 // 4 watchpoints × 16B: +0=addr, +8=type(2=write,3=rw)
+
+@kernel fn gdb_insert_watchpoint(pkt: i64, len: i64) {
+    // Z2,ADDR,KIND (write watchpoint) or Z3,ADDR,KIND (r/w)
+    let wp_type = volatile_read_u8(pkt + 1) - 48 // '2' or '3'
+    let mut addr: i64 = 0
+    let mut pos: i64 = 3
+    while pos < len && volatile_read_u8(pkt + pos) != 44 {
+        addr = addr * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    // Find free DR register
+    let mut dr: i64 = 0
+    let mut found: i64 = -1
+    while dr < GDB_WP_MAX && found == -1 {
+        if volatile_read_u64(GDB_WP_TABLE + dr * 16) == 0 { found = dr }
+        dr = dr + 1
+    }
+    if found == -1 { gdb_send_packet(GDB_RESP_BUF, 0); return }
+    volatile_write_u64(GDB_WP_TABLE + found * 16, addr)
+    volatile_write_u64(GDB_WP_TABLE + found * 16 + 8, wp_type)
+    let resp = GDB_RESP_BUF
+    volatile_write_u8(resp, 79)
+    volatile_write_u8(resp + 1, 75)
+    gdb_send_packet(resp, 2)
+}
+
+@kernel fn gdb_remove_watchpoint(pkt: i64, len: i64) {
+    let mut addr: i64 = 0
+    let mut pos: i64 = 3
+    while pos < len && volatile_read_u8(pkt + pos) != 44 {
+        addr = addr * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    let mut i: i64 = 0
+    while i < GDB_WP_MAX {
+        if volatile_read_u64(GDB_WP_TABLE + i * 16) == addr {
+            volatile_write_u64(GDB_WP_TABLE + i * 16, 0)
+            volatile_write_u64(GDB_WP_TABLE + i * 16 + 8, 0)
+            let resp = GDB_RESP_BUF
+            volatile_write_u8(resp, 79)
+            volatile_write_u8(resp + 1, 75)
+            gdb_send_packet(resp, 2)
+            return
+        }
+        i = i + 1
+    }
+    gdb_send_packet(GDB_RESP_BUF, 0)
+}
+
+// P2.5: Thread query — qfThreadInfo lists PIDs as GDB threads
+@kernel fn gdb_handle_thread_info() {
+    let resp = GDB_RESP_BUF
+    let mut pos: i64 = 0
+    volatile_write_u8(resp + pos, 109) // 'm' = more threads
+    pos = pos + 1
+    let mut first: i64 = 1
+    let mut pid: i64 = 0
+    while pid < PROC_MAX {
+        let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state != PROC_STATE_FREE {
+            if first == 0 { volatile_write_u8(resp + pos, 44); pos = pos + 1 } // ','
+            pos = gdb_write_hex_small(resp, pos, pid + 1) // thread IDs start at 1
+            first = 0
+        }
+        pid = pid + 1
+    }
+    gdb_send_packet(resp, pos)
+}
+
+@kernel fn gdb_write_hex_small(buf: i64, pos: i64, val: i64) -> i64 {
+    if val < 16 {
+        volatile_write_u8(buf + pos, gdb_hex_char(val))
+        pos + 1
+    } else {
+        volatile_write_u8(buf + pos, gdb_hex_char((val >> 4) & 0xF))
+        volatile_write_u8(buf + pos + 1, gdb_hex_char(val & 0xF))
+        pos + 2
+    }
+}
+
+// P2.6: Memory map — qXfer:memory-map:read
+@kernel fn gdb_handle_memory_map() {
+    // Return XML memory map
+    let resp = GDB_RESP_BUF
+    let mut pos: i64 = 0
+    volatile_write_u8(resp, 108) // 'l' = last chunk
+    pos = 1
+    pos = http_write_str(resp, pos, "<memory-map>")
+    pos = http_write_str(resp, pos, "<memory type=\"ram\" start=\"0x100000\" length=\"0x7F00000\"/>")
+    pos = http_write_str(resp, pos, "<memory type=\"ram\" start=\"0x2000000\" length=\"0x1000000\"/>")
+    pos = http_write_str(resp, pos, "</memory-map>")
+    gdb_send_packet(resp, pos)
+}
+
+// P2.8: Debug exception handlers (IDT vectors 1 and 3)
+// Vector 1 = #DB (debug), Vector 3 = #BP (breakpoint)
+// These are handled by the linker's ISR stubs
+// When GDB is active, they should notify GDB instead of crashing
+
+@kernel fn gdb_on_breakpoint() {
+    // Called when INT3 (0xCC) is hit
+    if volatile_read_u64(GDB_STATE) == 1 {
+        gdb_handle_halt_reason() // Send S05 to GDB
+    }
+}
+
+@kernel fn gdb_on_debug_trap() {
+    // Called on single-step (#DB, TF=1)
+    if volatile_read_u64(GDB_STATE) == 1 {
+        volatile_write_u64(GDB_STATE + 8, 0) // clear stepping
+        gdb_handle_halt_reason()
+    }
+}
+
+// Enhanced gdb_dispatch with P2 commands
+@kernel fn gdb_dispatch_v2(pkt: i64, len: i64) {
+    let cmd = volatile_read_u8(pkt)
+    if cmd == 63 { gdb_handle_halt_reason() }
+    else if cmd == 103 { gdb_handle_read_regs() }
+    else if cmd == 109 { gdb_handle_read_mem(pkt, len) }
+    else if cmd == 115 { gdb_handle_step() }
+    else if cmd == 99 { gdb_handle_continue() }
+    else if cmd == 90 {
+        let subcmd = volatile_read_u8(pkt + 1)
+        if subcmd == 48 { gdb_insert_breakpoint(pkt, len) }      // Z0
+        else if subcmd == 50 || subcmd == 51 { gdb_insert_watchpoint(pkt, len) } // Z2/Z3
+        else { gdb_send_packet(GDB_RESP_BUF, 0) }
+    }
+    else if cmd == 122 {
+        let subcmd = volatile_read_u8(pkt + 1)
+        if subcmd == 48 { gdb_remove_breakpoint(pkt, len) }
+        else if subcmd == 50 || subcmd == 51 { gdb_remove_watchpoint(pkt, len) }
+        else { gdb_send_packet(GDB_RESP_BUF, 0) }
+    }
+    else if cmd == 113 { // 'q' query
+        if volatile_read_u8(pkt + 1) == 102 { gdb_handle_thread_info() } // qfThreadInfo
+        else if volatile_read_u8(pkt + 1) == 82 { gdb_handle_rcmd(pkt, len) } // qRcmd
+        else if volatile_read_u8(pkt + 1) == 88 { gdb_handle_memory_map() } // qXfer
+        else { gdb_send_packet(GDB_RESP_BUF, 0) }
+    }
+    else { gdb_send_packet(GDB_RESP_BUF, 0) }
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
