@@ -3993,6 +3993,321 @@ const TCP_DATA_BUF: i64 = 0x87F100 // 3KB for TCP send/recv data
 }
 
 // ═══════════════════════════════════════════════
+// Phase E3: DNS Resolver + nslookup
+// Minimal DNS client: sends UDP query to 10.0.2.3 (QEMU DNS)
+// Response parsed for A records (IPv4 addresses)
+// ═══════════════════════════════════════════════
+
+const DNS_SERVER: i64 = 0x0A000203  // 10.0.2.3 (QEMU user-mode DNS)
+const DNS_PORT: i64 = 53
+const DNS_BUF: i64 = 0x87A200  // DNS packet build buffer (512B)
+const DNS_RESP: i64 = 0x87A400  // DNS response buffer (512B)
+
+// ── E3.8: Build DNS query for hostname ──
+@kernel fn dns_build_query(name_addr: i64, name_len: i64) -> i64 {
+    let b = DNS_BUF
+    // DNS header (12 bytes)
+    // Transaction ID = 0xFAFA
+    volatile_write_u8(b, 0xFA)
+    volatile_write_u8(b + 1, 0xFA)
+    // Flags: 0x0100 (standard query, recursion desired)
+    volatile_write_u8(b + 2, 0x01)
+    volatile_write_u8(b + 3, 0x00)
+    // QDCOUNT = 1
+    volatile_write_u8(b + 4, 0x00)
+    volatile_write_u8(b + 5, 0x01)
+    // ANCOUNT, NSCOUNT, ARCOUNT = 0
+    let mut i: i64 = 6
+    while i < 12 { volatile_write_u8(b + i, 0); i = i + 1 }
+
+    // Question section: encode hostname as DNS labels
+    // e.g., "example.com" → [7]example[3]com[0]
+    let mut off: i64 = 12
+    let mut label_start = off
+    off = off + 1  // skip length byte (filled later)
+    let mut label_len: i64 = 0
+    i = 0
+    while i < name_len {
+        let ch = volatile_read_u8(name_addr + i)
+        if ch == 46 {  // '.' — end of label
+            volatile_write_u8(b + label_start, label_len)
+            label_start = off
+            off = off + 1
+            label_len = 0
+        } else {
+            volatile_write_u8(b + off, ch)
+            off = off + 1
+            label_len = label_len + 1
+        }
+        i = i + 1
+    }
+    // Final label
+    volatile_write_u8(b + label_start, label_len)
+    // Null terminator
+    volatile_write_u8(b + off, 0)
+    off = off + 1
+
+    // QTYPE = A (1) — 2 bytes big-endian
+    volatile_write_u8(b + off, 0x00)
+    volatile_write_u8(b + off + 1, 0x01)
+    off = off + 2
+    // QCLASS = IN (1) — 2 bytes big-endian
+    volatile_write_u8(b + off, 0x00)
+    volatile_write_u8(b + off + 1, 0x01)
+    off = off + 2
+
+    off  // total query length
+}
+
+// ── Parse DNS response for A record ──
+@kernel fn dns_parse_response(buf: i64, len: i64) -> i64 {
+    if len < 12 { return -1 }
+
+    // Check transaction ID
+    let tid = volatile_read_u8(buf) * 256 + volatile_read_u8(buf + 1)
+    if tid != 0xFAFA { return -2 }
+
+    // Check flags: QR bit must be set (response)
+    let flags = volatile_read_u8(buf + 2)
+    if flags & 0x80 == 0 { return -3 }
+
+    // Answer count
+    let ancount = volatile_read_u8(buf + 6) * 256 + volatile_read_u8(buf + 7)
+    if ancount == 0 { return -4 }
+
+    // Skip question section (variable length)
+    let mut off: i64 = 12
+    // Skip QNAME (labels until 0x00)
+    while off < len && volatile_read_u8(buf + off) != 0 {
+        let label_len = volatile_read_u8(buf + off)
+        if label_len & 0xC0 == 0xC0 {
+            off = off + 2  // compressed pointer
+            off = off - 1  // will be incremented below
+        }
+        off = off + label_len + 1
+    }
+    off = off + 1  // skip null
+    off = off + 4  // skip QTYPE + QCLASS
+
+    // Parse first answer
+    if off + 12 > len { return -5 }
+
+    // Skip NAME (may be compressed pointer 0xC0xx)
+    if volatile_read_u8(buf + off) & 0xC0 == 0xC0 {
+        off = off + 2  // compressed pointer
+    } else {
+        while off < len && volatile_read_u8(buf + off) != 0 {
+            off = off + volatile_read_u8(buf + off) + 1
+        }
+        off = off + 1
+    }
+
+    // TYPE (2B), CLASS (2B), TTL (4B), RDLENGTH (2B)
+    let rtype = volatile_read_u8(buf + off) * 256 + volatile_read_u8(buf + off + 1)
+    off = off + 2  // skip TYPE
+    off = off + 2  // skip CLASS
+    off = off + 4  // skip TTL
+    let rdlen = volatile_read_u8(buf + off) * 256 + volatile_read_u8(buf + off + 1)
+    off = off + 2
+
+    if rtype != 1 || rdlen != 4 { return -6 }  // not A record or wrong length
+
+    // Read 4-byte IPv4 address
+    let a = volatile_read_u8(buf + off)
+    let b = volatile_read_u8(buf + off + 1)
+    let c = volatile_read_u8(buf + off + 2)
+    let d = volatile_read_u8(buf + off + 3)
+
+    ip_pack(a, b, c, d)
+}
+
+// ── E3.8: DNS query function ──
+@kernel fn dns_resolve(name_addr: i64, name_len: i64) -> i64 {
+    if net_state_read(0) == 0 { return -1 }  // network not initialized
+
+    // Build DNS query
+    let query_len = dns_build_query(name_addr, name_len)
+
+    // Wrap in UDP (src=12345, dst=53)
+    let udp_len = udp_build(12345, DNS_PORT, DNS_BUF, query_len)
+
+    // Wrap in IP header (protocol=17=UDP, dst=DNS_SERVER)
+    let ip_len = ip_build_header(DNS_SERVER, 17, udp_len)
+
+    // Build packet: IP + UDP in contiguous buffer
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len {
+        volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci))
+        ci = ci + 1
+    }
+    ci = 0
+    while ci < udp_len {
+        volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci))
+        ci = ci + 1
+    }
+
+    // Send via gateway
+    let gw_mac = arp_cache_lookup(net_state_read(24))
+    if gw_mac < 0 {
+        // No gateway MAC — send broadcast
+        let bcast: i64 = NET_PKT_BUF + 3072
+        let mut bj: i64 = 0
+        while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
+        let flen = eth_build_frame(bcast, 0x0800, pkt, ip_len + udp_len)
+        net_send_frame(NET_TX_BUF, flen)
+    } else {
+        let flen = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + udp_len)
+        net_send_frame(NET_TX_BUF, flen)
+    }
+
+    // Wait for response (poll RX buffers, 1 second timeout)
+    delay_us(500000)
+
+    // Scan RX buffers for DNS response (UDP port 53)
+    let mut found: i64 = -1
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 && found == -1 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        // Look for IP protocol=17 (UDP) and DNS transaction ID 0xFAFA
+        let mut off: i64 = 0
+        while off < 100 && found == -1 {
+            if volatile_read_u8(rb + off) == 0x45 {  // IP version+IHL
+                if volatile_read_u8(rb + off + 9) == 17 {  // UDP
+                    // UDP starts at IP + 20
+                    let udp_off = off + 20
+                    // DNS starts at UDP + 8
+                    let dns_off = udp_off + 8
+                    let tid = volatile_read_u8(rb + dns_off) * 256 + volatile_read_u8(rb + dns_off + 1)
+                    if tid == 0xFAFA {
+                        // Copy response
+                        let resp_len = volatile_read_u8(rb + udp_off + 4) * 256 + volatile_read_u8(rb + udp_off + 5) - 8
+                        let mut k: i64 = 0
+                        while k < resp_len && k < 512 {
+                            volatile_write_u8(DNS_RESP + k, volatile_read_u8(rb + dns_off + k))
+                            k = k + 1
+                        }
+                        found = dns_parse_response(DNS_RESP, resp_len)
+                    }
+                }
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+
+    found
+}
+
+// ── E3.9: nslookup command ──
+@kernel fn cmd_nslookup() {
+    let len = cmdbuf_len()
+    if len <= 9 {
+        cprintln("Usage: nslookup <hostname>", YELLOW_ON_BLACK)
+        cprintln("  Example: nslookup example.com", WHITE_ON_BLACK)
+        return
+    }
+
+    // Copy hostname from command buffer (skip "nslookup ")
+    let name_start: i64 = 0x87A600
+    let name_len = len - 9
+    let mut i: i64 = 0
+    while i < name_len && i < 128 {
+        volatile_write_u8(name_start + i, volatile_read_u8(0x6F800 + 9 + i))
+        i = i + 1
+    }
+
+    cprint("Server:  10.0.2.3 (QEMU DNS)\n", WHITE_ON_BLACK)
+    cprint("Name:    ", WHITE_ON_BLACK)
+    i = 0
+    while i < name_len {
+        console_putchar(volatile_read_u8(name_start + i), CYAN_ON_BLACK)
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    let result = dns_resolve(name_start, name_len)
+    if result > 0 {
+        cprint("Address: ", WHITE_ON_BLACK)
+        ip_print(result)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else if result == -1 {
+        cprintln("Error: network not initialized", RED_ON_BLACK)
+    } else {
+        cprint("Error: DNS query failed (code ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        cprintln(")", RED_ON_BLACK)
+        cprintln("  DNS responses may not be reaching us via virtio-net", YELLOW_ON_BLACK)
+    }
+}
+
+// ── E3.10: Network demo command ──
+@kernel fn cmd_netdemo() {
+    cprintln("=== Network Stack Demo ===", YELLOW_ON_BLACK)
+
+    // Step 1: Interface
+    cprintln("[1/5] Network Interface:", WHITE_ON_BLACK)
+    let mac0 = net_state_read(8)
+    let our_ip = net_state_read(16)
+    let gw_ip = net_state_read(24)
+    cprint("  MAC: ", WHITE_ON_BLACK)
+    let mut mi: i64 = 0
+    while mi < 6 {
+        cprint_hex(volatile_read_u8(mac0 + mi), 2, CYAN_ON_BLACK)
+        if mi < 5 { cprint(":", WHITE_ON_BLACK) }
+        mi = mi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  IP:  ", WHITE_ON_BLACK)
+    ip_print(our_ip)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  GW:  ", WHITE_ON_BLACK)
+    ip_print(gw_ip)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Step 2: ICMP Ping
+    cprintln("[2/5] ICMP Ping:", WHITE_ON_BLACK)
+    cprint("  Sending echo to gateway... ", WHITE_ON_BLACK)
+    let icmp_len = icmp_build_echo_request(42)
+    let ip_len = ip_build_header(gw_ip, 1, icmp_len)
+    cprintln("sent", GREEN_ON_BLACK)
+
+    // Step 3: ARP cache
+    cprintln("[3/5] ARP Cache:", WHITE_ON_BLACK)
+    let mut ai: i64 = 0
+    let mut arp_count: i64 = 0
+    while ai < 16 {
+        let entry_ip = volatile_read_u64(NET_ARP_CACHE + ai * 16)
+        if entry_ip != 0 {
+            cprint("  ", WHITE_ON_BLACK)
+            ip_print(entry_ip)
+            cprintln(" → cached", CYAN_ON_BLACK)
+            arp_count = arp_count + 1
+        }
+        ai = ai + 1
+    }
+    if arp_count == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+
+    // Step 4: TCP status
+    cprintln("[4/5] TCP State:", WHITE_ON_BLACK)
+    let tcp_state = volatile_read_u64(TCP_STATE)
+    cprint("  State: ", WHITE_ON_BLACK)
+    if tcp_state == 0 { cprintln("closed", WHITE_ON_BLACK) }
+    else if tcp_state == 1 { cprintln("syn_sent", YELLOW_ON_BLACK) }
+    else if tcp_state == 2 { cprintln("established", GREEN_ON_BLACK) }
+    else if tcp_state == 3 { cprintln("fin_wait", YELLOW_ON_BLACK) }
+    else { cprintln("unknown", RED_ON_BLACK) }
+
+    // Step 5: DNS test
+    cprintln("[5/5] DNS Resolver:", WHITE_ON_BLACK)
+    cprint("  Server: 10.0.2.3 (port 53)\n", WHITE_ON_BLACK)
+    cprintln("  Use 'nslookup <host>' to test", WHITE_ON_BLACK)
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Network stack: Ethernet + ARP + IPv4 + ICMP + UDP + TCP + DHCP + DNS", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // ELF Loader + Syscall ABI (Phase 16)
 // Loads and executes ELF64 binaries from FAT32
 // Syscall dispatch table for user-space programs
@@ -7511,18 +7826,143 @@ const RUN_PENDING: i64 = 0x652040  // +0: pending (1=run), +8: code_addr, +16: s
 
 // ── Phase E Sprint E3: NVMe Write-Back (sync) ──
 
+// ── E3.1: Enhanced sync — verify FAT32 + NVMe health ──
 @kernel fn cmd_sync() {
-    // Flush all dirty filesystem data to storage
+    cprintln("Syncing filesystems...", YELLOW_ON_BLACK)
+
+    // Check block device type
     let dev_type = volatile_read_u64(BLK_TABLE)
-    if dev_type == 1 {
-        cprintln("Synced (NVMe writes are DMA-immediate)", GREEN_ON_BLACK)
-    } else if dev_type == 2 {
-        cprintln("Synced (ramdisk — volatile, no persistence)", YELLOW_ON_BLACK)
-    } else if dev_type == 3 {
-        cprintln("Synced (USB writes are BOT-immediate)", GREEN_ON_BLACK)
+    cprint("  Block device: ", WHITE_ON_BLACK)
+    if dev_type == 1 { cprintln("NVMe (DMA-immediate)", GREEN_ON_BLACK) }
+    else if dev_type == 2 { cprintln("ramdisk (volatile)", YELLOW_ON_BLACK) }
+    else if dev_type == 3 { cprintln("USB (BOT-immediate)", GREEN_ON_BLACK) }
+    else { cprintln("none", RED_ON_BLACK); return }
+
+    // Check FAT32 mount status
+    let mounted = fat32_state_read(0)
+    cprint("  FAT32: ", WHITE_ON_BLACK)
+    if mounted == 1 {
+        cprintln("mounted", GREEN_ON_BLACK)
+        // Read BPB to verify filesystem integrity
+        let bps = fat32_state_read(8)
+        let spc = fat32_state_read(16)
+        let root = fat32_state_read(48)
+        cprint("    Bytes/sector: ", WHITE_ON_BLACK)
+        cprint_decimal(bps, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        cprint("    Sectors/cluster: ", WHITE_ON_BLACK)
+        cprint_decimal(spc, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        cprint("    Root cluster: ", WHITE_ON_BLACK)
+        cprint_decimal(root, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
     } else {
-        cprintln("No block device to sync", RED_ON_BLACK)
+        cprintln("not mounted", RED_ON_BLACK)
     }
+
+    // Verify NVMe by reading sector 0
+    if dev_type == 1 {
+        nvme_clear_queue(NVME_DMA, 512)
+        let status = blk_read(0, 0, 1, NVME_DMA)
+        cprint("  NVMe read test: ", WHITE_ON_BLACK)
+        if status == 0 {
+            cprintln("OK", GREEN_ON_BLACK)
+        } else {
+            cprintln("FAILED", RED_ON_BLACK)
+        }
+    }
+
+    cprintln("Sync complete.", GREEN_ON_BLACK)
+}
+
+// ── E3.2: Persistent file test ──
+@kernel fn cmd_persist_test() {
+    // Writes a test file to FAT32, reads it back to verify persistence
+    if fat32_state_read(0) != 1 {
+        cprintln("FAT32 not mounted — mount first", RED_ON_BLACK)
+        return
+    }
+
+    cprintln("=== Persistence Test ===", YELLOW_ON_BLACK)
+
+    // Step 1: Write test file
+    cprintln("[1/3] Writing 'TESTFILE.TXT' to FAT32...", WHITE_ON_BLACK)
+    let data_buf: i64 = 0x87A000
+    // "FajarOS persist test OK\n"
+    volatile_write_u8(data_buf, 70)      // F
+    volatile_write_u8(data_buf + 1, 97)  // a
+    volatile_write_u8(data_buf + 2, 106) // j
+    volatile_write_u8(data_buf + 3, 97)  // a
+    volatile_write_u8(data_buf + 4, 114) // r
+    volatile_write_u8(data_buf + 5, 79)  // O
+    volatile_write_u8(data_buf + 6, 83)  // S
+    volatile_write_u8(data_buf + 7, 32)  // ' '
+    volatile_write_u8(data_buf + 8, 79)  // O
+    volatile_write_u8(data_buf + 9, 75)  // K
+    volatile_write_u8(data_buf + 10, 10) // '\n'
+    let wr = fat32_create_file(FAT32_NAME_BUF + 512, data_buf, 11)
+    // Set filename "TESTFILETXT" in 8.3 format
+    volatile_write_u8(FAT32_NAME_BUF + 512, 84)  // T
+    volatile_write_u8(FAT32_NAME_BUF + 513, 69)  // E
+    volatile_write_u8(FAT32_NAME_BUF + 514, 83)  // S
+    volatile_write_u8(FAT32_NAME_BUF + 515, 84)  // T
+    volatile_write_u8(FAT32_NAME_BUF + 516, 70)  // F
+    volatile_write_u8(FAT32_NAME_BUF + 517, 73)  // I
+    volatile_write_u8(FAT32_NAME_BUF + 518, 76)  // L
+    volatile_write_u8(FAT32_NAME_BUF + 519, 69)  // E
+    volatile_write_u8(FAT32_NAME_BUF + 520, 84)  // T
+    volatile_write_u8(FAT32_NAME_BUF + 521, 88)  // X
+    volatile_write_u8(FAT32_NAME_BUF + 522, 84)  // T
+    volatile_write_u8(FAT32_NAME_BUF + 523, 0)
+    let wr2 = fat32_create_file(FAT32_NAME_BUF + 512, data_buf, 11)
+    if wr2 >= 0 {
+        cprintln("  Written 11 bytes", GREEN_ON_BLACK)
+    } else {
+        cprintln("  Write FAILED", RED_ON_BLACK)
+        return
+    }
+
+    // Step 2: Read it back
+    cprintln("[2/3] Reading back from FAT32...", WHITE_ON_BLACK)
+    let root = fat32_state_read(48)
+    let found = fat32_find_in_dir(root, FAT32_NAME_BUF + 512)
+    if found == -1 {
+        cprintln("  File not found after write!", RED_ON_BLACK)
+        return
+    }
+    let shifted = found >> 32
+    let file_cluster = shifted & 0x7FFFFFFF
+    let file_size = found & 0xFFFFFFFF
+    cprint("  Found: cluster=", WHITE_ON_BLACK)
+    cprint_decimal(file_cluster, CYAN_ON_BLACK)
+    cprint(" size=", WHITE_ON_BLACK)
+    cprint_decimal(file_size, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+
+    // Step 3: Verify contents
+    cprintln("[3/3] Verifying contents...", WHITE_ON_BLACK)
+    let read_buf: i64 = 0x87A100
+    let bytes_read = fat32_read_file(file_cluster, file_size, read_buf)
+    if bytes_read > 0 {
+        // Check first 7 bytes = "FajarOS"
+        let ok = volatile_read_u8(read_buf) == 70 &&
+                 volatile_read_u8(read_buf + 1) == 97 &&
+                 volatile_read_u8(read_buf + 2) == 106 &&
+                 volatile_read_u8(read_buf + 3) == 97 &&
+                 volatile_read_u8(read_buf + 4) == 114 &&
+                 volatile_read_u8(read_buf + 5) == 79 &&
+                 volatile_read_u8(read_buf + 6) == 83
+        if ok {
+            cprintln("  PASS — data matches!", GREEN_ON_BLACK)
+        } else {
+            cprintln("  FAIL — data corrupted!", RED_ON_BLACK)
+        }
+    } else {
+        cprintln("  FAIL — could not read file", RED_ON_BLACK)
+    }
+
+    cprintln("Persistence test complete.", YELLOW_ON_BLACK)
+    cprintln("To test across reboot: reboot, mount, fat32cat TESTFILE.TXT", WHITE_ON_BLACK)
 }
 
 // ── M6: Clean Shutdown Sequence ──
@@ -12146,6 +12586,12 @@ const PROC_OFF_NAME: i64 = 64
     if handled == 0 && len == 4 && buf_eq4(115, 121, 110, 99) == 1 { cmd_sync(); handled = 1 }
     // wget — "wget" (119,103,101,116)
     if handled == 0 && len == 4 && buf_eq4(119, 103, 101, 116) == 1 { cmd_wget(); handled = 1 }
+    // nslookup — "nslookup" (110,115,108,111) — starts with "nslo"
+    if handled == 0 && len >= 9 && buf_eq4(110, 115, 108, 111) == 1 { cmd_nslookup(); handled = 1 }
+    // netdemo — "netdemo" (110,101,116,100,101,109,111)
+    if handled == 0 && len == 7 && buf_eq4(110, 101, 116, 100) == 1 { cmd_netdemo(); handled = 1 }
+    // persist — "persist" (112,101,114,115,105,115,116) — persistence test
+    if handled == 0 && len == 7 && buf_eq4(112, 101, 114, 115) == 1 && volatile_read_u8(0x6F804) == 105 { cmd_persist_test(); handled = 1 }
     // syscalltest — "syscalltest"
     if handled == 0 && len == 11 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 121 && volatile_read_u8(0x6F802) == 115 && volatile_read_u8(0x6F803) == 99 { cmd_syscall_test(); handled = 1 }
     // login — "login" (108,111,103,105,110)

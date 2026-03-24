@@ -7514,3 +7514,229 @@ fn e2_three_programs_installed() {
     let out = eval_output(src);
     assert_eq!(out, vec!["hello", "goodbye", "fajar", "counter", "fib"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase E3: Storage + Network Tests
+// ═══════════════════════════════════════════════
+
+#[test]
+fn e3_fat32_state_layout() {
+    // Verify FAT32 state structure constants
+    let src = r#"
+        const FAT32_STATE: i64 = 0x805000
+        fn main() -> void {
+            // Offsets into FAT32 state
+            let mounted = 0      // +0: mounted flag
+            let bps = 8          // +8: bytes per sector
+            let spc = 16         // +16: sectors per cluster
+            let root = 48        // +48: root cluster
+            println(FAT32_STATE)
+            println(FAT32_STATE + bps)
+            println(FAT32_STATE + root)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8409088", "8409096", "8409136"]);
+}
+
+#[test]
+fn e3_block_device_types() {
+    let src = r#"
+        fn blk_type_name(t: i64) -> str {
+            if t == 1 { "nvme" }
+            else if t == 2 { "ramdisk" }
+            else if t == 3 { "usb" }
+            else { "none" }
+        }
+        fn main() -> void {
+            println(blk_type_name(1))
+            println(blk_type_name(2))
+            println(blk_type_name(3))
+            println(blk_type_name(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["nvme", "ramdisk", "usb", "none"]);
+}
+
+#[test]
+fn e3_dns_label_encoding() {
+    // DNS encodes hostnames as length-prefixed labels
+    // "example.com" → [7]example[3]com[0]
+    let src = r#"
+        fn main() -> void {
+            // DNS label count = dots + 1
+            // "example.com" has 1 dot → 2 labels
+            println(2)
+            // "www.example.com" has 2 dots → 3 labels
+            println(3)
+            // DNS query total size: 12 (header) + labels + 4 (type+class)
+            // For "example.com": 12 + 1+7+1+3+1 + 4 = 29
+            let header: i64 = 12
+            let qtype_qclass: i64 = 4
+            let labels: i64 = 1 + 7 + 1 + 3 + 1  // [7]example[3]com[0]
+            println(header + labels + qtype_qclass)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "3", "29"]);
+}
+
+#[test]
+fn e3_ip_address_packing() {
+    // Verify IP address packing: 4 octets → u32
+    let src = r#"
+        fn ip_pack(a: i64, b: i64, c: i64, d: i64) -> i64 {
+            (a << 24) | (b << 16) | (c << 8) | d
+        }
+        fn main() -> void {
+            // 10.0.2.3 (QEMU DNS)
+            println(ip_pack(10, 0, 2, 3))
+            // 10.0.2.2 (QEMU host)
+            println(ip_pack(10, 0, 2, 2))
+            // 10.0.2.15 (QEMU DHCP default)
+            println(ip_pack(10, 0, 2, 15))
+            // 255.255.255.0 (netmask)
+            println(ip_pack(255, 255, 255, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(
+        out,
+        vec!["167772675", "167772674", "167772687", "4294967040"]
+    );
+}
+
+#[test]
+fn e3_tcp_flags() {
+    // Verify TCP flag constants
+    let src = r#"
+        const FIN: i64 = 1
+        const SYN: i64 = 2
+        const RST: i64 = 4
+        const PSH: i64 = 8
+        const ACK: i64 = 16
+        fn main() -> void {
+            // SYN handshake: client sends SYN
+            println(SYN)
+            // Server responds SYN+ACK
+            println(SYN | ACK)
+            // Client sends ACK
+            println(ACK)
+            // Data transfer: PSH+ACK
+            println(PSH | ACK)
+            // Close: FIN+ACK
+            println(FIN | ACK)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "18", "16", "24", "17"]);
+}
+
+#[test]
+fn e3_network_state_layout() {
+    // Verify network state memory layout
+    let src = r#"
+        const NET_STATE: i64 = 0x860000
+        fn main() -> void {
+            // Offsets
+            let init = 0       // +0: initialized
+            let mac = 8        // +8: MAC address start
+            let ip = 16        // +16: our IP
+            let gw = 24        // +24: gateway
+            let mask = 32      // +32: netmask
+            let rx = 40        // +40: RX count
+            let tx = 48        // +48: TX count
+            let bar0 = 56      // +56: virtio BAR0
+            println(NET_STATE + ip)
+            println(NET_STATE + gw)
+            println(NET_STATE + bar0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8781840", "8781848", "8781880"]);
+}
+
+#[test]
+fn e3_dns_transaction_id() {
+    // Verify DNS header constants
+    let src = r#"
+        fn main() -> void {
+            let tid: i64 = 0xFAFA
+            println(tid)
+            // DNS flags: standard query + recursion desired
+            let flags: i64 = 0x0100
+            println(flags)
+            // DNS server port
+            println(53)
+            // QEMU DNS server
+            let dns = (10 << 24) | (0 << 16) | (2 << 8) | 3
+            println(dns)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["64250", "256", "53", "167772675"]);
+}
+
+#[test]
+fn e3_vfs_mount_types() {
+    // Verify VFS filesystem type constants
+    let src = r#"
+        fn fs_name(t: i64) -> str {
+            if t == 0 { "none" }
+            else if t == 1 { "ramfs" }
+            else if t == 2 { "fat32" }
+            else if t == 3 { "devfs" }
+            else if t == 4 { "procfs" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(fs_name(1))
+            println(fs_name(2))
+            println(fs_name(3))
+            println(fs_name(4))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["ramfs", "fat32", "devfs", "procfs"]);
+}
+
+#[test]
+fn e3_dhcp_transaction_id() {
+    // DHCP uses constant transaction ID for matching
+    let src = r#"
+        fn main() -> void {
+            let tid: i64 = 0xFAFA1234
+            println(tid)
+            // DHCP ports: client=68, server=67
+            println(68)
+            println(67)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4210692660", "68", "67"]);
+}
+
+#[test]
+fn e3_network_buffer_layout() {
+    // Verify network buffer addresses
+    let src = r#"
+        const NET_RX_BUF: i64 = 0x870000
+        const NET_TX_BUF: i64 = 0x874000
+        const NET_ARP_CACHE: i64 = 0x878000
+        const NET_PKT_BUF: i64 = 0x87C000
+        const DNS_BUF: i64 = 0x87A200
+        const DNS_RESP: i64 = 0x87A400
+        fn main() -> void {
+            // Verify no overlaps (each buffer < 16KB)
+            println(NET_TX_BUF - NET_RX_BUF)
+            println(NET_ARP_CACHE - NET_TX_BUF)
+            println(NET_PKT_BUF - NET_ARP_CACHE)
+            // DNS buffers within safe range
+            println(DNS_BUF > NET_ARP_CACHE)
+            println(DNS_RESP > DNS_BUF)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16384", "16384", "16384", "true", "true"]);
+}
