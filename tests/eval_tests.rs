@@ -11014,3 +11014,165 @@ fn l2_cow_complete_lifecycle() {
     let out = eval_output(src);
     assert_eq!(out, vec!["fork", "share_ro", "write_fault", "copy_page", "remap_rw", "decref", "done"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase M: Multi-User & File Permissions
+// Sprint M1: User account system
+// ═══════════════════════════════════════════════
+
+#[test]
+fn m1_user_table_layout() {
+    let src = r#"
+        const USER_TABLE: i64 = 0x960000
+        const USER_MAX: i64 = 16
+        const USER_ENTRY_SIZE: i64 = 64
+        fn main() -> void {
+            println(USER_MAX * USER_ENTRY_SIZE)
+            println(USER_TABLE)
+            println(USER_MAX * USER_ENTRY_SIZE < 4096)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "9830400", "true"]);
+}
+
+#[test]
+fn m1_user_entry_offsets() {
+    let src = r#"
+        const USER_OFF_UID: i64 = 0
+        const USER_OFF_NAME: i64 = 8
+        const USER_OFF_PASS: i64 = 24
+        const USER_OFF_GID: i64 = 32
+        const USER_OFF_HOME: i64 = 40
+        const USER_OFF_ACTIVE: i64 = 56
+        fn main() -> void {
+            println(USER_OFF_UID)
+            println(USER_OFF_NAME)
+            println(USER_OFF_PASS)
+            println(USER_OFF_HOME)
+            println(USER_OFF_ACTIVE)
+            println(USER_OFF_ACTIVE + 8 <= 64)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "8", "24", "40", "56", "true"]);
+}
+
+#[test]
+fn m1_proc_uid_gid_offsets() {
+    let src = r#"
+        const PROC_OFF_UID: i64 = 168
+        const PROC_OFF_GID: i64 = 176
+        const PROC_ENTRY_SIZE: i64 = 256
+        fn main() -> void {
+            println(PROC_OFF_UID)
+            println(PROC_OFF_GID)
+            println(PROC_OFF_GID + 8 <= PROC_ENTRY_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["168", "176", "true"]);
+}
+
+#[test]
+fn m1_simple_hash() {
+    // Hash is deterministic + collision-resistant
+    let src = r#"
+        fn fnv_step(hash: i64, byte: i64) -> i64 {
+            ((hash ^ byte) * 16777619) & 0x7FFFFFFF
+        }
+        fn main() -> void {
+            let h1 = fnv_step(fnv_step(0x811C9DC5, 114), 111)
+            let h2 = fnv_step(fnv_step(0x811C9DC5, 114), 111)
+            println(h1 == h2)
+            let h3 = fnv_step(fnv_step(0x811C9DC5, 97), 100)
+            println(h1 != h3)
+            println(h1 > 0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "true"]);
+}
+
+#[test]
+fn m1_root_uid_zero() {
+    let src = r#"
+        fn is_root(uid: i64) -> bool { uid == 0 }
+        fn main() -> void {
+            println(is_root(0))
+            println(is_root(1))
+            println(is_root(15))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn m1_current_uid_addr() {
+    let src = r#"
+        const CURRENT_UID_ADDR: i64 = 0x652070
+        fn main() -> void { println(CURRENT_UID_ADDR) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6627440"]);
+}
+
+#[test]
+fn m1_login_permission() {
+    let src = r#"
+        fn can_adduser(uid: i64) -> bool { uid == 0 }
+        fn can_su(uid: i64) -> bool { uid == 0 }
+        fn main() -> void {
+            println(can_adduser(0))
+            println(can_adduser(1))
+            println(can_su(0))
+            println(can_su(5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "true", "false"]);
+}
+
+#[test]
+fn m1_user_home_dir() {
+    let src = r#"
+        fn home_dir(name: str) -> str { f"/{name}" }
+        fn main() -> void {
+            println(home_dir("fajar"))
+            println(home_dir("admin"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["/fajar", "/admin"]);
+}
+
+#[test]
+fn m1_fork_inherits_uid() {
+    let src = r#"
+        fn child_uid(parent_uid: i64) -> i64 { parent_uid }
+        fn child_gid(parent_gid: i64) -> i64 { parent_gid }
+        fn main() -> void {
+            println(child_uid(3))
+            println(child_gid(3))
+            println(child_uid(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "3", "0"]);
+}
+
+#[test]
+fn m1_user_max_check() {
+    let src = r#"
+        const USER_MAX: i64 = 16
+        fn can_create(current_count: i64) -> bool { current_count < USER_MAX }
+        fn main() -> void {
+            println(can_create(0))
+            println(can_create(15))
+            println(can_create(16))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}
