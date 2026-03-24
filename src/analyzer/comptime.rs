@@ -33,6 +33,13 @@ pub enum ComptimeValue {
     Str(String),
     /// Array of values.
     Array(Vec<ComptimeValue>),
+    /// Struct instance: (name, fields as name→value pairs).
+    Struct {
+        name: String,
+        fields: Vec<(String, ComptimeValue)>,
+    },
+    /// Tuple of values.
+    Tuple(Vec<ComptimeValue>),
     /// Null/void.
     Null,
 }
@@ -83,6 +90,26 @@ impl std::fmt::Display for ComptimeValue {
                 }
                 write!(f, "]")
             }
+            ComptimeValue::Struct { name, fields } => {
+                write!(f, "{name} {{ ")?;
+                for (i, (fname, fval)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{fname}: {fval}")?;
+                }
+                write!(f, " }}")
+            }
+            ComptimeValue::Tuple(items) => {
+                write!(f, "(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
             ComptimeValue::Null => write!(f, "null"),
         }
     }
@@ -122,6 +149,26 @@ pub enum ComptimeError {
     /// Type error.
     #[error("CT008: type error in comptime: {reason}")]
     TypeError { reason: String },
+
+    /// Heap allocation in const fn.
+    #[error("CT009: heap allocation not allowed in const fn '{fn_name}'")]
+    HeapAllocInConstFn { fn_name: String },
+
+    /// Mutable variable in const fn.
+    #[error("CT010: mutable variables not allowed in const fn '{fn_name}'")]
+    MutableInConstFn { fn_name: String },
+
+    /// Non-const function call in const fn.
+    #[error("CT011: function '{callee}' is not const — cannot call from const fn '{fn_name}'")]
+    NonConstCall { callee: String, fn_name: String },
+
+    /// Const fn recursion limit.
+    #[error("CT012: const fn recursion limit exceeded ({limit} levels)")]
+    ConstFnRecursionLimit { limit: usize },
+
+    /// Arithmetic overflow in const fn.
+    #[error("CT013: arithmetic overflow in const fn evaluation")]
+    ConstFnOverflow,
 }
 
 /// Compile-time evaluator.
@@ -145,6 +192,11 @@ impl ComptimeEvaluator {
             variables: HashMap::new(),
             depth: 0,
         }
+    }
+
+    /// Sets a variable in the evaluator's environment.
+    pub fn set_variable(&mut self, name: String, value: ComptimeValue) {
+        self.variables.insert(name, value);
     }
 
     /// Collects const/comptime functions from a program.
@@ -268,6 +320,42 @@ impl ComptimeEvaluator {
                         reason: "index target must be array, index must be integer".into(),
                     }),
                 }
+            }
+
+            Expr::StructInit { name, fields, .. } => {
+                let mut field_vals = Vec::new();
+                for fi in fields {
+                    let val = self.eval_expr(&fi.value)?;
+                    field_vals.push((fi.name.clone(), val));
+                }
+                Ok(ComptimeValue::Struct {
+                    name: name.clone(),
+                    fields: field_vals,
+                })
+            }
+
+            Expr::Field { object, field, .. } => {
+                let obj = self.eval_expr(object)?;
+                match &obj {
+                    ComptimeValue::Struct { fields, .. } => {
+                        for (fname, fval) in fields {
+                            if fname == field {
+                                return Ok(fval.clone());
+                            }
+                        }
+                        Err(ComptimeError::NotComptime {
+                            reason: format!("field '{field}' not found in struct"),
+                        })
+                    }
+                    _ => Err(ComptimeError::TypeError {
+                        reason: "field access on non-struct value".into(),
+                    }),
+                }
+            }
+
+            Expr::Tuple { elements, .. } => {
+                let vals: Result<Vec<_>, _> = elements.iter().map(|e| self.eval_expr(e)).collect();
+                Ok(ComptimeValue::Tuple(vals?))
             }
 
             Expr::Cast { expr, .. } => {

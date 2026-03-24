@@ -471,6 +471,36 @@ Semicolons are **optional** statement terminators. Key rules:
 >
 > const MAX: usize = 1024 // compile-time constant
 
+**Const Arrays and Structs**
+
+> const TABLE: [i64; 4] = [1, 2, 3, 4]   // const array literal
+>
+> const ZEROS: [i64; 256] = [0; 256]       // const array repeat
+>
+> const SECOND: i64 = TABLE[1]             // const array indexing
+>
+> struct Point { x: i64, y: i64 }
+>
+> const ORIGIN = Point { x: 0, y: 0 }     // const struct init
+>
+> const X_VAL = ORIGIN.x                   // const field access
+
+**Const Functions**
+
+Const functions are evaluated at compile time when called with const arguments:
+
+> const fn add(a: i64, b: i64) -> i64 { a + b }
+>
+> const fn fib(n: i64) -> i64 {
+>
+>     if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+>
+> }
+>
+> const FIB_10: i64 = fib(10)             // evaluated at compile time = 55
+
+Const fn restrictions: no heap allocation, no I/O, no mutable refs, no method calls, no async, no inline asm. Allowed: arithmetic, if/else, function calls (to other const fns), arrays, structs, field access.
+
 ### 5.2 Control Flow
 
 **If/Else**

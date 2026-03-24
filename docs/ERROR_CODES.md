@@ -214,7 +214,27 @@ error[TE001]: tensor shape mismatch
 
 ---
 
-## 10. Effect Errors (EE)
+## 10. Compile-Time Errors (CT)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| CT001 | NotComptime | Expression cannot be evaluated at compile time |
+| CT002 | Overflow | Arithmetic overflow in comptime evaluation |
+| CT003 | DivisionByZero | Division by zero in comptime evaluation |
+| CT004 | UndefinedVariable | Undefined variable in comptime context |
+| CT005 | UndefinedFunction | Undefined function in comptime context |
+| CT006 | RecursionLimit | Comptime evaluation recursion limit exceeded (256) |
+| CT007 | IoForbidden | I/O operations not allowed in comptime |
+| CT008 | TypeError | Type error in comptime evaluation |
+| CT009 | HeapAllocInConstFn | Heap allocation not allowed in const fn |
+| CT010 | MutableInConstFn | Mutable variables not allowed in const fn |
+| CT011 | NonConstCall | Non-const function call in const fn |
+| CT012 | ConstFnRecursionLimit | Const fn recursion limit exceeded |
+| CT013 | ConstFnOverflow | Arithmetic overflow in const fn evaluation |
+
+---
+
+## 11. Effect Errors (EE)
 
 | Code | Nama | Deskripsi |
 |------|------|-----------|

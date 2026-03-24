@@ -5438,27 +5438,13 @@ const CSW_SIGNATURE: i64 = 0x53425355
     }
 }
 
-@kernel fn usb_scsi_inquiry() -> i64 {
-    // SCSI INQUIRY command
-    let cb = XHCI_DATA_BUF + 4200
+@kernel fn usb_scsi_test_unit_ready() -> i64 {
+    // Build SCSI TEST UNIT READY command (6 bytes, all zeros except opcode)
+    let cmd = XHCI_DATA_BUF + 5000
     let mut i: i64 = 0
-    while i < 16 { volatile_write_u8(cb + i, 0); i = i + 1 }
-    volatile_write_u8(cb, SCSI_INQUIRY)
-    volatile_write_u8(cb + 4, 36) // allocation length = 36 bytes
-
-    usb_bot_cbw(1, 36, 0x80, 0, 6, cb)
-    // TODO: actually send CBW via bulk OUT, receive data via bulk IN, receive CSW
-    // For now, report what we have
-    0
-}
-
-@kernel fn usb_scsi_read_capacity() -> i64 {
-    let cb = XHCI_DATA_BUF + 4200
-    let mut i: i64 = 0
-    while i < 16 { volatile_write_u8(cb + i, 0); i = i + 1 }
-    volatile_write_u8(cb, SCSI_READ_CAPACITY)
-    usb_bot_cbw(2, 8, 0x80, 0, 10, cb)
-    0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_TEST_UNIT_READY) // opcode 0x00
+    usb_bot_command(cmd, 6, 0, 0, 0x80)
 }
 
 // ── cmd_usb_init: Full USB enumeration ──
@@ -5564,11 +5550,19 @@ const CSW_SIGNATURE: i64 = 0x53425355
     let dev_desc = usb_get_descriptor(slot, USB_DESC_DEVICE, 0, 18)
     println("[USB] GET_DESCRIPTOR returned")
     if dev_desc >= 0 {
-        println("[USB] Device descriptor OK")
         let vid = volatile_read_u8(XHCI_DATA_BUF + 8) | (volatile_read_u8(XHCI_DATA_BUF + 9) << 8)
         let pid = volatile_read_u8(XHCI_DATA_BUF + 10) | (volatile_read_u8(XHCI_DATA_BUF + 11) << 8)
         let dev_class = volatile_read_u8(XHCI_DATA_BUF + 4)
-        println("[USB] VID/PID parsed")
+        let num_configs = volatile_read_u8(XHCI_DATA_BUF + 17)
+        cprint("  VID:PID = ", WHITE_ON_BLACK)
+        cprint_hex(vid, 4, CYAN_ON_BLACK)
+        cprint(":", WHITE_ON_BLACK)
+        cprint_hex(pid, 4, CYAN_ON_BLACK)
+        cprint("  class=", WHITE_ON_BLACK)
+        cprint_hex(dev_class, 2, CYAN_ON_BLACK)
+        cprint("  configs=", WHITE_ON_BLACK)
+        cprint_decimal(num_configs, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
     } else {
         println("[USB] GET_DESCRIPTOR(device) FAILED")
         return
@@ -5596,7 +5590,12 @@ const CSW_SIGNATURE: i64 = 0x53425355
         if ms == 0 {
             let bulk_in = xhci_state_read(160)
             let bulk_out = xhci_state_read(168)
-            println("[USB] Mass Storage detected!")
+            cprintln("  Mass Storage (SCSI/BOT) detected", GREEN_ON_BLACK)
+            cprint("  Bulk IN: EP", WHITE_ON_BLACK)
+            cprint_hex(bulk_in, 2, CYAN_ON_BLACK)
+            cprint("  Bulk OUT: EP", WHITE_ON_BLACK)
+            cprint_hex(bulk_out, 2, CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
             xhci_state_write(224, 1) // mass storage ready
         } else {
             println("[USB] No mass storage interface found")
@@ -5612,6 +5611,17 @@ const CSW_SIGNATURE: i64 = 0x53425355
         let cfg_ep = xhci_configure_bulk_endpoints(slot)
         if cfg_ep >= 0 {
             println("[USB] Bulk endpoints configured")
+            // SCSI TEST UNIT READY
+            println("[USB] SCSI TEST_UNIT_READY...")
+            let tur = usb_scsi_test_unit_ready()
+            if tur >= 0 {
+                println("[USB] Device ready")
+            } else {
+                println("[USB] TEST_UNIT_READY failed (retrying...)")
+                delay_us(100000)
+                let tur2 = usb_scsi_test_unit_ready()
+                if tur2 < 0 { println("[USB] Device not ready") }
+            }
             // SCSI INQUIRY
             println("[USB] SCSI INQUIRY...")
             let inq = usb_scsi_inquiry_full()
@@ -5739,9 +5749,7 @@ const CSW_SIGNATURE: i64 = 0x53425355
     }
     xhci_ring_doorbell(0, 0)
 
-    // Poll for Command Completion
-    xhci_submit_command(0, 0, 0, TRB_NO_OP) // dummy — use the existing poll mechanism
-    // Actually: we already wrote the TRB, just need to poll. Reuse the poll pattern:
+    // Poll for Command Completion (Configure Endpoint event)
     let mut cur_evt = xhci_state_read(112)
     let mut cur_cycle = xhci_state_read(128)
     let mut timeout: i64 = 2000000
@@ -5953,10 +5961,34 @@ const CSW_SIGNATURE: i64 = 0x53425355
 
     // Parse INQUIRY response at XHCI_DATA_BUF + 5120
     // Byte 0: Peripheral device type (0x00 = direct access = disk)
-    // Bytes 8-15: Vendor ID
-    // Bytes 16-31: Product ID
-    let dev_type = volatile_read_u8(XHCI_DATA_BUF + 5120) & 0x1F
-    println("[SCSI] Device type: disk")
+    // Bytes 8-15: Vendor ID (8 ASCII chars)
+    // Bytes 16-31: Product ID (16 ASCII chars)
+    // Bytes 32-35: Product Revision (4 ASCII chars)
+    let resp = XHCI_DATA_BUF + 5120
+    let dev_type = volatile_read_u8(resp) & 0x1F
+    cprint("  Device: ", WHITE_ON_BLACK)
+    if dev_type == 0 { cprint("Direct Access (Disk)", GREEN_ON_BLACK) }
+    else if dev_type == 5 { cprint("CD-ROM", WHITE_ON_BLACK) }
+    else { cprint_decimal(dev_type, WHITE_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Print Vendor ID (bytes 8-15)
+    cprint("  Vendor: ", WHITE_ON_BLACK)
+    let mut vi: i64 = 0
+    while vi < 8 {
+        let ch = volatile_read_u8(resp + 8 + vi)
+        if ch >= 0x20 && ch < 0x7F { console_putchar(ch, CYAN_ON_BLACK) }
+        vi = vi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Print Product ID (bytes 16-31)
+    cprint("  Product: ", WHITE_ON_BLACK)
+    let mut pi: i64 = 0
+    while pi < 16 {
+        let ch = volatile_read_u8(resp + 16 + pi)
+        if ch >= 0x20 && ch < 0x7F { console_putchar(ch, CYAN_ON_BLACK) }
+        pi = pi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
     0
 }
 
@@ -5988,7 +6020,14 @@ const CSW_SIGNATURE: i64 = 0x53425355
     xhci_state_write(232, last_lba + 1) // total sectors
     xhci_state_write(240, block_size)    // sector size
 
-    println("[SCSI] Capacity read OK")
+    cprint("  Capacity: ", WHITE_ON_BLACK)
+    cprint_decimal(last_lba + 1, CYAN_ON_BLACK)
+    cprint(" sectors x ", WHITE_ON_BLACK)
+    cprint_decimal(block_size, CYAN_ON_BLACK)
+    cprint(" bytes = ", WHITE_ON_BLACK)
+    let mb = ((last_lba + 1) * block_size) / (1024 * 1024)
+    cprint_decimal(mb, GREEN_ON_BLACK)
+    cprintln(" MB", WHITE_ON_BLACK)
     0
 }
 
@@ -6018,6 +6057,133 @@ const CSW_SIGNATURE: i64 = 0x53425355
 
 @kernel fn usb_blk_read(lba: i64, count: i64, buf: i64) -> i64 {
     usb_scsi_read(lba, count, buf)
+}
+
+@kernel fn usb_scsi_write(lba: i64, count: i64, buf: i64) -> i64 {
+    // Build SCSI WRITE(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_WRITE_10) // opcode 0x2A
+    // LBA (bytes 2-5, big-endian)
+    volatile_write_u8(cmd + 2, (lba >> 24) & 0xFF)
+    volatile_write_u8(cmd + 3, (lba >> 16) & 0xFF)
+    volatile_write_u8(cmd + 4, (lba >> 8) & 0xFF)
+    volatile_write_u8(cmd + 5, lba & 0xFF)
+    // Transfer length (bytes 7-8, big-endian)
+    volatile_write_u8(cmd + 7, (count >> 8) & 0xFF)
+    volatile_write_u8(cmd + 8, count & 0xFF)
+
+    let sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { return -1 }
+    let data_len = count * sector_sz
+
+    usb_bot_command(cmd, 10, buf, data_len, 0x00) // direction OUT
+}
+
+@kernel fn usb_blk_write(lba: i64, count: i64, buf: i64) -> i64 {
+    usb_scsi_write(lba, count, buf)
+}
+
+// ── USB Shell Commands ──
+
+@kernel fn cmd_usbread() {
+    // Read and hex-dump a single sector from USB mass storage
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Parse LBA from command buffer (after "usbread ")
+    let mut lba: i64 = 0
+    let mut ci: i64 = 8 // skip "usbread "
+    let mut has_digit: i64 = 0
+    while ci < 64 {
+        let ch = volatile_read_u8(0x6F800 + ci)
+        if ch >= 48 && ch <= 57 {
+            lba = lba * 10 + (ch - 48)
+            has_digit = 1
+            ci = ci + 1
+        } else { ci = 64 }
+    }
+    if has_digit == 0 {
+        cprintln("Usage: usbread <lba>", YELLOW_ON_BLACK)
+        return
+    }
+    let mut sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { sector_sz = 512 }
+    let buf = XHCI_DATA_BUF + 6144 // use scratch area
+    let result = usb_scsi_read(lba, 1, buf)
+    if result < 0 {
+        cprint("  Read failed: ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    cprint("USB sector ", WHITE_ON_BLACK)
+    cprint_decimal(lba, CYAN_ON_BLACK)
+    cprintln(":", WHITE_ON_BLACK)
+    // Hex dump first 256 bytes (or sector_sz if smaller)
+    let dump_len = if sector_sz < 256 { sector_sz } else { 256 }
+    let mut off: i64 = 0
+    while off < dump_len {
+        // Print offset
+        cprint_hex(off, 4, YELLOW_ON_BLACK)
+        cprint(": ", WHITE_ON_BLACK)
+        // Print 16 hex bytes
+        let mut b: i64 = 0
+        while b < 16 && (off + b) < dump_len {
+            cprint_hex(volatile_read_u8(buf + off + b), 2, CYAN_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            b = b + 1
+        }
+        // Print ASCII
+        cprint(" |", WHITE_ON_BLACK)
+        b = 0
+        while b < 16 && (off + b) < dump_len {
+            let ch = volatile_read_u8(buf + off + b)
+            if ch >= 0x20 && ch < 0x7F { console_putchar(ch, WHITE_ON_BLACK) }
+            else { cprint(".", WHITE_ON_BLACK) }
+            b = b + 1
+        }
+        cprintln("|", WHITE_ON_BLACK)
+        off = off + 16
+    }
+}
+
+@kernel fn cmd_usbls() {
+    // List files on USB FAT32 filesystem
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Ensure FAT32 is mounted on USB (blk_dev 2)
+    if fat32_state_read(0) != 1 || fat32_state_read(88) != 2 {
+        let mnt = fat32_mount(2)
+        if mnt != 0 {
+            cprintln("  No FAT32 filesystem on USB device", RED_ON_BLACK)
+            return
+        }
+    }
+    cmd_fat32_ls()
+}
+
+@kernel fn cmd_usbcat() {
+    // Read a file from USB FAT32
+    // "usbcat " = 7 chars prefix, same as "fatcat "
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Ensure FAT32 is mounted on USB (blk_dev 2)
+    if fat32_state_read(0) != 1 || fat32_state_read(88) != 2 {
+        let mnt = fat32_mount(2)
+        if mnt != 0 {
+            cprintln("  No FAT32 filesystem on USB device", RED_ON_BLACK)
+            return
+        }
+    }
+    // cmd_fat32_cat reads filename from 0x6F800+7, "usbcat " is also 7 chars
+    cmd_fat32_cat()
 }
 
 // ═══════════════════════════════════════════════
@@ -7889,7 +8055,7 @@ const HIST_SLOT_SIZE: i64 = 64
 // ═══════════════════════════════════════════════
 
 @kernel fn cmd_help() {
-    cprintln("== FajarOS Nova - 100 Commands ==", YELLOW_ON_BLACK)
+    cprintln("== FajarOS Nova - 165 Commands ==", YELLOW_ON_BLACK)
     cprintln("System:", WHITE_ON_BLUE)
     cprintln("  help version about uname sysinfo", WHITE_ON_BLACK)
     cprintln("  uptime date hostname whoami arch", WHITE_ON_BLACK)
@@ -7905,6 +8071,12 @@ const HIST_SLOT_SIZE: i64 = 64
     cprintln("  mkdir rmdir pwd write append head", WHITE_ON_BLACK)
     cprintln("  tail wc grep sort uniq nl cut", WHITE_ON_BLACK)
     cprintln("  stat xxd strings df du count md5", WHITE_ON_BLACK)
+    cprintln("Storage:", WHITE_ON_BLUE)
+    cprintln("  fat32mount fat32ls fatcat fatwrite", WHITE_ON_BLACK)
+    cprintln("  fatrm nvme disk_read disk_write", WHITE_ON_BLACK)
+    cprintln("USB:", WHITE_ON_BLUE)
+    cprintln("  lsusb xhci usbinit usbread <lba>", WHITE_ON_BLACK)
+    cprintln("  usbls usbcat <file>", WHITE_ON_BLACK)
     cprintln("AI/Compute:", WHITE_ON_BLUE)
     cprintln("  tensor mnist bench fib", WHITE_ON_BLACK)
     cprintln("Math/Text:", WHITE_ON_BLUE)
@@ -11229,6 +11401,12 @@ const FS_ENTRY_SIZE: i64 = 128
     if handled == 0 && len == 4 && buf_eq4(120, 104, 99, 105) == 1 { cmd_xhci_info(); handled = 1 }
     // usbinit — "usbinit" (117,115,98,105,110,105,116)
     if handled == 0 && len == 7 && buf_eq4(117, 115, 98, 105) == 1 && volatile_read_u8(0x6F804) == 110 && volatile_read_u8(0x6F805) == 105 && volatile_read_u8(0x6F806) == 116 { cmd_usb_init(); handled = 1 }
+    // usbread — "usbread" (117,115,98,114,101,97,100)
+    if handled == 0 && len >= 7 && buf_eq4(117, 115, 98, 114) == 1 && volatile_read_u8(0x6F804) == 101 && volatile_read_u8(0x6F805) == 97 && volatile_read_u8(0x6F806) == 100 { cmd_usbread(); handled = 1 }
+    // usbls — "usbls" (117,115,98,108,115)
+    if handled == 0 && len == 5 && buf_eq4(117, 115, 98, 108) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_usbls(); handled = 1 }
+    // usbcat — "usbcat" (117,115,98,99,97,116)
+    if handled == 0 && len >= 6 && buf_eq4(117, 115, 98, 99) == 1 && volatile_read_u8(0x6F804) == 97 && volatile_read_u8(0x6F805) == 116 { cmd_usbcat(); handled = 1 }
     // virtioblk — "virtioblk" (118,105,114,116)
     if handled == 0 && len == 9 && buf_eq4(118, 105, 114, 116) == 1 { cmd_virtio_blk(); handled = 1 }
     // source — "source ..." (115,111,117,114,99,101)

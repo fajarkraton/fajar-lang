@@ -6346,6 +6346,340 @@ fn const_fn_bitwise_ops() {
     assert_eq!(out, vec!["5", "15"]);
 }
 
+// ── Phase D: const struct + const array extended tests ──
+
+#[test]
+fn const_struct_init() {
+    let src = r#"
+        struct Point { x: i64, y: i64 }
+        const ORIGIN = Point { x: 0, y: 0 }
+        fn main() -> void {
+            println(ORIGIN.x)
+            println(ORIGIN.y)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "0"]);
+}
+
+#[test]
+fn const_struct_field_access() {
+    let src = r#"
+        struct Config { width: i64, height: i64 }
+        const SCREEN = Config { width: 1920, height: 1080 }
+        const W = SCREEN.width
+        const H = SCREEN.height
+        fn main() -> void {
+            println(W)
+            println(H)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1920", "1080"]);
+}
+
+#[test]
+fn const_fn_returning_struct() {
+    let src = r#"
+        struct Pair { a: i64, b: i64 }
+        const fn make_pair(x: i64, y: i64) -> Pair {
+            Pair { a: x, b: y }
+        }
+        fn main() -> void {
+            let p = make_pair(3, 7)
+            println(p.a)
+            println(p.b)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "7"]);
+}
+
+#[test]
+fn const_array_in_function() {
+    let src = r#"
+        const LOOKUP: [i64; 4] = [10, 20, 30, 40]
+        fn get(i: i64) -> i64 { LOOKUP[i] }
+        fn main() -> void {
+            println(get(0))
+            println(get(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10", "40"]);
+}
+
+#[test]
+fn const_fn_returning_array() {
+    let src = r#"
+        const fn first_four() -> [i64; 4] {
+            [1, 2, 3, 4]
+        }
+        fn main() -> void {
+            let arr = first_four()
+            println(arr[0])
+            println(arr[3])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "4"]);
+}
+
+#[test]
+fn const_array_repeat_large() {
+    let src = r#"
+        const ZEROS: [i64; 256] = [0; 256]
+        fn main() -> void {
+            println(ZEROS[0])
+            println(ZEROS[255])
+            println(len(ZEROS))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "0", "256"]);
+}
+
+#[test]
+fn const_nested_struct() {
+    let src = r#"
+        struct Vec2 { x: i64, y: i64 }
+        struct Rect { origin: Vec2, size: Vec2 }
+        const FRAME = Rect {
+            origin: Vec2 { x: 10, y: 20 },
+            size: Vec2 { x: 640, y: 480 }
+        }
+        fn main() -> void {
+            println(FRAME.origin.x)
+            println(FRAME.size.y)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10", "480"]);
+}
+
+#[test]
+fn const_struct_with_arithmetic() {
+    let src = r#"
+        struct Dims { w: i64, h: i64 }
+        const D = Dims { w: 16 * 2, h: 9 * 2 }
+        fn main() -> void {
+            println(D.w)
+            println(D.h)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["32", "18"]);
+}
+
+#[test]
+fn const_multiple_structs() {
+    let src = r#"
+        struct Color { r: i64, g: i64, b: i64 }
+        const RED = Color { r: 255, g: 0, b: 0 }
+        const GREEN = Color { r: 0, g: 255, b: 0 }
+        const BLUE = Color { r: 0, g: 0, b: 255 }
+        fn main() -> void {
+            println(RED.r)
+            println(GREEN.g)
+            println(BLUE.b)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["255", "255", "255"]);
+}
+
+#[test]
+fn const_fn_with_struct_and_array() {
+    let src = r#"
+        struct Point { x: i64, y: i64 }
+        const POINTS: [i64; 4] = [1, 2, 3, 4]
+        const P = Point { x: POINTS[0], y: POINTS[3] }
+        fn main() -> void {
+            println(P.x)
+            println(P.y)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "4"]);
+}
+
+// ── Phase D2: const fn error diagnostic tests ──
+
+#[test]
+fn const_fn_rejects_method_call() {
+    let mut interp = Interpreter::new_capturing();
+    let result = interp.eval_source(r#"
+        const fn bad() -> i64 {
+            let s = "hello"
+            s.len()
+        }
+        fn main() -> void { println(bad()) }
+    "#);
+    assert!(result.is_err(), "method call in const fn should be rejected");
+}
+
+#[test]
+fn const_fn_allows_struct_init() {
+    // This should NOT error — struct init is now allowed in const fn
+    let src = r#"
+        struct Pair { a: i64, b: i64 }
+        const fn make() -> Pair { Pair { a: 1, b: 2 } }
+        fn main() -> void {
+            let p = make()
+            println(p.a)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1"]);
+}
+
+#[test]
+fn const_fn_allows_field_access() {
+    let src = r#"
+        struct Vec2 { x: i64, y: i64 }
+        const fn sum_fields(v: Vec2) -> i64 { v.x + v.y }
+        fn main() -> void {
+            println(sum_fields(Vec2 { x: 3, y: 7 }))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10"]);
+}
+
+#[test]
+fn const_fn_allows_array_repeat() {
+    let src = r#"
+        const fn make_zeros() -> [i64; 5] { [0; 5] }
+        fn main() -> void {
+            let z = make_zeros()
+            println(z[0])
+            println(len(z))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "5"]);
+}
+
+#[test]
+fn const_fn_allows_cast() {
+    let src = r#"
+        const fn to_int(b: bool) -> i64 {
+            if b { 1 } else { 0 }
+        }
+        fn main() -> void {
+            println(to_int(true))
+            println(to_int(false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "0"]);
+}
+
+#[test]
+fn comptime_error_ct001_not_evaluable() {
+    // The comptime evaluator should reject expressions it can't handle
+    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeError};
+    let mut eval = ComptimeEvaluator::new();
+    // An Await expression should fail
+    let expr = fajar_lang::parser::ast::Expr::Await {
+        expr: Box::new(fajar_lang::parser::ast::Expr::Literal {
+            kind: fajar_lang::parser::ast::LiteralKind::Int(42),
+            span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+        }),
+        span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+    };
+    let result = eval.eval_expr(&expr);
+    assert!(result.is_err());
+    match result {
+        Err(ComptimeError::NotComptime { .. }) => {}
+        other => panic!("expected NotComptime, got: {other:?}"),
+    }
+}
+
+#[test]
+fn comptime_error_ct003_division_by_zero() {
+    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeError};
+    let mut eval = ComptimeEvaluator::new();
+    let expr = fajar_lang::parser::ast::Expr::Binary {
+        op: fajar_lang::parser::ast::BinOp::Div,
+        left: Box::new(fajar_lang::parser::ast::Expr::Literal {
+            kind: fajar_lang::parser::ast::LiteralKind::Int(42),
+            span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+        }),
+        right: Box::new(fajar_lang::parser::ast::Expr::Literal {
+            kind: fajar_lang::parser::ast::LiteralKind::Int(0),
+            span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+        }),
+        span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+    };
+    let result = eval.eval_expr(&expr);
+    assert!(result.is_err());
+    match result {
+        Err(ComptimeError::DivisionByZero) => {}
+        other => panic!("expected DivisionByZero, got: {other:?}"),
+    }
+}
+
+#[test]
+fn comptime_struct_field_not_found() {
+    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeValue, ComptimeError};
+    let mut eval = ComptimeEvaluator::new();
+    eval.set_variable("P".into(), ComptimeValue::Struct {
+        name: "Point".into(),
+        fields: vec![("x".into(), ComptimeValue::Int(1)), ("y".into(), ComptimeValue::Int(2))],
+    });
+    let expr = fajar_lang::parser::ast::Expr::Field {
+        object: Box::new(fajar_lang::parser::ast::Expr::Ident {
+            name: "P".into(),
+            span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+        }),
+        field: "z".into(),
+        span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+    };
+    let result = eval.eval_expr(&expr);
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("not found"), "error should mention field not found: {err_msg}");
+}
+
+#[test]
+fn comptime_struct_init_evaluates() {
+    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeValue};
+    let mut eval = ComptimeEvaluator::new();
+    let expr = fajar_lang::parser::ast::Expr::StructInit {
+        name: "Point".into(),
+        fields: vec![
+            fajar_lang::parser::ast::FieldInit {
+                name: "x".into(),
+                value: fajar_lang::parser::ast::Expr::Literal {
+                    kind: fajar_lang::parser::ast::LiteralKind::Int(10),
+                    span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+                },
+                span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+            },
+            fajar_lang::parser::ast::FieldInit {
+                name: "y".into(),
+                value: fajar_lang::parser::ast::Expr::Literal {
+                    kind: fajar_lang::parser::ast::LiteralKind::Int(20),
+                    span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+                },
+                span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+            },
+        ],
+        span: fajar_lang::lexer::token::Span { start: 0, end: 1 },
+    };
+    let result = eval.eval_expr(&expr).unwrap();
+    match result {
+        ComptimeValue::Struct { name, fields } => {
+            assert_eq!(name, "Point");
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0], ("x".into(), ComptimeValue::Int(10)));
+            assert_eq!(fields[1], ("y".into(), ComptimeValue::Int(20)));
+        }
+        other => panic!("expected Struct, got: {other:?}"),
+    }
+}
+
 // ── static mut tests ──
 
 #[test]

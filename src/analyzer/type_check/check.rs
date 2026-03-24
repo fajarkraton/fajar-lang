@@ -336,6 +336,26 @@ impl TypeChecker {
                 self.check_const_fn_body(object, fn_name, fn_span);
                 self.check_const_fn_body(index, fn_name, fn_span);
             }
+            Expr::StructInit { fields, .. } => {
+                for fi in fields {
+                    self.check_const_fn_body(&fi.value, fn_name, fn_span);
+                }
+            }
+            Expr::Field { object, .. } => {
+                self.check_const_fn_body(object, fn_name, fn_span);
+            }
+            Expr::Tuple { elements, .. } => {
+                for elem in elements {
+                    self.check_const_fn_body(elem, fn_name, fn_span);
+                }
+            }
+            Expr::ArrayRepeat { value, count, .. } => {
+                self.check_const_fn_body(value, fn_name, fn_span);
+                self.check_const_fn_body(count, fn_name, fn_span);
+            }
+            Expr::Cast { expr, .. } => {
+                self.check_const_fn_body(expr, fn_name, fn_span);
+            }
             // Disallowed in const fn
             Expr::MethodCall { span, .. } => {
                 self.errors.push(SemanticError::TypeMismatch {
@@ -344,6 +364,28 @@ impl TypeChecker {
                     span: *span,
                     hint: Some(format!(
                         "const fn '{}': method calls cannot be evaluated at compile time",
+                        fn_name
+                    )),
+                });
+            }
+            Expr::Await { span, .. } | Expr::AsyncBlock { span, .. } => {
+                self.errors.push(SemanticError::TypeMismatch {
+                    expected: "const-evaluable expression".into(),
+                    found: "async operation in const fn".into(),
+                    span: *span,
+                    hint: Some(format!(
+                        "const fn '{}': async operations are not allowed in const context",
+                        fn_name
+                    )),
+                });
+            }
+            Expr::InlineAsm { span, .. } => {
+                self.errors.push(SemanticError::TypeMismatch {
+                    expected: "const-evaluable expression".into(),
+                    found: "inline assembly in const fn".into(),
+                    span: *span,
+                    hint: Some(format!(
+                        "const fn '{}': inline assembly cannot be evaluated at compile time",
                         fn_name
                     )),
                 });
