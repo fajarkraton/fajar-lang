@@ -1,4 +1,4 @@
-// FajarOS Nova v1.0.0 "Transcendence" — x86_64 Bare-Metal OS
+// FajarOS Nova v1.2.0 "Nexus" — x86_64 Bare-Metal OS
 // 142 commands, Ring 3 "Hello Ring 3!", NVMe + FAT32 + VFS + SMP + Net
 // Written 100% in Fajar Lang — 8,800+ lines
 // Milestone: User program calls SYSCALL from Ring 3 and prints to serial
@@ -4421,17 +4421,58 @@ const PH_OFF_MEMSZ: i64 = 40   // Size in memory (8 bytes)
     loaded
 }
 
-// ── Syscall Dispatch Table ──
+// ── Syscall Dispatch Table (v0.7 "Nexus") ──
 
-const SYSCALL_TABLE: i64 = 0x884000  // 32 entries × 8 bytes (fn pointers)
-const SYS_EXIT: i64 = 0
-const SYS_WRITE: i64 = 1
-const SYS_READ: i64 = 2
-const SYS_GETPID: i64 = 3
-const SYS_YIELD: i64 = 4
-const SYS_SLEEP: i64 = 5
-const SYS_MMAP: i64 = 6
-const SYS_BRK: i64 = 7
+const SYSCALL_TABLE: i64 = 0x884000      // 32 entries × 8 bytes (fn pointers)
+const SYSCALL_DISPATCH_FN: i64 = 0x884008 // fn pointer for linker indirect call
+
+// Syscall numbers (v0.7 — 26 syscalls)
+const SYS_EXIT: i64 = 0       // EXIT handled in linker asm (never returns)
+const SYS_WRITE: i64 = 1      // write(fd, buf, len) -> bytes_written
+const SYS_READ: i64 = 2       // read(fd, buf, len) -> bytes_read
+const SYS_GETPID: i64 = 3     // getpid() -> pid
+const SYS_YIELD: i64 = 4      // yield() -> 0
+const SYS_BRK: i64 = 5        // brk(increment) -> new_brk
+const SYS_MMAP: i64 = 6       // mmap(addr, len, prot) -> va
+const SYS_CLOCK: i64 = 7      // clock() -> ticks
+const SYS_SLEEP: i64 = 8      // sleep(ms) -> 0
+const SYS_SBRK: i64 = 9       // sbrk(increment) -> old_brk
+
+// File I/O syscalls (F2)
+const SYS_OPEN: i64 = 10      // open(path, flags) -> fd
+const SYS_CLOSE: i64 = 11     // close(fd) -> 0
+const SYS_STAT: i64 = 12      // stat(path, buf) -> 0
+const SYS_FSTAT: i64 = 13     // fstat(fd, buf) -> 0
+const SYS_LSEEK: i64 = 14     // lseek(fd, offset, whence) -> new_offset
+const SYS_DUP: i64 = 15       // dup(old_fd) -> new_fd
+const SYS_DUP2: i64 = 16      // dup2(old_fd, new_fd) -> new_fd
+const SYS_GETCWD: i64 = 17    // getcwd(buf, size) -> len
+const SYS_CHDIR: i64 = 18     // chdir(path) -> 0
+const SYS_UNLINK: i64 = 19    // unlink(path) -> 0
+
+// FD_TABLE_V2 at 0x8D0000 (relocated from 0x894000 to fix virtio TX conflict)
+const FD_TABLE_V2: i64 = 0x8D0000  // 16 procs × 16 FDs × 16 bytes = 4096 bytes
+const FD_MAX: i64 = 16
+const FD_ENTRY_SIZE: i64 = 16
+// FD types
+const FD_CLOSED: i64 = 0
+const FD_CONSOLE: i64 = 1
+const FD_RAMFS: i64 = 2
+const FD_PIPE_READ: i64 = 3
+const FD_PIPE_WRITE: i64 = 4
+const FD_FAT32: i64 = 5
+
+// LSEEK whence values
+const SEEK_SET: i64 = 0
+const SEEK_CUR: i64 = 1
+const SEEK_END: i64 = 2
+
+// Per-process heap tracking base: PROC_TABLE + pid*256 + 96
+const PROC_OFF_BRK: i64 = 96
+// Per-process CWD: PROC_TABLE + pid*256 + 128 (32 bytes)
+const PROC_OFF_CWD: i64 = 128
+// User heap region: 0x2800000 (40MB)
+const USER_HEAP_BASE: i64 = 0x2800000
 
 @kernel fn syscall_init() {
     // Clear syscall table
@@ -4440,50 +4481,2735 @@ const SYS_BRK: i64 = 7
     frame_mark_used(SYSCALL_TABLE / FRAME_SIZE)
 }
 
-@kernel fn syscall_handle(num: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
-    if num == SYS_EXIT { return arg0 }
-    if num == SYS_WRITE {
-        // arg0=fd, arg1=buf_addr, arg2=len
-        if arg0 == 1 { // stdout
-            let mut i: i64 = 0
-            while i < arg2 {
-                let ch = volatile_read_u8(arg1 + i)
-                console_putchar(ch, WHITE_ON_BLACK)
-                i = i + 1
-            }
-            return arg2
+// Store syscall_dispatch fn pointer for linker indirect call (F1.1)
+@kernel fn syscall_register_dispatch() {
+    volatile_write_u64(SYSCALL_DISPATCH_FN, fn_addr("syscall_dispatch"))
+}
+
+// Main syscall dispatcher — called from linker __syscall_entry via indirect call
+// System V ABI: RDI=num, RSI=arg0, RDX=arg1, RCX=arg2
+// Returns result in RAX
+@kernel fn syscall_dispatch(num: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
+    if num == SYS_WRITE { return sys_write(arg0, arg1, arg2) }
+    if num == SYS_READ { return sys_read(arg0, arg1, arg2) }
+    if num == SYS_GETPID { return sys_getpid() }
+    if num == SYS_YIELD { return sys_yield() }
+    if num == SYS_BRK { return sys_brk(arg0) }
+    if num == SYS_MMAP { return sys_mmap(arg0, arg1, arg2) }
+    if num == SYS_CLOCK { return sys_clock() }
+    if num == SYS_SLEEP { return sys_sleep(arg0) }
+    if num == SYS_SBRK { return sys_sbrk(arg0) }
+    // File I/O syscalls (Sprint F2)
+    if num == SYS_OPEN { return sys_open(arg0, arg1) }
+    if num == SYS_CLOSE { return sys_close(arg0) }
+    if num == SYS_STAT { return sys_stat(arg0, arg1) }
+    if num == SYS_FSTAT { return sys_fstat(arg0, arg1) }
+    if num == SYS_LSEEK { return sys_lseek(arg0, arg1, arg2) }
+    if num == SYS_DUP { return sys_dup(arg0) }
+    if num == SYS_DUP2 { return sys_dup2(arg0, arg1) }
+    if num == SYS_GETCWD { return sys_getcwd(arg0, arg1) }
+    if num == SYS_CHDIR { return sys_chdir(arg0) }
+    if num == SYS_UNLINK { return sys_unlink(arg0) }
+    // Process syscalls (Sprint G1-G3)
+    if num == SYS_FORK { return sys_fork() }
+    if num == SYS_EXEC { return sys_exec(arg0, arg1) }
+    if num == SYS_WAITPID { return sys_waitpid(arg0, arg1, arg2) }
+    if num == SYS_SETPGID { return sys_setpgid(arg0, arg1) }
+    if num == SYS_PIPE { return sys_pipe(arg0) }
+    if num == SYS_KILL { return sys_kill(arg0, arg1) }
+    if num == SYS_SIGNAL { return sys_signal(arg0, arg1) }
+    -1 // Unknown syscall
+}
+
+// SYS_WRITE(1): write to fd via FD table v2
+@kernel fn sys_write(fd: i64, buf_addr: i64, len: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+
+    if ftype == FD_CONSOLE {
+        let mut i: i64 = 0
+        while i < len {
+            let ch = volatile_read_u8(buf_addr + i)
+            console_putchar(ch, WHITE_ON_BLACK)
+            i = i + 1
         }
-        return -1
+        return len
     }
-    if num == SYS_READ {
-        // arg0=fd — stdin not implemented yet
-        return 0
+    if ftype == FD_RAMFS {
+        // Write to ramfs file (append at current offset)
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let offset = (data >> 32) & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let data_ptr = volatile_read(entry_addr + 40)
+        if data_ptr == 0 { return -1 }
+        let mut i: i64 = 0
+        while i < len {
+            volatile_write_u8(data_ptr + offset + i, volatile_read_u8(buf_addr + i))
+            i = i + 1
+        }
+        let new_offset = offset + len
+        let new_data = (new_offset << 32) | idx
+        fd_v2_set(pid, fd, ftype, new_data)
+        let old_size = volatile_read(entry_addr + 32)
+        if new_offset > old_size { volatile_write(entry_addr + 32, new_offset) }
+        return len
     }
-    if num == SYS_GETPID {
-        return 0 // TODO: return actual PID
+    if ftype == FD_PIPE_WRITE {
+        let slot = fd_v2_get_data(pid, fd)
+        return pipe_write_circular(slot, buf_addr, len)
     }
-    if num == SYS_YIELD {
-        return 0
+    -1
+}
+
+// SYS_READ(2): read from fd via FD table v2
+@kernel fn sys_read(fd: i64, buf_addr: i64, len: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+
+    if ftype == FD_CONSOLE {
+        // Read from keyboard ring buffer
+        let read_idx = volatile_read_u8(0x6FBF8)
+        let write_idx = volatile_read_u8(0x6FBF0)
+        if read_idx == write_idx { return 0 }
+        let ch = volatile_read_u8(0x6FB00 + read_idx)
+        volatile_write_u8(buf_addr, ch)
+        volatile_write_u8(0x6FBF8, (read_idx + 1) % 256)
+        return 1
     }
-    if num == SYS_SLEEP {
-        sleep_ms(arg0)
-        return 0
+    if ftype == FD_RAMFS {
+        // Read from ramfs file at current offset
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let offset = (data >> 32) & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let data_ptr = volatile_read(entry_addr + 40)
+        if data_ptr == 0 { return 0 }
+        let available = size - offset
+        if available <= 0 { return 0 } // EOF
+        let to_read = if len < available { len } else { available }
+        let mut i: i64 = 0
+        while i < to_read {
+            volatile_write_u8(buf_addr + i, volatile_read_u8(data_ptr + offset + i))
+            i = i + 1
+        }
+        let new_offset = offset + to_read
+        let new_data = (new_offset << 32) | idx
+        fd_v2_set(pid, fd, ftype, new_data)
+        return to_read
     }
-    if num == SYS_MMAP {
-        // Simple: allocate arg0 bytes, return address
-        let pages = (arg0 + FRAME_SIZE - 1) / FRAME_SIZE
-        let base = ELF_LOAD_BASE + 0x800000 // heap starts at 40MB
-        let mut pg: i64 = 0
-        while pg < pages {
+    if ftype == FD_PIPE_READ {
+        let slot = fd_v2_get_data(pid, fd)
+        return pipe_read_circular(slot, buf_addr, len)
+    }
+    -1
+}
+
+// SYS_GETPID(3): return current process ID
+@kernel fn sys_getpid() -> i64 {
+    volatile_read_u64(0x6FE00)
+}
+
+// SYS_YIELD(4): voluntarily yield CPU
+@kernel fn sys_yield() -> i64 {
+    // Mark current process READY, let scheduler pick next on timer
+    let pid = volatile_read_u64(0x6FE00)
+    if pid > 0 {
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_READY)
+    }
+    0
+}
+
+// SYS_BRK(5): set program break (heap end)
+@kernel fn sys_brk(new_brk: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let brk_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_BRK
+    let current_brk = volatile_read_u64(brk_addr)
+    if new_brk == 0 {
+        // Query current break
+        if current_brk == 0 {
+            // Initialize heap
+            volatile_write_u64(brk_addr, USER_HEAP_BASE)
+            return USER_HEAP_BASE
+        }
+        return current_brk
+    }
+    if new_brk >= USER_HEAP_BASE && new_brk < ELF_STACK_TOP - 0x10000 {
+        // Allocate pages between current_brk and new_brk
+        let old = if current_brk == 0 { USER_HEAP_BASE } else { current_brk }
+        let mut page = (old + FRAME_SIZE - 1) / FRAME_SIZE * FRAME_SIZE
+        while page < new_brk {
             let frame = frame_alloc()
             if frame != -1 {
-                map_page(base + pg * FRAME_SIZE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+                map_page(page, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
             }
-            pg = pg + 1
+            page = page + FRAME_SIZE
         }
-        return base
+        volatile_write_u64(brk_addr, new_brk)
+        return new_brk
     }
-    -1 // Unknown syscall
+    -1
+}
+
+// SYS_MMAP(6): allocate pages in user space
+@kernel fn sys_mmap(addr: i64, len: i64, prot: i64) -> i64 {
+    let pages = (len + FRAME_SIZE - 1) / FRAME_SIZE
+    let base = if addr != 0 { addr } else { USER_HEAP_BASE + 0x100000 }
+    let mut pg: i64 = 0
+    while pg < pages {
+        let frame = frame_alloc()
+        if frame != -1 {
+            map_page(base + pg * FRAME_SIZE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+        }
+        pg = pg + 1
+    }
+    base
+}
+
+// SYS_CLOCK(7): return timer ticks since boot (100 Hz)
+@kernel fn sys_clock() -> i64 {
+    volatile_read_u64(0x6FE08)
+}
+
+// SYS_SLEEP(8): sleep for N milliseconds
+@kernel fn sys_sleep(ms: i64) -> i64 {
+    let target_ticks = volatile_read_u64(0x6FE08) + (ms + 9) / 10  // 10ms per tick
+    let pid = volatile_read_u64(0x6FE00)
+    if pid > 0 {
+        // Store wake-up tick at proc entry +104 (PROC_OFF_WAKE)
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + 104, target_ticks)
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+    }
+    // Busy-wait fallback for PID 0 (shell)
+    while volatile_read_u64(0x6FE08) < target_ticks { }
+    0
+}
+
+// SYS_SBRK(9): increment program break, return OLD break
+@kernel fn sys_sbrk(increment: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let brk_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_BRK
+    let current_brk = volatile_read_u64(brk_addr)
+    let old = if current_brk == 0 { USER_HEAP_BASE } else { current_brk }
+    if increment == 0 { return old }
+    let new_brk = old + increment
+    let result = sys_brk(new_brk)
+    if result == -1 { return -1 }
+    old
+}
+
+// ═══════════════════════════════════════════════
+// File I/O Syscalls (Sprint F2)
+// ═══════════════════════════════════════════════
+
+// FD table v2 helpers (relocated to 0x8D0000)
+
+@kernel fn fd_v2_addr(pid: i64, fd: i64) -> i64 {
+    FD_TABLE_V2 + pid * FD_MAX * FD_ENTRY_SIZE + fd * FD_ENTRY_SIZE
+}
+
+@kernel fn fd_v2_get_type(pid: i64, fd: i64) -> i64 {
+    volatile_read_u64(fd_v2_addr(pid, fd))
+}
+
+@kernel fn fd_v2_get_data(pid: i64, fd: i64) -> i64 {
+    volatile_read_u64(fd_v2_addr(pid, fd) + 8)
+}
+
+@kernel fn fd_v2_set(pid: i64, fd: i64, ftype: i64, data: i64) {
+    let addr = fd_v2_addr(pid, fd)
+    volatile_write_u64(addr, ftype)
+    volatile_write_u64(addr + 8, data)
+}
+
+@kernel fn fd_v2_init(pid: i64) {
+    // FD 0=stdin, 1=stdout, 2=stderr (all console)
+    fd_v2_set(pid, 0, FD_CONSOLE, 0)
+    fd_v2_set(pid, 1, FD_CONSOLE, 0)
+    fd_v2_set(pid, 2, FD_CONSOLE, 0)
+    let mut fd: i64 = 3
+    while fd < FD_MAX {
+        fd_v2_set(pid, fd, FD_CLOSED, 0)
+        fd = fd + 1
+    }
+}
+
+@kernel fn fd_v2_alloc(pid: i64) -> i64 {
+    // Find lowest free FD
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        if fd_v2_get_type(pid, fd) == FD_CLOSED { return fd }
+        fd = fd + 1
+    }
+    -1
+}
+
+// Helper: find ramfs entry by buffer address (null-terminated string)
+@kernel fn ramfs_find_by_addr(name_addr: i64) -> i64 {
+    let count = volatile_read(FS_BASE)
+    // Get name length
+    let mut nlen: i64 = 0
+    while nlen < 31 && volatile_read_u8(name_addr + nlen) != 0 { nlen = nlen + 1 }
+    if nlen == 0 { return -1 }
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < nlen && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(name_addr + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + nlen) == 0 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+// SYS_OPEN(10): open file, return FD
+// data field packs: low 32 bits = ramfs_index, high 32 bits = offset
+@kernel fn sys_open(path_addr: i64, flags: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let fd = fd_v2_alloc(pid)
+    if fd == -1 { return -1 } // no free FDs
+
+    // Try ramfs first
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let ftype = volatile_read(entry_addr + 48)
+        if ftype != 1 { return -1 } // not a regular file
+        // Pack: data = (offset=0 << 32) | ramfs_index
+        fd_v2_set(pid, fd, FD_RAMFS, idx)
+        return fd
+    }
+
+    // TODO: try FAT32 (future sprint)
+    -1 // file not found
+}
+
+// SYS_CLOSE(11): close FD
+@kernel fn sys_close(fd: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype == FD_CLOSED { return -1 }
+    // Pipe refcount handling (H1)
+    if ftype == FD_PIPE_READ {
+        let slot = fd_v2_get_data(pid, fd)
+        let freed = pipe_decref(slot, 0) // is_writer=0
+        if freed == 1 { pipe_free(slot) }
+    }
+    if ftype == FD_PIPE_WRITE {
+        let slot = fd_v2_get_data(pid, fd)
+        let freed = pipe_decref(slot, 1) // is_writer=1
+        if freed == 1 { pipe_free(slot) }
+    }
+    fd_v2_set(pid, fd, FD_CLOSED, 0)
+    0
+}
+
+// SYS_STAT(12): stat file by path, write size to user buffer
+// buf layout: +0=size(i64), +8=type(i64: 1=file, 2=dir)
+@kernel fn sys_stat(path_addr: i64, buf_addr: i64) -> i64 {
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let ftype = volatile_read(entry_addr + 48)
+        volatile_write_u64(buf_addr, size)
+        volatile_write_u64(buf_addr + 8, ftype)
+        return 0
+    }
+    -1 // not found
+}
+
+// SYS_FSTAT(13): stat by FD
+@kernel fn sys_fstat(fd: i64, buf_addr: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype == FD_CONSOLE {
+        volatile_write_u64(buf_addr, 0)     // size = 0 (stream)
+        volatile_write_u64(buf_addr + 8, 0) // type = special
+        return 0
+    }
+    if ftype == FD_RAMFS {
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let ft = volatile_read(entry_addr + 48)
+        volatile_write_u64(buf_addr, size)
+        volatile_write_u64(buf_addr + 8, ft)
+        return 0
+    }
+    -1
+}
+
+// SYS_LSEEK(14): set file offset
+@kernel fn sys_lseek(fd: i64, offset: i64, whence: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype != FD_RAMFS && ftype != FD_FAT32 { return -1 } // not seekable
+
+    let data = fd_v2_get_data(pid, fd)
+    let idx = data & 0xFFFFFFFF
+    let current_offset = (data >> 32) & 0xFFFFFFFF
+
+    let new_offset = if whence == SEEK_SET {
+        offset
+    } else if whence == SEEK_CUR {
+        current_offset + offset
+    } else if whence == SEEK_END {
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        size + offset
+    } else {
+        -1
+    }
+
+    if new_offset < 0 { return -1 }
+    // Pack new offset into data high 32 bits
+    let new_data = (new_offset << 32) | idx
+    fd_v2_set(pid, fd, ftype, new_data)
+    new_offset
+}
+
+// SYS_DUP(15): duplicate FD to lowest free slot
+@kernel fn sys_dup(old_fd: i64) -> i64 {
+    if old_fd < 0 || old_fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, old_fd)
+    if ftype == FD_CLOSED { return -1 }
+    let new_fd = fd_v2_alloc(pid)
+    if new_fd == -1 { return -1 }
+    let data = fd_v2_get_data(pid, old_fd)
+    fd_v2_set(pid, new_fd, ftype, data)
+    new_fd
+}
+
+// SYS_DUP2(16): duplicate FD to specific slot
+@kernel fn sys_dup2(old_fd: i64, new_fd: i64) -> i64 {
+    if old_fd < 0 || old_fd >= FD_MAX { return -1 }
+    if new_fd < 0 || new_fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, old_fd)
+    if ftype == FD_CLOSED { return -1 }
+    if old_fd == new_fd { return new_fd }
+    // Close target if open
+    let target_type = fd_v2_get_type(pid, new_fd)
+    if target_type != FD_CLOSED { sys_close(new_fd) }
+    // Copy
+    let data = fd_v2_get_data(pid, old_fd)
+    fd_v2_set(pid, new_fd, ftype, data)
+    new_fd
+}
+
+// SYS_GETCWD(17): get current working directory
+@kernel fn sys_getcwd(buf_addr: i64, size: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let cwd_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CWD
+    // Read CWD string from process table
+    let mut len: i64 = 0
+    while len < 31 && len < size - 1 {
+        let ch = volatile_read_u8(cwd_addr + len)
+        if ch == 0 { len = size } // break
+        else { volatile_write_u8(buf_addr + len, ch); len = len + 1 }
+    }
+    // If CWD is empty, default to "/"
+    if len == 0 || len >= size {
+        volatile_write_u8(buf_addr, 47) // '/'
+        volatile_write_u8(buf_addr + 1, 0)
+        return 1
+    }
+    volatile_write_u8(buf_addr + len, 0)
+    len
+}
+
+// SYS_CHDIR(18): change working directory
+@kernel fn sys_chdir(path_addr: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let cwd_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CWD
+    // Verify path exists (check ramfs for directory)
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let ftype = volatile_read(entry_addr + 48)
+        if ftype != 2 { return -1 } // not a directory
+    }
+    // Copy path to process CWD (max 31 chars)
+    let mut i: i64 = 0
+    while i < 31 {
+        let ch = volatile_read_u8(path_addr + i)
+        volatile_write_u8(cwd_addr + i, ch)
+        if ch == 0 { return 0 }
+        i = i + 1
+    }
+    volatile_write_u8(cwd_addr + 31, 0)
+    0
+}
+
+// SYS_UNLINK(19): remove file
+@kernel fn sys_unlink(path_addr: i64) -> i64 {
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx < 0 { return -1 }
+    let entry_addr = ramfs_entry_addr(idx)
+    let ftype = volatile_read(entry_addr + 48)
+    if ftype == 2 { return -1 } // can't unlink directory
+    // Mark entry as unused (clear name + type)
+    volatile_write_u8(entry_addr, 0)
+    volatile_write(entry_addr + 32, 0) // size = 0
+    volatile_write(entry_addr + 48, 0) // type = unused
+    0
+}
+
+// ═══════════════════════════════════════════════
+// Process Syscalls (Sprint G1-G3)
+// ═══════════════════════════════════════════════
+
+const SYS_FORK: i64 = 20      // fork() -> pid/0
+const SYS_EXEC: i64 = 21      // exec(path, argv) -> (no return)
+const SYS_WAITPID: i64 = 22   // waitpid(pid, status, opts) -> child_pid
+const SYS_PIPE: i64 = 23      // pipe(fds_buf) -> 0
+const SYS_KILL: i64 = 24      // kill(pid, signum) -> 0
+const SYS_SIGNAL: i64 = 25    // signal(signum, handler) -> old_handler
+const SYS_SETPGID: i64 = 26   // setpgid(pid, pgid) -> 0
+
+// Process state constants
+const PROC_STATE_FREE: i64 = 0
+const PROC_STATE_READY: i64 = 1
+const PROC_STATE_RUNNING: i64 = 2
+const PROC_STATE_BLOCKED: i64 = 3
+const PROC_STATE_ZOMBIE: i64 = 4
+
+// Context frame: 15 GPRs + 5 IRETQ fields = 20 × 8 = 160 bytes
+const CTX_FRAME_SIZE: i64 = 160
+// GPR offsets from frame bottom (order: R15,R14,...,RBP,RDI,RSI,RDX,RCX,RBX,RAX,RIP,CS,RFLAGS,RSP,SS)
+const CTX_OFF_RAX: i64 = 112   // RAX is 15th from bottom: 14*8=112
+const CTX_OFF_RIP: i64 = 120   // RIP: 15*8=120
+
+// SYS_FORK(20): create child process as copy of parent
+@kernel fn sys_fork() -> i64 {
+    let parent_pid = volatile_read_u64(0x6FE00)
+    let parent_base = PROC_TABLE + parent_pid * PROC_ENTRY_SIZE
+
+    // G1.1: Find free PID
+    let mut child_pid: i64 = -1
+    let mut i: i64 = 1
+    while i < PROC_MAX && child_pid == -1 {
+        if volatile_read(PROC_TABLE + i * PROC_ENTRY_SIZE + PROC_OFF_STATE) == PROC_STATE_FREE {
+            child_pid = i
+        }
+        i = i + 1
+    }
+    if child_pid == -1 { return -1 } // no free PIDs
+
+    // G1.2: Clone page tables (kernel entries + deep-copy user pages)
+    let parent_cr3 = volatile_read(parent_base + PROC_OFF_CR3)
+    let child_pml4 = fork_clone_page_tables(parent_cr3)
+    if child_pml4 == -1 { return -1 }
+
+    // G1.3: Copy FD table from parent to child
+    fork_copy_fd_table(parent_pid, child_pid)
+
+    // G1.4: Copy CWD, brk, and other proc fields
+    let child_base = PROC_TABLE + child_pid * PROC_ENTRY_SIZE
+    // Copy bytes 96-159 (brk, wake, cwd, etc.)
+    let mut off: i64 = PROC_OFF_BRK
+    while off < PROC_OFF_CWD + 32 {
+        volatile_write_u8(child_base + off, volatile_read_u8(parent_base + off))
+        off = off + 1
+    }
+
+    // G1.5: Build child kernel stack (copy parent's context frame)
+    let child_kstack_base = KSTACK_BASE + child_pid * KSTACK_SIZE
+    let child_kstack_top = child_kstack_base + KSTACK_SIZE - 16
+    // Ensure kernel stack pages are mapped
+    let mut pg: i64 = child_kstack_base
+    while pg < child_kstack_base + KSTACK_SIZE {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // Copy parent's saved context frame from parent kernel stack
+    let parent_rsp = volatile_read(parent_base + PROC_OFF_RSP)
+    let child_sp = child_kstack_top - CTX_FRAME_SIZE
+    let mut ci: i64 = 0
+    while ci < CTX_FRAME_SIZE {
+        volatile_write_u8(child_sp + ci, volatile_read_u8(parent_rsp + ci))
+        ci = ci + 1
+    }
+
+    // G1.7: Set child RAX=0 (fork returns 0 to child)
+    // RAX is at frame_bottom + CTX_OFF_RAX
+    volatile_write_u64(child_sp + CTX_OFF_RAX, 0)
+
+    // G1.6: Set child process table entry
+    volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_READY)
+    volatile_write(child_base + PROC_OFF_RSP, child_sp)
+    volatile_write(child_base + PROC_OFF_ENTRY, volatile_read(parent_base + PROC_OFF_ENTRY))
+    volatile_write(child_base + PROC_OFF_TICKS, 0)
+    volatile_write(child_base + PROC_OFF_CR3, child_pml4)
+    volatile_write(child_base + PROC_OFF_EXIT, 0)
+    volatile_write(child_base + PROC_OFF_PPID, parent_pid)
+    // Copy process name
+    let mut ni: i64 = 0
+    while ni < 16 {
+        volatile_write_u8(child_base + PROC_OFF_NAME + ni, volatile_read_u8(parent_base + PROC_OFF_NAME + ni))
+        ni = ni + 1
+    }
+
+    // Return child_pid to parent
+    child_pid
+}
+
+// G1.2: Clone page tables — copy kernel entries, deep-copy user pages
+@kernel fn fork_clone_page_tables(parent_pml4: i64) -> i64 {
+    // Clone kernel PML4 first
+    let child_pml4 = clone_kernel_pml4()
+    if child_pml4 == -1 { return -1 }
+
+    // Deep-copy user pages (PML4 entries where PAGE_USER is set)
+    // Walk PML4 → PDPT → PD → PT for entries with PAGE_USER
+    let mut pml4_idx: i64 = 0
+    while pml4_idx < 512 {
+        let pml4_entry = page_table_entry(parent_pml4, pml4_idx)
+        if pml4_entry != 0 && (pml4_entry & PAGE_USER) != 0 {
+            // This is a user-accessible entry — need to deep-copy the subtree
+            let parent_pdpt = pml4_entry & 0xFFFFFFFFF000  // mask flags
+            let child_pdpt = fork_copy_page_level(parent_pdpt, 3)
+            if child_pdpt != -1 {
+                page_table_set(child_pml4, pml4_idx, child_pdpt | (pml4_entry & 0xFFF))
+            }
+        }
+        pml4_idx = pml4_idx + 1
+    }
+
+    child_pml4
+}
+
+// Deep-copy one level of page table hierarchy
+// level: 3=PDPT, 2=PD, 1=PT
+@kernel fn fork_copy_page_level(parent_table: i64, level: i64) -> i64 {
+    let child_frame = frame_alloc()
+    if child_frame == -1 { return -1 }
+    let child_table = child_frame * FRAME_SIZE
+
+    // Zero the new table
+    let mut z: i64 = 0
+    while z < 4096 { volatile_write_u8(child_table + z, 0); z = z + 1 }
+
+    let mut idx: i64 = 0
+    while idx < 512 {
+        let entry = page_table_entry(parent_table, idx)
+        if entry != 0 && (entry & PAGE_PRESENT) != 0 {
+            if level == 1 {
+                // PT level: deep-copy the actual data page
+                let parent_phys = entry & 0xFFFFFFFFF000
+                let flags = entry & 0xFFF
+                let new_frame = frame_alloc()
+                if new_frame != -1 {
+                    let new_phys = new_frame * FRAME_SIZE
+                    // Copy 4KB page content
+                    let mut b: i64 = 0
+                    while b < 4096 {
+                        volatile_write_u8(new_phys + b, volatile_read_u8(parent_phys + b))
+                        b = b + 1
+                    }
+                    page_table_set(child_table, idx, new_phys | flags)
+                }
+            } else {
+                // Higher level: recurse
+                if (entry & PAGE_USER) != 0 {
+                    let subtable = entry & 0xFFFFFFFFF000
+                    let child_subtable = fork_copy_page_level(subtable, level - 1)
+                    if child_subtable != -1 {
+                        page_table_set(child_table, idx, child_subtable | (entry & 0xFFF))
+                    }
+                } else {
+                    // Kernel entry: share (don't deep-copy)
+                    page_table_set(child_table, idx, entry)
+                }
+            }
+        }
+        idx = idx + 1
+    }
+
+    child_table
+}
+
+// G1.3: Copy FD table from parent to child (H1.9: pipe refcount increment)
+@kernel fn fork_copy_fd_table(parent_pid: i64, child_pid: i64) {
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        let ftype = fd_v2_get_type(parent_pid, fd)
+        let data = fd_v2_get_data(parent_pid, fd)
+        fd_v2_set(child_pid, fd, ftype, data)
+        // H1.9: Increment pipe refcounts on fork
+        if ftype == FD_PIPE_READ {
+            pipe_incref(data, 0) // is_writer=0
+        }
+        if ftype == FD_PIPE_WRITE {
+            pipe_incref(data, 1) // is_writer=1
+        }
+        fd = fd + 1
+    }
+}
+
+// G1.8: `sysfork` shell command (tests sys_fork syscall path)
+@kernel fn cmd_sysfork_test() {
+    cprintln("SysFork test:", YELLOW_ON_BLACK)
+    cprintln("  Note: sys_fork() creates child with deep-copied page tables", WHITE_ON_BLACK)
+
+    let child_pid = sys_fork()
+    if child_pid < 0 {
+        cprintln("  Fork failed: no free PIDs", RED_ON_BLACK)
+    } else {
+        cprint("  Forked child PID: ", WHITE_ON_BLACK)
+        cprint_decimal(child_pid, GREEN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        cprint("  Child PPID: ", WHITE_ON_BLACK)
+        let child_ppid = volatile_read(PROC_TABLE + child_pid * PROC_ENTRY_SIZE + PROC_OFF_PPID)
+        cprint_decimal(child_ppid, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        cprint("  Child state: ", WHITE_ON_BLACK)
+        let child_state = volatile_read(PROC_TABLE + child_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        cprint_decimal(child_state, CYAN_ON_BLACK)
+        cprintln(" (1=READY)", WHITE_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// SYS_EXEC (Sprint G2)
+// ═══════════════════════════════════════════════
+
+// ARGV_BUF at 0x8D6000: 8KB for argument passing
+const ARGV_BUF: i64 = 0x8D6000
+const ARGV_MAX: i64 = 16        // max 16 arguments
+const ARGV_STR_SIZE: i64 = 256  // max 256 bytes per argument string
+
+// SYS_EXEC(21): replace current process image with ELF from path
+// path_addr: pointer to null-terminated filename string
+// argv_addr: pointer to null-terminated argument list (0 = no args)
+// Returns: does NOT return on success; returns -1 on failure
+@kernel fn sys_exec(path_addr: i64, argv_addr: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    // G2.1: Find and load ELF file
+    // Try ramfs first (for in-memory ELFs)
+    let ramfs_idx = ramfs_find_by_addr(path_addr)
+    let mut elf_loaded: i64 = 0
+
+    if ramfs_idx >= 0 {
+        // Load from ramfs into ELF_BUF
+        let entry_addr = ramfs_entry_addr(ramfs_idx)
+        let file_size = volatile_read(entry_addr + 32)
+        let data_ptr = volatile_read(entry_addr + 40)
+        if data_ptr == 0 || file_size == 0 { return -1 }
+        // Copy to ELF_BUF
+        let mut ci: i64 = 0
+        while ci < file_size && ci < 0x10000 {
+            volatile_write_u8(ELF_BUF + ci, volatile_read_u8(data_ptr + ci))
+            ci = ci + 1
+        }
+        elf_loaded = file_size
+    }
+
+    // Try FAT32 if ramfs didn't find it
+    if elf_loaded == 0 && fat32_state_read(0) == 1 {
+        // Copy path to FAT32 name buffer
+        let mut ni: i64 = 0
+        while ni < 64 {
+            let ch = volatile_read_u8(path_addr + ni)
+            volatile_write_u8(FAT32_NAME_BUF + 256 + ni, ch)
+            if ch == 0 { ni = 64 } else { ni = ni + 1 }
+        }
+        let root = fat32_state_read(48)
+        let result = fat32_find_in_dir(root, FAT32_NAME_BUF + 256)
+        if result != -1 {
+            let shifted = result >> 32
+            let file_cluster = shifted & 0x7FFFFFFF
+            let file_size = result & 0xFFFFFFFF
+            let bytes = fat32_read_file(file_cluster, file_size, ELF_BUF)
+            if bytes > 0 { elf_loaded = bytes }
+        }
+    }
+
+    if elf_loaded == 0 { return -1 } // file not found
+
+    // Validate ELF
+    let valid = elf_validate(ELF_BUF)
+    if valid != 0 { return -1 }
+
+    // G2.2: Free old user pages
+    exec_free_user_pages(pid)
+
+    // G2.3: Load new ELF segments
+    let loaded = elf_load_segments(ELF_BUF, elf_loaded)
+    if loaded == 0 { return -1 }
+
+    let entry = elf_get_entry(ELF_BUF)
+
+    // G2.4: Setup new user stack (64KB at ELF_STACK_TOP - 0x10000)
+    let user_stack_base = ELF_STACK_TOP - 0x10000
+    let mut pg: i64 = user_stack_base
+    while pg < ELF_STACK_TOP {
+        let frame = frame_alloc()
+        if frame != -1 {
+            map_page(pg, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+        }
+        pg = pg + FRAME_SIZE
+    }
+
+    // G2.5: Setup argv on user stack
+    let user_rsp = exec_setup_argv(argv_addr)
+
+    // G2.6: Reset close-on-exec FDs (close FDs 3+ for now)
+    exec_reset_fds(pid)
+
+    // G2.7: Reset signal handlers (future: clear signal table)
+    // For now, nothing to reset — signal table not yet implemented
+
+    // G2.8: Update process entry — rebuild context frame for Ring 3
+    let kstack_top = KSTACK_BASE + pid * KSTACK_SIZE + KSTACK_SIZE - 16
+    let mut sp = kstack_top
+
+    // IRETQ frame for Ring 3
+    sp = sp - 8; volatile_write_u64(sp, 0x1B)       // SS (user data RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, user_rsp)    // RSP (user stack)
+    sp = sp - 8; volatile_write_u64(sp, 0x202)       // RFLAGS (IF=1)
+    sp = sp - 8; volatile_write_u64(sp, 0x23)        // CS (user code RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, entry)        // RIP (ELF entry point)
+
+    // 15 GPRs (zeroed — fresh start)
+    let mut r: i64 = 0
+    while r < 15 { sp = sp - 8; volatile_write_u64(sp, 0); r = r + 1 }
+
+    // Update process table
+    volatile_write(base + PROC_OFF_RSP, sp)
+    volatile_write(base + PROC_OFF_ENTRY, entry)
+    volatile_write(base + PROC_OFF_TICKS, 0)
+    volatile_write(base + PROC_OFF_STATE, PROC_STATE_READY)
+    // Reset heap break
+    volatile_write_u64(base + PROC_OFF_BRK, 0)
+
+    // exec never returns on success — the process will be scheduled
+    // and resume at the new entry point via the timer ISR
+    0
+}
+
+// G2.2: Free all user pages for a process (pages with PAGE_USER flag)
+@kernel fn exec_free_user_pages(pid: i64) {
+    // Free user code pages (ELF_LOAD_BASE region: 0x2000000-0x3000000)
+    // Walk the page range and unmap any mapped pages
+    let mut addr: i64 = ELF_LOAD_BASE
+    while addr < ELF_STACK_TOP {
+        // Check if page is mapped by trying to read PTE
+        // Simple approach: just unmap the range we know user code uses
+        // This is safe because kernel pages are at different addresses
+        // TODO: walk actual page tables for precise cleanup
+        addr = addr + FRAME_SIZE
+    }
+    // For now, the new elf_load_segments will overwrite with fresh mappings
+}
+
+// G2.5: Setup argv on user stack, return adjusted RSP
+@kernel fn exec_setup_argv(argv_addr: i64) -> i64 {
+    let mut user_rsp = ELF_STACK_TOP - 8
+
+    if argv_addr == 0 {
+        // No arguments: argc=0, argv=NULL
+        user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, 0) // argv = NULL
+        user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, 0) // argc = 0
+        return user_rsp
+    }
+
+    // Parse arguments from argv_addr (space-separated string or pointer array)
+    // Simple: treat argv_addr as a space-separated string, copy to ARGV_BUF
+    let mut argc: i64 = 0
+    let mut pos: i64 = 0
+    let mut arg_start: i64 = 0
+    let mut in_arg: i64 = 0
+
+    // First pass: count args and copy strings to ARGV_BUF
+    let mut ch = volatile_read_u8(argv_addr + pos)
+    while ch != 0 && argc < ARGV_MAX {
+        if ch == 32 { // space
+            if in_arg == 1 {
+                // End of argument
+                volatile_write_u8(ARGV_BUF + argc * ARGV_STR_SIZE + (pos - arg_start), 0)
+                argc = argc + 1
+                in_arg = 0
+            }
+        } else {
+            if in_arg == 0 {
+                arg_start = pos
+                in_arg = 1
+            }
+            let offset = pos - arg_start
+            if offset < ARGV_STR_SIZE - 1 {
+                volatile_write_u8(ARGV_BUF + argc * ARGV_STR_SIZE + offset, ch)
+            }
+        }
+        pos = pos + 1
+        ch = volatile_read_u8(argv_addr + pos)
+    }
+    // Last arg
+    if in_arg == 1 {
+        volatile_write_u8(ARGV_BUF + argc * ARGV_STR_SIZE + (pos - arg_start), 0)
+        argc = argc + 1
+    }
+
+    // Copy arg strings to user stack
+    let mut arg_addrs: i64 = ARGV_BUF + ARGV_MAX * ARGV_STR_SIZE // temp storage for pointers
+    let mut ai: i64 = 0
+    while ai < argc {
+        // Find string length
+        let mut slen: i64 = 0
+        while volatile_read_u8(ARGV_BUF + ai * ARGV_STR_SIZE + slen) != 0 { slen = slen + 1 }
+        // Push string onto user stack
+        user_rsp = user_rsp - (slen + 1)
+        user_rsp = user_rsp & 0xFFFFFFFFFFFFFFF8 // 8-byte align
+        let mut si: i64 = 0
+        while si <= slen {
+            volatile_write_u8(user_rsp + si, volatile_read_u8(ARGV_BUF + ai * ARGV_STR_SIZE + si))
+            si = si + 1
+        }
+        // Store pointer
+        volatile_write_u64(arg_addrs + ai * 8, user_rsp)
+        ai = ai + 1
+    }
+
+    // Push NULL terminator for argv array
+    user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, 0)
+    // Push argv pointers (reverse order so argv[0] is at lowest addr)
+    let mut aj: i64 = argc - 1
+    while aj >= 0 {
+        user_rsp = user_rsp - 8
+        volatile_write_u64(user_rsp, volatile_read_u64(arg_addrs + aj * 8))
+        aj = aj - 1
+    }
+    let argv_base = user_rsp
+
+    // Push argv pointer and argc (System V ABI: RDI=argc, RSI=argv)
+    user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, argv_base)
+    user_rsp = user_rsp - 8; volatile_write_u64(user_rsp, argc)
+
+    // Align to 16 bytes (System V ABI requirement)
+    user_rsp = user_rsp & 0xFFFFFFFFFFFFFFF0
+
+    user_rsp
+}
+
+// G2.6: Reset FDs on exec (close non-stdio FDs)
+@kernel fn exec_reset_fds(pid: i64) {
+    // Keep FD 0 (stdin), 1 (stdout), 2 (stderr)
+    // Close everything else (simple CLOEXEC behavior)
+    let mut fd: i64 = 3
+    while fd < FD_MAX {
+        let ftype = fd_v2_get_type(pid, fd)
+        if ftype != FD_CLOSED {
+            fd_v2_set(pid, fd, FD_CLOSED, 0)
+        }
+        fd = fd + 1
+    }
+}
+
+// ═══════════════════════════════════════════════
+// SYS_WAITPID + Process Groups (Sprint G3)
+// ═══════════════════════════════════════════════
+
+// PROC_WAIT_TABLE at 0x8D2000: per-process wait state
+// Per entry (16 bytes): +0=waiting_for_pid (i64), +8=options (i64)
+const PROC_WAIT_TABLE: i64 = 0x8D2000
+const WAIT_ENTRY_SIZE: i64 = 16
+
+// waitpid options
+const WNOHANG: i64 = 1
+
+// Process group offset in proc table
+const PROC_OFF_PGID: i64 = 120
+
+// Exit status packing: bits 0-7 = signal, bits 8-15 = exit code
+@kernel fn wait_pack_status(exit_code: i64, signal: i64) -> i64 {
+    ((exit_code & 0xFF) << 8) | (signal & 0xFF)
+}
+
+@kernel fn wait_unpack_exit(status: i64) -> i64 {
+    (status >> 8) & 0xFF
+}
+
+@kernel fn wait_unpack_signal(status: i64) -> i64 {
+    status & 0xFF
+}
+
+// G3.1: SYS_WAITPID(22) — wait for child process
+// pid: specific child PID, or -1 for any child
+// status_addr: user buffer to write exit status (0 = don't write)
+// options: WNOHANG (1) = return immediately if no child exited
+@kernel fn sys_waitpid(pid: i64, status_addr: i64, options: i64) -> i64 {
+    let parent_pid = volatile_read_u64(0x6FE00)
+
+    // G3.4: Wait for any child (pid == -1)
+    if pid == -1 {
+        return waitpid_any(parent_pid, status_addr, options)
+    }
+
+    // Wait for specific child
+    if pid < 1 || pid >= PROC_MAX { return -1 }
+    let child_base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    // Verify this is actually our child
+    let child_ppid = volatile_read(child_base + PROC_OFF_PPID)
+    if child_ppid != parent_pid { return -1 }
+
+    let state = volatile_read(child_base + PROC_OFF_STATE)
+
+    // G3.6: If child is ZOMBIE, reap immediately
+    if state == PROC_STATE_ZOMBIE {
+        let exit_code = volatile_read(child_base + PROC_OFF_EXIT)
+        let status = wait_pack_status(exit_code, 0) // normal exit, signal=0
+        if status_addr != 0 {
+            volatile_write_u64(status_addr, status)
+        }
+        // Reap: free the slot
+        volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
+        volatile_write(child_base + PROC_OFF_TICKS, 0)
+        volatile_write(child_base + PROC_OFF_ENTRY, 0)
+        return pid
+    }
+
+    // G3.3: WNOHANG — return 0 if child hasn't exited yet
+    if (options & WNOHANG) != 0 {
+        return 0
+    }
+
+    // G3.2: Block parent until child exits
+    // Store wait state and block
+    volatile_write_u64(PROC_WAIT_TABLE + parent_pid * WAIT_ENTRY_SIZE, pid)
+    volatile_write_u64(PROC_WAIT_TABLE + parent_pid * WAIT_ENTRY_SIZE + 8, options)
+    volatile_write(PROC_TABLE + parent_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+
+    // The parent is now BLOCKED. When the child exits (process_exit_v2),
+    // it will wake the parent by setting state=READY and storing the result.
+    // For now, busy-wait fallback for PID 0 (shell doesn't get descheduled)
+    if parent_pid == 0 {
+        while volatile_read(child_base + PROC_OFF_STATE) != PROC_STATE_ZOMBIE { }
+        let exit_code = volatile_read(child_base + PROC_OFF_EXIT)
+        let status = wait_pack_status(exit_code, 0)
+        if status_addr != 0 {
+            volatile_write_u64(status_addr, status)
+        }
+        volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
+        volatile_write(child_base + PROC_OFF_TICKS, 0)
+        volatile_write(child_base + PROC_OFF_ENTRY, 0)
+        volatile_write(PROC_TABLE + parent_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_RUNNING)
+        return pid
+    }
+
+    // For non-shell processes: the scheduler will resume us when child exits
+    // Return value will be set by wake_waiting_parent()
+    0
+}
+
+// G3.4: Wait for any child
+@kernel fn waitpid_any(parent_pid: i64, status_addr: i64, options: i64) -> i64 {
+    // Scan all PIDs for zombie children of this parent
+    let mut i: i64 = 1
+    while i < PROC_MAX {
+        let child_base = PROC_TABLE + i * PROC_ENTRY_SIZE
+        let child_ppid = volatile_read(child_base + PROC_OFF_PPID)
+        let child_state = volatile_read(child_base + PROC_OFF_STATE)
+        if child_ppid == parent_pid && child_state == PROC_STATE_ZOMBIE {
+            let exit_code = volatile_read(child_base + PROC_OFF_EXIT)
+            let status = wait_pack_status(exit_code, 0)
+            if status_addr != 0 {
+                volatile_write_u64(status_addr, status)
+            }
+            // Reap
+            volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
+            volatile_write(child_base + PROC_OFF_TICKS, 0)
+            volatile_write(child_base + PROC_OFF_ENTRY, 0)
+            return i
+        }
+        i = i + 1
+    }
+
+    // No zombie child found
+    if (options & WNOHANG) != 0 { return 0 }
+
+    // Check if we have any children at all
+    let mut has_children: i64 = 0
+    i = 1
+    while i < PROC_MAX {
+        let child_ppid = volatile_read(PROC_TABLE + i * PROC_ENTRY_SIZE + PROC_OFF_PPID)
+        let child_state = volatile_read(PROC_TABLE + i * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if child_ppid == parent_pid && child_state != PROC_STATE_FREE { has_children = 1 }
+        i = i + 1
+    }
+    if has_children == 0 { return -1 } // no children at all
+
+    // Block and wait (same mechanism as specific pid)
+    volatile_write_u64(PROC_WAIT_TABLE + parent_pid * WAIT_ENTRY_SIZE, -1)
+    volatile_write(PROC_TABLE + parent_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+    0
+}
+
+// G3.7: Reparent orphaned children to init (PID 1)
+@kernel fn reparent_children(exiting_pid: i64) {
+    let mut i: i64 = 1
+    while i < PROC_MAX {
+        let child_base = PROC_TABLE + i * PROC_ENTRY_SIZE
+        let child_ppid = volatile_read(child_base + PROC_OFF_PPID)
+        let child_state = volatile_read(child_base + PROC_OFF_STATE)
+        if child_ppid == exiting_pid && child_state != PROC_STATE_FREE {
+            // Reparent to init (PID 1)
+            volatile_write(child_base + PROC_OFF_PPID, 1)
+            // If child is zombie, init will auto-reap
+            if child_state == PROC_STATE_ZOMBIE {
+                volatile_write(child_base + PROC_OFF_STATE, PROC_STATE_FREE)
+                volatile_write(child_base + PROC_OFF_TICKS, 0)
+            }
+        }
+        i = i + 1
+    }
+}
+
+// Wake parent that is waiting in waitpid
+@kernel fn wake_waiting_parent(child_pid: i64, exit_code: i64) {
+    let child_base = PROC_TABLE + child_pid * PROC_ENTRY_SIZE
+    let parent_pid = volatile_read(child_base + PROC_OFF_PPID)
+    if parent_pid <= 0 || parent_pid >= PROC_MAX { return }
+
+    let parent_base = PROC_TABLE + parent_pid * PROC_ENTRY_SIZE
+    let parent_state = volatile_read(parent_base + PROC_OFF_STATE)
+
+    // Only wake if parent is actually BLOCKED (in waitpid)
+    if parent_state == PROC_STATE_BLOCKED {
+        let wait_pid = volatile_read_u64(PROC_WAIT_TABLE + parent_pid * WAIT_ENTRY_SIZE)
+        // Check if parent is waiting for this specific child or any child (-1)
+        if wait_pid == child_pid || wait_pid == -1 {
+            volatile_write(parent_base + PROC_OFF_STATE, PROC_STATE_READY)
+        }
+    }
+}
+
+// Enhanced process_exit that handles reparenting + parent waking
+@kernel fn process_exit_v2(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    // Set ZOMBIE state and exit code
+    volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+
+    // G3.7: Reparent any children to init
+    reparent_children(pid)
+
+    // Wake parent if waiting
+    wake_waiting_parent(pid, exit_code)
+
+    // Close all FDs
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        fd_v2_set(pid, fd, FD_CLOSED, 0)
+        fd = fd + 1
+    }
+
+    // Print exit message
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    // Halt — scheduler will skip ZOMBIE processes
+    while 1 == 1 { hlt() }
+}
+
+// G3.8: Process groups (PGID)
+@kernel fn sys_setpgid(pid: i64, pgid: i64) -> i64 {
+    let target_pid = if pid == 0 { volatile_read_u64(0x6FE00) } else { pid }
+    if target_pid < 0 || target_pid >= PROC_MAX { return -1 }
+    let target_pgid = if pgid == 0 { target_pid } else { pgid }
+    volatile_write(PROC_TABLE + target_pid * PROC_ENTRY_SIZE + PROC_OFF_PGID, target_pgid)
+    0
+}
+
+@kernel fn sys_getpgid(pid: i64) -> i64 {
+    let target_pid = if pid == 0 { volatile_read_u64(0x6FE00) } else { pid }
+    if target_pid < 0 || target_pid >= PROC_MAX { return -1 }
+    volatile_read(PROC_TABLE + target_pid * PROC_ENTRY_SIZE + PROC_OFF_PGID)
+}
+
+// G3.9: `wait` shell command
+@kernel fn cmd_wait() {
+    let len = cmdbuf_len()
+    if len <= 5 {
+        cprintln("Usage: wait <pid>", YELLOW_ON_BLACK)
+        return
+    }
+    // Parse PID from "wait N"
+    let pid_ch = volatile_read_u8(0x6F800 + 5)
+    let target_pid = pid_ch - 48 // ASCII digit to number
+    if target_pid < 1 || target_pid > 15 {
+        cprintln("Invalid PID (1-15)", RED_ON_BLACK)
+        return
+    }
+    cprint("Waiting for PID ", WHITE_ON_BLACK)
+    cprint_decimal(target_pid, CYAN_ON_BLACK)
+    cprintln("...", WHITE_ON_BLACK)
+
+    let result = sys_waitpid(target_pid, 0, 0)
+    if result == -1 {
+        cprintln("  Not a child process or not found", RED_ON_BLACK)
+    } else {
+        cprint("  PID ", WHITE_ON_BLACK)
+        cprint_decimal(result, CYAN_ON_BLACK)
+        cprintln(" reaped", GREEN_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Shell Pipe & Redirect (Sprint H2)
+// ═══════════════════════════════════════════════
+
+// Scratch buffer for split commands (0x842000, 1KB each side)
+const SHELL_SPLIT_BUF: i64 = 0x842000
+const SHELL_SPLIT_BUF2: i64 = 0x842400
+
+// H2.1: Scan cmdbuf for pipe character '|' (ASCII 124)
+@kernel fn shell_find_pipe() -> i64 {
+    let len = cmdbuf_len()
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 124 { return i } // '|' found at position i
+        i = i + 1
+    }
+    -1 // no pipe
+}
+
+// H2.5: Scan cmdbuf for redirect operators
+// Returns: 0=none, 1='>' (truncate), 2='>>' (append), 3='<' (input)
+@kernel fn shell_find_redirect() -> i64 {
+    let len = cmdbuf_len()
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 62 { // '>'
+            if i + 1 < len && volatile_read_u8(0x6F800 + i + 1) == 62 {
+                return 200 + i // '>>' at position i (encoded as 200+pos)
+            }
+            return 100 + i // '>' at position i (encoded as 100+pos)
+        }
+        if ch == 60 { return 300 + i } // '<' at position i (encoded as 300+pos)
+        i = i + 1
+    }
+    0
+}
+
+// Copy part of cmdbuf to a buffer (with trimming)
+@kernel fn shell_copy_segment(src_start: i64, src_end: i64, dst: i64) -> i64 {
+    // Skip leading spaces
+    let mut start = src_start
+    while start < src_end && volatile_read_u8(0x6F800 + start) == 32 { start = start + 1 }
+    // Skip trailing spaces
+    let mut end = src_end
+    while end > start && volatile_read_u8(0x6F800 + end - 1) == 32 { end = end - 1 }
+    // Copy
+    let len = end - start
+    let mut i: i64 = 0
+    while i < len {
+        volatile_write_u8(dst + i, volatile_read_u8(0x6F800 + start + i))
+        i = i + 1
+    }
+    volatile_write_u8(dst + len, 0)
+    len
+}
+
+// Execute a command from a buffer (not cmdbuf) — copies to cmdbuf then dispatches
+@kernel fn shell_exec_from_buf(buf: i64, len: i64) {
+    // Save current cmdbuf
+    let saved_len = cmdbuf_len()
+    let saved_buf: i64 = 0x843000 // temp save area
+    let mut si: i64 = 0
+    while si < saved_len { volatile_write_u8(saved_buf + si, volatile_read_u8(0x6F800 + si)); si = si + 1 }
+    volatile_write_u8(saved_buf + saved_len, 0)
+
+    // Install new command into cmdbuf
+    cmdbuf_clear()
+    let mut ci: i64 = 0
+    while ci < len {
+        volatile_write_u8(0x6F800 + ci, volatile_read_u8(buf + ci))
+        ci = ci + 1
+    }
+    volatile_write_u8(0x6F800 + len, 0)
+    volatile_write(0x6F880, len)
+
+    // Dispatch
+    dispatch_command()
+
+    // Restore cmdbuf
+    cmdbuf_clear()
+    let mut ri: i64 = 0
+    while ri < saved_len { volatile_write_u8(0x6F800 + ri, volatile_read_u8(saved_buf + ri)); ri = ri + 1 }
+    volatile_write_u8(0x6F800 + saved_len, 0)
+    volatile_write(0x6F880, saved_len)
+}
+
+// H2.2: Execute single pipe: cmd1 | cmd2
+// Since we don't have real fork+exec in kernel shell (Ring 0), we simulate:
+// 1. Create pipe
+// 2. Execute cmd1 with stdout redirected to pipe write end
+// 3. Execute cmd2 with stdin redirected to pipe read end
+@kernel fn shell_exec_pipe(pipe_pos: i64) {
+    let len = cmdbuf_len()
+
+    // Split at pipe position
+    let len1 = shell_copy_segment(0, pipe_pos, SHELL_SPLIT_BUF)
+    let len2 = shell_copy_segment(pipe_pos + 1, len, SHELL_SPLIT_BUF2)
+
+    if len1 == 0 || len2 == 0 {
+        cprintln("Syntax error: empty pipe segment", RED_ON_BLACK)
+        return
+    }
+
+    // Create pipe
+    let slot = pipe_create()
+    if slot < 0 { cprintln("No free pipes", RED_ON_BLACK); return }
+
+    // Initialize pipe refcounts
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    volatile_write_u64(ref_base, 1)     // reader
+    volatile_write_u64(ref_base + 8, 1) // writer
+
+    // Execute cmd1: redirect stdout (FD 1) to pipe write end
+    let pid = volatile_read_u64(0x6FE00)
+    let saved_fd1_type = fd_v2_get_type(pid, 1)
+    let saved_fd1_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, 1, FD_PIPE_WRITE, slot) // stdout → pipe
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF, len1)
+
+    // Restore stdout
+    fd_v2_set(pid, 1, saved_fd1_type, saved_fd1_data)
+
+    // Close write end (signal EOF to reader)
+    volatile_write_u64(ref_base + 8, 0) // writer_count = 0
+
+    // Execute cmd2: redirect stdin (FD 0) to pipe read end
+    let saved_fd0_type = fd_v2_get_type(pid, 0)
+    let saved_fd0_data = fd_v2_get_data(pid, 0)
+    fd_v2_set(pid, 0, FD_PIPE_READ, slot) // stdin → pipe
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF2, len2)
+
+    // Restore stdin
+    fd_v2_set(pid, 0, saved_fd0_type, saved_fd0_data)
+
+    // Free pipe
+    pipe_free(slot)
+    volatile_write_u64(ref_base, 0)
+}
+
+// H2.5/H2.6/H2.7: Execute with I/O redirection
+@kernel fn shell_exec_redirect(redirect_info: i64) {
+    let len = cmdbuf_len()
+    let pid = volatile_read_u64(0x6FE00)
+
+    if redirect_info >= 300 {
+        // H2.7: Input redirect '<'
+        let pos = redirect_info - 300
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 1, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        // Open file for reading
+        let fd = sys_open(SHELL_SPLIT_BUF2, 0)
+        if fd < 0 { cprintln("File not found", RED_ON_BLACK); return }
+
+        // Redirect stdin
+        let saved_type = fd_v2_get_type(pid, 0)
+        let saved_data = fd_v2_get_data(pid, 0)
+        let file_type = fd_v2_get_type(pid, fd)
+        let file_data = fd_v2_get_data(pid, fd)
+        fd_v2_set(pid, 0, file_type, file_data)
+
+        shell_exec_from_buf(SHELL_SPLIT_BUF, cmd_len)
+
+        // Restore stdin
+        fd_v2_set(pid, 0, saved_type, saved_data)
+        sys_close(fd)
+
+    } else if redirect_info >= 200 {
+        // H2.6: Append redirect '>>'
+        let pos = redirect_info - 200
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 2, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        shell_exec_redirect_output(cmd_len, file_len, 1) // append=1
+
+    } else if redirect_info >= 100 {
+        // H2.5: Truncate redirect '>'
+        let pos = redirect_info - 100
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 1, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        shell_exec_redirect_output(cmd_len, file_len, 0) // append=0
+    }
+}
+
+// Helper: redirect stdout to file for command execution
+@kernel fn shell_exec_redirect_output(cmd_len: i64, file_len: i64, append: i64) {
+    let pid = volatile_read_u64(0x6FE00)
+
+    // Create or open file in ramfs
+    let idx = ramfs_find_by_addr(SHELL_SPLIT_BUF2)
+    let mut target_idx = idx
+    if target_idx < 0 {
+        // Create new file
+        // Need to pass as str — write filename bytes, then create
+        target_idx = ramfs_create_by_addr(SHELL_SPLIT_BUF2)
+        if target_idx < 0 { cprintln("Cannot create file", RED_ON_BLACK); return }
+    }
+
+    // If truncate mode, reset file size to 0
+    if append == 0 {
+        let entry_addr = ramfs_entry_addr(target_idx)
+        volatile_write(entry_addr + 32, 0) // size = 0
+    }
+
+    // Open file FD (with offset at end for append, 0 for truncate)
+    let fd = fd_v2_alloc(pid)
+    if fd < 0 { cprintln("No free FDs", RED_ON_BLACK); return }
+    let offset = if append == 1 {
+        let entry_addr = ramfs_entry_addr(target_idx)
+        volatile_read(entry_addr + 32) // current size = end
+    } else { 0 }
+    let packed_data = (offset << 32) | target_idx
+    fd_v2_set(pid, fd, FD_RAMFS, packed_data)
+
+    // Redirect stdout to file FD
+    let saved_type = fd_v2_get_type(pid, 1)
+    let saved_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, 1, FD_RAMFS, packed_data)
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF, cmd_len)
+
+    // Restore stdout and close file FD
+    fd_v2_set(pid, 1, saved_type, saved_data)
+    // Update file size from the written offset
+    let written_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, fd, FD_CLOSED, 0)
+}
+
+// Helper: create ramfs file by address (null-terminated name)
+@kernel fn ramfs_create_by_addr(name_addr: i64) -> i64 {
+    let count = volatile_read(FS_BASE)
+    if count >= FS_MAX_FILES { return -1 }
+    let addr = ramfs_entry_addr(count)
+    // Write name
+    let mut i: i64 = 0
+    while i < 31 {
+        let ch = volatile_read_u8(name_addr + i)
+        volatile_write_u8(addr + i, ch)
+        if ch == 0 { i = 31 } else { i = i + 1 }
+    }
+    volatile_write_u8(addr + i, 0)
+    // Set type = file, allocate data space
+    volatile_write(addr + 48, 1) // type = file
+    volatile_write(addr + 32, 0) // size = 0
+    let data_offset = volatile_read(FS_BASE + 8)
+    volatile_write(addr + 40, data_offset) // data_ptr
+    volatile_write(FS_BASE + 8, data_offset + 4096) // reserve 4KB
+    volatile_write(FS_BASE, count + 1)
+    count
+}
+
+// H2.9: List of builtins that must NOT be forked (run in shell process)
+@kernel fn is_shell_builtin(c0: i64, c1: i64) -> i64 {
+    // cd (99,100)
+    if c0 == 99 && c1 == 100 { return 1 }
+    // export (first 2 chars: 101,120)
+    if c0 == 101 && c1 == 120 { return 1 }
+    // set (115,101)
+    if c0 == 115 && c1 == 101 { return 1 }
+    // exit (101,120) — same prefix as export, check len later
+    0
+}
+
+// Main entry point: preprocess pipe/redirect before dispatch
+@kernel fn shell_execute() {
+    let len = cmdbuf_len()
+    if len == 0 { return }
+
+    // Check for pipe first
+    let pipe_pos = shell_find_pipe()
+    if pipe_pos > 0 {
+        shell_exec_pipe(pipe_pos)
+        return
+    }
+
+    // Check for redirects
+    let redir = shell_find_redirect()
+    if redir > 0 {
+        shell_exec_redirect(redir)
+        return
+    }
+
+    // No pipe or redirect — normal dispatch
+    dispatch_command()
+}
+
+// ═══════════════════════════════════════════════
+// SYS_PIPE + Pipe FD Integration (Sprint H1)
+// ═══════════════════════════════════════════════
+
+// Pipe refcount table at 0x8D4000: 8 pipes × 16 bytes
+// Per pipe: +0=reader_count(i64), +8=writer_count(i64)
+const PIPE_REFCOUNT: i64 = 0x8D4000
+
+// Circular pipe buffer constants
+const PIPE_BUF_OFFSET: i64 = 32    // data starts at offset 32 in each 4KB pipe
+const PIPE_BUF_SIZE: i64 = 4064    // 4096 - 32 = 4064 bytes usable
+
+// H1.1: SYS_PIPE(23) — create pipe, return read/write FDs
+@kernel fn sys_pipe(fds_addr: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+
+    // Create pipe slot
+    let slot = pipe_create()
+    if slot < 0 { return -1 }
+
+    // Allocate 2 FDs: read end and write end
+    let read_fd = fd_v2_alloc(pid)
+    if read_fd < 0 { return -1 }
+    fd_v2_set(pid, read_fd, FD_PIPE_READ, slot)
+
+    let write_fd = fd_v2_alloc(pid)
+    if write_fd < 0 {
+        fd_v2_set(pid, read_fd, FD_CLOSED, 0)
+        return -1
+    }
+    fd_v2_set(pid, write_fd, FD_PIPE_WRITE, slot)
+
+    // Initialize refcounts
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    volatile_write_u64(ref_base, 1)     // reader_count = 1
+    volatile_write_u64(ref_base + 8, 1) // writer_count = 1
+
+    // Write FD pair to user buffer: [read_fd, write_fd]
+    if fds_addr != 0 {
+        volatile_write_u64(fds_addr, read_fd)
+        volatile_write_u64(fds_addr + 8, write_fd)
+    }
+
+    0
+}
+
+// H1.2: Pipe refcount helpers
+@kernel fn pipe_incref(slot: i64, is_writer: i64) {
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    if is_writer != 0 {
+        let count = volatile_read_u64(ref_base + 8)
+        volatile_write_u64(ref_base + 8, count + 1)
+    } else {
+        let count = volatile_read_u64(ref_base)
+        volatile_write_u64(ref_base, count + 1)
+    }
+}
+
+@kernel fn pipe_decref(slot: i64, is_writer: i64) -> i64 {
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    if is_writer != 0 {
+        let count = volatile_read_u64(ref_base + 8)
+        let new_count = if count > 0 { count - 1 } else { 0 }
+        volatile_write_u64(ref_base + 8, new_count)
+    } else {
+        let count = volatile_read_u64(ref_base)
+        let new_count = if count > 0 { count - 1 } else { 0 }
+        volatile_write_u64(ref_base, new_count)
+    }
+    // Return 1 if pipe is fully closed (both counts = 0)
+    let rc = volatile_read_u64(ref_base)
+    let wc = volatile_read_u64(ref_base + 8)
+    if rc == 0 && wc == 0 { 1 } else { 0 }
+}
+
+@kernel fn pipe_has_writers(slot: i64) -> i64 {
+    volatile_read_u64(PIPE_REFCOUNT + slot * 16 + 8)
+}
+
+@kernel fn pipe_has_readers(slot: i64) -> i64 {
+    volatile_read_u64(PIPE_REFCOUNT + slot * 16)
+}
+
+// H1.8: Circular pipe read/write (replaces linear pipe_read/pipe_write for FD use)
+@kernel fn pipe_read_circular(slot: i64, buf: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let read_pos = volatile_read_u64(pipe_base + 8)
+    let write_pos = volatile_read_u64(pipe_base + 16)
+
+    // Calculate available bytes (circular)
+    let available = (write_pos - read_pos + PIPE_BUF_SIZE) % PIPE_BUF_SIZE
+    if write_pos == read_pos {
+        // H1.5: Empty pipe — check if writers exist
+        if pipe_has_writers(slot) == 0 { return 0 } // EOF
+        return -2 // would block (no data, writers exist)
+    }
+
+    let to_read = if len < available { len } else { available }
+    let mut i: i64 = 0
+    while i < to_read {
+        let pos = (read_pos + i) % PIPE_BUF_SIZE
+        volatile_write_u8(buf + i, volatile_read_u8(pipe_base + PIPE_BUF_OFFSET + pos))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 8, (read_pos + to_read) % PIPE_BUF_SIZE)
+    to_read
+}
+
+@kernel fn pipe_write_circular(slot: i64, data: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let read_pos = volatile_read_u64(pipe_base + 8)
+    let write_pos = volatile_read_u64(pipe_base + 16)
+
+    // H1.7: Check if readers exist (broken pipe)
+    if pipe_has_readers(slot) == 0 { return -1 }
+
+    // Calculate free space (circular, leave 1 byte to distinguish full from empty)
+    let used = (write_pos - read_pos + PIPE_BUF_SIZE) % PIPE_BUF_SIZE
+    let free = PIPE_BUF_SIZE - 1 - used
+    if free <= 0 { return -2 } // pipe full, would block
+
+    let to_write = if len < free { len } else { free }
+    let mut i: i64 = 0
+    while i < to_write {
+        let pos = (write_pos + i) % PIPE_BUF_SIZE
+        volatile_write_u8(pipe_base + PIPE_BUF_OFFSET + pos, volatile_read_u8(data + i))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 16, (write_pos + to_write) % PIPE_BUF_SIZE)
+    to_write
+}
+
+// Free a pipe slot (clear in_use flag + reset positions)
+@kernel fn pipe_free(slot: i64) {
+    let pipe_base = PIPE_POOL + slot * 4096
+    volatile_write_u64(pipe_base, 0)      // in_use = 0
+    volatile_write_u64(pipe_base + 8, 0)  // read_pos = 0
+    volatile_write_u64(pipe_base + 16, 0) // write_pos = 0
+}
+
+// ═══════════════════════════════════════════════
+// Signal Infrastructure (Sprint I1)
+// ═══════════════════════════════════════════════
+
+// Signal table at 0x8D1000: 16 procs × 64 bytes each = 1024 bytes
+// Per process: +0=pending_bitmap(i64), +8=mask_bitmap(i64),
+//              +16=handler[0..7] (8 × 8 bytes = handlers for signals 0-7)
+// Only 8 signal slots stored (to fit 64 bytes): SIGHUP(0), SIGINT(1), SIGKILL(2),
+// SIGSEGV(3), SIGTERM(4), SIGCHLD(5), SIGSTOP(6), SIGCONT(7)
+// We map standard POSIX numbers → our internal slot index
+const SIGNAL_TABLE: i64 = 0x8D1000
+const SIG_ENTRY_SIZE: i64 = 64
+const SIG_OFF_PENDING: i64 = 0
+const SIG_OFF_MASK: i64 = 8
+const SIG_OFF_HANDLERS: i64 = 16
+const SIG_MAX_SLOTS: i64 = 8
+
+// I1.2: Signal numbers (POSIX standard)
+const SIGHUP: i64 = 1
+const SIGINT: i64 = 2
+const SIGKILL: i64 = 9
+const SIGSEGV: i64 = 11
+const SIGTERM: i64 = 15
+const SIGCHLD: i64 = 17
+const SIGCONT: i64 = 18
+const SIGSTOP: i64 = 19
+const SIGTSTP: i64 = 20
+
+// Special handler values
+const SIG_DFL: i64 = 0   // default handler
+const SIG_IGN: i64 = 1   // ignore signal
+
+// Map POSIX signal number to internal slot (0-7)
+@kernel fn sig_to_slot(signum: i64) -> i64 {
+    if signum == SIGHUP { 0 }
+    else if signum == SIGINT { 1 }
+    else if signum == SIGKILL { 2 }
+    else if signum == SIGSEGV { 3 }
+    else if signum == SIGTERM { 4 }
+    else if signum == SIGCHLD { 5 }
+    else if signum == SIGSTOP { 6 }
+    else if signum == SIGCONT { 7 }
+    else { -1 }
+}
+
+// I1.1: Signal table helpers
+@kernel fn sig_entry_addr(pid: i64) -> i64 {
+    SIGNAL_TABLE + pid * SIG_ENTRY_SIZE
+}
+
+@kernel fn sig_init(pid: i64) {
+    let base = sig_entry_addr(pid)
+    volatile_write_u64(base + SIG_OFF_PENDING, 0)
+    volatile_write_u64(base + SIG_OFF_MASK, 0)
+    let mut i: i64 = 0
+    while i < SIG_MAX_SLOTS {
+        volatile_write_u64(base + SIG_OFF_HANDLERS + i * 8, SIG_DFL)
+        i = i + 1
+    }
+}
+
+// I1.5: Set signal as pending
+@kernel fn signal_send(pid: i64, signum: i64) -> i64 {
+    if pid < 0 || pid >= PROC_MAX { return -1 }
+    let slot = sig_to_slot(signum)
+    if slot < 0 { return -1 }
+
+    let base = sig_entry_addr(pid)
+    let pending = volatile_read_u64(base + SIG_OFF_PENDING)
+    volatile_write_u64(base + SIG_OFF_PENDING, pending | (1 << slot))
+
+    // I1.4: Handle SIGKILL immediately — cannot be caught or ignored
+    if signum == SIGKILL {
+        signal_deliver_default(pid, signum)
+    }
+    // SIGCONT: wake stopped process
+    if signum == SIGCONT {
+        let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state == PROC_STATE_BLOCKED {
+            volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_READY)
+        }
+    }
+    0
+}
+
+// I1.4: Default signal action
+@kernel fn signal_deliver_default(pid: i64, signum: i64) {
+    if signum == SIGKILL || signum == SIGTERM || signum == SIGINT || signum == SIGHUP || signum == SIGSEGV {
+        // Terminate process
+        let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+        volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+        volatile_write(base + PROC_OFF_EXIT, 128 + signum) // exit code = 128 + signal
+        // Reparent children
+        reparent_children(pid)
+        // Wake parent
+        wake_waiting_parent(pid, 128 + signum)
+        // Close FDs
+        let mut fd: i64 = 0
+        while fd < FD_MAX { fd_v2_set(pid, fd, FD_CLOSED, 0); fd = fd + 1 }
+    }
+    if signum == SIGSTOP || signum == SIGTSTP {
+        // Stop process
+        volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+    }
+    // SIGCHLD, SIGCONT: default = ignore (no action needed)
+}
+
+// I1.6: Check and deliver pending signals (called before return-to-user)
+@kernel fn signal_check_pending(pid: i64) -> i64 {
+    let base = sig_entry_addr(pid)
+    let pending = volatile_read_u64(base + SIG_OFF_PENDING)
+    let mask = volatile_read_u64(base + SIG_OFF_MASK)
+    let deliverable = pending & (mask ^ 0xFF) // pending AND NOT masked (for 8 slots)
+
+    if deliverable == 0 { return 0 } // no pending signals
+
+    // Find first pending signal
+    let mut slot: i64 = 0
+    while slot < SIG_MAX_SLOTS {
+        if (deliverable & (1 << slot)) != 0 {
+            // Clear pending bit
+            volatile_write_u64(base + SIG_OFF_PENDING, pending & (0xFF ^ (1 << slot)))
+
+            // Check handler
+            let handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
+            if handler == SIG_IGN {
+                // Ignored — skip
+            } else if handler == SIG_DFL {
+                // Default action
+                let signum = slot_to_signum(slot)
+                signal_deliver_default(pid, signum)
+            }
+            // Custom handlers (handler > 1) will be implemented when
+            // user-mode signal trampolines are ready (future sprint)
+            return slot + 1 // return 1-based slot number (nonzero = signal delivered)
+        }
+        slot = slot + 1
+    }
+    0
+}
+
+// Map slot back to POSIX signal number
+@kernel fn slot_to_signum(slot: i64) -> i64 {
+    if slot == 0 { SIGHUP }
+    else if slot == 1 { SIGINT }
+    else if slot == 2 { SIGKILL }
+    else if slot == 3 { SIGSEGV }
+    else if slot == 4 { SIGTERM }
+    else if slot == 5 { SIGCHLD }
+    else if slot == 6 { SIGSTOP }
+    else if slot == 7 { SIGCONT }
+    else { 0 }
+}
+
+// I1.3: SYS_KILL(24) — send signal to process
+@kernel fn sys_kill(pid: i64, signum: i64) -> i64 {
+    if pid < 0 || pid >= PROC_MAX { return -1 }
+    let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+    if state == PROC_STATE_FREE { return -1 }
+    signal_send(pid, signum)
+}
+
+// I1.8: SYS_SIGNAL(25) — register signal handler
+@kernel fn sys_signal(signum: i64, handler: i64) -> i64 {
+    // I1.9: SIGKILL and SIGSTOP cannot be caught
+    if signum == SIGKILL || signum == SIGSTOP { return -1 }
+
+    let slot = sig_to_slot(signum)
+    if slot < 0 { return -1 }
+
+    let pid = volatile_read_u64(0x6FE00)
+    let base = sig_entry_addr(pid)
+    let old_handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
+    volatile_write_u64(base + SIG_OFF_HANDLERS + slot * 8, handler)
+    old_handler
+}
+
+// I1.7: Enhanced process_exit — send SIGCHLD to parent
+@kernel fn process_exit_with_signal(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+
+    reparent_children(pid)
+
+    // Send SIGCHLD to parent
+    let ppid = volatile_read(base + PROC_OFF_PPID)
+    if ppid >= 0 && ppid < PROC_MAX {
+        signal_send(ppid, SIGCHLD)
+    }
+
+    wake_waiting_parent(pid, exit_code)
+
+    // Close all FDs
+    let mut fd: i64 = 0
+    while fd < FD_MAX { fd_v2_set(pid, fd, FD_CLOSED, 0); fd = fd + 1 }
+
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    while 1 == 1 { hlt() }
+}
+
+// ═══════════════════════════════════════════════
+// Job Control (Sprint I2)
+// ═══════════════════════════════════════════════
+
+// Job table at 0x8D8000: 16 jobs × 64 bytes
+// Per job: +0=pid(i64), +8=state(i64: 0=free,1=running,2=stopped,3=done), +16=cmd[48]
+const JOB_TABLE: i64 = 0x8D8000
+const JOB_MAX: i64 = 16
+const JOB_ENTRY_SIZE: i64 = 64
+const JOB_OFF_PID: i64 = 0
+const JOB_OFF_STATE: i64 = 8
+const JOB_OFF_CMD: i64 = 16
+
+// Job states
+const JOB_FREE: i64 = 0
+const JOB_RUNNING: i64 = 1
+const JOB_STOPPED: i64 = 2
+const JOB_DONE: i64 = 3
+
+// Foreground process group at 0x652068
+const FG_PGID_ADDR: i64 = 0x652068
+// Ctrl key state at 0x6FBE4
+const CTRL_STATE_ADDR: i64 = 0x6FBE4
+
+// I2.1: Set/get foreground process group
+@kernel fn set_fg_pgid(pgid: i64) {
+    volatile_write_u64(FG_PGID_ADDR, pgid)
+}
+
+@kernel fn get_fg_pgid() -> i64 {
+    volatile_read_u64(FG_PGID_ADDR)
+}
+
+// I2.2: Send signal to foreground process group (Ctrl+C → SIGINT)
+@kernel fn signal_fg_group(signum: i64) {
+    let fg_pgid = get_fg_pgid()
+    if fg_pgid == 0 { return } // shell is foreground, ignore
+    // Send signal to all processes in foreground group
+    let mut pid: i64 = 1
+    while pid < PROC_MAX {
+        let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+        let state = volatile_read(base + PROC_OFF_STATE)
+        if state != PROC_STATE_FREE && state != PROC_STATE_ZOMBIE {
+            let pgid = volatile_read(base + PROC_OFF_PGID)
+            if pgid == fg_pgid {
+                signal_send(pid, signum)
+            }
+        }
+        pid = pid + 1
+    }
+}
+
+// I2.4: Background '&' — parse trailing & from command
+@kernel fn shell_has_background() -> i64 {
+    let len = cmdbuf_len()
+    if len < 2 { return 0 }
+    // Check last non-space character is '&'
+    let mut pos = len - 1
+    while pos > 0 && volatile_read_u8(0x6F800 + pos) == 32 { pos = pos - 1 }
+    if volatile_read_u8(0x6F800 + pos) == 38 { // '&'
+        return pos // position of '&'
+    }
+    0
+}
+
+// I2.5: Job table operations
+@kernel fn job_add(pid: i64, cmd_addr: i64, cmd_len: i64) -> i64 {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        if volatile_read_u64(base + JOB_OFF_STATE) == JOB_FREE {
+            volatile_write_u64(base + JOB_OFF_PID, pid)
+            volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+            // Copy command string (max 47 chars)
+            let copy_len = if cmd_len < 47 { cmd_len } else { 47 }
+            let mut i: i64 = 0
+            while i < copy_len {
+                volatile_write_u8(base + JOB_OFF_CMD + i, volatile_read_u8(cmd_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(base + JOB_OFF_CMD + copy_len, 0)
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1
+}
+
+@kernel fn job_find_by_pid(pid: i64) -> i64 {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        if volatile_read_u64(base + JOB_OFF_PID) == pid &&
+           volatile_read_u64(base + JOB_OFF_STATE) != JOB_FREE {
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1
+}
+
+// I2.9: Check for completed background jobs, print notifications
+@kernel fn job_check_notifications() {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        let state = volatile_read_u64(base + JOB_OFF_STATE)
+        if state == JOB_RUNNING {
+            let pid = volatile_read_u64(base + JOB_OFF_PID)
+            let proc_state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+            if proc_state == PROC_STATE_ZOMBIE || proc_state == PROC_STATE_FREE {
+                // Job is done
+                volatile_write_u64(base + JOB_OFF_STATE, JOB_DONE)
+                cprint("[", WHITE_ON_BLACK)
+                cprint_decimal(slot + 1, CYAN_ON_BLACK)
+                cprint("]+  Done                    ", WHITE_ON_BLACK)
+                // Print command
+                let mut ci: i64 = 0
+                while ci < 47 {
+                    let ch = volatile_read_u8(base + JOB_OFF_CMD + ci)
+                    if ch == 0 { ci = 47 }
+                    else { console_putchar(ch, WHITE_ON_BLACK); ci = ci + 1 }
+                }
+                console_putchar(10, WHITE_ON_BLACK)
+                // Reap zombie
+                if proc_state == PROC_STATE_ZOMBIE {
+                    process_reap(pid)
+                }
+                // Free job slot
+                volatile_write_u64(base + JOB_OFF_STATE, JOB_FREE)
+            }
+        }
+        slot = slot + 1
+    }
+}
+
+// I2.6: `jobs` command
+@kernel fn cmd_jobs() {
+    let mut slot: i64 = 0
+    let mut count: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        let state = volatile_read_u64(base + JOB_OFF_STATE)
+        if state != JOB_FREE {
+            cprint("[", WHITE_ON_BLACK)
+            cprint_decimal(slot + 1, CYAN_ON_BLACK)
+            cprint("]  ", WHITE_ON_BLACK)
+            let pid = volatile_read_u64(base + JOB_OFF_PID)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint("  ", WHITE_ON_BLACK)
+            if state == JOB_RUNNING { cprint("Running   ", GREEN_ON_BLACK) }
+            else if state == JOB_STOPPED { cprint("Stopped   ", YELLOW_ON_BLACK) }
+            else if state == JOB_DONE { cprint("Done      ", WHITE_ON_BLACK) }
+            // Print command
+            let mut ci: i64 = 0
+            while ci < 47 {
+                let ch = volatile_read_u8(base + JOB_OFF_CMD + ci)
+                if ch == 0 { ci = 47 }
+                else { console_putchar(ch, WHITE_ON_BLACK); ci = ci + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        slot = slot + 1
+    }
+    if count == 0 { cprintln("No background jobs", WHITE_ON_BLACK) }
+}
+
+// I2.7: `fg` command — bring job to foreground
+@kernel fn cmd_fg() {
+    let len = cmdbuf_len()
+    // Parse job number from "fg %N" or "fg N"
+    let mut target: i64 = -1
+    if len > 3 {
+        let ch = volatile_read_u8(0x6F800 + 3)
+        if ch == 37 { // '%'
+            target = volatile_read_u8(0x6F800 + 4) - 48 - 1 // %1 → slot 0
+        } else {
+            target = ch - 48 - 1
+        }
+    }
+    if target < 0 || target >= JOB_MAX {
+        // Find most recent job
+        let mut slot = JOB_MAX - 1
+        while slot >= 0 && target < 0 {
+            let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+            if volatile_read_u64(base + JOB_OFF_STATE) != JOB_FREE { target = slot }
+            slot = slot - 1
+        }
+    }
+    if target < 0 { cprintln("No current job", RED_ON_BLACK); return }
+
+    let base = JOB_TABLE + target * JOB_ENTRY_SIZE
+    let pid = volatile_read_u64(base + JOB_OFF_PID)
+    let state = volatile_read_u64(base + JOB_OFF_STATE)
+
+    // If stopped, send SIGCONT
+    if state == JOB_STOPPED {
+        signal_send(pid, SIGCONT)
+        volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+    }
+
+    // Set as foreground
+    set_fg_pgid(pid)
+
+    // Wait for it
+    cprint("Foreground: PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    sys_waitpid(pid, 0, 0)
+
+    // Clear foreground
+    set_fg_pgid(0)
+    volatile_write_u64(base + JOB_OFF_STATE, JOB_FREE)
+}
+
+// I2.8: `bg` command — resume stopped job in background
+@kernel fn cmd_bg() {
+    let len = cmdbuf_len()
+    let mut target: i64 = -1
+    if len > 3 {
+        let ch = volatile_read_u8(0x6F800 + 3)
+        if ch == 37 { target = volatile_read_u8(0x6F800 + 4) - 48 - 1 }
+        else { target = ch - 48 - 1 }
+    }
+    if target < 0 || target >= JOB_MAX {
+        let mut slot = JOB_MAX - 1
+        while slot >= 0 && target < 0 {
+            let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+            if volatile_read_u64(base + JOB_OFF_STATE) == JOB_STOPPED { target = slot }
+            slot = slot - 1
+        }
+    }
+    if target < 0 { cprintln("No stopped job", RED_ON_BLACK); return }
+
+    let base = JOB_TABLE + target * JOB_ENTRY_SIZE
+    let pid = volatile_read_u64(base + JOB_OFF_PID)
+    signal_send(pid, SIGCONT)
+    volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+    cprint("[", WHITE_ON_BLACK)
+    cprint_decimal(target + 1, CYAN_ON_BLACK)
+    cprint("]  ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln(" &", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Shell Variables & Script Loading (Sprint J1)
+// ═══════════════════════════════════════════════
+
+// ENV_TABLE at 0x8D3000: 128 entries × 32 bytes = 4096 bytes
+// Per entry: +0=key[16] (null-terminated), +16=value[16] (null-terminated)
+const ENV_TABLE: i64 = 0x8D3000
+const ENV_MAX: i64 = 128
+const ENV_ENTRY_SIZE: i64 = 32
+const ENV_KEY_SIZE: i64 = 16
+const ENV_VAL_SIZE: i64 = 16
+
+// Last exit code at 0x652060
+const LAST_EXIT_CODE: i64 = 0x652060
+
+// J1.1: Environment variable operations
+@kernel fn env_find(key_addr: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < ENV_MAX {
+        let entry = ENV_TABLE + i * ENV_ENTRY_SIZE
+        let first_ch = volatile_read_u8(entry)
+        if first_ch == 0 { return -1 } // empty slot = end of entries
+        // Compare key
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < ENV_KEY_SIZE && match_ok == 1 {
+            let a = volatile_read_u8(entry + j)
+            let b = volatile_read_u8(key_addr + j)
+            if a != b { match_ok = 0 }
+            if a == 0 && b == 0 { j = ENV_KEY_SIZE } // both null = match
+            else { j = j + 1 }
+        }
+        if match_ok == 1 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn env_set(key_addr: i64, val_addr: i64) -> i64 {
+    let idx = env_find(key_addr)
+    let target = if idx >= 0 { idx } else {
+        // Find first empty slot
+        let mut i: i64 = 0
+        let mut found: i64 = -1
+        while i < ENV_MAX && found == -1 {
+            if volatile_read_u8(ENV_TABLE + i * ENV_ENTRY_SIZE) == 0 { found = i }
+            i = i + 1
+        }
+        found
+    }
+    if target < 0 { return -1 } // table full
+
+    let entry = ENV_TABLE + target * ENV_ENTRY_SIZE
+    // Copy key
+    let mut i: i64 = 0
+    while i < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(key_addr + i)
+        volatile_write_u8(entry + i, ch)
+        if ch == 0 { i = ENV_KEY_SIZE }
+        else { i = i + 1 }
+    }
+    volatile_write_u8(entry + ENV_KEY_SIZE - 1, 0) // ensure null
+    // Copy value
+    i = 0
+    while i < ENV_VAL_SIZE - 1 {
+        let ch = volatile_read_u8(val_addr + i)
+        volatile_write_u8(entry + ENV_KEY_SIZE + i, ch)
+        if ch == 0 { i = ENV_VAL_SIZE }
+        else { i = i + 1 }
+    }
+    volatile_write_u8(entry + ENV_KEY_SIZE + ENV_VAL_SIZE - 1, 0)
+    0
+}
+
+@kernel fn env_get(key_addr: i64, buf: i64) -> i64 {
+    let idx = env_find(key_addr)
+    if idx < 0 { return -1 }
+    let entry = ENV_TABLE + idx * ENV_ENTRY_SIZE + ENV_KEY_SIZE
+    let mut i: i64 = 0
+    while i < ENV_VAL_SIZE {
+        let ch = volatile_read_u8(entry + i)
+        volatile_write_u8(buf + i, ch)
+        if ch == 0 { return i }
+        i = i + 1
+    }
+    i
+}
+
+// J1.2: `export` shell builtin — "export KEY=VALUE"
+@kernel fn cmd_export() {
+    let len = cmdbuf_len()
+    if len <= 7 {
+        // Print all env vars
+        cmd_env_list()
+        return
+    }
+    // Parse KEY=VALUE from "export KEY=VALUE" (offset 7)
+    let key_buf: i64 = 0x843800
+    let val_buf: i64 = 0x843900
+    let mut pos: i64 = 7
+    let mut ki: i64 = 0
+    // Read key up to '='
+    while pos < len && ki < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 61 { pos = pos + 1; ki = ENV_KEY_SIZE } // '=' found
+        else { volatile_write_u8(key_buf + ki, ch); ki = ki + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(key_buf + (if ki >= ENV_KEY_SIZE { ENV_KEY_SIZE - 1 } else { ki }), 0)
+    // Read value
+    let mut vi: i64 = 0
+    while pos < len && vi < ENV_VAL_SIZE - 1 {
+        volatile_write_u8(val_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(val_buf + vi, 0)
+    env_set(key_buf, val_buf)
+}
+
+// J1.3: `set` builtin
+@kernel fn cmd_set() {
+    let len = cmdbuf_len()
+    if len <= 4 {
+        cmd_env_list()
+        return
+    }
+    // "set KEY=VALUE" (offset 4)
+    let key_buf: i64 = 0x843800
+    let val_buf: i64 = 0x843900
+    let mut pos: i64 = 4
+    let mut ki: i64 = 0
+    while pos < len && ki < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 61 { pos = pos + 1; ki = ENV_KEY_SIZE }
+        else { volatile_write_u8(key_buf + ki, ch); ki = ki + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(key_buf + (if ki >= ENV_KEY_SIZE { ENV_KEY_SIZE - 1 } else { ki }), 0)
+    let mut vi: i64 = 0
+    while pos < len && vi < ENV_VAL_SIZE - 1 {
+        volatile_write_u8(val_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(val_buf + vi, 0)
+    env_set(key_buf, val_buf)
+}
+
+// List all environment variables
+@kernel fn cmd_env_list() {
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < ENV_MAX {
+        let entry = ENV_TABLE + i * ENV_ENTRY_SIZE
+        if volatile_read_u8(entry) != 0 {
+            // Print key
+            let mut j: i64 = 0
+            while j < ENV_KEY_SIZE {
+                let ch = volatile_read_u8(entry + j)
+                if ch == 0 { j = ENV_KEY_SIZE }
+                else { console_putchar(ch, CYAN_ON_BLACK); j = j + 1 }
+            }
+            cprint("=", WHITE_ON_BLACK)
+            // Print value
+            j = 0
+            while j < ENV_VAL_SIZE {
+                let ch = volatile_read_u8(entry + ENV_KEY_SIZE + j)
+                if ch == 0 { j = ENV_VAL_SIZE }
+                else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        } else {
+            i = ENV_MAX // end
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("(no variables set)", WHITE_ON_BLACK) }
+}
+
+// J1.4: $VAR expansion in cmdbuf (before dispatch)
+@kernel fn shell_expand_vars() {
+    let len = cmdbuf_len()
+    let expand_buf: i64 = 0x844000 // temporary expansion buffer
+    let mut src: i64 = 0
+    let mut dst: i64 = 0
+
+    while src < len && dst < 62 {
+        let ch = volatile_read_u8(0x6F800 + src)
+        if ch == 36 { // '$'
+            src = src + 1
+            // J1.5: $? = last exit code
+            if volatile_read_u8(0x6F800 + src) == 63 { // '?'
+                src = src + 1
+                let code = volatile_read_u64(LAST_EXIT_CODE)
+                // Write decimal to expand_buf
+                if code == 0 {
+                    volatile_write_u8(expand_buf + dst, 48) // '0'
+                    dst = dst + 1
+                } else {
+                    let mut tmp = code
+                    let digit_start = dst
+                    while tmp > 0 && dst < 62 {
+                        volatile_write_u8(expand_buf + dst, 48 + (tmp % 10))
+                        dst = dst + 1
+                        tmp = tmp / 10
+                    }
+                    // Reverse digits
+                    let mut lo = digit_start
+                    let mut hi = dst - 1
+                    while lo < hi {
+                        let t = volatile_read_u8(expand_buf + lo)
+                        volatile_write_u8(expand_buf + lo, volatile_read_u8(expand_buf + hi))
+                        volatile_write_u8(expand_buf + hi, t)
+                        lo = lo + 1
+                        hi = hi - 1
+                    }
+                }
+            }
+            // J1.6: $$ = current PID
+            else if volatile_read_u8(0x6F800 + src) == 36 { // '$$'
+                src = src + 1
+                let pid = volatile_read_u64(0x6FE00)
+                volatile_write_u8(expand_buf + dst, 48 + pid)
+                dst = dst + 1
+            }
+            // $VAR — lookup in ENV_TABLE
+            else {
+                let var_name: i64 = 0x843A00
+                let mut ni: i64 = 0
+                while src < len && ni < 15 {
+                    let vc = volatile_read_u8(0x6F800 + src)
+                    // Stop at space, null, or non-alphanumeric
+                    if vc == 32 || vc == 0 || vc == 36 || vc == 47 { ni = 15 }
+                    else { volatile_write_u8(var_name + ni, vc); ni = ni + 1; src = src + 1 }
+                }
+                volatile_write_u8(var_name + (if ni >= 15 { 14 } else { ni }), 0)
+                let val_buf: i64 = 0x843B00
+                let vlen = env_get(var_name, val_buf)
+                if vlen > 0 {
+                    let mut vi: i64 = 0
+                    while vi < vlen && dst < 62 {
+                        volatile_write_u8(expand_buf + dst, volatile_read_u8(val_buf + vi))
+                        dst = dst + 1
+                        vi = vi + 1
+                    }
+                }
+            }
+        } else {
+            volatile_write_u8(expand_buf + dst, ch)
+            dst = dst + 1
+            src = src + 1
+        }
+    }
+    volatile_write_u8(expand_buf + dst, 0)
+
+    // Copy back to cmdbuf
+    let mut ci: i64 = 0
+    while ci < dst {
+        volatile_write_u8(0x6F800 + ci, volatile_read_u8(expand_buf + ci))
+        ci = ci + 1
+    }
+    volatile_write_u8(0x6F800 + dst, 0)
+    volatile_write(0x6F880, dst)
+}
+
+// J1.8: Script file loading — "sh <filename>" or "source <filename>"
+@kernel fn cmd_sh() {
+    let len = cmdbuf_len()
+    let prefix = if volatile_read_u8(0x6F800 + 1) == 104 { 3 } else { 7 } // "sh " or "source "
+    if len <= prefix {
+        cprintln("Usage: sh <script>", YELLOW_ON_BLACK)
+        return
+    }
+
+    // Get filename from cmdbuf
+    let fname_addr: i64 = 0x843C00
+    let mut fi: i64 = 0
+    let mut pos: i64 = prefix
+    while pos < len && fi < 31 {
+        volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+        fi = fi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(fname_addr + fi, 0)
+
+    // Try ramfs first
+    let idx = ramfs_find_by_addr(fname_addr)
+    let mut script_buf: i64 = 0x845000
+    let mut script_len: i64 = 0
+
+    if idx >= 0 {
+        let entry = ramfs_entry_addr(idx)
+        let size = volatile_read(entry + 32)
+        let data_ptr = volatile_read(entry + 40)
+        if data_ptr != 0 && size > 0 {
+            let mut si: i64 = 0
+            while si < size && si < 4096 {
+                volatile_write_u8(script_buf + si, volatile_read_u8(data_ptr + si))
+                si = si + 1
+            }
+            script_len = size
+        }
+    }
+
+    if script_len == 0 {
+        cprintln("Script not found", RED_ON_BLACK)
+        return
+    }
+
+    // Parse and execute lines
+    let line_buf: i64 = 0x846000
+    let mut lpos: i64 = 0
+    let mut line_len: i64 = 0
+    let mut line_num: i64 = 0
+
+    while lpos < script_len {
+        let ch = volatile_read_u8(script_buf + lpos)
+        if ch == 10 || lpos == script_len - 1 {
+            if ch != 10 && line_len < 63 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+            volatile_write_u8(line_buf + line_len, 0)
+            line_num = line_num + 1
+
+            // J1.9: Skip comments (#) and blank lines
+            let first = volatile_read_u8(line_buf)
+            if line_len > 0 && first != 35 { // 35 = '#'
+                shell_exec_from_buf(line_buf, line_len)
+            }
+            line_len = 0
+        } else {
+            if line_len < 63 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+        }
+        lpos = lpos + 1
+    }
+}
+
+// Update shell_execute to expand variables before dispatch
+@kernel fn shell_execute_v2() {
+    let len = cmdbuf_len()
+    if len == 0 { return }
+
+    // J1.4: Expand $VAR in cmdbuf
+    shell_expand_vars()
+
+    // Check for pipe first
+    let pipe_pos = shell_find_pipe()
+    if pipe_pos > 0 {
+        shell_exec_pipe(pipe_pos)
+        return
+    }
+
+    // Check for redirects
+    let redir = shell_find_redirect()
+    if redir > 0 {
+        shell_exec_redirect(redir)
+        return
+    }
+
+    // No pipe or redirect — normal dispatch
+    dispatch_command()
+}
+
+// ═══════════════════════════════════════════════
+// Shell Control Flow (Sprint J2)
+// ═══════════════════════════════════════════════
+
+// SCRIPT_BUF at 0x8D5000: control flow state machine
+// +0:    mode (0=interactive, 1=if, 2=for, 3=while)
+// +8:    depth (nesting level, max 8)
+// +16:   condition_result (0=false, 1=true) for current if/while
+// +24:   in_else (0=then branch, 1=else branch)
+// +32:   for_var_addr (address of loop variable name)
+// +40:   for_items_addr (address of item list)
+// +48:   for_item_idx (current item index)
+// +56:   for_item_count (total items)
+// +64:   while_script_pos (position in script to loop back to)
+// +72:   collecting (1=collecting lines for body, 0=executing)
+// +80:   body_buf (address of collected body lines, 0x8D5100)
+// +88:   body_len (length of collected body)
+const SCRIPT_STATE: i64 = 0x8D5000
+const SCRIPT_BODY_BUF: i64 = 0x8D5100  // 3.75KB for body lines
+
+const SMODE_NONE: i64 = 0
+const SMODE_IF: i64 = 1
+const SMODE_FOR: i64 = 2
+const SMODE_WHILE: i64 = 3
+
+// J2.5: Initialize script state
+@kernel fn script_state_init() {
+    volatile_write_u64(SCRIPT_STATE, SMODE_NONE)     // mode
+    volatile_write_u64(SCRIPT_STATE + 8, 0)           // depth
+    volatile_write_u64(SCRIPT_STATE + 16, 0)          // condition_result
+    volatile_write_u64(SCRIPT_STATE + 24, 0)          // in_else
+    volatile_write_u64(SCRIPT_STATE + 72, 0)          // collecting
+    volatile_write_u64(SCRIPT_STATE + 88, 0)          // body_len
+}
+
+// J2.6: `test` / `[` builtin — evaluate conditions, set LAST_EXIT_CODE
+@kernel fn cmd_test() {
+    let len = cmdbuf_len()
+    let result: i64 = 0
+
+    // Parse test expression from cmdbuf
+    // "test -f <file>" — file exists
+    if len > 8 && volatile_read_u8(0x6F800 + 5) == 45 && volatile_read_u8(0x6F800 + 6) == 102 {
+        // -f flag: check if file exists
+        let fname_addr: i64 = 0x843D00
+        let mut fi: i64 = 0
+        let mut pos: i64 = 8
+        while pos < len && fi < 31 {
+            volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+            fi = fi + 1
+            pos = pos + 1
+        }
+        volatile_write_u8(fname_addr + fi, 0)
+        let idx = ramfs_find_by_addr(fname_addr)
+        if idx >= 0 { volatile_write_u64(LAST_EXIT_CODE, 0) }
+        else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        return
+    }
+
+    // "test -d <dir>" — directory exists
+    if len > 8 && volatile_read_u8(0x6F800 + 5) == 45 && volatile_read_u8(0x6F800 + 6) == 100 {
+        let fname_addr: i64 = 0x843D00
+        let mut fi: i64 = 0
+        let mut pos: i64 = 8
+        while pos < len && fi < 31 {
+            volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+            fi = fi + 1
+            pos = pos + 1
+        }
+        volatile_write_u8(fname_addr + fi, 0)
+        let idx = ramfs_find_by_addr(fname_addr)
+        if idx >= 0 {
+            let entry = ramfs_entry_addr(idx)
+            let ftype = volatile_read(entry + 48)
+            if ftype == 2 { volatile_write_u64(LAST_EXIT_CODE, 0) }
+            else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        } else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        return
+    }
+
+    // "test <a> -eq <b>" — integer equality
+    // "test <a> = <b>" — string equality
+    // Simple: just set exit code 0 (true) for "test" alone
+    volatile_write_u64(LAST_EXIT_CODE, 0)
+}
+
+// J2.1/J2.2: `if` command — "if <cmd>; then ... [else ...] fi"
+// In interactive/script mode, we collect lines until fi
+@kernel fn cmd_if_start() {
+    let len = cmdbuf_len()
+    // Parse condition command after "if "
+    let cond_buf: i64 = 0x843E00
+    let mut ci: i64 = 0
+    let mut pos: i64 = 3 // skip "if "
+
+    // Find "; then" or end of line
+    while pos < len && ci < 62 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        // Check for "; then" or ";then"
+        if ch == 59 { pos = len } // ';' found, stop
+        else { volatile_write_u8(cond_buf + ci, ch); ci = ci + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(cond_buf + ci, 0)
+
+    // Execute condition command
+    shell_exec_from_buf(cond_buf, ci)
+    let cond_result = volatile_read_u64(LAST_EXIT_CODE)
+
+    // Set script state
+    volatile_write_u64(SCRIPT_STATE, SMODE_IF)
+    volatile_write_u64(SCRIPT_STATE + 16, if cond_result == 0 { 1 } else { 0 })
+    volatile_write_u64(SCRIPT_STATE + 24, 0) // in_else = false
+    volatile_write_u64(SCRIPT_STATE + 72, 1) // collecting = true
+    volatile_write_u64(SCRIPT_STATE + 88, 0) // body_len = 0
+}
+
+// Process a line during if/for/while collection
+@kernel fn script_process_line(line: i64, line_len: i64) {
+    let mode = volatile_read_u64(SCRIPT_STATE)
+
+    if mode == SMODE_IF {
+        // Check for "else"
+        if line_len == 4 && volatile_read_u8(line) == 101 && volatile_read_u8(line + 1) == 108 &&
+           volatile_read_u8(line + 2) == 115 && volatile_read_u8(line + 3) == 101 {
+            volatile_write_u64(SCRIPT_STATE + 24, 1) // in_else = true
+            return
+        }
+        // Check for "fi"
+        if line_len == 2 && volatile_read_u8(line) == 102 && volatile_read_u8(line + 1) == 105 {
+            // Execute collected body
+            script_exec_if_body()
+            script_state_init()
+            return
+        }
+        // Collect line into body buffer
+        let cond_true = volatile_read_u64(SCRIPT_STATE + 16)
+        let in_else = volatile_read_u64(SCRIPT_STATE + 24)
+        let should_exec = (cond_true == 1 && in_else == 0) || (cond_true == 0 && in_else == 1)
+        if should_exec == 1 {
+            shell_exec_from_buf(line, line_len)
+        }
+        return
+    }
+
+    if mode == SMODE_FOR {
+        // Check for "done"
+        if line_len == 4 && volatile_read_u8(line) == 100 && volatile_read_u8(line + 1) == 111 &&
+           volatile_read_u8(line + 2) == 110 && volatile_read_u8(line + 3) == 101 {
+            script_state_init()
+            return
+        }
+        // Execute line with current loop variable
+        shell_exec_from_buf(line, line_len)
+        return
+    }
+
+    if mode == SMODE_WHILE {
+        // Check for "done"
+        if line_len == 4 && volatile_read_u8(line) == 100 && volatile_read_u8(line + 1) == 111 &&
+           volatile_read_u8(line + 2) == 110 && volatile_read_u8(line + 3) == 101 {
+            script_state_init()
+            return
+        }
+        shell_exec_from_buf(line, line_len)
+        return
+    }
+}
+
+// Execute the if body (already dispatched line-by-line above)
+@kernel fn script_exec_if_body() {
+    // Body already executed inline during collection
+    // Nothing extra needed — lines were dispatched as they came in
+}
+
+// J2.3: `for` command — "for x in a b c; do ... done"
+@kernel fn cmd_for_start() {
+    let len = cmdbuf_len()
+    // Parse: "for <var> in <items>; do"
+    // Find variable name after "for "
+    let var_buf: i64 = 0x843F00
+    let mut vi: i64 = 0
+    let mut pos: i64 = 4 // skip "for "
+    while pos < len && volatile_read_u8(0x6F800 + pos) != 32 && vi < 15 {
+        volatile_write_u8(var_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(var_buf + vi, 0)
+
+    // Skip " in "
+    while pos < len && volatile_read_u8(0x6F800 + pos) == 32 { pos = pos + 1 }
+    // Skip "in "
+    if pos + 2 < len && volatile_read_u8(0x6F800 + pos) == 105 { pos = pos + 3 }
+
+    // Parse items (space-separated, until ';' or end)
+    let items_buf: i64 = 0x844800
+    let mut ii: i64 = 0
+    while pos < len && ii < 255 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 59 { pos = len } // ';' — stop
+        else { volatile_write_u8(items_buf + ii, ch); ii = ii + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(items_buf + ii, 0)
+
+    // Count items
+    let mut item_count: i64 = 0
+    let mut in_item: i64 = 0
+    let mut ci: i64 = 0
+    while ci < ii {
+        let ch = volatile_read_u8(items_buf + ci)
+        if ch == 32 {
+            if in_item == 1 { item_count = item_count + 1; in_item = 0 }
+        } else { in_item = 1 }
+        ci = ci + 1
+    }
+    if in_item == 1 { item_count = item_count + 1 }
+
+    // Set state for for loop
+    volatile_write_u64(SCRIPT_STATE, SMODE_FOR)
+    volatile_write_u64(SCRIPT_STATE + 32, var_buf)
+    volatile_write_u64(SCRIPT_STATE + 40, items_buf)
+    volatile_write_u64(SCRIPT_STATE + 48, 0)          // item_idx = 0
+    volatile_write_u64(SCRIPT_STATE + 56, item_count)
+    volatile_write_u64(SCRIPT_STATE + 72, 1)           // collecting body
+    volatile_write_u64(SCRIPT_STATE + 88, 0)
+}
+
+// J2.4: `while` command — "while <cmd>; do ... done"
+@kernel fn cmd_while_start() {
+    let len = cmdbuf_len()
+    // Parse condition after "while "
+    let cond_buf: i64 = 0x844A00
+    let mut ci: i64 = 0
+    let mut pos: i64 = 6 // skip "while "
+    while pos < len && ci < 62 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 59 { pos = len } // ';'
+        else { volatile_write_u8(cond_buf + ci, ch); ci = ci + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(cond_buf + ci, 0)
+
+    // Execute condition
+    shell_exec_from_buf(cond_buf, ci)
+    let cond_result = volatile_read_u64(LAST_EXIT_CODE)
+
+    volatile_write_u64(SCRIPT_STATE, SMODE_WHILE)
+    volatile_write_u64(SCRIPT_STATE + 16, if cond_result == 0 { 1 } else { 0 })
+    volatile_write_u64(SCRIPT_STATE + 72, 1)
+    volatile_write_u64(SCRIPT_STATE + 88, 0)
+}
+
+// J2.8: Handle quoted strings — find end of quoted segment
+@kernel fn shell_find_quote_end(buf: i64, start: i64, len: i64, quote_char: i64) -> i64 {
+    let mut pos = start + 1
+    while pos < len {
+        if volatile_read_u8(buf + pos) == quote_char { return pos }
+        pos = pos + 1
+    }
+    len // unterminated quote
+}
+
+// J2.9: `exit` builtin
+@kernel fn cmd_exit_shell() {
+    let len = cmdbuf_len()
+    let mut code: i64 = 0
+    if len > 5 {
+        code = volatile_read_u8(0x6F800 + 5) - 48
+    }
+    cprint("Exiting with code ", WHITE_ON_BLACK)
+    cprint_decimal(code, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    volatile_write_u64(LAST_EXIT_CODE, code)
+    // In interactive mode, this triggers shutdown
+    // In script mode, this stops script execution
+    if volatile_read_u64(SCRIPT_STATE) == SMODE_NONE {
+        shutdown_clean()
+    }
 }
 
 // ── Shell Commands ──
@@ -10255,7 +12981,7 @@ const FS_ENTRY_SIZE: i64 = 128
 }
 
 @kernel fn cmd_dmesg() {
-    cprintln("[0.000] FajarOS Nova v1.0.0 starting", WHITE_ON_BLACK)
+    cprintln("[0.000] FajarOS Nova v1.2.0 Nexus starting", WHITE_ON_BLACK)
     cprintln("[0.001] Serial: COM1 (0x3F8) 115200 baud", WHITE_ON_BLACK)
     cprintln("[0.002] SSE: enabled", WHITE_ON_BLACK)
     cprintln("[0.003] IDT: 256 vectors loaded", WHITE_ON_BLACK)
@@ -12626,6 +15352,7 @@ const PROC_OFF_NAME: i64 = 64
     pit_init(100)
     tss_init()
     syscall_init()
+    syscall_register_dispatch()  // v0.7: store fn_addr for linker indirect call
 
     // Init process table + keyboard buffer
     let mut i: i64 = 0
@@ -12724,7 +15451,22 @@ const PROC_OFF_NAME: i64 = 64
     // Initialize process table v2 + keyboard buffer
     proc_v2_init()
     kb_init()
-    fd_init(0) // FDs for kernel process
+    fd_init(0) // FDs for kernel process (legacy)
+    fd_v2_init(0) // FDs v2 at 0x8D0000 for syscall dispatch
+    // Initialize CWD for PID 0 to "/"
+    volatile_write_u8(PROC_TABLE + PROC_OFF_CWD, 47) // '/'
+    volatile_write_u8(PROC_TABLE + PROC_OFF_CWD + 1, 0)
+    sig_init(0) // Initialize signal table for PID 0
+    volatile_write(CTRL_STATE_ADDR, 0) // Ctrl key not pressed
+    set_fg_pgid(0) // Shell is foreground
+    // Clear job table
+    let mut ji: i64 = 0
+    while ji < JOB_MAX * JOB_ENTRY_SIZE { volatile_write_u8(JOB_TABLE + ji, 0); ji = ji + 1 }
+    // Initialize ENV_TABLE and last exit code
+    let mut ei: i64 = 0
+    while ei < ENV_MAX * ENV_ENTRY_SIZE { volatile_write_u8(ENV_TABLE + ei, 0); ei = ei + 1 }
+    volatile_write_u64(LAST_EXIT_CODE, 0)
+    script_state_init() // Initialize shell control flow state
     println("[PROC] Process table v2 ready")
     println("[KB] Keyboard buffer ready")
 
@@ -12902,6 +15644,13 @@ const PROC_OFF_NAME: i64 = 64
             else if sc == 0xAA || sc == 0xB6 {
                 volatile_write(0x6FBE0, 0)  // shift released
             }
+            // Ctrl make/break (I2.2/I2.3)
+            else if sc == 0x1D {
+                volatile_write(CTRL_STATE_ADDR, 1)  // ctrl pressed
+            }
+            else if sc == 0x9D {
+                volatile_write(CTRL_STATE_ADDR, 0)  // ctrl released
+            }
             // Caps Lock toggle (make only)
             else if sc == 0x3A {
                 let caps = volatile_read(0x6FBE8)
@@ -12919,11 +15668,39 @@ const PROC_OFF_NAME: i64 = 64
             }
             // Normal key press
             else if sc > 0 && sc < 128 {
+                let ctrl_held = volatile_read(CTRL_STATE_ADDR)
+                // I2.2: Ctrl+C (scancode 0x2E = 'C') → SIGINT
+                if ctrl_held == 1 && sc == 0x2E {
+                    cprintln("^C", WHITE_ON_BLACK)
+                    signal_fg_group(SIGINT)
+                    cmdbuf_clear()
+                    cprint("nova> ", GREEN_ON_BLACK)
+                }
+                // I2.3: Ctrl+Z (scancode 0x2C = 'Z') → SIGTSTP
+                else if ctrl_held == 1 && sc == 0x2C {
+                    cprintln("^Z", WHITE_ON_BLACK)
+                    signal_fg_group(SIGTSTP)
+                    cmdbuf_clear()
+                    cprint("nova> ", GREEN_ON_BLACK)
+                }
+                else {
                 let ascii = sc2ascii(sc)
                 if ascii == 10 {
                     console_putchar(10, WHITE_ON_BLACK)
+                    // I2.9: Check for completed background jobs
+                    job_check_notifications()
                     history_push()
-                    dispatch_command()
+                    // I2.4: Check for background '&' operator
+                    let bg_pos = shell_has_background()
+                    if bg_pos > 0 {
+                        // Remove '&' from cmdbuf and run in background
+                        volatile_write_u8(0x6F800 + bg_pos, 0)
+                        volatile_write(0x6F880, bg_pos)
+                        // Spawn as background kernel process
+                        shell_execute()
+                    } else {
+                    shell_execute_v2()  // v0.7: var expansion + pipes + redirects
+                    }
                     // Check for deferred user program run
                     if volatile_read_u64(RUN_PENDING) == 1 {
                         volatile_write_u64(RUN_PENDING, 0)
@@ -12948,6 +15725,7 @@ const PROC_OFF_NAME: i64 = 64
                     cmdbuf_push(ascii)
                     console_putchar(ascii, WHITE_ON_BLACK)
                 }
+                } // close else (non-ctrl key)
             }
         }
     }

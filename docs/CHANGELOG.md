@@ -18,6 +18,38 @@ Kategori perubahan:
 
 ---
 
+## [5.2.0] — 2026-03-24 "Nexus"
+
+### Added — FajarOS Nova v1.2.0 "Nexus"
+- **26 unified syscalls** (SYS_EXIT through SYS_SETPGID) via table dispatch
+- **Linker syscall dispatch**: `__syscall_entry` uses indirect call to `syscall_dispatch()` (no more cmp/je chain)
+- **FD table v2** at 0x8D0000: 16 procs × 16 FDs, console/ramfs/pipe_read/pipe_write/fat32 types
+- **fork()**: Deep-copy page tables, FD table, context frame (child RAX=0), per-process kernel stack
+- **exec()**: Load ELF from ramfs/FAT32, argv on user stack (System V ABI), reset FDs/signals
+- **waitpid()**: Blocking wait, WNOHANG, zombie reaping, orphan reparenting to init (PID 1)
+- **Pipe syscall**: SYS_PIPE creates circular 4064-byte pipe with refcounting, EOF detection
+- **Shell pipes**: `cmd1 | cmd2` via FD redirect + pipe
+- **I/O redirection**: `>` (truncate), `>>` (append), `<` (input) with ramfs file creation
+- **Signal infrastructure**: 8 signals (SIGINT/SIGKILL/SIGTERM/SIGCHLD/SIGSEGV/SIGSTOP/SIGCONT/SIGTSTP)
+- **SYS_KILL/SYS_SIGNAL**: Send signals, register handlers, SIGKILL/SIGSTOP uncatchable
+- **Ctrl+C → SIGINT**, **Ctrl+Z → SIGTSTP** to foreground process group
+- **Job control**: Background `&`, `jobs`/`fg`/`bg` commands, job table at 0x8D8000
+- **Environment variables**: ENV_TABLE at 0x8D3000, `export`/`set` builtins, `$VAR` expansion
+- **Shell scripting**: `sh` command, if/then/else/fi, for/in/do/done, while/do/done, `test -f/-d`
+- **Special vars**: `$?` (last exit code), `$$` (current PID)
+- **Process groups**: PGID at proc entry +120, SYS_SETPGID
+
+### Stats
+- Nova LOC: 15,732 (up from 12,954)
+- Nova @kernel fns: 535 (up from 408)
+- Shell commands: ~200 (up from 181)
+- Syscalls: 26 (up from 5)
+- New memory allocations: 32KB at 0x8D0000-0x8D8000
+- 120 new integration tests (f1-f2, g1-g3, h1-h2, i1-i2, j1-j2, k1)
+- Total tests: 5,750+ (0 failures)
+
+---
+
 ## [5.1.0] — 2026-03-24 "Ascension"
 
 ### Added — Depth Completion (Zero "1 Inch Deep" Features)

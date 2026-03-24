@@ -2367,136 +2367,74 @@ fj_rt_bare_syscall_init:
 /* SYSCALL entry point — Ring 3 → Ring 0 */
 /* On entry: RCX=user RIP, R11=user RFLAGS, RAX=syscall number */
 /* Args: RDI=arg0, RSI=arg1, RDX=arg2, R10=arg3, R8=arg4, R9=arg5 */
+/* v0.7 "Nexus": table dispatch via indirect call to syscall_dispatch() */
 __syscall_entry:
-    /* Swap to kernel stack (from TSS RSP0 equivalent at fixed address) */
+    /* Swap to kernel stack */
     mov     QWORD PTR [0x6FE10], rsp    /* save user RSP */
     mov     rsp, 0x7F00000              /* kernel stack */
 
-    /* Save user context */
+    /* Save full user context (for future signal delivery) */
     push    rcx                 /* user RIP */
     push    r11                 /* user RFLAGS */
     push    rdi                 /* arg0 */
     push    rsi                 /* arg1 */
     push    rdx                 /* arg2 */
+    push    r10                 /* arg3 (reserved) */
+    push    r8                  /* arg4 (reserved) */
+    push    r9                  /* arg5 (reserved) */
 
-    /* Dispatch syscall by number (RAX) */
-    cmp     rax, 0              /* SYS_EXIT */
+    /* SYS_EXIT (0) is special — never returns to user, restores kernel stack */
+    cmp     rax, 0
     je      .Lsys_exit
-    cmp     rax, 1              /* SYS_WRITE */
-    je      .Lsys_write
-    cmp     rax, 2              /* SYS_READ */
-    je      .Lsys_read
-    cmp     rax, 9              /* SYS_GETPID */
-    je      .Lsys_getpid
-    cmp     rax, 10             /* SYS_YIELD */
-    je      .Lsys_yield
 
-    /* Unknown syscall — return -1 */
-    mov     rax, -1
+    /* Route all other syscalls through Fajar Lang syscall_dispatch() */
+    /* Setup System V calling convention: RDI=num, RSI=arg0, RDX=arg1, RCX=arg2 */
+    mov     rcx, rdx            /* arg2 → RCX (4th param) */
+    mov     rdx, rsi            /* arg1 → RDX (3rd param) */
+    mov     rsi, rdi            /* arg0 → RSI (2nd param) */
+    mov     rdi, rax            /* syscall num → RDI (1st param) */
+
+    /* Indirect call to syscall_dispatch fn pointer stored at 0x884008 */
+    /* If pointer is 0 (not initialized), return -1 */
+    mov     rax, QWORD PTR [0x884008]
+    test    rax, rax
+    jz      .Lsys_no_dispatch
+    call    rax
     jmp     .Lsys_return
 
-.Lsys_exit:
-    /* SYS_EXIT(code): store exit code, restore kernel state, return to shell */
-    /* Save exit code from RDI (arg0) to 0x652028 (exit_code) */
-    mov     QWORD PTR [0x652028], rdi
+.Lsys_no_dispatch:
+    mov     rax, -1
 
-    /* Mark current process as ZOMBIE in old process table */
-    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
-    shl     rax, 8
-    add     rax, 0x600000
-    mov     QWORD PTR [rax + 8], 0     /* state = dead */
-
-    /* Set "user_exited" flag at 0x652038 */
-    mov     QWORD PTR [0x652038], 1
-
-    /* Restore kernel RSP saved before iretq_to_user (at 0x652020) */
-    mov     rsp, QWORD PTR [0x652020]
-
-    /* Return to the caller of iretq_to_user (kernel code) */
-    /* The kernel saved RSP before calling iretq_to_user, so RET goes back to kernel */
-    ret
-
-.Lsys_yield:
-    /* SYS_YIELD: pop args and return 0 to userspace */
-    /* (Full preemptive scheduling comes in Phase 2) */
+.Lsys_return:
+    /* Restore saved registers and return to Ring 3 */
+    pop     r9
+    pop     r8
+    pop     r10
     pop     rdx
     pop     rsi
     pop     rdi
     pop     r11
     pop     rcx
     mov     rsp, QWORD PTR [0x6FE10]   /* restore user RSP */
-    xor     eax, eax
     sysretq
 
-.Lsys_write:
-    /* SYS_WRITE(fd=RDI, buf=RSI, len=RDX): write to serial */
-    /* For fd=1 (stdout), output each byte to COM1 */
-    pop     rdx                 /* len */
-    pop     rsi                 /* buf */
-    pop     rdi                 /* fd (ignored, always serial) */
-    mov     rcx, rdx            /* count */
-    mov     r8, rsi             /* buffer */
-.Lsys_write_loop:
-    test    rcx, rcx
-    jz      .Lsys_write_done
-    /* Wait TX ready */
-    mov     dx, 0x3FD
-.Lsys_write_wait:
-    in      al, dx
-    test    al, 0x20
-    jz      .Lsys_write_wait
-    /* Send byte */
-    mov     dx, 0x3F8
-    mov     al, BYTE PTR [r8]
-    out     dx, al
-    add     r8, 1
-    sub     rcx, 1
-    jmp     .Lsys_write_loop
-.Lsys_write_done:
-    mov     rax, rdx            /* return bytes written */
-    pop     r11
-    pop     rcx
-    mov     rsp, QWORD PTR [0x6FE10]
-    sysretq
+.Lsys_exit:
+    /* SYS_EXIT(code): store exit code, restore kernel state, return to shell */
+    mov     QWORD PTR [0x652028], rdi   /* save exit code */
 
-.Lsys_getpid:
-    pop     rdx
-    pop     rsi
-    pop     rdi
+    /* Mark current process as ZOMBIE in process table */
     mov     rax, QWORD PTR [0x6FE00]   /* current pid */
-    pop     r11
-    pop     rcx
-    mov     rsp, QWORD PTR [0x6FE10]
-    sysretq
+    shl     rax, 8                      /* pid * 256 */
+    add     rax, 0x600000
+    mov     QWORD PTR [rax + 8], 4     /* state = ZOMBIE (was 0=dead, now 4=zombie) */
+    mov     QWORD PTR [rax + 48], rdi  /* store exit code in proc entry */
 
-.Lsys_read:
-    /* SYS_READ(fd=RDI, buf=RSI, len=RDX): read from keyboard buffer */
-    pop     rdx                 /* len (max bytes to read) */
-    pop     rsi                 /* buf (destination) */
-    pop     rdi                 /* fd (0=stdin) */
-    xor     rax, rax            /* bytes read = 0 */
-    /* Simple: read one byte from keyboard port 0x60 if available */
-    /* Check keyboard status port 0x64 bit 0 */
-    in      al, 0x64
-    test    al, 1
-    jz      .Lsys_read_done    /* no key available */
-    in      al, 0x60            /* read scancode */
-    mov     BYTE PTR [rsi], al  /* store to user buffer */
-    mov     rax, 1              /* 1 byte read */
-.Lsys_read_done:
-    pop     r11
-    pop     rcx
-    mov     rsp, QWORD PTR [0x6FE10]
-    sysretq
+    /* Set "user_exited" flag */
+    mov     QWORD PTR [0x652038], 1
 
-.Lsys_return:
-    pop     rdx
-    pop     rsi
-    pop     rdi
-    pop     r11
-    pop     rcx
-    mov     rsp, QWORD PTR [0x6FE10]
-    sysretq
+    /* Restore kernel RSP saved before iretq_to_user */
+    mov     rsp, QWORD PTR [0x652020]
+    ret
 
 /* ── Ring 3 Process Creation ── */
 
