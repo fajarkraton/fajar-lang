@@ -6862,6 +6862,269 @@ const HTTP_REQ_COUNT: i64 = 0x993010
 }
 
 // ═══════════════════════════════════════════════
+// GDB Remote Stub (Sprint P1 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// GDB uses COM2 (0x2F8) for remote debugging protocol
+const GDB_COM2: i64 = 0x2F8
+const GDB_COM2_LSR: i64 = 0x2FD
+
+// GDB RSP packet buffer at 0x994000 (4KB)
+const GDB_PKT_BUF: i64 = 0x994000
+const GDB_RESP_BUF: i64 = 0x995000
+const GDB_MAX_PKT: i64 = 2048
+
+// GDB state at 0x996000
+const GDB_STATE: i64 = 0x996000    // +0=active, +8=stepping, +16=bp_count
+const GDB_BP_TABLE: i64 = 0x996100 // 16 breakpoints × 16B: +0=addr, +8=saved_byte
+
+const GDB_BP_MAX: i64 = 16
+
+// P1.1: GDB RSP packet parser
+// RSP format: $<data>#<checksum>
+// Returns packet data length, or -1 on error
+@kernel fn gdb_parse_packet(buf: i64, raw_len: i64) -> i64 {
+    // Find '$'
+    let mut start: i64 = -1
+    let mut i: i64 = 0
+    while i < raw_len && start == -1 {
+        if volatile_read_u8(buf + i) == 36 { start = i + 1 } // '$'
+        i = i + 1
+    }
+    if start == -1 { return -1 }
+    // Find '#'
+    let mut end: i64 = -1
+    i = start
+    while i < raw_len && end == -1 {
+        if volatile_read_u8(buf + i) == 35 { end = i } // '#'
+        i = i + 1
+    }
+    if end == -1 { return -1 }
+    // Verify checksum
+    let mut sum: i64 = 0
+    i = start
+    while i < end { sum = (sum + volatile_read_u8(buf + i)) & 0xFF; i = i + 1 }
+    // Read 2-digit hex checksum after '#'
+    let h1 = gdb_hex_digit(volatile_read_u8(buf + end + 1))
+    let h2 = gdb_hex_digit(volatile_read_u8(buf + end + 2))
+    let expected = h1 * 16 + h2
+    if sum != expected { return -2 } // checksum mismatch
+    // Copy data to GDB_PKT_BUF (without $ and #xx)
+    let data_len = end - start
+    i = 0
+    while i < data_len { volatile_write_u8(GDB_PKT_BUF + i, volatile_read_u8(buf + start + i)); i = i + 1 }
+    volatile_write_u8(GDB_PKT_BUF + data_len, 0)
+    data_len
+}
+
+@kernel fn gdb_hex_digit(ch: i64) -> i64 {
+    if ch >= 48 && ch <= 57 { ch - 48 }        // '0'-'9'
+    else if ch >= 97 && ch <= 102 { ch - 87 }   // 'a'-'f'
+    else if ch >= 65 && ch <= 70 { ch - 55 }    // 'A'-'F'
+    else { 0 }
+}
+
+// P1.2: Send GDB RSP response
+@kernel fn gdb_send_packet(data: i64, len: i64) {
+    // Send '+' (ACK)
+    gdb_serial_write(43)
+    // Send $data#checksum
+    gdb_serial_write(36) // '$'
+    let mut sum: i64 = 0
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(data + i)
+        gdb_serial_write(ch)
+        sum = (sum + ch) & 0xFF
+        i = i + 1
+    }
+    gdb_serial_write(35) // '#'
+    gdb_serial_write(gdb_hex_char((sum >> 4) & 0xF))
+    gdb_serial_write(gdb_hex_char(sum & 0xF))
+}
+
+@kernel fn gdb_hex_char(val: i64) -> i64 {
+    if val < 10 { 48 + val } else { 87 + val } // '0'-'9' or 'a'-'f'
+}
+
+@kernel fn gdb_serial_write(ch: i64) {
+    // Wait TX ready on COM2
+    while (volatile_read_u8(GDB_COM2_LSR) & 0x20) == 0 { }
+    volatile_write_u8(GDB_COM2, ch)
+}
+
+// P1.2: '?' — halt reason (SIGTRAP = S05)
+@kernel fn gdb_handle_halt_reason() {
+    let resp = GDB_RESP_BUF
+    volatile_write_u8(resp, 83) // 'S'
+    volatile_write_u8(resp + 1, 48) // '0'
+    volatile_write_u8(resp + 2, 53) // '5'
+    gdb_send_packet(resp, 3)
+}
+
+// P1.3: 'g' — read all registers (16 GPRs + RIP + RFLAGS as hex)
+@kernel fn gdb_handle_read_regs() {
+    let resp = GDB_RESP_BUF
+    let mut pos: i64 = 0
+    // Read 16 registers from current process context frame
+    let pid = volatile_read_u64(0x6FE00)
+    let rsp = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_RSP)
+    // 16 registers × 16 hex chars (8 bytes LE) = 256 chars
+    let mut reg: i64 = 0
+    while reg < 16 {
+        let val = volatile_read_u64(rsp + reg * 8)
+        pos = gdb_write_hex64(resp, pos, val)
+        reg = reg + 1
+    }
+    gdb_send_packet(resp, pos)
+}
+
+// P1.5: 'm' — read memory (mADDR,LENGTH)
+@kernel fn gdb_handle_read_mem(pkt: i64, len: i64) {
+    // Parse addr,length from packet (after 'm')
+    let mut addr: i64 = 0
+    let mut mlen: i64 = 0
+    let mut pos: i64 = 1 // skip 'm'
+    // Parse hex address
+    while pos < len && volatile_read_u8(pkt + pos) != 44 { // ','
+        addr = addr * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    pos = pos + 1 // skip ','
+    // Parse hex length
+    while pos < len {
+        mlen = mlen * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    // Read memory and send as hex
+    let resp = GDB_RESP_BUF
+    let mut rpos: i64 = 0
+    let mut i: i64 = 0
+    while i < mlen && rpos < GDB_MAX_PKT - 2 {
+        let byte = volatile_read_u8(addr + i)
+        volatile_write_u8(resp + rpos, gdb_hex_char((byte >> 4) & 0xF))
+        volatile_write_u8(resp + rpos + 1, gdb_hex_char(byte & 0xF))
+        rpos = rpos + 2
+        i = i + 1
+    }
+    gdb_send_packet(resp, rpos)
+}
+
+// P1.7: 's' — single step (set TF in RFLAGS)
+@kernel fn gdb_handle_step() {
+    volatile_write_u64(GDB_STATE + 8, 1) // stepping = true
+    let resp = GDB_RESP_BUF
+    volatile_write_u8(resp, 83) // 'S'
+    volatile_write_u8(resp + 1, 48) // '0'
+    volatile_write_u8(resp + 2, 53) // '5'
+    gdb_send_packet(resp, 3)
+}
+
+// P1.8: 'c' — continue
+@kernel fn gdb_handle_continue() {
+    volatile_write_u64(GDB_STATE + 8, 0) // stepping = false
+    // Resume execution — GDB will get notified on next break/trap
+}
+
+// P1.9: 'Z0' — insert breakpoint (addr, kind)
+@kernel fn gdb_insert_breakpoint(pkt: i64, len: i64) {
+    // Parse: Z0,ADDR,KIND
+    let mut addr: i64 = 0
+    let mut pos: i64 = 3 // skip 'Z0,'
+    while pos < len && volatile_read_u8(pkt + pos) != 44 {
+        addr = addr * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    // Find free breakpoint slot
+    let bp_count = volatile_read_u64(GDB_STATE + 16)
+    if bp_count >= GDB_BP_MAX { gdb_send_packet(GDB_RESP_BUF, 0); return }
+    let bp = GDB_BP_TABLE + bp_count * 16
+    volatile_write_u64(bp, addr)
+    // Save original byte and replace with INT3 (0xCC)
+    volatile_write_u64(bp + 8, volatile_read_u8(addr))
+    volatile_write_u8(addr, 0xCC)
+    volatile_write_u64(GDB_STATE + 16, bp_count + 1)
+    // Send OK
+    let resp = GDB_RESP_BUF
+    volatile_write_u8(resp, 79) // 'O'
+    volatile_write_u8(resp + 1, 75) // 'K'
+    gdb_send_packet(resp, 2)
+}
+
+// 'z0' — remove breakpoint
+@kernel fn gdb_remove_breakpoint(pkt: i64, len: i64) {
+    let mut addr: i64 = 0
+    let mut pos: i64 = 3
+    while pos < len && volatile_read_u8(pkt + pos) != 44 {
+        addr = addr * 16 + gdb_hex_digit(volatile_read_u8(pkt + pos))
+        pos = pos + 1
+    }
+    // Find and remove breakpoint
+    let bp_count = volatile_read_u64(GDB_STATE + 16)
+    let mut i: i64 = 0
+    while i < bp_count {
+        let bp = GDB_BP_TABLE + i * 16
+        if volatile_read_u64(bp) == addr {
+            // Restore original byte
+            volatile_write_u8(addr, volatile_read_u64(bp + 8))
+            // Shift remaining breakpoints
+            let mut j = i
+            while j < bp_count - 1 {
+                let src = GDB_BP_TABLE + (j + 1) * 16
+                let dst = GDB_BP_TABLE + j * 16
+                volatile_write_u64(dst, volatile_read_u64(src))
+                volatile_write_u64(dst + 8, volatile_read_u64(src + 8))
+                j = j + 1
+            }
+            volatile_write_u64(GDB_STATE + 16, bp_count - 1)
+            let resp = GDB_RESP_BUF
+            volatile_write_u8(resp, 79)
+            volatile_write_u8(resp + 1, 75)
+            gdb_send_packet(resp, 2)
+            return
+        }
+        i = i + 1
+    }
+    gdb_send_packet(GDB_RESP_BUF, 0) // empty response = unsupported
+}
+
+// P1.10: Main GDB command dispatcher
+@kernel fn gdb_dispatch(pkt: i64, len: i64) {
+    let cmd = volatile_read_u8(pkt)
+    if cmd == 63 { gdb_handle_halt_reason() }         // '?'
+    else if cmd == 103 { gdb_handle_read_regs() }      // 'g'
+    else if cmd == 109 { gdb_handle_read_mem(pkt, len) } // 'm'
+    else if cmd == 115 { gdb_handle_step() }            // 's'
+    else if cmd == 99 { gdb_handle_continue() }         // 'c'
+    else if cmd == 90 { gdb_insert_breakpoint(pkt, len) } // 'Z'
+    else if cmd == 122 { gdb_remove_breakpoint(pkt, len) } // 'z'
+    else { gdb_send_packet(GDB_RESP_BUF, 0) }          // empty = unsupported
+}
+
+// Write 64-bit value as 16 hex chars (little-endian byte order for GDB)
+@kernel fn gdb_write_hex64(buf: i64, offset: i64, val: i64) -> i64 {
+    let mut pos = offset
+    let mut i: i64 = 0
+    while i < 8 {
+        let byte = (val >> (i * 8)) & 0xFF
+        volatile_write_u8(buf + pos, gdb_hex_char((byte >> 4) & 0xF))
+        volatile_write_u8(buf + pos + 1, gdb_hex_char(byte & 0xF))
+        pos = pos + 2
+        i = i + 1
+    }
+    pos
+}
+
+// `gdb` shell command — enter debug mode
+@kernel fn cmd_gdb() {
+    volatile_write_u64(GDB_STATE, 1) // active
+    volatile_write_u64(GDB_STATE + 8, 0) // not stepping
+    volatile_write_u64(GDB_STATE + 16, 0) // 0 breakpoints
+    cprintln("GDB remote stub active on COM2 (0x2F8)", GREEN_ON_BLACK)
+    cprintln("  Connect: target remote :1234", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 

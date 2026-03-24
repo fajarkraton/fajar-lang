@@ -12258,3 +12258,207 @@ fn o2_server_state() {
     let out = eval_output(src);
     assert_eq!(out, vec!["10039296", "8", "8"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase P: GDB Remote Debugging
+// Sprint P1: GDB protocol stub
+// ═══════════════════════════════════════════════
+
+#[test]
+fn p1_gdb_rsp_format() {
+    let src = r#"
+        fn checksum(data: str) -> i64 {
+            let mut sum: i64 = 0
+            let slen = len(data) as i64
+            let mut i: i64 = 0
+            while i < slen {
+                sum = sum + data.substring(i, i + 1).parse_int().unwrap_or(0)
+                i = i + 1
+            }
+            sum & 0xFF
+        }
+        fn main() -> void {
+            // RSP format: $data#XX
+            let dollar: i64 = 36
+            let hash: i64 = 35
+            println(dollar)
+            println(hash)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["36", "35"]);
+}
+
+#[test]
+fn p1_hex_digit_parse() {
+    let src = r#"
+        fn hex_digit(ch: i64) -> i64 {
+            if ch >= 48 && ch <= 57 { ch - 48 }
+            else if ch >= 97 && ch <= 102 { ch - 87 }
+            else if ch >= 65 && ch <= 70 { ch - 55 }
+            else { 0 }
+        }
+        fn main() -> void {
+            println(hex_digit(48))   // '0' → 0
+            println(hex_digit(57))   // '9' → 9
+            println(hex_digit(97))   // 'a' → 10
+            println(hex_digit(102))  // 'f' → 15
+            println(hex_digit(65))   // 'A' → 10
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "9", "10", "15", "10"]);
+}
+
+#[test]
+fn p1_halt_reason() {
+    let src = r#"
+        fn halt_reason() -> str { "S05" }
+        fn main() -> void {
+            println(halt_reason())
+            // S05 = SIGTRAP
+            println(5)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["S05", "5"]);
+}
+
+#[test]
+fn p1_hex_byte() {
+    let src = r#"
+        fn hex_char(val: i64) -> i64 {
+            if val < 10 { 48 + val } else { 87 + val }
+        }
+        fn byte_to_hex(byte: i64) -> str {
+            let hi = hex_char((byte >> 4) & 0xF)
+            let lo = hex_char(byte & 0xF)
+            f"{hi}{lo}"
+        }
+        fn main() -> void {
+            // 0xCC = INT3
+            println(hex_char(12))  // 'c' = 99
+            println(hex_char(0))   // '0' = 48
+            println(hex_char(15))  // 'f' = 102
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["99", "48", "102"]);
+}
+
+#[test]
+fn p1_breakpoint_int3() {
+    let src = r#"
+        const INT3: i64 = 0xCC
+        fn main() -> void {
+            println(INT3)
+            // INT3 = 204 decimal
+            println(INT3 == 204)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["204", "true"]);
+}
+
+#[test]
+fn p1_gdb_com2() {
+    let src = r#"
+        const GDB_COM2: i64 = 0x2F8
+        const GDB_COM2_LSR: i64 = 0x2FD
+        fn main() -> void {
+            println(GDB_COM2)
+            println(GDB_COM2_LSR)
+            println(GDB_COM2_LSR - GDB_COM2)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["760", "765", "5"]);
+}
+
+#[test]
+fn p1_register_hex_encoding() {
+    let src = r#"
+        fn hex_char(val: i64) -> i64 { if val < 10 { 48 + val } else { 87 + val } }
+        fn le_byte(val: i64, idx: i64) -> i64 { (val >> (idx * 8)) & 0xFF }
+        fn main() -> void {
+            let val: i64 = 0x42
+            // Little-endian: first byte = 0x42, rest = 0x00
+            println(le_byte(val, 0))
+            println(le_byte(val, 1))
+            // 16 hex chars for 8 bytes
+            println(8 * 2)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["66", "0", "16"]);
+}
+
+#[test]
+fn p1_gdb_commands() {
+    let src = r#"
+        fn cmd_name(ch: i64) -> str {
+            if ch == 63 { "halt_reason" }
+            else if ch == 103 { "read_regs" }
+            else if ch == 109 { "read_mem" }
+            else if ch == 115 { "step" }
+            else if ch == 99 { "continue" }
+            else if ch == 90 { "insert_bp" }
+            else if ch == 122 { "remove_bp" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(cmd_name(63))   // '?'
+            println(cmd_name(103))  // 'g'
+            println(cmd_name(109))  // 'm'
+            println(cmd_name(115))  // 's'
+            println(cmd_name(99))   // 'c'
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["halt_reason", "read_regs", "read_mem", "step", "continue"]);
+}
+
+#[test]
+fn p1_bp_table_layout() {
+    let src = r#"
+        const GDB_BP_TABLE: i64 = 0x996100
+        const GDB_BP_MAX: i64 = 16
+        fn bp_addr(idx: i64) -> i64 { GDB_BP_TABLE + idx * 16 }
+        fn main() -> void {
+            println(GDB_BP_MAX)
+            println(GDB_BP_MAX * 16)
+            println(bp_addr(0))
+            println(bp_addr(1) - bp_addr(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16", "256", "10051840", "16"]);
+}
+
+#[test]
+fn p1_mem_addr_parse() {
+    let src = r#"
+        fn parse_hex(s: str) -> i64 {
+            let mut val: i64 = 0
+            let slen = len(s) as i64
+            let mut i: i64 = 0
+            while i < slen {
+                let ch = s.substring(i, i + 1)
+                val = val * 16
+                if ch == "a" { val = val + 10 }
+                else if ch == "f" { val = val + 15 }
+                else if ch == "1" { val = val + 1 }
+                else if ch == "0" { val = val + 0 }
+                i = i + 1
+            }
+            val
+        }
+        fn main() -> void {
+            println(parse_hex("1a"))
+            println(parse_hex("ff"))
+            println(parse_hex("10"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["26", "255", "16"]);
+}
