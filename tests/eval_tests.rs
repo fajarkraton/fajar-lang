@@ -11739,3 +11739,178 @@ fn n1_component_extraction() {
     let out = eval_output(src);
     assert_eq!(out, vec!["home", "etc", "file.txt"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint N2: Journal & crash recovery
+// ═══════════════════════════════════════════════
+
+#[test]
+fn n2_journal_layout() {
+    let src = r#"
+        const JOURNAL_BASE: i64 = 0x970000
+        const JOURNAL_ENTRIES: i64 = 0x970100
+        const JOURNAL_ENTRY_SIZE: i64 = 64
+        const JOURNAL_MAX_ENTRIES: i64 = 1000
+        fn main() -> void {
+            println(JOURNAL_ENTRIES - JOURNAL_BASE)
+            println(JOURNAL_MAX_ENTRIES * JOURNAL_ENTRY_SIZE)
+            println(JOURNAL_MAX_ENTRIES * JOURNAL_ENTRY_SIZE < 65536)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["256", "64000", "true"]);
+}
+
+#[test]
+fn n2_journal_entry_types() {
+    let src = r#"
+        const JTYPE_NONE: i64 = 0
+        const JTYPE_CREATE: i64 = 1
+        const JTYPE_WRITE: i64 = 2
+        const JTYPE_DELETE: i64 = 3
+        const JTYPE_RENAME: i64 = 4
+        const JTYPE_CHMOD: i64 = 5
+        fn main() -> void {
+            println(JTYPE_CREATE)
+            println(JTYPE_DELETE)
+            println(JTYPE_RENAME)
+            println(JTYPE_CHMOD)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3", "4", "5"]);
+}
+
+#[test]
+fn n2_journal_commit_flow() {
+    let src = r#"
+        fn journal_state(count: i64, committed: bool) -> str {
+            if count == 0 && committed { "clean" }
+            else if count > 0 && !committed { "dirty" }
+            else if count > 0 && committed { "committed" }
+            else { "empty" }
+        }
+        fn main() -> void {
+            println(journal_state(0, true))
+            println(journal_state(5, false))
+            println(journal_state(5, true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["clean", "dirty", "committed"]);
+}
+
+#[test]
+fn n2_disk_full_check() {
+    let src = r#"
+        const THRESHOLD: i64 = 90
+        fn is_full(used: i64, total: i64) -> bool {
+            total > 0 && (used * 100) / total >= THRESHOLD
+        }
+        fn main() -> void {
+            println(is_full(900, 1000))
+            println(is_full(899, 1000))
+            println(is_full(500, 1000))
+            println(is_full(0, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false", "false"]);
+}
+
+#[test]
+fn n2_inode_generation() {
+    let src = r#"
+        fn gen_after_delete_recreate(old_gen: i64) -> i64 { old_gen + 1 }
+        fn is_stale(handle_gen: i64, current_gen: i64) -> bool { handle_gen != current_gen }
+        fn main() -> void {
+            let gen = gen_after_delete_recreate(0)
+            println(gen)
+            println(is_stale(0, 1))
+            println(is_stale(1, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "true", "false"]);
+}
+
+#[test]
+fn n2_replay_needed() {
+    let src = r#"
+        fn needs_replay(committed: bool) -> bool { !committed }
+        fn main() -> void {
+            println(needs_replay(true))
+            println(needs_replay(false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["false", "true"]);
+}
+
+#[test]
+fn n2_atomic_rename() {
+    let src = r#"
+        fn rename_steps() -> i64 {
+            // 1. journal_add(RENAME), 2. apply, 3. journal_commit
+            3
+        }
+        fn main() -> void {
+            println(rename_steps())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
+
+#[test]
+fn n2_disk_usage_pct() {
+    let src = r#"
+        fn usage_pct(used: i64, total: i64) -> i64 {
+            if total == 0 { 0 } else { (used * 100) / total }
+        }
+        fn main() -> void {
+            println(usage_pct(500, 1000))
+            println(usage_pct(832 * 1024, 832 * 1024))
+            println(usage_pct(0, 832 * 1024))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["50", "100", "0"]);
+}
+
+#[test]
+fn n2_journal_sequence() {
+    let src = r#"
+        fn next_seq(current: i64) -> i64 { current + 1 }
+        fn main() -> void {
+            let mut seq: i64 = 0
+            seq = next_seq(seq)
+            println(seq)
+            seq = next_seq(seq)
+            println(seq)
+            seq = next_seq(seq)
+            println(seq)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "2", "3"]);
+}
+
+#[test]
+fn n2_fsck_error_types() {
+    let src = r#"
+        fn fsck_check(link_target: i64, max_entries: i64, size: i64) -> i64 {
+            let mut errors: i64 = 0
+            if link_target >= max_entries { errors = errors + 1 }
+            if size < 0 { errors = errors + 1 }
+            errors
+        }
+        fn main() -> void {
+            println(fsck_check(5, 64, 100))
+            println(fsck_check(100, 64, 100))
+            println(fsck_check(100, 64, -1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "2"]);
+}
