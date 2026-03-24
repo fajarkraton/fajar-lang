@@ -7747,3 +7747,83 @@ fn e3_network_buffer_layout() {
     let out = eval_output(src);
     assert_eq!(out, vec!["16384", "16384", "16384", "true", "true"]);
 }
+
+// ═══════════════════════════════════════════════
+// Item 5: Effect Polymorphism — end-to-end eval tests
+// ═══════════════════════════════════════════════
+
+#[test]
+fn effect_poly_basic_apply() {
+    // Effect-polymorphic function called with pure function
+    let src = r#"
+        fn apply<E: Effect>(x: i64) -> i64 with E { x * 2 }
+        fn main() -> void {
+            println(apply(21))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn effect_poly_chain() {
+    // Chain of effect-polymorphic functions
+    let src = r#"
+        fn double<E: Effect>(x: i64) -> i64 with E { x * 2 }
+        fn add_one<E: Effect>(x: i64) -> i64 with E { x + 1 }
+        fn main() -> void {
+            let a = double(5)
+            let b = add_one(a)
+            println(b)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["11"]);
+}
+
+#[test]
+fn effect_poly_with_type_generic() {
+    // Effect variable alongside type generic
+    let src = r#"
+        fn identity<T, E: Effect>(x: T) -> T with E { x }
+        fn main() -> void {
+            println(identity(42))
+            println(identity(true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "true"]);
+}
+
+#[test]
+fn effect_poly_with_concrete_io() {
+    // Effect-polymorphic function used in IO context
+    let src = r#"
+        fn transform<E: Effect>(x: i64) -> i64 with E { x + 100 }
+        fn do_io() -> void with IO {
+            println(transform(42))
+        }
+        fn main() -> void {
+            do_io()
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["142"]);
+}
+
+#[test]
+fn effect_poly_multiple_calls() {
+    // Same effect-poly function called multiple times
+    let src = r#"
+        fn inc<E: Effect>(x: i64) -> i64 with E { x + 1 }
+        fn main() -> void {
+            let a = inc(0)
+            let b = inc(a)
+            let c = inc(b)
+            let d = inc(c)
+            println(d)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4"]);
+}
