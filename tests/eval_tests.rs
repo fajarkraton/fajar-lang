@@ -12798,3 +12798,168 @@ fn r1_gpu_memory_regions() {
     let out = eval_output(src);
     assert_eq!(out, vec!["4096", "258048", "16384"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint R2: GPU compute dispatch
+// ═══════════════════════════════════════════════
+
+#[test]
+fn r2_compute_buffer_layout() {
+    let src = r#"
+        const COMPUTE_BUF_BASE: i64 = 0x9F0000
+        const COMPUTE_BUF_MAX: i64 = 16
+        const COMPUTE_BUF_SIZE: i64 = 4096
+        fn buf_addr(slot: i64) -> i64 { COMPUTE_BUF_BASE + slot * COMPUTE_BUF_SIZE }
+        fn main() -> void {
+            println(COMPUTE_BUF_MAX * COMPUTE_BUF_SIZE)
+            println(buf_addr(0))
+            println(buf_addr(1) - buf_addr(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["65536", "10420224", "4096"]);
+}
+
+#[test]
+fn r2_compute_meta_layout() {
+    let src = r#"
+        const COMPUTE_META: i64 = 0x9EF000
+        const COMPUTE_META_SIZE: i64 = 32
+        fn meta_addr(slot: i64) -> i64 { COMPUTE_META + slot * COMPUTE_META_SIZE }
+        fn main() -> void {
+            println(meta_addr(0))
+            println(meta_addr(1) - meta_addr(0))
+            println(16 * COMPUTE_META_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10416128", "32", "512"]);
+}
+
+#[test]
+fn r2_kernel_ids() {
+    let src = r#"
+        const KERNEL_MATMUL: i64 = 1
+        const KERNEL_VECADD: i64 = 2
+        const KERNEL_SCALE: i64 = 3
+        const KERNEL_RELU: i64 = 4
+        fn main() -> void {
+            println(KERNEL_MATMUL)
+            println(KERNEL_VECADD)
+            println(KERNEL_RELU)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "2", "4"]);
+}
+
+#[test]
+fn r2_matmul_dimensions() {
+    let src = r#"
+        fn matmul_valid(m: i64, n: i64, bn: i64, p: i64) -> bool { n == bn }
+        fn result_shape(m: i64, p: i64) -> str { f"{m}x{p}" }
+        fn main() -> void {
+            println(matmul_valid(4, 3, 3, 5))
+            println(matmul_valid(4, 3, 2, 5))
+            println(result_shape(4, 5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "4x5"]);
+}
+
+#[test]
+fn r2_matmul_simple() {
+    let src = r#"
+        fn dot(a0: i64, a1: i64, b0: i64, b1: i64) -> i64 { a0 * b0 + a1 * b1 }
+        fn main() -> void {
+            // [1,2] · [3,4] = 1*3 + 2*4 = 11
+            println(dot(1, 2, 3, 4))
+            // [1,0] · [0,1] = 0
+            println(dot(1, 0, 0, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["11", "0"]);
+}
+
+#[test]
+fn r2_vecadd_simple() {
+    let src = r#"
+        fn vecadd(a: i64, b: i64) -> i64 { a + b }
+        fn main() -> void {
+            println(vecadd(1, 2))
+            println(vecadd(10, 20))
+            println(vecadd(0, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "30", "0"]);
+}
+
+#[test]
+fn r2_buffer_capacity() {
+    let src = r#"
+        const BUF_SIZE: i64 = 4096
+        fn max_elements(elem_size: i64) -> i64 { BUF_SIZE / elem_size }
+        fn max_matrix_dim(elem_size: i64) -> i64 {
+            let total = max_elements(elem_size)
+            let mut n: i64 = 1
+            while n * n <= total { n = n + 1 }
+            n - 1
+        }
+        fn main() -> void {
+            // 4096 bytes / 8 = 512 i64 elements
+            println(max_elements(8))
+            // sqrt(512) ≈ 22 → 22×22 = 484 fits
+            println(max_matrix_dim(8))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "22"]);
+}
+
+#[test]
+fn r2_gpu_syscall_numbers() {
+    let src = r#"
+        const SYS_GPU_ALLOC: i64 = 32
+        const SYS_GPU_DISPATCH: i64 = 33
+        fn main() -> void {
+            println(SYS_GPU_ALLOC)
+            println(SYS_GPU_DISPATCH)
+            // Total syscalls now: 34 (0-33)
+            println(SYS_GPU_DISPATCH + 1)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["32", "33", "34"]);
+}
+
+#[test]
+fn r2_identity_matmul() {
+    // I × A = A (identity check)
+    let src = r#"
+        fn matmul_identity_check(a: i64) -> i64 { 1 * a }
+        fn main() -> void {
+            println(matmul_identity_check(42))
+            println(matmul_identity_check(7))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "7"]);
+}
+
+#[test]
+fn r2_benchmark_flops() {
+    // n×n matmul = 2*n^3 FLOPs
+    let src = r#"
+        fn matmul_flops(n: i64) -> i64 { 2 * n * n * n }
+        fn main() -> void {
+            println(matmul_flops(8))
+            println(matmul_flops(16))
+            println(matmul_flops(22))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "8192", "21296"]);
+}
