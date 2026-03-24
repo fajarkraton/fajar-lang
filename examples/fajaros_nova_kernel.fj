@@ -4969,6 +4969,224 @@ const USER_HEAP_BASE: i64 = 0x2800000
 }
 
 // ═══════════════════════════════════════════════
+// Copy-on-Write (Sprint L1 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// CoW page flag: PTE bit 9 (AVL) = 0x200
+const PAGE_COW: i64 = 0x200
+
+// Page refcount table at 0x950000: 32K entries × 2 bytes = 64KB
+// Covers 32K frames × 4KB = 128MB physical memory
+const PAGE_REFCOUNT: i64 = 0x950000
+const PAGE_REFCOUNT_MAX: i64 = 32768
+
+// L1.4: Initialize refcount table (all counts = 0)
+@kernel fn cow_init() {
+    let mut i: i64 = 0
+    while i < PAGE_REFCOUNT_MAX * 2 {
+        volatile_write_u8(PAGE_REFCOUNT + i, 0)
+        i = i + 1
+    }
+}
+
+// L1.5: Get/set refcount for a physical frame
+@kernel fn cow_refcount_get(frame_idx: i64) -> i64 {
+    if frame_idx < 0 || frame_idx >= PAGE_REFCOUNT_MAX { return 0 }
+    let addr = PAGE_REFCOUNT + frame_idx * 2
+    volatile_read_u8(addr) + volatile_read_u8(addr + 1) * 256
+}
+
+@kernel fn cow_refcount_set(frame_idx: i64, count: i64) {
+    if frame_idx >= 0 && frame_idx < PAGE_REFCOUNT_MAX {
+        let addr = PAGE_REFCOUNT + frame_idx * 2
+        volatile_write_u8(addr, count & 0xFF)
+        volatile_write_u8(addr + 1, (count >> 8) & 0xFF)
+    }
+}
+
+@kernel fn cow_refcount_inc(frame_idx: i64) {
+    let count = cow_refcount_get(frame_idx)
+    cow_refcount_set(frame_idx, count + 1)
+}
+
+@kernel fn cow_refcount_dec(frame_idx: i64) -> i64 {
+    let count = cow_refcount_get(frame_idx)
+    let new_count = if count > 0 { count - 1 } else { 0 }
+    cow_refcount_set(frame_idx, new_count)
+    new_count
+}
+
+// L1.3: Mark a PTE as CoW (remove WRITABLE, set COW bit)
+@kernel fn cow_mark_readonly(table: i64, idx: i64) {
+    let entry = page_table_entry(table, idx)
+    if entry != 0 && (entry & PAGE_PRESENT) != 0 && (entry & PAGE_WRITABLE) != 0 {
+        // Clear WRITABLE, set COW flag
+        let new_entry = (entry & (0xFFFFFFFFFFFF ^ PAGE_WRITABLE)) | PAGE_COW
+        page_table_set(table, idx, new_entry)
+    }
+}
+
+// L1.6: Handle CoW page fault — called from page fault handler
+// Returns 0 on success (page copied), -1 if not a CoW fault
+@kernel fn cow_handle_fault(fault_addr: i64) -> i64 {
+    // Walk page tables to find the PTE for fault_addr
+    let pml4_idx = (fault_addr >> 39) & 0x1FF
+    let pdpt_idx = (fault_addr >> 30) & 0x1FF
+    let pd_idx = (fault_addr >> 21) & 0x1FF
+    let pt_idx = (fault_addr >> 12) & 0x1FF
+
+    let pml4_entry = page_table_entry(PML4_BASE, pml4_idx)
+    if (pml4_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pdpt_addr = pml4_entry & 0xFFFFFFFFF000
+
+    let pdpt_entry = page_table_entry(pdpt_addr, pdpt_idx)
+    if (pdpt_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pd_addr = pdpt_entry & 0xFFFFFFFFF000
+
+    let pd_entry = page_table_entry(pd_addr, pd_idx)
+    if (pd_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pt_addr = pd_entry & 0xFFFFFFFFF000
+
+    let pt_entry = page_table_entry(pt_addr, pt_idx)
+    if (pt_entry & PAGE_PRESENT) == 0 { return -1 }
+
+    // Check if this is a CoW page
+    if (pt_entry & PAGE_COW) == 0 { return -1 } // not CoW, real fault
+
+    let old_phys = pt_entry & 0xFFFFFFFFF000
+    let old_frame = old_phys / FRAME_SIZE
+    let old_flags = pt_entry & 0xFFF
+
+    // Check refcount
+    let refcount = cow_refcount_get(old_frame)
+
+    if refcount <= 1 {
+        // Last reference — just make writable again (no copy needed)
+        let new_flags = (old_flags | PAGE_WRITABLE) & (0xFFF ^ PAGE_COW)
+        page_table_set(pt_addr, pt_idx, old_phys | new_flags)
+    } else {
+        // Multiple references — need to copy
+        let new_phys = frame_alloc()
+        if new_phys == -1 { return -1 } // OOM
+        let new_frame = new_phys / FRAME_SIZE
+
+        // Copy 4KB page content
+        let mut i: i64 = 0
+        while i < FRAME_SIZE {
+            volatile_write_u8(new_phys + i, volatile_read_u8(old_phys + i))
+            i = i + 1
+        }
+
+        // Remap to new page (writable, clear CoW)
+        let new_flags = (old_flags | PAGE_WRITABLE) & (0xFFF ^ PAGE_COW)
+        page_table_set(pt_addr, pt_idx, new_phys | new_flags)
+
+        // Decrement old page refcount
+        cow_refcount_dec(old_frame)
+
+        // Set new page refcount to 1
+        cow_refcount_set(new_frame, 1)
+    }
+
+    // L1.6: TLB flush for the faulting address
+    cow_invlpg(fault_addr)
+    0
+}
+
+// Invalidate TLB entry for a virtual address
+@kernel fn cow_invlpg(addr: i64) {
+    // invlpg instruction — flush single TLB entry
+    // This would be asm!("invlpg [rdi]") in real code
+    // For now, use write_cr3(read_cr3()) as full TLB flush fallback
+    write_cr3(read_cr3())
+}
+
+// L1.3 (modified): Fork with CoW instead of deep-copy
+// Replaces fork_copy_page_level at PT level
+@kernel fn fork_cow_share_pt(parent_table: i64, child_table: i64) {
+    let mut idx: i64 = 0
+    while idx < 512 {
+        let entry = page_table_entry(parent_table, idx)
+        if entry != 0 && (entry & PAGE_PRESENT) != 0 && (entry & PAGE_USER) != 0 {
+            let phys = entry & 0xFFFFFFFFF000
+            let frame_idx = phys / FRAME_SIZE
+
+            // Mark parent page as read-only + CoW
+            cow_mark_readonly(parent_table, idx)
+
+            // Child gets same physical page (read-only + CoW)
+            let cow_flags = (entry & (0xFFF ^ PAGE_WRITABLE)) | PAGE_COW
+            page_table_set(child_table, idx, phys | cow_flags)
+
+            // Increment refcount
+            let current_rc = cow_refcount_get(frame_idx)
+            if current_rc == 0 {
+                cow_refcount_set(frame_idx, 2) // was 1 (parent), now 2 (parent + child)
+            } else {
+                cow_refcount_inc(frame_idx)
+            }
+        }
+        idx = idx + 1
+    }
+}
+
+// L1.7: Decrement refcounts for all user pages of a process (on exit)
+@kernel fn cow_release_pages(pml4: i64) {
+    let mut pml4_idx: i64 = 0
+    while pml4_idx < 512 {
+        let pml4_entry = page_table_entry(pml4, pml4_idx)
+        if pml4_entry != 0 && (pml4_entry & PAGE_USER) != 0 {
+            cow_release_level(pml4_entry & 0xFFFFFFFFF000, 3)
+        }
+        pml4_idx = pml4_idx + 1
+    }
+}
+
+@kernel fn cow_release_level(table: i64, level: i64) {
+    let mut idx: i64 = 0
+    while idx < 512 {
+        let entry = page_table_entry(table, idx)
+        if entry != 0 && (entry & PAGE_PRESENT) != 0 {
+            if level == 1 {
+                // PT level: decrement refcount, free if last
+                let phys = entry & 0xFFFFFFFFF000
+                let frame_idx = phys / FRAME_SIZE
+                let remaining = cow_refcount_dec(frame_idx)
+                if remaining == 0 { frame_mark_free(frame_idx) }
+            } else {
+                if (entry & PAGE_USER) != 0 {
+                    cow_release_level(entry & 0xFFFFFFFFF000, level - 1)
+                }
+            }
+        }
+        idx = idx + 1
+    }
+}
+
+// L1.8: CoW statistics command
+@kernel fn cmd_cowstat() {
+    cprintln("CoW Statistics:", YELLOW_ON_BLACK)
+    let mut shared: i64 = 0
+    let mut total: i64 = 0
+    let mut i: i64 = 0
+    while i < PAGE_REFCOUNT_MAX {
+        let rc = cow_refcount_get(i)
+        if rc > 0 { total = total + 1 }
+        if rc > 1 { shared = shared + 1 }
+        i = i + 1
+    }
+    cprint("  Tracked pages: ", WHITE_ON_BLACK)
+    cprint_decimal(total, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Shared (CoW): ", WHITE_ON_BLACK)
+    cprint_decimal(shared, GREEN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Private: ", WHITE_ON_BLACK)
+    cprint_decimal(total - shared, WHITE_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -15490,6 +15708,9 @@ const PROC_OFF_NAME: i64 = 64
     while ei < ENV_MAX * ENV_ENTRY_SIZE { volatile_write_u8(ENV_TABLE + ei, 0); ei = ei + 1 }
     volatile_write_u64(LAST_EXIT_CODE, 0)
     script_state_init() // Initialize shell control flow state
+    cow_init() // Initialize CoW page refcount table
+    // Register cow_handle_fault fn pointer at 0x950040 for linker page fault handler
+    volatile_write_u64(0x950040, fn_addr("cow_handle_fault"))
     println("[PROC] Process table v2 ready")
     println("[KB] Keyboard buffer ready")
 

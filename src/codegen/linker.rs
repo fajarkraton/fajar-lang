@@ -3374,16 +3374,46 @@ __isr_13:
 /* Vector 14: #PF Page Fault (has error code) */
 __isr_14:
     /* Stack: [error_code] [rip] [cs] [rflags] [rsp] [ss] */
-    /* Check if fault from Ring 3 (CS RPL == 3) */
+    /* v0.8 "Bastion": Try CoW handler first before killing */
+
+    /* Save registers for CoW handler call */
     push    rax
-    mov     rax, QWORD PTR [rsp + 16]  /* CS from exception frame (after push rax + error_code) */
-    and     rax, 3                      /* RPL bits */
+    push    rcx
+    push    rdx
+    push    rsi
+    push    rdi
+
+    /* Read CR2 (faulting address) into RDI (1st arg) */
+    mov     rdi, cr2
+
+    /* Check if cow_handle_fault fn pointer is set at 0x950040 */
+    mov     rax, QWORD PTR [0x950040]
+    test    rax, rax
+    jz      .Lpf_no_cow
+
+    /* Call cow_handle_fault(fault_addr) */
+    call    rax
+
+    /* If returned 0 → CoW handled, resume user process */
+    test    rax, rax
+    jz      .Lpf_cow_ok
+
+.Lpf_no_cow:
+    /* Not a CoW fault — check if from Ring 3 */
+    pop     rdi
+    pop     rsi
+    pop     rdx
+    pop     rcx
+    pop     rax
+
+    push    rax
+    mov     rax, QWORD PTR [rsp + 16]  /* CS from exception frame */
+    and     rax, 3
     cmp     rax, 3
     pop     rax
     jne     .Lpf_kernel                 /* kernel fault → panic */
 
-    /* User-mode page fault: kill process, return to kernel */
-    /* Print "[PF-KILL]" to serial */
+    /* User-mode page fault (not CoW): kill process */
     push    rdx
     push    rax
     mov     dx, 0x3F8
@@ -3400,20 +3430,26 @@ __isr_14:
     pop     rax
     pop     rdx
 
-    /* Mark current process as dead */
     push    rax
-    mov     rax, QWORD PTR [0x6FE00]   /* current pid */
+    mov     rax, QWORD PTR [0x6FE00]
     shl     rax, 8
     add     rax, 0x600000
     mov     QWORD PTR [rax + 8], 0     /* state = FREE */
     pop     rax
 
-    /* Remove error code from stack */
-    add     rsp, 8
+    add     rsp, 8                      /* remove error code */
+    mov     rsp, QWORD PTR [0x652020]
+    ret
 
-    /* Restore kernel state: load kernel RSP and return to shell */
-    mov     rsp, QWORD PTR [0x652020]  /* saved kernel RSP */
-    ret                                 /* return to after iretq_to_user */
+.Lpf_cow_ok:
+    /* CoW page fault handled — restore regs and resume */
+    pop     rdi
+    pop     rsi
+    pop     rdx
+    pop     rcx
+    pop     rax
+    add     rsp, 8                      /* remove error code */
+    iretq                               /* resume user process */
 
 .Lpf_kernel:
     /* Kernel page fault — fatal */

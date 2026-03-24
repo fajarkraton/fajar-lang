@@ -10608,3 +10608,220 @@ fn k1_v07_plan_complete() {
     let out = eval_output(src);
     assert_eq!(out, vec!["120", "12", "F+G+H+I+J+K"]);
 }
+
+// ═══════════════════════════════════════════════
+// Nova v0.8 "Bastion" — Phase L: Copy-on-Write
+// Sprint L1: CoW page table infrastructure
+// ═══════════════════════════════════════════════
+
+#[test]
+fn l1_cow_flag_constant() {
+    let src = r#"
+        const PAGE_COW: i64 = 0x200
+        const PAGE_PRESENT: i64 = 1
+        const PAGE_WRITABLE: i64 = 2
+        const PAGE_USER: i64 = 4
+        fn main() -> void {
+            // CoW uses bit 9 (AVL bit)
+            println(PAGE_COW)
+            // Doesn't conflict with P/W/U
+            println(PAGE_COW & PAGE_PRESENT)
+            println(PAGE_COW & PAGE_WRITABLE)
+            println(PAGE_COW & PAGE_USER)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "0", "0", "0"]);
+}
+
+#[test]
+fn l1_refcount_table_layout() {
+    let src = r#"
+        const PAGE_REFCOUNT: i64 = 0x950000
+        const PAGE_REFCOUNT_MAX: i64 = 32768
+        fn main() -> void {
+            // 32K entries × 2 bytes = 64KB
+            println(PAGE_REFCOUNT_MAX * 2)
+            // At 0x950000
+            println(PAGE_REFCOUNT)
+            // Covers 32K × 4KB = 128MB
+            println(PAGE_REFCOUNT_MAX * 4096)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["65536", "9764864", "134217728"]);
+}
+
+#[test]
+fn l1_refcount_inc_dec() {
+    let src = r#"
+        fn inc(count: i64) -> i64 { count + 1 }
+        fn dec(count: i64) -> i64 { if count > 0 { count - 1 } else { 0 } }
+        fn main() -> void {
+            let mut rc: i64 = 0
+            rc = inc(rc)
+            println(rc)
+            rc = inc(rc)
+            println(rc)
+            rc = dec(rc)
+            println(rc)
+            rc = dec(rc)
+            println(rc)
+            // Can't go below 0
+            rc = dec(rc)
+            println(rc)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "2", "1", "0", "0"]);
+}
+
+#[test]
+fn l1_cow_mark_logic() {
+    // CoW mark: clear WRITABLE, set COW flag
+    let src = r#"
+        const PAGE_WRITABLE: i64 = 2
+        const PAGE_COW: i64 = 0x200
+        fn cow_mark(flags: i64) -> i64 {
+            let mask = 0xFFF ^ PAGE_WRITABLE
+            (flags & mask) | PAGE_COW
+        }
+        fn main() -> void {
+            // RWU (7) → R_U + CoW (0x205)
+            let f = cow_mark(7)
+            println(f)
+            // Check WRITABLE cleared
+            println(f & PAGE_WRITABLE)
+            // Check COW set
+            println(f & PAGE_COW)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["517", "0", "512"]);
+}
+
+#[test]
+fn l1_cow_fault_check() {
+    // Detect CoW page: PAGE_COW set, PAGE_WRITABLE clear
+    let src = r#"
+        const PAGE_COW: i64 = 0x200
+        const PAGE_WRITABLE: i64 = 2
+        fn is_cow(flags: i64) -> bool { (flags & PAGE_COW) != 0 }
+        fn is_writable(flags: i64) -> bool { (flags & PAGE_WRITABLE) != 0 }
+        fn main() -> void {
+            let cow_flags: i64 = 0x205  // P + U + CoW
+            println(is_cow(cow_flags))
+            println(is_writable(cow_flags))
+            // Normal writable
+            let normal: i64 = 7  // P + W + U
+            println(is_cow(normal))
+            println(is_writable(normal))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false", "true"]);
+}
+
+#[test]
+fn l1_cow_restore_writable() {
+    // After CoW copy: set WRITABLE, clear COW
+    let src = r#"
+        const PAGE_WRITABLE: i64 = 2
+        const PAGE_COW: i64 = 0x200
+        fn cow_restore(flags: i64) -> i64 {
+            let mask = 0xFFF ^ PAGE_COW
+            (flags & mask) | PAGE_WRITABLE
+        }
+        fn main() -> void {
+            let cow_flags: i64 = 0x205  // P + U + CoW
+            let restored = cow_restore(cow_flags)
+            println(restored)
+            // WRITABLE set
+            println(restored & PAGE_WRITABLE)
+            // COW cleared
+            println(restored & PAGE_COW)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["7", "2", "0"]);
+}
+
+#[test]
+fn l1_fork_refcount_initial() {
+    // After CoW fork: shared pages get refcount = 2
+    let src = r#"
+        fn cow_fork_refcount(old_rc: i64) -> i64 {
+            if old_rc == 0 { 2 }  // was 1 (parent only), now 2
+            else { old_rc + 1 }    // already shared
+        }
+        fn main() -> void {
+            // First fork: 0 → 2
+            println(cow_fork_refcount(0))
+            // Second fork of shared page: 2 → 3
+            println(cow_fork_refcount(2))
+            // Third fork: 3 → 4
+            println(cow_fork_refcount(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "3", "4"]);
+}
+
+#[test]
+fn l1_cow_handler_address() {
+    // CoW handler fn pointer stored at 0x950040
+    let src = r#"
+        const COW_HANDLER_ADDR: i64 = 0x950040
+        const PAGE_REFCOUNT: i64 = 0x950000
+        fn main() -> void {
+            // Handler pointer at offset 64 from refcount table
+            println(COW_HANDLER_ADDR - PAGE_REFCOUNT)
+            println(COW_HANDLER_ADDR)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["64", "9764928"]);
+}
+
+#[test]
+fn l1_pte_address_extraction() {
+    // Extract PML4/PDPT/PD/PT indices from virtual address
+    let src = r#"
+        fn pml4_idx(addr: i64) -> i64 { (addr >> 39) & 0x1FF }
+        fn pdpt_idx(addr: i64) -> i64 { (addr >> 30) & 0x1FF }
+        fn pd_idx(addr: i64) -> i64 { (addr >> 21) & 0x1FF }
+        fn pt_idx(addr: i64) -> i64 { (addr >> 12) & 0x1FF }
+        fn main() -> void {
+            // User address 0x2000000 (32MB)
+            let addr: i64 = 0x2000000
+            println(pml4_idx(addr))
+            println(pdpt_idx(addr))
+            println(pd_idx(addr))
+            println(pt_idx(addr))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "0", "16", "0"]);
+}
+
+#[test]
+fn l1_refcount_u16_packing() {
+    // 16-bit refcount stored as 2 bytes (little-endian)
+    let src = r#"
+        fn pack_lo(count: i64) -> i64 { count & 0xFF }
+        fn pack_hi(count: i64) -> i64 { (count >> 8) & 0xFF }
+        fn unpack(lo: i64, hi: i64) -> i64 { lo + hi * 256 }
+        fn main() -> void {
+            // Count 1
+            println(pack_lo(1))
+            println(pack_hi(1))
+            println(unpack(1, 0))
+            // Count 300
+            println(pack_lo(300))
+            println(pack_hi(300))
+            println(unpack(44, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "0", "1", "44", "1", "300"]);
+}
