@@ -18,6 +18,43 @@ Kategori perubahan:
 
 ---
 
+## [5.3.0] — 2026-03-25 "Bastion"
+
+### Added — FajarOS Nova v1.3.0 "Bastion"
+- **Copy-on-Write fork** — instant fork via shared read-only pages, page fault → copy, refcount table at 0x950000
+- **Multi-user system** — 16 user accounts, login/logout, passwd, adduser, su, id, session timeout
+- **File permissions** — rwxrwxrwx mode bits, chmod/chown, permission checks on open/unlink, root bypass
+- **User sessions** — login history, /etc/passwd, setuid bit, fork inherits UID/GID
+- **Directory tree** — hierarchical path resolution (/home/fajar/file), mkdir -p, pwd
+- **Symbolic links** — ln -s, readlink, symlink follow on path resolution
+- **Hard links** — ln, shared data pointer + size
+- **Filesystem journal** — WAL at 0x970000 (1000 entries), commit/replay, crash recovery
+- **fsck** — filesystem consistency check (files, dirs, links, journal status)
+- **Disk full handling** — refuse writes at 90% capacity, df command
+- **Socket API** — 16 sockets, SYS_SOCKET/BIND/LISTEN/ACCEPT/CONNECT (syscalls 27-31)
+- **HTTP server** — httpd command, GET static files from ramfs, /proc/version + /proc/uptime JSON
+- **Directory listing** — HTTP serves HTML listing for directories
+- **netstat** — show all sockets with state/type/port/IP
+- **GDB remote stub** — RSP protocol on COM2, breakpoints (INT3), single step, register/memory read
+- **Hardware watchpoints** — DR0-DR3 via Z2/z2 GDB commands
+- **Thread query** — qfThreadInfo lists PIDs as GDB thread IDs
+- **Memory map** — qXfer returns XML memory regions for GDB
+- **rmdir** — remove empty directories
+- **Atomic rename** — mv via journal (add → apply → commit)
+- **Inode generations** — detect stale file handles after delete+recreate
+
+### Stats
+- Nova LOC: 18,159 (up from 15,732)
+- Nova @kernel fns: 651 (up from 535)
+- Shell commands: 229 (up from 200)
+- Syscalls: 32 (up from 26)
+- New phases: L (CoW), M (Users), N (Filesystem), O (Sockets+HTTP), P (GDB)
+- 120 new integration tests (l1-l2, m1-m3, n1-n2, o1-o2, p1-p2)
+- Total tests: 6,186 (0 failures)
+- fajaros-x86: 100 .fj files (11 new v0.7 modules)
+
+---
+
 ## [5.2.0] — 2026-03-24 "Nexus"
 
 ### Added — FajarOS Nova v1.2.0 "Nexus"
