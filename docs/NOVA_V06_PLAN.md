@@ -91,23 +91,23 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B1.1 | Version bump | Cargo.toml → 3.5.0 | [ ] |
-| B1.2 | CHANGELOG update | Add v3.5.0 section with all new features | [ ] |
-| B1.3 | Update CLAUDE.md | Current stats (9,637 LOC, 148 cmd, 6,061 tests) | [ ] |
-| B1.4 | Update Nova banner | "v0.5.0" → "v0.6.0" in kernel_main() | [ ] |
-| B1.5 | Update fajaros-x86 README | Accurate feature list, LOC count | [ ] |
-| B1.6 | Clippy clean | `cargo clippy -- -D warnings` — zero warnings | [ ] |
-| B1.7 | Fmt check | `cargo fmt -- --check` — clean | [ ] |
-| B1.8 | Full test suite | `cargo test --features native` — all pass | [ ] |
-| B1.9 | Git tag | `git tag v3.5.0` on fajar-lang | [ ] |
-| B1.10 | GitHub release | Create release with binaries + notes | [ ] |
+| B1.1 | Version bump | Cargo.toml → 5.1.0 | [x] |
+| B1.2 | CHANGELOG update | Add v5.1.0 section with all new features | [x] |
+| B1.3 | Update CLAUDE.md | Current stats (6,750+ tests, 290K LOC) | [x] |
+| B1.4 | Update Nova banner | v1.0.0 → v1.1.0 "Ascension" in kernel_main() | [x] |
+| B1.5 | Update fajaros-x86 README | Version bumped, serial I/O documented | [x] |
+| B1.6 | Clippy clean | `cargo clippy -- -D warnings` — zero warnings | [x] |
+| B1.7 | Fmt check | `cargo fmt -- --check` — clean | [x] |
+| B1.8 | Full test suite | `cargo test --features native` — 6,750+ pass | [x] |
+| B1.9 | Git tag | `git tag v5.1.0` on fajar-lang | [x] |
+| B1.10 | GitHub release | github.com/fajarkraton/fajar-lang/releases/tag/v5.1.0 | [x] |
 
 ### B-Phase Quality Gate
-- [ ] `cargo test --features native` — 0 failures
-- [ ] `cargo clippy -- -D warnings` — 0 warnings
-- [ ] `cargo fmt -- --check` — clean
-- [ ] CHANGELOG.md updated
-- [ ] Git tag created
+- [x] `cargo test --features native` — 6,750+ pass
+- [x] `cargo clippy -- -D warnings` — 0 warnings
+- [x] `cargo fmt -- --check` — clean
+- [x] CHANGELOG.md updated
+- [x] Git tag v5.1.0 created
 
 ---
 
