@@ -36,10 +36,10 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 | A1.1 | Basic boot (serial) | `make run` | Boot banner + "nova>" prompt | [x] |
 | A1.2 | Boot with KVM | `make run-kvm` | Same, faster boot | [x] |
 | A1.3 | Boot with VGA | `make run-vga` | VGA text mode, colored banner | [x] |
-| A1.4 | Shell commands: help | Type `help` | List 160 commands | [ ] |
-| A1.5 | Shell commands: uname, uptime, cpuinfo | Type each | Correct output | [ ] |
+| A1.4 | Shell commands: help | Type `help` | List 160 commands | [x] |
+| A1.5 | Shell commands: uname, uptime, cpuinfo | Type each | Correct output | [x] |
 | A1.6 | Shell commands: meminfo, frames, heap | Type each | Memory stats shown | [x] |
-| A1.7 | Shell commands: clear, echo hello | Type each | Screen clears, echo works | [ ] |
+| A1.7 | Shell commands: clear, echo hello | Type each | Screen clears, echo works | [x] |
 | A1.8 | Shell commands: ps, lspci | Type each | Process list, PCI devices | [x] |
 | A1.9 | Keyboard: shift, caps lock, arrows | Press keys | Uppercase, history navigation | [x] |
 | A1.10 | Verify serial output matches VGA | Compare serial + VGA | Consistent output | [x] |
@@ -49,15 +49,15 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 | # | Task | QEMU Command | Expected Result | Status |
 |---|------|-------------|-----------------|--------|
 | A2.1 | NVMe detection | `make run-nvme` + `nvme` | NVMe controller found | [x] |
-| A2.2 | NVMe read/write | `disk_read 0` / `disk_write 0` | Sector R/W works | [ ] |
-| A2.3 | FAT32 mount | `fat32mount` | FAT32 filesystem mounted | [ ] |
-| A2.4 | FAT32 list | `fat32ls` | Root directory listing | [ ] |
-| A2.5 | FAT32 cat | `fat32cat <file>` | File contents shown | [ ] |
-| A2.6 | FAT32 write | `fatwrite test.txt hello` | File created | [ ] |
+| A2.2 | NVMe read/write | `disk_read 0` / `disk_write 0` | Sector R/W works | [x] |
+| A2.3 | FAT32 mount | `fat32mount` | FAT32 filesystem mounted | [x] |
+| A2.4 | FAT32 list | `fat32ls` | Root directory listing | [x] |
+| A2.5 | FAT32 cat | `fat32cat <file>` | File contents shown | [x] |
+| A2.6 | FAT32 write | `fatwrite test.txt hello` | File created | [x] |
 | A2.7 | FAT32 delete | `fatrm test.txt` | File removed | [ ] |
 | A2.8 | VFS mounts | `mounts` | /, /dev, /proc, /mnt listed | [x] |
-| A2.9 | /dev/random | `devread random` | Random bytes shown | [ ] |
-| A2.10 | /proc/version | `procversion` | Kernel version string | [ ] |
+| A2.9 | /dev/random | `devread random` | Random bytes shown | [x] |
+| A2.10 | /proc/version | `procversion` | Kernel version string | [x] |
 
 ### Sprint A3: Network & USB & Ring 3 Verification (10 tasks)
 
@@ -65,11 +65,11 @@ Compiler:    const fn with compile-time evaluation (fib(10)=55)
 |---|------|-------------|-----------------|--------|
 | A3.1 | Virtio-net detect | `make run-net` + `ifconfig` | Real MAC (not fake 52:54:00:12:34:56) | [x] |
 | A3.2 | Virtio-net BAR0 | `ifconfig` | BAR0 address shown, "active" | [x] |
-| A3.3 | Real ping TX | `ping` | "Packet sent via virtio-net TX" | [ ] |
-| A3.4 | ICMP reply RX | `ping` | "Reply from 10.0.2.2: time=Xus" OR timeout | [ ] |
-| A3.5 | ARP cache | `arp` | ARP entries shown after ping | [ ] |
-| A3.6 | XHCI detect | `make run` with `-device qemu-xhci` + `lsusb` | XHCI controller listed | [ ] |
-| A3.7 | XHCI init | `usbinit` | "Controller running, N device(s)" | [ ] |
+| A3.3 | Real ping TX | `ping` | "Packet sent via virtio-net TX" | [x] |
+| A3.4 | ICMP reply RX | `ping` | "Reply from 10.0.2.2: time=Xus" OR timeout | [x] |
+| A3.5 | ARP cache | `arp` | ARP entries shown after ping | [x] |
+| A3.6 | XHCI detect | `make run` with `-device qemu-xhci` + `lsusb` | XHCI controller listed | [x] |
+| A3.7 | XHCI init | `usbinit` | "Controller running, N device(s)" | [x] |
 | A3.8 | USB device enum | `-device usb-storage,drive=usbdisk` + `usbinit` | Slot enabled, device addressed | [ ] |
 | A3.9 | Ring 3 hello | Boot with default config | "[RING3]..." in serial | [x] |
 | A3.10 | SMP boot | `make run-smp` | Boot with 4 cores, no crash | [x] |
