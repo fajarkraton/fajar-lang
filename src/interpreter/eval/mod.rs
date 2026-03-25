@@ -431,6 +431,10 @@ impl Interpreter {
             "dbg",
             "eprint",
             "eprintln",
+            // Async ecosystem (AA2)
+            "join",
+            "timeout",
+            "spawn",
             // Math
             "abs",
             "sqrt",

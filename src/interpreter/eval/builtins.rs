@@ -1519,6 +1519,55 @@ impl Interpreter {
             "sys_ram_total" => Ok(Value::Int(8 * 1024 * 1024 * 1024)),
             "sys_ram_free" => Ok(Value::Int(6 * 1024 * 1024 * 1024)),
             "proc_yield" | "sys_poweroff" | "sys_reboot" => Ok(Value::Null),
+
+            // AA2: Async ecosystem builtins
+            "join" => {
+                // join(future1, future2, ...) → await all, return array of results
+                let mut results = Vec::new();
+                for arg in args {
+                    match arg {
+                        Value::Future { task_id } => {
+                            if let Some((body, task_env)) = self.async_tasks.remove(&task_id) {
+                                let prev_env = self.env.clone();
+                                self.env = task_env;
+                                let result = self.eval_expr(&body).unwrap_or(Value::Null);
+                                self.env = prev_env;
+                                results.push(result);
+                            } else {
+                                results.push(Value::Null);
+                            }
+                        }
+                        other => results.push(other),
+                    }
+                }
+                Ok(Value::Array(results))
+            }
+            "timeout" => {
+                // timeout(ms, future) → resolve future (cooperative, no real timeout in interpreter)
+                if args.len() != 2 { return Err(RuntimeError::ArityMismatch { expected: 2, got: args.len() }.into()); }
+                let _ms = &args[0];
+                match &args[1] {
+                    Value::Future { task_id } => {
+                        let tid = *task_id;
+                        if let Some((body, task_env)) = self.async_tasks.remove(&tid) {
+                            let prev_env = self.env.clone();
+                            self.env = task_env;
+                            let result = self.eval_expr(&body).unwrap_or(Value::Null);
+                            self.env = prev_env;
+                            Ok(result)
+                        } else {
+                            Ok(Value::Null)
+                        }
+                    }
+                    other => Ok(other.clone()),
+                }
+            }
+            "spawn" => {
+                // spawn(future) → starts task, returns future (already a future in our model)
+                if args.len() != 1 { return Err(RuntimeError::ArityMismatch { expected: 1, got: args.len() }.into()); }
+                Ok(args.into_iter().next().unwrap_or(Value::Null))
+            }
+
             _ => {
                 // Check for enum constructor builtins
                 if name.starts_with("__enum_") {

@@ -14423,3 +14423,157 @@ fn aa1_sync_and_async_mix() {
     let out = eval_output(src);
     assert_eq!(out, vec!["15", "22"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint AA2: Async ecosystem
+// ═══════════════════════════════════════════════
+
+#[test]
+fn aa2_join_two_futures() {
+    let src = r#"
+        async fn a() -> i64 { 10 }
+        async fn b() -> i64 { 20 }
+        fn main() -> void {
+            let results = join(a(), b())
+            println(len(results))
+            println(results[0])
+            println(results[1])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "10", "20"]);
+}
+
+#[test]
+fn aa2_join_three_futures() {
+    let src = r#"
+        async fn x() -> i64 { 1 }
+        async fn y() -> i64 { 2 }
+        async fn z() -> i64 { 3 }
+        fn main() -> void {
+            let r = join(x(), y(), z())
+            println(r[0] + r[1] + r[2])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["6"]);
+}
+
+#[test]
+fn aa2_timeout_resolves() {
+    let src = r#"
+        async fn slow() -> i64 { 42 }
+        fn main() -> void {
+            let v = timeout(1000, slow())
+            println(v)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn aa2_spawn_future() {
+    let src = r#"
+        async fn task() -> i64 { 99 }
+        fn main() -> void {
+            let f = spawn(task())
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["99"]);
+}
+
+#[test]
+fn aa2_async_error_propagation() {
+    let src = r#"
+        async fn may_fail(x: i64) -> i64 {
+            if x > 0 { x * 2 } else { -1 }
+        }
+        fn main() -> void {
+            println(may_fail(5).await)
+            println(may_fail(0).await)
+            println(may_fail(-3).await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10", "-1", "-1"]);
+}
+
+#[test]
+fn aa2_async_closure_capture() {
+    let src = r#"
+        fn main() -> void {
+            let multiplier: i64 = 10
+            let f = async { multiplier * 7 }
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["70"]);
+}
+
+#[test]
+fn aa2_async_string_concat() {
+    let src = r#"
+        async fn greeting(name: str) -> str { f"Hi {name}!" }
+        async fn farewell(name: str) -> str { f"Bye {name}!" }
+        fn main() -> void {
+            let r = join(greeting("Alice"), farewell("Bob"))
+            println(r[0])
+            println(r[1])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hi Alice!", "Bye Bob!"]);
+}
+
+#[test]
+fn aa2_async_sequential_pipeline() {
+    let src = r#"
+        async fn fetch(id: i64) -> i64 { id * 100 }
+        async fn process(data: i64) -> i64 { data + 1 }
+        async fn store(result: i64) -> str { f"stored:{result}" }
+        fn main() -> void {
+            let data = fetch(5).await
+            let processed = process(data).await
+            let msg = store(processed).await
+            println(msg)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["stored:501"]);
+}
+
+#[test]
+fn aa2_join_with_immediate() {
+    let src = r#"
+        async fn slow() -> i64 { 42 }
+        fn main() -> void {
+            let r = join(slow(), 99)
+            println(r[0])
+            println(r[1])
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "99"]);
+}
+
+#[test]
+fn aa2_async_loop() {
+    let src = r#"
+        async fn compute(n: i64) -> i64 { n * n }
+        fn main() -> void {
+            let mut sum: i64 = 0
+            let mut i: i64 = 1
+            while i <= 5 {
+                sum = sum + compute(i).await
+                i = i + 1
+            }
+            println(sum)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["55"]);
+}

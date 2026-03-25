@@ -794,6 +794,10 @@ impl TypeChecker {
             ("dbg", vec![Type::Unknown], Type::Unknown),
             ("eprint", vec![Type::Unknown], Type::Void),
             ("eprintln", vec![Type::Unknown], Type::Void),
+            // AA2: Async ecosystem builtins
+            ("join", vec![Type::Unknown], Type::Unknown),
+            ("timeout", vec![Type::Unknown, Type::Unknown], Type::Unknown),
+            ("spawn", vec![Type::Unknown], Type::Unknown),
         ];
         for (name, params, ret) in debug_fns {
             self.symbols.define(Symbol {

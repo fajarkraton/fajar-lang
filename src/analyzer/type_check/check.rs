@@ -1265,6 +1265,7 @@ impl TypeChecker {
             matches!(
                 name.as_str(),
                 "len" | "type_of" | "println" | "print" | "dbg" | "assert" | "assert_eq"
+                | "join" | "timeout" | "spawn"
             ) || name.starts_with("tensor_")
                 || name.starts_with("optimizer_")
                 || name.starts_with("model_")
