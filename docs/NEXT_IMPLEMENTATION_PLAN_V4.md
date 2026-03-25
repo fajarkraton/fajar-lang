@@ -428,31 +428,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G1.1 | Video outline | 5-minute demo: intro → language → OS → hardware → future | [ ] |
-| G1.2 | Script: Introduction (30s) | "Meet Fajar Lang — the only language where..." | [ ] |
-| G1.3 | Script: Language demo (90s) | @kernel/@device/@safe, tensor ops, pattern matching | [ ] |
-| G1.4 | Script: FajarOS Nova (90s) | Boot in QEMU, run commands, show TCP, GPU, ext2 | [ ] |
-| G1.5 | Script: ARM64 + Q6A (60s) | Cross-compile, deploy, QNN inference 99% | [ ] |
-| G1.6 | Script: Performance (30s) | Benchmarks, JIT speedup, test count | [ ] |
-| G1.7 | Script: Closing (30s) | GitHub link, Made in Indonesia, call to action | [ ] |
-| G1.8 | Slide deck | 10-15 slides for presentation format | [ ] |
-| G1.9 | Terminal recording commands | Exact commands for asciinema/OBS recording | [ ] |
-| G1.10 | Review and refine script | Timing, transitions, visual cues | [ ] |
+| G1.1 | Video outline | 5-minute demo: intro → language → OS → hardware → future | [x] |
+| G1.2 | Script: Introduction (30s) | "Meet Fajar Lang — the only language where..." | [x] |
+| G1.3 | Script: Language demo (90s) | @kernel/@device/@safe, tensor ops, pattern matching | [x] |
+| G1.4 | Script: FajarOS Nova (90s) | Boot in QEMU, run commands, show TCP, GPU, ext2 | [x] |
+| G1.5 | Script: ARM64 + Q6A (60s) | Cross-compile, deploy, QNN inference 99% | [x] |
+| G1.6 | Script: Performance (30s) | Benchmarks, JIT speedup, test count | [x] |
+| G1.7 | Script: Closing (30s) | GitHub link, Made in Indonesia, call to action | [x] |
+| G1.8 | Slide deck | 10-15 slides for presentation format | [x] |
+| G1.9 | Terminal recording commands | Exact commands for asciinema/OBS recording | [x] |
+| G1.10 | Review and refine script | Timing, transitions, visual cues | [x] |
 
 ### Sprint G2: Recording + Production (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G2.1 | Install recording tools | asciinema, OBS, or similar | [ ] |
-| G2.2 | Record: REPL demo | `fj repl` → type expressions, see results | [ ] |
-| G2.3 | Record: Hello World | `fj run examples/hello.fj` | [ ] |
-| G2.4 | Record: FajarOS boot | `make run` → QEMU → shell commands | [ ] |
-| G2.5 | Record: Compile + test | `cargo test` output, all green | [ ] |
-| G2.6 | Create thumbnail | 1280x720, Fajar Lang logo + "Systems Language" | [ ] |
-| G2.7 | Write YouTube description | Keywords, timestamps, links, tags | [ ] |
-| G2.8 | Social media posts | Twitter thread, LinkedIn article, Reddit post | [ ] |
-| G2.9 | GitHub README demo GIF | Animated GIF showing key features | [ ] |
-| G2.10 | Publish + announce | Upload, share, track engagement | [ ] |
+| G2.1 | Install recording tools | asciinema, OBS, or similar | [x] |
+| G2.2 | Record: REPL demo | `fj repl` → type expressions, see results | [x] |
+| G2.3 | Record: Hello World | `fj run examples/hello.fj` | [x] |
+| G2.4 | Record: FajarOS boot | `make run` → QEMU → shell commands | [x] |
+| G2.5 | Record: Compile + test | `cargo test` output, all green | [x] |
+| G2.6 | Create thumbnail | 1280x720, Fajar Lang logo + "Systems Language" | [x] |
+| G2.7 | Write YouTube description | Keywords, timestamps, links, tags | [x] |
+| G2.8 | Social media posts | Twitter thread, LinkedIn article, Reddit post | [x] |
+| G2.9 | GitHub README demo GIF | Animated GIF showing key features | [x] |
+| G2.10 | Publish + announce | Upload, share, track engagement | [x] |
 
 ---
 
