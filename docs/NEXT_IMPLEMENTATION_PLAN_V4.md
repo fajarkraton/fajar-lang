@@ -375,46 +375,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| F1.1 | Create `website/` directory | Project structure: index.html, css/, js/, img/ | [ ] |
-| F1.2 | Hero section | Logo, tagline, "Systems Language for Embedded ML & OS" | [ ] |
-| F1.3 | Feature cards | 6 cards: Safety, Tensor, OS, Compiler, Concurrency, Tooling | [ ] |
-| F1.4 | Code playground section | Live syntax-highlighted Fajar Lang code examples | [ ] |
-| F1.5 | Stats section | Tests: 6,286 | LOC: 290K | Examples: 126 | Packages: 7 | [ ] |
-| F1.6 | FajarOS showcase | Screenshots/output of Nova (x86_64) and Surya (ARM64) | [ ] |
-| F1.7 | About author section | Timeline from README (IndoFace → TaxPrime → ACEXI → Fajar Lang) | [ ] |
-| F1.8 | Installation section | Quick start: cargo install, first program | [ ] |
-| F1.9 | Footer | GitHub links, Made in Indonesia, MIT license | [ ] |
-| F1.10 | Color scheme + typography | Indonesian-inspired colors, clean modern font | [ ] |
+| F1.1 | Create `website/` directory | Project structure: index.html, css/, js/, img/ | [x] |
+| F1.2 | Hero section | Logo, tagline, "Systems Language for Embedded ML & OS" | [x] |
+| F1.3 | Feature cards | 6 cards: Safety, Tensor, OS, Compiler, Concurrency, Tooling | [x] |
+| F1.4 | Code playground section | Live syntax-highlighted Fajar Lang code examples | [x] |
+| F1.5 | Stats section | Tests: 6,286 | LOC: 290K | Examples: 126 | Packages: 7 | [x] |
+| F1.6 | FajarOS showcase | Screenshots/output of Nova (x86_64) and Surya (ARM64) | [x] |
+| F1.7 | About author section | Timeline from README (IndoFace → TaxPrime → ACEXI → Fajar Lang) | [x] |
+| F1.8 | Installation section | Quick start: cargo install, first program | [x] |
+| F1.9 | Footer | GitHub links, Made in Indonesia, MIT license | [x] |
+| F1.10 | Color scheme + typography | Indonesian-inspired colors, clean modern font | [x] |
 
 ### Sprint F2: Implementation (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| F2.1 | Write HTML structure | Semantic HTML5, accessibility | [ ] |
-| F2.2 | Write CSS (Tailwind or vanilla) | Responsive, mobile-first, dark mode | [ ] |
-| F2.3 | Syntax highlighting | Prism.js or highlight.js with Fajar Lang grammar | [ ] |
-| F2.4 | Smooth scroll + animations | CSS transitions, intersection observer | [ ] |
-| F2.5 | SEO meta tags | og:title, og:description, og:image, twitter:card | [ ] |
-| F2.6 | Favicon + social preview image | `.fj` logo, 1200x630 OG image | [ ] |
-| F2.7 | Performance optimization | Minify CSS/JS, lazy-load images, < 100KB total | [ ] |
-| F2.8 | Mobile responsiveness | Test on 320px, 768px, 1024px, 1440px | [ ] |
-| F2.9 | Accessibility | ARIA labels, keyboard navigation, contrast ratio | [ ] |
-| F2.10 | Local testing | Open in browser, check all sections | [ ] |
+| F2.1 | Write HTML structure | Semantic HTML5, accessibility | [x] |
+| F2.2 | Write CSS (Tailwind or vanilla) | Responsive, mobile-first, dark mode | [x] |
+| F2.3 | Syntax highlighting | Prism.js or highlight.js with Fajar Lang grammar | [x] |
+| F2.4 | Smooth scroll + animations | CSS transitions, intersection observer | [x] |
+| F2.5 | SEO meta tags | og:title, og:description, og:image, twitter:card | [x] |
+| F2.6 | Favicon + social preview image | `.fj` logo, 1200x630 OG image | [x] |
+| F2.7 | Performance optimization | Minify CSS/JS, lazy-load images, < 100KB total | [x] |
+| F2.8 | Mobile responsiveness | Test on 320px, 768px, 1024px, 1440px | [x] |
+| F2.9 | Accessibility | ARIA labels, keyboard navigation, contrast ratio | [x] |
+| F2.10 | Local testing | Open in browser, check all sections | [x] |
 
 ### Sprint F3: Deploy + SEO (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| F3.1 | GitHub Pages setup | `gh-pages` branch or `/docs` folder | [ ] |
-| F3.2 | Custom domain | Configure fajarlang.org or fajar-lang.primecore.id | [ ] |
-| F3.3 | HTTPS certificate | Let's Encrypt via GitHub Pages | [ ] |
-| F3.4 | Google Search Console | Submit sitemap.xml, verify ownership | [ ] |
-| F3.5 | Schema.org markup | SoftwareApplication structured data | [ ] |
-| F3.6 | robots.txt + sitemap.xml | Allow all crawlers, list all pages | [ ] |
-| F3.7 | Google Analytics / Plausible | Privacy-friendly analytics | [ ] |
-| F3.8 | Social media preview test | Share on Twitter/LinkedIn, verify OG cards | [ ] |
-| F3.9 | Performance audit | Lighthouse score > 90 on all categories | [ ] |
-| F3.10 | Announce | Post on social media, GitHub discussions | [ ] |
+| F3.1 | GitHub Pages setup | `gh-pages` branch or `/docs` folder | [x] |
+| F3.2 | Custom domain | Configure fajarlang.org or fajar-lang.primecore.id | [x] |
+| F3.3 | HTTPS certificate | Let's Encrypt via GitHub Pages | [x] |
+| F3.4 | Google Search Console | Submit sitemap.xml, verify ownership | [x] |
+| F3.5 | Schema.org markup | SoftwareApplication structured data | [x] |
+| F3.6 | robots.txt + sitemap.xml | Allow all crawlers, list all pages | [x] |
+| F3.7 | Google Analytics / Plausible | Privacy-friendly analytics | [x] |
+| F3.8 | Social media preview test | Share on Twitter/LinkedIn, verify OG cards | [x] |
+| F3.9 | Performance audit | Lighthouse score > 90 on all categories | [x] |
+| F3.10 | Announce | Post on social media, GitHub discussions | [x] |
 
 ---
 
