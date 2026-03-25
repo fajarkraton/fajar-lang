@@ -126,91 +126,91 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z1.1 | Create kernel/sched/pcpu.fj | Per-CPU data structure (8 CPUs × 256B) | [ ] |
-| Z1.2 | Create kernel/sched/runqueue.fj | Per-CPU linked-list run queues, enqueue/dequeue | [ ] |
-| Z1.3 | Create kernel/sched/priority.fj | Priority levels 0-39, timeslice by priority | [ ] |
-| Z1.4 | Create kernel/sched/loadbalance.fj | Load balancing, migration between CPUs | [ ] |
-| Z1.5 | Create kernel/sched/affinity.fj | CPU affinity masks, taskset | [ ] |
-| Z1.6 | Update shell/commands.fj | Add mpstat, schedstat, top v2, taskset, nice, renice | [ ] |
-| Z1.7 | Update Makefile | Add 5 new scheduler modules | [ ] |
-| Z1.8 | Lex verify all new files | `fj dump-tokens` on each | [ ] |
-| Z1.9 | Git commit + push | Push SMP v2 modules | [ ] |
-| Z1.10 | Verify file count | Target: 131+ .fj files | [ ] |
+| Z1.1 | Create kernel/sched/pcpu.fj | Per-CPU data structure (8 CPUs × 256B) | [x] |
+| Z1.2 | Create kernel/sched/runqueue.fj | Per-CPU linked-list run queues, enqueue/dequeue | [x] |
+| Z1.3 | Create kernel/sched/priority.fj | Priority levels 0-39, timeslice by priority | [x] |
+| Z1.4 | Create kernel/sched/loadbalance.fj | Load balancing, migration between CPUs | [x] |
+| Z1.5 | Create kernel/sched/affinity.fj | CPU affinity masks, taskset | [x] |
+| Z1.6 | Update shell/commands.fj | Add mpstat, schedstat, top v2, taskset, nice, renice | [x] |
+| Z1.7 | Update Makefile | Add 5 new scheduler modules | [x] |
+| Z1.8 | Lex verify all new files | `fj dump-tokens` on each | [x] |
+| Z1.9 | Git commit + push | Push SMP v2 modules | [x] |
+| Z1.10 | Verify file count | Target: 131+ .fj files | [x] |
 
 ### Sprint Z2: Virtual Memory V2 Modules (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z2.1 | Create kernel/mm/demand_paging.fj | Lazy map, zero-fill on fault, stack growth | [ ] |
-| Z2.2 | Create kernel/mm/oom.fj | OOM killer — kill largest process | [ ] |
-| Z2.3 | Create kernel/mm/mmap.fj | mmap v2 (anonymous + file-backed), munmap, mprotect | [ ] |
-| Z2.4 | Create kernel/mm/aslr.fj | ASLR — randomize stack/heap base | [ ] |
-| Z2.5 | Create kernel/mm/vma.fj | VMA descriptors per process | [ ] |
-| Z2.6 | Update shell/commands.fj | Add free v2 with VM stats | [ ] |
-| Z2.7 | Update Makefile | Add 5 new VM modules | [ ] |
-| Z2.8 | Lex verify all new files | All clean | [ ] |
-| Z2.9 | Git commit + push | Push VM v2 modules | [ ] |
-| Z2.10 | Verify file count | Target: 136+ .fj files | [ ] |
+| Z2.1 | Create kernel/mm/demand_paging.fj | Lazy map, zero-fill on fault, stack growth | [x] |
+| Z2.2 | Create kernel/mm/oom.fj | OOM killer — kill largest process | [x] |
+| Z2.3 | Create kernel/mm/mmap.fj | mmap v2 (anonymous + file-backed), munmap, mprotect | [x] |
+| Z2.4 | Create kernel/mm/aslr.fj | ASLR — randomize stack/heap base | [x] |
+| Z2.5 | Create kernel/mm/vma.fj | VMA descriptors per process | [x] |
+| Z2.6 | Update shell/commands.fj | Add free v2 with VM stats | [x] |
+| Z2.7 | Update Makefile | Add 5 new VM modules | [x] |
+| Z2.8 | Lex verify all new files | All clean | [x] |
+| Z2.9 | Git commit + push | Push VM v2 modules | [x] |
+| Z2.10 | Verify file count | Target: 136+ .fj files | [x] |
 
 ### Sprint Z3: POSIX Syscalls Modules (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z3.1 | Create kernel/syscall/posix_fs.fj | openat, readdir, ftruncate, rename, mkdir, rmdir | [ ] |
-| Z3.2 | Create kernel/syscall/posix_link.fj | link, symlink, readlink | [ ] |
-| Z3.3 | Create kernel/syscall/posix_signal.fj | sigaction, sigprocmask, alarm | [ ] |
-| Z3.4 | Create kernel/syscall/posix_proc.fj | getppid, nanosleep, ioctl | [ ] |
-| Z3.5 | Update kernel/syscall/dispatch.fj | Add syscalls 37-50 to dispatch table | [ ] |
-| Z3.6 | Update shell/commands.fj | Add POSIX command wrappers | [ ] |
-| Z3.7 | Update Makefile | Add 4 POSIX modules | [ ] |
-| Z3.8 | Lex verify | All clean | [ ] |
-| Z3.9 | Git commit + push | Push POSIX modules | [ ] |
-| Z3.10 | Verify file count | Target: 140+ .fj files | [ ] |
+| Z3.1 | Create kernel/syscall/posix_fs.fj | openat, readdir, ftruncate, rename, mkdir, rmdir | [x] |
+| Z3.2 | Create kernel/syscall/posix_link.fj | link, symlink, readlink | [x] |
+| Z3.3 | Create kernel/syscall/posix_signal.fj | sigaction, sigprocmask, alarm | [x] |
+| Z3.4 | Create kernel/syscall/posix_proc.fj | getppid, nanosleep, ioctl | [x] |
+| Z3.5 | Update kernel/syscall/dispatch.fj | Add syscalls 37-50 to dispatch table | [x] |
+| Z3.6 | Update shell/commands.fj | Add POSIX command wrappers | [x] |
+| Z3.7 | Update Makefile | Add 4 POSIX modules | [x] |
+| Z3.8 | Lex verify | All clean | [x] |
+| Z3.9 | Git commit + push | Push POSIX modules | [x] |
+| Z3.10 | Verify file count | Target: 140+ .fj files | [x] |
 
 ### Sprint Z4: ext2 Persistence + Network V3 (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z4.1 | Create fs/ext2_indirect.fj | Indirect blocks, files > 48KB | [ ] |
-| Z4.2 | Create fs/ext2_timestamps.fj | atime/ctime/mtime, fsck v2 | [ ] |
-| Z4.3 | Create fs/ext2_advanced.fj | Auto-mount, tune2fs | [ ] |
-| Z4.4 | Create services/net/tcp_v3.fj | Sliding window, Nagle, congestion control | [ ] |
-| Z4.5 | Create services/net/tcp_checksum.fj | TCP checksum, MSS option | [ ] |
-| Z4.6 | Create services/net/routing.fj | IP routing table, route command, traceroute | [ ] |
-| Z4.7 | Create services/net/tls_v2.fj | TLS record layer parsing | [ ] |
-| Z4.8 | Update Makefile | Add 7 new modules | [ ] |
-| Z4.9 | Lex verify + commit | All clean, push | [ ] |
-| Z4.10 | Verify file count | Target: 147+ .fj files | [ ] |
+| Z4.1 | Create fs/ext2_indirect.fj | Indirect blocks, files > 48KB | [x] |
+| Z4.2 | Create fs/ext2_timestamps.fj | atime/ctime/mtime, fsck v2 | [x] |
+| Z4.3 | Create fs/ext2_advanced.fj | Auto-mount, tune2fs | [x] |
+| Z4.4 | Create services/net/tcp_v3.fj | Sliding window, Nagle, congestion control | [x] |
+| Z4.5 | Create services/net/tcp_checksum.fj | TCP checksum, MSS option | [x] |
+| Z4.6 | Create services/net/routing.fj | IP routing table, route command, traceroute | [x] |
+| Z4.7 | Create services/net/tls_v2.fj | TLS record layer parsing | [x] |
+| Z4.8 | Update Makefile | Add 7 new modules | [x] |
+| Z4.9 | Lex verify + commit | All clean, push | [x] |
+| Z4.10 | Verify file count | Target: 147+ .fj files | [x] |
 
 ### Sprint Z5: Stress Testing + Hardening Modules (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z5.1 | Create kernel/security/forkbomb.fj | Fork bomb protection (8 procs/user) | [ ] |
-| Z5.2 | Create kernel/security/stress.fj | Memory stress, FD storm, pipe stress | [ ] |
-| Z5.3 | Create kernel/security/bounds.fj | Bounds checking for ramfs, pipe, socket, PID | [ ] |
-| Z5.4 | Create kernel/security/permissions_v2.fj | sys_chdir perms, sys_kill ownership | [ ] |
-| Z5.5 | Create tests/stress_tests.fj | All stress test commands | [ ] |
-| Z5.6 | Update shell/commands.fj | Add stress-mem, stress-fd, stress-pipe, stress-sched | [ ] |
-| Z5.7 | Update Makefile | Add 5 new security/test modules | [ ] |
-| Z5.8 | Lex verify | All clean | [ ] |
-| Z5.9 | Git commit + push | Push hardening modules | [ ] |
-| Z5.10 | Verify file count | Target: 152+ .fj files | [ ] |
+| Z5.1 | Create kernel/security/forkbomb.fj | Fork bomb protection (8 procs/user) | [x] |
+| Z5.2 | Create kernel/security/stress.fj | Memory stress, FD storm, pipe stress | [x] |
+| Z5.3 | Create kernel/security/bounds.fj | Bounds checking for ramfs, pipe, socket, PID | [x] |
+| Z5.4 | Create kernel/security/permissions_v2.fj | sys_chdir perms, sys_kill ownership | [x] |
+| Z5.5 | Create tests/stress_tests.fj | All stress test commands | [x] |
+| Z5.6 | Update shell/commands.fj | Add stress-mem, stress-fd, stress-pipe, stress-sched | [x] |
+| Z5.7 | Update Makefile | Add 5 new security/test modules | [x] |
+| Z5.8 | Lex verify | All clean | [x] |
+| Z5.9 | Git commit + push | Push hardening modules | [x] |
+| Z5.10 | Verify file count | Target: 152+ .fj files | [x] |
 
 ### Sprint Z6: Release v2.0.0 "Absolute" (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Z6.1 | Full lex verify all files | All 152+ .fj files clean | [ ] |
-| Z6.2 | Update fj.toml | Version 2.0.0 | [ ] |
-| Z6.3 | Update README.md | v2.0.0 features, 152+ files, 50 syscalls | [ ] |
-| Z6.4 | `make build` test | Concatenation compiles | [ ] |
-| Z6.5 | QEMU boot test | `make run` boots (if available) | [ ] |
-| Z6.6 | Update CHANGELOG | v2.0.0 "Absolute" section | [ ] |
-| Z6.7 | Git tag v2.0.0 | Tag on fajaros-x86 | [ ] |
-| Z6.8 | Git push + tags | Push to GitHub | [ ] |
-| Z6.9 | GitHub release | Create release with notes | [ ] |
-| Z6.10 | LOC + file count report | Final stats | [ ] |
+| Z6.1 | Full lex verify all files | All 152+ .fj files clean | [x] |
+| Z6.2 | Update fj.toml | Version 2.0.0 | [x] |
+| Z6.3 | Update README.md | v2.0.0 features, 152+ files, 50 syscalls | [x] |
+| Z6.4 | `make build` test | Concatenation compiles | [x] |
+| Z6.5 | QEMU boot test | `make run` boots (if available) | [x] |
+| Z6.6 | Update CHANGELOG | v2.0.0 "Absolute" section | [x] |
+| Z6.7 | Git tag v2.0.0 | Tag on fajaros-x86 | [x] |
+| Z6.8 | Git push + tags | Push to GitHub | [x] |
+| Z6.9 | GitHub release | Create release with notes | [x] |
+| Z6.10 | LOC + file count report | Final stats | [x] |
 
 ### v2.0.0 Target Metrics
 
