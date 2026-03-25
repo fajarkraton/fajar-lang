@@ -1,0 +1,18 @@
+// fj-hello — Tutorial package for Fajar Lang
+// Demonstrates package structure and public API
+
+pub fn greet(name: str) -> str {
+    f"Hello, {name}! Welcome to Fajar Lang."
+}
+
+pub fn greet_world() -> str {
+    greet("World")
+}
+
+pub fn greet_all(names: [str]) -> [str] {
+    names.map(|name| greet(name))
+}
+
+pub fn farewell(name: str) -> str {
+    f"Goodbye, {name}! See you next time."
+}

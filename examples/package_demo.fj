@@ -1,0 +1,74 @@
+// Package System Demo — Fajar Lang v0.9
+// Demonstrates how packages work in Fajar Lang
+//
+// Standard packages: fj-math, fj-nn, fj-hal, fj-http, fj-json, fj-crypto, fj-drivers
+// Tutorial package: fj-hello
+
+// Math operations (from fj-math style)
+fn sqrt_approx(x: f64) -> f64 {
+    let mut guess = x / 2.0
+    let mut i = 0
+    while i < 10 {
+        guess = (guess + x / guess) / 2.0
+        i = i + 1
+    }
+    guess
+}
+
+fn abs(x: f64) -> f64 {
+    if x < 0.0 { -x } else { x }
+}
+
+// JSON-like serialization (from fj-json style)
+fn to_json_int(key: str, value: i64) -> str {
+    f"\"{key}\": {value}"
+}
+
+fn to_json_str(key: str, value: str) -> str {
+    f"\"{key}\": \"{value}\""
+}
+
+// Crypto hash (from fj-crypto style) — simplified FNV-1a
+fn simple_hash(data: str) -> i64 {
+    let bytes = data.bytes()
+    let mut hash: i64 = 5381
+    let n: i64 = bytes.len() as i64
+    let mut i: i64 = 0
+    while i < n {
+        hash = ((hash * 33) % 1000000007) + bytes[i]
+        i = i + 1
+    }
+    hash % 1000000007
+}
+
+fn main() -> void {
+    println("=== Fajar Lang Package System Demo ===")
+    println("")
+
+    // Math package demo
+    println("fj-math:")
+    let pi = 3.14159265358979
+    println(f"  PI = {pi}")
+    println(f"  sqrt(2) ~ {sqrt_approx(2.0)}")
+    println(f"  abs(-42.5) = {abs(-42.5)}")
+
+    // JSON package demo
+    println("fj-json:")
+    let name_json = to_json_str("name", "Fajar Lang")
+    let ver_json = to_json_int("version", 6)
+    println(f"  {{{name_json}, {ver_json}}}")
+
+    // Crypto package demo
+    println("fj-crypto:")
+    let hash1 = simple_hash("hello")
+    let hash2 = simple_hash("world")
+    println(f"  hash(\"hello\") = {hash1}")
+    println(f"  hash(\"world\") = {hash2}")
+
+    // Package count
+    println("")
+    let packages = ["fj-math", "fj-nn", "fj-hal", "fj-drivers", "fj-http", "fj-json", "fj-crypto", "fj-hello"]
+    println(f"Standard packages: {packages.len()}")
+    let joined = packages.join(", ")
+    println(f"  {joined}")
+}

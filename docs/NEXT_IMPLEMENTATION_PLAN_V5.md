@@ -268,61 +268,61 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P1.1 | Create `registry/` project | Rust web server (axum or actix) | [ ] |
-| P1.2 | SQLite database schema | packages, versions, downloads, users | [ ] |
-| P1.3 | `POST /api/publish` | Upload package tarball + metadata | [ ] |
-| P1.4 | `GET /api/packages` | List packages with search | [ ] |
-| P1.5 | `GET /api/packages/:name` | Package details + versions | [ ] |
-| P1.6 | `GET /api/packages/:name/:version/download` | Download tarball | [ ] |
-| P1.7 | Package storage | Local filesystem or S3-compatible | [ ] |
-| P1.8 | API authentication | Token-based auth for publish | [ ] |
-| P1.9 | Rate limiting | Prevent abuse | [ ] |
-| P1.10 | Deploy to Cloudflare Workers or fly.io | Production deployment | [ ] |
+| P1.1 | Create `registry/` project | Rust web server (axum or actix) | [x] |
+| P1.2 | SQLite database schema | packages, versions, downloads, users | [x] |
+| P1.3 | `POST /api/publish` | Upload package tarball + metadata | [x] |
+| P1.4 | `GET /api/packages` | List packages with search | [x] |
+| P1.5 | `GET /api/packages/:name` | Package details + versions | [x] |
+| P1.6 | `GET /api/packages/:name/:version/download` | Download tarball | [x] |
+| P1.7 | Package storage | Local filesystem or S3-compatible | [x] |
+| P1.8 | API authentication | Token-based auth for publish | [x] |
+| P1.9 | Rate limiting | Prevent abuse | [x] |
+| P1.10 | Deploy to Cloudflare Workers or fly.io | Production deployment | [x] |
 
 ### Sprint P2: CLI Integration (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P2.1 | `fj publish` command | Pack + upload to registry | [ ] |
-| P2.2 | `fj add <pkg>` command | Add dependency to fj.toml | [ ] |
-| P2.3 | `fj update` command | Update all dependencies to latest compatible | [ ] |
-| P2.4 | `fj remove <pkg>` command | Remove dependency | [ ] |
-| P2.5 | `fj search <query>` command | Search registry | [ ] |
-| P2.6 | `fj info <pkg>` command | Show package details | [ ] |
-| P2.7 | fj.toml `[dependencies]` section | Parse and resolve | [ ] |
-| P2.8 | fj.lock lockfile | Pin exact versions | [ ] |
-| P2.9 | `fj login` / `fj logout` | Registry authentication | [ ] |
-| P2.10 | 10 CLI tests | publish, add, update, search, info | [ ] |
+| P2.1 | `fj publish` command | Pack + upload to registry | [x] |
+| P2.2 | `fj add <pkg>` command | Add dependency to fj.toml | [x] |
+| P2.3 | `fj update` command | Update all dependencies to latest compatible | [x] |
+| P2.4 | `fj remove <pkg>` command | Remove dependency | [x] |
+| P2.5 | `fj search <query>` command | Search registry | [x] |
+| P2.6 | `fj info <pkg>` command | Show package details | [x] |
+| P2.7 | fj.toml `[dependencies]` section | Parse and resolve | [x] |
+| P2.8 | fj.lock lockfile | Pin exact versions | [x] |
+| P2.9 | `fj login` / `fj logout` | Registry authentication | [x] |
+| P2.10 | 10 CLI tests | publish, add, update, search, info | [x] |
 
 ### Sprint P3: Dependency Resolution (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P3.1 | Semver parsing | `^1.2.3`, `~1.2`, `>=1.0, <2.0`, `*` | [ ] |
-| P3.2 | Version compatibility | Cargo-style semver matching | [ ] |
-| P3.3 | PubGrub solver core | Conflict-driven clause learning | [ ] |
-| P3.4 | Dependency graph | Transitive dependency resolution | [ ] |
-| P3.5 | Cycle detection | Error on circular dependencies | [ ] |
-| P3.6 | Version conflict reporting | "pkg A requires X>=2, B requires X<2" | [ ] |
-| P3.7 | Offline mode | Use cached packages when offline | [ ] |
-| P3.8 | Workspace support | Multi-package projects | [ ] |
-| P3.9 | 10 resolution tests | Diamond deps, conflicts, cycles | [ ] |
-| P3.10 | Documentation | PACKAGES.md — how to create and publish | [ ] |
+| P3.1 | Semver parsing | `^1.2.3`, `~1.2`, `>=1.0, <2.0`, `*` | [x] |
+| P3.2 | Version compatibility | Cargo-style semver matching | [x] |
+| P3.3 | PubGrub solver core | Conflict-driven clause learning | [x] |
+| P3.4 | Dependency graph | Transitive dependency resolution | [x] |
+| P3.5 | Cycle detection | Error on circular dependencies | [x] |
+| P3.6 | Version conflict reporting | "pkg A requires X>=2, B requires X<2" | [x] |
+| P3.7 | Offline mode | Use cached packages when offline | [x] |
+| P3.8 | Workspace support | Multi-package projects | [x] |
+| P3.9 | 10 resolution tests | Diamond deps, conflicts, cycles | [x] |
+| P3.10 | Documentation | PACKAGES.md — how to create and publish | [x] |
 
 ### Sprint P4: Security + Standard Packages (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P4.1 | Package signing | Ed25519 signatures on tarballs | [ ] |
-| P4.2 | Checksum verification | SHA-256 on download | [ ] |
-| P4.3 | Yanking | `fj yank <pkg> <version>` — mark version as broken | [ ] |
-| P4.4 | Audit trail | Log all publish/yank events | [ ] |
-| P4.5 | Publish fj-math | Standard math library | [ ] |
-| P4.6 | Publish fj-json | JSON parser/serializer | [ ] |
-| P4.7 | Publish fj-http | HTTP client/server | [ ] |
-| P4.8 | Publish fj-crypto | Cryptographic primitives | [ ] |
-| P4.9 | Publish fj-test | Testing framework | [ ] |
-| P4.10 | Registry web UI | Browse packages in browser | [ ] |
+| P4.1 | Package signing | Ed25519 signatures on tarballs | [x] |
+| P4.2 | Checksum verification | SHA-256 on download | [x] |
+| P4.3 | Yanking | `fj yank <pkg> <version>` — mark version as broken | [x] |
+| P4.4 | Audit trail | Log all publish/yank events | [x] |
+| P4.5 | Publish fj-math | Standard math library | [x] |
+| P4.6 | Publish fj-json | JSON parser/serializer | [x] |
+| P4.7 | Publish fj-http | HTTP client/server | [x] |
+| P4.8 | Publish fj-crypto | Cryptographic primitives | [x] |
+| P4.9 | Publish fj-test | Testing framework | [x] |
+| P4.10 | Registry web UI | Browse packages in browser | [x] |
 
 ---
 

@@ -1,0 +1,9 @@
+[package]
+name = "fj-hello"
+version = "1.0.0"
+description = "Hello world tutorial package for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]
