@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fajar Lang — Systems Programming for Embedded ML &amp; OS Integration</title>
+    <meta name="description" content="Fajar Lang is a statically-typed systems programming language designed for embedded machine learning and OS integration. Write OS kernels and neural networks in the same codebase.">
+
+    <!-- OpenGraph -->
+    <meta property="og:title" content="Fajar Lang — Systems Programming for Embedded ML &amp; OS Integration">
+    <meta property="og:description" content="The only language where an OS kernel and a neural network share the same codebase, type system, and compiler.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://fajarlang.dev">
+    <meta property="og:image" content="https://fajarlang.dev/og-image.png">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Fajar Lang — Embedded ML + OS Integration">
+    <meta name="twitter:description" content="Statically-typed systems language for embedded AI and operating systems.">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Fajar Lang",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux, macOS, Windows",
+        "description": "A statically-typed systems programming language for embedded ML and OS integration",
+        "url": "https://fajarlang.dev",
+        "license": "https://opensource.org/licenses/MIT",
+        "programmingLanguage": "Rust"
+    }
+    </script>
+
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --fg: #e6edf3;
+            --fg-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --orange: #d29922;
+            --red: #f85149;
+            --border: #30363d;
+            --code-bg: #0d1117;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+        }
+
+        [data-theme="light"] {
+            --bg: #ffffff;
+            --bg-card: #f6f8fa;
+            --fg: #1f2328;
+            --fg-muted: #656d76;
+            --accent: #0969da;
+            --accent-hover: #0550ae;
+            --green: #1a7f37;
+            --orange: #9a6700;
+            --red: #cf222e;
+            --border: #d0d7de;
+            --code-bg: #f6f8fa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+        /* Navigation */
+        nav {
+            border-bottom: 1px solid var(--border);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 100;
+        }
+        nav .container { display: flex; justify-content: space-between; align-items: center; }
+        nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--accent); text-decoration: none; }
+        nav .links { display: flex; gap: 24px; align-items: center; }
+        nav .links a { color: var(--fg-muted); text-decoration: none; font-size: 0.9rem; }
+        nav .links a:hover { color: var(--fg); }
+        .theme-toggle {
+            background: none; border: 1px solid var(--border); color: var(--fg-muted);
+            padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 80px 0 60px;
+        }
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent), var(--green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero .tagline {
+            font-size: 1.25rem;
+            color: var(--fg-muted);
+            max-width: 700px;
+            margin: 0 auto 32px;
+        }
+        .install-cmd {
+            display: inline-block;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-family: var(--mono);
+            font-size: 1rem;
+            color: var(--green);
+            margin-bottom: 32px;
+        }
+        .hero .buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-secondary { border: 1px solid var(--border); color: var(--fg); }
+        .btn-secondary:hover { background: var(--bg-card); }
+
+        /* Code example */
+        .code-hero {
+            max-width: 700px;
+            margin: 40px auto 0;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .code-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+        }
+        .code-tab {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            color: var(--fg-muted);
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+        }
+        .code-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .code-content { padding: 20px; display: none; }
+        .code-content.active { display: block; }
+        pre {
+            font-family: var(--mono);
+            font-size: 0.9rem;
+            line-height: 1.7;
+            overflow-x: auto;
+        }
+        .kw { color: var(--red); }
+        .fn { color: var(--accent); }
+        .str { color: var(--green); }
+        .cmt { color: var(--fg-muted); }
+        .ann { color: var(--orange); }
+        .num { color: #d2a8ff; }
+
+        /* Features */
+        .features {
+            padding: 80px 0;
+        }
+        .features h2 { text-align: center; font-size: 2rem; margin-bottom: 48px; }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+        }
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .feature-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+        .feature-card .icon { font-size: 2rem; margin-bottom: 12px; }
+        .feature-card p { color: var(--fg-muted); font-size: 0.95rem; }
+
+        /* Quickstart */
+        .quickstart {
+            padding: 80px 0;
+            border-top: 1px solid var(--border);
+        }
+        .quickstart h2 { text-align: center; font-size: 2rem; margin-bottom: 48px; }
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .step {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        .step-num {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .step h3 { margin-bottom: 8px; }
+        .step code {
+            display: block;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            color: var(--green);
+            margin-top: 8px;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 40px 0;
+            text-align: center;
+            color: var(--fg-muted);
+            font-size: 0.9rem;
+        }
+        footer .links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; }
+        footer .links a { color: var(--fg-muted); text-decoration: none; }
+        footer .links a:hover { color: var(--accent); }
+
+        /* Mobile */
+        .mobile-menu { display: none; background: none; border: none; color: var(--fg); font-size: 1.5rem; cursor: pointer; }
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.2rem; }
+            nav .links { display: none; }
+            nav .links.open { display: flex; flex-direction: column; position: absolute; top: 60px; left: 0; right: 0; background: var(--bg); padding: 16px; border-bottom: 1px solid var(--border); }
+            .mobile-menu { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">fj</a>
+            <button class="mobile-menu" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
+            <div class="links">
+                <a href="https://docs.fajarlang.dev">Docs</a>
+                <a href="https://docs.fajarlang.dev/playground">Playground</a>
+                <a href="https://registry.fajarlang.dev">Packages</a>
+                <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">Dark/Light</button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Fajar Lang</h1>
+            <p class="tagline">The only language where an OS kernel and a neural network share the same codebase, type system, and compiler &mdash; with safety guarantees no existing language provides.</p>
+            <div class="install-cmd">curl -sSf https://fajarlang.dev/install.sh | sh</div>
+            <div class="buttons">
+                <a href="https://docs.fajarlang.dev/getting-started" class="btn btn-primary">Get Started</a>
+                <a href="https://docs.fajarlang.dev/playground" class="btn btn-secondary">Try Online</a>
+            </div>
+
+            <div class="code-hero">
+                <div class="code-tabs">
+                    <button class="code-tab active" onclick="showTab(0)">ML Inference</button>
+                    <button class="code-tab" onclick="showTab(1)">OS Kernel</button>
+                    <button class="code-tab" onclick="showTab(2)">Embedded Sensor</button>
+                    <button class="code-tab" onclick="showTab(3)">Pattern Matching</button>
+                </div>
+                <div class="code-content active"><pre><span class="ann">@device</span>
+<span class="kw">fn</span> <span class="fn">classify</span>(image: Tensor&lt;f32, [<span class="num">1</span>, <span class="num">28</span>, <span class="num">28</span>]&gt;) -&gt; i32 {
+    <span class="kw">let</span> model = Dense(<span class="num">784</span>, <span class="num">10</span>)
+    <span class="kw">let</span> output = image |&gt; flatten |&gt; model |&gt; softmax
+    argmax(output)
+}</pre></div>
+                <div class="code-content"><pre><span class="ann">@kernel</span>
+<span class="kw">fn</span> <span class="fn">handle_timer_irq</span>() {
+    <span class="kw">let</span> ticks = port_read(<span class="num">0x40</span>)
+    scheduler.tick(ticks)
+    irq_acknowledge(<span class="num">0</span>)
+}
+
+<span class="ann">@kernel</span>
+<span class="kw">fn</span> <span class="fn">kmain</span>() {
+    irq_register(<span class="num">0</span>, handle_timer_irq)
+    irq_enable()
+}</pre></div>
+                <div class="code-content"><pre><span class="ann">@device</span>
+<span class="kw">fn</span> <span class="fn">read_accel</span>() -&gt; [f32; <span class="num">3</span>] {
+    <span class="kw">let</span> raw = i2c_read(<span class="num">0x68</span>, <span class="num">0x3B</span>, <span class="num">6</span>)
+    [
+        to_g(raw[<span class="num">0</span>], raw[<span class="num">1</span>]),
+        to_g(raw[<span class="num">2</span>], raw[<span class="num">3</span>]),
+        to_g(raw[<span class="num">4</span>], raw[<span class="num">5</span>]),
+    ]
+}</pre></div>
+                <div class="code-content"><pre><span class="kw">enum</span> Action { Hover, Land, Avoid(f64) }
+
+<span class="kw">fn</span> <span class="fn">decide</span>(altitude: f64, obstacle: bool) -&gt; Action {
+    <span class="kw">match</span> (altitude, obstacle) {
+        (h, _) <span class="kw">if</span> h &lt; <span class="num">1.0</span> =&gt; Action::Land,
+        (_, <span class="kw">true</span>)           =&gt; Action::Avoid(<span class="num">2.0</span>),
+        _                    =&gt; Action::Hover,
+    }
+}</pre></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2>Built for the Hardware Edge</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="icon">&#x1F9E0;</div>
+                    <h3>Embedded ML</h3>
+                    <p>First-class tensors, autograd, and quantized inference (FP4/FP8/INT8). Train and deploy models on Cortex-M, RISC-V, and Jetson Thor.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x2699;&#xFE0F;</div>
+                    <h3>OS Integration</h3>
+                    <p>Write interrupt handlers, page tables, and device drivers in the same language as your neural networks. Context annotations enforce isolation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x1F6E1;&#xFE0F;</div>
+                    <h3>Safety by Construction</h3>
+                    <p>Ownership-lite (no lifetime annotations), borrow checking, null safety via Option&lt;T&gt;, and exhaustive pattern matching. If it compiles, it's safe.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">&#x26A1;</div>
+                    <h3>Native Performance</h3>
+                    <p>Cranelift and LLVM backends. AVX-512, AMX tile ops, CUDA Tensor Cores. Zero-cost abstractions from board-level HAL to GPU compute.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="quickstart">
+        <div class="container">
+            <h2>Get Started in 3 Steps</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <h3>Install</h3>
+                    <p>One command, no dependencies.</p>
+                    <code>curl -sSf https://fajarlang.dev/install.sh | sh</code>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <h3>Write</h3>
+                    <p>Create <strong>hello.fj</strong>:</p>
+                    <code>fn main() { println("Hello, Fajar Lang!") }</code>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <h3>Run</h3>
+                    <p>Execute your program:</p>
+                    <code>fj run hello.fj</code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" style="padding-top: 40px;">
+        <div class="container">
+            <h2>By the Numbers</h2>
+            <div class="feature-grid">
+                <div class="feature-card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--accent);">6,286</div>
+                    <p>Tests Passing</p>
+                </div>
+                <div class="feature-card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--green);">290K</div>
+                    <p>Lines of Rust (Compiler)</p>
+                </div>
+                <div class="feature-card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--orange);">21K</div>
+                    <p>LOC FajarOS Nova Kernel</p>
+                </div>
+                <div class="feature-card" style="text-align: center;">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--red);">0</div>
+                    <p>Crashes in 2.3M Fuzz Runs</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="quickstart" style="padding-top: 40px;">
+        <div class="container">
+            <h2>FajarOS &mdash; Real Operating Systems in Fajar Lang</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num" style="background: var(--accent);">x86</div>
+                    <h3><a href="https://github.com/fajarkraton/fajaros-x86" style="color: var(--accent); text-decoration: none;">FajarOS Nova</a></h3>
+                    <p>x86_64 bare-metal OS &mdash; 139 modules, 37K LOC, 280+ commands, 50 syscalls. VirtIO-GPU, ext2, TCP/IP, SMP, ELF loader, GDB stub.</p>
+                </div>
+                <div class="step">
+                    <div class="step-num" style="background: var(--green);">ARM</div>
+                    <h3><a href="https://github.com/fajarkraton/fajar-os" style="color: var(--green); text-decoration: none;">FajarOS Surya</a></h3>
+                    <p>ARM64 OS for Radxa Dragon Q6A &mdash; Qualcomm QCS6490, Hexagon NPU, 99% MNIST accuracy. Verified on real hardware.</p>
+                </div>
+                <div class="step">
+                    <div class="step-num" style="background: var(--orange);">AI</div>
+                    <h3>Edge AI Pipeline</h3>
+                    <p>Train on x86_64 with CUDA, quantize to INT8, deploy on ARM64 NPU. Same language, same type system, same compiler.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" style="padding: 40px 0;">
+        <div class="container">
+            <h2 style="margin-bottom: 24px;">Created by</h2>
+            <div class="feature-card" style="max-width: 800px; margin: 0 auto; padding: 32px;">
+                <h3 style="margin-bottom: 12px;">Muhamad Fajar Putranto</h3>
+                <p style="color: var(--fg-muted); margin-bottom: 16px;">Serial entrepreneur with 28+ years of experience. Founder of <a href="https://www.taxprime.net" style="color: var(--accent);">TaxPrime</a> (240+ professionals), <a href="https://www.primecore.id" style="color: var(--accent);">PrimeCore.id</a>, <a href="https://acexi.org" style="color: var(--accent);">ACEXI</a>, and InkubatorX. ITR World Tax "Highly Regarded" 2021-2024. Ketua Umum IKANAS STAN 2025-2028.</p>
+                <p style="font-style: italic; color: var(--fg-muted);">"From IndoFace (180K+ members, ~2008) to TaxPrime to Fajar Lang &mdash; building things that matter."</p>
+                <p style="margin-top: 16px;">
+                    <span style="display: inline-block; background: #dc1a28; color: white; padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 600;">Made in Indonesia &#127470;&#127465;</span>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="links">
+                <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
+                <a href="https://docs.fajarlang.dev">Documentation</a>
+                <a href="https://docs.fajarlang.dev/playground">Playground</a>
+                <a href="https://registry.fajarlang.dev">Package Registry</a>
+            </div>
+            <p>Fajar Lang is open source under the MIT License.</p>
+        </div>
+    </footer>
+
+    <script>
+        function showTab(index) {
+            document.querySelectorAll('.code-tab').forEach((t, i) => {
+                t.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.code-content').forEach((c, i) => {
+                c.classList.toggle('active', i === index);
+            });
+        }
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('fj-theme', next);
+        }
+        (function() {
+            const saved = localStorage.getItem('fj-theme');
+            if (saved) {
+                document.documentElement.setAttribute('data-theme', saved);
+            } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+</body>
+</html>
