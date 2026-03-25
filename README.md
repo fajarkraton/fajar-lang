@@ -530,9 +530,26 @@ Commit format: `<type>(<scope>): <description>` (e.g., `feat(analyzer): add GAT 
 
 ---
 
-## Community
+## About the Author
 
-Fajar Lang is created and maintained by **Fajar** ([TaxPrime](https://github.com/fajarkraton) / [PrimeCore.id](https://primecore.id)), based in **Indonesia**.
+**Muhamad Fajar Putranto, SE., SH., MH.** — serial entrepreneur with 28+ years of professional experience spanning taxation, technology, and innovation.
+
+| Year | Milestone |
+|------|-----------|
+| 1996 | Started career at Indonesia's Directorate General of Taxes (DJP) |
+| ~2008 | Founded **[IndoFace](https://indoface.wordpress.com/)** — Indonesian social network with **180,000+ members** (status updates, photo sharing, blog, voting, classified ads). One of Indonesia's pioneering homegrown social platforms |
+| 2012 | Co-founded **[TaxPrime](https://www.taxprime.net/)** — now Indonesia's largest independent tax consulting firm (240+ professionals, 27 ex-DJP/Customs officials). Collaborating firm of [Andersen Global](https://andersen.com/) and member of [PrimeGlobal](https://www.primeglobal.net/) (300 firms, 110+ countries) |
+| 2021-2024 | **[ITR World Tax "Highly Regarded"](https://www.itrworldtax.com/Lawyer/TaxPrime/Muhamad-Fajar-Putranto-Indonesia/Profile/7273)** — Tax Controversy Leader, 4 consecutive years. **World TP "Transfer Pricing Expert"** (2021) |
+| 2022 | **[Indonesia Most Inspirational Taxpayers](https://www.taxprime.net/awards/the-most-inspirational-taxpayer/)** — Majalah Pajak, Tax Practitioner category |
+| 2023 | Founded **[InkubatorX](https://www.pajak.com/ekonomi/inkubatorx-riset-akselerasi-pengembangan-hilirisasi/)** — ecosystem company (digital economy, renewable energy, nano technology). Developed **Nanosix** (nano curcumin, nano coconut water, biodiesel nano additive) |
+| 2025 | Elected **[Ketua Umum IKANAS STAN](https://www.pajak.com/ekonomi/fajar-putranto-terpilih-jadi-ketua-ikanas-stan-siap-konsolidasi/)** 2025-2028 — leading ~80,000 alumni of Indonesia's State College of Accountancy |
+| 2026 | Created **Fajar Lang** — systems programming language for embedded ML & OS development. Built **FajarOS** — bare-metal OS on x86_64 and ARM64 (Radxa Dragon Q6A) |
+
+> *"From tax auditor to social network founder to programming language creator — the journey of building things that matter."*
+
+---
+
+## Community
 
 - **GitHub:** [github.com/fajarkraton/fajar-lang](https://github.com/fajarkraton/fajar-lang)
 - **Issues:** [github.com/fajarkraton/fajar-lang/issues](https://github.com/fajarkraton/fajar-lang/issues)
@@ -550,4 +567,4 @@ Fajar Lang adalah bahasa pemrograman sistem yang dibuat di Indonesia, dirancang 
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-Copyright (c) 2025-2026 Fajar (PrimeCore.id)
+Copyright (c) 2025-2026 Muhamad Fajar Putranto (TaxPrime / PrimeCore.id)
