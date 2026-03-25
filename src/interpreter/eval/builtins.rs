@@ -1544,7 +1544,13 @@ impl Interpreter {
             }
             "timeout" => {
                 // timeout(ms, future) → resolve future (cooperative, no real timeout in interpreter)
-                if args.len() != 2 { return Err(RuntimeError::ArityMismatch { expected: 2, got: args.len() }.into()); }
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
                 let _ms = &args[0];
                 match &args[1] {
                     Value::Future { task_id } => {
@@ -1564,7 +1570,13 @@ impl Interpreter {
             }
             "spawn" => {
                 // spawn(future) → starts task, returns future (already a future in our model)
-                if args.len() != 1 { return Err(RuntimeError::ArityMismatch { expected: 1, got: args.len() }.into()); }
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
                 Ok(args.into_iter().next().unwrap_or(Value::Null))
             }
 
@@ -4500,7 +4512,7 @@ impl Interpreter {
             params: closure_params,
             body: Box::new(body.clone()),
             closure_env: Rc::clone(&self.env),
-                    is_async: false,
+            is_async: false,
         }))
     }
 
@@ -4730,7 +4742,7 @@ impl Interpreter {
                 params: method.params.clone(),
                 body: method.body.clone(),
                 closure_env: Rc::clone(&self.env),
-                    is_async: false,
+                is_async: false,
             };
 
             // Check if this is a static method (no `self` param) — also register globally
@@ -5056,7 +5068,7 @@ impl Interpreter {
                         params: fndef.params.clone(),
                         body: fndef.body.clone(),
                         closure_env: Rc::clone(&self.env),
-                    is_async: false,
+                        is_async: false,
                     };
                     let val = Value::Function(fn_val);
                     mod_symbols.insert(fndef.name.clone(), val.clone());

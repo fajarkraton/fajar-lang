@@ -2968,7 +2968,13 @@ mod tests {
         "#;
         let result = check(src);
         // Should succeed now (no AwaitOutsideAsync error)
-        assert!(result.is_ok() || !result.unwrap_err().iter().any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })));
+        assert!(
+            result.is_ok()
+                || !result
+                    .unwrap_err()
+                    .iter()
+                    .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. }))
+        );
     }
 
     #[test]
@@ -4162,7 +4168,12 @@ mod tests {
             fn foo() -> i64 { 42 }
         "#;
         let result = check(src);
-        assert!(result.is_ok() || !result.unwrap_err().iter().any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })),
+        assert!(
+            result.is_ok()
+                || !result
+                    .unwrap_err()
+                    .iter()
+                    .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })),
             ".await should now be allowed outside async fn (v0.7)"
         );
     }

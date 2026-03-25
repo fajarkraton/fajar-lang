@@ -1264,8 +1264,16 @@ impl TypeChecker {
         let is_non_consuming_builtin = if let Expr::Ident { name, .. } = callee {
             matches!(
                 name.as_str(),
-                "len" | "type_of" | "println" | "print" | "dbg" | "assert" | "assert_eq"
-                | "join" | "timeout" | "spawn"
+                "len"
+                    | "type_of"
+                    | "println"
+                    | "print"
+                    | "dbg"
+                    | "assert"
+                    | "assert_eq"
+                    | "join"
+                    | "timeout"
+                    | "spawn"
             ) || name.starts_with("tensor_")
                 || name.starts_with("optimizer_")
                 || name.starts_with("model_")

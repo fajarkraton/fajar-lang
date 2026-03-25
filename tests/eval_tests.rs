@@ -7911,7 +7911,7 @@ fn t3_7_recursive_stack_limit() {
     let result = interp.eval_source(src);
     // Either succeeds or returns a stack overflow error — must NOT panic
     match result {
-        Ok(_) => {} // some implementations may handle this
+        Ok(_) => {}  // some implementations may handle this
         Err(_) => {} // stack overflow error is acceptable
     }
 }
@@ -9676,7 +9676,10 @@ fn i1_default_handler_action() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["terminate", "terminate", "terminate", "ignore", "stop"]);
+    assert_eq!(
+        out,
+        vec!["terminate", "terminate", "terminate", "ignore", "stop"]
+    );
 }
 
 #[test]
@@ -9952,7 +9955,15 @@ fn i2_fg_bg_semantics() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["send SIGCONT then wait", "wait", "send SIGCONT", "already running"]);
+    assert_eq!(
+        out,
+        vec![
+            "send SIGCONT then wait",
+            "wait",
+            "send SIGCONT",
+            "already running"
+        ]
+    );
 }
 
 #[test]
@@ -9968,7 +9979,13 @@ fn i2_job_notification_format() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["[1]+  Done                    sleep 100", "[2]+  Done                    compile"]);
+    assert_eq!(
+        out,
+        vec![
+            "[1]+  Done                    sleep 100",
+            "[2]+  Done                    compile"
+        ]
+    );
 }
 
 // ═══════════════════════════════════════════════
@@ -10447,7 +10464,12 @@ fn k1_memory_layout_complete() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["4096", "4096", "4096", "4096", "4096", "4096", "8192", "36864"]);
+    assert_eq!(
+        out,
+        vec![
+            "4096", "4096", "4096", "4096", "4096", "4096", "8192", "36864"
+        ]
+    );
 }
 
 #[test]
@@ -10559,7 +10581,12 @@ fn k1_shell_features_complete() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["true", "true", "true", "true", "true", "true", "true", "true", "true"]);
+    assert_eq!(
+        out,
+        vec![
+            "true", "true", "true", "true", "true", "true", "true", "true", "true"
+        ]
+    );
 }
 
 #[test]
@@ -11012,7 +11039,18 @@ fn l2_cow_complete_lifecycle() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["fork", "share_ro", "write_fault", "copy_page", "remap_rw", "decref", "done"]);
+    assert_eq!(
+        out,
+        vec![
+            "fork",
+            "share_ro",
+            "write_fault",
+            "copy_page",
+            "remap_rw",
+            "decref",
+            "done"
+        ]
+    );
 }
 
 // ═══════════════════════════════════════════════
@@ -12163,7 +12201,15 @@ fn o2_content_type() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["text/html", "application/json", "text/plain", "application/octet-stream"]);
+    assert_eq!(
+        out,
+        vec![
+            "text/html",
+            "application/json",
+            "text/plain",
+            "application/octet-stream"
+        ]
+    );
 }
 
 #[test]
@@ -12240,7 +12286,10 @@ fn o2_request_logging() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["[HTTP] GET / -> 200", "[HTTP] GET /missing -> 404"]);
+    assert_eq!(
+        out,
+        vec!["[HTTP] GET / -> 200", "[HTTP] GET /missing -> 404"]
+    );
 }
 
 #[test]
@@ -12415,7 +12464,10 @@ fn p1_gdb_commands() {
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out, vec!["halt_reason", "read_regs", "read_mem", "step", "continue"]);
+    assert_eq!(
+        out,
+        vec!["halt_reason", "read_regs", "read_mem", "step", "continue"]
+    );
 }
 
 #[test]

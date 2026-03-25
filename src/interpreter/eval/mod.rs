@@ -1016,7 +1016,7 @@ impl Interpreter {
                         params: handler.params.clone(),
                         body: handler.body.clone(),
                         closure_env: std::rc::Rc::clone(&self.env),
-                    is_async: false,
+                        is_async: false,
                     };
                     self.env
                         .borrow_mut()
