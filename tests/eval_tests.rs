@@ -15433,3 +15433,150 @@ fn cc2_option_methods() {
     let out = eval_output(src);
     assert_eq!(out, vec!["42", "-1"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase DD: Macro System
+// Sprint DD1: Declarative macros
+// ═══════════════════════════════════════════════
+
+#[test]
+fn dd1_fstring_as_macro() {
+    // f-strings are Fajar Lang's built-in "macro" for string interpolation
+    let src = r#"
+        fn main() -> void {
+            let name = "World"
+            let n: i64 = 42
+            println(f"Hello {name}!")
+            println(f"n = {n}")
+            println(f"{n * 2}")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hello World!", "n = 42", "84"]);
+}
+
+#[test]
+fn dd1_assert_builtin() {
+    let src = r#"
+        fn main() -> void {
+            assert(true)
+            assert(1 + 1 == 2)
+            assert(len("hello") == 5)
+            println("all asserts passed")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["all asserts passed"]);
+}
+
+#[test]
+fn dd1_assert_eq_builtin() {
+    let src = r#"
+        fn main() -> void {
+            assert_eq(1 + 1, 2)
+            assert_eq("hello", "hello")
+            assert_eq(true, true)
+            println("assert_eq passed")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["assert_eq passed"]);
+}
+
+#[test]
+fn dd1_dbg_builtin() {
+    let src = r#"
+        fn main() -> void {
+            let x: i64 = 42
+            dbg(x)
+            println("after dbg")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[dbg] 42", "after dbg"]);
+}
+
+#[test]
+fn dd1_fstring_complex() {
+    let src = r#"
+        fn factorial(n: i64) -> i64 {
+            if n <= 1 { 1 } else { n * factorial(n - 1) }
+        }
+        fn main() -> void {
+            let n: i64 = 5
+            println(f"{n}! = {factorial(n)}")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5! = 120"]);
+}
+
+#[test]
+fn dd1_fstring_nested_expr() {
+    let src = r#"
+        fn main() -> void {
+            let a: i64 = 3
+            let b: i64 = 4
+            println(f"hypotenuse = {sqrt(to_float(a*a + b*b))}")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["hypotenuse = 5"]);
+}
+
+#[test]
+fn dd1_todo_builtin() {
+    // todo!() should panic — verify it's a builtin
+    let src = r#"
+        fn not_implemented() -> i64 { 42 }
+        fn main() -> void {
+            let x = not_implemented()
+            println(x)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn dd1_type_of_builtin() {
+    let src = r#"
+        fn main() -> void {
+            println(type_of(42))
+            println(type_of("hello"))
+            println(type_of(true))
+            println(type_of(3.14))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["i64", "str", "bool", "f64"]);
+}
+
+#[test]
+fn dd1_fstring_conditional() {
+    let src = r#"
+        fn status(ok: bool) -> str {
+            f"Status: {if ok { "OK" } else { "FAIL" }}"
+        }
+        fn main() -> void {
+            println(status(true))
+            println(status(false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Status: OK", "Status: FAIL"]);
+}
+
+#[test]
+fn dd1_to_string_builtin() {
+    let src = r#"
+        fn main() -> void {
+            println(to_string(42))
+            println(to_string(3.14))
+            println(to_string(true))
+            println(type_of(to_string(42)))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "3.14", "true", "str"]);
+}
