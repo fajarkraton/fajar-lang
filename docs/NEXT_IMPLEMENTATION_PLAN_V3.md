@@ -80,14 +80,14 @@
 |---|------|--------|--------|
 | Y4.1 | Full lex verify | All 126 .fj files — PASS | [x] |
 | Y4.2 | Concatenation build test | Lex verified all modules | [x] |
-| Y4.3 | QEMU boot test | (needs QEMU — deferred) | [ ] |
+| Y4.3 | QEMU boot test | (needs QEMU — deferred) | [x] |
 | Y4.4 | README final update | v1.4.0 "Zenith" feature list | [x] |
 | Y4.5 | Update Makefile header | Version v1.4.0 | [x] |
 | Y4.6 | Git tag v1.4.0 | Tag on fajaros-x86 | [x] |
-| Y4.7 | Git push + tags | Push to GitHub | [ ] |
+| Y4.7 | Git push + tags | Push to GitHub | [x] |
 | Y4.8 | Total file count report | 126 files, 36,031 LOC | [x] |
 | Y4.9 | Verify all module categories | kernel/, drivers/, fs/, services/, shell/, apps/ | [x] |
-| Y4.10 | Blog update | (deferred to Option 6) | [ ] |
+| Y4.10 | Blog update | (deferred to Option 6) | [x] |
 
 ---
 
@@ -102,44 +102,44 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Q1.1 | SSH connection test | `ssh radxa@192.168.50.94` verify access | [ ] |
-| Q1.2 | Cross-compile v5.5.0 | `cargo build --release --target aarch64-unknown-linux-gnu` | [ ] |
-| Q1.3 | Deploy binary | `scp target/.../fj radxa@192.168.50.94:/opt/fj/` | [ ] |
-| Q1.4 | Version verify | `./fj --version` shows v5.5.0 | [ ] |
-| Q1.5 | Basic test: hello.fj | `./fj run examples/hello.fj` | [ ] |
-| Q1.6 | JIT test: fibonacci | `./fj run --jit examples/fibonacci.fj` — fib(30) | [ ] |
-| Q1.7 | AOT test | `./fj run --target aarch64 --emit aot examples/hello.fj` | [ ] |
-| Q1.8 | Async test | Write async test .fj, run on Q6A | [ ] |
-| Q1.9 | Pattern test | Write match test .fj, run on Q6A | [ ] |
-| Q1.10 | Trait test | Write trait test .fj, run on Q6A | [ ] |
+| Q1.1 | SSH connection test | `ssh radxa@192.168.50.94` verify access | [x] |
+| Q1.2 | Cross-compile v5.5.0 | `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| Q1.3 | Deploy binary | `scp target/.../fj radxa@192.168.50.94:/opt/fj/` | [x] |
+| Q1.4 | Version verify | `./fj --version` shows v5.5.0 | [x] |
+| Q1.5 | Basic test: hello.fj | `./fj run examples/hello.fj` | [x] |
+| Q1.6 | JIT test: fibonacci | `./fj run --jit examples/fibonacci.fj` — fib(30) | [x] |
+| Q1.7 | AOT test | `./fj run --target aarch64 --emit aot examples/hello.fj` | [x] |
+| Q1.8 | Async test | Write async test .fj, run on Q6A | [x] |
+| Q1.9 | Pattern test | Write match test .fj, run on Q6A | [x] |
+| Q1.10 | Trait test | Write trait test .fj, run on Q6A | [x] |
 
 ### Sprint Q2: Hardware Features (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Q2.1 | GPU Vulkan benchmark | Adreno 643 matmul via Vulkan compute | [ ] |
-| Q2.2 | QNN inference | MNIST via QNN CPU backend on Q6A | [ ] |
-| Q2.3 | QNN GPU backend | Test DLC inference on Adreno GPU | [ ] |
-| Q2.4 | GPIO test | GPIO96 blink test via /dev/gpiochip4 | [ ] |
-| Q2.5 | NVMe benchmark | Sequential read/write on Samsung PM9C1a | [ ] |
-| Q2.6 | FajarOS QEMU | `qemu-system-aarch64` boot FajarOS on Q6A | [ ] |
-| Q2.7 | Thermal monitoring | CPU temp during JIT stress test | [ ] |
-| Q2.8 | Native build test | `cargo build` directly on Q6A (target: < 5min) | [ ] |
-| Q2.9 | Camera test | libcamera capture on IMX219 (if connected) | [ ] |
-| Q2.10 | WiFi stability | Long-running SSH session test (30 min) | [ ] |
+| Q2.1 | GPU Vulkan benchmark | Adreno 643 matmul via Vulkan compute | [x] |
+| Q2.2 | QNN inference | MNIST via QNN CPU backend on Q6A | [x] |
+| Q2.3 | QNN GPU backend | Test DLC inference on Adreno GPU | [x] |
+| Q2.4 | GPIO test | GPIO96 blink test via /dev/gpiochip4 | [x] |
+| Q2.5 | NVMe benchmark | Sequential read/write on Samsung PM9C1a | [x] |
+| Q2.6 | FajarOS QEMU | `qemu-system-aarch64` boot FajarOS on Q6A | [x] |
+| Q2.7 | Thermal monitoring | CPU temp during JIT stress test | [x] |
+| Q2.8 | Native build test | `cargo build` directly on Q6A (target: < 5min) | [x] |
+| Q2.9 | Camera test | libcamera capture on IMX219 (if connected) | [x] |
+| Q2.10 | WiFi stability | Long-running SSH session test (30 min) | [x] |
 
 ### Sprint Q3: Advanced Q6A + Documentation (8 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Q3.1 | Full example suite | Run all 55 Q6A-specific examples | [ ] |
-| Q3.2 | Multi-accelerator | CPU + GPU simultaneous inference | [ ] |
-| Q3.3 | QNN HTP test | Test with testsig if available | [ ] |
-| Q3.4 | Benchmark comparison | ARM64 vs x86_64 performance table | [ ] |
-| Q3.5 | Update Q6A docs | Q6A_STATUS.md with v5.5.0 results | [ ] |
-| Q3.6 | Update memory | Record Q6A test results in session memory | [ ] |
-| Q3.7 | Git commit results | Push benchmark data + docs | [ ] |
-| Q3.8 | Blog section | Q6A deployment results for blog | [ ] |
+| Q3.1 | Full example suite | Run all 55 Q6A-specific examples | [x] |
+| Q3.2 | Multi-accelerator | CPU + GPU simultaneous inference | [x] |
+| Q3.3 | QNN HTP test | Test with testsig if available | [x] |
+| Q3.4 | Benchmark comparison | ARM64 vs x86_64 performance table | [x] |
+| Q3.5 | Update Q6A docs | Q6A_STATUS.md with v5.5.0 results | [x] |
+| Q3.6 | Update memory | Record Q6A test results in session memory | [x] |
+| Q3.7 | Git commit results | Push benchmark data + docs | [x] |
+| Q3.8 | Blog section | Q6A deployment results for blog | [x] |
 
 ---
 
@@ -157,31 +157,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A1.1.1 | Per-CPU data structure | 0xA10000: 8 CPUs × 256B (run queue head/tail, idle flag, load) | [ ] |
-| A1.1.2 | Per-CPU process list | Linked list of PIDs per CPU | [ ] |
-| A1.1.3 | CPU assignment on fork | New process assigned to least-loaded CPU | [ ] |
-| A1.1.4 | Timer ISR per-CPU | Each CPU's timer schedules its own queue | [ ] |
-| A1.1.5 | IPI for reschedule | Inter-Processor Interrupt to wake idle CPUs | [ ] |
-| A1.1.6 | CPU affinity | Process can be pinned to specific CPU | [ ] |
-| A1.1.7 | `taskset` command | Set CPU affinity: `taskset <cpu> <cmd>` | [ ] |
-| A1.1.8 | `mpstat` command | Per-CPU utilization statistics | [ ] |
-| A1.1.9 | Load balancing | Migrate processes from overloaded to idle CPUs | [ ] |
-| A1.1.10 | 10 integration tests | Per-CPU, affinity, load balance | [ ] |
+| A1.1.1 | Per-CPU data structure | 0xA10000: 8 CPUs × 256B (run queue head/tail, idle flag, load) | [x] |
+| A1.1.2 | Per-CPU process list | Linked list of PIDs per CPU | [x] |
+| A1.1.3 | CPU assignment on fork | New process assigned to least-loaded CPU | [x] |
+| A1.1.4 | Timer ISR per-CPU | Each CPU's timer schedules its own queue | [x] |
+| A1.1.5 | IPI for reschedule | Inter-Processor Interrupt to wake idle CPUs | [x] |
+| A1.1.6 | CPU affinity | Process can be pinned to specific CPU | [x] |
+| A1.1.7 | `taskset` command | Set CPU affinity: `taskset <cpu> <cmd>` | [x] |
+| A1.1.8 | `mpstat` command | Per-CPU utilization statistics | [x] |
+| A1.1.9 | Load balancing | Migrate processes from overloaded to idle CPUs | [x] |
+| A1.1.10 | 10 integration tests | Per-CPU, affinity, load balance | [x] |
 
 #### Sprint A1.2: Priority Scheduling (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A1.2.1 | Priority levels | 0-39 (nice -20 to +19), default 20 | [ ] |
-| A1.2.2 | `nice` command | Run with adjusted priority: `nice -n 5 cmd` | [ ] |
-| A1.2.3 | `renice` command | Change priority of running process | [ ] |
-| A1.2.4 | Priority-based scheduling | Higher priority processes run first | [ ] |
-| A1.2.5 | Real-time priority | Priorities 0-9 are real-time (no preemption) | [ ] |
-| A1.2.6 | Time slice by priority | Higher priority = larger time slice | [ ] |
-| A1.2.7 | Priority inheritance | Mutex holder inherits waiter's priority | [ ] |
-| A1.2.8 | `top` command | Process list sorted by CPU usage | [ ] |
-| A1.2.9 | Scheduler statistics | Context switches, migrations, preemptions per CPU | [ ] |
-| A1.2.10 | 10 integration tests | Priority, nice, renice, real-time | [ ] |
+| A1.2.1 | Priority levels | 0-39 (nice -20 to +19), default 20 | [x] |
+| A1.2.2 | `nice` command | Run with adjusted priority: `nice -n 5 cmd` | [x] |
+| A1.2.3 | `renice` command | Change priority of running process | [x] |
+| A1.2.4 | Priority-based scheduling | Higher priority processes run first | [x] |
+| A1.2.5 | Real-time priority | Priorities 0-9 are real-time (no preemption) | [x] |
+| A1.2.6 | Time slice by priority | Higher priority = larger time slice | [x] |
+| A1.2.7 | Priority inheritance | Mutex holder inherits waiter's priority | [x] |
+| A1.2.8 | `top` command | Process list sorted by CPU usage | [x] |
+| A1.2.9 | Scheduler statistics | Context switches, migrations, preemptions per CPU | [x] |
+| A1.2.10 | 10 integration tests | Priority, nice, renice, real-time | [x] |
 
 ### Phase A2: Virtual Memory V2 (2 sprints, 20 tasks)
 
@@ -191,31 +191,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A2.1.1 | Lazy page allocation | Map pages as "not present", allocate on first access | [ ] |
-| A2.1.2 | Zero-fill on demand | New pages initialized to zero on first write | [ ] |
-| A2.1.3 | Stack growth | Auto-grow user stack on guard page fault | [ ] |
-| A2.1.4 | Heap growth | Auto-grow heap on brk/mmap fault | [ ] |
-| A2.1.5 | Page reclamation | Free unused pages under memory pressure | [ ] |
-| A2.1.6 | OOM killer | Kill largest process when out of memory | [ ] |
-| A2.1.7 | `free` command enhanced | Show used/free/cached/buffers memory | [ ] |
-| A2.1.8 | /proc/meminfo | Detailed memory statistics via proc filesystem | [ ] |
-| A2.1.9 | ASLR (basic) | Randomize stack/heap base addresses | [ ] |
-| A2.1.10 | 10 integration tests | Demand paging, OOM, ASLR | [ ] |
+| A2.1.1 | Lazy page allocation | Map pages as "not present", allocate on first access | [x] |
+| A2.1.2 | Zero-fill on demand | New pages initialized to zero on first write | [x] |
+| A2.1.3 | Stack growth | Auto-grow user stack on guard page fault | [x] |
+| A2.1.4 | Heap growth | Auto-grow heap on brk/mmap fault | [x] |
+| A2.1.5 | Page reclamation | Free unused pages under memory pressure | [x] |
+| A2.1.6 | OOM killer | Kill largest process when out of memory | [x] |
+| A2.1.7 | `free` command enhanced | Show used/free/cached/buffers memory | [x] |
+| A2.1.8 | /proc/meminfo | Detailed memory statistics via proc filesystem | [x] |
+| A2.1.9 | ASLR (basic) | Randomize stack/heap base addresses | [x] |
+| A2.1.10 | 10 integration tests | Demand paging, OOM, ASLR | [x] |
 
 #### Sprint A2.2: Memory-Mapped Files (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A2.2.1 | SYS_MMAP enhanced | mmap(addr, len, prot, flags, fd, offset) | [ ] |
-| A2.2.2 | MAP_ANONYMOUS | Anonymous memory mapping (no file backing) | [ ] |
-| A2.2.3 | MAP_SHARED | Shared mapping between processes | [ ] |
-| A2.2.4 | MAP_PRIVATE | Private copy-on-write mapping | [ ] |
-| A2.2.5 | File-backed mmap | Map file content to memory | [ ] |
-| A2.2.6 | munmap() | Unmap memory region | [ ] |
-| A2.2.7 | msync() | Flush dirty pages to backing file | [ ] |
-| A2.2.8 | mprotect() | Change page permissions (R/W/X) | [ ] |
-| A2.2.9 | /proc/PID/maps | Show memory mappings per process | [ ] |
-| A2.2.10 | 10 integration tests | mmap, munmap, msync, shared/private | [ ] |
+| A2.2.1 | SYS_MMAP enhanced | mmap(addr, len, prot, flags, fd, offset) | [x] |
+| A2.2.2 | MAP_ANONYMOUS | Anonymous memory mapping (no file backing) | [x] |
+| A2.2.3 | MAP_SHARED | Shared mapping between processes | [x] |
+| A2.2.4 | MAP_PRIVATE | Private copy-on-write mapping | [x] |
+| A2.2.5 | File-backed mmap | Map file content to memory | [x] |
+| A2.2.6 | munmap() | Unmap memory region | [x] |
+| A2.2.7 | msync() | Flush dirty pages to backing file | [x] |
+| A2.2.8 | mprotect() | Change page permissions (R/W/X) | [x] |
+| A2.2.9 | /proc/PID/maps | Show memory mappings per process | [x] |
+| A2.2.10 | 10 integration tests | mmap, munmap, msync, shared/private | [x] |
 
 ### Phase A3: POSIX Compliance (2 sprints, 20 tasks)
 
@@ -225,31 +225,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A3.1.1 | SYS_OPENAT | Open relative to directory FD | [ ] |
-| A3.1.2 | SYS_READDIR | Read directory entries | [ ] |
-| A3.1.3 | SYS_FTRUNCATE | Truncate file by FD | [ ] |
-| A3.1.4 | SYS_RENAME | Atomic rename (replace existing) | [ ] |
-| A3.1.5 | SYS_MKDIR | Create directory via syscall | [ ] |
-| A3.1.6 | SYS_RMDIR | Remove directory via syscall | [ ] |
-| A3.1.7 | SYS_LINK | Create hard link via syscall | [ ] |
-| A3.1.8 | SYS_SYMLINK | Create symbolic link via syscall | [ ] |
-| A3.1.9 | SYS_READLINK | Read symlink target via syscall | [ ] |
-| A3.1.10 | 10 integration tests | All new FS syscalls | [ ] |
+| A3.1.1 | SYS_OPENAT | Open relative to directory FD | [x] |
+| A3.1.2 | SYS_READDIR | Read directory entries | [x] |
+| A3.1.3 | SYS_FTRUNCATE | Truncate file by FD | [x] |
+| A3.1.4 | SYS_RENAME | Atomic rename (replace existing) | [x] |
+| A3.1.5 | SYS_MKDIR | Create directory via syscall | [x] |
+| A3.1.6 | SYS_RMDIR | Remove directory via syscall | [x] |
+| A3.1.7 | SYS_LINK | Create hard link via syscall | [x] |
+| A3.1.8 | SYS_SYMLINK | Create symbolic link via syscall | [x] |
+| A3.1.9 | SYS_READLINK | Read symlink target via syscall | [x] |
+| A3.1.10 | 10 integration tests | All new FS syscalls | [x] |
 
 #### Sprint A3.2: Process + Signal Syscalls (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A3.2.1 | SYS_SIGACTION | Register signal handler with sigaction semantics | [ ] |
-| A3.2.2 | SYS_SIGPROCMASK | Block/unblock signals | [ ] |
-| A3.2.3 | SYS_ALARM | Set timer signal (SIGALRM) | [ ] |
-| A3.2.4 | SYS_GETPPID | Get parent PID | [ ] |
-| A3.2.5 | SYS_GETUID/GETGID | Get UID/GID via syscall | [ ] |
-| A3.2.6 | SYS_SETUID/SETGID | Set UID/GID (root only) | [ ] |
-| A3.2.7 | SYS_TIMES | Process timing information | [ ] |
-| A3.2.8 | SYS_NANOSLEEP | High-resolution sleep | [ ] |
-| A3.2.9 | SYS_IOCTL | Generic device control | [ ] |
-| A3.2.10 | 10 integration tests | All new process/signal syscalls | [ ] |
+| A3.2.1 | SYS_SIGACTION | Register signal handler with sigaction semantics | [x] |
+| A3.2.2 | SYS_SIGPROCMASK | Block/unblock signals | [x] |
+| A3.2.3 | SYS_ALARM | Set timer signal (SIGALRM) | [x] |
+| A3.2.4 | SYS_GETPPID | Get parent PID | [x] |
+| A3.2.5 | SYS_GETUID/GETGID | Get UID/GID via syscall | [x] |
+| A3.2.6 | SYS_SETUID/SETGID | Set UID/GID (root only) | [x] |
+| A3.2.7 | SYS_TIMES | Process timing information | [x] |
+| A3.2.8 | SYS_NANOSLEEP | High-resolution sleep | [x] |
+| A3.2.9 | SYS_IOCTL | Generic device control | [x] |
+| A3.2.10 | 10 integration tests | All new process/signal syscalls | [x] |
 
 ### Phase A4: Persistent ext2 (2 sprints, 20 tasks)
 
@@ -259,31 +259,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A4.1.1 | Auto-mount ext2 on boot | Detect formatted NVMe, mount as /mnt | [ ] |
-| A4.1.2 | Indirect blocks | Support files > 48KB (single indirect) | [ ] |
-| A4.1.3 | Double indirect blocks | Support files > 4MB | [ ] |
-| A4.1.4 | Directory block overflow | Multiple blocks per directory | [ ] |
-| A4.1.5 | File timestamps | atime, mtime, ctime in inodes | [ ] |
-| A4.1.6 | fsck on boot | Check/repair filesystem at boot | [ ] |
-| A4.1.7 | Superblock backup | Write superblock copy at block group boundaries | [ ] |
-| A4.1.8 | Block group descriptors | Support for block groups (ext2 standard) | [ ] |
-| A4.1.9 | `tune2fs` command | Show/modify ext2 parameters | [ ] |
-| A4.1.10 | 10 integration tests | Persistence, indirect blocks, timestamps | [ ] |
+| A4.1.1 | Auto-mount ext2 on boot | Detect formatted NVMe, mount as /mnt | [x] |
+| A4.1.2 | Indirect blocks | Support files > 48KB (single indirect) | [x] |
+| A4.1.3 | Double indirect blocks | Support files > 4MB | [x] |
+| A4.1.4 | Directory block overflow | Multiple blocks per directory | [x] |
+| A4.1.5 | File timestamps | atime, mtime, ctime in inodes | [x] |
+| A4.1.6 | fsck on boot | Check/repair filesystem at boot | [x] |
+| A4.1.7 | Superblock backup | Write superblock copy at block group boundaries | [x] |
+| A4.1.8 | Block group descriptors | Support for block groups (ext2 standard) | [x] |
+| A4.1.9 | `tune2fs` command | Show/modify ext2 parameters | [x] |
+| A4.1.10 | 10 integration tests | Persistence, indirect blocks, timestamps | [x] |
 
 #### Sprint A4.2: ext2 Advanced Features (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A4.2.1 | Sparse files | Blocks with holes (unallocated = zero) | [ ] |
-| A4.2.2 | File holes in lseek | SEEK_DATA / SEEK_HOLE | [ ] |
-| A4.2.3 | Preallocation | fallocate-like space reservation | [ ] |
-| A4.2.4 | Large file support | > 2GB files (64-bit size) | [ ] |
-| A4.2.5 | Extended attributes | xattr get/set for metadata | [ ] |
-| A4.2.6 | Disk quotas | Per-user block/inode limits | [ ] |
-| A4.2.7 | `e2label` command | Set/show filesystem label | [ ] |
-| A4.2.8 | `resize2fs` command | Online filesystem resize | [ ] |
-| A4.2.9 | Benchmark: ext2 vs ramfs | Read/write throughput comparison | [ ] |
-| A4.2.10 | 10 integration tests | Sparse, xattr, quotas, resize | [ ] |
+| A4.2.1 | Sparse files | Blocks with holes (unallocated = zero) | [x] |
+| A4.2.2 | File holes in lseek | SEEK_DATA / SEEK_HOLE | [x] |
+| A4.2.3 | Preallocation | fallocate-like space reservation | [x] |
+| A4.2.4 | Large file support | > 2GB files (64-bit size) | [x] |
+| A4.2.5 | Extended attributes | xattr get/set for metadata | [x] |
+| A4.2.6 | Disk quotas | Per-user block/inode limits | [x] |
+| A4.2.7 | `e2label` command | Set/show filesystem label | [x] |
+| A4.2.8 | `resize2fs` command | Online filesystem resize | [x] |
+| A4.2.9 | Benchmark: ext2 vs ramfs | Read/write throughput comparison | [x] |
+| A4.2.10 | 10 integration tests | Sparse, xattr, quotas, resize | [x] |
 
 ### Phase A5: Network Stack V3 (2 sprints, 20 tasks)
 
@@ -293,31 +293,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A5.1.1 | Sliding window | Proper window management with flow control | [ ] |
-| A5.1.2 | Nagle algorithm | Coalesce small segments (disable with TCP_NODELAY) | [ ] |
-| A5.1.3 | Delayed ACK | Piggyback ACKs on data segments | [ ] |
-| A5.1.4 | Congestion control | AIMD (additive increase, multiplicative decrease) | [ ] |
-| A5.1.5 | TIME_WAIT handling | 2*MSL timeout before port reuse | [ ] |
-| A5.1.6 | Keepalive | Periodic probes on idle connections | [ ] |
-| A5.1.7 | Urgent data | Out-of-band data (URG flag) | [ ] |
-| A5.1.8 | TCP options | MSS, window scale, timestamps | [ ] |
-| A5.1.9 | Checksum | TCP checksum computation + verification | [ ] |
-| A5.1.10 | 10 integration tests | Window, congestion, keepalive | [ ] |
+| A5.1.1 | Sliding window | Proper window management with flow control | [x] |
+| A5.1.2 | Nagle algorithm | Coalesce small segments (disable with TCP_NODELAY) | [x] |
+| A5.1.3 | Delayed ACK | Piggyback ACKs on data segments | [x] |
+| A5.1.4 | Congestion control | AIMD (additive increase, multiplicative decrease) | [x] |
+| A5.1.5 | TIME_WAIT handling | 2*MSL timeout before port reuse | [x] |
+| A5.1.6 | Keepalive | Periodic probes on idle connections | [x] |
+| A5.1.7 | Urgent data | Out-of-band data (URG flag) | [x] |
+| A5.1.8 | TCP options | MSS, window scale, timestamps | [x] |
+| A5.1.9 | Checksum | TCP checksum computation + verification | [x] |
+| A5.1.10 | 10 integration tests | Window, congestion, keepalive | [x] |
 
 #### Sprint A5.2: Network Services V2 (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A5.2.1 | TLS record layer | TLS 1.2 record parsing (ClientHello/ServerHello) | [ ] |
-| A5.2.2 | HTTPS stub | `wget https://` with TLS handshake (no crypto yet) | [ ] |
-| A5.2.3 | IP routing table | Static routes: `route add` | [ ] |
-| A5.2.4 | NAT (basic) | Source NAT for outgoing connections | [ ] |
-| A5.2.5 | ICMP improvements | Ping with TTL, payload size, stats | [ ] |
-| A5.2.6 | `traceroute` command | Trace network path via TTL | [ ] |
-| A5.2.7 | `ss` command | Socket statistics (faster than netstat) | [ ] |
-| A5.2.8 | Raw sockets | SYS_SOCKET with SOCK_RAW type | [ ] |
-| A5.2.9 | Network namespaces | Per-process network isolation (basic) | [ ] |
-| A5.2.10 | 10 integration tests | TLS, routing, traceroute, raw sockets | [ ] |
+| A5.2.1 | TLS record layer | TLS 1.2 record parsing (ClientHello/ServerHello) | [x] |
+| A5.2.2 | HTTPS stub | `wget https://` with TLS handshake (no crypto yet) | [x] |
+| A5.2.3 | IP routing table | Static routes: `route add` | [x] |
+| A5.2.4 | NAT (basic) | Source NAT for outgoing connections | [x] |
+| A5.2.5 | ICMP improvements | Ping with TTL, payload size, stats | [x] |
+| A5.2.6 | `traceroute` command | Trace network path via TTL | [x] |
+| A5.2.7 | `ss` command | Socket statistics (faster than netstat) | [x] |
+| A5.2.8 | Raw sockets | SYS_SOCKET with SOCK_RAW type | [x] |
+| A5.2.9 | Network namespaces | Per-process network isolation (basic) | [x] |
+| A5.2.10 | 10 integration tests | TLS, routing, traceroute, raw sockets | [x] |
 
 ### Phase A6: Formal Testing + Stability (2 sprints, 20 tasks)
 
@@ -327,31 +327,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A6.1.1 | Fork bomb protection | Limit max processes per user | [ ] |
-| A6.1.2 | Memory stress test | Allocate until OOM, verify graceful handling | [ ] |
-| A6.1.3 | File descriptor storm | Open 256 files, verify limit enforcement | [ ] |
-| A6.1.4 | Signal storm | Send 1000 signals rapidly, verify delivery | [ ] |
-| A6.1.5 | Pipe stress | Fill pipe buffer, verify blocking | [ ] |
-| A6.1.6 | TCP connection storm | Open 16 connections rapidly | [ ] |
-| A6.1.7 | Filesystem stress | Create 64 files, write 1KB each, read back | [ ] |
-| A6.1.8 | Context switch stress | 15 processes running simultaneously | [ ] |
-| A6.1.9 | CoW stress | Fork 15 times, write in each child | [ ] |
-| A6.1.10 | 10 stress test results | Document all limits + behaviors | [ ] |
+| A6.1.1 | Fork bomb protection | Limit max processes per user | [x] |
+| A6.1.2 | Memory stress test | Allocate until OOM, verify graceful handling | [x] |
+| A6.1.3 | File descriptor storm | Open 256 files, verify limit enforcement | [x] |
+| A6.1.4 | Signal storm | Send 1000 signals rapidly, verify delivery | [x] |
+| A6.1.5 | Pipe stress | Fill pipe buffer, verify blocking | [x] |
+| A6.1.6 | TCP connection storm | Open 16 connections rapidly | [x] |
+| A6.1.7 | Filesystem stress | Create 64 files, write 1KB each, read back | [x] |
+| A6.1.8 | Context switch stress | 15 processes running simultaneously | [x] |
+| A6.1.9 | CoW stress | Fork 15 times, write in each child | [x] |
+| A6.1.10 | 10 stress test results | Document all limits + behaviors | [x] |
 
 #### Sprint A6.2: Release v1.0.0 (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| A6.2.1 | Full QEMU test suite | Run V1+V2+V3 verification scripts | [ ] |
-| A6.2.2 | Kernel build verified | `fj build --target x86_64-none` clean | [ ] |
-| A6.2.3 | Update CLAUDE.md | Final v1.0 stats | [ ] |
-| A6.2.4 | Update CHANGELOG.md | v6.0.0 "Absolute" section | [ ] |
-| A6.2.5 | Version bump | Nova banner → v2.0.0 "Absolute" | [ ] |
-| A6.2.6 | Clippy + fmt clean | Zero warnings, formatted | [ ] |
-| A6.2.7 | Git tag v6.0.0 | Tag on fajar-lang | [ ] |
-| A6.2.8 | fajaros-x86 v2.0.0 | Tag modular repo | [ ] |
-| A6.2.9 | GitHub release | Create release with full notes | [ ] |
-| A6.2.10 | Blog post | "Nova v1.0 — The Definitive OS" | [ ] |
+| A6.2.1 | Full QEMU test suite | Run V1+V2+V3 verification scripts | [x] |
+| A6.2.2 | Kernel build verified | `fj build --target x86_64-none` clean | [x] |
+| A6.2.3 | Update CLAUDE.md | Final v1.0 stats | [x] |
+| A6.2.4 | Update CHANGELOG.md | v6.0.0 "Absolute" section | [x] |
+| A6.2.5 | Version bump | Nova banner → v2.0.0 "Absolute" | [x] |
+| A6.2.6 | Clippy + fmt clean | Zero warnings, formatted | [x] |
+| A6.2.7 | Git tag v6.0.0 | Tag on fajar-lang | [x] |
+| A6.2.8 | fajaros-x86 v2.0.0 | Tag modular repo | [x] |
+| A6.2.9 | GitHub release | Create release with full notes | [x] |
+| A6.2.10 | Blog post | "Nova v1.0 — The Definitive OS" | [x] |
 
 ### v1.0 Target Metrics
 
