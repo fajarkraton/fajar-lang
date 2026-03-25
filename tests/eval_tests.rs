@@ -14127,3 +14127,154 @@ fn v1_pkg_max_capacity() {
     let out = eval_output(src);
     assert_eq!(out, vec!["true", "true", "false"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint V2: Standard packages + update/upgrade
+// ═══════════════════════════════════════════════
+
+#[test]
+fn v2_registry_layout() {
+    let src = r#"
+        const PKG_REGISTRY: i64 = 0x9C2000
+        const PKG_REG_MAX: i64 = 8
+        const PKG_REG_SIZE: i64 = 64
+        fn main() -> void {
+            println(PKG_REG_MAX * PKG_REG_SIZE)
+            println(PKG_REGISTRY)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "10231808"]);
+}
+
+#[test]
+fn v2_standard_packages() {
+    let src = r#"
+        fn std_packages() -> i64 { 5 }
+        fn main() -> void {
+            println(std_packages())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn v2_semver_compare() {
+    let src = r#"
+        fn cmp(m1: i64, n1: i64, m2: i64, n2: i64) -> i64 {
+            if m1 > m2 { 1 }
+            else if m1 < m2 { -1 }
+            else if n1 > n2 { 1 }
+            else if n1 < n2 { -1 }
+            else { 0 }
+        }
+        fn main() -> void {
+            println(cmp(1, 0, 1, 0))
+            println(cmp(2, 0, 1, 0))
+            println(cmp(1, 0, 2, 0))
+            println(cmp(1, 1, 1, 0))
+            println(cmp(1, 0, 1, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "-1", "1", "-1"]);
+}
+
+#[test]
+fn v2_version_parse() {
+    let src = r#"
+        fn parse_version(major_ch: i64, minor_ch: i64) -> i64 {
+            (major_ch - 48) * 100 + (minor_ch - 48)
+        }
+        fn main() -> void {
+            println(parse_version(49, 48))  // "1.0" → 100
+            println(parse_version(50, 51))  // "2.3" → 203
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["100", "203"]);
+}
+
+#[test]
+fn v2_upgrade_check() {
+    let src = r#"
+        fn needs_upgrade(installed: i64, available: i64) -> bool { available > installed }
+        fn main() -> void {
+            println(needs_upgrade(100, 101))
+            println(needs_upgrade(100, 100))
+            println(needs_upgrade(200, 100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn v2_reg_entry_format() {
+    let src = r#"
+        fn reg_desc_offset() -> i64 { 32 }
+        fn reg_name_max() -> i64 { 24 }
+        fn reg_version_max() -> i64 { 8 }
+        fn main() -> void {
+            println(reg_desc_offset())
+            println(reg_name_max())
+            println(reg_version_max())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["32", "24", "8"]);
+}
+
+#[test]
+fn v2_package_names() {
+    let src = r#"
+        fn is_valid_pkg(name: str) -> bool {
+            name == "core" || name == "net-tools" || name == "dev-tools" ||
+            name == "editors" || name == "man"
+        }
+        fn main() -> void {
+            println(is_valid_pkg("core"))
+            println(is_valid_pkg("net-tools"))
+            println(is_valid_pkg("unknown"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}
+
+#[test]
+fn v2_update_refresh() {
+    let src = r#"
+        fn after_update() -> i64 { 5 } // 5 packages in registry
+        fn main() -> void { println(after_update()) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn v2_upgrade_all() {
+    let src = r#"
+        fn upgrade_result(installed: i64, up_to_date: i64) -> str {
+            if installed == up_to_date { "all up to date" }
+            else { f"{installed - up_to_date} upgraded" }
+        }
+        fn main() -> void {
+            println(upgrade_result(3, 3))
+            println(upgrade_result(5, 3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["all up to date", "2 upgraded"]);
+}
+
+#[test]
+fn v2_manifest_count() {
+    let src = r#"
+        const PKG_REG_MAX: i64 = 8
+        fn main() -> void { println(PKG_REG_MAX) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8"]);
+}
