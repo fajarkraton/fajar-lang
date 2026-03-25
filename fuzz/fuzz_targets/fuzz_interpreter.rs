@@ -1,6 +1,10 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
+// Note: Run with ASAN_OPTIONS="detect_leaks=0" because the interpreter
+// uses Rc<RefCell<>> for environments which creates expected reference cycles.
+// This is a known design choice (CLAUDE.md decision #6), not a real leak.
+
 fuzz_target!(|data: &[u8]| {
     // Fuzz the full pipeline: source → lex → parse → analyze → eval
     // The interpreter must never panic/UB — it should return Ok or Err

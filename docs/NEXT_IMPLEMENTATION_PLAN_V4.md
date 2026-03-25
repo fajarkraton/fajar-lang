@@ -73,46 +73,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| C1.1 | Review existing fuzz targets | Read `fuzz/fuzz_targets/*.rs`, check coverage | [ ] |
-| C1.2 | Create `fuzz_lexer.rs` | Fuzz `tokenize()` with random bytes + structured input | [ ] |
-| C1.3 | Run lexer fuzz 10 min | `cargo fuzz run fuzz_lexer -- -max_total_time=600` | [ ] |
-| C1.4 | Triage lexer crashes | Minimize, categorize, report | [ ] |
-| C1.5 | Fix lexer crashes | Patch infinite loops, panics, OOM | [ ] |
-| C1.6 | Create `fuzz_parser.rs` | Fuzz `parse()` with valid/semi-valid token streams | [ ] |
-| C1.7 | Run parser fuzz 10 min | `cargo fuzz run fuzz_parser -- -max_total_time=600` | [ ] |
-| C1.8 | Triage parser crashes | Minimize, categorize | [ ] |
-| C1.9 | Fix parser crashes | Patch stack overflow, unexpected token panics | [ ] |
-| C1.10 | Regression tests | Add crash inputs as unit tests | [ ] |
+| C1.1 | Review existing fuzz targets | Read `fuzz/fuzz_targets/*.rs`, check coverage | [x] |
+| C1.2 | Create `fuzz_lexer.rs` | Fuzz `tokenize()` with random bytes + structured input | [x] |
+| C1.3 | Run lexer fuzz 10 min | `cargo fuzz run fuzz_lexer -- -max_total_time=600` | [x] |
+| C1.4 | Triage lexer crashes | Minimize, categorize, report | [x] |
+| C1.5 | Fix lexer crashes | Patch infinite loops, panics, OOM | [x] |
+| C1.6 | Create `fuzz_parser.rs` | Fuzz `parse()` with valid/semi-valid token streams | [x] |
+| C1.7 | Run parser fuzz 10 min | `cargo fuzz run fuzz_parser -- -max_total_time=600` | [x] |
+| C1.8 | Triage parser crashes | Minimize, categorize | [x] |
+| C1.9 | Fix parser crashes | Patch stack overflow, unexpected token panics | [x] |
+| C1.10 | Regression tests | Add crash inputs as unit tests | [x] |
 
 ### Sprint C2: Fuzz Analyzer + Interpreter (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| C2.1 | Review `fuzz_analyzer.rs` | Check if existing target covers all analyzer paths | [ ] |
-| C2.2 | Enhance analyzer fuzz | Add structured AST generation for better coverage | [ ] |
-| C2.3 | Run analyzer fuzz 10 min | `cargo fuzz run fuzz_analyzer -- -max_total_time=600` | [ ] |
-| C2.4 | Triage + fix analyzer crashes | Type checker panics, scope errors | [ ] |
-| C2.5 | Review `fuzz_interpreter.rs` | Check coverage of eval paths | [ ] |
-| C2.6 | Enhance interpreter fuzz | Fuzz `eval_source()` with valid Fajar Lang programs | [ ] |
-| C2.7 | Run interpreter fuzz 10 min | `cargo fuzz run fuzz_interpreter -- -max_total_time=600` | [ ] |
-| C2.8 | Triage + fix interpreter crashes | Infinite recursion, stack overflow, divide-by-zero | [ ] |
-| C2.9 | Regression tests from crashes | Convert all crash inputs to `#[test]` functions | [ ] |
-| C2.10 | Coverage report | `cargo fuzz coverage` — document which paths are hit | [ ] |
+| C2.1 | Review `fuzz_analyzer.rs` | Check if existing target covers all analyzer paths | [x] |
+| C2.2 | Enhance analyzer fuzz | Add structured AST generation for better coverage | [x] |
+| C2.3 | Run analyzer fuzz 10 min | `cargo fuzz run fuzz_analyzer -- -max_total_time=600` | [x] |
+| C2.4 | Triage + fix analyzer crashes | Type checker panics, scope errors | [x] |
+| C2.5 | Review `fuzz_interpreter.rs` | Check coverage of eval paths | [x] |
+| C2.6 | Enhance interpreter fuzz | Fuzz `eval_source()` with valid Fajar Lang programs | [x] |
+| C2.7 | Run interpreter fuzz 10 min | `cargo fuzz run fuzz_interpreter -- -max_total_time=600` | [x] |
+| C2.8 | Triage + fix interpreter crashes | Infinite recursion, stack overflow, divide-by-zero | [x] |
+| C2.9 | Regression tests from crashes | Convert all crash inputs to `#[test]` functions | [x] |
+| C2.10 | Coverage report | `cargo fuzz coverage` — document which paths are hit | [x] |
 
 ### Sprint C3: Continuous Fuzzing + Hardening (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| C3.1 | Create `fuzz_full_pipeline.rs` | End-to-end: source string → lex → parse → analyze → eval | [ ] |
-| C3.2 | Seed corpus from examples | Copy all 126 .fj examples as seed inputs | [ ] |
-| C3.3 | Run full pipeline fuzz 30 min | Extended fuzzing session | [ ] |
-| C3.4 | Fix all remaining crashes | Target: zero crashes on 30-min fuzz run | [ ] |
-| C3.5 | Create `tools/fuzz_smoke.sh` | Quick 60-second fuzz smoke test for CI | [ ] |
-| C3.6 | Add MAX_RECURSION guard | Ensure all recursive functions have depth limit | [ ] |
-| C3.7 | Add input size limits | Reject source files > 1MB, tokens > 100K | [ ] |
-| C3.8 | OOM protection | Catch allocation failures gracefully | [ ] |
-| C3.9 | Document fuzz results | `docs/FUZZ_RESULTS.md` — crashes found, fixed, remaining | [ ] |
-| C3.10 | Commit all fixes + tests | Clean commit with all crash fixes and regression tests | [ ] |
+| C3.1 | Create `fuzz_full_pipeline.rs` | End-to-end: source string → lex → parse → analyze → eval | [x] |
+| C3.2 | Seed corpus from examples | Copy all 126 .fj examples as seed inputs | [x] |
+| C3.3 | Run full pipeline fuzz 30 min | Extended fuzzing session | [x] |
+| C3.4 | Fix all remaining crashes | Target: zero crashes on 30-min fuzz run | [x] |
+| C3.5 | Create `tools/fuzz_smoke.sh` | Quick 60-second fuzz smoke test for CI | [x] |
+| C3.6 | Add MAX_RECURSION guard | Ensure all recursive functions have depth limit | [x] |
+| C3.7 | Add input size limits | Reject source files > 1MB, tokens > 100K | [x] |
+| C3.8 | OOM protection | Catch allocation failures gracefully | [x] |
+| C3.9 | Document fuzz results | `docs/FUZZ_RESULTS.md` — crashes found, fixed, remaining | [x] |
+| C3.10 | Commit all fixes + tests | Clean commit with all crash fixes and regression tests | [x] |
 
 ---
 

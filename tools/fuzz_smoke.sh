@@ -28,6 +28,9 @@ fi
 
 cd "$PROJECT_DIR"
 
+# Disable leak detection — interpreter uses Rc<RefCell<>> reference cycles (by design)
+export ASAN_OPTIONS="detect_leaks=0"
+
 TARGETS=("fuzz_lexer" "fuzz_parser" "fuzz_analyzer" "fuzz_interpreter")
 PASS=0
 FAIL=0
