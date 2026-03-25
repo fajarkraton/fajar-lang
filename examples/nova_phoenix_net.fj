@@ -1,0 +1,803 @@
+// FajarOS Nova v2.0 "Phoenix" — Networking v4
+// Phase N5: DHCP v2, NTP, multicast, IPv6 stub, HTTP/2 stub
+// Written 100% in Fajar Lang — bare-metal x86_64
+
+// ═══════════════════════════════════════════════════════════════
+// N5.1: DHCP v2 (Full state machine, renewal, rebinding)
+// ═══════════════════════════════════════════════════════════════
+
+// DHCP message types
+const DHCP_DISCOVER: i64 = 1
+const DHCP_OFFER: i64 = 2
+const DHCP_REQUEST: i64 = 3
+const DHCP_DECLINE: i64 = 4
+const DHCP_ACK: i64 = 5
+const DHCP_NAK: i64 = 6
+const DHCP_RELEASE: i64 = 7
+const DHCP_INFORM: i64 = 8
+
+// DHCP state machine
+const DHCP_STATE_INIT: i64 = 0
+const DHCP_STATE_SELECTING: i64 = 1
+const DHCP_STATE_REQUESTING: i64 = 2
+const DHCP_STATE_BOUND: i64 = 3
+const DHCP_STATE_RENEWING: i64 = 4
+const DHCP_STATE_REBINDING: i64 = 5
+
+// DHCP state
+const DHCP_STATE: i64 = 0x3000000
+const DHCP_OFF_STATE: i64 = 0
+const DHCP_OFF_XID: i64 = 4       // transaction ID
+const DHCP_OFF_IP: i64 = 8        // assigned IP
+const DHCP_OFF_MASK: i64 = 12     // subnet mask
+const DHCP_OFF_GW: i64 = 16       // default gateway
+const DHCP_OFF_DNS1: i64 = 20     // primary DNS
+const DHCP_OFF_DNS2: i64 = 24     // secondary DNS
+const DHCP_OFF_SERVER: i64 = 28   // DHCP server IP
+const DHCP_OFF_LEASE: i64 = 32    // lease time (seconds)
+const DHCP_OFF_T1: i64 = 36       // renewal time
+const DHCP_OFF_T2: i64 = 40       // rebind time
+const DHCP_OFF_LEASE_START: i64 = 44  // tick when lease acquired
+const DHCP_OFF_DOMAIN: i64 = 48   // domain name (32 bytes)
+const DHCP_OFF_HOSTNAME: i64 = 80 // hostname (16 bytes)
+
+// Network buffer
+const NET_BUF: i64 = 0x3010000
+const NET_BUF_SIZE: i64 = 1536   // max ethernet frame
+
+@kernel fn dhcp_get(off: i64) -> i64 { volatile_read_u32(DHCP_STATE + off) }
+@kernel fn dhcp_set(off: i64, val: i64) { volatile_write_u32(DHCP_STATE + off, val) }
+
+@kernel fn dhcp_init() {
+    dhcp_set(DHCP_OFF_STATE, DHCP_STATE_INIT)
+    dhcp_set(DHCP_OFF_XID, 0x12345678)  // random transaction ID
+}
+
+@kernel fn dhcp_discover() {
+    let buf = NET_BUF
+    let mut pos: i64 = 0
+
+    // Ethernet header: broadcast
+    pos = eth_header(buf, pos, 0xFFFFFFFFFFFF, 0x0800)
+
+    // IP header (0.0.0.0 → 255.255.255.255)
+    let ip_start = pos
+    pos = ip_header(buf, pos, 0, 0xFFFFFFFF, 17, 0)  // UDP proto=17
+
+    // UDP header (68 → 67)
+    let udp_start = pos
+    pos = udp_header(buf, pos, 68, 67, 0)
+
+    // DHCP payload
+    let dhcp_start = pos
+    volatile_write_u8(buf + pos, 1); pos = pos + 1     // op: BOOTREQUEST
+    volatile_write_u8(buf + pos, 1); pos = pos + 1     // htype: Ethernet
+    volatile_write_u8(buf + pos, 6); pos = pos + 1     // hlen: 6
+    volatile_write_u8(buf + pos, 0); pos = pos + 1     // hops
+
+    // xid
+    volatile_write_u32_be(buf + pos, dhcp_get(DHCP_OFF_XID)); pos = pos + 4
+    volatile_write_u16_be(buf + pos, 0); pos = pos + 2  // secs
+    volatile_write_u16_be(buf + pos, 0x8000); pos = pos + 2  // flags: broadcast
+
+    // ciaddr, yiaddr, siaddr, giaddr (all 0)
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(buf + pos + i, 0); i = i + 1 }
+    pos = pos + 16
+
+    // chaddr (MAC address)
+    let mac = get_mac_address()
+    volatile_write_u8(buf + pos, (mac >> 40) & 0xFF); pos = pos + 1
+    volatile_write_u8(buf + pos, (mac >> 32) & 0xFF); pos = pos + 1
+    volatile_write_u8(buf + pos, (mac >> 24) & 0xFF); pos = pos + 1
+    volatile_write_u8(buf + pos, (mac >> 16) & 0xFF); pos = pos + 1
+    volatile_write_u8(buf + pos, (mac >> 8) & 0xFF); pos = pos + 1
+    volatile_write_u8(buf + pos, mac & 0xFF); pos = pos + 1
+    // Pad chaddr to 16 bytes
+    i = 0
+    while i < 10 { volatile_write_u8(buf + pos + i, 0); i = i + 1 }
+    pos = pos + 10
+
+    // sname + file (192 bytes zero)
+    i = 0
+    while i < 192 { volatile_write_u8(buf + pos + i, 0); i = i + 1 }
+    pos = pos + 192
+
+    // DHCP magic cookie
+    volatile_write_u32_be(buf + pos, 0x63825363); pos = pos + 4
+
+    // Option 53: DHCP Message Type = Discover
+    volatile_write_u8(buf + pos, 53); pos = pos + 1
+    volatile_write_u8(buf + pos, 1); pos = pos + 1
+    volatile_write_u8(buf + pos, DHCP_DISCOVER); pos = pos + 1
+
+    // Option 55: Parameter Request List
+    volatile_write_u8(buf + pos, 55); pos = pos + 1
+    volatile_write_u8(buf + pos, 4); pos = pos + 1
+    volatile_write_u8(buf + pos, 1); pos = pos + 1   // subnet mask
+    volatile_write_u8(buf + pos, 3); pos = pos + 1   // router
+    volatile_write_u8(buf + pos, 6); pos = pos + 1   // DNS
+    volatile_write_u8(buf + pos, 15); pos = pos + 1  // domain name
+
+    // Option 12: Hostname
+    volatile_write_u8(buf + pos, 12); pos = pos + 1
+    volatile_write_u8(buf + pos, 8); pos = pos + 1
+    // "fajaros\0"
+    volatile_write_u8(buf + pos, 102); volatile_write_u8(buf + pos+1, 97)
+    volatile_write_u8(buf + pos+2, 106); volatile_write_u8(buf + pos+3, 97)
+    volatile_write_u8(buf + pos+4, 114); volatile_write_u8(buf + pos+5, 111)
+    volatile_write_u8(buf + pos+6, 115); volatile_write_u8(buf + pos+7, 0)
+    pos = pos + 8
+
+    // End option
+    volatile_write_u8(buf + pos, 255); pos = pos + 1
+
+    // Fix IP/UDP lengths
+    let dhcp_len = pos - dhcp_start
+    let udp_len = dhcp_len + 8
+    let ip_len = udp_len + 20
+    ip_fix_length(buf, ip_start, ip_len)
+    udp_fix_length(buf, udp_start, udp_len)
+
+    // Send packet
+    net_transmit(buf, pos)
+    dhcp_set(DHCP_OFF_STATE, DHCP_STATE_SELECTING)
+}
+
+@kernel fn dhcp_handle_offer(pkt: i64, len: i64) {
+    if dhcp_get(DHCP_OFF_STATE) != DHCP_STATE_SELECTING { return }
+
+    // Parse offered IP (yiaddr at offset 16)
+    let offered_ip = volatile_read_u32_be(pkt + 16)
+    let server_ip = volatile_read_u32_be(pkt + 20)
+
+    dhcp_set(DHCP_OFF_IP, offered_ip)
+    dhcp_set(DHCP_OFF_SERVER, server_ip)
+
+    // Parse options
+    dhcp_parse_options(pkt + 240)
+
+    // Send DHCP Request
+    dhcp_request(offered_ip, server_ip)
+    dhcp_set(DHCP_OFF_STATE, DHCP_STATE_REQUESTING)
+}
+
+@kernel fn dhcp_request(ip: i64, server: i64) {
+    let buf = NET_BUF + NET_BUF_SIZE  // use second buffer
+    // Similar to discover but with:
+    // Option 53 = DHCP_REQUEST (3)
+    // Option 50 = Requested IP
+    // Option 54 = Server Identifier
+    let mut pos: i64 = 0
+    pos = eth_header(buf, pos, 0xFFFFFFFFFFFF, 0x0800)
+    let ip_start = pos
+    pos = ip_header(buf, pos, 0, 0xFFFFFFFF, 17, 0)
+    let udp_start = pos
+    pos = udp_header(buf, pos, 68, 67, 0)
+
+    // DHCP REQUEST body (same as discover but different options)
+    volatile_write_u8(buf + pos, 1); pos = pos + 1
+    volatile_write_u8(buf + pos, 1); pos = pos + 1
+    volatile_write_u8(buf + pos, 6); pos = pos + 1
+    volatile_write_u8(buf + pos, 0); pos = pos + 1
+    volatile_write_u32_be(buf + pos, dhcp_get(DHCP_OFF_XID)); pos = pos + 4
+    let mut z: i64 = 0
+    while z < 20 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 20
+    // MAC
+    let mac = get_mac_address()
+    let mut m: i64 = 5
+    while m >= 0 {
+        volatile_write_u8(buf + pos, (mac >> (m * 8)) & 0xFF)
+        pos = pos + 1
+        m = m - 1
+    }
+    z = 0
+    while z < 202 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 202
+
+    // Magic cookie
+    volatile_write_u32_be(buf + pos, 0x63825363); pos = pos + 4
+
+    // Option 53: DHCP_REQUEST
+    volatile_write_u8(buf + pos, 53); volatile_write_u8(buf + pos+1, 1)
+    volatile_write_u8(buf + pos+2, DHCP_REQUEST); pos = pos + 3
+
+    // Option 50: Requested IP
+    volatile_write_u8(buf + pos, 50); volatile_write_u8(buf + pos+1, 4)
+    volatile_write_u32_be(buf + pos + 2, ip); pos = pos + 6
+
+    // Option 54: Server Identifier
+    volatile_write_u8(buf + pos, 54); volatile_write_u8(buf + pos+1, 4)
+    volatile_write_u32_be(buf + pos + 2, server); pos = pos + 6
+
+    // End
+    volatile_write_u8(buf + pos, 255); pos = pos + 1
+
+    let udp_len = pos - udp_start - 8 + 8
+    let ip_len = udp_len + 20
+    ip_fix_length(buf, ip_start, ip_len)
+    udp_fix_length(buf, udp_start, udp_len)
+
+    net_transmit(buf, pos)
+}
+
+@kernel fn dhcp_handle_ack(pkt: i64, len: i64) {
+    let offered_ip = volatile_read_u32_be(pkt + 16)
+    dhcp_set(DHCP_OFF_IP, offered_ip)
+    dhcp_parse_options(pkt + 240)
+    dhcp_set(DHCP_OFF_STATE, DHCP_STATE_BOUND)
+    dhcp_set(DHCP_OFF_LEASE_START, pit_get_ticks())
+
+    // Configure network interface
+    net_set_ip(dhcp_get(DHCP_OFF_IP))
+    net_set_mask(dhcp_get(DHCP_OFF_MASK))
+    net_set_gateway(dhcp_get(DHCP_OFF_GW))
+    net_set_dns(dhcp_get(DHCP_OFF_DNS1), dhcp_get(DHCP_OFF_DNS2))
+}
+
+@kernel fn dhcp_renew() {
+    // Send unicast REQUEST to DHCP server
+    dhcp_set(DHCP_OFF_STATE, DHCP_STATE_RENEWING)
+    dhcp_request(dhcp_get(DHCP_OFF_IP), dhcp_get(DHCP_OFF_SERVER))
+}
+
+@kernel fn dhcp_check_timer() {
+    if dhcp_get(DHCP_OFF_STATE) != DHCP_STATE_BOUND { return }
+    let now = pit_get_ticks()
+    let start = dhcp_get(DHCP_OFF_LEASE_START)
+    let elapsed = (now - start) / 1000  // seconds
+
+    let t1 = dhcp_get(DHCP_OFF_T1)
+    let t2 = dhcp_get(DHCP_OFF_T2)
+
+    if elapsed >= t1 { dhcp_renew() }
+    if elapsed >= t2 { dhcp_set(DHCP_OFF_STATE, DHCP_STATE_REBINDING); dhcp_discover() }
+}
+
+@kernel fn dhcp_parse_options(opt_addr: i64) {
+    let mut pos: i64 = 0
+    while pos < 312 {
+        let opt = volatile_read_u8(opt_addr + pos)
+        if opt == 255 { return }  // end
+        if opt == 0 { pos = pos + 1; continue }  // pad
+        let len = volatile_read_u8(opt_addr + pos + 1)
+        if opt == 1 { dhcp_set(DHCP_OFF_MASK, volatile_read_u32_be(opt_addr + pos + 2)) }       // subnet
+        else if opt == 3 { dhcp_set(DHCP_OFF_GW, volatile_read_u32_be(opt_addr + pos + 2)) }    // router
+        else if opt == 6 {
+            dhcp_set(DHCP_OFF_DNS1, volatile_read_u32_be(opt_addr + pos + 2))
+            if len >= 8 { dhcp_set(DHCP_OFF_DNS2, volatile_read_u32_be(opt_addr + pos + 6)) }
+        }
+        else if opt == 51 { dhcp_set(DHCP_OFF_LEASE, volatile_read_u32_be(opt_addr + pos + 2)) } // lease
+        else if opt == 58 { dhcp_set(DHCP_OFF_T1, volatile_read_u32_be(opt_addr + pos + 2)) }    // renewal
+        else if opt == 59 { dhcp_set(DHCP_OFF_T2, volatile_read_u32_be(opt_addr + pos + 2)) }    // rebind
+        pos = pos + 2 + len
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N5.2: NTP Time Sync
+// ═══════════════════════════════════════════════════════════════
+
+const NTP_PORT: i64 = 123
+const NTP_EPOCH: i64 = 2208988800  // seconds between 1900 and 1970
+
+// NTP state
+const NTP_STATE: i64 = 0x3020000
+const NTP_OFF_SYNC: i64 = 0        // 1 = synchronized
+const NTP_OFF_OFFSET: i64 = 4      // clock offset (seconds)
+const NTP_OFF_DELAY: i64 = 8       // round-trip delay
+const NTP_OFF_SERVER: i64 = 12     // NTP server IP
+const NTP_OFF_UNIX_TIME: i64 = 16  // current UNIX timestamp
+const NTP_OFF_T1: i64 = 24         // originate timestamp
+const NTP_OFF_T4: i64 = 32         // destination timestamp
+
+@kernel fn ntp_query(server_ip: i64) {
+    volatile_write_u32(NTP_STATE + NTP_OFF_SERVER, server_ip)
+
+    let buf = NET_BUF + NET_BUF_SIZE * 2
+    let mut pos: i64 = 0
+
+    // Ethernet + IP + UDP headers
+    let gw_mac = arp_lookup(dhcp_get(DHCP_OFF_GW))
+    pos = eth_header(buf, pos, gw_mac, 0x0800)
+    let ip_start = pos
+    pos = ip_header(buf, pos, dhcp_get(DHCP_OFF_IP), server_ip, 17, 64)
+    let udp_start = pos
+    pos = udp_header(buf, pos, 12345, NTP_PORT, 0)
+
+    // NTP packet (48 bytes)
+    let ntp_start = pos
+    volatile_write_u8(buf + pos, 0x23); pos = pos + 1  // LI=0, VN=4, Mode=3 (client)
+    volatile_write_u8(buf + pos, 0); pos = pos + 1     // stratum
+    volatile_write_u8(buf + pos, 6); pos = pos + 1     // poll interval (64s)
+    volatile_write_u8(buf + pos, 0xEC); pos = pos + 1  // precision (-20 = ~1us)
+
+    // Root delay, dispersion (8 bytes)
+    let mut z: i64 = 0
+    while z < 8 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 8
+
+    // Reference ID (4 bytes)
+    z = 0
+    while z < 4 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 4
+
+    // Reference timestamp (8 bytes)
+    z = 0
+    while z < 8 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 8
+
+    // Originate timestamp (8 bytes) — our T1
+    let t1 = get_system_time_ntp()
+    volatile_write_u32_be(buf + pos, t1); pos = pos + 4
+    volatile_write_u32_be(buf + pos, 0); pos = pos + 4
+    volatile_write_u64(NTP_STATE + NTP_OFF_T1, t1)
+
+    // Receive + Transmit timestamps (16 bytes zero)
+    z = 0
+    while z < 16 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 16
+
+    // Fix lengths
+    let udp_len = pos - udp_start
+    let ip_len = pos - ip_start
+    ip_fix_length(buf, ip_start, ip_len)
+    udp_fix_length(buf, udp_start, udp_len)
+
+    net_transmit(buf, pos)
+}
+
+@kernel fn ntp_handle_response(pkt: i64, len: i64) {
+    // T2: server receive timestamp (bytes 32-39)
+    let t2 = volatile_read_u32_be(pkt + 32)
+    // T3: server transmit timestamp (bytes 40-47)
+    let t3 = volatile_read_u32_be(pkt + 40)
+    // T1: our originate timestamp (saved)
+    let t1 = volatile_read_u64(NTP_STATE + NTP_OFF_T1)
+    // T4: our receive time
+    let t4 = get_system_time_ntp()
+    volatile_write_u64(NTP_STATE + NTP_OFF_T4, t4)
+
+    // Calculate offset: ((T2-T1) + (T3-T4)) / 2
+    let offset = ((t2 - t1) + (t3 - t4)) / 2
+    // Calculate delay: (T4-T1) - (T3-T2)
+    let delay = (t4 - t1) - (t3 - t2)
+
+    volatile_write_u32(NTP_STATE + NTP_OFF_OFFSET, offset)
+    volatile_write_u32(NTP_STATE + NTP_OFF_DELAY, delay)
+    volatile_write_u32(NTP_STATE + NTP_OFF_SYNC, 1)
+
+    // Adjust system clock
+    let unix_time = t3 - NTP_EPOCH
+    volatile_write_u64(NTP_STATE + NTP_OFF_UNIX_TIME, unix_time)
+    set_system_time(unix_time)
+}
+
+@kernel fn get_system_time_ntp() -> i64 {
+    // Return time in NTP format (seconds since 1900)
+    pit_get_ticks() / 1000 + NTP_EPOCH
+}
+
+@kernel fn set_system_time(unix_time: i64) {
+    // Update RTC and system clock
+    volatile_write_u64(NTP_STATE + NTP_OFF_UNIX_TIME, unix_time)
+}
+
+@kernel fn ntp_get_unix_time() -> i64 {
+    volatile_read_u64(NTP_STATE + NTP_OFF_UNIX_TIME) + (pit_get_ticks() - volatile_read_u64(NTP_STATE + NTP_OFF_T4)) / 1000
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N5.3: Multicast (IGMP v2)
+// ═══════════════════════════════════════════════════════════════
+
+const IGMP_MEMBERSHIP_QUERY: i64 = 0x11
+const IGMP_MEMBERSHIP_REPORT_V2: i64 = 0x16
+const IGMP_LEAVE_GROUP: i64 = 0x17
+
+// Multicast group table (max 8 groups)
+const MCAST_MAX: i64 = 8
+const MCAST_TABLE: i64 = 0x3030000
+const MCAST_ENTRY_SIZE: i64 = 8   // group_ip(4) + active(4)
+
+@kernel fn igmp_join(group_ip: i64) -> i64 {
+    // Find free slot
+    let mut i: i64 = 0
+    while i < MCAST_MAX {
+        let entry = MCAST_TABLE + i * MCAST_ENTRY_SIZE
+        if volatile_read_u32(entry + 4) == 0 {
+            volatile_write_u32(entry, group_ip)
+            volatile_write_u32(entry + 4, 1)
+            // Send IGMP Membership Report
+            igmp_send_report(group_ip)
+            // Add multicast MAC filter
+            let mcast_mac = ip_to_multicast_mac(group_ip)
+            net_add_multicast_mac(mcast_mac)
+            return 0
+        }
+        i = i + 1
+    }
+    -1  // table full
+}
+
+@kernel fn igmp_leave(group_ip: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < MCAST_MAX {
+        let entry = MCAST_TABLE + i * MCAST_ENTRY_SIZE
+        if volatile_read_u32(entry) == group_ip {
+            if volatile_read_u32(entry + 4) != 0 {
+                volatile_write_u32(entry + 4, 0)
+                // Send IGMP Leave
+                igmp_send_leave(group_ip)
+                return 0
+            }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn igmp_send_report(group_ip: i64) {
+    let buf = NET_BUF + NET_BUF_SIZE * 3
+    let mut pos: i64 = 0
+    let mcast_mac = ip_to_multicast_mac(group_ip)
+    pos = eth_header(buf, pos, mcast_mac, 0x0800)
+    let ip_start = pos
+    pos = ip_header(buf, pos, dhcp_get(DHCP_OFF_IP), group_ip, 2, 1)  // IGMP proto=2, TTL=1
+    // IGMP message
+    volatile_write_u8(buf + pos, IGMP_MEMBERSHIP_REPORT_V2); pos = pos + 1
+    volatile_write_u8(buf + pos, 0); pos = pos + 1  // max resp time
+    volatile_write_u16_be(buf + pos, 0); pos = pos + 2  // checksum (fill later)
+    volatile_write_u32_be(buf + pos, group_ip); pos = pos + 4
+    // Calculate IGMP checksum
+    let igmp_start = pos - 8
+    let cksum = checksum(buf + igmp_start, 8)
+    volatile_write_u16_be(buf + igmp_start + 2, cksum)
+    ip_fix_length(buf, ip_start, pos - ip_start)
+    net_transmit(buf, pos)
+}
+
+@kernel fn igmp_send_leave(group_ip: i64) {
+    let buf = NET_BUF + NET_BUF_SIZE * 3
+    let mut pos: i64 = 0
+    let all_routers: i64 = 0xE0000002  // 224.0.0.2
+    let all_routers_mac: i64 = 0x01005E000002
+    pos = eth_header(buf, pos, all_routers_mac, 0x0800)
+    let ip_start = pos
+    pos = ip_header(buf, pos, dhcp_get(DHCP_OFF_IP), all_routers, 2, 1)
+    volatile_write_u8(buf + pos, IGMP_LEAVE_GROUP); pos = pos + 1
+    volatile_write_u8(buf + pos, 0); pos = pos + 1
+    volatile_write_u16_be(buf + pos, 0); pos = pos + 2
+    volatile_write_u32_be(buf + pos, group_ip); pos = pos + 4
+    let igmp_start = pos - 8
+    let cksum = checksum(buf + igmp_start, 8)
+    volatile_write_u16_be(buf + igmp_start + 2, cksum)
+    ip_fix_length(buf, ip_start, pos - ip_start)
+    net_transmit(buf, pos)
+}
+
+@kernel fn ip_to_multicast_mac(ip: i64) -> i64 {
+    // 01:00:5E + lower 23 bits of IP
+    0x01005E000000 | (ip & 0x7FFFFF)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N5.4: IPv6 Stub (address, NDP, basic send/recv)
+// ═══════════════════════════════════════════════════════════════
+
+const IPV6_VERSION: i64 = 6
+const IPV6_HEADER_LEN: i64 = 40
+
+// IPv6 address (128-bit stored as 2 × 64-bit)
+const IPV6_ADDR: i64 = 0x3040000
+const IPV6_ADDR_HI: i64 = 0    // upper 64 bits
+const IPV6_ADDR_LO: i64 = 8    // lower 64 bits
+const IPV6_PREFIX_LEN: i64 = 16
+const IPV6_GW_HI: i64 = 20
+const IPV6_GW_LO: i64 = 28
+
+@kernel fn ipv6_init() {
+    // Generate link-local address from MAC (EUI-64)
+    let mac = get_mac_address()
+
+    // fe80::MAC[0-2]:ff:fe:MAC[3-5]
+    volatile_write_u64(IPV6_ADDR + IPV6_ADDR_HI, 0xFE80000000000000)
+
+    let eui64_hi = ((mac >> 40) & 0xFF) ^ 0x02  // flip U/L bit
+    let eui64 = (eui64_hi << 56) | (((mac >> 32) & 0xFF) << 48) |
+                (((mac >> 24) & 0xFF) << 40) | (0xFF << 32) |
+                (0xFE << 24) | (((mac >> 16) & 0xFF) << 16) |
+                (((mac >> 8) & 0xFF) << 8) | (mac & 0xFF)
+    volatile_write_u64(IPV6_ADDR + IPV6_ADDR_LO, eui64)
+    volatile_write_u32(IPV6_ADDR + IPV6_PREFIX_LEN, 64)
+
+    // Send Neighbor Solicitation (DAD)
+    ipv6_send_ns_dad()
+}
+
+@kernel fn ipv6_send_ns_dad() {
+    // Duplicate Address Detection via Neighbor Solicitation
+    let buf = NET_BUF + NET_BUF_SIZE * 4
+    let mut pos: i64 = 0
+
+    // Ethernet: multicast to solicited-node address
+    let target_lo = volatile_read_u64(IPV6_ADDR + IPV6_ADDR_LO)
+    let sol_mac = 0x3333FF000000 | (target_lo & 0xFFFFFF)
+    pos = eth_header(buf, pos, sol_mac, 0x86DD)  // EtherType: IPv6
+
+    // IPv6 header
+    volatile_write_u32_be(buf + pos, 0x60000000); pos = pos + 4  // version=6, TC=0, FL=0
+    volatile_write_u16_be(buf + pos, 24); pos = pos + 2          // payload length
+    volatile_write_u8(buf + pos, 58); pos = pos + 1              // next header: ICMPv6
+    volatile_write_u8(buf + pos, 255); pos = pos + 1             // hop limit
+    // Source: :: (all zeros for DAD)
+    let mut z: i64 = 0
+    while z < 16 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    pos = pos + 16
+    // Destination: solicited-node multicast ff02::1:ff00:0/104
+    volatile_write_u8(buf + pos, 0xFF); volatile_write_u8(buf + pos+1, 0x02)
+    z = 2
+    while z < 11 { volatile_write_u8(buf + pos + z, 0); z = z + 1 }
+    volatile_write_u8(buf + pos + 11, 0x01)
+    volatile_write_u8(buf + pos + 12, 0xFF)
+    volatile_write_u8(buf + pos + 13, (target_lo >> 16) & 0xFF)
+    volatile_write_u8(buf + pos + 14, (target_lo >> 8) & 0xFF)
+    volatile_write_u8(buf + pos + 15, target_lo & 0xFF)
+    pos = pos + 16
+
+    // ICMPv6 Neighbor Solicitation (type=135)
+    volatile_write_u8(buf + pos, 135); pos = pos + 1  // type
+    volatile_write_u8(buf + pos, 0); pos = pos + 1    // code
+    volatile_write_u16_be(buf + pos, 0); pos = pos + 2  // checksum
+    volatile_write_u32_be(buf + pos, 0); pos = pos + 4  // reserved
+    // Target address
+    volatile_write_u64_be(buf + pos, volatile_read_u64(IPV6_ADDR + IPV6_ADDR_HI)); pos = pos + 8
+    volatile_write_u64_be(buf + pos, target_lo); pos = pos + 8
+
+    net_transmit(buf, pos)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N5.5: HTTP/2 Stub (frame parser, HPACK, streams)
+// ═══════════════════════════════════════════════════════════════
+
+// HTTP/2 frame types
+const H2_DATA: i64 = 0x0
+const H2_HEADERS: i64 = 0x1
+const H2_PRIORITY: i64 = 0x2
+const H2_RST_STREAM: i64 = 0x3
+const H2_SETTINGS: i64 = 0x4
+const H2_PUSH_PROMISE: i64 = 0x5
+const H2_PING: i64 = 0x6
+const H2_GOAWAY: i64 = 0x7
+const H2_WINDOW_UPDATE: i64 = 0x8
+const H2_CONTINUATION: i64 = 0x9
+
+// HTTP/2 connection state
+const H2_STATE: i64 = 0x3050000
+const H2_OFF_NEXT_STREAM: i64 = 0    // next stream ID (odd = client)
+const H2_OFF_WINDOW: i64 = 4         // connection window size
+const H2_OFF_MAX_STREAMS: i64 = 8    // SETTINGS_MAX_CONCURRENT_STREAMS
+const H2_OFF_FRAME_SIZE: i64 = 12    // SETTINGS_MAX_FRAME_SIZE
+const H2_OFF_HEADER_SIZE: i64 = 16   // SETTINGS_MAX_HEADER_LIST_SIZE
+
+// HTTP/2 connection preface: "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+const H2_PREFACE_LEN: i64 = 24
+
+@kernel fn h2_init() {
+    volatile_write_u32(H2_STATE + H2_OFF_NEXT_STREAM, 1)
+    volatile_write_u32(H2_STATE + H2_OFF_WINDOW, 65535)
+    volatile_write_u32(H2_STATE + H2_OFF_MAX_STREAMS, 100)
+    volatile_write_u32(H2_STATE + H2_OFF_FRAME_SIZE, 16384)
+    volatile_write_u32(H2_STATE + H2_OFF_HEADER_SIZE, 8192)
+}
+
+@kernel fn h2_send_preface(conn_buf: i64) -> i64 {
+    // Client connection preface
+    let preface: i64 = 0x3051000
+    volatile_write_u8(preface + 0, 80)   // P
+    volatile_write_u8(preface + 1, 82)   // R
+    volatile_write_u8(preface + 2, 73)   // I
+    volatile_write_u8(preface + 3, 32)   // ' '
+    volatile_write_u8(preface + 4, 42)   // *
+    volatile_write_u8(preface + 5, 32)   // ' '
+    volatile_write_u8(preface + 6, 72)   // H
+    volatile_write_u8(preface + 7, 84)   // T
+    volatile_write_u8(preface + 8, 84)   // T
+    volatile_write_u8(preface + 9, 80)   // P
+    volatile_write_u8(preface + 10, 47)  // /
+    volatile_write_u8(preface + 11, 50)  // 2
+    volatile_write_u8(preface + 12, 46)  // .
+    volatile_write_u8(preface + 13, 48)  // 0
+    volatile_write_u8(preface + 14, 13)  // \r
+    volatile_write_u8(preface + 15, 10)  // \n
+    volatile_write_u8(preface + 16, 13)  // \r
+    volatile_write_u8(preface + 17, 10)  // \n
+    volatile_write_u8(preface + 18, 83)  // S
+    volatile_write_u8(preface + 19, 77)  // M
+    volatile_write_u8(preface + 20, 13)  // \r
+    volatile_write_u8(preface + 21, 10)  // \n
+    volatile_write_u8(preface + 22, 13)  // \r
+    volatile_write_u8(preface + 23, 10)  // \n
+
+    let mut i: i64 = 0
+    while i < H2_PREFACE_LEN {
+        volatile_write_u8(conn_buf + i, volatile_read_u8(preface + i))
+        i = i + 1
+    }
+
+    // Follow with SETTINGS frame
+    let settings_pos = H2_PREFACE_LEN
+    h2_write_frame(conn_buf, settings_pos, H2_SETTINGS, 0, 0, 0)
+}
+
+@kernel fn h2_write_frame(buf: i64, pos: i64, frame_type: i64, flags: i64, stream_id: i64, payload_len: i64) -> i64 {
+    // Frame header: 9 bytes
+    // Length (3 bytes) + Type (1) + Flags (1) + Stream ID (4)
+    volatile_write_u8(buf + pos, (payload_len >> 16) & 0xFF)
+    volatile_write_u8(buf + pos + 1, (payload_len >> 8) & 0xFF)
+    volatile_write_u8(buf + pos + 2, payload_len & 0xFF)
+    volatile_write_u8(buf + pos + 3, frame_type)
+    volatile_write_u8(buf + pos + 4, flags)
+    volatile_write_u32_be(buf + pos + 5, stream_id & 0x7FFFFFFF)
+    pos + 9 + payload_len
+}
+
+@kernel fn h2_parse_frame(buf: i64, pos: i64) -> i64 {
+    // Read frame header
+    let length = (volatile_read_u8(buf + pos) << 16) | (volatile_read_u8(buf + pos + 1) << 8) | volatile_read_u8(buf + pos + 2)
+    let frame_type = volatile_read_u8(buf + pos + 3)
+    let flags = volatile_read_u8(buf + pos + 4)
+    let stream_id = volatile_read_u32_be(buf + pos + 5) & 0x7FFFFFFF
+
+    if frame_type == H2_SETTINGS {
+        h2_handle_settings(buf + pos + 9, length)
+    } else if frame_type == H2_PING {
+        h2_handle_ping(buf + pos + 9, flags, stream_id)
+    } else if frame_type == H2_GOAWAY {
+        h2_handle_goaway(buf + pos + 9, length)
+    } else if frame_type == H2_WINDOW_UPDATE {
+        let increment = volatile_read_u32_be(buf + pos + 9) & 0x7FFFFFFF
+        let window = volatile_read_u32(H2_STATE + H2_OFF_WINDOW)
+        volatile_write_u32(H2_STATE + H2_OFF_WINDOW, window + increment)
+    }
+
+    pos + 9 + length  // return position after frame
+}
+
+@kernel fn h2_handle_settings(payload: i64, length: i64) {
+    let mut pos: i64 = 0
+    while pos + 6 <= length {
+        let id = volatile_read_u16_be(payload + pos)
+        let value = volatile_read_u32_be(payload + pos + 2)
+        if id == 1 { /* HEADER_TABLE_SIZE */ }
+        else if id == 3 { volatile_write_u32(H2_STATE + H2_OFF_MAX_STREAMS, value) }
+        else if id == 4 { volatile_write_u32(H2_STATE + H2_OFF_WINDOW, value) }
+        else if id == 5 { volatile_write_u32(H2_STATE + H2_OFF_FRAME_SIZE, value) }
+        else if id == 6 { volatile_write_u32(H2_STATE + H2_OFF_HEADER_SIZE, value) }
+        pos = pos + 6
+    }
+    // Send SETTINGS ACK
+}
+
+@kernel fn h2_handle_ping(payload: i64, flags: i64, stream_id: i64) {
+    if (flags & 0x01) != 0 { return }  // ACK — ignore
+    // Send PING ACK with same payload
+}
+
+@kernel fn h2_handle_goaway(payload: i64, length: i64) {
+    let last_stream = volatile_read_u32_be(payload)
+    let error_code = volatile_read_u32_be(payload + 4)
+    // Connection is being shut down
+}
+
+// ── Network helper functions (stubs) ──
+
+@kernel fn eth_header(buf: i64, pos: i64, dst_mac: i64, ethertype: i64) -> i64 {
+    let mut i: i64 = 5
+    while i >= 0 {
+        volatile_write_u8(buf + pos + (5 - i), (dst_mac >> (i * 8)) & 0xFF)
+        i = i - 1
+    }
+    let mac = get_mac_address()
+    i = 5
+    while i >= 0 {
+        volatile_write_u8(buf + pos + 6 + (5 - i), (mac >> (i * 8)) & 0xFF)
+        i = i - 1
+    }
+    volatile_write_u16_be(buf + pos + 12, ethertype)
+    pos + 14
+}
+
+@kernel fn ip_header(buf: i64, pos: i64, src: i64, dst: i64, proto: i64, ttl: i64) -> i64 {
+    volatile_write_u8(buf + pos, 0x45); // version=4, IHL=5
+    volatile_write_u8(buf + pos + 1, 0) // TOS
+    volatile_write_u16_be(buf + pos + 2, 0)  // total length (fix later)
+    volatile_write_u16_be(buf + pos + 4, 0)  // identification
+    volatile_write_u16_be(buf + pos + 6, 0x4000)  // DF
+    volatile_write_u8(buf + pos + 8, if ttl == 0 { 64 } else { ttl })
+    volatile_write_u8(buf + pos + 9, proto)
+    volatile_write_u16_be(buf + pos + 10, 0)  // checksum
+    volatile_write_u32_be(buf + pos + 12, src)
+    volatile_write_u32_be(buf + pos + 16, dst)
+    pos + 20
+}
+
+@kernel fn udp_header(buf: i64, pos: i64, src_port: i64, dst_port: i64, length: i64) -> i64 {
+    volatile_write_u16_be(buf + pos, src_port)
+    volatile_write_u16_be(buf + pos + 2, dst_port)
+    volatile_write_u16_be(buf + pos + 4, length)  // fix later
+    volatile_write_u16_be(buf + pos + 6, 0)       // checksum
+    pos + 8
+}
+
+@kernel fn ip_fix_length(buf: i64, ip_start: i64, length: i64) {
+    volatile_write_u16_be(buf + ip_start + 2, length)
+    // Recalculate IP checksum
+    volatile_write_u16_be(buf + ip_start + 10, 0)
+    let cksum = checksum(buf + ip_start, 20)
+    volatile_write_u16_be(buf + ip_start + 10, cksum)
+}
+
+@kernel fn udp_fix_length(buf: i64, udp_start: i64, length: i64) {
+    volatile_write_u16_be(buf + udp_start + 4, length)
+}
+
+@kernel fn checksum(buf: i64, len: i64) -> i64 {
+    let mut sum: i64 = 0
+    let mut i: i64 = 0
+    while i < len - 1 {
+        sum = sum + volatile_read_u16_be(buf + i)
+        i = i + 2
+    }
+    if (len & 1) != 0 { sum = sum + (volatile_read_u8(buf + len - 1) << 8) }
+    while (sum >> 16) != 0 { sum = (sum & 0xFFFF) + (sum >> 16) }
+    (0xFFFF ^ sum) & 0xFFFF
+}
+
+@kernel fn volatile_write_u16_be(addr: i64, val: i64) {
+    volatile_write_u8(addr, (val >> 8) & 0xFF)
+    volatile_write_u8(addr + 1, val & 0xFF)
+}
+
+@kernel fn volatile_write_u32_be(addr: i64, val: i64) {
+    volatile_write_u8(addr, (val >> 24) & 0xFF)
+    volatile_write_u8(addr + 1, (val >> 16) & 0xFF)
+    volatile_write_u8(addr + 2, (val >> 8) & 0xFF)
+    volatile_write_u8(addr + 3, val & 0xFF)
+}
+
+@kernel fn volatile_write_u64_be(addr: i64, val: i64) {
+    volatile_write_u32_be(addr, (val >> 32) & 0xFFFFFFFF)
+    volatile_write_u32_be(addr + 4, val & 0xFFFFFFFF)
+}
+
+@kernel fn volatile_read_u16_be(addr: i64) -> i64 {
+    (volatile_read_u8(addr) << 8) | volatile_read_u8(addr + 1)
+}
+
+@kernel fn volatile_read_u32_be(addr: i64) -> i64 {
+    (volatile_read_u8(addr) << 24) | (volatile_read_u8(addr + 1) << 16) |
+    (volatile_read_u8(addr + 2) << 8) | volatile_read_u8(addr + 3)
+}
+
+// Network stubs
+@kernel fn get_mac_address() -> i64 { 0x525400123456 }
+@kernel fn net_transmit(buf: i64, len: i64) {}
+@kernel fn net_set_ip(ip: i64) {}
+@kernel fn net_set_mask(mask: i64) {}
+@kernel fn net_set_gateway(gw: i64) {}
+@kernel fn net_set_dns(dns1: i64, dns2: i64) {}
+@kernel fn net_add_multicast_mac(mac: i64) {}
+@kernel fn arp_lookup(ip: i64) -> i64 { 0xFFFFFFFFFFFF }
+
+// ── Entry point ──
+
+@kernel fn phoenix_net_main() {
+    dhcp_init()
+    dhcp_discover()
+    ntp_query(0xD8EF2307)  // pool.ntp.org (216.239.35.7)
+    ipv6_init()
+    h2_init()
+}

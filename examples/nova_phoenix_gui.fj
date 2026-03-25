@@ -1,0 +1,2036 @@
+// FajarOS Nova v2.0 "Phoenix" — GUI Framework
+// Phase N1: Framebuffer + Primitives + Window Manager + Widgets + Applications
+// Written 100% in Fajar Lang — VirtIO-GPU, double-buffered, event-driven
+// Target: x86_64 bare-metal, QEMU -device virtio-gpu-pci
+
+// ═══════════════════════════════════════════════════════════════
+// N1.1: Framebuffer + Primitives
+// ═══════════════════════════════════════════════════════════════
+
+const FB_WIDTH: i64 = 640
+const FB_HEIGHT: i64 = 480
+const FB_BPP: i64 = 4          // 32bpp BGRA
+const FB_STRIDE: i64 = 2560    // 640 * 4
+const FB_SIZE: i64 = 1228800   // 640 * 480 * 4
+
+// VirtIO-GPU MMIO registers
+const VIRTIO_GPU_BASE: i64 = 0xFEB00000
+const VIRTIO_GPU_MAGIC: i64 = 0x00
+const VIRTIO_GPU_VERSION: i64 = 0x04
+const VIRTIO_GPU_DEVICE_ID: i64 = 0x08
+const VIRTIO_GPU_STATUS: i64 = 0x70
+const VIRTIO_GPU_QUEUE_SEL: i64 = 0x30
+const VIRTIO_GPU_QUEUE_NUM: i64 = 0x38
+const VIRTIO_GPU_QUEUE_READY: i64 = 0x44
+
+// GPU command types
+const VIRTIO_GPU_CMD_GET_DISPLAY_INFO: i64 = 0x0100
+const VIRTIO_GPU_CMD_RESOURCE_CREATE_2D: i64 = 0x0101
+const VIRTIO_GPU_CMD_SET_SCANOUT: i64 = 0x0103
+const VIRTIO_GPU_CMD_RESOURCE_FLUSH: i64 = 0x0104
+const VIRTIO_GPU_CMD_TRANSFER_TO_HOST: i64 = 0x0105
+const VIRTIO_GPU_CMD_RESOURCE_ATTACH: i64 = 0x0106
+
+// Framebuffer addresses (back + front)
+const FB_FRONT: i64 = 0x2000000    // 32MB — front buffer (displayed)
+const FB_BACK: i64 = 0x2200000     // 34MB — back buffer (draw target)
+
+// N1.1.8: Color palette — 16 named colors (BGRA format)
+const COLOR_BLACK: i64 = 0xFF000000
+const COLOR_WHITE: i64 = 0xFFFFFFFF
+const COLOR_RED: i64 = 0xFF0000FF
+const COLOR_GREEN: i64 = 0xFF00FF00
+const COLOR_BLUE: i64 = 0xFFFF0000
+const COLOR_CYAN: i64 = 0xFFFFFF00
+const COLOR_MAGENTA: i64 = 0xFFFF00FF
+const COLOR_YELLOW: i64 = 0xFF00FFFF
+const COLOR_GRAY: i64 = 0xFF808080
+const COLOR_DARK_GRAY: i64 = 0xFF404040
+const COLOR_LIGHT_GRAY: i64 = 0xFFC0C0C0
+const COLOR_ORANGE: i64 = 0xFF0080FF
+const COLOR_PINK: i64 = 0xFFCB69CB
+const COLOR_BROWN: i64 = 0xFF2A5296
+const COLOR_NAVY: i64 = 0xFF800000
+const COLOR_TEAL: i64 = 0xFF808000
+
+// ── N1.1.1: VirtIO-GPU framebuffer init ──
+
+@kernel fn gpu_init() -> i64 {
+    // Check VirtIO magic
+    let magic = volatile_read_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_MAGIC)
+    if magic != 0x74726976 { return -1 }  // "virt"
+
+    // Check device ID (GPU = 16)
+    let dev_id = volatile_read_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_DEVICE_ID)
+    if dev_id != 16 { return -2 }
+
+    // Reset device
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_STATUS, 0)
+
+    // Acknowledge + driver
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_STATUS, 1)  // ACKNOWLEDGE
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_STATUS, 3)  // DRIVER
+
+    // Configure virtqueue 0 (controlq)
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_QUEUE_SEL, 0)
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_QUEUE_NUM, 16)
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_QUEUE_READY, 1)
+
+    // Driver OK
+    volatile_write_u32(VIRTIO_GPU_BASE + VIRTIO_GPU_STATUS, 7)
+
+    // Create 2D resource (resource_id=1, 640x480, BGRA)
+    gpu_cmd_resource_create_2d(1, FB_WIDTH, FB_HEIGHT)
+
+    // Attach backing storage
+    gpu_cmd_resource_attach(1, FB_FRONT, FB_SIZE)
+
+    // Set scanout (scanout 0 → resource 1)
+    gpu_cmd_set_scanout(0, 1, FB_WIDTH, FB_HEIGHT)
+
+    // Clear both buffers
+    fb_clear(COLOR_BLACK)
+    fb_swap()
+
+    0  // success
+}
+
+@kernel fn gpu_cmd_resource_create_2d(res_id: i64, w: i64, h: i64) {
+    // Build command in scratch buffer at 0x1F00000
+    let cmd_buf: i64 = 0x1F00000
+    volatile_write_u32(cmd_buf + 0, VIRTIO_GPU_CMD_RESOURCE_CREATE_2D)
+    volatile_write_u32(cmd_buf + 4, 0)       // flags
+    volatile_write_u64(cmd_buf + 8, 0)       // fence_id
+    volatile_write_u32(cmd_buf + 16, res_id) // resource_id
+    volatile_write_u32(cmd_buf + 20, 1)      // format: B8G8R8A8_UNORM
+    volatile_write_u32(cmd_buf + 24, w)
+    volatile_write_u32(cmd_buf + 28, h)
+    gpu_submit_cmd(cmd_buf, 32)
+}
+
+@kernel fn gpu_cmd_resource_attach(res_id: i64, addr: i64, size: i64) {
+    let cmd_buf: i64 = 0x1F00000
+    volatile_write_u32(cmd_buf + 0, VIRTIO_GPU_CMD_RESOURCE_ATTACH)
+    volatile_write_u32(cmd_buf + 4, 0)
+    volatile_write_u64(cmd_buf + 8, 0)
+    volatile_write_u32(cmd_buf + 16, res_id)
+    volatile_write_u32(cmd_buf + 20, 1)      // nr_entries
+    volatile_write_u64(cmd_buf + 24, addr)   // backing address
+    volatile_write_u32(cmd_buf + 32, size)
+    volatile_write_u32(cmd_buf + 36, 0)      // padding
+    gpu_submit_cmd(cmd_buf, 40)
+}
+
+@kernel fn gpu_cmd_set_scanout(scanout: i64, res_id: i64, w: i64, h: i64) {
+    let cmd_buf: i64 = 0x1F00000
+    volatile_write_u32(cmd_buf + 0, VIRTIO_GPU_CMD_SET_SCANOUT)
+    volatile_write_u32(cmd_buf + 4, 0)
+    volatile_write_u64(cmd_buf + 8, 0)
+    volatile_write_u32(cmd_buf + 16, scanout)
+    volatile_write_u32(cmd_buf + 20, res_id)
+    // rect: x, y, width, height
+    volatile_write_u32(cmd_buf + 24, 0)
+    volatile_write_u32(cmd_buf + 28, 0)
+    volatile_write_u32(cmd_buf + 32, w)
+    volatile_write_u32(cmd_buf + 36, h)
+    gpu_submit_cmd(cmd_buf, 40)
+}
+
+@kernel fn gpu_cmd_transfer_and_flush(res_id: i64, w: i64, h: i64) {
+    let cmd_buf: i64 = 0x1F00000
+
+    // Transfer to host
+    volatile_write_u32(cmd_buf + 0, VIRTIO_GPU_CMD_TRANSFER_TO_HOST)
+    volatile_write_u32(cmd_buf + 4, 0)
+    volatile_write_u64(cmd_buf + 8, 0)
+    volatile_write_u32(cmd_buf + 16, res_id)
+    volatile_write_u32(cmd_buf + 20, 0)   // offset
+    volatile_write_u32(cmd_buf + 24, 0)   // x
+    volatile_write_u32(cmd_buf + 28, 0)   // y
+    volatile_write_u32(cmd_buf + 32, w)
+    volatile_write_u32(cmd_buf + 36, h)
+    gpu_submit_cmd(cmd_buf, 40)
+
+    // Flush
+    volatile_write_u32(cmd_buf + 0, VIRTIO_GPU_CMD_RESOURCE_FLUSH)
+    volatile_write_u32(cmd_buf + 4, 0)
+    volatile_write_u64(cmd_buf + 8, 0)
+    volatile_write_u32(cmd_buf + 16, res_id)
+    volatile_write_u32(cmd_buf + 20, 0)
+    volatile_write_u32(cmd_buf + 24, 0)
+    volatile_write_u32(cmd_buf + 28, w)
+    volatile_write_u32(cmd_buf + 32, h)
+    gpu_submit_cmd(cmd_buf, 36)
+}
+
+@kernel fn gpu_submit_cmd(buf: i64, len: i64) {
+    // Write descriptor to virtqueue and notify device
+    let desc_base: i64 = 0x1F10000
+    volatile_write_u64(desc_base + 0, buf)     // addr
+    volatile_write_u32(desc_base + 8, len)     // len
+    volatile_write_u16(desc_base + 12, 0)      // flags
+    volatile_write_u16(desc_base + 14, 0)      // next
+    // Notify queue 0
+    volatile_write_u32(VIRTIO_GPU_BASE + 0x50, 0)
+    // Spin-wait for response (simplified)
+    let mut i: i64 = 0
+    while i < 10000 { i = i + 1 }
+}
+
+// ── N1.1.2: Pixel drawing ──
+
+@kernel fn draw_pixel(x: i64, y: i64, color: i64) {
+    if x < 0 { return }
+    if y < 0 { return }
+    if x >= FB_WIDTH { return }
+    if y >= FB_HEIGHT { return }
+    let offset = (y * FB_STRIDE) + (x * FB_BPP)
+    volatile_write_u32(FB_BACK + offset, color)
+}
+
+@kernel fn rgb(r: i64, g: i64, b: i64) -> i64 {
+    0xFF000000 | ((b & 0xFF) << 16) | ((g & 0xFF) << 8) | (r & 0xFF)
+}
+
+// ── N1.1.3: Line drawing (Bresenham's algorithm) ──
+
+@kernel fn draw_line(x0: i64, y0: i64, x1: i64, y1: i64, color: i64) {
+    let mut cx = x0
+    let mut cy = y0
+    let mut dx = x1 - x0
+    let mut dy = y1 - y0
+    let mut sx: i64 = 1
+    let mut sy: i64 = 1
+    if dx < 0 { dx = 0 - dx; sx = -1 }
+    if dy < 0 { dy = 0 - dy; sy = -1 }
+    let mut err = dx - dy
+
+    while true {
+        draw_pixel(cx, cy, color)
+        if cx == x1 {
+            if cy == y1 { return }
+        }
+        let e2 = err * 2
+        if e2 > (0 - dy) { err = err - dy; cx = cx + sx }
+        if e2 < dx { err = err + dx; cy = cy + sy }
+    }
+}
+
+// ── N1.1.4: Rectangle ──
+
+@kernel fn fill_rect(x: i64, y: i64, w: i64, h: i64, color: i64) {
+    let mut row: i64 = 0
+    while row < h {
+        let mut col: i64 = 0
+        while col < w {
+            draw_pixel(x + col, y + row, color)
+            col = col + 1
+        }
+        row = row + 1
+    }
+}
+
+@kernel fn draw_rect(x: i64, y: i64, w: i64, h: i64, color: i64) {
+    draw_line(x, y, x + w - 1, y, color)           // top
+    draw_line(x, y + h - 1, x + w - 1, y + h - 1, color) // bottom
+    draw_line(x, y, x, y + h - 1, color)           // left
+    draw_line(x + w - 1, y, x + w - 1, y + h - 1, color) // right
+}
+
+// ── N1.1.5: Circle (Midpoint algorithm) ──
+
+@kernel fn draw_circle(cx: i64, cy: i64, r: i64, color: i64) {
+    let mut x: i64 = 0
+    let mut y = r
+    let mut d = 1 - r
+
+    while x <= y {
+        draw_pixel(cx + x, cy + y, color)
+        draw_pixel(cx - x, cy + y, color)
+        draw_pixel(cx + x, cy - y, color)
+        draw_pixel(cx - x, cy - y, color)
+        draw_pixel(cx + y, cy + x, color)
+        draw_pixel(cx - y, cy + x, color)
+        draw_pixel(cx + y, cy - x, color)
+        draw_pixel(cx - y, cy - x, color)
+
+        if d < 0 {
+            d = d + 2 * x + 3
+        } else {
+            d = d + 2 * (x - y) + 5
+            y = y - 1
+        }
+        x = x + 1
+    }
+}
+
+@kernel fn fill_circle(cx: i64, cy: i64, r: i64, color: i64) {
+    let mut y = 0 - r
+    while y <= r {
+        let mut x = 0 - r
+        while x <= r {
+            if (x * x + y * y) <= (r * r) {
+                draw_pixel(cx + x, cy + y, color)
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+// ── N1.1.6: Font rendering (8x16 bitmap font) ──
+
+const FONT_WIDTH: i64 = 8
+const FONT_HEIGHT: i64 = 16
+const FONT_BASE: i64 = 0x1F20000   // Font bitmap data (4096 bytes for 256 chars)
+
+@kernel fn font_init() {
+    // Load basic ASCII bitmap font (CP437-compatible)
+    // Each character = 16 bytes (8 pixels wide × 16 rows, 1 bit per pixel)
+    // Characters 0x20-0x7E (printable ASCII)
+
+    // Space (0x20) — all zeros
+    let base = FONT_BASE + 0x20 * 16
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(base + i, 0); i = i + 1 }
+
+    // 'A' (0x41)
+    let a = FONT_BASE + 0x41 * 16
+    volatile_write_u8(a + 0, 0x00); volatile_write_u8(a + 1, 0x18)
+    volatile_write_u8(a + 2, 0x3C); volatile_write_u8(a + 3, 0x66)
+    volatile_write_u8(a + 4, 0x66); volatile_write_u8(a + 5, 0x7E)
+    volatile_write_u8(a + 6, 0x66); volatile_write_u8(a + 7, 0x66)
+    volatile_write_u8(a + 8, 0x66); volatile_write_u8(a + 9, 0x66)
+    volatile_write_u8(a + 10, 0x00); volatile_write_u8(a + 11, 0x00)
+    volatile_write_u8(a + 12, 0x00); volatile_write_u8(a + 13, 0x00)
+    volatile_write_u8(a + 14, 0x00); volatile_write_u8(a + 15, 0x00)
+
+    // 'F' for "FajarOS"
+    let f = FONT_BASE + 0x46 * 16
+    volatile_write_u8(f + 0, 0x00); volatile_write_u8(f + 1, 0x7E)
+    volatile_write_u8(f + 2, 0x60); volatile_write_u8(f + 3, 0x60)
+    volatile_write_u8(f + 4, 0x7C); volatile_write_u8(f + 5, 0x60)
+    volatile_write_u8(f + 6, 0x60); volatile_write_u8(f + 7, 0x60)
+    volatile_write_u8(f + 8, 0x60); volatile_write_u8(f + 9, 0x60)
+    volatile_write_u8(f + 10, 0x00); volatile_write_u8(f + 11, 0x00)
+    volatile_write_u8(f + 12, 0x00); volatile_write_u8(f + 13, 0x00)
+    volatile_write_u8(f + 14, 0x00); volatile_write_u8(f + 15, 0x00)
+
+    // Load full character set from ROM (0xC0000 VGA BIOS)
+    font_load_from_vga_bios()
+}
+
+@kernel fn font_load_from_vga_bios() {
+    // VGA BIOS font at INT 10h, AH=11h — address at 0xFFA6E
+    // Fallback: copy from VGA ROM area
+    let rom_font: i64 = 0xC0000 + 0x6E  // typical 8x16 font offset
+    let mut ch: i64 = 0
+    while ch < 256 {
+        let mut row: i64 = 0
+        while row < 16 {
+            let byte = volatile_read_u8(rom_font + ch * 16 + row)
+            volatile_write_u8(FONT_BASE + ch * 16 + row, byte)
+            row = row + 1
+        }
+        ch = ch + 1
+    }
+}
+
+@kernel fn draw_char(x: i64, y: i64, ch: i64, fg: i64, bg: i64) {
+    let glyph = FONT_BASE + (ch & 0xFF) * 16
+    let mut row: i64 = 0
+    while row < FONT_HEIGHT {
+        let bits = volatile_read_u8(glyph + row)
+        let mut col: i64 = 0
+        while col < FONT_WIDTH {
+            let mask = 0x80 >> col
+            if (bits & mask) != 0 {
+                draw_pixel(x + col, y + row, fg)
+            } else {
+                if bg != 0 { draw_pixel(x + col, y + row, bg) }
+            }
+            col = col + 1
+        }
+        row = row + 1
+    }
+}
+
+@kernel fn draw_text(x: i64, y: i64, text_addr: i64, len: i64, fg: i64, bg: i64) {
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(text_addr + i)
+        draw_char(x + i * FONT_WIDTH, y, ch, fg, bg)
+        i = i + 1
+    }
+}
+
+@kernel fn draw_text_str(x: i64, y: i64, s: i64, fg: i64, bg: i64) {
+    // Draw null-terminated string
+    let mut i: i64 = 0
+    while true {
+        let ch = volatile_read_u8(s + i)
+        if ch == 0 { return }
+        draw_char(x + i * FONT_WIDTH, y, ch, fg, bg)
+        i = i + 1
+    }
+}
+
+// ── N1.1.7: Double buffering ──
+
+@kernel fn fb_swap() {
+    // Copy back buffer → front buffer
+    let mut offset: i64 = 0
+    while offset < FB_SIZE {
+        let val = volatile_read_u64(FB_BACK + offset)
+        volatile_write_u64(FB_FRONT + offset, val)
+        offset = offset + 8
+    }
+    // Tell GPU to flush
+    gpu_cmd_transfer_and_flush(1, FB_WIDTH, FB_HEIGHT)
+}
+
+// ── N1.1.8: Color palette (constants above) ──
+
+@kernel fn color_blend(c1: i64, c2: i64, alpha: i64) -> i64 {
+    // alpha 0-255, blend c1 over c2
+    let r1 = c1 & 0xFF
+    let g1 = (c1 >> 8) & 0xFF
+    let b1 = (c1 >> 16) & 0xFF
+    let r2 = c2 & 0xFF
+    let g2 = (c2 >> 8) & 0xFF
+    let b2 = (c2 >> 16) & 0xFF
+    let r = (r1 * alpha + r2 * (255 - alpha)) / 255
+    let g = (g1 * alpha + g2 * (255 - alpha)) / 255
+    let b = (b1 * alpha + b2 * (255 - alpha)) / 255
+    0xFF000000 | (b << 16) | (g << 8) | r
+}
+
+// ── N1.1.9: Screen clear ──
+
+@kernel fn fb_clear(color: i64) {
+    let mut offset: i64 = 0
+    while offset < FB_SIZE {
+        volatile_write_u32(FB_BACK + offset, color)
+        offset = offset + 4
+    }
+}
+
+// ── N1.1.10: Demo — bouncing ball ──
+
+@kernel fn demo_bouncing_ball() {
+    let mut bx: i64 = 320
+    let mut by: i64 = 240
+    let mut dx: i64 = 3
+    let mut dy: i64 = 2
+    let radius: i64 = 15
+
+    let mut frame: i64 = 0
+    while frame < 500 {
+        fb_clear(COLOR_NAVY)
+
+        // Draw border
+        draw_rect(0, 0, FB_WIDTH, FB_HEIGHT, COLOR_WHITE)
+
+        // Draw ball
+        fill_circle(bx, by, radius, COLOR_RED)
+
+        // Draw shadow
+        fill_circle(bx + 3, by + 3, radius, COLOR_DARK_GRAY)
+
+        // Update position
+        bx = bx + dx
+        by = by + dy
+
+        // Bounce off walls
+        if bx <= radius { dx = 0 - dx; bx = radius }
+        if bx >= FB_WIDTH - radius { dx = 0 - dx; bx = FB_WIDTH - radius }
+        if by <= radius { dy = 0 - dy; by = radius }
+        if by >= FB_HEIGHT - radius { dy = 0 - dy; by = FB_HEIGHT - radius }
+
+        fb_swap()
+        frame = frame + 1
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N1.2: Window Manager
+// ═══════════════════════════════════════════════════════════════
+
+// Window table (max 16 windows)
+const WIN_MAX: i64 = 16
+const WIN_TABLE: i64 = 0x1F30000
+const WIN_ENTRY_SIZE: i64 = 128
+
+// Window fields
+const WIN_OFF_ACTIVE: i64 = 0     // 1 = active, 0 = free
+const WIN_OFF_X: i64 = 4
+const WIN_OFF_Y: i64 = 8
+const WIN_OFF_W: i64 = 12
+const WIN_OFF_H: i64 = 16
+const WIN_OFF_Z: i64 = 20        // Z-order (higher = on top)
+const WIN_OFF_TITLE: i64 = 24    // 32-byte title string
+const WIN_OFF_FLAGS: i64 = 56    // bit0=focused, bit1=minimized, bit2=maximized
+const WIN_OFF_CLIENT_BUF: i64 = 64  // client area buffer address
+const WIN_OFF_PID: i64 = 72      // owning process
+const WIN_OFF_DIRTY: i64 = 76    // needs redraw
+
+const TITLEBAR_HEIGHT: i64 = 20
+const BORDER_WIDTH: i64 = 1
+
+// ── N1.2.1: Window struct ──
+
+@kernel fn win_get(id: i64, off: i64) -> i64 {
+    volatile_read_u32(WIN_TABLE + id * WIN_ENTRY_SIZE + off)
+}
+
+@kernel fn win_set(id: i64, off: i64, val: i64) {
+    volatile_write_u32(WIN_TABLE + id * WIN_ENTRY_SIZE + off, val)
+}
+
+@kernel fn win_get_title_addr(id: i64) -> i64 {
+    WIN_TABLE + id * WIN_ENTRY_SIZE + WIN_OFF_TITLE
+}
+
+// ── N1.2.2: Window creation ──
+
+@kernel fn create_window(title_addr: i64, title_len: i64, x: i64, y: i64, w: i64, h: i64) -> i64 {
+    // Find free slot
+    let mut id: i64 = 0
+    while id < WIN_MAX {
+        if win_get(id, WIN_OFF_ACTIVE) == 0 {
+            win_set(id, WIN_OFF_ACTIVE, 1)
+            win_set(id, WIN_OFF_X, x)
+            win_set(id, WIN_OFF_Y, y)
+            win_set(id, WIN_OFF_W, w)
+            win_set(id, WIN_OFF_H, h)
+            win_set(id, WIN_OFF_Z, id)  // initial z-order
+            win_set(id, WIN_OFF_FLAGS, 1) // focused
+            win_set(id, WIN_OFF_DIRTY, 1)
+
+            // Copy title
+            let dst = win_get_title_addr(id)
+            let mut i: i64 = 0
+            while i < title_len {
+                if i >= 31 { break }
+                volatile_write_u8(dst + i, volatile_read_u8(title_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(dst + i, 0)  // null terminate
+
+            // Allocate client buffer (w * (h - titlebar) * 4)
+            let client_h = h - TITLEBAR_HEIGHT - BORDER_WIDTH * 2
+            let client_size = w * client_h * FB_BPP
+            let buf = frame_alloc_pages((client_size + 4095) / 4096)
+            win_set(id, WIN_OFF_CLIENT_BUF, buf)
+
+            // Unfocus all others
+            wm_focus_window(id)
+            return id
+        }
+        id = id + 1
+    }
+    -1  // no free slots
+}
+
+@kernel fn destroy_window(id: i64) {
+    if id < 0 { return }
+    if id >= WIN_MAX { return }
+    if win_get(id, WIN_OFF_ACTIVE) == 0 { return }
+    win_set(id, WIN_OFF_ACTIVE, 0)
+    // Free client buffer
+    let buf = win_get(id, WIN_OFF_CLIENT_BUF)
+    if buf != 0 {
+        let w = win_get(id, WIN_OFF_W)
+        let h = win_get(id, WIN_OFF_H) - TITLEBAR_HEIGHT - BORDER_WIDTH * 2
+        let pages = (w * h * FB_BPP + 4095) / 4096
+        frame_free_pages(buf, pages)
+    }
+}
+
+// ── N1.2.3: Window rendering ──
+
+@kernel fn wm_render_window(id: i64) {
+    if win_get(id, WIN_OFF_ACTIVE) == 0 { return }
+    if (win_get(id, WIN_OFF_FLAGS) & 2) != 0 { return }  // minimized
+
+    let x = win_get(id, WIN_OFF_X)
+    let y = win_get(id, WIN_OFF_Y)
+    let w = win_get(id, WIN_OFF_W)
+    let h = win_get(id, WIN_OFF_H)
+    let focused = (win_get(id, WIN_OFF_FLAGS) & 1) != 0
+
+    // Title bar
+    let title_bg = if focused { COLOR_BLUE } else { COLOR_GRAY }
+    fill_rect(x, y, w, TITLEBAR_HEIGHT, title_bg)
+
+    // Title text
+    let title_addr = win_get_title_addr(id)
+    draw_text_str(x + 4, y + 2, title_addr, COLOR_WHITE, 0)
+
+    // Close button [X]
+    let close_x = x + w - 18
+    fill_rect(close_x, y + 2, 16, 16, COLOR_RED)
+    draw_char(close_x + 4, y + 2, 0x58, COLOR_WHITE, 0)  // 'X'
+
+    // Border
+    let border_color = if focused { COLOR_CYAN } else { COLOR_DARK_GRAY }
+    draw_rect(x, y, w, h, border_color)
+
+    // Client area background
+    fill_rect(x + BORDER_WIDTH, y + TITLEBAR_HEIGHT, w - BORDER_WIDTH * 2, h - TITLEBAR_HEIGHT - BORDER_WIDTH, COLOR_WHITE)
+
+    // Render client buffer contents
+    wm_blit_client(id)
+}
+
+@kernel fn wm_blit_client(id: i64) {
+    let buf = win_get(id, WIN_OFF_CLIENT_BUF)
+    if buf == 0 { return }
+    let x = win_get(id, WIN_OFF_X) + BORDER_WIDTH
+    let y = win_get(id, WIN_OFF_Y) + TITLEBAR_HEIGHT
+    let w = win_get(id, WIN_OFF_W) - BORDER_WIDTH * 2
+    let h = win_get(id, WIN_OFF_H) - TITLEBAR_HEIGHT - BORDER_WIDTH
+    let mut row: i64 = 0
+    while row < h {
+        let mut col: i64 = 0
+        while col < w {
+            let pixel = volatile_read_u32(buf + (row * w + col) * FB_BPP)
+            if pixel != 0 { draw_pixel(x + col, y + row, pixel) }
+            col = col + 1
+        }
+        row = row + 1
+    }
+}
+
+// ── N1.2.4: Window stacking (Z-order) ──
+
+@kernel fn wm_raise_window(id: i64) {
+    // Find current max Z
+    let mut max_z: i64 = 0
+    let mut i: i64 = 0
+    while i < WIN_MAX {
+        if win_get(i, WIN_OFF_ACTIVE) != 0 {
+            let z = win_get(i, WIN_OFF_Z)
+            if z > max_z { max_z = z }
+        }
+        i = i + 1
+    }
+    win_set(id, WIN_OFF_Z, max_z + 1)
+}
+
+@kernel fn wm_lower_window(id: i64) {
+    // Find current min Z
+    let mut min_z: i64 = 99999
+    let mut i: i64 = 0
+    while i < WIN_MAX {
+        if win_get(i, WIN_OFF_ACTIVE) != 0 {
+            let z = win_get(i, WIN_OFF_Z)
+            if z < min_z { min_z = z }
+        }
+        i = i + 1
+    }
+    if min_z > 0 { win_set(id, WIN_OFF_Z, min_z - 1) }
+    else { win_set(id, WIN_OFF_Z, 0) }
+}
+
+// ── N1.2.5: Window moving ──
+
+// Drag state
+const DRAG_STATE: i64 = 0x1F40000
+const DRAG_ACTIVE: i64 = 0
+const DRAG_WIN_ID: i64 = 4
+const DRAG_OFF_X: i64 = 8
+const DRAG_OFF_Y: i64 = 12
+
+@kernel fn wm_begin_drag(win_id: i64, mouse_x: i64, mouse_y: i64) {
+    let wx = win_get(win_id, WIN_OFF_X)
+    let wy = win_get(win_id, WIN_OFF_Y)
+    volatile_write_u32(DRAG_STATE + DRAG_ACTIVE, 1)
+    volatile_write_u32(DRAG_STATE + DRAG_WIN_ID, win_id)
+    volatile_write_u32(DRAG_STATE + DRAG_OFF_X, mouse_x - wx)
+    volatile_write_u32(DRAG_STATE + DRAG_OFF_Y, mouse_y - wy)
+}
+
+@kernel fn wm_update_drag(mouse_x: i64, mouse_y: i64) {
+    if volatile_read_u32(DRAG_STATE + DRAG_ACTIVE) == 0 { return }
+    let id = volatile_read_u32(DRAG_STATE + DRAG_WIN_ID)
+    let off_x = volatile_read_u32(DRAG_STATE + DRAG_OFF_X)
+    let off_y = volatile_read_u32(DRAG_STATE + DRAG_OFF_Y)
+    let new_x = mouse_x - off_x
+    let new_y = mouse_y - off_y
+    // Clamp to screen
+    if new_x >= 0 { if new_x < FB_WIDTH - 20 { win_set(id, WIN_OFF_X, new_x) } }
+    if new_y >= 0 { if new_y < FB_HEIGHT - 20 { win_set(id, WIN_OFF_Y, new_y) } }
+    win_set(id, WIN_OFF_DIRTY, 1)
+}
+
+@kernel fn wm_end_drag() {
+    volatile_write_u32(DRAG_STATE + DRAG_ACTIVE, 0)
+}
+
+// ── N1.2.6: Window close ──
+
+@kernel fn wm_close_window(id: i64) {
+    destroy_window(id)
+    wm_redraw_all()
+}
+
+// ── N1.2.7: Desktop background ──
+
+@kernel fn wm_draw_desktop() {
+    // Gradient background: dark blue → teal
+    let mut y: i64 = 0
+    while y < FB_HEIGHT - 28 {  // leave room for taskbar
+        let ratio = y * 255 / FB_HEIGHT
+        let r = 0
+        let g = ratio / 4
+        let b = 60 + ratio / 3
+        let color = rgb(r, g, b)
+        let mut x: i64 = 0
+        while x < FB_WIDTH {
+            draw_pixel(x, y, color)
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+// ── N1.2.8: Taskbar ──
+
+const TASKBAR_HEIGHT: i64 = 28
+const TASKBAR_Y: i64 = 452   // FB_HEIGHT - TASKBAR_HEIGHT
+
+@kernel fn wm_draw_taskbar() {
+    // Taskbar background
+    fill_rect(0, TASKBAR_Y, FB_WIDTH, TASKBAR_HEIGHT, COLOR_DARK_GRAY)
+    draw_line(0, TASKBAR_Y, FB_WIDTH - 1, TASKBAR_Y, COLOR_LIGHT_GRAY)
+
+    // Start button
+    fill_rect(2, TASKBAR_Y + 2, 50, 24, COLOR_BLUE)
+    // "Start" text
+    let start_str: i64 = 0x1F41000
+    volatile_write_u8(start_str + 0, 83)  // 'S'
+    volatile_write_u8(start_str + 1, 116) // 't'
+    volatile_write_u8(start_str + 2, 97)  // 'a'
+    volatile_write_u8(start_str + 3, 114) // 'r'
+    volatile_write_u8(start_str + 4, 116) // 't'
+    volatile_write_u8(start_str + 5, 0)
+    draw_text_str(8, TASKBAR_Y + 6, start_str, COLOR_WHITE, 0)
+
+    // Window buttons
+    let mut btn_x: i64 = 58
+    let mut id: i64 = 0
+    while id < WIN_MAX {
+        if win_get(id, WIN_OFF_ACTIVE) != 0 {
+            let focused = (win_get(id, WIN_OFF_FLAGS) & 1) != 0
+            let bg = if focused { COLOR_NAVY } else { COLOR_GRAY }
+            fill_rect(btn_x, TASKBAR_Y + 2, 80, 24, bg)
+            draw_rect(btn_x, TASKBAR_Y + 2, 80, 24, COLOR_LIGHT_GRAY)
+            let title_addr = win_get_title_addr(id)
+            draw_text_str(btn_x + 4, TASKBAR_Y + 6, title_addr, COLOR_WHITE, 0)
+            btn_x = btn_x + 84
+        }
+        id = id + 1
+    }
+
+    // Clock (right side)
+    let clock_str: i64 = 0x1F41100
+    volatile_write_u8(clock_str + 0, 49)  // '1'
+    volatile_write_u8(clock_str + 1, 50)  // '2'
+    volatile_write_u8(clock_str + 2, 58)  // ':'
+    volatile_write_u8(clock_str + 3, 48)  // '0'
+    volatile_write_u8(clock_str + 4, 48)  // '0'
+    volatile_write_u8(clock_str + 5, 0)
+    draw_text_str(FB_WIDTH - 48, TASKBAR_Y + 6, clock_str, COLOR_WHITE, 0)
+}
+
+// ── N1.2.9: Mouse cursor ──
+
+const MOUSE_STATE: i64 = 0x1F42000
+const MOUSE_X: i64 = 0
+const MOUSE_Y: i64 = 4
+const MOUSE_BUTTONS: i64 = 8   // bit0=left, bit1=right, bit2=middle
+
+@kernel fn mouse_init() {
+    volatile_write_u32(MOUSE_STATE + MOUSE_X, FB_WIDTH / 2)
+    volatile_write_u32(MOUSE_STATE + MOUSE_Y, FB_HEIGHT / 2)
+    volatile_write_u32(MOUSE_STATE + MOUSE_BUTTONS, 0)
+}
+
+@kernel fn mouse_update(dx: i64, dy: i64, buttons: i64) {
+    let mut x = volatile_read_u32(MOUSE_STATE + MOUSE_X) + dx
+    let mut y = volatile_read_u32(MOUSE_STATE + MOUSE_Y) + dy
+    if x < 0 { x = 0 }
+    if y < 0 { y = 0 }
+    if x >= FB_WIDTH { x = FB_WIDTH - 1 }
+    if y >= FB_HEIGHT { y = FB_HEIGHT - 1 }
+    volatile_write_u32(MOUSE_STATE + MOUSE_X, x)
+    volatile_write_u32(MOUSE_STATE + MOUSE_Y, y)
+    volatile_write_u32(MOUSE_STATE + MOUSE_BUTTONS, buttons)
+}
+
+@kernel fn draw_cursor(x: i64, y: i64) {
+    // Arrow cursor (12x16 pixels)
+    // Row 0: X
+    // Row 1: XX
+    // Row 2: XXX
+    // ... etc
+    let mut row: i64 = 0
+    while row < 16 {
+        let mut col: i64 = 0
+        let width = if row < 12 { row + 1 } else { 12 - (row - 11) }
+        while col < width {
+            if col == 0 { draw_pixel(x + col, y + row, COLOR_BLACK) }
+            else if col == width - 1 { draw_pixel(x + col, y + row, COLOR_BLACK) }
+            else if row == width - 1 { draw_pixel(x + col, y + row, COLOR_BLACK) }
+            else { draw_pixel(x + col, y + row, COLOR_WHITE) }
+            col = col + 1
+        }
+        row = row + 1
+    }
+}
+
+// ── N1.2.10: Focus management ──
+
+@kernel fn wm_focus_window(id: i64) {
+    let mut i: i64 = 0
+    while i < WIN_MAX {
+        if win_get(i, WIN_OFF_ACTIVE) != 0 {
+            let flags = win_get(i, WIN_OFF_FLAGS)
+            if i == id {
+                win_set(i, WIN_OFF_FLAGS, flags | 1)  // set focused
+            } else {
+                win_set(i, WIN_OFF_FLAGS, flags & 0xFFFFFFFE)  // clear focused
+            }
+        }
+        i = i + 1
+    }
+    wm_raise_window(id)
+}
+
+@kernel fn wm_hit_test(mx: i64, my: i64) -> i64 {
+    // Find topmost window under cursor (highest Z)
+    let mut best_id: i64 = -1
+    let mut best_z: i64 = -1
+    let mut id: i64 = 0
+    while id < WIN_MAX {
+        if win_get(id, WIN_OFF_ACTIVE) != 0 {
+            let x = win_get(id, WIN_OFF_X)
+            let y = win_get(id, WIN_OFF_Y)
+            let w = win_get(id, WIN_OFF_W)
+            let h = win_get(id, WIN_OFF_H)
+            let z = win_get(id, WIN_OFF_Z)
+            if mx >= x { if mx < x + w { if my >= y { if my < y + h {
+                if z > best_z { best_z = z; best_id = id }
+            } } } }
+        }
+        id = id + 1
+    }
+    best_id
+}
+
+// ── Composite: full redraw ──
+
+@kernel fn wm_redraw_all() {
+    wm_draw_desktop()
+
+    // Sort windows by Z and render
+    let mut z: i64 = 0
+    while z < WIN_MAX * 2 {
+        let mut id: i64 = 0
+        while id < WIN_MAX {
+            if win_get(id, WIN_OFF_ACTIVE) != 0 {
+                if win_get(id, WIN_OFF_Z) == z {
+                    wm_render_window(id)
+                }
+            }
+            id = id + 1
+        }
+        z = z + 1
+    }
+
+    wm_draw_taskbar()
+
+    // Mouse cursor on top
+    let mx = volatile_read_u32(MOUSE_STATE + MOUSE_X)
+    let my = volatile_read_u32(MOUSE_STATE + MOUSE_Y)
+    draw_cursor(mx, my)
+
+    fb_swap()
+}
+
+// ── N1.2.10: Demo — 3 windows ──
+
+@kernel fn demo_3_windows() {
+    gpu_init()
+    font_init()
+    mouse_init()
+
+    // Initialize window table
+    let mut i: i64 = 0
+    while i < WIN_MAX { win_set(i, WIN_OFF_ACTIVE, 0); i = i + 1 }
+
+    // Create 3 windows
+    let title1: i64 = 0x1F50000
+    volatile_write_u8(title1, 70); volatile_write_u8(title1+1, 105); volatile_write_u8(title1+2, 108)
+    volatile_write_u8(title1+3, 101); volatile_write_u8(title1+4, 115); volatile_write_u8(title1+5, 0) // "Files"
+
+    let title2: i64 = 0x1F50020
+    volatile_write_u8(title2, 69); volatile_write_u8(title2+1, 100); volatile_write_u8(title2+2, 105)
+    volatile_write_u8(title2+3, 116); volatile_write_u8(title2+4, 0) // "Edit"
+
+    let title3: i64 = 0x1F50040
+    volatile_write_u8(title3, 84); volatile_write_u8(title3+1, 101); volatile_write_u8(title3+2, 114)
+    volatile_write_u8(title3+3, 109); volatile_write_u8(title3+4, 0) // "Term"
+
+    let w1 = create_window(title1, 5, 50, 40, 250, 200)
+    let w2 = create_window(title2, 4, 150, 80, 300, 250)
+    let w3 = create_window(title3, 4, 280, 120, 320, 200)
+
+    wm_redraw_all()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N1.3: Widget Toolkit
+// ═══════════════════════════════════════════════════════════════
+
+// Widget types
+const WIDGET_NONE: i64 = 0
+const WIDGET_BUTTON: i64 = 1
+const WIDGET_LABEL: i64 = 2
+const WIDGET_TEXTINPUT: i64 = 3
+const WIDGET_CHECKBOX: i64 = 4
+const WIDGET_LISTVIEW: i64 = 5
+
+// Widget table (per window, max 32 widgets)
+const WIDGET_MAX: i64 = 32
+const WIDGET_ENTRY_SIZE: i64 = 96
+const WIDGET_TABLE: i64 = 0x1F60000  // 32 * 96 * 16 windows = 49152 bytes
+
+// Widget fields
+const WG_OFF_TYPE: i64 = 0
+const WG_OFF_X: i64 = 4
+const WG_OFF_Y: i64 = 8
+const WG_OFF_W: i64 = 12
+const WG_OFF_H: i64 = 16
+const WG_OFF_STATE: i64 = 20    // bit0=hover, bit1=pressed, bit2=checked, bit3=focused
+const WG_OFF_TEXT: i64 = 24     // 32-byte text
+const WG_OFF_CALLBACK: i64 = 56 // function pointer for click handler
+const WG_OFF_SCROLL: i64 = 60   // scroll offset (listview)
+const WG_OFF_CURSOR: i64 = 64   // cursor position (textinput)
+const WG_OFF_WIN_ID: i64 = 68   // parent window
+
+@kernel fn widget_addr(win_id: i64, wg_id: i64) -> i64 {
+    WIDGET_TABLE + (win_id * WIDGET_MAX + wg_id) * WIDGET_ENTRY_SIZE
+}
+
+@kernel fn widget_get(win_id: i64, wg_id: i64, off: i64) -> i64 {
+    volatile_read_u32(widget_addr(win_id, wg_id) + off)
+}
+
+@kernel fn widget_set(win_id: i64, wg_id: i64, off: i64, val: i64) {
+    volatile_write_u32(widget_addr(win_id, wg_id) + off, val)
+}
+
+// ── N1.3.1: Button widget ──
+
+@kernel fn button_create(win_id: i64, x: i64, y: i64, w: i64, h: i64, text_addr: i64, text_len: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) == WIDGET_NONE {
+            widget_set(win_id, wg_id, WG_OFF_TYPE, WIDGET_BUTTON)
+            widget_set(win_id, wg_id, WG_OFF_X, x)
+            widget_set(win_id, wg_id, WG_OFF_Y, y)
+            widget_set(win_id, wg_id, WG_OFF_W, w)
+            widget_set(win_id, wg_id, WG_OFF_H, h)
+            widget_set(win_id, wg_id, WG_OFF_STATE, 0)
+            widget_set(win_id, wg_id, WG_OFF_WIN_ID, win_id)
+            // Copy text
+            let dst = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+            let mut i: i64 = 0
+            while i < text_len {
+                if i >= 31 { break }
+                volatile_write_u8(dst + i, volatile_read_u8(text_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(dst + i, 0)
+            return wg_id
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+@kernel fn button_render(win_id: i64, wg_id: i64, base_x: i64, base_y: i64) {
+    let x = base_x + widget_get(win_id, wg_id, WG_OFF_X)
+    let y = base_y + widget_get(win_id, wg_id, WG_OFF_Y)
+    let w = widget_get(win_id, wg_id, WG_OFF_W)
+    let h = widget_get(win_id, wg_id, WG_OFF_H)
+    let state = widget_get(win_id, wg_id, WG_OFF_STATE)
+
+    let pressed = (state & 2) != 0
+    let hover = (state & 1) != 0
+
+    let bg = if pressed { COLOR_DARK_GRAY } else { if hover { COLOR_LIGHT_GRAY } else { COLOR_GRAY } }
+    fill_rect(x, y, w, h, bg)
+    draw_rect(x, y, w, h, COLOR_WHITE)
+
+    // 3D effect
+    if !pressed {
+        draw_line(x, y, x + w - 1, y, COLOR_WHITE)        // highlight top
+        draw_line(x, y, x, y + h - 1, COLOR_WHITE)        // highlight left
+        draw_line(x + w - 1, y, x + w - 1, y + h - 1, COLOR_DARK_GRAY) // shadow right
+        draw_line(x, y + h - 1, x + w - 1, y + h - 1, COLOR_DARK_GRAY) // shadow bottom
+    }
+
+    let text_addr = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+    draw_text_str(x + 6, y + (h - 16) / 2, text_addr, COLOR_BLACK, 0)
+}
+
+// ── N1.3.2: Label widget ──
+
+@kernel fn label_create(win_id: i64, x: i64, y: i64, text_addr: i64, text_len: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) == WIDGET_NONE {
+            widget_set(win_id, wg_id, WG_OFF_TYPE, WIDGET_LABEL)
+            widget_set(win_id, wg_id, WG_OFF_X, x)
+            widget_set(win_id, wg_id, WG_OFF_Y, y)
+            widget_set(win_id, wg_id, WG_OFF_W, text_len * FONT_WIDTH)
+            widget_set(win_id, wg_id, WG_OFF_H, FONT_HEIGHT)
+            let dst = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+            let mut i: i64 = 0
+            while i < text_len {
+                if i >= 31 { break }
+                volatile_write_u8(dst + i, volatile_read_u8(text_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(dst + i, 0)
+            return wg_id
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+@kernel fn label_render(win_id: i64, wg_id: i64, base_x: i64, base_y: i64) {
+    let x = base_x + widget_get(win_id, wg_id, WG_OFF_X)
+    let y = base_y + widget_get(win_id, wg_id, WG_OFF_Y)
+    let text_addr = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+    draw_text_str(x, y, text_addr, COLOR_BLACK, 0)
+}
+
+// ── N1.3.3: TextInput widget ──
+
+@kernel fn textinput_create(win_id: i64, x: i64, y: i64, w: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) == WIDGET_NONE {
+            widget_set(win_id, wg_id, WG_OFF_TYPE, WIDGET_TEXTINPUT)
+            widget_set(win_id, wg_id, WG_OFF_X, x)
+            widget_set(win_id, wg_id, WG_OFF_Y, y)
+            widget_set(win_id, wg_id, WG_OFF_W, w)
+            widget_set(win_id, wg_id, WG_OFF_H, 22)
+            widget_set(win_id, wg_id, WG_OFF_CURSOR, 0)
+            // Clear text buffer
+            let dst = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+            volatile_write_u8(dst, 0)
+            return wg_id
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+@kernel fn textinput_render(win_id: i64, wg_id: i64, base_x: i64, base_y: i64) {
+    let x = base_x + widget_get(win_id, wg_id, WG_OFF_X)
+    let y = base_y + widget_get(win_id, wg_id, WG_OFF_Y)
+    let w = widget_get(win_id, wg_id, WG_OFF_W)
+    let focused = (widget_get(win_id, wg_id, WG_OFF_STATE) & 8) != 0
+
+    // Background
+    fill_rect(x, y, w, 22, COLOR_WHITE)
+    let border = if focused { COLOR_BLUE } else { COLOR_GRAY }
+    draw_rect(x, y, w, 22, border)
+
+    // Text
+    let text_addr = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+    draw_text_str(x + 4, y + 3, text_addr, COLOR_BLACK, 0)
+
+    // Cursor blink
+    if focused {
+        let cursor_pos = widget_get(win_id, wg_id, WG_OFF_CURSOR)
+        let cx = x + 4 + cursor_pos * FONT_WIDTH
+        draw_line(cx, y + 2, cx, y + 19, COLOR_BLACK)
+    }
+}
+
+@kernel fn textinput_key(win_id: i64, wg_id: i64, key: i64) {
+    let text_addr = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+    let mut cursor = widget_get(win_id, wg_id, WG_OFF_CURSOR)
+
+    if key == 8 {  // backspace
+        if cursor > 0 {
+            cursor = cursor - 1
+            // Shift left
+            let mut i = cursor
+            while i < 30 {
+                let next = volatile_read_u8(text_addr + i + 1)
+                volatile_write_u8(text_addr + i, next)
+                if next == 0 { break }
+                i = i + 1
+            }
+            widget_set(win_id, wg_id, WG_OFF_CURSOR, cursor)
+        }
+    } else if key >= 32 {
+        if key < 127 {
+            if cursor < 30 {
+                // Shift right
+                let mut i: i64 = 30
+                while i > cursor {
+                    volatile_write_u8(text_addr + i, volatile_read_u8(text_addr + i - 1))
+                    i = i - 1
+                }
+                volatile_write_u8(text_addr + cursor, key)
+                cursor = cursor + 1
+                volatile_write_u8(text_addr + 31, 0)  // ensure null terminated
+                widget_set(win_id, wg_id, WG_OFF_CURSOR, cursor)
+            }
+        }
+    }
+}
+
+// ── N1.3.4: Checkbox widget ──
+
+@kernel fn checkbox_create(win_id: i64, x: i64, y: i64, text_addr: i64, text_len: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) == WIDGET_NONE {
+            widget_set(win_id, wg_id, WG_OFF_TYPE, WIDGET_CHECKBOX)
+            widget_set(win_id, wg_id, WG_OFF_X, x)
+            widget_set(win_id, wg_id, WG_OFF_Y, y)
+            widget_set(win_id, wg_id, WG_OFF_W, 16 + text_len * FONT_WIDTH + 4)
+            widget_set(win_id, wg_id, WG_OFF_H, 16)
+            widget_set(win_id, wg_id, WG_OFF_STATE, 0)
+            let dst = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+            let mut i: i64 = 0
+            while i < text_len {
+                if i >= 31 { break }
+                volatile_write_u8(dst + i, volatile_read_u8(text_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(dst + i, 0)
+            return wg_id
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+@kernel fn checkbox_render(win_id: i64, wg_id: i64, base_x: i64, base_y: i64) {
+    let x = base_x + widget_get(win_id, wg_id, WG_OFF_X)
+    let y = base_y + widget_get(win_id, wg_id, WG_OFF_Y)
+    let checked = (widget_get(win_id, wg_id, WG_OFF_STATE) & 4) != 0
+
+    // Box
+    fill_rect(x, y, 14, 14, COLOR_WHITE)
+    draw_rect(x, y, 14, 14, COLOR_GRAY)
+
+    // Checkmark
+    if checked {
+        draw_line(x + 2, y + 7, x + 5, y + 11, COLOR_BLUE)
+        draw_line(x + 5, y + 11, x + 11, y + 3, COLOR_BLUE)
+    }
+
+    // Label
+    let text_addr = widget_addr(win_id, wg_id) + WG_OFF_TEXT
+    draw_text_str(x + 18, y, text_addr, COLOR_BLACK, 0)
+}
+
+@kernel fn checkbox_toggle(win_id: i64, wg_id: i64) {
+    let state = widget_get(win_id, wg_id, WG_OFF_STATE)
+    widget_set(win_id, wg_id, WG_OFF_STATE, state ^ 4)  // toggle checked
+}
+
+// ── N1.3.5: ListView widget ──
+
+const LISTVIEW_ITEM_HEIGHT: i64 = 20
+const LISTVIEW_ITEMS_BASE: i64 = 0x1F80000  // list item storage
+const LISTVIEW_MAX_ITEMS: i64 = 64
+
+@kernel fn listview_create(win_id: i64, x: i64, y: i64, w: i64, h: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) == WIDGET_NONE {
+            widget_set(win_id, wg_id, WG_OFF_TYPE, WIDGET_LISTVIEW)
+            widget_set(win_id, wg_id, WG_OFF_X, x)
+            widget_set(win_id, wg_id, WG_OFF_Y, y)
+            widget_set(win_id, wg_id, WG_OFF_W, w)
+            widget_set(win_id, wg_id, WG_OFF_H, h)
+            widget_set(win_id, wg_id, WG_OFF_SCROLL, 0)
+            return wg_id
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+@kernel fn listview_render(win_id: i64, wg_id: i64, base_x: i64, base_y: i64) {
+    let x = base_x + widget_get(win_id, wg_id, WG_OFF_X)
+    let y = base_y + widget_get(win_id, wg_id, WG_OFF_Y)
+    let w = widget_get(win_id, wg_id, WG_OFF_W)
+    let h = widget_get(win_id, wg_id, WG_OFF_H)
+    let scroll = widget_get(win_id, wg_id, WG_OFF_SCROLL)
+
+    fill_rect(x, y, w, h, COLOR_WHITE)
+    draw_rect(x, y, w, h, COLOR_GRAY)
+
+    // Scrollbar track
+    fill_rect(x + w - 14, y + 1, 13, h - 2, COLOR_LIGHT_GRAY)
+
+    // Render visible items
+    let visible = h / LISTVIEW_ITEM_HEIGHT
+    let mut i: i64 = 0
+    while i < visible {
+        let item_idx = scroll + i
+        if item_idx >= LISTVIEW_MAX_ITEMS { break }
+        let item_addr = LISTVIEW_ITEMS_BASE + item_idx * 32
+        let first_byte = volatile_read_u8(item_addr)
+        if first_byte == 0 { break }  // end of items
+
+        let iy = y + i * LISTVIEW_ITEM_HEIGHT
+        // Alternating row colors
+        if (i & 1) == 0 {
+            fill_rect(x + 1, iy, w - 15, LISTVIEW_ITEM_HEIGHT, COLOR_WHITE)
+        } else {
+            fill_rect(x + 1, iy, w - 15, LISTVIEW_ITEM_HEIGHT, 0xFFF0F0F0)
+        }
+        draw_text_str(x + 4, iy + 2, item_addr, COLOR_BLACK, 0)
+        i = i + 1
+    }
+}
+
+// ── N1.3.6-7: Layout (vertical + horizontal stack) ──
+
+const LAYOUT_VERTICAL: i64 = 0
+const LAYOUT_HORIZONTAL: i64 = 1
+
+@kernel fn layout_stack(win_id: i64, widgets: i64, count: i64, direction: i64, start_x: i64, start_y: i64, spacing: i64) {
+    let mut offset: i64 = 0
+    let mut i: i64 = 0
+    while i < count {
+        let wg_id = volatile_read_u32(widgets + i * 4)
+        if direction == LAYOUT_VERTICAL {
+            widget_set(win_id, wg_id, WG_OFF_X, start_x)
+            widget_set(win_id, wg_id, WG_OFF_Y, start_y + offset)
+            offset = offset + widget_get(win_id, wg_id, WG_OFF_H) + spacing
+        } else {
+            widget_set(win_id, wg_id, WG_OFF_X, start_x + offset)
+            widget_set(win_id, wg_id, WG_OFF_Y, start_y)
+            offset = offset + widget_get(win_id, wg_id, WG_OFF_W) + spacing
+        }
+        i = i + 1
+    }
+}
+
+// ── N1.3.8: Event system ──
+
+const EVENT_CLICK: i64 = 1
+const EVENT_KEY: i64 = 2
+const EVENT_MOUSE_MOVE: i64 = 3
+
+@kernel fn widget_dispatch_click(win_id: i64, local_x: i64, local_y: i64) -> i64 {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        let wtype = widget_get(win_id, wg_id, WG_OFF_TYPE)
+        if wtype != WIDGET_NONE {
+            let x = widget_get(win_id, wg_id, WG_OFF_X)
+            let y = widget_get(win_id, wg_id, WG_OFF_Y)
+            let w = widget_get(win_id, wg_id, WG_OFF_W)
+            let h = widget_get(win_id, wg_id, WG_OFF_H)
+            if local_x >= x { if local_x < x + w { if local_y >= y { if local_y < y + h {
+                // Hit!
+                if wtype == WIDGET_BUTTON {
+                    let state = widget_get(win_id, wg_id, WG_OFF_STATE)
+                    widget_set(win_id, wg_id, WG_OFF_STATE, state | 2)  // pressed
+                    return wg_id
+                }
+                if wtype == WIDGET_CHECKBOX {
+                    checkbox_toggle(win_id, wg_id)
+                    return wg_id
+                }
+                if wtype == WIDGET_TEXTINPUT {
+                    // Focus this input, unfocus others
+                    widget_focus(win_id, wg_id)
+                    return wg_id
+                }
+                return wg_id
+            } } } }
+        }
+        wg_id = wg_id + 1
+    }
+    -1
+}
+
+// ── N1.3.9: Focus management (Tab key) ──
+
+@kernel fn widget_focus(win_id: i64, target: i64) {
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        let wtype = widget_get(win_id, wg_id, WG_OFF_TYPE)
+        if wtype != WIDGET_NONE {
+            let state = widget_get(win_id, wg_id, WG_OFF_STATE)
+            if wg_id == target {
+                widget_set(win_id, wg_id, WG_OFF_STATE, state | 8)
+            } else {
+                widget_set(win_id, wg_id, WG_OFF_STATE, state & 0xFFFFFFF7)
+            }
+        }
+        wg_id = wg_id + 1
+    }
+}
+
+@kernel fn widget_tab_next(win_id: i64) {
+    // Find currently focused widget
+    let mut current: i64 = -1
+    let mut wg_id: i64 = 0
+    while wg_id < WIDGET_MAX {
+        if widget_get(win_id, wg_id, WG_OFF_TYPE) != WIDGET_NONE {
+            if (widget_get(win_id, wg_id, WG_OFF_STATE) & 8) != 0 {
+                current = wg_id
+            }
+        }
+        wg_id = wg_id + 1
+    }
+
+    // Find next focusable widget
+    let start = if current >= 0 { current + 1 } else { 0 }
+    let mut i: i64 = 0
+    while i < WIDGET_MAX {
+        let idx = (start + i) % WIDGET_MAX
+        let wtype = widget_get(win_id, idx, WG_OFF_TYPE)
+        if wtype == WIDGET_TEXTINPUT { widget_focus(win_id, idx); return }
+        if wtype == WIDGET_BUTTON { widget_focus(win_id, idx); return }
+        if wtype == WIDGET_CHECKBOX { widget_focus(win_id, idx); return }
+        i = i + 1
+    }
+}
+
+// ── N1.3.10: Demo — calculator app ──
+
+@kernel fn demo_calculator() {
+    gpu_init()
+    font_init()
+    mouse_init()
+
+    let mut i: i64 = 0
+    while i < WIN_MAX { win_set(i, WIN_OFF_ACTIVE, 0); i = i + 1 }
+
+    let title: i64 = 0x1F50000
+    volatile_write_u8(title, 67); volatile_write_u8(title+1, 97); volatile_write_u8(title+2, 108)
+    volatile_write_u8(title+3, 99); volatile_write_u8(title+4, 0) // "Calc"
+
+    let win = create_window(title, 4, 200, 100, 200, 280)
+
+    // Display (textinput at top)
+    let display = textinput_create(win, 8, 4, 180)
+
+    // Number buttons 0-9
+    let btn_texts: i64 = 0x1F51000
+    let mut d: i64 = 0
+    while d < 10 {
+        volatile_write_u8(btn_texts + d * 4, 48 + d)
+        volatile_write_u8(btn_texts + d * 4 + 1, 0)
+        d = d + 1
+    }
+
+    // Create grid of buttons: 7 8 9 / 4 5 6 * 1 2 3 - 0 = + C
+    let keys: i64 = 0x1F51100
+    // Row 0: 7 8 9 +
+    volatile_write_u8(keys + 0, 55); volatile_write_u8(keys + 1, 0)   // '7'
+    volatile_write_u8(keys + 4, 56); volatile_write_u8(keys + 5, 0)   // '8'
+    volatile_write_u8(keys + 8, 57); volatile_write_u8(keys + 9, 0)   // '9'
+    volatile_write_u8(keys + 12, 47); volatile_write_u8(keys + 13, 0) // '/'
+    // Row 1: 4 5 6 *
+    volatile_write_u8(keys + 16, 52); volatile_write_u8(keys + 17, 0) // '4'
+    volatile_write_u8(keys + 20, 53); volatile_write_u8(keys + 21, 0) // '5'
+    volatile_write_u8(keys + 24, 54); volatile_write_u8(keys + 25, 0) // '6'
+    volatile_write_u8(keys + 28, 42); volatile_write_u8(keys + 29, 0) // '*'
+    // Row 2: 1 2 3 -
+    volatile_write_u8(keys + 32, 49); volatile_write_u8(keys + 33, 0) // '1'
+    volatile_write_u8(keys + 36, 50); volatile_write_u8(keys + 37, 0) // '2'
+    volatile_write_u8(keys + 40, 51); volatile_write_u8(keys + 41, 0) // '3'
+    volatile_write_u8(keys + 44, 45); volatile_write_u8(keys + 45, 0) // '-'
+    // Row 3: 0 = + C
+    volatile_write_u8(keys + 48, 48); volatile_write_u8(keys + 49, 0) // '0'
+    volatile_write_u8(keys + 52, 61); volatile_write_u8(keys + 53, 0) // '='
+    volatile_write_u8(keys + 56, 43); volatile_write_u8(keys + 57, 0) // '+'
+    volatile_write_u8(keys + 60, 67); volatile_write_u8(keys + 61, 0) // 'C'
+
+    let mut row: i64 = 0
+    while row < 4 {
+        let mut col: i64 = 0
+        while col < 4 {
+            let idx = row * 4 + col
+            let text = keys + idx * 4
+            button_create(win, 8 + col * 46, 32 + row * 42, 42, 38, text, 1)
+            col = col + 1
+        }
+        row = row + 1
+    }
+
+    wm_redraw_all()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N1.4: Applications
+// ═══════════════════════════════════════════════════════════════
+
+// ── N1.4.1: Terminal emulator ──
+
+const TERM_COLS: i64 = 80
+const TERM_ROWS: i64 = 24
+const TERM_BUF: i64 = 0x1FA0000    // 80*24*2 = 3840 bytes (char + attr)
+const TERM_CURSOR_X: i64 = 0x1FA1000
+const TERM_CURSOR_Y: i64 = 0x1FA1004
+
+@kernel fn terminal_init() {
+    // Clear terminal buffer
+    let mut i: i64 = 0
+    while i < TERM_COLS * TERM_ROWS * 2 {
+        volatile_write_u8(TERM_BUF + i, 0)
+        i = i + 1
+    }
+    volatile_write_u32(TERM_CURSOR_X, 0)
+    volatile_write_u32(TERM_CURSOR_Y, 0)
+}
+
+@kernel fn terminal_putchar(ch: i64) {
+    let mut cx = volatile_read_u32(TERM_CURSOR_X)
+    let mut cy = volatile_read_u32(TERM_CURSOR_Y)
+
+    if ch == 10 {  // newline
+        cx = 0; cy = cy + 1
+    } else if ch == 13 {  // carriage return
+        cx = 0
+    } else if ch == 8 {  // backspace
+        if cx > 0 { cx = cx - 1 }
+    } else {
+        volatile_write_u8(TERM_BUF + (cy * TERM_COLS + cx) * 2, ch)
+        volatile_write_u8(TERM_BUF + (cy * TERM_COLS + cx) * 2 + 1, 0x0F)  // white on black
+        cx = cx + 1
+    }
+
+    if cx >= TERM_COLS { cx = 0; cy = cy + 1 }
+    if cy >= TERM_ROWS {
+        // Scroll up
+        let mut row: i64 = 0
+        while row < TERM_ROWS - 1 {
+            let mut col: i64 = 0
+            while col < TERM_COLS {
+                let src = TERM_BUF + ((row + 1) * TERM_COLS + col) * 2
+                let dst = TERM_BUF + (row * TERM_COLS + col) * 2
+                volatile_write_u8(dst, volatile_read_u8(src))
+                volatile_write_u8(dst + 1, volatile_read_u8(src + 1))
+                col = col + 1
+            }
+            row = row + 1
+        }
+        // Clear last row
+        let mut col: i64 = 0
+        while col < TERM_COLS {
+            volatile_write_u8(TERM_BUF + ((TERM_ROWS - 1) * TERM_COLS + col) * 2, 0)
+            col = col + 1
+        }
+        cy = TERM_ROWS - 1
+    }
+
+    volatile_write_u32(TERM_CURSOR_X, cx)
+    volatile_write_u32(TERM_CURSOR_Y, cy)
+}
+
+@kernel fn terminal_render_to_window(win_id: i64) {
+    let wx = win_get(win_id, WIN_OFF_X) + BORDER_WIDTH
+    let wy = win_get(win_id, WIN_OFF_Y) + TITLEBAR_HEIGHT
+
+    let mut row: i64 = 0
+    while row < TERM_ROWS {
+        let mut col: i64 = 0
+        while col < TERM_COLS {
+            let ch = volatile_read_u8(TERM_BUF + (row * TERM_COLS + col) * 2)
+            if ch != 0 {
+                draw_char(wx + col * FONT_WIDTH, wy + row * FONT_HEIGHT, ch, COLOR_GREEN, COLOR_BLACK)
+            } else {
+                fill_rect(wx + col * FONT_WIDTH, wy + row * FONT_HEIGHT, FONT_WIDTH, FONT_HEIGHT, COLOR_BLACK)
+            }
+            col = col + 1
+        }
+        row = row + 1
+    }
+
+    // Draw cursor
+    let cx = volatile_read_u32(TERM_CURSOR_X)
+    let cy = volatile_read_u32(TERM_CURSOR_Y)
+    fill_rect(wx + cx * FONT_WIDTH, wy + cy * FONT_HEIGHT, FONT_WIDTH, FONT_HEIGHT, COLOR_GREEN)
+}
+
+// ── N1.4.2: File manager ──
+
+@kernel fn app_file_manager(win_id: i64) {
+    // List files from ramfs
+    let list = listview_create(win_id, 4, 4, 250, 300)
+
+    // Populate from ramfs directory listing
+    let mut entry: i64 = 0
+    let ramfs: i64 = 0x700000
+    while entry < 32 {
+        let entry_addr = ramfs + entry * 64
+        let name_byte = volatile_read_u8(entry_addr)
+        if name_byte == 0 { break }
+        // Copy filename to listview items
+        let item = LISTVIEW_ITEMS_BASE + entry * 32
+        let mut i: i64 = 0
+        while i < 31 {
+            let b = volatile_read_u8(entry_addr + i)
+            if b == 0 { break }
+            volatile_write_u8(item + i, b)
+            i = i + 1
+        }
+        volatile_write_u8(item + i, 0)
+        entry = entry + 1
+    }
+}
+
+// ── N1.4.3: Text editor ──
+
+const EDITOR_BUF: i64 = 0x1FB0000     // 64KB text buffer
+const EDITOR_BUF_SIZE: i64 = 65536
+const EDITOR_CURSOR: i64 = 0x1FC0000  // cursor position
+const EDITOR_LENGTH: i64 = 0x1FC0004  // text length
+const EDITOR_SCROLL_Y: i64 = 0x1FC0008
+
+@kernel fn editor_init() {
+    volatile_write_u32(EDITOR_CURSOR, 0)
+    volatile_write_u32(EDITOR_LENGTH, 0)
+    volatile_write_u32(EDITOR_SCROLL_Y, 0)
+    let mut i: i64 = 0
+    while i < 256 { volatile_write_u8(EDITOR_BUF + i, 0); i = i + 1 }
+}
+
+@kernel fn editor_insert_char(ch: i64) {
+    let pos = volatile_read_u32(EDITOR_CURSOR)
+    let len = volatile_read_u32(EDITOR_LENGTH)
+    if len >= EDITOR_BUF_SIZE - 1 { return }
+
+    // Shift right from pos
+    let mut i = len
+    while i > pos {
+        volatile_write_u8(EDITOR_BUF + i, volatile_read_u8(EDITOR_BUF + i - 1))
+        i = i - 1
+    }
+    volatile_write_u8(EDITOR_BUF + pos, ch)
+    volatile_write_u32(EDITOR_CURSOR, pos + 1)
+    volatile_write_u32(EDITOR_LENGTH, len + 1)
+}
+
+@kernel fn editor_delete_char() {
+    let pos = volatile_read_u32(EDITOR_CURSOR)
+    let len = volatile_read_u32(EDITOR_LENGTH)
+    if pos == 0 { return }
+
+    // Shift left
+    let mut i = pos - 1
+    while i < len - 1 {
+        volatile_write_u8(EDITOR_BUF + i, volatile_read_u8(EDITOR_BUF + i + 1))
+        i = i + 1
+    }
+    volatile_write_u32(EDITOR_CURSOR, pos - 1)
+    volatile_write_u32(EDITOR_LENGTH, len - 1)
+}
+
+@kernel fn editor_render_to_window(win_id: i64) {
+    let wx = win_get(win_id, WIN_OFF_X) + BORDER_WIDTH + 4
+    let wy = win_get(win_id, WIN_OFF_Y) + TITLEBAR_HEIGHT + 2
+    let ww = win_get(win_id, WIN_OFF_W) - BORDER_WIDTH * 2 - 8
+    let wh = win_get(win_id, WIN_OFF_H) - TITLEBAR_HEIGHT - BORDER_WIDTH - 4
+
+    let cols = ww / FONT_WIDTH
+    let rows = wh / FONT_HEIGHT
+    let scroll_y = volatile_read_u32(EDITOR_SCROLL_Y)
+    let len = volatile_read_u32(EDITOR_LENGTH)
+    let cursor_pos = volatile_read_u32(EDITOR_CURSOR)
+
+    // Fill editor background
+    fill_rect(wx - 2, wy - 1, ww + 4, wh + 2, 0xFF1E1E2E)  // dark background
+
+    // Line numbers gutter
+    let gutter_w = 4 * FONT_WIDTH
+    fill_rect(wx - 2, wy - 1, gutter_w, wh + 2, 0xFF2E2E3E)
+
+    // Render text
+    let mut line: i64 = 0
+    let mut col: i64 = 0
+    let mut pos: i64 = 0
+    while pos < len {
+        if line >= scroll_y {
+            if line - scroll_y < rows {
+                let screen_line = line - scroll_y
+                let ch = volatile_read_u8(EDITOR_BUF + pos)
+
+                if ch == 10 {
+                    line = line + 1; col = 0; pos = pos + 1
+                    continue
+                }
+
+                // Syntax highlighting (simple: keywords in cyan, numbers in yellow)
+                let fg = if ch >= 48 { if ch <= 57 { COLOR_YELLOW } else { COLOR_WHITE } } else { COLOR_WHITE }
+
+                draw_char(wx + gutter_w + col * FONT_WIDTH, wy + screen_line * FONT_HEIGHT, ch, fg, 0)
+
+                // Cursor
+                if pos == cursor_pos {
+                    fill_rect(wx + gutter_w + col * FONT_WIDTH, wy + screen_line * FONT_HEIGHT, 2, FONT_HEIGHT, COLOR_CYAN)
+                }
+
+                col = col + 1
+                if col >= cols - 4 { col = 0; line = line + 1 }
+            }
+        } else {
+            let ch = volatile_read_u8(EDITOR_BUF + pos)
+            if ch == 10 { line = line + 1; col = 0 }
+            else { col = col + 1; if col >= cols - 4 { col = 0; line = line + 1 } }
+        }
+        pos = pos + 1
+    }
+
+    // Line numbers
+    let mut ln: i64 = 0
+    while ln < rows {
+        let line_num = scroll_y + ln + 1
+        if line_num <= line + 1 {
+            // Render line number (up to 4 digits)
+            let mut n = line_num
+            let mut digits: i64 = 0
+            let mut tmp = n
+            while tmp > 0 { digits = digits + 1; tmp = tmp / 10 }
+            if digits == 0 { digits = 1 }
+            let mut d = digits - 1
+            while d >= 0 {
+                draw_char(wx + d * FONT_WIDTH, wy + ln * FONT_HEIGHT, 48 + (n % 10), COLOR_GRAY, 0)
+                n = n / 10
+                d = d - 1
+            }
+        }
+        ln = ln + 1
+    }
+}
+
+// ── N1.4.4: System monitor ──
+
+@kernel fn app_sysmon(win_id: i64) {
+    let wx = win_get(win_id, WIN_OFF_X) + BORDER_WIDTH + 4
+    let wy = win_get(win_id, WIN_OFF_Y) + TITLEBAR_HEIGHT + 4
+
+    // CPU usage bars
+    let cpu_title: i64 = 0x1F51200
+    volatile_write_u8(cpu_title, 67); volatile_write_u8(cpu_title+1, 80)
+    volatile_write_u8(cpu_title+2, 85); volatile_write_u8(cpu_title+3, 0) // "CPU"
+    draw_text_str(wx, wy, cpu_title, COLOR_WHITE, 0)
+
+    let mut cpu: i64 = 0
+    while cpu < 4 {
+        let bar_y = wy + 20 + cpu * 18
+        let usage = 20 + cpu * 15  // simulated usage %
+        fill_rect(wx + 40, bar_y, 150, 14, COLOR_DARK_GRAY)
+        let bar_w = usage * 150 / 100
+        let bar_color = if usage > 80 { COLOR_RED } else { if usage > 50 { COLOR_YELLOW } else { COLOR_GREEN } }
+        fill_rect(wx + 40, bar_y, bar_w, 14, bar_color)
+        cpu = cpu + 1
+    }
+
+    // Memory usage
+    let mem_y = wy + 96
+    let mem_title: i64 = 0x1F51210
+    volatile_write_u8(mem_title, 77); volatile_write_u8(mem_title+1, 101)
+    volatile_write_u8(mem_title+2, 109); volatile_write_u8(mem_title+3, 0) // "Mem"
+    draw_text_str(wx, mem_y, mem_title, COLOR_WHITE, 0)
+
+    let used_frames = frame_count_used()
+    let usage_pct = used_frames * 100 / TOTAL_FRAMES
+    fill_rect(wx + 40, mem_y, 150, 14, COLOR_DARK_GRAY)
+    fill_rect(wx + 40, mem_y, usage_pct * 150 / 100, 14, COLOR_CYAN)
+
+    // Process list
+    let proc_y = mem_y + 30
+    let proc_title: i64 = 0x1F51220
+    volatile_write_u8(proc_title, 80); volatile_write_u8(proc_title+1, 73)
+    volatile_write_u8(proc_title+2, 68); volatile_write_u8(proc_title+3, 0) // "PID"
+    draw_text_str(wx, proc_y, proc_title, COLOR_CYAN, 0)
+
+    let name_title: i64 = 0x1F51230
+    volatile_write_u8(name_title, 78); volatile_write_u8(name_title+1, 97)
+    volatile_write_u8(name_title+2, 109); volatile_write_u8(name_title+3, 101)
+    volatile_write_u8(name_title+4, 0) // "Name"
+    draw_text_str(wx + 40, proc_y, name_title, COLOR_CYAN, 0)
+}
+
+@kernel fn frame_count_used() -> i64 {
+    let mut count: i64 = 0
+    let mut i: i64 = 0
+    while i < TOTAL_FRAMES {
+        let byte_idx = i / 8
+        let bit_idx = i % 8
+        let byte = volatile_read_u8(BITMAP_BASE + byte_idx)
+        if (byte & (1 << bit_idx)) != 0 { count = count + 1 }
+        i = i + 1
+    }
+    count
+}
+
+@kernel fn frame_alloc_pages(count: i64) -> i64 {
+    // Simple sequential allocation
+    let mut start: i64 = 2048  // start after reserved area
+    while start + count < TOTAL_FRAMES {
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < count {
+            let byte_idx = (start + j) / 8
+            let bit_idx = (start + j) % 8
+            if (volatile_read_u8(BITMAP_BASE + byte_idx) & (1 << bit_idx)) != 0 { ok = 0; break }
+            j = j + 1
+        }
+        if ok == 1 {
+            let mut j: i64 = 0
+            while j < count { frame_mark_used(start + j); j = j + 1 }
+            return start * FRAME_SIZE
+        }
+        start = start + 1
+    }
+    0  // OOM
+}
+
+@kernel fn frame_free_pages(addr: i64, count: i64) {
+    let start_frame = addr / FRAME_SIZE
+    let mut i: i64 = 0
+    while i < count {
+        let frame = start_frame + i
+        let byte_idx = frame / 8
+        let bit_idx = frame % 8
+        let byte = volatile_read_u8(BITMAP_BASE + byte_idx)
+        volatile_write_u8(BITMAP_BASE + byte_idx, byte & (0xFF ^ (1 << bit_idx)))
+        i = i + 1
+    }
+}
+
+// ── N1.4.5: Image viewer ──
+
+@kernel fn app_image_viewer(win_id: i64, image_addr: i64, img_w: i64, img_h: i64) {
+    let wx = win_get(win_id, WIN_OFF_X) + BORDER_WIDTH
+    let wy = win_get(win_id, WIN_OFF_Y) + TITLEBAR_HEIGHT
+    let ww = win_get(win_id, WIN_OFF_W) - BORDER_WIDTH * 2
+    let wh = win_get(win_id, WIN_OFF_H) - TITLEBAR_HEIGHT - BORDER_WIDTH
+
+    // Scale image to fit window
+    let scale_x = img_w / ww
+    let scale_y = img_h / wh
+    let scale = if scale_x > scale_y { scale_x } else { scale_y }
+    let actual_scale = if scale < 1 { 1 } else { scale }
+
+    let mut y: i64 = 0
+    while y < wh {
+        if y * actual_scale >= img_h { break }
+        let mut x: i64 = 0
+        while x < ww {
+            if x * actual_scale >= img_w { break }
+            let src_offset = (y * actual_scale * img_w + x * actual_scale) * 4
+            let pixel = volatile_read_u32(image_addr + src_offset)
+            draw_pixel(wx + x, wy + y, pixel)
+            x = x + 1
+        }
+        y = y + 1
+    }
+}
+
+// ── N1.4.6: Settings app ──
+
+@kernel fn app_settings(win_id: i64) {
+    // Hostname setting
+    let lbl_host: i64 = 0x1F51300
+    volatile_write_u8(lbl_host, 72); volatile_write_u8(lbl_host+1, 111)
+    volatile_write_u8(lbl_host+2, 115); volatile_write_u8(lbl_host+3, 116)
+    volatile_write_u8(lbl_host+4, 110); volatile_write_u8(lbl_host+5, 97)
+    volatile_write_u8(lbl_host+6, 109); volatile_write_u8(lbl_host+7, 101)
+    volatile_write_u8(lbl_host+8, 58); volatile_write_u8(lbl_host+9, 0) // "Hostname:"
+    label_create(win_id, 10, 10, lbl_host, 9)
+    textinput_create(win_id, 10, 30, 180)
+
+    // Resolution
+    let lbl_res: i64 = 0x1F51320
+    volatile_write_u8(lbl_res, 82); volatile_write_u8(lbl_res+1, 101)
+    volatile_write_u8(lbl_res+2, 115); volatile_write_u8(lbl_res+3, 58)
+    volatile_write_u8(lbl_res+4, 0) // "Res:"
+    label_create(win_id, 10, 60, lbl_res, 4)
+
+    // Theme checkboxes
+    let lbl_dark: i64 = 0x1F51340
+    volatile_write_u8(lbl_dark, 68); volatile_write_u8(lbl_dark+1, 97)
+    volatile_write_u8(lbl_dark+2, 114); volatile_write_u8(lbl_dark+3, 107)
+    volatile_write_u8(lbl_dark+4, 0) // "Dark"
+    checkbox_create(win_id, 10, 90, lbl_dark, 4)
+
+    // Apply button
+    let lbl_apply: i64 = 0x1F51360
+    volatile_write_u8(lbl_apply, 65); volatile_write_u8(lbl_apply+1, 112)
+    volatile_write_u8(lbl_apply+2, 112); volatile_write_u8(lbl_apply+3, 108)
+    volatile_write_u8(lbl_apply+4, 121); volatile_write_u8(lbl_apply+5, 0) // "Apply"
+    button_create(win_id, 10, 130, 80, 28, lbl_apply, 5)
+}
+
+// ── N1.4.7: startx command ──
+
+@kernel fn cmd_startx() {
+    gpu_init()
+    font_init()
+    mouse_init()
+
+    let mut i: i64 = 0
+    while i < WIN_MAX { win_set(i, WIN_OFF_ACTIVE, 0); i = i + 1 }
+
+    // Draw desktop
+    wm_draw_desktop()
+    wm_draw_taskbar()
+    fb_swap()
+
+    // Enter GUI event loop
+    gui_event_loop()
+}
+
+@kernel fn gui_event_loop() {
+    while true {
+        // Poll keyboard
+        let key = keyboard_poll()
+        if key != 0 {
+            // Dispatch to focused window
+            gui_handle_key(key)
+        }
+
+        // Poll mouse (PS/2 or VirtIO-input)
+        let mouse = mouse_poll()
+        if mouse != 0 {
+            gui_handle_mouse(mouse)
+        }
+
+        // Redraw if needed
+        let mut dirty: i64 = 0
+        let mut i: i64 = 0
+        while i < WIN_MAX {
+            if win_get(i, WIN_OFF_ACTIVE) != 0 {
+                if win_get(i, WIN_OFF_DIRTY) != 0 { dirty = 1; win_set(i, WIN_OFF_DIRTY, 0) }
+            }
+            i = i + 1
+        }
+        if dirty != 0 { wm_redraw_all() }
+    }
+}
+
+@kernel fn gui_handle_key(key: i64) {
+    if key == 9 {  // Tab — cycle focus
+        let focused_win = wm_get_focused_window()
+        if focused_win >= 0 { widget_tab_next(focused_win) }
+        return
+    }
+    // Forward to focused window's focused textinput
+    let win = wm_get_focused_window()
+    if win >= 0 {
+        let mut wg: i64 = 0
+        while wg < WIDGET_MAX {
+            if widget_get(win, wg, WG_OFF_TYPE) == WIDGET_TEXTINPUT {
+                if (widget_get(win, wg, WG_OFF_STATE) & 8) != 0 {
+                    textinput_key(win, wg, key)
+                    win_set(win, WIN_OFF_DIRTY, 1)
+                    return
+                }
+            }
+            wg = wg + 1
+        }
+    }
+}
+
+@kernel fn gui_handle_mouse(event: i64) {
+    let dx = (event >> 16) & 0xFFFF
+    let dy = event & 0xFFFF
+    let buttons = (event >> 32) & 0xFF
+    mouse_update(dx, dy, buttons)
+
+    let mx = volatile_read_u32(MOUSE_STATE + MOUSE_X)
+    let my = volatile_read_u32(MOUSE_STATE + MOUSE_Y)
+
+    if (buttons & 1) != 0 {  // left click
+        // Check for drag
+        if volatile_read_u32(DRAG_STATE + DRAG_ACTIVE) != 0 {
+            wm_update_drag(mx, my)
+            return
+        }
+
+        let hit = wm_hit_test(mx, my)
+        if hit >= 0 {
+            wm_focus_window(hit)
+            let wx = win_get(hit, WIN_OFF_X)
+            let wy = win_get(hit, WIN_OFF_Y)
+
+            // Titlebar click → drag
+            if my >= wy { if my < wy + TITLEBAR_HEIGHT {
+                // Check close button
+                let close_x = wx + win_get(hit, WIN_OFF_W) - 18
+                if mx >= close_x { if mx < close_x + 16 {
+                    wm_close_window(hit)
+                    return
+                } }
+                wm_begin_drag(hit, mx, my)
+                return
+            } }
+
+            // Client area click → dispatch to widgets
+            let local_x = mx - wx - BORDER_WIDTH
+            let local_y = my - wy - TITLEBAR_HEIGHT
+            widget_dispatch_click(hit, local_x, local_y)
+            win_set(hit, WIN_OFF_DIRTY, 1)
+        }
+    } else {
+        wm_end_drag()
+    }
+}
+
+@kernel fn wm_get_focused_window() -> i64 {
+    let mut i: i64 = 0
+    while i < WIN_MAX {
+        if win_get(i, WIN_OFF_ACTIVE) != 0 {
+            if (win_get(i, WIN_OFF_FLAGS) & 1) != 0 { return i }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn keyboard_poll() -> i64 {
+    // PS/2 keyboard port 0x60
+    let status = port_read_u8(0x64)
+    if (status & 1) != 0 { return port_read_u8(0x60) }
+    0
+}
+
+@kernel fn mouse_poll() -> i64 {
+    // Simplified: check VirtIO-input or PS/2 aux
+    0  // no event
+}
+
+// ── N1.4.8: Screenshot ──
+
+@kernel fn cmd_screenshot(filename_addr: i64, filename_len: i64) {
+    // Save framebuffer as raw BGRA bitmap to ramfs
+    // Header: width(4) + height(4) + pixels(640*480*4)
+    let total_size = 8 + FB_SIZE
+    let file_buf = frame_alloc_pages((total_size + 4095) / 4096)
+    if file_buf == 0 { return }
+
+    volatile_write_u32(file_buf, FB_WIDTH)
+    volatile_write_u32(file_buf + 4, FB_HEIGHT)
+
+    // Copy front buffer
+    let mut i: i64 = 0
+    while i < FB_SIZE {
+        volatile_write_u8(file_buf + 8 + i, volatile_read_u8(FB_FRONT + i))
+        i = i + 1
+    }
+
+    // Save to ramfs (simplified)
+    ramfs_write_file(filename_addr, filename_len, file_buf, total_size)
+    frame_free_pages(file_buf, (total_size + 4095) / 4096)
+}
+
+@kernel fn ramfs_write_file(name_addr: i64, name_len: i64, data: i64, data_len: i64) {
+    // Find free ramfs entry and write
+    let ramfs: i64 = 0x700000
+    let mut entry: i64 = 0
+    while entry < 32 {
+        let entry_addr = ramfs + entry * 64
+        if volatile_read_u8(entry_addr) == 0 {
+            // Copy name
+            let mut i: i64 = 0
+            while i < name_len {
+                volatile_write_u8(entry_addr + i, volatile_read_u8(name_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(entry_addr + i, 0)
+            // Store data ptr + length
+            volatile_write_u64(entry_addr + 48, data)
+            volatile_write_u32(entry_addr + 56, data_len)
+            return
+        }
+        entry = entry + 1
+    }
+}
+
+// ── N1.4.9: QEMU verification ──
+
+// Run: qemu-system-x86_64 -kernel nova_phoenix.elf -device virtio-gpu-pci \
+//      -device virtio-keyboard-pci -device virtio-mouse-pci -m 256M
+
+// ── N1.4.10: Blog entry (see docs/NOVA_PHOENIX.md) ──
+
+// ═══════════════════════════════════════════════════════════════
+// Entry point — initialize and show desktop
+// ═══════════════════════════════════════════════════════════════
+
+@kernel fn phoenix_gui_main() {
+    gpu_init()
+    font_init()
+    mouse_init()
+    terminal_init()
+    editor_init()
+
+    // Initialize window table
+    let mut i: i64 = 0
+    while i < WIN_MAX { win_set(i, WIN_OFF_ACTIVE, 0); i = i + 1 }
+
+    // Draw desktop
+    wm_draw_desktop()
+    wm_draw_taskbar()
+
+    // Draw startup splash
+    let splash_x = FB_WIDTH / 2 - 100
+    let splash_y = FB_HEIGHT / 2 - 40
+    fill_rect(splash_x, splash_y, 200, 80, COLOR_NAVY)
+    draw_rect(splash_x, splash_y, 200, 80, COLOR_CYAN)
+
+    let splash_title: i64 = 0x1F51400
+    // "FajarOS Nova"
+    volatile_write_u8(splash_title + 0, 70)   // F
+    volatile_write_u8(splash_title + 1, 97)   // a
+    volatile_write_u8(splash_title + 2, 106)  // j
+    volatile_write_u8(splash_title + 3, 97)   // a
+    volatile_write_u8(splash_title + 4, 114)  // r
+    volatile_write_u8(splash_title + 5, 79)   // O
+    volatile_write_u8(splash_title + 6, 83)   // S
+    volatile_write_u8(splash_title + 7, 0)
+    draw_text_str(splash_x + 60, splash_y + 16, splash_title, COLOR_WHITE, 0)
+
+    let splash_ver: i64 = 0x1F51420
+    // "v2.0 Phoenix"
+    volatile_write_u8(splash_ver + 0, 118)  // v
+    volatile_write_u8(splash_ver + 1, 50)   // 2
+    volatile_write_u8(splash_ver + 2, 46)   // .
+    volatile_write_u8(splash_ver + 3, 48)   // 0
+    volatile_write_u8(splash_ver + 4, 32)   // ' '
+    volatile_write_u8(splash_ver + 5, 80)   // P
+    volatile_write_u8(splash_ver + 6, 104)  // h
+    volatile_write_u8(splash_ver + 7, 111)  // o
+    volatile_write_u8(splash_ver + 8, 101)  // e
+    volatile_write_u8(splash_ver + 9, 110)  // n
+    volatile_write_u8(splash_ver + 10, 105) // i
+    volatile_write_u8(splash_ver + 11, 120) // x
+    volatile_write_u8(splash_ver + 12, 0)
+    draw_text_str(splash_x + 48, splash_y + 40, splash_ver, COLOR_CYAN, 0)
+
+    fb_swap()
+}

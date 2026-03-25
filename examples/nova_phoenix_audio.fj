@@ -1,0 +1,599 @@
+// FajarOS Nova v2.0 "Phoenix" — Audio Driver
+// Phase N2: Intel HD Audio (HDA) — detection, codec, PCM, mixer, playback
+// Written 100% in Fajar Lang — bare-metal x86_64
+// Target: QEMU -device intel-hda -device hda-duplex
+
+// ═══════════════════════════════════════════════════════════════
+// N2.1: Intel HDA Controller Detection + Init
+// ═══════════════════════════════════════════════════════════════
+
+// PCI configuration
+const HDA_VENDOR_INTEL: i64 = 0x8086
+const HDA_DEVICE_ICH6: i64 = 0x2668
+const HDA_DEVICE_ICH9: i64 = 0x293E
+
+// HDA MMIO registers (BAR0)
+const HDA_BASE: i64 = 0xFEBD0000     // typical QEMU intel-hda BAR0
+const HDA_GCAP: i64 = 0x00           // Global Capabilities (16-bit)
+const HDA_VMIN: i64 = 0x02           // Minor Version
+const HDA_VMAJ: i64 = 0x03           // Major Version
+const HDA_OUTPAY: i64 = 0x04         // Output Payload Capability
+const HDA_INPAY: i64 = 0x06          // Input Payload Capability
+const HDA_GCTL: i64 = 0x08           // Global Control
+const HDA_WAKEEN: i64 = 0x0C         // Wake Enable
+const HDA_STATESTS: i64 = 0x0E       // State Change Status
+const HDA_GSTS: i64 = 0x10           // Global Status
+const HDA_INTCTL: i64 = 0x20         // Interrupt Control
+const HDA_INTSTS: i64 = 0x24         // Interrupt Status
+
+// CORB/RIRB (Command/Response buffers)
+const HDA_CORBLBASE: i64 = 0x40
+const HDA_CORBUBASE: i64 = 0x44
+const HDA_CORBWP: i64 = 0x48         // Write Pointer
+const HDA_CORBRP: i64 = 0x4A         // Read Pointer
+const HDA_CORBCTL: i64 = 0x4C
+const HDA_CORBSTS: i64 = 0x4D
+const HDA_CORBSIZE: i64 = 0x4E
+
+const HDA_RIRBLBASE: i64 = 0x50
+const HDA_RIRBUBASE: i64 = 0x54
+const HDA_RIRBWP: i64 = 0x58
+const HDA_RINTCNT: i64 = 0x5A
+const HDA_RIRBCTL: i64 = 0x5C
+const HDA_RIRBSTS: i64 = 0x5D
+const HDA_RIRBSIZE: i64 = 0x5E
+
+// Stream descriptors (output stream 0)
+const HDA_SD0_BASE: i64 = 0x80       // first output stream descriptor
+const HDA_SD_CTL: i64 = 0x00         // 24-bit control
+const HDA_SD_STS: i64 = 0x03         // status
+const HDA_SD_LPIB: i64 = 0x04        // link position in buffer
+const HDA_SD_CBL: i64 = 0x08         // cyclic buffer length
+const HDA_SD_LVI: i64 = 0x0C         // last valid index
+const HDA_SD_FMT: i64 = 0x12         // stream format
+const HDA_SD_BDPL: i64 = 0x18        // BDL pointer low
+const HDA_SD_BDPU: i64 = 0x1C        // BDL pointer high
+
+// Memory allocations
+const CORB_BUF: i64 = 0x2400000      // 256 entries × 4 bytes = 1KB
+const RIRB_BUF: i64 = 0x2401000      // 256 entries × 8 bytes = 2KB
+const BDL_BUF: i64 = 0x2402000       // Buffer Descriptor List (256 entries × 16 bytes)
+const AUDIO_BUF: i64 = 0x2410000     // Audio DMA buffer (256KB ring buffer)
+const AUDIO_BUF_SIZE: i64 = 262144   // 256KB
+const MIXER_STATE: i64 = 0x2460000   // Mixer volume/mute state
+
+// N2.1.1: PCI detection
+
+@kernel fn hda_pci_detect() -> i64 {
+    // Scan PCI bus for Intel HDA controller
+    let mut bus: i64 = 0
+    while bus < 256 {
+        let mut dev: i64 = 0
+        while dev < 32 {
+            let vendor = pci_config_read16(bus, dev, 0, 0x00)
+            let device = pci_config_read16(bus, dev, 0, 0x02)
+            let class = pci_config_read8(bus, dev, 0, 0x0B)
+            let subclass = pci_config_read8(bus, dev, 0, 0x0A)
+
+            // Audio device: class 0x04, subclass 0x03 (HD Audio)
+            if class == 0x04 {
+                if subclass == 0x03 {
+                    return (bus << 16) | (dev << 8) | 1  // found
+                }
+            }
+            dev = dev + 1
+        }
+        bus = bus + 1
+    }
+    0  // not found
+}
+
+@kernel fn pci_config_read8(bus: i64, dev: i64, func: i64, offset: i64) -> i64 {
+    let addr = 0x80000000 | (bus << 16) | (dev << 11) | (func << 8) | (offset & 0xFC)
+    port_write_u32(0xCF8, addr)
+    let val = port_read_u32(0xCFC)
+    (val >> ((offset & 3) * 8)) & 0xFF
+}
+
+@kernel fn pci_config_read16(bus: i64, dev: i64, func: i64, offset: i64) -> i64 {
+    let addr = 0x80000000 | (bus << 16) | (dev << 11) | (func << 8) | (offset & 0xFC)
+    port_write_u32(0xCF8, addr)
+    let val = port_read_u32(0xCFC)
+    (val >> ((offset & 2) * 8)) & 0xFFFF
+}
+
+@kernel fn pci_config_write16(bus: i64, dev: i64, func: i64, offset: i64, value: i64) {
+    let addr = 0x80000000 | (bus << 16) | (dev << 11) | (func << 8) | (offset & 0xFC)
+    port_write_u32(0xCF8, addr)
+    let old = port_read_u32(0xCFC)
+    let shift = (offset & 2) * 8
+    let mask = 0xFFFF << shift
+    let new_val = (old & (0xFFFFFFFF ^ mask)) | ((value & 0xFFFF) << shift)
+    port_write_u32(0xCFC, new_val)
+}
+
+// N2.1.2: Controller reset + init
+
+@kernel fn hda_init() -> i64 {
+    let pci = hda_pci_detect()
+    if pci == 0 { return -1 }  // no HDA controller
+
+    // Enable PCI bus master + memory space
+    let bus = (pci >> 16) & 0xFF
+    let dev = (pci >> 8) & 0xFF
+    let cmd = pci_config_read16(bus, dev, 0, 0x04)
+    pci_config_write16(bus, dev, 0, 0x04, cmd | 0x06)  // bus master + memory
+
+    // Reset controller
+    volatile_write_u32(HDA_BASE + HDA_GCTL, 0)  // enter reset
+    let mut i: i64 = 0
+    while i < 1000 { i = i + 1 }  // wait
+    volatile_write_u32(HDA_BASE + HDA_GCTL, 1)  // exit reset
+
+    // Wait for reset complete
+    i = 0
+    while i < 100000 {
+        if (volatile_read_u32(HDA_BASE + HDA_GCTL) & 1) != 0 { break }
+        i = i + 1
+    }
+
+    // Wait for codec detection
+    i = 0
+    while i < 100000 {
+        let statests = volatile_read_u16(HDA_BASE + HDA_STATESTS)
+        if statests != 0 { break }
+        i = i + 1
+    }
+
+    // Setup CORB
+    volatile_write_u32(HDA_BASE + HDA_CORBLBASE, CORB_BUF)
+    volatile_write_u32(HDA_BASE + HDA_CORBUBASE, 0)
+    volatile_write_u8(HDA_BASE + HDA_CORBSIZE, 0x02)  // 256 entries
+    volatile_write_u16(HDA_BASE + HDA_CORBRP, 0x8000)  // reset read pointer
+    i = 0
+    while i < 10000 {
+        if (volatile_read_u16(HDA_BASE + HDA_CORBRP) & 0x8000) != 0 { break }
+        i = i + 1
+    }
+    volatile_write_u16(HDA_BASE + HDA_CORBRP, 0)
+    volatile_write_u8(HDA_BASE + HDA_CORBCTL, 0x02)    // run CORB
+
+    // Setup RIRB
+    volatile_write_u32(HDA_BASE + HDA_RIRBLBASE, RIRB_BUF)
+    volatile_write_u32(HDA_BASE + HDA_RIRBUBASE, 0)
+    volatile_write_u8(HDA_BASE + HDA_RIRBSIZE, 0x02)   // 256 entries
+    volatile_write_u16(HDA_BASE + HDA_RIRBWP, 0x8000)  // reset write pointer
+    volatile_write_u8(HDA_BASE + HDA_RIRBCTL, 0x02)    // run RIRB
+
+    // Enable interrupts
+    volatile_write_u32(HDA_BASE + HDA_INTCTL, 0x80000001)  // global + stream 0
+
+    0  // success
+}
+
+// N2.1.3: Codec communication (CORB/RIRB verbs)
+
+@kernel fn hda_send_verb(codec: i64, node: i64, verb: i64) -> i64 {
+    let cmd = (codec << 28) | (node << 20) | verb
+
+    // Write to CORB
+    let wp = volatile_read_u16(HDA_BASE + HDA_CORBWP) & 0xFF
+    let new_wp = (wp + 1) & 0xFF
+    volatile_write_u32(CORB_BUF + new_wp * 4, cmd)
+    volatile_write_u16(HDA_BASE + HDA_CORBWP, new_wp)
+
+    // Wait for RIRB response
+    let rirb_wp = volatile_read_u16(HDA_BASE + HDA_RIRBWP) & 0xFF
+    let mut timeout: i64 = 0
+    while timeout < 100000 {
+        let new_rirb_wp = volatile_read_u16(HDA_BASE + HDA_RIRBWP) & 0xFF
+        if new_rirb_wp != rirb_wp {
+            let response = volatile_read_u32(RIRB_BUF + new_rirb_wp * 8)
+            return response
+        }
+        timeout = timeout + 1
+    }
+    -1  // timeout
+}
+
+// N2.1.4: Codec enumeration
+
+@kernel fn hda_enumerate_codec(codec: i64) {
+    // Get vendor/device ID
+    let vendor = hda_send_verb(codec, 0, 0xF0000)  // GET_PARAMETER: VendorID
+    let rev = hda_send_verb(codec, 0, 0xF0002)     // GET_PARAMETER: RevisionID
+
+    // Get subordinate node count
+    let sub_nodes = hda_send_verb(codec, 0, 0xF0004)  // GET_PARAMETER: SubNodeCount
+    let start_nid = (sub_nodes >> 16) & 0xFF
+    let num_nodes = sub_nodes & 0xFF
+
+    // Walk function groups → audio widget nodes
+    let mut nid = start_nid
+    while nid < start_nid + num_nodes {
+        let fg_type = hda_send_verb(codec, nid, 0xF0005)  // FunctionGroupType
+        if (fg_type & 0xFF) == 1 {  // Audio Function Group
+            hda_setup_audio_fg(codec, nid)
+        }
+        nid = nid + 1
+    }
+}
+
+@kernel fn hda_setup_audio_fg(codec: i64, afg_nid: i64) {
+    // Power on the AFG
+    hda_send_verb(codec, afg_nid, 0x70500)  // SET_POWER_STATE: D0
+
+    // Get AFG sub-nodes (audio widgets)
+    let sub = hda_send_verb(codec, afg_nid, 0xF0004)
+    let start = (sub >> 16) & 0xFF
+    let count = sub & 0xFF
+
+    // Find output DAC and pin widgets
+    let mut nid = start
+    while nid < start + count {
+        let widget_cap = hda_send_verb(codec, nid, 0xF0009)  // AudioWidgetCap
+        let wtype = (widget_cap >> 20) & 0xF
+
+        if wtype == 0 {       // Audio Output (DAC)
+            hda_setup_dac(codec, nid)
+        } else if wtype == 4 { // Pin Complex
+            hda_setup_pin(codec, nid)
+        }
+        nid = nid + 1
+    }
+}
+
+@kernel fn hda_setup_dac(codec: i64, nid: i64) {
+    // Set stream/channel: stream 1, channel 0
+    hda_send_verb(codec, nid, 0x70600 | (1 << 4) | 0)  // SET_STREAM_CHANNEL
+
+    // Set converter format: 48kHz, 16-bit, stereo
+    hda_send_verb(codec, nid, 0x20000 | 0x0011)  // SET_CONVERTER_FORMAT
+}
+
+@kernel fn hda_setup_pin(codec: i64, nid: i64) {
+    // Check pin capabilities
+    let pin_cap = hda_send_verb(codec, nid, 0xF000C)  // PinCap
+    let has_output = (pin_cap & 0x10) != 0  // Output capable
+
+    if has_output {
+        // Enable pin output
+        let pin_ctl = hda_send_verb(codec, nid, 0xF0700)  // GET_PIN_CONTROL
+        hda_send_verb(codec, nid, 0x70700 | (pin_ctl | 0x40))  // SET_PIN_CONTROL: OUT
+
+        // Set EAPD (external amp)
+        let eapd = hda_send_verb(codec, nid, 0xF0C00)
+        hda_send_verb(codec, nid, 0x70C00 | (eapd | 0x02))  // enable EAPD
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N2.1.5-10: PCM Format + Stream Setup
+// ═══════════════════════════════════════════════════════════════
+
+// PCM formats
+const PCM_FORMAT_16BIT_48K_STEREO: i64 = 0x0011   // base=48k, mult=1, div=1, 16bit, 2ch
+const PCM_FORMAT_16BIT_44K_STEREO: i64 = 0x4011   // base=44.1k, 16bit, 2ch
+const PCM_FORMAT_24BIT_48K_STEREO: i64 = 0x0031   // base=48k, 24bit, 2ch
+
+// Audio state
+const AUDIO_PLAYING: i64 = 0x2460010
+const AUDIO_SAMPLE_RATE: i64 = 0x2460014
+const AUDIO_CHANNELS: i64 = 0x2460018
+const AUDIO_BIT_DEPTH: i64 = 0x246001C
+const AUDIO_WRITE_POS: i64 = 0x2460020
+
+@kernel fn audio_setup_stream(sample_rate: i64, channels: i64, bit_depth: i64) {
+    // Stop stream if running
+    let ctl = volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL)
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL, ctl & 0xFD)  // clear RUN bit
+
+    // Wait for stream to stop
+    let mut i: i64 = 0
+    while i < 10000 {
+        if (volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL) & 0x02) == 0 { break }
+        i = i + 1
+    }
+
+    // Reset stream
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL, 0x01)  // SRST
+    i = 0
+    while i < 10000 {
+        if (volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL) & 0x01) != 0 { break }
+        i = i + 1
+    }
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL, 0)
+
+    // Setup BDL (Buffer Descriptor List) — single buffer, circular
+    volatile_write_u64(BDL_BUF + 0, AUDIO_BUF)           // address
+    volatile_write_u32(BDL_BUF + 8, AUDIO_BUF_SIZE)      // length
+    volatile_write_u32(BDL_BUF + 12, 0x01)               // IOC (interrupt on completion)
+
+    // Point stream descriptor to BDL
+    volatile_write_u32(HDA_BASE + HDA_SD0_BASE + HDA_SD_BDPL, BDL_BUF)
+    volatile_write_u32(HDA_BASE + HDA_SD0_BASE + HDA_SD_BDPU, 0)
+
+    // Set buffer length
+    volatile_write_u32(HDA_BASE + HDA_SD0_BASE + HDA_SD_CBL, AUDIO_BUF_SIZE)
+
+    // Set last valid index (0 = 1 buffer entry)
+    volatile_write_u16(HDA_BASE + HDA_SD0_BASE + HDA_SD_LVI, 0)
+
+    // Set format
+    let fmt = if sample_rate == 44100 { PCM_FORMAT_16BIT_44K_STEREO }
+              else { if bit_depth == 24 { PCM_FORMAT_24BIT_48K_STEREO }
+                     else { PCM_FORMAT_16BIT_48K_STEREO } }
+    volatile_write_u16(HDA_BASE + HDA_SD0_BASE + HDA_SD_FMT, fmt)
+
+    // Set stream number (1) in CTL bits 23:20
+    let ctl_high = volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL + 2)
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL + 2, (ctl_high & 0x0F) | 0x10)
+
+    // Save state
+    volatile_write_u32(AUDIO_SAMPLE_RATE, sample_rate)
+    volatile_write_u32(AUDIO_CHANNELS, channels)
+    volatile_write_u32(AUDIO_BIT_DEPTH, bit_depth)
+    volatile_write_u32(AUDIO_WRITE_POS, 0)
+
+    // Clear audio buffer
+    i = 0
+    while i < AUDIO_BUF_SIZE {
+        volatile_write_u8(AUDIO_BUF + i, 0)
+        i = i + 1
+    }
+}
+
+@kernel fn audio_start() {
+    // Start DMA
+    let ctl = volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL)
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL, ctl | 0x02 | 0x04)  // RUN + IOCE
+    volatile_write_u32(AUDIO_PLAYING, 1)
+}
+
+@kernel fn audio_stop() {
+    let ctl = volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL)
+    volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_CTL, ctl & 0xFD)  // clear RUN
+    volatile_write_u32(AUDIO_PLAYING, 0)
+}
+
+@kernel fn audio_get_position() -> i64 {
+    volatile_read_u32(HDA_BASE + HDA_SD0_BASE + HDA_SD_LPIB)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N2.2: Mixer + Playback + System Sounds
+// ═══════════════════════════════════════════════════════════════
+
+// Mixer channels
+const MIXER_MASTER: i64 = 0
+const MIXER_PCM: i64 = 1
+const MIXER_SYSTEM: i64 = 2
+
+const MIXER_VOL_OFFSET: i64 = 0     // 0-100
+const MIXER_MUTE_OFFSET: i64 = 4    // 0 or 1
+
+@kernel fn mixer_init() {
+    // Default volumes
+    mixer_set_volume(MIXER_MASTER, 80)
+    mixer_set_volume(MIXER_PCM, 100)
+    mixer_set_volume(MIXER_SYSTEM, 60)
+    mixer_set_mute(MIXER_MASTER, 0)
+    mixer_set_mute(MIXER_PCM, 0)
+    mixer_set_mute(MIXER_SYSTEM, 0)
+}
+
+@kernel fn mixer_set_volume(channel: i64, volume: i64) {
+    let vol = if volume > 100 { 100 } else { if volume < 0 { 0 } else { volume } }
+    volatile_write_u32(MIXER_STATE + channel * 8 + MIXER_VOL_OFFSET, vol)
+
+    // Update hardware: send SET_AMP_GAIN to codec
+    // volume 0-100 → HDA gain 0-63
+    let gain = vol * 63 / 100
+    hda_send_verb(0, 2, 0x3B000 | gain | 0xB000)  // output amp, left+right
+}
+
+@kernel fn mixer_get_volume(channel: i64) -> i64 {
+    volatile_read_u32(MIXER_STATE + channel * 8 + MIXER_VOL_OFFSET)
+}
+
+@kernel fn mixer_set_mute(channel: i64, mute: i64) {
+    volatile_write_u32(MIXER_STATE + channel * 8 + MIXER_MUTE_OFFSET, mute)
+    if mute != 0 {
+        hda_send_verb(0, 2, 0x3B080 | 0xB000)  // mute
+    }
+}
+
+// ── Sound generation (sine wave, square wave) ──
+
+@kernel fn audio_generate_sine(freq: i64, duration_ms: i64) {
+    let sample_rate = volatile_read_u32(AUDIO_SAMPLE_RATE)
+    if sample_rate == 0 { return }
+    let total_samples = sample_rate * duration_ms / 1000
+    let samples_per_cycle = sample_rate / freq
+
+    let vol = mixer_get_volume(MIXER_MASTER) * mixer_get_volume(MIXER_SYSTEM) / 100
+
+    let mut pos = volatile_read_u32(AUDIO_WRITE_POS)
+    let mut i: i64 = 0
+    while i < total_samples {
+        // Approximate sine with triangle wave
+        let phase = (i % samples_per_cycle) * 4 / samples_per_cycle  // 0-3
+        let mut sample: i64 = 0
+        if phase == 0 { sample = i % samples_per_cycle * 32767 / (samples_per_cycle / 4) }
+        else if phase == 1 { sample = 32767 - (i % samples_per_cycle - samples_per_cycle / 4) * 32767 / (samples_per_cycle / 4) }
+        else if phase == 2 { sample = 0 - (i % samples_per_cycle - samples_per_cycle / 2) * 32767 / (samples_per_cycle / 4) }
+        else { sample = -32767 + (i % samples_per_cycle - samples_per_cycle * 3 / 4) * 32767 / (samples_per_cycle / 4) }
+
+        sample = sample * vol / 100
+
+        // Write stereo 16-bit sample (little-endian)
+        let buf_pos = pos % AUDIO_BUF_SIZE
+        volatile_write_u16(AUDIO_BUF + buf_pos, sample & 0xFFFF)      // left
+        volatile_write_u16(AUDIO_BUF + buf_pos + 2, sample & 0xFFFF)  // right
+        pos = pos + 4
+        i = i + 1
+    }
+    volatile_write_u32(AUDIO_WRITE_POS, pos % AUDIO_BUF_SIZE)
+}
+
+@kernel fn audio_generate_beep(freq: i64, duration_ms: i64) {
+    // Square wave beep
+    let sample_rate = volatile_read_u32(AUDIO_SAMPLE_RATE)
+    if sample_rate == 0 { return }
+    let total_samples = sample_rate * duration_ms / 1000
+    let half_period = sample_rate / (freq * 2)
+    let vol = mixer_get_volume(MIXER_SYSTEM) * 80 / 100
+
+    let mut pos = volatile_read_u32(AUDIO_WRITE_POS)
+    let mut i: i64 = 0
+    while i < total_samples {
+        let sample = if (i / half_period) % 2 == 0 { 16000 * vol / 100 } else { -16000 * vol / 100 }
+        let buf_pos = pos % AUDIO_BUF_SIZE
+        volatile_write_u16(AUDIO_BUF + buf_pos, sample & 0xFFFF)
+        volatile_write_u16(AUDIO_BUF + buf_pos + 2, sample & 0xFFFF)
+        pos = pos + 4
+        i = i + 1
+    }
+    volatile_write_u32(AUDIO_WRITE_POS, pos % AUDIO_BUF_SIZE)
+}
+
+// ── System sounds ──
+
+@kernel fn sound_startup() {
+    // Ascending chord: C5 → E5 → G5
+    audio_generate_sine(523, 150)   // C5
+    audio_generate_sine(659, 150)   // E5
+    audio_generate_sine(784, 300)   // G5
+}
+
+@kernel fn sound_error() {
+    audio_generate_beep(200, 100)
+    audio_generate_beep(150, 200)
+}
+
+@kernel fn sound_notification() {
+    audio_generate_sine(880, 100)   // A5
+    audio_generate_sine(1047, 100)  // C6
+}
+
+@kernel fn sound_click() {
+    audio_generate_beep(1000, 10)
+}
+
+@kernel fn sound_shutdown() {
+    // Descending: G5 → E5 → C5
+    audio_generate_sine(784, 200)
+    audio_generate_sine(659, 200)
+    audio_generate_sine(523, 400)
+}
+
+// ── WAV file playback ──
+
+@kernel fn audio_play_wav(wav_addr: i64, wav_size: i64) {
+    // Parse WAV header
+    // Offset 0: "RIFF"
+    // Offset 8: "WAVE"
+    // Offset 20: format (1=PCM)
+    // Offset 22: channels
+    // Offset 24: sample rate
+    // Offset 34: bits per sample
+    // Offset 36: "data"
+    // Offset 40: data size
+
+    let riff = volatile_read_u32(wav_addr)
+    if riff != 0x46464952 { return }  // "RIFF"
+
+    let wave = volatile_read_u32(wav_addr + 8)
+    if wave != 0x45564157 { return }  // "WAVE"
+
+    let format = volatile_read_u16(wav_addr + 20)
+    if format != 1 { return }  // PCM only
+
+    let channels = volatile_read_u16(wav_addr + 22)
+    let sample_rate = volatile_read_u32(wav_addr + 24)
+    let bits = volatile_read_u16(wav_addr + 34)
+
+    // Find data chunk
+    let mut offset: i64 = 12
+    while offset < wav_size - 8 {
+        let chunk_id = volatile_read_u32(wav_addr + offset)
+        let chunk_size = volatile_read_u32(wav_addr + offset + 4)
+        if chunk_id == 0x61746164 {  // "data"
+            // Copy PCM data to audio buffer
+            let data_addr = wav_addr + offset + 8
+            let data_size = if chunk_size > AUDIO_BUF_SIZE { AUDIO_BUF_SIZE } else { chunk_size }
+            let mut i: i64 = 0
+            while i < data_size {
+                volatile_write_u8(AUDIO_BUF + i, volatile_read_u8(data_addr + i))
+                i = i + 1
+            }
+            volatile_write_u32(AUDIO_WRITE_POS, data_size)
+
+            // Configure stream for this format
+            audio_setup_stream(sample_rate, channels, bits)
+            audio_start()
+            return
+        }
+        offset = offset + 8 + chunk_size
+        if (chunk_size & 1) != 0 { offset = offset + 1 }  // pad to even
+    }
+}
+
+// ── Shell commands ──
+
+@kernel fn cmd_audio_init() {
+    let result = hda_init()
+    if result < 0 {
+        // serial output for text mode
+        return
+    }
+    hda_enumerate_codec(0)
+    audio_setup_stream(48000, 2, 16)
+    mixer_init()
+    audio_start()
+}
+
+@kernel fn cmd_volume(level: i64) {
+    mixer_set_volume(MIXER_MASTER, level)
+}
+
+@kernel fn cmd_mute() {
+    let muted = volatile_read_u32(MIXER_STATE + MIXER_MASTER * 8 + MIXER_MUTE_OFFSET)
+    mixer_set_mute(MIXER_MASTER, if muted != 0 { 0 } else { 1 })
+}
+
+@kernel fn cmd_beep() {
+    audio_generate_beep(440, 200)
+}
+
+@kernel fn cmd_play(file_addr: i64, file_size: i64) {
+    audio_play_wav(file_addr, file_size)
+}
+
+// ── Audio IRQ handler ──
+
+@kernel fn hda_irq_handler() {
+    // Check interrupt status
+    let intsts = volatile_read_u32(HDA_BASE + HDA_INTSTS)
+
+    if (intsts & 1) != 0 {
+        // Stream 0 interrupt — buffer completion
+        let sts = volatile_read_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_STS)
+        volatile_write_u8(HDA_BASE + HDA_SD0_BASE + HDA_SD_STS, sts)  // clear status
+
+        if (sts & 0x04) != 0 {
+            // Buffer completion — refill or loop
+            let playing = volatile_read_u32(AUDIO_PLAYING)
+            if playing == 0 {
+                audio_stop()
+            }
+        }
+    }
+}
+
+// ── Entry point ──
+
+@kernel fn phoenix_audio_main() {
+    cmd_audio_init()
+    sound_startup()
+}

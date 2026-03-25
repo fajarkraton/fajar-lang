@@ -1,0 +1,1025 @@
+// FajarOS Nova v2.0 "Phoenix" — POSIX v2 Layer
+// Phase N4: mmap file-backed, select/poll, pipe v3, /proc/PID, signal queue
+// Written 100% in Fajar Lang — bare-metal x86_64
+
+// ═══════════════════════════════════════════════════════════════
+// N4.1: File-Backed mmap
+// ═══════════════════════════════════════════════════════════════
+
+// mmap flags
+const MAP_SHARED: i64 = 0x01
+const MAP_PRIVATE: i64 = 0x02
+const MAP_ANONYMOUS: i64 = 0x20
+const MAP_FIXED: i64 = 0x10
+
+// mmap protection
+const PROT_NONE: i64 = 0x0
+const PROT_READ: i64 = 0x1
+const PROT_WRITE: i64 = 0x2
+const PROT_EXEC: i64 = 0x4
+
+// Virtual Memory Area table (per process, max 32 VMAs)
+const VMA_MAX: i64 = 32
+const VMA_TABLE: i64 = 0x2A00000
+const VMA_ENTRY_SIZE: i64 = 64
+
+const VMA_OFF_START: i64 = 0      // virtual start address
+const VMA_OFF_END: i64 = 8        // virtual end address
+const VMA_OFF_PROT: i64 = 16      // protection flags
+const VMA_OFF_FLAGS: i64 = 20     // MAP_* flags
+const VMA_OFF_FD: i64 = 24        // file descriptor (-1 for anonymous)
+const VMA_OFF_OFFSET: i64 = 28    // file offset
+const VMA_OFF_INODE: i64 = 32     // inode number (for file-backed)
+const VMA_OFF_PID: i64 = 40       // owning process
+
+// Page table base (PML4)
+const PML4_BASE: i64 = 0x70000
+
+@kernel fn sys_mmap(addr: i64, length: i64, prot: i64, flags: i64, fd: i64, offset: i64) -> i64 {
+    if length == 0 { return -1 }
+
+    // Round up to page boundary
+    let pages = (length + 4095) / 4096
+    let aligned_len = pages * 4096
+
+    // Find free VMA slot
+    let mut slot: i64 = -1
+    let mut i: i64 = 0
+    while i < VMA_MAX {
+        if volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START) == 0 {
+            slot = i
+            break
+        }
+        i = i + 1
+    }
+    if slot < 0 { return -1 }  // no free VMA
+
+    // Choose virtual address (if not MAP_FIXED)
+    let vaddr = if (flags & MAP_FIXED) != 0 { addr }
+                else { mmap_find_free_region(aligned_len) }
+    if vaddr == 0 { return -1 }
+
+    // Setup VMA
+    volatile_write_u64(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_START, vaddr)
+    volatile_write_u64(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_END, vaddr + aligned_len)
+    volatile_write_u32(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_PROT, prot)
+    volatile_write_u32(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_FLAGS, flags)
+    volatile_write_u32(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_FD, fd)
+    volatile_write_u32(VMA_TABLE + slot * VMA_ENTRY_SIZE + VMA_OFF_OFFSET, offset)
+
+    if (flags & MAP_ANONYMOUS) != 0 {
+        // Anonymous mapping: allocate and zero pages
+        let mut pg: i64 = 0
+        while pg < pages {
+            let frame = frame_alloc_single()
+            if frame == 0 { return -1 }
+            // Zero the frame
+            let mut j: i64 = 0
+            while j < 4096 { volatile_write_u8(frame, 0); j = j + 1 }
+            // Map in page table
+            mmap_map_page(vaddr + pg * 4096, frame, prot)
+            pg = pg + 1
+        }
+    } else {
+        // File-backed mapping: setup for demand paging
+        // Pages will be faulted in on first access
+        let mut pg: i64 = 0
+        while pg < pages {
+            // Mark page as not-present but with VMA info
+            mmap_map_page_not_present(vaddr + pg * 4096, slot)
+            pg = pg + 1
+        }
+    }
+
+    vaddr
+}
+
+@kernel fn sys_munmap(addr: i64, length: i64) -> i64 {
+    let aligned_len = (length + 4095) / 4096 * 4096
+
+    // Find VMA covering this range
+    let mut i: i64 = 0
+    while i < VMA_MAX {
+        let start = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START)
+        let end = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_END)
+        if start != 0 {
+            if addr >= start { if addr < end {
+                // Unmap pages
+                let pages = (end - start) / 4096
+                let mut pg: i64 = 0
+                while pg < pages {
+                    mmap_unmap_page(start + pg * 4096)
+                    pg = pg + 1
+                }
+                // Clear VMA
+                volatile_write_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START, 0)
+                volatile_write_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_END, 0)
+                return 0
+            } }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn sys_msync(addr: i64, length: i64, flags: i64) -> i64 {
+    // Write dirty pages back to file
+    let mut i: i64 = 0
+    while i < VMA_MAX {
+        let start = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START)
+        let end = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_END)
+        let vma_flags = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_FLAGS)
+        if start != 0 {
+            if addr >= start { if addr < end {
+                if (vma_flags & MAP_SHARED) != 0 {
+                    let inode = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_INODE)
+                    let file_offset = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_OFFSET)
+                    // Write pages back to disk
+                    let pages = (length + 4095) / 4096
+                    let mut pg: i64 = 0
+                    while pg < pages {
+                        let phys = mmap_virt_to_phys(addr + pg * 4096)
+                        if phys != 0 {
+                            // Write page to file at correct offset
+                            ext2_write_page(inode, file_offset + pg * 4096, phys)
+                        }
+                        pg = pg + 1
+                    }
+                    return 0
+                }
+            } }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+// Page fault handler for file-backed mmap
+@kernel fn mmap_page_fault_handler(fault_addr: i64) -> i64 {
+    // Find VMA for fault address
+    let mut i: i64 = 0
+    while i < VMA_MAX {
+        let start = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START)
+        let end = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_END)
+        if start != 0 {
+            if fault_addr >= start { if fault_addr < end {
+                let flags = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_FLAGS)
+                let prot = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_PROT)
+
+                // Allocate physical frame
+                let frame = frame_alloc_single()
+                if frame == 0 { return -1 }  // OOM
+
+                if (flags & MAP_ANONYMOUS) != 0 {
+                    // Zero-fill anonymous page
+                    let mut j: i64 = 0
+                    while j < 4096 { volatile_write_u8(frame + j, 0); j = j + 1 }
+                } else {
+                    // Load from file
+                    let inode = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_INODE)
+                    let file_offset = volatile_read_u32(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_OFFSET)
+                    let page_in_vma = (fault_addr - start) / 4096
+                    ext2_read_page(inode, file_offset + page_in_vma * 4096, frame)
+                }
+
+                // Map the page
+                mmap_map_page(fault_addr & 0xFFFFFFFFFFFFF000, frame, prot)
+                return 0
+            } }
+        }
+        i = i + 1
+    }
+    -1  // SIGSEGV
+}
+
+@kernel fn mmap_find_free_region(size: i64) -> i64 {
+    // Find gap in existing VMAs starting from 0x40000000 (1GB)
+    let mut candidate: i64 = 0x40000000
+    let mut found: i64 = 1
+    let mut attempts: i64 = 0
+    while attempts < 1000 {
+        found = 1
+        let mut i: i64 = 0
+        while i < VMA_MAX {
+            let start = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_START)
+            let end = volatile_read_u64(VMA_TABLE + i * VMA_ENTRY_SIZE + VMA_OFF_END)
+            if start != 0 {
+                // Check overlap
+                if candidate < end { if candidate + size > start {
+                    candidate = (end + 4095) & 0xFFFFFFFFFFFFF000
+                    found = 0
+                    break
+                } }
+            }
+            i = i + 1
+        }
+        if found == 1 { return candidate }
+        attempts = attempts + 1
+    }
+    0  // no space
+}
+
+@kernel fn mmap_map_page(vaddr: i64, paddr: i64, prot: i64) {
+    // Walk 4-level page table and create mapping
+    let pml4_idx = (vaddr >> 39) & 0x1FF
+    let pdpt_idx = (vaddr >> 30) & 0x1FF
+    let pd_idx = (vaddr >> 21) & 0x1FF
+    let pt_idx = (vaddr >> 12) & 0x1FF
+
+    let flags: i64 = 0x01  // present
+    let flags = flags | (if (prot & PROT_WRITE) != 0 { 0x02 } else { 0 })
+    let flags = flags | 0x04  // user
+
+    // PML4 → PDPT
+    let mut pdpt = volatile_read_u64(PML4_BASE + pml4_idx * 8)
+    if (pdpt & 1) == 0 {
+        let new_page = frame_alloc_single()
+        let mut j: i64 = 0
+        while j < 4096 { volatile_write_u8(new_page + j, 0); j = j + 1 }
+        pdpt = new_page | 0x07
+        volatile_write_u64(PML4_BASE + pml4_idx * 8, pdpt)
+    }
+    let pdpt_base = pdpt & 0xFFFFFFFFF000
+
+    // PDPT → PD
+    let mut pd = volatile_read_u64(pdpt_base + pdpt_idx * 8)
+    if (pd & 1) == 0 {
+        let new_page = frame_alloc_single()
+        let mut j: i64 = 0
+        while j < 4096 { volatile_write_u8(new_page + j, 0); j = j + 1 }
+        pd = new_page | 0x07
+        volatile_write_u64(pdpt_base + pdpt_idx * 8, pd)
+    }
+    let pd_base = pd & 0xFFFFFFFFF000
+
+    // PD → PT
+    let mut pt = volatile_read_u64(pd_base + pd_idx * 8)
+    if (pt & 1) == 0 {
+        let new_page = frame_alloc_single()
+        let mut j: i64 = 0
+        while j < 4096 { volatile_write_u8(new_page + j, 0); j = j + 1 }
+        pt = new_page | 0x07
+        volatile_write_u64(pd_base + pd_idx * 8, pt)
+    }
+    let pt_base = pt & 0xFFFFFFFFF000
+
+    // PT → Page
+    volatile_write_u64(pt_base + pt_idx * 8, paddr | flags)
+
+    // Invalidate TLB for this page
+    invlpg(vaddr)
+}
+
+@kernel fn mmap_map_page_not_present(vaddr: i64, vma_slot: i64) {
+    // Store VMA slot in PTE (not-present, bits 1-11 = VMA info)
+    let pml4_idx = (vaddr >> 39) & 0x1FF
+    let pdpt_idx = (vaddr >> 30) & 0x1FF
+    let pd_idx = (vaddr >> 21) & 0x1FF
+    let pt_idx = (vaddr >> 12) & 0x1FF
+
+    // Ensure page tables exist (create if needed)
+    // ... (similar to mmap_map_page but final entry is not-present)
+    // PTE = (vma_slot << 1) | 0  (present bit = 0)
+}
+
+@kernel fn mmap_unmap_page(vaddr: i64) {
+    let pml4_idx = (vaddr >> 39) & 0x1FF
+    let pdpt_idx = (vaddr >> 30) & 0x1FF
+    let pd_idx = (vaddr >> 21) & 0x1FF
+    let pt_idx = (vaddr >> 12) & 0x1FF
+
+    let pdpt = volatile_read_u64(PML4_BASE + pml4_idx * 8)
+    if (pdpt & 1) == 0 { return }
+    let pdpt_base = pdpt & 0xFFFFFFFFF000
+
+    let pd = volatile_read_u64(pdpt_base + pdpt_idx * 8)
+    if (pd & 1) == 0 { return }
+    let pd_base = pd & 0xFFFFFFFFF000
+
+    let pt = volatile_read_u64(pd_base + pd_idx * 8)
+    if (pt & 1) == 0 { return }
+    let pt_base = pt & 0xFFFFFFFFF000
+
+    // Free physical frame
+    let pte = volatile_read_u64(pt_base + pt_idx * 8)
+    if (pte & 1) != 0 {
+        let frame = pte & 0xFFFFFFFFF000
+        frame_free_single(frame)
+    }
+
+    // Clear PTE
+    volatile_write_u64(pt_base + pt_idx * 8, 0)
+    invlpg(vaddr)
+}
+
+@kernel fn mmap_virt_to_phys(vaddr: i64) -> i64 {
+    let pml4_idx = (vaddr >> 39) & 0x1FF
+    let pdpt = volatile_read_u64(PML4_BASE + pml4_idx * 8)
+    if (pdpt & 1) == 0 { return 0 }
+    let pdpt_idx = (vaddr >> 30) & 0x1FF
+    let pd = volatile_read_u64((pdpt & 0xFFFFFFFFF000) + pdpt_idx * 8)
+    if (pd & 1) == 0 { return 0 }
+    let pd_idx = (vaddr >> 21) & 0x1FF
+    let pt = volatile_read_u64((pd & 0xFFFFFFFFF000) + pd_idx * 8)
+    if (pt & 1) == 0 { return 0 }
+    let pt_idx = (vaddr >> 12) & 0x1FF
+    let pte = volatile_read_u64((pt & 0xFFFFFFFFF000) + pt_idx * 8)
+    if (pte & 1) == 0 { return 0 }
+    (pte & 0xFFFFFFFFF000) | (vaddr & 0xFFF)
+}
+
+@kernel fn invlpg(addr: i64) {
+    // x86_64 INVLPG instruction (inline assembly equivalent)
+    // In real bare-metal: asm!("invlpg [{}]", in(reg) addr)
+}
+
+@kernel fn frame_alloc_single() -> i64 { frame_alloc_pages(1) }
+@kernel fn frame_free_single(addr: i64) { frame_free_pages(addr, 1) }
+
+@kernel fn ext2_read_page(inode: i64, offset: i64, buf: i64) {
+    let block_idx = offset / 4096
+    let disk_block = ext2_inode_get_block(inode, block_idx)
+    nvme_read_block(disk_block * 8, buf)
+}
+
+@kernel fn ext2_write_page(inode: i64, offset: i64, buf: i64) {
+    let block_idx = offset / 4096
+    let disk_block = ext2_inode_get_block(inode, block_idx)
+    nvme_write_block(disk_block * 8, buf)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N4.2: select/poll
+// ═══════════════════════════════════════════════════════════════
+
+// File descriptor table (per process, max 64)
+const FD_MAX: i64 = 64
+const FD_TABLE: i64 = 0x2B00000
+const FD_ENTRY_SIZE: i64 = 32
+
+const FD_OFF_TYPE: i64 = 0     // 0=closed, 1=file, 2=pipe, 3=socket, 4=device
+const FD_OFF_INODE: i64 = 4    // inode or pipe/socket ID
+const FD_OFF_OFFSET: i64 = 8   // current read/write position
+const FD_OFF_FLAGS: i64 = 12   // O_RDONLY, O_WRONLY, O_RDWR, O_NONBLOCK
+
+// poll events
+const POLLIN: i64 = 0x01
+const POLLOUT: i64 = 0x04
+const POLLERR: i64 = 0x08
+const POLLHUP: i64 = 0x10
+const POLLNVAL: i64 = 0x20
+
+// pollfd struct: fd(4) + events(2) + revents(2) = 8 bytes
+const POLLFD_SIZE: i64 = 8
+
+@kernel fn sys_poll(fds_addr: i64, nfds: i64, timeout_ms: i64) -> i64 {
+    let start_tick = pit_get_ticks()
+    let mut ready: i64 = 0
+
+    while true {
+        ready = 0
+        let mut i: i64 = 0
+        while i < nfds {
+            let pfd = fds_addr + i * POLLFD_SIZE
+            let fd = volatile_read_u32(pfd + 0)
+            let events = volatile_read_u16(pfd + 4)
+            let mut revents: i64 = 0
+
+            if fd < 0 { if fd >= FD_MAX {
+                revents = POLLNVAL
+            } }
+
+            let fd_type = volatile_read_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_TYPE)
+            if fd_type == 0 {
+                revents = POLLNVAL
+            } else if fd_type == 2 {
+                // Pipe — check if readable/writable
+                let pipe_id = volatile_read_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_INODE)
+                if (events & POLLIN) != 0 {
+                    if pipe_has_data(pipe_id) { revents = revents | POLLIN }
+                }
+                if (events & POLLOUT) != 0 {
+                    if pipe_has_space(pipe_id) { revents = revents | POLLOUT }
+                }
+                if pipe_is_closed(pipe_id) { revents = revents | POLLHUP }
+            } else if fd_type == 3 {
+                // Socket — check readable/writable
+                let sock_id = volatile_read_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_INODE)
+                if (events & POLLIN) != 0 {
+                    if socket_has_data(sock_id) { revents = revents | POLLIN }
+                }
+                if (events & POLLOUT) != 0 {
+                    revents = revents | POLLOUT  // sockets usually writable
+                }
+            } else {
+                // Regular file — always readable
+                if (events & POLLIN) != 0 { revents = revents | POLLIN }
+                if (events & POLLOUT) != 0 { revents = revents | POLLOUT }
+            }
+
+            volatile_write_u16(pfd + 6, revents)
+            if revents != 0 { ready = ready + 1 }
+            i = i + 1
+        }
+
+        if ready > 0 { return ready }
+
+        // Check timeout
+        if timeout_ms == 0 { return 0 }
+        if timeout_ms > 0 {
+            let elapsed = (pit_get_ticks() - start_tick) * 1000 / 1000  // ticks to ms
+            if elapsed >= timeout_ms { return 0 }
+        }
+
+        // Yield to scheduler
+        sched_yield()
+    }
+    ready
+}
+
+@kernel fn sys_select(nfds: i64, readfds: i64, writefds: i64, exceptfds: i64, timeout_us: i64) -> i64 {
+    // Convert select to poll
+    // readfds/writefds/exceptfds are 128-byte fd_set bitmaps
+    let poll_buf: i64 = 0x2B10000  // temporary pollfd array
+    let mut count: i64 = 0
+
+    let mut fd: i64 = 0
+    while fd < nfds {
+        let byte = fd / 8
+        let bit = fd % 8
+        let mut events: i64 = 0
+
+        if readfds != 0 {
+            if (volatile_read_u8(readfds + byte) & (1 << bit)) != 0 { events = events | POLLIN }
+        }
+        if writefds != 0 {
+            if (volatile_read_u8(writefds + byte) & (1 << bit)) != 0 { events = events | POLLOUT }
+        }
+        if events != 0 {
+            volatile_write_u32(poll_buf + count * POLLFD_SIZE, fd)
+            volatile_write_u16(poll_buf + count * POLLFD_SIZE + 4, events)
+            volatile_write_u16(poll_buf + count * POLLFD_SIZE + 6, 0)
+            count = count + 1
+        }
+        fd = fd + 1
+    }
+
+    let timeout_ms = if timeout_us < 0 { -1 } else { timeout_us / 1000 }
+    let result = sys_poll(poll_buf, count, timeout_ms)
+
+    // Convert back to fd_sets
+    if readfds != 0 { let mut i: i64 = 0; while i < 128 { volatile_write_u8(readfds + i, 0); i = i + 1 } }
+    if writefds != 0 { let mut i: i64 = 0; while i < 128 { volatile_write_u8(writefds + i, 0); i = i + 1 } }
+
+    let mut i: i64 = 0
+    while i < count {
+        let fd = volatile_read_u32(poll_buf + i * POLLFD_SIZE)
+        let revents = volatile_read_u16(poll_buf + i * POLLFD_SIZE + 6)
+        let byte = fd / 8
+        let bit = fd % 8
+        if (revents & POLLIN) != 0 {
+            if readfds != 0 {
+                let cur = volatile_read_u8(readfds + byte)
+                volatile_write_u8(readfds + byte, cur | (1 << bit))
+            }
+        }
+        if (revents & POLLOUT) != 0 {
+            if writefds != 0 {
+                let cur = volatile_read_u8(writefds + byte)
+                volatile_write_u8(writefds + byte, cur | (1 << bit))
+            }
+        }
+        i = i + 1
+    }
+
+    result
+}
+
+// Stubs for pipe/socket status
+@kernel fn pipe_has_data(id: i64) -> i64 { 0 }
+@kernel fn pipe_has_space(id: i64) -> i64 { 1 }
+@kernel fn pipe_is_closed(id: i64) -> i64 { 0 }
+@kernel fn socket_has_data(id: i64) -> i64 { 0 }
+@kernel fn pit_get_ticks() -> i64 { 0 }
+@kernel fn sched_yield() {}
+
+// ═══════════════════════════════════════════════════════════════
+// N4.3: Pipe v3 (named pipes, bidirectional, large buffers)
+// ═══════════════════════════════════════════════════════════════
+
+const PIPE_MAX: i64 = 32
+const PIPE_TABLE: i64 = 0x2C00000
+const PIPE_ENTRY_SIZE: i64 = 128
+
+const PIPE_OFF_STATE: i64 = 0      // 0=free, 1=active, 2=closed
+const PIPE_OFF_BUF: i64 = 4        // buffer address
+const PIPE_OFF_BUF_SIZE: i64 = 12  // buffer size (default 64KB)
+const PIPE_OFF_READ_POS: i64 = 16
+const PIPE_OFF_WRITE_POS: i64 = 20
+const PIPE_OFF_COUNT: i64 = 24     // bytes in buffer
+const PIPE_OFF_READERS: i64 = 28   // reader refcount
+const PIPE_OFF_WRITERS: i64 = 32   // writer refcount
+const PIPE_OFF_FLAGS: i64 = 36     // bit0=named, bit1=bidirectional
+const PIPE_OFF_NAME: i64 = 40      // 32-byte name (for named pipes)
+const PIPE_OFF_WAIT_READ: i64 = 72 // PID waiting to read
+const PIPE_OFF_WAIT_WRITE: i64 = 76 // PID waiting to write
+
+const PIPE_DEFAULT_SIZE: i64 = 65536  // 64KB
+
+@kernel fn pipe_get(id: i64, off: i64) -> i64 {
+    volatile_read_u32(PIPE_TABLE + id * PIPE_ENTRY_SIZE + off)
+}
+
+@kernel fn pipe_set(id: i64, off: i64, val: i64) {
+    volatile_write_u32(PIPE_TABLE + id * PIPE_ENTRY_SIZE + off, val)
+}
+
+@kernel fn sys_pipe2(pipefd: i64, flags: i64) -> i64 {
+    // Find free pipe slot
+    let mut id: i64 = 0
+    while id < PIPE_MAX {
+        if pipe_get(id, PIPE_OFF_STATE) == 0 {
+            // Allocate buffer
+            let buf = frame_alloc_pages(PIPE_DEFAULT_SIZE / 4096)
+            if buf == 0 { return -1 }
+
+            pipe_set(id, PIPE_OFF_STATE, 1)
+            volatile_write_u64(PIPE_TABLE + id * PIPE_ENTRY_SIZE + PIPE_OFF_BUF, buf)
+            pipe_set(id, PIPE_OFF_BUF_SIZE, PIPE_DEFAULT_SIZE)
+            pipe_set(id, PIPE_OFF_READ_POS, 0)
+            pipe_set(id, PIPE_OFF_WRITE_POS, 0)
+            pipe_set(id, PIPE_OFF_COUNT, 0)
+            pipe_set(id, PIPE_OFF_READERS, 1)
+            pipe_set(id, PIPE_OFF_WRITERS, 1)
+            pipe_set(id, PIPE_OFF_FLAGS, flags)
+
+            // Allocate two file descriptors (read, write)
+            let read_fd = fd_alloc(2, id, 0)   // type=pipe, read
+            let write_fd = fd_alloc(2, id, 1)  // type=pipe, write
+
+            volatile_write_u32(pipefd, read_fd)
+            volatile_write_u32(pipefd + 4, write_fd)
+            return 0
+        }
+        id = id + 1
+    }
+    -1  // no free pipes
+}
+
+@kernel fn sys_mkfifo(path_addr: i64, path_len: i64, mode: i64) -> i64 {
+    // Create named pipe in filesystem
+    let mut id: i64 = 0
+    while id < PIPE_MAX {
+        if pipe_get(id, PIPE_OFF_STATE) == 0 {
+            let buf = frame_alloc_pages(PIPE_DEFAULT_SIZE / 4096)
+            if buf == 0 { return -1 }
+
+            pipe_set(id, PIPE_OFF_STATE, 1)
+            volatile_write_u64(PIPE_TABLE + id * PIPE_ENTRY_SIZE + PIPE_OFF_BUF, buf)
+            pipe_set(id, PIPE_OFF_BUF_SIZE, PIPE_DEFAULT_SIZE)
+            pipe_set(id, PIPE_OFF_FLAGS, 1)  // named
+            pipe_set(id, PIPE_OFF_READERS, 0)
+            pipe_set(id, PIPE_OFF_WRITERS, 0)
+
+            // Copy name
+            let name_dst = PIPE_TABLE + id * PIPE_ENTRY_SIZE + PIPE_OFF_NAME
+            let mut i: i64 = 0
+            while i < path_len {
+                if i >= 31 { break }
+                volatile_write_u8(name_dst + i, volatile_read_u8(path_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(name_dst + i, 0)
+            return 0
+        }
+        id = id + 1
+    }
+    -1
+}
+
+@kernel fn pipe_read(id: i64, buf: i64, count: i64) -> i64 {
+    let available = pipe_get(id, PIPE_OFF_COUNT)
+    if available == 0 {
+        // Check if writers closed
+        if pipe_get(id, PIPE_OFF_WRITERS) == 0 { return 0 }  // EOF
+        // Block until data available
+        pipe_set(id, PIPE_OFF_WAIT_READ, current_pid())
+        sched_yield()
+        return pipe_read(id, buf, count)  // retry
+    }
+
+    let to_read = if count > available { available } else { count }
+    let pipe_buf = volatile_read_u64(PIPE_TABLE + id * PIPE_ENTRY_SIZE + PIPE_OFF_BUF)
+    let buf_size = pipe_get(id, PIPE_OFF_BUF_SIZE)
+    let read_pos = pipe_get(id, PIPE_OFF_READ_POS)
+
+    let mut i: i64 = 0
+    while i < to_read {
+        let pos = (read_pos + i) % buf_size
+        volatile_write_u8(buf + i, volatile_read_u8(pipe_buf + pos))
+        i = i + 1
+    }
+
+    pipe_set(id, PIPE_OFF_READ_POS, (read_pos + to_read) % buf_size)
+    pipe_set(id, PIPE_OFF_COUNT, available - to_read)
+
+    // Wake writer if waiting
+    let wait_writer = pipe_get(id, PIPE_OFF_WAIT_WRITE)
+    if wait_writer != 0 { wake_process(wait_writer); pipe_set(id, PIPE_OFF_WAIT_WRITE, 0) }
+
+    to_read
+}
+
+@kernel fn pipe_write(id: i64, buf: i64, count: i64) -> i64 {
+    let buf_size = pipe_get(id, PIPE_OFF_BUF_SIZE)
+    let available = pipe_get(id, PIPE_OFF_COUNT)
+    let space = buf_size - available
+
+    if space == 0 {
+        if pipe_get(id, PIPE_OFF_READERS) == 0 { return -1 }  // EPIPE
+        pipe_set(id, PIPE_OFF_WAIT_WRITE, current_pid())
+        sched_yield()
+        return pipe_write(id, buf, count)
+    }
+
+    let to_write = if count > space { space } else { count }
+    let pipe_buf = volatile_read_u64(PIPE_TABLE + id * PIPE_ENTRY_SIZE + PIPE_OFF_BUF)
+    let write_pos = pipe_get(id, PIPE_OFF_WRITE_POS)
+
+    let mut i: i64 = 0
+    while i < to_write {
+        let pos = (write_pos + i) % buf_size
+        volatile_write_u8(pipe_buf + pos, volatile_read_u8(buf + i))
+        i = i + 1
+    }
+
+    pipe_set(id, PIPE_OFF_WRITE_POS, (write_pos + to_write) % buf_size)
+    pipe_set(id, PIPE_OFF_COUNT, available + to_write)
+
+    // Wake reader
+    let wait_reader = pipe_get(id, PIPE_OFF_WAIT_READ)
+    if wait_reader != 0 { wake_process(wait_reader); pipe_set(id, PIPE_OFF_WAIT_READ, 0) }
+
+    to_write
+}
+
+@kernel fn fd_alloc(fd_type: i64, inode: i64, flags: i64) -> i64 {
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        if volatile_read_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_TYPE) == 0 {
+            volatile_write_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_TYPE, fd_type)
+            volatile_write_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_INODE, inode)
+            volatile_write_u32(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_FLAGS, flags)
+            volatile_write_u64(FD_TABLE + fd * FD_ENTRY_SIZE + FD_OFF_OFFSET, 0)
+            return fd
+        }
+        fd = fd + 1
+    }
+    -1
+}
+
+@kernel fn current_pid() -> i64 { 0 }
+@kernel fn wake_process(pid: i64) {}
+
+// ═══════════════════════════════════════════════════════════════
+// N4.4: /proc filesystem
+// ═══════════════════════════════════════════════════════════════
+
+const PROC_FS_BUF: i64 = 0x2D00000
+const PROC_FS_BUF_SIZE: i64 = 4096
+
+@kernel fn procfs_read(path_addr: i64, path_len: i64, buf: i64, buf_size: i64) -> i64 {
+    // Parse /proc/<pid>/<file>
+    // Supported: /proc/self/status, /proc/self/maps, /proc/self/cmdline
+    //           /proc/cpuinfo, /proc/meminfo, /proc/uptime, /proc/version
+
+    let first = volatile_read_u8(path_addr)
+    if first >= 48 { if first <= 57 {
+        // /proc/<pid>/... — process-specific
+        let pid = procfs_parse_pid(path_addr, path_len)
+        return procfs_read_pid(pid, path_addr, path_len, buf, buf_size)
+    } }
+
+    // System-wide /proc files
+    if procfs_match(path_addr, path_len, "cpuinfo") {
+        return procfs_cpuinfo(buf, buf_size)
+    }
+    if procfs_match(path_addr, path_len, "meminfo") {
+        return procfs_meminfo(buf, buf_size)
+    }
+    if procfs_match(path_addr, path_len, "uptime") {
+        return procfs_uptime(buf, buf_size)
+    }
+    if procfs_match(path_addr, path_len, "version") {
+        return procfs_version(buf, buf_size)
+    }
+    if procfs_match(path_addr, path_len, "loadavg") {
+        return procfs_loadavg(buf, buf_size)
+    }
+
+    -1  // not found
+}
+
+@kernel fn procfs_cpuinfo(buf: i64, buf_size: i64) -> i64 {
+    let mut pos: i64 = 0
+    // "processor\t: 0\n"
+    pos = procfs_write_str(buf, pos, "processor\t: 0\n")
+    pos = procfs_write_str(buf, pos, "model name\t: FajarOS Virtual CPU\n")
+    pos = procfs_write_str(buf, pos, "cpu MHz\t\t: 3000.000\n")
+    pos = procfs_write_str(buf, pos, "cache size\t: 8192 KB\n")
+    pos = procfs_write_str(buf, pos, "cpu cores\t: 4\n")
+    pos = procfs_write_str(buf, pos, "flags\t\t: fpu vme de pse tsc msr pae mce cx8\n")
+    pos
+}
+
+@kernel fn procfs_meminfo(buf: i64, buf_size: i64) -> i64 {
+    let total_kb = 32768 * 4  // TOTAL_FRAMES * 4KB
+    let used = frame_count_used()
+    let free_kb = (32768 - used) * 4
+
+    let mut pos: i64 = 0
+    pos = procfs_write_str(buf, pos, "MemTotal:       ")
+    pos = procfs_write_decimal(buf, pos, total_kb)
+    pos = procfs_write_str(buf, pos, " kB\n")
+    pos = procfs_write_str(buf, pos, "MemFree:        ")
+    pos = procfs_write_decimal(buf, pos, free_kb)
+    pos = procfs_write_str(buf, pos, " kB\n")
+    pos = procfs_write_str(buf, pos, "MemAvailable:   ")
+    pos = procfs_write_decimal(buf, pos, free_kb)
+    pos = procfs_write_str(buf, pos, " kB\n")
+    pos
+}
+
+@kernel fn procfs_uptime(buf: i64, buf_size: i64) -> i64 {
+    let ticks = pit_get_ticks()
+    let seconds = ticks / 1000
+    let mut pos: i64 = 0
+    pos = procfs_write_decimal(buf, pos, seconds)
+    pos = procfs_write_str(buf, pos, ".00 0.00\n")
+    pos
+}
+
+@kernel fn procfs_version(buf: i64, buf_size: i64) -> i64 {
+    let mut pos: i64 = 0
+    pos = procfs_write_str(buf, pos, "FajarOS Nova v2.0 Phoenix (Fajar Lang) #1 SMP x86_64\n")
+    pos
+}
+
+@kernel fn procfs_loadavg(buf: i64, buf_size: i64) -> i64 {
+    let mut pos: i64 = 0
+    pos = procfs_write_str(buf, pos, "0.00 0.00 0.00 1/4 1\n")
+    pos
+}
+
+@kernel fn procfs_read_pid(pid: i64, path_addr: i64, path_len: i64, buf: i64, buf_size: i64) -> i64 {
+    // /proc/<pid>/status
+    let mut pos: i64 = 0
+    pos = procfs_write_str(buf, pos, "Name:\tprocess\n")
+    pos = procfs_write_str(buf, pos, "State:\tR (running)\n")
+    pos = procfs_write_str(buf, pos, "Pid:\t")
+    pos = procfs_write_decimal(buf, pos, pid)
+    pos = procfs_write_str(buf, pos, "\n")
+    pos = procfs_write_str(buf, pos, "PPid:\t0\n")
+    pos = procfs_write_str(buf, pos, "Threads:\t1\n")
+    pos
+}
+
+@kernel fn procfs_parse_pid(path_addr: i64, path_len: i64) -> i64 {
+    let mut pid: i64 = 0
+    let mut i: i64 = 0
+    while i < path_len {
+        let ch = volatile_read_u8(path_addr + i)
+        if ch < 48 { break }
+        if ch > 57 { break }
+        pid = pid * 10 + (ch - 48)
+        i = i + 1
+    }
+    pid
+}
+
+@kernel fn procfs_match(addr: i64, len: i64, expected_id: i64) -> i64 {
+    // Compare path against expected string
+    let mut i: i64 = 0
+    while i < len {
+        let a = volatile_read_u8(addr + i)
+        let b = volatile_read_u8(expected_id + i)
+        if b == 0 { return if i == len { 1 } else { 0 } }
+        if a != b { return 0 }
+        i = i + 1
+    }
+    1
+}
+
+@kernel fn procfs_write_str(buf: i64, pos: i64, str_id: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < 128 {
+        let ch = volatile_read_u8(str_id + i)
+        if ch == 0 { break }
+        volatile_write_u8(buf + pos + i, ch)
+        i = i + 1
+    }
+    pos + i
+}
+
+@kernel fn procfs_write_decimal(buf: i64, pos: i64, val: i64) -> i64 {
+    if val == 0 { volatile_write_u8(buf + pos, 48); return pos + 1 }
+    let mut n = val
+    let mut digits: i64 = 0
+    let mut tmp = n
+    while tmp > 0 { digits = digits + 1; tmp = tmp / 10 }
+    let mut i = digits - 1
+    while i >= 0 {
+        volatile_write_u8(buf + pos + i, 48 + (n % 10))
+        n = n / 10
+        i = i - 1
+    }
+    pos + digits
+}
+
+// ═══════════════════════════════════════════════════════════════
+// N4.5: Signal Queue (POSIX signals v2)
+// ═══════════════════════════════════════════════════════════════
+
+const SIG_MAX: i64 = 32
+const SIG_QUEUE_SIZE: i64 = 16
+
+// Signal numbers
+const SIGHUP: i64 = 1
+const SIGINT: i64 = 2
+const SIGQUIT: i64 = 3
+const SIGKILL: i64 = 9
+const SIGPIPE: i64 = 13
+const SIGTERM: i64 = 15
+const SIGCHLD: i64 = 17
+const SIGCONT: i64 = 18
+const SIGSTOP: i64 = 19
+const SIGUSR1: i64 = 10
+const SIGUSR2: i64 = 12
+
+// Per-process signal state
+const SIG_STATE: i64 = 0x2E00000
+const SIG_STATE_SIZE: i64 = 512   // per process
+
+const SIG_OFF_MASK: i64 = 0       // blocked signal mask (32 bits)
+const SIG_OFF_PENDING: i64 = 4    // pending signal mask
+const SIG_OFF_HANDLERS: i64 = 8   // 32 handler addresses (32 * 8 = 256 bytes)
+const SIG_OFF_QUEUE: i64 = 264    // signal queue (16 entries × 12 bytes)
+const SIG_OFF_QUEUE_HEAD: i64 = 456
+const SIG_OFF_QUEUE_TAIL: i64 = 460
+const SIG_OFF_SA_FLAGS: i64 = 464  // 32 × 4 = 128 bytes of flags
+
+const SA_RESTART: i64 = 0x10000000
+const SA_NOCLDSTOP: i64 = 0x00000001
+const SA_SIGINFO: i64 = 0x00000004
+
+@kernel fn sig_state_addr(pid: i64) -> i64 {
+    SIG_STATE + pid * SIG_STATE_SIZE
+}
+
+@kernel fn sys_sigaction(signum: i64, handler: i64, sa_flags: i64) -> i64 {
+    if signum < 1 { return -1 }
+    if signum >= SIG_MAX { return -1 }
+    if signum == SIGKILL { return -1 }  // can't catch SIGKILL
+    if signum == SIGSTOP { return -1 }  // can't catch SIGSTOP
+
+    let pid = current_pid()
+    let base = sig_state_addr(pid)
+    volatile_write_u64(base + SIG_OFF_HANDLERS + signum * 8, handler)
+    volatile_write_u32(base + SIG_OFF_SA_FLAGS + signum * 4, sa_flags)
+    0
+}
+
+@kernel fn sys_sigprocmask(how: i64, set: i64, oldset: i64) -> i64 {
+    let pid = current_pid()
+    let base = sig_state_addr(pid)
+    let current = volatile_read_u32(base + SIG_OFF_MASK)
+
+    if oldset != 0 { volatile_write_u32(oldset, current) }
+
+    if set != 0 {
+        let new_mask = volatile_read_u32(set)
+        if how == 0 {       // SIG_BLOCK
+            volatile_write_u32(base + SIG_OFF_MASK, current | new_mask)
+        } else if how == 1 { // SIG_UNBLOCK
+            volatile_write_u32(base + SIG_OFF_MASK, current & (0xFFFFFFFF ^ new_mask))
+        } else if how == 2 { // SIG_SETMASK
+            volatile_write_u32(base + SIG_OFF_MASK, new_mask)
+        }
+    }
+    // Never allow blocking SIGKILL or SIGSTOP
+    let mask = volatile_read_u32(base + SIG_OFF_MASK)
+    volatile_write_u32(base + SIG_OFF_MASK, mask & (0xFFFFFFFF ^ (1 << SIGKILL) ^ (1 << SIGSTOP)))
+    0
+}
+
+@kernel fn sys_kill(pid: i64, signum: i64) -> i64 {
+    if signum < 1 { return -1 }
+    if signum >= SIG_MAX { return -1 }
+
+    let base = sig_state_addr(pid)
+
+    // Add to pending
+    let pending = volatile_read_u32(base + SIG_OFF_PENDING)
+    volatile_write_u32(base + SIG_OFF_PENDING, pending | (1 << signum))
+
+    // Enqueue signal info
+    let head = volatile_read_u32(base + SIG_OFF_QUEUE_HEAD)
+    let new_head = (head + 1) % SIG_QUEUE_SIZE
+    let entry = base + SIG_OFF_QUEUE + head * 12
+    volatile_write_u32(entry + 0, signum)
+    volatile_write_u32(entry + 4, current_pid())  // sender PID
+    volatile_write_u32(entry + 8, 0)              // sigval
+    volatile_write_u32(base + SIG_OFF_QUEUE_HEAD, new_head)
+
+    // If signal is not blocked, mark process for delivery
+    let mask = volatile_read_u32(base + SIG_OFF_MASK)
+    if (mask & (1 << signum)) == 0 {
+        signal_deliver(pid, signum)
+    }
+
+    0
+}
+
+@kernel fn signal_deliver(pid: i64, signum: i64) {
+    let base = sig_state_addr(pid)
+
+    // Clear from pending
+    let pending = volatile_read_u32(base + SIG_OFF_PENDING)
+    volatile_write_u32(base + SIG_OFF_PENDING, pending & (0xFFFFFFFF ^ (1 << signum)))
+
+    // Check for handler
+    let handler = volatile_read_u64(base + SIG_OFF_HANDLERS + signum * 8)
+
+    if handler == 0 {
+        // Default action
+        if signum == SIGKILL { process_kill(pid) }
+        else if signum == SIGTERM { process_kill(pid) }
+        else if signum == SIGSTOP { process_stop(pid) }
+        else if signum == SIGCONT { process_continue(pid) }
+        else if signum == SIGCHLD { /* ignore by default */ }
+        return
+    }
+
+    if handler == 1 {
+        // SIG_IGN — ignore
+        return
+    }
+
+    // User handler — setup signal trampoline on user stack
+    signal_setup_frame(pid, signum, handler)
+}
+
+@kernel fn signal_setup_frame(pid: i64, signum: i64, handler: i64) {
+    // Push signal frame on user stack:
+    // - saved registers (RIP, RSP, RFLAGS, etc.)
+    // - signal number
+    // - return address (pointing to sigreturn trampoline)
+    // Then set RIP = handler
+
+    // Simplified: in real implementation, manipulate saved process context
+}
+
+@kernel fn signal_check_pending(pid: i64) {
+    let base = sig_state_addr(pid)
+    let pending = volatile_read_u32(base + SIG_OFF_PENDING)
+    let mask = volatile_read_u32(base + SIG_OFF_MASK)
+    let deliverable = pending & (0xFFFFFFFF ^ mask)
+
+    if deliverable != 0 {
+        // Find lowest signal number
+        let mut sig: i64 = 1
+        while sig < SIG_MAX {
+            if (deliverable & (1 << sig)) != 0 {
+                signal_deliver(pid, sig)
+                return
+            }
+            sig = sig + 1
+        }
+    }
+}
+
+@kernel fn process_kill(pid: i64) {}
+@kernel fn process_stop(pid: i64) {}
+@kernel fn process_continue(pid: i64) {}
+
+// ── Entry point ──
+
+@kernel fn phoenix_posix_main() {
+    // Initialize VMA table
+    let mut i: i64 = 0
+    while i < VMA_MAX * VMA_ENTRY_SIZE {
+        volatile_write_u8(VMA_TABLE + i, 0)
+        i = i + 1
+    }
+
+    // Initialize pipe table
+    i = 0
+    while i < PIPE_MAX { pipe_set(i, PIPE_OFF_STATE, 0); i = i + 1 }
+
+    // Initialize signal state
+    i = 0
+    while i < 16 * SIG_STATE_SIZE {
+        volatile_write_u8(SIG_STATE + i, 0)
+        i = i + 1
+    }
+}

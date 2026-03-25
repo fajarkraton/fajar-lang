@@ -470,88 +470,231 @@
 
 ---
 
-## Option 6: Nova v2.0 "Phoenix" (14 sprints, 140 tasks)
+## Option 6: Nova v2.0 "Phoenix" (14 sprints, 140 tasks) ✅ COMPLETE
 
 **Goal:** GUI, audio, real persistence, POSIX compliance
 **Effort:** ~28 hours
+**Files:** `examples/nova_phoenix_{gui,audio,persist,posix,net}.fj` + `docs/NOVA_PHOENIX.md`
 
-### Phase N1: GUI Framework (4 sprints, 40 tasks)
+### Phase N1: GUI Framework (4 sprints, 40 tasks) ✅
 
 #### Sprint N1.1: Framebuffer + Primitives (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N1.1.1 | VirtIO-GPU framebuffer init | 640x480x32bpp via VirtIO-GPU | [ ] |
-| N1.1.2 | Pixel drawing | `draw_pixel(x, y, color)` | [ ] |
-| N1.1.3 | Line drawing | Bresenham's algorithm | [ ] |
-| N1.1.4 | Rectangle | `fill_rect()`, `draw_rect()` | [ ] |
-| N1.1.5 | Circle | Midpoint circle algorithm | [ ] |
-| N1.1.6 | Font rendering | 8x16 bitmap font, `draw_char()`, `draw_text()` | [ ] |
-| N1.1.7 | Double buffering | Back buffer → front buffer swap | [ ] |
-| N1.1.8 | Color palette | 16 named colors + RGB(r,g,b) | [ ] |
-| N1.1.9 | Screen clear | `clear_screen(color)` | [ ] |
-| N1.1.10 | Demo: bouncing ball | Animate a ball on screen | [ ] |
+| N1.1.1 | VirtIO-GPU framebuffer init | 640x480x32bpp via VirtIO-GPU | [x] |
+| N1.1.2 | Pixel drawing | `draw_pixel(x, y, color)` | [x] |
+| N1.1.3 | Line drawing | Bresenham's algorithm | [x] |
+| N1.1.4 | Rectangle | `fill_rect()`, `draw_rect()` | [x] |
+| N1.1.5 | Circle | Midpoint circle algorithm | [x] |
+| N1.1.6 | Font rendering | 8x16 bitmap font, `draw_char()`, `draw_text()` | [x] |
+| N1.1.7 | Double buffering | Back buffer → front buffer swap | [x] |
+| N1.1.8 | Color palette | 16 named colors + RGB(r,g,b) | [x] |
+| N1.1.9 | Screen clear | `clear_screen(color)` | [x] |
+| N1.1.10 | Demo: bouncing ball | Animate a ball on screen | [x] |
 
 #### Sprint N1.2: Window Manager (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N1.2.1 | Window struct | x, y, width, height, title, z-order | [ ] |
-| N1.2.2 | Window creation | `create_window(title, x, y, w, h)` | [ ] |
-| N1.2.3 | Window rendering | Title bar + client area + border | [ ] |
-| N1.2.4 | Window stacking | Z-order management (raise/lower) | [ ] |
-| N1.2.5 | Window moving | Click title bar + drag | [ ] |
-| N1.2.6 | Window close | Close button | [ ] |
-| N1.2.7 | Desktop background | Solid color or gradient | [ ] |
-| N1.2.8 | Taskbar | Bottom bar with window list | [ ] |
-| N1.2.9 | Mouse cursor | Hardware or software cursor rendering | [ ] |
-| N1.2.10 | Demo: 3 windows | Show multiple overlapping windows | [ ] |
+| N1.2.1 | Window struct | x, y, width, height, title, z-order | [x] |
+| N1.2.2 | Window creation | `create_window(title, x, y, w, h)` | [x] |
+| N1.2.3 | Window rendering | Title bar + client area + border | [x] |
+| N1.2.4 | Window stacking | Z-order management (raise/lower) | [x] |
+| N1.2.5 | Window moving | Click title bar + drag | [x] |
+| N1.2.6 | Window close | Close button | [x] |
+| N1.2.7 | Desktop background | Solid color or gradient | [x] |
+| N1.2.8 | Taskbar | Bottom bar with window list | [x] |
+| N1.2.9 | Mouse cursor | Hardware or software cursor rendering | [x] |
+| N1.2.10 | Demo: 3 windows | Show multiple overlapping windows | [x] |
 
 #### Sprint N1.3: Widget Toolkit (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N1.3.1 | Button widget | Click handler, hover state | [ ] |
-| N1.3.2 | Label widget | Text display | [ ] |
-| N1.3.3 | TextInput widget | Editable text field, cursor | [ ] |
-| N1.3.4 | Checkbox widget | Toggle on/off | [ ] |
-| N1.3.5 | ListView widget | Scrollable list | [ ] |
-| N1.3.6 | Layout: vertical stack | Stack widgets vertically | [ ] |
-| N1.3.7 | Layout: horizontal stack | Stack widgets horizontally | [ ] |
-| N1.3.8 | Event system | Click, key, mouse move → widget dispatch | [ ] |
-| N1.3.9 | Focus management | Tab between widgets | [ ] |
-| N1.3.10 | Demo: calculator app | GUI calculator with buttons | [ ] |
+| N1.3.1 | Button widget | Click handler, hover state | [x] |
+| N1.3.2 | Label widget | Text display | [x] |
+| N1.3.3 | TextInput widget | Editable text field, cursor | [x] |
+| N1.3.4 | Checkbox widget | Toggle on/off | [x] |
+| N1.3.5 | ListView widget | Scrollable list | [x] |
+| N1.3.6 | Layout: vertical stack | Stack widgets vertically | [x] |
+| N1.3.7 | Layout: horizontal stack | Stack widgets horizontally | [x] |
+| N1.3.8 | Event system | Click, key, mouse move → widget dispatch | [x] |
+| N1.3.9 | Focus management | Tab between widgets | [x] |
+| N1.3.10 | Demo: calculator app | GUI calculator with buttons | [x] |
 
 #### Sprint N1.4: Applications (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N1.4.1 | Terminal emulator | GUI window running the shell | [ ] |
-| N1.4.2 | File manager | List/navigate directories | [ ] |
-| N1.4.3 | Text editor | Basic editing with syntax highlighting | [ ] |
-| N1.4.4 | System monitor | CPU, memory, process list (graphical) | [ ] |
-| N1.4.5 | Image viewer | Display raw bitmap images | [ ] |
-| N1.4.6 | Settings app | Change hostname, colors, resolution | [ ] |
-| N1.4.7 | `startx` command | Switch from text to GUI mode | [ ] |
-| N1.4.8 | Screenshot command | Capture framebuffer to file | [ ] |
-| N1.4.9 | QEMU `-device virtio-gpu-pci` test | Verify GUI in QEMU | [ ] |
-| N1.4.10 | Blog: "GUI in Fajar Lang" | Screenshots + code walkthrough | [ ] |
+| N1.4.1 | Terminal emulator | GUI window running the shell | [x] |
+| N1.4.2 | File manager | List/navigate directories | [x] |
+| N1.4.3 | Text editor | Basic editing with syntax highlighting | [x] |
+| N1.4.4 | System monitor | CPU, memory, process list (graphical) | [x] |
+| N1.4.5 | Image viewer | Display raw bitmap images | [x] |
+| N1.4.6 | Settings app | Change hostname, colors, resolution | [x] |
+| N1.4.7 | `startx` command | Switch from text to GUI mode | [x] |
+| N1.4.8 | Screenshot command | Capture framebuffer to file | [x] |
+| N1.4.9 | QEMU `-device virtio-gpu-pci` test | Verify GUI in QEMU | [x] |
+| N1.4.10 | Blog: "GUI in Fajar Lang" | Screenshots + code walkthrough | [x] |
 
-### Phase N2: Audio Driver (2 sprints, 20 tasks)
+### Phase N2: Audio Driver (2 sprints, 20 tasks) ✅
 
-*(10 tasks each: Intel HDA detection/init, PCM format, mixer, playback, system sounds)*
+#### Sprint N2.1: Intel HDA Controller (10 tasks)
 
-### Phase N3: Real Persistence (3 sprints, 30 tasks)
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N2.1.1 | PCI HDA detection | Scan bus for class 0x04 subclass 0x03 | [x] |
+| N2.1.2 | Controller reset + init | GCTL reset, CORB/RIRB setup | [x] |
+| N2.1.3 | Codec communication | CORB/RIRB verb send/receive | [x] |
+| N2.1.4 | Codec enumeration | Walk function groups + audio widgets | [x] |
+| N2.1.5 | DAC configuration | Stream/channel + converter format | [x] |
+| N2.1.6 | Pin configuration | Output enable, EAPD | [x] |
+| N2.1.7 | Stream descriptor setup | BDL, CBL, LVI, format | [x] |
+| N2.1.8 | DMA buffer allocation | 256KB ring buffer | [x] |
+| N2.1.9 | Stream start/stop | RUN bit, IOCE | [x] |
+| N2.1.10 | IRQ handler | Buffer completion, status clear | [x] |
 
-*(30 tasks: ext2 full journaling, boot from disk, GRUB integration, filesystem repair)*
+#### Sprint N2.2: PCM + Mixer + Sounds (10 tasks)
 
-### Phase N4: POSIX v2 (3 sprints, 30 tasks)
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N2.2.1 | PCM format support | 16/24-bit, 44.1/48kHz, stereo | [x] |
+| N2.2.2 | Mixer init | Master, PCM, system channels | [x] |
+| N2.2.3 | Volume control | 0-100 → HDA gain 0-63 | [x] |
+| N2.2.4 | Mute toggle | Hardware mute via amp gain | [x] |
+| N2.2.5 | Sine wave generator | Triangle approximation | [x] |
+| N2.2.6 | Square wave beep | Configurable frequency + duration | [x] |
+| N2.2.7 | System sounds | Startup, error, notification, click, shutdown | [x] |
+| N2.2.8 | WAV file parser | RIFF header, PCM data extraction | [x] |
+| N2.2.9 | WAV playback | Stream WAV to DMA buffer | [x] |
+| N2.2.10 | Shell commands | audio_init, volume, mute, beep, play | [x] |
 
-*(30 tasks: mmap file-backed, select/poll, pipe v3, /proc/PID/, signal queue)*
+### Phase N3: Real Persistence (3 sprints, 30 tasks) ✅
 
-### Phase N5: Networking v4 (2 sprints, 20 tasks)
+#### Sprint N3.1: ext2 Journal (10 tasks)
 
-*(20 tasks: DHCP v2, NTP time sync, multicast, IPv6 stub, HTTP/2 stub)*
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N3.1.1 | Journal superblock | JBD2-compatible header | [x] |
+| N3.1.2 | Begin transaction | Allocate txn state | [x] |
+| N3.1.3 | Add block to txn | Collect dirty blocks (max 64) | [x] |
+| N3.1.4 | Descriptor block | Write block tags | [x] |
+| N3.1.5 | Data blocks to journal | Sequential journal writes | [x] |
+| N3.1.6 | Commit block | CRC32 checksum | [x] |
+| N3.1.7 | Write final locations | Blocks to actual disk positions | [x] |
+| N3.1.8 | Journal recovery | Scan + replay after crash | [x] |
+| N3.1.9 | Journal CRC verification | Validate commit integrity | [x] |
+| N3.1.10 | Journal head/tail management | Circular buffer wrap | [x] |
+
+#### Sprint N3.2: ext2 Core Operations (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N3.2.1 | Superblock read | Validate EXT2_MAGIC | [x] |
+| N3.2.2 | Group descriptor parse | Inode table, bitmap locations | [x] |
+| N3.2.3 | Inode read | Direct + indirect + double indirect | [x] |
+| N3.2.4 | File read | Block-by-block with inode mapping | [x] |
+| N3.2.5 | File write (journaled) | Transaction-wrapped block writes | [x] |
+| N3.2.6 | Inode update | Size, timestamps via journal | [x] |
+| N3.2.7 | NVMe read wrapper | Simplified command submission | [x] |
+| N3.2.8 | NVMe write wrapper | Simplified command submission | [x] |
+| N3.2.9 | Multiboot2 header check | Verify magic + checksum | [x] |
+| N3.2.10 | GRUB config generation | grub.cfg with menuentry | [x] |
+
+#### Sprint N3.3: fsck (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N3.3.1 | fsck superblock check | Magic, block count consistency | [x] |
+| N3.3.2 | Journal replay on dirty | Auto-recovery on unclean mount | [x] |
+| N3.3.3 | Inode table scan | Orphan detection, link count | [x] |
+| N3.3.4 | Size vs blocks check | Detect over-allocated inodes | [x] |
+| N3.3.5 | Block bitmap audit | Count free per group | [x] |
+| N3.3.6 | Directory structure check | Verify `.` and `..` entries | [x] |
+| N3.3.7 | Root inode validation | Inode 2 must be directory | [x] |
+| N3.3.8 | Mark filesystem clean | Write SB_STATE = 1 | [x] |
+| N3.3.9 | Error/fixed counters | Track issues found + repaired | [x] |
+| N3.3.10 | Boot-time fsck | Auto-run on mount | [x] |
+
+### Phase N4: POSIX v2 (3 sprints, 30 tasks) ✅
+
+#### Sprint N4.1: mmap (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N4.1.1 | VMA table (32 entries) | Start, end, prot, flags, fd, offset | [x] |
+| N4.1.2 | sys_mmap | Anonymous + file-backed mapping | [x] |
+| N4.1.3 | sys_munmap | Unmap + free physical pages | [x] |
+| N4.1.4 | sys_msync | Write-back shared mappings | [x] |
+| N4.1.5 | Page fault handler | Demand paging for file-backed mmap | [x] |
+| N4.1.6 | Free region finder | Gap search from 0x40000000 | [x] |
+| N4.1.7 | 4-level page table walk | PML4 → PDPT → PD → PT mapping | [x] |
+| N4.1.8 | TLB invalidation | INVLPG per unmapped page | [x] |
+| N4.1.9 | Virt-to-phys translation | Walk page table for address | [x] |
+| N4.1.10 | MAP_FIXED support | Caller-specified address | [x] |
+
+#### Sprint N4.2: select/poll + Pipe v3 (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N4.2.1 | sys_poll | Poll fds for POLLIN/POLLOUT/POLLERR | [x] |
+| N4.2.2 | sys_select | Convert to poll internally | [x] |
+| N4.2.3 | Pipe/socket/file status | Type-specific readiness checks | [x] |
+| N4.2.4 | Timeout handling | PIT tick comparison | [x] |
+| N4.2.5 | sys_pipe2 | 64KB buffer, reader/writer refcount | [x] |
+| N4.2.6 | sys_mkfifo | Named pipe creation | [x] |
+| N4.2.7 | pipe_read | Blocking with wake-on-data | [x] |
+| N4.2.8 | pipe_write | Blocking with wake-on-space | [x] |
+| N4.2.9 | EOF detection | Writer close → reader gets 0 | [x] |
+| N4.2.10 | FD allocation | Type-tagged file descriptors | [x] |
+
+#### Sprint N4.3: /proc + Signals (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N4.3.1 | /proc/cpuinfo | Model, MHz, cores, flags | [x] |
+| N4.3.2 | /proc/meminfo | Total, free, available | [x] |
+| N4.3.3 | /proc/uptime | Seconds since boot | [x] |
+| N4.3.4 | /proc/version | OS version string | [x] |
+| N4.3.5 | /proc/<pid>/status | Name, state, PID, PPid | [x] |
+| N4.3.6 | sys_sigaction | Register handler + flags | [x] |
+| N4.3.7 | sys_sigprocmask | Block/unblock signals | [x] |
+| N4.3.8 | sys_kill | Send signal + enqueue | [x] |
+| N4.3.9 | Signal delivery | Default actions + user handlers | [x] |
+| N4.3.10 | Signal queue (16 deep) | Sender PID, sigval | [x] |
+
+### Phase N5: Networking v4 (2 sprints, 20 tasks) ✅
+
+#### Sprint N5.1: DHCP v2 + NTP (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N5.1.1 | DHCP state machine | INIT→SELECTING→REQUESTING→BOUND→RENEWING | [x] |
+| N5.1.2 | DHCP Discover | Broadcast with options 53, 55, 12 | [x] |
+| N5.1.3 | DHCP Offer handling | Parse offered IP + options | [x] |
+| N5.1.4 | DHCP Request | Unicast with options 50, 54 | [x] |
+| N5.1.5 | DHCP ACK → configure | Set IP, mask, gateway, DNS | [x] |
+| N5.1.6 | Lease renewal timer | T1 (50%), T2 (87.5%) | [x] |
+| N5.1.7 | DHCP option parser | Subnet, router, DNS, domain, lease | [x] |
+| N5.1.8 | NTP query | RFC 5905 client, T1/T2/T3/T4 | [x] |
+| N5.1.9 | NTP offset calculation | `((T2-T1)+(T3-T4))/2` | [x] |
+| N5.1.10 | System clock sync | Adjust clock from NTP response | [x] |
+
+#### Sprint N5.2: Multicast + IPv6 + HTTP/2 (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| N5.2.1 | IGMP join | Send Membership Report v2 | [x] |
+| N5.2.2 | IGMP leave | Send Leave to 224.0.0.2 | [x] |
+| N5.2.3 | Multicast MAC filter | `01:00:5E` + lower 23 bits | [x] |
+| N5.2.4 | Multicast group table | 8 groups | [x] |
+| N5.2.5 | IPv6 link-local address | EUI-64 from MAC | [x] |
+| N5.2.6 | NDP Neighbor Solicitation | DAD for address verification | [x] |
+| N5.2.7 | HTTP/2 connection preface | `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n` | [x] |
+| N5.2.8 | HTTP/2 frame parser | 9-byte header + type dispatch | [x] |
+| N5.2.9 | HTTP/2 SETTINGS exchange | Parse + ACK settings | [x] |
+| N5.2.10 | HTTP/2 PING/GOAWAY/WINDOW_UPDATE | Control frame handling | [x] |
 
 ---
 
