@@ -539,13 +539,15 @@ Commit format: `<type>(<scope>): <description>` (e.g., `feat(analyzer): add GAT 
 | 1996 | Started career at Indonesia's Directorate General of Taxes (DJP) |
 | ~2008 | Founded **[IndoFace](https://indoface.wordpress.com/)** — Indonesian social network with **180,000+ members** (status updates, photo sharing, blog, voting, classified ads). One of Indonesia's pioneering homegrown social platforms |
 | 2012 | Co-founded **[TaxPrime](https://www.taxprime.net/)** — now Indonesia's largest independent tax consulting firm (240+ professionals, 27 ex-DJP/Customs officials). Collaborating firm of [Andersen Global](https://andersen.com/) and member of [PrimeGlobal](https://www.primeglobal.net/) (300 firms, 110+ countries) |
+| 2012 | Founded **[PrimeCore.id](https://www.primecore.id/)** — Global Business Solutions (affiliate of TaxPrime). Strategic business development, ESG & sustainability advisory, legal restructuring, global mobility, independent board services. Offices in Jakarta, Gresik, Surabaya, Cikarang. Ecosystem: TaxPrime, [Associa](https://www.primecore.id/) (HR), [TheTitan.Asia](https://www.primecore.id/) (private wealth), [InkubatorX](https://www.primecore.id/) (enterprise) |
 | 2021-2024 | **[ITR World Tax "Highly Regarded"](https://www.itrworldtax.com/Lawyer/TaxPrime/Muhamad-Fajar-Putranto-Indonesia/Profile/7273)** — Tax Controversy Leader, 4 consecutive years. **World TP "Transfer Pricing Expert"** (2021) |
 | 2022 | **[Indonesia Most Inspirational Taxpayers](https://www.taxprime.net/awards/the-most-inspirational-taxpayer/)** — Majalah Pajak, Tax Practitioner category |
 | 2023 | Founded **[InkubatorX](https://www.pajak.com/ekonomi/inkubatorx-riset-akselerasi-pengembangan-hilirisasi/)** — ecosystem company (digital economy, renewable energy, nano technology). Developed **Nanosix** (nano curcumin, nano coconut water, biodiesel nano additive) |
+| 2023 | **Wakil Ketua Dewan Pembina [ACEXI](https://acexi.org/)** (Asosiasi Ahli Emisi Karbon Indonesia) — Vice Chair of the Board of Trustees. Carbon emission expert association with MoU with BKI & BSN. Focus: capacity building, policy advocacy, ESG standardization, sustainability verification |
 | 2025 | Elected **[Ketua Umum IKANAS STAN](https://www.pajak.com/ekonomi/fajar-putranto-terpilih-jadi-ketua-ikanas-stan-siap-konsolidasi/)** 2025-2028 — leading ~80,000 alumni of Indonesia's State College of Accountancy |
 | 2026 | Created **Fajar Lang** — systems programming language for embedded ML & OS development. Built **FajarOS** — bare-metal OS on x86_64 and ARM64 (Radxa Dragon Q6A) |
 
-> *"From tax auditor to social network founder to programming language creator — the journey of building things that matter."*
+> *"From tax auditor to social network founder, from global business advisory to carbon emission governance, to programming language creator — the journey of building things that matter."*
 
 ---
 
