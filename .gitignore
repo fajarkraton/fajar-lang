@@ -27,6 +27,11 @@ tarpaulin-report.html
 # Build artifacts
 book/book/
 
+# Fuzz testing (regenerable, ~53MB)
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/Cargo.lock
+
 # MNIST data (downloaded separately)
 data/
 
