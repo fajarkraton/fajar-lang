@@ -16048,3 +16048,195 @@ fn ee1_async_with_struct_method() {
     let out = eval_output(src);
     assert_eq!(out, vec!["142"]);
 }
+
+// ═══════════════════════════════════════════════════════
+// v0.8 Array Higher-Order Methods (22 methods)
+// ═══════════════════════════════════════════════════════
+
+#[test]
+fn v08_array_map_with_closure() {
+    let src = r#"fn main() -> void { println([1, 2, 3].map(|x| x * 2)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[2, 4, 6]"]);
+}
+
+#[test]
+fn v08_array_filter_with_closure() {
+    let src = r#"fn main() -> void { println([1, 2, 3, 4, 5].filter(|x| x > 3)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[4, 5]"]);
+}
+
+#[test]
+fn v08_array_fold() {
+    let src = r#"fn main() -> void { println([1, 2, 3, 4, 5].fold(0, |acc, x| acc + x)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["15"]);
+}
+
+#[test]
+fn v08_array_any_all() {
+    let src = r#"
+        fn main() -> void {
+            println([1, 2, 3].any(|x| x > 2))
+            println([1, 2, 3].all(|x| x > 0))
+            println([1, 2, 3].all(|x| x > 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}
+
+#[test]
+fn v08_array_sort_reverse() {
+    let src = r#"
+        fn main() -> void {
+            println([3, 1, 4, 1, 5].sort())
+            println([1, 2, 3].reverse())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[1, 1, 3, 4, 5]", "[3, 2, 1]"]);
+}
+
+#[test]
+fn v08_array_sum_min_max() {
+    let src = r#"
+        fn main() -> void {
+            println([1, 2, 3, 4, 5].sum())
+            println([3, 1, 4, 1, 5].min())
+            println([3, 1, 4, 1, 5].max())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["15", "1", "5"]);
+}
+
+#[test]
+fn v08_array_take_skip() {
+    let src = r#"
+        fn main() -> void {
+            println([1, 2, 3, 4, 5].take(3))
+            println([1, 2, 3, 4, 5].skip(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[1, 2, 3]", "[4, 5]"]);
+}
+
+#[test]
+fn v08_array_enumerate() {
+    let src = r#"fn main() -> void { println([10, 20, 30].enumerate()) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[(0, 10), (1, 20), (2, 30)]"]);
+}
+
+#[test]
+fn v08_array_zip() {
+    let src = r#"fn main() -> void { println([1, 2, 3].zip([10, 20, 30])) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[(1, 10), (2, 20), (3, 30)]"]);
+}
+
+#[test]
+fn v08_array_join() {
+    let src = r#"fn main() -> void { println([1, 2, 3].join(", ")) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1, 2, 3"]);
+}
+
+#[test]
+fn v08_array_flatten() {
+    let src = r#"fn main() -> void { println([[1, 2], [3, 4], [5]].flatten()) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[1, 2, 3, 4, 5]"]);
+}
+
+#[test]
+fn v08_array_dedup() {
+    let src = r#"fn main() -> void { println([1, 1, 2, 2, 3, 3].dedup()) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[1, 2, 3]"]);
+}
+
+#[test]
+fn v08_array_chunks() {
+    let src = r#"fn main() -> void { println([1, 2, 3, 4, 5, 6].chunks(2)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[[1, 2], [3, 4], [5, 6]]"]);
+}
+
+#[test]
+fn v08_array_chaining() {
+    let src = r#"fn main() -> void { println([1, 2, 3, 4, 5].filter(|x| x > 2).map(|x| x * 10)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[30, 40, 50]"]);
+}
+
+#[test]
+fn v08_array_count_with_predicate() {
+    let src = r#"fn main() -> void { println([1, 2, 3, 4, 5].count(|x| x > 3)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2"]);
+}
+
+// ═══════════════════════════════════════════════════════
+// v0.8 String V2 Methods (11 methods)
+// ═══════════════════════════════════════════════════════
+
+#[test]
+fn v08_string_pad_left_right() {
+    let src = r#"
+        fn main() -> void {
+            println("hi".pad_left(6, "."))
+            println("hi".pad_right(6, "."))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["....hi", "hi...."]);
+}
+
+#[test]
+fn v08_string_to_int() {
+    let src = r#"
+        fn main() -> void {
+            println("42".to_int() + 8)
+            println("3".to_int() * 7)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["50", "21"]);
+}
+
+#[test]
+fn v08_string_words() {
+    let src = r#"fn main() -> void { println("hello world foo".words()) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["[hello, world, foo]"]);
+}
+
+#[test]
+fn v08_string_char_at() {
+    let src = r#"fn main() -> void { println("abcdef".char_at(2)) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["c"]);
+}
+
+#[test]
+fn v08_string_insert_remove() {
+    let src = r#"
+        fn main() -> void {
+            println("abcdef".insert(3, "XYZ"))
+            println("abcdef".remove(2, 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["abcXYZdef", "abef"]);
+}
+
+#[test]
+fn v08_string_count_substr() {
+    let src = r#"fn main() -> void { println("hello world".count("l")) }"#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
