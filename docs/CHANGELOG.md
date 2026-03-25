@@ -18,6 +18,54 @@ Kategori perubahan:
 
 ---
 
+## [6.0.0] — 2026-03-25 "Absolute"
+
+### Added — Fajar Lang v0.8 + Nova v1.0
+
+**Language Features (v0.8)**
+- **22 array higher-order methods** — `.map()`, `.filter()`, `.fold()`, `.flat_map()`, `.any()`, `.all()`, `.find()`, `.position()`, `.count()`, `.sum()`, `.min()`, `.max()`, `.sort()`, `.reverse()`, `.enumerate()`, `.zip()`, `.take()`, `.skip()`, `.join()`, `.flatten()`, `.dedup()`, `.chunks()`, `.windows()`
+- **`call_value()`** — call closures and functions as first-class values
+- **Closure + array chaining** — `arr.filter(|x| x > 3).map(|x| x * x)`
+
+**FajarOS Nova v1.0 "Absolute"**
+- **SMP Scheduler V2** — per-CPU run queues, priority 0-39, load balancing, CPU affinity, IPI
+- **Virtual Memory V2** — demand paging, zero-fill on fault, stack growth, OOM killer, ASLR
+- **POSIX Syscalls** — openat, readdir, ftruncate, rename, mkdir, rmdir, sigaction, alarm, getppid, nanosleep (syscalls 37-50)
+- **ext2 Persistence** — indirect blocks (>48KB files), timestamps, fsck, tune2fs
+- **TCP/IP V3** — congestion control (AIMD), Nagle, checksum, MSS option, TLS stub, IP routing
+- **Hardening** — fork bomb protection, stress tests (memory, FD, pipe, scheduler)
+- Nova kernel: 20,176 → 21,187 LOC, 34 → 50 syscalls, 240 → 270+ commands
+
+**fajaros-x86 v2.0.0 "Absolute"**
+- 126 → 139 modular .fj files, 36K → 37K LOC
+- 13 new modules: SMP v2, VM v2, POSIX, ext2 indirect, TCP v3, routing, hardening
+
+**Quality**
+- 5,664 tests passing, 0 failures
+- 2,357,767 fuzz runs (cargo-fuzz + ASAN), 0 crashes
+- Clippy clean, cargo fmt clean
+
+**Documentation**
+- Architecture reference (Nova kernel, 809 lines)
+- Syscall reference (all 50 syscalls)
+- User manual (240+ commands)
+- Security audit (15 findings documented)
+- Blog: Nova v0.9 "Zenith" technical post
+- Demo script (5-min video, social media posts)
+
+**Infrastructure**
+- Website: landing page with dark/light theme, SEO, GitHub Pages
+- 3 repos updated: SEO READMEs, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT
+- Releases: v5.5.0, v1.4.0, v2.0.0
+- GitHub topics + descriptions for all repos
+
+### Stats
+- Total tests: 6,286+ (0 failures)
+- Fuzz: 2.3M runs, 0 crashes
+- LOC: ~290,000 Rust (compiler) + 21,187 Fajar Lang (Nova kernel)
+
+---
+
 ## [5.5.0] — 2026-03-25 "Illumination"
 
 ### Added — Fajar Lang v0.7 "Illumination"
