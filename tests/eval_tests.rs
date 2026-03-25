@@ -15224,3 +15224,212 @@ fn cc1_multiple_traits_on_struct() {
     let out = eval_output(src);
     assert_eq!(out, vec!["fajar", "30"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint CC2: Associated types + advanced traits
+// ═══════════════════════════════════════════════
+
+#[test]
+fn cc2_generic_struct_method() {
+    let src = r#"
+        struct Pair { first: i64, second: i64 }
+        impl Pair {
+            fn sum(self) -> i64 { self.first + self.second }
+            fn diff(self) -> i64 { self.first - self.second }
+        }
+        fn main() -> void {
+            let p = Pair { first: 10, second: 20 }
+            println(p.sum())
+            let q = Pair { first: 50, second: 30 }
+            println(q.diff())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30", "20"]);
+}
+
+#[test]
+fn cc2_generic_function() {
+    let src = r#"
+        fn identity<T>(x: T) -> T { x }
+        fn main() -> void {
+            println(identity(42))
+            println(identity("hello"))
+            println(identity(true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "hello", "true"]);
+}
+
+#[test]
+fn cc2_generic_pair() {
+    let src = r#"
+        fn make_pair<T>(a: T, b: T) -> (T, T) { (a, b) }
+        fn main() -> void {
+            let p = make_pair(1, 2)
+            println(p.0)
+            println(p.1)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "2"]);
+}
+
+#[test]
+fn cc2_trait_with_generic_impl() {
+    let src = r#"
+        trait Describe {
+            fn describe(self) -> str
+        }
+        struct Container { value: i64 }
+        impl Container {
+            fn unwrap(self) -> i64 { self.value }
+        }
+        impl Describe for Container {
+            fn describe(self) -> str { f"Container({self.value})" }
+        }
+        fn main() -> void {
+            let b = Container { value: 42 }
+            println(b.describe())
+            let b2 = Container { value: 99 }
+            println(b2.unwrap())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Container(42)", "99"]);
+}
+
+#[test]
+fn cc2_nested_generics() {
+    let src = r#"
+        fn wrap<T>(x: T) -> T { x }
+        fn main() -> void {
+            println(wrap(42))
+            println(wrap("hi"))
+            println(wrap(true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "hi", "true"]);
+}
+
+#[test]
+fn cc2_trait_polymorphism() {
+    let src = r#"
+        trait Printable {
+            fn to_text(self) -> str
+        }
+        struct Num { val: i64 }
+        struct Txt { val: str }
+        impl Printable for Num {
+            fn to_text(self) -> str { to_string(self.val) }
+        }
+        impl Printable for Txt {
+            fn to_text(self) -> str { self.val }
+        }
+        fn main() -> void {
+            let n = Num { val: 42 }
+            let t = Txt { val: "hello" }
+            println(n.to_text())
+            println(t.to_text())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "hello"]);
+}
+
+#[test]
+fn cc2_struct_with_methods_and_trait() {
+    let src = r#"
+        trait Measurable {
+            fn measure(self) -> f64
+        }
+        struct Rectangle { width: f64, height: f64 }
+        impl Rectangle {
+            fn perimeter(self) -> f64 { 2.0 * (self.width + self.height) }
+        }
+        impl Measurable for Rectangle {
+            fn measure(self) -> f64 { self.width * self.height }
+        }
+        fn main() -> void {
+            let r = Rectangle { width: 5.0, height: 3.0 }
+            println(r.measure())
+            let r2 = Rectangle { width: 5.0, height: 3.0 }
+            println(r2.perimeter())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["15", "16"]);
+}
+
+#[test]
+fn cc2_generic_max() {
+    let src = r#"
+        fn max_val(a: i64, b: i64) -> i64 {
+            if a > b { a } else { b }
+        }
+        fn main() -> void {
+            println(max_val(10, 20))
+            println(max_val(100, 50))
+            println(max_val(7, 7))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["20", "100", "7"]);
+}
+
+#[test]
+fn cc2_impl_chain_pattern() {
+    // Builder pattern with impl methods
+    let src = r#"
+        struct Config {
+            debug: bool,
+            verbose: bool,
+            threads: i64
+        }
+        impl Config {
+            fn with_debug(self) -> Config {
+                Config { debug: true, verbose: self.verbose, threads: self.threads }
+            }
+            fn with_threads(self, n: i64) -> Config {
+                Config { debug: self.debug, verbose: self.verbose, threads: n }
+            }
+            fn summary(self) -> str {
+                f"debug={self.debug} threads={self.threads}"
+            }
+        }
+        fn main() -> void {
+            let c = Config { debug: false, verbose: false, threads: 1 }
+                .with_debug()
+                .with_threads(8)
+            println(c.summary())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["debug=true threads=8"]);
+}
+
+#[test]
+fn cc2_option_methods() {
+    let src = r#"
+        fn unwrap_or(opt: i64, default: i64) -> i64 {
+            let v = Some(opt)
+            match v {
+                Some(x) => x
+                _ => default
+            }
+        }
+        fn main() -> void {
+            println(unwrap_or(42, 0))
+            let empty = None
+            let result = match empty {
+                Some(x) => x
+                _ => -1
+            }
+            println(result)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42", "-1"]);
+}
