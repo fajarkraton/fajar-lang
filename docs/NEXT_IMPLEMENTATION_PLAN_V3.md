@@ -415,46 +415,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DOC1.1 | Architecture overview | Kernel layers diagram (boot → sched → mm → fs → net) | [ ] |
-| DOC1.2 | Memory map reference | Complete address map 0x000000-0xA06000 | [ ] |
-| DOC1.3 | Process model | Fork/exec/waitpid lifecycle diagram | [ ] |
-| DOC1.4 | Filesystem layers | VFS → ramfs/ext2/fat32 architecture | [ ] |
-| DOC1.5 | Network stack | TCP state diagram, socket API flow | [ ] |
-| DOC1.6 | Signal delivery | Signal bitmap → check → deliver flow | [ ] |
-| DOC1.7 | CoW mechanism | Page fault → copy → remap diagram | [ ] |
-| DOC1.8 | Init system | Service lifecycle, runlevel transitions | [ ] |
-| DOC1.9 | GDB integration | RSP protocol flow, breakpoint mechanism | [ ] |
-| DOC1.10 | Output: ARCHITECTURE_V09.md | Complete architecture document | [ ] |
+| DOC1.1 | Architecture overview | 5-layer diagram + context annotations | [x] |
+| DOC1.2 | Memory map reference | 30+ structures, 0x000000-0xA06000 | [x] |
+| DOC1.3 | Process model | 16 PIDs, 5 states, fork/exec lifecycle | [x] |
+| DOC1.4 | Filesystem layers | VFS → ramfs/ext2/fat32 + journaling | [x] |
+| DOC1.5 | Network stack | TCP 11-state diagram, socket API | [x] |
+| DOC1.6 | Signal delivery | 8 signals, bitmap, SIGKILL fast path | [x] |
+| DOC1.7 | CoW mechanism | Refcount, page fault handler flow | [x] |
+| DOC1.8 | Init system | Boot sequence, 4 runlevels, daemons | [x] |
+| DOC1.9 | GDB integration | RSP on COM2, 16 breakpoints | [x] |
+| DOC1.10 | Output: ARCHITECTURE_NOVA_V09.md | 809 lines, all 10 sections | [x] |
 
 ### Sprint DOC2: Syscall Reference (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DOC2.1 | Syscall 0-9 | EXIT through SBRK signatures + semantics | [ ] |
-| DOC2.2 | Syscall 10-19 | OPEN through UNLINK | [ ] |
-| DOC2.3 | Syscall 20-26 | FORK through SETPGID | [ ] |
-| DOC2.4 | Syscall 27-31 | SOCKET through CONNECT | [ ] |
-| DOC2.5 | Syscall 32-33 | GPU_ALLOC, GPU_DISPATCH | [ ] |
-| DOC2.6 | Error codes | All error returns documented | [ ] |
-| DOC2.7 | Examples per syscall | Usage example for each | [ ] |
-| DOC2.8 | ABI reference | Register convention, calling convention | [ ] |
-| DOC2.9 | User-mode runtime | runtime_user.rs syscall wrappers | [ ] |
-| DOC2.10 | Output: SYSCALL_REFERENCE.md | Complete syscall document | [ ] |
+| DOC2.1 | Syscall 0-9 | Core: EXIT through SBRK | [x] |
+| DOC2.2 | Syscall 10-19 | File I/O: OPEN through UNLINK | [x] |
+| DOC2.3 | Syscall 20-26 | Process + Signal: FORK through SETPGID | [x] |
+| DOC2.4 | Syscall 30-34 | IPC: SEND/RECV/CALL/REPLY/NOTIFY | [x] |
+| DOC2.5 | Syscall 35-36 | GPU: GPU_ALLOC, GPU_DISPATCH | [x] |
+| DOC2.6 | Error codes | 8 error values documented | [x] |
+| DOC2.7 | Examples per syscall | Fajar Lang code examples | [x] |
+| DOC2.8 | ABI reference | SYSCALL/SYSRET, rax/rdi/rsi/rdx | [x] |
+| DOC2.9 | Implementation notes | Memory addresses, tables | [x] |
+| DOC2.10 | Output: SYSCALL_REFERENCE_NOVA.md | All 34 syscalls documented | [x] |
 
 ### Sprint DOC3: User Manual (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DOC3.1 | Getting started | Build, boot, first commands | [ ] |
-| DOC3.2 | Shell guide | Pipes, redirect, vars, scripting | [ ] |
-| DOC3.3 | User management | adduser, login, chmod, chown | [ ] |
-| DOC3.4 | File operations | ls, cat, touch, rm, mkdir, ln | [ ] |
-| DOC3.5 | Process management | ps, kill, jobs, fg, bg | [ ] |
-| DOC3.6 | Networking | ifconfig, ping, wget, netstat, httpd | [ ] |
-| DOC3.7 | Package management | pkg install/remove/list/update | [ ] |
-| DOC3.8 | Service management | service start/stop, crontab, syslog | [ ] |
-| DOC3.9 | Debugging | gdb, dmesg, cowstat, tcpstat | [ ] |
-| DOC3.10 | Output: USER_MANUAL.md | Complete user manual | [ ] |
+| DOC3.1 | Getting started | Build, 7 QEMU variants, first commands | [x] |
+| DOC3.2 | Shell guide | Pipes, redirect, vars, if/for/while | [x] |
+| DOC3.3 | User management | 16 accounts, adduser, chmod, chown | [x] |
+| DOC3.4 | File operations | 24 commands, 3 filesystems | [x] |
+| DOC3.5 | Process management | 16 PIDs, fork/exec, 6 signals | [x] |
+| DOC3.6 | Networking | TCP/UDP/ICMP/ARP/DNS/DHCP, socket API | [x] |
+| DOC3.7 | Package management | 5 std packages, install/remove/list | [x] |
+| DOC3.8 | Service management | Init, 4 runlevels, 9 services | [x] |
+| DOC3.9 | Debugging | GDB RSP, dmesg, 16 breakpoints | [x] |
+| DOC3.10 | Output: USER_MANUAL_NOVA.md | ~380 lines, all 10 sections | [x] |
 
 ---
 
