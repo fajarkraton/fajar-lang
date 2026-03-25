@@ -15008,3 +15008,219 @@ fn bb2_default_first_wins() {
     let out = eval_output(src);
     assert_eq!(out, vec!["positive first", "default"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase CC: Trait Objects V2
+// Sprint CC1: Dynamic dispatch + trait objects
+// ═══════════════════════════════════════════════
+
+#[test]
+fn cc1_trait_def_and_impl() {
+    let src = r#"
+        trait Greet {
+            fn hello(self) -> str
+        }
+        struct Person { name: str }
+        impl Greet for Person {
+            fn hello(self) -> str { f"Hello, {self.name}!" }
+        }
+        fn main() -> void {
+            let p = Person { name: "Fajar" }
+            println(p.hello())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hello, Fajar!"]);
+}
+
+#[test]
+fn cc1_multiple_impls() {
+    let src = r#"
+        trait Area {
+            fn area(self) -> f64
+        }
+        struct Circle { r: f64 }
+        struct Rect { w: f64, h: f64 }
+        impl Area for Circle {
+            fn area(self) -> f64 { 3.14 * self.r * self.r }
+        }
+        impl Area for Rect {
+            fn area(self) -> f64 { self.w * self.h }
+        }
+        fn main() -> void {
+            let c = Circle { r: 10.0 }
+            let r = Rect { w: 5.0, h: 3.0 }
+            println(c.area())
+            println(r.area())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["314", "15"]);
+}
+
+#[test]
+fn cc1_trait_with_multiple_methods() {
+    let src = r#"
+        trait Animal {
+            fn name(self) -> str
+            fn sound(self) -> str
+        }
+        struct Dog {}
+        impl Animal for Dog {
+            fn name(self) -> str { "Dog" }
+            fn sound(self) -> str { "Woof" }
+        }
+        fn main() -> void {
+            let d = Dog {}
+            println(d.name())
+            println(d.sound())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Dog", "Woof"]);
+}
+
+#[test]
+fn cc1_trait_method_with_args() {
+    // Trait methods with extra args beyond self
+    let src = r#"
+        struct Adder { base: i64 }
+        struct Multiplier { base: i64 }
+        impl Adder {
+            fn compute(self, x: i64) -> i64 { self.base + x }
+        }
+        impl Multiplier {
+            fn compute(self, x: i64) -> i64 { self.base * x }
+        }
+        fn main() -> void {
+            let a = Adder { base: 3 }
+            let m = Multiplier { base: 3 }
+            println(a.compute(4))
+            println(m.compute(4))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["7", "12"]);
+}
+
+#[test]
+fn cc1_struct_method_no_trait() {
+    let src = r#"
+        struct Counter { value: i64 }
+        impl Counter {
+            fn get(self) -> i64 { self.value }
+            fn doubled(self) -> i64 { self.value * 2 }
+        }
+        fn main() -> void {
+            let c = Counter { value: 21 }
+            println(c.get())
+            println(c.doubled())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["21", "42"]);
+}
+
+#[test]
+fn cc1_trait_as_constraint() {
+    let src = r#"
+        trait Display {
+            fn show(self) -> str
+        }
+        struct Point { x: i64, y: i64 }
+        impl Display for Point {
+            fn show(self) -> str { f"({self.x}, {self.y})" }
+        }
+        fn print_it(item: Point) -> void {
+            println(item.show())
+        }
+        fn main() -> void {
+            let p = Point { x: 3, y: 4 }
+            print_it(p)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["(3, 4)"]);
+}
+
+#[test]
+fn cc1_impl_with_constructor() {
+    let src = r#"
+        struct Vec2 { x: f64, y: f64 }
+        impl Vec2 {
+            fn length(self) -> f64 { sqrt(self.x * self.x + self.y * self.y) }
+        }
+        fn main() -> void {
+            let v = Vec2 { x: 3.0, y: 4.0 }
+            println(v.length())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn cc1_chained_method_calls() {
+    let src = r#"
+        struct Builder { val: i64 }
+        impl Builder {
+            fn add(self, n: i64) -> Builder { Builder { val: self.val + n } }
+            fn mul(self, n: i64) -> Builder { Builder { val: self.val * n } }
+            fn build(self) -> i64 { self.val }
+        }
+        fn main() -> void {
+            let result = Builder { val: 0 }.add(5).mul(3).add(1).build()
+            println(result)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16"]);
+}
+
+#[test]
+fn cc1_trait_default_behavior() {
+    // When a struct has impl for a trait, the trait's methods work
+    let src = r#"
+        trait Stringify {
+            fn to_text(self) -> str
+        }
+        struct Color { r: i64, g: i64, b: i64 }
+        impl Stringify for Color {
+            fn to_text(self) -> str { f"rgb({self.r},{self.g},{self.b})" }
+        }
+        fn main() -> void {
+            let red = Color { r: 255, g: 0, b: 0 }
+            let blue = Color { r: 0, g: 0, b: 255 }
+            println(red.to_text())
+            println(blue.to_text())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["rgb(255,0,0)", "rgb(0,0,255)"]);
+}
+
+#[test]
+fn cc1_multiple_traits_on_struct() {
+    let src = r#"
+        trait Named {
+            fn name(self) -> str
+        }
+        trait Aged {
+            fn age(self) -> i64
+        }
+        struct User { username: str, years: i64 }
+        impl Named for User {
+            fn name(self) -> str { self.username }
+        }
+        impl Aged for User {
+            fn age(self) -> i64 { self.years }
+        }
+        fn main() -> void {
+            let u = User { username: "fajar", years: 30 }
+            println(u.name())
+            println(u.age())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["fajar", "30"]);
+}
