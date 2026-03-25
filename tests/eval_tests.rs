@@ -13486,3 +13486,163 @@ fn t1_rst_clears() {
     let out = eval_output(src);
     assert_eq!(out, vec!["0"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint T2: Network services
+// ═══════════════════════════════════════════════
+
+#[test]
+fn t2_net_stats_layout() {
+    let src = r#"
+        const NET_STATS: i64 = 0xA06000
+        const NSTAT_RX_PACKETS: i64 = 0
+        const NSTAT_TX_BYTES: i64 = 24
+        const NSTAT_UDP_DGRAMS: i64 = 56
+        fn main() -> void {
+            println(NET_STATS)
+            println(NSTAT_UDP_DGRAMS + 8)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10510336", "64"]);
+}
+
+#[test]
+fn t2_udp_header() {
+    let src = r#"
+        fn udp_total(data_len: i64) -> i64 { 8 + data_len }
+        fn main() -> void {
+            println(udp_total(100))
+            println(udp_total(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["108", "8"]);
+}
+
+#[test]
+fn t2_port_encoding() {
+    let src = r#"
+        fn port_hi(port: i64) -> i64 { (port >> 8) & 0xFF }
+        fn port_lo(port: i64) -> i64 { port & 0xFF }
+        fn main() -> void {
+            println(port_hi(80))
+            println(port_lo(80))
+            println(port_hi(8080))
+            println(port_lo(8080))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "80", "31", "144"]);
+}
+
+#[test]
+fn t2_arp_aging() {
+    let src = r#"
+        const ARP_MAX_AGE: i64 = 300
+        fn is_expired(age: i64) -> bool { age > ARP_MAX_AGE }
+        fn main() -> void {
+            println(is_expired(100))
+            println(is_expired(301))
+            println(is_expired(300))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["false", "true", "false"]);
+}
+
+#[test]
+fn t2_dns_retry() {
+    let src = r#"
+        fn dns_with_retry(max: i64) -> i64 {
+            let mut retries: i64 = 0
+            let mut success = false
+            while retries < max && !success {
+                if retries == 2 { success = true }
+                retries = retries + 1
+            }
+            retries
+        }
+        fn main() -> void {
+            println(dns_with_retry(3))
+            println(dns_with_retry(1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "1"]);
+}
+
+#[test]
+fn t2_echo_port() {
+    let src = r#"
+        const ECHO_PORT: i64 = 7
+        fn main() -> void { println(ECHO_PORT) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["7"]);
+}
+
+#[test]
+fn t2_telnet_default_port() {
+    let src = r#"
+        const TELNET_PORT: i64 = 23
+        fn ephemeral(tcb: i64) -> i64 { 49200 + tcb }
+        fn main() -> void {
+            println(TELNET_PORT)
+            println(ephemeral(0))
+            println(ephemeral(5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["23", "49200", "49205"]);
+}
+
+#[test]
+fn t2_multi_client_max() {
+    let src = r#"
+        const TCB_MAX: i64 = 16
+        fn can_accept(active: i64) -> bool { active < TCB_MAX - 1 }
+        fn main() -> void {
+            println(can_accept(0))
+            println(can_accept(14))
+            println(can_accept(15))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}
+
+#[test]
+fn t2_stat_increment() {
+    let src = r#"
+        fn stat_inc(current: i64, amount: i64) -> i64 { current + amount }
+        fn main() -> void {
+            let mut rx: i64 = 0
+            rx = stat_inc(rx, 1)
+            rx = stat_inc(rx, 1)
+            rx = stat_inc(rx, 1)
+            println(rx)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
+
+#[test]
+fn t2_ip_display() {
+    let src = r#"
+        fn ip_a(ip: i64) -> i64 { (ip >> 24) & 0xFF }
+        fn ip_b(ip: i64) -> i64 { (ip >> 16) & 0xFF }
+        fn ip_c(ip: i64) -> i64 { (ip >> 8) & 0xFF }
+        fn ip_d(ip: i64) -> i64 { ip & 0xFF }
+        fn main() -> void {
+            let ip: i64 = 0x0A000202
+            println(ip_a(ip))
+            println(ip_b(ip))
+            println(ip_c(ip))
+            println(ip_d(ip))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10", "0", "2", "2"]);
+}

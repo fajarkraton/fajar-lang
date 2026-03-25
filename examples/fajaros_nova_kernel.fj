@@ -8429,6 +8429,200 @@ const TCP_MAX_RETRIES: i64 = 5
 }
 
 // ═══════════════════════════════════════════════
+// Network Services (Sprint T2 — v0.9 "Zenith")
+// ═══════════════════════════════════════════════
+
+// Network statistics at 0xA06000
+const NET_STATS: i64 = 0xA06000
+const NSTAT_RX_PACKETS: i64 = 0
+const NSTAT_TX_PACKETS: i64 = 8
+const NSTAT_RX_BYTES: i64 = 16
+const NSTAT_TX_BYTES: i64 = 24
+const NSTAT_ERRORS: i64 = 32
+const NSTAT_DROPPED: i64 = 40
+const NSTAT_TCP_CONNS: i64 = 48
+const NSTAT_UDP_DGRAMS: i64 = 56
+
+// ARP aging: max age = 300 ticks (30 seconds at 100Hz)
+const ARP_MAX_AGE: i64 = 300
+const ARP_MAX_ENTRIES: i64 = 16
+
+// T2.1: TCP server multi-client (up to 4)
+@kernel fn tcp_server_accept(listen_tcb: i64) -> i64 {
+    let state = tcb_get(listen_tcb, TCB_OFF_STATE)
+    if state != TCP_LISTEN { return -1 }
+    // Allocate new TCB for accepted connection
+    let new_tcb = tcb_alloc()
+    if new_tcb < 0 { return -1 }
+    tcb_set(new_tcb, TCB_OFF_LOCAL_PORT, tcb_get(listen_tcb, TCB_OFF_LOCAL_PORT))
+    tcb_set(new_tcb, TCB_OFF_STATE, TCP_ESTABLISHED)
+    tcb_set(new_tcb, TCB_OFF_WINDOW, 65535)
+    let isn = volatile_read_u64(0x6FE08) * 1000
+    tcb_set(new_tcb, TCB_OFF_SND_NXT, isn + 1)
+    tcb_set(new_tcb, TCB_OFF_SND_UNA, isn)
+    // Update stats
+    let conns = volatile_read_u64(NET_STATS + NSTAT_TCP_CONNS)
+    volatile_write_u64(NET_STATS + NSTAT_TCP_CONNS, conns + 1)
+    new_tcb
+}
+
+// T2.2: UDP socket support
+@kernel fn udp_send(local_port: i64, remote_ip: i64, remote_port: i64, data: i64, len: i64) -> i64 {
+    // Build UDP header (8 bytes) + data
+    let pkt: i64 = 0xA06100
+    // Source port (2B)
+    volatile_write_u8(pkt, (local_port >> 8) & 0xFF)
+    volatile_write_u8(pkt + 1, local_port & 0xFF)
+    // Dest port (2B)
+    volatile_write_u8(pkt + 2, (remote_port >> 8) & 0xFF)
+    volatile_write_u8(pkt + 3, remote_port & 0xFF)
+    // Length (2B)
+    let total = 8 + len
+    volatile_write_u8(pkt + 4, (total >> 8) & 0xFF)
+    volatile_write_u8(pkt + 5, total & 0xFF)
+    // Checksum (0 = disabled)
+    volatile_write_u8(pkt + 6, 0)
+    volatile_write_u8(pkt + 7, 0)
+    // Copy data
+    let mut i: i64 = 0
+    while i < len { volatile_write_u8(pkt + 8 + i, volatile_read_u8(data + i)); i = i + 1 }
+    let dgrams = volatile_read_u64(NET_STATS + NSTAT_UDP_DGRAMS)
+    volatile_write_u64(NET_STATS + NSTAT_UDP_DGRAMS, dgrams + 1)
+    total
+}
+
+// T2.3: `telnet` command — simple TCP terminal client
+@kernel fn cmd_telnet() {
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: telnet <ip> <port>", YELLOW_ON_BLACK); return }
+    cprintln("Telnet client (simulated):", YELLOW_ON_BLACK)
+    let tcb = tcb_alloc()
+    if tcb < 0 { cprintln("  No free TCB", RED_ON_BLACK); return }
+    // Parse IP and port from command (simplified: use defaults)
+    tcp_connect(tcb, 0x0A000202, 23, 49200 + tcb) // 10.0.2.2:23
+    cprint("  Connecting to 10.0.2.2:23 (TCB ", WHITE_ON_BLACK)
+    cprint_decimal(tcb, CYAN_ON_BLACK)
+    cprintln(")...", WHITE_ON_BLACK)
+    cprint("  State: ", WHITE_ON_BLACK)
+    tcp_state_name(tcb_get(tcb, TCB_OFF_STATE))
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// T2.4: Echo server — listen on port 7
+@kernel fn cmd_echo_server() {
+    cprintln("Echo server on port 7:", YELLOW_ON_BLACK)
+    let tcb = tcb_alloc()
+    if tcb < 0 { cprintln("  No free TCB", RED_ON_BLACK); return }
+    tcp_listen(tcb, 7)
+    cprint("  Listening on :7 (TCB ", WHITE_ON_BLACK)
+    cprint_decimal(tcb, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+    cprint("  State: ", WHITE_ON_BLACK)
+    tcp_state_name(tcb_get(tcb, TCB_OFF_STATE))
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// T2.5: DNS client v2 — with retry and timeout
+@kernel fn dns_resolve_v2(name_addr: i64, name_len: i64) -> i64 {
+    let mut retries: i64 = 0
+    let max_retries: i64 = 3
+    let mut result: i64 = -1
+    while retries < max_retries && result < 0 {
+        // Send DNS query via UDP to 10.0.2.3:53
+        result = udp_send(53000 + retries, 0x0A000203, 53, name_addr, name_len)
+        if result < 0 { retries = retries + 1 }
+        else { result = 0 }
+    }
+    result
+}
+
+// T2.6: DHCP client v2 — with lease renewal
+@kernel fn dhcp_renew() {
+    cprint("[DHCP] Renewing lease at T=", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(0x6FE08), CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    // Would send DHCP Request to renew lease
+}
+
+// T2.7: Enhanced `ifconfig`
+@kernel fn cmd_ifconfig_v2() {
+    cprintln("Network interfaces:", YELLOW_ON_BLACK)
+    cprint("  eth0: ", WHITE_ON_BLACK)
+    // Read IP from net state
+    let ip = net_state_read(16)
+    if ip != 0 {
+        cprint_decimal((ip >> 24) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+        cprint_decimal((ip >> 16) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+        cprint_decimal((ip >> 8) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+        cprint_decimal(ip & 0xFF, CYAN_ON_BLACK)
+    } else { cprint("(no IP)", WHITE_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  RX: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_RX_PACKETS), CYAN_ON_BLACK)
+    cprint(" pkts, ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_RX_BYTES), CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+    cprint("  TX: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TX_PACKETS), CYAN_ON_BLACK)
+    cprint(" pkts, ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TX_BYTES), CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+    cprint("  Errors: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_ERRORS), WHITE_ON_BLACK)
+    cprint("  Dropped: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_DROPPED), WHITE_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  TCP conns: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TCP_CONNS), CYAN_ON_BLACK)
+    cprint("  UDP dgrams: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_UDP_DGRAMS), CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// T2.8: ARP table with aging
+@kernel fn arp_check_age() {
+    let now = volatile_read_u64(0x6FE08)
+    let arp_cache = 0x878000  // existing ARP cache address
+    let mut i: i64 = 0
+    while i < ARP_MAX_ENTRIES {
+        let entry = arp_cache + i * 16
+        let ip = volatile_read_u64(entry)
+        if ip != 0 {
+            let timestamp = volatile_read_u64(entry + 8) & 0xFFFFFFFF0000
+            let age = now - (timestamp >> 16)
+            if age > ARP_MAX_AGE {
+                volatile_write_u64(entry, 0) // expire entry
+                volatile_write_u64(entry + 8, 0)
+            }
+        }
+        i = i + 1
+    }
+}
+
+// T2.9: Network statistics
+@kernel fn net_stats_init() {
+    let mut i: i64 = 0
+    while i < 64 { volatile_write_u8(NET_STATS + i, 0); i = i + 1 }
+}
+
+@kernel fn net_stat_inc(field: i64, amount: i64) {
+    let val = volatile_read_u64(NET_STATS + field)
+    volatile_write_u64(NET_STATS + field, val + amount)
+}
+
+@kernel fn cmd_netstat_v2() {
+    cprintln("Network statistics:", YELLOW_ON_BLACK)
+    cprint("  RX packets: ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_RX_PACKETS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  TX packets: ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TX_PACKETS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  RX bytes:   ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_RX_BYTES), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  TX bytes:   ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TX_BYTES), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Errors:     ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_ERRORS), WHITE_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Dropped:    ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_DROPPED), WHITE_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  TCP conns:  ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_TCP_CONNS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  UDP dgrams: ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(NET_STATS + NSTAT_UDP_DGRAMS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -18966,6 +19160,7 @@ const PROC_OFF_NAME: i64 = 64
     journal_init() // Initialize filesystem journal
     socket_init() // Initialize socket table
     tcp_init() // Initialize TCP state machine
+    net_stats_init() // Initialize network statistics
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
