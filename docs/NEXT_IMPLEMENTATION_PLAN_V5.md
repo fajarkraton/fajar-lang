@@ -38,31 +38,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S1.1.1 | Create stdlib/selfhost/lexer.fj | Main file structure, Token enum | [ ] |
-| S1.1.2 | Cursor struct | peek, advance, is_eof, position tracking | [ ] |
-| S1.1.3 | Whitespace + comment skipping | `//' line comments, `/* */` block comments | [ ] |
-| S1.1.4 | Integer literals | Decimal, hex (0x), binary (0b), octal (0o), underscores | [ ] |
-| S1.1.5 | Float literals | `3.14`, `1e10`, `1.5e-3` | [ ] |
-| S1.1.6 | String literals | `"hello"`, escape sequences `\n \t \\ \"` | [ ] |
-| S1.1.7 | Char literals | `'a'`, `'\n'` | [ ] |
-| S1.1.8 | Identifiers + keywords | 50+ keywords, contextual keywords (tensor, grad, etc.) | [ ] |
-| S1.1.9 | Operators + punctuation | 40+ operators, multi-char (`==`, `!=`, `|>`, `..=`) | [ ] |
-| S1.1.10 | 10 tokenizer tests | Write .fj tests that tokenize sample programs | [ ] |
+| S1.1.1 | Create stdlib/selfhost/lexer.fj | Main file structure, Token enum | [x] |
+| S1.1.2 | Cursor struct | peek, advance, is_eof, position tracking | [x] |
+| S1.1.3 | Whitespace + comment skipping | `//' line comments, `/* */` block comments | [x] |
+| S1.1.4 | Integer literals | Decimal, hex (0x), binary (0b), octal (0o), underscores | [x] |
+| S1.1.5 | Float literals | `3.14`, `1e10`, `1.5e-3` | [x] |
+| S1.1.6 | String literals | `"hello"`, escape sequences `\n \t \\ \"` | [x] |
+| S1.1.7 | Char literals | `'a'`, `'\n'` | [x] |
+| S1.1.8 | Identifiers + keywords | 50+ keywords, contextual keywords (tensor, grad, etc.) | [x] |
+| S1.1.9 | Operators + punctuation | 40+ operators, multi-char (`==`, `!=`, `|>`, `..=`) | [x] |
+| S1.1.10 | 10 tokenizer tests | Write .fj tests that tokenize sample programs | [x] |
 
 #### Sprint S1.2: Tokenizer Advanced + Verification (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S1.2.1 | F-string tokenization | `f"Hello {name}"` → string parts + expressions | [ ] |
-| S1.2.2 | Annotation tokens | `@kernel`, `@device`, `@safe`, `@unsafe` | [ ] |
-| S1.2.3 | Lifetime tokens | `'a`, `'static` | [ ] |
-| S1.2.4 | Attribute tokens | `#[derive(Debug)]`, `#[cfg(test)]` | [ ] |
-| S1.2.5 | Error recovery | Continue tokenizing after error, collect all errors | [ ] |
-| S1.2.6 | Span tracking | Line:column for every token | [ ] |
-| S1.2.7 | Tokenize hello.fj | Self-host tokenizer produces same tokens as Rust tokenizer | [ ] |
-| S1.2.8 | Tokenize fibonacci.fj | Verify on real program | [ ] |
-| S1.2.9 | Tokenize array_methods.fj | Verify closures, methods, pipes | [ ] |
-| S1.2.10 | Benchmark: .fj vs Rust tokenizer | Compare speed and correctness | [ ] |
+| S1.2.1 | F-string tokenization | `f"Hello {name}"` → string parts + expressions | [x] |
+| S1.2.2 | Annotation tokens | `@kernel`, `@device`, `@safe`, `@unsafe` | [x] |
+| S1.2.3 | Lifetime tokens | `'a`, `'static` | [x] |
+| S1.2.4 | Attribute tokens | `#[derive(Debug)]`, `#[cfg(test)]` | [x] |
+| S1.2.5 | Error recovery | Continue tokenizing after error, collect all errors | [x] |
+| S1.2.6 | Span tracking | Line:column for every token | [x] |
+| S1.2.7 | Tokenize hello.fj | Self-host tokenizer produces same tokens as Rust tokenizer | [x] |
+| S1.2.8 | Tokenize fibonacci.fj | Verify on real program | [x] |
+| S1.2.9 | Tokenize array_methods.fj | Verify closures, methods, pipes | [x] |
+| S1.2.10 | Benchmark: .fj vs Rust tokenizer | Compare speed and correctness | [x] |
 
 ### Phase S2: Parser in Fajar Lang (3 sprints, 30 tasks)
 
@@ -70,46 +70,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S2.1.1 | AST types in .fj | Expr, Stmt, Item enums | [ ] |
-| S2.1.2 | Pratt parser core | `parse_expr(min_precedence)` — 19 levels | [ ] |
-| S2.1.3 | Literal expressions | Int, Float, Bool, String, Char, Null | [ ] |
-| S2.1.4 | Binary expressions | `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, etc. | [ ] |
-| S2.1.5 | Unary expressions | `!`, `-`, `~`, `&`, `&mut` | [ ] |
-| S2.1.6 | Call expressions | `f(a, b)`, `obj.method(a)` | [ ] |
-| S2.1.7 | Index expressions | `arr[i]`, `map["key"]` | [ ] |
-| S2.1.8 | Closure expressions | `\|x, y\| x + y`, `\|x: i32\| -> i32 { ... }` | [ ] |
-| S2.1.9 | If/match expressions | `if cond { a } else { b }`, `match x { ... }` | [ ] |
-| S2.1.10 | 10 parser tests | Parse sample expressions, verify AST | [ ] |
+| S2.1.1 | AST types in .fj | Expr, Stmt, Item enums | [x] |
+| S2.1.2 | Pratt parser core | `parse_expr(min_precedence)` — 19 levels | [x] |
+| S2.1.3 | Literal expressions | Int, Float, Bool, String, Char, Null | [x] |
+| S2.1.4 | Binary expressions | `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, etc. | [x] |
+| S2.1.5 | Unary expressions | `!`, `-`, `~`, `&`, `&mut` | [x] |
+| S2.1.6 | Call expressions | `f(a, b)`, `obj.method(a)` | [x] |
+| S2.1.7 | Index expressions | `arr[i]`, `map["key"]` | [x] |
+| S2.1.8 | Closure expressions | `\|x, y\| x + y`, `\|x: i32\| -> i32 { ... }` | [x] |
+| S2.1.9 | If/match expressions | `if cond { a } else { b }`, `match x { ... }` | [x] |
+| S2.1.10 | 10 parser tests | Parse sample expressions, verify AST | [x] |
 
 #### Sprint S2.2: Statement + Item Parser (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S2.2.1 | Let statements | `let x = 42`, `let mut y: i32 = 0` | [ ] |
-| S2.2.2 | Assignment | `x = 5`, `arr[i] = val`, `obj.field = val` | [ ] |
-| S2.2.3 | Return/break/continue | `return expr`, `break 'label`, `continue` | [ ] |
-| S2.2.4 | While/for/loop | `while cond { }`, `for x in iter { }`, `loop { }` | [ ] |
-| S2.2.5 | Function definitions | `fn name(params) -> RetType { body }` | [ ] |
-| S2.2.6 | Struct definitions | `struct Name { field: Type }` | [ ] |
-| S2.2.7 | Enum definitions | `enum Name { Variant(Type) }` | [ ] |
-| S2.2.8 | Trait + impl | `trait T { }`, `impl T for S { }` | [ ] |
-| S2.2.9 | Use/mod statements | `use std::io::println`, `mod math` | [ ] |
-| S2.2.10 | 10 statement tests | Parse full programs, verify structure | [ ] |
+| S2.2.1 | Let statements | `let x = 42`, `let mut y: i32 = 0` | [x] |
+| S2.2.2 | Assignment | `x = 5`, `arr[i] = val`, `obj.field = val` | [x] |
+| S2.2.3 | Return/break/continue | `return expr`, `break 'label`, `continue` | [x] |
+| S2.2.4 | While/for/loop | `while cond { }`, `for x in iter { }`, `loop { }` | [x] |
+| S2.2.5 | Function definitions | `fn name(params) -> RetType { body }` | [x] |
+| S2.2.6 | Struct definitions | `struct Name { field: Type }` | [x] |
+| S2.2.7 | Enum definitions | `enum Name { Variant(Type) }` | [x] |
+| S2.2.8 | Trait + impl | `trait T { }`, `impl T for S { }` | [x] |
+| S2.2.9 | Use/mod statements | `use std::io::println`, `mod math` | [x] |
+| S2.2.10 | 10 statement tests | Parse full programs, verify structure | [x] |
 
 #### Sprint S2.3: Parser Completion + Testing (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S2.3.1 | Generics parsing | `<T>`, `<T: Bound>`, `where T: Display` | [ ] |
-| S2.3.2 | Pattern matching | `match x { Some(v) => ..., None => ... }` | [ ] |
-| S2.3.3 | Type expressions | `i32`, `[T; N]`, `Option<T>`, `Result<T, E>`, `fn(A) -> B` | [ ] |
-| S2.3.4 | Async/await | `async fn`, `.await`, `async { }` | [ ] |
-| S2.3.5 | Error recovery | Skip to next statement on parse error | [ ] |
-| S2.3.6 | Parse hello.fj | Full program parse in .fj | [ ] |
-| S2.3.7 | Parse fibonacci.fj | Recursive functions | [ ] |
-| S2.3.8 | Parse fajaros_nova_kernel.fj | 21,187 lines (stress test) | [ ] |
-| S2.3.9 | AST pretty-printer | Print parsed AST back as source code | [ ] |
-| S2.3.10 | Compare AST output | .fj parser vs Rust parser — identical AST | [ ] |
+| S2.3.1 | Generics parsing | `<T>`, `<T: Bound>`, `where T: Display` | [x] |
+| S2.3.2 | Pattern matching | `match x { Some(v) => ..., None => ... }` | [x] |
+| S2.3.3 | Type expressions | `i32`, `[T; N]`, `Option<T>`, `Result<T, E>`, `fn(A) -> B` | [x] |
+| S2.3.4 | Async/await | `async fn`, `.await`, `async { }` | [x] |
+| S2.3.5 | Error recovery | Skip to next statement on parse error | [x] |
+| S2.3.6 | Parse hello.fj | Full program parse in .fj | [x] |
+| S2.3.7 | Parse fibonacci.fj | Recursive functions | [x] |
+| S2.3.8 | Parse fajaros_nova_kernel.fj | 21,187 lines (stress test) | [x] |
+| S2.3.9 | AST pretty-printer | Print parsed AST back as source code | [x] |
+| S2.3.10 | Compare AST output | .fj parser vs Rust parser — identical AST | [x] |
 
 ### Phase S3: Code Generation (2 sprints, 20 tasks)
 
@@ -117,31 +117,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S3.1.1 | C codegen scaffold | AST → C source code (transpiler) | [ ] |
-| S3.1.2 | Functions → C functions | `fn add(a: i32, b: i32) -> i32` → `int add(int a, int b)` | [ ] |
-| S3.1.3 | Structs → C structs | Field layout, alignment | [ ] |
-| S3.1.4 | Control flow → C | if/while/for/match → C equivalents | [ ] |
-| S3.1.5 | Arrays → C arrays | Stack arrays, heap arrays (malloc) | [ ] |
-| S3.1.6 | String handling | String type → `char*` with length | [ ] |
-| S3.1.7 | Closures → C | Function pointer + environment struct | [ ] |
-| S3.1.8 | Runtime library | `fj_print()`, `fj_alloc()`, `fj_panic()` in C | [ ] |
-| S3.1.9 | Compile hello.fj → hello.c → binary | End-to-end verification | [ ] |
-| S3.1.10 | Compile fibonacci.fj → C → binary | Verify correctness | [ ] |
+| S3.1.1 | C codegen scaffold | AST → C source code (transpiler) | [x] |
+| S3.1.2 | Functions → C functions | `fn add(a: i32, b: i32) -> i32` → `int add(int a, int b)` | [x] |
+| S3.1.3 | Structs → C structs | Field layout, alignment | [x] |
+| S3.1.4 | Control flow → C | if/while/for/match → C equivalents | [x] |
+| S3.1.5 | Arrays → C arrays | Stack arrays, heap arrays (malloc) | [x] |
+| S3.1.6 | String handling | String type → `char*` with length | [x] |
+| S3.1.7 | Closures → C | Function pointer + environment struct | [x] |
+| S3.1.8 | Runtime library | `fj_print()`, `fj_alloc()`, `fj_panic()` in C | [x] |
+| S3.1.9 | Compile hello.fj → hello.c → binary | End-to-end verification | [x] |
+| S3.1.10 | Compile fibonacci.fj → C → binary | Verify correctness | [x] |
 
 #### Sprint S3.2: Optimization + Testing (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S3.2.1 | Constant folding | `1 + 2` → `3` at compile time | [ ] |
-| S3.2.2 | Dead code elimination | Remove unreachable functions | [ ] |
-| S3.2.3 | Inline small functions | Functions < 5 statements | [ ] |
-| S3.2.4 | Type inference in codegen | Resolve `let x = 42` → `int x = 42` | [ ] |
-| S3.2.5 | Error messages | "line X: type mismatch: expected i32, got str" | [ ] |
-| S3.2.6 | Compile 10 example programs | Verify all produce correct output | [ ] |
-| S3.2.7 | Compile array_methods.fj | Closures + higher-order methods | [ ] |
-| S3.2.8 | Performance comparison | .fj compiler speed vs Rust compiler speed | [ ] |
-| S3.2.9 | Memory safety | No buffer overflows in generated C code | [ ] |
-| S3.2.10 | Documentation | SELFHOST.md — how the self-hosted compiler works | [ ] |
+| S3.2.1 | Constant folding | `1 + 2` → `3` at compile time | [x] |
+| S3.2.2 | Dead code elimination | Remove unreachable functions | [x] |
+| S3.2.3 | Inline small functions | Functions < 5 statements | [x] |
+| S3.2.4 | Type inference in codegen | Resolve `let x = 42` → `int x = 42` | [x] |
+| S3.2.5 | Error messages | "line X: type mismatch: expected i32, got str" | [x] |
+| S3.2.6 | Compile 10 example programs | Verify all produce correct output | [x] |
+| S3.2.7 | Compile array_methods.fj | Closures + higher-order methods | [x] |
+| S3.2.8 | Performance comparison | .fj compiler speed vs Rust compiler speed | [x] |
+| S3.2.9 | Memory safety | No buffer overflows in generated C code | [x] |
+| S3.2.10 | Documentation | SELFHOST.md — how the self-hosted compiler works | [x] |
 
 ### Phase S4: Bootstrap (2 sprints, 20 tasks)
 
@@ -149,31 +149,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S4.1.1 | Compile lexer.fj with Rust `fj` | → lexer.c → lexer binary | [ ] |
-| S4.1.2 | Compile parser.fj with Rust `fj` | → parser.c → parser binary | [ ] |
-| S4.1.3 | Compile codegen.fj with Rust `fj` | → codegen.c → codegen binary | [ ] |
-| S4.1.4 | Link stage-1 compiler | lexer + parser + codegen = `fj-stage1` | [ ] |
-| S4.1.5 | Test stage-1 on hello.fj | Verify output matches Rust `fj` | [ ] |
-| S4.1.6 | Test stage-1 on fibonacci.fj | Verify correctness | [ ] |
-| S4.1.7 | Test stage-1 on 10 examples | Verify all produce correct output | [ ] |
-| S4.1.8 | Fix divergences | Any difference from Rust compiler = bug | [ ] |
-| S4.1.9 | Stage-1 test suite | Automated comparison: `fj-stage1` vs `fj` | [ ] |
-| S4.1.10 | Document bootstrap process | Step-by-step build instructions | [ ] |
+| S4.1.1 | Compile lexer.fj with Rust `fj` | → lexer.c → lexer binary | [x] |
+| S4.1.2 | Compile parser.fj with Rust `fj` | → parser.c → parser binary | [x] |
+| S4.1.3 | Compile codegen.fj with Rust `fj` | → codegen.c → codegen binary | [x] |
+| S4.1.4 | Link stage-1 compiler | lexer + parser + codegen = `fj-stage1` | [x] |
+| S4.1.5 | Test stage-1 on hello.fj | Verify output matches Rust `fj` | [x] |
+| S4.1.6 | Test stage-1 on fibonacci.fj | Verify correctness | [x] |
+| S4.1.7 | Test stage-1 on 10 examples | Verify all produce correct output | [x] |
+| S4.1.8 | Fix divergences | Any difference from Rust compiler = bug | [x] |
+| S4.1.9 | Stage-1 test suite | Automated comparison: `fj-stage1` vs `fj` | [x] |
+| S4.1.10 | Document bootstrap process | Step-by-step build instructions | [x] |
 
 #### Sprint S4.2: Stage 2 Bootstrap + Verification (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S4.2.1 | Compile lexer.fj with `fj-stage1` | Stage-2 lexer | [ ] |
-| S4.2.2 | Compile parser.fj with `fj-stage1` | Stage-2 parser | [ ] |
-| S4.2.3 | Compile codegen.fj with `fj-stage1` | Stage-2 codegen | [ ] |
-| S4.2.4 | Link stage-2 compiler | `fj-stage2` | [ ] |
-| S4.2.5 | Verify: stage-1 output == stage-2 output | Fixed-point bootstrap | [ ] |
-| S4.2.6 | Binary reproducibility | Same input → byte-identical output | [ ] |
-| S4.2.7 | Fuzz stage-2 compiler | 60s fuzz run on self-hosted compiler | [ ] |
-| S4.2.8 | Performance: stage-2 vs Rust `fj` | Compilation speed comparison | [ ] |
-| S4.2.9 | Release `fj-selfhost` binary | Package self-hosted compiler | [ ] |
-| S4.2.10 | Blog: "Fajar Lang Compiles Itself" | Technical write-up | [ ] |
+| S4.2.1 | Compile lexer.fj with `fj-stage1` | Stage-2 lexer | [x] |
+| S4.2.2 | Compile parser.fj with `fj-stage1` | Stage-2 parser | [x] |
+| S4.2.3 | Compile codegen.fj with `fj-stage1` | Stage-2 codegen | [x] |
+| S4.2.4 | Link stage-2 compiler | `fj-stage2` | [x] |
+| S4.2.5 | Verify: stage-1 output == stage-2 output | Fixed-point bootstrap | [x] |
+| S4.2.6 | Binary reproducibility | Same input → byte-identical output | [x] |
+| S4.2.7 | Fuzz stage-2 compiler | 60s fuzz run on self-hosted compiler | [x] |
+| S4.2.8 | Performance: stage-2 vs Rust `fj` | Compilation speed comparison | [x] |
+| S4.2.9 | Release `fj-selfhost` binary | Package self-hosted compiler | [x] |
+| S4.2.10 | Blog: "Fajar Lang Compiles Itself" | Technical write-up | [x] |
 
 ---
 

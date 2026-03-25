@@ -1,0 +1,95 @@
+// Self-Hosting Compiler Demo — Fajar Lang v0.9
+// Demonstrates the self-hosted lexer + parser + codegen concepts
+
+// === Mini Lexer ===
+
+fn is_digit(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn is_alpha(c: str) -> bool {
+    c == "_" || c == "a" || c == "b" || c == "c" || c == "d" || c == "e" ||
+    c == "f" || c == "g" || c == "h" || c == "i" || c == "j" || c == "k" ||
+    c == "l" || c == "m" || c == "n" || c == "o" || c == "p" || c == "q" ||
+    c == "r" || c == "s" || c == "t" || c == "u" || c == "v" || c == "w" ||
+    c == "x" || c == "y" || c == "z"
+}
+
+fn count_tokens(source: str) -> i64 {
+    let words = source.words()
+    let mut tokens: i64 = 0
+    let n: i64 = words.len() as i64
+    let mut i: i64 = 0
+    while i < n {
+        tokens = tokens + 1
+        i = i + 1
+    }
+    tokens
+}
+
+// === Mini Parser ===
+
+fn parse_expr_type(source: str) -> str {
+    let trimmed = source.trim()
+    if trimmed == "" { return "empty" }
+    let first = to_string(trimmed.char_at(0))
+    if is_digit(first) { "number" }
+    else if first == "\"" { "string" }
+    else if trimmed == "true" || trimmed == "false" { "boolean" }
+    else { "identifier" }
+}
+
+// === Mini Codegen ===
+
+fn emit_c_function(name: str, body: str) -> str {
+    f"int64_t {name}() {{\n    {body}\n}}"
+}
+
+fn main() -> void {
+    println("=== Self-Hosting Compiler Demo ===")
+    println("")
+
+    // Lexer demo
+    let source = "fn main ( ) { let x = 42 + y }"
+    let token_count = count_tokens(source)
+    println(f"Source:  \"{source}\"")
+    println(f"Tokens:  {token_count}")
+
+    // Parser demo
+    println("")
+    println("Expression types:")
+    println(f"  \"42\"    -> {parse_expr_type("42")}")
+    println(f"  \"hello\" -> {parse_expr_type("hello")}")
+    println(f"  \"true\"  -> {parse_expr_type("true")}")
+
+    // Codegen demo
+    println("")
+    println("Generated C:")
+    let c_fn = emit_c_function("add", "return 3 + 4;")
+    println(c_fn)
+
+    // Bootstrap info
+    println("")
+    println("Bootstrap stages:")
+    println("  Stage 0: Rust compiler -> fj (current binary)")
+    println("  Stage 1: fj compiles .fj compiler -> fj-stage1")
+    println("  Stage 2: fj-stage1 compiles itself -> fj-stage2")
+    println("  Verify:  stage1 == stage2 (reproducible)")
+
+    println("")
+    println("Self-hosted compiler (in Fajar Lang):")
+    println("  stdlib/lexer.fj:    381 lines")
+    println("  stdlib/parser.fj:   397 lines")
+    println("  stdlib/analyzer.fj: 249 lines")
+    println("  stdlib/codegen.fj:  321 lines")
+    println("  Total:            1,348 lines")
+
+    println("")
+    println("Rust-side bootstrap support:")
+    println("  selfhost/bootstrap.rs:    562 lines")
+    println("  selfhost/codegen_fj.rs:   661 lines")
+    println("  selfhost/analyzer_fj.rs:  930 lines")
+    println("  selfhost/reproducible.rs: 702 lines")
+    println("  Total:                  2,855 lines")
+}
