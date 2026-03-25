@@ -254,6 +254,8 @@ pub struct FnValue {
     pub body: Box<Expr>,
     /// Captured environment at the point of definition.
     pub closure_env: Rc<RefCell<Environment>>,
+    /// Whether this is an async function (returns Future on call).
+    pub is_async: bool,
 }
 
 impl PartialEq for Value {

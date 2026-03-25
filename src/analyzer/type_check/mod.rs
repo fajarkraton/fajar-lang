@@ -2959,19 +2959,16 @@ mod tests {
 
     #[test]
     fn await_outside_async_is_error() {
-        // .await outside async fn → SE017
+        // v0.7: .await is now allowed in any context (cooperative eval)
         let src = r#"
             fn not_async() -> i64 {
                 let x = 42
                 x.await
             }
         "#;
-        let errors = check_errors(src);
-        assert!(
-            errors
-                .iter()
-                .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. }))
-        );
+        let result = check(src);
+        // Should succeed now (no AwaitOutsideAsync error)
+        assert!(result.is_ok() || !result.unwrap_err().iter().any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })));
     }
 
     #[test]
@@ -4157,18 +4154,16 @@ mod tests {
 
     #[test]
     fn await_rejected_outside_async() {
+        // v0.7: .await now allowed in any context
         let src = r#"
             fn main() {
                 let x = foo().await
             }
             fn foo() -> i64 { 42 }
         "#;
-        let errors = check_errors(src);
-        assert!(
-            errors
-                .iter()
-                .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })),
-            ".await should be rejected outside async fn"
+        let result = check(src);
+        assert!(result.is_ok() || !result.unwrap_err().iter().any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })),
+            ".await should now be allowed outside async fn (v0.7)"
         );
     }
 
@@ -4191,6 +4186,7 @@ mod tests {
 
     #[test]
     fn await_rejected_in_regular_fn_nested() {
+        // v0.7: .await now allowed everywhere
         let src = r#"
             fn outer() {
                 let val = something().await
@@ -4198,10 +4194,10 @@ mod tests {
         "#;
         let errors = check_errors(src);
         assert!(
-            errors
+            !errors
                 .iter()
                 .any(|e| matches!(e, SemanticError::AwaitOutsideAsync { .. })),
-            ".await in regular fn should error"
+            ".await now allowed in regular fn (v0.7)"
         );
     }
 

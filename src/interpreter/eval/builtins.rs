@@ -4451,6 +4451,7 @@ impl Interpreter {
             params: closure_params,
             body: Box::new(body.clone()),
             closure_env: Rc::clone(&self.env),
+                    is_async: false,
         }))
     }
 
@@ -4680,6 +4681,7 @@ impl Interpreter {
                 params: method.params.clone(),
                 body: method.body.clone(),
                 closure_env: Rc::clone(&self.env),
+                    is_async: false,
             };
 
             // Check if this is a static method (no `self` param) — also register globally
@@ -5005,6 +5007,7 @@ impl Interpreter {
                         params: fndef.params.clone(),
                         body: fndef.body.clone(),
                         closure_env: Rc::clone(&self.env),
+                    is_async: false,
                     };
                     let val = Value::Function(fn_val);
                     mod_symbols.insert(fndef.name.clone(), val.clone());

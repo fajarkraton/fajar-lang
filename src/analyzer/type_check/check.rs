@@ -834,11 +834,9 @@ impl TypeChecker {
                 target
             }
             Expr::Try { .. } => Type::Unknown,
-            Expr::Await { expr, span } => {
-                if !self.symbols.is_inside_async() {
-                    self.errors
-                        .push(SemanticError::AwaitOutsideAsync { span: *span });
-                }
+            Expr::Await { expr, span: _ } => {
+                // v0.7 "Illumination": allow .await in any context (cooperative eval)
+                // Previously this was an error; now it's allowed for flexibility
                 // Unwrap Future<T> → T
                 let inner_ty = self.check_expr(expr);
                 match inner_ty {

@@ -1075,6 +1075,7 @@ impl Compiler {
                 use std::rc::Rc;
                 Rc::new(RefCell::new(Environment::new()))
             },
+            is_async: false,
         });
 
         // Copy captured locals to globals so the closure body can access them

@@ -954,6 +954,7 @@ impl Interpreter {
                     params: fndef.params.clone(),
                     body: fndef.body.clone(),
                     closure_env: Rc::clone(&self.env),
+                    is_async: fndef.is_async,
                 };
                 self.env
                     .borrow_mut()
@@ -1011,6 +1012,7 @@ impl Interpreter {
                         params: handler.params.clone(),
                         body: handler.body.clone(),
                         closure_env: std::rc::Rc::clone(&self.env),
+                    is_async: false,
                     };
                     self.env
                         .borrow_mut()
@@ -1553,6 +1555,22 @@ impl Interpreter {
                 got: args.len(),
             }
             .into());
+        }
+
+        // AA1: If async fn, capture as Future instead of executing immediately
+        if fv.is_async {
+            let task_id = self.next_task_id;
+            self.next_task_id += 1;
+            // Create a new environment with arguments bound
+            let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                &fv.closure_env,
+            ))));
+            for (param, val) in fv.params.iter().zip(args) {
+                call_env.borrow_mut().define(param.name.clone(), val);
+            }
+            self.async_tasks
+                .insert(task_id, (fv.body.clone(), call_env));
+            return Ok(Value::Future { task_id });
         }
 
         self.call_depth += 1;

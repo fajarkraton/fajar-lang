@@ -621,6 +621,7 @@ impl VM {
                     use std::rc::Rc;
                     Rc::new(RefCell::new(crate::interpreter::env::Environment::new()))
                 },
+                is_async: false,
             });
             self.globals.insert(func.name.clone(), fn_val);
         }

@@ -14278,3 +14278,148 @@ fn v2_manifest_count() {
     let out = eval_output(src);
     assert_eq!(out, vec!["8"]);
 }
+
+// ═══════════════════════════════════════════════
+// Fajar Lang v0.7 "Illumination" — Phase AA: Async/Await
+// Sprint AA1: Async runtime
+// ═══════════════════════════════════════════════
+
+#[test]
+fn aa1_async_fn_returns_future() {
+    let src = r#"
+        async fn get_value() -> i64 { 42 }
+        fn main() -> void {
+            let f = get_value()
+            println(type_of(f))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["future"]);
+}
+
+#[test]
+fn aa1_await_resolves_future() {
+    let src = r#"
+        async fn get_value() -> i64 { 42 }
+        fn main() -> void {
+            let f = get_value()
+            let v = f.await
+            println(v)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn aa1_async_fn_with_args() {
+    let src = r#"
+        async fn add(a: i64, b: i64) -> i64 { a + b }
+        fn main() -> void {
+            let f = add(10, 20)
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30"]);
+}
+
+#[test]
+fn aa1_multiple_futures() {
+    let src = r#"
+        async fn double(x: i64) -> i64 { x * 2 }
+        fn main() -> void {
+            let a = double(5)
+            let b = double(10)
+            println(a.await)
+            println(b.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10", "20"]);
+}
+
+#[test]
+fn aa1_async_block() {
+    let src = r#"
+        fn main() -> void {
+            let f = async { 99 }
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["99"]);
+}
+
+#[test]
+fn aa1_async_fn_string() {
+    let src = r#"
+        async fn greet(name: str) -> str { f"Hello {name}" }
+        fn main() -> void {
+            let f = greet("Fajar")
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hello Fajar"]);
+}
+
+#[test]
+fn aa1_future_type_check() {
+    let src = r#"
+        async fn compute() -> i64 { 1 + 2 + 3 }
+        fn main() -> void {
+            let f = compute()
+            // Future is not the final value
+            println(type_of(f) == "future")
+            let v = f.await
+            println(type_of(v) == "i64")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true"]);
+}
+
+#[test]
+fn aa1_async_with_closure() {
+    let src = r#"
+        fn main() -> void {
+            let x: i64 = 100
+            let f = async { x + 50 }
+            println(f.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["150"]);
+}
+
+#[test]
+fn aa1_chained_async() {
+    let src = r#"
+        async fn step1() -> i64 { 10 }
+        async fn step2(x: i64) -> i64 { x + 20 }
+        fn main() -> void {
+            let a = step1()
+            let b = step2(a.await)
+            println(b.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30"]);
+}
+
+#[test]
+fn aa1_sync_and_async_mix() {
+    let src = r#"
+        fn sync_fn(x: i64) -> i64 { x * 3 }
+        async fn async_fn(x: i64) -> i64 { x + 7 }
+        fn main() -> void {
+            let a = sync_fn(5)
+            let b = async_fn(a)
+            println(a)
+            println(b.await)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["15", "22"]);
+}
