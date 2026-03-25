@@ -15580,3 +15580,186 @@ fn dd1_to_string_builtin() {
     let out = eval_output(src);
     assert_eq!(out, vec!["42", "3.14", "true", "str"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint DD2: Proc macros + derive patterns
+// ═══════════════════════════════════════════════
+
+#[test]
+fn dd2_annotation_kernel() {
+    // @kernel annotation restricts context
+    let src = r#"
+        @kernel fn kernel_fn() -> i64 { 42 }
+        fn main() -> void {
+            println(kernel_fn())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn dd2_annotation_safe() {
+    let src = r#"
+        @safe fn safe_fn(x: i64) -> i64 { x * 2 }
+        fn main() -> void {
+            println(safe_fn(21))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn dd2_struct_display_pattern() {
+    // Manual "derive(Display)" via trait impl
+    let src = r#"
+        trait Display {
+            fn fmt(self) -> str
+        }
+        struct Point { x: i64, y: i64 }
+        impl Display for Point {
+            fn fmt(self) -> str { f"Point({self.x}, {self.y})" }
+        }
+        fn main() -> void {
+            let p = Point { x: 3, y: 4 }
+            println(p.fmt())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Point(3, 4)"]);
+}
+
+#[test]
+fn dd2_struct_equality_pattern() {
+    // Manual "derive(PartialEq)" via function
+    let src = r#"
+        struct Vec2 { x: i64, y: i64 }
+        fn vec2_eq(a: Vec2, b: Vec2) -> bool {
+            a.x == b.x && a.y == b.y
+        }
+        fn main() -> void {
+            let a = Vec2 { x: 1, y: 2 }
+            let b = Vec2 { x: 1, y: 2 }
+            println(vec2_eq(a, b))
+            let b2 = Vec2 { x: 1, y: 2 }
+            let c = Vec2 { x: 3, y: 4 }
+            println(vec2_eq(b2, c))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false"]);
+}
+
+#[test]
+fn dd2_struct_clone_pattern() {
+    // Manual "derive(Clone)" via constructor
+    let src = r#"
+        struct Config { width: i64, height: i64 }
+        fn clone_config(c: Config) -> Config {
+            Config { width: c.width, height: c.height }
+        }
+        fn main() -> void {
+            let original = Config { width: 800, height: 600 }
+            let copy = clone_config(original)
+            println(copy.width)
+            println(copy.height)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["800", "600"]);
+}
+
+#[test]
+fn dd2_struct_debug_pattern() {
+    // Manual "derive(Debug)" via trait
+    let src = r#"
+        trait Debug {
+            fn debug(self) -> str
+        }
+        struct Color { r: i64, g: i64, b: i64 }
+        impl Debug for Color {
+            fn debug(self) -> str { f"Color {{ r: {self.r}, g: {self.g}, b: {self.b} }}" }
+        }
+        fn main() -> void {
+            let c = Color { r: 255, g: 128, b: 0 }
+            println(c.debug())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Color { r: 255, g: 128, b: 0 }"]);
+}
+
+#[test]
+fn dd2_enum_variant_display() {
+    let src = r#"
+        fn status_text(code: i64) -> str {
+            let s = if code == 0 { Ok("success") } else { Err(f"error:{code}") }
+            match s {
+                Ok(msg) => f"OK: {msg}"
+                Err(msg) => f"ERR: {msg}"
+                _ => "unknown"
+            }
+        }
+        fn main() -> void {
+            println(status_text(0))
+            println(status_text(42))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["OK: success", "ERR: error:42"]);
+}
+
+#[test]
+fn dd2_const_fn_comptime() {
+    // const fn acts like a compile-time "macro"
+    let src = r#"
+        const MAX_SIZE: i64 = 1024
+        const HALF_SIZE: i64 = 512
+        fn main() -> void {
+            println(MAX_SIZE)
+            println(HALF_SIZE)
+            println(MAX_SIZE + HALF_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "512", "1536"]);
+}
+
+#[test]
+fn dd2_generic_as_template() {
+    // Generics act as compile-time "template macros"
+    let src = r#"
+        fn repeat<T>(val: T, n: i64) -> str {
+            let mut result = ""
+            let mut i: i64 = 0
+            while i < n {
+                result = f"{result}{val}"
+                i = i + 1
+            }
+            result
+        }
+        fn main() -> void {
+            println(repeat("ab", 3))
+            println(repeat(42, 2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["ababab", "4242"]);
+}
+
+#[test]
+fn dd2_annotation_combination() {
+    // Multiple annotations on same function
+    let src = r#"
+        @kernel fn low_level() -> i64 { 100 }
+        @safe fn high_level(x: i64) -> i64 { x + 1 }
+        fn main() -> void {
+            let a = low_level()
+            let b = high_level(a)
+            println(b)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["101"]);
+}
