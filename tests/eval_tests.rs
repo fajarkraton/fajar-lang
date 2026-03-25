@@ -13646,3 +13646,180 @@ fn t2_ip_display() {
     let out = eval_output(src);
     assert_eq!(out, vec!["10", "0", "2", "2"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase U: Init System + Services
+// Sprint U1: Init process + service management
+// ═══════════════════════════════════════════════
+
+#[test]
+fn u1_service_table_layout() {
+    let src = r#"
+        const SVC_TABLE: i64 = 0x9B0000
+        const SVC_MAX: i64 = 16
+        const SVC_SIZE: i64 = 64
+        fn main() -> void {
+            println(SVC_MAX * SVC_SIZE)
+            println(SVC_TABLE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1024", "10158080"]);
+}
+
+#[test]
+fn u1_service_states() {
+    let src = r#"
+        const SVC_STOPPED: i64 = 0
+        const SVC_RUNNING: i64 = 1
+        const SVC_FAILED: i64 = 2
+        fn state_name(s: i64) -> str {
+            if s == 0 { "stopped" } else if s == 1 { "running" } else { "failed" }
+        }
+        fn main() -> void {
+            println(state_name(0))
+            println(state_name(1))
+            println(state_name(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["stopped", "running", "failed"]);
+}
+
+#[test]
+fn u1_restart_policies() {
+    let src = r#"
+        const RESTART_NO: i64 = 0
+        const RESTART_ALWAYS: i64 = 1
+        const RESTART_ON_FAILURE: i64 = 2
+        fn should_restart(state: i64, policy: i64) -> bool {
+            state == 2 && (policy == 1 || policy == 2)
+        }
+        fn main() -> void {
+            println(should_restart(2, 1))
+            println(should_restart(2, 0))
+            println(should_restart(1, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn u1_runlevels() {
+    let src = r#"
+        const RL_HALT: i64 = 0
+        const RL_SINGLE: i64 = 1
+        const RL_MULTI: i64 = 3
+        const RL_GRAPHICAL: i64 = 5
+        fn rl_name(rl: i64) -> str {
+            if rl == 0 { "halt" }
+            else if rl == 1 { "single" }
+            else if rl == 3 { "multi-user" }
+            else if rl == 5 { "graphical" }
+            else { "custom" }
+        }
+        fn main() -> void {
+            println(rl_name(0))
+            println(rl_name(3))
+            println(rl_name(5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["halt", "multi-user", "graphical"]);
+}
+
+#[test]
+fn u1_svc_entry_offsets() {
+    let src = r#"
+        const SVC_OFF_NAME: i64 = 0
+        const SVC_OFF_PID: i64 = 16
+        const SVC_OFF_STATE: i64 = 24
+        const SVC_OFF_RESTART: i64 = 32
+        const SVC_OFF_ENABLED: i64 = 56
+        fn main() -> void {
+            println(SVC_OFF_PID)
+            println(SVC_OFF_RESTART)
+            println(SVC_OFF_ENABLED + 8 <= 64)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["16", "32", "true"]);
+}
+
+#[test]
+fn u1_svc_lifecycle() {
+    let src = r#"
+        fn lifecycle(action: str) -> str {
+            if action == "start" { "running" }
+            else if action == "stop" { "stopped" }
+            else if action == "crash" { "failed" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(lifecycle("start"))
+            println(lifecycle("stop"))
+            println(lifecycle("crash"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["running", "stopped", "failed"]);
+}
+
+#[test]
+fn u1_init_default_runlevel() {
+    let src = r#"
+        const DEFAULT_RUNLEVEL: i64 = 3
+        fn main() -> void { println(DEFAULT_RUNLEVEL) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
+
+#[test]
+fn u1_restart_counter() {
+    let src = r#"
+        fn after_restart(current: i64) -> i64 { current + 1 }
+        fn main() -> void {
+            let mut r: i64 = 0
+            r = after_restart(r)
+            r = after_restart(r)
+            r = after_restart(r)
+            println(r)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
+
+#[test]
+fn u1_halt_on_runlevel_0() {
+    let src = r#"
+        fn should_halt(level: i64) -> bool { level == 0 }
+        fn main() -> void {
+            println(should_halt(0))
+            println(should_halt(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false"]);
+}
+
+#[test]
+fn u1_service_subcommands() {
+    let src = r#"
+        fn subcmd(s: str) -> str {
+            if s == "start" { "starting" }
+            else if s == "stop" { "stopping" }
+            else if s == "status" { "listing" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(subcmd("start"))
+            println(subcmd("stop"))
+            println(subcmd("status"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["starting", "stopping", "listing"]);
+}

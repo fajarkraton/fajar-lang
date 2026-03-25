@@ -8623,6 +8623,233 @@ const ARP_MAX_ENTRIES: i64 = 16
 }
 
 // ═══════════════════════════════════════════════
+// Init System + Services (Sprint U1 — v0.9 "Zenith")
+// ═══════════════════════════════════════════════
+
+// Service table at 0x9B0000: 16 services × 64B
+// Per service: +0=name[16], +16=pid(i64), +24=state(i64), +32=restart_policy(i64), +40=start_tick(i64), +48=restarts(i64), +56=enabled(i64)
+const SVC_TABLE: i64 = 0x9B0000
+const SVC_MAX: i64 = 16
+const SVC_SIZE: i64 = 64
+const SVC_OFF_NAME: i64 = 0
+const SVC_OFF_PID: i64 = 16
+const SVC_OFF_STATE: i64 = 24
+const SVC_OFF_RESTART: i64 = 32
+const SVC_OFF_START_TICK: i64 = 40
+const SVC_OFF_RESTARTS: i64 = 48
+const SVC_OFF_ENABLED: i64 = 56
+
+// Service states
+const SVC_STOPPED: i64 = 0
+const SVC_RUNNING: i64 = 1
+const SVC_FAILED: i64 = 2
+const SVC_STARTING: i64 = 3
+
+// Restart policies
+const RESTART_NO: i64 = 0
+const RESTART_ALWAYS: i64 = 1
+const RESTART_ON_FAILURE: i64 = 2
+
+// Runlevels
+const RUNLEVEL_HALT: i64 = 0
+const RUNLEVEL_SINGLE: i64 = 1
+const RUNLEVEL_MULTI: i64 = 3
+const RUNLEVEL_GRAPHICAL: i64 = 5
+
+// Current runlevel at 0x9B1000
+const CURRENT_RUNLEVEL: i64 = 0x9B1000
+
+// U1.1: Init service table
+@kernel fn svc_init() {
+    let mut i: i64 = 0
+    while i < SVC_MAX * SVC_SIZE { volatile_write_u8(SVC_TABLE + i, 0); i = i + 1 }
+    volatile_write_u64(CURRENT_RUNLEVEL, RUNLEVEL_MULTI) // default: multi-user
+}
+
+// U1.2: Register a service
+@kernel fn svc_register(name_addr: i64, name_len: i64, restart_policy: i64) -> i64 {
+    let mut slot: i64 = -1
+    let mut i: i64 = 0
+    while i < SVC_MAX && slot == -1 {
+        if volatile_read_u64(SVC_TABLE + i * SVC_SIZE + SVC_OFF_ENABLED) == 0 { slot = i }
+        i = i + 1
+    }
+    if slot == -1 { return -1 }
+    let entry = SVC_TABLE + slot * SVC_SIZE
+    let mut ni: i64 = 0
+    while ni < name_len && ni < 15 {
+        volatile_write_u8(entry + SVC_OFF_NAME + ni, volatile_read_u8(name_addr + ni))
+        ni = ni + 1
+    }
+    volatile_write_u8(entry + SVC_OFF_NAME + ni, 0)
+    volatile_write_u64(entry + SVC_OFF_PID, 0)
+    volatile_write_u64(entry + SVC_OFF_STATE, SVC_STOPPED)
+    volatile_write_u64(entry + SVC_OFF_RESTART, restart_policy)
+    volatile_write_u64(entry + SVC_OFF_RESTARTS, 0)
+    volatile_write_u64(entry + SVC_OFF_ENABLED, 1)
+    slot
+}
+
+// U1.3: `service start <name>`
+@kernel fn cmd_service() {
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: service start|stop|status [name]", YELLOW_ON_BLACK); return }
+    // Parse subcommand
+    let c0 = volatile_read_u8(0x6F800 + 8)
+    if c0 == 115 && volatile_read_u8(0x6F800 + 9) == 116 && volatile_read_u8(0x6F800 + 10) == 97 {
+        // "start"
+        if len > 14 { svc_start_by_name(14) }
+        else { cprintln("Usage: service start <name>", YELLOW_ON_BLACK) }
+    } else if c0 == 115 && volatile_read_u8(0x6F800 + 9) == 116 && volatile_read_u8(0x6F800 + 10) == 111 {
+        // "stop"
+        if len > 13 { svc_stop_by_name(13) }
+        else { cprintln("Usage: service stop <name>", YELLOW_ON_BLACK) }
+    } else if c0 == 115 && volatile_read_u8(0x6F800 + 9) == 116 && volatile_read_u8(0x6F800 + 10) == 97 && volatile_read_u8(0x6F800 + 11) == 116 {
+        // "status"
+        cmd_service_status()
+    } else { cmd_service_status() }
+}
+
+@kernel fn svc_find(name_addr: i64, name_len: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < SVC_MAX {
+        let entry = SVC_TABLE + i * SVC_SIZE
+        if volatile_read_u64(entry + SVC_OFF_ENABLED) == 1 {
+            let mut ok: i64 = 1
+            let mut j: i64 = 0
+            while j < name_len && ok == 1 {
+                if volatile_read_u8(entry + SVC_OFF_NAME + j) != volatile_read_u8(name_addr + j) { ok = 0 }
+                j = j + 1
+            }
+            if ok == 1 && volatile_read_u8(entry + SVC_OFF_NAME + name_len) == 0 { return i }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn svc_start_by_name(prefix: i64) {
+    let name_buf: i64 = 0x9B1100
+    let len = cmdbuf_len()
+    let mut ni: i64 = 0
+    let mut pos: i64 = prefix
+    while pos < len && ni < 15 { volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos)); ni = ni + 1; pos = pos + 1 }
+    volatile_write_u8(name_buf + ni, 0)
+    let slot = svc_find(name_buf, ni)
+    if slot < 0 {
+        // Auto-register
+        let ns = svc_register(name_buf, ni, RESTART_NO)
+        if ns < 0 { cprintln("Cannot register service", RED_ON_BLACK); return }
+        svc_start(ns)
+    } else { svc_start(slot) }
+}
+
+@kernel fn svc_start(slot: i64) {
+    let entry = SVC_TABLE + slot * SVC_SIZE
+    volatile_write_u64(entry + SVC_OFF_STATE, SVC_RUNNING)
+    volatile_write_u64(entry + SVC_OFF_START_TICK, volatile_read_u64(0x6FE08))
+    cprint("[SVC] Started: ", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    while i < 15 { let ch = volatile_read_u8(entry + SVC_OFF_NAME + i); if ch == 0 { i = 15 } else { console_putchar(ch, GREEN_ON_BLACK); i = i + 1 } }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// U1.4: `service stop <name>`
+@kernel fn svc_stop_by_name(prefix: i64) {
+    let name_buf: i64 = 0x9B1100
+    let len = cmdbuf_len()
+    let mut ni: i64 = 0
+    let mut pos: i64 = prefix
+    while pos < len && ni < 15 { volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos)); ni = ni + 1; pos = pos + 1 }
+    volatile_write_u8(name_buf + ni, 0)
+    let slot = svc_find(name_buf, ni)
+    if slot < 0 { cprintln("Service not found", RED_ON_BLACK); return }
+    svc_stop(slot)
+}
+
+@kernel fn svc_stop(slot: i64) {
+    let entry = SVC_TABLE + slot * SVC_SIZE
+    volatile_write_u64(entry + SVC_OFF_STATE, SVC_STOPPED)
+    cprint("[SVC] Stopped: ", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    while i < 15 { let ch = volatile_read_u8(entry + SVC_OFF_NAME + i); if ch == 0 { i = 15 } else { console_putchar(ch, YELLOW_ON_BLACK); i = i + 1 } }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// U1.5: `service status`
+@kernel fn cmd_service_status() {
+    cprintln("Services:", YELLOW_ON_BLACK)
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < SVC_MAX {
+        let entry = SVC_TABLE + i * SVC_SIZE
+        if volatile_read_u64(entry + SVC_OFF_ENABLED) == 1 {
+            cprint("  ", WHITE_ON_BLACK)
+            let mut j: i64 = 0
+            while j < 15 { let ch = volatile_read_u8(entry + SVC_OFF_NAME + j); if ch == 0 { j = 15 } else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 } }
+            cprint(": ", WHITE_ON_BLACK)
+            let state = volatile_read_u64(entry + SVC_OFF_STATE)
+            if state == SVC_RUNNING { cprint("running", GREEN_ON_BLACK) }
+            else if state == SVC_STOPPED { cprint("stopped", WHITE_ON_BLACK) }
+            else if state == SVC_FAILED { cprint("failed", RED_ON_BLACK) }
+            else { cprint("starting", YELLOW_ON_BLACK) }
+            let restarts = volatile_read_u64(entry + SVC_OFF_RESTARTS)
+            if restarts > 0 {
+                cprint(" (restarts: ", WHITE_ON_BLACK); cprint_decimal(restarts, CYAN_ON_BLACK); cprint(")", WHITE_ON_BLACK)
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (no services)", WHITE_ON_BLACK) }
+}
+
+// U1.6: Auto-restart crashed services
+@kernel fn svc_check_restart() {
+    let mut i: i64 = 0
+    while i < SVC_MAX {
+        let entry = SVC_TABLE + i * SVC_SIZE
+        if volatile_read_u64(entry + SVC_OFF_ENABLED) == 1 {
+            let state = volatile_read_u64(entry + SVC_OFF_STATE)
+            let policy = volatile_read_u64(entry + SVC_OFF_RESTART)
+            if state == SVC_FAILED && (policy == RESTART_ALWAYS || policy == RESTART_ON_FAILURE) {
+                let restarts = volatile_read_u64(entry + SVC_OFF_RESTARTS)
+                volatile_write_u64(entry + SVC_OFF_RESTARTS, restarts + 1)
+                svc_start(i)
+            }
+        }
+        i = i + 1
+    }
+}
+
+// U1.7: Runlevels
+@kernel fn cmd_runlevel() {
+    let rl = volatile_read_u64(CURRENT_RUNLEVEL)
+    cprint("Current runlevel: ", WHITE_ON_BLACK)
+    cprint_decimal(rl, CYAN_ON_BLACK)
+    cprint(" (", WHITE_ON_BLACK)
+    if rl == 0 { cprint("halt", RED_ON_BLACK) }
+    else if rl == 1 { cprint("single-user", YELLOW_ON_BLACK) }
+    else if rl == 3 { cprint("multi-user", GREEN_ON_BLACK) }
+    else if rl == 5 { cprint("graphical", CYAN_ON_BLACK) }
+    else { cprint("custom", WHITE_ON_BLACK) }
+    cprintln(")", WHITE_ON_BLACK)
+}
+
+// U1.9: `init <level>` — switch runlevel
+@kernel fn cmd_init_level() {
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: init <0|1|3|5>", YELLOW_ON_BLACK); return }
+    let level = volatile_read_u8(0x6F800 + 5) - 48
+    volatile_write_u64(CURRENT_RUNLEVEL, level)
+    cprint("Switching to runlevel ", WHITE_ON_BLACK)
+    cprint_decimal(level, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    if level == 0 { cprintln("Halting...", RED_ON_BLACK); shutdown_clean() }
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -19161,6 +19388,7 @@ const PROC_OFF_NAME: i64 = 64
     socket_init() // Initialize socket table
     tcp_init() // Initialize TCP state machine
     net_stats_init() // Initialize network statistics
+    svc_init() // Initialize service table
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
