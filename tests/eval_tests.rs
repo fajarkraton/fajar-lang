@@ -14577,3 +14577,205 @@ fn aa2_async_loop() {
     let out = eval_output(src);
     assert_eq!(out, vec!["55"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase BB: Pattern Matching V2
+// Sprint BB1: Advanced patterns
+// ═══════════════════════════════════════════════
+
+#[test]
+fn bb1_nested_option_pattern() {
+    let src = r#"
+        fn unwrap_nested(val: i64) -> str {
+            let outer = Some(Some(val))
+            match outer {
+                Some(Some(v)) => f"got {v}"
+                Some(None) => "inner none"
+                None => "outer none"
+                _ => "other"
+            }
+        }
+        fn main() -> void {
+            println(unwrap_nested(42))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["got 42"]);
+}
+
+#[test]
+fn bb1_guard_clause() {
+    let src = r#"
+        fn classify(n: i64) -> str {
+            match n {
+                x if x > 100 => "big"
+                x if x > 0 => "positive"
+                0 => "zero"
+                _ => "negative"
+            }
+        }
+        fn main() -> void {
+            println(classify(200))
+            println(classify(50))
+            println(classify(0))
+            println(classify(-5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["big", "positive", "zero", "negative"]);
+}
+
+#[test]
+fn bb1_tuple_pattern() {
+    let src = r#"
+        fn describe(pair: (i64, str)) -> str {
+            match pair {
+                (0, s) => f"zero: {s}"
+                (n, s) => f"{n}: {s}"
+                _ => "unknown"
+            }
+        }
+        fn main() -> void {
+            println(describe((0, "hello")))
+            println(describe((5, "world")))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["zero: hello", "5: world"]);
+}
+
+#[test]
+fn bb1_or_pattern() {
+    let src = r#"
+        fn is_weekend(day: str) -> bool {
+            match day {
+                "Saturday" | "Sunday" => true
+                _ => false
+            }
+        }
+        fn main() -> void {
+            println(is_weekend("Saturday"))
+            println(is_weekend("Monday"))
+            println(is_weekend("Sunday"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "true"]);
+}
+
+#[test]
+fn bb1_range_pattern() {
+    let src = r#"
+        fn grade(score: i64) -> str {
+            match score {
+                90..=100 => "A"
+                80..=89 => "B"
+                70..=79 => "C"
+                _ => "F"
+            }
+        }
+        fn main() -> void {
+            println(grade(95))
+            println(grade(85))
+            println(grade(72))
+            println(grade(50))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["A", "B", "C", "F"]);
+}
+
+#[test]
+fn bb1_wildcard_deep() {
+    let src = r#"
+        fn first_or_default(val: i64) -> i64 {
+            match Some(val) {
+                Some(x) => x
+                _ => -1
+            }
+        }
+        fn main() -> void {
+            println(first_or_default(42))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn bb1_match_string() {
+    let src = r#"
+        fn respond(cmd: str) -> str {
+            match cmd {
+                "hello" => "Hi there!"
+                "bye" => "Goodbye!"
+                _ => f"Unknown: {cmd}"
+            }
+        }
+        fn main() -> void {
+            println(respond("hello"))
+            println(respond("bye"))
+            println(respond("test"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Hi there!", "Goodbye!", "Unknown: test"]);
+}
+
+#[test]
+fn bb1_match_bool() {
+    let src = r#"
+        fn bool_to_str(b: bool) -> str {
+            match b {
+                true => "yes"
+                false => "no"
+                _ => "?"
+            }
+        }
+        fn main() -> void {
+            println(bool_to_str(true))
+            println(bool_to_str(false))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["yes", "no"]);
+}
+
+#[test]
+fn bb1_enum_destructure() {
+    let src = r#"
+        enum Shape { Circle(f64), Rect(f64, f64) }
+        fn area(s: Shape) -> f64 {
+            match s {
+                Shape::Circle(r) => 3.14 * r * r
+                Shape::Rect(w, h) => w * h
+                _ => 0.0
+            }
+        }
+        fn main() -> void {
+            println(area(Shape::Circle(10.0)))
+            println(area(Shape::Rect(5.0, 3.0)))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["314", "15"]);
+}
+
+#[test]
+fn bb1_match_expression() {
+    // match as expression (returns value)
+    let src = r#"
+        fn main() -> void {
+            let x: i64 = 3
+            let label = match x {
+                1 => "one"
+                2 => "two"
+                3 => "three"
+                _ => "other"
+            }
+            println(label)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["three"]);
+}
