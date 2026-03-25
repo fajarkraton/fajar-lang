@@ -13296,3 +13296,193 @@ fn s2_vfs_backend_type() {
     let out = eval_output(src);
     assert_eq!(out, vec!["1", "3", "0"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase T: Network Stack V2
+// Sprint T1: TCP state machine
+// ═══════════════════════════════════════════════
+
+#[test]
+fn t1_tcp_states() {
+    let src = r#"
+        const TCP_CLOSED: i64 = 0
+        const TCP_LISTEN: i64 = 1
+        const TCP_SYN_SENT: i64 = 2
+        const TCP_ESTABLISHED: i64 = 4
+        const TCP_TIME_WAIT: i64 = 10
+        fn main() -> void {
+            println(TCP_CLOSED)
+            println(TCP_LISTEN)
+            println(TCP_ESTABLISHED)
+            println(TCP_TIME_WAIT)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "4", "10"]);
+}
+
+#[test]
+fn t1_tcp_flags() {
+    let src = r#"
+        const FIN: i64 = 0x01
+        const SYN: i64 = 0x02
+        const RST: i64 = 0x04
+        const PSH: i64 = 0x08
+        const ACK: i64 = 0x10
+        fn main() -> void {
+            println(SYN | ACK)
+            println(FIN | ACK)
+            println(PSH | ACK)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["18", "17", "24"]);
+}
+
+#[test]
+fn t1_tcb_layout() {
+    let src = r#"
+        const TCB_TABLE: i64 = 0xA04000
+        const TCB_MAX: i64 = 16
+        const TCB_SIZE: i64 = 128
+        fn main() -> void {
+            println(TCB_MAX * TCB_SIZE)
+            println(TCB_TABLE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2048", "10502144"]);
+}
+
+#[test]
+fn t1_syn_handshake() {
+    let src = r#"
+        fn active_open(state: i64) -> i64 {
+            if state == 0 { 2 } else { state } // CLOSED → SYN_SENT
+        }
+        fn on_synack(state: i64) -> i64 {
+            if state == 2 { 4 } else { state } // SYN_SENT → ESTABLISHED
+        }
+        fn main() -> void {
+            let mut s: i64 = 0
+            s = active_open(s)
+            println(s)
+            s = on_synack(s)
+            println(s)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "4"]);
+}
+
+#[test]
+fn t1_passive_handshake() {
+    let src = r#"
+        fn passive_open(state: i64) -> i64 {
+            if state == 0 { 1 } else { state } // CLOSED → LISTEN
+        }
+        fn on_syn(state: i64) -> i64 {
+            if state == 1 { 3 } else { state } // LISTEN → SYN_RCVD
+        }
+        fn on_ack(state: i64) -> i64 {
+            if state == 3 { 4 } else { state } // SYN_RCVD → ESTABLISHED
+        }
+        fn main() -> void {
+            let mut s: i64 = 0
+            s = passive_open(s)
+            println(s)
+            s = on_syn(s)
+            println(s)
+            s = on_ack(s)
+            println(s)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3", "4"]);
+}
+
+#[test]
+fn t1_seq_ack_tracking() {
+    let src = r#"
+        fn after_send(snd_nxt: i64, data_len: i64) -> i64 { snd_nxt + data_len }
+        fn after_recv(rcv_nxt: i64, data_len: i64) -> i64 { rcv_nxt + data_len }
+        fn main() -> void {
+            let mut snd: i64 = 1000
+            let mut rcv: i64 = 2000
+            snd = after_send(snd, 100)
+            println(snd)
+            rcv = after_recv(rcv, 50)
+            println(rcv)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1100", "2050"]);
+}
+
+#[test]
+fn t1_fin_handshake() {
+    let src = r#"
+        fn close(state: i64) -> i64 {
+            if state == 4 { 5 } else if state == 7 { 9 } else { state }
+        }
+        fn on_fin(state: i64) -> i64 {
+            if state == 4 { 7 } else if state == 5 { 8 } else if state == 6 { 10 } else { state }
+        }
+        fn main() -> void {
+            // Active close: ESTABLISHED → FIN_WAIT_1
+            println(close(4))
+            // Peer FIN in ESTABLISHED → CLOSE_WAIT
+            println(on_fin(4))
+            // Passive close: CLOSE_WAIT → LAST_ACK
+            println(close(7))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5", "7", "9"]);
+}
+
+#[test]
+fn t1_retransmit_timer() {
+    let src = r#"
+        const RTO: i64 = 20
+        const MAX_RETRIES: i64 = 5
+        fn should_retransmit(now: i64, timer: i64) -> bool { timer > 0 && now >= timer }
+        fn should_give_up(retries: i64) -> bool { retries >= MAX_RETRIES }
+        fn main() -> void {
+            println(should_retransmit(100, 90))
+            println(should_retransmit(100, 110))
+            println(should_give_up(5))
+            println(should_give_up(3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "true", "false"]);
+}
+
+#[test]
+fn t1_window_size() {
+    let src = r#"
+        fn can_send(snd_nxt: i64, snd_una: i64, window: i64) -> i64 {
+            window - (snd_nxt - snd_una)
+        }
+        fn main() -> void {
+            println(can_send(1000, 900, 65535))
+            println(can_send(1000, 1000, 65535))
+            println(can_send(2000, 1000, 500))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["65435", "65535", "-500"]);
+}
+
+#[test]
+fn t1_rst_clears() {
+    let src = r#"
+        fn after_rst() -> i64 { 0 } // → CLOSED
+        fn main() -> void {
+            println(after_rst())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0"]);
+}

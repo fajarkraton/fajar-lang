@@ -8184,6 +8184,251 @@ const EXT2_FILE_BUF: i64 = 0xA03000
 }
 
 // ═══════════════════════════════════════════════
+// TCP State Machine (Sprint T1 — v0.9 "Zenith")
+// ═══════════════════════════════════════════════
+
+// TCP connection states (RFC 793)
+const TCP_CLOSED: i64 = 0
+const TCP_LISTEN: i64 = 1
+const TCP_SYN_SENT: i64 = 2
+const TCP_SYN_RCVD: i64 = 3
+const TCP_ESTABLISHED: i64 = 4
+const TCP_FIN_WAIT_1: i64 = 5
+const TCP_FIN_WAIT_2: i64 = 6
+const TCP_CLOSE_WAIT: i64 = 7
+const TCP_CLOSING: i64 = 8
+const TCP_LAST_ACK: i64 = 9
+const TCP_TIME_WAIT: i64 = 10
+
+// TCP flags
+const TCP_FIN: i64 = 0x01
+const TCP_SYN: i64 = 0x02
+const TCP_RST: i64 = 0x04
+const TCP_PSH: i64 = 0x08
+const TCP_ACK: i64 = 0x10
+const TCP_URG: i64 = 0x20
+
+// TCP Control Block table at 0xA04000: 16 connections × 128B
+const TCB_TABLE: i64 = 0xA04000
+const TCB_MAX: i64 = 16
+const TCB_SIZE: i64 = 128
+// Per TCB:
+const TCB_OFF_STATE: i64 = 0
+const TCB_OFF_LOCAL_PORT: i64 = 8
+const TCB_OFF_REMOTE_IP: i64 = 16
+const TCB_OFF_REMOTE_PORT: i64 = 24
+const TCB_OFF_SND_NXT: i64 = 32    // next sequence to send
+const TCB_OFF_SND_UNA: i64 = 40    // oldest unacked sequence
+const TCB_OFF_RCV_NXT: i64 = 48    // next expected receive seq
+const TCB_OFF_WINDOW: i64 = 56     // receive window size
+const TCB_OFF_TIMER: i64 = 64      // retransmit timer (tick)
+const TCB_OFF_RETRIES: i64 = 72    // retransmission count
+const TCB_OFF_SOCKET: i64 = 80     // associated socket slot
+const TCB_OFF_RX_LEN: i64 = 88    // received data length
+const TCB_OFF_TX_LEN: i64 = 96    // pending transmit length
+
+// Retransmit timeout: 20 ticks = 200ms
+const TCP_RTO: i64 = 20
+const TCP_MAX_RETRIES: i64 = 5
+
+// T1.1: TCB management
+@kernel fn tcp_init() {
+    let mut i: i64 = 0
+    while i < TCB_MAX * TCB_SIZE { volatile_write_u8(TCB_TABLE + i, 0); i = i + 1 }
+}
+
+@kernel fn tcb_alloc() -> i64 {
+    let mut i: i64 = 0
+    while i < TCB_MAX {
+        if volatile_read_u64(TCB_TABLE + i * TCB_SIZE + TCB_OFF_STATE) == TCP_CLOSED { return i }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn tcb_addr(idx: i64) -> i64 { TCB_TABLE + idx * TCB_SIZE }
+
+@kernel fn tcb_get(idx: i64, field: i64) -> i64 { volatile_read_u64(tcb_addr(idx) + field) }
+@kernel fn tcb_set(idx: i64, field: i64, val: i64) { volatile_write_u64(tcb_addr(idx) + field, val) }
+
+// T1.2: TCP state name for display
+@kernel fn tcp_state_name(state: i64) {
+    if state == TCP_CLOSED { cprint("CLOSED", WHITE_ON_BLACK) }
+    else if state == TCP_LISTEN { cprint("LISTEN", GREEN_ON_BLACK) }
+    else if state == TCP_SYN_SENT { cprint("SYN_SENT", YELLOW_ON_BLACK) }
+    else if state == TCP_SYN_RCVD { cprint("SYN_RCVD", YELLOW_ON_BLACK) }
+    else if state == TCP_ESTABLISHED { cprint("ESTABLISHED", GREEN_ON_BLACK) }
+    else if state == TCP_FIN_WAIT_1 { cprint("FIN_WAIT_1", YELLOW_ON_BLACK) }
+    else if state == TCP_FIN_WAIT_2 { cprint("FIN_WAIT_2", YELLOW_ON_BLACK) }
+    else if state == TCP_CLOSE_WAIT { cprint("CLOSE_WAIT", YELLOW_ON_BLACK) }
+    else if state == TCP_CLOSING { cprint("CLOSING", YELLOW_ON_BLACK) }
+    else if state == TCP_LAST_ACK { cprint("LAST_ACK", YELLOW_ON_BLACK) }
+    else if state == TCP_TIME_WAIT { cprint("TIME_WAIT", YELLOW_ON_BLACK) }
+    else { cprint("???", RED_ON_BLACK) }
+}
+
+// T1.3: Active open (client connect) — send SYN
+@kernel fn tcp_connect(tcb: i64, remote_ip: i64, remote_port: i64, local_port: i64) -> i64 {
+    tcb_set(tcb, TCB_OFF_LOCAL_PORT, local_port)
+    tcb_set(tcb, TCB_OFF_REMOTE_IP, remote_ip)
+    tcb_set(tcb, TCB_OFF_REMOTE_PORT, remote_port)
+    let isn: i64 = volatile_read_u64(0x6FE08) * 1000 // initial sequence number from tick
+    tcb_set(tcb, TCB_OFF_SND_NXT, isn + 1)
+    tcb_set(tcb, TCB_OFF_SND_UNA, isn)
+    tcb_set(tcb, TCB_OFF_WINDOW, 65535)
+    tcb_set(tcb, TCB_OFF_STATE, TCP_SYN_SENT)
+    tcb_set(tcb, TCB_OFF_TIMER, volatile_read_u64(0x6FE08) + TCP_RTO)
+    tcb_set(tcb, TCB_OFF_RETRIES, 0)
+    // Would send SYN packet here via virtio-net
+    0
+}
+
+// T1.4: Passive open (server accept) — transition on SYN received
+@kernel fn tcp_listen(tcb: i64, local_port: i64) -> i64 {
+    tcb_set(tcb, TCB_OFF_LOCAL_PORT, local_port)
+    tcb_set(tcb, TCB_OFF_STATE, TCP_LISTEN)
+    tcb_set(tcb, TCB_OFF_WINDOW, 65535)
+    0
+}
+
+@kernel fn tcp_on_syn_received(tcb: i64, remote_ip: i64, remote_port: i64, their_seq: i64) {
+    tcb_set(tcb, TCB_OFF_REMOTE_IP, remote_ip)
+    tcb_set(tcb, TCB_OFF_REMOTE_PORT, remote_port)
+    tcb_set(tcb, TCB_OFF_RCV_NXT, their_seq + 1)
+    let isn = volatile_read_u64(0x6FE08) * 1000
+    tcb_set(tcb, TCB_OFF_SND_NXT, isn + 1)
+    tcb_set(tcb, TCB_OFF_SND_UNA, isn)
+    tcb_set(tcb, TCB_OFF_STATE, TCP_SYN_RCVD)
+    // Would send SYN+ACK here
+}
+
+// T1.5: Data transfer (ESTABLISHED state)
+@kernel fn tcp_on_data(tcb: i64, data_seq: i64, data_len: i64) {
+    let expected = tcb_get(tcb, TCB_OFF_RCV_NXT)
+    if data_seq == expected {
+        tcb_set(tcb, TCB_OFF_RCV_NXT, expected + data_len)
+        let rx_len = tcb_get(tcb, TCB_OFF_RX_LEN)
+        tcb_set(tcb, TCB_OFF_RX_LEN, rx_len + data_len)
+        // Would send ACK here
+    }
+    // Out-of-order: drop (simple implementation)
+}
+
+// T1.6: ACK processing
+@kernel fn tcp_on_ack(tcb: i64, ack_num: i64) {
+    let una = tcb_get(tcb, TCB_OFF_SND_UNA)
+    if ack_num > una {
+        tcb_set(tcb, TCB_OFF_SND_UNA, ack_num)
+        // Reset retransmit timer
+        tcb_set(tcb, TCB_OFF_TIMER, volatile_read_u64(0x6FE08) + TCP_RTO)
+        tcb_set(tcb, TCB_OFF_RETRIES, 0)
+    }
+    // Handle state transitions on ACK
+    let state = tcb_get(tcb, TCB_OFF_STATE)
+    if state == TCP_SYN_SENT {
+        // SYN+ACK received → ESTABLISHED
+        tcb_set(tcb, TCB_OFF_STATE, TCP_ESTABLISHED)
+    }
+    if state == TCP_SYN_RCVD {
+        // ACK of our SYN+ACK → ESTABLISHED
+        tcb_set(tcb, TCB_OFF_STATE, TCP_ESTABLISHED)
+    }
+    if state == TCP_FIN_WAIT_1 {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_FIN_WAIT_2)
+    }
+    if state == TCP_LAST_ACK {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_CLOSED)
+    }
+}
+
+// T1.7: FIN handshake — graceful close
+@kernel fn tcp_close(tcb: i64) {
+    let state = tcb_get(tcb, TCB_OFF_STATE)
+    if state == TCP_ESTABLISHED {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_FIN_WAIT_1)
+        // Would send FIN here
+    }
+    if state == TCP_CLOSE_WAIT {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_LAST_ACK)
+        // Would send FIN here
+    }
+}
+
+@kernel fn tcp_on_fin(tcb: i64) {
+    let state = tcb_get(tcb, TCB_OFF_STATE)
+    let rcv_nxt = tcb_get(tcb, TCB_OFF_RCV_NXT)
+    tcb_set(tcb, TCB_OFF_RCV_NXT, rcv_nxt + 1) // FIN consumes 1 seq
+    if state == TCP_ESTABLISHED {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_CLOSE_WAIT)
+        // Would send ACK here
+    }
+    if state == TCP_FIN_WAIT_1 {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_CLOSING)
+    }
+    if state == TCP_FIN_WAIT_2 {
+        tcb_set(tcb, TCB_OFF_STATE, TCP_TIME_WAIT)
+    }
+}
+
+// T1.8: RST handling
+@kernel fn tcp_reset(tcb: i64) {
+    tcb_set(tcb, TCB_OFF_STATE, TCP_CLOSED)
+    tcb_set(tcb, TCB_OFF_RX_LEN, 0)
+    tcb_set(tcb, TCB_OFF_TX_LEN, 0)
+}
+
+// T1.9: Retransmission timer check (called periodically)
+@kernel fn tcp_check_timers() {
+    let now = volatile_read_u64(0x6FE08)
+    let mut i: i64 = 0
+    while i < TCB_MAX {
+        let state = tcb_get(i, TCB_OFF_STATE)
+        if state != TCP_CLOSED && state != TCP_LISTEN {
+            let timer = tcb_get(i, TCB_OFF_TIMER)
+            if timer > 0 && now >= timer {
+                let retries = tcb_get(i, TCB_OFF_RETRIES)
+                if retries >= TCP_MAX_RETRIES {
+                    tcp_reset(i) // give up
+                } else {
+                    tcb_set(i, TCB_OFF_RETRIES, retries + 1)
+                    tcb_set(i, TCB_OFF_TIMER, now + TCP_RTO)
+                    // Would retransmit unacked data here
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+
+// `tcpstat` command — show TCP connections
+@kernel fn cmd_tcpstat() {
+    cprintln("TCP connections:", YELLOW_ON_BLACK)
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < TCB_MAX {
+        let state = tcb_get(i, TCB_OFF_STATE)
+        if state != TCP_CLOSED {
+            cprint("  [", WHITE_ON_BLACK)
+            cprint_decimal(i, CYAN_ON_BLACK)
+            cprint("] :", WHITE_ON_BLACK)
+            cprint_decimal(tcb_get(i, TCB_OFF_LOCAL_PORT), CYAN_ON_BLACK)
+            cprint(" → :", WHITE_ON_BLACK)
+            cprint_decimal(tcb_get(i, TCB_OFF_REMOTE_PORT), WHITE_ON_BLACK)
+            cprint(" seq=", WHITE_ON_BLACK)
+            cprint_decimal(tcb_get(i, TCB_OFF_SND_NXT), WHITE_ON_BLACK)
+            cprint(" ack=", WHITE_ON_BLACK)
+            cprint_decimal(tcb_get(i, TCB_OFF_RCV_NXT), WHITE_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            tcp_state_name(state)
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (none)", WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -18720,6 +18965,7 @@ const PROC_OFF_NAME: i64 = 64
     volatile_write_u64(SESSION_TIMEOUT, 0) // Session timeout disabled by default
     journal_init() // Initialize filesystem journal
     socket_init() // Initialize socket table
+    tcp_init() // Initialize TCP state machine
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
