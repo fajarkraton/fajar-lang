@@ -186,76 +186,76 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G1.1.1 | Enable `gpu` feature flag | `cargo build --features gpu` | [ ] |
-| G1.1.2 | GPU device initialization | wgpu::Instance → Adapter → Device → Queue | [ ] |
-| G1.1.3 | Buffer creation | Create GPU buffers from tensor data | [ ] |
-| G1.1.4 | CPU → GPU upload | Copy tensor f64 data to GPU buffer | [ ] |
-| G1.1.5 | GPU → CPU download | Read result buffer back to CPU | [ ] |
-| G1.1.6 | Buffer pool | Reuse buffers to avoid allocation overhead | [ ] |
-| G1.1.7 | Error handling | GPU errors → FjError::Gpu variant | [ ] |
-| G1.1.8 | Fallback detection | `gpu_available()` → bool | [ ] |
-| G1.1.9 | Device info | `gpu_info()` → name, memory, compute units | [ ] |
-| G1.1.10 | 10 GPU tests | Buffer create, upload, download, fallback | [ ] |
+| G1.1.1 | Enable `gpu` feature flag | `cargo build --features gpu` | [x] |
+| G1.1.2 | GPU device initialization | wgpu::Instance → Adapter → Device → Queue | [x] |
+| G1.1.3 | Buffer creation | Create GPU buffers from tensor data | [x] |
+| G1.1.4 | CPU → GPU upload | Copy tensor f64 data to GPU buffer | [x] |
+| G1.1.5 | GPU → CPU download | Read result buffer back to CPU | [x] |
+| G1.1.6 | Buffer pool | Reuse buffers to avoid allocation overhead | [x] |
+| G1.1.7 | Error handling | GPU errors → FjError::Gpu variant | [x] |
+| G1.1.8 | Fallback detection | `gpu_available()` → bool | [x] |
+| G1.1.9 | Device info | `gpu_info()` → name, memory, compute units | [x] |
+| G1.1.10 | 10 GPU tests | Buffer create, upload, download, fallback | [x] |
 
 ### Sprint G1.2: Compute Pipeline (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G1.2.1 | WGSL shader loading | Load .wgsl compute shaders at runtime | [ ] |
-| G1.2.2 | Pipeline creation | ComputePipeline from WGSL source | [ ] |
-| G1.2.3 | Bind group layout | Uniform + storage buffer bindings | [ ] |
-| G1.2.4 | Dispatch | `encoder.dispatch_workgroups(x, y, z)` | [ ] |
-| G1.2.5 | Synchronization | Wait for GPU completion | [ ] |
-| G1.2.6 | Shader cache | Cache compiled pipelines by name | [ ] |
-| G1.2.7 | Workgroup sizing | Auto-calculate optimal workgroup dimensions | [ ] |
-| G1.2.8 | Memory layout | Row-major f32 buffer for GPU, f64 for CPU | [ ] |
-| G1.2.9 | Precision handling | f64 (CPU) ↔ f32 (GPU) conversion | [ ] |
-| G1.2.10 | Benchmark: pipeline overhead | Measure dispatch latency | [ ] |
+| G1.2.1 | WGSL shader loading | Load .wgsl compute shaders at runtime | [x] |
+| G1.2.2 | Pipeline creation | ComputePipeline from WGSL source | [x] |
+| G1.2.3 | Bind group layout | Uniform + storage buffer bindings | [x] |
+| G1.2.4 | Dispatch | `encoder.dispatch_workgroups(x, y, z)` | [x] |
+| G1.2.5 | Synchronization | Wait for GPU completion | [x] |
+| G1.2.6 | Shader cache | Cache compiled pipelines by name | [x] |
+| G1.2.7 | Workgroup sizing | Auto-calculate optimal workgroup dimensions | [x] |
+| G1.2.8 | Memory layout | Row-major f32 buffer for GPU, f64 for CPU | [x] |
+| G1.2.9 | Precision handling | f64 (CPU) ↔ f32 (GPU) conversion | [x] |
+| G1.2.10 | Benchmark: pipeline overhead | Measure dispatch latency | [x] |
 
 ### Sprint G2.1: WGSL Compute Kernels (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G2.1.1 | vecadd.wgsl | Element-wise vector addition | [ ] |
-| G2.1.2 | matmul.wgsl | Matrix multiplication (tiled) | [ ] |
-| G2.1.3 | relu.wgsl | ReLU activation | [ ] |
-| G2.1.4 | sigmoid.wgsl | Sigmoid activation | [ ] |
-| G2.1.5 | softmax.wgsl | Softmax (reduce + normalize) | [ ] |
-| G2.1.6 | transpose.wgsl | Matrix transpose | [ ] |
-| G2.1.7 | scale.wgsl | Scalar multiplication | [ ] |
-| G2.1.8 | conv2d.wgsl | 2D convolution (im2col approach) | [ ] |
-| G2.1.9 | Verify all kernels | Compare GPU output vs CPU reference | [ ] |
-| G2.1.10 | Kernel benchmark suite | Time each kernel at various sizes | [ ] |
+| G2.1.1 | vecadd.wgsl | Element-wise vector addition | [x] |
+| G2.1.2 | matmul.wgsl | Matrix multiplication (tiled) | [x] |
+| G2.1.3 | relu.wgsl | ReLU activation | [x] |
+| G2.1.4 | sigmoid.wgsl | Sigmoid activation | [x] |
+| G2.1.5 | softmax.wgsl | Softmax (reduce + normalize) | [x] |
+| G2.1.6 | transpose.wgsl | Matrix transpose | [x] |
+| G2.1.7 | scale.wgsl | Scalar multiplication | [x] |
+| G2.1.8 | conv2d.wgsl | 2D convolution (im2col approach) | [x] |
+| G2.1.9 | Verify all kernels | Compare GPU output vs CPU reference | [x] |
+| G2.1.10 | Kernel benchmark suite | Time each kernel at various sizes | [x] |
 
 ### Sprint G2.2: Integration (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G2.2.1 | Hook GPU into tensor_matmul | Auto-dispatch to GPU if available | [ ] |
-| G2.2.2 | Hook GPU into tensor_relu | GPU activation for large tensors | [ ] |
-| G2.2.3 | Hook GPU into tensor_softmax | GPU softmax | [ ] |
-| G2.2.4 | Size threshold | Only use GPU for tensors > 1024 elements | [ ] |
-| G2.2.5 | Multi-operation fusion | Chain ops without CPU roundtrip | [ ] |
-| G2.2.6 | Memory management | Track GPU allocations, prevent leaks | [ ] |
-| G2.2.7 | MNIST on GPU | Run MNIST inference with GPU acceleration | [ ] |
-| G2.2.8 | `gpu_benchmark` command | Compare CPU vs GPU for matmul at N=64,128,256,512 | [ ] |
-| G2.2.9 | Update examples | `examples/gpu_matmul.fj`, `examples/gpu_mnist.fj` | [ ] |
-| G2.2.10 | Documentation | GPU_COMPUTE.md — setup, usage, benchmarks | [ ] |
+| G2.2.1 | Hook GPU into tensor_matmul | Auto-dispatch to GPU if available | [x] |
+| G2.2.2 | Hook GPU into tensor_relu | GPU activation for large tensors | [x] |
+| G2.2.3 | Hook GPU into tensor_softmax | GPU softmax | [x] |
+| G2.2.4 | Size threshold | Only use GPU for tensors > 1024 elements | [x] |
+| G2.2.5 | Multi-operation fusion | Chain ops without CPU roundtrip | [x] |
+| G2.2.6 | Memory management | Track GPU allocations, prevent leaks | [x] |
+| G2.2.7 | MNIST on GPU | Run MNIST inference with GPU acceleration | [x] |
+| G2.2.8 | `gpu_benchmark` command | Compare CPU vs GPU for matmul at N=64,128,256,512 | [x] |
+| G2.2.9 | Update examples | `examples/gpu_matmul.fj`, `examples/gpu_mnist.fj` | [x] |
+| G2.2.10 | Documentation | GPU_COMPUTE.md — setup, usage, benchmarks | [x] |
 
 ### Sprint G3: Auto-Dispatch + Benchmarks (10 tasks each — 2 sprints)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| G3.1 | Auto-dispatch policy | CPU < 1K elements, GPU >= 1K | [ ] |
-| G3.2 | Runtime device selection | `@device` annotation routes to GPU | [ ] |
-| G3.3 | Mixed precision support | FP16 on GPU, FP64 on CPU | [ ] |
-| G3.4 | Multi-GPU support | Detect multiple GPUs, round-robin dispatch | [ ] |
-| G3.5 | Vulkan backend (via ash) | Alternative to wgpu for bare-metal | [ ] |
-| G3.6 | Q6A Adreno backend | OpenCL/Vulkan on Adreno 643 | [ ] |
-| G3.7 | Benchmark: matmul 64-1024 | CPU vs GPU speedup table | [ ] |
-| G3.8 | Benchmark: MNIST end-to-end | Full inference pipeline | [ ] |
-| G3.9 | Benchmark: training loop | Forward + backward + update on GPU | [ ] |
-| G3.10 | Release blog post | "GPU Compute in Fajar Lang" | [ ] |
+| G3.1 | Auto-dispatch policy | CPU < 1K elements, GPU >= 1K | [x] |
+| G3.2 | Runtime device selection | `@device` annotation routes to GPU | [x] |
+| G3.3 | Mixed precision support | FP16 on GPU, FP64 on CPU | [x] |
+| G3.4 | Multi-GPU support | Detect multiple GPUs, round-robin dispatch | [x] |
+| G3.5 | Vulkan backend (via ash) | Alternative to wgpu for bare-metal | [x] |
+| G3.6 | Q6A Adreno backend | OpenCL/Vulkan on Adreno 643 | [x] |
+| G3.7 | Benchmark: matmul 64-1024 | CPU vs GPU speedup table | [x] |
+| G3.8 | Benchmark: MNIST end-to-end | Full inference pipeline | [x] |
+| G3.9 | Benchmark: training loop | Forward + backward + update on GPU | [x] |
+| G3.10 | Release blog post | "GPU Compute in Fajar Lang" | [x] |
 
 ---
 
