@@ -307,6 +307,316 @@ impl Interpreter {
                 Ok(Value::Array(new_arr))
             }
             (Value::Array(a), "is_empty") => Ok(Value::Bool(a.is_empty())),
+            // Array higher-order methods with closures (v0.8)
+            (Value::Array(a), "map") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut result = Vec::with_capacity(a.len());
+                for item in a.iter() {
+                    let mapped = self.call_value(&func, vec![item.clone()])?;
+                    result.push(mapped);
+                }
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "filter") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut result = Vec::new();
+                for item in a.iter() {
+                    let keep = self.call_value(&func, vec![item.clone()])?;
+                    if keep == Value::Bool(true) {
+                        result.push(item.clone());
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "fold") => {
+                if arg_vals.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let mut args_iter = arg_vals.into_iter();
+                let mut acc = args_iter.next().unwrap_or(Value::Null);
+                let func = args_iter.next().unwrap_or(Value::Null);
+                for item in a.iter() {
+                    acc = self.call_value(&func, vec![acc, item.clone()])?;
+                }
+                Ok(acc)
+            }
+            (Value::Array(a), "any") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                for item in a.iter() {
+                    if self.call_value(&func, vec![item.clone()])? == Value::Bool(true) {
+                        return Ok(Value::Bool(true));
+                    }
+                }
+                Ok(Value::Bool(false))
+            }
+            (Value::Array(a), "all") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                for item in a.iter() {
+                    if self.call_value(&func, vec![item.clone()])? != Value::Bool(true) {
+                        return Ok(Value::Bool(false));
+                    }
+                }
+                Ok(Value::Bool(true))
+            }
+            (Value::Array(a), "enumerate") => {
+                let result: Vec<Value> = a
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| Value::Tuple(vec![Value::Int(i as i64), v.clone()]))
+                    .collect();
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "reverse" | "rev") => {
+                let mut reversed = a.clone();
+                reversed.reverse();
+                Ok(Value::Array(reversed))
+            }
+            (Value::Array(a), "sort") => {
+                let mut sorted = a.clone();
+                sorted.sort_by(|a, b| match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                    (Value::Float(x), Value::Float(y)) => {
+                        x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                    }
+                    (Value::Str(x), Value::Str(y)) => x.cmp(y),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                Ok(Value::Array(sorted))
+            }
+            (Value::Array(a), "join") => {
+                let sep = match arg_vals.first() {
+                    Some(Value::Str(s)) => s.clone(),
+                    _ => "".to_string(),
+                };
+                let result: Vec<String> = a.iter().map(|v| format!("{v}")).collect();
+                Ok(Value::Str(result.join(&sep)))
+            }
+            (Value::Array(a), "flat_map") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut result = Vec::new();
+                for item in a.iter() {
+                    let mapped = self.call_value(&func, vec![item.clone()])?;
+                    if let Value::Array(inner) = mapped {
+                        result.extend(inner);
+                    } else {
+                        result.push(mapped);
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "take") => {
+                let n = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                Ok(Value::Array(a.iter().take(n).cloned().collect()))
+            }
+            (Value::Array(a), "skip") => {
+                let n = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                Ok(Value::Array(a.iter().skip(n).cloned().collect()))
+            }
+            (Value::Array(a), "zip") => {
+                if let Some(Value::Array(b)) = arg_vals.into_iter().next() {
+                    let result: Vec<Value> = a
+                        .iter()
+                        .zip(b.iter())
+                        .map(|(x, y)| Value::Tuple(vec![x.clone(), y.clone()]))
+                        .collect();
+                    Ok(Value::Array(result))
+                } else {
+                    Err(RuntimeError::TypeError("zip() requires an array argument".into()).into())
+                }
+            }
+            (Value::Array(a), "find") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                for item in a.iter() {
+                    if self.call_value(&func, vec![item.clone()])? == Value::Bool(true) {
+                        return Ok(Value::Enum {
+                            variant: "Some".into(),
+                            data: Some(Box::new(item.clone())),
+                        });
+                    }
+                }
+                Ok(Value::Enum {
+                    variant: "None".into(),
+                    data: None,
+                })
+            }
+            (Value::Array(a), "position") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                for (i, item) in a.iter().enumerate() {
+                    if self.call_value(&func, vec![item.clone()])? == Value::Bool(true) {
+                        return Ok(Value::Enum {
+                            variant: "Some".into(),
+                            data: Some(Box::new(Value::Int(i as i64))),
+                        });
+                    }
+                }
+                Ok(Value::Enum {
+                    variant: "None".into(),
+                    data: None,
+                })
+            }
+            (Value::Array(a), "count") => {
+                if arg_vals.is_empty() {
+                    return Ok(Value::Int(a.len() as i64));
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut c: i64 = 0;
+                for item in a.iter() {
+                    if self.call_value(&func, vec![item.clone()])? == Value::Bool(true) {
+                        c += 1;
+                    }
+                }
+                Ok(Value::Int(c))
+            }
+            (Value::Array(a), "sum") => {
+                let mut total: i64 = 0;
+                for item in a {
+                    if let Value::Int(n) = item {
+                        total += n;
+                    }
+                }
+                Ok(Value::Int(total))
+            }
+            (Value::Array(a), "min") => {
+                let mut m = i64::MAX;
+                for item in a.iter() {
+                    if let Value::Int(n) = item {
+                        if *n < m {
+                            m = *n;
+                        }
+                    }
+                }
+                if a.is_empty() {
+                    Ok(Value::Null)
+                } else {
+                    Ok(Value::Int(m))
+                }
+            }
+            (Value::Array(a), "max") => {
+                let mut m = i64::MIN;
+                for item in a.iter() {
+                    if let Value::Int(n) = item {
+                        if *n > m {
+                            m = *n;
+                        }
+                    }
+                }
+                if a.is_empty() {
+                    Ok(Value::Null)
+                } else {
+                    Ok(Value::Int(m))
+                }
+            }
+            (Value::Array(a), "flatten") => {
+                let mut result = Vec::new();
+                for item in a.iter() {
+                    if let Value::Array(inner) = item {
+                        result.extend(inner.clone());
+                    } else {
+                        result.push(item.clone());
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "dedup") => {
+                let mut result = Vec::new();
+                let mut prev: Option<Value> = None;
+                for item in a.iter() {
+                    if prev.as_ref() != Some(item) {
+                        result.push(item.clone());
+                    }
+                    prev = Some(item.clone());
+                }
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "chunks") => {
+                let size = match arg_vals.first() {
+                    Some(Value::Int(n)) if *n > 0 => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "chunks() requires a positive integer".into(),
+                        )
+                        .into());
+                    }
+                };
+                let result: Vec<Value> = a
+                    .chunks(size)
+                    .map(|chunk| Value::Array(chunk.to_vec()))
+                    .collect();
+                Ok(Value::Array(result))
+            }
+            (Value::Array(a), "windows") => {
+                let size = match arg_vals.first() {
+                    Some(Value::Int(n)) if *n > 0 => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "windows() requires a positive integer".into(),
+                        )
+                        .into());
+                    }
+                };
+                let result: Vec<Value> =
+                    a.windows(size).map(|w| Value::Array(w.to_vec())).collect();
+                Ok(Value::Array(result))
+            }
             (Value::Array(a), "first") => match a.first() {
                 Some(v) => Ok(Value::Enum {
                     variant: "Some".into(),
@@ -405,30 +715,7 @@ impl Interpreter {
                     )
                 }
             }
-            // Array methods continued
-            (Value::Array(a), "join") => {
-                if let Some(Value::Str(sep)) = arg_vals.first() {
-                    let joined: String = a
-                        .iter()
-                        .map(|v| match v {
-                            Value::Str(s) => s.clone(),
-                            other => format!("{other}"),
-                        })
-                        .collect::<Vec<_>>()
-                        .join(sep.as_str());
-                    Ok(Value::Str(joined))
-                } else {
-                    Err(RuntimeError::TypeError(
-                        "join() requires a string separator argument".into(),
-                    )
-                    .into())
-                }
-            }
-            (Value::Array(a), "reverse") => {
-                let mut reversed = a.clone();
-                reversed.reverse();
-                Ok(Value::Array(reversed))
-            }
+            // (join and reverse handled above in v0.8 methods)
             (Value::Array(a), "contains") => {
                 if arg_vals.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {

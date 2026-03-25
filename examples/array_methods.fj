@@ -1,0 +1,63 @@
+// Array Higher-Order Methods — Fajar Lang v0.8
+// Demonstrates closures with array .map(), .filter(), .fold(), etc.
+
+let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// map: transform each element
+let doubled = nums.map(|x| x * 2)
+println(f"Doubled:    {doubled}")
+
+// filter: keep elements matching predicate
+let evens = nums.filter(|x| x % 2 == 0)
+println(f"Evens:      {evens}")
+
+// fold: reduce to single value
+let sum = nums.fold(0, |acc, x| acc + x)
+println(f"Sum:        {sum}")
+
+// any/all: boolean predicates
+let has_ten = nums.any(|x| x == 10)
+let all_pos = nums.all(|x| x > 0)
+println(f"Has 10?     {has_ten}")
+println(f"All > 0?    {all_pos}")
+
+// sort, reverse, join
+let mixed = [3, 1, 4, 1, 5, 9, 2, 6]
+println(f"Sorted:     {mixed.sort()}")
+println(f"Reversed:   {mixed.reverse()}")
+println(f"Joined:     {mixed.join(", ")}")
+
+// take, skip, enumerate
+println(f"First 3:    {nums.take(3)}")
+println(f"Skip 7:     {nums.skip(7)}")
+println(f"Enumerate:  {nums.take(3).enumerate()}")
+
+// min, max, sum, count
+println(f"Min:        {nums.min()}")
+println(f"Max:        {nums.max()}")
+println(f"Count > 5:  {nums.count(|x| x > 5)}")
+
+// find, position
+println(f"Find > 7:   {nums.find(|x| x > 7)}")
+println(f"Pos of 5:   {nums.position(|x| x == 5)}")
+
+// chaining: map then filter then sum
+let result = nums.filter(|x| x > 3).map(|x| x * x)
+println(f"Squares>3:  {result}")
+
+// flat_map
+let nested = [[1, 2], [3, 4], [5, 6]]
+println(f"Flattened:  {nested.flatten()}")
+
+// zip
+let a = [1, 2, 3]
+let b = [10, 20, 30]
+println(f"Zipped:     {a.zip(b)}")
+
+// dedup
+let duped = [1, 1, 2, 2, 3, 3, 3, 4]
+println(f"Deduped:    {duped.dedup()}")
+
+// chunks, windows
+println(f"Chunks(3):  {nums.take(9).chunks(3)}")
+println(f"Windows(3): {nums.take(5).windows(3)}")

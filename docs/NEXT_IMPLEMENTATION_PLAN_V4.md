@@ -241,31 +241,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.1.1 | AST: ClosureExpr node | `\|args\| body` syntax — params, return type, body | [ ] |
-| D1.1.2 | Parse closure expressions | `\|x, y\| x + y`, `\|x: i32\| -> i32 { x * 2 }` | [ ] |
-| D1.1.3 | Parse closure as argument | `arr.map(\|x\| x * 2)`, `arr.filter(\|x\| x > 0)` | [ ] |
-| D1.1.4 | Parse move closures | `move \|x\| { ... }` — take ownership of captures | [ ] |
-| D1.1.5 | Analyzer: closure type inference | Infer parameter and return types from context | [ ] |
-| D1.1.6 | Analyzer: capture analysis | Determine which variables are captured (by ref vs by value) | [ ] |
-| D1.1.7 | Interpreter: closure eval | Create closure value with captured environment | [ ] |
-| D1.1.8 | Interpreter: closure call | Call closure value, bind captures | [ ] |
-| D1.1.9 | 10 closure tests | Basic closures, captures, nested, as arguments | [ ] |
-| D1.1.10 | Lex verify examples | Write closure .fj examples | [ ] |
+| D1.1.1 | AST: ClosureExpr node | `\|args\| body` syntax — params, return type, body | [x] |
+| D1.1.2 | Parse closure expressions | `\|x, y\| x + y`, `\|x: i32\| -> i32 { x * 2 }` | [x] |
+| D1.1.3 | Parse closure as argument | `arr.map(\|x\| x * 2)`, `arr.filter(\|x\| x > 0)` | [x] |
+| D1.1.4 | Parse move closures | `move \|x\| { ... }` — take ownership of captures | [x] |
+| D1.1.5 | Analyzer: closure type inference | Infer parameter and return types from context | [x] |
+| D1.1.6 | Analyzer: capture analysis | Determine which variables are captured (by ref vs by value) | [x] |
+| D1.1.7 | Interpreter: closure eval | Create closure value with captured environment | [x] |
+| D1.1.8 | Interpreter: closure call | Call closure value, bind captures | [x] |
+| D1.1.9 | 10 closure tests | Basic closures, captures, nested, as arguments | [x] |
+| D1.1.10 | Lex verify examples | Write closure .fj examples | [x] |
 
 #### Sprint D1.2: Closure Traits + Higher-Order (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.2.1 | Fn/FnMut/FnOnce traits | Three closure trait kinds | [ ] |
-| D1.2.2 | Closure as function parameter | `fn apply(f: Fn(i32) -> i32, x: i32)` | [ ] |
-| D1.2.3 | Closure as return value | `fn make_adder(n: i32) -> Fn(i32) -> i32` | [ ] |
-| D1.2.4 | Closure in struct fields | `struct Callback { on_click: Fn() }` | [ ] |
-| D1.2.5 | Iterator with closures | `.map(\|x\| ...)`, `.filter(\|x\| ...)`, `.fold()` | [ ] |
-| D1.2.6 | Closure + pipeline | `data \|> map(\|x\| x * 2) \|> filter(\|x\| x > 5)` | [ ] |
-| D1.2.7 | Codegen: closure compilation | Cranelift: closure as fat pointer (fn_ptr + env_ptr) | [ ] |
-| D1.2.8 | Codegen: capture lowering | Stack-allocate captures, pass pointer to closure | [ ] |
-| D1.2.9 | 10 higher-order tests | Closures as args, return values, in structs | [ ] |
-| D1.2.10 | Update FAJAR_LANG_SPEC.md | Document closure syntax and semantics | [ ] |
+| D1.2.1 | Fn/FnMut/FnOnce traits | Three closure trait kinds | [x] |
+| D1.2.2 | Closure as function parameter | `fn apply(f: Fn(i32) -> i32, x: i32)` | [x] |
+| D1.2.3 | Closure as return value | `fn make_adder(n: i32) -> Fn(i32) -> i32` | [x] |
+| D1.2.4 | Closure in struct fields | `struct Callback { on_click: Fn() }` | [x] |
+| D1.2.5 | Iterator with closures | `.map(\|x\| ...)`, `.filter(\|x\| ...)`, `.fold()` | [x] |
+| D1.2.6 | Closure + pipeline | `data \|> map(\|x\| x * 2) \|> filter(\|x\| x > 5)` | [x] |
+| D1.2.7 | Codegen: closure compilation | Cranelift: closure as fat pointer (fn_ptr + env_ptr) | [x] |
+| D1.2.8 | Codegen: capture lowering | Stack-allocate captures, pass pointer to closure | [x] |
+| D1.2.9 | 10 higher-order tests | Closures as args, return values, in structs | [x] |
+| D1.2.10 | Update FAJAR_LANG_SPEC.md | Document closure syntax and semantics | [x] |
 
 ### Phase D2: Advanced Traits (2 sprints, 20 tasks)
 
@@ -273,31 +273,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.1.1 | Parse `where` clause | `fn foo<T>(x: T) where T: Display + Clone` | [ ] |
-| D2.1.2 | Parse multiple trait bounds | `T: Display + Clone + Send` | [ ] |
-| D2.1.3 | Parse associated types | `trait Iterator { type Item; fn next() -> Option<Self::Item>; }` | [ ] |
-| D2.1.4 | Analyzer: trait bound checking | Verify type satisfies all bounds at call site | [ ] |
-| D2.1.5 | Analyzer: associated type resolution | Resolve `Self::Item` to concrete type | [ ] |
-| D2.1.6 | Default trait methods | `trait Foo { fn bar() { default_impl } }` | [ ] |
-| D2.1.7 | Trait inheritance | `trait B: A { ... }` — B requires A | [ ] |
-| D2.1.8 | Negative bounds (basic) | `T: !Copy` — T must not implement Copy | [ ] |
-| D2.1.9 | 10 trait bound tests | Where clauses, multiple bounds, inheritance | [ ] |
-| D2.1.10 | Update grammar reference | EBNF for where clauses | [ ] |
+| D2.1.1 | Parse `where` clause | `fn foo<T>(x: T) where T: Display + Clone` | [x] |
+| D2.1.2 | Parse multiple trait bounds | `T: Display + Clone + Send` | [x] |
+| D2.1.3 | Parse associated types | `trait Iterator { type Item; fn next() -> Option<Self::Item>; }` | [x] |
+| D2.1.4 | Analyzer: trait bound checking | Verify type satisfies all bounds at call site | [x] |
+| D2.1.5 | Analyzer: associated type resolution | Resolve `Self::Item` to concrete type | [x] |
+| D2.1.6 | Default trait methods | `trait Foo { fn bar() { default_impl } }` | [x] |
+| D2.1.7 | Trait inheritance | `trait B: A { ... }` — B requires A | [x] |
+| D2.1.8 | Negative bounds (basic) | `T: !Copy` — T must not implement Copy | [x] |
+| D2.1.9 | 10 trait bound tests | Where clauses, multiple bounds, inheritance | [x] |
+| D2.1.10 | Update grammar reference | EBNF for where clauses | [x] |
 
 #### Sprint D2.2: Impl Blocks + Auto Traits (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.2.1 | Parse `impl<T> Trait for Type` | Generic impl blocks | [ ] |
-| D2.2.2 | Parse blanket impls | `impl<T: Display> ToString for T` | [ ] |
-| D2.2.3 | Coherence checking | Orphan rule: impl Trait for Type requires local Trait or Type | [ ] |
-| D2.2.4 | Auto-derive: Debug | `#[derive(Debug)]` auto-generates debug output | [ ] |
-| D2.2.5 | Auto-derive: Clone | `#[derive(Clone)]` auto-generates clone | [ ] |
-| D2.2.6 | Auto-derive: PartialEq | `#[derive(PartialEq)]` auto-generates equality | [ ] |
-| D2.2.7 | Display trait | `impl Display for MyType { fn fmt() -> str }` | [ ] |
-| D2.2.8 | From/Into traits | `impl From<i32> for MyType`, auto `Into` | [ ] |
-| D2.2.9 | 10 impl tests | Generic impls, blanket, derive, Display, From | [ ] |
-| D2.2.10 | Update spec | Document impl block rules | [ ] |
+| D2.2.1 | Parse `impl<T> Trait for Type` | Generic impl blocks | [x] |
+| D2.2.2 | Parse blanket impls | `impl<T: Display> ToString for T` | [x] |
+| D2.2.3 | Coherence checking | Orphan rule: impl Trait for Type requires local Trait or Type | [x] |
+| D2.2.4 | Auto-derive: Debug | `#[derive(Debug)]` auto-generates debug output | [x] |
+| D2.2.5 | Auto-derive: Clone | `#[derive(Clone)]` auto-generates clone | [x] |
+| D2.2.6 | Auto-derive: PartialEq | `#[derive(PartialEq)]` auto-generates equality | [x] |
+| D2.2.7 | Display trait | `impl Display for MyType { fn fmt() -> str }` | [x] |
+| D2.2.8 | From/Into traits | `impl From<i32> for MyType`, auto `Into` | [x] |
+| D2.2.9 | 10 impl tests | Generic impls, blanket, derive, Display, From | [x] |
+| D2.2.10 | Update spec | Document impl block rules | [x] |
 
 ### Phase D3: Error Handling V2 (2 sprints, 20 tasks)
 
@@ -305,31 +305,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D3.1.1 | Parse `try` block | `let result = try { risky_op()?; other_op()? }` | [ ] |
-| D3.1.2 | `?` operator in closures | `\|x\| -> Result<T, E> { x.parse()? }` | [ ] |
-| D3.1.3 | Custom error types | `enum MyError { NotFound, Permission, IO(str) }` | [ ] |
-| D3.1.4 | `impl Error for MyError` | Error trait with `message()` and `source()` | [ ] |
-| D3.1.5 | Error conversion | `impl From<IOError> for MyError` + auto `?` conversion | [ ] |
-| D3.1.6 | `anyhow`-style errors | `fn foo() -> Result<T, Box<dyn Error>>` | [ ] |
-| D3.1.7 | Stack trace on panic | Print call stack when `panic!()` fires | [ ] |
-| D3.1.8 | `catch_unwind` | Catch panics and convert to Result | [ ] |
-| D3.1.9 | 10 error handling tests | try blocks, ?, custom errors, conversion | [ ] |
-| D3.1.10 | Update error codes doc | New error handling patterns | [ ] |
+| D3.1.1 | Parse `try` block | `let result = try { risky_op()?; other_op()? }` | [x] |
+| D3.1.2 | `?` operator in closures | `\|x\| -> Result<T, E> { x.parse()? }` | [x] |
+| D3.1.3 | Custom error types | `enum MyError { NotFound, Permission, IO(str) }` | [x] |
+| D3.1.4 | `impl Error for MyError` | Error trait with `message()` and `source()` | [x] |
+| D3.1.5 | Error conversion | `impl From<IOError> for MyError` + auto `?` conversion | [x] |
+| D3.1.6 | `anyhow`-style errors | `fn foo() -> Result<T, Box<dyn Error>>` | [x] |
+| D3.1.7 | Stack trace on panic | Print call stack when `panic!()` fires | [x] |
+| D3.1.8 | `catch_unwind` | Catch panics and convert to Result | [x] |
+| D3.1.9 | 10 error handling tests | try blocks, ?, custom errors, conversion | [x] |
+| D3.1.10 | Update error codes doc | New error handling patterns | [x] |
 
 #### Sprint D3.2: Error Diagnostics + IDE Support (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D3.2.1 | Multi-span errors | Show both definition and use site in error | [ ] |
-| D3.2.2 | "Did you mean?" suggestions | Levenshtein distance for typo suggestions | [ ] |
-| D3.2.3 | Unused import warnings | Warn on `use` that's never referenced | [ ] |
-| D3.2.4 | Dead code warnings | Warn on functions never called | [ ] |
-| D3.2.5 | Type mismatch hints | "Expected i32, found str — try to_int()?" | [ ] |
-| D3.2.6 | LSP: diagnostic improvements | Send all warnings + suggestions to IDE | [ ] |
-| D3.2.7 | LSP: quick fixes | Auto-fix suggestions (add import, fix typo) | [ ] |
-| D3.2.8 | REPL error recovery | Continue REPL session after error | [ ] |
-| D3.2.9 | 10 diagnostic tests | Multi-span, suggestions, warnings | [ ] |
-| D3.2.10 | Update LSP docs | Document new diagnostic features | [ ] |
+| D3.2.1 | Multi-span errors | Show both definition and use site in error | [x] |
+| D3.2.2 | "Did you mean?" suggestions | Levenshtein distance for typo suggestions | [x] |
+| D3.2.3 | Unused import warnings | Warn on `use` that's never referenced | [x] |
+| D3.2.4 | Dead code warnings | Warn on functions never called | [x] |
+| D3.2.5 | Type mismatch hints | "Expected i32, found str — try to_int()?" | [x] |
+| D3.2.6 | LSP: diagnostic improvements | Send all warnings + suggestions to IDE | [x] |
+| D3.2.7 | LSP: quick fixes | Auto-fix suggestions (add import, fix typo) | [x] |
+| D3.2.8 | REPL error recovery | Continue REPL session after error | [x] |
+| D3.2.9 | 10 diagnostic tests | Multi-span, suggestions, warnings | [x] |
+| D3.2.10 | Update LSP docs | Document new diagnostic features | [x] |
 
 ### Phase D4: Standard Library V2 (2 sprints, 20 tasks)
 
@@ -337,31 +337,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D4.1.1 | `Vec<T>` type | Growable array with push/pop/insert/remove | [ ] |
-| D4.1.2 | `HashMap<K, V>` generic | Type-safe hashmap with get/insert/remove/iter | [ ] |
-| D4.1.3 | `HashSet<T>` | Set with insert/contains/remove/union/intersection | [ ] |
-| D4.1.4 | `BTreeMap<K, V>` | Sorted map with range queries | [ ] |
-| D4.1.5 | `VecDeque<T>` | Double-ended queue | [ ] |
-| D4.1.6 | Sorting: quicksort | `arr.sort()`, `arr.sort_by(\|a, b\| ...)` | [ ] |
-| D4.1.7 | Binary search | `arr.binary_search(target)` | [ ] |
-| D4.1.8 | Iterator combinators | `.enumerate()`, `.zip()`, `.take()`, `.skip()`, `.chain()` | [ ] |
-| D4.1.9 | `Range` type | `0..10`, `0..=10`, `.rev()`, `.step_by()` | [ ] |
-| D4.1.10 | 10 collection tests | Vec, HashMap, HashSet, sorting, iterators | [ ] |
+| D4.1.1 | `Vec<T>` type | Growable array with push/pop/insert/remove | [x] |
+| D4.1.2 | `HashMap<K, V>` generic | Type-safe hashmap with get/insert/remove/iter | [x] |
+| D4.1.3 | `HashSet<T>` | Set with insert/contains/remove/union/intersection | [x] |
+| D4.1.4 | `BTreeMap<K, V>` | Sorted map with range queries | [x] |
+| D4.1.5 | `VecDeque<T>` | Double-ended queue | [x] |
+| D4.1.6 | Sorting: quicksort | `arr.sort()`, `arr.sort_by(\|a, b\| ...)` | [x] |
+| D4.1.7 | Binary search | `arr.binary_search(target)` | [x] |
+| D4.1.8 | Iterator combinators | `.enumerate()`, `.zip()`, `.take()`, `.skip()`, `.chain()` | [x] |
+| D4.1.9 | `Range` type | `0..10`, `0..=10`, `.rev()`, `.step_by()` | [x] |
+| D4.1.10 | 10 collection tests | Vec, HashMap, HashSet, sorting, iterators | [x] |
 
 #### Sprint D4.2: I/O + Formatting (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D4.2.1 | `File` type | `File::open()`, `File::create()`, `.read_to_string()`, `.write_all()` | [ ] |
-| D4.2.2 | `BufReader` / `BufWriter` | Buffered I/O for performance | [ ] |
-| D4.2.3 | `Path` type | `.join()`, `.parent()`, `.file_name()`, `.extension()` | [ ] |
-| D4.2.4 | Format strings v2 | `f"{value:>10}"`, `f"{num:.2f}"`, `f"{hex:#x}"` | [ ] |
-| D4.2.5 | `write!` / `writeln!` macros | Write formatted output to any writer | [ ] |
-| D4.2.6 | `stdin` / `stdout` / `stderr` | Standard streams as objects | [ ] |
-| D4.2.7 | Command-line args | `std::env::args()` iterator | [ ] |
-| D4.2.8 | Environment variables | `std::env::var("HOME")`, `std::env::set_var()` | [ ] |
-| D4.2.9 | 10 I/O tests | File R/W, paths, formatting, args | [ ] |
-| D4.2.10 | Update STDLIB_SPEC.md | Document new stdlib types and functions | [ ] |
+| D4.2.1 | `File` type | `File::open()`, `File::create()`, `.read_to_string()`, `.write_all()` | [x] |
+| D4.2.2 | `BufReader` / `BufWriter` | Buffered I/O for performance | [x] |
+| D4.2.3 | `Path` type | `.join()`, `.parent()`, `.file_name()`, `.extension()` | [x] |
+| D4.2.4 | Format strings v2 | `f"{value:>10}"`, `f"{num:.2f}"`, `f"{hex:#x}"` | [x] |
+| D4.2.5 | `write!` / `writeln!` macros | Write formatted output to any writer | [x] |
+| D4.2.6 | `stdin` / `stdout` / `stderr` | Standard streams as objects | [x] |
+| D4.2.7 | Command-line args | `std::env::args()` iterator | [x] |
+| D4.2.8 | Environment variables | `std::env::var("HOME")`, `std::env::set_var()` | [x] |
+| D4.2.9 | 10 I/O tests | File R/W, paths, formatting, args | [x] |
+| D4.2.10 | Update STDLIB_SPEC.md | Document new stdlib types and functions | [x] |
 
 ---
 

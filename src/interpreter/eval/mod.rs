@@ -1552,6 +1552,19 @@ impl Interpreter {
     }
 
     /// Calls a user-defined function with given arguments.
+    /// Call a Value as a function (works with closures and named functions)
+    fn call_value(&mut self, func: &Value, args: Vec<Value>) -> EvalResult {
+        match func {
+            Value::Function(fv) => self.call_function(fv, args),
+            Value::BuiltinFn(name) => self.call_builtin(name, args),
+            _ => Err(RuntimeError::TypeError(format!(
+                "cannot call value of type {} as function",
+                func.type_name()
+            ))
+            .into()),
+        }
+    }
+
     fn call_function(&mut self, fv: &FnValue, args: Vec<Value>) -> EvalResult {
         if args.len() != fv.params.len() {
             return Err(RuntimeError::ArityMismatch {
