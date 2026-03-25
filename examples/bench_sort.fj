@@ -1,0 +1,15 @@
+// Benchmark: Array Sort
+// Tests sort performance on various sizes
+
+fn main() -> void {
+    let small = [5, 3, 8, 1, 9, 2, 7, 4, 6, 10]
+    println(f"Sorted: {small.sort()}")
+
+    // Generate reverse-sorted array
+    let rev = [100, 99, 98, 97, 96, 95, 94, 93, 92, 91,
+               90, 89, 88, 87, 86, 85, 84, 83, 82, 81]
+    println(f"Sorted 20: {rev.sort()}")
+
+    // Sum after sort (verify)
+    println(f"Sum: {rev.sum()}")
+}
