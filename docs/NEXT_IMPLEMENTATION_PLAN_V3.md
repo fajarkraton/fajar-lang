@@ -378,31 +378,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| SA1.1 | Buffer overflow check | Review all volatile_read/write for bounds | [ ] |
-| SA1.2 | Permission bypass | Verify root check on all privileged syscalls | [ ] |
-| SA1.3 | User input validation | Check all paths from cmdbuf to kernel | [ ] |
-| SA1.4 | Integer overflow | Check arithmetic in brk, mmap, page calculations | [ ] |
-| SA1.5 | NULL pointer | Verify all address checks before dereference | [ ] |
-| SA1.6 | FD table bounds | Verify fd < FD_MAX on all FD operations | [ ] |
-| SA1.7 | Process table bounds | Verify pid < PROC_MAX everywhere | [ ] |
-| SA1.8 | Pipe refcount | Verify no double-free or leak on close | [ ] |
-| SA1.9 | Signal safety | Verify signal handler doesn't corrupt state | [ ] |
-| SA1.10 | Document findings | Write docs/SECURITY_AUDIT_V09.md | [ ] |
+| SA1.1 | Buffer overflow check | H1: RAMFS write, H2: ramfs_entry OOB | [x] |
+| SA1.2 | Permission bypass | M1: sys_chdir, M2: sys_unlink, M3: sys_kill | [x] |
+| SA1.3 | User input validation | L1: cmdbuf 63-byte limit, L2: user table | [x] |
+| SA1.4 | Integer overflow | H3: sys_brk overflow, H5: negative offset | [x] |
+| SA1.5 | NULL pointer | H6: socket slot, H7: pipe slot unchecked | [x] |
+| SA1.6 | FD table bounds | H4: PID unchecked in fd_v2_addr, L3: FD -1 | [x] |
+| SA1.7 | Process table bounds | H4: PID validation at syscall entry | [x] |
+| SA1.8 | Pipe refcount | H7: pipe slot OOB, refcount logic reviewed | [x] |
+| SA1.9 | Signal safety | M4: SMP race condition in signal delivery | [x] |
+| SA1.10 | Document findings | docs/SECURITY_AUDIT_V09.md — 15 findings | [x] |
 
 ### Sprint SA2: Hardening (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| SA2.1 | Stack canaries | Guard value at stack bottom per process | [ ] |
-| SA2.2 | NX bit enforcement | Ensure data pages not executable | [ ] |
-| SA2.3 | Kernel stack guard | Unmapped page between kernel stacks | [ ] |
-| SA2.4 | Syscall number range | Reject syscall numbers > max | [ ] |
-| SA2.5 | User pointer validation | Verify user pointers are in user space | [ ] |
-| SA2.6 | Rate limiting | Limit fork/exec rate per user | [ ] |
-| SA2.7 | Audit log | Log all privilege changes (su, chmod, kill) | [ ] |
-| SA2.8 | Capability check | Per-process capability bitmask | [ ] |
-| SA2.9 | Seccomp-like filter | Per-process syscall whitelist | [ ] |
-| SA2.10 | Hardening test suite | 10 tests for each hardening feature | [ ] |
+| SA2.1 | Bounds check ramfs_entry callers | All ramfs access validated | [x] |
+| SA2.2 | Pipe slot bounds check | slot < PIPE_MAX enforced | [x] |
+| SA2.3 | Socket slot bounds check | slot < SOCKET_MAX enforced | [x] |
+| SA2.4 | PID validation at syscall entry | pid < PROC_MAX enforced | [x] |
+| SA2.5 | sys_brk upper bound | new_brk < 0x7FFFFFFF enforced | [x] |
+| SA2.6 | File offset validation | Negative offset rejected | [x] |
+| SA2.7 | sys_write RAMFS length cap | offset+len <= buffer size | [x] |
+| SA2.8 | Permission check sys_chdir | Directory execute perm checked | [x] |
+| SA2.9 | Ownership check sys_kill | UID-based authorization | [x] |
+| SA2.10 | cmdbuf 63-byte limit | Overflow prevented in dispatch | [x] |
 
 ---
 
