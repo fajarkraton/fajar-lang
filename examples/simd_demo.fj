@@ -1,0 +1,50 @@
+// SIMD-Style Vector Operations Demo — Fajar Lang v0.9
+// Demonstrates vectorized array operations using higher-order methods
+
+fn main() -> void {
+    let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    // Element-wise transform (like SIMD map)
+    let squared = data.map(|x| x * x)
+    println(f"squared: {squared}")
+
+    // Reduction (like SIMD reduce)
+    println(f"sum: {data.sum()}")
+    println(f"min: {data.min()}")
+    println(f"max: {data.max()}")
+
+    // Chunked processing (like SIMD width=4)
+    let chunks = [1,2,3,4,5,6,7,8].chunks(4)
+    println(f"chunks(4): {chunks}")
+
+    // Zip pairs
+    let x = [1, 2, 3]
+    let y = [4, 5, 6]
+    println(f"zip: {x.zip(y)}")
+
+    // Benchmark-style: sum of squared values
+    let total = [1,2,3,4,5,6,7,8,9,10].map(|x| x * x).sum()
+    println(f"sum(1^2..10^2) = {total}")
+
+    // Dot product via zip + map + sum
+    let a = [1, 2, 3, 4, 5]
+    let b = [10, 20, 30, 40, 50]
+    // Manual dot product
+    let dot = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3] + a[4]*b[4]
+    println(f"dot(a,b) = {dot}")
+
+    // Pipeline: filter → map → fold
+    let result = [1,2,3,4,5,6,7,8,9,10]
+        .filter(|x| x > 5)
+        .map(|x| x * x)
+        .fold(0, |acc, x| acc + x)
+    println(f"sum(x^2 for x>5) = {result}")
+
+    // Windows for sliding operations
+    let windows = [1,2,3,4,5].windows(3)
+    println(f"windows(3): {windows}")
+
+    // Dedup (like SIMD compress)
+    let deduped = [1,1,2,2,3,3,4,4,5,5].dedup()
+    println(f"deduped: {deduped}")
+}

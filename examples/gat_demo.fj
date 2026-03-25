@@ -1,0 +1,65 @@
+// Generic Associated Types Demo — Fajar Lang v0.9
+// Demonstrates traits, impl, closures, and higher-order programming
+
+// Trait with methods
+trait Describable {
+    fn describe(self) -> str
+}
+
+trait Transformable {
+    fn double(self) -> i64
+    fn negate(self) -> i64
+}
+
+struct Point { x: i64, y: i64 }
+
+impl Describable for Point {
+    fn describe(self) -> str { f"Point({self.x}, {self.y})" }
+}
+
+impl Transformable for Point {
+    fn double(self) -> i64 { self.x * 2 + self.y * 2 }
+    fn negate(self) -> i64 { -self.x + -self.y }
+}
+
+// Builder pattern with chained methods
+struct Builder { value: i64 }
+
+impl Builder {
+    fn new() -> Builder { Builder { value: 0 } }
+    fn add(self, n: i64) -> Builder { Builder { value: self.value + n } }
+    fn mul(self, n: i64) -> Builder { Builder { value: self.value * n } }
+    fn build(self) -> i64 { self.value }
+}
+
+fn main() -> void {
+    // Trait dispatch
+    let p = Point { x: 3, y: 4 }
+    println(p.describe())
+    println(f"Double: {p.double()}")
+
+    // Builder pattern
+    let result = Builder::new().add(5).mul(3).add(1).build()
+    println(f"Builder: {result}")
+
+    // Higher-order pipeline
+    let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    let even_squares = data
+        .filter(|x| x % 2 == 0)
+        .map(|x| x * x)
+    println(f"Even squares: {even_squares}")
+    println(f"Sum: {even_squares.sum()}")
+
+    // Closure capturing
+    let multiplier = 7
+    let scaled = data.map(|x| x * multiplier)
+    println(f"Scaled by {multiplier}: {scaled}")
+
+    // Complex pipeline
+    let top3 = data
+        .map(|x| x * x)
+        .filter(|x| x > 20)
+        .sort()
+        .take(3)
+    println(f"Top 3 squares > 20: {top3}")
+}

@@ -1,0 +1,51 @@
+// Compile-Time Evaluation Demo — Fajar Lang v0.9
+// Demonstrates const evaluation and compile-time computation
+
+// Constant expressions
+const PI: f64 = 3.14159265358979
+const TAU: f64 = 2.0 * 3.14159265358979
+const MAX_SIZE: i64 = 1024
+
+// Const function — evaluated at compile time when called with constants
+const fn factorial(n: i64) -> i64 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+const fn fibonacci(n: i64) -> i64 {
+    if n <= 1 { n } else { fibonacci(n - 1) + fibonacci(n - 2) }
+}
+
+const fn is_power_of_two(n: i64) -> bool {
+    n > 0 && (n & (n - 1)) == 0
+}
+
+// Use const fn results
+const FACT_10: i64 = 3628800
+const FIB_10: i64 = 55
+
+fn main() -> void {
+    println(f"PI = {PI}")
+    println(f"TAU = {TAU}")
+    println(f"MAX_SIZE = {MAX_SIZE}")
+
+    // Const fn calls (evaluated at runtime in interpreter, compile-time in codegen)
+    println(f"5! = {factorial(5)}")
+    println(f"10! = {factorial(10)}")
+    println(f"fib(10) = {fibonacci(10)}")
+
+    // Const checks
+    println(f"is_power_of_two(8) = {is_power_of_two(8)}")
+    println(f"is_power_of_two(10) = {is_power_of_two(10)}")
+    println(f"is_power_of_two(256) = {is_power_of_two(256)}")
+
+    // Pre-computed constants
+    println(f"FACT_10 = {FACT_10}")
+    println(f"FIB_10 = {FIB_10}")
+
+    // Array operations with const-like computation
+    let squares = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|x| x * x)
+    println(f"Squares: {squares}")
+
+    let sum_squares = squares.sum()
+    println(f"Sum of squares 1-10: {sum_squares}")
+}

@@ -1,60 +1,53 @@
-// effects_demo.fj — Algebraic Effects Concepts
-//
-// Demonstrates the CONCEPT of algebraic effects for structured side-effect
-// control. Effects allow functions to declare what side effects they perform,
-// and handlers determine how those effects are implemented.
+// Effect System Demo — Fajar Lang v0.9
+// Demonstrates controlled side effects with Result types
 
-// Pure function — no effects
-fn add(a: i64, b: i64) -> i64 {
-    a + b
+// Pure function — no side effects
+fn add(a: i64, b: i64) -> i64 { a + b }
+
+// Function that may fail — returns Result
+fn safe_divide(a: i64, b: i64) -> Result<i64, str> {
+    if b == 0 { Err("division by zero") }
+    else { Ok(a / b) }
 }
 
-// Simulate State effect with mutable variable
-fn counter_demo() -> i64 {
-    let mut value = 0
-    // Simulate: perform State.get() / State.put()
-    value = value + 1
-    value = value + 1
-    value = value + 1
-    value
-}
-
-// Simulate Exception effect with early return
-fn safe_divide(a: f64, b: f64) -> f64 {
-    if b == 0.0 {
-        println("  Caught: division by zero")
-        return 0.0
+// Chain multiple fallible operations
+fn compute(x: i64, y: i64, z: i64) -> Result<i64, str> {
+    let a = safe_divide(x, y)
+    match a {
+        Ok(val) => safe_divide(val, z),
+        Err(e) => Err(e)
     }
-    a / b
 }
 
-fn main() {
-    println("=== Algebraic Effects Demo ===")
-    println("")
+// Option as effect — may be absent
+fn find_first_even(arr: [i64; 5]) -> Option<i64> {
+    let mut i = 0
+    while i < 5 {
+        if arr[i] % 2 == 0 { return Some(arr[i]) }
+        i = i + 1
+    }
+    None
+}
 
-    // Pure computation (no effects)
-    let sum = add(3, 4)
-    println("Pure: add(3, 4) = " + to_string(sum))
-    println("")
+fn main() -> void {
+    // Pure computation
+    println(f"Pure: {add(3, 4)}")
 
-    // Console effect (simulated with println)
-    println("Console effect:")
-    println("  Hello, Fajar!")
-    println("")
+    // Fallible computation
+    let r1 = safe_divide(10, 3)
+    let r2 = safe_divide(10, 0)
+    println(f"10/3 = {r1}")
+    println(f"10/0 = {r2}")
 
-    // State effect (simulated with mutable state)
-    println("State effect:")
-    let count = counter_demo()
-    println("  Counter after 3 increments: " + to_string(count))
-    println("")
+    // Chained
+    let c1 = compute(100, 5, 2)
+    let c2 = compute(100, 0, 2)
+    println(f"100/5/2 = {c1}")
+    println(f"100/0/2 = {c2}")
 
-    // Exception effect (simulated with early return)
-    println("Exception effect:")
-    let div1 = safe_divide(10.0, 3.0)
-    println("  safe_divide(10.0, 3.0) = " + to_string(div1))
-    let div2 = safe_divide(10.0, 0.0)
-    println("  safe_divide(10.0, 0.0) = " + to_string(div2))
-    println("")
-
-    println("=== Effects Demo Complete ===")
+    // Option
+    let nums = [1, 3, 5, 7, 9]
+    let evens = [2, 4, 6, 8, 10]
+    println(f"First even in odds: {find_first_even(nums)}")
+    println(f"First even in evens: {find_first_even(evens)}")
 }

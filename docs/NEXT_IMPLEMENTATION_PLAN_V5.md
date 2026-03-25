@@ -337,31 +337,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T1.1.1 | Parse `type Item<'a>` in traits | Associated type with lifetime parameter | [ ] |
-| T1.1.2 | Parse GAT in impl blocks | `type Item<'a> = &'a T` | [ ] |
-| T1.1.3 | Analyzer: GAT resolution | Resolve `Self::Item<'a>` to concrete type | [ ] |
-| T1.1.4 | Analyzer: GAT bound checking | Verify GAT satisfies trait bounds | [ ] |
-| T1.1.5 | Iterator trait with GAT | `trait Iterator { type Item<'a>; fn next(&'a self) -> Option<Self::Item<'a>>; }` | [ ] |
-| T1.1.6 | LendingIterator pattern | Iterator that borrows from self | [ ] |
-| T1.1.7 | Interpreter: GAT dispatch | Resolve GAT at runtime | [ ] |
-| T1.1.8 | Codegen: GAT monomorphization | Specialize GAT per concrete type | [ ] |
-| T1.1.9 | 10 GAT tests | Basic, iterator, lending, bounds | [ ] |
-| T1.1.10 | GAT examples | `examples/gat_iterator.fj`, `examples/gat_lending.fj` | [ ] |
+| T1.1.1 | Parse `type Item<'a>` in traits | Associated type with lifetime parameter | [x] |
+| T1.1.2 | Parse GAT in impl blocks | `type Item<'a> = &'a T` | [x] |
+| T1.1.3 | Analyzer: GAT resolution | Resolve `Self::Item<'a>` to concrete type | [x] |
+| T1.1.4 | Analyzer: GAT bound checking | Verify GAT satisfies trait bounds | [x] |
+| T1.1.5 | Iterator trait with GAT | `trait Iterator { type Item<'a>; fn next(&'a self) -> Option<Self::Item<'a>>; }` | [x] |
+| T1.1.6 | LendingIterator pattern | Iterator that borrows from self | [x] |
+| T1.1.7 | Interpreter: GAT dispatch | Resolve GAT at runtime | [x] |
+| T1.1.8 | Codegen: GAT monomorphization | Specialize GAT per concrete type | [x] |
+| T1.1.9 | 10 GAT tests | Basic, iterator, lending, bounds | [x] |
+| T1.1.10 | GAT examples | `examples/gat_iterator.fj`, `examples/gat_lending.fj` | [x] |
 
 #### Sprint T1.2: GAT Advanced + Patterns (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T1.2.1 | Multiple GATs per trait | `type Key; type Value<'a>;` | [ ] |
-| T1.2.2 | GAT with type bounds | `type Item<'a>: Display + 'a` | [ ] |
-| T1.2.3 | GAT in where clauses | `where T: Iterator<Item<'a> = &'a str>` | [ ] |
-| T1.2.4 | GAT default types | `type Item<'a> = &'a Self` | [ ] |
-| T1.2.5 | Parser collection trait | `trait Collection { type Iter<'a>: Iterator; fn iter(&self) -> Self::Iter<'_>; }` | [ ] |
-| T1.2.6 | Monad-like pattern | `trait Functor { type Output<U>; fn map<U>(self, f: fn(T) -> U) -> Self::Output<U>; }` | [ ] |
-| T1.2.7 | GAT + async | `type Future<'a>: Future<Output = T>` | [ ] |
-| T1.2.8 | Error messages | Clear errors for GAT violations | [ ] |
-| T1.2.9 | 10 advanced GAT tests | Collections, functors, async | [ ] |
-| T1.2.10 | Update FAJAR_LANG_SPEC.md | Document GAT syntax and semantics | [ ] |
+| T1.2.1 | Multiple GATs per trait | `type Key; type Value<'a>;` | [x] |
+| T1.2.2 | GAT with type bounds | `type Item<'a>: Display + 'a` | [x] |
+| T1.2.3 | GAT in where clauses | `where T: Iterator<Item<'a> = &'a str>` | [x] |
+| T1.2.4 | GAT default types | `type Item<'a> = &'a Self` | [x] |
+| T1.2.5 | Parser collection trait | `trait Collection { type Iter<'a>: Iterator; fn iter(&self) -> Self::Iter<'_>; }` | [x] |
+| T1.2.6 | Monad-like pattern | `trait Functor { type Output<U>; fn map<U>(self, f: fn(T) -> U) -> Self::Output<U>; }` | [x] |
+| T1.2.7 | GAT + async | `type Future<'a>: Future<Output = T>` | [x] |
+| T1.2.8 | Error messages | Clear errors for GAT violations | [x] |
+| T1.2.9 | 10 advanced GAT tests | Collections, functors, async | [x] |
+| T1.2.10 | Update FAJAR_LANG_SPEC.md | Document GAT syntax and semantics | [x] |
 
 ### Phase T2: Effect System (2 sprints, 20 tasks)
 
@@ -369,31 +369,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T2.1.1 | Parse `effect` keyword | `effect IO { fn read() -> str; fn write(s: str); }` | [ ] |
-| T2.1.2 | Parse effect annotation on fn | `fn foo() -> i32 ! IO` (may perform IO) | [ ] |
-| T2.1.3 | Parse `handle` block | `handle { risky() } with { IO::read => "mock" }` | [ ] |
-| T2.1.4 | Analyzer: effect tracking | Track which functions have which effects | [ ] |
-| T2.1.5 | Analyzer: effect propagation | Callee effects propagate to caller | [ ] |
-| T2.1.6 | Analyzer: effect checking | Error if unhandled effect | [ ] |
-| T2.1.7 | Built-in effects | `IO`, `Allocate`, `Panic`, `Async` | [ ] |
-| T2.1.8 | Pure functions | `fn pure_add(a: i32, b: i32) -> i32` — no effects allowed | [ ] |
-| T2.1.9 | 10 effect tests | Declaration, annotation, propagation, handling | [ ] |
-| T2.1.10 | Effect examples | `examples/effects_io.fj`, `examples/effects_pure.fj` | [ ] |
+| T2.1.1 | Parse `effect` keyword | `effect IO { fn read() -> str; fn write(s: str); }` | [x] |
+| T2.1.2 | Parse effect annotation on fn | `fn foo() -> i32 ! IO` (may perform IO) | [x] |
+| T2.1.3 | Parse `handle` block | `handle { risky() } with { IO::read => "mock" }` | [x] |
+| T2.1.4 | Analyzer: effect tracking | Track which functions have which effects | [x] |
+| T2.1.5 | Analyzer: effect propagation | Callee effects propagate to caller | [x] |
+| T2.1.6 | Analyzer: effect checking | Error if unhandled effect | [x] |
+| T2.1.7 | Built-in effects | `IO`, `Allocate`, `Panic`, `Async` | [x] |
+| T2.1.8 | Pure functions | `fn pure_add(a: i32, b: i32) -> i32` — no effects allowed | [x] |
+| T2.1.9 | 10 effect tests | Declaration, annotation, propagation, handling | [x] |
+| T2.1.10 | Effect examples | `examples/effects_io.fj`, `examples/effects_pure.fj` | [x] |
 
 #### Sprint T2.2: Effect Handlers + Algebraic Effects (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T2.2.1 | Interpreter: effect dispatch | Handle effects at runtime via handler table | [ ] |
-| T2.2.2 | Resumption | Handler can resume computation after handling | [ ] |
-| T2.2.3 | Multi-shot continuations | Handler can resume multiple times | [ ] |
-| T2.2.4 | Effect composition | `fn foo() -> i32 ! IO + Allocate` | [ ] |
-| T2.2.5 | Effect polymorphism | `fn run<E>(f: fn() -> T ! E) -> T` | [ ] |
-| T2.2.6 | Exception as effect | `effect Exception { fn throw(msg: str) -> never; }` | [ ] |
-| T2.2.7 | State as effect | `effect State<S> { fn get() -> S; fn put(s: S); }` | [ ] |
-| T2.2.8 | Codegen: effect lowering | Effects → CPS transformation or exception tables | [ ] |
-| T2.2.9 | 10 algebraic effect tests | Resumption, multi-shot, state, exception | [ ] |
-| T2.2.10 | Blog: "Algebraic Effects in Fajar Lang" | Technical write-up | [ ] |
+| T2.2.1 | Interpreter: effect dispatch | Handle effects at runtime via handler table | [x] |
+| T2.2.2 | Resumption | Handler can resume computation after handling | [x] |
+| T2.2.3 | Multi-shot continuations | Handler can resume multiple times | [x] |
+| T2.2.4 | Effect composition | `fn foo() -> i32 ! IO + Allocate` | [x] |
+| T2.2.5 | Effect polymorphism | `fn run<E>(f: fn() -> T ! E) -> T` | [x] |
+| T2.2.6 | Exception as effect | `effect Exception { fn throw(msg: str) -> never; }` | [x] |
+| T2.2.7 | State as effect | `effect State<S> { fn get() -> S; fn put(s: S); }` | [x] |
+| T2.2.8 | Codegen: effect lowering | Effects → CPS transformation or exception tables | [x] |
+| T2.2.9 | 10 algebraic effect tests | Resumption, multi-shot, state, exception | [x] |
+| T2.2.10 | Blog: "Algebraic Effects in Fajar Lang" | Technical write-up | [x] |
 
 ### Phase T3: Comptime (2 sprints, 20 tasks)
 
@@ -401,31 +401,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T3.1.1 | Parse `comptime { }` blocks | Compile-time evaluated code blocks | [ ] |
-| T3.1.2 | Parse `const fn` enhanced | Const functions that run at compile time | [ ] |
-| T3.1.3 | Const generics | `fn create_array<const N: usize>() -> [i32; N]` | [ ] |
-| T3.1.4 | Compile-time interpreter | Run subset of Fajar Lang at compile time | [ ] |
-| T3.1.5 | Const evaluation of expressions | `const X: i32 = 2 + 3` → evaluate at compile time | [ ] |
-| T3.1.6 | Const string operations | `const S: str = f"size_{N}"` | [ ] |
-| T3.1.7 | Const array generation | `const TABLE: [i32; 256] = comptime { generate_table() }` | [ ] |
-| T3.1.8 | Static assertions | `comptime { assert(size_of::<T>() <= 8) }` | [ ] |
-| T3.1.9 | 10 comptime tests | Blocks, const fn, const generics | [ ] |
-| T3.1.10 | Update spec | Document comptime syntax | [ ] |
+| T3.1.1 | Parse `comptime { }` blocks | Compile-time evaluated code blocks | [x] |
+| T3.1.2 | Parse `const fn` enhanced | Const functions that run at compile time | [x] |
+| T3.1.3 | Const generics | `fn create_array<const N: usize>() -> [i32; N]` | [x] |
+| T3.1.4 | Compile-time interpreter | Run subset of Fajar Lang at compile time | [x] |
+| T3.1.5 | Const evaluation of expressions | `const X: i32 = 2 + 3` → evaluate at compile time | [x] |
+| T3.1.6 | Const string operations | `const S: str = f"size_{N}"` | [x] |
+| T3.1.7 | Const array generation | `const TABLE: [i32; 256] = comptime { generate_table() }` | [x] |
+| T3.1.8 | Static assertions | `comptime { assert(size_of::<T>() <= 8) }` | [x] |
+| T3.1.9 | 10 comptime tests | Blocks, const fn, const generics | [x] |
+| T3.1.10 | Update spec | Document comptime syntax | [x] |
 
 #### Sprint T3.2: Const Generics + Applications (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T3.2.1 | Tensor shape as const generic | `Tensor<f32, [const M, const N]>` | [ ] |
-| T3.2.2 | Shape checking at compile time | `matmul(A: Tensor<M,K>, B: Tensor<K,N>) -> Tensor<M,N>` | [ ] |
-| T3.2.3 | Fixed-size arrays | `[T; N]` where N is const | [ ] |
-| T3.2.4 | Const arithmetic | `N + M`, `N * M` in type positions | [ ] |
-| T3.2.5 | Const-if | `if const N > 0 { ... }` — compile-time branching | [ ] |
-| T3.2.6 | Const loops | `for const i in 0..N { ... }` — unrolled at compile time | [ ] |
-| T3.2.7 | Build-time code generation | Generate lookup tables, dispatch tables | [ ] |
-| T3.2.8 | Embedded: const config | `const CLOCK_HZ: u32 = comptime { board_clock() }` | [ ] |
-| T3.2.9 | 10 const generic tests | Tensors, arrays, shape checking | [ ] |
-| T3.2.10 | Example: compile-time MNIST | Pre-compute weight matrices at compile time | [ ] |
+| T3.2.1 | Tensor shape as const generic | `Tensor<f32, [const M, const N]>` | [x] |
+| T3.2.2 | Shape checking at compile time | `matmul(A: Tensor<M,K>, B: Tensor<K,N>) -> Tensor<M,N>` | [x] |
+| T3.2.3 | Fixed-size arrays | `[T; N]` where N is const | [x] |
+| T3.2.4 | Const arithmetic | `N + M`, `N * M` in type positions | [x] |
+| T3.2.5 | Const-if | `if const N > 0 { ... }` — compile-time branching | [x] |
+| T3.2.6 | Const loops | `for const i in 0..N { ... }` — unrolled at compile time | [x] |
+| T3.2.7 | Build-time code generation | Generate lookup tables, dispatch tables | [x] |
+| T3.2.8 | Embedded: const config | `const CLOCK_HZ: u32 = comptime { board_clock() }` | [x] |
+| T3.2.9 | 10 const generic tests | Tensors, arrays, shape checking | [x] |
+| T3.2.10 | Example: compile-time MNIST | Pre-compute weight matrices at compile time | [x] |
 
 ### Phase T4: SIMD Intrinsics (2 sprints, 20 tasks)
 
@@ -433,31 +433,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T4.1.1 | SIMD type: `f32x4` | 4-wide float vector | [ ] |
-| T4.1.2 | SIMD type: `f32x8` | 8-wide (AVX) | [ ] |
-| T4.1.3 | SIMD type: `i32x4`, `i32x8` | Integer vectors | [ ] |
-| T4.1.4 | SIMD arithmetic | `a + b`, `a * b`, `a - b` on vector types | [ ] |
-| T4.1.5 | SIMD load/store | `f32x4::load(ptr)`, `.store(ptr)` | [ ] |
-| T4.1.6 | SIMD shuffle | `a.shuffle(b, mask)` | [ ] |
-| T4.1.7 | SIMD reduce | `a.sum()`, `a.min()`, `a.max()` | [ ] |
-| T4.1.8 | SIMD comparison | `a == b`, `a < b` → mask | [ ] |
-| T4.1.9 | Auto-vectorization hints | `@simd` annotation on loops | [ ] |
-| T4.1.10 | 10 SIMD tests | Arithmetic, load/store, reduce, shuffle | [ ] |
+| T4.1.1 | SIMD type: `f32x4` | 4-wide float vector | [x] |
+| T4.1.2 | SIMD type: `f32x8` | 8-wide (AVX) | [x] |
+| T4.1.3 | SIMD type: `i32x4`, `i32x8` | Integer vectors | [x] |
+| T4.1.4 | SIMD arithmetic | `a + b`, `a * b`, `a - b` on vector types | [x] |
+| T4.1.5 | SIMD load/store | `f32x4::load(ptr)`, `.store(ptr)` | [x] |
+| T4.1.6 | SIMD shuffle | `a.shuffle(b, mask)` | [x] |
+| T4.1.7 | SIMD reduce | `a.sum()`, `a.min()`, `a.max()` | [x] |
+| T4.1.8 | SIMD comparison | `a == b`, `a < b` → mask | [x] |
+| T4.1.9 | Auto-vectorization hints | `@simd` annotation on loops | [x] |
+| T4.1.10 | 10 SIMD tests | Arithmetic, load/store, reduce, shuffle | [x] |
 
 #### Sprint T4.2: SIMD Integration + Platforms (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| T4.2.1 | SSE4.2 backend | Map to x86 SSE intrinsics | [ ] |
-| T4.2.2 | AVX2 backend | Map to x86 AVX intrinsics | [ ] |
-| T4.2.3 | AVX-512 backend | Map to x86 AVX-512 intrinsics | [ ] |
-| T4.2.4 | NEON backend | Map to ARM64 NEON intrinsics | [ ] |
-| T4.2.5 | SVE backend | Map to ARM SVE (variable-width) | [ ] |
-| T4.2.6 | SIMD tensor matmul | Vectorized inner loop for matmul | [ ] |
-| T4.2.7 | SIMD activation functions | Vectorized relu, sigmoid, tanh | [ ] |
-| T4.2.8 | Benchmark: scalar vs SIMD | Speedup comparison for tensor ops | [ ] |
-| T4.2.9 | Example: SIMD neural network | Vectorized forward pass | [ ] |
-| T4.2.10 | Documentation | SIMD_GUIDE.md — types, operations, platforms | [ ] |
+| T4.2.1 | SSE4.2 backend | Map to x86 SSE intrinsics | [x] |
+| T4.2.2 | AVX2 backend | Map to x86 AVX intrinsics | [x] |
+| T4.2.3 | AVX-512 backend | Map to x86 AVX-512 intrinsics | [x] |
+| T4.2.4 | NEON backend | Map to ARM64 NEON intrinsics | [x] |
+| T4.2.5 | SVE backend | Map to ARM SVE (variable-width) | [x] |
+| T4.2.6 | SIMD tensor matmul | Vectorized inner loop for matmul | [x] |
+| T4.2.7 | SIMD activation functions | Vectorized relu, sigmoid, tanh | [x] |
+| T4.2.8 | Benchmark: scalar vs SIMD | Speedup comparison for tensor ops | [x] |
+| T4.2.9 | Example: SIMD neural network | Vectorized forward pass | [x] |
+| T4.2.10 | Documentation | SIMD_GUIDE.md — types, operations, platforms | [x] |
 
 ---
 
