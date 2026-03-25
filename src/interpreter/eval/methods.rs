@@ -292,6 +292,118 @@ impl Interpreter {
             (Value::Str(s), "bytes") => Ok(Value::Array(
                 s.bytes().map(|b| Value::Int(b as i64)).collect(),
             )),
+            // String v2 methods (v0.8)
+            (Value::Str(s), "pad_left") => {
+                let width = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                let pad_char = match arg_vals.get(1) {
+                    Some(Value::Str(c)) => c.chars().next().unwrap_or(' '),
+                    _ => ' ',
+                };
+                let current = s.chars().count();
+                if current >= width {
+                    Ok(Value::Str(s.clone()))
+                } else {
+                    Ok(Value::Str(format!(
+                        "{}{}",
+                        std::iter::repeat(pad_char)
+                            .take(width - current)
+                            .collect::<String>(),
+                        s
+                    )))
+                }
+            }
+            (Value::Str(s), "pad_right") => {
+                let width = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                let pad_char = match arg_vals.get(1) {
+                    Some(Value::Str(c)) => c.chars().next().unwrap_or(' '),
+                    _ => ' ',
+                };
+                let current = s.chars().count();
+                if current >= width {
+                    Ok(Value::Str(s.clone()))
+                } else {
+                    Ok(Value::Str(format!(
+                        "{}{}",
+                        s,
+                        std::iter::repeat(pad_char)
+                            .take(width - current)
+                            .collect::<String>()
+                    )))
+                }
+            }
+            (Value::Str(s), "to_int") => match s.trim().parse::<i64>() {
+                Ok(n) => Ok(Value::Int(n)),
+                Err(_) => Ok(Value::Int(0)),
+            },
+            (Value::Str(s), "to_float") => match s.trim().parse::<f64>() {
+                Ok(f) => Ok(Value::Float(f)),
+                Err(_) => Ok(Value::Float(0.0)),
+            },
+            (Value::Str(s), "lines") => {
+                let lines: Vec<Value> = s.lines().map(|l| Value::Str(l.to_string())).collect();
+                Ok(Value::Array(lines))
+            }
+            (Value::Str(s), "words") => {
+                let words: Vec<Value> = s
+                    .split_whitespace()
+                    .map(|w| Value::Str(w.to_string()))
+                    .collect();
+                Ok(Value::Array(words))
+            }
+            (Value::Str(s), "char_at") => {
+                let idx = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                match s.chars().nth(idx) {
+                    Some(c) => Ok(Value::Char(c)),
+                    None => Ok(Value::Null),
+                }
+            }
+            (Value::Str(s), "insert") => {
+                let idx = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                let text = match arg_vals.get(1) {
+                    Some(Value::Str(t)) => t.as_str(),
+                    _ => "",
+                };
+                let mut result = s.clone();
+                if idx <= result.len() {
+                    result.insert_str(idx, text);
+                }
+                Ok(Value::Str(result))
+            }
+            (Value::Str(s), "remove") => {
+                let start = match arg_vals.first() {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 0,
+                };
+                let count = match arg_vals.get(1) {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => 1,
+                };
+                let mut result: Vec<char> = s.chars().collect();
+                if start < result.len() {
+                    let end = (start + count).min(result.len());
+                    result.drain(start..end);
+                }
+                Ok(Value::Str(result.into_iter().collect()))
+            }
+            (Value::Str(s), "count") => {
+                if let Some(Value::Str(sub)) = arg_vals.first() {
+                    Ok(Value::Int(s.matches(sub.as_str()).count() as i64))
+                } else {
+                    Ok(Value::Int(s.len() as i64))
+                }
+            }
             // Array methods
             (Value::Array(a), "len") => Ok(Value::Int(a.len() as i64)),
             (Value::Array(a), "push") => {
@@ -714,6 +826,76 @@ impl Interpreter {
                             .into(),
                     )
                 }
+            }
+            // Map higher-order methods (v0.8)
+            (Value::Map(m), "entries") => {
+                let entries: Vec<Value> = m
+                    .iter()
+                    .map(|(k, v)| Value::Tuple(vec![Value::Str(k.clone()), v.clone()]))
+                    .collect();
+                Ok(Value::Array(entries))
+            }
+            (Value::Map(m), "map_values") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut new_map = std::collections::HashMap::new();
+                for (k, v) in m.iter() {
+                    let mapped = self.call_value(&func, vec![v.clone()])?;
+                    new_map.insert(k.clone(), mapped);
+                }
+                Ok(Value::Map(new_map))
+            }
+            (Value::Map(m), "filter_entries") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                let mut new_map = std::collections::HashMap::new();
+                for (k, v) in m.iter() {
+                    let pair = Value::Tuple(vec![Value::Str(k.clone()), v.clone()]);
+                    if self.call_value(&func, vec![pair])? == Value::Bool(true) {
+                        new_map.insert(k.clone(), v.clone());
+                    }
+                }
+                Ok(Value::Map(new_map))
+            }
+            (Value::Map(m), "merge") => {
+                if let Some(Value::Map(other)) = arg_vals.into_iter().next() {
+                    let mut merged = m.clone();
+                    for (k, v) in other {
+                        merged.insert(k, v);
+                    }
+                    Ok(Value::Map(merged))
+                } else {
+                    Err(RuntimeError::TypeError("merge() requires a map argument".into()).into())
+                }
+            }
+            (Value::Map(m), "any") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let func = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                for (k, v) in m.iter() {
+                    let pair = Value::Tuple(vec![Value::Str(k.clone()), v.clone()]);
+                    if self.call_value(&func, vec![pair])? == Value::Bool(true) {
+                        return Ok(Value::Bool(true));
+                    }
+                }
+                Ok(Value::Bool(false))
             }
             // (join and reverse handled above in v0.8 methods)
             (Value::Array(a), "contains") => {
