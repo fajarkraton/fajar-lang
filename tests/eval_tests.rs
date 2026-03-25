@@ -14779,3 +14779,232 @@ fn bb1_match_expression() {
     let out = eval_output(src);
     assert_eq!(out, vec!["three"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint BB2: Pattern compilation
+// ═══════════════════════════════════════════════
+
+#[test]
+fn bb2_or_pattern_in_match() {
+    let src = r#"
+        fn classify(n: i64) -> str {
+            match n {
+                1 | 2 | 3 => "low"
+                4 | 5 | 6 => "mid"
+                7 | 8 | 9 => "high"
+                _ => "out"
+            }
+        }
+        fn main() -> void {
+            println(classify(2))
+            println(classify(5))
+            println(classify(8))
+            println(classify(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["low", "mid", "high", "out"]);
+}
+
+#[test]
+fn bb2_constant_pattern() {
+    let src = r#"
+        fn day_type(day: i64) -> str {
+            match day {
+                0 => "Sunday"
+                6 => "Saturday"
+                _ => "Weekday"
+            }
+        }
+        fn main() -> void {
+            println(day_type(0))
+            println(day_type(3))
+            println(day_type(6))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Sunday", "Weekday", "Saturday"]);
+}
+
+#[test]
+fn bb2_match_computed_value() {
+    let src = r#"
+        fn fib(n: i64) -> i64 {
+            if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+        }
+        fn main() -> void {
+            let result = match fib(6) {
+                8 => "correct"
+                _ => "wrong"
+            }
+            println(result)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["correct"]);
+}
+
+#[test]
+fn bb2_nested_guard_combo() {
+    let src = r#"
+        fn analyze(opt: i64) -> str {
+            let v = Some(opt)
+            match v {
+                Some(x) if x > 100 => "big"
+                Some(x) if x > 0 => f"positive:{x}"
+                Some(0) => "zero"
+                Some(x) => f"negative:{x}"
+                _ => "none"
+            }
+        }
+        fn main() -> void {
+            println(analyze(200))
+            println(analyze(42))
+            println(analyze(0))
+            println(analyze(-5))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["big", "positive:42", "zero", "negative:-5"]);
+}
+
+#[test]
+fn bb2_match_as_value() {
+    // match used as expression in complex context
+    let src = r#"
+        fn score_to_grade(s: i64) -> str {
+            let grade = match s / 10 {
+                10 | 9 => "A"
+                8 => "B"
+                7 => "C"
+                6 => "D"
+                _ => "F"
+            }
+            f"Grade: {grade}"
+        }
+        fn main() -> void {
+            println(score_to_grade(95))
+            println(score_to_grade(82))
+            println(score_to_grade(71))
+            println(score_to_grade(45))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Grade: A", "Grade: B", "Grade: C", "Grade: F"]);
+}
+
+#[test]
+fn bb2_mixed_pattern_types() {
+    // Same match with literal, guard, wildcard, or-pattern
+    let src = r#"
+        fn categorize(x: i64) -> str {
+            match x {
+                0 => "zero"
+                1 | 2 => "tiny"
+                n if n < 0 => "negative"
+                n if n > 1000 => "huge"
+                _ => "normal"
+            }
+        }
+        fn main() -> void {
+            println(categorize(0))
+            println(categorize(1))
+            println(categorize(-10))
+            println(categorize(5000))
+            println(categorize(50))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["zero", "tiny", "negative", "huge", "normal"]);
+}
+
+#[test]
+fn bb2_complex_body() {
+    let src = r#"
+        fn process(cmd: str) -> str {
+            match cmd {
+                "add" => {
+                    let a: i64 = 10
+                    let b: i64 = 20
+                    to_string(a + b)
+                }
+                "mul" => {
+                    let a: i64 = 3
+                    let b: i64 = 7
+                    to_string(a * b)
+                }
+                _ => "unknown"
+            }
+        }
+        fn main() -> void {
+            println(process("add"))
+            println(process("mul"))
+            println(process("div"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30", "21", "unknown"]);
+}
+
+#[test]
+fn bb2_match_in_loop() {
+    let src = r#"
+        fn main() -> void {
+            let mut i: i64 = 0
+            let mut result = ""
+            while i < 5 {
+                let ch = match i {
+                    0 => "a"
+                    1 => "b"
+                    2 => "c"
+                    _ => "."
+                }
+                result = f"{result}{ch}"
+                i = i + 1
+            }
+            println(result)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["abc.."]);
+}
+
+#[test]
+fn bb2_result_pattern() {
+    let src = r#"
+        fn handle(r: i64) -> str {
+            let val = if r >= 0 { Ok(r) } else { Err("negative") }
+            match val {
+                Ok(v) => f"ok:{v}"
+                Err(e) => f"err:{e}"
+                _ => "unknown"
+            }
+        }
+        fn main() -> void {
+            println(handle(42))
+            println(handle(-1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["ok:42", "err:negative"]);
+}
+
+#[test]
+fn bb2_default_first_wins() {
+    // First matching arm wins (order matters)
+    let src = r#"
+        fn first_match(x: i64) -> str {
+            match x {
+                n if n > 0 => "positive first"
+                1 => "one (never reached)"
+                _ => "default"
+            }
+        }
+        fn main() -> void {
+            println(first_match(1))
+            println(first_match(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["positive first", "default"]);
+}
