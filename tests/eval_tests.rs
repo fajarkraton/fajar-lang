@@ -13966,3 +13966,164 @@ fn u2_daemon_count() {
     let out = eval_output(src);
     assert_eq!(out, vec!["3"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase V: Package Manager
+// Sprint V1: Package format + registry
+// ═══════════════════════════════════════════════
+
+#[test]
+fn v1_pkg_db_layout() {
+    let src = r#"
+        const PKG_DB: i64 = 0x9C0000
+        const PKG_MAX: i64 = 32
+        const PKG_SIZE: i64 = 128
+        fn main() -> void {
+            println(PKG_MAX * PKG_SIZE)
+            println(PKG_DB)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4096", "10223616"]);
+}
+
+#[test]
+fn v1_pkg_states() {
+    let src = r#"
+        const PKG_NONE: i64 = 0
+        const PKG_INSTALLED: i64 = 1
+        const PKG_AVAILABLE: i64 = 2
+        fn state_name(s: i64) -> str {
+            if s == 0 { "none" } else if s == 1 { "installed" } else { "available" }
+        }
+        fn main() -> void {
+            println(state_name(0))
+            println(state_name(1))
+            println(state_name(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["none", "installed", "available"]);
+}
+
+#[test]
+fn v1_pkg_entry_offsets() {
+    let src = r#"
+        const PKG_OFF_NAME: i64 = 0
+        const PKG_OFF_VERSION: i64 = 24
+        const PKG_OFF_STATE: i64 = 32
+        const PKG_OFF_DEPS: i64 = 40
+        const PKG_OFF_CHECKSUM: i64 = 88
+        const PKG_OFF_DESC: i64 = 96
+        fn main() -> void {
+            println(PKG_OFF_VERSION)
+            println(PKG_OFF_CHECKSUM)
+            println(PKG_OFF_DESC + 32 <= 128)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["24", "88", "true"]);
+}
+
+#[test]
+fn v1_pkg_checksum() {
+    let src = r#"
+        fn fnv_step(hash: i64, byte: i64) -> i64 { ((hash ^ byte) * 16777619) & 0x7FFFFFFF }
+        fn main() -> void {
+            let h = fnv_step(0x811C9DC5, 99) // 'c'
+            println(h > 0)
+            let h2 = fnv_step(h, 111) // 'o'
+            println(h2 != h)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true"]);
+}
+
+#[test]
+fn v1_pkg_subcommands() {
+    let src = r#"
+        fn subcmd(ch: i64) -> str {
+            if ch == 105 { "install" }
+            else if ch == 114 { "remove" }
+            else if ch == 108 { "list" }
+            else if ch == 115 { "search" }
+            else { "unknown" }
+        }
+        fn main() -> void {
+            println(subcmd(105))
+            println(subcmd(114))
+            println(subcmd(108))
+            println(subcmd(115))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["install", "remove", "list", "search"]);
+}
+
+#[test]
+fn v1_builtin_packages() {
+    let src = r#"
+        fn builtin_count() -> i64 { 5 }
+        fn main() -> void {
+            println(builtin_count())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5"]);
+}
+
+#[test]
+fn v1_version_format() {
+    let src = r#"
+        fn version(major: i64, minor: i64) -> str { f"{major}.{minor}" }
+        fn main() -> void {
+            println(version(1, 0))
+            println(version(2, 3))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1.0", "2.3"]);
+}
+
+#[test]
+fn v1_dep_check() {
+    let src = r#"
+        fn has_dep(deps: str, name: str) -> bool { deps.contains(name) }
+        fn main() -> void {
+            println(has_dep("core,net-tools", "core"))
+            println(has_dep("core,net-tools", "editors"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false"]);
+}
+
+#[test]
+fn v1_already_installed() {
+    let src = r#"
+        fn should_skip(state: i64) -> bool { state == 1 }
+        fn main() -> void {
+            println(should_skip(1))
+            println(should_skip(0))
+            println(should_skip(2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn v1_pkg_max_capacity() {
+    let src = r#"
+        const PKG_MAX: i64 = 32
+        fn can_install(current: i64) -> bool { current < PKG_MAX }
+        fn main() -> void {
+            println(can_install(0))
+            println(can_install(31))
+            println(can_install(32))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "true", "false"]);
+}

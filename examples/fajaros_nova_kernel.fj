@@ -9057,6 +9057,201 @@ const PIDFILE_TABLE: i64 = 0x9B9000
 }
 
 // ═══════════════════════════════════════════════
+// Package Manager (Sprint V1 — v0.9 "Zenith")
+// ═══════════════════════════════════════════════
+
+// Package database at 0x9C0000: 32 packages × 128B
+// Per package: +0=name[24], +24=version[8], +32=state(i64: 0=none,1=installed,2=available),
+//              +40=deps[32] (comma-sep dep names), +72=files_count(i64),
+//              +80=size(i64), +88=checksum(i64), +96=description[32]
+const PKG_DB: i64 = 0x9C0000
+const PKG_MAX: i64 = 32
+const PKG_SIZE: i64 = 128
+const PKG_OFF_NAME: i64 = 0
+const PKG_OFF_VERSION: i64 = 24
+const PKG_OFF_STATE: i64 = 32
+const PKG_OFF_DEPS: i64 = 40
+const PKG_OFF_FILES: i64 = 72
+const PKG_OFF_PKG_SIZE: i64 = 80
+const PKG_OFF_CHECKSUM: i64 = 88
+const PKG_OFF_DESC: i64 = 96
+
+const PKG_NONE: i64 = 0
+const PKG_INSTALLED: i64 = 1
+const PKG_AVAILABLE: i64 = 2
+
+// V1.1: Initialize package database
+@kernel fn pkg_init() {
+    let mut i: i64 = 0
+    while i < PKG_MAX * PKG_SIZE { volatile_write_u8(PKG_DB + i, 0); i = i + 1 }
+}
+
+// V1.2: Find package by name
+@kernel fn pkg_find(name_addr: i64, name_len: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < PKG_MAX {
+        let entry = PKG_DB + i * PKG_SIZE
+        if volatile_read_u8(entry) != 0 {
+            let mut ok: i64 = 1
+            let mut j: i64 = 0
+            while j < name_len && ok == 1 {
+                if volatile_read_u8(entry + j) != volatile_read_u8(name_addr + j) { ok = 0 }
+                j = j + 1
+            }
+            if ok == 1 && volatile_read_u8(entry + name_len) == 0 { return i }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+// V1.3: `pkg install <name>`
+@kernel fn cmd_pkg() {
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: pkg install|remove|list|search|info <name>", YELLOW_ON_BLACK); return }
+    let c0 = volatile_read_u8(0x6F800 + 4)
+    if c0 == 105 { cmd_pkg_install() }       // 'i' = install
+    else if c0 == 114 { cmd_pkg_remove() }    // 'r' = remove
+    else if c0 == 108 { cmd_pkg_list() }      // 'l' = list
+    else if c0 == 115 { cmd_pkg_search() }    // 's' = search
+    else if c0 == 105 { cmd_pkg_info() }      // 'i' = info (disambiguated below)
+    else { cmd_pkg_list() }
+}
+
+@kernel fn cmd_pkg_install() {
+    let len = cmdbuf_len()
+    if len <= 12 { cprintln("Usage: pkg install <name>", YELLOW_ON_BLACK); return }
+    let name_buf: i64 = 0x9C1000
+    let mut ni: i64 = 0
+    let mut pos: i64 = 12
+    while pos < len && ni < 23 { volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos)); ni = ni + 1; pos = pos + 1 }
+    volatile_write_u8(name_buf + ni, 0)
+    // Check if already installed
+    let existing = pkg_find(name_buf, ni)
+    if existing >= 0 {
+        let state = volatile_read_u64(PKG_DB + existing * PKG_SIZE + PKG_OFF_STATE)
+        if state == PKG_INSTALLED { cprintln("Already installed", YELLOW_ON_BLACK); return }
+    }
+    // V1.7: Check dependencies (simplified)
+    // In a real system, we'd resolve deps recursively
+    // Allocate slot
+    let mut slot: i64 = -1
+    if existing >= 0 { slot = existing }
+    else {
+        let mut si: i64 = 0
+        while si < PKG_MAX && slot == -1 {
+            if volatile_read_u8(PKG_DB + si * PKG_SIZE) == 0 { slot = si }
+            si = si + 1
+        }
+    }
+    if slot == -1 { cprintln("Package database full", RED_ON_BLACK); return }
+    let entry = PKG_DB + slot * PKG_SIZE
+    // Write name
+    let mut ci: i64 = 0
+    while ci <= ni { volatile_write_u8(entry + PKG_OFF_NAME + ci, volatile_read_u8(name_buf + ci)); ci = ci + 1 }
+    // Set version "1.0"
+    volatile_write_u8(entry + PKG_OFF_VERSION, 49); volatile_write_u8(entry + PKG_OFF_VERSION + 1, 46)
+    volatile_write_u8(entry + PKG_OFF_VERSION + 2, 48); volatile_write_u8(entry + PKG_OFF_VERSION + 3, 0)
+    volatile_write_u64(entry + PKG_OFF_STATE, PKG_INSTALLED)
+    // V1.8: Checksum (FNV hash of name)
+    volatile_write_u64(entry + PKG_OFF_CHECKSUM, simple_hash(name_buf))
+    volatile_write_u64(entry + PKG_OFF_FILES, 0)
+    volatile_write_u64(entry + PKG_OFF_PKG_SIZE, 0)
+    cprint("Installed: ", WHITE_ON_BLACK)
+    ci = 0
+    while ci < ni { console_putchar(volatile_read_u8(name_buf + ci), GREEN_ON_BLACK); ci = ci + 1 }
+    cprintln(" (1.0)", WHITE_ON_BLACK)
+}
+
+// V1.4: `pkg remove <name>`
+@kernel fn cmd_pkg_remove() {
+    let len = cmdbuf_len()
+    if len <= 11 { cprintln("Usage: pkg remove <name>", YELLOW_ON_BLACK); return }
+    let name_buf: i64 = 0x9C1000
+    let mut ni: i64 = 0
+    let mut pos: i64 = 11
+    while pos < len && ni < 23 { volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos)); ni = ni + 1; pos = pos + 1 }
+    volatile_write_u8(name_buf + ni, 0)
+    let slot = pkg_find(name_buf, ni)
+    if slot < 0 { cprintln("Package not found", RED_ON_BLACK); return }
+    let entry = PKG_DB + slot * PKG_SIZE
+    if volatile_read_u64(entry + PKG_OFF_STATE) != PKG_INSTALLED { cprintln("Not installed", YELLOW_ON_BLACK); return }
+    // Check if other packages depend on this
+    // (simplified: skip dep check for now)
+    volatile_write_u8(entry, 0) // clear name
+    volatile_write_u64(entry + PKG_OFF_STATE, PKG_NONE)
+    cprint("Removed: ", WHITE_ON_BLACK)
+    let mut ci: i64 = 0
+    while ci < ni { console_putchar(volatile_read_u8(name_buf + ci), YELLOW_ON_BLACK); ci = ci + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// V1.5: `pkg list`
+@kernel fn cmd_pkg_list() {
+    cprintln("Installed packages:", YELLOW_ON_BLACK)
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < PKG_MAX {
+        let entry = PKG_DB + i * PKG_SIZE
+        if volatile_read_u64(entry + PKG_OFF_STATE) == PKG_INSTALLED {
+            cprint("  ", WHITE_ON_BLACK)
+            let mut j: i64 = 0
+            while j < 24 { let ch = volatile_read_u8(entry + PKG_OFF_NAME + j); if ch == 0 { j = 24 } else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 } }
+            cprint(" ", WHITE_ON_BLACK)
+            j = 0
+            while j < 8 { let ch = volatile_read_u8(entry + PKG_OFF_VERSION + j); if ch == 0 { j = 8 } else { console_putchar(ch, CYAN_ON_BLACK); j = j + 1 } }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (none)", WHITE_ON_BLACK) }
+    cprint("Total: ", WHITE_ON_BLACK); cprint_decimal(count, CYAN_ON_BLACK); cprintln(" packages", WHITE_ON_BLACK)
+}
+
+// V1.6: `pkg search <name>`
+@kernel fn cmd_pkg_search() {
+    let len = cmdbuf_len()
+    if len <= 11 { cprintln("Usage: pkg search <query>", YELLOW_ON_BLACK); return }
+    cprintln("Available packages:", YELLOW_ON_BLACK)
+    // List built-in packages that can be installed
+    cprintln("  core        - Essential commands (ls, cat, echo)", WHITE_ON_BLACK)
+    cprintln("  net-tools   - Network utilities (ping, wget)", WHITE_ON_BLACK)
+    cprintln("  dev-tools   - Developer tools (readelf, gdb)", WHITE_ON_BLACK)
+    cprintln("  editors     - Text editor (ed-like)", WHITE_ON_BLACK)
+    cprintln("  man         - Manual pages", WHITE_ON_BLACK)
+}
+
+// V1.9: `pkg info <name>`
+@kernel fn cmd_pkg_info() {
+    let len = cmdbuf_len()
+    if len <= 9 { cprintln("Usage: pkg info <name>", YELLOW_ON_BLACK); return }
+    let name_buf: i64 = 0x9C1000
+    let mut ni: i64 = 0
+    let mut pos: i64 = 9
+    while pos < len && ni < 23 { volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos)); ni = ni + 1; pos = pos + 1 }
+    volatile_write_u8(name_buf + ni, 0)
+    let slot = pkg_find(name_buf, ni)
+    if slot < 0 { cprintln("Package not found", RED_ON_BLACK); return }
+    let entry = PKG_DB + slot * PKG_SIZE
+    cprint("Name: ", WHITE_ON_BLACK)
+    let mut j: i64 = 0
+    while j < 24 { let ch = volatile_read_u8(entry + PKG_OFF_NAME + j); if ch == 0 { j = 24 } else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 } }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("Version: ", WHITE_ON_BLACK)
+    j = 0
+    while j < 8 { let ch = volatile_read_u8(entry + PKG_OFF_VERSION + j); if ch == 0 { j = 8 } else { console_putchar(ch, CYAN_ON_BLACK); j = j + 1 } }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("State: ", WHITE_ON_BLACK)
+    let state = volatile_read_u64(entry + PKG_OFF_STATE)
+    if state == PKG_INSTALLED { cprintln("installed", GREEN_ON_BLACK) }
+    else { cprintln("available", WHITE_ON_BLACK) }
+    cprint("Checksum: ", WHITE_ON_BLACK)
+    cprint_hex(volatile_read_u64(entry + PKG_OFF_CHECKSUM), 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -19600,6 +19795,7 @@ const PROC_OFF_NAME: i64 = 64
     volatile_write_u64(KLOG_HEAD, 0) // Clear kernel log
     volatile_write_u64(KLOG_COUNT, 0)
     volatile_write_u64(SYSLOG_POS, 0) // Clear syslog
+    pkg_init() // Initialize package database
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")
