@@ -15763,3 +15763,236 @@ fn dd2_annotation_combination() {
     let out = eval_output(src);
     assert_eq!(out, vec!["101"]);
 }
+
+// ═══════════════════════════════════════════════
+// Phase EE: Integration + Release
+// Sprint EE1: Comprehensive end-to-end tests
+// ═══════════════════════════════════════════════
+
+#[test]
+fn ee1_async_trait_combo() {
+    // async fn + trait impl together
+    let src = r#"
+        trait Processor {
+            fn process(self) -> str
+        }
+        struct DataPipe { name: str }
+        impl Processor for DataPipe {
+            fn process(self) -> str { f"processed:{self.name}" }
+        }
+        async fn fetch(label: str) -> str { f"data:{label}" }
+        fn main() -> void {
+            let pipe = DataPipe { name: "alpha" }
+            let data = fetch("input").await
+            println(pipe.process())
+            println(data)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["processed:alpha", "data:input"]);
+}
+
+#[test]
+fn ee1_pattern_match_async_result() {
+    // match on async result
+    let src = r#"
+        async fn compute(x: i64) -> i64 { x * x }
+        fn classify(n: i64) -> str {
+            match n {
+                n if n > 100 => "big"
+                n if n > 10 => "medium"
+                _ => "small"
+            }
+        }
+        fn main() -> void {
+            let val = compute(15).await
+            println(classify(val))
+            let val2 = compute(3).await
+            println(classify(val2))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["big", "small"]);
+}
+
+#[test]
+fn ee1_builder_with_traits() {
+    // Builder pattern + trait
+    let src = r#"
+        trait Renderable {
+            fn render(self) -> str
+        }
+        struct Widget { kind: str, value: str }
+        impl Widget {
+            fn with_value(self, v: str) -> Widget {
+                Widget { kind: self.kind, value: v }
+            }
+        }
+        impl Renderable for Widget {
+            fn render(self) -> str { f"<{self.kind}>{self.value}</{self.kind}>" }
+        }
+        fn main() -> void {
+            let w = Widget { kind: "div", value: "" }.with_value("Hello")
+            println(w.render())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["<div>Hello</div>"]);
+}
+
+#[test]
+fn ee1_async_join_with_match() {
+    let src = r#"
+        async fn api_call(endpoint: str) -> str { f"response:{endpoint}" }
+        fn main() -> void {
+            let results = join(api_call("users"), api_call("posts"))
+            let mut i: i64 = 0
+            while i < len(results) as i64 {
+                let r = results[i]
+                let label = match i {
+                    0 => "first"
+                    1 => "second"
+                    _ => "other"
+                }
+                println(f"{label}: {r}")
+                i = i + 1
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["first: response:users", "second: response:posts"]);
+}
+
+#[test]
+fn ee1_generic_with_fstring() {
+    let src = r#"
+        fn describe<T>(label: str, value: T) -> str {
+            f"{label} = {value}"
+        }
+        fn main() -> void {
+            println(describe("x", 42))
+            println(describe("name", "Fajar"))
+            println(describe("ok", true))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["x = 42", "name = Fajar", "ok = true"]);
+}
+
+#[test]
+fn ee1_complex_data_pipeline() {
+    let src = r#"
+        struct Record { id: i64, name: str, score: i64 }
+        impl Record {
+            fn grade(self) -> str {
+                match self.score {
+                    s if s >= 90 => "A"
+                    s if s >= 80 => "B"
+                    s if s >= 70 => "C"
+                    _ => "F"
+                }
+            }
+            fn summary(self) -> str {
+                f"{self.name} (#{self.id}): {self.grade()}"
+            }
+        }
+        fn main() -> void {
+            let r1 = Record { id: 1, name: "Alice", score: 95 }
+            let r2 = Record { id: 2, name: "Bob", score: 72 }
+            let r3 = Record { id: 3, name: "Charlie", score: 88 }
+            println(r1.summary())
+            println(r2.summary())
+            println(r3.summary())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Alice (#1): A", "Bob (#2): C", "Charlie (#3): B"]);
+}
+
+#[test]
+fn ee1_recursive_with_match() {
+    let src = r#"
+        fn eval_expr(op: str, a: i64, b: i64) -> i64 {
+            match op {
+                "+" => a + b
+                "-" => a - b
+                "*" => a * b
+                "/" => if b != 0 { a / b } else { 0 }
+                _ => 0
+            }
+        }
+        fn main() -> void {
+            println(eval_expr("+", 10, 20))
+            println(eval_expr("*", 6, 7))
+            println(eval_expr("-", 100, 58))
+            println(eval_expr("/", 42, 0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["30", "42", "42", "0"]);
+}
+
+#[test]
+fn ee1_option_chain() {
+    let src = r#"
+        fn safe_div(a: i64, b: i64) -> i64 {
+            let result = if b == 0 { None } else { Some(a / b) }
+            match result {
+                Some(v) => v
+                _ => -1
+            }
+        }
+        fn main() -> void {
+            println(safe_div(10, 2))
+            println(safe_div(10, 0))
+            println(safe_div(42, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5", "-1", "42"]);
+}
+
+#[test]
+fn ee1_multi_trait_struct() {
+    let src = r#"
+        trait Named {
+            fn get_name(self) -> str
+        }
+        trait Scored {
+            fn get_score(self) -> i64
+        }
+        struct Student { name: str, score: i64 }
+        impl Named for Student {
+            fn get_name(self) -> str { self.name }
+        }
+        impl Scored for Student {
+            fn get_score(self) -> i64 { self.score }
+        }
+        fn main() -> void {
+            let s1 = Student { name: "Alice", score: 95 }
+            println(s1.get_name())
+            let s2 = Student { name: "Alice", score: 95 }
+            println(s2.get_score())
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["Alice", "95"]);
+}
+
+#[test]
+fn ee1_async_with_struct_method() {
+    let src = r#"
+        struct Calculator { base: i64 }
+        impl Calculator {
+            fn add(self, n: i64) -> i64 { self.base + n }
+        }
+        async fn get_offset() -> i64 { 100 }
+        fn main() -> void {
+            let calc = Calculator { base: 42 }
+            let offset = get_offset().await
+            println(calc.add(offset))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["142"]);
+}

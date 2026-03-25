@@ -18,6 +18,31 @@ Kategori perubahan:
 
 ---
 
+## [5.5.0] — 2026-03-25 "Illumination"
+
+### Added — Fajar Lang v0.7 "Illumination"
+- **async fn + .await** — async functions return Future, .await resolves cooperatively
+- **async blocks** — `async { expr }` creates Future from expression
+- **join()** — await multiple futures in parallel, return array
+- **timeout()** — resolve future with timeout
+- **spawn()** — start async task
+- **Pattern matching** — nested enums, guards, tuples, or-patterns, ranges, wildcards
+- **Match as expression** — `let x = match ... { ... }`
+- **Trait + impl** — trait definitions, multiple impls, polymorphic dispatch
+- **Chained methods** — `builder.add(5).mul(3).build()`
+- **Multiple traits per struct** — Named + Scored on Student
+- **Generic functions** — `identity<T>(x: T) -> T`
+- **f-string expressions** — `f"{factorial(n)}"`, conditionals in f-strings
+- **Attribute macros** — @kernel, @safe, @device annotations
+- **Built-in macros** — assert, assert_eq, dbg, type_of, to_string
+
+### Stats
+- 100 new integration tests (aa1-ee1 prefixes)
+- Total tests: 6,376+ (0 failures)
+- 5 phases: AA (Async), BB (Patterns), CC (Traits), DD (Macros), EE (Integration)
+
+---
+
 ## [5.4.0] — 2026-03-25 "Zenith"
 
 ### Added — FajarOS Nova v1.4.0 "Zenith"

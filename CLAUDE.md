@@ -158,7 +158,7 @@ Examples:  126 .fj programs (incl. fajaros_nova_kernel, fajaros_kernel, q6a_show
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
 Builtins:  121 bare-metal runtime functions + tensor short aliases
 CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
-Release:   v5.4.0 "Zenith" (2026-03-25)
+Release:   v5.5.0 "Illumination" (2026-03-25)
 ```
 
 ### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
