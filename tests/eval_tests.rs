@@ -13142,3 +13142,157 @@ fn s1_ext2_state() {
     let out = eval_output(src);
     assert_eq!(out, vec!["10489856", "10485760", "4096"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint S2: ext2 directory + file operations
+// ═══════════════════════════════════════════════
+
+#[test]
+fn s2_dirent_format() {
+    let src = r#"
+        const DIRENT_SIZE: i64 = 128
+        const DIRENTS_PER_BLOCK: i64 = 32
+        fn main() -> void {
+            println(DIRENT_SIZE)
+            println(DIRENTS_PER_BLOCK)
+            println(DIRENTS_PER_BLOCK * DIRENT_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["128", "32", "4096"]);
+}
+
+#[test]
+fn s2_dirent_fields() {
+    let src = r#"
+        fn dirent_inode_off(idx: i64) -> i64 { idx * 128 }
+        fn dirent_nlen_off(idx: i64) -> i64 { idx * 128 + 8 }
+        fn dirent_name_off(idx: i64) -> i64 { idx * 128 + 16 }
+        fn main() -> void {
+            println(dirent_inode_off(0))
+            println(dirent_nlen_off(0))
+            println(dirent_name_off(0))
+            println(dirent_name_off(1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "8", "16", "144"]);
+}
+
+#[test]
+fn s2_root_inode_num() {
+    let src = r#"
+        const ROOT_INODE: i64 = 2
+        fn main() -> void {
+            println(ROOT_INODE)
+            println(ROOT_INODE > 0)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2", "true"]);
+}
+
+#[test]
+fn s2_file_mode_regular() {
+    let src = r#"
+        fn regular_file_mode(perms: i64) -> i64 { 0x8000 + perms }
+        fn is_regular(mode: i64) -> bool { (mode & 0xF000) == 0x8000 }
+        fn main() -> void {
+            let m = regular_file_mode(0x1A4) // 0644
+            println(m)
+            println(is_regular(m))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["33188", "true"]);
+}
+
+#[test]
+fn s2_inode_size_read() {
+    let src = r#"
+        fn read_size_le(b0: i64, b1: i64, b2: i64) -> i64 { b0 + b1 * 256 + b2 * 65536 }
+        fn main() -> void {
+            println(read_size_le(100, 0, 0))
+            println(read_size_le(0, 4, 0))
+            println(read_size_le(0, 0, 1))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["100", "1024", "65536"]);
+}
+
+#[test]
+fn s2_block_pointer_read() {
+    let src = r#"
+        fn read_block_ptr(lo: i64, hi: i64) -> i64 { lo + hi * 256 }
+        fn main() -> void {
+            println(read_block_ptr(0, 0))
+            println(read_block_ptr(1, 0))
+            println(read_block_ptr(0, 1))
+            println(read_block_ptr(255, 255))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["0", "1", "256", "65535"]);
+}
+
+#[test]
+fn s2_max_file_direct() {
+    let src = r#"
+        fn max_direct(block_size: i64) -> i64 { 12 * block_size }
+        fn max_indirect(block_size: i64) -> i64 { (block_size / 4) * block_size }
+        fn main() -> void {
+            println(max_direct(4096))
+            println(max_indirect(4096))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["49152", "4194304"]);
+}
+
+#[test]
+fn s2_ext2_buffers() {
+    let src = r#"
+        const EXT2_BUF: i64 = 0xA00000
+        const EXT2_DIR_BUF: i64 = 0xA02000
+        const EXT2_FILE_BUF: i64 = 0xA03000
+        fn main() -> void {
+            println(EXT2_DIR_BUF - EXT2_BUF)
+            println(EXT2_FILE_BUF - EXT2_DIR_BUF)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8192", "4096"]);
+}
+
+#[test]
+fn s2_lookup_match() {
+    let src = r#"
+        fn name_match(a: str, b: str) -> bool { a == b }
+        fn main() -> void {
+            println(name_match("hello.txt", "hello.txt"))
+            println(name_match("hello.txt", "world.txt"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false"]);
+}
+
+#[test]
+fn s2_vfs_backend_type() {
+    let src = r#"
+        fn vfs_type(fs: str) -> i64 {
+            if fs == "ramfs" { 1 }
+            else if fs == "fat32" { 2 }
+            else if fs == "ext2" { 3 }
+            else { 0 }
+        }
+        fn main() -> void {
+            println(vfs_type("ramfs"))
+            println(vfs_type("ext2"))
+            println(vfs_type("ntfs"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3", "0"]);
+}
