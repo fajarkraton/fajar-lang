@@ -18,6 +18,40 @@ Kategori perubahan:
 
 ---
 
+## [5.4.0] — 2026-03-25 "Zenith"
+
+### Added — FajarOS Nova v1.4.0 "Zenith"
+- **VirtIO-GPU driver** — PCI detection, framebuffer 320×200×32bpp, draw_pixel, fill_rect, clear
+- **GPU compute** — 16 compute buffers (4KB each), matmul kernel (O(n³)), vecadd, SYS_GPU_ALLOC/DISPATCH
+- **ext2 filesystem** — superblock, block/inode bitmaps, 256 inodes, 16K blocks, mkfs.ext2
+- **ext2 file ops** — lookup, create, read, write, unlink, mount, ext2ls, VFS integration
+- **TCP state machine** — 11 RFC 793 states, 3-way handshake, FIN teardown, retransmit timer (200ms)
+- **Network services** — UDP datagrams, multi-client TCP, telnet, echo server (port 7)
+- **DNS v2** — 3 retries with timeout
+- **ARP aging** — 30-second expiry, ifconfig with rx/tx/error stats
+- **Init system** — 16 services, start/stop/status, auto-restart (ALWAYS/ON_FAILURE)
+- **Runlevels** — 0=halt, 1=single, 3=multi-user, 5=graphical, `init <level>` command
+- **Syslog** — timestamped ring buffer (8KB), log rotation at 64KB
+- **Crond** — periodic task execution with tick-based intervals, crontab command
+- **Kernel log** — dmesg ring buffer (8KB), klog_write
+- **PID files** — per-service PID tracking
+- **Shutdown sequence** — stop services reverse order, sync journal, halt
+- **Package manager** — 32 packages database, install/remove/list/search/info/update/upgrade
+- **5 standard packages** — core, net-tools, dev-tools, editors, man
+- **Semver comparison** — major.minor version compare for upgrades
+- **Package registry** — 8-entry built-in registry with descriptions
+
+### Stats
+- Nova LOC: 20,176 (up from 18,159 — crossed 20K!)
+- Nova functions: 757 (up from 651)
+- Syscalls: 34 (up from 32)
+- New phases: R (GPU), S (ext2), T (Network v2), U (Init+Services), V (Packages)
+- 100 new integration tests
+- Total tests: 6,286 (0 failures)
+- fajaros-x86: 112 .fj files
+
+---
+
 ## [5.3.0] — 2026-03-25 "Bastion"
 
 ### Added — FajarOS Nova v1.3.0 "Bastion"

@@ -152,13 +152,13 @@ Sprints:   8/8 complete
 ### Current Totals
 
 ```
-Tests:     6,186 total (0 failures), 712 integration tests
+Tests:     6,286 total (0 failures), 810+ integration tests
 LOC:       ~290,000 lines of Rust (220+ files)
 Examples:  126 .fj programs (incl. fajaros_nova_kernel, fajaros_kernel, q6a_showcase)
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
 Builtins:  121 bare-metal runtime functions + tensor short aliases
 CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
-Release:   v5.3.0 "Bastion" (2026-03-25)
+Release:   v5.4.0 "Zenith" (2026-03-25)
 ```
 
 ### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
@@ -169,26 +169,29 @@ Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inf
 Repo:      github.com/fajarkraton/fajar-os
 ```
 
-### FajarOS Nova v1.3.0 "Bastion" — x86_64 bare-metal OS (100% Fajar Lang)
+### FajarOS Nova v1.4.0 "Zenith" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 18,159 lines, 651 @kernel fns
-Commands:  229 shell commands
+Kernel:    examples/fajaros_nova_kernel.fj — 20,176 lines, 757 @kernel fns
+Commands:  240+ shell commands
 Scheduler: Preemptive multitasking (timer-driven context switch, round-robin)
 Memory:    Copy-on-Write fork (CoW page tables, refcounting, page fault handler)
 RING 3:    5 user programs (hello/goodbye/fajar/counter/fibonacci)
-SYSCALL:   32 syscalls via table dispatch (EXIT through CONNECT)
-Storage:   NVMe + FAT32 + USB + ramdisk + journaling (WAL + fsck + crash recovery)
+SYSCALL:   34 syscalls via table dispatch (EXIT through GPU_DISPATCH)
+Storage:   NVMe + FAT32 + ext2 + USB + ramdisk + journaling (WAL + fsck)
 VFS:       / (ramfs), /dev, /proc, /mnt + hierarchical dirs + symlinks + hardlinks
-Network:   DHCP + ARP + IPv4 + ICMP + UDP + TCP + HTTP server + socket API
+Network:   TCP state machine (RFC 793) + UDP + HTTP server + socket API + echo server
+GPU:       VirtIO-GPU driver (framebuffer 320×200) + compute dispatch (matmul, vecadd)
 Users:     Multi-user (16 accounts), login/logout, passwd, chmod/chown, rwxrwxrwx
+Services:  Init system (16 services), runlevels, syslogd, crond, auto-restart
+Packages:  pkg install/remove/list/search/update/upgrade (5 std packages)
 SMP:       AP trampoline, INIT-SIPI-SIPI, per-CPU
 ELF:       ELF64 parser, PT_LOAD loader, exec from FAT32/ramfs with argv
 Process:   fork(CoW)/exec/waitpid, signals, job control, session timeout
 Pipes:     Circular 4KB buffer, refcounting, EOF, shell | operator
 Shell:     Pipes, > >> < redirect, $VAR, scripts, if/for/while, test -f/-d
 Debug:     GDB remote stub (RSP, breakpoints, watchpoints, thread query, memory map)
-Modular:   fajaros-x86 repo — 100 .fj files, concatenation build
+Modular:   fajaros-x86 repo — 112 .fj files, concatenation build
 Test:      QEMU + KVM verified (boot, NVMe, USB, virtio-net, SMP, Ring 3)
 Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
 Compiler:  x86_64-user target for Ring 3 ELF compilation
