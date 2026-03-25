@@ -468,16 +468,16 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| BL1.1 | Title + intro | "From 18K to 20K LOC: Nova v0.9 Zenith" | [ ] |
-| BL1.2 | GPU compute section | VirtIO-GPU driver + matmul benchmark | [ ] |
-| BL1.3 | ext2 section | On-disk layout, mkfs, file operations | [ ] |
-| BL1.4 | TCP state machine | 11 states, retransmit, echo server | [ ] |
-| BL1.5 | Init system | Service management, runlevels, daemons | [ ] |
-| BL1.6 | Package manager | Install/remove with semver | [ ] |
-| BL1.7 | 20K LOC milestone | Growth chart, complexity analysis | [ ] |
-| BL1.8 | Performance data | Benchmark results from v0.8 doc | [ ] |
-| BL1.9 | What's next | Nova v1.0 "Absolute" preview | [ ] |
-| BL1.10 | Push + publish | Commit blog, push to GitHub | [ ] |
+| BL1.1 | Title + intro | "From 18K to 20K LOC: Nova v0.9 Zenith" | [x] |
+| BL1.2 | GPU compute section | VirtIO-GPU driver + matmul benchmark | [x] |
+| BL1.3 | ext2 section | On-disk layout, mkfs, file operations | [x] |
+| BL1.4 | TCP state machine | 11 states, retransmit, echo server | [x] |
+| BL1.5 | Init system | Service management, runlevels, daemons | [x] |
+| BL1.6 | Package manager | Install/remove with semver | [x] |
+| BL1.7 | 20K LOC milestone | Growth chart v0.6→v0.9 | [x] |
+| BL1.8 | Performance data | Benchmark table + modular build stats | [x] |
+| BL1.9 | What's next | Nova v1.0 "Absolute" preview (14 sprints) | [x] |
+| BL1.10 | Push + publish | Committed to docs/ | [x] |
 
 ---
 
