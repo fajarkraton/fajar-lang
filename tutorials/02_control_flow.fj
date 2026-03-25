@@ -1,0 +1,54 @@
+// Tutorial 2: Control Flow — if/else, while, for, match
+// ═══════════════════════════════════════════════════════
+// Run: fj run tutorials/02_control_flow.fj
+
+fn main() -> void {
+    // If/else
+    let age = 25
+    if age >= 18 {
+        println("You are an adult")
+    } else {
+        println("You are a minor")
+    }
+
+    // If as expression
+    let status = if age >= 21 { "can drink" } else { "cannot drink" }
+    println(f"Age {age}: {status}")
+
+    // While loop
+    let mut sum = 0
+    let mut i = 1
+    while i <= 10 {
+        sum = sum + i
+        i = i + 1
+    }
+    println(f"Sum 1-10: {sum}")
+
+    // For loop
+    let fruits = ["apple", "banana", "cherry"]
+    for fruit in fruits {
+        println(f"  Fruit: {fruit}")
+    }
+
+    // Match expression
+    let day = 3
+    let name = match day {
+        1 => "Monday",
+        2 => "Tuesday",
+        3 => "Wednesday",
+        4 => "Thursday",
+        5 => "Friday",
+        _ => "Weekend"
+    }
+    println(f"Day {day} is {name}")
+
+    // Nested match with guards
+    let score = 85
+    let grade = match score {
+        s if s >= 90 => "A",
+        s if s >= 80 => "B",
+        s if s >= 70 => "C",
+        _ => "F"
+    }
+    println(f"Score {score}: Grade {grade}")
+}

@@ -1,0 +1,49 @@
+// Tutorial 8: OS Development — @kernel Context
+// ═══════════════════════════════════════════════
+// Run: fj run tutorials/08_os_kernel.fj
+// Note: @kernel ops simulated in interpreter, real on bare-metal
+
+fn main() -> void {
+    println("=== OS Development with Fajar Lang ===")
+    println("")
+
+    // Context annotations
+    println("Context Safety Model:")
+    println("  @kernel — hardware access, no heap")
+    println("  @device — tensor ops, no hardware")
+    println("  @safe   — normal code, no hardware")
+    println("")
+
+    // Simulated memory-mapped I/O
+    println("Memory-Mapped I/O (simulated):")
+    let vga_addr = 0xB8000
+    let serial_port = 0x3F8
+    println(f"  VGA buffer: 0x{vga_addr}")
+    println(f"  Serial port: 0x{serial_port}")
+    println("")
+
+    // Simulated page table
+    println("Page Table (simulated):")
+    let page_size = 4096
+    let phys_addr = 0x1000
+    let virt_addr = 0x400000
+    println(f"  Page size: {page_size} bytes")
+    println(f"  Map: virt 0x{virt_addr} -> phys 0x{phys_addr}")
+    println("")
+
+    // Syscall table
+    println("Syscall Table:")
+    let syscalls = ["EXIT", "WRITE", "READ", "GETPID", "YIELD", "BRK", "MMAP", "CLOCK"]
+    let mut i = 0
+    for name in syscalls {
+        println(f"  SYS_{name} = {i}")
+        i = i + 1
+    }
+    println("")
+
+    // FajarOS stats
+    println("FajarOS Nova (built with Fajar Lang):")
+    println("  Kernel: 21,187 LOC, 50 syscalls")
+    println("  Modular: 139 .fj files (fajaros-x86)")
+    println("  Features: SMP, ext2, TCP/IP, GPU, GDB")
+}

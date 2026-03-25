@@ -1,0 +1,54 @@
+// Tutorial 5: Error Handling — Option, Result, Match
+// ═══════════════════════════════════════════════════
+// Run: fj run tutorials/05_error_handling.fj
+
+fn safe_divide(a: i64, b: i64) -> Result<i64, str> {
+    if b == 0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn find_index(arr: [i64; 5], target: i64) -> Option<i64> {
+    let mut i: i64 = 0
+    while i < 5 {
+        if arr[i] == target { return Some(i) }
+        i = i + 1
+    }
+    None
+}
+
+fn main() -> void {
+    // Result type
+    let r1 = safe_divide(10, 3)
+    let r2 = safe_divide(10, 0)
+    println(f"10 / 3 = {r1}")
+    println(f"10 / 0 = {r2}")
+
+    // Match on Result
+    match safe_divide(100, 7) {
+        Ok(val) => println(f"100 / 7 = {val}"),
+        Err(msg) => println(f"Error: {msg}")
+    }
+
+    // Option type
+    let nums = [10, 20, 30, 40, 50]
+    let found = find_index(nums, 30)
+    let missing = find_index(nums, 99)
+    println(f"Find 30: {found}")
+    println(f"Find 99: {missing}")
+
+    // Match on Option
+    match find_index(nums, 40) {
+        Some(idx) => println(f"Found 40 at index {idx}"),
+        None => println("40 not found")
+    }
+
+    // Chained error handling
+    let chain = safe_divide(100, 5)
+    match chain {
+        Ok(v) => {
+            let chain2 = safe_divide(v, 2)
+            println(f"100/5/2 = {chain2}")
+        },
+        Err(e) => println(f"Chain failed: {e}")
+    }
+}

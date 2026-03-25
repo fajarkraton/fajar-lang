@@ -1,0 +1,57 @@
+// Tutorial 4: Functions & Closures — First-Class Functions
+// ════════════════════════════════════════════════════════
+// Run: fj run tutorials/04_functions_closures.fj
+
+// Basic function
+fn add(a: i64, b: i64) -> i64 { a + b }
+
+// Recursive function
+fn factorial(n: i64) -> i64 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+// Function returning function result
+fn apply_twice(x: i64, f: fn(i64) -> i64) -> i64 {
+    f(f(x))
+}
+
+fn double(x: i64) -> i64 { x * 2 }
+
+fn main() -> void {
+    // Basic calls
+    println(f"add(3, 4) = {add(3, 4)}")
+    println(f"5! = {factorial(5)}")
+
+    // Higher-order functions
+    println(f"double(double(3)) = {apply_twice(3, double)}")
+
+    // Closures
+    let multiplier = 7
+    let mul = |x: i64| -> i64 { x * multiplier }
+    println(f"mul(6) = {mul(6)}")
+
+    // Closures with array methods
+    let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    let doubled = data.map(|x| x * 2)
+    println(f"Doubled: {doubled}")
+
+    let evens = data.filter(|x| x % 2 == 0)
+    println(f"Evens: {evens}")
+
+    let sum = data.fold(0, |acc, x| acc + x)
+    println(f"Sum: {sum}")
+
+    // Pipeline: filter → map → fold
+    let result = data
+        .filter(|x| x > 5)
+        .map(|x| x * x)
+        .sum()
+    println(f"Sum of squares > 5: {result}")
+
+    // More array methods
+    println(f"Any > 8? {data.any(|x| x > 8)}")
+    println(f"All > 0? {data.all(|x| x > 0)}")
+    println(f"Find > 7: {data.find(|x| x > 7)}")
+    println(f"Count > 5: {data.count(|x| x > 5)}")
+}

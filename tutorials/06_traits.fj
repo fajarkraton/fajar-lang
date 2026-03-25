@@ -1,0 +1,52 @@
+// Tutorial 6: Traits & Impl — Polymorphism in Fajar Lang
+// ════════════════════════════════════════════════════════
+// Run: fj run tutorials/06_traits.fj
+
+trait Shape {
+    fn area(self) -> f64
+    fn name(self) -> str
+}
+
+struct Circle { radius: f64 }
+struct Rectangle { width: f64, height: f64 }
+struct Triangle { base: f64, height: f64 }
+
+impl Shape for Circle {
+    fn area(self) -> f64 { 3.14159 * self.radius * self.radius }
+    fn name(self) -> str { "Circle" }
+}
+
+impl Shape for Rectangle {
+    fn area(self) -> f64 { self.width * self.height }
+    fn name(self) -> str { "Rectangle" }
+}
+
+impl Shape for Triangle {
+    fn area(self) -> f64 { 0.5 * self.base * self.height }
+    fn name(self) -> str { "Triangle" }
+}
+
+// Builder pattern
+struct Builder { value: i64 }
+
+impl Builder {
+    fn new() -> Builder { Builder { value: 0 } }
+    fn add(self, n: i64) -> Builder { Builder { value: self.value + n } }
+    fn mul(self, n: i64) -> Builder { Builder { value: self.value * n } }
+    fn build(self) -> i64 { self.value }
+}
+
+fn main() -> void {
+    // Trait dispatch
+    let c = Circle { radius: 5.0 }
+    let r = Rectangle { width: 4.0, height: 6.0 }
+    let t = Triangle { base: 3.0, height: 8.0 }
+
+    println(f"{c.name()}: area = {c.area()}")
+    println(f"{r.name()}: area = {r.area()}")
+    println(f"{t.name()}: area = {t.area()}")
+
+    // Builder pattern with method chaining
+    let result = Builder::new().add(10).mul(3).add(5).build()
+    println(f"Builder: (10 * 3) + 5 = {result}")
+}

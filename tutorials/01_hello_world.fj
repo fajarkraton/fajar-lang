@@ -1,0 +1,32 @@
+// Tutorial 1: Hello World — Your First Fajar Lang Program
+// ═══════════════════════════════════════════════════════
+// Run: fj run tutorials/01_hello_world.fj
+
+fn main() -> void {
+    // Print to console
+    println("Hello, Fajar Lang!")
+
+    // Variables
+    let name = "World"
+    let year = 2026
+    println(f"Hello {name}, welcome to {year}!")
+
+    // Numbers
+    let x = 42
+    let pi = 3.14159
+    println(f"Integer: {x}, Float: {pi}")
+
+    // Mutable variables
+    let mut counter = 0
+    counter = counter + 1
+    counter = counter + 1
+    println(f"Counter: {counter}")
+
+    // Constants
+    const MAX: i64 = 100
+    println(f"Max: {MAX}")
+
+    // Boolean
+    let is_awesome = true
+    println(f"Fajar Lang is awesome: {is_awesome}")
+}

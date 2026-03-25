@@ -1,0 +1,53 @@
+// Tutorial 3: Data Structures — Arrays, Structs, Enums, Maps
+// ═══════════════════════════════════════════════════════════
+// Run: fj run tutorials/03_data_structures.fj
+
+struct Point { x: f64, y: f64 }
+
+struct Person {
+    name: str,
+    age: i64
+}
+
+enum Color { Red, Green, Blue }
+
+fn distance(p1: Point, p2: Point) -> f64 {
+    let dx = p2.x - p1.x
+    let dy = p2.y - p1.y
+    // sqrt approximation
+    let sq = dx * dx + dy * dy
+    let mut guess = sq / 2.0
+    let mut i = 0
+    while i < 10 { guess = (guess + sq / guess) / 2.0; i = i + 1 }
+    guess
+}
+
+fn main() -> void {
+    // Arrays
+    let numbers = [10, 20, 30, 40, 50]
+    println(f"Array: {numbers}")
+    println(f"First: {numbers[0]}, Last: {numbers[4]}")
+    println(f"Length: {numbers.len()}")
+
+    // Array methods
+    println(f"Sum: {numbers.sum()}")
+    println(f"Min: {numbers.min()}, Max: {numbers.max()}")
+    println(f"Sorted: {[5,3,1,4,2].sort()}")
+    println(f"Reversed: {numbers.reverse()}")
+
+    // Structs
+    let p1 = Point { x: 0.0, y: 0.0 }
+    let p2 = Point { x: 3.0, y: 4.0 }
+    println(f"Distance: {distance(p1, p2)}")
+
+    let person = Person { name: "Fajar", age: 30 }
+    println(f"{person.name} is {person.age} years old")
+
+    // Tuples
+    let pair = (42, "hello")
+    println(f"Tuple: {pair}")
+
+    // Maps
+    let config = {"host": "localhost", "port": "8080"}
+    println(f"Config: {config}")
+}

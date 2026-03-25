@@ -564,16 +564,16 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| ED1.1 | Tutorial framework | Step-by-step lessons with code editor | [ ] |
-| ED1.2 | Lesson 1: Hello World | Variables, functions, println | [ ] |
-| ED1.3 | Lesson 2: Control Flow | if/else, while, for, match | [ ] |
-| ED1.4 | Lesson 3: Data Structures | Arrays, structs, enums, maps | [ ] |
-| ED1.5 | Lesson 4: Functions | Closures, higher-order, pipeline | [ ] |
-| ED1.6 | Lesson 5: Error Handling | Option, Result, ? operator | [ ] |
-| ED1.7 | Lesson 6: Traits | Trait definition, impl, polymorphism | [ ] |
-| ED1.8 | Lesson 7: Async | async/await, join, spawn | [ ] |
-| ED1.9 | Lesson 8: OS Development | @kernel, volatile, interrupt handlers | [ ] |
-| ED1.10 | Lesson 9: ML | Tensors, autograd, training loop | [ ] |
+| ED1.1 | Tutorial framework | Step-by-step lessons with code editor | [x] |
+| ED1.2 | Lesson 1: Hello World | Variables, functions, println | [x] |
+| ED1.3 | Lesson 2: Control Flow | if/else, while, for, match | [x] |
+| ED1.4 | Lesson 3: Data Structures | Arrays, structs, enums, maps | [x] |
+| ED1.5 | Lesson 4: Functions | Closures, higher-order, pipeline | [x] |
+| ED1.6 | Lesson 5: Error Handling | Option, Result, ? operator | [x] |
+| ED1.7 | Lesson 6: Traits | Trait definition, impl, polymorphism | [x] |
+| ED1.8 | Lesson 7: Async | async/await, join, spawn | [x] |
+| ED1.9 | Lesson 8: OS Development | @kernel, volatile, interrupt handlers | [x] |
+| ED1.10 | Lesson 9: ML | Tensors, autograd, training loop | [x] |
 
 ### Sprint ED2-ED4: Playground, Course, Community (30 tasks)
 

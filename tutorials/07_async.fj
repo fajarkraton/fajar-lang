@@ -1,0 +1,37 @@
+// Tutorial 7: Async/Await — Concurrent Programming
+// ══════════════════════════════════════════════════
+// Run: fj run tutorials/07_async.fj
+
+async fn fetch_data(id: i64) -> str {
+    f"Data from source {id}"
+}
+
+async fn compute_result(x: i64) -> i64 {
+    x * x + 1
+}
+
+fn main() -> void {
+    println("=== Async/Await Tutorial ===")
+
+    // Basic async
+    let data = fetch_data(42).await
+    println(f"Fetched: {data}")
+
+    // Multiple async calls
+    let r1 = compute_result(5).await
+    let r2 = compute_result(10).await
+    println(f"compute(5) = {r1}")
+    println(f"compute(10) = {r2}")
+
+    // Join — parallel execution
+    let results = join(fetch_data(1), fetch_data(2)).await
+    println(f"Parallel: {results}")
+
+    println("")
+    println("Async features:")
+    println("  async fn — returns Future")
+    println("  .await   — resolves Future")
+    println("  join()   — parallel execution")
+    println("  spawn()  — background task")
+    println("  timeout() — with deadline")
+}

@@ -1,0 +1,102 @@
+// Tutorial 10: Complete Project — Putting It All Together
+// ═══════════════════════════════════════════════════════
+// Run: fj run tutorials/10_project.fj
+// A mini statistics library demonstrating all Fajar Lang features
+
+// Data structures
+struct Stats {
+    count: i64,
+    sum: f64,
+    min: f64,
+    max: f64
+}
+
+// Constructor
+fn compute_stats(data: [f64; 5]) -> Stats {
+    let mut s = Stats { count: 5, sum: 0.0, min: data[0], max: data[0] }
+    let mut i = 0
+    while i < 5 {
+        s.sum = s.sum + data[i]
+        if data[i] < s.min { s.min = data[i] }
+        if data[i] > s.max { s.max = data[i] }
+        i = i + 1
+    }
+    s
+}
+
+fn mean(s: Stats) -> f64 { s.sum / (s.count as f64) }
+
+fn describe(s: Stats) -> str {
+    let avg = mean(s)
+    f"n={s.count}, sum={s.sum}, mean={avg}, min={s.min}, max={s.max}"
+}
+
+// Error handling
+fn safe_mean(data: [f64; 5]) -> Result<f64, str> {
+    if data.len() == 0 { Err("empty dataset") }
+    else {
+        let s = compute_stats(data)
+        Ok(mean(s))
+    }
+}
+
+// Higher-order processing
+fn normalize(data: [i64; 10]) -> [i64; 10] {
+    let min_val = data.min()
+    let max_val = data.max()
+    let range = max_val - min_val
+    if range == 0 { return data }
+    data
+}
+
+fn main() -> void {
+    println("=== Complete Project: Statistics Library ===")
+    println("")
+
+    // Compute statistics
+    let data = [23.5, 18.2, 31.7, 25.0, 19.8]
+    println(f"Data: {data}")
+    let s = compute_stats(data)
+    println(f"Stats: {describe(s)}")
+    println("")
+
+    // Error handling
+    let data2 = [23.5, 18.2, 31.7, 25.0, 19.8]
+    match safe_mean(data2) {
+        Ok(avg) => println(f"Mean: {avg}"),
+        Err(e) => println(f"Error: {e}")
+    }
+    println("")
+
+    // Pipeline processing
+    let raw = [5, 3, 8, 1, 9, 2, 7, 4, 6, 10]
+    println(f"Raw data: {raw}")
+    println(f"Sorted: {raw.sort()}")
+    println(f"Top 3: {raw.sort().reverse().take(3)}")
+    println(f"Sum: {raw.sum()}")
+    println(f"Evens: {raw.filter(|x| x % 2 == 0)}")
+    println(f"Squared: {raw.map(|x| x * x)}")
+    println(f"Even sum: {raw.filter(|x| x % 2 == 0).sum()}")
+    println("")
+
+    // Completion
+    println("Congratulations! You've completed all 10 tutorials.")
+    println("")
+    println("What you learned:")
+    println("  1. Hello World — variables, types, println")
+    println("  2. Control Flow — if, while, for, match")
+    println("  3. Data Structures — arrays, structs, enums, maps")
+    println("  4. Functions — closures, higher-order, pipelines")
+    println("  5. Error Handling — Option, Result, match")
+    println("  6. Traits — impl, polymorphism, builder pattern")
+    println("  7. Async — async/await, join, spawn")
+    println("  8. OS Development — @kernel, syscalls, page tables")
+    println("  9. ML — tensors, neural networks, autograd")
+    println("  10. Complete Project — putting it all together")
+    println("")
+    println("Next steps:")
+    println("  - Read docs: fj doc --open")
+    println("  - Browse examples: ls examples/")
+    println("  - Build a package: fj new my-project")
+    println("  - Join community: github.com/fajarkraton/fajar-lang")
+}
