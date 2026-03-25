@@ -30,6 +30,7 @@ book/book/
 # Fuzz testing (regenerable, ~53MB)
 fuzz/corpus/
 fuzz/artifacts/
+fuzz/target/
 fuzz/Cargo.lock
 
 # MNIST data (downloaded separately)
