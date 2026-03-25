@@ -8850,6 +8850,213 @@ const CURRENT_RUNLEVEL: i64 = 0x9B1000
 }
 
 // ═══════════════════════════════════════════════
+// Daemon Infrastructure (Sprint U2 — v0.9 "Zenith")
+// ═══════════════════════════════════════════════
+
+// Kernel log ring buffer at 0x9B2000 (8KB)
+const KLOG_BUF: i64 = 0x9B2000
+const KLOG_SIZE: i64 = 8192
+const KLOG_HEAD: i64 = 0x9B4000  // write position
+const KLOG_COUNT: i64 = 0x9B4008 // total messages
+
+// Syslog buffer at 0x9B5000 (8KB for /var/log/syslog)
+const SYSLOG_BUF: i64 = 0x9B5000
+const SYSLOG_SIZE: i64 = 8192
+const SYSLOG_POS: i64 = 0x9B7000
+const SYSLOG_MAX_ROTATE: i64 = 65536 // rotate at 64KB
+
+// Crontab at 0x9B8000: 8 entries × 64B
+const CRONTAB: i64 = 0x9B8000
+const CRON_MAX: i64 = 8
+const CRON_SIZE: i64 = 64
+// Per entry: +0=minute(i64), +8=hour(i64), +16=interval_ticks(i64), +24=last_run(i64), +32=command[32]
+const CRON_OFF_INTERVAL: i64 = 16
+const CRON_OFF_LAST_RUN: i64 = 24
+const CRON_OFF_CMD: i64 = 32
+const CRON_OFF_ACTIVE: i64 = 56
+
+// PID file directory at 0x9B9000 (16 services × 16B: name_hash + pid)
+const PIDFILE_TABLE: i64 = 0x9B9000
+
+// U2.1: Syslog — centralized logging
+@kernel fn syslog_write(level: i64, msg: str) {
+    let pos = volatile_read_u64(SYSLOG_POS)
+    let mlen = str_len(msg)
+    // Write timestamp
+    let tick = volatile_read_u64(0x6FE08)
+    let secs = tick / 100
+    // Format: "[TICK] LEVEL: message\n"
+    let mut wp = pos
+    volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), 91) // '['
+    wp = wp + 1
+    // Write seconds (simple: up to 5 digits)
+    let mut tmp = secs
+    let digit_buf: i64 = 0x9B7010
+    let mut dc: i64 = 0
+    if tmp == 0 { volatile_write_u8(digit_buf, 48); dc = 1 }
+    else { while tmp > 0 { volatile_write_u8(digit_buf + dc, 48 + (tmp % 10)); dc = dc + 1; tmp = tmp / 10 } }
+    let mut di = dc - 1
+    while di >= 0 {
+        volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), volatile_read_u8(digit_buf + di))
+        wp = wp + 1; di = di - 1
+    }
+    volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), 93) // ']'
+    wp = wp + 1
+    volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), 32) // ' '
+    wp = wp + 1
+    // Write message
+    let mut i: i64 = 0
+    while i < mlen {
+        volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), str_byte_at(msg, i))
+        wp = wp + 1; i = i + 1
+    }
+    volatile_write_u8(SYSLOG_BUF + (wp % SYSLOG_SIZE), 10) // '\n'
+    wp = wp + 1
+    volatile_write_u64(SYSLOG_POS, wp)
+    volatile_write_u64(KLOG_COUNT, volatile_read_u64(KLOG_COUNT) + 1)
+}
+
+// U2.2: crond — periodic task execution
+@kernel fn cron_init() {
+    let mut i: i64 = 0
+    while i < CRON_MAX * CRON_SIZE { volatile_write_u8(CRONTAB + i, 0); i = i + 1 }
+}
+
+@kernel fn cron_add(interval_ticks: i64, cmd_addr: i64, cmd_len: i64) -> i64 {
+    let mut slot: i64 = -1
+    let mut i: i64 = 0
+    while i < CRON_MAX && slot == -1 {
+        if volatile_read_u64(CRONTAB + i * CRON_SIZE + CRON_OFF_ACTIVE) == 0 { slot = i }
+        i = i + 1
+    }
+    if slot == -1 { return -1 }
+    let entry = CRONTAB + slot * CRON_SIZE
+    volatile_write_u64(entry + CRON_OFF_INTERVAL, interval_ticks)
+    volatile_write_u64(entry + CRON_OFF_LAST_RUN, volatile_read_u64(0x6FE08))
+    let cl = if cmd_len < 31 { cmd_len } else { 31 }
+    let mut ci: i64 = 0
+    while ci < cl { volatile_write_u8(entry + CRON_OFF_CMD + ci, volatile_read_u8(cmd_addr + ci)); ci = ci + 1 }
+    volatile_write_u8(entry + CRON_OFF_CMD + cl, 0)
+    volatile_write_u64(entry + CRON_OFF_ACTIVE, 1)
+    slot
+}
+
+@kernel fn cron_check() {
+    let now = volatile_read_u64(0x6FE08)
+    let mut i: i64 = 0
+    while i < CRON_MAX {
+        let entry = CRONTAB + i * CRON_SIZE
+        if volatile_read_u64(entry + CRON_OFF_ACTIVE) == 1 {
+            let interval = volatile_read_u64(entry + CRON_OFF_INTERVAL)
+            let last = volatile_read_u64(entry + CRON_OFF_LAST_RUN)
+            if now - last >= interval {
+                volatile_write_u64(entry + CRON_OFF_LAST_RUN, now)
+                // Execute command
+                let cmd = entry + CRON_OFF_CMD
+                let mut cl: i64 = 0
+                while cl < 31 && volatile_read_u8(cmd + cl) != 0 { cl = cl + 1 }
+                shell_exec_from_buf(cmd, cl)
+            }
+        }
+        i = i + 1
+    }
+}
+
+// U2.3: Crontab command
+@kernel fn cmd_crontab() {
+    let len = cmdbuf_len()
+    if len <= 8 {
+        // List cron entries
+        cprintln("Crontab:", YELLOW_ON_BLACK)
+        let mut i: i64 = 0
+        let mut count: i64 = 0
+        while i < CRON_MAX {
+            let entry = CRONTAB + i * CRON_SIZE
+            if volatile_read_u64(entry + CRON_OFF_ACTIVE) == 1 {
+                cprint("  [", WHITE_ON_BLACK); cprint_decimal(i, CYAN_ON_BLACK); cprint("] every ", WHITE_ON_BLACK)
+                cprint_decimal(volatile_read_u64(entry + CRON_OFF_INTERVAL) / 100, CYAN_ON_BLACK)
+                cprint("s: ", WHITE_ON_BLACK)
+                let mut j: i64 = 0
+                while j < 31 { let ch = volatile_read_u8(entry + CRON_OFF_CMD + j); if ch == 0 { j = 31 } else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 } }
+                console_putchar(10, WHITE_ON_BLACK)
+                count = count + 1
+            }
+            i = i + 1
+        }
+        if count == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+        return
+    }
+    // "crontab <interval_sec> <command>"
+    cprintln("Use: crontab <sec> <cmd>", YELLOW_ON_BLACK)
+}
+
+// U2.5: PID files
+@kernel fn pidfile_write(svc_slot: i64, pid: i64) {
+    volatile_write_u64(PIDFILE_TABLE + svc_slot * 16, svc_slot + 1) // name hash (simplified)
+    volatile_write_u64(PIDFILE_TABLE + svc_slot * 16 + 8, pid)
+}
+
+@kernel fn pidfile_read(svc_slot: i64) -> i64 {
+    volatile_read_u64(PIDFILE_TABLE + svc_slot * 16 + 8)
+}
+
+// U2.6: `dmesg` — kernel message ring buffer
+@kernel fn klog_write(msg: str) {
+    let head = volatile_read_u64(KLOG_HEAD)
+    let mlen = str_len(msg)
+    let mut i: i64 = 0
+    while i < mlen {
+        volatile_write_u8(KLOG_BUF + ((head + i) % KLOG_SIZE), str_byte_at(msg, i))
+        i = i + 1
+    }
+    volatile_write_u8(KLOG_BUF + ((head + mlen) % KLOG_SIZE), 10)
+    volatile_write_u64(KLOG_HEAD, head + mlen + 1)
+}
+
+@kernel fn cmd_dmesg_v2() {
+    cprintln("Kernel messages:", YELLOW_ON_BLACK)
+    let head = volatile_read_u64(KLOG_HEAD)
+    let start = if head > KLOG_SIZE { head - KLOG_SIZE } else { 0 }
+    let mut pos = start
+    while pos < head {
+        let ch = volatile_read_u8(KLOG_BUF + (pos % KLOG_SIZE))
+        console_putchar(ch, WHITE_ON_BLACK)
+        pos = pos + 1
+    }
+    if head == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+}
+
+// U2.7: Log rotation
+@kernel fn syslog_check_rotate() {
+    let pos = volatile_read_u64(SYSLOG_POS)
+    if pos >= SYSLOG_MAX_ROTATE {
+        // Rotate: keep last SYSLOG_SIZE bytes, reset position
+        volatile_write_u64(SYSLOG_POS, 0)
+        syslog_write(0, "Log rotated")
+    }
+}
+
+// U2.8: `systemctl` alias
+@kernel fn cmd_systemctl() { cmd_service() }
+
+// U2.9: Shutdown sequence — stop services in reverse order
+@kernel fn shutdown_services() {
+    cprintln("[INIT] Stopping services...", YELLOW_ON_BLACK)
+    let mut i = SVC_MAX - 1
+    while i >= 0 {
+        let entry = SVC_TABLE + i * SVC_SIZE
+        if volatile_read_u64(entry + SVC_OFF_ENABLED) == 1 && volatile_read_u64(entry + SVC_OFF_STATE) == SVC_RUNNING {
+            svc_stop(i)
+        }
+        i = i - 1
+    }
+    cprintln("[INIT] All services stopped", GREEN_ON_BLACK)
+    syslog_write(0, "System shutdown")
+    journal_commit()
+    cprintln("[INIT] Filesystem synced", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
 // Process Syscalls (Sprint G1-G3)
 // ═══════════════════════════════════════════════
 
@@ -19389,6 +19596,10 @@ const PROC_OFF_NAME: i64 = 64
     tcp_init() // Initialize TCP state machine
     net_stats_init() // Initialize network statistics
     svc_init() // Initialize service table
+    cron_init() // Initialize crontab
+    volatile_write_u64(KLOG_HEAD, 0) // Clear kernel log
+    volatile_write_u64(KLOG_COUNT, 0)
+    volatile_write_u64(SYSLOG_POS, 0) // Clear syslog
     journal_replay() // Replay any uncommitted journal entries
     volatile_write_u64(SESSION_LAST_INPUT, 0)
     println("[PROC] Process table v2 ready")

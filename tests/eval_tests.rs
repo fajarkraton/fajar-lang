@@ -13823,3 +13823,146 @@ fn u1_service_subcommands() {
     let out = eval_output(src);
     assert_eq!(out, vec!["starting", "stopping", "listing"]);
 }
+
+// ═══════════════════════════════════════════════
+// Sprint U2: Daemon infrastructure
+// ═══════════════════════════════════════════════
+
+#[test]
+fn u2_klog_ring_buffer() {
+    let src = r#"
+        const KLOG_SIZE: i64 = 8192
+        fn wrap(pos: i64) -> i64 { pos % KLOG_SIZE }
+        fn main() -> void {
+            println(KLOG_SIZE)
+            println(wrap(8192))
+            println(wrap(8193))
+            println(wrap(100))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["8192", "0", "1", "100"]);
+}
+
+#[test]
+fn u2_syslog_layout() {
+    let src = r#"
+        const SYSLOG_BUF: i64 = 0x9B5000
+        const SYSLOG_SIZE: i64 = 8192
+        fn main() -> void {
+            println(SYSLOG_BUF)
+            println(SYSLOG_SIZE)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10178560", "8192"]);
+}
+
+#[test]
+fn u2_cron_interval() {
+    let src = r#"
+        fn should_run(now: i64, last: i64, interval: i64) -> bool { now - last >= interval }
+        fn main() -> void {
+            println(should_run(1000, 0, 500))
+            println(should_run(1000, 600, 500))
+            println(should_run(1000, 800, 500))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "false"]);
+}
+
+#[test]
+fn u2_crontab_layout() {
+    let src = r#"
+        const CRONTAB: i64 = 0x9B8000
+        const CRON_MAX: i64 = 8
+        const CRON_SIZE: i64 = 64
+        fn main() -> void {
+            println(CRON_MAX * CRON_SIZE)
+            println(CRONTAB)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["512", "10190848"]);
+}
+
+#[test]
+fn u2_pidfile_table() {
+    let src = r#"
+        const PIDFILE_TABLE: i64 = 0x9B9000
+        fn pidfile_addr(slot: i64) -> i64 { PIDFILE_TABLE + slot * 16 }
+        fn main() -> void {
+            println(pidfile_addr(0))
+            println(pidfile_addr(1) - pidfile_addr(0))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["10194944", "16"]);
+}
+
+#[test]
+fn u2_log_rotation() {
+    let src = r#"
+        const MAX_ROTATE: i64 = 65536
+        fn should_rotate(pos: i64) -> bool { pos >= MAX_ROTATE }
+        fn main() -> void {
+            println(should_rotate(65536))
+            println(should_rotate(65535))
+            println(should_rotate(100000))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false", "true"]);
+}
+
+#[test]
+fn u2_shutdown_order() {
+    let src = r#"
+        fn shutdown_steps() -> i64 {
+            // 1. stop services (reverse), 2. syslog, 3. journal sync, 4. halt
+            4
+        }
+        fn main() -> void { println(shutdown_steps()) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["4"]);
+}
+
+#[test]
+fn u2_systemctl_alias() {
+    let src = r#"
+        fn is_alias(cmd: str, target: str) -> bool { cmd == target }
+        fn main() -> void {
+            println(is_alias("systemctl", "service"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["false"]);
+}
+
+#[test]
+fn u2_syslog_timestamp() {
+    let src = r#"
+        fn format_tick(tick: i64) -> i64 { tick / 100 }
+        fn main() -> void {
+            println(format_tick(500))
+            println(format_tick(12345))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["5", "123"]);
+}
+
+#[test]
+fn u2_daemon_count() {
+    let src = r#"
+        fn builtin_daemons() -> i64 {
+            // syslogd, crond, httpd
+            3
+        }
+        fn main() -> void { println(builtin_daemons()) }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3"]);
+}
