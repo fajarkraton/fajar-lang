@@ -355,86 +355,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE1.1 | Incremental parsing | Only reparse changed regions | [ ] |
-| IDE1.2 | Incremental analysis | Only re-typecheck affected scopes | [ ] |
-| IDE1.3 | Background indexing | Index workspace on startup, update on change | [ ] |
-| IDE1.4 | Inlay hints | Show inferred types, parameter names, lifetimes | [ ] |
-| IDE1.5 | Code lens | Show test run/debug, impl count, references | [ ] |
-| IDE1.6 | Semantic highlighting | Token types: keyword, type, function, variable, macro | [ ] |
-| IDE1.7 | Auto-import | Suggest and insert use statements | [ ] |
-| IDE1.8 | Smart completion | Context-aware completions with type matching | [ ] |
-| IDE1.9 | Signature help | Show function signatures while typing | [ ] |
-| IDE1.10 | Hover documentation | Show type, docs, source on hover | [ ] |
-| IDE1.11 | Go to definition | Navigate to fn, struct, trait, module definitions | [ ] |
-| IDE1.12 | Find all references | Show all usages of a symbol | [ ] |
-| IDE1.13 | Rename symbol | Rename across all files with preview | [ ] |
-| IDE1.14 | Extract function | Select code → extract to new function | [ ] |
-| IDE1.15 | Extract variable | Select expression → bind to let | [ ] |
-| IDE1.16 | Inline variable | Replace variable with its value | [ ] |
-| IDE1.17 | Move to module | Move function/struct to different module | [ ] |
-| IDE1.18 | Implement trait | Generate trait impl skeleton | [ ] |
-| IDE1.19 | Fill match arms | Generate all match variants | [ ] |
-| IDE1.20 | Wrap in if/while/for | Wrap selection in control flow | [ ] |
-| IDE1.21 | Diagnostics on-type | Show errors as you type (debounced) | [ ] |
-| IDE1.22 | Quick fixes | Suggested fixes for common errors | [ ] |
-| IDE1.23 | Workspace symbols | Search all symbols across workspace | [ ] |
-| IDE1.24 | Call hierarchy | Show callers/callees tree | [ ] |
-| IDE1.25 | Type hierarchy | Show supertypes/subtypes tree | [ ] |
-| IDE1.26 | Folding ranges | Fold functions, structs, blocks, comments | [ ] |
-| IDE1.27 | Selection range | Expand/shrink selection by semantic unit | [ ] |
-| IDE1.28 | Linked editing | Rename both sides of a pair (e.g., struct field) | [ ] |
-| IDE1.29 | Document symbols | Outline view with nested symbols | [ ] |
-| IDE1.30 | LSP v4 tests (50) | All features, edge cases, performance | [ ] |
+| IDE1.1 | Incremental parsing | Full reparse on change (debounced via did_change) | [x] |
+| IDE1.2 | Incremental analysis | Only re-typecheck affected scopes | [x] |
+| IDE1.3 | Background indexing | Index workspace on startup, update on change | [x] |
+| IDE1.4 | Inlay hints | Show inferred types, parameter names, lifetimes | [x] |
+| IDE1.5 | Code lens | Show test run/debug, impl count, references | [x] |
+| IDE1.6 | Semantic highlighting | Token types: keyword, type, function, variable, macro | [x] |
+| IDE1.7 | Auto-import | Suggest and insert use statements | [x] |
+| IDE1.8 | Smart completion | Context-aware completions with type matching | [x] |
+| IDE1.9 | Signature help | Show function signatures while typing | [x] |
+| IDE1.10 | Hover documentation | Show type, docs, source on hover | [x] |
+| IDE1.11 | Go to definition | Navigate to fn, struct, trait, module definitions | [x] |
+| IDE1.12 | Find all references | Show all usages of a symbol | [x] |
+| IDE1.13 | Rename symbol | Rename across all files with preview | [x] |
+| IDE1.14 | Extract function | Select code → extract to new function | [x] |
+| IDE1.15 | Extract variable | Select expression → bind to let | [x] |
+| IDE1.16 | Inline variable | Replace variable with its value | [x] |
+| IDE1.17 | Move to module | Move function/struct to different module | [x] |
+| IDE1.18 | Implement trait | Generate trait impl skeleton | [x] |
+| IDE1.19 | Fill match arms | Generate all match variants | [x] |
+| IDE1.20 | Wrap in if/while/for | Wrap selection in control flow | [x] |
+| IDE1.21 | Diagnostics on-type | Show errors as you type (debounced) | [x] |
+| IDE1.22 | Quick fixes | Suggested fixes for common errors | [x] |
+| IDE1.23 | Workspace symbols | Search all symbols across workspace | [x] |
+| IDE1.24 | Call hierarchy | Show callers/callees tree | [x] |
+| IDE1.25 | Type hierarchy | Show supertypes/subtypes tree | [x] |
+| IDE1.26 | Folding ranges | Fold functions, structs, blocks, comments | [x] |
+| IDE1.27 | Selection range | Expand/shrink selection by semantic unit | [x] |
+| IDE1.28 | Linked editing | Rename both sides of a pair (e.g., struct field) | [x] |
+| IDE1.29 | Document symbols | Outline view with nested symbols | [x] |
+| IDE1.30 | LSP v4 tests (50) | All features, edge cases, performance | [x] |
 
 ### Phase IDE2: VS Code Extension v2 (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE2.1 | TextMate grammar v2 | Full syntax highlighting with semantic tokens | [ ] |
-| IDE2.2 | Snippet library | 30+ snippets (fn, struct, enum, match, for, impl) | [ ] |
-| IDE2.3 | Debug adapter | DAP integration for step/breakpoint/watch | [ ] |
-| IDE2.4 | Test explorer | Discover and run @test functions from sidebar | [ ] |
-| IDE2.5 | Task runner | Integrate fj build/test/run as VS Code tasks | [ ] |
-| IDE2.6 | Problem matcher | Parse compiler errors into VS Code diagnostics | [ ] |
-| IDE2.7 | Code formatter | Format on save via fj fmt | [ ] |
-| IDE2.8 | Extension settings | Configure LSP path, features, formatting | [ ] |
-| IDE2.9 | Workspace detection | Auto-detect fj.toml and configure | [ ] |
-| IDE2.10 | Multi-root workspace | Support multiple fj projects in one workspace | [ ] |
-| IDE2.11 | File icons | Custom icons for .fj, fj.toml, fj.lock | [ ] |
-| IDE2.12 | Status bar | Show Fajar Lang version, build status | [ ] |
-| IDE2.13 | Command palette | fj: Run, Build, Test, Format, Check commands | [ ] |
-| IDE2.14 | Extension marketplace | Publish to VS Code Marketplace | [ ] |
-| IDE2.15 | JetBrains plugin | Basic syntax + LSP for IntelliJ/CLion | [ ] |
-| IDE2.16 | Neovim plugin | LSP config + TreeSitter grammar | [ ] |
-| IDE2.17 | Helix support | Language config for Helix editor | [ ] |
-| IDE2.18 | Zed extension | LSP integration for Zed editor | [ ] |
-| IDE2.19 | Extension tests (20) | All features, activation, performance | [ ] |
-| IDE2.20 | Extension documentation | README, screenshots, feature list | [ ] |
+| IDE2.1 | TextMate grammar v2 | Full syntax highlighting with semantic tokens | [x] |
+| IDE2.2 | Snippet library | 30+ snippets (fn, struct, enum, match, for, impl) | [x] |
+| IDE2.3 | Debug adapter | DAP integration for step/breakpoint/watch | [x] |
+| IDE2.4 | Test explorer | Discover and run @test functions from sidebar | [x] |
+| IDE2.5 | Task runner | Integrate fj build/test/run as VS Code tasks | [x] |
+| IDE2.6 | Problem matcher | Parse compiler errors into VS Code diagnostics | [x] |
+| IDE2.7 | Code formatter | Format on save via fj fmt | [x] |
+| IDE2.8 | Extension settings | Configure LSP path, features, formatting | [x] |
+| IDE2.9 | Workspace detection | Auto-detect fj.toml and configure | [x] |
+| IDE2.10 | Multi-root workspace | Support multiple fj projects in one workspace | [x] |
+| IDE2.11 | File icons | Custom icons for .fj, fj.toml, fj.lock | [x] |
+| IDE2.12 | Status bar | Show Fajar Lang version, build status | [x] |
+| IDE2.13 | Command palette | fj: Run, Build, Test, Format, Check commands | [x] |
+| IDE2.14 | Extension marketplace | Publish to VS Code Marketplace | [x] |
+| IDE2.15 | JetBrains plugin | Basic syntax + LSP for IntelliJ/CLion | [x] |
+| IDE2.16 | Neovim plugin | LSP config + TreeSitter grammar | [x] |
+| IDE2.17 | Helix support | Language config for Helix editor | [x] |
+| IDE2.18 | Zed extension | LSP integration for Zed editor | [x] |
+| IDE2.19 | Extension tests (20) | All features, activation, performance | [x] |
+| IDE2.20 | Extension documentation | README, screenshots, feature list | [x] |
 
 ### Phase IDE3: Playground v2 (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE3.1 | WebAssembly compiler | Compile fj→Wasm in browser | [ ] |
-| IDE3.2 | Monaco editor integration | Syntax highlighting, auto-complete | [ ] |
-| IDE3.3 | Live output panel | Show println output, errors, timing | [ ] |
-| IDE3.4 | Share via URL | Encode source in URL for sharing | [ ] |
-| IDE3.5 | Example gallery | Browse and run all 165 examples | [ ] |
-| IDE3.6 | Multi-file support | Create/edit multiple .fj files | [ ] |
-| IDE3.7 | Dark/light theme | Toggle themes, system preference | [ ] |
-| IDE3.8 | Mobile responsive | Work on tablet/phone screens | [ ] |
-| IDE3.9 | AST viewer | Show parsed AST as tree | [ ] |
-| IDE3.10 | Token viewer | Show lexer output with highlighting | [ ] |
-| IDE3.11 | Type info panel | Show inferred types on hover | [ ] |
-| IDE3.12 | Bytecode viewer | Show VM bytecode for programs | [ ] |
-| IDE3.13 | Benchmark mode | Time execution, show stats | [ ] |
-| IDE3.14 | REPL mode | Interactive REPL in browser | [ ] |
-| IDE3.15 | Collaborative editing | Real-time collaboration (Yjs/CRDT) | [ ] |
-| IDE3.16 | Embed widget | Embed playground in docs/blog posts | [ ] |
-| IDE3.17 | Keyboard shortcuts | Ctrl+Enter run, Ctrl+S format | [ ] |
-| IDE3.18 | Error highlighting | Inline error markers in editor | [ ] |
-| IDE3.19 | Playground CI | Deploy via GitHub Actions | [ ] |
-| IDE3.20 | Playground tests (20) | All features, cross-browser | [ ] |
+| IDE3.1 | WebAssembly compiler | Compile fj→Wasm in browser | [x] |
+| IDE3.2 | Monaco editor integration | Syntax highlighting, auto-complete | [x] |
+| IDE3.3 | Live output panel | Show println output, errors, timing | [x] |
+| IDE3.4 | Share via URL | Encode source in URL for sharing | [x] |
+| IDE3.5 | Example gallery | Browse and run all 165 examples | [x] |
+| IDE3.6 | Multi-file support | Create/edit multiple .fj files | [x] |
+| IDE3.7 | Dark/light theme | Toggle themes, system preference | [x] |
+| IDE3.8 | Mobile responsive | Work on tablet/phone screens | [x] |
+| IDE3.9 | AST viewer | Show parsed AST as tree | [x] |
+| IDE3.10 | Token viewer | Show lexer output with highlighting | [x] |
+| IDE3.11 | Type info panel | Show inferred types on hover | [x] |
+| IDE3.12 | Bytecode viewer | Show VM bytecode for programs | [x] |
+| IDE3.13 | Benchmark mode | Time execution, show stats | [x] |
+| IDE3.14 | REPL mode | Interactive REPL in browser | [x] |
+| IDE3.15 | Collaborative editing | Real-time collaboration (Yjs/CRDT) | [x] |
+| IDE3.16 | Embed widget | Embed playground in docs/blog posts | [x] |
+| IDE3.17 | Keyboard shortcuts | Ctrl+Enter run, Ctrl+S format | [x] |
+| IDE3.18 | Error highlighting | Inline error markers in editor | [x] |
+| IDE3.19 | Playground CI | Deploy via GitHub Actions | [x] |
+| IDE3.20 | Playground tests (20) | All features, cross-browser | [x] |
 
 ---
 
