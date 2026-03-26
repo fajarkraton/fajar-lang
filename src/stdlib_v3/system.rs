@@ -721,6 +721,223 @@ pub fn temp_dir() -> String {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// SQ8.1: Pipe stdin to child process
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Spawn a process and write data to its stdin, capture stdout.
+pub fn spawn_with_stdin(
+    program: &str,
+    args: &[&str],
+    stdin_data: &[u8],
+) -> Result<CommandOutput, String> {
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("spawn {program}: {e}"))?;
+
+    // Write to stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin
+            .write_all(stdin_data)
+            .map_err(|e| format!("write stdin: {e}"))?;
+        // Drop stdin to signal EOF
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("wait: {e}"))?;
+
+    Ok(CommandOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        exit_code: output.status.code().unwrap_or(-1),
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SQ8.2: Stream stdout line-by-line
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Spawn a process and read stdout line by line, calling handler for each.
+pub fn spawn_streaming<F>(
+    program: &str,
+    args: &[&str],
+    mut handler: F,
+) -> Result<i32, String>
+where
+    F: FnMut(&str),
+{
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("spawn {program}: {e}"))?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            match line {
+                Ok(l) => handler(&l),
+                Err(_) => break,
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| format!("wait: {e}"))?;
+    Ok(status.code().unwrap_or(-1))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SQ8.3: Exit code constants
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Standard exit code: success.
+pub const EXIT_SUCCESS: i32 = 0;
+/// Standard exit code: general failure.
+pub const EXIT_FAILURE: i32 = 1;
+/// Exit code: command not found (shell convention).
+pub const EXIT_NOT_FOUND: i32 = 127;
+/// Exit code: permission denied.
+pub const EXIT_PERMISSION: i32 = 126;
+
+// ═══════════════════════════════════════════════════════════════════════
+// SQ8.4-SQ8.6: File permissions, symlinks, metadata
+// ═══════════════════════════════════════════════════════════════════════
+
+/// File metadata.
+#[derive(Debug, Clone)]
+pub struct FileMeta {
+    /// File size in bytes.
+    pub size: u64,
+    /// Is a directory.
+    pub is_dir: bool,
+    /// Is a regular file.
+    pub is_file: bool,
+    /// Is a symbolic link.
+    pub is_symlink: bool,
+    /// Unix permissions (octal, e.g., 0o755).
+    pub permissions: u32,
+    /// Last modified time (seconds since epoch).
+    pub modified_secs: u64,
+}
+
+/// Get file metadata (size, type, permissions, modified time).
+pub fn file_metadata(path: &str) -> Result<FileMeta, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+
+    let permissions = {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            meta.permissions().mode()
+        }
+        #[cfg(not(unix))]
+        {
+            if meta.permissions().readonly() {
+                0o444
+            } else {
+                0o644
+            }
+        }
+    };
+
+    let modified_secs = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    Ok(FileMeta {
+        size: meta.len(),
+        is_dir: meta.is_dir(),
+        is_file: meta.is_file(),
+        is_symlink: meta.file_type().is_symlink(),
+        permissions,
+        modified_secs,
+    })
+}
+
+/// Create a symbolic link.
+#[cfg(unix)]
+pub fn create_symlink(target: &str, link: &str) -> Result<(), String> {
+    std::os::unix::fs::symlink(target, link).map_err(|e| format!("symlink: {e}"))
+}
+
+/// Read a symbolic link target.
+pub fn read_symlink(path: &str) -> Result<String, String> {
+    std::fs::read_link(path)
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| format!("readlink {path}: {e}"))
+}
+
+/// Set file permissions (Unix mode, e.g., 0o755).
+#[cfg(unix)]
+pub fn set_permissions(path: &str, mode: u32) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let perms = std::fs::Permissions::from_mode(mode);
+    std::fs::set_permissions(path, perms).map_err(|e| format!("chmod {path}: {e}"))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SQ8.8: Home directory
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Get the user's home directory (cross-platform).
+pub fn home_dir() -> Option<String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SQ8.9: Find executable in PATH
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Find an executable in the system PATH.
+pub fn which(name: &str) -> Option<String> {
+    let path_var = std::env::var("PATH").ok()?;
+    let separator = if cfg!(windows) { ";" } else { ":" };
+    for dir in path_var.split(separator) {
+        let candidate = std::path::Path::new(dir).join(name);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+        // On Unix, also try without extension
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = std::fs::metadata(&candidate) {
+                if meta.permissions().mode() & 0o111 != 0 {
+                    return Some(candidate.to_string_lossy().to_string());
+                }
+            }
+        }
+        // On Windows, try common extensions
+        #[cfg(windows)]
+        {
+            for ext in &[".exe", ".cmd", ".bat", ".com"] {
+                let with_ext = candidate.with_extension(&ext[1..]);
+                if with_ext.is_file() {
+                    return Some(with_ext.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1017,5 +1234,108 @@ mod tests {
         let tmp = temp_dir();
         assert!(!tmp.is_empty());
         assert!(std::path::Path::new(&tmp).exists());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SQ8: Quality improvement tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn sq8_1_pipe_stdin() {
+        // Pipe data to `cat` and capture output
+        let result = spawn_with_stdin("cat", &[], b"hello from stdin").unwrap();
+        assert_eq!(result.stdout, "hello from stdin");
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn sq8_2_stream_stdout() {
+        let mut lines = Vec::new();
+        let code =
+            spawn_streaming("echo", &["line1\nline2\nline3"], |line| {
+                lines.push(line.to_string());
+            })
+            .unwrap();
+        assert_eq!(code, 0);
+        assert!(!lines.is_empty(), "should capture at least 1 line");
+    }
+
+    #[test]
+    fn sq8_3_exit_codes() {
+        assert_eq!(EXIT_SUCCESS, 0);
+        assert_eq!(EXIT_FAILURE, 1);
+        assert_eq!(EXIT_NOT_FOUND, 127);
+        assert_eq!(EXIT_PERMISSION, 126);
+    }
+
+    #[test]
+    fn sq8_6_file_metadata() {
+        let meta = file_metadata("/tmp").unwrap();
+        assert!(meta.is_dir, "/tmp should be a directory");
+        assert!(!meta.is_file, "/tmp should not be a regular file");
+    }
+
+    #[test]
+    fn sq8_6_file_metadata_regular() {
+        // Create a temp file
+        let path = format!("{}/fj_meta_test_{}", temp_dir(), std::process::id());
+        std::fs::write(&path, "test data").unwrap();
+        let meta = file_metadata(&path).unwrap();
+        assert!(meta.is_file);
+        assert!(!meta.is_dir);
+        assert_eq!(meta.size, 9); // "test data" = 9 bytes
+        assert!(meta.modified_secs > 0);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sq8_4_file_permissions() {
+        let path = format!("{}/fj_perm_test_{}", temp_dir(), std::process::id());
+        std::fs::write(&path, "test").unwrap();
+        set_permissions(&path, 0o755).unwrap();
+        let meta = file_metadata(&path).unwrap();
+        assert_eq!(meta.permissions & 0o777, 0o755);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sq8_5_symlink() {
+        let dir = format!("{}/fj_symlink_test_{}", temp_dir(), std::process::id());
+        let _ = std::fs::create_dir_all(&dir);
+        let target = format!("{dir}/target.txt");
+        let link = format!("{dir}/link.txt");
+        std::fs::write(&target, "real file").unwrap();
+        create_symlink(&target, &link).unwrap();
+
+        let resolved = read_symlink(&link).unwrap();
+        assert_eq!(resolved, target);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sq8_8_home_dir() {
+        let home = home_dir();
+        assert!(home.is_some(), "should detect home directory");
+        let home = home.unwrap();
+        assert!(!home.is_empty());
+        assert!(std::path::Path::new(&home).exists());
+    }
+
+    #[test]
+    fn sq8_9_which_cargo() {
+        // cargo should be in PATH (we're running inside cargo test)
+        let result = which("cargo");
+        assert!(result.is_some(), "cargo should be findable in PATH");
+        let path = result.unwrap();
+        assert!(path.contains("cargo"), "path should contain 'cargo': {path}");
+    }
+
+    #[test]
+    fn sq8_9_which_nonexistent() {
+        let result = which("this_program_definitely_does_not_exist_12345");
+        assert!(result.is_none());
     }
 }
