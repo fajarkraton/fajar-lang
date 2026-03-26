@@ -1096,7 +1096,7 @@ pub struct H5FdcanBitTiming {
 impl H5FdcanBitTiming {
     /// Returns the NBTP (Nominal Bit Timing and Prescaler) register value.
     ///
-    /// NSJW [31:25], NBRP [24:16], NTSEG1 [15:8], NTSEG2 [6:0]
+    /// NSJW `[31:25]`, NBRP `[24:16]`, NTSEG1 `[15:8]`, NTSEG2 `[6:0]`
     pub fn nbtp_value(&self) -> u32 {
         let mut val = 0u32;
         // NSJW: bits 31:25 (value - 1)
@@ -1112,7 +1112,7 @@ impl H5FdcanBitTiming {
 
     /// Returns the DBTP (Data Bit Timing and Prescaler) register value.
     ///
-    /// DSJW [3:0], DTSEG2 [7:4], DTSEG1 [12:8], DBRP [20:16], TDC [23]
+    /// DSJW `[3:0]`, DTSEG2 `[7:4]`, DTSEG1 `[12:8]`, DBRP `[20:16]`, TDC `[23]`
     pub fn dbtp_value(&self) -> u32 {
         let mut val = 0u32;
         // DSJW: bits 3:0 (value - 1)

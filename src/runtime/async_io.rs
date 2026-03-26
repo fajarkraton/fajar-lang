@@ -1327,7 +1327,7 @@ pub struct WsFrame {
 
 /// Encode a WebSocket frame into wire bytes (simplified, <=125 bytes).
 ///
-/// Format: [FIN+opcode] [mask_bit+len] [mask_key if masked] [payload]
+/// Format: `[FIN+opcode]` `[mask_bit+len]` `[mask_key if masked]` `[payload]`
 pub fn encode_ws_frame(frame: &WsFrame) -> Vec<u8> {
     let mut out = Vec::new();
     // FIN bit (0x80) | opcode

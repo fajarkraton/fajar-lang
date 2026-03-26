@@ -54,7 +54,7 @@ pub enum StepMode {
 pub struct Breakpoint {
     /// Unique breakpoint ID.
     pub id: u32,
-    /// Source file path (or "<repl>" for REPL).
+    /// Source file path (or `"<repl>"` for REPL).
     pub file: String,
     /// 1-based line number.
     pub line: usize,

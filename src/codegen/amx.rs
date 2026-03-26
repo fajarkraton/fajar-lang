@@ -24,13 +24,13 @@ use std::fmt;
 /// AMX feature flags detected from CPUID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AmxFeatures {
-    /// AMX-TILE: Base tile architecture (CPUID.7.0:EDX[24]).
+    /// AMX-TILE: Base tile architecture (CPUID.7.0:EDX\[24\]).
     pub amx_tile: bool,
-    /// AMX-BF16: BF16 tile matmul (CPUID.7.0:EDX[22]).
+    /// AMX-BF16: BF16 tile matmul (CPUID.7.0:EDX\[22\]).
     pub amx_bf16: bool,
-    /// AMX-INT8: INT8 tile matmul (CPUID.7.0:EDX[25]).
+    /// AMX-INT8: INT8 tile matmul (CPUID.7.0:EDX\[25\]).
     pub amx_int8: bool,
-    /// AMX-FP16: FP16 tile matmul (CPUID.7.1:EAX[21]).
+    /// AMX-FP16: FP16 tile matmul (CPUID.7.1:EAX\[21\]).
     pub amx_fp16: bool,
     /// AMX-COMPLEX: Complex number tile ops.
     pub amx_complex: bool,

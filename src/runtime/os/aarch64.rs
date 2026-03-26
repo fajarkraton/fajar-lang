@@ -459,13 +459,13 @@ pub enum PageAccess {
 }
 
 impl PageAccess {
-    /// Convert to AP[2:1] bits for page table descriptor.
+    /// Convert to AP\[2:1\] bits for page table descriptor.
     ///
     /// ARM64 Stage 1 AP encoding:
-    ///   AP[2:1] = 0b00 → EL1 RW, EL0 RW
-    ///   AP[2:1] = 0b01 → EL1 RW, EL0 no access
-    ///   AP[2:1] = 0b10 → EL1 RO, EL0 RO
-    ///   AP[2:1] = 0b11 → EL1 RO, EL0 no access
+    ///   AP\[2:1\] = 0b00 — EL1 RW, EL0 RW
+    ///   AP\[2:1\] = 0b01 — EL1 RW, EL0 no access
+    ///   AP\[2:1\] = 0b10 — EL1 RO, EL0 RO
+    ///   AP\[2:1\] = 0b11 — EL1 RO, EL0 no access
     pub fn to_ap_bits(self) -> u64 {
         match self {
             PageAccess::UserRW => 0b00 << 6,   // AP[2:1] = 00

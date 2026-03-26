@@ -6,7 +6,7 @@ static NEXT_BUFFER_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Opaque handle to device memory.
 ///
-/// Buffers are created via [`GpuDevice::create_buffer`] and hold
+/// Buffers are created via `GpuDevice::create_buffer` and hold
 /// a unique ID for backend tracking. The actual device memory is
 /// managed by the backend implementation.
 #[derive(Debug)]

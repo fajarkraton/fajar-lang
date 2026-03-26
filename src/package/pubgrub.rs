@@ -404,17 +404,17 @@ pub mod protocol {
 
     /// API endpoint paths.
     pub mod endpoints {
-        /// Search packages: GET /api/v1/search?q=<query>&limit=<n>
+        /// Search packages: `GET /api/v1/search?q=<query>&limit=<n>`
         pub const SEARCH: &str = "/api/v1/search";
-        /// Publish package: PUT /api/v1/packages/<name>/<version>
+        /// Publish package: `PUT /api/v1/packages/<name>/<version>`
         pub const PUBLISH: &str = "/api/v1/packages";
-        /// Download package: GET /api/v1/packages/<name>/<version>/download
+        /// Download package: `GET /api/v1/packages/<name>/<version>/download`
         pub const DOWNLOAD: &str = "/api/v1/packages";
-        /// Package metadata: GET /api/v1/packages/<name>
+        /// Package metadata: `GET /api/v1/packages/<name>`
         pub const METADATA: &str = "/api/v1/packages";
-        /// Sparse index: GET /index/<prefix>/<name>
+        /// Sparse index: `GET /index/<prefix>/<name>`
         pub const SPARSE_INDEX: &str = "/index";
-        /// Yank version: DELETE /api/v1/packages/<name>/<version>/yank
+        /// Yank version: `DELETE /api/v1/packages/<name>/<version>/yank`
         pub const YANK: &str = "/api/v1/packages";
     }
 

@@ -4,7 +4,7 @@
 //!
 //! - [`PeriodicTask`] — Periodic task with `vTaskDelayUntil` code generation
 //! - [`RealtimeConstraint`] — Deadline and heap-allocation restriction analysis
-//! - [`WcetEstimate`] — Worst-case execution time estimation from call graphs
+//! - `WcetEstimate` — Worst-case execution time estimation from call graphs
 //! - [`IdleHook`] / [`TickHook`] — Hook code generation
 //! - Stack size estimation via call graph analysis
 //! - Priority inversion detection

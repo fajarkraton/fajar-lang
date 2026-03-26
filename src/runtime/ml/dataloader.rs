@@ -412,9 +412,9 @@ pub struct Checkpoint {
     pub lr: f64,
     /// Best metric value at checkpoint time.
     pub best_metric: Option<f64>,
-    /// Flattened parameter data: maps param name to flat Vec<f64>.
+    /// Flattened parameter data: maps param name to flat `Vec<f64>`.
     pub params: HashMap<String, Vec<f64>>,
-    /// Flattened optimizer state: maps state name to flat Vec<f64>.
+    /// Flattened optimizer state: maps state name to flat `Vec<f64>`.
     pub optimizer_state: HashMap<String, Vec<f64>>,
 }
 

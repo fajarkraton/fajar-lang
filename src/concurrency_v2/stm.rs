@@ -357,7 +357,7 @@ impl TMap {
     }
 }
 
-/// A transactional queue (TQueue<T>) backed by STM.
+/// A transactional queue (`TQueue<T>`) backed by STM.
 #[derive(Debug, Default)]
 pub struct TQueue {
     /// Queue items as TVar IDs.

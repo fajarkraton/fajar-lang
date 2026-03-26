@@ -609,7 +609,7 @@ impl DispatchTable {
     ///
     /// For Int values, the i64 is used directly. For Float, bits are
     /// reinterpreted via `f64::from_bits`. For Bool, 0 = false, nonzero = true.
-    /// For Str, the i64 is not meaningful — use [`dispatch_str`] instead.
+    /// For Str, the i64 is not meaningful — use `dispatch_str` instead.
     pub fn dispatch(
         &self,
         op: OpCode,

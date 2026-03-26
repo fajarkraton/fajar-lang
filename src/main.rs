@@ -208,7 +208,7 @@ enum Command {
         /// API key (prompted interactively if not provided).
         #[arg(long)]
         token: Option<String>,
-        /// Registry URL (default: https://registry.fajarlang.dev).
+        /// Registry URL (default: <https://registry.fajarlang.dev>).
         #[arg(long)]
         registry: Option<String>,
     },

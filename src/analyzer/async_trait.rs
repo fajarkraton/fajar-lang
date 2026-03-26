@@ -1,10 +1,10 @@
 //! Async trait method desugaring and validation for Fajar Lang.
 //!
 //! Handles the transformation and checking of `async fn` methods inside traits:
-//! - [`AsyncTraitDesugaring`] — transforms `async fn method()` into equivalent
+//! - `AsyncTraitDesugaring` — transforms `async fn method()` into equivalent
 //!   `fn method() -> impl Future<Output = T>` form
 //! - [`AsyncMethodInfo`] — metadata about an async method in a trait
-//! - [`ObjectSafetyCheck`] — determines if an async trait is object-safe
+//! - `ObjectSafetyCheck` — determines if an async trait is object-safe
 //! - [`AsyncTraitAttribute`] — the `#[async_trait]` configuration
 //!
 //! # Example (Fajar Lang source)

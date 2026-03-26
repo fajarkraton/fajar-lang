@@ -4,8 +4,8 @@
 //!
 //! 1. [`FuzzHarness`] — Grammar-aware fuzz testing framework
 //! 2. [`ConformanceRunner`] — Language spec compliance testing
-//! 3. [`RegressionHarness`] — Snapshot-based regression detection
-//! 4. [`ErrorPolisher`] — Error message quality auditing
+//! 3. `RegressionHarness` — Snapshot-based regression detection
+//! 4. `ErrorPolisher` — Error message quality auditing
 //!
 //! Each subsystem is designed to be used both in CI and during
 //! local development to catch regressions and ensure quality.
