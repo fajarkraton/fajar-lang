@@ -203,7 +203,11 @@ pub fn suggest_typo_fix(name: &str, candidates: &[&str], max_distance: usize) ->
     for &candidate in candidates {
         let dist = levenshtein_distance(name, candidate);
         if dist <= max_distance && dist > 0 {
-            if best.is_none() || dist < best.as_ref().unwrap().0 {
+            let dominated = match best.as_ref() {
+                None => true,
+                Some((prev_dist, _)) => dist < *prev_dist,
+            };
+            if dominated {
                 best = Some((dist, candidate.to_string()));
             }
         }

@@ -309,7 +309,7 @@ pub fn parse_args(args: &[String], defs: &[ArgDef]) -> Result<ParsedArgs, String
                 return Err(format!("unknown argument: --{name}"));
             }
         } else if arg.starts_with('-') && arg.len() == 2 {
-            let ch = arg.chars().nth(1).unwrap();
+            let ch = arg.as_bytes()[1] as char;
             let def = defs.iter().find(|d| d.short == Some(ch));
             if let Some(def) = def {
                 if def.takes_value {

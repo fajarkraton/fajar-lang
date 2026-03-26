@@ -428,8 +428,7 @@ impl Url {
         let (auth_host, path_rest) = rest.split_once('/').unwrap_or((rest, ""));
 
         // Parse auth
-        let (username, password, host_port) = if auth_host.contains('@') {
-            let (auth, hp) = auth_host.split_once('@').unwrap();
+        let (username, password, host_port) = if let Some((auth, hp)) = auth_host.split_once('@') {
             let (u, p) = auth.split_once(':').unwrap_or((auth, ""));
             (Some(u.to_string()), Some(p.to_string()), hp)
         } else {
@@ -437,8 +436,7 @@ impl Url {
         };
 
         // Parse host:port
-        let (host, port) = if host_port.contains(':') {
-            let (h, p) = host_port.rsplit_once(':').unwrap();
+        let (host, port) = if let Some((h, p)) = host_port.rsplit_once(':') {
             let port = p.parse::<u16>().map_err(|_| "invalid port")?;
             (h.to_string(), port)
         } else {
@@ -451,15 +449,13 @@ impl Url {
 
         // Parse path?query#fragment
         let full_path = format!("/{path_rest}");
-        let (path, fragment) = if full_path.contains('#') {
-            let (p, f) = full_path.split_once('#').unwrap();
+        let (path, fragment) = if let Some((p, f)) = full_path.split_once('#') {
             (p.to_string(), Some(f.to_string()))
         } else {
             (full_path, None)
         };
 
-        let (path, query) = if path.contains('?') {
-            let (p, q) = path.split_once('?').unwrap();
+        let (path, query) = if let Some((p, q)) = path.split_once('?') {
             (p.to_string(), Some(q.to_string()))
         } else {
             (path, None)
