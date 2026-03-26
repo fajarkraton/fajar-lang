@@ -1180,6 +1180,147 @@ pub fn dns_resolve(hostname: &str) -> Result<Vec<String>, String> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// NQ2.5: HTTP Keep-Alive Session
+// ═══════════════════════════════════════════════════════════════════════
+
+/// An HTTP session that reuses a single TCP connection for multiple requests.
+///
+/// Sends `Connection: keep-alive` and reads exact Content-Length or chunked
+/// body to allow the next request on the same stream.
+pub struct HttpSession {
+    stream: BufReader<std::net::TcpStream>,
+    host: String,
+    #[allow(dead_code)]
+    port: u16,
+}
+
+impl HttpSession {
+    /// Open a keep-alive session to a host:port.
+    pub fn connect(host: &str, port: u16, timeout_ms: u64) -> Result<Self, String> {
+        let addr = format!("{host}:{port}");
+        let tcp = std::net::TcpStream::connect(&addr)
+            .map_err(|e| format!("connect {addr}: {e}"))?;
+        tcp.set_read_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
+            .map_err(|e| format!("set timeout: {e}"))?;
+        tcp.set_write_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
+            .map_err(|e| format!("set timeout: {e}"))?;
+        let _ = tcp.set_nodelay(true);
+        Ok(Self {
+            stream: BufReader::new(tcp),
+            host: host.to_string(),
+            port,
+        })
+    }
+
+    /// Send an HTTP request on the existing connection and read the response.
+    ///
+    /// Uses `Connection: keep-alive` so the connection stays open for the next request.
+    pub fn request(&mut self, method: &str, path: &str, body: Option<&[u8]>) -> Result<HttpResponse, String> {
+        let start = std::time::Instant::now();
+
+        // Build request with keep-alive
+        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\n", self.host);
+        if let Some(b) = body {
+            req.push_str(&format!("Content-Length: {}\r\n", b.len()));
+        }
+        req.push_str("\r\n");
+
+        // Write request
+        let tcp = self.stream.get_mut();
+        tcp.write_all(req.as_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        if let Some(b) = body {
+            tcp.write_all(b).map_err(|e| format!("write body: {e}"))?;
+        }
+        tcp.flush().map_err(|e| format!("flush: {e}"))?;
+
+        // Read status line
+        let mut status_line = String::new();
+        self.stream
+            .read_line(&mut status_line)
+            .map_err(|e| format!("read status: {e}"))?;
+        let parts: Vec<&str> = status_line.trim().splitn(3, ' ').collect();
+        let status: u16 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let status_text = parts.get(2).unwrap_or(&"").to_string();
+
+        // Read headers
+        let mut headers = HashMap::new();
+        let mut content_length: usize = 0;
+        loop {
+            let mut line = String::new();
+            self.stream
+                .read_line(&mut line)
+                .map_err(|e| format!("read header: {e}"))?;
+            let trimmed = line.trim_end_matches(['\r', '\n']);
+            if trimmed.is_empty() {
+                break;
+            }
+            if let Some((k, v)) = trimmed.split_once(": ") {
+                let key = k.to_lowercase();
+                if key == "content-length" {
+                    content_length = v.trim().parse().unwrap_or(0);
+                }
+                headers.insert(key, v.trim().to_string());
+            }
+        }
+
+        // Read body by Content-Length (required for keep-alive — no read-to-EOF)
+        let is_chunked = headers
+            .get("transfer-encoding")
+            .is_some_and(|v| v.contains("chunked"));
+
+        let mut body_data = Vec::new();
+        if is_chunked {
+            loop {
+                let mut sz = String::new();
+                if self.stream.read_line(&mut sz).unwrap_or(0) == 0 {
+                    break;
+                }
+                let hex = sz.trim().split(';').next().unwrap_or("0").trim();
+                let n = usize::from_str_radix(hex, 16).unwrap_or(0);
+                if n == 0 {
+                    let mut trailer = String::new();
+                    let _ = self.stream.read_line(&mut trailer);
+                    break;
+                }
+                let mut chunk = vec![0u8; n];
+                self.stream
+                    .read_exact(&mut chunk)
+                    .map_err(|e| format!("read chunk: {e}"))?;
+                body_data.extend_from_slice(&chunk);
+                let mut crlf = [0u8; 2];
+                let _ = self.stream.read_exact(&mut crlf);
+            }
+        } else if content_length > 0 {
+            body_data.resize(content_length, 0);
+            self.stream
+                .read_exact(&mut body_data)
+                .map_err(|e| format!("read body: {e}"))?;
+        }
+        // If no Content-Length and not chunked, body is empty (keep-alive can't read-to-EOF)
+
+        let elapsed = start.elapsed();
+        Ok(HttpResponse {
+            status,
+            status_text,
+            headers,
+            body: body_data,
+            elapsed_ms: elapsed.as_secs_f64() * 1000.0,
+        })
+    }
+
+    /// Send a GET request.
+    pub fn get(&mut self, path: &str) -> Result<HttpResponse, String> {
+        self.request("GET", path, None)
+    }
+
+    /// Send a POST request with body.
+    pub fn post(&mut self, path: &str, body: &[u8]) -> Result<HttpResponse, String> {
+        self.request("POST", path, Some(body))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // NQ2.1: TLS/HTTPS Support via rustls
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1840,6 +1981,57 @@ mod tests {
     #[test]
     fn nq2_1_tls_available_check() {
         assert!(tls_available(), "tls feature should be enabled");
+    }
+
+    #[test]
+    fn nq2_5_http_keepalive_two_requests() {
+        // Start a server that handles 2 requests on the same connection
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(&stream);
+            let mut writer = stream.try_clone().unwrap();
+
+            // Handle 2 requests on same connection
+            for i in 0..2 {
+                // Read request
+                let mut req_line = String::new();
+                reader.read_line(&mut req_line).unwrap();
+                // Drain headers
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).unwrap();
+                    if line.trim().is_empty() {
+                        break;
+                    }
+                }
+                // Send response with Content-Length (required for keep-alive)
+                let body = format!("response-{i}");
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                writer.write_all(resp.as_bytes()).unwrap();
+                writer.flush().unwrap();
+            }
+        });
+
+        // Use HttpSession for 2 requests on 1 connection
+        let mut session =
+            HttpSession::connect(&addr.ip().to_string(), addr.port(), 5000).unwrap();
+
+        let resp1 = session.get("/first").unwrap();
+        assert_eq!(resp1.status, 200);
+        assert_eq!(resp1.text().unwrap(), "response-0");
+
+        let resp2 = session.get("/second").unwrap();
+        assert_eq!(resp2.status, 200);
+        assert_eq!(resp2.text().unwrap(), "response-1");
+
+        handle.join().unwrap();
     }
 
     #[test]
