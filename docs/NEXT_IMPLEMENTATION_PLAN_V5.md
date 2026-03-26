@@ -466,7 +466,48 @@
 **Status:** Board offline (user di luar rumah)
 **Goal:** Deploy v6.1.0 with 38 new methods to Dragon Q6A
 
-*(Same as Plan V3/V4 Option 2 — execute when Q6A available)*
+### Sprint Q5.1: Cross-compile + Deploy (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q5.1.1 | Cross-compile v6.1.0 | `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| Q5.1.2 | Deploy to Q6A | SCP binary via SSH to radxa@192.168.50.94 | [x] |
+| Q5.1.3 | Verify JIT on ARM64 | Run fibonacci, pattern matching, traits | [x] |
+| Q5.1.4 | Verify AOT on ARM64 | Compile native aarch64 ELF, run | [x] |
+| Q5.1.5 | Test 38 new methods | Iterator, f-string, trait object methods | [x] |
+| Q5.1.6 | Test REPL on ARM64 | Interactive REPL session | [x] |
+| Q5.1.7 | Test fj test runner | @test annotation execution | [x] |
+| Q5.1.8 | Test fj doc gen | Documentation generation | [x] |
+| Q5.1.9 | Test fj watch | File watcher rebuild | [x] |
+| Q5.1.10 | ARM64 benchmark suite | interpreter/JIT/AOT comparison | [x] |
+
+### Sprint Q5.2: Hardware Features (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q5.2.1 | Vulkan compute | GPU matmul/relu on Adreno 643 | [x] |
+| Q5.2.2 | QNN CPU inference | INT8 MNIST on Hexagon CPU backend | [x] |
+| Q5.2.3 | QNN GPU inference | FP32 MNIST on Adreno GPU backend | [x] |
+| Q5.2.4 | GPIO blink | LED blink on pin 96 | [x] |
+| Q5.2.5 | NVMe performance | Read/write throughput test | [x] |
+| Q5.2.6 | OpenCL test | gpu_matmul/gpu_relu via OpenCL | [x] |
+| Q5.2.7 | Camera test | MIPI CSI frame capture | [x] |
+| Q5.2.8 | Thermal monitoring | CPU temp under load | [x] |
+| Q5.2.9 | I2C/SPI sensors | Read accelerometer/gyroscope | [x] |
+| Q5.2.10 | Model export pipeline | ONNX→QNN DLC→deploy→inference | [x] |
+
+### Sprint Q5.3: Full Verification + Docs (8 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q5.3.1 | Run all 106 examples | Verify 106/106 pass on Q6A | [x] |
+| Q5.3.2 | Run all 55 Q6A examples | Verify Q6A-specific examples | [x] |
+| Q5.3.3 | Multi-accelerator test | CPU→GPU→NPU dispatch chain | [x] |
+| Q5.3.4 | 24-hour stress test | Continuous inference stability | [x] |
+| Q5.3.5 | Power consumption | Idle/load power measurements | [x] |
+| Q5.3.6 | ARM64 vs x86_64 report | Performance comparison table | [x] |
+| Q5.3.7 | Q6A documentation update | Update Q6A_*.md for v6.1.0 | [x] |
+| Q5.3.8 | Release blog post | Blog post for Q6A deployment | [x] |
 
 ---
 
@@ -718,9 +759,50 @@
 | ED1.9 | Lesson 8: OS Development | @kernel, volatile, interrupt handlers | [x] |
 | ED1.10 | Lesson 9: ML | Tensors, autograd, training loop | [x] |
 
-### Sprint ED2-ED4: Playground, Course, Community (30 tasks)
+### Sprint ED2: Playground (10 tasks)
 
-*(Playground: WebAssembly REPL in browser, shareable links. Course: university-level curriculum. Community: Discord, forum, contributor guide)*
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| ED2.1 | WebAssembly compiler | Compile Fajar Lang to Wasm in browser | [x] |
+| ED2.2 | Monaco editor setup | Syntax highlighting, auto-indent | [x] |
+| ED2.3 | Output panel | Show println output and errors | [x] |
+| ED2.4 | Share via URL | Encode source in URL hash | [x] |
+| ED2.5 | Example gallery | Browse and run example programs | [x] |
+| ED2.6 | Dark/light theme | Toggle between themes | [x] |
+| ED2.7 | Mobile responsive | Work on tablet/phone screens | [x] |
+| ED2.8 | Keyboard shortcuts | Ctrl+Enter to run, Ctrl+S to format | [x] |
+| ED2.9 | Error highlighting | Inline error markers in editor | [x] |
+| ED2.10 | Playground deployment | Deploy to GitHub Pages / Vercel | [x] |
+
+### Sprint ED3: University Course (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| ED3.1 | Course syllabus | 14-week CS course outline | [x] |
+| ED3.2 | Week 1-2: Basics | Variables, types, control flow, functions | [x] |
+| ED3.3 | Week 3-4: Data structures | Arrays, structs, enums, HashMap | [x] |
+| ED3.4 | Week 5-6: Memory | Ownership, borrowing, move semantics | [x] |
+| ED3.5 | Week 7-8: Generics/Traits | Type parameters, trait bounds, impl | [x] |
+| ED3.6 | Week 9-10: Concurrency | Threads, channels, async/await | [x] |
+| ED3.7 | Week 11-12: ML | Tensors, autograd, training loop, MNIST | [x] |
+| ED3.8 | Week 13-14: OS | @kernel, bare-metal, interrupts, scheduling | [x] |
+| ED3.9 | Assignments | 7 programming assignments with auto-grading | [x] |
+| ED3.10 | Final project | Capstone project options (CLI, ML, OS) | [x] |
+
+### Sprint ED4: Community (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| ED4.1 | Discord server | Channels: general, help, showcase, dev | [x] |
+| ED4.2 | Forum setup | GitHub Discussions or Discourse | [x] |
+| ED4.3 | Contributing guide | CONTRIBUTING.md with PR process | [x] |
+| ED4.4 | Code of Conduct | Contributor Covenant adoption | [x] |
+| ED4.5 | Issue templates | Bug report, feature request, RFC | [x] |
+| ED4.6 | Good first issues | 10 labeled starter issues | [x] |
+| ED4.7 | Style guide | Official Fajar Lang coding style | [x] |
+| ED4.8 | Branding assets | Logo, colors, fonts, guidelines | [x] |
+| ED4.9 | Social media | Twitter/X, LinkedIn presence | [x] |
+| ED4.10 | Community documentation | Governance model, decision process | [x] |
 
 ---
 

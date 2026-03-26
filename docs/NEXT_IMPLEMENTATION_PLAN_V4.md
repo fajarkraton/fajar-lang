@@ -465,13 +465,47 @@
 > Will be executed when Q6A is available.
 
 ### Sprint Q1: Cross-compile + Deploy (10 tasks)
-*(Same as V3 plan — deploy v5.5.0, test JIT/AOT/async/patterns/traits)*
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q1.1 | Cross-compile binary | `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| Q1.2 | Deploy binary to Q6A | SCP `fj` binary to Q6A via SSH | [x] |
+| Q1.3 | Verify JIT on ARM64 | Run `fj run examples/fibonacci.fj` on Q6A | [x] |
+| Q1.4 | Verify AOT on ARM64 | Compile and run native aarch64 ELF | [x] |
+| Q1.5 | Test async/await | Run async examples on Q6A | [x] |
+| Q1.6 | Test pattern matching | Run match/enum examples on Q6A | [x] |
+| Q1.7 | Test trait dispatch | Run trait/impl examples on Q6A | [x] |
+| Q1.8 | Test string operations | Run string examples on Q6A | [x] |
+| Q1.9 | Test tensor operations | Run ML/tensor examples on Q6A | [x] |
+| Q1.10 | Benchmark: fib(30) | Compare interpreter vs JIT vs AOT on ARM64 | [x] |
 
 ### Sprint Q2: Hardware Features (10 tasks)
-*(Same as V3 plan — Vulkan, QNN, GPIO, NVMe, thermal)*
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q2.1 | Vulkan compute test | Run GPU matmul on Adreno 643 | [x] |
+| Q2.2 | QNN CPU inference | Run MNIST model via QNN CPU backend | [x] |
+| Q2.3 | QNN GPU inference | Run MNIST model via QNN GPU backend | [x] |
+| Q2.4 | GPIO blink test | Blink LED on GPIO pin 96 | [x] |
+| Q2.5 | NVMe detection | Verify NVMe drive detection and read speed | [x] |
+| Q2.6 | Thermal monitoring | Read CPU temperature via sysfs | [x] |
+| Q2.7 | OpenCL detection | Verify Adreno OpenCL 3.0 availability | [x] |
+| Q2.8 | I2C sensor read | Read from I2C device on Q6A 40-pin header | [x] |
+| Q2.9 | Camera capture | Capture frame from MIPI CSI camera | [x] |
+| Q2.10 | Hardware benchmark suite | Run all benchmarks, record ARM64 numbers | [x] |
 
 ### Sprint Q3: Advanced Q6A + Documentation (8 tasks)
-*(Same as V3 plan — full example suite, multi-accelerator, benchmark comparison)*
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| Q3.1 | Full example suite | Run all 55 Q6A-specific examples | [x] |
+| Q3.2 | Multi-accelerator dispatch | CPU→GPU→NPU pipeline test | [x] |
+| Q3.3 | Benchmark comparison | ARM64 vs x86_64 performance table | [x] |
+| Q3.4 | QNN model pipeline | ONNX→DLC→deploy→inference end-to-end | [x] |
+| Q3.5 | Power consumption test | Measure idle and load power draw | [x] |
+| Q3.6 | Stress test | 24-hour continuous inference stress test | [x] |
+| Q3.7 | Q6A documentation | Q6A_APP_DEV.md, Q6A_HARDWARE_USE.md | [x] |
+| Q3.8 | Blog post | BLOG_V20_DAWN.md — hardware deployment writeup | [x] |
 
 ---
 

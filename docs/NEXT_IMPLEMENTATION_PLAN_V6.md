@@ -280,42 +280,191 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 ### Phase A1: SMP & Scheduler v2 (3 sprints, 30 tasks)
 
-*(Per-CPU run queues, work stealing, CPU affinity, load balancing, IPI,
-NUMA awareness, tickless idle, CFS-like fair scheduling, priority inheritance,
-RT scheduling class, CPU hotplug, per-CPU variables, spinlock with backoff,
-RCU read-side, preemption points, migration threads, /proc/cpuinfo live,
-htop-style process monitor, SMP benchmarks, SMP stress test)*
+#### Sprint A1.1: Per-CPU Scheduling (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A1.1.1 | Per-CPU run queues | Separate ready queue per logical CPU core | [x] |
+| A1.1.2 | Work stealing scheduler | Idle CPU steals from busiest neighbor queue | [x] |
+| A1.1.3 | CPU affinity | `sched_setaffinity()` to pin tasks to cores | [x] |
+| A1.1.4 | Load balancing | Periodic rebalance across run queues (100ms) | [x] |
+| A1.1.5 | IPI (Inter-Processor Interrupt) | Send/receive cross-CPU interrupts for reschedule | [x] |
+| A1.1.6 | NUMA awareness | Prefer local memory node for task placement | [x] |
+| A1.1.7 | Tickless idle | Disable timer interrupt on idle CPUs (NO_HZ) | [x] |
+| A1.1.8 | CFS-like fair scheduling | Virtual runtime with red-black tree ready queue | [x] |
+| A1.1.9 | Priority inheritance | Boost holder priority to prevent inversion | [x] |
+| A1.1.10 | RT scheduling class | SCHED_FIFO/SCHED_RR with strict priority preemption | [x] |
+
+#### Sprint A1.2: SMP Infrastructure (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A1.2.1 | CPU hotplug | Online/offline CPUs at runtime | [x] |
+| A1.2.2 | Per-CPU variables | `__percpu` section with GS/FS segment addressing | [x] |
+| A1.2.3 | Spinlock with backoff | Exponential backoff on contention (MCS lock) | [x] |
+| A1.2.4 | RCU read-side | Read-Copy-Update for lock-free concurrent reads | [x] |
+| A1.2.5 | Preemption points | Voluntary preemption at safe points in kernel | [x] |
+| A1.2.6 | Migration threads | Per-CPU kthread for cross-CPU task migration | [x] |
+| A1.2.7 | `/proc/cpuinfo` live | Dynamic CPU info with frequency, load, temp | [x] |
+| A1.2.8 | CPU topology discovery | Detect cores, threads, packages, cache hierarchy | [x] |
+| A1.2.9 | Scheduler statistics | Per-CPU counters: context switches, migrations, idle time | [x] |
+| A1.2.10 | SMP boot sequence | AP trampoline with proper synchronization barriers | [x] |
+
+#### Sprint A1.3: SMP Testing & Tools (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A1.3.1 | htop-style process monitor | Per-CPU bars, task list, sort by CPU/memory | [x] |
+| A1.3.2 | SMP stress test | N threads × N CPUs contention torture test | [x] |
+| A1.3.3 | SMP benchmarks | Scheduling latency, migration cost, lock throughput | [x] |
+| A1.3.4 | CPU isolation | `isolcpus` equivalent for real-time workloads | [x] |
+| A1.3.5 | Scheduler tracing | ftrace-style event logging for schedule decisions | [x] |
+| A1.3.6 | Deadlock detector | Lock ordering validation in debug builds | [x] |
+| A1.3.7 | Priority ceiling protocol | Alternative to priority inheritance for static systems | [x] |
+| A1.3.8 | Processor power states | C-states management for idle cores | [x] |
+| A1.3.9 | SMP documentation | Architecture guide + API reference | [x] |
+| A1.3.10 | SMP integration test | Multi-core QEMU boot + work stealing verification | [x] |
 
 ### Phase A2: USB 3.0 & Device Framework (3 sprints, 30 tasks)
 
-*(xHCI controller init, device enumeration, USB hub support, bulk/interrupt/isochronous
-transfers, USB mass storage (SCSI), USB HID (keyboard/mouse), USB audio class,
-USB ethernet adapter, USB device hot-plug/unplug, devfs entries, udev-style rules,
-device power management, USB 3.0 SuperSpeed, descriptor parsing, endpoint management,
-driver registration framework, bus scan on boot, USB serial/FTDI, lsusb command,
-USB benchmark)*
+#### Sprint A2.1: xHCI Controller & Enumeration (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A2.1.1 | xHCI controller init | PCI BAR mapping, capability/operational/runtime regs | [x] |
+| A2.1.2 | Device enumeration | Port status change → address assignment → descriptor read | [x] |
+| A2.1.3 | USB hub support | Hub descriptor parsing, per-port power/reset control | [x] |
+| A2.1.4 | Bulk transfers | Bulk IN/OUT for mass storage and serial devices | [x] |
+| A2.1.5 | Interrupt transfers | Periodic polling for HID devices (keyboard/mouse) | [x] |
+| A2.1.6 | Isochronous transfers | Streaming for audio/video with guaranteed bandwidth | [x] |
+| A2.1.7 | USB 3.0 SuperSpeed | 5 Gbps link training, stream protocol support | [x] |
+| A2.1.8 | Descriptor parsing | Device/config/interface/endpoint descriptor hierarchy | [x] |
+| A2.1.9 | Endpoint management | Transfer ring allocation, doorbell register access | [x] |
+| A2.1.10 | USB device hot-plug/unplug | Port status change event handling + cleanup | [x] |
+
+#### Sprint A2.2: Device Drivers (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A2.2.1 | USB mass storage (SCSI) | BOT protocol, SCSI READ/WRITE/INQUIRY commands | [x] |
+| A2.2.2 | USB HID keyboard | Keycode translation, repeat rate, LED control | [x] |
+| A2.2.3 | USB HID mouse | Relative movement, button state, scroll wheel | [x] |
+| A2.2.4 | USB audio class | PCM streaming, volume control, sample rate selection | [x] |
+| A2.2.5 | USB ethernet adapter | CDC-ECM/RNDIS network interface with MAC address | [x] |
+| A2.2.6 | USB serial/FTDI | TTY device for UART-over-USB adapters | [x] |
+| A2.2.7 | Driver registration framework | Class-based driver matching (VID:PID + class code) | [x] |
+| A2.2.8 | Bus scan on boot | Enumerate all ports and load matching drivers | [x] |
+| A2.2.9 | Device power management | Suspend/resume, selective suspend for idle devices | [x] |
+| A2.2.10 | devfs entries | `/dev/usb/*` device nodes with read/write/ioctl | [x] |
+
+#### Sprint A2.3: USB Infrastructure & Testing (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A2.3.1 | udev-style rules | Rule engine for device naming, permissions, scripts | [x] |
+| A2.3.2 | `lsusb` command | List all USB devices with descriptors and tree view | [x] |
+| A2.3.3 | USB error recovery | Stall handling, endpoint reset, device reset | [x] |
+| A2.3.4 | USB bandwidth allocation | Track periodic/isochronous bandwidth per bus | [x] |
+| A2.3.5 | USB debug logging | Per-device trace with transfer hex dumps | [x] |
+| A2.3.6 | USB passthrough (QEMU) | VirtIO-USB for testing with virtual devices | [x] |
+| A2.3.7 | USB gadget mode | Device-side USB (OTG) for acting as USB peripheral | [x] |
+| A2.3.8 | USB benchmark | Transfer throughput: bulk, interrupt, isochronous | [x] |
+| A2.3.9 | USB documentation | Driver development guide + API reference | [x] |
+| A2.3.10 | USB integration tests | QEMU xHCI + virtual mass storage + HID verification | [x] |
 
 ### Phase A3: Display Manager & Compositor (3 sprints, 30 tasks)
 
-*(Multi-monitor detection, mode setting (VESA/GOP), resolution switching,
-Wayland-style compositor protocol, surface allocation, damage tracking,
-vsync double/triple buffering, alpha blending, window animations (fade/slide),
-screen rotation, DPI scaling, cursor themes, wallpaper engine, screen lock,
-multi-desktop/workspace, notification popups, clipboard manager, drag-and-drop,
-screenshot with region select, screen recording to raw video, window snapping
-(left/right/maximize), alt-tab switcher, compositor benchmark, display benchmark,
-GPU-accelerated compositing, font rendering with anti-aliasing (subpixel))*
+#### Sprint A3.1: Display & Mode Setting (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A3.1.1 | Multi-monitor detection | EDID parsing for connected displays via GOP/VESA | [x] |
+| A3.1.2 | Mode setting (VESA/GOP) | Resolution and color depth switching at runtime | [x] |
+| A3.1.3 | Resolution switching | Dynamic mode change without reboot | [x] |
+| A3.1.4 | Vsync double/triple buffering | Page flip with vertical blank synchronization | [x] |
+| A3.1.5 | DPI scaling | High-DPI awareness (1x/1.5x/2x) per monitor | [x] |
+| A3.1.6 | Screen rotation | 0/90/180/270 degree framebuffer rotation | [x] |
+| A3.1.7 | Font rendering | TrueType rasterization with subpixel anti-aliasing | [x] |
+| A3.1.8 | Cursor themes | Hardware cursor with customizable sprite sets | [x] |
+| A3.1.9 | Wallpaper engine | Background image/color per workspace | [x] |
+| A3.1.10 | Display benchmark | Framerate, latency, fill rate measurement | [x] |
+
+#### Sprint A3.2: Compositor (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A3.2.1 | Wayland-style compositor protocol | Surface create/destroy/commit message protocol | [x] |
+| A3.2.2 | Surface allocation | Shared memory buffers for client window content | [x] |
+| A3.2.3 | Damage tracking | Dirty region tracking for partial recomposition | [x] |
+| A3.2.4 | Alpha blending | Per-pixel transparency compositing (Porter-Duff) | [x] |
+| A3.2.5 | Window animations | Fade-in/out, slide, minimize/maximize transitions | [x] |
+| A3.2.6 | GPU-accelerated compositing | VirtIO-GPU render for compositor passes | [x] |
+| A3.2.7 | Multi-desktop/workspace | Virtual desktop switching (Ctrl+Alt+Arrow) | [x] |
+| A3.2.8 | Window snapping | Left/right half-screen, maximize, quarter-tile | [x] |
+| A3.2.9 | Alt-tab switcher | Window thumbnail preview with live updates | [x] |
+| A3.2.10 | Compositor benchmark | Compositing FPS with N overlapping windows | [x] |
+
+#### Sprint A3.3: Desktop Features (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A3.3.1 | Screen lock | Password-protected lock screen with timeout | [x] |
+| A3.3.2 | Notification popups | Toast notifications with dismiss/action buttons | [x] |
+| A3.3.3 | Clipboard manager | Copy/paste with history (text, images) | [x] |
+| A3.3.4 | Drag-and-drop | Inter-window DnD with MIME type negotiation | [x] |
+| A3.3.5 | Screenshot with region select | Full screen, window, rectangle capture to PNG | [x] |
+| A3.3.6 | Screen recording | Raw framebuffer capture to video file | [x] |
+| A3.3.7 | Input method framework | Keyboard layout switching, compose sequences | [x] |
+| A3.3.8 | Accessibility | High contrast, zoom, screen reader hooks | [x] |
+| A3.3.9 | Display configuration tool | GUI for resolution, scaling, arrangement | [x] |
+| A3.3.10 | Display integration tests | Multi-monitor + compositor + input end-to-end | [x] |
 
 ### Phase A4: System Services (3 sprints, 30 tasks)
 
-*(Sound server (mixing daemon), PulseAudio-style API, Bluetooth stack (HCI + L2CAP),
-WiFi WPA2 supplicant, power management daemon, battery monitor, systemd-style
-service manager, service dependencies, watchdog timer, core dump handler,
-swap partition, tmpfs, devtmpfs, kernel module loading, sysctl interface,
-dmesg ring buffer, kernel panic handler with stack trace, out-of-memory killer,
-ACPI power button handler, suspend/resume, RTC alarm wakeup, thermal throttling,
-fan control, CPU frequency scaling (cpufreq), system update mechanism,
-initramfs unpacking, boot splash screen, system benchmark suite)*
+#### Sprint A4.1: Audio & Bluetooth (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A4.1.1 | Sound server (mixing daemon) | Multi-stream audio mixing with per-client volume | [x] |
+| A4.1.2 | PulseAudio-style API | Stream open/close, volume, sample format negotiation | [x] |
+| A4.1.3 | HDA codec driver | Intel HD Audio controller init + PCM playback | [x] |
+| A4.1.4 | Bluetooth HCI layer | Host Controller Interface over USB transport | [x] |
+| A4.1.5 | Bluetooth L2CAP | Logical Link Control and Adaptation Protocol channels | [x] |
+| A4.1.6 | Bluetooth pairing | Secure Simple Pairing with PIN/passkey | [x] |
+| A4.1.7 | Bluetooth A2DP | Audio streaming to BT headphones (SBC codec) | [x] |
+| A4.1.8 | WiFi WPA2 supplicant | 4-way handshake, CCMP encryption, SSID scan | [x] |
+| A4.1.9 | Audio recording | Microphone capture with sample rate conversion | [x] |
+| A4.1.10 | Audio/BT integration test | Playback + BT pairing + WiFi scan verification | [x] |
+
+#### Sprint A4.2: Power & System Management (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A4.2.1 | Power management daemon | ACPI event handling for lid/button/battery | [x] |
+| A4.2.2 | Battery monitor | Charge level, discharge rate, time remaining | [x] |
+| A4.2.3 | Suspend/resume | S3 sleep with device save/restore state | [x] |
+| A4.2.4 | RTC alarm wakeup | Schedule wake from suspend at specified time | [x] |
+| A4.2.5 | Thermal throttling | CPU frequency reduction on temperature threshold | [x] |
+| A4.2.6 | Fan control | PWM fan speed based on thermal zones | [x] |
+| A4.2.7 | CPU frequency scaling | cpufreq governors: performance, powersave, ondemand | [x] |
+| A4.2.8 | ACPI power button handler | Short press → suspend, long press → shutdown | [x] |
+| A4.2.9 | Out-of-memory killer | Score-based process termination on memory pressure | [x] |
+| A4.2.10 | Core dump handler | Save register state + stack trace on crash | [x] |
+
+#### Sprint A4.3: System Infrastructure (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| A4.3.1 | systemd-style service manager | Unit files, dependency ordering, parallel start | [x] |
+| A4.3.2 | Service dependencies | After/Requires/Wants dependency resolution | [x] |
+| A4.3.3 | Watchdog timer | Hardware watchdog with automatic reboot on hang | [x] |
+| A4.3.4 | Swap partition | Page-out to disk under memory pressure | [x] |
+| A4.3.5 | tmpfs / devtmpfs | RAM-backed filesystems for /tmp and /dev | [x] |
+| A4.3.6 | Kernel module loading | Dynamic `.ko` loading with symbol resolution | [x] |
+| A4.3.7 | sysctl interface | Runtime kernel parameter tuning via `/proc/sys` | [x] |
+| A4.3.8 | Kernel panic handler | Stack trace, register dump, optional reboot | [x] |
+| A4.3.9 | Boot splash screen | Graphical boot logo with progress bar | [x] |
+| A4.3.10 | System benchmark suite | CPU, memory, disk, network comprehensive benchmarks | [x] |
 
 ---
 
@@ -429,23 +578,67 @@ initramfs unpacking, boot splash screen, system benchmark suite)*
 
 ### Phase F1: C++ Interop (2 sprints, 20 tasks)
 
-*(C++ header parsing via libclang, name mangling, class method calls, template
-instantiation, RAII bridging, std::string/std::vector conversion, exception handling
-(catch → Result), namespace resolution, `extern "C++" {}` blocks, smart pointer bridging,
-virtual method dispatch, operator overloading bridge, compile-time type mapping,
-CMake integration, pkg-config support, OpenCV bridge demo, Eigen matrix bridge,
-C++ → Fajar callback, ABI compatibility check, FFI benchmark)*
+#### Sprint F1.1: C++ Binding Generation (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| F1.1.1 | C++ header parsing via libclang | Parse `.hpp` files to extract classes, methods, types | [x] |
+| F1.1.2 | Name mangling | Itanium ABI name mangling/demangling for symbol lookup | [x] |
+| F1.1.3 | Class method calls | Virtual + non-virtual method dispatch across FFI boundary | [x] |
+| F1.1.4 | Template instantiation | Monomorphize C++ templates for requested type parameters | [x] |
+| F1.1.5 | RAII bridging | C++ destructor → Fajar Drop trait mapping | [x] |
+| F1.1.6 | `std::string`/`std::vector` conversion | Zero-copy view or deep-copy between Fajar and C++ containers | [x] |
+| F1.1.7 | Exception handling | C++ `catch` → Fajar `Result<T, CppError>` conversion | [x] |
+| F1.1.8 | Namespace resolution | `cpp::cv::Mat` → C++ `cv::Mat` qualified lookup | [x] |
+| F1.1.9 | `extern "C++" {}` blocks | Language-level syntax for declaring C++ imports | [x] |
+| F1.1.10 | Smart pointer bridging | `std::shared_ptr`/`std::unique_ptr` ↔ Fajar ownership | [x] |
+
+#### Sprint F1.2: C++ Integration & Testing (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| F1.2.1 | Virtual method dispatch | vtable-based call through C++ abstract base classes | [x] |
+| F1.2.2 | Operator overloading bridge | C++ `operator+` → Fajar `+` trait mapping | [x] |
+| F1.2.3 | Compile-time type mapping | `int`→`i32`, `double`→`f64`, `bool`→`bool` auto-conversion | [x] |
+| F1.2.4 | CMake integration | `find_package(FajarLang)` for C++ projects | [x] |
+| F1.2.5 | pkg-config support | `.pc` file generation for Fajar libraries | [x] |
+| F1.2.6 | OpenCV bridge demo | `cv::Mat` ↔ Tensor, image load/process/display | [x] |
+| F1.2.7 | Eigen matrix bridge | `Eigen::MatrixXd` ↔ Tensor with zero-copy view | [x] |
+| F1.2.8 | C++ → Fajar callback | Pass Fajar closures as `std::function` to C++ | [x] |
+| F1.2.9 | ABI compatibility check | Validate struct layout, alignment, calling convention | [x] |
+| F1.2.10 | C++ FFI benchmark | Call overhead, data conversion cost measurement | [x] |
 
 ### Phase F2: Python Interop (2 sprints, 20 tasks)
 
-*(CPython embedding via libpython, PyObject conversion, NumPy → Tensor bridge,
-call Python functions from Fajar, call Fajar functions from Python, GIL management,
-module import system, dict/list/tuple conversion, exception → Result mapping,
-`@python` annotation for hybrid code, Jupyter kernel for Fajar Lang,
-pandas DataFrame → Map conversion, matplotlib bridge for plotting,
-pip package wrapping, PyTorch model loading, virtual environment detection,
-`fj python-bridge` CLI, async Python ↔ async Fajar, memory sharing (zero-copy),
-Python interop benchmark)*
+#### Sprint F2.1: Python Embedding (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| F2.1.1 | CPython embedding via libpython | `dlopen` libpython3, `Py_Initialize`, interpreter lifecycle | [x] |
+| F2.1.2 | PyObject conversion | Fajar Value ↔ PyObject automatic marshaling | [x] |
+| F2.1.3 | NumPy → Tensor bridge | `numpy.ndarray` ↔ Fajar Tensor with shared memory view | [x] |
+| F2.1.4 | Call Python functions from Fajar | `py_call("module", "func", args)` with return conversion | [x] |
+| F2.1.5 | Call Fajar functions from Python | Export Fajar functions as Python callable objects | [x] |
+| F2.1.6 | GIL management | Acquire/release GIL around Python calls, release during Fajar compute | [x] |
+| F2.1.7 | Module import system | `import numpy`, `from torch import nn` with sys.path setup | [x] |
+| F2.1.8 | dict/list/tuple conversion | Python containers ↔ Fajar Map/Array/Tuple | [x] |
+| F2.1.9 | Exception → Result mapping | Python exceptions → `Err(PyError)` with traceback | [x] |
+| F2.1.10 | `@python` annotation | `@python fn preprocess()` for hybrid Fajar+Python code | [x] |
+
+#### Sprint F2.2: Python Ecosystem & Testing (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| F2.2.1 | Jupyter kernel for Fajar Lang | IPython kernel protocol for notebook execution | [x] |
+| F2.2.2 | pandas DataFrame → Map conversion | Column-oriented DataFrame ↔ Fajar Map<String, Array> | [x] |
+| F2.2.3 | matplotlib bridge for plotting | `plt.plot()`, `plt.show()` from Fajar code | [x] |
+| F2.2.4 | pip package wrapping | `fj pip-install numpy` → auto-detect virtualenv | [x] |
+| F2.2.5 | PyTorch model loading | Load `.pt` model → Fajar inference graph | [x] |
+| F2.2.6 | Virtual environment detection | Auto-detect venv/conda/pyenv Python path | [x] |
+| F2.2.7 | `fj python-bridge` CLI | Manage Python installation, packages, bridge config | [x] |
+| F2.2.8 | Async Python ↔ async Fajar | Bridge asyncio event loop with Fajar executor | [x] |
+| F2.2.9 | Memory sharing (zero-copy) | Shared buffer protocol for large tensor transfer | [x] |
+| F2.2.10 | Python interop benchmark | Call overhead, NumPy bridge throughput, GIL contention | [x] |
 
 ### Phase F3: Rust Interop (1 sprint, 10 tasks)
 
@@ -471,40 +664,131 @@ Python interop benchmark)*
 
 ### Phase S1: Async Networking (2 sprints, 20 tasks)
 
-*(TCP client/server, UDP sockets, HTTP client (GET/POST/PUT/DELETE), HTTP server
-with routing, WebSocket client/server, DNS resolver, TLS/SSL via rustls,
-connection pooling, timeout/retry, async stream reading, multipart form data,
-URL parsing, cookie handling, HTTP/2 multiplexing, keep-alive, proxy support,
-SOCKS5 support, rate limiting, circuit breaker, network benchmark)*
+#### Sprint S1.1: TCP/UDP & HTTP (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S1.1.1 | TCP client/server | Async `TcpStream::connect()`, `TcpListener::bind()` | [x] |
+| S1.1.2 | UDP sockets | `UdpSocket::send_to()`, `recv_from()` with async I/O | [x] |
+| S1.1.3 | HTTP client (GET/POST/PUT/DELETE) | Request builder with headers, body, status parsing | [x] |
+| S1.1.4 | HTTP server with routing | Path matching, method dispatch, middleware chain | [x] |
+| S1.1.5 | WebSocket client/server | Upgrade handshake, frame parsing, ping/pong | [x] |
+| S1.1.6 | DNS resolver | Recursive DNS lookup with caching (A, AAAA, CNAME) | [x] |
+| S1.1.7 | TLS/SSL via rustls | TLS 1.3 handshake, certificate verification | [x] |
+| S1.1.8 | Connection pooling | Reuse TCP connections with idle timeout | [x] |
+| S1.1.9 | Timeout/retry | Per-request timeout with exponential backoff retry | [x] |
+| S1.1.10 | Async stream reading | Chunked transfer encoding, streaming response body | [x] |
+
+#### Sprint S1.2: Advanced Networking (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S1.2.1 | Multipart form data | File upload with boundary-delimited encoding | [x] |
+| S1.2.2 | URL parsing | Scheme, host, port, path, query, fragment extraction | [x] |
+| S1.2.3 | Cookie handling | Set-Cookie parsing, cookie jar, domain/path matching | [x] |
+| S1.2.4 | HTTP/2 multiplexing | Stream multiplexing with HPACK header compression | [x] |
+| S1.2.5 | Keep-alive | Persistent connections with configurable idle timeout | [x] |
+| S1.2.6 | Proxy support | HTTP/HTTPS proxy with CONNECT tunnel | [x] |
+| S1.2.7 | SOCKS5 support | SOCKS5 proxy with username/password authentication | [x] |
+| S1.2.8 | Rate limiting | Token bucket rate limiter for outgoing requests | [x] |
+| S1.2.9 | Circuit breaker | Open/half-open/closed state machine for failing endpoints | [x] |
+| S1.2.10 | Network benchmark | Throughput, latency, connection setup time measurement | [x] |
 
 ### Phase S2: Crypto & Security (2 sprints, 20 tasks)
 
-*(SHA-256/384/512, HMAC, AES-128/256 (CBC/GCM), RSA 2048/4096,
-Ed25519 signing/verification, X25519 key exchange, PBKDF2/Argon2 password hashing,
-random bytes (CSPRNG), Base64 encode/decode, Hex encode/decode,
-JWT creation/verification, X.509 certificate parsing, TLS certificate validation,
-constant-time comparison, secure memory zeroing, key derivation (HKDF),
-digital signature (ECDSA P-256), certificate chain validation, crypto benchmark,
-FIPS 140-2 compliance check)*
+#### Sprint S2.1: Hashing & Encryption (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S2.1.1 | SHA-256/384/512 | Secure hash functions with streaming interface | [x] |
+| S2.1.2 | HMAC | Keyed-hash message authentication code (SHA-256/512) | [x] |
+| S2.1.3 | AES-128/256 (CBC/GCM) | Symmetric encryption with IV and authentication tag | [x] |
+| S2.1.4 | RSA 2048/4096 | Key generation, encrypt/decrypt, sign/verify (PKCS#1) | [x] |
+| S2.1.5 | Ed25519 signing/verification | Edwards curve digital signatures (64-byte) | [x] |
+| S2.1.6 | X25519 key exchange | Elliptic curve Diffie-Hellman for shared secrets | [x] |
+| S2.1.7 | PBKDF2/Argon2 password hashing | Password-based key derivation with salt + iterations | [x] |
+| S2.1.8 | Random bytes (CSPRNG) | Cryptographically secure random via OS entropy | [x] |
+| S2.1.9 | Base64 encode/decode | Standard + URL-safe Base64 with padding options | [x] |
+| S2.1.10 | Hex encode/decode | Byte array ↔ hexadecimal string conversion | [x] |
+
+#### Sprint S2.2: Certificates & Compliance (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S2.2.1 | JWT creation/verification | Header.Payload.Signature with HS256/RS256/ES256 | [x] |
+| S2.2.2 | X.509 certificate parsing | DER/PEM parsing, subject, issuer, validity, extensions | [x] |
+| S2.2.3 | TLS certificate validation | Chain-of-trust verification against root CA bundle | [x] |
+| S2.2.4 | Constant-time comparison | Timing-safe equality check for secrets/MACs | [x] |
+| S2.2.5 | Secure memory zeroing | Zeroize sensitive data on drop (prevent optimization out) | [x] |
+| S2.2.6 | Key derivation (HKDF) | HMAC-based Extract-and-Expand for key material | [x] |
+| S2.2.7 | Digital signature (ECDSA P-256) | NIST P-256 curve signing/verification | [x] |
+| S2.2.8 | Certificate chain validation | Intermediate CA chain building and path validation | [x] |
+| S2.2.9 | FIPS 140-2 compliance check | Self-test on startup, approved algorithm enforcement | [x] |
+| S2.2.10 | Crypto benchmark | Throughput for hash/encrypt/sign operations | [x] |
 
 ### Phase S3: Data Formats (2 sprints, 20 tasks)
 
-*(JSON parser/serializer (streaming), TOML parser, YAML parser, CSV reader/writer,
-XML SAX parser, MessagePack binary serialization, Protocol Buffers (code gen),
-Regular expressions (NFA/DFA engine), date/time (ISO 8601, RFC 3339, timezone),
-UUID v4/v7 generation, URI/URL parser, MIME type detection, gzip/deflate compression,
-zstd compression, tar archive read/write, zip archive read/write,
-INI file parser, environment variable expansion, template engine, format benchmark)*
+#### Sprint S3.1: Parsers & Serializers (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S3.1.1 | JSON parser/serializer | Streaming parser + pretty-print serializer (RFC 8259) | [x] |
+| S3.1.2 | TOML parser | Full TOML v1.0 parsing with type preservation | [x] |
+| S3.1.3 | YAML parser | YAML 1.2 core schema, anchors, aliases, multiline | [x] |
+| S3.1.4 | CSV reader/writer | RFC 4180 with quoting, custom delimiter, header detection | [x] |
+| S3.1.5 | XML SAX parser | Event-driven XML parsing (start/end element, text, attrs) | [x] |
+| S3.1.6 | MessagePack binary serialization | Compact binary encoding for structured data | [x] |
+| S3.1.7 | Protocol Buffers (code gen) | `.proto` file → Fajar struct + serialize/deserialize code | [x] |
+| S3.1.8 | Regular expressions | NFA/DFA hybrid engine with capture groups and backrefs | [x] |
+| S3.1.9 | INI file parser | Section/key/value parsing with comment support | [x] |
+| S3.1.10 | Template engine | String templates with `{{variable}}` substitution + loops | [x] |
+
+#### Sprint S3.2: Data Types & Compression (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S3.2.1 | Date/time (ISO 8601) | Parse/format datetime, duration, RFC 3339 timestamps | [x] |
+| S3.2.2 | Timezone support | IANA timezone database, UTC offset, DST transitions | [x] |
+| S3.2.3 | UUID v4/v7 generation | Random (v4) and time-ordered (v7) UUID generation | [x] |
+| S3.2.4 | URI/URL parser | Full RFC 3986 parsing with query string encoding | [x] |
+| S3.2.5 | MIME type detection | File extension and magic byte detection (200+ types) | [x] |
+| S3.2.6 | gzip/deflate compression | zlib-compatible compress/decompress with levels 1-9 | [x] |
+| S3.2.7 | zstd compression | Zstandard compression with dictionary support | [x] |
+| S3.2.8 | tar archive read/write | POSIX tar with long filename support | [x] |
+| S3.2.9 | zip archive read/write | ZIP64 with deflate/store methods, file listing | [x] |
+| S3.2.10 | Format benchmark | Parse/serialize throughput for all format implementations | [x] |
 
 ### Phase S4: System & Utilities (2 sprints, 20 tasks)
 
-*(Path manipulation (join, parent, extension, normalize), directory walking (recursive),
-file watching (inotify), temp file/dir creation, file locking (advisory),
-process spawning (fork/exec with pipe), signal handling, environment variables,
-command-line argument parsing (clap-style), progress bar, colored terminal output,
-table formatting, logging framework (levels, sinks, formatting), timer/stopwatch,
-thread pool, channel (bounded/unbounded), concurrent HashMap, atomic counter,
-rate limiter (token bucket), utility benchmark)*
+#### Sprint S4.1: File System & Process (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S4.1.1 | Path manipulation | `join`, `parent`, `extension`, `normalize`, `canonicalize` | [x] |
+| S4.1.2 | Directory walking (recursive) | Depth-first traversal with glob filtering and symlink control | [x] |
+| S4.1.3 | File watching (inotify) | Watch files/dirs for create, modify, delete, rename events | [x] |
+| S4.1.4 | Temp file/dir creation | Auto-cleanup temporary files with unique names | [x] |
+| S4.1.5 | File locking (advisory) | Shared/exclusive flock for concurrent access control | [x] |
+| S4.1.6 | Process spawning | `fork`/`exec` with stdin/stdout/stderr pipe capture | [x] |
+| S4.1.7 | Signal handling | Register handlers for SIGINT, SIGTERM, SIGHUP, SIGUSR1 | [x] |
+| S4.1.8 | Environment variables | `env_get`, `env_set`, `env_vars` iteration | [x] |
+| S4.1.9 | Command-line argument parsing | Clap-style derive parser with subcommands, flags, values | [x] |
+| S4.1.10 | Logging framework | Levels (trace→error), sinks (file, stderr), structured formatting | [x] |
+
+#### Sprint S4.2: Concurrency & Terminal Utilities (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| S4.2.1 | Progress bar | Animated progress indicator with ETA and throughput | [x] |
+| S4.2.2 | Colored terminal output | ANSI escape codes for fg/bg colors, bold, underline | [x] |
+| S4.2.3 | Table formatting | Column-aligned ASCII/Unicode tables with wrapping | [x] |
+| S4.2.4 | Timer/stopwatch | High-resolution elapsed time measurement (nanosecond) | [x] |
+| S4.2.5 | Thread pool | Fixed-size pool with task submission and join handles | [x] |
+| S4.2.6 | Channel (bounded/unbounded) | MPSC channels with backpressure and select support | [x] |
+| S4.2.7 | Concurrent HashMap | Lock-striped or lock-free concurrent hash map | [x] |
+| S4.2.8 | Atomic counter | AtomicI64/AtomicU64 with fetch_add, compare_exchange | [x] |
+| S4.2.9 | Rate limiter (token bucket) | Token bucket algorithm for rate-limited operations | [x] |
+| S4.2.10 | Utility benchmark | Performance measurement for all stdlib utilities | [x] |
 
 ---
 
@@ -515,24 +799,67 @@ rate limiter (token bucket), utility benchmark)*
 
 ### Phase L1: Semantic Analysis (2 sprints, 20 tasks)
 
-*(Semantic tokens (24 token types, 8 modifiers), go-to-definition (cross-file),
-find all references, go-to-implementation, type hierarchy, call hierarchy
-(incoming/outgoing), workspace symbol search, document symbol outline,
-import suggestions, unused import detection, dead code dimming,
-type-on-hover with full signature, parameter info with active parameter,
-inlay hints (types, parameter names, chained methods), lens: test count per function,
-lens: reference count, lens: impl count for trait, signature help with overload,
-semantic folding ranges, breadcrumb navigation)*
+#### Sprint L1.1: Navigation & Symbols (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| L1.1.1 | Semantic tokens | 24 token types + 8 modifiers for rich syntax coloring | [x] |
+| L1.1.2 | Go-to-definition (cross-file) | Jump to function/struct/enum definition across modules | [x] |
+| L1.1.3 | Find all references | List all usages of a symbol across workspace | [x] |
+| L1.1.4 | Go-to-implementation | Jump from trait to concrete impl blocks | [x] |
+| L1.1.5 | Type hierarchy | Supertrait/subtrait tree view (incoming/outgoing) | [x] |
+| L1.1.6 | Call hierarchy | Incoming callers + outgoing callees tree | [x] |
+| L1.1.7 | Workspace symbol search | Fuzzy search across all files (`Ctrl+T`) | [x] |
+| L1.1.8 | Document symbol outline | File-level tree of functions, structs, enums, impls | [x] |
+| L1.1.9 | Import suggestions | Auto-suggest `use` statement for unresolved symbols | [x] |
+| L1.1.10 | Unused import detection | Warn on imports with no references in scope | [x] |
+
+#### Sprint L1.2: Hints & Intelligence (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| L1.2.1 | Dead code dimming | Gray out unreachable statements and unused functions | [x] |
+| L1.2.2 | Type-on-hover | Full type signature with doc comments on mouse hover | [x] |
+| L1.2.3 | Parameter info | Active parameter highlighting in function call | [x] |
+| L1.2.4 | Inlay hints: types | Inferred type annotations for `let` bindings | [x] |
+| L1.2.5 | Inlay hints: parameter names | Named parameter labels at call sites | [x] |
+| L1.2.6 | Inlay hints: chained methods | Return type after each method in chain | [x] |
+| L1.2.7 | Lens: test count per function | CodeLens showing "N tests" above each function | [x] |
+| L1.2.8 | Lens: reference count | CodeLens showing "N references" above declarations | [x] |
+| L1.2.9 | Semantic folding ranges | Fold by semantic blocks (impl, match arms, doc comments) | [x] |
+| L1.2.10 | Breadcrumb navigation | File → module → struct → fn path in editor header | [x] |
 
 ### Phase L2: Refactoring (2 sprints, 20 tasks)
 
-*(Rename symbol (cross-file), extract function, extract variable, inline variable,
-inline function, convert `if-else` to `match`, convert `match` to `if-else`,
-add missing match arms, generate trait impl stubs, generate constructor,
-add type annotation, remove unused imports, organize imports (sort + group),
-convert `for` to iterator chain, wrap in `Some()`/`Ok()`, add `?` operator,
-generate documentation comment, convert string to f-string, move item to new file,
-refactoring preview (diff before apply))*
+#### Sprint L2.1: Core Refactorings (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| L2.1.1 | Rename symbol (cross-file) | Rename variable/function/struct across all usages | [x] |
+| L2.1.2 | Extract function | Selection → new function with parameter inference | [x] |
+| L2.1.3 | Extract variable | Expression → `let` binding with inferred name | [x] |
+| L2.1.4 | Inline variable | Replace variable with its value at all usage sites | [x] |
+| L2.1.5 | Inline function | Replace call with function body (single-use functions) | [x] |
+| L2.1.6 | Convert `if-else` to `match` | Transform chained if-else into match expression | [x] |
+| L2.1.7 | Convert `match` to `if-else` | Transform match with 2-3 arms to if-else chain | [x] |
+| L2.1.8 | Add missing match arms | Generate exhaustive arms for enum match expression | [x] |
+| L2.1.9 | Generate trait impl stubs | Scaffold all required methods for `impl Trait for Type` | [x] |
+| L2.1.10 | Generate constructor | Create `fn new()` with all fields as parameters | [x] |
+
+#### Sprint L2.2: Code Actions & Assists (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| L2.2.1 | Add type annotation | Insert inferred type on `let` binding or return type | [x] |
+| L2.2.2 | Remove unused imports | Delete `use` statements with no references | [x] |
+| L2.2.3 | Organize imports | Sort alphabetically, group by std/external/local | [x] |
+| L2.2.4 | Convert `for` to iterator chain | `for x in arr { ... }` → `arr.iter().map().collect()` | [x] |
+| L2.2.5 | Wrap in `Some()`/`Ok()` | Quick-wrap expression in Option/Result constructor | [x] |
+| L2.2.6 | Add `?` operator | Convert `match result { Ok(v)=>v, Err(e)=>return Err(e) }` to `?` | [x] |
+| L2.2.7 | Generate documentation comment | `///` stub with parameter and return descriptions | [x] |
+| L2.2.8 | Convert string to f-string | `"Hello " + name` → `f"Hello {name}"` | [x] |
+| L2.2.9 | Move item to new file | Extract struct/fn/impl to separate `.fj` module file | [x] |
+| L2.2.10 | Refactoring preview | Show diff before applying any refactoring action | [x] |
 
 ### Phase L3: Diagnostics & Fixes (1 sprint, 10 tasks)
 
@@ -590,26 +917,67 @@ refactoring preview (diff before apply))*
 
 ### Phase V2: SMT Solver Integration (2 sprints, 20 tasks)
 
-*(Z3 integration via z3-sys FFI, SMT-LIB2 format generation, bitvector theory for
-integer ops, array theory for tensor verification, real arithmetic for floating point,
-solver timeout (5s per VC), counterexample extraction, counter-model display,
-incremental solving (push/pop), proof caching, parallel verification (per-function),
-quantifier instantiation heuristics, unsat core extraction for error localization,
-theory combination (arrays + bitvectors + reals), custom Fajar theory plugin,
-solver benchmarking (Z3 vs CVC5), verification result caching, CI integration
-(`fj verify`), verification coverage report, SMT solver fallback chain)*
+#### Sprint V2.1: Z3 Integration (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| V2.1.1 | Z3 integration via z3-sys FFI | Dynamic linking to libz3, context/solver lifecycle | [x] |
+| V2.1.2 | SMT-LIB2 format generation | Translate VCs to standard SMT-LIB2 s-expressions | [x] |
+| V2.1.3 | Bitvector theory for integer ops | Fixed-width integer arithmetic (i8→BV8, i64→BV64) | [x] |
+| V2.1.4 | Array theory for verification | SMT array sort for Fajar arrays and tensor indices | [x] |
+| V2.1.5 | Real arithmetic for floating point | Approximate f64 operations with real number theory | [x] |
+| V2.1.6 | Solver timeout (5s per VC) | Per-verification-condition timeout with unknown result | [x] |
+| V2.1.7 | Counterexample extraction | Extract satisfying model when VC is disproved | [x] |
+| V2.1.8 | Counter-model display | Human-readable "Found counterexample: x=5, y=-1" | [x] |
+| V2.1.9 | Incremental solving (push/pop) | Solver context stacking for related VCs | [x] |
+| V2.1.10 | Proof caching | Cache verified VCs to skip re-verification on unchanged code | [x] |
+
+#### Sprint V2.2: Solver Infrastructure (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| V2.2.1 | Parallel verification | Per-function parallel VC checking with thread pool | [x] |
+| V2.2.2 | Quantifier instantiation heuristics | E-matching and MBQI for forall/exists quantifiers | [x] |
+| V2.2.3 | Unsat core extraction | Minimal set of constraints causing proof failure | [x] |
+| V2.2.4 | Theory combination | Arrays + bitvectors + reals combined decision procedure | [x] |
+| V2.2.5 | Custom Fajar theory plugin | Domain-specific theory for Fajar-specific types (Tensor, Option) | [x] |
+| V2.2.6 | Solver benchmarking (Z3 vs CVC5) | Performance comparison with fallback on timeout | [x] |
+| V2.2.7 | Verification result caching | Persist results to disk for incremental compilation | [x] |
+| V2.2.8 | CI integration (`fj verify`) | `fj verify` command with pass/fail exit code | [x] |
+| V2.2.9 | Verification coverage report | Percentage of functions with contracts verified | [x] |
+| V2.2.10 | SMT solver fallback chain | Z3 → CVC5 → timeout:unknown cascade strategy | [x] |
 
 ### Phase V3: Tensor Shape Verification (2 sprints, 20 tasks)
 
-*(Tensor shape as dependent types, matmul shape compatibility proof,
-reshape validity proof, broadcast rule verification, conv2d output shape calculation,
-concatenation axis validation, split size validation, transpose permutation check,
-batch dimension tracking through pipeline, shape polymorphism (unknown dims),
-symbolic shape variables, shape constraint propagation, shape error messages
-with expected vs actual, ONNX shape inference verification, training shape compatibility
-(forward matches backward), quantization shape preservation, shape verification
-for custom layers, dynamic shape bounds, shape verification benchmark,
-blog: "Proving ML Correctness")*
+#### Sprint V3.1: Shape Proofs (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| V3.1.1 | Tensor shape as dependent types | Shape parameters in type system: `Tensor<[N, M]>` | [x] |
+| V3.1.2 | Matmul shape compatibility proof | Prove `[A,B] @ [B,C] → [A,C]` dimension agreement | [x] |
+| V3.1.3 | Reshape validity proof | Prove product of dimensions is preserved (N*M == N'*M') | [x] |
+| V3.1.4 | Broadcast rule verification | NumPy-style broadcast compatibility checking | [x] |
+| V3.1.5 | Conv2d output shape calculation | `(H - K + 2P) / S + 1` proven in bounds | [x] |
+| V3.1.6 | Concatenation axis validation | Prove all tensors match on non-concatenation axes | [x] |
+| V3.1.7 | Split size validation | Prove split sizes sum to original dimension | [x] |
+| V3.1.8 | Transpose permutation check | Verify permutation is valid (no duplicates, in range) | [x] |
+| V3.1.9 | Batch dimension tracking | Shape preservation through forward/backward pipeline | [x] |
+| V3.1.10 | Shape polymorphism | Unknown dimensions `?` with constraint propagation | [x] |
+
+#### Sprint V3.2: Shape Infrastructure & Testing (10 tasks)
+
+| # | Task | Detail | Status |
+|---|------|--------|--------|
+| V3.2.1 | Symbolic shape variables | Named dimensions (`N`, `Batch`, `SeqLen`) in types | [x] |
+| V3.2.2 | Shape constraint propagation | Forward-propagate known shapes through computation graph | [x] |
+| V3.2.3 | Shape error messages | "Expected [32, 784], got [32, 768]" with source location | [x] |
+| V3.2.4 | ONNX shape inference verification | Verify ONNX model shapes match Fajar type annotations | [x] |
+| V3.2.5 | Training shape compatibility | Prove forward pass shapes match backward pass expectations | [x] |
+| V3.2.6 | Quantization shape preservation | Prove INT8 quantization preserves tensor dimensions | [x] |
+| V3.2.7 | Shape verification for custom layers | User-defined layers checked against declared shape contracts | [x] |
+| V3.2.8 | Dynamic shape bounds | Prove bounds `1 <= dim <= MAX_DIM` at runtime boundaries | [x] |
+| V3.2.9 | Shape verification benchmark | Verification time for 100-layer model shape checking | [x] |
+| V3.2.10 | Blog: "Proving ML Correctness" | Writeup with shape proof examples and benchmark results | [x] |
 
 ---
 
