@@ -264,86 +264,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR1.1 | Registry API design | REST API: publish, download, search, yank | [x] |
-| PR1.2 | Package storage backend | S3-compatible object storage | [x] |
-| PR1.3 | Sparse index | Git-based sparse index (like crates.io) | [x] |
-| PR1.4 | Version resolution | PubGrub solver integration | [x] |
-| PR1.5 | Authentication | API tokens, OAuth2, publish permissions | [x] |
-| PR1.6 | Rate limiting | Per-token rate limits, abuse prevention | [x] |
-| PR1.7 | Package validation | Name rules, semver enforcement, size limits | [x] |
-| PR1.8 | Search engine | Full-text search across names, descriptions, keywords | [x] |
-| PR1.9 | Download counting | Per-version download statistics | [x] |
-| PR1.10 | Dependency graph | Transitive dependency resolution, cycle detection | [x] |
-| PR1.11 | Yanking support | Soft-delete versions, prevent new installs | [x] |
-| PR1.12 | Audit log | Who published what, when, from where | [x] |
-| PR1.13 | Webhook notifications | Notify on new versions, security advisories | [x] |
-| PR1.14 | Mirror support | Read-only mirrors for air-gapped environments | [x] |
-| PR1.15 | Registry tests (30) | API endpoints, auth, resolution, edge cases | [x] |
-| PR1.16 | Docker deployment | docker-compose for self-hosted registry | [x] |
-| PR1.17 | TLS/HTTPS | Certificate management, HSTS | [x] |
-| PR1.18 | Backup strategy | Automated backups, disaster recovery | [x] |
-| PR1.19 | Admin dashboard | Web UI for registry management | [x] |
-| PR1.20 | API documentation | OpenAPI spec, usage examples | [x] |
+| PR1.1 | Registry API design | REST API: publish, download, search, yank | [ ] |
+| PR1.2 | Package storage backend | S3-compatible object storage | [ ] |
+| PR1.3 | Sparse index | Git-based sparse index (like crates.io) | [ ] |
+| PR1.4 | Version resolution | PubGrub solver integration | [ ] |
+| PR1.5 | Authentication | API tokens, OAuth2, publish permissions | [ ] |
+| PR1.6 | Rate limiting | Per-token rate limits, abuse prevention | [ ] |
+| PR1.7 | Package validation | Name rules, semver enforcement, size limits | [ ] |
+| PR1.8 | Search engine | Full-text search across names, descriptions, keywords | [ ] |
+| PR1.9 | Download counting | Per-version download statistics | [ ] |
+| PR1.10 | Dependency graph | Transitive dependency resolution, cycle detection | [ ] |
+| PR1.11 | Yanking support | Soft-delete versions, prevent new installs | [ ] |
+| PR1.12 | Audit log | Who published what, when, from where | [ ] |
+| PR1.13 | Webhook notifications | Notify on new versions, security advisories | [ ] |
+| PR1.14 | Mirror support | Read-only mirrors for air-gapped environments | [ ] |
+| PR1.15 | Registry tests (30) | API endpoints, auth, resolution, edge cases | [ ] |
+| PR1.16 | Docker deployment | docker-compose for self-hosted registry | [ ] |
+| PR1.17 | TLS/HTTPS | Certificate management, HSTS | [ ] |
+| PR1.18 | Backup strategy | Automated backups, disaster recovery | [ ] |
+| PR1.19 | Admin dashboard | Web UI for registry management | [ ] |
+| PR1.20 | API documentation | OpenAPI spec, usage examples | [ ] |
 
 ### Phase PR2: CLI Integration (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR2.1 | `fj publish` command | Build, validate, upload to registry | [x] |
-| PR2.2 | `fj install` command | Download, extract, add to deps | [x] |
-| PR2.3 | `fj update` command | Update deps to latest compatible versions | [x] |
-| PR2.4 | `fj search` command | Search registry by name/keyword | [x] |
-| PR2.5 | `fj yank` command | Yank a published version | [x] |
-| PR2.6 | `fj login` command | Authenticate with registry | [x] |
-| PR2.7 | `fj audit` command | Check deps for known vulnerabilities | [x] |
-| PR2.8 | Lock file (fj.lock) | Reproducible dependency resolution | [x] |
-| PR2.9 | Workspace support | Multi-package workspaces | [x] |
-| PR2.10 | Private registries | Configure alternate registry URLs | [x] |
-| PR2.11 | Offline mode | Install from cache when offline | [x] |
-| PR2.12 | Dependency tree | `fj tree` shows full dependency graph | [x] |
-| PR2.13 | Checksum verification | SHA-256 integrity checks on downloads | [x] |
-| PR2.14 | Proxy support | HTTP/SOCKS proxy for corporate environments | [x] |
-| PR2.15 | Auto-completion | Shell completions for fj commands | [x] |
-| PR2.16 | Progress indicators | Download progress bars, spinners | [x] |
-| PR2.17 | Conflict resolution | Handle version conflicts with clear errors | [x] |
-| PR2.18 | Feature flags | Optional dependencies via fj.toml features | [x] |
-| PR2.19 | Build scripts | Pre/post build hooks in fj.toml | [x] |
-| PR2.20 | CLI tests (30) | All commands, edge cases, error handling | [x] |
+| PR2.1 | `fj publish` command | Build, validate, upload to registry | [ ] |
+| PR2.2 | `fj install` command | Download, extract, add to deps | [ ] |
+| PR2.3 | `fj update` command | Update deps to latest compatible versions | [ ] |
+| PR2.4 | `fj search` command | Search registry by name/keyword | [ ] |
+| PR2.5 | `fj yank` command | Yank a published version | [ ] |
+| PR2.6 | `fj login` command | Authenticate with registry | [ ] |
+| PR2.7 | `fj audit` command | Check deps for known vulnerabilities | [ ] |
+| PR2.8 | Lock file (fj.lock) | Reproducible dependency resolution | [ ] |
+| PR2.9 | Workspace support | Multi-package workspaces | [ ] |
+| PR2.10 | Private registries | Configure alternate registry URLs | [ ] |
+| PR2.11 | Offline mode | Install from cache when offline | [ ] |
+| PR2.12 | Dependency tree | `fj tree` shows full dependency graph | [ ] |
+| PR2.13 | Checksum verification | SHA-256 integrity checks on downloads | [ ] |
+| PR2.14 | Proxy support | HTTP/SOCKS proxy for corporate environments | [ ] |
+| PR2.15 | Auto-completion | Shell completions for fj commands | [ ] |
+| PR2.16 | Progress indicators | Download progress bars, spinners | [ ] |
+| PR2.17 | Conflict resolution | Handle version conflicts with clear errors | [ ] |
+| PR2.18 | Feature flags | Optional dependencies via fj.toml features | [ ] |
+| PR2.19 | Build scripts | Pre/post build hooks in fj.toml | [ ] |
+| PR2.20 | CLI tests (30) | All commands, edge cases, error handling | [ ] |
 
 ### Phase PR3: Ecosystem Packages (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR3.1 | fj-async — async runtime | Tokio-like async executor for Fajar | [x] |
-| PR3.2 | fj-log — structured logging | Log levels, JSON output, file rotation | [x] |
-| PR3.3 | fj-test — advanced testing | Fixtures, mocking, parameterized tests | [x] |
-| PR3.4 | fj-cli — CLI framework | Argument parsing, subcommands, help gen | [x] |
-| PR3.5 | fj-db — database drivers | SQLite, PostgreSQL, MySQL bindings | [x] |
-| PR3.6 | fj-web — web framework | HTTP router, middleware, templates | [x] |
-| PR3.7 | fj-serial — serialization | Binary, MessagePack, Protocol Buffers | [x] |
-| PR3.8 | fj-image — image processing | PNG/JPEG decode, resize, filters | [x] |
-| PR3.9 | fj-regex — regular expressions | NFA/DFA regex engine | [x] |
-| PR3.10 | fj-toml — TOML parser | Full TOML v1.0 spec | [x] |
-| PR3.11 | fj-yaml — YAML parser | YAML 1.2 core schema | [x] |
-| PR3.12 | fj-csv — CSV parser | RFC 4180 compliant | [x] |
-| PR3.13 | fj-time — date/time | Chrono-like date, time, duration, timezone | [x] |
-| PR3.14 | fj-uuid — UUID generation | v4 random, v7 timestamp | [x] |
-| PR3.15 | fj-base64 — encoding | Base64 encode/decode | [x] |
-| PR3.16 | fj-url — URL parsing | RFC 3986 compliant URL parser | [x] |
-| PR3.17 | fj-fs — filesystem utils | Walk, glob, watch, temp dirs | [x] |
-| PR3.18 | fj-env — environment | Env vars, dotenv, config loading | [x] |
-| PR3.19 | fj-color — terminal colors | ANSI colors, styles, RGB | [x] |
-| PR3.20 | fj-rand — random numbers | PCG, MT19937, cryptographic RNG | [x] |
-| PR3.21 | fj-compress — compression | gzip, zstd, lz4 | [x] |
-| PR3.22 | fj-tls — TLS/SSL | rustls-based TLS for fj-http | [x] |
-| PR3.23 | fj-mqtt — IoT messaging | MQTT 3.1.1/5.0 client | [x] |
-| PR3.24 | fj-gpio — GPIO abstraction | Cross-platform GPIO (Linux sysfs, Q6A) | [x] |
-| PR3.25 | fj-sensor — sensor fusion | Accelerometer, gyroscope, Kalman filter | [x] |
-| PR3.26 | fj-onnx — ONNX runtime | ONNX model loading and inference | [x] |
-| PR3.27 | fj-plot — data visualization | Line, bar, scatter plots to SVG/PNG | [x] |
-| PR3.28 | fj-bench — benchmarking | Criterion-like benchmark framework | [x] |
-| PR3.29 | fj-doc — documentation | mdBook-like documentation generator | [x] |
-| PR3.30 | Package ecosystem tests | Cross-package compatibility, integration | [x] |
+| PR3.1 | fj-async — async runtime | Tokio-like async executor for Fajar | [ ] |
+| PR3.2 | fj-log — structured logging | Log levels, JSON output, file rotation | [ ] |
+| PR3.3 | fj-test — advanced testing | Fixtures, mocking, parameterized tests | [ ] |
+| PR3.4 | fj-cli — CLI framework | Argument parsing, subcommands, help gen | [ ] |
+| PR3.5 | fj-db — database drivers | SQLite, PostgreSQL, MySQL bindings | [ ] |
+| PR3.6 | fj-web — web framework | HTTP router, middleware, templates | [ ] |
+| PR3.7 | fj-serial — serialization | Binary, MessagePack, Protocol Buffers | [ ] |
+| PR3.8 | fj-image — image processing | PNG/JPEG decode, resize, filters | [ ] |
+| PR3.9 | fj-regex — regular expressions | NFA/DFA regex engine | [ ] |
+| PR3.10 | fj-toml — TOML parser | Full TOML v1.0 spec | [ ] |
+| PR3.11 | fj-yaml — YAML parser | YAML 1.2 core schema | [ ] |
+| PR3.12 | fj-csv — CSV parser | RFC 4180 compliant | [ ] |
+| PR3.13 | fj-time — date/time | Chrono-like date, time, duration, timezone | [ ] |
+| PR3.14 | fj-uuid — UUID generation | v4 random, v7 timestamp | [ ] |
+| PR3.15 | fj-base64 — encoding | Base64 encode/decode | [ ] |
+| PR3.16 | fj-url — URL parsing | RFC 3986 compliant URL parser | [ ] |
+| PR3.17 | fj-fs — filesystem utils | Walk, glob, watch, temp dirs | [ ] |
+| PR3.18 | fj-env — environment | Env vars, dotenv, config loading | [ ] |
+| PR3.19 | fj-color — terminal colors | ANSI colors, styles, RGB | [ ] |
+| PR3.20 | fj-rand — random numbers | PCG, MT19937, cryptographic RNG | [ ] |
+| PR3.21 | fj-compress — compression | gzip, zstd, lz4 | [ ] |
+| PR3.22 | fj-tls — TLS/SSL | rustls-based TLS for fj-http | [ ] |
+| PR3.23 | fj-mqtt — IoT messaging | MQTT 3.1.1/5.0 client | [ ] |
+| PR3.24 | fj-gpio — GPIO abstraction | Cross-platform GPIO (Linux sysfs, Q6A) | [ ] |
+| PR3.25 | fj-sensor — sensor fusion | Accelerometer, gyroscope, Kalman filter | [ ] |
+| PR3.26 | fj-onnx — ONNX runtime | ONNX model loading and inference | [ ] |
+| PR3.27 | fj-plot — data visualization | Line, bar, scatter plots to SVG/PNG | [ ] |
+| PR3.28 | fj-bench — benchmarking | Criterion-like benchmark framework | [ ] |
+| PR3.29 | fj-doc — documentation | mdBook-like documentation generator | [ ] |
+| PR3.30 | Package ecosystem tests | Cross-package compatibility, integration | [ ] |
 
 ---
 
@@ -355,86 +355,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE1.1 | Incremental parsing | Full reparse on change (debounced via did_change) | [x] |
-| IDE1.2 | Incremental analysis | Only re-typecheck affected scopes | [x] |
-| IDE1.3 | Background indexing | Index workspace on startup, update on change | [x] |
-| IDE1.4 | Inlay hints | Show inferred types, parameter names, lifetimes | [x] |
-| IDE1.5 | Code lens | Show test run/debug, impl count, references | [x] |
-| IDE1.6 | Semantic highlighting | Token types: keyword, type, function, variable, macro | [x] |
-| IDE1.7 | Auto-import | Suggest and insert use statements | [x] |
-| IDE1.8 | Smart completion | Context-aware completions with type matching | [x] |
-| IDE1.9 | Signature help | Show function signatures while typing | [x] |
-| IDE1.10 | Hover documentation | Show type, docs, source on hover | [x] |
-| IDE1.11 | Go to definition | Navigate to fn, struct, trait, module definitions | [x] |
-| IDE1.12 | Find all references | Show all usages of a symbol | [x] |
-| IDE1.13 | Rename symbol | Rename across all files with preview | [x] |
-| IDE1.14 | Extract function | Select code → extract to new function | [x] |
-| IDE1.15 | Extract variable | Select expression → bind to let | [x] |
-| IDE1.16 | Inline variable | Replace variable with its value | [x] |
-| IDE1.17 | Move to module | Move function/struct to different module | [x] |
-| IDE1.18 | Implement trait | Generate trait impl skeleton | [x] |
-| IDE1.19 | Fill match arms | Generate all match variants | [x] |
-| IDE1.20 | Wrap in if/while/for | Wrap selection in control flow | [x] |
-| IDE1.21 | Diagnostics on-type | Show errors as you type (debounced) | [x] |
-| IDE1.22 | Quick fixes | Suggested fixes for common errors | [x] |
-| IDE1.23 | Workspace symbols | Search all symbols across workspace | [x] |
-| IDE1.24 | Call hierarchy | Show callers/callees tree | [x] |
-| IDE1.25 | Type hierarchy | Show supertypes/subtypes tree | [x] |
-| IDE1.26 | Folding ranges | Fold functions, structs, blocks, comments | [x] |
-| IDE1.27 | Selection range | Expand/shrink selection by semantic unit | [x] |
-| IDE1.28 | Linked editing | Rename both sides of a pair (e.g., struct field) | [x] |
-| IDE1.29 | Document symbols | Outline view with nested symbols | [x] |
-| IDE1.30 | LSP v4 tests (50) | All features, edge cases, performance | [x] |
+| IDE1.1 | Incremental parsing | Full reparse on change (debounced via did_change) | [ ] |
+| IDE1.2 | Incremental analysis | Only re-typecheck affected scopes | [ ] |
+| IDE1.3 | Background indexing | Index workspace on startup, update on change | [ ] |
+| IDE1.4 | Inlay hints | Show inferred types, parameter names, lifetimes | [ ] |
+| IDE1.5 | Code lens | Show test run/debug, impl count, references | [ ] |
+| IDE1.6 | Semantic highlighting | Token types: keyword, type, function, variable, macro | [ ] |
+| IDE1.7 | Auto-import | Suggest and insert use statements | [ ] |
+| IDE1.8 | Smart completion | Context-aware completions with type matching | [ ] |
+| IDE1.9 | Signature help | Show function signatures while typing | [ ] |
+| IDE1.10 | Hover documentation | Show type, docs, source on hover | [ ] |
+| IDE1.11 | Go to definition | Navigate to fn, struct, trait, module definitions | [ ] |
+| IDE1.12 | Find all references | Show all usages of a symbol | [ ] |
+| IDE1.13 | Rename symbol | Rename across all files with preview | [ ] |
+| IDE1.14 | Extract function | Select code → extract to new function | [ ] |
+| IDE1.15 | Extract variable | Select expression → bind to let | [ ] |
+| IDE1.16 | Inline variable | Replace variable with its value | [ ] |
+| IDE1.17 | Move to module | Move function/struct to different module | [ ] |
+| IDE1.18 | Implement trait | Generate trait impl skeleton | [ ] |
+| IDE1.19 | Fill match arms | Generate all match variants | [ ] |
+| IDE1.20 | Wrap in if/while/for | Wrap selection in control flow | [ ] |
+| IDE1.21 | Diagnostics on-type | Show errors as you type (debounced) | [ ] |
+| IDE1.22 | Quick fixes | Suggested fixes for common errors | [ ] |
+| IDE1.23 | Workspace symbols | Search all symbols across workspace | [ ] |
+| IDE1.24 | Call hierarchy | Show callers/callees tree | [ ] |
+| IDE1.25 | Type hierarchy | Show supertypes/subtypes tree | [ ] |
+| IDE1.26 | Folding ranges | Fold functions, structs, blocks, comments | [ ] |
+| IDE1.27 | Selection range | Expand/shrink selection by semantic unit | [ ] |
+| IDE1.28 | Linked editing | Rename both sides of a pair (e.g., struct field) | [ ] |
+| IDE1.29 | Document symbols | Outline view with nested symbols | [ ] |
+| IDE1.30 | LSP v4 tests (50) | All features, edge cases, performance | [ ] |
 
 ### Phase IDE2: VS Code Extension v2 (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE2.1 | TextMate grammar v2 | Full syntax highlighting with semantic tokens | [x] |
-| IDE2.2 | Snippet library | 30+ snippets (fn, struct, enum, match, for, impl) | [x] |
-| IDE2.3 | Debug adapter | DAP integration for step/breakpoint/watch | [x] |
-| IDE2.4 | Test explorer | Discover and run @test functions from sidebar | [x] |
-| IDE2.5 | Task runner | Integrate fj build/test/run as VS Code tasks | [x] |
-| IDE2.6 | Problem matcher | Parse compiler errors into VS Code diagnostics | [x] |
-| IDE2.7 | Code formatter | Format on save via fj fmt | [x] |
-| IDE2.8 | Extension settings | Configure LSP path, features, formatting | [x] |
-| IDE2.9 | Workspace detection | Auto-detect fj.toml and configure | [x] |
-| IDE2.10 | Multi-root workspace | Support multiple fj projects in one workspace | [x] |
-| IDE2.11 | File icons | Custom icons for .fj, fj.toml, fj.lock | [x] |
-| IDE2.12 | Status bar | Show Fajar Lang version, build status | [x] |
-| IDE2.13 | Command palette | fj: Run, Build, Test, Format, Check commands | [x] |
-| IDE2.14 | Extension marketplace | Publish to VS Code Marketplace | [x] |
-| IDE2.15 | JetBrains plugin | Basic syntax + LSP for IntelliJ/CLion | [x] |
-| IDE2.16 | Neovim plugin | LSP config + TreeSitter grammar | [x] |
-| IDE2.17 | Helix support | Language config for Helix editor | [x] |
-| IDE2.18 | Zed extension | LSP integration for Zed editor | [x] |
-| IDE2.19 | Extension tests (20) | All features, activation, performance | [x] |
-| IDE2.20 | Extension documentation | README, screenshots, feature list | [x] |
+| IDE2.1 | TextMate grammar v2 | Full syntax highlighting with semantic tokens | [ ] |
+| IDE2.2 | Snippet library | 30+ snippets (fn, struct, enum, match, for, impl) | [ ] |
+| IDE2.3 | Debug adapter | DAP integration for step/breakpoint/watch | [ ] |
+| IDE2.4 | Test explorer | Discover and run @test functions from sidebar | [ ] |
+| IDE2.5 | Task runner | Integrate fj build/test/run as VS Code tasks | [ ] |
+| IDE2.6 | Problem matcher | Parse compiler errors into VS Code diagnostics | [ ] |
+| IDE2.7 | Code formatter | Format on save via fj fmt | [ ] |
+| IDE2.8 | Extension settings | Configure LSP path, features, formatting | [ ] |
+| IDE2.9 | Workspace detection | Auto-detect fj.toml and configure | [ ] |
+| IDE2.10 | Multi-root workspace | Support multiple fj projects in one workspace | [ ] |
+| IDE2.11 | File icons | Custom icons for .fj, fj.toml, fj.lock | [ ] |
+| IDE2.12 | Status bar | Show Fajar Lang version, build status | [ ] |
+| IDE2.13 | Command palette | fj: Run, Build, Test, Format, Check commands | [ ] |
+| IDE2.14 | Extension marketplace | Publish to VS Code Marketplace | [ ] |
+| IDE2.15 | JetBrains plugin | Basic syntax + LSP for IntelliJ/CLion | [ ] |
+| IDE2.16 | Neovim plugin | LSP config + TreeSitter grammar | [ ] |
+| IDE2.17 | Helix support | Language config for Helix editor | [ ] |
+| IDE2.18 | Zed extension | LSP integration for Zed editor | [ ] |
+| IDE2.19 | Extension tests (20) | All features, activation, performance | [ ] |
+| IDE2.20 | Extension documentation | README, screenshots, feature list | [ ] |
 
 ### Phase IDE3: Playground v2 (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| IDE3.1 | WebAssembly compiler | Compile fj→Wasm in browser | [x] |
-| IDE3.2 | Monaco editor integration | Syntax highlighting, auto-complete | [x] |
-| IDE3.3 | Live output panel | Show println output, errors, timing | [x] |
-| IDE3.4 | Share via URL | Encode source in URL for sharing | [x] |
-| IDE3.5 | Example gallery | Browse and run all 165 examples | [x] |
-| IDE3.6 | Multi-file support | Create/edit multiple .fj files | [x] |
-| IDE3.7 | Dark/light theme | Toggle themes, system preference | [x] |
-| IDE3.8 | Mobile responsive | Work on tablet/phone screens | [x] |
-| IDE3.9 | AST viewer | Show parsed AST as tree | [x] |
-| IDE3.10 | Token viewer | Show lexer output with highlighting | [x] |
-| IDE3.11 | Type info panel | Show inferred types on hover | [x] |
-| IDE3.12 | Bytecode viewer | Show VM bytecode for programs | [x] |
-| IDE3.13 | Benchmark mode | Time execution, show stats | [x] |
-| IDE3.14 | REPL mode | Interactive REPL in browser | [x] |
-| IDE3.15 | Collaborative editing | Real-time collaboration (Yjs/CRDT) | [x] |
-| IDE3.16 | Embed widget | Embed playground in docs/blog posts | [x] |
-| IDE3.17 | Keyboard shortcuts | Ctrl+Enter run, Ctrl+S format | [x] |
-| IDE3.18 | Error highlighting | Inline error markers in editor | [x] |
-| IDE3.19 | Playground CI | Deploy via GitHub Actions | [x] |
-| IDE3.20 | Playground tests (20) | All features, cross-browser | [x] |
+| IDE3.1 | WebAssembly compiler | Compile fj→Wasm in browser | [ ] |
+| IDE3.2 | Monaco editor integration | Syntax highlighting, auto-complete | [ ] |
+| IDE3.3 | Live output panel | Show println output, errors, timing | [ ] |
+| IDE3.4 | Share via URL | Encode source in URL for sharing | [ ] |
+| IDE3.5 | Example gallery | Browse and run all 165 examples | [ ] |
+| IDE3.6 | Multi-file support | Create/edit multiple .fj files | [ ] |
+| IDE3.7 | Dark/light theme | Toggle themes, system preference | [ ] |
+| IDE3.8 | Mobile responsive | Work on tablet/phone screens | [ ] |
+| IDE3.9 | AST viewer | Show parsed AST as tree | [ ] |
+| IDE3.10 | Token viewer | Show lexer output with highlighting | [ ] |
+| IDE3.11 | Type info panel | Show inferred types on hover | [ ] |
+| IDE3.12 | Bytecode viewer | Show VM bytecode for programs | [ ] |
+| IDE3.13 | Benchmark mode | Time execution, show stats | [ ] |
+| IDE3.14 | REPL mode | Interactive REPL in browser | [ ] |
+| IDE3.15 | Collaborative editing | Real-time collaboration (Yjs/CRDT) | [ ] |
+| IDE3.16 | Embed widget | Embed playground in docs/blog posts | [ ] |
+| IDE3.17 | Keyboard shortcuts | Ctrl+Enter run, Ctrl+S format | [ ] |
+| IDE3.18 | Error highlighting | Inline error markers in editor | [ ] |
+| IDE3.19 | Playground CI | Deploy via GitHub Actions | [ ] |
+| IDE3.20 | Playground tests (20) | All features, cross-browser | [ ] |
 
 ---
 
@@ -537,86 +537,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC1.1 | Tutorial framework | Step-by-step lesson engine with progress tracking | [x] |
-| DOC1.2 | Lesson 1: Hello World | Variables, println, basic types | [x] |
-| DOC1.3 | Lesson 2: Functions | Parameters, return types, recursion | [x] |
-| DOC1.4 | Lesson 3: Control Flow | if/else, match, while, for loops | [x] |
-| DOC1.5 | Lesson 4: Structs & Enums | Custom types, methods, pattern matching | [x] |
-| DOC1.6 | Lesson 5: Error Handling | Result, Option, ? operator | [x] |
-| DOC1.7 | Lesson 6: Ownership | Move semantics, borrowing, references | [x] |
-| DOC1.8 | Lesson 7: Generics & Traits | Type parameters, trait bounds, impl | [x] |
-| DOC1.9 | Lesson 8: Collections | Arrays, HashMap, iterators | [x] |
-| DOC1.10 | Lesson 9: Modules | mod, use, pub, project structure | [x] |
-| DOC1.11 | Lesson 10: Tensor & ML | Tensor creation, operations, autograd basics | [x] |
-| DOC1.12 | Lesson 11: OS Development | @kernel, @device, bare-metal hello world | [x] |
-| DOC1.13 | Lesson 12: Concurrency | Threads, channels, async/await | [x] |
-| DOC1.14 | Lesson 13: FFI | Calling C functions, extern blocks | [x] |
-| DOC1.15 | Lesson 14: Testing | @test, assert, property-based testing | [x] |
-| DOC1.16 | Code exercises | 50 interactive exercises with auto-grading | [x] |
-| DOC1.17 | Progress persistence | Save/resume tutorial progress | [x] |
-| DOC1.18 | Playground integration | Run lesson code in browser playground | [x] |
-| DOC1.19 | Multilingual support | English + Bahasa Indonesia | [x] |
-| DOC1.20 | Tutorial deployment | Static site generation, hosting | [x] |
+| DOC1.1 | Tutorial framework | Step-by-step lesson engine with progress tracking | [ ] |
+| DOC1.2 | Lesson 1: Hello World | Variables, println, basic types | [ ] |
+| DOC1.3 | Lesson 2: Functions | Parameters, return types, recursion | [ ] |
+| DOC1.4 | Lesson 3: Control Flow | if/else, match, while, for loops | [ ] |
+| DOC1.5 | Lesson 4: Structs & Enums | Custom types, methods, pattern matching | [ ] |
+| DOC1.6 | Lesson 5: Error Handling | Result, Option, ? operator | [ ] |
+| DOC1.7 | Lesson 6: Ownership | Move semantics, borrowing, references | [ ] |
+| DOC1.8 | Lesson 7: Generics & Traits | Type parameters, trait bounds, impl | [ ] |
+| DOC1.9 | Lesson 8: Collections | Arrays, HashMap, iterators | [ ] |
+| DOC1.10 | Lesson 9: Modules | mod, use, pub, project structure | [ ] |
+| DOC1.11 | Lesson 10: Tensor & ML | Tensor creation, operations, autograd basics | [ ] |
+| DOC1.12 | Lesson 11: OS Development | @kernel, @device, bare-metal hello world | [ ] |
+| DOC1.13 | Lesson 12: Concurrency | Threads, channels, async/await | [ ] |
+| DOC1.14 | Lesson 13: FFI | Calling C functions, extern blocks | [ ] |
+| DOC1.15 | Lesson 14: Testing | @test, assert, property-based testing | [ ] |
+| DOC1.16 | Code exercises | 50 interactive exercises with auto-grading | [ ] |
+| DOC1.17 | Progress persistence | Save/resume tutorial progress | [ ] |
+| DOC1.18 | Playground integration | Run lesson code in browser playground | [ ] |
+| DOC1.19 | Multilingual support | English + Bahasa Indonesia | [ ] |
+| DOC1.20 | Tutorial deployment | Static site generation, hosting | [ ] |
 
 ### Phase DOC2: API Reference (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC2.1 | Doc generator v2 | Extract /// docs from all pub items | [x] |
-| DOC2.2 | Type documentation | All primitive types with examples | [x] |
-| DOC2.3 | Stdlib documentation | All builtins: print, len, type_of, assert, etc. | [x] |
-| DOC2.4 | Collections API docs | Array methods, HashMap methods, iterators | [x] |
-| DOC2.5 | String API docs | All 15 string methods with examples | [x] |
-| DOC2.6 | Math API docs | PI, E, abs, sqrt, sin, cos, etc. | [x] |
-| DOC2.7 | IO API docs | read_file, write_file, append_file, file_exists | [x] |
-| DOC2.8 | Tensor API docs | zeros, ones, randn, matmul, reshape, etc. | [x] |
-| DOC2.9 | Autograd API docs | backward, grad, requires_grad, optimizers | [x] |
-| DOC2.10 | Layer API docs | Dense, Conv2d, MultiHeadAttention, BatchNorm | [x] |
-| DOC2.11 | OS API docs | Memory, IRQ, syscall, port I/O builtins | [x] |
-| DOC2.12 | Error code reference | All 71 error codes with explanations and fixes | [x] |
-| DOC2.13 | Keyword reference | All keywords with syntax and examples | [x] |
-| DOC2.14 | Operator reference | All operators with precedence table | [x] |
-| DOC2.15 | Annotation reference | @kernel, @device, @safe, @unsafe, @test, @entry | [x] |
-| DOC2.16 | Grammar reference | EBNF grammar with railroad diagrams | [x] |
-| DOC2.17 | Search functionality | Full-text search across all API docs | [x] |
-| DOC2.18 | Cross-linking | Automatic links between related items | [x] |
-| DOC2.19 | Version selector | Show docs for different Fajar Lang versions | [x] |
-| DOC2.20 | API reference deployment | Static site with navigation, mobile-friendly | [x] |
+| DOC2.1 | Doc generator v2 | Extract /// docs from all pub items | [ ] |
+| DOC2.2 | Type documentation | All primitive types with examples | [ ] |
+| DOC2.3 | Stdlib documentation | All builtins: print, len, type_of, assert, etc. | [ ] |
+| DOC2.4 | Collections API docs | Array methods, HashMap methods, iterators | [ ] |
+| DOC2.5 | String API docs | All 15 string methods with examples | [ ] |
+| DOC2.6 | Math API docs | PI, E, abs, sqrt, sin, cos, etc. | [ ] |
+| DOC2.7 | IO API docs | read_file, write_file, append_file, file_exists | [ ] |
+| DOC2.8 | Tensor API docs | zeros, ones, randn, matmul, reshape, etc. | [ ] |
+| DOC2.9 | Autograd API docs | backward, grad, requires_grad, optimizers | [ ] |
+| DOC2.10 | Layer API docs | Dense, Conv2d, MultiHeadAttention, BatchNorm | [ ] |
+| DOC2.11 | OS API docs | Memory, IRQ, syscall, port I/O builtins | [ ] |
+| DOC2.12 | Error code reference | All 71 error codes with explanations and fixes | [ ] |
+| DOC2.13 | Keyword reference | All keywords with syntax and examples | [ ] |
+| DOC2.14 | Operator reference | All operators with precedence table | [ ] |
+| DOC2.15 | Annotation reference | @kernel, @device, @safe, @unsafe, @test, @entry | [ ] |
+| DOC2.16 | Grammar reference | EBNF grammar with railroad diagrams | [ ] |
+| DOC2.17 | Search functionality | Full-text search across all API docs | [ ] |
+| DOC2.18 | Cross-linking | Automatic links between related items | [ ] |
+| DOC2.19 | Version selector | Show docs for different Fajar Lang versions | [ ] |
+| DOC2.20 | API reference deployment | Static site with navigation, mobile-friendly | [ ] |
 
 ### Phase DOC3: Cookbook & Guides (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC3.1 | Getting Started guide | Install, first program, project setup | [x] |
-| DOC3.2 | Build system guide | fj.toml, fj build, fj run, fj test | [x] |
-| DOC3.3 | Package management guide | fj new, fj add, fj publish | [x] |
-| DOC3.4 | Error handling cookbook | Patterns for Result, Option, error propagation | [x] |
-| DOC3.5 | Concurrency cookbook | Thread patterns, async patterns, channels | [x] |
-| DOC3.6 | ML cookbook | Training pipeline, inference, quantization | [x] |
-| DOC3.7 | OS development guide | @kernel program, boot sequence, QEMU testing | [x] |
-| DOC3.8 | Embedded guide | Cross-compilation, bare-metal, HAL | [x] |
-| DOC3.9 | FFI guide | C interop, Python bindings, Rust interop | [x] |
-| DOC3.10 | Testing guide | Unit tests, integration tests, property tests | [x] |
-| DOC3.11 | Performance guide | Profiling, benchmarking, optimization tips | [x] |
-| DOC3.12 | Migration guide | From Rust/C/Python to Fajar Lang | [x] |
-| DOC3.13 | IDE setup guide | VS Code, Neovim, JetBrains configuration | [x] |
-| DOC3.14 | Deployment guide | Docker, cross-compile, CI/CD setup | [x] |
-| DOC3.15 | Security guide | Safe coding, audit checklist, context rules | [x] |
-| DOC3.16 | Dragon Q6A guide | Setup, GPIO, NPU inference, deployment | [x] |
-| DOC3.17 | FAQ page | 50 most common questions with answers | [x] |
-| DOC3.18 | Troubleshooting guide | 30 common errors with solutions | [x] |
-| DOC3.19 | Changelog | Auto-generated from git tags and commits | [x] |
-| DOC3.20 | Blog platform | Markdown blog for release announcements | [x] |
-| DOC3.21 | Recipe: REST API | Step-by-step REST API server | [x] |
-| DOC3.22 | Recipe: CLI tool | Build a command-line application | [x] |
-| DOC3.23 | Recipe: Web scraper | HTTP requests + JSON parsing | [x] |
-| DOC3.24 | Recipe: Image classifier | Load model, preprocess, classify | [x] |
-| DOC3.25 | Recipe: Drone controller | Sensor fusion + PID + ML inference | [x] |
-| DOC3.26 | Recipe: Chat server | TCP server with multiple clients | [x] |
-| DOC3.27 | Recipe: Key-value store | Persistent storage with transactions | [x] |
-| DOC3.28 | Recipe: Game of Life | Terminal-based cellular automaton | [x] |
-| DOC3.29 | Recipe: Markdown parser | Recursive descent Markdown → HTML | [x] |
-| DOC3.30 | Documentation CI | Auto-build docs on push, deploy to site | [x] |
+| DOC3.1 | Getting Started guide | Install, first program, project setup | [ ] |
+| DOC3.2 | Build system guide | fj.toml, fj build, fj run, fj test | [ ] |
+| DOC3.3 | Package management guide | fj new, fj add, fj publish | [ ] |
+| DOC3.4 | Error handling cookbook | Patterns for Result, Option, error propagation | [ ] |
+| DOC3.5 | Concurrency cookbook | Thread patterns, async patterns, channels | [ ] |
+| DOC3.6 | ML cookbook | Training pipeline, inference, quantization | [ ] |
+| DOC3.7 | OS development guide | @kernel program, boot sequence, QEMU testing | [ ] |
+| DOC3.8 | Embedded guide | Cross-compilation, bare-metal, HAL | [ ] |
+| DOC3.9 | FFI guide | C interop, Python bindings, Rust interop | [ ] |
+| DOC3.10 | Testing guide | Unit tests, integration tests, property tests | [ ] |
+| DOC3.11 | Performance guide | Profiling, benchmarking, optimization tips | [ ] |
+| DOC3.12 | Migration guide | From Rust/C/Python to Fajar Lang | [ ] |
+| DOC3.13 | IDE setup guide | VS Code, Neovim, JetBrains configuration | [ ] |
+| DOC3.14 | Deployment guide | Docker, cross-compile, CI/CD setup | [ ] |
+| DOC3.15 | Security guide | Safe coding, audit checklist, context rules | [ ] |
+| DOC3.16 | Dragon Q6A guide | Setup, GPIO, NPU inference, deployment | [ ] |
+| DOC3.17 | FAQ page | 50 most common questions with answers | [ ] |
+| DOC3.18 | Troubleshooting guide | 30 common errors with solutions | [ ] |
+| DOC3.19 | Changelog | Auto-generated from git tags and commits | [ ] |
+| DOC3.20 | Blog platform | Markdown blog for release announcements | [ ] |
+| DOC3.21 | Recipe: REST API | Step-by-step REST API server | [ ] |
+| DOC3.22 | Recipe: CLI tool | Build a command-line application | [ ] |
+| DOC3.23 | Recipe: Web scraper | HTTP requests + JSON parsing | [ ] |
+| DOC3.24 | Recipe: Image classifier | Load model, preprocess, classify | [ ] |
+| DOC3.25 | Recipe: Drone controller | Sensor fusion + PID + ML inference | [ ] |
+| DOC3.26 | Recipe: Chat server | TCP server with multiple clients | [ ] |
+| DOC3.27 | Recipe: Key-value store | Persistent storage with transactions | [ ] |
+| DOC3.28 | Recipe: Game of Life | Terminal-based cellular automaton | [ ] |
+| DOC3.29 | Recipe: Markdown parser | Recursive descent Markdown → HTML | [ ] |
+| DOC3.30 | Documentation CI | Auto-build docs on push, deploy to site | [ ] |
 
 ---
 
@@ -628,86 +628,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OPT1.1 | Parallel lexing | Lex multiple files concurrently | [x] |
-| OPT1.2 | Parallel parsing | Parse multiple modules concurrently | [x] |
-| OPT1.3 | Parallel type checking | Per-module type checking with shared context | [x] |
-| OPT1.4 | Incremental analysis cache | Cache analysis results, reuse on unchanged files | [x] |
-| OPT1.5 | Lazy module loading | Only load/parse imported modules | [x] |
-| OPT1.6 | Tokenizer SIMD | Use SIMD for whitespace/delimiter scanning | [x] |
-| OPT1.7 | String interning | Intern identifiers and keywords (arena allocator) | [x] |
-| OPT1.8 | AST arena allocation | Allocate AST nodes from typed arena | [x] |
-| OPT1.9 | Module dependency graph | Topological sort for optimal compilation order | [x] |
-| OPT1.10 | Precompiled headers | Cache parsed stdlib for instant reuse | [x] |
-| OPT1.11 | Compile server mode | Persistent daemon with warm caches | [x] |
-| OPT1.12 | Profile-guided recompilation | Only recompile changed + dependent modules | [x] |
-| OPT1.13 | Type check caching | Hash-based cache for type inference results | [x] |
-| OPT1.14 | Parallel codegen | Generate code for independent functions concurrently | [x] |
-| OPT1.15 | Object file caching | Cache .o files, only regenerate on change | [x] |
-| OPT1.16 | Linker optimization | Incremental linking, parallel symbol resolution | [x] |
-| OPT1.17 | Compilation metrics | Track time per phase, show bottlenecks | [x] |
-| OPT1.18 | Memory usage optimization | Reduce peak memory during compilation | [x] |
-| OPT1.19 | Benchmark: 10K line program | Compile time < 2s goal | [x] |
-| OPT1.20 | Benchmark: 100K line project | Incremental rebuild < 500ms goal | [x] |
+| OPT1.1 | Parallel lexing | Lex multiple files concurrently | [ ] |
+| OPT1.2 | Parallel parsing | Parse multiple modules concurrently | [ ] |
+| OPT1.3 | Parallel type checking | Per-module type checking with shared context | [ ] |
+| OPT1.4 | Incremental analysis cache | Cache analysis results, reuse on unchanged files | [ ] |
+| OPT1.5 | Lazy module loading | Only load/parse imported modules | [ ] |
+| OPT1.6 | Tokenizer SIMD | Use SIMD for whitespace/delimiter scanning | [ ] |
+| OPT1.7 | String interning | Intern identifiers and keywords (arena allocator) | [ ] |
+| OPT1.8 | AST arena allocation | Allocate AST nodes from typed arena | [ ] |
+| OPT1.9 | Module dependency graph | Topological sort for optimal compilation order | [ ] |
+| OPT1.10 | Precompiled headers | Cache parsed stdlib for instant reuse | [ ] |
+| OPT1.11 | Compile server mode | Persistent daemon with warm caches | [ ] |
+| OPT1.12 | Profile-guided recompilation | Only recompile changed + dependent modules | [ ] |
+| OPT1.13 | Type check caching | Hash-based cache for type inference results | [ ] |
+| OPT1.14 | Parallel codegen | Generate code for independent functions concurrently | [ ] |
+| OPT1.15 | Object file caching | Cache .o files, only regenerate on change | [ ] |
+| OPT1.16 | Linker optimization | Incremental linking, parallel symbol resolution | [ ] |
+| OPT1.17 | Compilation metrics | Track time per phase, show bottlenecks | [ ] |
+| OPT1.18 | Memory usage optimization | Reduce peak memory during compilation | [ ] |
+| OPT1.19 | Benchmark: 10K line program | Compile time < 2s goal | [ ] |
+| OPT1.20 | Benchmark: 100K line project | Incremental rebuild < 500ms goal | [ ] |
 
 ### Phase OPT2: Code Quality (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OPT2.1 | Constant folding | Evaluate constant expressions at compile time | [x] |
-| OPT2.2 | Dead code elimination v2 | Whole-program DCE with call graph analysis | [x] |
-| OPT2.3 | Function inlining | Cost model, always-inline hint, threshold tuning | [x] |
-| OPT2.4 | Loop unrolling | Unroll small loops with known trip count | [x] |
-| OPT2.5 | LICM v2 | Loop-invariant code motion with alias analysis | [x] |
-| OPT2.6 | Common subexpression elimination v2 | Global CSE across basic blocks | [x] |
-| OPT2.7 | Strength reduction | Replace expensive ops (mul→shift, div→mul) | [x] |
-| OPT2.8 | Tail call optimization | Convert tail recursion to loops | [x] |
-| OPT2.9 | Escape analysis | Stack-allocate non-escaping heap objects | [x] |
-| OPT2.10 | Devirtualization | Replace dynamic dispatch with static when known | [x] |
-| OPT2.11 | Alias analysis | Track pointer aliasing for optimization safety | [x] |
-| OPT2.12 | Auto-vectorization | Detect vectorizable loops, emit SIMD | [x] |
-| OPT2.13 | Branch prediction hints | Profile-guided branch probability | [x] |
-| OPT2.14 | Peephole optimizations | Pattern-based instruction simplification | [x] |
-| OPT2.15 | Copy propagation | Eliminate redundant copies | [x] |
-| OPT2.16 | Phi node optimization | Simplify SSA phi nodes | [x] |
-| OPT2.17 | Optimization pipeline | O0/O1/O2/O3/Os optimization levels | [x] |
-| OPT2.18 | Optimization metrics | Count applied optimizations per level | [x] |
-| OPT2.19 | Benchmark: fibonacci | Within 2x of C -O2 | [x] |
-| OPT2.20 | Benchmark: matrix multiply | Within 3x of C -O2 with BLAS | [x] |
+| OPT2.1 | Constant folding | Evaluate constant expressions at compile time | [ ] |
+| OPT2.2 | Dead code elimination v2 | Whole-program DCE with call graph analysis | [ ] |
+| OPT2.3 | Function inlining | Cost model, always-inline hint, threshold tuning | [ ] |
+| OPT2.4 | Loop unrolling | Unroll small loops with known trip count | [ ] |
+| OPT2.5 | LICM v2 | Loop-invariant code motion with alias analysis | [ ] |
+| OPT2.6 | Common subexpression elimination v2 | Global CSE across basic blocks | [ ] |
+| OPT2.7 | Strength reduction | Replace expensive ops (mul→shift, div→mul) | [ ] |
+| OPT2.8 | Tail call optimization | Convert tail recursion to loops | [ ] |
+| OPT2.9 | Escape analysis | Stack-allocate non-escaping heap objects | [ ] |
+| OPT2.10 | Devirtualization | Replace dynamic dispatch with static when known | [ ] |
+| OPT2.11 | Alias analysis | Track pointer aliasing for optimization safety | [ ] |
+| OPT2.12 | Auto-vectorization | Detect vectorizable loops, emit SIMD | [ ] |
+| OPT2.13 | Branch prediction hints | Profile-guided branch probability | [ ] |
+| OPT2.14 | Peephole optimizations | Pattern-based instruction simplification | [ ] |
+| OPT2.15 | Copy propagation | Eliminate redundant copies | [ ] |
+| OPT2.16 | Phi node optimization | Simplify SSA phi nodes | [ ] |
+| OPT2.17 | Optimization pipeline | O0/O1/O2/O3/Os optimization levels | [ ] |
+| OPT2.18 | Optimization metrics | Count applied optimizations per level | [ ] |
+| OPT2.19 | Benchmark: fibonacci | Within 2x of C -O2 | [ ] |
+| OPT2.20 | Benchmark: matrix multiply | Within 3x of C -O2 with BLAS | [ ] |
 
 ### Phase OPT3: Binary Size & LTO (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OPT3.1 | Dead function elimination | Remove unreachable functions from binary | [x] |
-| OPT3.2 | Dead global elimination | Remove unused global variables | [x] |
-| OPT3.3 | String deduplication | Merge identical string literals | [x] |
-| OPT3.4 | Function merging | Merge identical function bodies | [x] |
-| OPT3.5 | Section garbage collection | --gc-sections linker flag integration | [x] |
-| OPT3.6 | Cross-module inlining | Inline small functions across module boundaries | [x] |
-| OPT3.7 | Thin LTO | Parallel link-time optimization | [x] |
-| OPT3.8 | Full LTO | Single-module whole-program optimization | [x] |
-| OPT3.9 | Symbol stripping | Strip debug symbols in release mode | [x] |
-| OPT3.10 | Compression | UPX-style binary compression option | [x] |
-| OPT3.11 | Size profiling | Per-function size report (bloaty-style) | [x] |
-| OPT3.12 | Monomorphization dedup | Detect identical monomorphized instances | [x] |
-| OPT3.13 | Runtime trimming | Only link used runtime functions | [x] |
-| OPT3.14 | Panic-free mode | Eliminate panic infrastructure for embedded | [x] |
-| OPT3.15 | no_std binary | Minimal binary without stdlib | [x] |
-| OPT3.16 | Custom allocator | Plug custom allocator for binary size | [x] |
-| OPT3.17 | Embedded profile | Optimize for flash/RAM-constrained targets | [x] |
-| OPT3.18 | WASM size optimization | wasm-opt integration, tree shaking | [x] |
-| OPT3.19 | Benchmark: minimal binary | Hello world < 100KB | [x] |
-| OPT3.20 | Benchmark: embedded binary | Blinky < 16KB for Cortex-M | [x] |
-| OPT3.21 | PGO profile collection | Instrument build for profile data | [x] |
-| OPT3.22 | PGO profile application | Use profile data for optimization | [x] |
-| OPT3.23 | PGO hot/cold splitting | Separate hot and cold code paths | [x] |
-| OPT3.24 | PGO inline decisions | Profile-guided inlining heuristics | [x] |
-| OPT3.25 | PGO branch layout | Optimize branch layout from profile | [x] |
-| OPT3.26 | BOLT integration | Post-link optimization with BOLT | [x] |
-| OPT3.27 | Compile time tracking | --timings flag showing phase breakdown | [x] |
-| OPT3.28 | Optimization report | --opt-report showing what was optimized | [x] |
-| OPT3.29 | Regression tests | 50 optimization correctness tests | [x] |
-| OPT3.30 | Optimization documentation | Guide for each -O level and trade-offs | [x] |
+| OPT3.1 | Dead function elimination | Remove unreachable functions from binary | [ ] |
+| OPT3.2 | Dead global elimination | Remove unused global variables | [ ] |
+| OPT3.3 | String deduplication | Merge identical string literals | [ ] |
+| OPT3.4 | Function merging | Merge identical function bodies | [ ] |
+| OPT3.5 | Section garbage collection | --gc-sections linker flag integration | [ ] |
+| OPT3.6 | Cross-module inlining | Inline small functions across module boundaries | [ ] |
+| OPT3.7 | Thin LTO | Parallel link-time optimization | [ ] |
+| OPT3.8 | Full LTO | Single-module whole-program optimization | [ ] |
+| OPT3.9 | Symbol stripping | Strip debug symbols in release mode | [ ] |
+| OPT3.10 | Compression | UPX-style binary compression option | [ ] |
+| OPT3.11 | Size profiling | Per-function size report (bloaty-style) | [ ] |
+| OPT3.12 | Monomorphization dedup | Detect identical monomorphized instances | [ ] |
+| OPT3.13 | Runtime trimming | Only link used runtime functions | [ ] |
+| OPT3.14 | Panic-free mode | Eliminate panic infrastructure for embedded | [ ] |
+| OPT3.15 | no_std binary | Minimal binary without stdlib | [ ] |
+| OPT3.16 | Custom allocator | Plug custom allocator for binary size | [ ] |
+| OPT3.17 | Embedded profile | Optimize for flash/RAM-constrained targets | [ ] |
+| OPT3.18 | WASM size optimization | wasm-opt integration, tree shaking | [ ] |
+| OPT3.19 | Benchmark: minimal binary | Hello world < 100KB | [ ] |
+| OPT3.20 | Benchmark: embedded binary | Blinky < 16KB for Cortex-M | [ ] |
+| OPT3.21 | PGO profile collection | Instrument build for profile data | [ ] |
+| OPT3.22 | PGO profile application | Use profile data for optimization | [ ] |
+| OPT3.23 | PGO hot/cold splitting | Separate hot and cold code paths | [ ] |
+| OPT3.24 | PGO inline decisions | Profile-guided inlining heuristics | [ ] |
+| OPT3.25 | PGO branch layout | Optimize branch layout from profile | [ ] |
+| OPT3.26 | BOLT integration | Post-link optimization with BOLT | [ ] |
+| OPT3.27 | Compile time tracking | --timings flag showing phase breakdown | [ ] |
+| OPT3.28 | Optimization report | --opt-report showing what was optimized | [ ] |
+| OPT3.29 | Regression tests | 50 optimization correctness tests | [ ] |
+| OPT3.30 | Optimization documentation | Guide for each -O level and trade-offs | [ ] |
 
 ---
 
@@ -719,86 +719,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| SEC1.1 | Stack canaries | Detect stack buffer overflow at runtime | [x] |
-| SEC1.2 | Stack clash protection | Guard pages between stack frames | [x] |
-| SEC1.3 | ASLR support | Address space layout randomization for binaries | [x] |
-| SEC1.4 | CFI (Control Flow Integrity) | Forward-edge CFI for indirect calls | [x] |
-| SEC1.5 | Shadow stack | Return address protection via shadow stack | [x] |
-| SEC1.6 | Bounds checking mode | Runtime bounds checks on all array access | [x] |
-| SEC1.7 | Integer overflow detection | Runtime traps on signed/unsigned overflow | [x] |
-| SEC1.8 | Use-after-free detection | Quarantine freed memory, detect reuse | [x] |
-| SEC1.9 | Double-free detection | Track allocation state, trap on double free | [x] |
-| SEC1.10 | Null pointer protection | Guard page at address 0 | [x] |
-| SEC1.11 | Memory tagging (MTE) | ARM Memory Tagging Extension support | [x] |
-| SEC1.12 | SafeStack | Separate stack for safe and unsafe data | [x] |
-| SEC1.13 | Sanitizer integration | ASan, MSan, TSan, UBSan support | [x] |
-| SEC1.14 | Fuzzing integration | libFuzzer/AFL++ target generation | [x] |
-| SEC1.15 | Leak detector | Detect memory leaks at program exit | [x] |
-| SEC1.16 | Allocation limits | Per-context memory allocation budgets | [x] |
-| SEC1.17 | Stack depth limit | Configurable recursion depth protection | [x] |
-| SEC1.18 | Heap hardening | Randomized heap layout, guard pages | [x] |
-| SEC1.19 | Memory safety tests | 50 tests for all hardening features | [x] |
-| SEC1.20 | Security benchmark | Overhead measurement for each feature | [x] |
+| SEC1.1 | Stack canaries | Detect stack buffer overflow at runtime | [ ] |
+| SEC1.2 | Stack clash protection | Guard pages between stack frames | [ ] |
+| SEC1.3 | ASLR support | Address space layout randomization for binaries | [ ] |
+| SEC1.4 | CFI (Control Flow Integrity) | Forward-edge CFI for indirect calls | [ ] |
+| SEC1.5 | Shadow stack | Return address protection via shadow stack | [ ] |
+| SEC1.6 | Bounds checking mode | Runtime bounds checks on all array access | [ ] |
+| SEC1.7 | Integer overflow detection | Runtime traps on signed/unsigned overflow | [ ] |
+| SEC1.8 | Use-after-free detection | Quarantine freed memory, detect reuse | [ ] |
+| SEC1.9 | Double-free detection | Track allocation state, trap on double free | [ ] |
+| SEC1.10 | Null pointer protection | Guard page at address 0 | [ ] |
+| SEC1.11 | Memory tagging (MTE) | ARM Memory Tagging Extension support | [ ] |
+| SEC1.12 | SafeStack | Separate stack for safe and unsafe data | [ ] |
+| SEC1.13 | Sanitizer integration | ASan, MSan, TSan, UBSan support | [ ] |
+| SEC1.14 | Fuzzing integration | libFuzzer/AFL++ target generation | [ ] |
+| SEC1.15 | Leak detector | Detect memory leaks at program exit | [ ] |
+| SEC1.16 | Allocation limits | Per-context memory allocation budgets | [ ] |
+| SEC1.17 | Stack depth limit | Configurable recursion depth protection | [ ] |
+| SEC1.18 | Heap hardening | Randomized heap layout, guard pages | [ ] |
+| SEC1.19 | Memory safety tests | 50 tests for all hardening features | [ ] |
+| SEC1.20 | Security benchmark | Overhead measurement for each feature | [ ] |
 
 ### Phase SEC2: Supply Chain Security (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| SEC2.1 | Package signing | Ed25519 signatures on published packages | [x] |
-| SEC2.2 | Signature verification | Verify signatures on download | [x] |
-| SEC2.3 | Transparency log | Sigstore-style transparency for publishes | [x] |
-| SEC2.4 | SBOM generation | CycloneDX/SPDX software bill of materials | [x] |
-| SEC2.5 | License compliance | Detect and report dependency licenses | [x] |
-| SEC2.6 | Vulnerability database | CVE tracking for Fajar packages | [x] |
-| SEC2.7 | `fj audit` command | Scan deps against vulnerability database | [x] |
-| SEC2.8 | Dependency pinning | Exact version pinning in fj.lock | [x] |
-| SEC2.9 | Checksum verification | SHA-256 integrity on all downloads | [x] |
-| SEC2.10 | Reproducible builds | Same source → identical binary output | [x] |
-| SEC2.11 | Build provenance | SLSA-compliant build attestation | [x] |
-| SEC2.12 | Source verification | Verify package source matches published | [x] |
-| SEC2.13 | Typosquatting detection | Flag packages with names similar to popular ones | [x] |
-| SEC2.14 | Namespace reservation | Prevent unauthorized publishes to known names | [x] |
-| SEC2.15 | Two-factor auth | 2FA for package publish operations | [x] |
-| SEC2.16 | API token scoping | Fine-grained token permissions (read/write/admin) | [x] |
-| SEC2.17 | Token rotation | Automatic token expiry and renewal | [x] |
-| SEC2.18 | Security advisories | Publish and distribute security notices | [x] |
-| SEC2.19 | Supply chain tests | 30 tests for signing, verification, audit | [x] |
-| SEC2.20 | Security policy | SECURITY.md, responsible disclosure process | [x] |
+| SEC2.1 | Package signing | Ed25519 signatures on published packages | [ ] |
+| SEC2.2 | Signature verification | Verify signatures on download | [ ] |
+| SEC2.3 | Transparency log | Sigstore-style transparency for publishes | [ ] |
+| SEC2.4 | SBOM generation | CycloneDX/SPDX software bill of materials | [ ] |
+| SEC2.5 | License compliance | Detect and report dependency licenses | [ ] |
+| SEC2.6 | Vulnerability database | CVE tracking for Fajar packages | [ ] |
+| SEC2.7 | `fj audit` command | Scan deps against vulnerability database | [ ] |
+| SEC2.8 | Dependency pinning | Exact version pinning in fj.lock | [ ] |
+| SEC2.9 | Checksum verification | SHA-256 integrity on all downloads | [ ] |
+| SEC2.10 | Reproducible builds | Same source → identical binary output | [ ] |
+| SEC2.11 | Build provenance | SLSA-compliant build attestation | [ ] |
+| SEC2.12 | Source verification | Verify package source matches published | [ ] |
+| SEC2.13 | Typosquatting detection | Flag packages with names similar to popular ones | [ ] |
+| SEC2.14 | Namespace reservation | Prevent unauthorized publishes to known names | [ ] |
+| SEC2.15 | Two-factor auth | 2FA for package publish operations | [ ] |
+| SEC2.16 | API token scoping | Fine-grained token permissions (read/write/admin) | [ ] |
+| SEC2.17 | Token rotation | Automatic token expiry and renewal | [ ] |
+| SEC2.18 | Security advisories | Publish and distribute security notices | [ ] |
+| SEC2.19 | Supply chain tests | 30 tests for signing, verification, audit | [ ] |
+| SEC2.20 | Security policy | SECURITY.md, responsible disclosure process | [ ] |
 
 ### Phase SEC3: Audit & Certification (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| SEC3.1 | Static analysis rules | 50 custom lint rules for security patterns | [x] |
-| SEC3.2 | Taint analysis | Track untrusted input through data flow | [x] |
-| SEC3.3 | SQL injection detection | Flag string concatenation in queries | [x] |
-| SEC3.4 | Command injection detection | Flag string concatenation in exec calls | [x] |
-| SEC3.5 | Path traversal detection | Flag user input in file paths | [x] |
-| SEC3.6 | Cryptographic misuse detection | Flag weak algorithms, hardcoded keys | [x] |
-| SEC3.7 | Information leak detection | Flag sensitive data in logs/errors | [x] |
-| SEC3.8 | Race condition detection | Static data race analysis | [x] |
-| SEC3.9 | Deadlock detection | Lock ordering analysis | [x] |
-| SEC3.10 | Undefined behavior detection | Flag platform-dependent code | [x] |
-| SEC3.11 | MISRA-C compliance mode | Subset of MISRA rules for safety-critical | [x] |
-| SEC3.12 | CERT C compliance mode | CERT C secure coding rules | [x] |
-| SEC3.13 | ISO 26262 annotations | ASIL classification support for automotive | [x] |
-| SEC3.14 | DO-178C evidence | Traceability matrices for aerospace | [x] |
-| SEC3.15 | IEC 62443 support | Industrial cybersecurity compliance | [x] |
-| SEC3.16 | Formal verification hooks | Pre/post conditions, invariants | [x] |
-| SEC3.17 | Test coverage enforcement | Minimum coverage thresholds per module | [x] |
-| SEC3.18 | Mutation testing | Verify test quality with mutation analysis | [x] |
-| SEC3.19 | Security scorecard | Generate security posture report | [x] |
-| SEC3.20 | Penetration test suite | Automated security testing framework | [x] |
-| SEC3.21 | @secure annotation | Mark functions requiring security review | [x] |
-| SEC3.22 | @trusted annotation | Mark FFI boundaries as trust boundaries | [x] |
-| SEC3.23 | Capability-based security | Fine-grained permissions for modules | [x] |
-| SEC3.24 | Sandbox mode | Restrict filesystem/network/exec access | [x] |
-| SEC3.25 | Secure default configuration | Safe defaults for all compiler options | [x] |
-| SEC3.26 | Hardening guide | Document all security features and usage | [x] |
-| SEC3.27 | Threat model | Document attack surfaces and mitigations | [x] |
-| SEC3.28 | Security review checklist | Checklist for code review | [x] |
-| SEC3.29 | Audit trail | Log all security-relevant compiler decisions | [x] |
-| SEC3.30 | Certification documentation | Templates for regulatory submissions | [x] |
+| SEC3.1 | Static analysis rules | 50 custom lint rules for security patterns | [ ] |
+| SEC3.2 | Taint analysis | Track untrusted input through data flow | [ ] |
+| SEC3.3 | SQL injection detection | Flag string concatenation in queries | [ ] |
+| SEC3.4 | Command injection detection | Flag string concatenation in exec calls | [ ] |
+| SEC3.5 | Path traversal detection | Flag user input in file paths | [ ] |
+| SEC3.6 | Cryptographic misuse detection | Flag weak algorithms, hardcoded keys | [ ] |
+| SEC3.7 | Information leak detection | Flag sensitive data in logs/errors | [ ] |
+| SEC3.8 | Race condition detection | Static data race analysis | [ ] |
+| SEC3.9 | Deadlock detection | Lock ordering analysis | [ ] |
+| SEC3.10 | Undefined behavior detection | Flag platform-dependent code | [ ] |
+| SEC3.11 | MISRA-C compliance mode | Subset of MISRA rules for safety-critical | [ ] |
+| SEC3.12 | CERT C compliance mode | CERT C secure coding rules | [ ] |
+| SEC3.13 | ISO 26262 annotations | ASIL classification support for automotive | [ ] |
+| SEC3.14 | DO-178C evidence | Traceability matrices for aerospace | [ ] |
+| SEC3.15 | IEC 62443 support | Industrial cybersecurity compliance | [ ] |
+| SEC3.16 | Formal verification hooks | Pre/post conditions, invariants | [ ] |
+| SEC3.17 | Test coverage enforcement | Minimum coverage thresholds per module | [ ] |
+| SEC3.18 | Mutation testing | Verify test quality with mutation analysis | [ ] |
+| SEC3.19 | Security scorecard | Generate security posture report | [ ] |
+| SEC3.20 | Penetration test suite | Automated security testing framework | [ ] |
+| SEC3.21 | @secure annotation | Mark functions requiring security review | [ ] |
+| SEC3.22 | @trusted annotation | Mark FFI boundaries as trust boundaries | [ ] |
+| SEC3.23 | Capability-based security | Fine-grained permissions for modules | [ ] |
+| SEC3.24 | Sandbox mode | Restrict filesystem/network/exec access | [ ] |
+| SEC3.25 | Secure default configuration | Safe defaults for all compiler options | [ ] |
+| SEC3.26 | Hardening guide | Document all security features and usage | [ ] |
+| SEC3.27 | Threat model | Document attack surfaces and mitigations | [ ] |
+| SEC3.28 | Security review checklist | Checklist for code review | [ ] |
+| SEC3.29 | Audit trail | Log all security-relevant compiler decisions | [ ] |
+| SEC3.30 | Certification documentation | Templates for regulatory submissions | [ ] |
 
 ---
 
@@ -810,86 +810,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| GUI1.1 | Window creation | Platform window (X11/Wayland/Win32/Cocoa) | [x] |
-| GUI1.2 | Event loop | Mouse, keyboard, resize, close events | [x] |
-| GUI1.3 | Canvas rendering | 2D drawing: lines, rects, circles, text | [x] |
-| GUI1.4 | Button widget | Clickable button with text and icon | [x] |
-| GUI1.5 | Label widget | Static text display with alignment | [x] |
-| GUI1.6 | TextInput widget | Single-line text entry with cursor | [x] |
-| GUI1.7 | TextArea widget | Multi-line text editing with scroll | [x] |
-| GUI1.8 | Checkbox widget | Boolean toggle with label | [x] |
-| GUI1.9 | RadioButton widget | Exclusive selection group | [x] |
-| GUI1.10 | Slider widget | Continuous value selection | [x] |
-| GUI1.11 | ProgressBar widget | Determinate and indeterminate progress | [x] |
-| GUI1.12 | Dropdown/ComboBox | Selection from list of options | [x] |
-| GUI1.13 | ListView widget | Scrollable list with selection | [x] |
-| GUI1.14 | TreeView widget | Hierarchical expandable tree | [x] |
-| GUI1.15 | Table widget | Grid with columns, sorting, selection | [x] |
-| GUI1.16 | Image widget | Display PNG/JPEG images | [x] |
-| GUI1.17 | Dialog windows | Alert, confirm, file picker, color picker | [x] |
-| GUI1.18 | Menu bar | Application menu with submenus | [x] |
-| GUI1.19 | Context menu | Right-click popup menus | [x] |
-| GUI1.20 | Toolbar | Icon button strip with tooltips | [x] |
-| GUI1.21 | TabView widget | Tabbed container for multiple views | [x] |
-| GUI1.22 | SplitView widget | Resizable horizontal/vertical split | [x] |
-| GUI1.23 | ScrollView widget | Scrollable container for any content | [x] |
-| GUI1.24 | Tooltip | Hover information popup | [x] |
-| GUI1.25 | StatusBar | Bottom bar with text segments | [x] |
-| GUI1.26 | Theme system | Light/dark/custom themes | [x] |
-| GUI1.27 | Font rendering | TrueType/OpenType font loading | [x] |
-| GUI1.28 | DPI awareness | High-DPI scaling on all platforms | [x] |
-| GUI1.29 | Widget tests (30) | All widgets, interactions, rendering | [x] |
-| GUI1.30 | Widget documentation | API docs with visual examples | [x] |
+| GUI1.1 | Window creation | Platform window (X11/Wayland/Win32/Cocoa) | [ ] |
+| GUI1.2 | Event loop | Mouse, keyboard, resize, close events | [ ] |
+| GUI1.3 | Canvas rendering | 2D drawing: lines, rects, circles, text | [ ] |
+| GUI1.4 | Button widget | Clickable button with text and icon | [ ] |
+| GUI1.5 | Label widget | Static text display with alignment | [ ] |
+| GUI1.6 | TextInput widget | Single-line text entry with cursor | [ ] |
+| GUI1.7 | TextArea widget | Multi-line text editing with scroll | [ ] |
+| GUI1.8 | Checkbox widget | Boolean toggle with label | [ ] |
+| GUI1.9 | RadioButton widget | Exclusive selection group | [ ] |
+| GUI1.10 | Slider widget | Continuous value selection | [ ] |
+| GUI1.11 | ProgressBar widget | Determinate and indeterminate progress | [ ] |
+| GUI1.12 | Dropdown/ComboBox | Selection from list of options | [ ] |
+| GUI1.13 | ListView widget | Scrollable list with selection | [ ] |
+| GUI1.14 | TreeView widget | Hierarchical expandable tree | [ ] |
+| GUI1.15 | Table widget | Grid with columns, sorting, selection | [ ] |
+| GUI1.16 | Image widget | Display PNG/JPEG images | [ ] |
+| GUI1.17 | Dialog windows | Alert, confirm, file picker, color picker | [ ] |
+| GUI1.18 | Menu bar | Application menu with submenus | [ ] |
+| GUI1.19 | Context menu | Right-click popup menus | [ ] |
+| GUI1.20 | Toolbar | Icon button strip with tooltips | [ ] |
+| GUI1.21 | TabView widget | Tabbed container for multiple views | [ ] |
+| GUI1.22 | SplitView widget | Resizable horizontal/vertical split | [ ] |
+| GUI1.23 | ScrollView widget | Scrollable container for any content | [ ] |
+| GUI1.24 | Tooltip | Hover information popup | [ ] |
+| GUI1.25 | StatusBar | Bottom bar with text segments | [ ] |
+| GUI1.26 | Theme system | Light/dark/custom themes | [ ] |
+| GUI1.27 | Font rendering | TrueType/OpenType font loading | [ ] |
+| GUI1.28 | DPI awareness | High-DPI scaling on all platforms | [ ] |
+| GUI1.29 | Widget tests (30) | All widgets, interactions, rendering | [ ] |
+| GUI1.30 | Widget documentation | API docs with visual examples | [ ] |
 
 ### Phase GUI2: Layout Engine (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| GUI2.1 | Flexbox layout | Row/column flex with wrapping | [x] |
-| GUI2.2 | Grid layout | CSS Grid-style rows/columns/areas | [x] |
-| GUI2.3 | Stack layout | Z-order stacking for overlays | [x] |
-| GUI2.4 | Absolute positioning | Fixed pixel position relative to parent | [x] |
-| GUI2.5 | Padding and margin | Inner and outer spacing for all widgets | [x] |
-| GUI2.6 | Min/max constraints | Minimum and maximum size constraints | [x] |
-| GUI2.7 | Aspect ratio | Maintain aspect ratio during resize | [x] |
-| GUI2.8 | Alignment | Start, center, end, stretch, baseline | [x] |
-| GUI2.9 | Overflow handling | Clip, scroll, visible overflow modes | [x] |
-| GUI2.10 | Responsive breakpoints | Layout changes at width thresholds | [x] |
-| GUI2.11 | Layout caching | Cache layout calculations, invalidate on change | [x] |
-| GUI2.12 | Animation system | Tweened property animations (ease, spring) | [x] |
-| GUI2.13 | Transition system | Animated transitions between states | [x] |
-| GUI2.14 | Constraint solver | Cassowary-style constraint layout | [x] |
-| GUI2.15 | Auto-sizing | Text-based size calculation | [x] |
-| GUI2.16 | Scroll physics | Smooth scrolling with momentum | [x] |
-| GUI2.17 | Hit testing | Determine widget under mouse coordinates | [x] |
-| GUI2.18 | Focus management | Tab order, focus ring, keyboard navigation | [x] |
-| GUI2.19 | Layout tests (30) | All layouts, constraints, edge cases | [x] |
-| GUI2.20 | Layout performance benchmark | 1000 widgets layout < 16ms | [x] |
+| GUI2.1 | Flexbox layout | Row/column flex with wrapping | [ ] |
+| GUI2.2 | Grid layout | CSS Grid-style rows/columns/areas | [ ] |
+| GUI2.3 | Stack layout | Z-order stacking for overlays | [ ] |
+| GUI2.4 | Absolute positioning | Fixed pixel position relative to parent | [ ] |
+| GUI2.5 | Padding and margin | Inner and outer spacing for all widgets | [ ] |
+| GUI2.6 | Min/max constraints | Minimum and maximum size constraints | [ ] |
+| GUI2.7 | Aspect ratio | Maintain aspect ratio during resize | [ ] |
+| GUI2.8 | Alignment | Start, center, end, stretch, baseline | [ ] |
+| GUI2.9 | Overflow handling | Clip, scroll, visible overflow modes | [ ] |
+| GUI2.10 | Responsive breakpoints | Layout changes at width thresholds | [ ] |
+| GUI2.11 | Layout caching | Cache layout calculations, invalidate on change | [ ] |
+| GUI2.12 | Animation system | Tweened property animations (ease, spring) | [ ] |
+| GUI2.13 | Transition system | Animated transitions between states | [ ] |
+| GUI2.14 | Constraint solver | Cassowary-style constraint layout | [ ] |
+| GUI2.15 | Auto-sizing | Text-based size calculation | [ ] |
+| GUI2.16 | Scroll physics | Smooth scrolling with momentum | [ ] |
+| GUI2.17 | Hit testing | Determine widget under mouse coordinates | [ ] |
+| GUI2.18 | Focus management | Tab order, focus ring, keyboard navigation | [ ] |
+| GUI2.19 | Layout tests (30) | All layouts, constraints, edge cases | [ ] |
+| GUI2.20 | Layout performance benchmark | 1000 widgets layout < 16ms | [ ] |
 
 ### Phase GUI3: Platform Integration (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| GUI3.1 | Linux/X11 backend | Xlib window creation, events, rendering | [x] |
-| GUI3.2 | Linux/Wayland backend | wl_surface, xdg_shell, input events | [x] |
-| GUI3.3 | Windows backend | Win32 HWND, WndProc, GDI/Direct2D | [x] |
-| GUI3.4 | macOS backend | NSWindow, NSView, Core Graphics | [x] |
-| GUI3.5 | GPU-accelerated rendering | Vulkan/Metal/D3D12 render backend | [x] |
-| GUI3.6 | Software renderer | CPU-only fallback renderer | [x] |
-| GUI3.7 | Clipboard support | Copy/paste text and images | [x] |
-| GUI3.8 | Drag and drop | Internal and system drag-and-drop | [x] |
-| GUI3.9 | System tray | Tray icon with menu (Linux/Windows/macOS) | [x] |
-| GUI3.10 | Notifications | Native OS notification support | [x] |
-| GUI3.11 | File dialogs | Open/save file dialogs via OS | [x] |
-| GUI3.12 | Cursor management | Custom cursors, cursor style changes | [x] |
-| GUI3.13 | Multi-window | Multiple windows per application | [x] |
-| GUI3.14 | Fullscreen mode | Toggle fullscreen on all platforms | [x] |
-| GUI3.15 | IME support | Input Method Editor for CJK text | [x] |
-| GUI3.16 | Accessibility | Screen reader support (AT-SPI/UIAutomation) | [x] |
-| GUI3.17 | Touch input | Multi-touch gestures for touch screens | [x] |
-| GUI3.18 | Gamepad input | Controller/joystick input | [x] |
-| GUI3.19 | Platform integration tests | Cross-platform rendering comparison | [x] |
-| GUI3.20 | Demo application | Complete GUI app showcasing all widgets | [x] |
+| GUI3.1 | Linux/X11 backend | Xlib window creation, events, rendering | [ ] |
+| GUI3.2 | Linux/Wayland backend | wl_surface, xdg_shell, input events | [ ] |
+| GUI3.3 | Windows backend | Win32 HWND, WndProc, GDI/Direct2D | [ ] |
+| GUI3.4 | macOS backend | NSWindow, NSView, Core Graphics | [ ] |
+| GUI3.5 | GPU-accelerated rendering | Vulkan/Metal/D3D12 render backend | [ ] |
+| GUI3.6 | Software renderer | CPU-only fallback renderer | [ ] |
+| GUI3.7 | Clipboard support | Copy/paste text and images | [ ] |
+| GUI3.8 | Drag and drop | Internal and system drag-and-drop | [ ] |
+| GUI3.9 | System tray | Tray icon with menu (Linux/Windows/macOS) | [ ] |
+| GUI3.10 | Notifications | Native OS notification support | [ ] |
+| GUI3.11 | File dialogs | Open/save file dialogs via OS | [ ] |
+| GUI3.12 | Cursor management | Custom cursors, cursor style changes | [ ] |
+| GUI3.13 | Multi-window | Multiple windows per application | [ ] |
+| GUI3.14 | Fullscreen mode | Toggle fullscreen on all platforms | [ ] |
+| GUI3.15 | IME support | Input Method Editor for CJK text | [ ] |
+| GUI3.16 | Accessibility | Screen reader support (AT-SPI/UIAutomation) | [ ] |
+| GUI3.17 | Touch input | Multi-touch gestures for touch screens | [ ] |
+| GUI3.18 | Gamepad input | Controller/joystick input | [ ] |
+| GUI3.19 | Platform integration tests | Cross-platform rendering comparison | [ ] |
+| GUI3.20 | Demo application | Complete GUI app showcasing all widgets | [ ] |
 
 ---
 
@@ -901,86 +901,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OS1.1 | Per-CPU run queues | Separate ready queue per CPU core | [x] |
-| OS1.2 | Work stealing | Idle CPUs steal tasks from busy CPUs | [x] |
-| OS1.3 | Priority scheduling | 32 priority levels with preemption | [x] |
-| OS1.4 | Real-time class | SCHED_FIFO and SCHED_RR policies | [x] |
-| OS1.5 | CPU affinity | Pin processes to specific cores | [x] |
-| OS1.6 | Load balancer | Periodic rebalancing across CPUs | [x] |
-| OS1.7 | NUMA awareness | Prefer local memory for tasks | [x] |
-| OS1.8 | CFS-like scheduler | Completely Fair Scheduler with vruntime | [x] |
-| OS1.9 | Deadline scheduling | EDF (Earliest Deadline First) for real-time | [x] |
-| OS1.10 | CPU hotplug | Online/offline CPUs dynamically | [x] |
-| OS1.11 | Idle management | Per-CPU idle loop with WFI | [x] |
-| OS1.12 | Context switch optimization | Minimize register save/restore overhead | [x] |
-| OS1.13 | IPI mechanism | Inter-Processor Interrupt for cross-CPU signals | [x] |
-| OS1.14 | Spinlock fairness | Ticket locks to prevent starvation | [x] |
-| OS1.15 | RCU (Read-Copy-Update) | Lock-free reads for shared data structures | [x] |
-| OS1.16 | Process migration | Move running process to different CPU | [x] |
-| OS1.17 | Scheduler tracing | Log scheduling decisions for debugging | [x] |
-| OS1.18 | Latency measurement | Track worst-case scheduling latency | [x] |
-| OS1.19 | SMP scheduler tests | 30 tests including stress tests | [x] |
-| OS1.20 | SMP benchmark | 8-core utilization > 90% under load | [x] |
+| OS1.1 | Per-CPU run queues | Separate ready queue per CPU core | [ ] |
+| OS1.2 | Work stealing | Idle CPUs steal tasks from busy CPUs | [ ] |
+| OS1.3 | Priority scheduling | 32 priority levels with preemption | [ ] |
+| OS1.4 | Real-time class | SCHED_FIFO and SCHED_RR policies | [ ] |
+| OS1.5 | CPU affinity | Pin processes to specific cores | [ ] |
+| OS1.6 | Load balancer | Periodic rebalancing across CPUs | [ ] |
+| OS1.7 | NUMA awareness | Prefer local memory for tasks | [ ] |
+| OS1.8 | CFS-like scheduler | Completely Fair Scheduler with vruntime | [ ] |
+| OS1.9 | Deadline scheduling | EDF (Earliest Deadline First) for real-time | [ ] |
+| OS1.10 | CPU hotplug | Online/offline CPUs dynamically | [ ] |
+| OS1.11 | Idle management | Per-CPU idle loop with WFI | [ ] |
+| OS1.12 | Context switch optimization | Minimize register save/restore overhead | [ ] |
+| OS1.13 | IPI mechanism | Inter-Processor Interrupt for cross-CPU signals | [ ] |
+| OS1.14 | Spinlock fairness | Ticket locks to prevent starvation | [ ] |
+| OS1.15 | RCU (Read-Copy-Update) | Lock-free reads for shared data structures | [ ] |
+| OS1.16 | Process migration | Move running process to different CPU | [ ] |
+| OS1.17 | Scheduler tracing | Log scheduling decisions for debugging | [ ] |
+| OS1.18 | Latency measurement | Track worst-case scheduling latency | [ ] |
+| OS1.19 | SMP scheduler tests | 30 tests including stress tests | [ ] |
+| OS1.20 | SMP benchmark | 8-core utilization > 90% under load | [ ] |
 
 ### Phase OS2: Real Network Stack (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OS2.1 | VirtIO-net driver v2 | Multi-queue, checksum offload, TSO/LRO | [x] |
-| OS2.2 | Ethernet frame handling | MAC address, VLAN tagging, ARP | [x] |
-| OS2.3 | IP layer v2 | IPv4 + IPv6 dual stack, ICMP, routing table | [x] |
-| OS2.4 | TCP v2 | Congestion control (Reno/CUBIC), fast retransmit | [x] |
-| OS2.5 | UDP v2 | Multicast, broadcast support | [x] |
-| OS2.6 | DNS resolver | Recursive DNS resolution, caching | [x] |
-| OS2.7 | DHCP client | Auto-configure IP, gateway, DNS | [x] |
-| OS2.8 | Socket API v2 | Berkeley sockets: socket/bind/listen/accept/connect | [x] |
-| OS2.9 | Netfilter/firewall | Packet filtering rules (iptables-style) | [x] |
-| OS2.10 | Network namespaces | Isolated network stacks per container | [x] |
-| OS2.11 | TLS integration | TLS 1.3 for secure connections | [x] |
-| OS2.12 | HTTP server v2 | HTTP/1.1 + HTTP/2 with keep-alive | [x] |
-| OS2.13 | NTP client | Network time synchronization | [x] |
-| OS2.14 | Ping utility | ICMP echo request/reply | [x] |
-| OS2.15 | Netstat utility | Show active connections and listening ports | [x] |
-| OS2.16 | Wget utility | Download files via HTTP | [x] |
-| OS2.17 | SSH server | Minimal SSH for remote access | [x] |
-| OS2.18 | Network benchmarks | Throughput: TCP stream > 100 Mbps in QEMU | [x] |
-| OS2.19 | Network stack tests | 30 tests: ARP, TCP handshake, HTTP, DNS | [x] |
-| OS2.20 | Network documentation | Protocol implementation notes, API docs | [x] |
+| OS2.1 | VirtIO-net driver v2 | Multi-queue, checksum offload, TSO/LRO | [ ] |
+| OS2.2 | Ethernet frame handling | MAC address, VLAN tagging, ARP | [ ] |
+| OS2.3 | IP layer v2 | IPv4 + IPv6 dual stack, ICMP, routing table | [ ] |
+| OS2.4 | TCP v2 | Congestion control (Reno/CUBIC), fast retransmit | [ ] |
+| OS2.5 | UDP v2 | Multicast, broadcast support | [ ] |
+| OS2.6 | DNS resolver | Recursive DNS resolution, caching | [ ] |
+| OS2.7 | DHCP client | Auto-configure IP, gateway, DNS | [ ] |
+| OS2.8 | Socket API v2 | Berkeley sockets: socket/bind/listen/accept/connect | [ ] |
+| OS2.9 | Netfilter/firewall | Packet filtering rules (iptables-style) | [ ] |
+| OS2.10 | Network namespaces | Isolated network stacks per container | [ ] |
+| OS2.11 | TLS integration | TLS 1.3 for secure connections | [ ] |
+| OS2.12 | HTTP server v2 | HTTP/1.1 + HTTP/2 with keep-alive | [ ] |
+| OS2.13 | NTP client | Network time synchronization | [ ] |
+| OS2.14 | Ping utility | ICMP echo request/reply | [ ] |
+| OS2.15 | Netstat utility | Show active connections and listening ports | [ ] |
+| OS2.16 | Wget utility | Download files via HTTP | [ ] |
+| OS2.17 | SSH server | Minimal SSH for remote access | [ ] |
+| OS2.18 | Network benchmarks | Throughput: TCP stream > 100 Mbps in QEMU | [ ] |
+| OS2.19 | Network stack tests | 30 tests: ARP, TCP handshake, HTTP, DNS | [ ] |
+| OS2.20 | Network documentation | Protocol implementation notes, API docs | [ ] |
 
 ### Phase OS3: GPU Compositor & Desktop (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| OS3.1 | VirtIO-GPU v2 | 3D acceleration, multi-plane, cursor plane | [x] |
-| OS3.2 | Framebuffer management | Double buffering, vsync, page flip | [x] |
-| OS3.3 | Resolution detection | EDID parsing, mode setting | [x] |
-| OS3.4 | 2D drawing primitives | Lines, rectangles, circles, filled shapes | [x] |
-| OS3.5 | Font renderer | Bitmap font rendering with glyph cache | [x] |
-| OS3.6 | Window manager | Floating windows with title bar, resize, move | [x] |
-| OS3.7 | Window decorations | Title bar, close/minimize/maximize buttons | [x] |
-| OS3.8 | Desktop background | Solid color / image background rendering | [x] |
-| OS3.9 | Taskbar | Bottom panel with running applications | [x] |
-| OS3.10 | Application launcher | Start menu / application grid | [x] |
-| OS3.11 | Terminal emulator | VT100 terminal in a GUI window | [x] |
-| OS3.12 | Text editor | Simple Notepad-style text editor | [x] |
-| OS3.13 | File manager | Browse, open, copy, move, delete files | [x] |
-| OS3.14 | System monitor | CPU, memory, process monitor | [x] |
-| OS3.15 | Image viewer | Display PNG/BMP images in a window | [x] |
-| OS3.16 | Calculator app | Basic calculator with GUI | [x] |
-| OS3.17 | Mouse cursor rendering | Hardware cursor or software sprite | [x] |
-| OS3.18 | Keyboard input routing | Focus tracking, key event dispatch | [x] |
-| OS3.19 | Clipboard system | Copy/paste between applications | [x] |
-| OS3.20 | Drag and drop | Move windows, drag files | [x] |
-| OS3.21 | Alpha blending | Transparent windows and overlays | [x] |
-| OS3.22 | Damage tracking | Only redraw changed screen regions | [x] |
-| OS3.23 | Multi-monitor | Support multiple display outputs | [x] |
-| OS3.24 | Screen resolution switch | Runtime resolution change | [x] |
-| OS3.25 | Theme support | Color scheme, font selection | [x] |
-| OS3.26 | Wallpaper manager | Change desktop background | [x] |
-| OS3.27 | Lock screen | Password-protected screen lock | [x] |
-| OS3.28 | Screenshot utility | Capture screen/window to file | [x] |
-| OS3.29 | Compositor tests | 30 tests: rendering, layout, events | [x] |
-| OS3.30 | Desktop documentation | Architecture, window protocol, app development | [x] |
+| OS3.1 | VirtIO-GPU v2 | 3D acceleration, multi-plane, cursor plane | [ ] |
+| OS3.2 | Framebuffer management | Double buffering, vsync, page flip | [ ] |
+| OS3.3 | Resolution detection | EDID parsing, mode setting | [ ] |
+| OS3.4 | 2D drawing primitives | Lines, rectangles, circles, filled shapes | [ ] |
+| OS3.5 | Font renderer | Bitmap font rendering with glyph cache | [ ] |
+| OS3.6 | Window manager | Floating windows with title bar, resize, move | [ ] |
+| OS3.7 | Window decorations | Title bar, close/minimize/maximize buttons | [ ] |
+| OS3.8 | Desktop background | Solid color / image background rendering | [ ] |
+| OS3.9 | Taskbar | Bottom panel with running applications | [ ] |
+| OS3.10 | Application launcher | Start menu / application grid | [ ] |
+| OS3.11 | Terminal emulator | VT100 terminal in a GUI window | [ ] |
+| OS3.12 | Text editor | Simple Notepad-style text editor | [ ] |
+| OS3.13 | File manager | Browse, open, copy, move, delete files | [ ] |
+| OS3.14 | System monitor | CPU, memory, process monitor | [ ] |
+| OS3.15 | Image viewer | Display PNG/BMP images in a window | [ ] |
+| OS3.16 | Calculator app | Basic calculator with GUI | [ ] |
+| OS3.17 | Mouse cursor rendering | Hardware cursor or software sprite | [ ] |
+| OS3.18 | Keyboard input routing | Focus tracking, key event dispatch | [ ] |
+| OS3.19 | Clipboard system | Copy/paste between applications | [ ] |
+| OS3.20 | Drag and drop | Move windows, drag files | [ ] |
+| OS3.21 | Alpha blending | Transparent windows and overlays | [ ] |
+| OS3.22 | Damage tracking | Only redraw changed screen regions | [ ] |
+| OS3.23 | Multi-monitor | Support multiple display outputs | [ ] |
+| OS3.24 | Screen resolution switch | Runtime resolution change | [ ] |
+| OS3.25 | Theme support | Color scheme, font selection | [ ] |
+| OS3.26 | Wallpaper manager | Change desktop background | [ ] |
+| OS3.27 | Lock screen | Password-protected screen lock | [ ] |
+| OS3.28 | Screenshot utility | Capture screen/window to file | [ ] |
+| OS3.29 | Compositor tests | 30 tests: rendering, layout, events | [ ] |
+| OS3.30 | Desktop documentation | Architecture, window protocol, app development | [ ] |
 
 ---
 
@@ -992,86 +992,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| COM1.1 | Landing page | Modern landing page with key features | [x] |
-| COM1.2 | Download page | Platform-specific binary downloads | [x] |
-| COM1.3 | Documentation site | Hosted docs with search and navigation | [x] |
-| COM1.4 | Blog section | Release notes, tutorials, announcements | [x] |
-| COM1.5 | Playground embed | Inline code playground on website | [x] |
-| COM1.6 | Package registry UI | Web interface for browsing packages | [x] |
-| COM1.7 | Showcase gallery | Projects built with Fajar Lang | [x] |
-| COM1.8 | Comparison page | Fajar vs Rust vs C vs Python feature matrix | [x] |
-| COM1.9 | Installation wizard | Interactive install guide per platform | [x] |
-| COM1.10 | SEO optimization | Meta tags, sitemap, structured data | [x] |
-| COM1.11 | Analytics | Privacy-respecting usage analytics | [x] |
-| COM1.12 | Performance (Lighthouse) | 90+ score on all Lighthouse metrics | [x] |
-| COM1.13 | Mobile responsive | Full functionality on mobile devices | [x] |
-| COM1.14 | Internationalization | English + Bahasa Indonesia | [x] |
-| COM1.15 | Newsletter | Email signup for release announcements | [x] |
-| COM1.16 | RSS feed | Blog and release RSS feeds | [x] |
-| COM1.17 | Status page | Build status, registry uptime | [x] |
-| COM1.18 | CDN deployment | Global CDN for fast page loads | [x] |
-| COM1.19 | Website CI/CD | Auto-deploy on push, preview for PRs | [x] |
-| COM1.20 | Website tests | Link checker, accessibility audit, performance | [x] |
+| COM1.1 | Landing page | Modern landing page with key features | [ ] |
+| COM1.2 | Download page | Platform-specific binary downloads | [ ] |
+| COM1.3 | Documentation site | Hosted docs with search and navigation | [ ] |
+| COM1.4 | Blog section | Release notes, tutorials, announcements | [ ] |
+| COM1.5 | Playground embed | Inline code playground on website | [ ] |
+| COM1.6 | Package registry UI | Web interface for browsing packages | [ ] |
+| COM1.7 | Showcase gallery | Projects built with Fajar Lang | [ ] |
+| COM1.8 | Comparison page | Fajar vs Rust vs C vs Python feature matrix | [ ] |
+| COM1.9 | Installation wizard | Interactive install guide per platform | [ ] |
+| COM1.10 | SEO optimization | Meta tags, sitemap, structured data | [ ] |
+| COM1.11 | Analytics | Privacy-respecting usage analytics | [ ] |
+| COM1.12 | Performance (Lighthouse) | 90+ score on all Lighthouse metrics | [ ] |
+| COM1.13 | Mobile responsive | Full functionality on mobile devices | [ ] |
+| COM1.14 | Internationalization | English + Bahasa Indonesia | [ ] |
+| COM1.15 | Newsletter | Email signup for release announcements | [ ] |
+| COM1.16 | RSS feed | Blog and release RSS feeds | [ ] |
+| COM1.17 | Status page | Build status, registry uptime | [ ] |
+| COM1.18 | CDN deployment | Global CDN for fast page loads | [ ] |
+| COM1.19 | Website CI/CD | Auto-deploy on push, preview for PRs | [ ] |
+| COM1.20 | Website tests | Link checker, accessibility audit, performance | [ ] |
 
 ### Phase COM2: Community Platform (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| COM2.1 | GitHub organization | Transfer repos to fajar-lang org | [x] |
-| COM2.2 | Issue templates | Bug report, feature request, RFC templates | [x] |
-| COM2.3 | PR templates | Checklist, description, testing evidence | [x] |
-| COM2.4 | Discussion forum | GitHub Discussions or Discourse setup | [x] |
-| COM2.5 | Discord server | Community chat with channels per topic | [x] |
-| COM2.6 | Code of Conduct | Contributor covenant adoption | [x] |
-| COM2.7 | Contributing guide | How to contribute code, docs, translations | [x] |
-| COM2.8 | Good first issues | 20 labeled starter issues for newcomers | [x] |
-| COM2.9 | Mentorship program | Pair experienced contributors with newcomers | [x] |
-| COM2.10 | Release process | Documented release cycle (monthly/quarterly) | [x] |
-| COM2.11 | RFC process | Formal process for language changes | [x] |
-| COM2.12 | Governance model | Decision-making structure, maintainer roles | [x] |
-| COM2.13 | Maintainer guide | How to review PRs, triage issues, release | [x] |
-| COM2.14 | Style guide | Official Fajar Lang coding style | [x] |
-| COM2.15 | Branding assets | Logo, colors, fonts, usage guidelines | [x] |
-| COM2.16 | Presentation deck | Slides for conferences and meetups | [x] |
-| COM2.17 | Demo video | 5-minute intro video showing key features | [x] |
-| COM2.18 | Social media presence | Twitter/X, LinkedIn, YouTube channels | [x] |
-| COM2.19 | Community metrics | Track contributors, issues, PRs, stars | [x] |
-| COM2.20 | Swag store | Stickers, T-shirts, mugs | [x] |
+| COM2.1 | GitHub organization | Transfer repos to fajar-lang org | [ ] |
+| COM2.2 | Issue templates | Bug report, feature request, RFC templates | [ ] |
+| COM2.3 | PR templates | Checklist, description, testing evidence | [ ] |
+| COM2.4 | Discussion forum | GitHub Discussions or Discourse setup | [ ] |
+| COM2.5 | Discord server | Community chat with channels per topic | [ ] |
+| COM2.6 | Code of Conduct | Contributor covenant adoption | [ ] |
+| COM2.7 | Contributing guide | How to contribute code, docs, translations | [ ] |
+| COM2.8 | Good first issues | 20 labeled starter issues for newcomers | [ ] |
+| COM2.9 | Mentorship program | Pair experienced contributors with newcomers | [ ] |
+| COM2.10 | Release process | Documented release cycle (monthly/quarterly) | [ ] |
+| COM2.11 | RFC process | Formal process for language changes | [ ] |
+| COM2.12 | Governance model | Decision-making structure, maintainer roles | [ ] |
+| COM2.13 | Maintainer guide | How to review PRs, triage issues, release | [ ] |
+| COM2.14 | Style guide | Official Fajar Lang coding style | [ ] |
+| COM2.15 | Branding assets | Logo, colors, fonts, usage guidelines | [ ] |
+| COM2.16 | Presentation deck | Slides for conferences and meetups | [ ] |
+| COM2.17 | Demo video | 5-minute intro video showing key features | [ ] |
+| COM2.18 | Social media presence | Twitter/X, LinkedIn, YouTube channels | [ ] |
+| COM2.19 | Community metrics | Track contributors, issues, PRs, stars | [ ] |
+| COM2.20 | Swag store | Stickers, T-shirts, mugs | [ ] |
 
 ### Phase COM3: Ecosystem Growth (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| COM3.1 | Plugin marketplace | Discover and install community plugins | [x] |
-| COM3.2 | Template marketplace | Project templates shared by community | [x] |
-| COM3.3 | Example marketplace | Community-contributed examples | [x] |
-| COM3.4 | Package quality scores | Automated quality scoring for packages | [x] |
-| COM3.5 | Dependency insights | Usage stats, dependency health dashboard | [x] |
-| COM3.6 | Security advisories | CVE-style advisories for Fajar packages | [x] |
-| COM3.7 | Automated releases | Bot for dependency updates and releases | [x] |
-| COM3.8 | CI templates | GitHub Actions, GitLab CI, Jenkins templates | [x] |
-| COM3.9 | Docker images | Official Docker images for building/running | [x] |
-| COM3.10 | Nix/Flake package | Nix package for reproducible builds | [x] |
-| COM3.11 | Homebrew formula | `brew install fajar` for macOS | [x] |
-| COM3.12 | APT/YUM packages | Linux distribution packages | [x] |
-| COM3.13 | Snap/Flatpak | Universal Linux packages | [x] |
-| COM3.14 | Windows installer | MSI/NSIS installer with PATH setup | [x] |
-| COM3.15 | Chocolatey package | `choco install fajar` for Windows | [x] |
-| COM3.16 | asdf plugin | Version management via asdf | [x] |
-| COM3.17 | GitHub Codespaces | Pre-configured cloud dev environment | [x] |
-| COM3.18 | Gitpod config | One-click development in browser | [x] |
-| COM3.19 | Conference talks | Submit talks to FOSDEM, RustConf, PyCon | [x] |
-| COM3.20 | Workshop materials | 3-hour hands-on workshop curriculum | [x] |
-| COM3.21 | University curriculum | Course materials for CS education | [x] |
-| COM3.22 | Certification program | Official Fajar Lang developer certification | [x] |
-| COM3.23 | Ambassador program | Regional community leaders | [x] |
-| COM3.24 | Bug bounty | Security bug bounty program | [x] |
-| COM3.25 | Sponsorship model | Funding model for sustainable development | [x] |
-| COM3.26 | Annual survey | Community survey for priorities | [x] |
-| COM3.27 | Roadmap voting | Community input on feature priorities | [x] |
-| COM3.28 | Contributor recognition | Monthly contributor highlights | [x] |
-| COM3.29 | Ecosystem health report | Quarterly ecosystem health metrics | [x] |
-| COM3.30 | Year-one retrospective | Document lessons learned, plan year two | [x] |
+| COM3.1 | Plugin marketplace | Discover and install community plugins | [ ] |
+| COM3.2 | Template marketplace | Project templates shared by community | [ ] |
+| COM3.3 | Example marketplace | Community-contributed examples | [ ] |
+| COM3.4 | Package quality scores | Automated quality scoring for packages | [ ] |
+| COM3.5 | Dependency insights | Usage stats, dependency health dashboard | [ ] |
+| COM3.6 | Security advisories | CVE-style advisories for Fajar packages | [ ] |
+| COM3.7 | Automated releases | Bot for dependency updates and releases | [ ] |
+| COM3.8 | CI templates | GitHub Actions, GitLab CI, Jenkins templates | [ ] |
+| COM3.9 | Docker images | Official Docker images for building/running | [ ] |
+| COM3.10 | Nix/Flake package | Nix package for reproducible builds | [ ] |
+| COM3.11 | Homebrew formula | `brew install fajar` for macOS | [ ] |
+| COM3.12 | APT/YUM packages | Linux distribution packages | [ ] |
+| COM3.13 | Snap/Flatpak | Universal Linux packages | [ ] |
+| COM3.14 | Windows installer | MSI/NSIS installer with PATH setup | [ ] |
+| COM3.15 | Chocolatey package | `choco install fajar` for Windows | [ ] |
+| COM3.16 | asdf plugin | Version management via asdf | [ ] |
+| COM3.17 | GitHub Codespaces | Pre-configured cloud dev environment | [ ] |
+| COM3.18 | Gitpod config | One-click development in browser | [ ] |
+| COM3.19 | Conference talks | Submit talks to FOSDEM, RustConf, PyCon | [ ] |
+| COM3.20 | Workshop materials | 3-hour hands-on workshop curriculum | [ ] |
+| COM3.21 | University curriculum | Course materials for CS education | [ ] |
+| COM3.22 | Certification program | Official Fajar Lang developer certification | [ ] |
+| COM3.23 | Ambassador program | Regional community leaders | [ ] |
+| COM3.24 | Bug bounty | Security bug bounty program | [ ] |
+| COM3.25 | Sponsorship model | Funding model for sustainable development | [ ] |
+| COM3.26 | Annual survey | Community survey for priorities | [ ] |
+| COM3.27 | Roadmap voting | Community input on feature priorities | [ ] |
+| COM3.28 | Contributor recognition | Monthly contributor highlights | [ ] |
+| COM3.29 | Ecosystem health report | Quarterly ecosystem health metrics | [ ] |
+| COM3.30 | Year-one retrospective | Document lessons learned, plan year two | [ ] |
 
 ---
 
