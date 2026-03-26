@@ -277,6 +277,301 @@ impl CompilerPlugin for TodoLint {
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// PQ9.2: Plugin API Versioning
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Current plugin API version. Plugins must match this to load.
+pub const PLUGIN_API_VERSION: u32 = 1;
+
+/// Check if a plugin's API version is compatible.
+pub fn check_api_version(plugin_api_version: u32) -> Result<(), String> {
+    if plugin_api_version != PLUGIN_API_VERSION {
+        Err(format!(
+            "incompatible plugin API: plugin has v{plugin_api_version}, need v{PLUGIN_API_VERSION}"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ9.3: Plugin Configuration
+// ═══════════════════════════════════════════════════════════════════════
+
+impl PluginRegistry {
+    /// Set a plugin option.
+    pub fn set_option(&mut self, plugin_name: &str, key: &str, value: &str) {
+        if let Some(cfg) = self.configs.get_mut(plugin_name) {
+            cfg.options.insert(key.to_string(), value.to_string());
+        }
+    }
+
+    /// Get a plugin option.
+    pub fn get_option(&self, plugin_name: &str, key: &str) -> Option<&str> {
+        self.configs
+            .get(plugin_name)
+            .and_then(|c| c.options.get(key).map(|s| s.as_str()))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ9.7: Auto-fix API
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A suggested code fix from a plugin.
+#[derive(Debug, Clone)]
+pub struct CodeFix {
+    /// File path.
+    pub file: String,
+    /// Line to replace (1-based).
+    pub line: u32,
+    /// Original text.
+    pub original: String,
+    /// Replacement text.
+    pub replacement: String,
+    /// Description of the fix.
+    pub description: String,
+}
+
+impl std::fmt::Display for CodeFix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}: {} → {}",
+            self.file, self.line, self.original, self.replacement
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ9.8: Performance Budget
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Run a plugin with a performance budget.
+/// Returns diagnostics if completed within budget, or a timeout error.
+pub fn run_plugin_with_budget(
+    plugin: &dyn CompilerPlugin,
+    source: &str,
+    file: &str,
+    budget_ms: u64,
+) -> Result<Vec<PluginDiagnostic>, String> {
+    let start = std::time::Instant::now();
+    let diags = plugin.on_ast(source, file);
+    let elapsed = start.elapsed().as_millis() as u64;
+    if elapsed > budget_ms {
+        Err(format!(
+            "plugin '{}' exceeded budget: {}ms > {}ms",
+            plugin.name(),
+            elapsed,
+            budget_ms
+        ))
+    } else {
+        Ok(diags)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ9.9: 5 Built-in Plugins (3 new + 2 existing)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Plugin 3: Naming convention checker.
+/// Enforces snake_case for functions/variables, PascalCase for types.
+pub struct NamingConventionLint;
+
+impl CompilerPlugin for NamingConventionLint {
+    fn name(&self) -> &str {
+        "naming-convention"
+    }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+    fn on_ast(&self, source: &str, file: &str) -> Vec<PluginDiagnostic> {
+        let mut diags = Vec::new();
+        for (i, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+            // Check fn names are snake_case
+            if let Some(rest) = trimmed.strip_prefix("fn ") {
+                let name = rest.split('(').next().unwrap_or("").trim();
+                if !name.is_empty() && name.chars().any(|c| c.is_uppercase()) {
+                    diags.push(PluginDiagnostic {
+                        severity: DiagnosticSeverity::Warning,
+                        message: format!("function `{name}` should be snake_case"),
+                        file: file.to_string(),
+                        line: (i + 1) as u32,
+                        column: 1,
+                        plugin: self.name().to_string(),
+                        fix: Some(format!("rename to `{}`", to_snake_case(name))),
+                    });
+                }
+            }
+            // Check struct/enum names are PascalCase
+            for keyword in ["struct ", "enum "] {
+                if let Some(rest) = trimmed.strip_prefix(keyword) {
+                    let name = rest.split(['{', '<', ' ']).next().unwrap_or("").trim();
+                    if !name.is_empty()
+                        && name.chars().next().is_some_and(|c| c.is_lowercase())
+                    {
+                        diags.push(PluginDiagnostic {
+                            severity: DiagnosticSeverity::Warning,
+                            message: format!("{}{name}` should be PascalCase", &keyword.trim()),
+                            file: file.to_string(),
+                            line: (i + 1) as u32,
+                            column: 1,
+                            plugin: self.name().to_string(),
+                            fix: Some(format!("rename to `{}`", to_pascal_case(name))),
+                        });
+                    }
+                }
+            }
+        }
+        diags
+    }
+}
+
+/// Plugin 4: Complexity checker — warns about functions with too many lines.
+pub struct ComplexityLint {
+    /// Maximum lines per function (default: 50).
+    pub max_lines: usize,
+}
+
+impl Default for ComplexityLint {
+    fn default() -> Self {
+        Self { max_lines: 50 }
+    }
+}
+
+impl CompilerPlugin for ComplexityLint {
+    fn name(&self) -> &str {
+        "complexity"
+    }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+    fn on_ast(&self, source: &str, file: &str) -> Vec<PluginDiagnostic> {
+        let mut diags = Vec::new();
+        let mut fn_start: Option<(String, usize)> = None;
+        let mut brace_depth = 0i32;
+
+        for (i, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
+                let name = trimmed
+                    .trim_start_matches("pub ")
+                    .trim_start_matches("fn ")
+                    .split('(')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                fn_start = Some((name, i));
+                brace_depth = 0;
+            }
+            brace_depth += trimmed.matches('{').count() as i32;
+            brace_depth -= trimmed.matches('}').count() as i32;
+
+            if brace_depth == 0 {
+                if let Some((ref name, start)) = fn_start {
+                    let lines = i - start + 1;
+                    if lines > self.max_lines {
+                        diags.push(PluginDiagnostic {
+                            severity: DiagnosticSeverity::Warning,
+                            message: format!(
+                                "function `{name}` is {lines} lines (max {})",
+                                self.max_lines
+                            ),
+                            file: file.to_string(),
+                            line: (start + 1) as u32,
+                            column: 1,
+                            plugin: self.name().to_string(),
+                            fix: Some("consider splitting into smaller functions".to_string()),
+                        });
+                    }
+                    fn_start = None;
+                }
+            }
+        }
+        diags
+    }
+}
+
+/// Plugin 5: Security lint — detect hardcoded secrets.
+pub struct SecurityLint;
+
+impl CompilerPlugin for SecurityLint {
+    fn name(&self) -> &str {
+        "security"
+    }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+    fn on_ast(&self, source: &str, file: &str) -> Vec<PluginDiagnostic> {
+        let mut diags = Vec::new();
+        let secret_patterns = [
+            "password", "secret", "api_key", "apikey", "token", "private_key",
+        ];
+        for (i, line) in source.lines().enumerate() {
+            let lower = line.to_lowercase();
+            if lower.contains("let ") && lower.contains("= \"") {
+                for pattern in &secret_patterns {
+                    if lower.contains(pattern) {
+                        diags.push(PluginDiagnostic {
+                            severity: DiagnosticSeverity::Error,
+                            message: format!("potential hardcoded secret: `{pattern}` in string literal"),
+                            file: file.to_string(),
+                            line: (i + 1) as u32,
+                            column: 1,
+                            plugin: self.name().to_string(),
+                            fix: Some("use environment variable instead".to_string()),
+                        });
+                    }
+                }
+            }
+        }
+        diags
+    }
+}
+
+/// Convert to snake_case.
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(c.to_lowercase().next().unwrap_or(c));
+    }
+    result
+}
+
+/// Convert to PascalCase.
+fn to_pascal_case(s: &str) -> String {
+    let mut result = String::new();
+    let mut capitalize_next = true;
+    for c in s.chars() {
+        if c == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.push(c.to_uppercase().next().unwrap_or(c));
+            capitalize_next = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Create a default registry with all 5 built-in plugins.
+pub fn default_registry() -> PluginRegistry {
+    let mut reg = PluginRegistry::new();
+    reg.register(Box::new(UnusedVariableLint));
+    reg.register(Box::new(TodoLint));
+    reg.register(Box::new(NamingConventionLint));
+    reg.register(Box::new(ComplexityLint::default()));
+    reg.register(Box::new(SecurityLint));
+    reg
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,5 +668,157 @@ println(x)
         assert!(s.contains("warning"));
         assert!(s.contains("main.fj:5:1"));
         assert!(s.contains("unused variable"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ9: Quality improvement tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn pq9_2_api_version_match() {
+        assert!(check_api_version(PLUGIN_API_VERSION).is_ok());
+    }
+
+    #[test]
+    fn pq9_2_api_version_mismatch() {
+        let result = check_api_version(99);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("incompatible"));
+    }
+
+    #[test]
+    fn pq9_3_plugin_config() {
+        let mut reg = PluginRegistry::new();
+        reg.register(Box::new(UnusedVariableLint));
+        reg.set_option("unused-variables", "ignore_prefix", "_");
+        assert_eq!(
+            reg.get_option("unused-variables", "ignore_prefix"),
+            Some("_")
+        );
+        assert_eq!(reg.get_option("unused-variables", "nonexistent"), None);
+    }
+
+    #[test]
+    fn pq9_8_performance_budget_ok() {
+        let lint = UnusedVariableLint;
+        let result = run_plugin_with_budget(&lint, "let x = 42\nprintln(x)", "test.fj", 1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn pq9_9_naming_convention() {
+        let lint = NamingConventionLint;
+        let source = "fn myFunction() {}\nstruct point {}";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(
+            diags.iter().any(|d| d.message.contains("snake_case")),
+            "should flag camelCase function"
+        );
+        assert!(
+            diags.iter().any(|d| d.message.contains("PascalCase")),
+            "should flag lowercase struct"
+        );
+    }
+
+    #[test]
+    fn pq9_9_naming_convention_correct() {
+        let lint = NamingConventionLint;
+        let source = "fn my_function() {}\nstruct MyStruct {}";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(diags.is_empty(), "correct naming should have no warnings");
+    }
+
+    #[test]
+    fn pq9_9_complexity_lint() {
+        let lint = ComplexityLint { max_lines: 5 };
+        // 10-line function should trigger
+        let source = "fn big() {\n1\n2\n3\n4\n5\n6\n7\n8\n}";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(
+            diags.iter().any(|d| d.message.contains("lines")),
+            "should warn about long function"
+        );
+    }
+
+    #[test]
+    fn pq9_9_complexity_lint_ok() {
+        let lint = ComplexityLint { max_lines: 50 };
+        let source = "fn small() {\n    42\n}";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(diags.is_empty(), "small function should not trigger");
+    }
+
+    #[test]
+    fn pq9_9_security_lint() {
+        let lint = SecurityLint;
+        let source = "let password = \"hunter2\"\nlet api_key = \"sk-abc123\"";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(
+            diags.iter().any(|d| d.message.contains("password")),
+            "should detect password"
+        );
+        assert!(
+            diags.iter().any(|d| d.message.contains("api_key")),
+            "should detect api_key"
+        );
+        assert!(
+            diags.iter().all(|d| d.severity == DiagnosticSeverity::Error),
+            "security issues should be errors"
+        );
+    }
+
+    #[test]
+    fn pq9_9_security_lint_clean() {
+        let lint = SecurityLint;
+        let source = "let name = \"Fajar\"\nlet count = 42";
+        let diags = lint.on_ast(source, "test.fj");
+        assert!(diags.is_empty(), "no secrets should produce no warnings");
+    }
+
+    #[test]
+    fn pq9_9_default_registry() {
+        let reg = default_registry();
+        assert_eq!(reg.len(), 5, "should have 5 built-in plugins");
+        let names = reg.plugin_names();
+        assert!(names.contains(&"unused-variables"));
+        assert!(names.contains(&"todo-comments"));
+        assert!(names.contains(&"naming-convention"));
+        assert!(names.contains(&"complexity"));
+        assert!(names.contains(&"security"));
+    }
+
+    #[test]
+    fn pq9_9_all_plugins_on_real_code() {
+        let reg = default_registry();
+        let source = r#"fn myBadName() {
+    let password = "secret123"
+    let unused = 42
+    // TODO: fix this
+}
+
+struct point { x: i64 }
+"#;
+        let diags = reg.run_ast_phase(source, "test.fj");
+        // Should find: camelCase fn, hardcoded password, unused var, TODO, lowercase struct
+        assert!(
+            diags.len() >= 4,
+            "should find 4+ issues, got {}: {:?}",
+            diags.len(),
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn pq9_7_code_fix_display() {
+        let fix = CodeFix {
+            file: "main.fj".to_string(),
+            line: 5,
+            original: "let Password".to_string(),
+            replacement: "let _password".to_string(),
+            description: "prefix unused variable".to_string(),
+        };
+        let s = format!("{fix}");
+        assert!(s.contains("main.fj:5"));
+        assert!(s.contains("Password"));
     }
 }
