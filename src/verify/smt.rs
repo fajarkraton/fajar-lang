@@ -478,8 +478,7 @@ pub fn check_satisfiable(assertions: &[(String, i64, &str, i64)]) -> SmtResult {
             let mut assignments = HashMap::new();
             for (name, var) in &vars {
                 if let Some(val) = model.eval(var, true) {
-                    assignments
-                        .insert(name.clone(), SmtValue::Int(val.as_i64().unwrap_or(0)));
+                    assignments.insert(name.clone(), SmtValue::Int(val.as_i64().unwrap_or(0)));
                 }
             }
             SmtResult::Sat(Counterexample { assignments })
@@ -512,10 +511,7 @@ pub fn prove_array_bounds(index_constraint: &str, array_size: i64) -> SmtResult 
     }
 
     // Negate: index < 0 || index >= size
-    let out_of_bounds = z3::ast::Bool::or(
-        &ctx,
-        &[&idx.lt(&zero), &idx.ge(&size)],
-    );
+    let out_of_bounds = z3::ast::Bool::or(&ctx, &[&idx.lt(&zero), &idx.ge(&size)]);
     solver.assert(&out_of_bounds);
 
     match solver.check() {
@@ -552,14 +548,20 @@ pub fn prove_matmul_shapes(m: i64, k1: i64, k2: i64, n: i64) -> SmtResult {
         z3::SatResult::Unsat => SmtResult::Unsat, // proven: k1 must equal k2
         z3::SatResult::Sat => SmtResult::Sat(Counterexample {
             assignments: HashMap::from([
-                ("A_shape".to_string(), SmtValue::Array(vec![
-                    (SmtValue::Int(0), SmtValue::Int(m)),
-                    (SmtValue::Int(1), SmtValue::Int(k1)),
-                ])),
-                ("B_shape".to_string(), SmtValue::Array(vec![
-                    (SmtValue::Int(0), SmtValue::Int(k2)),
-                    (SmtValue::Int(1), SmtValue::Int(n)),
-                ])),
+                (
+                    "A_shape".to_string(),
+                    SmtValue::Array(vec![
+                        (SmtValue::Int(0), SmtValue::Int(m)),
+                        (SmtValue::Int(1), SmtValue::Int(k1)),
+                    ]),
+                ),
+                (
+                    "B_shape".to_string(),
+                    SmtValue::Array(vec![
+                        (SmtValue::Int(0), SmtValue::Int(k2)),
+                        (SmtValue::Int(1), SmtValue::Int(n)),
+                    ]),
+                ),
             ]),
         }),
         z3::SatResult::Unknown => SmtResult::Unknown,
@@ -751,10 +753,8 @@ mod tests {
     #[test]
     fn gc4_satisfiable_constraints() {
         // x > 5 AND x < 10 — satisfiable
-        let result = check_satisfiable(&[
-            ("x".to_string(), 0, ">", 5),
-            ("x".to_string(), 0, "<", 10),
-        ]);
+        let result =
+            check_satisfiable(&[("x".to_string(), 0, ">", 5), ("x".to_string(), 0, "<", 10)]);
         assert!(
             result.is_failed(), // Sat = satisfiable = found assignment
             "x > 5 AND x < 10 should be satisfiable"
@@ -765,10 +765,8 @@ mod tests {
     #[test]
     fn gc4_unsatisfiable_constraints() {
         // x > 10 AND x < 5 — unsatisfiable
-        let result = check_satisfiable(&[
-            ("x".to_string(), 0, ">", 10),
-            ("x".to_string(), 0, "<", 5),
-        ]);
+        let result =
+            check_satisfiable(&[("x".to_string(), 0, ">", 10), ("x".to_string(), 0, "<", 5)]);
         assert!(
             result.is_proven(), // Unsat = no solution = constraints conflict
             "x > 10 AND x < 5 should be unsatisfiable"
@@ -802,10 +800,7 @@ mod tests {
     fn gc4_matmul_shapes_compatible() {
         // A[3,4] × B[4,5] — k1 == k2 == 4
         let result = prove_matmul_shapes(3, 4, 4, 5);
-        assert!(
-            result.is_proven(),
-            "k=4 == k=4 should be proven"
-        );
+        assert!(result.is_proven(), "k=4 == k=4 should be proven");
     }
 
     #[cfg(feature = "smt")]
@@ -823,10 +818,8 @@ mod tests {
     #[test]
     fn gc4_two_variable_constraint() {
         // x > 0 AND y > 0 AND x + y should be > 0 (checked via satisfiability)
-        let result = check_satisfiable(&[
-            ("x".to_string(), 0, ">", 0),
-            ("y".to_string(), 0, ">", 0),
-        ]);
+        let result =
+            check_satisfiable(&[("x".to_string(), 0, ">", 0), ("y".to_string(), 0, ">", 0)]);
         // Should find satisfying assignment
         if let SmtResult::Sat(ce) = &result {
             assert!(ce.assignments.contains_key("x"));

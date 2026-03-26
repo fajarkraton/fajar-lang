@@ -210,7 +210,7 @@ fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
         let (key_val, r) = parse_string(rest)?;
         let key = match key_val {
             JsonValue::String(s) => s,
-            _ => unreachable!(),
+            _ => return Err("expected string key in object".to_string()),
         };
         let r = r.trim_start();
         if !r.starts_with(':') {
@@ -230,6 +230,78 @@ fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
     }
 }
 
+/// Serializes a `JsonValue` to a compact JSON string.
+///
+/// Equivalent to `format!("{value}")` but provided as a named function for
+/// API symmetry with `json_parse`.
+pub fn json_stringify(value: &JsonValue) -> String {
+    format!("{value}")
+}
+
+/// Serializes a `JsonValue` to a pretty-printed JSON string with indentation.
+pub fn json_stringify_pretty(value: &JsonValue) -> String {
+    fn write_pretty(val: &JsonValue, indent: usize, buf: &mut String) {
+        let pad = "  ".repeat(indent);
+        let inner = "  ".repeat(indent + 1);
+        match val {
+            JsonValue::Null => buf.push_str("null"),
+            JsonValue::Bool(b) => buf.push_str(&b.to_string()),
+            JsonValue::Number(n) => {
+                if *n == (*n as i64) as f64 {
+                    buf.push_str(&(*n as i64).to_string());
+                } else {
+                    buf.push_str(&n.to_string());
+                }
+            }
+            JsonValue::String(s) => {
+                buf.push('"');
+                buf.push_str(&s.replace('\\', "\\\\").replace('"', "\\\""));
+                buf.push('"');
+            }
+            JsonValue::Array(arr) => {
+                if arr.is_empty() {
+                    buf.push_str("[]");
+                    return;
+                }
+                buf.push_str("[\n");
+                for (i, v) in arr.iter().enumerate() {
+                    buf.push_str(&inner);
+                    write_pretty(v, indent + 1, buf);
+                    if i < arr.len() - 1 {
+                        buf.push(',');
+                    }
+                    buf.push('\n');
+                }
+                buf.push_str(&pad);
+                buf.push(']');
+            }
+            JsonValue::Object(entries) => {
+                if entries.is_empty() {
+                    buf.push_str("{}");
+                    return;
+                }
+                buf.push_str("{\n");
+                for (i, (k, v)) in entries.iter().enumerate() {
+                    buf.push_str(&inner);
+                    buf.push('"');
+                    buf.push_str(k);
+                    buf.push_str("\": ");
+                    write_pretty(v, indent + 1, buf);
+                    if i < entries.len() - 1 {
+                        buf.push(',');
+                    }
+                    buf.push('\n');
+                }
+                buf.push_str(&pad);
+                buf.push('}');
+            }
+        }
+    }
+    let mut buf = String::new();
+    write_pretty(value, 0, &mut buf);
+    buf
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // S3.2: CSV Reader/Writer
 // ═══════════════════════════════════════════════════════════════════════
@@ -238,16 +310,59 @@ fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
 pub type CsvRecord = Vec<String>;
 
 /// Parses CSV text into records.
+///
+/// Handles RFC 4180-style quoting: fields wrapped in double quotes may
+/// contain the delimiter, newlines, and escaped quotes (`""`).
 pub fn csv_parse(input: &str, delimiter: char) -> Vec<CsvRecord> {
-    input
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            line.split(delimiter)
-                .map(|field| field.trim().trim_matches('"').to_string())
-                .collect()
-        })
-        .collect()
+    let mut records: Vec<CsvRecord> = Vec::new();
+    let mut current_record: CsvRecord = Vec::new();
+    let mut field = String::new();
+    let mut in_quotes = false;
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if in_quotes {
+            if c == '"' {
+                // Check for escaped quote ("") vs end of quoted field.
+                if chars.peek() == Some(&'"') {
+                    field.push('"');
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                field.push(c);
+            }
+        } else if c == '"' && field.is_empty() {
+            // Start of a quoted field (quote must appear at field start).
+            in_quotes = true;
+        } else if c == delimiter {
+            current_record.push(field.trim().to_string());
+            field = String::new();
+        } else if c == '\n' {
+            // Ignore trailing \r before \n.
+            let trimmed = field.trim_end_matches('\r');
+            current_record.push(trimmed.trim().to_string());
+            field = String::new();
+            if !current_record.iter().all(|f| f.is_empty()) || current_record.len() > 1 {
+                records.push(current_record);
+            }
+            current_record = Vec::new();
+        } else {
+            field.push(c);
+        }
+    }
+
+    // Flush last field / record.
+    if !field.is_empty() || !current_record.is_empty() {
+        let trimmed = field.trim_end_matches('\r');
+        current_record.push(trimmed.trim().to_string());
+        if !current_record.iter().all(|f| f.is_empty()) || current_record.len() > 1 {
+            records.push(current_record);
+        }
+    }
+
+    records
 }
 
 /// Serializes records to CSV text.
@@ -269,6 +384,209 @@ pub fn csv_serialize(records: &[CsvRecord], delimiter: char) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// S3.2b: TOML Parser
+// ═══════════════════════════════════════════════════════════════════════
+
+/// TOML value type (mirrors TOML data model).
+#[derive(Debug, Clone, PartialEq)]
+pub enum TomlValue {
+    /// A string value.
+    String(String),
+    /// An integer value.
+    Integer(i64),
+    /// A float value.
+    Float(f64),
+    /// A boolean value.
+    Bool(bool),
+    /// A TOML array.
+    Array(Vec<TomlValue>),
+    /// A TOML table (ordered key-value pairs).
+    Table(Vec<(String, TomlValue)>),
+}
+
+impl TomlValue {
+    /// Gets a value by key (for tables).
+    pub fn get(&self, key: &str) -> Option<&TomlValue> {
+        match self {
+            Self::Table(entries) => entries.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+
+    /// Returns as string if this is a String value.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Returns as i64 if this is an Integer value.
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Integer(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Returns as f64 if this is a Float value.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Float(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Returns as bool if this is a Bool value.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for TomlValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::String(s) => write!(f, "\"{s}\""),
+            Self::Integer(n) => write!(f, "{n}"),
+            Self::Float(n) => write!(f, "{n}"),
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Array(arr) => {
+                write!(f, "[")?;
+                for (i, v) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{v}")?;
+                }
+                write!(f, "]")
+            }
+            Self::Table(entries) => {
+                for (i, (k, v)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        writeln!(f)?;
+                    }
+                    write!(f, "{k} = {v}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Converts a `toml::Value` (from the toml crate) into our `TomlValue`.
+fn toml_crate_to_toml_value(val: &toml::Value) -> TomlValue {
+    match val {
+        toml::Value::String(s) => TomlValue::String(s.clone()),
+        toml::Value::Integer(n) => TomlValue::Integer(*n),
+        toml::Value::Float(f) => TomlValue::Float(*f),
+        toml::Value::Boolean(b) => TomlValue::Bool(*b),
+        toml::Value::Datetime(dt) => TomlValue::String(dt.to_string()),
+        toml::Value::Array(arr) => {
+            TomlValue::Array(arr.iter().map(toml_crate_to_toml_value).collect())
+        }
+        toml::Value::Table(table) => {
+            let entries = table
+                .iter()
+                .map(|(k, v)| (k.clone(), toml_crate_to_toml_value(v)))
+                .collect();
+            TomlValue::Table(entries)
+        }
+    }
+}
+
+/// Parses a TOML string into a `TomlValue`.
+///
+/// Uses the `toml` crate (v0.8) for standards-compliant parsing, then
+/// converts the result into our own `TomlValue` type.
+pub fn toml_parse(input: &str) -> Result<TomlValue, String> {
+    let parsed: toml::Value = input
+        .parse::<toml::Value>()
+        .map_err(|e| format!("TOML parse error: {e}"))?;
+    Ok(toml_crate_to_toml_value(&parsed))
+}
+
+/// Serializes a `TomlValue` to a TOML string.
+///
+/// Handles top-level tables and nested structures.
+pub fn toml_stringify(value: &TomlValue) -> String {
+    fn write_value(val: &TomlValue) -> String {
+        match val {
+            TomlValue::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+            TomlValue::Integer(n) => n.to_string(),
+            TomlValue::Float(f) => {
+                let s = f.to_string();
+                // Ensure float has a decimal point for TOML compliance.
+                if s.contains('.') || s.contains('e') || s.contains('E') {
+                    s
+                } else {
+                    format!("{s}.0")
+                }
+            }
+            TomlValue::Bool(b) => b.to_string(),
+            TomlValue::Array(arr) => {
+                let items: Vec<String> = arr.iter().map(write_value).collect();
+                format!("[{}]", items.join(", "))
+            }
+            TomlValue::Table(entries) => {
+                // Inline table.
+                let items: Vec<String> = entries
+                    .iter()
+                    .map(|(k, v)| format!("{k} = {}", write_value(v)))
+                    .collect();
+                format!("{{{}}}", items.join(", "))
+            }
+        }
+    }
+
+    fn write_table(entries: &[(String, TomlValue)], prefix: &str, buf: &mut String) {
+        // First pass: write simple key-value pairs.
+        for (key, val) in entries {
+            if !matches!(val, TomlValue::Table(_)) {
+                if !prefix.is_empty() && buf.is_empty() || (!buf.is_empty() && buf.ends_with('\n'))
+                {
+                    // Already at line start.
+                } else if !buf.is_empty() {
+                    buf.push('\n');
+                }
+                buf.push_str(&format!("{key} = {}\n", write_value(val)));
+            }
+        }
+
+        // Second pass: write sub-tables with [section] headers.
+        for (key, val) in entries {
+            if let TomlValue::Table(sub_entries) = val {
+                let section = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                if !buf.is_empty() && !buf.ends_with('\n') {
+                    buf.push('\n');
+                }
+                buf.push_str(&format!("[{section}]\n"));
+                write_table(sub_entries, &section, buf);
+            }
+        }
+    }
+
+    match value {
+        TomlValue::Table(entries) => {
+            let mut buf = String::new();
+            write_table(entries, "", &mut buf);
+            // Remove trailing newline for consistency.
+            while buf.ends_with('\n') {
+                buf.pop();
+            }
+            buf
+        }
+        other => write_value(other),
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -601,5 +919,255 @@ mod tests {
             mime_from_magic(&[0x7F, b'E', b'L', b'F']),
             "application/x-elf"
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Integration: json_stringify
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn json_stringify_compact_primitives() {
+        assert_eq!(json_stringify(&JsonValue::Null), "null");
+        assert_eq!(json_stringify(&JsonValue::Bool(true)), "true");
+        assert_eq!(json_stringify(&JsonValue::Number(3.14)), "3.14");
+        assert_eq!(json_stringify(&JsonValue::Number(42.0)), "42");
+        assert_eq!(
+            json_stringify(&JsonValue::String("hello".into())),
+            "\"hello\""
+        );
+    }
+
+    #[test]
+    fn json_stringify_object_and_array() {
+        let val = JsonValue::Object(vec![
+            (
+                "arr".into(),
+                JsonValue::Array(vec![JsonValue::Number(1.0), JsonValue::Number(2.0)]),
+            ),
+            ("flag".into(), JsonValue::Bool(false)),
+        ]);
+        let s = json_stringify(&val);
+        assert!(s.contains("\"arr\":[1,2]"));
+        assert!(s.contains("\"flag\":false"));
+    }
+
+    #[test]
+    fn json_stringify_pretty_output() {
+        let val = JsonValue::Object(vec![
+            ("name".into(), JsonValue::String("fajar".into())),
+            ("version".into(), JsonValue::Number(5.0)),
+        ]);
+        let pretty = json_stringify_pretty(&val);
+        assert!(pretty.contains("  \"name\": \"fajar\""));
+        assert!(pretty.contains("  \"version\": 5"));
+        // Multi-line output.
+        assert!(pretty.contains('\n'));
+    }
+
+    #[test]
+    fn json_roundtrip_parse_stringify_parse() {
+        let input = r#"{"name":"fajar","scores":[100,95.5,88],"active":true,"meta":null}"#;
+        let parsed = json_parse(input).unwrap();
+        let serialized = json_stringify(&parsed);
+        let reparsed = json_parse(&serialized).unwrap();
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn json_roundtrip_nested_objects() {
+        let input = r#"{"a":{"b":{"c":42}},"d":[1,[2,3]]}"#;
+        let parsed = json_parse(input).unwrap();
+        let serialized = json_stringify(&parsed);
+        let reparsed = json_parse(&serialized).unwrap();
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn json_parse_escaped_strings() {
+        let input = r#"{"msg":"hello\nworld","path":"c:\\dir"}"#;
+        let val = json_parse(input).unwrap();
+        assert_eq!(val.get("msg").unwrap().as_str(), Some("hello\nworld"));
+        assert_eq!(val.get("path").unwrap().as_str(), Some("c:\\dir"));
+    }
+
+    #[test]
+    fn json_parse_empty_structures() {
+        let val = json_parse("{}").unwrap();
+        assert_eq!(val, JsonValue::Object(vec![]));
+        let val = json_parse("[]").unwrap();
+        assert_eq!(val, JsonValue::Array(vec![]));
+    }
+
+    #[test]
+    fn json_parse_negative_and_scientific_numbers() {
+        let val = json_parse("-42").unwrap();
+        assert_eq!(val.as_f64(), Some(-42.0));
+        let val = json_parse("1.5e2").unwrap();
+        assert_eq!(val.as_f64(), Some(150.0));
+        let val = json_parse("-3.14E-1").unwrap();
+        assert_eq!(val.as_f64(), Some(-0.314));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Integration: TOML parser
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn toml_parse_simple_key_values() {
+        let input = r#"
+name = "fajar-lang"
+version = "5.5.0"
+edition = 2026
+debug = true
+"#;
+        let val = toml_parse(input).unwrap();
+        assert_eq!(val.get("name").unwrap().as_str(), Some("fajar-lang"));
+        assert_eq!(val.get("version").unwrap().as_str(), Some("5.5.0"));
+        assert_eq!(val.get("edition").unwrap().as_i64(), Some(2026));
+        assert_eq!(val.get("debug").unwrap().as_bool(), Some(true));
+    }
+
+    #[test]
+    fn toml_parse_nested_tables() {
+        let input = r#"
+[package]
+name = "fj"
+version = "5.5.0"
+
+[dependencies]
+ndarray = "0.16"
+"#;
+        let val = toml_parse(input).unwrap();
+        let pkg = val.get("package").unwrap();
+        assert_eq!(pkg.get("name").unwrap().as_str(), Some("fj"));
+        assert_eq!(pkg.get("version").unwrap().as_str(), Some("5.5.0"));
+        let deps = val.get("dependencies").unwrap();
+        assert_eq!(deps.get("ndarray").unwrap().as_str(), Some("0.16"));
+    }
+
+    #[test]
+    fn toml_parse_arrays() {
+        let input = r#"
+ports = [80, 443, 8080]
+names = ["alpha", "beta", "gamma"]
+"#;
+        let val = toml_parse(input).unwrap();
+        match val.get("ports").unwrap() {
+            TomlValue::Array(arr) => {
+                assert_eq!(arr.len(), 3);
+                assert_eq!(arr[0].as_i64(), Some(80));
+                assert_eq!(arr[2].as_i64(), Some(8080));
+            }
+            other => panic!("expected array, got: {other:?}"),
+        }
+        match val.get("names").unwrap() {
+            TomlValue::Array(arr) => {
+                assert_eq!(arr.len(), 3);
+                assert_eq!(arr[0].as_str(), Some("alpha"));
+            }
+            other => panic!("expected array, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn toml_parse_floats() {
+        let input = "pi = 3.14159\nrate = 1e-3\n";
+        let val = toml_parse(input).unwrap();
+        let pi = val.get("pi").unwrap().as_f64().unwrap();
+        assert!((pi - 3.14159).abs() < 1e-10);
+        let rate = val.get("rate").unwrap().as_f64().unwrap();
+        assert!((rate - 0.001).abs() < 1e-10);
+    }
+
+    #[test]
+    fn toml_parse_error_invalid_input() {
+        let result = toml_parse("= no key");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("TOML parse error"));
+    }
+
+    #[test]
+    fn toml_stringify_simple() {
+        let val = TomlValue::Table(vec![
+            ("name".into(), TomlValue::String("fj".into())),
+            ("version".into(), TomlValue::Integer(5)),
+            ("debug".into(), TomlValue::Bool(true)),
+        ]);
+        let s = toml_stringify(&val);
+        assert!(s.contains("name = \"fj\""));
+        assert!(s.contains("version = 5"));
+        assert!(s.contains("debug = true"));
+    }
+
+    #[test]
+    fn toml_value_display() {
+        assert_eq!(format!("{}", TomlValue::String("hi".into())), "\"hi\"");
+        assert_eq!(format!("{}", TomlValue::Integer(42)), "42");
+        assert_eq!(format!("{}", TomlValue::Bool(false)), "false");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Integration: CSV parser (quoted fields)
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn csv_parse_quoted_fields_with_delimiter() {
+        let input = "name,address\nFajar,\"Jakarta, Indonesia\"\nLang,\"Bandung\"";
+        let records = csv_parse(input, ',');
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[1][0], "Fajar");
+        assert_eq!(records[1][1], "Jakarta, Indonesia");
+        assert_eq!(records[2][1], "Bandung");
+    }
+
+    #[test]
+    fn csv_parse_escaped_quotes() {
+        let input = "col\n\"He said \"\"hello\"\"\"";
+        let records = csv_parse(input, ',');
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1][0], "He said \"hello\"");
+    }
+
+    #[test]
+    fn csv_parse_multiline_quoted_field() {
+        let input = "desc\n\"line 1\nline 2\"";
+        let records = csv_parse(input, ',');
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1][0], "line 1\nline 2");
+    }
+
+    #[test]
+    fn csv_parse_tab_delimiter() {
+        let input = "a\tb\tc\n1\t2\t3\n4\t5\t6";
+        let records = csv_parse(input, '\t');
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], vec!["a", "b", "c"]);
+        assert_eq!(records[1], vec!["1", "2", "3"]);
+        assert_eq!(records[2], vec!["4", "5", "6"]);
+    }
+
+    #[test]
+    fn csv_roundtrip_serialize_parse() {
+        let original = vec![
+            vec!["name".to_string(), "value".to_string()],
+            vec!["hello, world".to_string(), "42".to_string()],
+            vec!["simple".to_string(), "data".to_string()],
+        ];
+        let serialized = csv_serialize(&original, ',');
+        let reparsed = csv_parse(&serialized, ',');
+        assert_eq!(reparsed.len(), 3);
+        assert_eq!(reparsed[0], vec!["name", "value"]);
+        assert_eq!(reparsed[1], vec!["hello, world", "42"]);
+        assert_eq!(reparsed[2], vec!["simple", "data"]);
+    }
+
+    #[test]
+    fn csv_parse_empty_fields() {
+        let input = "a,,c\n,b,";
+        let records = csv_parse(input, ',');
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0], vec!["a", "", "c"]);
+        assert_eq!(records[1], vec!["", "b", ""]);
     }
 }

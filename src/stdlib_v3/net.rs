@@ -693,8 +693,7 @@ pub struct TcpServer {
 impl TcpServer {
     /// Bind to an address. Use "127.0.0.1:0" for OS-assigned port.
     pub fn bind(addr: &str) -> Result<Self, String> {
-        let listener =
-            std::net::TcpListener::bind(addr).map_err(|e| format!("TCP bind: {e}"))?;
+        let listener = std::net::TcpListener::bind(addr).map_err(|e| format!("TCP bind: {e}"))?;
         Ok(Self { listener })
     }
 
@@ -772,8 +771,8 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
 
     let start = std::time::Instant::now();
 
-    let mut stream = std::net::TcpStream::connect(&addr)
-        .map_err(|e| format!("HTTP connect to {addr}: {e}"))?;
+    let mut stream =
+        std::net::TcpStream::connect(&addr).map_err(|e| format!("HTTP connect to {addr}: {e}"))?;
     stream
         .set_read_timeout(Some(std::time::Duration::from_millis(req.timeout_ms)))
         .map_err(|e| format!("set timeout: {e}"))?;
@@ -880,8 +879,7 @@ pub struct HttpServer {
 impl HttpServer {
     /// Bind to an address.
     pub fn bind(addr: &str) -> Result<Self, String> {
-        let listener =
-            std::net::TcpListener::bind(addr).map_err(|e| format!("HTTP bind: {e}"))?;
+        let listener = std::net::TcpListener::bind(addr).map_err(|e| format!("HTTP bind: {e}"))?;
         Ok(Self { listener })
     }
 
@@ -898,10 +896,7 @@ impl HttpServer {
     where
         F: FnOnce(&str, &str, &HashMap<String, String>) -> (u16, String, Vec<u8>),
     {
-        let (stream, _addr) = self
-            .listener
-            .accept()
-            .map_err(|e| format!("accept: {e}"))?;
+        let (stream, _addr) = self.listener.accept().map_err(|e| format!("accept: {e}"))?;
         let mut reader = BufReader::new(&stream);
 
         // Read request line
@@ -1121,9 +1116,7 @@ mod tests {
         let addr = server.local_addr().unwrap();
 
         let handle = std::thread::spawn(move || {
-            server.accept_one(|data| {
-                format!("got {} bytes", data.len()).into_bytes()
-            })
+            server.accept_one(|data| format!("got {} bytes", data.len()).into_bytes())
         });
 
         let payload = vec![0xABu8; 1024];
@@ -1136,8 +1129,7 @@ mod tests {
     #[test]
     fn gc1_udp_roundtrip() {
         // Server socket
-        let server_sock =
-            std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
         let server_addr = server_sock.local_addr().unwrap().to_string();
 
         // Server echoes in background
@@ -1148,8 +1140,7 @@ mod tests {
         });
 
         // Client sends and receives
-        let response =
-            udp_send_recv("127.0.0.1:0", &server_addr, b"ping", 5000).unwrap();
+        let response = udp_send_recv("127.0.0.1:0", &server_addr, b"ping", 5000).unwrap();
         assert_eq!(response, b"ping");
 
         handle.join().unwrap();
@@ -1190,10 +1181,8 @@ mod tests {
             })
         });
 
-        let req = HttpRequest::post_json(
-            &format!("http://{addr}/api/items"),
-            "{\"name\":\"fajar\"}",
-        );
+        let req =
+            HttpRequest::post_json(&format!("http://{addr}/api/items"), "{\"name\":\"fajar\"}");
         let resp = http_request(&req).unwrap();
         assert_eq!(resp.status, 201);
 

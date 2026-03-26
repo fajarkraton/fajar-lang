@@ -136,8 +136,7 @@ pub struct HmacConfig {
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     use hmac::{Hmac, Mac};
     type HmacSha256 = Hmac<sha2::Sha256>;
-    let mut mac =
-        HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
     mac.update(data);
     mac.finalize().into_bytes().to_vec()
 }
@@ -161,13 +160,15 @@ pub fn aes256_gcm_encrypt(
     plaintext: &[u8],
     aad: &[u8],
 ) -> Result<(Vec<u8>, [u8; 16]), String> {
-    use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
     use aes_gcm::aead::Payload;
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| format!("AES key error: {e}"))?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("AES key error: {e}"))?;
     let nonce = Nonce::from_slice(nonce);
-    let payload = Payload { msg: plaintext, aad };
+    let payload = Payload {
+        msg: plaintext,
+        aad,
+    };
     let ciphertext_with_tag = cipher
         .encrypt(nonce, payload)
         .map_err(|e| format!("AES encrypt error: {e}"))?;
@@ -190,18 +191,20 @@ pub fn aes256_gcm_decrypt(
     tag: &[u8; 16],
     aad: &[u8],
 ) -> Result<Vec<u8>, String> {
-    use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
     use aes_gcm::aead::Payload;
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| format!("AES key error: {e}"))?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("AES key error: {e}"))?;
     let nonce = Nonce::from_slice(nonce);
 
     // Reconstruct ciphertext + tag as aes-gcm expects
     let mut ct_with_tag = ciphertext.to_vec();
     ct_with_tag.extend_from_slice(tag);
 
-    let payload = Payload { msg: &ct_with_tag, aad };
+    let payload = Payload {
+        msg: &ct_with_tag,
+        aad,
+    };
     cipher
         .decrypt(nonce, payload)
         .map_err(|e| format!("AES decrypt error: {e}"))
@@ -257,7 +260,7 @@ pub fn ed25519_verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64
 
 /// Hash a password with Argon2id. Returns the PHC-formatted hash string.
 pub fn argon2_hash(password: &[u8]) -> Result<String, String> {
-    use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
     use rand::rngs::OsRng;
 
     let salt = SaltString::generate(&mut OsRng);
@@ -270,7 +273,7 @@ pub fn argon2_hash(password: &[u8]) -> Result<String, String> {
 
 /// Verify a password against an Argon2id hash string.
 pub fn argon2_verify(password: &[u8], hash_str: &str) -> bool {
-    use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
+    use argon2::{Argon2, PasswordVerifier, password_hash::PasswordHash};
 
     let Ok(parsed_hash) = PasswordHash::new(hash_str) else {
         return false;

@@ -538,6 +538,189 @@ impl Stopwatch {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// S4.11-S4.20: Real Process, Environment, Path, and FS Operations
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Output captured from a spawned process.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    /// Standard output.
+    pub stdout: String,
+    /// Standard error.
+    pub stderr: String,
+    /// Process exit code (0 = success).
+    pub exit_code: i32,
+}
+
+/// Spawns a command and captures its output.
+///
+/// Uses real `std::process::Command` to execute the program.
+///
+/// # Errors
+///
+/// Returns an error if the process cannot be started (e.g., program not found).
+pub fn spawn_command(program: &str, args: &[&str]) -> Result<CommandOutput, String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to spawn '{program}': {e}"))?;
+
+    Ok(CommandOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        exit_code: output.status.code().unwrap_or(-1),
+    })
+}
+
+/// Spawns a command with a timeout in milliseconds.
+///
+/// If the process does not exit within `timeout_ms`, it is killed and an error
+/// is returned.
+///
+/// # Errors
+///
+/// Returns an error if the process cannot be started or if it exceeds the timeout.
+pub fn spawn_with_timeout(
+    program: &str,
+    args: &[&str],
+    timeout_ms: u64,
+) -> Result<CommandOutput, String> {
+    let mut child = std::process::Command::new(program)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to spawn '{program}': {e}"))?;
+
+    let deadline = std::time::Duration::from_millis(timeout_ms);
+    let start = std::time::Instant::now();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = child
+                    .stdout
+                    .take()
+                    .map(|mut r| {
+                        let mut s = String::new();
+                        std::io::Read::read_to_string(&mut r, &mut s).ok();
+                        s
+                    })
+                    .unwrap_or_default();
+                let stderr = child
+                    .stderr
+                    .take()
+                    .map(|mut r| {
+                        let mut s = String::new();
+                        std::io::Read::read_to_string(&mut r, &mut s).ok();
+                        s
+                    })
+                    .unwrap_or_default();
+                return Ok(CommandOutput {
+                    stdout,
+                    stderr,
+                    exit_code: status.code().unwrap_or(-1),
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "process '{program}' timed out after {timeout_ms}ms"
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => {
+                return Err(format!("error waiting for '{program}': {e}"));
+            }
+        }
+    }
+}
+
+/// Gets an environment variable by name.
+///
+/// Returns `None` if the variable is not set.
+pub fn env_get(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// Sets an environment variable for the current process.
+///
+/// # Safety note
+///
+/// This modifies the process environment, which is shared state. In
+/// multi-threaded contexts, concurrent reads and writes to environment
+/// variables can cause issues on some platforms.
+pub fn env_set(key: &str, value: &str) {
+    // SAFETY: We document that env_set is not thread-safe on all platforms.
+    // This matches std::env::set_var behavior.
+    unsafe {
+        std::env::set_var(key, value);
+    }
+}
+
+/// Joins two path segments using the platform separator.
+///
+/// Uses real `std::path::Path` for correct cross-platform behavior.
+pub fn path_join(base: &str, child: &str) -> String {
+    std::path::Path::new(base)
+        .join(child)
+        .to_string_lossy()
+        .to_string()
+}
+
+/// Returns the parent directory of a path, or `None` for root/empty paths.
+pub fn path_parent(path: &str) -> Option<String> {
+    std::path::Path::new(path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Returns the file extension (without the dot), or `None` if there is none.
+pub fn path_extension(path: &str) -> Option<String> {
+    std::path::Path::new(path)
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+}
+
+/// Recursively walks a directory and returns all file paths.
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be read.
+pub fn walk_dir(path: &str) -> Result<Vec<String>, String> {
+    let mut results = Vec::new();
+    walk_dir_recursive(std::path::Path::new(path), &mut results)?;
+    results.sort();
+    Ok(results)
+}
+
+/// Internal recursive helper for `walk_dir`.
+fn walk_dir_recursive(dir: &std::path::Path, results: &mut Vec<String>) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("failed to read directory '{}': {e}", dir.display()))?;
+
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| format!("failed to read entry in '{}': {e}", dir.display()))?;
+        let path = entry.path();
+        if path.is_dir() {
+            walk_dir_recursive(&path, results)?;
+        } else {
+            results.push(path.to_string_lossy().to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Returns the system temporary directory path.
+pub fn temp_dir() -> String {
+    std::env::temp_dir().to_string_lossy().to_string()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -715,5 +898,124 @@ mod tests {
         assert_eq!(cfg.min_level, LogLevel::Info);
         assert!(cfg.use_colors);
         assert_eq!(cfg.target, LogTarget::Stderr);
+    }
+
+    // S4.11: spawn_command — echo hello
+    #[test]
+    fn s4_11_spawn_echo() {
+        let result = spawn_command("echo", &["hello"]).unwrap();
+        assert!(result.stdout.contains("hello"));
+        assert_eq!(result.exit_code, 0);
+    }
+
+    // S4.11: spawn_command — nonexistent program
+    #[test]
+    fn s4_11_spawn_nonexistent() {
+        let result = spawn_command("__nonexistent_program_fj_test__", &[]);
+        assert!(result.is_err());
+    }
+
+    // S4.12: spawn_with_timeout — fast command succeeds
+    #[test]
+    fn s4_12_spawn_with_timeout_ok() {
+        let result = spawn_with_timeout("echo", &["timeout_test"], 5000).unwrap();
+        assert!(result.stdout.contains("timeout_test"));
+        assert_eq!(result.exit_code, 0);
+    }
+
+    // S4.12: spawn_with_timeout — slow command times out
+    #[test]
+    fn s4_12_spawn_with_timeout_expires() {
+        let result = spawn_with_timeout("sleep", &["60"], 100);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("timed out"));
+    }
+
+    // S4.13: env_get / env_set roundtrip
+    #[test]
+    fn s4_13_env_roundtrip() {
+        let key = "FJ_TEST_ENV_VAR_SYSTEM_RS";
+        let value = "fajar_lang_42";
+        env_set(key, value);
+        let got = env_get(key);
+        assert_eq!(got, Some(value.to_string()));
+    }
+
+    // S4.13: env_get missing variable
+    #[test]
+    fn s4_13_env_get_missing() {
+        let got = env_get("FJ_TEST_DEFINITELY_NOT_SET_XYZ_999");
+        assert!(got.is_none());
+    }
+
+    // S4.14: path_join
+    #[test]
+    fn s4_14_path_join() {
+        let joined = path_join("/home/fajar", "src/main.fj");
+        assert_eq!(joined, "/home/fajar/src/main.fj");
+    }
+
+    // S4.14: path_join with absolute child replaces base
+    #[test]
+    fn s4_14_path_join_absolute_child() {
+        let joined = path_join("/home/fajar", "/etc/config");
+        assert_eq!(joined, "/etc/config");
+    }
+
+    // S4.15: path_parent
+    #[test]
+    fn s4_15_path_parent() {
+        let parent = path_parent("/home/fajar/file.txt");
+        assert_eq!(parent, Some("/home/fajar".to_string()));
+    }
+
+    // S4.15: path_parent of root returns None (no parent above /)
+    #[test]
+    fn s4_15_path_parent_root() {
+        // On Unix, "/" has no parent — std::path returns None.
+        let parent = path_parent("/");
+        assert!(parent.is_none());
+    }
+
+    // S4.16: path_extension
+    #[test]
+    fn s4_16_path_extension() {
+        assert_eq!(path_extension("main.fj"), Some("fj".to_string()));
+        assert_eq!(path_extension("archive.tar.gz"), Some("gz".to_string()));
+        assert_eq!(path_extension("no_extension"), None);
+    }
+
+    // S4.17: walk_dir on temp directory with created files
+    #[test]
+    fn s4_17_walk_dir() {
+        let dir = std::env::temp_dir().join("fj_test_walk_dir_s4_17");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "aaa").unwrap();
+        std::fs::write(dir.join("sub/b.txt"), "bbb").unwrap();
+
+        let files = walk_dir(dir.to_str().unwrap()).unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(files.iter().any(|f| f.ends_with("a.txt")));
+        assert!(files.iter().any(|f| f.ends_with("b.txt")));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // S4.17: walk_dir on nonexistent directory
+    #[test]
+    fn s4_17_walk_dir_nonexistent() {
+        let result = walk_dir("/tmp/fj_test_nonexistent_dir_xyz_999");
+        assert!(result.is_err());
+    }
+
+    // S4.18: temp_dir returns valid path
+    #[test]
+    fn s4_18_temp_dir() {
+        let tmp = temp_dir();
+        assert!(!tmp.is_empty());
+        assert!(std::path::Path::new(&tmp).exists());
     }
 }

@@ -1030,9 +1030,10 @@ namespace io {{
         assert!(ns_count >= 2, "expected 2 namespaces, got {ns_count}");
 
         // Verify nested declarations
-        if let Some(CppDecl::Namespace(ns)) = decls.iter().find(|d| {
-            matches!(d, CppDecl::Namespace(n) if n.name == "math")
-        }) {
+        if let Some(CppDecl::Namespace(ns)) = decls
+            .iter()
+            .find(|d| matches!(d, CppDecl::Namespace(n) if n.name == "math"))
+        {
             assert!(
                 ns.declarations.len() >= 2,
                 "math namespace should have 2+ functions"

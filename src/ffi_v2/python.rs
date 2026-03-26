@@ -598,7 +598,10 @@ mod tests {
     use pyo3::types::PyModule;
 
     #[cfg(feature = "python-ffi")]
-    fn py_eval<'py, T: pyo3::FromPyObject<'py>>(py: pyo3::Python<'py>, code: &str) -> pyo3::PyResult<T> {
+    fn py_eval<'py, T: pyo3::FromPyObject<'py>>(
+        py: pyo3::Python<'py>,
+        code: &str,
+    ) -> pyo3::PyResult<T> {
         let ccode = std::ffi::CString::new(code).unwrap();
         py.eval(&ccode, None, None)?.extract()
     }
@@ -664,9 +667,14 @@ mod tests {
     #[test]
     fn gc2_python_numpy_array() {
         pyo3::Python::with_gil(|py| {
-            let arr: Vec<f64> = py_eval(py, "__import__('numpy').array([1.0, 2.0, 3.0]).tolist()").unwrap();
+            let arr: Vec<f64> =
+                py_eval(py, "__import__('numpy').array([1.0, 2.0, 3.0]).tolist()").unwrap();
             assert_eq!(arr, vec![1.0, 2.0, 3.0]);
-            let sum: f64 = py_eval(py, "float(__import__('numpy').sum(__import__('numpy').array([1,2,3,4])))").unwrap();
+            let sum: f64 = py_eval(
+                py,
+                "float(__import__('numpy').sum(__import__('numpy').array([1,2,3,4])))",
+            )
+            .unwrap();
             assert!((sum - 10.0).abs() < 1e-10);
         });
     }

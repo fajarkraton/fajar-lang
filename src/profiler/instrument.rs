@@ -473,6 +473,141 @@ mod tests {
         assert_eq!(rec.net_memory(), 3072);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC5.11-GC5.14: Real profiling with std::time::Instant
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn gc5_real_timer_profiling() {
+        use std::time::Instant;
+
+        let mut records = Vec::new();
+        let base = Instant::now();
+
+        // Profile a real computation
+        let start = Instant::now();
+        let mut sum = 0u64;
+        for i in 0..10_000 {
+            sum += i;
+        }
+        let end = Instant::now();
+
+        records.push(CallRecord {
+            function: "sum_loop".to_string(),
+            file: "test.fj".to_string(),
+            line: 1,
+            entry_ns: start.duration_since(base).as_nanos() as u64,
+            exit_ns: end.duration_since(base).as_nanos() as u64,
+            depth: 0,
+            parent_idx: -1,
+            alloc_bytes: 0,
+            free_bytes: 0,
+        });
+
+        assert_eq!(sum, 49_995_000); // verify computation happened
+        assert!(!records.is_empty());
+        assert!(
+            records[0].duration_ns() > 0,
+            "real timer should measure non-zero time"
+        );
+    }
+
+    #[test]
+    fn gc5_call_graph_from_real_timing() {
+        use std::time::Instant;
+
+        let base = Instant::now();
+        let mut records = Vec::new();
+
+        // Outer function
+        let outer_start = Instant::now();
+
+        // Inner function 1
+        let inner1_start = Instant::now();
+        let _ = (0..1000).sum::<u64>();
+        let inner1_end = Instant::now();
+
+        records.push(CallRecord {
+            function: "inner1".to_string(),
+            file: "bench.fj".to_string(),
+            line: 10,
+            entry_ns: inner1_start.duration_since(base).as_nanos() as u64,
+            exit_ns: inner1_end.duration_since(base).as_nanos() as u64,
+            depth: 1,
+            parent_idx: 0,
+            alloc_bytes: 0,
+            free_bytes: 0,
+        });
+
+        // Inner function 2
+        let inner2_start = Instant::now();
+        let _ = (0..5000).sum::<u64>();
+        let inner2_end = Instant::now();
+
+        records.push(CallRecord {
+            function: "inner2".to_string(),
+            file: "bench.fj".to_string(),
+            line: 20,
+            entry_ns: inner2_start.duration_since(base).as_nanos() as u64,
+            exit_ns: inner2_end.duration_since(base).as_nanos() as u64,
+            depth: 1,
+            parent_idx: 0,
+            alloc_bytes: 0,
+            free_bytes: 0,
+        });
+
+        let outer_end = Instant::now();
+
+        // Insert outer record at index 0
+        records.insert(
+            0,
+            CallRecord {
+                function: "outer".to_string(),
+                file: "bench.fj".to_string(),
+                line: 1,
+                entry_ns: outer_start.duration_since(base).as_nanos() as u64,
+                exit_ns: outer_end.duration_since(base).as_nanos() as u64,
+                depth: 0,
+                parent_idx: -1,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+        );
+
+        let graph = CallGraph::from_records(&records);
+        // Verify inclusive time was computed for at least some functions.
+        assert!(!graph.inclusive_time.is_empty());
+        assert!(graph.edges.len() >= 2); // at least inner1, inner2
+    }
+
+    #[test]
+    fn gc5_chrome_trace_from_real_timing() {
+        use std::time::Instant;
+
+        let base = Instant::now();
+        let start = Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        let end = Instant::now();
+
+        let records = vec![CallRecord {
+            function: "sleep_test".to_string(),
+            file: "test.fj".to_string(),
+            line: 1,
+            entry_ns: start.duration_since(base).as_nanos() as u64,
+            exit_ns: end.duration_since(base).as_nanos() as u64,
+            depth: 0,
+            parent_idx: -1,
+            alloc_bytes: 0,
+            free_bytes: 0,
+        }];
+
+        let json = to_trace_events(&records);
+        assert!(json.contains("sleep_test"));
+        assert!(json.contains("\"ph\":\"X\""), "should be Chrome Trace format");
+        // Duration should be at least 1ms = 1000us
+        assert!(records[0].duration_ms() >= 0.5, "sleep should be >= 0.5ms");
+    }
+
     #[test]
     fn d1_9_function_counts() {
         let profile = SamplingProfile {

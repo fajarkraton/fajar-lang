@@ -184,18 +184,12 @@ impl TransportNode {
 
     /// Register a local actor.
     pub fn register_actor(&self, name: &str, sender: mpsc::Sender<NetMessage>) {
-        self.actors
-            .lock()
-            .unwrap()
-            .insert(name.to_string(), sender);
+        self.actors.lock().unwrap().insert(name.to_string(), sender);
     }
 
     /// Add a known peer.
     pub fn add_peer(&self, peer_id: u64, addr: &str) {
-        self.peers
-            .lock()
-            .unwrap()
-            .insert(peer_id, addr.to_string());
+        self.peers.lock().unwrap().insert(peer_id, addr.to_string());
     }
 
     /// Send a message to a remote node via TCP.
@@ -242,24 +236,24 @@ impl TransportNode {
         tokio::spawn(async move {
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 {
-                        let actors = actors.clone();
-                        tokio::spawn(async move {
-                            let mut len_buf = [0u8; 4];
-                            if stream.read_exact(&mut len_buf).await.is_err() {
-                                return;
+                    let actors = actors.clone();
+                    tokio::spawn(async move {
+                        let mut len_buf = [0u8; 4];
+                        if stream.read_exact(&mut len_buf).await.is_err() {
+                            return;
+                        }
+                        let len = u32::from_le_bytes(len_buf) as usize;
+                        let mut data = vec![0u8; len];
+                        if stream.read_exact(&mut data).await.is_err() {
+                            return;
+                        }
+                        if let Ok(msg) = NetMessage::from_bytes(&data) {
+                            let actors = actors.lock().unwrap();
+                            if let Some(sender) = actors.get(&msg.target) {
+                                let _ = sender.try_send(msg);
                             }
-                            let len = u32::from_le_bytes(len_buf) as usize;
-                            let mut data = vec![0u8; len];
-                            if stream.read_exact(&mut data).await.is_err() {
-                                return;
-                            }
-                            if let Ok(msg) = NetMessage::from_bytes(&data) {
-                                let actors = actors.lock().unwrap();
-                                if let Some(sender) = actors.get(&msg.target) {
-                                    let _ = sender.try_send(msg);
-                                }
-                            }
-                        });
+                        }
+                    });
                 }
             }
         });
@@ -414,13 +408,10 @@ mod tests {
 
         // Receive on node1's actor
         let mut rx = actor.take_receiver().unwrap();
-        let received = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            rx.recv(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let received = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(received.payload, b"hello from node 2");
         assert_eq!(received.sender_id, 2);

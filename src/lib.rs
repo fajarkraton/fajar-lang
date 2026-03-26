@@ -51,6 +51,7 @@ pub mod package;
 pub mod package_v2;
 pub mod parser;
 pub mod playground;
+pub mod plugin;
 pub mod profiler;
 pub mod rt_pipeline;
 pub mod rtos;
