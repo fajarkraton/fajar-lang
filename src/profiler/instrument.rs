@@ -317,6 +317,136 @@ pub fn to_trace_events(records: &[CallRecord]) -> String {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// PQ10.3: Hotspot Report
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Generate a human-readable hotspot report from call records.
+pub fn hotspot_report(records: &[CallRecord], top_n: usize) -> String {
+    let graph = CallGraph::from_records(records);
+    let hot = graph.hot_functions(top_n);
+    let total_ns: u64 = graph.self_time.values().sum();
+
+    let mut report = String::new();
+    report.push_str("=== Hotspot Report ===\n");
+    report.push_str(&format!(
+        "Total: {:.2}ms | Functions: {}\n\n",
+        total_ns as f64 / 1_000_000.0,
+        graph.self_time.len()
+    ));
+
+    for (i, (name, ns)) in hot.iter().enumerate() {
+        let pct = if total_ns > 0 {
+            (*ns as f64 / total_ns as f64) * 100.0
+        } else {
+            0.0
+        };
+        let ms = *ns as f64 / 1_000_000.0;
+        report.push_str(&format!(
+            "  #{}: fn {} — {:.2}ms ({:.1}%)\n",
+            i + 1,
+            name,
+            ms,
+            pct
+        ));
+    }
+    report
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ10.5: Profile Comparison
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Comparison between two profile runs.
+#[derive(Debug)]
+pub struct ProfileComparison {
+    /// Functions that got faster.
+    pub faster: Vec<(String, f64)>,
+    /// Functions that got slower.
+    pub slower: Vec<(String, f64)>,
+    /// Overall speedup (positive = faster).
+    pub overall_speedup_pct: f64,
+}
+
+/// Compare two sets of call records and report speedup/regression.
+pub fn compare_profiles(before: &[CallRecord], after: &[CallRecord]) -> ProfileComparison {
+    let graph_before = CallGraph::from_records(before);
+    let graph_after = CallGraph::from_records(after);
+
+    let mut faster = Vec::new();
+    let mut slower = Vec::new();
+
+    for (name, before_ns) in &graph_before.self_time {
+        if let Some(after_ns) = graph_after.self_time.get(name) {
+            let before_f = *before_ns as f64;
+            let after_f = *after_ns as f64;
+            if before_f > 0.0 {
+                let change_pct = ((before_f - after_f) / before_f) * 100.0;
+                if change_pct > 5.0 {
+                    faster.push((name.clone(), change_pct));
+                } else if change_pct < -5.0 {
+                    slower.push((name.clone(), -change_pct));
+                }
+            }
+        }
+    }
+
+    let total_before: u64 = graph_before.self_time.values().sum();
+    let total_after: u64 = graph_after.self_time.values().sum();
+    let overall = if total_before > 0 {
+        ((total_before as f64 - total_after as f64) / total_before as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    ProfileComparison {
+        faster,
+        slower,
+        overall_speedup_pct: overall,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ10.8: Speedscope JSON Export
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Export call records to speedscope JSON format.
+/// Speedscope: https://www.speedscope.app/
+pub fn to_speedscope(records: &[CallRecord]) -> String {
+    let mut frames = Vec::new();
+    let mut frame_map: HashMap<String, usize> = HashMap::new();
+    let mut events = Vec::new();
+
+    for rec in records {
+        let frame_idx = frame_map.entry(rec.function.clone()).or_insert_with(|| {
+            let idx = frames.len();
+            frames.push(format!(
+                r#"{{"name":"{}","file":"{}","line":{}}}"#,
+                rec.function, rec.file, rec.line
+            ));
+            idx
+        });
+
+        events.push(format!(
+            r#"{{"type":"O","at":{},"frame":{}}}"#,
+            rec.entry_ns / 1000, // microseconds
+            frame_idx
+        ));
+        events.push(format!(
+            r#"{{"type":"C","at":{},"frame":{}}}"#,
+            rec.exit_ns / 1000,
+            frame_idx
+        ));
+    }
+
+    format!(
+        r#"{{"$schema":"https://www.speedscope.app/file-format-schema.json","shared":{{"frames":[{}]}},"profiles":[{{"type":"evented","name":"fajar-profile","unit":"microseconds","startValue":0,"endValue":{},"events":[{}]}}]}}"#,
+        frames.join(","),
+        records.last().map(|r| r.exit_ns / 1000).unwrap_or(0),
+        events.join(",")
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -628,5 +758,111 @@ mod tests {
         assert_eq!(*counts.get("a").unwrap(), 2);
         assert_eq!(*counts.get("b").unwrap(), 1);
         assert_eq!(*counts.get("c").unwrap(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ10: Quality improvement tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    fn make_test_records() -> Vec<CallRecord> {
+        vec![
+            CallRecord {
+                function: "main".to_string(),
+                file: "test.fj".to_string(),
+                line: 1,
+                entry_ns: 0,
+                exit_ns: 10_000_000,
+                depth: 0,
+                parent_idx: -1,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+            CallRecord {
+                function: "compute".to_string(),
+                file: "test.fj".to_string(),
+                line: 5,
+                entry_ns: 1_000_000,
+                exit_ns: 8_000_000,
+                depth: 1,
+                parent_idx: 0,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+            CallRecord {
+                function: "log".to_string(),
+                file: "test.fj".to_string(),
+                line: 10,
+                entry_ns: 8_000_000,
+                exit_ns: 9_000_000,
+                depth: 1,
+                parent_idx: 0,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+        ]
+    }
+
+    #[test]
+    fn pq10_3_hotspot_report() {
+        let records = make_test_records();
+        let report = hotspot_report(&records, 3);
+        assert!(report.contains("Hotspot Report"));
+        assert!(report.contains("compute"), "should show compute as hot: {report}");
+    }
+
+    #[test]
+    fn pq10_5_profile_comparison_faster() {
+        let before = make_test_records();
+        // "After" records — everything takes half the time
+        let mut after = make_test_records();
+        after[0].exit_ns = 5_000_000;  // main: 5ms (was 10ms)
+        after[1].exit_ns = 4_000_000;  // compute: 3ms (was 7ms)
+        after[2].entry_ns = 4_000_000;
+        after[2].exit_ns = 4_500_000;  // log: 0.5ms (was 1ms)
+
+        let cmp = compare_profiles(&before, &after);
+        assert!(
+            cmp.overall_speedup_pct > 10.0,
+            "should be >10% faster overall: {:.1}%",
+            cmp.overall_speedup_pct
+        );
+    }
+
+    #[test]
+    fn pq10_5_profile_comparison_slower() {
+        let before = make_test_records();
+        // "After" — everything takes double
+        let mut after = make_test_records();
+        after[0].exit_ns = 20_000_000; // main: 20ms
+        after[1].exit_ns = 16_000_000; // compute: 15ms
+        after[2].entry_ns = 16_000_000;
+        after[2].exit_ns = 18_000_000; // log: 2ms
+
+        let cmp = compare_profiles(&before, &after);
+        assert!(
+            cmp.overall_speedup_pct < -10.0,
+            "should be >10% slower overall: {:.1}%",
+            cmp.overall_speedup_pct
+        );
+    }
+
+    #[test]
+    fn pq10_8_speedscope_export() {
+        let records = make_test_records();
+        let json = to_speedscope(&records);
+        assert!(json.contains("speedscope.app"), "should have schema URL");
+        assert!(json.contains("\"name\":\"main\""), "should have main frame");
+        assert!(json.contains("\"name\":\"compute\""), "should have compute frame");
+        assert!(json.contains("\"type\":\"O\""), "should have open events");
+        assert!(json.contains("\"type\":\"C\""), "should have close events");
+    }
+
+    #[test]
+    fn pq10_8_chrome_trace_export() {
+        let records = make_test_records();
+        let json = to_trace_events(&records);
+        assert!(json.contains("\"ph\":\"X\""), "should have complete events");
+        assert!(json.contains("main"), "should have main function");
+        assert!(json.contains("compute"), "should have compute function");
     }
 }
