@@ -537,86 +537,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC1.1 | Tutorial framework | Step-by-step lesson engine with progress tracking | [ ] |
-| DOC1.2 | Lesson 1: Hello World | Variables, println, basic types | [ ] |
-| DOC1.3 | Lesson 2: Functions | Parameters, return types, recursion | [ ] |
-| DOC1.4 | Lesson 3: Control Flow | if/else, match, while, for loops | [ ] |
-| DOC1.5 | Lesson 4: Structs & Enums | Custom types, methods, pattern matching | [ ] |
-| DOC1.6 | Lesson 5: Error Handling | Result, Option, ? operator | [ ] |
-| DOC1.7 | Lesson 6: Ownership | Move semantics, borrowing, references | [ ] |
-| DOC1.8 | Lesson 7: Generics & Traits | Type parameters, trait bounds, impl | [ ] |
-| DOC1.9 | Lesson 8: Collections | Arrays, HashMap, iterators | [ ] |
-| DOC1.10 | Lesson 9: Modules | mod, use, pub, project structure | [ ] |
-| DOC1.11 | Lesson 10: Tensor & ML | Tensor creation, operations, autograd basics | [ ] |
-| DOC1.12 | Lesson 11: OS Development | @kernel, @device, bare-metal hello world | [ ] |
-| DOC1.13 | Lesson 12: Concurrency | Threads, channels, async/await | [ ] |
-| DOC1.14 | Lesson 13: FFI | Calling C functions, extern blocks | [ ] |
-| DOC1.15 | Lesson 14: Testing | @test, assert, property-based testing | [ ] |
-| DOC1.16 | Code exercises | 50 interactive exercises with auto-grading | [ ] |
-| DOC1.17 | Progress persistence | Save/resume tutorial progress | [ ] |
-| DOC1.18 | Playground integration | Run lesson code in browser playground | [ ] |
-| DOC1.19 | Multilingual support | English + Bahasa Indonesia | [ ] |
-| DOC1.20 | Tutorial deployment | Static site generation, hosting | [ ] |
+| DOC1.1 | Tutorial framework | Step-by-step lesson engine with progress tracking | [x] |
+| DOC1.2 | Lesson 1: Hello World | Variables, println, basic types | [x] |
+| DOC1.3 | Lesson 2: Functions | Parameters, return types, recursion | [x] |
+| DOC1.4 | Lesson 3: Control Flow | if/else, match, while, for loops | [x] |
+| DOC1.5 | Lesson 4: Structs & Enums | Custom types, methods, pattern matching | [x] |
+| DOC1.6 | Lesson 5: Error Handling | Result, Option, ? operator | [x] |
+| DOC1.7 | Lesson 6: Ownership | Move semantics, borrowing, references | [x] |
+| DOC1.8 | Lesson 7: Generics & Traits | Type parameters, trait bounds, impl | [x] |
+| DOC1.9 | Lesson 8: Collections | Arrays, HashMap, iterators | [x] |
+| DOC1.10 | Lesson 9: Modules | mod, use, pub, project structure | [x] |
+| DOC1.11 | Lesson 10: Tensor & ML | Tensor creation, operations, autograd basics | [x] |
+| DOC1.12 | Lesson 11: OS Development | @kernel, @device, bare-metal hello world | [x] |
+| DOC1.13 | Lesson 12: Concurrency | Threads, channels, async/await | [x] |
+| DOC1.14 | Lesson 13: FFI | Calling C functions, extern blocks | [x] |
+| DOC1.15 | Lesson 14: Testing | @test, assert, property-based testing | [x] |
+| DOC1.16 | Code exercises | 50 interactive exercises with auto-grading | [x] |
+| DOC1.17 | Progress persistence | Save/resume tutorial progress | [x] |
+| DOC1.18 | Playground integration | Run lesson code in browser playground | [x] |
+| DOC1.19 | Multilingual support | English + Bahasa Indonesia | [x] |
+| DOC1.20 | Tutorial deployment | Static site generation, hosting | [x] |
 
 ### Phase DOC2: API Reference (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC2.1 | Doc generator v2 | Extract /// docs from all pub items | [ ] |
-| DOC2.2 | Type documentation | All primitive types with examples | [ ] |
-| DOC2.3 | Stdlib documentation | All builtins: print, len, type_of, assert, etc. | [ ] |
-| DOC2.4 | Collections API docs | Array methods, HashMap methods, iterators | [ ] |
-| DOC2.5 | String API docs | All 15 string methods with examples | [ ] |
-| DOC2.6 | Math API docs | PI, E, abs, sqrt, sin, cos, etc. | [ ] |
-| DOC2.7 | IO API docs | read_file, write_file, append_file, file_exists | [ ] |
-| DOC2.8 | Tensor API docs | zeros, ones, randn, matmul, reshape, etc. | [ ] |
-| DOC2.9 | Autograd API docs | backward, grad, requires_grad, optimizers | [ ] |
-| DOC2.10 | Layer API docs | Dense, Conv2d, MultiHeadAttention, BatchNorm | [ ] |
-| DOC2.11 | OS API docs | Memory, IRQ, syscall, port I/O builtins | [ ] |
-| DOC2.12 | Error code reference | All 71 error codes with explanations and fixes | [ ] |
-| DOC2.13 | Keyword reference | All keywords with syntax and examples | [ ] |
-| DOC2.14 | Operator reference | All operators with precedence table | [ ] |
-| DOC2.15 | Annotation reference | @kernel, @device, @safe, @unsafe, @test, @entry | [ ] |
-| DOC2.16 | Grammar reference | EBNF grammar with railroad diagrams | [ ] |
-| DOC2.17 | Search functionality | Full-text search across all API docs | [ ] |
-| DOC2.18 | Cross-linking | Automatic links between related items | [ ] |
-| DOC2.19 | Version selector | Show docs for different Fajar Lang versions | [ ] |
-| DOC2.20 | API reference deployment | Static site with navigation, mobile-friendly | [ ] |
+| DOC2.1 | Doc generator v2 | Extract /// docs from all pub items | [x] |
+| DOC2.2 | Type documentation | All primitive types with examples | [x] |
+| DOC2.3 | Stdlib documentation | All builtins: print, len, type_of, assert, etc. | [x] |
+| DOC2.4 | Collections API docs | Array methods, HashMap methods, iterators | [x] |
+| DOC2.5 | String API docs | All 15 string methods with examples | [x] |
+| DOC2.6 | Math API docs | PI, E, abs, sqrt, sin, cos, etc. | [x] |
+| DOC2.7 | IO API docs | read_file, write_file, append_file, file_exists | [x] |
+| DOC2.8 | Tensor API docs | zeros, ones, randn, matmul, reshape, etc. | [x] |
+| DOC2.9 | Autograd API docs | backward, grad, requires_grad, optimizers | [x] |
+| DOC2.10 | Layer API docs | Dense, Conv2d, MultiHeadAttention, BatchNorm | [x] |
+| DOC2.11 | OS API docs | Memory, IRQ, syscall, port I/O builtins | [x] |
+| DOC2.12 | Error code reference | All 71 error codes with explanations and fixes | [x] |
+| DOC2.13 | Keyword reference | All keywords with syntax and examples | [x] |
+| DOC2.14 | Operator reference | All operators with precedence table | [x] |
+| DOC2.15 | Annotation reference | @kernel, @device, @safe, @unsafe, @test, @entry | [x] |
+| DOC2.16 | Grammar reference | EBNF grammar with railroad diagrams | [x] |
+| DOC2.17 | Search functionality | Full-text search across all API docs | [x] |
+| DOC2.18 | Cross-linking | Automatic links between related items | [x] |
+| DOC2.19 | Version selector | Show docs for different Fajar Lang versions | [x] |
+| DOC2.20 | API reference deployment | Static site with navigation, mobile-friendly | [x] |
 
 ### Phase DOC3: Cookbook & Guides (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| DOC3.1 | Getting Started guide | Install, first program, project setup | [ ] |
-| DOC3.2 | Build system guide | fj.toml, fj build, fj run, fj test | [ ] |
-| DOC3.3 | Package management guide | fj new, fj add, fj publish | [ ] |
-| DOC3.4 | Error handling cookbook | Patterns for Result, Option, error propagation | [ ] |
-| DOC3.5 | Concurrency cookbook | Thread patterns, async patterns, channels | [ ] |
-| DOC3.6 | ML cookbook | Training pipeline, inference, quantization | [ ] |
-| DOC3.7 | OS development guide | @kernel program, boot sequence, QEMU testing | [ ] |
-| DOC3.8 | Embedded guide | Cross-compilation, bare-metal, HAL | [ ] |
-| DOC3.9 | FFI guide | C interop, Python bindings, Rust interop | [ ] |
-| DOC3.10 | Testing guide | Unit tests, integration tests, property tests | [ ] |
-| DOC3.11 | Performance guide | Profiling, benchmarking, optimization tips | [ ] |
-| DOC3.12 | Migration guide | From Rust/C/Python to Fajar Lang | [ ] |
-| DOC3.13 | IDE setup guide | VS Code, Neovim, JetBrains configuration | [ ] |
-| DOC3.14 | Deployment guide | Docker, cross-compile, CI/CD setup | [ ] |
-| DOC3.15 | Security guide | Safe coding, audit checklist, context rules | [ ] |
-| DOC3.16 | Dragon Q6A guide | Setup, GPIO, NPU inference, deployment | [ ] |
-| DOC3.17 | FAQ page | 50 most common questions with answers | [ ] |
-| DOC3.18 | Troubleshooting guide | 30 common errors with solutions | [ ] |
-| DOC3.19 | Changelog | Auto-generated from git tags and commits | [ ] |
-| DOC3.20 | Blog platform | Markdown blog for release announcements | [ ] |
-| DOC3.21 | Recipe: REST API | Step-by-step REST API server | [ ] |
-| DOC3.22 | Recipe: CLI tool | Build a command-line application | [ ] |
-| DOC3.23 | Recipe: Web scraper | HTTP requests + JSON parsing | [ ] |
-| DOC3.24 | Recipe: Image classifier | Load model, preprocess, classify | [ ] |
-| DOC3.25 | Recipe: Drone controller | Sensor fusion + PID + ML inference | [ ] |
-| DOC3.26 | Recipe: Chat server | TCP server with multiple clients | [ ] |
-| DOC3.27 | Recipe: Key-value store | Persistent storage with transactions | [ ] |
-| DOC3.28 | Recipe: Game of Life | Terminal-based cellular automaton | [ ] |
-| DOC3.29 | Recipe: Markdown parser | Recursive descent Markdown → HTML | [ ] |
-| DOC3.30 | Documentation CI | Auto-build docs on push, deploy to site | [ ] |
+| DOC3.1 | Getting Started guide | Install, first program, project setup | [x] |
+| DOC3.2 | Build system guide | fj.toml, fj build, fj run, fj test | [x] |
+| DOC3.3 | Package management guide | fj new, fj add, fj publish | [x] |
+| DOC3.4 | Error handling cookbook | Patterns for Result, Option, error propagation | [x] |
+| DOC3.5 | Concurrency cookbook | Thread patterns, async patterns, channels | [x] |
+| DOC3.6 | ML cookbook | Training pipeline, inference, quantization | [x] |
+| DOC3.7 | OS development guide | @kernel program, boot sequence, QEMU testing | [x] |
+| DOC3.8 | Embedded guide | Cross-compilation, bare-metal, HAL | [x] |
+| DOC3.9 | FFI guide | C interop, Python bindings, Rust interop | [x] |
+| DOC3.10 | Testing guide | Unit tests, integration tests, property tests | [x] |
+| DOC3.11 | Performance guide | Profiling, benchmarking, optimization tips | [x] |
+| DOC3.12 | Migration guide | From Rust/C/Python to Fajar Lang | [x] |
+| DOC3.13 | IDE setup guide | VS Code, Neovim, JetBrains configuration | [x] |
+| DOC3.14 | Deployment guide | Docker, cross-compile, CI/CD setup | [x] |
+| DOC3.15 | Security guide | Safe coding, audit checklist, context rules | [x] |
+| DOC3.16 | Dragon Q6A guide | Setup, GPIO, NPU inference, deployment | [x] |
+| DOC3.17 | FAQ page | 50 most common questions with answers | [x] |
+| DOC3.18 | Troubleshooting guide | 30 common errors with solutions | [x] |
+| DOC3.19 | Changelog | Auto-generated from git tags and commits | [x] |
+| DOC3.20 | Blog platform | Markdown blog for release announcements | [x] |
+| DOC3.21 | Recipe: REST API | Step-by-step REST API server | [x] |
+| DOC3.22 | Recipe: CLI tool | Build a command-line application | [x] |
+| DOC3.23 | Recipe: Web scraper | HTTP requests + JSON parsing | [x] |
+| DOC3.24 | Recipe: Image classifier | Load model, preprocess, classify | [x] |
+| DOC3.25 | Recipe: Drone controller | Sensor fusion + PID + ML inference | [x] |
+| DOC3.26 | Recipe: Chat server | TCP server with multiple clients | [x] |
+| DOC3.27 | Recipe: Key-value store | Persistent storage with transactions | [x] |
+| DOC3.28 | Recipe: Game of Life | Terminal-based cellular automaton | [x] |
+| DOC3.29 | Recipe: Markdown parser | Recursive descent Markdown → HTML | [x] |
+| DOC3.30 | Documentation CI | Auto-build docs on push, deploy to site | [x] |
 
 ---
 
