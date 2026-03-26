@@ -26,6 +26,13 @@ toml = "0.8"                  # Phase 5.4: parse fj.toml
 libloading = "0.8"            # Phase 7: FFI dynamic library loading
 dap = "0.4.1-alpha1"          # Phase 2: Debug Adapter Protocol server
 
+# V8 GC1: Real crypto (RustCrypto)
+sha2 = "0.10"
+hmac = "0.12"
+aes-gcm = "0.10"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+argon2 = "0.5"
+
 # GPU compute (feature-gated)
 wgpu = { version = "28.0", optional = true }
 ash = { version = "0.38", optional = true, default-features = false, features = ["loaded", "std"] }

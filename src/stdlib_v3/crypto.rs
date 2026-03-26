@@ -1,7 +1,8 @@
 //! Crypto & Security — hashing, encryption, signing, key exchange, encoding.
 //!
-//! Phase S2: 20 tasks covering SHA, AES, RSA, Ed25519, HMAC, JWT, Base64.
-//! All implementations are constant-time where required for security.
+//! Phase S2 + V8 GC1: Real cryptographic implementations via RustCrypto.
+//! Hashing (SHA-2), HMAC, AES-GCM encryption, Ed25519 signing, Argon2 password hashing.
+//! Encoding: Base64, Hex. Utilities: constant-time comparison, secure zeroing.
 
 use std::fmt;
 
@@ -76,7 +77,50 @@ pub const SHA256_K: [u32; 64] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
-// S2.2: HMAC
+// V8 GC1.2-GC1.3: Real SHA-256/384/512 via sha2 crate
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Compute SHA-256 hash of data. Returns 32-byte digest.
+pub fn sha256(data: &[u8]) -> Digest {
+    use sha2::Digest as Sha2Digest;
+    let hash = sha2::Sha256::digest(data);
+    Digest {
+        bytes: hash.to_vec(),
+        algorithm: HashAlgorithm::Sha256,
+    }
+}
+
+/// Compute SHA-384 hash of data. Returns 48-byte digest.
+pub fn sha384(data: &[u8]) -> Digest {
+    use sha2::Digest as Sha2Digest;
+    let hash = sha2::Sha384::digest(data);
+    Digest {
+        bytes: hash.to_vec(),
+        algorithm: HashAlgorithm::Sha384,
+    }
+}
+
+/// Compute SHA-512 hash of data. Returns 64-byte digest.
+pub fn sha512(data: &[u8]) -> Digest {
+    use sha2::Digest as Sha2Digest;
+    let hash = sha2::Sha512::digest(data);
+    Digest {
+        bytes: hash.to_vec(),
+        algorithm: HashAlgorithm::Sha512,
+    }
+}
+
+/// Compute hash with specified algorithm.
+pub fn hash(algorithm: HashAlgorithm, data: &[u8]) -> Digest {
+    match algorithm {
+        HashAlgorithm::Sha256 => sha256(data),
+        HashAlgorithm::Sha384 => sha384(data),
+        HashAlgorithm::Sha512 => sha512(data),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.4: Real HMAC via hmac crate
 // ═══════════════════════════════════════════════════════════════════════
 
 /// HMAC configuration.
@@ -86,6 +130,166 @@ pub struct HmacConfig {
     pub algorithm: HashAlgorithm,
     /// Secret key.
     pub key: Vec<u8>,
+}
+
+/// Compute HMAC-SHA256 of data with given key.
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<sha2::Sha256>;
+    let mut mac =
+        HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
+}
+
+/// Verify HMAC-SHA256 tag.
+pub fn hmac_sha256_verify(key: &[u8], data: &[u8], tag: &[u8]) -> bool {
+    constant_time_eq(&hmac_sha256(key, data), tag)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.5: Real AES-256-GCM via aes-gcm crate
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Encrypt data with AES-256-GCM.
+///
+/// `key` must be 32 bytes. `nonce` must be 12 bytes.
+/// Returns (ciphertext, 16-byte authentication tag).
+pub fn aes256_gcm_encrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> Result<(Vec<u8>, [u8; 16]), String> {
+    use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+    use aes_gcm::aead::Payload;
+
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| format!("AES key error: {e}"))?;
+    let nonce = Nonce::from_slice(nonce);
+    let payload = Payload { msg: plaintext, aad };
+    let ciphertext_with_tag = cipher
+        .encrypt(nonce, payload)
+        .map_err(|e| format!("AES encrypt error: {e}"))?;
+
+    // aes-gcm appends 16-byte tag to ciphertext
+    let tag_start = ciphertext_with_tag.len() - 16;
+    let ciphertext = ciphertext_with_tag[..tag_start].to_vec();
+    let mut tag = [0u8; 16];
+    tag.copy_from_slice(&ciphertext_with_tag[tag_start..]);
+    Ok((ciphertext, tag))
+}
+
+/// Decrypt data with AES-256-GCM.
+///
+/// `key` must be 32 bytes. `nonce` must be 12 bytes.
+pub fn aes256_gcm_decrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    ciphertext: &[u8],
+    tag: &[u8; 16],
+    aad: &[u8],
+) -> Result<Vec<u8>, String> {
+    use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+    use aes_gcm::aead::Payload;
+
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| format!("AES key error: {e}"))?;
+    let nonce = Nonce::from_slice(nonce);
+
+    // Reconstruct ciphertext + tag as aes-gcm expects
+    let mut ct_with_tag = ciphertext.to_vec();
+    ct_with_tag.extend_from_slice(tag);
+
+    let payload = Payload { msg: &ct_with_tag, aad };
+    cipher
+        .decrypt(nonce, payload)
+        .map_err(|e| format!("AES decrypt error: {e}"))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.7: Real Ed25519 via ed25519-dalek crate
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Generate an Ed25519 key pair.
+pub fn ed25519_generate() -> Ed25519KeyPair {
+    use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
+
+    let signing_key = SigningKey::generate(&mut OsRng);
+    let verifying_key = signing_key.verifying_key();
+
+    let mut secret = [0u8; 64];
+    secret[..32].copy_from_slice(&signing_key.to_bytes());
+    secret[32..].copy_from_slice(verifying_key.as_bytes());
+
+    Ed25519KeyPair {
+        public_key: verifying_key.to_bytes(),
+        secret_key: secret,
+    }
+}
+
+/// Sign data with Ed25519.
+pub fn ed25519_sign(secret_key: &[u8; 64], message: &[u8]) -> [u8; 64] {
+    use ed25519_dalek::{Signer, SigningKey};
+
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&secret_key[..32]);
+    let signing_key = SigningKey::from_bytes(&seed);
+    let signature = signing_key.sign(message);
+    signature.to_bytes()
+}
+
+/// Verify Ed25519 signature.
+pub fn ed25519_verify(public_key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+    let Ok(verifying_key) = VerifyingKey::from_bytes(public_key) else {
+        return false;
+    };
+    let sig = Signature::from_bytes(signature);
+    verifying_key.verify(message, &sig).is_ok()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.8: Real Argon2 password hashing
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Hash a password with Argon2id. Returns the PHC-formatted hash string.
+pub fn argon2_hash(password: &[u8]) -> Result<String, String> {
+    use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+    use rand::rngs::OsRng;
+
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let hash = argon2
+        .hash_password(password, &salt)
+        .map_err(|e| format!("argon2 hash error: {e}"))?;
+    Ok(hash.to_string())
+}
+
+/// Verify a password against an Argon2id hash string.
+pub fn argon2_verify(password: &[u8], hash_str: &str) -> bool {
+    use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
+
+    let Ok(parsed_hash) = PasswordHash::new(hash_str) else {
+        return false;
+    };
+    Argon2::default()
+        .verify_password(password, &parsed_hash)
+        .is_ok()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.9: Real CSPRNG
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Generate cryptographically secure random bytes.
+pub fn random_bytes(len: usize) -> Vec<u8> {
+    use rand::RngCore;
+    let mut buf = vec![0u8; len];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    buf
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -534,5 +738,158 @@ mod tests {
         assert_eq!(SHA256_H.len(), 8);
         assert_eq!(SHA256_K.len(), 64);
         assert_eq!(SHA256_H[0], 0x6a09e667);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC1.10: Real crypto integration tests (NIST test vectors)
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn gc1_sha256_empty() {
+        let d = sha256(b"");
+        assert_eq!(
+            d.hex(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn gc1_sha256_abc() {
+        let d = sha256(b"abc");
+        assert_eq!(
+            d.hex(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn gc1_sha384_abc() {
+        let d = sha384(b"abc");
+        assert_eq!(d.bytes.len(), 48);
+        assert_eq!(d.algorithm, HashAlgorithm::Sha384);
+    }
+
+    #[test]
+    fn gc1_sha512_abc() {
+        let d = sha512(b"abc");
+        assert_eq!(d.bytes.len(), 64);
+        assert_eq!(d.algorithm, HashAlgorithm::Sha512);
+    }
+
+    #[test]
+    fn gc1_hash_dispatch() {
+        let d1 = hash(HashAlgorithm::Sha256, b"test");
+        let d2 = sha256(b"test");
+        assert_eq!(d1.bytes, d2.bytes);
+    }
+
+    #[test]
+    fn gc1_hmac_sha256_rfc4231() {
+        // RFC 4231 Test Case 2
+        let key = b"Jefe";
+        let data = b"what do ya want for nothing?";
+        let mac = hmac_sha256(key, data);
+        assert_eq!(
+            hex_encode(&mac),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+    }
+
+    #[test]
+    fn gc1_hmac_verify() {
+        let key = b"secret";
+        let data = b"message";
+        let mac = hmac_sha256(key, data);
+        assert!(hmac_sha256_verify(key, data, &mac));
+        assert!(!hmac_sha256_verify(key, b"wrong", &mac));
+    }
+
+    #[test]
+    fn gc1_aes256_gcm_roundtrip() {
+        let key = [0x42u8; 32];
+        let nonce = [0x01u8; 12];
+        let plaintext = b"Hello, Fajar Lang crypto!";
+        let aad = b"additional data";
+
+        let (ct, tag) = aes256_gcm_encrypt(&key, &nonce, plaintext, aad).unwrap();
+        assert_ne!(ct, plaintext.to_vec()); // ciphertext differs
+
+        let decrypted = aes256_gcm_decrypt(&key, &nonce, &ct, &tag, aad).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn gc1_aes256_gcm_tamper_detection() {
+        let key = [0x42u8; 32];
+        let nonce = [0x01u8; 12];
+        let (ct, mut tag) = aes256_gcm_encrypt(&key, &nonce, b"data", b"").unwrap();
+        tag[0] ^= 1; // tamper with tag
+        assert!(aes256_gcm_decrypt(&key, &nonce, &ct, &tag, b"").is_err());
+    }
+
+    #[test]
+    fn gc1_ed25519_sign_verify() {
+        let kp = ed25519_generate();
+        let msg = b"Fajar Lang is making history in IT";
+        let sig = ed25519_sign(&kp.secret_key, msg);
+        assert!(ed25519_verify(&kp.public_key, msg, &sig));
+        assert!(!ed25519_verify(&kp.public_key, b"wrong message", &sig));
+    }
+
+    #[test]
+    fn gc1_ed25519_different_keys() {
+        let kp1 = ed25519_generate();
+        let kp2 = ed25519_generate();
+        let msg = b"test";
+        let sig = ed25519_sign(&kp1.secret_key, msg);
+        assert!(!ed25519_verify(&kp2.public_key, msg, &sig)); // wrong key
+    }
+
+    #[test]
+    fn gc1_argon2_hash_verify() {
+        let password = b"fajar-lang-2026";
+        let hash_str = argon2_hash(password).unwrap();
+        assert!(hash_str.starts_with("$argon2"));
+        assert!(argon2_verify(password, &hash_str));
+        assert!(!argon2_verify(b"wrong-password", &hash_str));
+    }
+
+    #[test]
+    fn gc1_random_bytes_length() {
+        assert_eq!(random_bytes(0).len(), 0);
+        assert_eq!(random_bytes(32).len(), 32);
+        assert_eq!(random_bytes(64).len(), 64);
+    }
+
+    #[test]
+    fn gc1_random_bytes_different() {
+        let a = random_bytes(32);
+        let b = random_bytes(32);
+        assert_ne!(a, b); // astronomically unlikely to be equal
+    }
+
+    #[test]
+    fn gc1_full_crypto_pipeline() {
+        // Generate keypair
+        let kp = ed25519_generate();
+
+        // Hash some data
+        let data = b"important document";
+        let digest = sha256(data);
+
+        // Sign the hash
+        let sig = ed25519_sign(&kp.secret_key, &digest.bytes);
+
+        // Verify
+        assert!(ed25519_verify(&kp.public_key, &digest.bytes, &sig));
+
+        // Encrypt with AES
+        let key = sha256(b"encryption-key");
+        let mut aes_key = [0u8; 32];
+        aes_key.copy_from_slice(&key.bytes);
+        let nonce = [0u8; 12];
+        let (ct, tag) = aes256_gcm_encrypt(&aes_key, &nonce, data, b"").unwrap();
+        let pt = aes256_gcm_decrypt(&aes_key, &nonce, &ct, &tag, b"").unwrap();
+        assert_eq!(pt, data);
     }
 }
