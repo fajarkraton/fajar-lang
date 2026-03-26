@@ -1,0 +1,231 @@
+// Self-hosted AST builder for Fajar Lang
+// V8 SQ11.1: Constructs array-based AST nodes from token stream.
+//
+// Each AST node is an array where element [0] is the node type tag:
+//   ["int", value_str]
+//   ["float", value_str]
+//   ["str", value_str]
+//   ["bool", "true"/"false"]
+//   ["ident", name]
+//   ["binop", op_str, left_node, right_node]
+//   ["unary", op_str, operand_node]
+//   ["call", fn_name, arg1, arg2, ...]
+//   ["field", object_node, field_name]
+//   ["index", object_node, index_node]
+//   ["let", name, type_str, value_node]
+//   ["const", name, type_str, value_node]
+//   ["return", value_node]
+//   ["break"]
+//   ["continue"]
+//   ["if", cond_node, then_node, else_node]
+//   ["while", cond_node, body_node]
+//   ["for", var_name, iter_node, body_node]
+//   ["block", stmt1, stmt2, ...]
+//   ["fn", name, params_str, return_type, body_node]
+//   ["struct", name, field1_name, field1_type, ...]
+//   ["enum", name, variant1, variant2, ...]
+//   ["impl", type_name, method1, method2, ...]
+//   ["use", path_str]
+
+// ═══════════════════════════════════════════════════════════════════════
+// AST Node Constructors
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Create an integer literal node.
+fn ast_int(value: str) -> [str] {
+    ["int", value]
+}
+
+/// Create a float literal node.
+fn ast_float(value: str) -> [str] {
+    ["float", value]
+}
+
+/// Create a string literal node.
+fn ast_str(value: str) -> [str] {
+    ["str", value]
+}
+
+/// Create a boolean literal node.
+fn ast_bool(value: bool) -> [str] {
+    if value { ["bool", "true"] } else { ["bool", "false"] }
+}
+
+/// Create an identifier node.
+fn ast_ident(name: str) -> [str] {
+    ["ident", name]
+}
+
+/// Create a binary operator node.
+fn ast_binop(op: str, left: str, right: str) -> [str] {
+    ["binop", op, left, right]
+}
+
+/// Create a unary operator node.
+fn ast_unary(op: str, operand: str) -> [str] {
+    ["unary", op, operand]
+}
+
+/// Create a let binding node.
+fn ast_let(name: str, ty: str, value: str) -> [str] {
+    ["let", name, ty, value]
+}
+
+/// Create a return node.
+fn ast_return(value: str) -> [str] {
+    ["return", value]
+}
+
+/// Create a function definition node.
+fn ast_fn(name: str, params: str, ret_type: str, body: str) -> [str] {
+    ["fn", name, params, ret_type, body]
+}
+
+/// Create a struct definition node.
+fn ast_struct(name: str, fields: str) -> [str] {
+    ["struct", name, fields]
+}
+
+/// Create a use statement node.
+fn ast_use(path: str) -> [str] {
+    ["use", path]
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AST Utilities
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Get the node type tag (first element).
+pub fn ast_type(node: [str]) -> str {
+    if len(node) > 0 { node[0] } else { "empty" }
+}
+
+/// Check if a node is of a specific type.
+pub fn ast_is(node: [str], tag: str) -> bool {
+    if len(node) > 0 { node[0] == tag } else { false }
+}
+
+/// Pretty-print an AST node (SQ11.2).
+pub fn ast_print(node: [str], indent: i64) -> str {
+    let pad = repeat_str("  ", indent)
+    let tag = if to_int(len(node)) > 0 { node[0] } else { "?" }
+
+    if tag == "int" || tag == "float" || tag == "str" || tag == "bool" || tag == "ident" {
+        return f"{pad}{tag}({node[1]})"
+    }
+    if tag == "let" {
+        return f"{pad}let {node[1]}: {node[2]} = {node[3]}"
+    }
+    if tag == "fn" {
+        return f"{pad}fn {node[1]}({node[2]}) -> {node[3]}"
+    }
+    if tag == "struct" {
+        return f"{pad}struct {node[1]} {{ {node[2]} }}"
+    }
+    if tag == "use" {
+        return f"{pad}use {node[1]}"
+    }
+    if tag == "binop" {
+        return f"{pad}({node[2]} {node[1]} {node[3]})"
+    }
+    if tag == "return" {
+        return f"{pad}return {node[1]}"
+    }
+
+    // Default: show all elements
+    let mut result = f"{pad}[{tag}"
+    let mut i = 1
+    while i < to_int(len(node)) {
+        result = result + ", " + node[i]
+        i = i + 1
+    }
+    result + "]"
+}
+
+/// Repeat a string N times.
+fn repeat_str(s: str, n: i64) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < n {
+        result = result + s
+        i = i + 1
+    }
+    result
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AST-building parser (builds nodes from token stream)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Parse a simple expression and return an AST node as a string description.
+/// Uses the token stream from lexer.fj.
+///
+/// This is a simplified AST builder that creates string representations.
+/// A full AST would use nested arrays, but Fajar Lang's type system
+/// currently requires homogeneous arrays, so we use string encoding.
+pub fn parse_expr_ast(tokens: [i64], source: str, pos: i64) -> [str] {
+    let kind = if pos < to_int(len(tokens)) { tokens[pos] } else { 0 }
+
+    if kind == 130 {
+        // IntLit — extract value from source (simplified: return tag)
+        return ast_int(to_string(pos))
+    }
+    if kind == 131 {
+        return ast_float(to_string(pos))
+    }
+    if kind == 132 {
+        return ast_str(to_string(pos))
+    }
+    if kind == 29 {
+        return ast_bool(true)
+    }
+    if kind == 30 {
+        return ast_bool(false)
+    }
+    if kind == 133 {
+        return ast_ident(f"ident@{pos}")
+    }
+
+    // Default: unknown node
+    ["unknown", to_string(kind)]
+}
+
+/// Parse a top-level item and return an AST node description.
+pub fn parse_item_ast(tokens: [i64], source: str, pos: i64) -> [str] {
+    let kind = if pos < to_int(len(tokens)) { tokens[pos] } else { 0 }
+
+    // fn definition
+    if kind == 15 || kind == 25 {
+        let mut p = pos
+        let mut is_pub = false
+        if kind == 25 { is_pub = true; p = p + 1 }
+        // Skip 'fn' token
+        p = p + 1
+        // Function name
+        let name = f"fn@{p}"
+        return ast_fn(name, "", "", "")
+    }
+
+    // let statement
+    if kind == 13 {
+        return ast_let(f"var@{pos + 1}", "", "")
+    }
+
+    // struct
+    if kind == 16 {
+        return ast_struct(f"struct@{pos + 1}", "")
+    }
+
+    // enum
+    if kind == 17 {
+        return ["enum", f"enum@{pos + 1}"]
+    }
+
+    // use
+    if kind == 23 {
+        return ast_use(f"path@{pos + 1}")
+    }
+
+    // Default
+    ["stmt", to_string(pos)]
+}

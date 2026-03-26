@@ -20,10 +20,10 @@ impl Parser {
                     break;
                 }
 
-                // Prevent `(` on a new line from chaining as a function call.
+                // Prevent `(` and `[` on a new line from chaining as postfix.
                 // E.g., `foo()\n(x + 1)` should be two statements, not `foo()(x + 1)`.
-                // Only break for LParen; Dot and LBracket are fine on new lines.
-                if kind == TokenKind::LParen {
+                // E.g., `if c { return r }\n["a", b]` should be a new array, not index.
+                if kind == TokenKind::LParen || kind == TokenKind::LBracket {
                     let next_line = self.peek().line;
                     let prev_line = self.prev_line();
                     if next_line > prev_line {
