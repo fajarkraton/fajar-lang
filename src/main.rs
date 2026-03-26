@@ -238,6 +238,20 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // SQ11.7: Increase thread stack size to 16MB for deeply recursive
+    // programs (self-hosted compiler tokenizing large files).
+    let stack_size = 16 * 1024 * 1024; // 16 MB
+    let builder = std::thread::Builder::new().stack_size(stack_size);
+    let handler = builder
+        .spawn(main_inner)
+        .expect("failed to spawn main thread with larger stack");
+    match handler.join() {
+        Ok(code) => code,
+        Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn main_inner() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
