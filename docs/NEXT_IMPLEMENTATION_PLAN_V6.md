@@ -319,7 +319,7 @@ initramfs unpacking, boot splash screen, system benchmark suite)*
 
 ---
 
-## Option 4: Real-Time ML Pipeline (6 sprints, 60 tasks)
+## Option 4: Real-Time ML Pipeline (6 sprints, 60 tasks) ✅ COMPLETE
 
 **Goal:** End-to-end sensor → inference → actuator pipeline with latency guarantees
 **Impact:** Core differentiator — no other language does this with compiler-enforced safety
@@ -330,31 +330,31 @@ initramfs unpacking, boot splash screen, system benchmark suite)*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R1.1.1 | Sensor trait | `trait Sensor { fn read() -> SensorData }` | [ ] |
-| R1.1.2 | SensorData type | Timestamped, typed sensor readings | [ ] |
-| R1.1.3 | IMU driver | Accelerometer + gyroscope (MPU6050) | [ ] |
-| R1.1.4 | Camera frame capture | Raw frame → Tensor conversion | [ ] |
-| R1.1.5 | ADC driver | Analog-to-digital (temperature, pressure) | [ ] |
-| R1.1.6 | GPS NMEA parser | Lat/lon/alt from UART GPS module | [ ] |
-| R1.1.7 | LiDAR point cloud | Distance array from scanning LiDAR | [ ] |
-| R1.1.8 | Microphone PCM | Audio samples for voice detection | [ ] |
-| R1.1.9 | Sensor fusion | Kalman filter for IMU + GPS | [ ] |
-| R1.1.10 | Sensor data logger | Ring buffer with timestamp | [ ] |
+| R1.1.1 | Sensor trait | `trait Sensor { fn read() -> SensorData }` | [x] |
+| R1.1.2 | SensorData type | Timestamped, typed sensor readings | [x] |
+| R1.1.3 | IMU driver | Accelerometer + gyroscope (MPU6050) | [x] |
+| R1.1.4 | Camera frame capture | Raw frame → Tensor conversion | [x] |
+| R1.1.5 | ADC driver | Analog-to-digital (temperature, pressure) | [x] |
+| R1.1.6 | GPS NMEA parser | Lat/lon/alt from UART GPS module | [x] |
+| R1.1.7 | LiDAR point cloud | Distance array from scanning LiDAR | [x] |
+| R1.1.8 | Microphone PCM | Audio samples for voice detection | [x] |
+| R1.1.9 | Sensor fusion | Kalman filter for IMU + GPS | [x] |
+| R1.1.10 | Sensor data logger | Ring buffer with timestamp | [x] |
 
 #### Sprint R1.2: Data Pipeline (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R1.2.1 | Pipeline DSL | `sensor |> preprocess |> infer |> act` | [ ] |
-| R1.2.2 | Preprocessing stage | Normalization, windowing, FFT | [ ] |
-| R1.2.3 | Feature extraction | Rolling mean, variance, peak detection | [ ] |
-| R1.2.4 | Batching strategy | Collect N samples before inference | [ ] |
-| R1.2.5 | Ring buffer allocator | Zero-copy circular buffer | [ ] |
-| R1.2.6 | Backpressure handling | Drop oldest on overflow | [ ] |
-| R1.2.7 | Multi-sensor fusion | Align timestamps across sensors | [ ] |
-| R1.2.8 | Data augmentation | Random noise, rotation for training | [ ] |
-| R1.2.9 | Streaming windowing | Sliding window with overlap | [ ] |
-| R1.2.10 | Pipeline benchmark | End-to-end latency measurement | [ ] |
+| R1.2.1 | Pipeline DSL | `sensor |> preprocess |> infer |> act` | [x] |
+| R1.2.2 | Preprocessing stage | Normalization, windowing, FFT | [x] |
+| R1.2.3 | Feature extraction | Rolling mean, variance, peak detection | [x] |
+| R1.2.4 | Batching strategy | Collect N samples before inference | [x] |
+| R1.2.5 | Ring buffer allocator | Zero-copy circular buffer | [x] |
+| R1.2.6 | Backpressure handling | Drop oldest on overflow | [x] |
+| R1.2.7 | Multi-sensor fusion | Align timestamps across sensors | [x] |
+| R1.2.8 | Data augmentation | Random noise, rotation for training | [x] |
+| R1.2.9 | Streaming windowing | Sliding window with overlap | [x] |
+| R1.2.10 | Pipeline benchmark | End-to-end latency measurement | [x] |
 
 ### Phase R2: Inference Engine (2 sprints, 20 tasks)
 
@@ -362,31 +362,31 @@ initramfs unpacking, boot splash screen, system benchmark suite)*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R2.1.1 | Model loader | FJML/ONNX/TFLite → runtime graph | [ ] |
-| R2.1.2 | Inference scheduler | Priority queue with deadline | [ ] |
-| R2.1.3 | @device inference context | Tensor ops isolated from kernel | [ ] |
-| R2.1.4 | Batch inference | Multiple inputs in one pass | [ ] |
-| R2.1.5 | Model hot-swap | Replace model without restart | [ ] |
-| R2.1.6 | Multi-model pipeline | Chain: detector → classifier → tracker | [ ] |
-| R2.1.7 | Confidence threshold | Filter low-confidence predictions | [ ] |
-| R2.1.8 | Inference caching | Cache repeated inputs (LRU) | [ ] |
-| R2.1.9 | Quantized inference | INT8 fast path on CPU/NPU | [ ] |
-| R2.1.10 | Latency SLA | Guarantee < 10ms per inference | [ ] |
+| R2.1.1 | Model loader | FJML/ONNX/TFLite → runtime graph | [x] |
+| R2.1.2 | Inference scheduler | Priority queue with deadline | [x] |
+| R2.1.3 | @device inference context | Tensor ops isolated from kernel | [x] |
+| R2.1.4 | Batch inference | Multiple inputs in one pass | [x] |
+| R2.1.5 | Model hot-swap | Replace model without restart | [x] |
+| R2.1.6 | Multi-model pipeline | Chain: detector → classifier → tracker | [x] |
+| R2.1.7 | Confidence threshold | Filter low-confidence predictions | [x] |
+| R2.1.8 | Inference caching | Cache repeated inputs (LRU) | [x] |
+| R2.1.9 | Quantized inference | INT8 fast path on CPU/NPU | [x] |
+| R2.1.10 | Latency SLA | Guarantee < 10ms per inference | [x] |
 
 #### Sprint R2.2: Actuator Framework (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R2.2.1 | Actuator trait | `trait Actuator { fn act(cmd: Command) }` | [ ] |
-| R2.2.2 | PWM motor control | Speed + direction via PWM duty cycle | [ ] |
-| R2.2.3 | Servo control | Angular position (0-180°) | [ ] |
-| R2.2.4 | GPIO digital output | On/off for relays, LEDs | [ ] |
-| R2.2.5 | CAN bus command | Automotive actuator commands | [ ] |
-| R2.2.6 | Safety interlock | Emergency stop on anomaly detection | [ ] |
-| R2.2.7 | PID controller | Proportional-integral-derivative loop | [ ] |
-| R2.2.8 | Command smoothing | Ramp rate limiting for motors | [ ] |
-| R2.2.9 | Actuator feedback | Closed-loop with sensor reading | [ ] |
-| R2.2.10 | Fail-safe defaults | Safe state on communication loss | [ ] |
+| R2.2.1 | Actuator trait | `trait Actuator { fn act(cmd: Command) }` | [x] |
+| R2.2.2 | PWM motor control | Speed + direction via PWM duty cycle | [x] |
+| R2.2.3 | Servo control | Angular position (0-180°) | [x] |
+| R2.2.4 | GPIO digital output | On/off for relays, LEDs | [x] |
+| R2.2.5 | CAN bus command | Automotive actuator commands | [x] |
+| R2.2.6 | Safety interlock | Emergency stop on anomaly detection | [x] |
+| R2.2.7 | PID controller | Proportional-integral-derivative loop | [x] |
+| R2.2.8 | Command smoothing | Ramp rate limiting for motors | [x] |
+| R2.2.9 | Actuator feedback | Closed-loop with sensor reading | [x] |
+| R2.2.10 | Fail-safe defaults | Safe state on communication loss | [x] |
 
 ### Phase R3: Integration & Demo (2 sprints, 20 tasks)
 
@@ -394,31 +394,31 @@ initramfs unpacking, boot splash screen, system benchmark suite)*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R3.1.1 | @kernel → @device bridge | Zero-copy sensor data → tensor | [ ] |
-| R3.1.2 | @device → @kernel bridge | Inference result → actuator command | [ ] |
-| R3.1.3 | @safe orchestrator | Pipeline coordination with error handling | [ ] |
-| R3.1.4 | Deadline scheduler | Hard real-time task priorities | [ ] |
-| R3.1.5 | Jitter measurement | < 1ms variance on 10ms deadline | [ ] |
-| R3.1.6 | Worst-case execution time | Static WCET analysis | [ ] |
-| R3.1.7 | Priority inversion prevention | Priority inheritance protocol | [ ] |
-| R3.1.8 | Watchdog integration | Reset on missed deadline | [ ] |
-| R3.1.9 | Telemetry export | Pipeline metrics → serial/network | [ ] |
-| R3.1.10 | Power-aware scheduling | Reduce frequency when idle | [ ] |
+| R3.1.1 | @kernel → @device bridge | Zero-copy sensor data → tensor | [x] |
+| R3.1.2 | @device → @kernel bridge | Inference result → actuator command | [x] |
+| R3.1.3 | @safe orchestrator | Pipeline coordination with error handling | [x] |
+| R3.1.4 | Deadline scheduler | Hard real-time task priorities | [x] |
+| R3.1.5 | Jitter measurement | < 1ms variance on 10ms deadline | [x] |
+| R3.1.6 | Worst-case execution time | Static WCET analysis | [x] |
+| R3.1.7 | Priority inversion prevention | Priority inheritance protocol | [x] |
+| R3.1.8 | Watchdog integration | Reset on missed deadline | [x] |
+| R3.1.9 | Telemetry export | Pipeline metrics → serial/network | [x] |
+| R3.1.10 | Power-aware scheduling | Reduce frequency when idle | [x] |
 
 #### Sprint R3.2: Demo Applications (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R3.2.1 | Drone autopilot | IMU → stabilization → motor control | [ ] |
-| R3.2.2 | Object tracker | Camera → YOLO → servo follow | [ ] |
-| R3.2.3 | Anomaly detector | Vibration sensor → FFT → classifier → alert | [ ] |
-| R3.2.4 | Voice command | Microphone → keyword detection → GPIO | [ ] |
-| R3.2.5 | Autonomous rover | LiDAR → obstacle avoid → motor | [ ] |
-| R3.2.6 | Predictive maintenance | Sensor trends → failure prediction → alert | [ ] |
-| R3.2.7 | Smart agriculture | Soil moisture → irrigation control | [ ] |
-| R3.2.8 | Industrial quality control | Camera → defect detection → reject gate | [ ] |
-| R3.2.9 | Pipeline benchmark report | All demos with latency/accuracy | [ ] |
-| R3.2.10 | Blog: "RT ML in Fajar Lang" | Architecture + benchmarks | [ ] |
+| R3.2.1 | Drone autopilot | IMU → stabilization → motor control | [x] |
+| R3.2.2 | Object tracker | Camera → YOLO → servo follow | [x] |
+| R3.2.3 | Anomaly detector | Vibration sensor → FFT → classifier → alert | [x] |
+| R3.2.4 | Voice command | Microphone → keyword detection → GPIO | [x] |
+| R3.2.5 | Autonomous rover | LiDAR → obstacle avoid → motor | [x] |
+| R3.2.6 | Predictive maintenance | Sensor trends → failure prediction → alert | [x] |
+| R3.2.7 | Smart agriculture | Soil moisture → irrigation control | [x] |
+| R3.2.8 | Industrial quality control | Camera → defect detection → reject gate | [x] |
+| R3.2.9 | Pipeline benchmark report | All demos with latency/accuracy | [x] |
+| R3.2.10 | Blog: "RT ML in Fajar Lang" | Architecture + benchmarks | [x] |
 
 ---
 
