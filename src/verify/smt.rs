@@ -572,6 +572,184 @@ pub fn prove_matmul_shapes(m: i64, k1: i64, k2: i64, n: i64) -> SmtResult {
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// VQ6.1: Bitvector Theory (overflow detection)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Prove that i32 addition doesn't overflow for bounded inputs.
+/// Returns Unsat if no overflow possible, Sat with counterexample if overflow found.
+#[cfg(feature = "smt")]
+pub fn prove_no_i32_overflow(a_min: i32, a_max: i32, b_min: i32, b_max: i32) -> SmtResult {
+    use z3::ast::Ast;
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let a = z3::ast::BV::new_const(&ctx, "a", 32);
+    let b = z3::ast::BV::new_const(&ctx, "b", 32);
+
+    // Constrain ranges
+    let a_min_bv = z3::ast::BV::from_i64(&ctx, a_min as i64, 32);
+    let a_max_bv = z3::ast::BV::from_i64(&ctx, a_max as i64, 32);
+    let b_min_bv = z3::ast::BV::from_i64(&ctx, b_min as i64, 32);
+    let b_max_bv = z3::ast::BV::from_i64(&ctx, b_max as i64, 32);
+
+    solver.assert(&a.bvsge(&a_min_bv));
+    solver.assert(&a.bvsle(&a_max_bv));
+    solver.assert(&b.bvsge(&b_min_bv));
+    solver.assert(&b.bvsle(&b_max_bv));
+
+    // Check: does signed addition overflow?
+    // Overflow if: (a > 0 && b > 0 && a+b < 0) || (a < 0 && b < 0 && a+b > 0)
+    let sum = a.bvadd(&b);
+    let zero = z3::ast::BV::from_i64(&ctx, 0, 32);
+
+    let pos_overflow = z3::ast::Bool::and(
+        &ctx,
+        &[
+            &a.bvsgt(&zero),
+            &b.bvsgt(&zero),
+            &sum.bvslt(&zero),
+        ],
+    );
+    let neg_overflow = z3::ast::Bool::and(
+        &ctx,
+        &[
+            &a.bvslt(&zero),
+            &b.bvslt(&zero),
+            &sum.bvsgt(&zero),
+        ],
+    );
+    let overflow = z3::ast::Bool::or(&ctx, &[&pos_overflow, &neg_overflow]);
+    solver.assert(&overflow);
+
+    match solver.check() {
+        z3::SatResult::Unsat => SmtResult::Unsat, // no overflow possible
+        z3::SatResult::Sat => {
+            let model = solver.get_model().unwrap();
+            let a_val = model.eval(&a, true).unwrap();
+            let b_val = model.eval(&b, true).unwrap();
+            SmtResult::Sat(Counterexample {
+                assignments: HashMap::from([
+                    ("a".to_string(), SmtValue::Int(a_val.as_i64().unwrap_or(0))),
+                    ("b".to_string(), SmtValue::Int(b_val.as_i64().unwrap_or(0))),
+                ]),
+            })
+        }
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VQ6.5: Timeout Handling
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Run a verification with a timeout.
+#[cfg(feature = "smt")]
+pub fn prove_with_timeout(
+    var_name: &str,
+    constraint: &str,
+    timeout_ms: u64,
+) -> SmtResult {
+    use z3::ast::Ast;
+    let mut cfg = z3::Config::new();
+    cfg.set_timeout_msec(timeout_ms);
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let x = z3::ast::Int::new_const(&ctx, var_name);
+
+    if let Some(rest) = constraint.strip_prefix(">= ") {
+        if let Ok(val) = rest.trim().parse::<i64>() {
+            solver.assert(&x.ge(&z3::ast::Int::from_i64(&ctx, val)));
+        }
+    }
+
+    // Try to prove x >= 0 (negate: x < 0)
+    solver.assert(&x.lt(&z3::ast::Int::from_i64(&ctx, 0)));
+
+    match solver.check() {
+        z3::SatResult::Unsat => SmtResult::Unsat,
+        z3::SatResult::Sat => {
+            let model = solver.get_model().unwrap();
+            let val = model.eval(&x, true).unwrap();
+            SmtResult::Sat(Counterexample {
+                assignments: HashMap::from([(
+                    var_name.to_string(),
+                    SmtValue::Int(val.as_i64().unwrap_or(0)),
+                )]),
+            })
+        }
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VQ6.7: Counterexample Pretty Display
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Format a verification result with context for human reading.
+pub fn format_verification_result(
+    description: &str,
+    file: &str,
+    line: u32,
+    result: &SmtResult,
+) -> String {
+    match result {
+        SmtResult::Unsat => format!("  ✅ {file}:{line} — {description}: PROVEN safe"),
+        SmtResult::Sat(ce) => {
+            let mut msg = format!("  ❌ {file}:{line} — {description}: FAILED\n");
+            msg.push_str(&format!("     Counterexample: {}\n", ce.display()));
+            msg.push_str("     Fix: add bounds check or tighten precondition\n");
+            msg
+        }
+        SmtResult::Timeout => {
+            format!("  ⚠️  {file}:{line} — {description}: TIMEOUT (solver timed out)")
+        }
+        SmtResult::Error(e) => {
+            format!("  ⛔ {file}:{line} — {description}: SOLVER ERROR ({e})")
+        }
+        SmtResult::Unknown => {
+            format!("  ⚠️  {file}:{line} — {description}: UNKNOWN (solver could not decide)")
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VQ6.9: Error Localization
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A localized verification error with source position.
+#[derive(Debug)]
+pub struct LocalizedError {
+    /// Source file.
+    pub file: String,
+    /// Line number.
+    pub line: u32,
+    /// Column number.
+    pub column: u32,
+    /// Error description.
+    pub description: String,
+    /// Counterexample (if available).
+    pub counterexample: Option<String>,
+    /// Suggested fix.
+    pub suggestion: String,
+}
+
+impl std::fmt::Display for LocalizedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}:{}: {} — {}",
+            self.file, self.line, self.column, self.description, self.suggestion
+        )?;
+        if let Some(ref ce) = self.counterexample {
+            write!(f, "\n  counterexample: {ce}")?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -837,5 +1015,104 @@ mod tests {
                 assert_eq!(*v, 42);
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // VQ6: Quality improvement tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn vq6_1_no_overflow_small_range() {
+        // a in [0, 100], b in [0, 100] → no i32 overflow
+        let result = prove_no_i32_overflow(0, 100, 0, 100);
+        assert!(result.is_proven(), "small range should not overflow");
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn vq6_1_overflow_max_range() {
+        // a in [0, i32::MAX], b in [1, i32::MAX] → CAN overflow
+        let result = prove_no_i32_overflow(0, i32::MAX, 1, i32::MAX);
+        assert!(
+            result.is_failed(),
+            "max range should overflow: {:?}",
+            result
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn vq6_5_timeout_simple() {
+        // Simple constraint — should resolve quickly within 5s
+        let result = prove_with_timeout("x", ">= 0", 5000);
+        assert!(result.is_proven(), "x >= 0 should prove x >= 0");
+    }
+
+    #[test]
+    fn vq6_7_format_proven() {
+        let msg = format_verification_result(
+            "array bounds",
+            "main.fj",
+            42,
+            &SmtResult::Unsat,
+        );
+        assert!(msg.contains("✅"));
+        assert!(msg.contains("PROVEN"));
+        assert!(msg.contains("main.fj:42"));
+    }
+
+    #[test]
+    fn vq6_7_format_failed() {
+        let msg = format_verification_result(
+            "index check",
+            "lib.fj",
+            10,
+            &SmtResult::Sat(Counterexample {
+                assignments: HashMap::from([("i".to_string(), SmtValue::Int(-1))]),
+            }),
+        );
+        assert!(msg.contains("❌"));
+        assert!(msg.contains("FAILED"));
+        assert!(msg.contains("i = -1"));
+    }
+
+    #[test]
+    fn vq6_7_format_unknown() {
+        let msg = format_verification_result(
+            "complex proof",
+            "deep.fj",
+            99,
+            &SmtResult::Unknown,
+        );
+        assert!(msg.contains("UNKNOWN"));
+    }
+
+    #[test]
+    fn vq6_7_format_timeout() {
+        let msg = format_verification_result(
+            "complex proof",
+            "deep.fj",
+            99,
+            &SmtResult::Timeout,
+        );
+        assert!(msg.contains("TIMEOUT"));
+    }
+
+    #[test]
+    fn vq6_9_localized_error() {
+        let err = LocalizedError {
+            file: "main.fj".to_string(),
+            line: 42,
+            column: 15,
+            description: "array index may be out of bounds".to_string(),
+            counterexample: Some("i = 10, len = 5".to_string()),
+            suggestion: "add `if i < len(arr)` guard".to_string(),
+        };
+        let s = format!("{err}");
+        assert!(s.contains("main.fj:42:15"));
+        assert!(s.contains("out of bounds"));
+        assert!(s.contains("i = 10, len = 5"));
+        assert!(s.contains("guard"));
     }
 }
