@@ -703,6 +703,67 @@ mod tests {
         assert_eq!(metrics.send_errors, 1);
     }
 
+    // DQ5.3: Backpressure — bounded channel doesn't OOM
+    #[tokio::test]
+    async fn dq5_3_backpressure_bounded() {
+        let mut actor = Actor::new("slow", 3); // capacity 3
+        let tx = actor.mailbox_tx.clone();
+
+        // Fill the channel
+        for i in 0..3 {
+            let msg = NetMessage {
+                msg_type: MessageType::ActorMessage,
+                target: "slow".to_string(),
+                payload: vec![i as u8],
+                sender_id: 0,
+                seq: i as u64 + 1,
+            };
+            tx.send(msg).await.unwrap();
+        }
+
+        // 4th send should fail (channel full) with try_send
+        let msg4 = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "slow".to_string(),
+            payload: vec![99],
+            sender_id: 0,
+            seq: 4,
+        };
+        let result = tx.try_send(msg4);
+        assert!(result.is_err(), "bounded channel should reject when full");
+    }
+
+    // DQ5.8: Graceful shutdown — drain messages
+    #[tokio::test]
+    async fn dq5_8_graceful_drain() {
+        let mut actor = Actor::new("drain-test", 10);
+
+        // Send 5 messages using the actor's own sender
+        for i in 0..5u64 {
+            let msg = NetMessage {
+                msg_type: MessageType::ActorMessage,
+                target: "drain-test".to_string(),
+                payload: format!("msg-{i}").into_bytes(),
+                sender_id: 0,
+                seq: i + 1,
+            };
+            actor.send(msg).await.unwrap();
+        }
+
+        // Take receiver and drain with timeout
+        let mut rx = actor.take_receiver().unwrap();
+        // Drop the actor (which drops the last sender clone)
+        drop(actor);
+
+        let mut drained = 0;
+        // Use try_recv in a loop since channel is closed
+        while let Ok(msg) = rx.try_recv() {
+            let _ = msg;
+            drained += 1;
+        }
+        assert_eq!(drained, 5, "should drain all 5 messages");
+    }
+
     #[test]
     fn dq5_9_prometheus_format() {
         let mut metrics = TransportMetrics::default();

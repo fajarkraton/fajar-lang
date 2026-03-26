@@ -794,6 +794,29 @@ fn clang_type_to_cpp(cx_type: clang_sys::CXType) -> CppType {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CQ3.8: std::string ↔ Fajar str bridge
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Convert a Fajar Lang &str to a C-compatible null-terminated string.
+pub fn fajar_str_to_c(s: &str) -> Vec<u8> {
+    let mut bytes = s.as_bytes().to_vec();
+    bytes.push(0); // null terminator
+    bytes
+}
+
+/// Convert a C null-terminated string to a Fajar Lang String.
+pub fn c_str_to_fajar(ptr: &[u8]) -> String {
+    let nul_pos = ptr.iter().position(|&b| b == 0).unwrap_or(ptr.len());
+    String::from_utf8_lossy(&ptr[..nul_pos]).into_owned()
+}
+
+/// Map a C++ std::string type to Fajar str representation.
+/// In practice: std::string → heap-allocated UTF-8 with length prefix.
+pub fn cpp_string_to_fajar(data: &[u8], length: usize) -> String {
+    String::from_utf8_lossy(&data[..length]).into_owned()
+}
+
 /// Get the type name from a clang CXType.
 #[cfg(feature = "cpp-ffi")]
 fn clang_type_name(cx_type: clang_sys::CXType) -> String {
@@ -1359,6 +1382,28 @@ public:
         assert!(has_get_max, "should find get_max after macro expansion");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cq3_8_string_bridge() {
+        // Fajar → C
+        let c_str = fajar_str_to_c("hello");
+        assert_eq!(c_str, b"hello\0");
+
+        // C → Fajar
+        let fj_str = c_str_to_fajar(b"world\0extra");
+        assert_eq!(fj_str, "world");
+
+        // C++ std::string → Fajar
+        let data = b"Fajar Lang rocks!";
+        let fj = cpp_string_to_fajar(data, 10);
+        assert_eq!(fj, "Fajar Lang");
+
+        // Round-trip
+        let original = "Hello, 世界!";
+        let c = fajar_str_to_c(original);
+        let back = c_str_to_fajar(&c);
+        assert_eq!(back, original);
     }
 
     #[test]
