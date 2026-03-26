@@ -508,7 +508,7 @@ rate limiter (token bucket), utility benchmark)*
 
 ---
 
-## Option 7: Language Server v3 (5 sprints, 50 tasks)
+## Option 7: Language Server v3 (5 sprints, 50 tasks) ✅ COMPLETE
 
 **Goal:** World-class IDE experience — on par with rust-analyzer
 **Impact:** Developer productivity; IDE experience often determines language adoption
@@ -538,16 +538,16 @@ refactoring preview (diff before apply))*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| L3.1 | Quick fix: add missing import | Auto-insert `use` statement | [ ] |
-| L3.2 | Quick fix: add type annotation | Infer and insert type | [ ] |
-| L3.3 | Quick fix: fix typo | "Did you mean `println`?" | [ ] |
-| L3.4 | Quick fix: make mutable | Add `mut` when reassigned | [ ] |
-| L3.5 | Quick fix: add missing field | Struct literal completion | [ ] |
-| L3.6 | Quick fix: implement trait | Generate method stubs | [ ] |
-| L3.7 | Diagnostic: ownership error | Suggest clone/borrow | [ ] |
-| L3.8 | Diagnostic: type mismatch | Show expected vs actual | [ ] |
-| L3.9 | Diagnostic: unreachable code | Gray out dead branches | [ ] |
-| L3.10 | Diagnostic: deprecated API | Strikethrough + suggestion | [ ] |
+| L3.1 | Quick fix: add missing import | Auto-insert `use` statement | [x] |
+| L3.2 | Quick fix: add type annotation | Infer and insert type | [x] |
+| L3.3 | Quick fix: fix typo | "Did you mean `println`?" | [x] |
+| L3.4 | Quick fix: make mutable | Add `mut` when reassigned | [x] |
+| L3.5 | Quick fix: add missing field | Struct literal completion | [x] |
+| L3.6 | Quick fix: implement trait | Generate method stubs | [x] |
+| L3.7 | Diagnostic: ownership error | Suggest clone/borrow | [x] |
+| L3.8 | Diagnostic: type mismatch | Show expected vs actual | [x] |
+| L3.9 | Diagnostic: unreachable code | Gray out dead branches | [x] |
+| L3.10 | Diagnostic: deprecated API | Strikethrough + suggestion | [x] |
 
 ---
 
