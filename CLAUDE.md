@@ -30,36 +30,41 @@
 Every Claude Code session MUST follow this order:
 
 1. **READ** → `CLAUDE.md` (this file) [auto-loaded]
-2. **READ** → Current task list (`docs/V06_PLAN.md` for v0.6; check user intent)
-3. **READ** → `docs/V1_RULES.md` + `docs/V06_WORKFLOW.md` [coding conventions + workflow]
-4. **ORIENT** → "What does the user want?" (v0.5 complete — all planned tasks done)
-5. **ACT** → Execute per TDD workflow (see `docs/V06_WORKFLOW.md`)
-6. **VERIFY** → `cargo test --features native && cargo clippy -- -D warnings && cargo fmt -- --check`
-7. **UPDATE** → Mark task `[x]` in relevant task file if applicable
+2. **READ** → `docs/GAP_ANALYSIS_V2.md` [CRITICAL: honest codebase audit — know what's real vs framework]
+3. **READ** → `docs/NEXT_IMPLEMENTATION_PLAN_V8.md` [current plan — Option 0 Gap Closure first]
+4. **READ** → `docs/V1_RULES.md` [coding conventions — still applies]
+5. **ORIENT** → "What does the user want?" Check V8 progress.
+6. **ACT** → Execute per TDD workflow
+7. **VERIFY** → `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check`
+8. **UPDATE** → Mark task `[x]` ONLY if feature works end-to-end. Use `[f]` for framework-only.
 
-**v1.0 STATUS: ALL 506 ACTIONABLE TASKS COMPLETE.**
-**v0.2 STATUS: Phases A, B, E, F COMPLETE.**
-**v0.3 STATUS: "Dominion" — 52 sprints, 739 tasks. ALL COMPLETE.**
-**v0.4 STATUS: "Sovereignty" — 6 sprints, 40 tasks. ALL COMPLETE.**
-**v0.5 STATUS: "Ascendancy" — 8 sprints, 80 tasks. ALL COMPLETE.**
-**v0.6 STATUS: "Horizon" — 28 sprints, ~280 tasks. PLANNING COMPLETE, implementation not started.**
+### Completion Status (Honest Assessment)
 
-### Key Documents (Read on Demand)
+**Core Compiler (V1-V05): 100% PRODUCTION REAL — verified by code audit.**
+- v1.0: 506 tasks — lexer, parser, analyzer, Cranelift, ML runtime ✅
+- v0.2: Codegen type system, advanced types ✅
+- v0.3: 739 tasks — concurrency, OS runtime, GPU, ML native, self-hosting, packages ✅
+- v0.4: 40 tasks — generic enums, RAII/Drop, async, MNIST ✅
+- v0.5: 80 tasks — test framework, doc gen, trait objects, iterators, f-strings ✅
+
+**Advanced Features (V06-V07): MIXED — see GAP_ANALYSIS_V2.md for details.**
+- V06 "Dominance": 560 tasks documented. ~360 real, ~200 framework.
+- V07 "Ascendancy": 680 tasks documented. ~150 real, ~530 framework.
+- Key gaps: distributed (no networking), FFI v2 (no libclang/pyo3), verify (no Z3), stdlib v3 (no sockets/crypto)
+
+**V08 "Dominion": CURRENT PLAN — 810 tasks. Option 0 (Gap Closure) mandatory first.**
+
+### Key Documents
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/V06_PLAN.md` | **Current sprint** | v0.6 "Horizon" plan (28 sprints, ~280 tasks) |
-| `docs/V06_WORKFLOW.md` | Session start | Sprint cycle, quality gates, feature gate rules |
-| `docs/V06_SKILLS.md` | Before complex tasks | Patterns: LLVM, DAP, BSP, PubGrub, lifetimes, RTOS, LSTM |
-| `docs/V05_PLAN.md` | Reference | v0.5 "Ascendancy" plan (8 sprints, COMPLETE) |
-| `docs/V04_PLAN.md` | Reference | v0.4 "Sovereignty" plan (6 sprints, COMPLETE) |
-| `docs/V03_TASKS.md` | Reference | v0.3 task checkboxes (739 tasks, ALL COMPLETE) |
-| `docs/V03_IMPLEMENTATION_PLAN.md` | Reference | 12-month plan: concurrency, OS, GPU, ML, self-hosting |
-| `docs/V03_WORKFLOW.md` | Reference | v0.3 sprint cycle, quality gates, rules |
-| `docs/V03_SKILLS.md` | Reference | Patterns: fn pointers, threads, async, GPU, bare metal |
-| `docs/V1_TASKS.md` | Reference | v1.0 + v0.2 completed tasks (historical) |
-| `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules (still applies) |
-| `docs/V1_SKILLS.md` | Reference | Cranelift, monomorphization, borrow checker patterns |
+| `docs/GAP_ANALYSIS_V2.md` | **EVERY SESSION** | Honest audit — what's real vs framework |
+| `docs/NEXT_IMPLEMENTATION_PLAN_V8.md` | **Current plan** | V8 "Dominion" (810 tasks, Option 0 first) |
+| `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules |
+| `docs/V05_PLAN.md` | Reference | v0.5 plan (COMPLETE, verified real) |
+| `docs/V04_PLAN.md` | Reference | v0.4 plan (COMPLETE, verified real) |
+| `docs/V03_TASKS.md` | Reference | v0.3 tasks (739, COMPLETE, verified real) |
+| `docs/V1_TASKS.md` | Reference | v1.0 tasks (506, COMPLETE, verified real) |
 | `docs/V1_IMPLEMENTATION_PLAN.md` | Reference | Original 6-month plan (completed) |
 
 ---
@@ -149,16 +154,22 @@ Tasks:     80/80 complete | 0 deferred
 Sprints:   8/8 complete
 ```
 
-### Current Totals
+### Current Totals (Verified 2026-03-26)
 
 ```
-Tests:     6,286 total (0 failures), 810+ integration tests
-LOC:       ~290,000 lines of Rust (220+ files)
-Examples:  126 .fj programs (incl. fajaros_nova_kernel, fajaros_kernel, q6a_showcase)
+Tests:     4,849 lib + 78 property = 4,927 (0 failures)
+LOC:       ~292,000 lines of Rust (220+ files)
+  Real:    ~136,000 (47%) — core compiler, codegen, ML, OS, BSP, CLI, tools
+  Partial:  ~18,000 (6%)  — real logic, needs external integration
+  Framework: ~8,200 (3%)  — type definitions only, needs rewrite
+  Support: ~130,000 (44%) — tests, examples, docs, config
+Examples:  126 .fj programs
 Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
-Builtins:  121 bare-metal runtime functions + tensor short aliases
-CI:        15 jobs green (Linux/macOS/Windows, stable/nightly, 5 cross targets)
-Release:   v5.5.0 "Illumination" (2026-03-25)
+Binary:    7.8 MB release build
+MSRV:      Rust 1.87
+CI:        3 GitHub Actions workflows (Linux/macOS/Windows, stable/nightly, cross)
+Release:   v6.1.0 "Illumination" (2026-03-25)
+Audit:     docs/GAP_ANALYSIS_V2.md — per-module honest assessment
 ```
 
 ### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
@@ -453,7 +464,23 @@ Error codes:         PREFIX + NUMBER -> SE004, KE001, CE003
 - [ ] `cargo clippy -- -D warnings` — zero warnings
 - [ ] `cargo fmt` — formatted
 - [ ] New functions have at least 1 test
-- [ ] `docs/V1_TASKS.md` updated
+- [ ] Task file updated
+
+### 6.6 Documentation Integrity Rules (Non-Negotiable)
+
+These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated claims.
+
+1. **[x] means END-TO-END working.** A task is only [x] if a user can actually USE the feature. Type definitions with passing unit tests are `[f]` (framework), not `[x]`.
+
+2. **Every task needs a verification method.** "Verify: send HTTP request and receive response" not "Verify: unit test passes".
+
+3. **No inflated statistics.** Documentation must match actual code capability. Reference GAP_ANALYSIS_V2.md for accurate LOC/status.
+
+4. **No stub plans.** Every option in a plan must have full task tables. No `*(placeholder)*` lines.
+
+5. **Audit before building.** Before creating new plans, verify previous plan claims are backed by real code.
+
+6. **Distinguish real vs framework.** When a module has type definitions but no external integration (no networking, no FFI, no solver calls), document it honestly as "framework — needs X integration".
 
 ---
 
@@ -846,13 +873,11 @@ fajar-lang/
 
 | When You Need... | Read This |
 |---|---|
-| **v0.6 plan (CURRENT)** | **`docs/V06_PLAN.md`** — 28 sprints, ~280 tasks, 7 phases |
-| **v0.6 implementation patterns** | **`docs/V06_SKILLS.md`** — LLVM, DAP, BSP, PubGrub, lifetimes, RTOS, LSTM |
-| **v0.6 development workflow** | **`docs/V06_WORKFLOW.md`** — sprint cycle, quality gates, feature gates |
-| **Completed task lists** | `docs/V05_PLAN.md` (v0.5) + `docs/V04_PLAN.md` (v0.4) + `docs/V03_TASKS.md` (v0.3) |
-| **Coding rules** | **`docs/V1_RULES.md`** |
-| **Previous patterns** | `docs/V03_SKILLS.md` + `docs/V1_SKILLS.md` |
-| **Future roadmap** | **`docs/ROADMAP_V1.1.md`** |
+| **Honest codebase audit** | **`docs/GAP_ANALYSIS_V2.md`** — Tier 1/2/3 breakdown, per-module status |
+| **Current plan (V8)** | **`docs/NEXT_IMPLEMENTATION_PLAN_V8.md`** — 810 tasks, Option 0 (Gap Closure) first |
+| **Coding rules** | **`docs/V1_RULES.md`** — safety, quality, architecture (still applies) |
+| **Completed core tasks** | `docs/V05_PLAN.md` + `docs/V04_PLAN.md` + `docs/V03_TASKS.md` + `docs/V1_TASKS.md` |
+| **Implementation plans** | `docs/NEXT_IMPLEMENTATION_PLAN_V{2-8}.md` — all with detailed task tables |
 | Language syntax, keywords, types | `docs/FAJAR_LANG_SPEC.md` |
 | Formal EBNF grammar | `docs/GRAMMAR_REFERENCE.md` |
 | Component contracts, data flow | `docs/ARCHITECTURE.md` |
@@ -861,7 +886,7 @@ fajar-lang/
 | Security model | `docs/SECURITY.md` |
 | Example programs | `docs/EXAMPLES.md` |
 | Git workflow | `docs/CONTRIBUTING.md` |
-| Performance targets | `docs/BENCHMARKS.md` |
+| OS plans | `docs/V30_PLAN.md` + `docs/COMPILER_ENHANCEMENT_PLAN.md` |
 
 ---
 
