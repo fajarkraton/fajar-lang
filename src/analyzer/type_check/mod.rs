@@ -1401,6 +1401,7 @@ impl TypeChecker {
             "net_send",
             "net_recv",
             "net_close",
+            "http_listen",
             // Phase 6: Display & Input
             "fb_init",
             "fb_write_pixel",
@@ -1599,6 +1600,7 @@ impl TypeChecker {
                 "net_send",
                 "net_recv",
                 "net_close",
+                "http_listen",
             ]
             .iter()
             .map(|s| s.to_string())

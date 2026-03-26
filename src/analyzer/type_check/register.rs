@@ -206,6 +206,8 @@ impl TypeChecker {
             ("cache_set", vec![Type::Str, Type::Str], Type::Bool),
             ("cache_get", vec![Type::Str], Type::Str),
             ("cache_clear", vec![], Type::Void),
+            // HTTP server (TQ12.1)
+            ("http_listen", vec![Type::I64, Type::I64], Type::I64),
             ("file_size", vec![Type::Str], Type::I64),
             (
                 "dir_list",

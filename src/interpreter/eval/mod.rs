@@ -830,6 +830,8 @@ impl Interpreter {
             "net_send",
             "net_recv",
             "net_close",
+            // HTTP server (TQ12.1)
+            "http_listen",
         ]
     }
 

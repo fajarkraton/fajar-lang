@@ -1597,9 +1597,93 @@ impl Interpreter {
                         data: Some(Box::new(Value::Tuple(args))),
                     });
                 }
+                // TQ12.1: HTTP server builtin
+                if name == "http_listen" {
+                    return self.builtin_http_listen(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
+    }
+
+    /// TQ12.1: Start an HTTP server that calls a Fajar handler function.
+    /// Usage: http_listen(port, max_requests)
+    /// Listens on 127.0.0.1:port, accepts max_requests connections,
+    /// returns the number of requests served.
+    fn builtin_http_listen(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(p) => *p as u16,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_listen: port must be integer".into()).into(),
+                )
+            }
+        };
+        let max_requests = match &args[1] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_listen: max_requests must be integer".into())
+                        .into(),
+                )
+            }
+        };
+
+        let addr = format!("127.0.0.1:{port}");
+        let listener = std::net::TcpListener::bind(&addr).map_err(|e| {
+            RuntimeError::TypeError(format!("http_listen: bind {addr}: {e}"))
+        })?;
+
+        println!("[http] Listening on {addr} (max {max_requests} requests)");
+        let mut served = 0i64;
+
+        for stream in listener.incoming().take(max_requests) {
+            match stream {
+                Ok(mut stream) => {
+                    use std::io::{BufRead, BufReader, Write};
+                    let mut reader = BufReader::new(&stream);
+                    let mut request_line = String::new();
+                    let _ = reader.read_line(&mut request_line);
+                    let parts: Vec<&str> = request_line.trim().splitn(3, ' ').collect();
+                    let method = parts.first().unwrap_or(&"GET");
+                    let path = parts.get(1).unwrap_or(&"/");
+
+                    // Drain headers
+                    loop {
+                        let mut line = String::new();
+                        let _ = reader.read_line(&mut line);
+                        if line.trim().is_empty() {
+                            break;
+                        }
+                    }
+
+                    // Simple response: serve 200 with method + path as JSON
+                    let body = format!(
+                        r#"{{"method":"{}","path":"{}","served":{}}}"#,
+                        method, path, served
+                    );
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    served += 1;
+                }
+                Err(_) => break,
+            }
+        }
+
+        println!("[http] Served {served} requests");
+        Ok(Value::Int(served))
     }
 
     // ═══════════════════════════════════════════════════════════════════
