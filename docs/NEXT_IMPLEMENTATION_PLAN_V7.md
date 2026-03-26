@@ -618,21 +618,21 @@ full system benchmark, hardware validation report)*
 | QA1.13 | Property test expansion | 50 new proptest invariants | [x] |
 | QA1.14 | Integration test expansion | 50 new eval_tests | [x] |
 | QA1.15 | Benchmark baseline | Record all benchmarks for regression tracking | [x] |
-| QA1.16 | Code coverage report | tarpaulin → 85%+ target | [ ] |
-| QA1.17 | Error message audit | All errors have codes, spans, suggestions | [ ] |
-| QA1.18 | REPL stability | Test 100 common REPL interactions | [ ] |
-| QA1.19 | Memory leak check | Valgrind/ASan on test suite | [ ] |
-| QA1.20 | Thread safety audit | Check all `Rc` → should be `Arc`? | [ ] |
-| QA1.21 | API consistency audit | Naming conventions across all modules | [ ] |
-| QA1.22 | Error handling patterns | Consistent `Result`/`Option` usage | [ ] |
-| QA1.23 | Public API review | Remove accidental public items | [ ] |
-| QA1.24 | Deprecation warnings | Mark old APIs deprecated + suggest new | [ ] |
-| QA1.25 | Documentation audit | README, CLAUDE.md, all docs up-to-date | [ ] |
-| QA1.26 | Example verification | Run all 165 examples, fix failures | [ ] |
-| QA1.27 | Panic audit | Ensure no panics in library code | [ ] |
-| QA1.28 | Large file audit | Split files > 5000 lines | [ ] |
-| QA1.29 | Test naming conventions | Consistent `<what>_<when>_<expected>` | [ ] |
-| QA1.30 | Module documentation | Every mod.rs has module-level docs | [ ] |
+| QA1.16 | Code coverage report | tarpaulin → 85%+ target | [x] |
+| QA1.17 | Error message audit | All errors have codes, spans, suggestions | [x] |
+| QA1.18 | REPL stability | Test 100 common REPL interactions | [x] |
+| QA1.19 | Memory leak check | Valgrind/ASan on test suite | [x] |
+| QA1.20 | Thread safety audit | Check all `Rc` → should be `Arc`? | [x] |
+| QA1.21 | API consistency audit | Naming conventions across all modules | [x] |
+| QA1.22 | Error handling patterns | Consistent `Result`/`Option` usage | [x] |
+| QA1.23 | Public API review | Remove accidental public items | [x] |
+| QA1.24 | Deprecation warnings | Mark old APIs deprecated + suggest new | [x] |
+| QA1.25 | Documentation audit | README, CLAUDE.md, all docs up-to-date | [x] |
+| QA1.26 | Example verification | Run all 165 examples, fix failures | [x] |
+| QA1.27 | Panic audit | Ensure no panics in library code | [x] |
+| QA1.28 | Large file audit | Split files > 5000 lines | [x] |
+| QA1.29 | Test naming conventions | Consistent `<what>_<when>_<expected>` | [x] |
+| QA1.30 | Module documentation | Every mod.rs has module-level docs | [x] |
 
 ### Phase QA2: QEMU Verification (2 sprints, 20 tasks)
 
