@@ -1236,9 +1236,27 @@ impl TypeChecker {
                 }
             }
             Item::StructDef(sdef) => {
+                // For generic structs, register type params so T resolves to TypeVar("T")
+                let has_generics = !sdef.generic_params.is_empty();
+                if has_generics {
+                    self.symbols
+                        .push_scope_kind(crate::analyzer::scope::ScopeKind::Block);
+                    for gp in &sdef.generic_params {
+                        self.symbols.define(Symbol {
+                            name: gp.name.clone(),
+                            ty: Type::TypeVar(gp.name.clone()),
+                            mutable: false,
+                            span: gp.span,
+                            used: true,
+                        });
+                    }
+                }
                 let mut fields = HashMap::new();
                 for field in &sdef.fields {
                     fields.insert(field.name.clone(), self.resolve_type(&field.ty));
+                }
+                if has_generics {
+                    self.symbols.pop_scope();
                 }
                 // Track @message structs for IPC type safety
                 if let Some(ref ann) = sdef.annotation {

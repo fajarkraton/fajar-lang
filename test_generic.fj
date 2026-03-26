@@ -1,0 +1,5 @@
+struct Pair<T> { first: T, second: T }
+fn main() -> void { 
+  let p = Pair { first: 42, second: 99 }
+  println(p.first) 
+}

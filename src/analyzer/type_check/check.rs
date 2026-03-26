@@ -1909,11 +1909,44 @@ impl TypeChecker {
                 name: sname,
                 fields: def_fields,
             }) => {
+                // Build type variable substitution map for generic structs.
+                // If a field type is TypeVar("T") and the value is i64, then T = i64.
+                let mut subst: HashMap<String, Type> = HashMap::new();
+                let is_generic = def_fields
+                    .values()
+                    .any(|t| matches!(t, Type::TypeVar(_)));
+
                 // Check each provided field
                 for fi in fields {
                     let val_ty = self.check_expr(&fi.value);
                     if let Some(expected_ty) = def_fields.get(&fi.name) {
-                        if !expected_ty.is_compatible(&val_ty) {
+                        if is_generic {
+                            if let Type::TypeVar(tv) = expected_ty {
+                                // Infer: T = val_ty
+                                if let Some(prev) = subst.get(tv) {
+                                    if !prev.is_compatible(&val_ty) {
+                                        self.errors.push(SemanticError::TypeMismatch {
+                                            expected: prev.display_name(),
+                                            found: val_ty.display_name(),
+                                            span: fi.value.span(),
+                                            hint: Some(format!(
+                                                "type parameter `{tv}` was inferred as `{}` from another field",
+                                                prev.display_name()
+                                            )),
+                                        });
+                                    }
+                                } else {
+                                    subst.insert(tv.clone(), val_ty.clone());
+                                }
+                            } else if !expected_ty.is_compatible(&val_ty) {
+                                self.errors.push(SemanticError::TypeMismatch {
+                                    expected: expected_ty.display_name(),
+                                    found: val_ty.display_name(),
+                                    span: fi.value.span(),
+                                    hint: None,
+                                });
+                            }
+                        } else if !expected_ty.is_compatible(&val_ty) {
                             self.errors.push(SemanticError::TypeMismatch {
                                 expected: expected_ty.display_name(),
                                 found: val_ty.display_name(),
@@ -1923,6 +1956,7 @@ impl TypeChecker {
                         }
                     }
                 }
+
                 // Check for missing required fields
                 for fname in def_fields.keys() {
                     if !fields.iter().any(|fi| &fi.name == fname) {
@@ -1933,9 +1967,28 @@ impl TypeChecker {
                         });
                     }
                 }
+
+                // Resolve generic fields with inferred types
+                let resolved_fields = if is_generic && !subst.is_empty() {
+                    def_fields
+                        .iter()
+                        .map(|(k, v)| {
+                            let resolved = match v {
+                                Type::TypeVar(tv) => {
+                                    subst.get(tv).cloned().unwrap_or_else(|| v.clone())
+                                }
+                                other => other.clone(),
+                            };
+                            (k.clone(), resolved)
+                        })
+                        .collect()
+                } else {
+                    def_fields
+                };
+
                 Type::Struct {
                     name: sname,
-                    fields: def_fields,
+                    fields: resolved_fields,
                 }
             }
             _ => {

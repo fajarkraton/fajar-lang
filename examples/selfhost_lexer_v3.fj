@@ -1,0 +1,223 @@
+// Self-Hosted Lexer v3 — Comprehensive Test Suite for Plan V8 SH1
+// Tests the self-hosted lexer (stdlib/lexer.fj) against known expected outputs.
+// NOTE: Run via `cat stdlib/lexer.fj examples/selfhost_lexer_v3.fj > /tmp/t.fj && fj run /tmp/t.fj`
+
+// ═══════════════════════════════════════════════════════════════════════
+// SH1.15: 50 Lexer Unit Tests
+// ═══════════════════════════════════════════════════════════════════════
+
+fn main() -> void {
+    let mut pass = 0
+    let mut fail = 0
+
+    // Test 1: Empty source → just EOF
+    let t1 = tokenize("")
+    if len(t1) == 1 && t1[0] == 0 { println("T01 PASS: empty source"); pass = pass + 1 } else { println("T01 FAIL"); fail = fail + 1 }
+
+    // Test 2: Single integer
+    let t2 = tokenize("42")
+    if len(t2) == 2 && t2[0] == 130 { println("T02 PASS: integer literal"); pass = pass + 1 } else { println("T02 FAIL"); fail = fail + 1 }
+
+    // Test 3: Single identifier
+    let t3 = tokenize("hello")
+    if len(t3) == 2 && t3[0] == 133 { println("T03 PASS: identifier"); pass = pass + 1 } else { println("T03 FAIL"); fail = fail + 1 }
+
+    // Test 4: Keyword 'let'
+    let t4 = tokenize("let")
+    if len(t4) == 2 && t4[0] == 13 { println("T04 PASS: let keyword"); pass = pass + 1 } else { println("T04 FAIL"); fail = fail + 1 }
+
+    // Test 5: Keyword 'fn'
+    let t5 = tokenize("fn")
+    if len(t5) == 2 && t5[0] == 15 { println("T05 PASS: fn keyword"); pass = pass + 1 } else { println("T05 FAIL"); fail = fail + 1 }
+
+    // Test 6: let x = 42
+    let t6 = tokenize("let x = 42")
+    if len(t6) == 5 && t6[0] == 13 && t6[1] == 133 && t6[2] == 91 && t6[3] == 130 { println("T06 PASS: let x = 42"); pass = pass + 1 } else { println("T06 FAIL"); fail = fail + 1 }
+
+    // Test 7: String literal
+    let t7 = tokenize("\"hello world\"")
+    if len(t7) == 2 && t7[0] == 132 { println("T07 PASS: string literal"); pass = pass + 1 } else { println("T07 FAIL"); fail = fail + 1 }
+
+    // Test 8: Float literal
+    let t8 = tokenize("3.14")
+    if len(t8) == 2 && t8[0] == 131 { println("T08 PASS: float literal"); pass = pass + 1 } else { println("T08 FAIL"); fail = fail + 1 }
+
+    // Test 9: Function definition
+    let t9 = tokenize("fn add(a: i32, b: i32) -> i32 { a + b }")
+    if t9[0] == 15 && t9[1] == 133 && t9[2] == 110 { println("T09 PASS: fn definition"); pass = pass + 1 } else { println("T09 FAIL"); fail = fail + 1 }
+
+    // Test 10: Line comment
+    let t10 = tokenize("// comment\n42")
+    if len(t10) == 2 && t10[0] == 130 { println("T10 PASS: line comment"); pass = pass + 1 } else { println("T10 FAIL"); fail = fail + 1 }
+
+    // Test 11: Block comment
+    let t11 = tokenize("/* comment */ 42")
+    if len(t11) == 2 && t11[0] == 130 { println("T11 PASS: block comment"); pass = pass + 1 } else { println("T11 FAIL"); fail = fail + 1 }
+
+    // Test 12: All arithmetic operators
+    let t12 = tokenize("+ - * / %")
+    if t12[0] == 70 && t12[1] == 71 && t12[2] == 72 && t12[3] == 73 && t12[4] == 74 { println("T12 PASS: arithmetic ops"); pass = pass + 1 } else { println("T12 FAIL"); fail = fail + 1 }
+
+    // Test 13: Comparison operators
+    let t13 = tokenize("== != < > <= >=")
+    if t13[0] == 76 && t13[1] == 77 && t13[2] == 78 && t13[3] == 79 && t13[4] == 80 && t13[5] == 81 { println("T13 PASS: comparison ops"); pass = pass + 1 } else { println("T13 FAIL"); fail = fail + 1 }
+
+    // Test 14: Logical operators
+    let t14 = tokenize("&& || !")
+    if t14[0] == 82 && t14[1] == 83 && t14[2] == 84 { println("T14 PASS: logical ops"); pass = pass + 1 } else { println("T14 FAIL"); fail = fail + 1 }
+
+    // Test 15: Bitwise operators
+    let t15 = tokenize("& | ^ ~ << >>")
+    if t15[0] == 85 && t15[1] == 86 && t15[2] == 87 && t15[3] == 88 && t15[4] == 89 && t15[5] == 90 { println("T15 PASS: bitwise ops"); pass = pass + 1 } else { println("T15 FAIL"); fail = fail + 1 }
+
+    // Test 16: Assignment operators
+    let t16 = tokenize("= += -= *= /=")
+    if t16[0] == 91 && t16[1] == 92 && t16[2] == 93 && t16[3] == 94 && t16[4] == 95 { println("T16 PASS: assignment ops"); pass = pass + 1 } else { println("T16 FAIL"); fail = fail + 1 }
+
+    // Test 17: Delimiters
+    let t17 = tokenize("( ) { } [ ]")
+    if t17[0] == 110 && t17[1] == 111 && t17[2] == 112 && t17[3] == 113 && t17[4] == 114 && t17[5] == 115 { println("T17 PASS: delimiters"); pass = pass + 1 } else { println("T17 FAIL"); fail = fail + 1 }
+
+    // Test 18: Punctuation
+    let t18 = tokenize("; : :: , . -> => ?")
+    if t18[0] == 116 && t18[1] == 118 && t18[2] == 117 { println("T18 PASS: punctuation"); pass = pass + 1 } else { println("T18 FAIL"); fail = fail + 1 }
+
+    // Test 19: Pipeline operator
+    let t19 = tokenize("|>")
+    if t19[0] == 104 { println("T19 PASS: pipeline |>"); pass = pass + 1 } else { println("T19 FAIL"); fail = fail + 1 }
+
+    // Test 20: Power operator
+    let t20 = tokenize("**")
+    if t20[0] == 75 { println("T20 PASS: power **"); pass = pass + 1 } else { println("T20 FAIL"); fail = fail + 1 }
+
+    // Test 21: Range operators
+    let t21 = tokenize(".. ..=")
+    if t21[0] == 102 && t21[1] == 103 { println("T21 PASS: range ..  ..="); pass = pass + 1 } else { println("T21 FAIL"); fail = fail + 1 }
+
+    // Test 22: At sign (for annotations)
+    let t22 = tokenize("@kernel")
+    if t22[0] == 105 && t22[1] == 133 { println("T22 PASS: @kernel annotation"); pass = pass + 1 } else { println("T22 FAIL"); fail = fail + 1 }
+
+    // Test 23: Control flow keywords
+    let t23 = tokenize("if else while for match")
+    if t23[0] == 1 && t23[1] == 2 && t23[2] == 4 && t23[3] == 5 && t23[4] == 3 { println("T23 PASS: control flow"); pass = pass + 1 } else { println("T23 FAIL"); fail = fail + 1 }
+
+    // Test 24: true false null
+    let t24 = tokenize("true false null")
+    if t24[0] == 29 && t24[1] == 30 && t24[2] == 31 { println("T24 PASS: true false null"); pass = pass + 1 } else { println("T24 FAIL"); fail = fail + 1 }
+
+    // Test 25: struct enum impl trait
+    let t25 = tokenize("struct enum impl trait")
+    if t25[0] == 16 && t25[1] == 17 && t25[2] == 19 && t25[3] == 20 { println("T25 PASS: struct enum impl trait"); pass = pass + 1 } else { println("T25 FAIL"); fail = fail + 1 }
+
+    // Test 26: return break continue
+    let t26 = tokenize("return break continue")
+    if t26[0] == 8 && t26[1] == 9 && t26[2] == 10 { println("T26 PASS: return break continue"); pass = pass + 1 } else { println("T26 FAIL"); fail = fail + 1 }
+
+    // Test 27: async await
+    let t27 = tokenize("async await")
+    if t27[0] == 11 && t27[1] == 12 { println("T27 PASS: async await"); pass = pass + 1 } else { println("T27 FAIL"); fail = fail + 1 }
+
+    // Test 28: use mod pub extern
+    let t28 = tokenize("use mod pub extern")
+    if t28[0] == 23 && t28[1] == 24 && t28[2] == 25 && t28[3] == 26 { println("T28 PASS: use mod pub extern"); pass = pass + 1 } else { println("T28 FAIL"); fail = fail + 1 }
+
+    // Test 29: ML keyword 'tensor'
+    let t29 = tokenize("tensor")
+    if t29[0] == 53 { println("T29 PASS: tensor keyword"); pass = pass + 1 } else { println("T29 FAIL"); fail = fail + 1 }
+
+    // Test 30: Loop keyword
+    let t30 = tokenize("loop")
+    if t30[0] == 6 { println("T30 PASS: loop keyword"); pass = pass + 1 } else { println("T30 FAIL"); fail = fail + 1 }
+
+    // Test 31: String with escape
+    let t31 = tokenize("\"hello\\nworld\"")
+    if t31[0] == 132 { println("T31 PASS: string with escape"); pass = pass + 1 } else { println("T31 FAIL"); fail = fail + 1 }
+
+    // Test 32: Multiple statements
+    let t32 = tokenize("let x = 1; let y = 2")
+    if len(t32) == 9 { println("T32 PASS: multi-statement (9 tokens)"); pass = pass + 1 } else { println(f"T32 FAIL: got {len(t32)} tokens"); fail = fail + 1 }
+
+    // Test 33: Nested blocks
+    let t33 = tokenize("{ { } }")
+    if t33[0] == 112 && t33[1] == 112 && t33[2] == 113 && t33[3] == 113 { println("T33 PASS: nested blocks"); pass = pass + 1 } else { println("T33 FAIL"); fail = fail + 1 }
+
+    // Test 34: Array syntax
+    let t34 = tokenize("[1, 2, 3]")
+    if t34[0] == 114 && t34[1] == 130 { println("T34 PASS: array [1,2,3]"); pass = pass + 1 } else { println("T34 FAIL"); fail = fail + 1 }
+
+    // Test 35: Method call
+    let t35 = tokenize("x.method()")
+    if t35[0] == 133 && t35[1] == 120 && t35[2] == 133 { println("T35 PASS: method call"); pass = pass + 1 } else { println("T35 FAIL"); fail = fail + 1 }
+
+    // Test 36: Type annotation
+    let t36 = tokenize("x: i64")
+    if t36[0] == 133 && t36[1] == 118 { println("T36 PASS: type annotation"); pass = pass + 1 } else { println("T36 FAIL"); fail = fail + 1 }
+
+    // Test 37: Arrow types
+    let t37 = tokenize("-> =>")
+    if t37[0] == 121 && t37[1] == 122 { println("T37 PASS: -> =>"); pass = pass + 1 } else { println("T37 FAIL"); fail = fail + 1 }
+
+    // Test 38: Whitespace only
+    let t38 = tokenize("   \n\t  ")
+    if len(t38) == 1 && t38[0] == 0 { println("T38 PASS: whitespace only"); pass = pass + 1 } else { println("T38 FAIL"); fail = fail + 1 }
+
+    // Test 39: const keyword
+    let t39 = tokenize("const")
+    if t39[0] == 22 { println("T39 PASS: const keyword"); pass = pass + 1 } else { println("T39 FAIL"); fail = fail + 1 }
+
+    // Test 40: type keyword
+    let t40 = tokenize("type")
+    if t40[0] == 21 { println("T40 PASS: type keyword"); pass = pass + 1 } else { println("T40 FAIL"); fail = fail + 1 }
+
+    // Test 41: Complex expression
+    let t41 = tokenize("a + b * c - d / e")
+    if len(t41) == 10 { println("T41 PASS: complex expr (10 tokens)"); pass = pass + 1 } else { println("T41 FAIL"); fail = fail + 1 }
+
+    // Test 42: If-else
+    let t42 = tokenize("if x > 0 { 1 } else { 0 }")
+    if t42[0] == 1 && t42[4] == 112 { println("T42 PASS: if-else"); pass = pass + 1 } else { println("T42 FAIL"); fail = fail + 1 }
+
+    // Test 43: Match expression
+    let t43 = tokenize("match x { 0 => 1, _ => 2 }")
+    if t43[0] == 3 { println("T43 PASS: match"); pass = pass + 1 } else { println("T43 FAIL"); fail = fail + 1 }
+
+    // Test 44: For loop
+    let t44 = tokenize("for i in 0..10 { }")
+    if t44[0] == 5 && t44[1] == 133 && t44[2] == 7 { println("T44 PASS: for loop"); pass = pass + 1 } else { println("T44 FAIL"); fail = fail + 1 }
+
+    // Test 45: Where keyword
+    let t45 = tokenize("where")
+    if t45[0] == 28 { println("T45 PASS: where keyword"); pass = pass + 1 } else { println("T45 FAIL"); fail = fail + 1 }
+
+    // Test 46: As keyword
+    let t46 = tokenize("as")
+    if t46[0] == 27 { println("T46 PASS: as keyword"); pass = pass + 1 } else { println("T46 FAIL"); fail = fail + 1 }
+
+    // Test 47: In keyword (standalone)
+    let t47 = tokenize("in")
+    if t47[0] == 7 { println("T47 PASS: in keyword"); pass = pass + 1 } else { println("T47 FAIL"); fail = fail + 1 }
+
+    // Test 48: Bool type keyword
+    let t48 = tokenize("bool")
+    if t48[0] == 32 { println("T48 PASS: bool type"); pass = pass + 1 } else { println("T48 FAIL"); fail = fail + 1 }
+
+    // Test 49: Multiple consecutive newlines
+    let t49 = tokenize("\n\n\n42\n\n")
+    if len(t49) == 2 && t49[0] == 130 { println("T49 PASS: newlines + int"); pass = pass + 1 } else { println("T49 FAIL"); fail = fail + 1 }
+
+    // Test 50: EOF always last
+    let t50 = tokenize("let x = fn add")
+    let last = t50[len(t50) - 1]
+    if last == 0 { println("T50 PASS: EOF always last"); pass = pass + 1 } else { println("T50 FAIL"); fail = fail + 1 }
+
+    // ═════════════════════════════════════════════════════════════════
+    // Summary
+    // ═════════════════════════════════════════════════════════════════
+    println(f"\n{'='} Self-Hosted Lexer v3 Test Results {'='}")
+    println(f"Passed: {pass}/50")
+    println(f"Failed: {fail}/50")
+    if fail == 0 {
+        println("ALL 50 TESTS PASSED — Lexer is production ready!")
+    }
+}
