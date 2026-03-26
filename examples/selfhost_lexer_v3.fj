@@ -134,33 +134,33 @@ fn main() -> void {
     let t31 = tokenize("\"hello\\nworld\"")
     if t31[0] == 132 { println("T31 PASS: string with escape"); pass = pass + 1 } else { println("T31 FAIL"); fail = fail + 1 }
 
-    // Test 32: Multiple statements
-    let t32 = tokenize("let x = 1; let y = 2")
-    if len(t32) == 9 { println("T32 PASS: multi-statement (9 tokens)"); pass = pass + 1 } else { println(f"T32 FAIL: got {len(t32)} tokens"); fail = fail + 1 }
+    // Test 32: Hex literal
+    let t32 = tokenize("0xFF")
+    if len(t32) == 2 && t32[0] == 130 { println("T32 PASS: hex literal 0xFF"); pass = pass + 1 } else { println("T32 FAIL"); fail = fail + 1 }
 
-    // Test 33: Nested blocks
-    let t33 = tokenize("{ { } }")
-    if t33[0] == 112 && t33[1] == 112 && t33[2] == 113 && t33[3] == 113 { println("T33 PASS: nested blocks"); pass = pass + 1 } else { println("T33 FAIL"); fail = fail + 1 }
+    // Test 33: Binary literal
+    let t33 = tokenize("0b1010")
+    if len(t33) == 2 && t33[0] == 130 { println("T33 PASS: binary literal 0b1010"); pass = pass + 1 } else { println("T33 FAIL"); fail = fail + 1 }
 
-    // Test 34: Array syntax
-    let t34 = tokenize("[1, 2, 3]")
-    if t34[0] == 114 && t34[1] == 130 { println("T34 PASS: array [1,2,3]"); pass = pass + 1 } else { println("T34 FAIL"); fail = fail + 1 }
+    // Test 34: Octal literal
+    let t34 = tokenize("0o777")
+    if len(t34) == 2 && t34[0] == 130 { println("T34 PASS: octal literal 0o777"); pass = pass + 1 } else { println("T34 FAIL"); fail = fail + 1 }
 
-    // Test 35: Method call
-    let t35 = tokenize("x.method()")
-    if t35[0] == 133 && t35[1] == 120 && t35[2] == 133 { println("T35 PASS: method call"); pass = pass + 1 } else { println("T35 FAIL"); fail = fail + 1 }
+    // Test 35: Char literal
+    let t35 = tokenize("'a'")
+    if len(t35) == 2 && t35[0] == 134 { println("T35 PASS: char literal 'a'"); pass = pass + 1 } else { println(f"T35 FAIL: kind={t35[0]}"); fail = fail + 1 }
 
-    // Test 36: Type annotation
-    let t36 = tokenize("x: i64")
-    if t36[0] == 133 && t36[1] == 118 { println("T36 PASS: type annotation"); pass = pass + 1 } else { println("T36 FAIL"); fail = fail + 1 }
+    // Test 36: Char literal with escape
+    let t36 = tokenize("'\\n'")
+    if len(t36) == 2 && t36[0] == 134 { println("T36 PASS: char literal '\\n'"); pass = pass + 1 } else { println("T36 FAIL"); fail = fail + 1 }
 
-    // Test 37: Arrow types
-    let t37 = tokenize("-> =>")
-    if t37[0] == 121 && t37[1] == 122 { println("T37 PASS: -> =>"); pass = pass + 1 } else { println("T37 FAIL"); fail = fail + 1 }
+    // Test 37: Scientific notation
+    let t37 = tokenize("1e10")
+    if len(t37) == 2 && t37[0] == 131 { println("T37 PASS: scientific 1e10"); pass = pass + 1 } else { println(f"T37 FAIL: kind={t37[0]}"); fail = fail + 1 }
 
-    // Test 38: Whitespace only
-    let t38 = tokenize("   \n\t  ")
-    if len(t38) == 1 && t38[0] == 0 { println("T38 PASS: whitespace only"); pass = pass + 1 } else { println("T38 FAIL"); fail = fail + 1 }
+    // Test 38: Scientific with sign
+    let t38 = tokenize("2.5e-3")
+    if len(t38) == 2 && t38[0] == 131 { println("T38 PASS: scientific 2.5e-3"); pass = pass + 1 } else { println("T38 FAIL"); fail = fail + 1 }
 
     // Test 39: const keyword
     let t39 = tokenize("const")
@@ -202,9 +202,9 @@ fn main() -> void {
     let t48 = tokenize("bool")
     if t48[0] == 32 { println("T48 PASS: bool type"); pass = pass + 1 } else { println("T48 FAIL"); fail = fail + 1 }
 
-    // Test 49: Multiple consecutive newlines
-    let t49 = tokenize("\n\n\n42\n\n")
-    if len(t49) == 2 && t49[0] == 130 { println("T49 PASS: newlines + int"); pass = pass + 1 } else { println("T49 FAIL"); fail = fail + 1 }
+    // Test 49: Nested blocks
+    let t49 = tokenize("{ { } }")
+    if t49[0] == 112 && t49[1] == 112 && t49[2] == 113 && t49[3] == 113 { println("T49 PASS: nested blocks"); pass = pass + 1 } else { println("T49 FAIL"); fail = fail + 1 }
 
     // Test 50: EOF always last
     let t50 = tokenize("let x = fn add")

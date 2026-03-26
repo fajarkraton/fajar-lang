@@ -162,9 +162,50 @@ pub fn tokenize(source: str) -> [i64] {
             continue
         }
 
-        // Numbers (integer and float)
+        // Numbers (integer and float), including hex (0x), binary (0b), octal (0o)
         if is_digit_str(c) {
             let mut is_float = false
+            // Check for 0x, 0b, 0o prefix
+            if c == "0" && pos + 1 < n {
+                let prefix = source.substring(pos + 1, pos + 2)
+                if prefix == "x" || prefix == "X" {
+                    // Hex literal: 0x[0-9a-fA-F]+
+                    pos = pos + 2
+                    while pos < n {
+                        let hc = source.substring(pos, pos + 1)
+                        if is_digit_str(hc) || hc == "a" || hc == "b" || hc == "c" || hc == "d" || hc == "e" || hc == "f" || hc == "A" || hc == "B" || hc == "C" || hc == "D" || hc == "E" || hc == "F" {
+                            pos = pos + 1
+                        } else {
+                            break
+                        }
+                    }
+                    tokens = tokens.push(130)
+                    continue
+                }
+                if prefix == "b" || prefix == "B" {
+                    // Binary literal: 0b[01]+
+                    pos = pos + 2
+                    while pos < n {
+                        let bc = source.substring(pos, pos + 1)
+                        if bc == "0" || bc == "1" { pos = pos + 1 } else { break }
+                    }
+                    tokens = tokens.push(130)
+                    continue
+                }
+                if prefix == "o" || prefix == "O" {
+                    // Octal literal: 0o[0-7]+
+                    pos = pos + 2
+                    while pos < n {
+                        let oc = source.substring(pos, pos + 1)
+                        if oc == "0" || oc == "1" || oc == "2" || oc == "3" || oc == "4" || oc == "5" || oc == "6" || oc == "7" {
+                            pos = pos + 1
+                        } else { break }
+                    }
+                    tokens = tokens.push(130)
+                    continue
+                }
+            }
+            // Decimal integer or float
             pos = pos + 1
             while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
                 pos = pos + 1
@@ -179,11 +220,56 @@ pub fn tokenize(source: str) -> [i64] {
                     }
                 }
             }
+            // Check for scientific notation (e/E)
+            if pos < n {
+                let ec = source.substring(pos, pos + 1)
+                if ec == "e" || ec == "E" {
+                    is_float = true
+                    pos = pos + 1
+                    if pos < n {
+                        let sign = source.substring(pos, pos + 1)
+                        if sign == "+" || sign == "-" { pos = pos + 1 }
+                    }
+                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                        pos = pos + 1
+                    }
+                }
+            }
             if is_float {
                 tokens = tokens.push(131)
             } else {
                 tokens = tokens.push(130)
             }
+            continue
+        }
+
+        // Char literals: 'a', '\n', '\0'  (token kind 134)
+        if c == "'" {
+            pos = pos + 1
+            if pos < n && source.substring(pos, pos + 1) == "\\" {
+                pos = pos + 2  // skip escape sequence
+            } else {
+                pos = pos + 1  // skip single char
+            }
+            if pos < n && source.substring(pos, pos + 1) == "'" {
+                pos = pos + 1
+            }
+            tokens = tokens.push(134)
+            continue
+        }
+
+        // F-string literals: f"..." (token kind 135)
+        if c == "f" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "\"" {
+            pos = pos + 2  // skip f"
+            while pos < n && source.substring(pos, pos + 1) != "\"" {
+                if source.substring(pos, pos + 1) == "\\" {
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            if pos < n { pos = pos + 1 }  // skip closing "
+            tokens = tokens.push(135)
             continue
         }
 
@@ -377,5 +463,7 @@ pub fn kind_name(tag: i64) -> str {
     if tag == 131 { return "FloatLit" }
     if tag == 132 { return "StringLit" }
     if tag == 133 { return "Ident" }
+    if tag == 134 { return "CharLit" }
+    if tag == 135 { return "FString" }
     "Unknown"
 }
