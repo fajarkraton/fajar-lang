@@ -535,7 +535,7 @@ extern "C" fn visit_decl(
             let func = extract_function(cursor, &name);
             decls.push(CppDecl::Function(func));
         }
-        CXCursor_ClassDecl | CXCursor_StructDecl => {
+        CXCursor_ClassDecl | CXCursor_StructDecl | CXCursor_ClassTemplate => {
             let class = extract_class(cursor, &name);
             decls.push(CppDecl::Class(class));
         }
@@ -633,6 +633,8 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
         constructors: Vec<CppFunction>,
         fields: Vec<CppField>,
         has_destructor: bool,
+        bases: Vec<String>,
+        template_params: Vec<String>,
     }
 
     let mut data = ClassVisitorData {
@@ -640,6 +642,8 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
         constructors: Vec::new(),
         fields: Vec::new(),
         has_destructor: false,
+        bases: Vec::new(),
+        template_params: Vec::new(),
     };
 
     extern "C" fn visit_member(
@@ -673,6 +677,16 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
                     offset_bytes: 0,
                 });
             }
+            // CQ3.2: Extract base classes
+            CXCursor_CXXBaseSpecifier => {
+                let base_type = unsafe { clang_getCursorType(cursor) };
+                let base_name = clang_type_name(base_type);
+                data.bases.push(base_name);
+            }
+            // CQ3.1: Extract template parameters
+            CXCursor_TemplateTypeParameter => {
+                data.template_params.push(member_name);
+            }
             _ => {}
         }
         CXChildVisit_Continue
@@ -689,13 +703,13 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
     CppClass {
         name: name.to_string(),
         namespace: vec![],
-        bases: vec![],
+        bases: data.bases,
         fields: data.fields,
         methods: data.methods,
         constructors: data.constructors,
         has_destructor: data.has_destructor,
         is_abstract: false,
-        template_params: vec![],
+        template_params: data.template_params,
         size_bytes: 0,
         align_bytes: 0,
     }
@@ -778,6 +792,96 @@ fn clang_type_to_cpp(cx_type: clang_sys::CXType) -> CppType {
             CppType::Custom(name)
         }
     }
+}
+
+/// Get the type name from a clang CXType.
+#[cfg(feature = "cpp-ffi")]
+fn clang_type_name(cx_type: clang_sys::CXType) -> String {
+    unsafe {
+        let cx_str = clang_sys::clang_getTypeSpelling(cx_type);
+        let c_str = clang_sys::clang_getCString(cx_str);
+        let name = if c_str.is_null() {
+            String::new()
+        } else {
+            std::ffi::CStr::from_ptr(c_str)
+                .to_string_lossy()
+                .into_owned()
+        };
+        clang_sys::clang_disposeString(cx_str);
+        name
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CQ3.7: Generate Fajar Lang binding code from parsed C++ declarations
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Generate Fajar Lang extern block from a list of parsed C++ declarations.
+pub fn generate_fajar_bindings(decls: &[CppDecl]) -> String {
+    let mut code = String::new();
+    code.push_str("// Auto-generated Fajar Lang bindings\n\n");
+
+    for decl in decls {
+        match decl {
+            CppDecl::Function(f) => {
+                let params: Vec<String> = f
+                    .params
+                    .iter()
+                    .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
+                    .collect();
+                let ret = f.return_type.to_fajar_type();
+                code.push_str(&format!(
+                    "extern fn {}({}) -> {}\n",
+                    f.name,
+                    params.join(", "),
+                    ret
+                ));
+            }
+            CppDecl::Class(c) => {
+                // Generate struct + impl
+                code.push_str(&format!("struct {} {{\n", c.name));
+                for field in &c.fields {
+                    code.push_str(&format!(
+                        "    {}: {},\n",
+                        field.name,
+                        field.field_type.to_fajar_type()
+                    ));
+                }
+                code.push_str("}\n\n");
+                if !c.methods.is_empty() {
+                    code.push_str(&format!("impl {} {{\n", c.name));
+                    for m in &c.methods {
+                        let params: Vec<String> = m
+                            .params
+                            .iter()
+                            .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
+                            .collect();
+                        code.push_str(&format!(
+                            "    extern fn {}(self{}) -> {}\n",
+                            m.name,
+                            if params.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", {}", params.join(", "))
+                            },
+                            m.return_type.to_fajar_type()
+                        ));
+                    }
+                    code.push_str("}\n\n");
+                }
+            }
+            CppDecl::Enum(e) => {
+                code.push_str(&format!("enum {} {{\n", e.name));
+                for (name, value) in &e.variants {
+                    code.push_str(&format!("    {} = {},\n", name, value));
+                }
+                code.push_str("}\n\n");
+            }
+            _ => {}
+        }
+    }
+
+    code
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1041,5 +1145,190 @@ namespace io {{
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CQ3: C++ FFI Quality Tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_1_template_detection() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_tmpl");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("tmpl.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(f, r#"
+template<typename T>
+class Container {{
+public:
+    T value;
+    T get() const {{ return value; }}
+}};
+"#).unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        let class = decls.iter().find_map(|d| match d {
+            CppDecl::Class(c) if c.name == "Container" => Some(c),
+            _ => None,
+        });
+        assert!(class.is_some(), "should find Container class");
+        let cls = class.unwrap();
+        assert!(
+            !cls.template_params.is_empty(),
+            "should detect template parameter T"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_2_inheritance() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_inherit");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("inherit.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(f, r#"
+class Base {{
+public:
+    int x;
+}};
+
+class Derived : public Base {{
+public:
+    int y;
+}};
+"#).unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        let derived = decls.iter().find_map(|d| match d {
+            CppDecl::Class(c) if c.name == "Derived" => Some(c),
+            _ => None,
+        });
+        assert!(derived.is_some(), "should find Derived class");
+        let cls = derived.unwrap();
+        assert!(
+            !cls.bases.is_empty(),
+            "Derived should have base class: {:?}",
+            cls.bases
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_3_method_qualifiers() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_qual");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("qual.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(f, r#"
+class Widget {{
+public:
+    int value() const;
+    static Widget create();
+    virtual void update();
+}};
+"#).unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        let widget = decls.iter().find_map(|d| match d {
+            CppDecl::Class(c) if c.name == "Widget" => Some(c),
+            _ => None,
+        });
+        assert!(widget.is_some());
+        let cls = widget.unwrap();
+
+        let value_fn = cls.methods.iter().find(|m| m.name == "value");
+        assert!(value_fn.is_some(), "should find value method");
+        assert!(value_fn.unwrap().is_const, "value should be const");
+
+        let create_fn = cls.methods.iter().find(|m| m.name == "create");
+        assert!(create_fn.is_some(), "should find create method");
+        assert!(create_fn.unwrap().is_static, "create should be static");
+
+        let update_fn = cls.methods.iter().find(|m| m.name == "update");
+        assert!(update_fn.is_some(), "should find update method");
+        assert!(update_fn.unwrap().is_virtual, "update should be virtual");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_6_error_handling() {
+        let result = parse_header("/nonexistent/path/header.h", &[]);
+        assert!(result.is_err(), "nonexistent file should return error");
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_7_binding_generation() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_bind");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("api.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(f, r#"
+int add(int a, int b);
+double pi();
+
+enum Color {{ Red = 0, Green = 1, Blue = 2 }};
+
+class Point {{
+public:
+    double x;
+    double y;
+    double distance() const;
+}};
+"#).unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        let code = generate_fajar_bindings(&decls);
+
+        assert!(code.contains("extern fn add("), "should generate add binding");
+        assert!(code.contains("extern fn pi("), "should generate pi binding");
+        assert!(code.contains("enum Color"), "should generate Color enum");
+        assert!(code.contains("struct Point"), "should generate Point struct");
+        assert!(code.contains("x: f64"), "Point should have x field");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cq3_7_binding_from_manual_decls() {
+        let decls = vec![
+            CppDecl::Function(CppFunction {
+                name: "sqrt".to_string(),
+                namespace: vec![],
+                return_type: CppType::Double,
+                params: vec![CppParam {
+                    name: "x".to_string(),
+                    param_type: CppType::Double,
+                    has_default: false,
+                }],
+                is_static: false,
+                is_const: false,
+                is_virtual: false,
+                is_noexcept: false,
+                template_params: vec![],
+            }),
+            CppDecl::Enum(CppEnum {
+                name: "Status".to_string(),
+                namespace: vec![],
+                variants: vec![
+                    ("OK".to_string(), 0),
+                    ("Error".to_string(), 1),
+                ],
+                is_scoped: false,
+            }),
+        ];
+        let code = generate_fajar_bindings(&decls);
+        assert!(code.contains("extern fn sqrt(x: f64) -> f64"));
+        assert!(code.contains("enum Status"));
+        assert!(code.contains("OK = 0"));
     }
 }
