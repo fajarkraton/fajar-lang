@@ -34,6 +34,7 @@ pub mod dependent;
 pub mod deployment;
 pub mod distributed;
 pub mod docgen;
+pub mod ffi_v2;
 pub mod formatter;
 pub mod gpu_codegen;
 pub mod hw;
