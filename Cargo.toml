@@ -33,6 +33,10 @@ aes-gcm = "0.10"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 argon2 = "0.5"
 
+# V8 NQ2.1: TLS/HTTPS support
+rustls = { version = "0.23", optional = true }
+webpki-roots = { version = "0.26", optional = true }
+
 # V8 GC4: Real SMT solver
 z3 = { version = "0.12", optional = true }
 
@@ -69,6 +73,7 @@ native = [
     "target-lexicon",
 ]
 llvm = ["dep:inkwell"]
+tls = ["dep:rustls", "dep:webpki-roots"]
 cpp-ffi = ["dep:clang-sys"]
 python-ffi = ["dep:pyo3"]
 smt = ["dep:z3"]

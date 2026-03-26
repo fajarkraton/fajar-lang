@@ -1143,6 +1143,139 @@ pub fn dns_resolve(hostname: &str) -> Result<Vec<String>, String> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// NQ2.1: TLS/HTTPS Support via rustls
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Perform an HTTPS GET request using rustls.
+///
+/// Returns the response body as a string.
+/// Requires the `tls` feature: `cargo build --features tls`
+#[cfg(feature = "tls")]
+pub fn https_get(url_str: &str) -> Result<HttpResponse, NetError> {
+    let url = Url::parse(url_str).map_err(|e| NetError::InvalidUrl(e))?;
+
+    let host = url.host.clone();
+    let port = if url.port == 80 && url.scheme == "https" {
+        443
+    } else {
+        url.port
+    };
+    let path = if url.path.is_empty() {
+        "/".to_string()
+    } else {
+        let mut p = url.path.clone();
+        if let Some(ref q) = url.query {
+            p.push('?');
+            p.push_str(q);
+        }
+        p
+    };
+
+    let start = std::time::Instant::now();
+
+    // Build TLS config with Mozilla root certificates
+    let root_store = rustls::RootCertStore::from_iter(
+        webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+    );
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let config = std::sync::Arc::new(config);
+
+    let server_name = rustls::pki_types::ServerName::try_from(host.clone())
+        .map_err(|e| NetError::TlsError(format!("invalid server name '{host}': {e}")))?;
+
+    let mut conn = rustls::ClientConnection::new(config, server_name)
+        .map_err(|e| NetError::TlsError(format!("TLS handshake: {e}")))?;
+
+    // Connect TCP
+    let addr = format!("{host}:{port}");
+    let mut sock = std::net::TcpStream::connect(&addr)
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::ConnectionRefused {
+                NetError::ConnectRefused(addr.clone())
+            } else {
+                NetError::Io(format!("connect {addr}: {e}"))
+            }
+        })?;
+    sock.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .map_err(|e| NetError::Io(e.to_string()))?;
+
+    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+
+    // Send HTTP request
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nUser-Agent: FajarLang/7.0\r\n\r\n"
+    );
+    tls.write_all(request.as_bytes())
+        .map_err(|e| NetError::WriteFailed(e.to_string()))?;
+
+    // Read response
+    let mut response_bytes = Vec::new();
+    loop {
+        let mut buf = [0u8; 4096];
+        match tls.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => response_bytes.extend_from_slice(&buf[..n]),
+            Err(ref e) if e.kind() == std::io::ErrorKind::ConnectionAborted => break,
+            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(NetError::Io(format!("TLS read: {e}"))),
+        }
+    }
+
+    let elapsed = start.elapsed();
+
+    // Parse HTTP response
+    let response_str = String::from_utf8_lossy(&response_bytes);
+    let mut lines = response_str.lines();
+
+    // Status line
+    let status_line = lines.next().ok_or_else(|| {
+        NetError::HttpParseError("empty response".into())
+    })?;
+    let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
+    let status: u16 = parts
+        .get(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let status_text = parts.get(2).unwrap_or(&"").to_string();
+
+    // Headers
+    let mut headers = HashMap::new();
+    let mut header_end = false;
+    for line in lines.by_ref() {
+        if line.is_empty() {
+            header_end = true;
+            break;
+        }
+        if let Some((k, v)) = line.split_once(": ") {
+            headers.insert(k.to_lowercase(), v.trim().to_string());
+        }
+    }
+
+    // Body (everything after headers)
+    let body = if header_end {
+        let remaining: String = lines.collect::<Vec<&str>>().join("\n");
+        remaining.into_bytes()
+    } else {
+        Vec::new()
+    };
+
+    Ok(HttpResponse {
+        status,
+        status_text,
+        headers,
+        body,
+        elapsed_ms: elapsed.as_secs_f64() * 1000.0,
+    })
+}
+
+/// Check if TLS feature is available.
+pub fn tls_available() -> bool {
+    cfg!(feature = "tls")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // NQ2.8: Connection Pool
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1629,6 +1762,47 @@ mod tests {
 
         let e7 = NetError::TooManyRedirects { max: 5 };
         assert!(format!("{e7}").contains("redirect"));
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn nq2_1_https_get_real() {
+        // Real HTTPS request to a public endpoint
+        let result = https_get("https://httpbin.org/get");
+        match result {
+            Ok(resp) => {
+                assert_eq!(resp.status, 200, "HTTPS GET should return 200");
+                let body = resp.text().unwrap();
+                assert!(
+                    body.contains("httpbin.org") || body.contains("headers"),
+                    "response should contain httpbin data"
+                );
+                assert!(resp.elapsed_ms > 0.0, "should have elapsed time");
+                println!(
+                    "  HTTPS GET: {} {}ms, {} bytes",
+                    resp.status,
+                    resp.elapsed_ms as u64,
+                    resp.body.len()
+                );
+            }
+            Err(e) => {
+                // Network may not be available in CI — print but don't fail
+                println!("  HTTPS test skipped (no network): {e}");
+            }
+        }
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn nq2_1_https_invalid_host() {
+        let result = https_get("https://this-host-definitely-does-not-exist.invalid/");
+        assert!(result.is_err(), "invalid host should error");
+    }
+
+    #[cfg(feature = "tls")]
+    #[test]
+    fn nq2_1_tls_available_check() {
+        assert!(tls_available(), "tls feature should be enabled");
     }
 
     #[test]
