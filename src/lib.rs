@@ -54,6 +54,7 @@ pub mod rtos;
 pub mod runtime;
 pub mod selfhost;
 pub mod stdlib;
+pub mod stdlib_v3;
 pub mod testing;
 pub mod vm;
 
