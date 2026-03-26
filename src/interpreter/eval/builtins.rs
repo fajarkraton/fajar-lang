@@ -1624,23 +1624,22 @@ impl Interpreter {
             _ => {
                 return Err(
                     RuntimeError::TypeError("http_listen: port must be integer".into()).into(),
-                )
+                );
             }
         };
         let max_requests = match &args[1] {
             Value::Int(n) => *n as usize,
             _ => {
-                return Err(
-                    RuntimeError::TypeError("http_listen: max_requests must be integer".into())
-                        .into(),
+                return Err(RuntimeError::TypeError(
+                    "http_listen: max_requests must be integer".into(),
                 )
+                .into());
             }
         };
 
         let addr = format!("127.0.0.1:{port}");
-        let listener = std::net::TcpListener::bind(&addr).map_err(|e| {
-            RuntimeError::TypeError(format!("http_listen: bind {addr}: {e}"))
-        })?;
+        let listener = std::net::TcpListener::bind(&addr)
+            .map_err(|e| RuntimeError::TypeError(format!("http_listen: bind {addr}: {e}")))?;
 
         println!("[http] Listening on {addr} (max {max_requests} requests)");
         let mut served = 0i64;
@@ -4488,9 +4487,7 @@ impl Interpreter {
                 #[allow(clippy::needless_borrow)]
                 let is_known_method = is_known_method_name(&type_name, field);
                 let hint = if is_known_method {
-                    format!(
-                        " — did you mean `{field}()`? (add parentheses for method call)"
-                    )
+                    format!(" — did you mean `{field}()`? (add parentheses for method call)")
                 } else {
                     String::new()
                 };
@@ -5438,14 +5435,32 @@ fn is_known_method_name(type_name: &str, field: &str) -> bool {
     match type_name {
         "str" => matches!(
             field,
-            "len" | "trim" | "to_uppercase" | "to_lowercase" | "chars"
-                | "split" | "contains" | "starts_with" | "ends_with"
-                | "replace" | "substring" | "parse_int" | "parse_float"
+            "len"
+                | "trim"
+                | "to_uppercase"
+                | "to_lowercase"
+                | "chars"
+                | "split"
+                | "contains"
+                | "starts_with"
+                | "ends_with"
+                | "replace"
+                | "substring"
+                | "parse_int"
+                | "parse_float"
         ),
         "array" => matches!(
             field,
-            "len" | "push" | "pop" | "sort" | "reverse" | "contains"
-                | "iter" | "map" | "filter" | "collect"
+            "len"
+                | "push"
+                | "pop"
+                | "sort"
+                | "reverse"
+                | "contains"
+                | "iter"
+                | "map"
+                | "filter"
+                | "collect"
         ),
         _ => false,
     }

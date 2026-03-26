@@ -749,9 +749,7 @@ pub fn spawn_with_stdin(
         // Drop stdin to signal EOF
     }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("wait: {e}"))?;
+    let output = child.wait_with_output().map_err(|e| format!("wait: {e}"))?;
 
     Ok(CommandOutput {
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
@@ -765,11 +763,7 @@ pub fn spawn_with_stdin(
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Spawn a process and read stdout line by line, calling handler for each.
-pub fn spawn_streaming<F>(
-    program: &str,
-    args: &[&str],
-    mut handler: F,
-) -> Result<i32, String>
+pub fn spawn_streaming<F>(program: &str, args: &[&str], mut handler: F) -> Result<i32, String>
 where
     F: FnMut(&str),
 {
@@ -1251,11 +1245,10 @@ mod tests {
     #[test]
     fn sq8_2_stream_stdout() {
         let mut lines = Vec::new();
-        let code =
-            spawn_streaming("echo", &["line1\nline2\nline3"], |line| {
-                lines.push(line.to_string());
-            })
-            .unwrap();
+        let code = spawn_streaming("echo", &["line1\nline2\nline3"], |line| {
+            lines.push(line.to_string());
+        })
+        .unwrap();
         assert_eq!(code, 0);
         assert!(!lines.is_empty(), "should capture at least 1 line");
     }
@@ -1330,7 +1323,10 @@ mod tests {
         let result = which("cargo");
         assert!(result.is_some(), "cargo should be findable in PATH");
         let path = result.unwrap();
-        assert!(path.contains("cargo"), "path should contain 'cargo': {path}");
+        assert!(
+            path.contains("cargo"),
+            "path should contain 'cargo': {path}"
+        );
     }
 
     #[test]

@@ -159,13 +159,15 @@ pub fn aes128_gcm_encrypt(
     plaintext: &[u8],
     aad: &[u8],
 ) -> Result<(Vec<u8>, [u8; 16]), String> {
-    use aes_gcm::{aead::Aead, Aes128Gcm, KeyInit, Nonce};
     use aes_gcm::aead::Payload;
+    use aes_gcm::{Aes128Gcm, KeyInit, Nonce, aead::Aead};
 
-    let cipher = Aes128Gcm::new_from_slice(key)
-        .map_err(|e| format!("AES-128 key error: {e}"))?;
+    let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| format!("AES-128 key error: {e}"))?;
     let nonce = Nonce::from_slice(nonce);
-    let payload = Payload { msg: plaintext, aad };
+    let payload = Payload {
+        msg: plaintext,
+        aad,
+    };
     let ct_with_tag = cipher
         .encrypt(nonce, payload)
         .map_err(|e| format!("AES-128 encrypt error: {e}"))?;
@@ -185,15 +187,17 @@ pub fn aes128_gcm_decrypt(
     tag: &[u8; 16],
     aad: &[u8],
 ) -> Result<Vec<u8>, String> {
-    use aes_gcm::{aead::Aead, Aes128Gcm, KeyInit, Nonce};
     use aes_gcm::aead::Payload;
+    use aes_gcm::{Aes128Gcm, KeyInit, Nonce, aead::Aead};
 
-    let cipher = Aes128Gcm::new_from_slice(key)
-        .map_err(|e| format!("AES-128 key error: {e}"))?;
+    let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| format!("AES-128 key error: {e}"))?;
     let nonce = Nonce::from_slice(nonce);
     let mut ct_with_tag = ciphertext.to_vec();
     ct_with_tag.extend_from_slice(tag);
-    let payload = Payload { msg: &ct_with_tag, aad };
+    let payload = Payload {
+        msg: &ct_with_tag,
+        aad,
+    };
     cipher
         .decrypt(nonce, payload)
         .map_err(|e| format!("AES-128 decrypt error: {e}"))
@@ -255,6 +259,145 @@ pub fn aes256_gcm_decrypt(
     cipher
         .decrypt(nonce, payload)
         .map_err(|e| format!("AES decrypt error: {e}"))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CQ1.3: Real AES-CBC via cbc + aes crates (PKCS7 padding)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Encrypt data with AES-256-CBC (PKCS7 padding).
+///
+/// `key` must be 32 bytes. `iv` must be 16 bytes.
+/// Returns ciphertext (padded to block boundary).
+pub fn aes256_cbc_encrypt(
+    key: &[u8; 32],
+    iv: &[u8; 16],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, String> {
+    use aes::Aes256;
+    use cbc::cipher::{BlockEncryptMut, KeyIvInit};
+    type Aes256CbcEnc = cbc::Encryptor<Aes256>;
+
+    let encryptor = Aes256CbcEnc::new_from_slices(key, iv)
+        .map_err(|e| format!("AES-256-CBC key/iv error: {e}"))?;
+
+    // PKCS7 pad: add 1..16 bytes so length is multiple of 16
+    let block_size = 16;
+    let pad_len = block_size - (plaintext.len() % block_size);
+    let mut buf = Vec::with_capacity(plaintext.len() + pad_len);
+    buf.extend_from_slice(plaintext);
+    buf.extend(std::iter::repeat_n(pad_len as u8, pad_len));
+
+    let buf_len = buf.len();
+    let ct = encryptor
+        .encrypt_padded_mut::<cbc::cipher::block_padding::NoPadding>(&mut buf, buf_len)
+        .map_err(|e| format!("AES-256-CBC encrypt error: {e}"))?;
+    Ok(ct.to_vec())
+}
+
+/// Decrypt data with AES-256-CBC (PKCS7 unpadding).
+///
+/// `key` must be 32 bytes. `iv` must be 16 bytes.
+/// Ciphertext length must be a multiple of 16.
+pub fn aes256_cbc_decrypt(
+    key: &[u8; 32],
+    iv: &[u8; 16],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, String> {
+    use aes::Aes256;
+    use cbc::cipher::{BlockDecryptMut, KeyIvInit};
+    type Aes256CbcDec = cbc::Decryptor<Aes256>;
+
+    if ciphertext.is_empty() || !ciphertext.len().is_multiple_of(16) {
+        return Err("AES-256-CBC: ciphertext length must be a non-zero multiple of 16".to_string());
+    }
+
+    let decryptor = Aes256CbcDec::new_from_slices(key, iv)
+        .map_err(|e| format!("AES-256-CBC key/iv error: {e}"))?;
+
+    let mut buf = ciphertext.to_vec();
+    let pt = decryptor
+        .decrypt_padded_mut::<cbc::cipher::block_padding::NoPadding>(&mut buf)
+        .map_err(|e| format!("AES-256-CBC decrypt error: {e}"))?;
+
+    // PKCS7 unpad
+    let last = *pt
+        .last()
+        .ok_or("AES-256-CBC: empty plaintext after decrypt")?;
+    let pad_len = last as usize;
+    if pad_len == 0 || pad_len > 16 || pt.len() < pad_len {
+        return Err("AES-256-CBC: invalid PKCS7 padding".to_string());
+    }
+    if !pt[pt.len() - pad_len..].iter().all(|&b| b == last) {
+        return Err("AES-256-CBC: invalid PKCS7 padding bytes".to_string());
+    }
+    Ok(pt[..pt.len() - pad_len].to_vec())
+}
+
+/// Encrypt data with AES-128-CBC (PKCS7 padding).
+///
+/// `key` must be 16 bytes. `iv` must be 16 bytes.
+pub fn aes128_cbc_encrypt(
+    key: &[u8; 16],
+    iv: &[u8; 16],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, String> {
+    use aes::Aes128;
+    use cbc::cipher::{BlockEncryptMut, KeyIvInit};
+    type Aes128CbcEnc = cbc::Encryptor<Aes128>;
+
+    let encryptor = Aes128CbcEnc::new_from_slices(key, iv)
+        .map_err(|e| format!("AES-128-CBC key/iv error: {e}"))?;
+
+    let block_size = 16;
+    let pad_len = block_size - (plaintext.len() % block_size);
+    let mut buf = Vec::with_capacity(plaintext.len() + pad_len);
+    buf.extend_from_slice(plaintext);
+    buf.extend(std::iter::repeat_n(pad_len as u8, pad_len));
+
+    let buf_len = buf.len();
+    let ct = encryptor
+        .encrypt_padded_mut::<cbc::cipher::block_padding::NoPadding>(&mut buf, buf_len)
+        .map_err(|e| format!("AES-128-CBC encrypt error: {e}"))?;
+    Ok(ct.to_vec())
+}
+
+/// Decrypt data with AES-128-CBC (PKCS7 unpadding).
+///
+/// `key` must be 16 bytes. `iv` must be 16 bytes.
+pub fn aes128_cbc_decrypt(
+    key: &[u8; 16],
+    iv: &[u8; 16],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, String> {
+    use aes::Aes128;
+    use cbc::cipher::{BlockDecryptMut, KeyIvInit};
+    type Aes128CbcDec = cbc::Decryptor<Aes128>;
+
+    if ciphertext.is_empty() || !ciphertext.len().is_multiple_of(16) {
+        return Err("AES-128-CBC: ciphertext length must be a non-zero multiple of 16".to_string());
+    }
+
+    let decryptor = Aes128CbcDec::new_from_slices(key, iv)
+        .map_err(|e| format!("AES-128-CBC key/iv error: {e}"))?;
+
+    let mut buf = ciphertext.to_vec();
+    let pt = decryptor
+        .decrypt_padded_mut::<cbc::cipher::block_padding::NoPadding>(&mut buf)
+        .map_err(|e| format!("AES-128-CBC decrypt error: {e}"))?;
+
+    // PKCS7 unpad
+    let last = *pt
+        .last()
+        .ok_or("AES-128-CBC: empty plaintext after decrypt")?;
+    let pad_len = last as usize;
+    if pad_len == 0 || pad_len > 16 || pt.len() < pad_len {
+        return Err("AES-128-CBC: invalid PKCS7 padding".to_string());
+    }
+    if !pt[pt.len() - pad_len..].iter().all(|&b| b == last) {
+        return Err("AES-128-CBC: invalid PKCS7 padding bytes".to_string());
+    }
+    Ok(pt[..pt.len() - pad_len].to_vec())
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -438,16 +581,14 @@ pub fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32, output_len: 
         let mut salt_block = salt.to_vec();
         salt_block.extend_from_slice(&block_num.to_be_bytes());
 
-        let mut mac = HmacSha256::new_from_slice(password)
-            .expect("HMAC key can be any length");
+        let mut mac = HmacSha256::new_from_slice(password).expect("HMAC key can be any length");
         mac.update(&salt_block);
         let mut u = mac.finalize().into_bytes().to_vec();
         let mut derived = u.clone();
 
         // Subsequent iterations: U_i = PRF(password, U_{i-1})
         for _ in 1..iterations {
-            let mut mac = HmacSha256::new_from_slice(password)
-                .expect("HMAC key can be any length");
+            let mut mac = HmacSha256::new_from_slice(password).expect("HMAC key can be any length");
             mac.update(&u);
             u = mac.finalize().into_bytes().to_vec();
             // XOR into derived
@@ -1142,7 +1283,10 @@ mod tests {
         hasher.update(b"the lazy dog");
         let incremental = hasher.finalize();
 
-        assert_eq!(one_shot.bytes, incremental.bytes, "streaming must match one-shot");
+        assert_eq!(
+            one_shot.bytes, incremental.bytes,
+            "streaming must match one-shot"
+        );
         assert_eq!(
             one_shot.hex(),
             "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
@@ -1287,5 +1431,106 @@ mod tests {
         let mut buf = vec![0xAA; 64];
         secure_zero(&mut buf);
         assert!(buf.iter().all(|&b| b == 0));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CQ1.3: AES-CBC mode tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn cq1_3_aes256_cbc_roundtrip() {
+        let key = [0x42u8; 32];
+        let iv = [0x01u8; 16];
+        let plaintext = b"Hello, AES-256-CBC!";
+
+        let ct = aes256_cbc_encrypt(&key, &iv, plaintext).unwrap();
+        assert_ne!(ct, plaintext.to_vec());
+        assert_eq!(ct.len() % 16, 0); // padded to block boundary
+
+        let pt = aes256_cbc_decrypt(&key, &iv, &ct).unwrap();
+        assert_eq!(pt, plaintext);
+    }
+
+    #[test]
+    fn cq1_3_aes256_cbc_exact_block() {
+        // 16 bytes = exact block — PKCS7 adds full padding block
+        let key = [0xAA; 32];
+        let iv = [0xBB; 16];
+        let plaintext = b"exactly16bytes!!"; // 16 bytes
+
+        let ct = aes256_cbc_encrypt(&key, &iv, plaintext).unwrap();
+        assert_eq!(ct.len(), 32); // 16 data + 16 padding
+
+        let pt = aes256_cbc_decrypt(&key, &iv, &ct).unwrap();
+        assert_eq!(pt, plaintext);
+    }
+
+    #[test]
+    fn cq1_3_aes256_cbc_empty_plaintext() {
+        let key = [0xCC; 32];
+        let iv = [0xDD; 16];
+        let plaintext = b"";
+
+        let ct = aes256_cbc_encrypt(&key, &iv, plaintext).unwrap();
+        assert_eq!(ct.len(), 16); // just the padding block
+
+        let pt = aes256_cbc_decrypt(&key, &iv, &ct).unwrap();
+        assert_eq!(pt, plaintext);
+    }
+
+    #[test]
+    fn cq1_3_aes256_cbc_wrong_key_fails() {
+        let key = [0x42u8; 32];
+        let iv = [0x01u8; 16];
+        let ct = aes256_cbc_encrypt(&key, &iv, b"secret data").unwrap();
+
+        let wrong_key = [0x43u8; 32];
+        // Decryption with wrong key → invalid PKCS7 padding
+        assert!(aes256_cbc_decrypt(&wrong_key, &iv, &ct).is_err());
+    }
+
+    #[test]
+    fn cq1_3_aes256_cbc_invalid_ciphertext_length() {
+        let key = [0x42u8; 32];
+        let iv = [0x01u8; 16];
+        // 15 bytes — not a multiple of 16
+        assert!(aes256_cbc_decrypt(&key, &iv, &[0u8; 15]).is_err());
+        // Empty ciphertext
+        assert!(aes256_cbc_decrypt(&key, &iv, &[]).is_err());
+    }
+
+    #[test]
+    fn cq1_3_aes128_cbc_roundtrip() {
+        let key = [0x42u8; 16]; // 16 bytes for AES-128
+        let iv = [0x01u8; 16];
+        let plaintext = b"AES-128-CBC test data for Fajar Lang";
+
+        let ct = aes128_cbc_encrypt(&key, &iv, plaintext).unwrap();
+        assert_ne!(ct, plaintext.to_vec());
+
+        let pt = aes128_cbc_decrypt(&key, &iv, &ct).unwrap();
+        assert_eq!(pt, plaintext);
+    }
+
+    #[test]
+    fn cq1_3_aes128_cbc_tamper_detection() {
+        let key = [0x42u8; 16];
+        let iv = [0x01u8; 16];
+        let mut ct = aes128_cbc_encrypt(&key, &iv, b"tamper test").unwrap();
+        // Flip last byte — corrupts PKCS7 padding
+        let last = ct.len() - 1;
+        ct[last] ^= 1;
+        assert!(aes128_cbc_decrypt(&key, &iv, &ct).is_err());
+    }
+
+    #[test]
+    fn cq1_3_aes_cbc_large_data() {
+        let key = [0x55u8; 32];
+        let iv = [0x66u8; 16];
+        let plaintext: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
+
+        let ct = aes256_cbc_encrypt(&key, &iv, &plaintext).unwrap();
+        let pt = aes256_cbc_decrypt(&key, &iv, &ct).unwrap();
+        assert_eq!(pt, plaintext);
     }
 }

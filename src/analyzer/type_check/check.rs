@@ -184,10 +184,7 @@ impl TypeChecker {
             && !matches!(declared_ret, Type::Void)
             && !matches!(body_type, Type::Void | Type::Never)
         {
-            let hint = type_mismatch_hint(
-                &declared_ret.display_name(),
-                &body_type.display_name(),
-            );
+            let hint = type_mismatch_hint(&declared_ret.display_name(), &body_type.display_name());
             self.errors.push(SemanticError::TypeMismatch {
                 expected: declared_ret.display_name(),
                 found: body_type.display_name(),
@@ -949,12 +946,13 @@ impl TypeChecker {
                 // suggest adding `fn` keyword (beginner forgot `fn`)
                 if suggestion.is_none() || suggestion.as_deref() == Some("did you mean 'min'?") {
                     let common_fn_names = [
-                        "main", "init", "setup", "run", "start", "test", "new",
-                        "create", "build", "parse", "process", "handle", "update",
+                        "main", "init", "setup", "run", "start", "test", "new", "create", "build",
+                        "parse", "process", "handle", "update",
                     ];
                     if common_fn_names.contains(&name) {
-                        suggestion =
-                            Some(format!("did you mean `fn {name}()`? (missing `fn` keyword)"));
+                        suggestion = Some(format!(
+                            "did you mean `fn {name}()`? (missing `fn` keyword)"
+                        ));
                     }
                 }
 
@@ -1675,7 +1673,12 @@ impl TypeChecker {
         // evaluating the RHS. This allows the moved variable to be consumed by f()
         // and then reassigned. Without this, `state = define_fn(state, ...)` would
         // trigger ME001 because state was marked moved in a previous iteration.
-        if let Expr::Ident { name, span: id_span, .. } = target {
+        if let Expr::Ident {
+            name,
+            span: id_span,
+            ..
+        } = target
+        {
             self.moves.declare(name, *id_span);
         }
 
@@ -1929,7 +1932,10 @@ impl TypeChecker {
                         expected: 1,
                         found: params.len(),
                         span,
-                        hint: Some("pipeline `|>` requires a function that takes exactly 1 argument".into()),
+                        hint: Some(
+                            "pipeline `|>` requires a function that takes exactly 1 argument"
+                                .into(),
+                        ),
                     });
                 } else if !params[0].is_compatible(&arg_ty) {
                     self.errors.push(SemanticError::TypeMismatch {
@@ -1970,9 +1976,7 @@ impl TypeChecker {
                 // Build type variable substitution map for generic structs.
                 // If a field type is TypeVar("T") and the value is i64, then T = i64.
                 let mut subst: HashMap<String, Type> = HashMap::new();
-                let is_generic = def_fields
-                    .values()
-                    .any(|t| matches!(t, Type::TypeVar(_)));
+                let is_generic = def_fields.values().any(|t| matches!(t, Type::TypeVar(_)));
 
                 // Check each provided field
                 for fi in fields {

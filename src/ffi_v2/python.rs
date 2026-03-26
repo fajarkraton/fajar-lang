@@ -460,13 +460,13 @@ pub fn generate_python_wrapper(
 /// PQ4.2: Call Python code and map exceptions to Result.
 #[cfg(feature = "python-ffi")]
 pub fn py_eval_result(code: &str) -> Result<String, String> {
-    let ccode = std::ffi::CString::new(code)
-        .map_err(|e| format!("invalid code string: {e}"))?;
+    let ccode = std::ffi::CString::new(code).map_err(|e| format!("invalid code string: {e}"))?;
     pyo3::Python::with_gil(|py| {
         use pyo3::types::PyAnyMethods;
         match py.eval(&ccode, None, None) {
             Ok(val) => {
-                let repr: String = val.str()
+                let repr: String = val
+                    .str()
                     .map(|s| s.to_string())
                     .unwrap_or_else(|_| "???".to_string());
                 Ok(repr)
@@ -484,8 +484,8 @@ pub fn py_eval_result(code: &str) -> Result<String, String> {
 #[cfg(feature = "python-ffi")]
 pub fn py_type_roundtrip(value: &PyValue) -> Result<PyValue, String> {
     pyo3::Python::with_gil(|py| {
-        use pyo3::types::PyAnyMethods;
         use pyo3::IntoPyObject;
+        use pyo3::types::PyAnyMethods;
         match value {
             PyValue::Int(n) => {
                 let obj = n.into_pyobject(py).map_err(|e| format!("{e}"))?;
@@ -519,8 +519,10 @@ pub fn py_list_module_attrs(module_name: &str) -> Result<Vec<String>, String> {
         use pyo3::types::PyAnyMethods;
         let dir_code = std::ffi::CString::new(format!(
             "[x for x in dir(__import__('{module_name}')) if not x.startswith('_')]"
-        )).map_err(|e| format!("{e}"))?;
-        let result: Vec<String> = py.eval(&dir_code, None, None)
+        ))
+        .map_err(|e| format!("{e}"))?;
+        let result: Vec<String> = py
+            .eval(&dir_code, None, None)
             .map_err(|e| format!("dir: {e}"))?
             .extract()
             .map_err(|e| format!("extract: {e}"))?;
@@ -543,7 +545,8 @@ pub fn python_available() -> Result<String, String> {
                 use pyo3::types::PyAnyMethods;
                 let ccode = std::ffi::CString::new("str(__import__('sys').version_info.major) + '.' + str(__import__('sys').version_info.minor) + '.' + str(__import__('sys').version_info.micro)")
                     .unwrap();
-                let version: String = py.eval(&ccode, None, None)
+                let version: String = py
+                    .eval(&ccode, None, None)
                     .map_err(|e| format!("Python error: {e}"))?
                     .extract()
                     .map_err(|e| format!("{e}"))?;
@@ -554,6 +557,215 @@ pub fn python_available() -> Result<String, String> {
         Err("Python FFI not compiled (build with --features python-ffi)".into())
     } else {
         Err("Python FFI not compiled (build with --features python-ffi)".into())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ4.1: NumPy Zero-Copy Bridge
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A buffer descriptor for zero-copy transfer between NumPy and Fajar tensors.
+#[derive(Debug, Clone)]
+pub struct NumpyBuffer {
+    /// Raw f64 data (shared buffer).
+    pub data: Vec<f64>,
+    /// Shape of the array.
+    pub shape: Vec<usize>,
+    /// Data type.
+    pub dtype: NumpyDtype,
+    /// Whether this buffer owns the data (true) or is a view (false).
+    pub owned: bool,
+}
+
+impl NumpyBuffer {
+    /// Create a new owned buffer from shape and data.
+    pub fn new(shape: Vec<usize>, data: Vec<f64>) -> Self {
+        Self {
+            data,
+            shape,
+            dtype: NumpyDtype::Float64,
+            owned: true,
+        }
+    }
+
+    /// Create a view (non-owning reference) over existing data.
+    pub fn view(shape: Vec<usize>, data: Vec<f64>) -> Self {
+        Self {
+            data,
+            shape,
+            dtype: NumpyDtype::Float64,
+            owned: false,
+        }
+    }
+
+    /// Total number of elements.
+    pub fn numel(&self) -> usize {
+        self.shape.iter().product()
+    }
+
+    /// Size in bytes.
+    pub fn nbytes(&self) -> usize {
+        self.numel() * self.dtype.element_size()
+    }
+
+    /// Convert to a 2D ndarray (for Fajar tensor operations).
+    pub fn to_ndarray2(&self) -> Result<ndarray::Array2<f64>, String> {
+        if self.shape.len() != 2 {
+            return Err(format!(
+                "expected 2D array, got {}D (shape {:?})",
+                self.shape.len(),
+                self.shape
+            ));
+        }
+        let rows = self.shape[0];
+        let cols = self.shape[1];
+        if rows * cols != self.data.len() {
+            return Err(format!(
+                "shape {:?} requires {} elements, got {}",
+                self.shape,
+                rows * cols,
+                self.data.len()
+            ));
+        }
+        ndarray::Array2::from_shape_vec((rows, cols), self.data.clone())
+            .map_err(|e| format!("ndarray error: {e}"))
+    }
+
+    /// Create from a 2D ndarray.
+    pub fn from_ndarray2(arr: &ndarray::Array2<f64>) -> Self {
+        let shape = vec![arr.nrows(), arr.ncols()];
+        let data = arr.as_slice().unwrap_or(&[]).to_vec();
+        Self::new(shape, data)
+    }
+
+    /// Reshape the buffer (must have same total elements).
+    pub fn reshape(&self, new_shape: Vec<usize>) -> Result<Self, String> {
+        let new_numel: usize = new_shape.iter().product();
+        if new_numel != self.numel() {
+            return Err(format!(
+                "cannot reshape {:?} ({} elements) to {:?} ({} elements)",
+                self.shape,
+                self.numel(),
+                new_shape,
+                new_numel
+            ));
+        }
+        Ok(Self {
+            data: self.data.clone(),
+            shape: new_shape,
+            dtype: self.dtype,
+            owned: true,
+        })
+    }
+}
+
+/// Convert a NumPy array (via pyo3) to a NumpyBuffer.
+#[cfg(feature = "python-ffi")]
+pub fn numpy_to_buffer(code: &str) -> Result<NumpyBuffer, String> {
+    use pyo3::prelude::*;
+
+    Python::with_gil(|py| {
+        // Evaluate the expression to get a numpy array, convert to flat list
+        let data_code = format!("list(({code}).flatten())");
+        let shape_code = format!("list(({code}).shape)");
+
+        let data_list: Vec<f64> = py
+            .eval(&std::ffi::CString::new(data_code).unwrap(), None, None)
+            .map_err(|e| format!("numpy data eval: {e}"))?
+            .extract()
+            .map_err(|e| format!("numpy data extract: {e}"))?;
+
+        let shape: Vec<usize> = py
+            .eval(&std::ffi::CString::new(shape_code).unwrap(), None, None)
+            .map_err(|e| format!("numpy shape eval: {e}"))?
+            .extract()
+            .map_err(|e| format!("numpy shape extract: {e}"))?;
+
+        Ok(NumpyBuffer::new(shape, data_list))
+    })
+}
+
+/// Convert a NumpyBuffer back to a Python numpy array string representation.
+pub fn buffer_to_numpy_code(buf: &NumpyBuffer) -> String {
+    let data_str: Vec<String> = buf.data.iter().map(|x| format!("{x}")).collect();
+    let shape_str: Vec<String> = buf.shape.iter().map(|s| format!("{s}")).collect();
+    format!(
+        "__import__('numpy').array([{}]).reshape(({},))",
+        data_str.join(","),
+        shape_str.join(",")
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ4.6: Python→Fajar Callback
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A registered callback that Python code can invoke.
+#[derive(Debug, Clone)]
+pub struct FajarCallback {
+    /// Callback name.
+    pub name: String,
+    /// Expected argument types.
+    pub arg_types: Vec<String>,
+    /// Return type.
+    pub return_type: String,
+    /// Description for documentation.
+    pub description: String,
+}
+
+/// Registry of Fajar functions exposed to Python.
+#[derive(Debug, Default)]
+pub struct CallbackRegistry {
+    /// Registered callbacks by name.
+    callbacks: HashMap<String, FajarCallback>,
+}
+
+impl CallbackRegistry {
+    /// Create a new empty registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a callback.
+    pub fn register(&mut self, cb: FajarCallback) {
+        self.callbacks.insert(cb.name.clone(), cb);
+    }
+
+    /// Look up a callback by name.
+    pub fn get(&self, name: &str) -> Option<&FajarCallback> {
+        self.callbacks.get(name)
+    }
+
+    /// List all registered callback names.
+    pub fn names(&self) -> Vec<&str> {
+        self.callbacks.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Number of registered callbacks.
+    pub fn count(&self) -> usize {
+        self.callbacks.len()
+    }
+
+    /// Generate Python wrapper code for all registered callbacks.
+    pub fn generate_python_wrappers(&self) -> String {
+        let mut code = String::from("# Auto-generated Fajar Lang callback wrappers\n\n");
+        for cb in self.callbacks.values() {
+            let args = if cb.arg_types.is_empty() {
+                String::new()
+            } else {
+                cb.arg_types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("arg{i}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            code.push_str(&format!(
+                "def {}({}):\n    \"\"\"{}. Returns: {}\"\"\"\n    pass\n\n",
+                cb.name, args, cb.description, cb.return_type
+            ));
+        }
+        code
     }
 }
 
@@ -900,5 +1112,147 @@ mod tests {
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("not compiled"));
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ4.1: NumPy Zero-Copy Bridge
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn pq4_1_numpy_buffer_creation() {
+        let buf = NumpyBuffer::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(buf.numel(), 6);
+        assert_eq!(buf.nbytes(), 48); // 6 * 8 bytes
+        assert!(buf.owned);
+    }
+
+    #[test]
+    fn pq4_1_numpy_buffer_view() {
+        let buf = NumpyBuffer::view(vec![3], vec![1.0, 2.0, 3.0]);
+        assert!(!buf.owned);
+        assert_eq!(buf.numel(), 3);
+    }
+
+    #[test]
+    fn pq4_1_numpy_to_ndarray2() {
+        let buf = NumpyBuffer::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let arr = buf.to_ndarray2().unwrap();
+        assert_eq!(arr.nrows(), 2);
+        assert_eq!(arr.ncols(), 3);
+        assert_eq!(arr[[0, 0]], 1.0);
+        assert_eq!(arr[[1, 2]], 6.0);
+    }
+
+    #[test]
+    fn pq4_1_numpy_from_ndarray2() {
+        let arr = ndarray::Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let buf = NumpyBuffer::from_ndarray2(&arr);
+        assert_eq!(buf.shape, vec![2, 2]);
+        assert_eq!(buf.data, vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn pq4_1_numpy_reshape() {
+        let buf = NumpyBuffer::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let reshaped = buf.reshape(vec![3, 2]).unwrap();
+        assert_eq!(reshaped.shape, vec![3, 2]);
+        assert_eq!(reshaped.data.len(), 6);
+
+        // Invalid reshape
+        assert!(buf.reshape(vec![2, 2]).is_err());
+    }
+
+    #[test]
+    fn pq4_1_numpy_3d_rejects_ndarray2() {
+        let buf = NumpyBuffer::new(vec![2, 3, 4], vec![0.0; 24]);
+        assert!(buf.to_ndarray2().is_err());
+    }
+
+    #[test]
+    fn pq4_1_buffer_to_numpy_code() {
+        let buf = NumpyBuffer::new(vec![2, 2], vec![1.0, 2.0, 3.0, 4.0]);
+        let code = buffer_to_numpy_code(&buf);
+        assert!(code.contains("numpy"));
+        assert!(code.contains("reshape"));
+        assert!(code.contains("1,2,3,4"));
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_1_numpy_roundtrip() {
+        let buf = NumpyBuffer::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let code = buffer_to_numpy_code(&buf);
+        let back = numpy_to_buffer(&code).unwrap();
+        assert_eq!(back.shape, vec![2, 3]);
+        assert_eq!(back.data, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ4.6: Python→Fajar Callback
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn pq4_6_callback_registry_basic() {
+        let mut reg = CallbackRegistry::new();
+        assert_eq!(reg.count(), 0);
+
+        reg.register(FajarCallback {
+            name: "predict".to_string(),
+            arg_types: vec!["Tensor".to_string()],
+            return_type: "Tensor".to_string(),
+            description: "Run inference on input tensor".to_string(),
+        });
+        assert_eq!(reg.count(), 1);
+        assert!(reg.get("predict").is_some());
+        assert!(reg.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn pq4_6_callback_registry_multiple() {
+        let mut reg = CallbackRegistry::new();
+        reg.register(FajarCallback {
+            name: "predict".to_string(),
+            arg_types: vec!["Tensor".to_string()],
+            return_type: "Tensor".to_string(),
+            description: "Run inference".to_string(),
+        });
+        reg.register(FajarCallback {
+            name: "preprocess".to_string(),
+            arg_types: vec!["str".to_string()],
+            return_type: "Tensor".to_string(),
+            description: "Preprocess input text".to_string(),
+        });
+        assert_eq!(reg.count(), 2);
+        let names = reg.names();
+        assert!(names.contains(&"predict"));
+        assert!(names.contains(&"preprocess"));
+    }
+
+    #[test]
+    fn pq4_6_callback_python_wrappers() {
+        let mut reg = CallbackRegistry::new();
+        reg.register(FajarCallback {
+            name: "sigmoid".to_string(),
+            arg_types: vec!["float".to_string()],
+            return_type: "float".to_string(),
+            description: "Sigmoid activation".to_string(),
+        });
+        let code = reg.generate_python_wrappers();
+        assert!(code.contains("def sigmoid(arg0)"));
+        assert!(code.contains("Sigmoid activation"));
+        assert!(code.contains("Returns: float"));
+    }
+
+    #[test]
+    fn pq4_6_callback_no_args() {
+        let mut reg = CallbackRegistry::new();
+        reg.register(FajarCallback {
+            name: "version".to_string(),
+            arg_types: vec![],
+            return_type: "str".to_string(),
+            description: "Get Fajar Lang version".to_string(),
+        });
+        let code = reg.generate_python_wrappers();
+        assert!(code.contains("def version()"));
     }
 }

@@ -657,7 +657,9 @@ pub enum SemanticError {
     },
 
     /// SE007: Assignment to immutable variable.
-    #[error("SE007: cannot assign to immutable variable '{name}' — declare with `let mut {name}` to allow mutation")]
+    #[error(
+        "SE007: cannot assign to immutable variable '{name}' — declare with `let mut {name}` to allow mutation"
+    )]
     ImmutableAssignment {
         /// Variable name.
         name: String,

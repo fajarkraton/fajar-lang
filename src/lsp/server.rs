@@ -680,8 +680,14 @@ fn compute_code_lenses(source: &str, uri: &Url) -> Vec<CodeLens> {
         if trimmed.starts_with("@test") {
             lenses.push(CodeLens {
                 range: Range {
-                    start: Position { line: line_idx as u32, character: 0 },
-                    end: Position { line: line_idx as u32, character: trimmed.len() as u32 },
+                    start: Position {
+                        line: line_idx as u32,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: line_idx as u32,
+                        character: trimmed.len() as u32,
+                    },
                 },
                 command: Some(Command {
                     title: "Run Test".into(),
@@ -696,9 +702,7 @@ fn compute_code_lenses(source: &str, uri: &Url) -> Vec<CodeLens> {
         }
 
         // fn definitions → "N references" lens
-        if (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn "))
-            && trimmed.contains('(')
-        {
+        if (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ")) && trimmed.contains('(') {
             let fn_name = trimmed
                 .trim_start_matches("pub ")
                 .trim_start_matches("fn ")
@@ -716,8 +720,14 @@ fn compute_code_lenses(source: &str, uri: &Url) -> Vec<CodeLens> {
 
                 lenses.push(CodeLens {
                     range: Range {
-                        start: Position { line: line_idx as u32, character: 0 },
-                        end: Position { line: line_idx as u32, character: trimmed.len() as u32 },
+                        start: Position {
+                            line: line_idx as u32,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: line_idx as u32,
+                            character: trimmed.len() as u32,
+                        },
                     },
                     command: Some(Command {
                         title: format!("{ref_count} references"),
@@ -1782,7 +1792,10 @@ mod tests {
         let uri = Url::parse("file:///test.fj").unwrap();
         let lenses = compute_code_lenses(source, &uri);
         assert!(
-            lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("Run Test"))),
+            lenses.iter().any(|l| l
+                .command
+                .as_ref()
+                .is_some_and(|c| c.title.contains("Run Test"))),
             "should have Run Test lens"
         );
     }
@@ -1793,7 +1806,10 @@ mod tests {
         let uri = Url::parse("file:///test.fj").unwrap();
         let lenses = compute_code_lenses(source, &uri);
         assert!(
-            lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("reference"))),
+            lenses.iter().any(|l| l
+                .command
+                .as_ref()
+                .is_some_and(|c| c.title.contains("reference"))),
             "should have references lens for add()"
         );
     }
@@ -1805,7 +1821,10 @@ mod tests {
         let lenses = compute_code_lenses(source, &uri);
         // main() should not get a references lens (excluded by convention)
         assert!(
-            !lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("reference"))),
+            !lenses.iter().any(|l| l
+                .command
+                .as_ref()
+                .is_some_and(|c| c.title.contains("reference"))),
             "main() should not get references lens"
         );
     }

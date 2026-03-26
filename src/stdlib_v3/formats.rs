@@ -150,8 +150,8 @@ fn parse_string(input: &str) -> Result<(JsonValue, &str), String> {
                     b'"' => s.push('"'),
                     b'\\' => s.push('\\'),
                     b'/' => s.push('/'),
-                    b'b' => s.push('\u{0008}'),  // backspace
-                    b'f' => s.push('\u{000C}'),  // form feed
+                    b'b' => s.push('\u{0008}'), // backspace
+                    b'f' => s.push('\u{000C}'), // form feed
                     b'n' => s.push('\n'),
                     b't' => s.push('\t'),
                     b'r' => s.push('\r'),
@@ -168,7 +168,8 @@ fn parse_string(input: &str) -> Result<(JsonValue, &str), String> {
                         // Check for surrogate pair: \uD800-\uDBFF followed by \uDC00-\uDFFF
                         if (0xD800..=0xDBFF).contains(&code_point) {
                             // High surrogate — expect \uDC00-\uDFFF
-                            if i + 2 < bytes.len() && bytes[i + 1] == b'\\' && bytes[i + 2] == b'u' {
+                            if i + 2 < bytes.len() && bytes[i + 1] == b'\\' && bytes[i + 2] == b'u'
+                            {
                                 if i + 6 < bytes.len() {
                                     let low_hex = &input[i + 3..i + 7];
                                     let low = u16::from_str_radix(low_hex, 16)
@@ -861,7 +862,10 @@ pub fn detect_format(content: &str) -> &'static str {
             if let Some(close) = trimmed.find(']') {
                 let inside = &trimmed[1..close];
                 // TOML section: [section_name] where name is alphanumeric
-                if inside.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+                if inside
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+                {
                     // Check if next non-empty line has '='
                     let after = trimmed[close + 1..].trim_start();
                     if after.starts_with('\n') || after.is_empty() {

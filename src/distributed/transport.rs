@@ -281,6 +281,275 @@ impl TransportNode {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// DQ5.1: Reconnection with Exponential Backoff
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Configuration for retry/reconnection logic.
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts.
+    pub max_retries: u32,
+    /// Initial backoff delay in milliseconds.
+    pub initial_backoff_ms: u64,
+    /// Maximum backoff delay in milliseconds.
+    pub max_backoff_ms: u64,
+    /// Backoff multiplier (typically 2 for exponential).
+    pub multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 5,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 10_000,
+            multiplier: 2.0,
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Calculate the backoff delay for a given attempt (0-based).
+    pub fn backoff_ms(&self, attempt: u32) -> u64 {
+        let delay = self.initial_backoff_ms as f64 * self.multiplier.powi(attempt as i32);
+        (delay as u64).min(self.max_backoff_ms)
+    }
+}
+
+impl TransportNode {
+    /// Send a message with automatic retry and exponential backoff.
+    ///
+    /// Attempts `config.max_retries` reconnections with increasing delays.
+    /// Returns the number of attempts made on success, or the last error.
+    pub async fn send_with_retry(
+        &self,
+        peer_id: u64,
+        msg: NetMessage,
+        config: &RetryConfig,
+    ) -> Result<u32, String> {
+        let mut last_err = String::new();
+        for attempt in 0..=config.max_retries {
+            match self.send_to_node(peer_id, msg.clone()).await {
+                Ok(()) => return Ok(attempt + 1),
+                Err(e) => {
+                    last_err = e;
+                    if attempt < config.max_retries {
+                        let delay = config.backoff_ms(attempt);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                    }
+                }
+            }
+        }
+        Err(format!(
+            "failed after {} attempts: {last_err}",
+            config.max_retries + 1
+        ))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DQ5.5: Connection Pool — reuse TCP streams
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A pool of TCP connections keyed by peer address.
+pub struct ConnectionPool {
+    /// Open connections per address.
+    pool: Arc<Mutex<HashMap<String, Vec<TcpStream>>>>,
+    /// Maximum connections per address.
+    max_per_addr: usize,
+}
+
+impl ConnectionPool {
+    /// Create a new connection pool.
+    pub fn new(max_per_addr: usize) -> Self {
+        Self {
+            pool: Arc::new(Mutex::new(HashMap::new())),
+            max_per_addr,
+        }
+    }
+
+    /// Get a connection from the pool, or create a new one.
+    pub async fn get_or_connect(&self, addr: &str) -> Result<TcpStream, String> {
+        // Try to get an existing connection
+        {
+            let mut pool = self.pool.lock().unwrap();
+            if let Some(conns) = pool.get_mut(addr) {
+                if let Some(stream) = conns.pop() {
+                    return Ok(stream);
+                }
+            }
+        }
+
+        // Create a new connection
+        TcpStream::connect(addr)
+            .await
+            .map_err(|e| format!("connect to {addr}: {e}"))
+    }
+
+    /// Return a connection to the pool for reuse.
+    pub fn return_connection(&self, addr: &str, stream: TcpStream) {
+        let mut pool = self.pool.lock().unwrap();
+        let conns = pool.entry(addr.to_string()).or_default();
+        if conns.len() < self.max_per_addr {
+            conns.push(stream);
+        }
+        // else: drop the connection (pool is full)
+    }
+
+    /// Number of pooled connections for an address.
+    pub fn pooled_count(&self, addr: &str) -> usize {
+        let pool = self.pool.lock().unwrap();
+        pool.get(addr).map_or(0, |c| c.len())
+    }
+
+    /// Total pooled connections across all addresses.
+    pub fn total_pooled(&self) -> usize {
+        let pool = self.pool.lock().unwrap();
+        pool.values().map(|c| c.len()).sum()
+    }
+
+    /// Clear all pooled connections for a given address.
+    pub fn clear_addr(&self, addr: &str) {
+        let mut pool = self.pool.lock().unwrap();
+        pool.remove(addr);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DQ5.7: Service Discovery via UDP Multicast
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A service announcement for discovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceAnnouncement {
+    /// Node ID.
+    pub node_id: u64,
+    /// Service name (e.g., "worker", "scheduler").
+    pub service_name: String,
+    /// TCP address for RPC.
+    pub rpc_addr: String,
+    /// Timestamp (epoch milliseconds).
+    pub timestamp_ms: u64,
+}
+
+impl ServiceAnnouncement {
+    /// Serialize to bytes: [node_id:8][ts:8][name_len:4][name][addr_len:4][addr]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&self.node_id.to_le_bytes());
+        buf.extend_from_slice(&self.timestamp_ms.to_le_bytes());
+        let name = self.service_name.as_bytes();
+        buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        buf.extend_from_slice(name);
+        let addr = self.rpc_addr.as_bytes();
+        buf.extend_from_slice(&(addr.len() as u32).to_le_bytes());
+        buf.extend_from_slice(addr);
+        buf
+    }
+
+    /// Deserialize from bytes.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
+        if data.len() < 20 {
+            return Err("announcement too short".to_string());
+        }
+        let node_id = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| "bad node_id".to_string())?,
+        );
+        let timestamp_ms = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| "bad timestamp".to_string())?,
+        );
+        let name_len = u32::from_le_bytes(
+            data[16..20]
+                .try_into()
+                .map_err(|_| "bad name_len".to_string())?,
+        ) as usize;
+        if data.len() < 20 + name_len + 4 {
+            return Err("announcement truncated".to_string());
+        }
+        let service_name = String::from_utf8(data[20..20 + name_len].to_vec())
+            .map_err(|_| "bad name".to_string())?;
+        let addr_start = 20 + name_len;
+        let addr_len = u32::from_le_bytes(
+            data[addr_start..addr_start + 4]
+                .try_into()
+                .map_err(|_| "bad addr_len".to_string())?,
+        ) as usize;
+        if data.len() < addr_start + 4 + addr_len {
+            return Err("announcement addr truncated".to_string());
+        }
+        let rpc_addr = String::from_utf8(data[addr_start + 4..addr_start + 4 + addr_len].to_vec())
+            .map_err(|_| "bad addr".to_string())?;
+
+        Ok(Self {
+            node_id,
+            service_name,
+            rpc_addr,
+            timestamp_ms,
+        })
+    }
+}
+
+/// Registry of discovered services (updated by announcements).
+pub struct ServiceRegistry {
+    /// Known services: name → list of (node_id, addr, last_seen_ms).
+    services: HashMap<String, Vec<(u64, String, u64)>>,
+    /// TTL for entries in milliseconds.
+    ttl_ms: u64,
+}
+
+impl ServiceRegistry {
+    /// Create a new service registry.
+    pub fn new(ttl_ms: u64) -> Self {
+        Self {
+            services: HashMap::new(),
+            ttl_ms,
+        }
+    }
+
+    /// Register or update a service from an announcement.
+    pub fn register(&mut self, ann: &ServiceAnnouncement) {
+        let entries = self.services.entry(ann.service_name.clone()).or_default();
+        if let Some(entry) = entries.iter_mut().find(|(id, _, _)| *id == ann.node_id) {
+            entry.1 = ann.rpc_addr.clone();
+            entry.2 = ann.timestamp_ms;
+        } else {
+            entries.push((ann.node_id, ann.rpc_addr.clone(), ann.timestamp_ms));
+        }
+    }
+
+    /// Look up all addresses for a service (excluding expired).
+    pub fn lookup(&self, service_name: &str, now_ms: u64) -> Vec<(u64, String)> {
+        self.services
+            .get(service_name)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter(|(_, _, ts)| now_ms.saturating_sub(*ts) <= self.ttl_ms)
+                    .map(|(id, addr, _)| (*id, addr.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Remove expired entries.
+    pub fn gc(&mut self, now_ms: u64) {
+        for entries in self.services.values_mut() {
+            entries.retain(|(_, _, ts)| now_ms.saturating_sub(*ts) <= self.ttl_ms);
+        }
+        self.services.retain(|_, entries| !entries.is_empty());
+    }
+
+    /// Number of total service entries (across all names).
+    pub fn entry_count(&self) -> usize {
+        self.services.values().map(|v| v.len()).sum()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // DQ5.2: Heartbeat Timeout Detection
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -677,12 +946,20 @@ mod tests {
         };
 
         let ready_first = fifo.receive(msg2);
-        assert_eq!(ready_first.len(), 0, "seq 2 should be buffered (waiting for 1)");
+        assert_eq!(
+            ready_first.len(),
+            0,
+            "seq 2 should be buffered (waiting for 1)"
+        );
         assert_eq!(fifo.pending_count(), 1);
 
         // Now send seq 1 — both should be released in order
         let ready_second = fifo.receive(msg1);
-        assert_eq!(ready_second.len(), 2, "should release seq 1 + buffered seq 2");
+        assert_eq!(
+            ready_second.len(),
+            2,
+            "should release seq 1 + buffered seq 2"
+        );
         assert_eq!(ready_second[0].seq, 1);
         assert_eq!(ready_second[1].seq, 2);
         assert_eq!(fifo.pending_count(), 0);
@@ -773,5 +1050,243 @@ mod tests {
         assert!(prom.contains("fj_transport_messages_sent 1"));
         assert!(prom.contains("fj_transport_bytes_sent 100"));
         assert!(prom.contains("fj_transport_messages_received 1"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DQ5.1: Reconnection / Retry tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dq5_1_retry_config_defaults() {
+        let cfg = RetryConfig::default();
+        assert_eq!(cfg.max_retries, 5);
+        assert_eq!(cfg.initial_backoff_ms, 100);
+        assert_eq!(cfg.max_backoff_ms, 10_000);
+    }
+
+    #[test]
+    fn dq5_1_exponential_backoff() {
+        let cfg = RetryConfig {
+            max_retries: 5,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5_000,
+            multiplier: 2.0,
+        };
+        assert_eq!(cfg.backoff_ms(0), 100); // 100 * 2^0
+        assert_eq!(cfg.backoff_ms(1), 200); // 100 * 2^1
+        assert_eq!(cfg.backoff_ms(2), 400); // 100 * 2^2
+        assert_eq!(cfg.backoff_ms(3), 800); // 100 * 2^3
+        assert_eq!(cfg.backoff_ms(4), 1600); // 100 * 2^4
+        assert_eq!(cfg.backoff_ms(5), 3200); // 100 * 2^5
+        assert_eq!(cfg.backoff_ms(10), 5000); // capped at max
+    }
+
+    #[tokio::test]
+    async fn dq5_1_send_with_retry_success() {
+        // Set up listener node
+        let node1 = TransportNode::new(1, "127.0.0.1:0");
+        let mut actor = Actor::new("retry-test", 10);
+        node1.register_actor("retry-test", actor.mailbox_tx.clone());
+        let addr = node1.start_listener().await.unwrap();
+
+        // Sender with retry
+        let node2 = TransportNode::new(2, "127.0.0.1:0");
+        node2.add_peer(1, &addr);
+
+        let msg = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "retry-test".to_string(),
+            payload: b"retry-ok".to_vec(),
+            sender_id: 2,
+            seq: 1,
+        };
+
+        let config = RetryConfig::default();
+        let result = node2.send_with_retry(1, msg, &config).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // succeeded on first attempt
+
+        // Verify message arrived
+        let mut rx = actor.take_receiver().unwrap();
+        let received = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.payload, b"retry-ok");
+    }
+
+    #[tokio::test]
+    async fn dq5_1_send_with_retry_fails_bad_peer() {
+        let node = TransportNode::new(1, "127.0.0.1:0");
+        // Peer at an address that doesn't exist
+        node.add_peer(99, "127.0.0.1:1"); // port 1 likely refused
+
+        let msg = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "x".to_string(),
+            payload: vec![],
+            sender_id: 1,
+            seq: 1,
+        };
+
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_backoff_ms: 10, // fast for testing
+            max_backoff_ms: 50,
+            multiplier: 2.0,
+        };
+        let result = node.send_with_retry(99, msg, &config).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("failed after 3 attempts"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DQ5.5: Connection Pool tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dq5_5_pool_creation() {
+        let pool = ConnectionPool::new(5);
+        assert_eq!(pool.total_pooled(), 0);
+        assert_eq!(pool.pooled_count("127.0.0.1:8080"), 0);
+    }
+
+    #[tokio::test]
+    async fn dq5_5_pool_get_creates_connection() {
+        // Start a TCP listener to accept connections
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        let pool = ConnectionPool::new(5);
+        let stream = pool.get_or_connect(&addr).await;
+        assert!(stream.is_ok(), "should connect to listener");
+    }
+
+    #[tokio::test]
+    async fn dq5_5_pool_return_and_reuse() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        let pool = ConnectionPool::new(5);
+        let stream = pool.get_or_connect(&addr).await.unwrap();
+
+        // Return it to pool
+        pool.return_connection(&addr, stream);
+        assert_eq!(pool.pooled_count(&addr), 1);
+        assert_eq!(pool.total_pooled(), 1);
+
+        // Clear
+        pool.clear_addr(&addr);
+        assert_eq!(pool.pooled_count(&addr), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DQ5.7: Service Discovery tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dq5_7_announcement_roundtrip() {
+        let ann = ServiceAnnouncement {
+            node_id: 42,
+            service_name: "worker".to_string(),
+            rpc_addr: "192.168.1.10:9000".to_string(),
+            timestamp_ms: 1_000_000,
+        };
+        let bytes = ann.to_bytes();
+        let decoded = ServiceAnnouncement::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded, ann);
+    }
+
+    #[test]
+    fn dq5_7_service_registry_register() {
+        let mut reg = ServiceRegistry::new(30_000);
+        let ann = ServiceAnnouncement {
+            node_id: 1,
+            service_name: "worker".to_string(),
+            rpc_addr: "10.0.0.1:8080".to_string(),
+            timestamp_ms: 1000,
+        };
+        reg.register(&ann);
+        assert_eq!(reg.entry_count(), 1);
+
+        let found = reg.lookup("worker", 2000);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, 1);
+        assert_eq!(found[0].1, "10.0.0.1:8080");
+    }
+
+    #[test]
+    fn dq5_7_service_registry_multiple_nodes() {
+        let mut reg = ServiceRegistry::new(30_000);
+        for i in 1..=3 {
+            reg.register(&ServiceAnnouncement {
+                node_id: i,
+                service_name: "worker".to_string(),
+                rpc_addr: format!("10.0.0.{i}:8080"),
+                timestamp_ms: 1000,
+            });
+        }
+        assert_eq!(reg.entry_count(), 3);
+        assert_eq!(reg.lookup("worker", 2000).len(), 3);
+        assert_eq!(reg.lookup("scheduler", 2000).len(), 0);
+    }
+
+    #[test]
+    fn dq5_7_service_registry_expiry() {
+        let mut reg = ServiceRegistry::new(5000); // 5s TTL
+        reg.register(&ServiceAnnouncement {
+            node_id: 1,
+            service_name: "worker".to_string(),
+            rpc_addr: "10.0.0.1:8080".to_string(),
+            timestamp_ms: 1000,
+        });
+
+        // Still alive at t=5000
+        assert_eq!(reg.lookup("worker", 5000).len(), 1);
+        // Expired at t=7000 (6s > 5s TTL)
+        assert_eq!(reg.lookup("worker", 7000).len(), 0);
+    }
+
+    #[test]
+    fn dq5_7_service_registry_gc() {
+        let mut reg = ServiceRegistry::new(5000);
+        reg.register(&ServiceAnnouncement {
+            node_id: 1,
+            service_name: "old".to_string(),
+            rpc_addr: "x".to_string(),
+            timestamp_ms: 1000,
+        });
+        reg.register(&ServiceAnnouncement {
+            node_id: 2,
+            service_name: "new".to_string(),
+            rpc_addr: "y".to_string(),
+            timestamp_ms: 10_000,
+        });
+        assert_eq!(reg.entry_count(), 2);
+
+        reg.gc(15_000); // old (t=1000) expired, new (t=10000) alive
+        assert_eq!(reg.entry_count(), 1);
+        assert_eq!(reg.lookup("new", 15_000).len(), 1);
+    }
+
+    #[test]
+    fn dq5_7_service_registry_update() {
+        let mut reg = ServiceRegistry::new(30_000);
+        reg.register(&ServiceAnnouncement {
+            node_id: 1,
+            service_name: "worker".to_string(),
+            rpc_addr: "old:8080".to_string(),
+            timestamp_ms: 1000,
+        });
+        // Same node re-announces with new address
+        reg.register(&ServiceAnnouncement {
+            node_id: 1,
+            service_name: "worker".to_string(),
+            rpc_addr: "new:9090".to_string(),
+            timestamp_ms: 2000,
+        });
+        assert_eq!(reg.entry_count(), 1); // updated, not duplicated
+        let found = reg.lookup("worker", 3000);
+        assert_eq!(found[0].1, "new:9090");
     }
 }

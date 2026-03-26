@@ -118,13 +118,11 @@ impl PluginRegistry {
     /// Register a built-in plugin.
     pub fn register(&mut self, plugin: Box<dyn CompilerPlugin>) {
         let name = plugin.name().to_string();
-        self.configs
-            .entry(name)
-            .or_insert_with(|| PluginConfig {
-                name: plugin.name().to_string(),
-                options: HashMap::new(),
-                enabled: true,
-            });
+        self.configs.entry(name).or_insert_with(|| PluginConfig {
+            name: plugin.name().to_string(),
+            options: HashMap::new(),
+            enabled: true,
+        });
         self.plugins.push(plugin);
     }
 
@@ -302,9 +300,8 @@ pub fn load_plugin_from_path(path: &str) -> Result<Box<dyn CompilerPlugin>, Stri
     // Look up the factory function
     #[allow(improper_ctypes_definitions)]
     type CreatePluginFn = unsafe extern "C" fn() -> *mut dyn CompilerPlugin;
-    let create_fn: libloading::Symbol<CreatePluginFn> =
-        unsafe { lib.get(b"create_plugin") }
-            .map_err(|e| format!("plugin '{path}' missing 'create_plugin' symbol: {e}"))?;
+    let create_fn: libloading::Symbol<CreatePluginFn> = unsafe { lib.get(b"create_plugin") }
+        .map_err(|e| format!("plugin '{path}' missing 'create_plugin' symbol: {e}"))?;
 
     // Call the factory
     // SAFETY: the factory returns a valid pointer to a CompilerPlugin.
@@ -483,9 +480,7 @@ impl CompilerPlugin for NamingConventionLint {
             for keyword in ["struct ", "enum "] {
                 if let Some(rest) = trimmed.strip_prefix(keyword) {
                     let name = rest.split(['{', '<', ' ']).next().unwrap_or("").trim();
-                    if !name.is_empty()
-                        && name.chars().next().is_some_and(|c| c.is_lowercase())
-                    {
+                    if !name.is_empty() && name.chars().next().is_some_and(|c| c.is_lowercase()) {
                         diags.push(PluginDiagnostic {
                             severity: DiagnosticSeverity::Warning,
                             message: format!("{}{name}` should be PascalCase", &keyword.trim()),
@@ -582,7 +577,12 @@ impl CompilerPlugin for SecurityLint {
     fn on_ast(&self, source: &str, file: &str) -> Vec<PluginDiagnostic> {
         let mut diags = Vec::new();
         let secret_patterns = [
-            "password", "secret", "api_key", "apikey", "token", "private_key",
+            "password",
+            "secret",
+            "api_key",
+            "apikey",
+            "token",
+            "private_key",
         ];
         for (i, line) in source.lines().enumerate() {
             let lower = line.to_lowercase();
@@ -591,7 +591,9 @@ impl CompilerPlugin for SecurityLint {
                     if lower.contains(pattern) {
                         diags.push(PluginDiagnostic {
                             severity: DiagnosticSeverity::Error,
-                            message: format!("potential hardcoded secret: `{pattern}` in string literal"),
+                            message: format!(
+                                "potential hardcoded secret: `{pattern}` in string literal"
+                            ),
                             file: file.to_string(),
                             line: (i + 1) as u32,
                             column: 1,
@@ -674,12 +676,16 @@ println(x)
         let diags = lint.on_ast(source, "test.fj");
         // y is unused (only x is used in println)
         assert!(
-            diags.iter().any(|d| d.message.contains("unused variable: `y`")),
+            diags
+                .iter()
+                .any(|d| d.message.contains("unused variable: `y`")),
             "should detect unused `y`, got: {diags:?}"
         );
         // x is used — should NOT be flagged
         assert!(
-            !diags.iter().any(|d| d.message.contains("unused variable: `x`")),
+            !diags
+                .iter()
+                .any(|d| d.message.contains("unused variable: `x`")),
             "should not flag `x` as unused"
         );
     }
@@ -712,7 +718,11 @@ println(x)
         let diags = registry.run_ast_phase(source, "test.fj");
 
         // Should get both unused variable + TODO comment
-        assert!(diags.len() >= 2, "expected 2+ diagnostics, got {}", diags.len());
+        assert!(
+            diags.len() >= 2,
+            "expected 2+ diagnostics, got {}",
+            diags.len()
+        );
     }
 
     #[test]
@@ -836,7 +846,9 @@ println(x)
             "should detect api_key"
         );
         assert!(
-            diags.iter().all(|d| d.severity == DiagnosticSeverity::Error),
+            diags
+                .iter()
+                .all(|d| d.severity == DiagnosticSeverity::Error),
             "security issues should be errors"
         );
     }
@@ -894,7 +906,11 @@ struct point { x: i64 }
 
     #[test]
     fn pq9_4_discover_empty_dir() {
-        let dir = format!("{}/fj_plugin_test_{}", crate::stdlib_v3::system::temp_dir(), std::process::id());
+        let dir = format!(
+            "{}/fj_plugin_test_{}",
+            crate::stdlib_v3::system::temp_dir(),
+            std::process::id()
+        );
         let _ = std::fs::create_dir_all(&dir);
         let plugins = discover_plugins(&dir);
         assert!(plugins.is_empty(), "empty dir should have no plugins");

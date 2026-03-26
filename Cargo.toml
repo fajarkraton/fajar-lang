@@ -30,6 +30,8 @@ dap = "0.4.1-alpha1"          # Phase 2: Debug Adapter Protocol server
 sha2 = "0.10"
 hmac = "0.12"
 aes-gcm = "0.10"
+cbc = { version = "0.1", features = ["alloc"] }
+aes = "0.8"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 argon2 = "0.5"
 

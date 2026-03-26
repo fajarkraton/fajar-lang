@@ -76,9 +76,7 @@ impl From<std::io::Error> for NetError {
             std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
                 NetError::ReadTimeout { timeout_ms: 0 }
             }
-            std::io::ErrorKind::ConnectionRefused => {
-                NetError::ConnectRefused(e.to_string())
-            }
+            std::io::ErrorKind::ConnectionRefused => NetError::ConnectRefused(e.to_string()),
             _ => NetError::Io(e.to_string()),
         }
     }
@@ -854,8 +852,9 @@ pub fn tcp_connect_opts(addr: &str, data: &[u8], opts: &TcpOptions) -> Result<Ve
     let mut buf = [0u8; 4096];
     match stream.read(&mut buf) {
         Ok(n) => response.extend_from_slice(&buf[..n]),
-        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
-            || e.kind() == std::io::ErrorKind::TimedOut =>
+        Err(e)
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.kind() == std::io::ErrorKind::TimedOut =>
         {
             return Err(NetError::ReadTimeout {
                 timeout_ms: opts.read_timeout_ms,
@@ -961,15 +960,15 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
 
         // Check for redirect
         if req.follow_redirects
-            && (resp.status == 301 || resp.status == 302 || resp.status == 303
-                || resp.status == 307 || resp.status == 308)
+            && (resp.status == 301
+                || resp.status == 302
+                || resp.status == 303
+                || resp.status == 307
+                || resp.status == 308)
         {
             redirects += 1;
             if redirects > req.max_redirects {
-                return Err(format!(
-                    "too many redirects (max {})",
-                    req.max_redirects
-                ));
+                return Err(format!("too many redirects (max {})", req.max_redirects));
             }
 
             if let Some(location) = resp.header("location") {
@@ -978,12 +977,10 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
                     current_url = location.to_string();
                 } else {
                     // Relative redirect — resolve against current URL
-                    let base = Url::parse(&current_url)
-                        .map_err(|e| format!("parse base URL: {e}"))?;
-                    current_url = format!(
-                        "{}://{}:{}{}",
-                        base.scheme, base.host, base.port, location
-                    );
+                    let base =
+                        Url::parse(&current_url).map_err(|e| format!("parse base URL: {e}"))?;
+                    current_url =
+                        format!("{}://{}:{}{}", base.scheme, base.host, base.port, location);
                 }
 
                 // 303: always change method to GET
@@ -1100,12 +1097,7 @@ fn http_request_single(req: &HttpRequest) -> Result<HttpResponse, String> {
             if reader.read_line(&mut size_line).unwrap_or(0) == 0 {
                 break;
             }
-            let hex = size_line
-                .trim()
-                .split(';')
-                .next()
-                .unwrap_or("0")
-                .trim();
+            let hex = size_line.trim().split(';').next().unwrap_or("0").trim();
             let chunk_size = usize::from_str_radix(hex, 16).unwrap_or(0);
             if chunk_size == 0 {
                 // Final chunk — consume optional trailers + CRLF
@@ -1251,8 +1243,8 @@ impl HttpSession {
     /// Open a keep-alive session to a host:port.
     pub fn connect(host: &str, port: u16, timeout_ms: u64) -> Result<Self, String> {
         let addr = format!("{host}:{port}");
-        let tcp = std::net::TcpStream::connect(&addr)
-            .map_err(|e| format!("connect {addr}: {e}"))?;
+        let tcp =
+            std::net::TcpStream::connect(&addr).map_err(|e| format!("connect {addr}: {e}"))?;
         tcp.set_read_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
             .map_err(|e| format!("set timeout: {e}"))?;
         tcp.set_write_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
@@ -1268,11 +1260,19 @@ impl HttpSession {
     /// Send an HTTP request on the existing connection and read the response.
     ///
     /// Uses `Connection: keep-alive` so the connection stays open for the next request.
-    pub fn request(&mut self, method: &str, path: &str, body: Option<&[u8]>) -> Result<HttpResponse, String> {
+    pub fn request(
+        &mut self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<HttpResponse, String> {
         let start = std::time::Instant::now();
 
         // Build request with keep-alive
-        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\n", self.host);
+        let mut req = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\n",
+            self.host
+        );
         if let Some(b) = body {
             req.push_str(&format!("Content-Length: {}\r\n", b.len()));
         }
@@ -1405,9 +1405,8 @@ pub fn https_get(url_str: &str) -> Result<HttpResponse, NetError> {
     let start = std::time::Instant::now();
 
     // Build TLS config with Mozilla root certificates
-    let root_store = rustls::RootCertStore::from_iter(
-        webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
-    );
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let config = rustls::ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
@@ -1421,14 +1420,13 @@ pub fn https_get(url_str: &str) -> Result<HttpResponse, NetError> {
 
     // Connect TCP
     let addr = format!("{host}:{port}");
-    let mut sock = std::net::TcpStream::connect(&addr)
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::ConnectionRefused {
-                NetError::ConnectRefused(addr.clone())
-            } else {
-                NetError::Io(format!("connect {addr}: {e}"))
-            }
-        })?;
+    let mut sock = std::net::TcpStream::connect(&addr).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::ConnectionRefused {
+            NetError::ConnectRefused(addr.clone())
+        } else {
+            NetError::Io(format!("connect {addr}: {e}"))
+        }
+    })?;
     sock.set_read_timeout(Some(std::time::Duration::from_secs(10)))
         .map_err(|e| NetError::Io(e.to_string()))?;
 
@@ -1461,14 +1459,11 @@ pub fn https_get(url_str: &str) -> Result<HttpResponse, NetError> {
     let mut lines = response_str.lines();
 
     // Status line
-    let status_line = lines.next().ok_or_else(|| {
-        NetError::HttpParseError("empty response".into())
-    })?;
+    let status_line = lines
+        .next()
+        .ok_or_else(|| NetError::HttpParseError("empty response".into()))?;
     let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
-    let status: u16 = parts
-        .get(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let status: u16 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
     let status_text = parts.get(2).unwrap_or(&"").to_string();
 
     // Headers
@@ -1534,7 +1529,11 @@ impl ConnectionPool {
     }
 
     /// Get or create a connection to a host.
-    pub fn acquire(&mut self, addr: &str, timeout_ms: u64) -> Result<std::net::TcpStream, NetError> {
+    pub fn acquire(
+        &mut self,
+        addr: &str,
+        timeout_ms: u64,
+    ) -> Result<std::net::TcpStream, NetError> {
         // Check for existing idle connection
         if let Some(streams) = self.connections.get_mut(addr) {
             if let Some(stream) = streams.pop() {
@@ -1553,11 +1552,7 @@ impl ConnectionPool {
             });
         }
 
-        let host_count = self
-            .connections
-            .get(addr)
-            .map(|v| v.len())
-            .unwrap_or(0);
+        let host_count = self.connections.get(addr).map(|v| v.len()).unwrap_or(0);
         if host_count >= self.max_per_host {
             return Err(NetError::PoolExhausted {
                 max: self.max_per_host,
@@ -1569,17 +1564,16 @@ impl ConnectionPool {
         let sock_addr: std::net::SocketAddr = addr
             .parse()
             .map_err(|e| NetError::DnsError(format!("{addr}: {e}")))?;
-        let stream = std::net::TcpStream::connect_timeout(&sock_addr, timeout)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::TimedOut {
-                    NetError::ConnectTimeout {
-                        addr: addr.to_string(),
-                        timeout_ms,
-                    }
-                } else {
-                    NetError::from(e)
+        let stream = std::net::TcpStream::connect_timeout(&sock_addr, timeout).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::TimedOut {
+                NetError::ConnectTimeout {
+                    addr: addr.to_string(),
+                    timeout_ms,
                 }
-            })?;
+            } else {
+                NetError::from(e)
+            }
+        })?;
         let _ = stream.set_nodelay(true);
         self.total += 1;
         Ok(stream)
@@ -1587,10 +1581,7 @@ impl ConnectionPool {
 
     /// Return a connection to the pool for reuse.
     pub fn release(&mut self, addr: &str, stream: std::net::TcpStream) {
-        let streams = self
-            .connections
-            .entry(addr.to_string())
-            .or_default();
+        let streams = self.connections.entry(addr.to_string()).or_default();
         if streams.len() < self.max_per_host {
             streams.push(stream);
         } else {
@@ -1886,10 +1877,10 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             NetError::ConnectTimeout { .. } => {} // expected
-            NetError::ReadTimeout { .. } => {} // some systems resolve then timeout on read
-            NetError::Io(_) => {} // some systems return EHOSTUNREACH
-            NetError::DnsError(_) => {} // DNS may fail for test-net
-            NetError::ConnectRefused(_) => {} // some systems refuse immediately
+            NetError::ReadTimeout { .. } => {}    // some systems resolve then timeout on read
+            NetError::Io(_) => {}                 // some systems return EHOSTUNREACH
+            NetError::DnsError(_) => {}           // DNS may fail for test-net
+            NetError::ConnectRefused(_) => {}     // some systems refuse immediately
             other => panic!("expected timeout/io/dns error, got: {other}"),
         }
     }
@@ -1919,9 +1910,7 @@ mod tests {
         let server = TcpServer::bind("127.0.0.1:0").unwrap();
         let addr = server.local_addr().unwrap();
 
-        let handle = std::thread::spawn(move || {
-            server.accept_one(|data| data.to_vec())
-        });
+        let handle = std::thread::spawn(move || server.accept_one(|data| data.to_vec()));
 
         // Connect with nodelay
         let result = tcp_connect_opts(
@@ -2177,8 +2166,7 @@ mod tests {
         });
 
         // Use HttpSession for 2 requests on 1 connection
-        let mut session =
-            HttpSession::connect(&addr.ip().to_string(), addr.port(), 5000).unwrap();
+        let mut session = HttpSession::connect(&addr.ip().to_string(), addr.port(), 5000).unwrap();
 
         let resp1 = session.get("/first").unwrap();
         assert_eq!(resp1.status, 200);
@@ -2209,11 +2197,11 @@ mod tests {
                 "Transfer-Encoding: chunked\r\n",
                 "Content-Type: text/plain\r\n",
                 "\r\n",
-                "5\r\n",       // chunk 1: 5 bytes
+                "5\r\n", // chunk 1: 5 bytes
                 "Hello\r\n",
-                "7\r\n",       // chunk 2: 7 bytes
+                "7\r\n", // chunk 2: 7 bytes
                 ", World\r\n",
-                "0\r\n",       // final chunk
+                "0\r\n", // final chunk
                 "\r\n"
             );
             stream.write_all(response.as_bytes()).unwrap();
@@ -2277,5 +2265,265 @@ mod tests {
         // but we can test the error type exists
         let err = NetError::PoolExhausted { max: 1 };
         assert!(format!("{err}").contains("pool"));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TQ12.3: Web Benchmark — measure req/sec
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Results from an HTTP benchmark run.
+#[derive(Debug, Clone)]
+pub struct BenchmarkResult {
+    /// Total requests attempted.
+    pub total_requests: u64,
+    /// Successful requests (2xx status).
+    pub success_count: u64,
+    /// Failed requests.
+    pub error_count: u64,
+    /// Total elapsed time in milliseconds.
+    pub elapsed_ms: f64,
+    /// Requests per second.
+    pub rps: f64,
+    /// Average latency in milliseconds.
+    pub avg_latency_ms: f64,
+    /// Minimum latency in milliseconds.
+    pub min_latency_ms: f64,
+    /// Maximum latency in milliseconds.
+    pub max_latency_ms: f64,
+    /// P50 latency in milliseconds.
+    pub p50_ms: f64,
+    /// P99 latency in milliseconds.
+    pub p99_ms: f64,
+    /// Total bytes received.
+    pub bytes_received: u64,
+}
+
+impl BenchmarkResult {
+    /// Throughput in MB/s.
+    pub fn throughput_mbps(&self) -> f64 {
+        if self.elapsed_ms > 0.0 {
+            (self.bytes_received as f64 / (1024.0 * 1024.0)) / (self.elapsed_ms / 1000.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Format as a human-readable report.
+    pub fn to_report(&self) -> String {
+        let mut s = String::new();
+        s.push_str("=== HTTP Benchmark Results ===\n");
+        s.push_str(&format!(
+            "Requests: {} total, {} success, {} errors\n",
+            self.total_requests, self.success_count, self.error_count
+        ));
+        s.push_str(&format!("Duration: {:.1}ms\n", self.elapsed_ms));
+        s.push_str(&format!("RPS: {:.1} req/s\n", self.rps));
+        s.push_str(&format!(
+            "Latency: avg={:.2}ms min={:.2}ms max={:.2}ms\n",
+            self.avg_latency_ms, self.min_latency_ms, self.max_latency_ms
+        ));
+        s.push_str(&format!(
+            "P50: {:.2}ms  P99: {:.2}ms\n",
+            self.p50_ms, self.p99_ms
+        ));
+        s.push_str(&format!(
+            "Throughput: {:.2} MB/s ({} bytes)\n",
+            self.throughput_mbps(),
+            self.bytes_received
+        ));
+        s
+    }
+
+    /// Format as JSON.
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"total_requests\":{},\"success_count\":{},\"error_count\":{},\"elapsed_ms\":{:.1},\"rps\":{:.1},\"avg_latency_ms\":{:.2},\"min_latency_ms\":{:.2},\"max_latency_ms\":{:.2},\"p50_ms\":{:.2},\"p99_ms\":{:.2},\"bytes_received\":{}}}",
+            self.total_requests,
+            self.success_count,
+            self.error_count,
+            self.elapsed_ms,
+            self.rps,
+            self.avg_latency_ms,
+            self.min_latency_ms,
+            self.max_latency_ms,
+            self.p50_ms,
+            self.p99_ms,
+            self.bytes_received,
+        )
+    }
+}
+
+/// Run an HTTP benchmark against a URL.
+pub fn http_benchmark(url: &str, num_requests: u64) -> Result<BenchmarkResult, String> {
+    let mut latencies = Vec::with_capacity(num_requests as usize);
+    let mut success_count = 0u64;
+    let mut error_count = 0u64;
+    let mut bytes_received = 0u64;
+
+    let start = std::time::Instant::now();
+
+    for _ in 0..num_requests {
+        let mut req = HttpRequest::get(url);
+        req.timeout_ms = 2000; // short timeout for benchmarks
+        let req_start = std::time::Instant::now();
+        match http_request(&req) {
+            Ok(resp) => {
+                let lat_ms = req_start.elapsed().as_secs_f64() * 1000.0;
+                latencies.push(lat_ms);
+                if (200..300).contains(&resp.status) {
+                    success_count += 1;
+                } else {
+                    error_count += 1;
+                }
+                bytes_received += resp.body.len() as u64;
+            }
+            Err(_) => {
+                error_count += 1;
+                latencies.push(req_start.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+    }
+
+    let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+    // Calculate percentiles
+    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let avg_latency_ms = if latencies.is_empty() {
+        0.0
+    } else {
+        latencies.iter().sum::<f64>() / latencies.len() as f64
+    };
+    let min_latency_ms = latencies.first().copied().unwrap_or(0.0);
+    let max_latency_ms = latencies.last().copied().unwrap_or(0.0);
+
+    let p50_idx = (latencies.len() as f64 * 0.5) as usize;
+    let p99_idx = (latencies.len() as f64 * 0.99) as usize;
+    let p50_ms = latencies
+        .get(p50_idx.min(latencies.len().saturating_sub(1)))
+        .copied()
+        .unwrap_or(0.0);
+    let p99_ms = latencies
+        .get(p99_idx.min(latencies.len().saturating_sub(1)))
+        .copied()
+        .unwrap_or(0.0);
+
+    let rps = if elapsed_ms > 0.0 {
+        num_requests as f64 / (elapsed_ms / 1000.0)
+    } else {
+        0.0
+    };
+
+    Ok(BenchmarkResult {
+        total_requests: num_requests,
+        success_count,
+        error_count,
+        elapsed_ms,
+        rps,
+        avg_latency_ms,
+        min_latency_ms,
+        max_latency_ms,
+        p50_ms,
+        p99_ms,
+        bytes_received,
+    })
+}
+
+#[cfg(test)]
+mod bench_tests {
+    use super::*;
+
+    #[test]
+    fn tq12_3_benchmark_result_report() {
+        let result = BenchmarkResult {
+            total_requests: 100,
+            success_count: 95,
+            error_count: 5,
+            elapsed_ms: 1000.0,
+            rps: 100.0,
+            avg_latency_ms: 10.0,
+            min_latency_ms: 1.0,
+            max_latency_ms: 50.0,
+            p50_ms: 8.0,
+            p99_ms: 45.0,
+            bytes_received: 50_000,
+        };
+
+        let report = result.to_report();
+        assert!(report.contains("100 total"));
+        assert!(report.contains("95 success"));
+        assert!(report.contains("100.0 req/s"));
+        assert!(report.contains("P50"));
+        assert!(report.contains("P99"));
+    }
+
+    #[test]
+    fn tq12_3_benchmark_result_json() {
+        let result = BenchmarkResult {
+            total_requests: 50,
+            success_count: 50,
+            error_count: 0,
+            elapsed_ms: 500.0,
+            rps: 100.0,
+            avg_latency_ms: 10.0,
+            min_latency_ms: 5.0,
+            max_latency_ms: 20.0,
+            p50_ms: 10.0,
+            p99_ms: 18.0,
+            bytes_received: 25_000,
+        };
+
+        let json = result.to_json();
+        assert!(json.contains("\"total_requests\":50"));
+        assert!(json.contains("\"rps\":100.0"));
+        assert!(json.contains("\"bytes_received\":25000"));
+    }
+
+    #[test]
+    fn tq12_3_benchmark_throughput() {
+        let result = BenchmarkResult {
+            total_requests: 100,
+            success_count: 100,
+            error_count: 0,
+            elapsed_ms: 1000.0,
+            rps: 100.0,
+            avg_latency_ms: 10.0,
+            min_latency_ms: 1.0,
+            max_latency_ms: 50.0,
+            p50_ms: 8.0,
+            p99_ms: 45.0,
+            bytes_received: 1_048_576, // 1 MB
+        };
+        let tp = result.throughput_mbps();
+        assert!((tp - 1.0).abs() < 0.01, "should be ~1.0 MB/s, got {tp}");
+    }
+
+    #[test]
+    fn tq12_3_benchmark_handles_connection_errors() {
+        // Benchmark against a port that refuses connections
+        let result = http_benchmark("http://127.0.0.1:1/test", 2).unwrap();
+        assert_eq!(result.total_requests, 2);
+        assert_eq!(result.error_count, 2);
+        assert_eq!(result.success_count, 0);
+        assert!(result.elapsed_ms > 0.0);
+    }
+
+    #[test]
+    fn tq12_3_benchmark_zero_requests() {
+        // Edge case: 0 requests
+        let result = BenchmarkResult {
+            total_requests: 0,
+            success_count: 0,
+            error_count: 0,
+            elapsed_ms: 0.0,
+            rps: 0.0,
+            avg_latency_ms: 0.0,
+            min_latency_ms: 0.0,
+            max_latency_ms: 0.0,
+            p50_ms: 0.0,
+            p99_ms: 0.0,
+            bytes_received: 0,
+        };
+        assert_eq!(result.throughput_mbps(), 0.0);
     }
 }

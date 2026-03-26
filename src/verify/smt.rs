@@ -604,22 +604,10 @@ pub fn prove_no_i32_overflow(a_min: i32, a_max: i32, b_min: i32, b_max: i32) -> 
     let sum = a.bvadd(&b);
     let zero = z3::ast::BV::from_i64(&ctx, 0, 32);
 
-    let pos_overflow = z3::ast::Bool::and(
-        &ctx,
-        &[
-            &a.bvsgt(&zero),
-            &b.bvsgt(&zero),
-            &sum.bvslt(&zero),
-        ],
-    );
-    let neg_overflow = z3::ast::Bool::and(
-        &ctx,
-        &[
-            &a.bvslt(&zero),
-            &b.bvslt(&zero),
-            &sum.bvsgt(&zero),
-        ],
-    );
+    let pos_overflow =
+        z3::ast::Bool::and(&ctx, &[&a.bvsgt(&zero), &b.bvsgt(&zero), &sum.bvslt(&zero)]);
+    let neg_overflow =
+        z3::ast::Bool::and(&ctx, &[&a.bvslt(&zero), &b.bvslt(&zero), &sum.bvsgt(&zero)]);
     let overflow = z3::ast::Bool::or(&ctx, &[&pos_overflow, &neg_overflow]);
     solver.assert(&overflow);
 
@@ -646,11 +634,7 @@ pub fn prove_no_i32_overflow(a_min: i32, a_max: i32, b_min: i32, b_max: i32) -> 
 
 /// Run a verification with a timeout.
 #[cfg(feature = "smt")]
-pub fn prove_with_timeout(
-    var_name: &str,
-    constraint: &str,
-    timeout_ms: u64,
-) -> SmtResult {
+pub fn prove_with_timeout(var_name: &str, constraint: &str, timeout_ms: u64) -> SmtResult {
     use z3::ast::Ast;
     let mut cfg = z3::Config::new();
     cfg.set_timeout_msec(timeout_ms);
@@ -1051,12 +1035,7 @@ mod tests {
 
     #[test]
     fn vq6_7_format_proven() {
-        let msg = format_verification_result(
-            "array bounds",
-            "main.fj",
-            42,
-            &SmtResult::Unsat,
-        );
+        let msg = format_verification_result("array bounds", "main.fj", 42, &SmtResult::Unsat);
         assert!(msg.contains("✅"));
         assert!(msg.contains("PROVEN"));
         assert!(msg.contains("main.fj:42"));
@@ -1079,23 +1058,13 @@ mod tests {
 
     #[test]
     fn vq6_7_format_unknown() {
-        let msg = format_verification_result(
-            "complex proof",
-            "deep.fj",
-            99,
-            &SmtResult::Unknown,
-        );
+        let msg = format_verification_result("complex proof", "deep.fj", 99, &SmtResult::Unknown);
         assert!(msg.contains("UNKNOWN"));
     }
 
     #[test]
     fn vq6_7_format_timeout() {
-        let msg = format_verification_result(
-            "complex proof",
-            "deep.fj",
-            99,
-            &SmtResult::Timeout,
-        );
+        let msg = format_verification_result("complex proof", "deep.fj", 99, &SmtResult::Timeout);
         assert!(msg.contains("TIMEOUT"));
     }
 

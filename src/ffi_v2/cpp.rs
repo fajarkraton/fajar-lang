@@ -1182,14 +1182,18 @@ namespace io {{
         let _ = std::fs::create_dir_all(&dir);
         let header = dir.join("tmpl.h");
         let mut f = std::fs::File::create(&header).unwrap();
-        writeln!(f, r#"
+        writeln!(
+            f,
+            r#"
 template<typename T>
 class Container {{
 public:
     T value;
     T get() const {{ return value; }}
 }};
-"#).unwrap();
+"#
+        )
+        .unwrap();
 
         let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
         let class = decls.iter().find_map(|d| match d {
@@ -1213,7 +1217,9 @@ public:
         let _ = std::fs::create_dir_all(&dir);
         let header = dir.join("inherit.h");
         let mut f = std::fs::File::create(&header).unwrap();
-        writeln!(f, r#"
+        writeln!(
+            f,
+            r#"
 class Base {{
 public:
     int x;
@@ -1223,7 +1229,9 @@ class Derived : public Base {{
 public:
     int y;
 }};
-"#).unwrap();
+"#
+        )
+        .unwrap();
 
         let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
         let derived = decls.iter().find_map(|d| match d {
@@ -1248,14 +1256,18 @@ public:
         let _ = std::fs::create_dir_all(&dir);
         let header = dir.join("qual.h");
         let mut f = std::fs::File::create(&header).unwrap();
-        writeln!(f, r#"
+        writeln!(
+            f,
+            r#"
 class Widget {{
 public:
     int value() const;
     static Widget create();
     virtual void update();
 }};
-"#).unwrap();
+"#
+        )
+        .unwrap();
 
         let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
         let widget = decls.iter().find_map(|d| match d {
@@ -1295,7 +1307,9 @@ public:
         let _ = std::fs::create_dir_all(&dir);
         let header = dir.join("api.h");
         let mut f = std::fs::File::create(&header).unwrap();
-        writeln!(f, r#"
+        writeln!(
+            f,
+            r#"
 int add(int a, int b);
 double pi();
 
@@ -1307,15 +1321,23 @@ public:
     double y;
     double distance() const;
 }};
-"#).unwrap();
+"#
+        )
+        .unwrap();
 
         let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
         let code = generate_fajar_bindings(&decls);
 
-        assert!(code.contains("extern fn add("), "should generate add binding");
+        assert!(
+            code.contains("extern fn add("),
+            "should generate add binding"
+        );
         assert!(code.contains("extern fn pi("), "should generate pi binding");
         assert!(code.contains("enum Color"), "should generate Color enum");
-        assert!(code.contains("struct Point"), "should generate Point struct");
+        assert!(
+            code.contains("struct Point"),
+            "should generate Point struct"
+        );
         assert!(code.contains("x: f64"), "Point should have x field");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -1427,10 +1449,7 @@ public:
             CppDecl::Enum(CppEnum {
                 name: "Status".to_string(),
                 namespace: vec![],
-                variants: vec![
-                    ("OK".to_string(), 0),
-                    ("Error".to_string(), 1),
-                ],
+                variants: vec![("OK".to_string(), 0), ("Error".to_string(), 1)],
                 is_scoped: false,
             }),
         ];

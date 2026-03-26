@@ -447,6 +447,252 @@ pub fn to_speedscope(records: &[CallRecord]) -> String {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// PQ10.1: Interpreter Profiling Hooks
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A profiling session that collects call records in real-time.
+///
+/// Usage:
+/// 1. Create a `ProfileSession::new()`
+/// 2. Call `enter_fn("name", "file.fj", line)` on function entry
+/// 3. Call `exit_fn()` on function return
+/// 4. Use `records()`, `report()`, etc. for analysis
+pub struct ProfileSession {
+    /// Collected call records.
+    records: Vec<CallRecord>,
+    /// Stack of (record_index, function_name) for nesting.
+    stack: Vec<usize>,
+    /// Whether profiling is active.
+    active: bool,
+}
+
+impl ProfileSession {
+    /// Create a new profiling session.
+    pub fn new() -> Self {
+        Self {
+            records: Vec::new(),
+            stack: Vec::new(),
+            active: true,
+        }
+    }
+
+    /// Pause profiling (stops collecting records).
+    pub fn pause(&mut self) {
+        self.active = false;
+    }
+
+    /// Resume profiling.
+    pub fn resume(&mut self) {
+        self.active = true;
+    }
+
+    /// Whether the session is actively collecting.
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Record function entry. Returns the record index.
+    pub fn enter_fn(&mut self, name: &str, file: &str, line: u32) -> usize {
+        if !self.active {
+            return usize::MAX;
+        }
+
+        let parent_idx = self.stack.last().map(|&i| i as i64).unwrap_or(-1);
+        let depth = self.stack.len() as u32;
+        let entry_ns = self.time_ns();
+
+        let idx = self.records.len();
+        self.records.push(CallRecord {
+            function: name.to_string(),
+            file: file.to_string(),
+            line,
+            entry_ns,
+            exit_ns: 0,
+            depth,
+            parent_idx,
+            alloc_bytes: 0,
+            free_bytes: 0,
+        });
+        self.stack.push(idx);
+        idx
+    }
+
+    /// Record function exit. Closes the most recent open call.
+    pub fn exit_fn(&mut self) {
+        if !self.active {
+            return;
+        }
+        if let Some(idx) = self.stack.pop() {
+            if idx < self.records.len() {
+                self.records[idx].exit_ns = self.time_ns();
+            }
+        }
+    }
+
+    /// Record a memory allocation during the current function.
+    pub fn record_alloc(&mut self, bytes: u64) {
+        if let Some(&idx) = self.stack.last() {
+            if idx < self.records.len() {
+                self.records[idx].alloc_bytes += bytes;
+            }
+        }
+    }
+
+    /// Record a memory free during the current function.
+    pub fn record_free(&mut self, bytes: u64) {
+        if let Some(&idx) = self.stack.last() {
+            if idx < self.records.len() {
+                self.records[idx].free_bytes += bytes;
+            }
+        }
+    }
+
+    /// Returns all collected call records.
+    pub fn records(&self) -> &[CallRecord] {
+        &self.records
+    }
+
+    /// Number of function calls recorded.
+    pub fn call_count(&self) -> usize {
+        self.records.len()
+    }
+
+    /// Current call depth.
+    pub fn current_depth(&self) -> usize {
+        self.stack.len()
+    }
+
+    /// Generate a hotspot report.
+    pub fn report(&self, top_n: usize) -> String {
+        hotspot_report(&self.records, top_n)
+    }
+
+    /// Export to Chrome Trace format.
+    pub fn to_trace(&self) -> String {
+        to_trace_events(&self.records)
+    }
+
+    /// Export to Speedscope format.
+    pub fn to_speedscope_json(&self) -> String {
+        to_speedscope(&self.records)
+    }
+
+    /// Reset the session (clear all records).
+    pub fn reset(&mut self) {
+        self.records.clear();
+        self.stack.clear();
+        self.active = true;
+    }
+
+    /// Get current time in nanoseconds (monotonic).
+    fn time_ns(&self) -> u64 {
+        // Use std::time for monotonic timing
+        use std::time::SystemTime;
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0)
+    }
+}
+
+impl Default for ProfileSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PQ10.6: Sampling Profiler Engine
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A sampling profiler that periodically captures the call stack.
+pub struct SamplingProfiler {
+    /// Collected samples.
+    samples: Vec<Sample>,
+    /// Sampling interval in microseconds.
+    interval_us: u64,
+    /// Whether sampling is active.
+    active: bool,
+    /// Current stack (maintained externally via push/pop).
+    current_stack: Vec<String>,
+}
+
+impl SamplingProfiler {
+    /// Create a new sampling profiler with given interval.
+    pub fn new(interval_us: u64) -> Self {
+        Self {
+            samples: Vec::new(),
+            interval_us,
+            active: true,
+            current_stack: Vec::new(),
+        }
+    }
+
+    /// Push a frame onto the current stack.
+    pub fn push_frame(&mut self, name: &str) {
+        self.current_stack.push(name.to_string());
+    }
+
+    /// Pop the top frame.
+    pub fn pop_frame(&mut self) {
+        self.current_stack.pop();
+    }
+
+    /// Take a sample of the current stack.
+    pub fn sample(&mut self) {
+        if !self.active || self.current_stack.is_empty() {
+            return;
+        }
+        self.samples.push(Sample {
+            timestamp_ns: std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0),
+            frames: self.current_stack.clone(),
+        });
+    }
+
+    /// Returns the sampling profile.
+    pub fn finish(self) -> SamplingProfile {
+        let total_ns = if self.samples.len() >= 2 {
+            self.samples.last().unwrap().timestamp_ns - self.samples[0].timestamp_ns
+        } else {
+            0
+        };
+        let frequency_hz = if self.interval_us > 0 {
+            (1_000_000 / self.interval_us) as u32
+        } else {
+            0
+        };
+        SamplingProfile {
+            samples: self.samples,
+            frequency_hz,
+            total_ns,
+        }
+    }
+
+    /// Number of samples collected.
+    pub fn sample_count(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Sampling interval.
+    pub fn interval_us(&self) -> u64 {
+        self.interval_us
+    }
+
+    /// Pause sampling.
+    pub fn pause(&mut self) {
+        self.active = false;
+    }
+
+    /// Resume sampling.
+    pub fn resume(&mut self) {
+        self.active = true;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -733,7 +979,10 @@ mod tests {
 
         let json = to_trace_events(&records);
         assert!(json.contains("sleep_test"));
-        assert!(json.contains("\"ph\":\"X\""), "should be Chrome Trace format");
+        assert!(
+            json.contains("\"ph\":\"X\""),
+            "should be Chrome Trace format"
+        );
         // Duration should be at least 1ms = 1000us
         assert!(records[0].duration_ms() >= 0.5, "sleep should be >= 0.5ms");
     }
@@ -807,7 +1056,10 @@ mod tests {
         let records = make_test_records();
         let report = hotspot_report(&records, 3);
         assert!(report.contains("Hotspot Report"));
-        assert!(report.contains("compute"), "should show compute as hot: {report}");
+        assert!(
+            report.contains("compute"),
+            "should show compute as hot: {report}"
+        );
     }
 
     #[test]
@@ -815,10 +1067,10 @@ mod tests {
         let before = make_test_records();
         // "After" records — everything takes half the time
         let mut after = make_test_records();
-        after[0].exit_ns = 5_000_000;  // main: 5ms (was 10ms)
-        after[1].exit_ns = 4_000_000;  // compute: 3ms (was 7ms)
+        after[0].exit_ns = 5_000_000; // main: 5ms (was 10ms)
+        after[1].exit_ns = 4_000_000; // compute: 3ms (was 7ms)
         after[2].entry_ns = 4_000_000;
-        after[2].exit_ns = 4_500_000;  // log: 0.5ms (was 1ms)
+        after[2].exit_ns = 4_500_000; // log: 0.5ms (was 1ms)
 
         let cmp = compare_profiles(&before, &after);
         assert!(
@@ -852,7 +1104,10 @@ mod tests {
         let json = to_speedscope(&records);
         assert!(json.contains("speedscope.app"), "should have schema URL");
         assert!(json.contains("\"name\":\"main\""), "should have main frame");
-        assert!(json.contains("\"name\":\"compute\""), "should have compute frame");
+        assert!(
+            json.contains("\"name\":\"compute\""),
+            "should have compute frame"
+        );
         assert!(json.contains("\"type\":\"O\""), "should have open events");
         assert!(json.contains("\"type\":\"C\""), "should have close events");
     }
@@ -864,5 +1119,214 @@ mod tests {
         assert!(json.contains("\"ph\":\"X\""), "should have complete events");
         assert!(json.contains("main"), "should have main function");
         assert!(json.contains("compute"), "should have compute function");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ10.1: Interpreter Profiling Hooks
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn pq10_1_profile_session_basic() {
+        let mut session = ProfileSession::new();
+        assert!(session.is_active());
+        assert_eq!(session.call_count(), 0);
+        assert_eq!(session.current_depth(), 0);
+
+        let idx = session.enter_fn("main", "main.fj", 1);
+        assert_eq!(idx, 0);
+        assert_eq!(session.current_depth(), 1);
+
+        session.exit_fn();
+        assert_eq!(session.current_depth(), 0);
+        assert_eq!(session.call_count(), 1);
+
+        let rec = &session.records()[0];
+        assert_eq!(rec.function, "main");
+        assert_eq!(rec.file, "main.fj");
+        assert_eq!(rec.line, 1);
+        assert_eq!(rec.depth, 0);
+        assert_eq!(rec.parent_idx, -1);
+        assert!(rec.exit_ns > 0);
+    }
+
+    #[test]
+    fn pq10_1_profile_session_nested() {
+        let mut session = ProfileSession::new();
+
+        session.enter_fn("main", "main.fj", 1);
+        session.enter_fn("compute", "math.fj", 10);
+        assert_eq!(session.current_depth(), 2);
+        session.enter_fn("add", "math.fj", 20);
+        assert_eq!(session.current_depth(), 3);
+
+        session.exit_fn(); // exit add
+        session.exit_fn(); // exit compute
+        session.exit_fn(); // exit main
+
+        assert_eq!(session.call_count(), 3);
+        assert_eq!(session.records()[0].depth, 0);
+        assert_eq!(session.records()[1].depth, 1);
+        assert_eq!(session.records()[1].parent_idx, 0); // parent is main
+        assert_eq!(session.records()[2].depth, 2);
+        assert_eq!(session.records()[2].parent_idx, 1); // parent is compute
+    }
+
+    #[test]
+    fn pq10_1_profile_session_pause_resume() {
+        let mut session = ProfileSession::new();
+        session.enter_fn("before", "a.fj", 1);
+        session.exit_fn();
+
+        session.pause();
+        assert!(!session.is_active());
+        session.enter_fn("during_pause", "b.fj", 1); // should be ignored
+        session.exit_fn();
+
+        session.resume();
+        session.enter_fn("after", "c.fj", 1);
+        session.exit_fn();
+
+        assert_eq!(session.call_count(), 2); // only before + after
+        assert_eq!(session.records()[0].function, "before");
+        assert_eq!(session.records()[1].function, "after");
+    }
+
+    #[test]
+    fn pq10_1_profile_session_memory_tracking() {
+        let mut session = ProfileSession::new();
+        session.enter_fn("alloc_fn", "mem.fj", 1);
+        session.record_alloc(1024);
+        session.record_alloc(2048);
+        session.record_free(512);
+        session.exit_fn();
+
+        let rec = &session.records()[0];
+        assert_eq!(rec.alloc_bytes, 3072);
+        assert_eq!(rec.free_bytes, 512);
+        assert_eq!(rec.net_memory(), 2560);
+    }
+
+    #[test]
+    fn pq10_1_profile_session_report() {
+        let mut session = ProfileSession::new();
+        session.enter_fn("main", "main.fj", 1);
+        session.exit_fn();
+
+        let report = session.report(5);
+        assert!(report.contains("Hotspot Report"));
+        assert!(report.contains("main"));
+    }
+
+    #[test]
+    fn pq10_1_profile_session_reset() {
+        let mut session = ProfileSession::new();
+        session.enter_fn("fn1", "a.fj", 1);
+        session.exit_fn();
+        assert_eq!(session.call_count(), 1);
+
+        session.reset();
+        assert_eq!(session.call_count(), 0);
+        assert!(session.is_active());
+    }
+
+    #[test]
+    fn pq10_1_profile_session_export() {
+        let mut session = ProfileSession::new();
+        session.enter_fn("main", "main.fj", 1);
+        session.enter_fn("work", "work.fj", 5);
+        session.exit_fn();
+        session.exit_fn();
+
+        let trace = session.to_trace();
+        assert!(trace.contains("main"));
+        assert!(trace.contains("work"));
+
+        let speedscope = session.to_speedscope_json();
+        assert!(speedscope.contains("speedscope"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ10.6: Sampling Profiler
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn pq10_6_sampling_profiler_basic() {
+        let mut profiler = SamplingProfiler::new(1000); // 1ms interval
+        assert_eq!(profiler.sample_count(), 0);
+        assert_eq!(profiler.interval_us(), 1000);
+
+        profiler.push_frame("main");
+        profiler.sample();
+        assert_eq!(profiler.sample_count(), 1);
+
+        profiler.push_frame("compute");
+        profiler.sample();
+        assert_eq!(profiler.sample_count(), 2);
+
+        profiler.pop_frame();
+        profiler.sample();
+        assert_eq!(profiler.sample_count(), 3);
+    }
+
+    #[test]
+    fn pq10_6_sampling_profiler_finish() {
+        let mut profiler = SamplingProfiler::new(1000);
+        profiler.push_frame("main");
+        profiler.sample();
+        profiler.push_frame("work");
+        profiler.sample();
+        profiler.pop_frame();
+        profiler.pop_frame();
+
+        let profile = profiler.finish();
+        assert_eq!(profile.samples.len(), 2);
+        assert_eq!(profile.frequency_hz, 1000); // 1M/1000 = 1000 Hz
+
+        // First sample has 1 frame, second has 2
+        assert_eq!(profile.samples[0].frames.len(), 1);
+        assert_eq!(profile.samples[1].frames.len(), 2);
+
+        // Function counts: main appears in both, work in one
+        let counts = profile.function_counts();
+        assert_eq!(*counts.get("main").unwrap_or(&0), 2);
+        assert_eq!(*counts.get("work").unwrap_or(&0), 1);
+    }
+
+    #[test]
+    fn pq10_6_sampling_profiler_collapsed_stacks() {
+        let mut profiler = SamplingProfiler::new(100);
+        profiler.push_frame("main");
+        profiler.sample();
+        profiler.push_frame("fib");
+        profiler.sample();
+        profiler.sample(); // duplicate stack
+
+        let profile = profiler.finish();
+        let collapsed = profile.to_collapsed_stacks();
+        // Should have "main 1" and "main;fib 2"
+        assert!(collapsed.contains("main "));
+        assert!(collapsed.contains("main;fib "));
+    }
+
+    #[test]
+    fn pq10_6_sampling_profiler_pause() {
+        let mut profiler = SamplingProfiler::new(100);
+        profiler.push_frame("main");
+        profiler.sample();
+
+        profiler.pause();
+        profiler.sample(); // ignored
+
+        profiler.resume();
+        profiler.sample();
+
+        assert_eq!(profiler.sample_count(), 2);
+    }
+
+    #[test]
+    fn pq10_6_sampling_empty_stack_ignored() {
+        let mut profiler = SamplingProfiler::new(100);
+        profiler.sample(); // no frames — should be ignored
+        assert_eq!(profiler.sample_count(), 0);
     }
 }
