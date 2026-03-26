@@ -308,8 +308,7 @@ impl Interpreter {
                 } else {
                     Ok(Value::Str(format!(
                         "{}{}",
-                        std::iter::repeat_n(pad_char, width - current)
-                            .collect::<String>(),
+                        std::iter::repeat_n(pad_char, width - current).collect::<String>(),
                         s
                     )))
                 }
@@ -330,8 +329,7 @@ impl Interpreter {
                     Ok(Value::Str(format!(
                         "{}{}",
                         s,
-                        std::iter::repeat_n(pad_char, width - current)
-                            .collect::<String>()
+                        std::iter::repeat_n(pad_char, width - current).collect::<String>()
                     )))
                 }
             }

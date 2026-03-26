@@ -141,10 +141,7 @@ pub enum QuickFixKind {
         end_char: u32,
     },
     /// Remove unused code.
-    RemoveUnused {
-        start_line: u32,
-        end_line: u32,
-    },
+    RemoveUnused { start_line: u32, end_line: u32 },
 }
 
 /// Ownership fix suggestions.
@@ -179,8 +176,12 @@ impl fmt::Display for OwnershipSuggestion {
 pub fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_len = a.len();
     let b_len = b.len();
-    if a_len == 0 { return b_len; }
-    if b_len == 0 { return a_len; }
+    if a_len == 0 {
+        return b_len;
+    }
+    if b_len == 0 {
+        return a_len;
+    }
 
     let mut prev: Vec<usize> = (0..=b_len).collect();
     let mut curr = vec![0; b_len + 1];
@@ -189,9 +190,7 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
         curr[0] = i + 1;
         for (j, cb) in b.chars().enumerate() {
             let cost = if ca == cb { 0 } else { 1 };
-            curr[j + 1] = (prev[j] + cost)
-                .min(prev[j + 1] + 1)
-                .min(curr[j] + 1);
+            curr[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(curr[j] + 1);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -234,7 +233,9 @@ pub fn type_mismatch_diagnostic(
             kind: QuickFixKind::FixTypo {
                 wrong: "".to_string(),
                 suggestion: ".to_string()".to_string(),
-                line, start_char: end_char, end_char,
+                line,
+                start_char: end_char,
+                end_char,
             },
             is_preferred: true,
         });
@@ -244,7 +245,9 @@ pub fn type_mismatch_diagnostic(
             kind: QuickFixKind::FixTypo {
                 wrong: "".to_string(),
                 suggestion: "parse_int()".to_string(),
-                line, start_char, end_char,
+                line,
+                start_char,
+                end_char,
             },
             is_preferred: true,
         });
@@ -254,7 +257,9 @@ pub fn type_mismatch_diagnostic(
             kind: QuickFixKind::FixTypo {
                 wrong: "".to_string(),
                 suggestion: " as f64".to_string(),
-                line, start_char: end_char, end_char,
+                line,
+                start_char: end_char,
+                end_char,
             },
             is_preferred: true,
         });
@@ -279,11 +284,7 @@ pub fn type_mismatch_diagnostic(
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Creates an unreachable code diagnostic (grayed out).
-pub fn unreachable_code_diagnostic(
-    start_line: u32,
-    end_line: u32,
-    reason: &str,
-) -> Diagnostic {
+pub fn unreachable_code_diagnostic(start_line: u32, end_line: u32, reason: &str) -> Diagnostic {
     Diagnostic {
         severity: DiagnosticSeverity::Hint,
         code: "SE010".to_string(),
@@ -293,13 +294,14 @@ pub fn unreachable_code_diagnostic(
         end_line,
         end_char: 0,
         related: vec![],
-        quick_fixes: vec![
-            QuickFix {
-                title: "Remove unreachable code".to_string(),
-                kind: QuickFixKind::RemoveUnused { start_line, end_line },
-                is_preferred: false,
+        quick_fixes: vec![QuickFix {
+            title: "Remove unreachable code".to_string(),
+            kind: QuickFixKind::RemoveUnused {
+                start_line,
+                end_line,
             },
-        ],
+            is_preferred: false,
+        }],
         tags: vec![DiagnosticTag::Unnecessary],
     }
 }
@@ -337,19 +339,17 @@ pub fn deprecated_diagnostic(
         end_line: line,
         end_char,
         related: vec![],
-        quick_fixes: vec![
-            QuickFix {
-                title: format!("Replace with `{replacement}`"),
-                kind: QuickFixKind::ReplaceDeprecated {
-                    old_api: name.to_string(),
-                    new_api: replacement.to_string(),
-                    line,
-                    start_char,
-                    end_char,
-                },
-                is_preferred: true,
+        quick_fixes: vec![QuickFix {
+            title: format!("Replace with `{replacement}`"),
+            kind: QuickFixKind::ReplaceDeprecated {
+                old_api: name.to_string(),
+                new_api: replacement.to_string(),
+                line,
+                start_char,
+                end_char,
             },
-        ],
+            is_preferred: true,
+        }],
         tags: vec![DiagnosticTag::Deprecated],
     }
 }
@@ -467,13 +467,19 @@ mod tests {
     // L3.7: Ownership suggestion
     #[test]
     fn l3_7_ownership_suggestions() {
-        let clone = OwnershipSuggestion::Clone { expr: "data".to_string() };
+        let clone = OwnershipSuggestion::Clone {
+            expr: "data".to_string(),
+        };
         assert_eq!(format!("{clone}"), "use `data.clone()` to avoid move");
 
-        let borrow = OwnershipSuggestion::Borrow { expr: "data".to_string() };
+        let borrow = OwnershipSuggestion::Borrow {
+            expr: "data".to_string(),
+        };
         assert_eq!(format!("{borrow}"), "use `&data` to borrow instead of move");
 
-        let rc = OwnershipSuggestion::UseRc { type_name: "String".to_string() };
+        let rc = OwnershipSuggestion::UseRc {
+            type_name: "String".to_string(),
+        };
         assert_eq!(format!("{rc}"), "use `Rc<String>` for shared ownership");
     }
 

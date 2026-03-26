@@ -36,15 +36,14 @@ pub struct WorkspaceEdit {
 impl WorkspaceEdit {
     /// Creates a new empty workspace edit.
     pub fn new() -> Self {
-        Self { changes: HashMap::new() }
+        Self {
+            changes: HashMap::new(),
+        }
     }
 
     /// Adds an edit for a file.
     pub fn add_edit(&mut self, uri: &str, edit: TextEdit) {
-        self.changes
-            .entry(uri.to_string())
-            .or_default()
-            .push(edit);
+        self.changes.entry(uri.to_string()).or_default().push(edit);
     }
 
     /// Total number of edits across all files.
@@ -84,9 +83,9 @@ pub fn validate_rename(new_name: &str) -> Result<(), String> {
     }
     // Check against keywords
     let keywords = [
-        "fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "type",
-        "if", "else", "match", "while", "for", "in", "return", "break", "continue",
-        "loop", "use", "mod", "pub", "extern", "as", "true", "false", "null",
+        "fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "type", "if", "else",
+        "match", "while", "for", "in", "return", "break", "continue", "loop", "use", "mod", "pub",
+        "extern", "as", "true", "false", "null",
     ];
     if keywords.contains(&new_name) {
         return Err(format!("'{new_name}' is a reserved keyword"));
@@ -131,13 +130,17 @@ pub fn generate_extracted_function(
     params: &ExtractFunctionParams,
 ) -> (String, String) {
     // Build parameter list
-    let param_list: Vec<String> = params.captured_reads.iter().map(|v| {
-        if v.is_mutable {
-            format!("{}: &mut {}", v.name, v.var_type)
-        } else {
-            format!("{}: {}", v.name, v.var_type)
-        }
-    }).collect();
+    let param_list: Vec<String> = params
+        .captured_reads
+        .iter()
+        .map(|v| {
+            if v.is_mutable {
+                format!("{}: &mut {}", v.name, v.var_type)
+            } else {
+                format!("{}: {}", v.name, v.var_type)
+            }
+        })
+        .collect();
 
     // Build return type
     let return_type = if params.captured_writes.is_empty() {
@@ -145,7 +148,11 @@ pub fn generate_extracted_function(
     } else if params.captured_writes.len() == 1 {
         format!(" -> {}", params.captured_writes[0].var_type)
     } else {
-        let types: Vec<&str> = params.captured_writes.iter().map(|v| v.var_type.as_str()).collect();
+        let types: Vec<&str> = params
+            .captured_writes
+            .iter()
+            .map(|v| v.var_type.as_str())
+            .collect();
         format!(" -> ({})", types.join(", "))
     };
 
@@ -162,7 +169,11 @@ pub fn generate_extracted_function(
 
     // Return value
     if !params.captured_writes.is_empty() {
-        let names: Vec<&str> = params.captured_writes.iter().map(|v| v.name.as_str()).collect();
+        let names: Vec<&str> = params
+            .captured_writes
+            .iter()
+            .map(|v| v.name.as_str())
+            .collect();
         if names.len() == 1 {
             extracted.push_str(&format!("    {}\n", names[0]));
         } else {
@@ -180,14 +191,32 @@ pub fn generate_extracted_function(
     );
 
     // Call site
-    let args: Vec<&str> = params.captured_reads.iter().map(|v| v.name.as_str()).collect();
+    let args: Vec<&str> = params
+        .captured_reads
+        .iter()
+        .map(|v| v.name.as_str())
+        .collect();
     let call = if params.captured_writes.is_empty() {
         format!("{}({})", params.function_name, args.join(", "))
     } else if params.captured_writes.len() == 1 {
-        format!("let {} = {}({})", params.captured_writes[0].name, params.function_name, args.join(", "))
+        format!(
+            "let {} = {}({})",
+            params.captured_writes[0].name,
+            params.function_name,
+            args.join(", ")
+        )
     } else {
-        let names: Vec<&str> = params.captured_writes.iter().map(|v| v.name.as_str()).collect();
-        format!("let ({}) = {}({})", names.join(", "), params.function_name, args.join(", "))
+        let names: Vec<&str> = params
+            .captured_writes
+            .iter()
+            .map(|v| v.name.as_str())
+            .collect();
+        format!(
+            "let ({}) = {}({})",
+            names.join(", "),
+            params.function_name,
+            args.join(", ")
+        )
     };
 
     (func_def, call)
@@ -284,7 +313,11 @@ pub struct CodeAction {
 }
 
 /// Convert if-else chain to match expression.
-pub fn if_else_to_match(condition_var: &str, branches: &[(String, String)], else_body: &str) -> String {
+pub fn if_else_to_match(
+    condition_var: &str,
+    branches: &[(String, String)],
+    else_body: &str,
+) -> String {
     let mut result = format!("match {condition_var} {{\n");
     for (pattern, body) in branches {
         result.push_str(&format!("    {pattern} => {body},\n"));
@@ -321,11 +354,22 @@ pub fn generate_trait_impl(
 ) -> String {
     let mut result = format!("impl {trait_name} for {struct_name} {{\n");
     for method in methods {
-        let params: Vec<String> = method.params.iter()
+        let params: Vec<String> = method
+            .params
+            .iter()
             .map(|(name, ty)| format!("{name}: {ty}"))
             .collect();
-        let ret = method.return_type.as_deref().map(|t| format!(" -> {t}")).unwrap_or_default();
-        result.push_str(&format!("    fn {}({}){} {{\n", method.name, params.join(", "), ret));
+        let ret = method
+            .return_type
+            .as_deref()
+            .map(|t| format!(" -> {t}"))
+            .unwrap_or_default();
+        result.push_str(&format!(
+            "    fn {}({}){} {{\n",
+            method.name,
+            params.join(", "),
+            ret
+        ));
         result.push_str("        todo!()\n");
         result.push_str("    }\n\n");
     }
@@ -346,10 +390,12 @@ pub struct TraitMethodStub {
 
 /// Generates a constructor for a struct.
 pub fn generate_constructor(struct_name: &str, fields: &[(String, String)]) -> String {
-    let params: Vec<String> = fields.iter()
+    let params: Vec<String> = fields
+        .iter()
         .map(|(name, ty)| format!("{name}: {ty}"))
         .collect();
-    let assignments: Vec<String> = fields.iter()
+    let assignments: Vec<String> = fields
+        .iter()
         .map(|(name, _)| format!("        {name}: {name}"))
         .collect();
     format!(
@@ -406,10 +452,18 @@ pub fn organize_imports(imports: &[String]) -> Vec<String> {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Wrap expression in Some() or Ok().
-pub fn wrap_in_some(expr: &str) -> String { format!("Some({expr})") }
-pub fn wrap_in_ok(expr: &str) -> String { format!("Ok({expr})") }
-pub fn wrap_in_err(expr: &str) -> String { format!("Err({expr})") }
-pub fn add_question_mark(expr: &str) -> String { format!("{expr}?") }
+pub fn wrap_in_some(expr: &str) -> String {
+    format!("Some({expr})")
+}
+pub fn wrap_in_ok(expr: &str) -> String {
+    format!("Ok({expr})")
+}
+pub fn wrap_in_err(expr: &str) -> String {
+    format!("Err({expr})")
+}
+pub fn add_question_mark(expr: &str) -> String {
+    format!("{expr}?")
+}
 
 /// Convert string literal to f-string.
 pub fn to_fstring(literal: &str) -> String {
@@ -514,18 +568,36 @@ mod tests {
     #[test]
     fn l2_1_workspace_edit() {
         let mut edit = WorkspaceEdit::new();
-        edit.add_edit("file:///a.fj", TextEdit {
-            start_line: 0, start_char: 3, end_line: 0, end_char: 6,
-            new_text: "new_fn".to_string(),
-        });
-        edit.add_edit("file:///a.fj", TextEdit {
-            start_line: 5, start_char: 4, end_line: 5, end_char: 7,
-            new_text: "new_fn".to_string(),
-        });
-        edit.add_edit("file:///b.fj", TextEdit {
-            start_line: 2, start_char: 8, end_line: 2, end_char: 11,
-            new_text: "new_fn".to_string(),
-        });
+        edit.add_edit(
+            "file:///a.fj",
+            TextEdit {
+                start_line: 0,
+                start_char: 3,
+                end_line: 0,
+                end_char: 6,
+                new_text: "new_fn".to_string(),
+            },
+        );
+        edit.add_edit(
+            "file:///a.fj",
+            TextEdit {
+                start_line: 5,
+                start_char: 4,
+                end_line: 5,
+                end_char: 7,
+                new_text: "new_fn".to_string(),
+            },
+        );
+        edit.add_edit(
+            "file:///b.fj",
+            TextEdit {
+                start_line: 2,
+                start_char: 8,
+                end_line: 2,
+                end_char: 11,
+                new_text: "new_fn".to_string(),
+            },
+        );
         assert_eq!(edit.edit_count(), 3);
         assert_eq!(edit.file_count(), 2);
     }
@@ -534,17 +606,31 @@ mod tests {
     #[test]
     fn l2_2_extract_function() {
         let params = ExtractFunctionParams {
-            start_line: 5, start_char: 0, end_line: 8, end_char: 0,
+            start_line: 5,
+            start_char: 0,
+            end_line: 8,
+            end_char: 0,
             function_name: "compute_sum".to_string(),
             captured_reads: vec![
-                CapturedVariable { name: "a".to_string(), var_type: "i32".to_string(), is_mutable: false },
-                CapturedVariable { name: "b".to_string(), var_type: "i32".to_string(), is_mutable: false },
+                CapturedVariable {
+                    name: "a".to_string(),
+                    var_type: "i32".to_string(),
+                    is_mutable: false,
+                },
+                CapturedVariable {
+                    name: "b".to_string(),
+                    var_type: "i32".to_string(),
+                    is_mutable: false,
+                },
             ],
-            captured_writes: vec![
-                CapturedVariable { name: "result".to_string(), var_type: "i32".to_string(), is_mutable: false },
-            ],
+            captured_writes: vec![CapturedVariable {
+                name: "result".to_string(),
+                var_type: "i32".to_string(),
+                is_mutable: false,
+            }],
         };
-        let source = "line0\nline1\nline2\nline3\nline4\nlet result = a + b\nresult = result * 2\nresult";
+        let source =
+            "line0\nline1\nline2\nline3\nline4\nlet result = a + b\nresult = result * 2\nresult";
         let (func, call) = generate_extracted_function(source, &params);
         assert!(func.contains("fn compute_sum(a: i32, b: i32) -> i32"));
         assert!(call.contains("compute_sum(a, b)"));
@@ -553,10 +639,14 @@ mod tests {
     // L2.6: If-else to match
     #[test]
     fn l2_6_if_else_to_match() {
-        let result = if_else_to_match("x", &[
-            ("1".to_string(), "\"one\"".to_string()),
-            ("2".to_string(), "\"two\"".to_string()),
-        ], "\"other\"");
+        let result = if_else_to_match(
+            "x",
+            &[
+                ("1".to_string(), "\"one\"".to_string()),
+                ("2".to_string(), "\"two\"".to_string()),
+            ],
+            "\"other\"",
+        );
         assert!(result.contains("match x {"));
         assert!(result.contains("1 => \"one\""));
         assert!(result.contains("_ => \"other\""));
@@ -565,10 +655,13 @@ mod tests {
     // L2.7: Match to if-else
     #[test]
     fn l2_7_match_to_if_else() {
-        let result = match_to_if_else("x", &[
-            ("1".to_string(), "println(\"one\")".to_string()),
-            ("_".to_string(), "println(\"other\")".to_string()),
-        ]);
+        let result = match_to_if_else(
+            "x",
+            &[
+                ("1".to_string(), "println(\"one\")".to_string()),
+                ("_".to_string(), "println(\"other\")".to_string()),
+            ],
+        );
         assert!(result.contains("if x == 1"));
         assert!(result.contains("else { println(\"other\") }"));
     }
@@ -635,10 +728,14 @@ mod tests {
     // L2.16: Generate doc comment
     #[test]
     fn l2_16_generate_doc() {
-        let doc = generate_doc_comment("add", &[
-            ("a".to_string(), "i32".to_string()),
-            ("b".to_string(), "i32".to_string()),
-        ], Some("i32"));
+        let doc = generate_doc_comment(
+            "add",
+            &[
+                ("a".to_string(), "i32".to_string()),
+                ("b".to_string(), "i32".to_string()),
+            ],
+            Some("i32"),
+        );
         assert!(doc.contains("/// add"));
         assert!(doc.contains("/// * `a` — i32"));
         assert!(doc.contains("/// Returns: i32"));
@@ -654,7 +751,13 @@ mod tests {
     #[test]
     fn l2_6_code_action_kinds() {
         assert_eq!(format!("{}", CodeActionKind::QuickFix), "quickfix");
-        assert_eq!(format!("{}", CodeActionKind::RefactorExtract), "refactor.extract");
-        assert_eq!(format!("{}", CodeActionKind::SourceOrganizeImports), "source.organizeImports");
+        assert_eq!(
+            format!("{}", CodeActionKind::RefactorExtract),
+            "refactor.extract"
+        );
+        assert_eq!(
+            format!("{}", CodeActionKind::SourceOrganizeImports),
+            "source.organizeImports"
+        );
     }
 }

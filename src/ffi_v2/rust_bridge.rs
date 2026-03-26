@@ -59,23 +59,91 @@ pub enum ConversionKind {
 /// Standard Rust → Fajar type mappings.
 pub fn standard_type_mappings() -> Vec<TypeMapping> {
     vec![
-        TypeMapping { rust_type: "i8".into(), fajar_type: "i8".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "i16".into(), fajar_type: "i16".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "i32".into(), fajar_type: "i32".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "i64".into(), fajar_type: "i64".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "u8".into(), fajar_type: "u8".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "u16".into(), fajar_type: "u16".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "u32".into(), fajar_type: "u32".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "u64".into(), fajar_type: "u64".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "f32".into(), fajar_type: "f32".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "f64".into(), fajar_type: "f64".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "bool".into(), fajar_type: "bool".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "String".into(), fajar_type: "str".into(), conversion: ConversionKind::Wrapper },
-        TypeMapping { rust_type: "&str".into(), fajar_type: "str".into(), conversion: ConversionKind::Wrapper },
-        TypeMapping { rust_type: "Vec<T>".into(), fajar_type: "[T]".into(), conversion: ConversionKind::Wrapper },
-        TypeMapping { rust_type: "HashMap<K,V>".into(), fajar_type: "Map<K,V>".into(), conversion: ConversionKind::Wrapper },
-        TypeMapping { rust_type: "Option<T>".into(), fajar_type: "Option<T>".into(), conversion: ConversionKind::Direct },
-        TypeMapping { rust_type: "Result<T,E>".into(), fajar_type: "Result<T,E>".into(), conversion: ConversionKind::Direct },
+        TypeMapping {
+            rust_type: "i8".into(),
+            fajar_type: "i8".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "i16".into(),
+            fajar_type: "i16".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "i32".into(),
+            fajar_type: "i32".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "i64".into(),
+            fajar_type: "i64".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "u8".into(),
+            fajar_type: "u8".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "u16".into(),
+            fajar_type: "u16".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "u32".into(),
+            fajar_type: "u32".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "u64".into(),
+            fajar_type: "u64".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "f32".into(),
+            fajar_type: "f32".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "f64".into(),
+            fajar_type: "f64".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "bool".into(),
+            fajar_type: "bool".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "String".into(),
+            fajar_type: "str".into(),
+            conversion: ConversionKind::Wrapper,
+        },
+        TypeMapping {
+            rust_type: "&str".into(),
+            fajar_type: "str".into(),
+            conversion: ConversionKind::Wrapper,
+        },
+        TypeMapping {
+            rust_type: "Vec<T>".into(),
+            fajar_type: "[T]".into(),
+            conversion: ConversionKind::Wrapper,
+        },
+        TypeMapping {
+            rust_type: "HashMap<K,V>".into(),
+            fajar_type: "Map<K,V>".into(),
+            conversion: ConversionKind::Wrapper,
+        },
+        TypeMapping {
+            rust_type: "Option<T>".into(),
+            fajar_type: "Option<T>".into(),
+            conversion: ConversionKind::Direct,
+        },
+        TypeMapping {
+            rust_type: "Result<T,E>".into(),
+            fajar_type: "Result<T,E>".into(),
+            conversion: ConversionKind::Direct,
+        },
     ]
 }
 
@@ -107,12 +175,18 @@ pub struct RustMethod {
 pub fn generate_fajar_trait(rust_trait: &RustTrait) -> String {
     let mut code = format!("trait {} {{\n", rust_trait.name);
     for method in &rust_trait.methods {
-        let params: Vec<String> = method.params.iter()
+        let params: Vec<String> = method
+            .params
+            .iter()
             .map(|(n, t)| format!("{n}: {t}"))
             .collect();
         let async_kw = if method.is_async { "async " } else { "" };
-        code.push_str(&format!("    {async_kw}fn {}({}) -> {}\n",
-            method.name, params.join(", "), method.return_type));
+        code.push_str(&format!(
+            "    {async_kw}fn {}({}) -> {}\n",
+            method.name,
+            params.join(", "),
+            method.return_type
+        ));
     }
     code.push_str("}\n");
     code
@@ -153,7 +227,11 @@ pub enum TokioRuntime {
 
 impl Default for AsyncBridgeConfig {
     fn default() -> Self {
-        Self { runtime: TokioRuntime::MultiThread, worker_threads: 4, max_blocking: 512 }
+        Self {
+            runtime: TokioRuntime::MultiThread,
+            worker_threads: 4,
+            max_blocking: 512,
+        }
     }
 }
 
@@ -206,7 +284,9 @@ pub struct BindgenOutput {
 pub fn bindgen_summary(output: &BindgenOutput) -> String {
     format!(
         "Generated {} functions, {} types ({} warnings)",
-        output.function_count, output.type_count, output.warnings.len()
+        output.function_count,
+        output.type_count,
+        output.warnings.len()
     )
 }
 

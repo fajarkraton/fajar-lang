@@ -42,11 +42,15 @@ pub enum AllocKind {
 
 impl AllocRecord {
     /// Returns true if this allocation is still alive (not freed).
-    pub fn is_alive(&self) -> bool { self.free_ns == 0 }
+    pub fn is_alive(&self) -> bool {
+        self.free_ns == 0
+    }
 
     /// Returns lifetime in nanoseconds (0 if still alive).
     pub fn lifetime_ns(&self) -> u64 {
-        if self.free_ns == 0 { return 0; }
+        if self.free_ns == 0 {
+            return 0;
+        }
         self.free_ns.saturating_sub(self.alloc_ns)
     }
 }
@@ -72,20 +76,39 @@ pub struct MemoryProfile {
 
 impl MemoryProfile {
     /// Records an allocation.
-    pub fn record_alloc(&mut self, addr: u64, size: usize, site: &str, kind: AllocKind, now_ns: u64) {
+    pub fn record_alloc(
+        &mut self,
+        addr: u64,
+        size: usize,
+        site: &str,
+        kind: AllocKind,
+        now_ns: u64,
+    ) {
         self.records.push(AllocRecord {
-            id: self.alloc_count, addr, size, alloc_ns: now_ns, free_ns: 0,
-            site: site.to_string(), kind,
+            id: self.alloc_count,
+            addr,
+            size,
+            alloc_ns: now_ns,
+            free_ns: 0,
+            site: site.to_string(),
+            kind,
         });
         self.current_bytes += size;
         self.total_allocated += size as u64;
         self.alloc_count += 1;
-        if self.current_bytes > self.peak_bytes { self.peak_bytes = self.current_bytes; }
+        if self.current_bytes > self.peak_bytes {
+            self.peak_bytes = self.current_bytes;
+        }
     }
 
     /// Records a free.
     pub fn record_free(&mut self, addr: u64, now_ns: u64) {
-        if let Some(rec) = self.records.iter_mut().rev().find(|r| r.addr == addr && r.free_ns == 0) {
+        if let Some(rec) = self
+            .records
+            .iter_mut()
+            .rev()
+            .find(|r| r.addr == addr && r.free_ns == 0)
+        {
             rec.free_ns = now_ns;
             self.current_bytes = self.current_bytes.saturating_sub(rec.size);
             self.total_freed += rec.size as u64;
@@ -106,17 +129,27 @@ impl MemoryProfile {
             entry.0 += 1;
             entry.1 += rec.size;
         }
-        let mut result: Vec<_> = by_site.into_iter().map(|(site, (count, bytes))| {
-            LeakSummary { site: site.to_string(), count, total_bytes: bytes }
-        }).collect();
+        let mut result: Vec<_> = by_site
+            .into_iter()
+            .map(|(site, (count, bytes))| LeakSummary {
+                site: site.to_string(),
+                count,
+                total_bytes: bytes,
+            })
+            .collect();
         result.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
         result
     }
 
     /// Returns peak memory contributing allocations.
     pub fn peak_contributors(&self, top_n: usize) -> Vec<&AllocRecord> {
-        let mut alive_at_peak: Vec<&AllocRecord> = self.records.iter()
-            .filter(|r| r.alloc_ns <= self.peak_timestamp_ns() && (r.free_ns == 0 || r.free_ns >= self.peak_timestamp_ns()))
+        let mut alive_at_peak: Vec<&AllocRecord> = self
+            .records
+            .iter()
+            .filter(|r| {
+                r.alloc_ns <= self.peak_timestamp_ns()
+                    && (r.free_ns == 0 || r.free_ns >= self.peak_timestamp_ns())
+            })
             .collect();
         alive_at_peak.sort_by(|a, b| b.size.cmp(&a.size));
         alive_at_peak.truncate(top_n);
@@ -131,14 +164,21 @@ impl MemoryProfile {
         // Simplified: use alloc events sorted by time
         for rec in &self.records {
             current += rec.size;
-            if current > peak { peak = current; peak_ts = rec.alloc_ns; }
+            if current > peak {
+                peak = current;
+                peak_ts = rec.alloc_ns;
+            }
         }
         peak_ts
     }
 
     /// Tensor-specific memory stats.
     pub fn tensor_stats(&self) -> TensorMemStats {
-        let tensor_allocs: Vec<_> = self.records.iter().filter(|r| r.kind == AllocKind::Tensor).collect();
+        let tensor_allocs: Vec<_> = self
+            .records
+            .iter()
+            .filter(|r| r.kind == AllocKind::Tensor)
+            .collect();
         let alive: Vec<_> = tensor_allocs.iter().filter(|r| r.is_alive()).collect();
         TensorMemStats {
             total_tensors: tensor_allocs.len() as u64,
@@ -199,7 +239,12 @@ impl FragmentationStats {
         } else {
             0.0
         };
-        Self { free_blocks, free_bytes, largest_free, fragmentation }
+        Self {
+            free_blocks,
+            free_bytes,
+            largest_free,
+            fragmentation,
+        }
     }
 }
 
@@ -239,19 +284,35 @@ pub fn valgrind_report(profile: &MemoryProfile) -> String {
 
     let mut report = String::new();
     report.push_str("==== HEAP SUMMARY ====\n");
-    report.push_str(&format!("    in use at exit: {} bytes in {} blocks\n", profile.current_bytes, leaks.len()));
-    report.push_str(&format!("  total heap usage: {} allocs, {} frees, {} bytes allocated\n",
-        profile.alloc_count, profile.free_count, profile.total_allocated));
-    report.push_str(&format!("         peak heap: {} bytes\n\n", profile.peak_bytes));
+    report.push_str(&format!(
+        "    in use at exit: {} bytes in {} blocks\n",
+        profile.current_bytes,
+        leaks.len()
+    ));
+    report.push_str(&format!(
+        "  total heap usage: {} allocs, {} frees, {} bytes allocated\n",
+        profile.alloc_count, profile.free_count, profile.total_allocated
+    ));
+    report.push_str(&format!(
+        "         peak heap: {} bytes\n\n",
+        profile.peak_bytes
+    ));
 
     if leaks.is_empty() {
         report.push_str("All heap blocks were freed — no leaks are possible\n");
     } else {
         report.push_str("==== LEAK SUMMARY ====\n");
-        report.push_str(&format!("   definitely lost: {} bytes in {} blocks\n", total_leaked, leaks.len()));
+        report.push_str(&format!(
+            "   definitely lost: {} bytes in {} blocks\n",
+            total_leaked,
+            leaks.len()
+        ));
         report.push_str("\n==== LEAK DETAILS ====\n");
         for s in &summary {
-            report.push_str(&format!("  {} bytes in {} blocks at {}\n", s.total_bytes, s.count, s.site));
+            report.push_str(&format!(
+                "  {} bytes in {} blocks at {}\n",
+                s.total_bytes, s.count, s.site
+            ));
         }
     }
     report

@@ -59,7 +59,12 @@ pub struct KernelDeviceBridge {
 impl KernelDeviceBridge {
     /// Creates a new bridge.
     pub fn new(addr: u64, size: usize) -> Self {
-        Self { shared_buffer_addr: addr, buffer_size: size, transfer_pending: false, seq: 0 }
+        Self {
+            shared_buffer_addr: addr,
+            buffer_size: size,
+            transfer_pending: false,
+            seq: 0,
+        }
     }
 
     /// Signals that sensor data is ready for inference.
@@ -90,7 +95,12 @@ pub struct DeviceKernelBridge {
 impl DeviceKernelBridge {
     /// Creates a new bridge.
     pub fn new(addr: u64) -> Self {
-        Self { result_addr: addr, action_id: 0, confidence: 0.0, result_ready: false }
+        Self {
+            result_addr: addr,
+            action_id: 0,
+            confidence: 0.0,
+            result_ready: false,
+        }
     }
 
     /// Posts an inference result.
@@ -144,16 +154,25 @@ pub struct JitterStats {
 impl JitterStats {
     /// Creates a new jitter tracker.
     pub fn new(target_us: u64) -> Self {
-        Self { samples: Vec::new(), target_us }
+        Self {
+            samples: Vec::new(),
+            target_us,
+        }
     }
 
     /// Records a measurement.
-    pub fn record(&mut self, actual_us: u64) { self.samples.push(actual_us); }
+    pub fn record(&mut self, actual_us: u64) {
+        self.samples.push(actual_us);
+    }
 
     /// Returns mean jitter (absolute deviation from target).
     pub fn mean_jitter(&self) -> f64 {
-        if self.samples.is_empty() { return 0.0; }
-        let sum: f64 = self.samples.iter()
+        if self.samples.is_empty() {
+            return 0.0;
+        }
+        let sum: f64 = self
+            .samples
+            .iter()
             .map(|&s| (s as f64 - self.target_us as f64).abs())
             .sum();
         sum / self.samples.len() as f64
@@ -161,7 +180,8 @@ impl JitterStats {
 
     /// Returns max jitter.
     pub fn max_jitter(&self) -> u64 {
-        self.samples.iter()
+        self.samples
+            .iter()
             .map(|&s| (s as i64 - self.target_us as i64).unsigned_abs())
             .max()
             .unwrap_or(0)
@@ -198,10 +218,13 @@ pub struct WcetAnalysis {
 /// Checks if a task set is schedulable (Rate Monotonic Analysis).
 pub fn rate_monotonic_test(tasks: &[RtTask]) -> bool {
     let n = tasks.len();
-    if n == 0 { return true; }
+    if n == 0 {
+        return true;
+    }
 
     // Utilization bound: sum(Ci/Ti) <= n * (2^(1/n) - 1)
-    let utilization: f64 = tasks.iter()
+    let utilization: f64 = tasks
+        .iter()
         .map(|t| t.wcet_us as f64 / t.period_us as f64)
         .sum();
 
@@ -231,7 +254,10 @@ impl Default for PriorityInheritance {
 impl PriorityInheritance {
     /// Creates a new priority inheritance tracker.
     pub fn new() -> Self {
-        Self { owners: Vec::new(), effective_priority: Vec::new() }
+        Self {
+            owners: Vec::new(),
+            effective_priority: Vec::new(),
+        }
     }
 
     /// Records that a task acquired a resource.
@@ -267,11 +293,17 @@ pub struct WatchdogConfig {
 
 /// Watchdog timeout action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WatchdogAction { Reset, Log, EmergencyStop }
+pub enum WatchdogAction {
+    Reset,
+    Log,
+    EmergencyStop,
+}
 
 impl WatchdogConfig {
     /// Kicks the watchdog (resets timer).
-    pub fn kick(&mut self, now_ms: u64) { self.last_kick_ms = now_ms; }
+    pub fn kick(&mut self, now_ms: u64) {
+        self.last_kick_ms = now_ms;
+    }
 
     /// Checks if the watchdog has timed out.
     pub fn is_expired(&self, now_ms: u64) -> bool {
@@ -300,9 +332,17 @@ pub struct Telemetry {
 
 impl fmt::Display for Telemetry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "inferences={} reads={} cmds={} violations={} avg_lat={:.0}μs e2e={:.0}μs uptime={}s",
-            self.total_inferences, self.total_reads, self.total_commands,
-            self.deadline_violations, self.avg_inference_us, self.avg_e2e_us, self.uptime_secs)
+        write!(
+            f,
+            "inferences={} reads={} cmds={} violations={} avg_lat={:.0}μs e2e={:.0}μs uptime={}s",
+            self.total_inferences,
+            self.total_reads,
+            self.total_commands,
+            self.deadline_violations,
+            self.avg_inference_us,
+            self.avg_e2e_us,
+            self.uptime_secs
+        )
     }
 }
 
@@ -353,9 +393,24 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["4x PWM motors".to_string()],
             target_latency_ms: 5.0,
             pipeline: vec![
-                PipelineStage { name: "read_imu".to_string(), context: Context::Kernel, expected_latency_us: 200, priority: 0 },
-                PipelineStage { name: "stabilize".to_string(), context: Context::Device, expected_latency_us: 2000, priority: 1 },
-                PipelineStage { name: "set_motors".to_string(), context: Context::Kernel, expected_latency_us: 100, priority: 0 },
+                PipelineStage {
+                    name: "read_imu".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 200,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "stabilize".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 2000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "set_motors".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 100,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
@@ -366,9 +421,24 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["Pan servo".to_string(), "Tilt servo".to_string()],
             target_latency_ms: 33.0, // 30fps
             pipeline: vec![
-                PipelineStage { name: "capture_frame".to_string(), context: Context::Kernel, expected_latency_us: 1000, priority: 0 },
-                PipelineStage { name: "detect_objects".to_string(), context: Context::Device, expected_latency_us: 20000, priority: 1 },
-                PipelineStage { name: "track_servo".to_string(), context: Context::Kernel, expected_latency_us: 500, priority: 0 },
+                PipelineStage {
+                    name: "capture_frame".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 1000,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "detect_objects".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 20000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "track_servo".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 500,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
@@ -379,10 +449,30 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["Alert LED".to_string(), "Buzzer".to_string()],
             target_latency_ms: 10.0,
             pipeline: vec![
-                PipelineStage { name: "read_vibration".to_string(), context: Context::Kernel, expected_latency_us: 100, priority: 0 },
-                PipelineStage { name: "fft_features".to_string(), context: Context::Device, expected_latency_us: 3000, priority: 1 },
-                PipelineStage { name: "classify".to_string(), context: Context::Device, expected_latency_us: 2000, priority: 1 },
-                PipelineStage { name: "alert".to_string(), context: Context::Kernel, expected_latency_us: 50, priority: 0 },
+                PipelineStage {
+                    name: "read_vibration".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 100,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "fft_features".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 3000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "classify".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 2000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "alert".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 50,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
@@ -393,9 +483,24 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["GPIO relay".to_string()],
             target_latency_ms: 100.0,
             pipeline: vec![
-                PipelineStage { name: "capture_audio".to_string(), context: Context::Kernel, expected_latency_us: 62500, priority: 0 },
-                PipelineStage { name: "detect_keyword".to_string(), context: Context::Device, expected_latency_us: 30000, priority: 1 },
-                PipelineStage { name: "gpio_action".to_string(), context: Context::Kernel, expected_latency_us: 50, priority: 0 },
+                PipelineStage {
+                    name: "capture_audio".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 62500,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "detect_keyword".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 30000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "gpio_action".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 50,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
@@ -406,35 +511,88 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["2x DC motors".to_string(), "Steering servo".to_string()],
             target_latency_ms: 20.0,
             pipeline: vec![
-                PipelineStage { name: "scan_lidar".to_string(), context: Context::Kernel, expected_latency_us: 5000, priority: 0 },
-                PipelineStage { name: "plan_path".to_string(), context: Context::Device, expected_latency_us: 10000, priority: 1 },
-                PipelineStage { name: "drive".to_string(), context: Context::Kernel, expected_latency_us: 200, priority: 0 },
+                PipelineStage {
+                    name: "scan_lidar".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 5000,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "plan_path".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 10000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "drive".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 200,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
             name: "Predictive Maintenance".to_string(),
             description: "Sensor trends → failure prediction → alert".to_string(),
-            sensors: vec!["Temperature".to_string(), "Vibration".to_string(), "Current".to_string()],
+            sensors: vec![
+                "Temperature".to_string(),
+                "Vibration".to_string(),
+                "Current".to_string(),
+            ],
             model: "failure_predictor".to_string(),
             actuators: vec!["Alert system".to_string()],
             target_latency_ms: 1000.0,
             pipeline: vec![
-                PipelineStage { name: "read_sensors".to_string(), context: Context::Kernel, expected_latency_us: 500, priority: 0 },
-                PipelineStage { name: "predict".to_string(), context: Context::Device, expected_latency_us: 50000, priority: 2 },
-                PipelineStage { name: "alert".to_string(), context: Context::Safe, expected_latency_us: 1000, priority: 1 },
+                PipelineStage {
+                    name: "read_sensors".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 500,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "predict".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 50000,
+                    priority: 2,
+                },
+                PipelineStage {
+                    name: "alert".to_string(),
+                    context: Context::Safe,
+                    expected_latency_us: 1000,
+                    priority: 1,
+                },
             ],
         },
         DemoApp {
             name: "Smart Agriculture".to_string(),
             description: "Soil moisture → irrigation control".to_string(),
-            sensors: vec!["Soil moisture".to_string(), "Temperature".to_string(), "Humidity".to_string()],
+            sensors: vec![
+                "Soil moisture".to_string(),
+                "Temperature".to_string(),
+                "Humidity".to_string(),
+            ],
             model: "irrigation_model".to_string(),
             actuators: vec!["Water valve (solenoid)".to_string()],
             target_latency_ms: 5000.0,
             pipeline: vec![
-                PipelineStage { name: "read_soil".to_string(), context: Context::Kernel, expected_latency_us: 1000, priority: 0 },
-                PipelineStage { name: "decide".to_string(), context: Context::Device, expected_latency_us: 10000, priority: 1 },
-                PipelineStage { name: "valve_control".to_string(), context: Context::Kernel, expected_latency_us: 100, priority: 0 },
+                PipelineStage {
+                    name: "read_soil".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 1000,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "decide".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 10000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "valve_control".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 100,
+                    priority: 0,
+                },
             ],
         },
         DemoApp {
@@ -445,9 +603,24 @@ pub fn demo_apps() -> Vec<DemoApp> {
             actuators: vec!["Reject gate (pneumatic)".to_string()],
             target_latency_ms: 15.0,
             pipeline: vec![
-                PipelineStage { name: "capture".to_string(), context: Context::Kernel, expected_latency_us: 2000, priority: 0 },
-                PipelineStage { name: "detect_defect".to_string(), context: Context::Device, expected_latency_us: 10000, priority: 1 },
-                PipelineStage { name: "reject".to_string(), context: Context::Kernel, expected_latency_us: 500, priority: 0 },
+                PipelineStage {
+                    name: "capture".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 2000,
+                    priority: 0,
+                },
+                PipelineStage {
+                    name: "detect_defect".to_string(),
+                    context: Context::Device,
+                    expected_latency_us: 10000,
+                    priority: 1,
+                },
+                PipelineStage {
+                    name: "reject".to_string(),
+                    context: Context::Kernel,
+                    expected_latency_us: 500,
+                    priority: 0,
+                },
             ],
         },
     ]
@@ -505,8 +678,22 @@ mod tests {
     #[test]
     fn r3_5_rate_monotonic() {
         let tasks = vec![
-            RtTask { name: "sensor".to_string(), period_us: 10000, deadline_us: 10000, wcet_us: 2000, context: Context::Kernel, priority: 0 },
-            RtTask { name: "infer".to_string(), period_us: 30000, deadline_us: 30000, wcet_us: 10000, context: Context::Device, priority: 1 },
+            RtTask {
+                name: "sensor".to_string(),
+                period_us: 10000,
+                deadline_us: 10000,
+                wcet_us: 2000,
+                context: Context::Kernel,
+                priority: 0,
+            },
+            RtTask {
+                name: "infer".to_string(),
+                period_us: 30000,
+                deadline_us: 30000,
+                wcet_us: 10000,
+                context: Context::Device,
+                priority: 1,
+            },
         ];
         // U = 2/10 + 10/30 = 0.533, bound for n=2 = 2*(2^0.5-1) = 0.828
         assert!(rate_monotonic_test(&tasks));
@@ -515,8 +702,22 @@ mod tests {
     #[test]
     fn r3_5_rate_monotonic_overloaded() {
         let tasks = vec![
-            RtTask { name: "a".to_string(), period_us: 1000, deadline_us: 1000, wcet_us: 600, context: Context::Kernel, priority: 0 },
-            RtTask { name: "b".to_string(), period_us: 1000, deadline_us: 1000, wcet_us: 600, context: Context::Device, priority: 1 },
+            RtTask {
+                name: "a".to_string(),
+                period_us: 1000,
+                deadline_us: 1000,
+                wcet_us: 600,
+                context: Context::Kernel,
+                priority: 0,
+            },
+            RtTask {
+                name: "b".to_string(),
+                period_us: 1000,
+                deadline_us: 1000,
+                wcet_us: 600,
+                context: Context::Device,
+                priority: 1,
+            },
         ];
         // U = 0.6 + 0.6 = 1.2 > bound 0.828
         assert!(!rate_monotonic_test(&tasks));
@@ -524,7 +725,11 @@ mod tests {
 
     #[test]
     fn r3_7_watchdog() {
-        let mut wd = WatchdogConfig { timeout_ms: 500, action: WatchdogAction::EmergencyStop, last_kick_ms: 1000 };
+        let mut wd = WatchdogConfig {
+            timeout_ms: 500,
+            action: WatchdogAction::EmergencyStop,
+            last_kick_ms: 1000,
+        };
         assert!(!wd.is_expired(1400));
         assert!(wd.is_expired(1600));
         wd.kick(1600);
@@ -534,8 +739,13 @@ mod tests {
     #[test]
     fn r3_8_telemetry_display() {
         let t = Telemetry {
-            total_inferences: 1000, total_reads: 5000, total_commands: 1000,
-            deadline_violations: 5, avg_inference_us: 3500.0, avg_e2e_us: 8000.0, uptime_secs: 3600,
+            total_inferences: 1000,
+            total_reads: 5000,
+            total_commands: 1000,
+            deadline_violations: 5,
+            avg_inference_us: 3500.0,
+            avg_e2e_us: 8000.0,
+            uptime_secs: 3600,
         };
         let s = format!("{t}");
         assert!(s.contains("inferences=1000"));
@@ -571,7 +781,11 @@ mod tests {
         let mut pi = PriorityInheritance::new();
         pi.acquire("low_task", "mutex_A", 10); // low priority = 10
         pi.inherit("low_task", 2); // high-priority task blocked → inherit priority 2
-        let eff = pi.effective_priority.iter().find(|(t, _)| t == "low_task").unwrap();
+        let eff = pi
+            .effective_priority
+            .iter()
+            .find(|(t, _)| t == "low_task")
+            .unwrap();
         assert_eq!(eff.1, 2);
     }
 }

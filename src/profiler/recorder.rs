@@ -66,8 +66,12 @@ pub fn compute_delta(prev: &Snapshot, curr: &Snapshot) -> DeltaSnapshot {
     // Find changed and new variables
     for (name, value) in &curr.variables {
         match prev.variables.get(name) {
-            Some(old_val) if old_val != value => { changed_vars.insert(name.clone(), value.clone()); }
-            None => { changed_vars.insert(name.clone(), value.clone()); }
+            Some(old_val) if old_val != value => {
+                changed_vars.insert(name.clone(), value.clone());
+            }
+            None => {
+                changed_vars.insert(name.clone(), value.clone());
+            }
             _ => {}
         }
     }
@@ -84,12 +88,20 @@ pub fn compute_delta(prev: &Snapshot, curr: &Snapshot) -> DeltaSnapshot {
     DeltaSnapshot {
         index: curr.index,
         pc: curr.pc,
-        file: if curr.file != prev.file { Some(curr.file.clone()) } else { None },
+        file: if curr.file != prev.file {
+            Some(curr.file.clone())
+        } else {
+            None
+        },
         line: curr.line,
         changed_vars,
         removed_vars,
         call_stack_changed,
-        call_stack: if call_stack_changed { Some(curr.call_stack.clone()) } else { None },
+        call_stack: if call_stack_changed {
+            Some(curr.call_stack.clone())
+        } else {
+            None
+        },
         timestamp_ns: curr.timestamp_ns,
     }
 }
@@ -110,7 +122,10 @@ pub fn apply_delta(base: &Snapshot, delta: &DeltaSnapshot) -> Snapshot {
         file: delta.file.clone().unwrap_or_else(|| base.file.clone()),
         line: delta.line,
         variables: vars,
-        call_stack: delta.call_stack.clone().unwrap_or_else(|| base.call_stack.clone()),
+        call_stack: delta
+            .call_stack
+            .clone()
+            .unwrap_or_else(|| base.call_stack.clone()),
         timestamp_ns: delta.timestamp_ns,
         is_checkpoint: false,
     }
@@ -161,10 +176,14 @@ impl Recorder {
 
     /// Records a statement execution.
     pub fn record(&mut self, snapshot: Snapshot) {
-        if !self.enabled { return; }
+        if !self.enabled {
+            return;
+        }
         self.total_statements += 1;
 
-        let is_checkpoint = self.total_statements.is_multiple_of(self.checkpoint_interval)
+        let is_checkpoint = self
+            .total_statements
+            .is_multiple_of(self.checkpoint_interval)
             || self.last_checkpoint.is_none();
 
         if is_checkpoint {
@@ -183,7 +202,9 @@ impl Recorder {
 
         // Evict old data if over max
         if self.snapshot_count > self.max_snapshots {
-            if !self.checkpoints.is_empty() { self.checkpoints.remove(0); }
+            if !self.checkpoints.is_empty() {
+                self.checkpoints.remove(0);
+            }
             // Remove deltas that reference the evicted checkpoint
             let min_idx = self.checkpoints.first().map(|c| c.index).unwrap_or(0);
             self.deltas.retain(|d| d.index >= min_idx);
@@ -193,7 +214,10 @@ impl Recorder {
     /// Returns the snapshot at a given index.
     pub fn get_snapshot(&self, target_index: u64) -> Option<Snapshot> {
         // Find the nearest checkpoint before target
-        let checkpoint = self.checkpoints.iter().rev()
+        let checkpoint = self
+            .checkpoints
+            .iter()
+            .rev()
             .find(|c| c.index <= target_index)?;
 
         // Replay deltas from checkpoint to target
@@ -208,7 +232,9 @@ impl Recorder {
 
     /// Returns the previous snapshot (step back).
     pub fn step_back(&self, current_index: u64) -> Option<Snapshot> {
-        if current_index == 0 { return None; }
+        if current_index == 0 {
+            return None;
+        }
         self.get_snapshot(current_index - 1)
     }
 
@@ -217,7 +243,9 @@ impl Recorder {
         // Search deltas for the variable change
         for delta in self.deltas.iter().rev() {
             if let Some(val) = delta.changed_vars.get(var_name) {
-                if val == target_value { return Some(delta.index); }
+                if val == target_value {
+                    return Some(delta.index);
+                }
             }
         }
         None
@@ -251,8 +279,14 @@ pub struct RecordingOverhead {
 
 impl fmt::Display for RecordingOverhead {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}KB, {} checkpoints, {} deltas, {} statements",
-            self.memory_bytes / 1024, self.checkpoints, self.deltas, self.total_statements)
+        write!(
+            f,
+            "{}KB, {} checkpoints, {} deltas, {} statements",
+            self.memory_bytes / 1024,
+            self.checkpoints,
+            self.deltas,
+            self.total_statements
+        )
     }
 }
 
@@ -313,7 +347,10 @@ pub fn build_variable_history(recorder: &Recorder, var_name: &str) -> VariableHi
     }
 
     values.sort_by_key(|(idx, _)| *idx);
-    VariableHistory { name: var_name.to_string(), values }
+    VariableHistory {
+        name: var_name.to_string(),
+        values,
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -326,8 +363,14 @@ mod tests {
 
     fn make_snapshot(index: u64, line: u32, vars: Vec<(&str, &str)>) -> Snapshot {
         Snapshot {
-            index, pc: index, file: "test.fj".to_string(), line,
-            variables: vars.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            index,
+            pc: index,
+            file: "test.fj".to_string(),
+            line,
+            variables: vars
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
             call_stack: vec!["main".to_string()],
             timestamp_ns: index * 1000,
             is_checkpoint: false,
@@ -349,10 +392,15 @@ mod tests {
     fn d2_1_apply_delta() {
         let base = make_snapshot(0, 1, vec![("x", "1"), ("y", "2")]);
         let delta = DeltaSnapshot {
-            index: 1, pc: 1, file: None, line: 2,
+            index: 1,
+            pc: 1,
+            file: None,
+            line: 2,
             changed_vars: HashMap::from([("y".to_string(), "3".to_string())]),
             removed_vars: vec![],
-            call_stack_changed: false, call_stack: None, timestamp_ns: 1000,
+            call_stack_changed: false,
+            call_stack: None,
+            timestamp_ns: 1000,
         };
         let result = apply_delta(&base, &delta);
         assert_eq!(result.variables.get("x").unwrap(), "1");
@@ -386,9 +434,15 @@ mod tests {
         rec.record(make_snapshot(0, 1, vec![("x", "0")])); // checkpoint
         // Manually add deltas
         rec.deltas.push(DeltaSnapshot {
-            index: 1, pc: 1, file: None, line: 2,
+            index: 1,
+            pc: 1,
+            file: None,
+            line: 2,
             changed_vars: HashMap::from([("x".to_string(), "42".to_string())]),
-            removed_vars: vec![], call_stack_changed: false, call_stack: None, timestamp_ns: 1000,
+            removed_vars: vec![],
+            call_stack_changed: false,
+            call_stack: None,
+            timestamp_ns: 1000,
         });
         let found = rec.find_variable_change("x", "42");
         assert_eq!(found, Some(1));
@@ -397,7 +451,9 @@ mod tests {
     #[test]
     fn d2_1_recording_overhead() {
         let mut rec = Recorder::new(10, 1000);
-        for i in 0..50 { rec.record(make_snapshot(i, 1, vec![("x", "1")])); }
+        for i in 0..50 {
+            rec.record(make_snapshot(i, 1, vec![("x", "1")]));
+        }
         let overhead = rec.overhead_estimate();
         assert!(overhead.memory_bytes > 0);
         assert_eq!(overhead.total_statements, 50);
@@ -416,14 +472,26 @@ mod tests {
         let mut rec = Recorder::new(100, 1000);
         rec.record(make_snapshot(0, 1, vec![("loss", "1.5")]));
         rec.deltas.push(DeltaSnapshot {
-            index: 1, pc: 1, file: None, line: 2,
+            index: 1,
+            pc: 1,
+            file: None,
+            line: 2,
             changed_vars: HashMap::from([("loss".to_string(), "0.8".to_string())]),
-            removed_vars: vec![], call_stack_changed: false, call_stack: None, timestamp_ns: 1000,
+            removed_vars: vec![],
+            call_stack_changed: false,
+            call_stack: None,
+            timestamp_ns: 1000,
         });
         rec.deltas.push(DeltaSnapshot {
-            index: 2, pc: 2, file: None, line: 3,
+            index: 2,
+            pc: 2,
+            file: None,
+            line: 3,
             changed_vars: HashMap::from([("loss".to_string(), "0.3".to_string())]),
-            removed_vars: vec![], call_stack_changed: false, call_stack: None, timestamp_ns: 2000,
+            removed_vars: vec![],
+            call_stack_changed: false,
+            call_stack: None,
+            timestamp_ns: 2000,
         });
         let history = build_variable_history(&rec, "loss");
         assert_eq!(history.values.len(), 3); // checkpoint + 2 deltas
@@ -431,7 +499,12 @@ mod tests {
 
     #[test]
     fn d2_1_overhead_display() {
-        let oh = RecordingOverhead { memory_bytes: 10240, checkpoints: 5, deltas: 45, total_statements: 50 };
+        let oh = RecordingOverhead {
+            memory_bytes: 10240,
+            checkpoints: 5,
+            deltas: 45,
+            total_statements: 50,
+        };
         let s = format!("{oh}");
         assert!(s.contains("10KB"));
         assert!(s.contains("50 statements"));

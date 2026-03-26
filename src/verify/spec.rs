@@ -74,16 +74,31 @@ pub enum SpecExpr {
 /// Specification binary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpecBinOp {
-    Add, Sub, Mul, Div, Mod,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    And, Or,
-    BitAnd, BitOr, BitXor, Shl, Shr,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 /// Specification unary operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpecUnaryOp {
-    Not, Neg,
+    Not,
+    Neg,
 }
 
 impl fmt::Display for SpecExpr {
@@ -242,7 +257,9 @@ pub fn substitute(expr: &SpecExpr, var: &str, replacement: &SpecExpr) -> SpecExp
             *op,
             Box::new(substitute(rhs, var, replacement)),
         ),
-        SpecExpr::UnaryOp(op, inner) => SpecExpr::UnaryOp(*op, Box::new(substitute(inner, var, replacement))),
+        SpecExpr::UnaryOp(op, inner) => {
+            SpecExpr::UnaryOp(*op, Box::new(substitute(inner, var, replacement)))
+        }
         SpecExpr::Old(inner) => SpecExpr::Old(Box::new(substitute(inner, var, replacement))),
         SpecExpr::Index(arr, idx) => SpecExpr::Index(
             Box::new(substitute(arr, var, replacement)),
@@ -291,14 +308,20 @@ impl SsaContext {
     /// Gets the current SSA version of a variable.
     pub fn current(&self, name: &str) -> SsaVar {
         let version = self.versions.get(name).copied().unwrap_or(0);
-        SsaVar { name: name.to_string(), version }
+        SsaVar {
+            name: name.to_string(),
+            version,
+        }
     }
 
     /// Creates a new version (for assignment).
     pub fn next_version(&mut self, name: &str) -> SsaVar {
         let version = self.versions.entry(name.to_string()).or_insert(0);
         *version += 1;
-        SsaVar { name: name.to_string(), version: *version }
+        SsaVar {
+            name: name.to_string(),
+            version: *version,
+        }
     }
 }
 
@@ -307,7 +330,12 @@ impl SsaContext {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Generates array bounds check VC: `0 <= idx && idx < len(arr)`.
-pub fn array_bounds_vc(arr_name: &str, index_expr: &SpecExpr, file: &str, line: u32) -> VerificationCondition {
+pub fn array_bounds_vc(
+    arr_name: &str,
+    index_expr: &SpecExpr,
+    file: &str,
+    line: u32,
+) -> VerificationCondition {
     let formula = SpecExpr::BinOp(
         Box::new(SpecExpr::BinOp(
             Box::new(SpecExpr::IntLit(0)),
@@ -322,14 +350,24 @@ pub fn array_bounds_vc(arr_name: &str, index_expr: &SpecExpr, file: &str, line: 
         )),
     );
     VerificationCondition {
-        id: 0, description: format!("array bounds: {arr_name}[{index_expr}]"),
-        formula, file: file.to_string(), line, kind: VcKind::ArrayBoundsCheck,
+        id: 0,
+        description: format!("array bounds: {arr_name}[{index_expr}]"),
+        formula,
+        file: file.to_string(),
+        line,
+        kind: VcKind::ArrayBoundsCheck,
         status: ProofStatus::Pending,
     }
 }
 
 /// Generates integer overflow check VC.
-pub fn overflow_vc(expr: &SpecExpr, min: i64, max: i64, file: &str, line: u32) -> VerificationCondition {
+pub fn overflow_vc(
+    expr: &SpecExpr,
+    min: i64,
+    max: i64,
+    file: &str,
+    line: u32,
+) -> VerificationCondition {
     let formula = SpecExpr::BinOp(
         Box::new(SpecExpr::BinOp(
             Box::new(SpecExpr::IntLit(min)),
@@ -344,8 +382,12 @@ pub fn overflow_vc(expr: &SpecExpr, min: i64, max: i64, file: &str, line: u32) -
         )),
     );
     VerificationCondition {
-        id: 0, description: format!("no overflow: {min} <= {expr} <= {max}"),
-        formula, file: file.to_string(), line, kind: VcKind::IntegerOverflow,
+        id: 0,
+        description: format!("no overflow: {min} <= {expr} <= {max}"),
+        formula,
+        file: file.to_string(),
+        line,
+        kind: VcKind::IntegerOverflow,
         status: ProofStatus::Pending,
     }
 }
@@ -358,8 +400,12 @@ pub fn div_zero_vc(divisor: &SpecExpr, file: &str, line: u32) -> VerificationCon
         Box::new(SpecExpr::IntLit(0)),
     );
     VerificationCondition {
-        id: 0, description: format!("division by zero: {divisor} != 0"),
-        formula, file: file.to_string(), line, kind: VcKind::DivisionByZero,
+        id: 0,
+        description: format!("division by zero: {divisor} != 0"),
+        formula,
+        file: file.to_string(),
+        line,
+        kind: VcKind::DivisionByZero,
         status: ProofStatus::Pending,
     }
 }
@@ -372,8 +418,12 @@ pub fn null_safety_vc(var_name: &str, file: &str, line: u32) -> VerificationCond
         Box::new(SpecExpr::Var("null".to_string())),
     );
     VerificationCondition {
-        id: 0, description: format!("null safety: {var_name} is Some"),
-        formula, file: file.to_string(), line, kind: VcKind::NullSafety,
+        id: 0,
+        description: format!("null safety: {var_name} is Some"),
+        formula,
+        file: file.to_string(),
+        line,
+        kind: VcKind::NullSafety,
         status: ProofStatus::Pending,
     }
 }
@@ -388,19 +438,30 @@ pub fn to_smtlib2(expr: &SpecExpr) -> String {
         SpecExpr::BoolLit(true) => "true".to_string(),
         SpecExpr::BoolLit(false) => "false".to_string(),
         SpecExpr::IntLit(i) => {
-            if *i < 0 { format!("(- {})", -i) } else { i.to_string() }
+            if *i < 0 {
+                format!("(- {})", -i)
+            } else {
+                i.to_string()
+            }
         }
         SpecExpr::Var(name) | SpecExpr::Ghost(name) => name.clone(),
         SpecExpr::Result => "result".to_string(),
         SpecExpr::Old(inner) => format!("old_{}", to_smtlib2(inner)),
         SpecExpr::BinOp(lhs, op, rhs) => {
             let op_str = match op {
-                SpecBinOp::Add => "+", SpecBinOp::Sub => "-", SpecBinOp::Mul => "*",
-                SpecBinOp::Div => "div", SpecBinOp::Mod => "mod",
-                SpecBinOp::Eq => "=", SpecBinOp::Ne => "distinct",
-                SpecBinOp::Lt => "<", SpecBinOp::Le => "<=",
-                SpecBinOp::Gt => ">", SpecBinOp::Ge => ">=",
-                SpecBinOp::And => "and", SpecBinOp::Or => "or",
+                SpecBinOp::Add => "+",
+                SpecBinOp::Sub => "-",
+                SpecBinOp::Mul => "*",
+                SpecBinOp::Div => "div",
+                SpecBinOp::Mod => "mod",
+                SpecBinOp::Eq => "=",
+                SpecBinOp::Ne => "distinct",
+                SpecBinOp::Lt => "<",
+                SpecBinOp::Le => "<=",
+                SpecBinOp::Gt => ">",
+                SpecBinOp::Ge => ">=",
+                SpecBinOp::And => "and",
+                SpecBinOp::Or => "or",
                 _ => "unknown",
             };
             format!("({} {} {})", op_str, to_smtlib2(lhs), to_smtlib2(rhs))
@@ -408,12 +469,20 @@ pub fn to_smtlib2(expr: &SpecExpr) -> String {
         SpecExpr::UnaryOp(SpecUnaryOp::Not, inner) => format!("(not {})", to_smtlib2(inner)),
         SpecExpr::UnaryOp(SpecUnaryOp::Neg, inner) => format!("(- {})", to_smtlib2(inner)),
         SpecExpr::Forall(v, lo, hi, body) => {
-            format!("(forall (({v} Int)) (=> (and (>= {v} {}) (<= {v} {})) {}))",
-                to_smtlib2(lo), to_smtlib2(hi), to_smtlib2(body))
+            format!(
+                "(forall (({v} Int)) (=> (and (>= {v} {}) (<= {v} {})) {}))",
+                to_smtlib2(lo),
+                to_smtlib2(hi),
+                to_smtlib2(body)
+            )
         }
         SpecExpr::Exists(v, lo, hi, body) => {
-            format!("(exists (({v} Int)) (and (>= {v} {}) (<= {v} {}) {}))",
-                to_smtlib2(lo), to_smtlib2(hi), to_smtlib2(body))
+            format!(
+                "(exists (({v} Int)) (and (>= {v} {}) (<= {v} {}) {}))",
+                to_smtlib2(lo),
+                to_smtlib2(hi),
+                to_smtlib2(body)
+            )
         }
         SpecExpr::Implies(lhs, rhs) => format!("(=> {} {})", to_smtlib2(lhs), to_smtlib2(rhs)),
         SpecExpr::Len(inner) => format!("(len {})", to_smtlib2(inner)),
@@ -464,7 +533,10 @@ mod tests {
             Box::new(SpecExpr::IntLit(0)),
             Box::new(SpecExpr::Var("n".to_string())),
             Box::new(SpecExpr::BinOp(
-                Box::new(SpecExpr::Index(Box::new(SpecExpr::Var("arr".to_string())), Box::new(SpecExpr::Var("i".to_string())))),
+                Box::new(SpecExpr::Index(
+                    Box::new(SpecExpr::Var("arr".to_string())),
+                    Box::new(SpecExpr::Var("i".to_string())),
+                )),
                 SpecBinOp::Ge,
                 Box::new(SpecExpr::IntLit(0)),
             )),
@@ -569,7 +641,10 @@ mod tests {
             Box::new(SpecExpr::IntLit(0)),
             Box::new(SpecExpr::Var("n".to_string())),
             Box::new(SpecExpr::BinOp(
-                Box::new(SpecExpr::Index(Box::new(SpecExpr::Var("a".to_string())), Box::new(SpecExpr::Var("i".to_string())))),
+                Box::new(SpecExpr::Index(
+                    Box::new(SpecExpr::Var("a".to_string())),
+                    Box::new(SpecExpr::Var("i".to_string())),
+                )),
                 SpecBinOp::Ge,
                 Box::new(SpecExpr::IntLit(0)),
             )),
@@ -596,14 +671,32 @@ mod tests {
             ensures: vec![SpecExpr::Forall(
                 "i".to_string(),
                 Box::new(SpecExpr::IntLit(0)),
-                Box::new(SpecExpr::BinOp(Box::new(SpecExpr::Len(Box::new(SpecExpr::Var("arr".to_string())))), SpecBinOp::Sub, Box::new(SpecExpr::IntLit(1)))),
                 Box::new(SpecExpr::BinOp(
-                    Box::new(SpecExpr::Index(Box::new(SpecExpr::Var("arr".to_string())), Box::new(SpecExpr::Var("i".to_string())))),
+                    Box::new(SpecExpr::Len(Box::new(SpecExpr::Var("arr".to_string())))),
+                    SpecBinOp::Sub,
+                    Box::new(SpecExpr::IntLit(1)),
+                )),
+                Box::new(SpecExpr::BinOp(
+                    Box::new(SpecExpr::Index(
+                        Box::new(SpecExpr::Var("arr".to_string())),
+                        Box::new(SpecExpr::Var("i".to_string())),
+                    )),
                     SpecBinOp::Le,
-                    Box::new(SpecExpr::Index(Box::new(SpecExpr::Var("arr".to_string())), Box::new(SpecExpr::BinOp(Box::new(SpecExpr::Var("i".to_string())), SpecBinOp::Add, Box::new(SpecExpr::IntLit(1)))))),
+                    Box::new(SpecExpr::Index(
+                        Box::new(SpecExpr::Var("arr".to_string())),
+                        Box::new(SpecExpr::BinOp(
+                            Box::new(SpecExpr::Var("i".to_string())),
+                            SpecBinOp::Add,
+                            Box::new(SpecExpr::IntLit(1)),
+                        )),
+                    )),
                 )),
             )],
-            ghost_vars: vec![GhostVar { name: "perm".to_string(), var_type: "bool".to_string(), init: None }],
+            ghost_vars: vec![GhostVar {
+                name: "perm".to_string(),
+                var_type: "bool".to_string(),
+                init: None,
+            }],
         };
         assert_eq!(spec.ghost_vars.len(), 1);
         assert_eq!(spec.ensures.len(), 1);
@@ -612,7 +705,10 @@ mod tests {
     #[test]
     fn v1_2_proof_status_display() {
         assert_eq!(format!("{}", ProofStatus::Verified), "verified");
-        assert_eq!(format!("{}", ProofStatus::Failed("x = -1".to_string())), "FAILED: x = -1");
+        assert_eq!(
+            format!("{}", ProofStatus::Failed("x = -1".to_string())),
+            "FAILED: x = -1"
+        );
         assert_eq!(format!("{}", ProofStatus::Timeout), "timeout");
     }
 

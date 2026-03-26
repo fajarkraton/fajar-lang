@@ -35,18 +35,26 @@ pub struct CallRecord {
 impl CallRecord {
     /// Duration in nanoseconds.
     pub fn duration_ns(&self) -> u64 {
-        if self.exit_ns == 0 { return 0; }
+        if self.exit_ns == 0 {
+            return 0;
+        }
         self.exit_ns.saturating_sub(self.entry_ns)
     }
 
     /// Duration in microseconds.
-    pub fn duration_us(&self) -> f64 { self.duration_ns() as f64 / 1000.0 }
+    pub fn duration_us(&self) -> f64 {
+        self.duration_ns() as f64 / 1000.0
+    }
 
     /// Duration in milliseconds.
-    pub fn duration_ms(&self) -> f64 { self.duration_ns() as f64 / 1_000_000.0 }
+    pub fn duration_ms(&self) -> f64 {
+        self.duration_ns() as f64 / 1_000_000.0
+    }
 
     /// Net memory change (allocated - freed).
-    pub fn net_memory(&self) -> i64 { self.alloc_bytes as i64 - self.free_bytes as i64 }
+    pub fn net_memory(&self) -> i64 {
+        self.alloc_bytes as i64 - self.free_bytes as i64
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -87,7 +95,10 @@ impl CallGraph {
 
         for rec in records {
             // Inclusive time
-            *graph.inclusive_time.entry(rec.function.clone()).or_default() += rec.duration_ns();
+            *graph
+                .inclusive_time
+                .entry(rec.function.clone())
+                .or_default() += rec.duration_ns();
             *graph.call_counts.entry(rec.function.clone()).or_default() += 1;
 
             // Parent edge
@@ -103,23 +114,40 @@ impl CallGraph {
         // Compute self time = inclusive - children
         for rec in records {
             let self_time = graph.self_time.entry(rec.function.clone()).or_default();
-            let child_time: u64 = records.iter()
-                .filter(|r| r.parent_idx == records.iter().position(|x| std::ptr::eq(x, rec)).unwrap_or(0) as i64)
+            let child_time: u64 = records
+                .iter()
+                .filter(|r| {
+                    r.parent_idx
+                        == records
+                            .iter()
+                            .position(|x| std::ptr::eq(x, rec))
+                            .unwrap_or(0) as i64
+                })
                 .map(|r| r.duration_ns())
                 .sum();
             *self_time += rec.duration_ns().saturating_sub(child_time);
         }
 
-        graph.edges = edges_map.into_iter().map(|((caller, callee), (count, total_ns))| {
-            CallEdge { caller, callee, count, total_ns }
-        }).collect();
+        graph.edges = edges_map
+            .into_iter()
+            .map(|((caller, callee), (count, total_ns))| CallEdge {
+                caller,
+                callee,
+                count,
+                total_ns,
+            })
+            .collect();
 
         graph
     }
 
     /// Returns the top N functions by self time.
     pub fn hot_functions(&self, n: usize) -> Vec<(&str, u64)> {
-        let mut sorted: Vec<_> = self.self_time.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+        let mut sorted: Vec<_> = self
+            .self_time
+            .iter()
+            .map(|(k, v)| (k.as_str(), *v))
+            .collect();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
         sorted.truncate(n);
         sorted
@@ -160,7 +188,9 @@ impl BranchProfile {
     /// Returns taken ratio (0.0 to 1.0).
     pub fn taken_ratio(&self) -> f64 {
         let total = self.taken + self.not_taken;
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
         self.taken as f64 / total as f64
     }
 }
@@ -252,7 +282,9 @@ impl TraceEvent {
             json.push_str(&format!(r#","dur":{dur}"#));
         }
         if !self.args.is_empty() {
-            let args_json: Vec<String> = self.args.iter()
+            let args_json: Vec<String> = self
+                .args
+                .iter()
                 .map(|(k, v)| format!(r#""{k}":"{v}""#))
                 .collect();
             json.push_str(&format!(r#","args":{{{}}}"#, args_json.join(",")));
@@ -295,9 +327,15 @@ mod tests {
     #[test]
     fn d1_1_call_record_duration() {
         let rec = CallRecord {
-            function: "fib".to_string(), file: "main.fj".to_string(), line: 5,
-            entry_ns: 1_000_000, exit_ns: 2_500_000, depth: 0, parent_idx: -1,
-            alloc_bytes: 0, free_bytes: 0,
+            function: "fib".to_string(),
+            file: "main.fj".to_string(),
+            line: 5,
+            entry_ns: 1_000_000,
+            exit_ns: 2_500_000,
+            depth: 0,
+            parent_idx: -1,
+            alloc_bytes: 0,
+            free_bytes: 0,
         };
         assert_eq!(rec.duration_ns(), 1_500_000);
         assert!((rec.duration_us() - 1500.0).abs() < 0.1);
@@ -307,9 +345,39 @@ mod tests {
     #[test]
     fn d1_2_call_graph_hot_functions() {
         let records = vec![
-            CallRecord { function: "main".to_string(), file: "a.fj".to_string(), line: 1, entry_ns: 0, exit_ns: 10_000_000, depth: 0, parent_idx: -1, alloc_bytes: 0, free_bytes: 0 },
-            CallRecord { function: "compute".to_string(), file: "a.fj".to_string(), line: 5, entry_ns: 1_000_000, exit_ns: 8_000_000, depth: 1, parent_idx: 0, alloc_bytes: 0, free_bytes: 0 },
-            CallRecord { function: "log".to_string(), file: "a.fj".to_string(), line: 10, entry_ns: 8_000_000, exit_ns: 9_000_000, depth: 1, parent_idx: 0, alloc_bytes: 0, free_bytes: 0 },
+            CallRecord {
+                function: "main".to_string(),
+                file: "a.fj".to_string(),
+                line: 1,
+                entry_ns: 0,
+                exit_ns: 10_000_000,
+                depth: 0,
+                parent_idx: -1,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+            CallRecord {
+                function: "compute".to_string(),
+                file: "a.fj".to_string(),
+                line: 5,
+                entry_ns: 1_000_000,
+                exit_ns: 8_000_000,
+                depth: 1,
+                parent_idx: 0,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
+            CallRecord {
+                function: "log".to_string(),
+                file: "a.fj".to_string(),
+                line: 10,
+                entry_ns: 8_000_000,
+                exit_ns: 9_000_000,
+                depth: 1,
+                parent_idx: 0,
+                alloc_bytes: 0,
+                free_bytes: 0,
+            },
         ];
         let graph = CallGraph::from_records(&records);
         assert!(graph.call_counts.get("compute").unwrap() >= &1);
@@ -319,7 +387,12 @@ mod tests {
 
     #[test]
     fn d1_7_branch_profile() {
-        let bp = BranchProfile { file: "a.fj".to_string(), line: 10, taken: 75, not_taken: 25 };
+        let bp = BranchProfile {
+            file: "a.fj".to_string(),
+            line: 10,
+            taken: 75,
+            not_taken: 25,
+        };
         assert!((bp.taken_ratio() - 0.75).abs() < 0.001);
     }
 
@@ -327,11 +400,21 @@ mod tests {
     fn d1_9_collapsed_stacks() {
         let profile = SamplingProfile {
             samples: vec![
-                Sample { timestamp_ns: 0, frames: vec!["main".to_string(), "compute".to_string()] },
-                Sample { timestamp_ns: 1000, frames: vec!["main".to_string(), "compute".to_string()] },
-                Sample { timestamp_ns: 2000, frames: vec!["main".to_string(), "log".to_string()] },
+                Sample {
+                    timestamp_ns: 0,
+                    frames: vec!["main".to_string(), "compute".to_string()],
+                },
+                Sample {
+                    timestamp_ns: 1000,
+                    frames: vec!["main".to_string(), "compute".to_string()],
+                },
+                Sample {
+                    timestamp_ns: 2000,
+                    frames: vec!["main".to_string(), "log".to_string()],
+                },
             ],
-            frequency_hz: 1000, total_ns: 3000,
+            frequency_hz: 1000,
+            total_ns: 3000,
         };
         let collapsed = profile.to_collapsed_stacks();
         assert!(collapsed.contains("main;compute 2"));
@@ -341,8 +424,13 @@ mod tests {
     #[test]
     fn d1_10_trace_event_json() {
         let event = TraceEvent {
-            name: "fib".to_string(), cat: "function".to_string(), ph: 'X',
-            ts: 1500.0, dur: Some(500.0), pid: 1, tid: 1,
+            name: "fib".to_string(),
+            cat: "function".to_string(),
+            ph: 'X',
+            ts: 1500.0,
+            dur: Some(500.0),
+            pid: 1,
+            tid: 1,
             args: HashMap::from([("depth".to_string(), "3".to_string())]),
         };
         let json = event.to_json();
@@ -354,9 +442,15 @@ mod tests {
     #[test]
     fn d1_10_to_trace_events() {
         let records = vec![CallRecord {
-            function: "test".to_string(), file: "t.fj".to_string(), line: 1,
-            entry_ns: 0, exit_ns: 1000, depth: 0, parent_idx: -1,
-            alloc_bytes: 256, free_bytes: 0,
+            function: "test".to_string(),
+            file: "t.fj".to_string(),
+            line: 1,
+            entry_ns: 0,
+            exit_ns: 1000,
+            depth: 0,
+            parent_idx: -1,
+            alloc_bytes: 256,
+            free_bytes: 0,
         }];
         let json = to_trace_events(&records);
         assert!(json.starts_with('['));
@@ -366,9 +460,15 @@ mod tests {
     #[test]
     fn d1_1_net_memory() {
         let rec = CallRecord {
-            function: "alloc_heavy".to_string(), file: "a.fj".to_string(), line: 1,
-            entry_ns: 0, exit_ns: 1000, depth: 0, parent_idx: -1,
-            alloc_bytes: 4096, free_bytes: 1024,
+            function: "alloc_heavy".to_string(),
+            file: "a.fj".to_string(),
+            line: 1,
+            entry_ns: 0,
+            exit_ns: 1000,
+            depth: 0,
+            parent_idx: -1,
+            alloc_bytes: 4096,
+            free_bytes: 1024,
         };
         assert_eq!(rec.net_memory(), 3072);
     }
@@ -377,10 +477,17 @@ mod tests {
     fn d1_9_function_counts() {
         let profile = SamplingProfile {
             samples: vec![
-                Sample { timestamp_ns: 0, frames: vec!["a".to_string(), "b".to_string()] },
-                Sample { timestamp_ns: 1, frames: vec!["a".to_string(), "c".to_string()] },
+                Sample {
+                    timestamp_ns: 0,
+                    frames: vec!["a".to_string(), "b".to_string()],
+                },
+                Sample {
+                    timestamp_ns: 1,
+                    frames: vec!["a".to_string(), "c".to_string()],
+                },
             ],
-            frequency_hz: 1000, total_ns: 2,
+            frequency_hz: 1000,
+            total_ns: 2,
         };
         let counts = profile.function_counts();
         assert_eq!(*counts.get("a").unwrap(), 2);

@@ -55,7 +55,11 @@ impl Default for PythonConfig {
     fn default() -> Self {
         Self {
             python_path: "python3".to_string(),
-            version: PythonVersion { major: 3, minor: 11, patch: 0 },
+            version: PythonVersion {
+                major: 3,
+                minor: 11,
+                patch: 0,
+            },
             venv_path: None,
             sys_path: Vec::new(),
             auto_init: true,
@@ -81,13 +85,27 @@ pub enum PyValue {
     Dict(Vec<(PyValue, PyValue)>),
     Set(Vec<PyValue>),
     /// NumPy array: shape + data type + flattened data.
-    NdArray { shape: Vec<usize>, dtype: NumpyDtype, data: Vec<f64> },
+    NdArray {
+        shape: Vec<usize>,
+        dtype: NumpyDtype,
+        data: Vec<f64>,
+    },
     /// Opaque Python object reference (refcounted handle).
-    Object { type_name: String, handle: u64 },
+    Object {
+        type_name: String,
+        handle: u64,
+    },
     /// Python callable.
-    Callable { name: String, handle: u64 },
+    Callable {
+        name: String,
+        handle: u64,
+    },
     /// Python exception.
-    Error { exc_type: String, message: String, traceback: Option<String> },
+    Error {
+        exc_type: String,
+        message: String,
+        traceback: Option<String>,
+    },
 }
 
 /// NumPy data type.
@@ -163,7 +181,8 @@ impl PyValue {
                 format!("[{}]", inner.join(", "))
             }
             Self::Dict(entries) => {
-                let inner: Vec<String> = entries.iter()
+                let inner: Vec<String> = entries
+                    .iter()
                     .map(|(k, v)| format!("{}: {}", k.to_fajar_repr(), v.to_fajar_repr()))
                     .collect();
                 format!("{{{}}}", inner.join(", "))
@@ -172,13 +191,17 @@ impl PyValue {
                 let shape_str: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
                 format!("Tensor<{}>[{}]", dtype.to_fajar_type(), shape_str.join("×"))
             }
-            Self::Error { exc_type, message, .. } => format!("Err({exc_type}: {message})"),
+            Self::Error {
+                exc_type, message, ..
+            } => format!("Err({exc_type}: {message})"),
             _ => format!("<{}>", self.type_name()),
         }
     }
 
     /// Returns true if this is an error.
-    pub fn is_error(&self) -> bool { matches!(self, Self::Error { .. }) }
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::Error { .. })
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -234,15 +257,24 @@ pub struct PyCall {
 impl PyCall {
     /// Creates a simple function call.
     pub fn new(module: &str, function: &str) -> Self {
-        Self { module: module.to_string(), function: function.to_string(), args: Vec::new(), kwargs: HashMap::new() }
+        Self {
+            module: module.to_string(),
+            function: function.to_string(),
+            args: Vec::new(),
+            kwargs: HashMap::new(),
+        }
     }
 
     /// Adds a positional argument.
-    pub fn arg(mut self, value: PyValue) -> Self { self.args.push(value); self }
+    pub fn arg(mut self, value: PyValue) -> Self {
+        self.args.push(value);
+        self
+    }
 
     /// Adds a keyword argument.
     pub fn kwarg(mut self, key: &str, value: PyValue) -> Self {
-        self.kwargs.insert(key.to_string(), value); self
+        self.kwargs.insert(key.to_string(), value);
+        self
     }
 }
 
@@ -272,7 +304,10 @@ pub struct GilConfig {
 
 impl Default for GilConfig {
     fn default() -> Self {
-        Self { auto_release: true, release_threshold_us: 100 }
+        Self {
+            auto_release: true,
+            release_threshold_us: 100,
+        }
     }
 }
 
@@ -316,7 +351,7 @@ pub enum PyAttrKind {
 /// Maps Python exception types to Fajar error types.
 pub fn map_exception(exc_type: &str) -> &str {
     match exc_type {
-        "ValueError" => "SE004",        // TypeMismatch
+        "ValueError" => "SE004", // TypeMismatch
         "TypeError" => "SE004",
         "IndexError" => "RE006",        // IndexOutOfBounds
         "KeyError" => "RE007",          // KeyNotFound
@@ -388,10 +423,17 @@ pub struct PythonAnnotation {
 }
 
 /// Generates the FFI wrapper for a @python annotated function.
-pub fn generate_python_wrapper(ann: &PythonAnnotation, params: &[(String, String)], return_type: &str) -> String {
+pub fn generate_python_wrapper(
+    ann: &PythonAnnotation,
+    params: &[(String, String)],
+    return_type: &str,
+) -> String {
     let py_name = ann.python_name.as_deref().unwrap_or(&ann.fajar_name);
     let param_list: Vec<String> = params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
-    let arg_converts: Vec<String> = params.iter().map(|(n, _)| format!("    let _py_{n} = to_python({n})")).collect();
+    let arg_converts: Vec<String> = params
+        .iter()
+        .map(|(n, _)| format!("    let _py_{n} = to_python({n})"))
+        .collect();
 
     format!(
         r#"@python fn {fajar_name}({params}) -> {ret} {{
@@ -421,12 +463,20 @@ mod tests {
 
     #[test]
     fn f2_1_python_version() {
-        let v = PythonVersion { major: 3, minor: 11, patch: 5 };
+        let v = PythonVersion {
+            major: 3,
+            minor: 11,
+            patch: 5,
+        };
         assert!(v.is_supported());
         assert_eq!(format!("{v}"), "3.11.5");
         assert_eq!(v.lib_name(), "python3.11");
 
-        let old = PythonVersion { major: 3, minor: 6, patch: 0 };
+        let old = PythonVersion {
+            major: 3,
+            minor: 6,
+            patch: 0,
+        };
         assert!(!old.is_supported());
     }
 
@@ -444,7 +494,10 @@ mod tests {
         assert_eq!(PyValue::Bool(true).to_fajar_repr(), "true");
         assert_eq!(PyValue::Int(42).to_fajar_repr(), "42");
         assert_eq!(PyValue::Str("hi".to_string()).to_fajar_repr(), "\"hi\"");
-        assert_eq!(PyValue::List(vec![PyValue::Int(1), PyValue::Int(2)]).to_fajar_repr(), "[1, 2]");
+        assert_eq!(
+            PyValue::List(vec![PyValue::Int(1), PyValue::Int(2)]).to_fajar_repr(),
+            "[1, 2]"
+        );
     }
 
     #[test]

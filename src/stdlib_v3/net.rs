@@ -26,7 +26,9 @@ impl fmt::Display for SocketAddr {
             IpAddr::V6(segments) => {
                 write!(f, "[")?;
                 for (i, s) in segments.iter().enumerate() {
-                    if i > 0 { write!(f, ":")?; }
+                    if i > 0 {
+                        write!(f, ":")?;
+                    }
                     write!(f, "{s:04x}")?;
                 }
                 write!(f, "]:{}", self.port)
@@ -100,7 +102,11 @@ pub struct UdpConfig {
 
 impl Default for UdpConfig {
     fn default() -> Self {
-        Self { recv_buf_size: 65536, broadcast: false, multicast_ttl: 1 }
+        Self {
+            recv_buf_size: 65536,
+            broadcast: false,
+            multicast_ttl: 1,
+        }
     }
 }
 
@@ -111,7 +117,13 @@ impl Default for UdpConfig {
 /// HTTP method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpMethod {
-    Get, Post, Put, Delete, Patch, Head, Options,
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Head,
+    Options,
 }
 
 impl fmt::Display for HttpMethod {
@@ -214,8 +226,7 @@ pub struct HttpResponse {
 impl HttpResponse {
     /// Returns body as UTF-8 string.
     pub fn text(&self) -> Result<String, String> {
-        String::from_utf8(self.body.clone())
-            .map_err(|e| format!("invalid UTF-8: {e}"))
+        String::from_utf8(self.body.clone()).map_err(|e| format!("invalid UTF-8: {e}"))
     }
 
     /// Returns true if status is 2xx.
@@ -230,7 +241,9 @@ impl HttpResponse {
 
     /// Returns content-length.
     pub fn content_length(&self) -> Option<usize> {
-        self.headers.get("content-length").and_then(|s| s.parse().ok())
+        self.headers
+            .get("content-length")
+            .and_then(|s| s.parse().ok())
     }
 }
 
@@ -267,7 +280,10 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            addr: SocketAddr { ip: IpAddr::V4(0, 0, 0, 0), port: 8080 },
+            addr: SocketAddr {
+                ip: IpAddr::V4(0, 0, 0, 0),
+                port: 8080,
+            },
             max_connections: 1024,
             body_limit: 10 * 1024 * 1024, // 10MB
             keep_alive_ms: 60_000,
@@ -293,7 +309,9 @@ pub fn match_route(pattern: &str, url: &str) -> Option<HashMap<String, String>> 
     let pat_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
     let url_parts: Vec<&str> = url.split('/').filter(|s| !s.is_empty()).collect();
 
-    if pat_parts.len() != url_parts.len() { return None; }
+    if pat_parts.len() != url_parts.len() {
+        return None;
+    }
 
     let mut params = HashMap::new();
     for (p, u) in pat_parts.iter().zip(url_parts.iter()) {
@@ -333,17 +351,26 @@ pub struct WsMessage {
 impl WsMessage {
     /// Creates a text message.
     pub fn text(s: &str) -> Self {
-        Self { opcode: WsOpcode::Text, payload: s.as_bytes().to_vec() }
+        Self {
+            opcode: WsOpcode::Text,
+            payload: s.as_bytes().to_vec(),
+        }
     }
 
     /// Creates a binary message.
     pub fn binary(data: Vec<u8>) -> Self {
-        Self { opcode: WsOpcode::Binary, payload: data }
+        Self {
+            opcode: WsOpcode::Binary,
+            payload: data,
+        }
     }
 
     /// Creates a close message.
     pub fn close() -> Self {
-        Self { opcode: WsOpcode::Close, payload: Vec::new() }
+        Self {
+            opcode: WsOpcode::Close,
+            payload: Vec::new(),
+        }
     }
 
     /// Returns payload as string (for text frames).
@@ -358,7 +385,16 @@ impl WsMessage {
 
 /// DNS record types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DnsRecordType { A, AAAA, CNAME, MX, TXT, NS, SOA, SRV }
+pub enum DnsRecordType {
+    A,
+    AAAA,
+    CNAME,
+    MX,
+    TXT,
+    NS,
+    SOA,
+    SRV,
+}
 
 /// A parsed URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -385,11 +421,11 @@ impl Url {
     /// Parses a URL string.
     pub fn parse(url: &str) -> Result<Self, String> {
         // Simple parser: scheme://[user:pass@]host[:port]/path[?query][#fragment]
-        let (scheme, rest) = url.split_once("://")
+        let (scheme, rest) = url
+            .split_once("://")
             .ok_or_else(|| "missing scheme".to_string())?;
 
-        let (auth_host, path_rest) = rest.split_once('/')
-            .unwrap_or((rest, ""));
+        let (auth_host, path_rest) = rest.split_once('/').unwrap_or((rest, ""));
 
         // Parse auth
         let (username, password, host_port) = if auth_host.contains('@') {
@@ -429,17 +465,38 @@ impl Url {
             (path, None)
         };
 
-        Ok(Url { scheme: scheme.to_string(), host, port, path, query, fragment, username, password })
+        Ok(Url {
+            scheme: scheme.to_string(),
+            host,
+            port,
+            path,
+            query,
+            fragment,
+            username,
+            password,
+        })
     }
 
     /// Returns the full URL as string.
     pub fn to_string_url(&self) -> String {
         let mut url = format!("{}://{}", self.scheme, self.host);
-        let default_port = if self.scheme == "https" || self.scheme == "wss" { 443 } else { 80 };
-        if self.port != default_port { url.push_str(&format!(":{}", self.port)); }
+        let default_port = if self.scheme == "https" || self.scheme == "wss" {
+            443
+        } else {
+            80
+        };
+        if self.port != default_port {
+            url.push_str(&format!(":{}", self.port));
+        }
         url.push_str(&self.path);
-        if let Some(ref q) = self.query { url.push('?'); url.push_str(q); }
-        if let Some(ref f) = self.fragment { url.push('#'); url.push_str(f); }
+        if let Some(ref q) = self.query {
+            url.push('?');
+            url.push_str(q);
+        }
+        if let Some(ref f) = self.fragment {
+            url.push('#');
+            url.push_str(f);
+        }
         url
     }
 }
@@ -472,7 +529,11 @@ pub struct PoolConfig {
 
 impl Default for PoolConfig {
     fn default() -> Self {
-        Self { max_per_host: 10, max_total: 100, idle_timeout_secs: 300 }
+        Self {
+            max_per_host: 10,
+            max_total: 100,
+            idle_timeout_secs: 300,
+        }
     }
 }
 
@@ -492,7 +553,12 @@ pub struct RateLimiter {
 impl RateLimiter {
     /// Creates a new rate limiter.
     pub fn new(max_tokens: u64, refill_rate: u64) -> Self {
-        Self { max_tokens, tokens: max_tokens, refill_rate, last_refill_ms: 0 }
+        Self {
+            max_tokens,
+            tokens: max_tokens,
+            refill_rate,
+            last_refill_ms: 0,
+        }
     }
 
     /// Attempts to consume one token. Returns true if allowed.
@@ -515,7 +581,11 @@ impl RateLimiter {
 
 /// Circuit breaker state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CircuitState { Closed, Open, HalfOpen }
+pub enum CircuitState {
+    Closed,
+    Open,
+    HalfOpen,
+}
 
 /// Circuit breaker for fault tolerance.
 #[derive(Debug, Clone)]
@@ -535,7 +605,13 @@ pub struct CircuitBreaker {
 impl CircuitBreaker {
     /// Creates a new circuit breaker.
     pub fn new(threshold: u32, reset_timeout_ms: u64) -> Self {
-        Self { state: CircuitState::Closed, failure_count: 0, threshold, reset_timeout_ms, opened_at_ms: 0 }
+        Self {
+            state: CircuitState::Closed,
+            failure_count: 0,
+            threshold,
+            reset_timeout_ms,
+            opened_at_ms: 0,
+        }
     }
 
     /// Records a success.
@@ -582,7 +658,10 @@ mod tests {
 
     #[test]
     fn s1_1_socket_addr_display() {
-        let addr = SocketAddr { ip: IpAddr::V4(127, 0, 0, 1), port: 8080 };
+        let addr = SocketAddr {
+            ip: IpAddr::V4(127, 0, 0, 1),
+            port: 8080,
+        };
         assert_eq!(format!("{addr}"), "127.0.0.1:8080");
     }
 
@@ -606,9 +685,11 @@ mod tests {
     #[test]
     fn s1_4_http_response() {
         let resp = HttpResponse {
-            status: 200, status_text: "OK".to_string(),
+            status: 200,
+            status_text: "OK".to_string(),
             headers: HashMap::from([("content-type".to_string(), "application/json".to_string())]),
-            body: b"hello".to_vec(), elapsed_ms: 42.5,
+            body: b"hello".to_vec(),
+            elapsed_ms: 42.5,
         };
         assert!(resp.is_success());
         assert_eq!(resp.text().unwrap(), "hello");

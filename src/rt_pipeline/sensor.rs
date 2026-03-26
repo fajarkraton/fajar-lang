@@ -105,13 +105,29 @@ pub enum SensorPayload {
     /// IMU: accelerometer (x,y,z) + gyroscope (x,y,z) in SI units.
     Imu { accel: [f64; 3], gyro: [f64; 3] },
     /// Camera frame: width, height, pixel data (RGB888).
-    CameraFrame { width: u32, height: u32, data: Vec<u8> },
+    CameraFrame {
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+    },
     /// ADC: channel readings (0.0 to 1.0 normalized).
     Adc { channels: Vec<f64> },
     /// GPS: latitude, longitude, altitude, speed, heading.
-    Gps { lat: f64, lon: f64, alt: f64, speed: f64, heading: f64, satellites: u8 },
+    Gps {
+        lat: f64,
+        lon: f64,
+        alt: f64,
+        speed: f64,
+        heading: f64,
+        satellites: u8,
+    },
     /// LiDAR: array of distance measurements (meters).
-    Lidar { distances: Vec<f64>, angle_min: f64, angle_max: f64, angle_step: f64 },
+    Lidar {
+        distances: Vec<f64>,
+        angle_min: f64,
+        angle_max: f64,
+        angle_step: f64,
+    },
     /// Microphone: PCM samples (i16, mono).
     Audio { samples: Vec<i16>, sample_rate: u32 },
     /// Single scalar value (temperature, humidity, pressure).
@@ -139,7 +155,13 @@ pub struct ImuConfig {
 
 impl Default for ImuConfig {
     fn default() -> Self {
-        Self { i2c_addr: 0x68, accel_range_g: 4, gyro_range_dps: 500, lpf_bandwidth_hz: 42, sample_rate_hz: 100 }
+        Self {
+            i2c_addr: 0x68,
+            accel_range_g: 4,
+            gyro_range_dps: 500,
+            lpf_bandwidth_hz: 42,
+            sample_rate_hz: 100,
+        }
     }
 }
 
@@ -160,23 +182,45 @@ pub struct CameraConfig {
 
 /// Pixel format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PixelFormat { Rgb888, Bgr888, Yuv422, Grayscale, RawBayer }
+pub enum PixelFormat {
+    Rgb888,
+    Bgr888,
+    Yuv422,
+    Grayscale,
+    RawBayer,
+}
 
 impl Default for CameraConfig {
     fn default() -> Self {
-        Self { width: 320, height: 240, fps: 30, format: PixelFormat::Rgb888, auto_exposure: true }
+        Self {
+            width: 320,
+            height: 240,
+            fps: 30,
+            format: PixelFormat::Rgb888,
+            auto_exposure: true,
+        }
     }
 }
 
 /// GPS NMEA sentence types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NmeaSentence { Gga, Rmc, Gll, Vtg, Gsa }
+pub enum NmeaSentence {
+    Gga,
+    Rmc,
+    Gll,
+    Vtg,
+    Gsa,
+}
 
 /// Parses NMEA GGA sentence to GPS coordinates.
 pub fn parse_nmea_gga(sentence: &str) -> Result<(f64, f64, f64, u8), String> {
     let parts: Vec<&str> = sentence.split(',').collect();
-    if parts.len() < 15 { return Err("incomplete GGA sentence".to_string()); }
-    if !parts[0].ends_with("GGA") { return Err("not a GGA sentence".to_string()); }
+    if parts.len() < 15 {
+        return Err("incomplete GGA sentence".to_string());
+    }
+    if !parts[0].ends_with("GGA") {
+        return Err("not a GGA sentence".to_string());
+    }
 
     let lat = parse_nmea_coord(parts[2], parts[3])?;
     let lon = parse_nmea_coord(parts[4], parts[5])?;
@@ -187,13 +231,17 @@ pub fn parse_nmea_gga(sentence: &str) -> Result<(f64, f64, f64, u8), String> {
 }
 
 fn parse_nmea_coord(value: &str, direction: &str) -> Result<f64, String> {
-    if value.is_empty() { return Err("empty coordinate".to_string()); }
+    if value.is_empty() {
+        return Err("empty coordinate".to_string());
+    }
     let dot = value.find('.').ok_or("no decimal point")?;
     let deg_len = if dot > 4 { 3 } else { 2 }; // lon has 3 digits before decimal
     let degrees: f64 = value[..deg_len].parse().map_err(|e| format!("{e}"))?;
     let minutes: f64 = value[deg_len..].parse().map_err(|e| format!("{e}"))?;
     let mut coord = degrees + minutes / 60.0;
-    if direction == "S" || direction == "W" { coord = -coord; }
+    if direction == "S" || direction == "W" {
+        coord = -coord;
+    }
     Ok(coord)
 }
 
@@ -217,7 +265,12 @@ pub struct KalmanFilter {
 impl KalmanFilter {
     /// Creates a new Kalman filter.
     pub fn new(initial: f64, uncertainty: f64, process_noise: f64, measurement_noise: f64) -> Self {
-        Self { x: initial, p: uncertainty, q: process_noise, r: measurement_noise }
+        Self {
+            x: initial,
+            p: uncertainty,
+            q: process_noise,
+            r: measurement_noise,
+        }
     }
 
     /// Prediction step.
@@ -260,7 +313,10 @@ impl FusionFilter {
     /// Creates a new fusion filter with default parameters.
     pub fn new() -> Self {
         let make = || KalmanFilter::new(0.0, 1.0, 0.01, 0.1);
-        Self { pos: [make(), make(), make()], vel: [make(), make(), make()] }
+        Self {
+            pos: [make(), make(), make()],
+            vel: [make(), make(), make()],
+        }
     }
 
     /// Updates with IMU acceleration data (integrate to velocity).
@@ -304,7 +360,12 @@ pub struct RingBuffer<T> {
 impl<T> RingBuffer<T> {
     /// Creates a new ring buffer.
     pub fn new(capacity: usize) -> Self {
-        Self { data: VecDeque::with_capacity(capacity), capacity, total_pushed: 0, total_dropped: 0 }
+        Self {
+            data: VecDeque::with_capacity(capacity),
+            capacity,
+            total_pushed: 0,
+            total_dropped: 0,
+        }
     }
 
     /// Pushes an item, dropping oldest if full.
@@ -318,20 +379,30 @@ impl<T> RingBuffer<T> {
     }
 
     /// Pops the oldest item.
-    pub fn pop(&mut self) -> Option<T> { self.data.pop_front() }
+    pub fn pop(&mut self) -> Option<T> {
+        self.data.pop_front()
+    }
 
     /// Returns number of items.
-    pub fn len(&self) -> usize { self.data.len() }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
 
     /// Returns true if empty.
-    pub fn is_empty(&self) -> bool { self.data.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
 
     /// Returns true if full.
-    pub fn is_full(&self) -> bool { self.data.len() >= self.capacity }
+    pub fn is_full(&self) -> bool {
+        self.data.len() >= self.capacity
+    }
 
     /// Drop rate (fraction of total items dropped).
     pub fn drop_rate(&self) -> f64 {
-        if self.total_pushed == 0 { return 0.0; }
+        if self.total_pushed == 0 {
+            return 0.0;
+        }
         self.total_dropped as f64 / self.total_pushed as f64
     }
 }
@@ -348,46 +419,68 @@ pub struct SlidingWindow {
 impl SlidingWindow {
     /// Creates a new sliding window.
     pub fn new(size: usize) -> Self {
-        Self { values: VecDeque::with_capacity(size), size }
+        Self {
+            values: VecDeque::with_capacity(size),
+            size,
+        }
     }
 
     /// Adds a value to the window.
     pub fn push(&mut self, value: f64) {
-        if self.values.len() >= self.size { self.values.pop_front(); }
+        if self.values.len() >= self.size {
+            self.values.pop_front();
+        }
         self.values.push_back(value);
     }
 
     /// Returns the rolling mean.
     pub fn mean(&self) -> f64 {
-        if self.values.is_empty() { return 0.0; }
+        if self.values.is_empty() {
+            return 0.0;
+        }
         self.values.iter().sum::<f64>() / self.values.len() as f64
     }
 
     /// Returns the rolling variance.
     pub fn variance(&self) -> f64 {
-        if self.values.len() < 2 { return 0.0; }
+        if self.values.len() < 2 {
+            return 0.0;
+        }
         let mean = self.mean();
         self.values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (self.values.len() - 1) as f64
     }
 
     /// Returns the rolling standard deviation.
-    pub fn std_dev(&self) -> f64 { self.variance().sqrt() }
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
+    }
 
     /// Returns the min value in the window.
-    pub fn min(&self) -> f64 { self.values.iter().copied().fold(f64::INFINITY, f64::min) }
+    pub fn min(&self) -> f64 {
+        self.values.iter().copied().fold(f64::INFINITY, f64::min)
+    }
 
     /// Returns the max value in the window.
-    pub fn max(&self) -> f64 { self.values.iter().copied().fold(f64::NEG_INFINITY, f64::max) }
+    pub fn max(&self) -> f64 {
+        self.values
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max)
+    }
 
     /// Detects if the latest value is a peak.
     pub fn is_peak(&self) -> bool {
-        if self.values.len() < 3 { return false; }
+        if self.values.len() < 3 {
+            return false;
+        }
         let n = self.values.len();
         self.values[n - 2] > self.values[n - 3] && self.values[n - 2] > self.values[n - 1]
     }
 
     /// Returns true if window is full.
-    pub fn is_full(&self) -> bool { self.values.len() >= self.size }
+    pub fn is_full(&self) -> bool {
+        self.values.len() >= self.size
+    }
 }
 
 /// Normalizes a data slice to [0, 1].
@@ -395,7 +488,9 @@ pub fn normalize(data: &[f64]) -> Vec<f64> {
     let min = data.iter().copied().fold(f64::INFINITY, f64::min);
     let max = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let range = max - min;
-    if range == 0.0 { return vec![0.5; data.len()]; }
+    if range == 0.0 {
+        return vec![0.5; data.len()];
+    }
     data.iter().map(|v| (v - min) / range).collect()
 }
 
@@ -405,7 +500,9 @@ pub fn standardize(data: &[f64]) -> Vec<f64> {
     let mean = data.iter().sum::<f64>() / n;
     let var = data.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
     let std = var.sqrt();
-    if std == 0.0 { return vec![0.0; data.len()]; }
+    if std == 0.0 {
+        return vec![0.0; data.len()];
+    }
     data.iter().map(|v| (v - mean) / std).collect()
 }
 
@@ -429,7 +526,10 @@ mod tests {
         let data = SensorData {
             sensor_type: SensorType::Imu,
             timestamp_us: 1000000,
-            payload: SensorPayload::Imu { accel: [0.0, 0.0, 9.81], gyro: [0.0, 0.0, 0.0] },
+            payload: SensorPayload::Imu {
+                accel: [0.0, 0.0, 9.81],
+                gyro: [0.0, 0.0, 0.0],
+            },
             seq: 1,
         };
         assert_eq!(data.sensor_type, SensorType::Imu);
@@ -465,7 +565,9 @@ mod tests {
     fn r1_9_kalman_filter() {
         let mut kf = KalmanFilter::new(0.0, 1.0, 0.01, 0.5);
         // Feed noisy measurements of a constant value (10.0)
-        for _ in 0..100 { kf.filter(10.0 + 0.1); }
+        for _ in 0..100 {
+            kf.filter(10.0 + 0.1);
+        }
         assert!((kf.x - 10.1).abs() < 0.5);
     }
 
@@ -484,7 +586,9 @@ mod tests {
     #[test]
     fn r1_10_ring_buffer() {
         let mut rb: RingBuffer<i32> = RingBuffer::new(3);
-        rb.push(1); rb.push(2); rb.push(3);
+        rb.push(1);
+        rb.push(2);
+        rb.push(3);
         assert!(rb.is_full());
         assert_eq!(rb.len(), 3);
         rb.push(4); // drops 1
@@ -495,7 +599,10 @@ mod tests {
     #[test]
     fn r1_10_ring_buffer_drop_rate() {
         let mut rb: RingBuffer<i32> = RingBuffer::new(2);
-        rb.push(1); rb.push(2); rb.push(3); rb.push(4);
+        rb.push(1);
+        rb.push(2);
+        rb.push(3);
+        rb.push(4);
         assert_eq!(rb.total_pushed, 4);
         assert_eq!(rb.total_dropped, 2);
         assert!((rb.drop_rate() - 0.5).abs() < 0.001);
@@ -504,7 +611,9 @@ mod tests {
     #[test]
     fn r1_2_sliding_window() {
         let mut w = SlidingWindow::new(5);
-        for v in [1.0, 2.0, 3.0, 4.0, 5.0] { w.push(v); }
+        for v in [1.0, 2.0, 3.0, 4.0, 5.0] {
+            w.push(v);
+        }
         assert!(w.is_full());
         assert!((w.mean() - 3.0).abs() < 0.001);
         assert_eq!(w.min(), 1.0);
@@ -514,7 +623,9 @@ mod tests {
     #[test]
     fn r1_2_sliding_window_variance() {
         let mut w = SlidingWindow::new(4);
-        for v in [2.0, 4.0, 4.0, 4.0] { w.push(v); }
+        for v in [2.0, 4.0, 4.0, 4.0] {
+            w.push(v);
+        }
         // mean=3.5, var = ((2-3.5)^2+(4-3.5)^2*3)/3 = (2.25+0.75)/3 = 1.0
         assert!((w.variance() - 1.0).abs() < 0.001);
     }
@@ -539,13 +650,18 @@ mod tests {
     #[test]
     fn r1_2_peak_detection() {
         let mut w = SlidingWindow::new(10);
-        for v in [1.0, 2.0, 5.0, 3.0] { w.push(v); }
+        for v in [1.0, 2.0, 5.0, 3.0] {
+            w.push(v);
+        }
         assert!(w.is_peak()); // 5.0 is peak (> 2.0 and > 3.0)
     }
 
     #[test]
     fn r1_1_sensor_error_display() {
         assert_eq!(format!("{}", SensorError::Timeout), "sensor read timeout");
-        assert_eq!(format!("{}", SensorError::Disconnected), "sensor disconnected");
+        assert_eq!(
+            format!("{}", SensorError::Disconnected),
+            "sensor disconnected"
+        );
     }
 }

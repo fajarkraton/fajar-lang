@@ -127,8 +127,14 @@ pub struct InferenceResult {
 
 impl InferenceResult {
     /// Computes confidence and class from output.
-    pub fn from_output(request_id: u64, output: Vec<f32>, latency_us: u64, deadline_us: u64) -> Self {
-        let (predicted_class, confidence) = output.iter()
+    pub fn from_output(
+        request_id: u64,
+        output: Vec<f32>,
+        latency_us: u64,
+        deadline_us: u64,
+    ) -> Self {
+        let (predicted_class, confidence) = output
+            .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, &v)| (i, v))
@@ -168,7 +174,11 @@ impl Default for ModelRegistry {
 impl ModelRegistry {
     /// Creates a new empty registry.
     pub fn new() -> Self {
-        Self { models: HashMap::new(), pending: HashMap::new(), swap_count: 0 }
+        Self {
+            models: HashMap::new(),
+            pending: HashMap::new(),
+            swap_count: 0,
+        }
     }
 
     /// Registers a model.
@@ -198,7 +208,9 @@ impl ModelRegistry {
     }
 
     /// Number of loaded models.
-    pub fn count(&self) -> usize { self.models.len() }
+    pub fn count(&self) -> usize {
+        self.models.len()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -232,7 +244,11 @@ pub struct ModelPipeline {
 impl ModelPipeline {
     /// Creates a new pipeline.
     pub fn new(name: &str) -> Self {
-        Self { name: name.to_string(), stages: Vec::new(), short_circuit: true }
+        Self {
+            name: name.to_string(),
+            stages: Vec::new(),
+            short_circuit: true,
+        }
     }
 
     /// Adds a stage.
@@ -247,7 +263,9 @@ impl ModelPipeline {
     }
 
     /// Number of stages.
-    pub fn stage_count(&self) -> usize { self.stages.len() }
+    pub fn stage_count(&self) -> usize {
+        self.stages.len()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -270,7 +288,12 @@ pub struct InferenceCache {
 impl InferenceCache {
     /// Creates a new cache.
     pub fn new(capacity: usize) -> Self {
-        Self { entries: Vec::with_capacity(capacity), capacity, hits: 0, misses: 0 }
+        Self {
+            entries: Vec::with_capacity(capacity),
+            capacity,
+            hits: 0,
+            misses: 0,
+        }
     }
 
     /// Looks up a cached result by input hash.
@@ -289,7 +312,9 @@ impl InferenceCache {
     pub fn insert(&mut self, input_hash: u64, result: InferenceResult) {
         if self.entries.len() >= self.capacity {
             // Evict least recently used (lowest access count)
-            let min_idx = self.entries.iter()
+            let min_idx = self
+                .entries
+                .iter()
                 .enumerate()
                 .min_by_key(|(_, (_, _, count))| *count)
                 .map(|(i, _)| i)
@@ -302,7 +327,9 @@ impl InferenceCache {
     /// Cache hit rate.
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
         self.hits as f64 / total as f64
     }
 }
@@ -329,29 +356,47 @@ pub struct LatencySla {
 impl LatencySla {
     /// Creates a new SLA tracker.
     pub fn new(target_us: u64, window_size: usize) -> Self {
-        Self { target_us, latencies: Vec::with_capacity(window_size), window_size, violations: 0, total: 0 }
+        Self {
+            target_us,
+            latencies: Vec::with_capacity(window_size),
+            window_size,
+            violations: 0,
+            total: 0,
+        }
     }
 
     /// Records a latency measurement.
     pub fn record(&mut self, latency_us: u64) {
-        if self.latencies.len() >= self.window_size { self.latencies.remove(0); }
+        if self.latencies.len() >= self.window_size {
+            self.latencies.remove(0);
+        }
         self.latencies.push(latency_us);
         self.total += 1;
-        if latency_us > self.target_us { self.violations += 1; }
+        if latency_us > self.target_us {
+            self.violations += 1;
+        }
     }
 
     /// Returns p50 latency.
-    pub fn p50(&self) -> u64 { self.percentile(50) }
+    pub fn p50(&self) -> u64 {
+        self.percentile(50)
+    }
 
     /// Returns p95 latency.
-    pub fn p95(&self) -> u64 { self.percentile(95) }
+    pub fn p95(&self) -> u64 {
+        self.percentile(95)
+    }
 
     /// Returns p99 latency.
-    pub fn p99(&self) -> u64 { self.percentile(99) }
+    pub fn p99(&self) -> u64 {
+        self.percentile(99)
+    }
 
     /// Returns a specific percentile.
     pub fn percentile(&self, p: u32) -> u64 {
-        if self.latencies.is_empty() { return 0; }
+        if self.latencies.is_empty() {
+            return 0;
+        }
         let mut sorted = self.latencies.clone();
         sorted.sort();
         let idx = (p as usize * sorted.len() / 100).min(sorted.len() - 1);
@@ -360,13 +405,17 @@ impl LatencySla {
 
     /// Returns SLA compliance rate (0.0 to 1.0).
     pub fn compliance(&self) -> f64 {
-        if self.total == 0 { return 1.0; }
+        if self.total == 0 {
+            return 1.0;
+        }
         1.0 - (self.violations as f64 / self.total as f64)
     }
 
     /// Returns mean latency.
     pub fn mean(&self) -> f64 {
-        if self.latencies.is_empty() { return 0.0; }
+        if self.latencies.is_empty() {
+            return 0.0;
+        }
         self.latencies.iter().sum::<u64>() as f64 / self.latencies.len() as f64
     }
 }
@@ -382,10 +431,15 @@ mod tests {
     #[test]
     fn r2_1_model_memory() {
         let model = Model {
-            name: "mnist".to_string(), format: ModelFormat::Fjml,
-            input_shape: vec![1, 784], output_shape: vec![1, 10],
-            num_params: 100_000, size_bytes: 400_000, quantized: false,
-            quant_type: None, version: "1.0".to_string(),
+            name: "mnist".to_string(),
+            format: ModelFormat::Fjml,
+            input_shape: vec![1, 784],
+            output_shape: vec![1, 10],
+            num_params: 100_000,
+            size_bytes: 400_000,
+            quantized: false,
+            quant_type: None,
+            version: "1.0".to_string(),
         };
         assert_eq!(model.estimated_flops(), 200_000);
         // FP32: 100K*4 + (784+10)*4 = 403_176
@@ -395,10 +449,15 @@ mod tests {
     #[test]
     fn r2_1_model_quantized() {
         let model = Model {
-            name: "mnist_int8".to_string(), format: ModelFormat::QnnDlc,
-            input_shape: vec![1, 784], output_shape: vec![1, 10],
-            num_params: 100_000, size_bytes: 100_000, quantized: true,
-            quant_type: Some(QuantType::Int8), version: "1.0".to_string(),
+            name: "mnist_int8".to_string(),
+            format: ModelFormat::QnnDlc,
+            input_shape: vec![1, 784],
+            output_shape: vec![1, 10],
+            num_params: 100_000,
+            size_bytes: 100_000,
+            quantized: true,
+            quant_type: Some(QuantType::Int8),
+            version: "1.0".to_string(),
         };
         // INT8: 100K*1 + (784+10)*4
         assert!(model.memory_required() < 110_000);
@@ -423,10 +482,15 @@ mod tests {
     fn r2_5_model_registry() {
         let mut reg = ModelRegistry::new();
         reg.register(Model {
-            name: "det".to_string(), format: ModelFormat::Onnx,
-            input_shape: vec![1, 3, 224, 224], output_shape: vec![1, 100, 6],
-            num_params: 5_000_000, size_bytes: 20_000_000, quantized: false,
-            quant_type: None, version: "1.0".to_string(),
+            name: "det".to_string(),
+            format: ModelFormat::Onnx,
+            input_shape: vec![1, 3, 224, 224],
+            output_shape: vec![1, 100, 6],
+            num_params: 5_000_000,
+            size_bytes: 20_000_000,
+            quantized: false,
+            quant_type: None,
+            version: "1.0".to_string(),
         });
         assert_eq!(reg.count(), 1);
         assert!(reg.get("det").is_some());
@@ -436,16 +500,26 @@ mod tests {
     fn r2_5_hot_swap() {
         let mut reg = ModelRegistry::new();
         reg.register(Model {
-            name: "clf".to_string(), format: ModelFormat::Fjml,
-            input_shape: vec![1, 10], output_shape: vec![1, 5],
-            num_params: 1000, size_bytes: 4000, quantized: false,
-            quant_type: None, version: "1.0".to_string(),
+            name: "clf".to_string(),
+            format: ModelFormat::Fjml,
+            input_shape: vec![1, 10],
+            output_shape: vec![1, 5],
+            num_params: 1000,
+            size_bytes: 4000,
+            quantized: false,
+            quant_type: None,
+            version: "1.0".to_string(),
         });
         reg.stage_swap(Model {
-            name: "clf".to_string(), format: ModelFormat::Fjml,
-            input_shape: vec![1, 10], output_shape: vec![1, 5],
-            num_params: 1200, size_bytes: 4800, quantized: false,
-            quant_type: None, version: "2.0".to_string(),
+            name: "clf".to_string(),
+            format: ModelFormat::Fjml,
+            input_shape: vec![1, 10],
+            output_shape: vec![1, 5],
+            num_params: 1200,
+            size_bytes: 4800,
+            quantized: false,
+            quant_type: None,
+            version: "2.0".to_string(),
         });
         assert!(reg.commit_swap("clf"));
         assert_eq!(reg.get("clf").unwrap().version, "2.0");
@@ -490,7 +564,9 @@ mod tests {
     #[test]
     fn r2_10_sla_percentiles() {
         let mut sla = LatencySla::new(10000, 100);
-        for i in 1..=100 { sla.record(i * 100); } // 100, 200, ..., 10000
+        for i in 1..=100 {
+            sla.record(i * 100);
+        } // 100, 200, ..., 10000
         assert!(sla.p50() >= 4000 && sla.p50() <= 6000);
         assert!(sla.p95() >= 9000);
     }

@@ -38,21 +38,32 @@ impl JsonValue {
 
     /// Returns as string if this is a String value.
     pub fn as_str(&self) -> Option<&str> {
-        match self { Self::String(s) => Some(s), _ => None }
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
     }
 
     /// Returns as f64 if this is a Number value.
     pub fn as_f64(&self) -> Option<f64> {
-        match self { Self::Number(n) => Some(*n), _ => None }
+        match self {
+            Self::Number(n) => Some(*n),
+            _ => None,
+        }
     }
 
     /// Returns as bool if this is a Bool value.
     pub fn as_bool(&self) -> Option<bool> {
-        match self { Self::Bool(b) => Some(*b), _ => None }
+        match self {
+            Self::Bool(b) => Some(*b),
+            _ => None,
+        }
     }
 
     /// Returns true if this is Null.
-    pub fn is_null(&self) -> bool { matches!(self, Self::Null) }
+    pub fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
 }
 
 impl fmt::Display for JsonValue {
@@ -61,14 +72,19 @@ impl fmt::Display for JsonValue {
             Self::Null => write!(f, "null"),
             Self::Bool(b) => write!(f, "{b}"),
             Self::Number(n) => {
-                if *n == (*n as i64) as f64 { write!(f, "{}", *n as i64) }
-                else { write!(f, "{n}") }
+                if *n == (*n as i64) as f64 {
+                    write!(f, "{}", *n as i64)
+                } else {
+                    write!(f, "{n}")
+                }
             }
             Self::String(s) => write!(f, "\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
             Self::Array(arr) => {
                 write!(f, "[")?;
                 for (i, v) in arr.iter().enumerate() {
-                    if i > 0 { write!(f, ",")?; }
+                    if i > 0 {
+                        write!(f, ",")?;
+                    }
                     write!(f, "{v}")?;
                 }
                 write!(f, "]")
@@ -76,7 +92,9 @@ impl fmt::Display for JsonValue {
             Self::Object(entries) => {
                 write!(f, "{{")?;
                 for (i, (k, v)) in entries.iter().enumerate() {
-                    if i > 0 { write!(f, ",")?; }
+                    if i > 0 {
+                        write!(f, ",")?;
+                    }
                     write!(f, "\"{k}\":{v}")?;
                 }
                 write!(f, "}}")
@@ -88,9 +106,13 @@ impl fmt::Display for JsonValue {
 /// Parses a JSON string into a JsonValue.
 pub fn json_parse(input: &str) -> Result<JsonValue, String> {
     let trimmed = input.trim();
-    if trimmed.is_empty() { return Err("empty input".to_string()); }
+    if trimmed.is_empty() {
+        return Err("empty input".to_string());
+    }
     let (val, rest) = parse_value(trimmed)?;
-    if !rest.trim().is_empty() { return Err(format!("trailing characters: {rest}")); }
+    if !rest.trim().is_empty() {
+        return Err(format!("trailing characters: {rest}"));
+    }
     Ok(val)
 }
 
@@ -110,7 +132,9 @@ fn parse_value(input: &str) -> Result<(JsonValue, &str), String> {
 }
 
 fn parse_string(input: &str) -> Result<(JsonValue, &str), String> {
-    if !input.starts_with('"') { return Err("expected string".to_string()); }
+    if !input.starts_with('"') {
+        return Err("expected string".to_string());
+    }
     let mut s = String::new();
     let mut i = 1;
     let bytes = input.as_bytes();
@@ -119,11 +143,20 @@ fn parse_string(input: &str) -> Result<(JsonValue, &str), String> {
             b'"' => return Ok((JsonValue::String(s), &input[i + 1..])),
             b'\\' => {
                 i += 1;
-                if i >= bytes.len() { return Err("unterminated string escape".to_string()); }
+                if i >= bytes.len() {
+                    return Err("unterminated string escape".to_string());
+                }
                 match bytes[i] {
-                    b'"' => s.push('"'), b'\\' => s.push('\\'), b'/' => s.push('/'),
-                    b'n' => s.push('\n'), b't' => s.push('\t'), b'r' => s.push('\r'),
-                    c => { s.push('\\'); s.push(c as char); }
+                    b'"' => s.push('"'),
+                    b'\\' => s.push('\\'),
+                    b'/' => s.push('/'),
+                    b'n' => s.push('\n'),
+                    b't' => s.push('\t'),
+                    b'r' => s.push('\r'),
+                    c => {
+                        s.push('\\');
+                        s.push(c as char);
+                    }
                 }
             }
             b => s.push(b as char),
@@ -134,42 +167,66 @@ fn parse_string(input: &str) -> Result<(JsonValue, &str), String> {
 }
 
 fn parse_number(input: &str) -> Result<(JsonValue, &str), String> {
-    let end = input.find(|c: char| !c.is_ascii_digit() && c != '.' && c != '-' && c != 'e' && c != 'E' && c != '+')
+    let end = input
+        .find(|c: char| {
+            !c.is_ascii_digit() && c != '.' && c != '-' && c != 'e' && c != 'E' && c != '+'
+        })
         .unwrap_or(input.len());
     let num_str = &input[..end];
-    let num: f64 = num_str.parse().map_err(|e| format!("invalid number: {e}"))?;
+    let num: f64 = num_str
+        .parse()
+        .map_err(|e| format!("invalid number: {e}"))?;
     Ok((JsonValue::Number(num), &input[end..]))
 }
 
 fn parse_array(input: &str) -> Result<(JsonValue, &str), String> {
     let mut rest = input[1..].trim_start();
     let mut arr = Vec::new();
-    if let Some(stripped) = rest.strip_prefix(']') { return Ok((JsonValue::Array(arr), stripped)); }
+    if let Some(stripped) = rest.strip_prefix(']') {
+        return Ok((JsonValue::Array(arr), stripped));
+    }
     loop {
         let (val, r) = parse_value(rest)?;
         arr.push(val);
         rest = r.trim_start();
-        if let Some(stripped) = rest.strip_prefix(']') { return Ok((JsonValue::Array(arr), stripped)); }
-        if let Some(stripped) = rest.strip_prefix(',') { rest = stripped.trim_start(); }
-        else { return Err("expected ',' or ']' in array".to_string()); }
+        if let Some(stripped) = rest.strip_prefix(']') {
+            return Ok((JsonValue::Array(arr), stripped));
+        }
+        if let Some(stripped) = rest.strip_prefix(',') {
+            rest = stripped.trim_start();
+        } else {
+            return Err("expected ',' or ']' in array".to_string());
+        }
     }
 }
 
 fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
     let mut rest = input[1..].trim_start();
     let mut entries = Vec::new();
-    if let Some(stripped) = rest.strip_prefix('}') { return Ok((JsonValue::Object(entries), stripped)); }
+    if let Some(stripped) = rest.strip_prefix('}') {
+        return Ok((JsonValue::Object(entries), stripped));
+    }
     loop {
         let (key_val, r) = parse_string(rest)?;
-        let key = match key_val { JsonValue::String(s) => s, _ => unreachable!() };
+        let key = match key_val {
+            JsonValue::String(s) => s,
+            _ => unreachable!(),
+        };
         let r = r.trim_start();
-        if !r.starts_with(':') { return Err("expected ':' in object".to_string()); }
+        if !r.starts_with(':') {
+            return Err("expected ':' in object".to_string());
+        }
         let (val, r) = parse_value(&r[1..])?;
         entries.push((key, val));
         rest = r.trim_start();
-        if let Some(stripped) = rest.strip_prefix('}') { return Ok((JsonValue::Object(entries), stripped)); }
-        if let Some(stripped) = rest.strip_prefix(',') { rest = stripped.trim_start(); }
-        else { return Err("expected ',' or '}' in object".to_string()); }
+        if let Some(stripped) = rest.strip_prefix('}') {
+            return Ok((JsonValue::Object(entries), stripped));
+        }
+        if let Some(stripped) = rest.strip_prefix(',') {
+            rest = stripped.trim_start();
+        } else {
+            return Err("expected ',' or '}' in object".to_string());
+        }
     }
 }
 
@@ -182,7 +239,8 @@ pub type CsvRecord = Vec<String>;
 
 /// Parses CSV text into records.
 pub fn csv_parse(input: &str, delimiter: char) -> Vec<CsvRecord> {
-    input.lines()
+    input
+        .lines()
         .filter(|line| !line.is_empty())
         .map(|line| {
             line.split(delimiter)
@@ -194,15 +252,23 @@ pub fn csv_parse(input: &str, delimiter: char) -> Vec<CsvRecord> {
 
 /// Serializes records to CSV text.
 pub fn csv_serialize(records: &[CsvRecord], delimiter: char) -> String {
-    records.iter().map(|record| {
-        record.iter().map(|field| {
-            if field.contains(delimiter) || field.contains('"') || field.contains('\n') {
-                format!("\"{}\"", field.replace('"', "\"\""))
-            } else {
-                field.clone()
-            }
-        }).collect::<Vec<_>>().join(&delimiter.to_string())
-    }).collect::<Vec<_>>().join("\n")
+    records
+        .iter()
+        .map(|record| {
+            record
+                .iter()
+                .map(|field| {
+                    if field.contains(delimiter) || field.contains('"') || field.contains('\n') {
+                        format!("\"{}\"", field.replace('"', "\"\""))
+                    } else {
+                        field.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(&delimiter.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -227,7 +293,16 @@ pub struct DateTime {
 impl DateTime {
     /// Creates a UTC datetime.
     pub fn utc(year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> Self {
-        Self { year, month, day, hour, minute, second, millis: 0, utc_offset_minutes: 0 }
+        Self {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            millis: 0,
+            utc_offset_minutes: 0,
+        }
     }
 
     /// Returns ISO 8601 string (e.g., "2026-03-26T12:00:00Z").
@@ -235,7 +310,11 @@ impl DateTime {
         let tz = if self.utc_offset_minutes == 0 {
             "Z".to_string()
         } else {
-            let sign = if self.utc_offset_minutes > 0 { '+' } else { '-' };
+            let sign = if self.utc_offset_minutes > 0 {
+                '+'
+            } else {
+                '-'
+            };
             let abs = self.utc_offset_minutes.unsigned_abs();
             format!("{sign}{:02}:{:02}", abs / 60, abs % 60)
         };
@@ -255,7 +334,13 @@ impl DateTime {
         match self.month {
             1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
             4 | 6 | 9 | 11 => 30,
-            2 => if self.is_leap_year() { 29 } else { 28 },
+            2 => {
+                if self.is_leap_year() {
+                    29
+                } else {
+                    28
+                }
+            }
             _ => 0,
         }
     }
@@ -279,7 +364,9 @@ pub struct Uuid {
 
 impl Uuid {
     /// Creates a nil UUID.
-    pub fn nil() -> Self { Self { bytes: [0; 16] } }
+    pub fn nil() -> Self {
+        Self { bytes: [0; 16] }
+    }
 
     /// Returns the UUID version (4, 7, etc.).
     pub fn version(&self) -> u8 {
@@ -295,9 +382,26 @@ impl Uuid {
 impl fmt::Display for Uuid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let b = &self.bytes;
-        write!(f, "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-            b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15])
+        write!(
+            f,
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            b[0],
+            b[1],
+            b[2],
+            b[3],
+            b[4],
+            b[5],
+            b[6],
+            b[7],
+            b[8],
+            b[9],
+            b[10],
+            b[11],
+            b[12],
+            b[13],
+            b[14],
+            b[15]
+        )
     }
 }
 
@@ -338,7 +442,9 @@ pub fn mime_from_extension(ext: &str) -> &'static str {
 
 /// Detects MIME type from file magic bytes.
 pub fn mime_from_magic(data: &[u8]) -> &'static str {
-    if data.len() < 4 { return "application/octet-stream"; }
+    if data.len() < 4 {
+        return "application/octet-stream";
+    }
     match &data[..4] {
         [0x89, b'P', b'N', b'G'] => "image/png",
         [0xFF, 0xD8, 0xFF, _] => "image/jpeg",
@@ -367,7 +473,10 @@ mod tests {
         assert_eq!(json_parse("null").unwrap(), JsonValue::Null);
         assert_eq!(json_parse("true").unwrap(), JsonValue::Bool(true));
         assert_eq!(json_parse("42").unwrap(), JsonValue::Number(42.0));
-        assert_eq!(json_parse("\"hello\"").unwrap(), JsonValue::String("hello".to_string()));
+        assert_eq!(
+            json_parse("\"hello\"").unwrap(),
+            JsonValue::String("hello".to_string())
+        );
     }
 
     #[test]
@@ -391,7 +500,10 @@ mod tests {
         let val = json_parse(r#"{"data": [1, {"x": true}]}"#).unwrap();
         let arr = val.get("data").unwrap();
         assert_eq!(arr.index(0).unwrap().as_f64(), Some(1.0));
-        assert_eq!(arr.index(1).unwrap().get("x").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            arr.index(1).unwrap().get("x").unwrap().as_bool(),
+            Some(true)
+        );
     }
 
     #[test]
@@ -481,7 +593,13 @@ mod tests {
     fn s3_5_mime_from_magic() {
         assert_eq!(mime_from_magic(&[0x89, b'P', b'N', b'G']), "image/png");
         assert_eq!(mime_from_magic(&[0xFF, 0xD8, 0xFF, 0xE0]), "image/jpeg");
-        assert_eq!(mime_from_magic(&[0x00, b'a', b's', b'm']), "application/wasm");
-        assert_eq!(mime_from_magic(&[0x7F, b'E', b'L', b'F']), "application/x-elf");
+        assert_eq!(
+            mime_from_magic(&[0x00, b'a', b's', b'm']),
+            "application/wasm"
+        );
+        assert_eq!(
+            mime_from_magic(&[0x7F, b'E', b'L', b'F']),
+            "application/x-elf"
+        );
     }
 }

@@ -3,7 +3,6 @@
 //! Phase F1: 20 tasks covering libclang parsing, Itanium name mangling,
 //! class method dispatch, RAII bridging, STL conversions, exception handling.
 
-
 // ═══════════════════════════════════════════════════════════════════════
 // F1.1: C++ Header Parsing (via libclang model)
 // ═══════════════════════════════════════════════════════════════════════
@@ -59,8 +58,8 @@ pub enum CppType {
     Float,
     Double,
     Char,
-    String,        // std::string
-    WString,       // std::wstring
+    String,  // std::string
+    WString, // std::wstring
     Pointer(Box<CppType>),
     Reference(Box<CppType>),
     ConstRef(Box<CppType>),
@@ -76,7 +75,17 @@ pub enum CppType {
 
 /// C++ integer sizes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CppIntSize { I8, I16, I32, I64, U8, U16, U32, U64, Size }
+pub enum CppIntSize {
+    I8,
+    I16,
+    I32,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    Size,
+}
 
 impl CppType {
     /// Maps a C++ type to a Fajar Lang type.
@@ -138,7 +147,9 @@ pub fn mangle_name(namespace: &[String], name: &str, params: &[CppType]) -> Stri
     for param in params {
         mangled.push_str(&mangle_type(param));
     }
-    if params.is_empty() { mangled.push('v'); } // void
+    if params.is_empty() {
+        mangled.push('v');
+    } // void
 
     mangled
 }
@@ -163,7 +174,9 @@ fn mangle_type(t: &CppType) -> String {
 
 /// Demangles an Itanium-mangled name (simplified).
 pub fn demangle_name(mangled: &str) -> String {
-    if !mangled.starts_with("_Z") { return mangled.to_string(); }
+    if !mangled.starts_with("_Z") {
+        return mangled.to_string();
+    }
     // Simplified: extract name lengths
     let rest = &mangled[2..];
     if rest.starts_with('N') {
@@ -179,7 +192,9 @@ pub fn demangle_name(mangled: &str) -> String {
                     pos += 1;
                 }
                 let len: usize = num.parse().unwrap_or(0);
-                let name: String = chars[pos..pos + len.min(chars.len() - pos)].iter().collect();
+                let name: String = chars[pos..pos + len.min(chars.len() - pos)]
+                    .iter()
+                    .collect();
                 parts.push(name);
                 pos += len;
             } else {
@@ -247,18 +262,32 @@ pub fn generate_class_binding(class: &CppClass) -> String {
 
     // Constructor
     for ctor in &class.constructors {
-        let params: Vec<String> = ctor.params.iter()
+        let params: Vec<String> = ctor
+            .params
+            .iter()
             .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
             .collect();
-        code.push_str(&format!("    @ffi fn new({}) -> {} {{\n", params.join(", "), class.name));
+        code.push_str(&format!(
+            "    @ffi fn new({}) -> {} {{\n",
+            params.join(", "),
+            class.name
+        ));
         code.push_str("        // calls C++ constructor via FFI\n");
         code.push_str("    }\n\n");
     }
 
     // Methods
     for method in &class.methods {
-        let self_param = if method.is_static { "" } else if method.is_const { "self" } else { "mut self" };
-        let other_params: Vec<String> = method.params.iter()
+        let self_param = if method.is_static {
+            ""
+        } else if method.is_const {
+            "self"
+        } else {
+            "mut self"
+        };
+        let other_params: Vec<String> = method
+            .params
+            .iter()
             .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
             .collect();
         let all_params = if self_param.is_empty() {
@@ -268,9 +297,15 @@ pub fn generate_class_binding(class: &CppClass) -> String {
             v.extend(other_params);
             v.join(", ")
         };
-        let ret = if method.return_type == CppType::Void { String::new() }
-                  else { format!(" -> {}", method.return_type.to_fajar_type()) };
-        code.push_str(&format!("    @ffi fn {}({}){} {{}}\n", method.name, all_params, ret));
+        let ret = if method.return_type == CppType::Void {
+            String::new()
+        } else {
+            format!(" -> {}", method.return_type.to_fajar_type())
+        };
+        code.push_str(&format!(
+            "    @ffi fn {}({}){} {{}}\n",
+            method.name, all_params, ret
+        ));
     }
 
     // Destructor
@@ -334,7 +369,9 @@ pub struct ExceptionMapping {
 
 /// Generates a try/catch wrapper for a C++ function call.
 pub fn generate_exception_wrapper(func: &CppFunction) -> String {
-    let params: Vec<String> = func.params.iter()
+    let params: Vec<String> = func
+        .params
+        .iter()
         .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
         .collect();
     let ret = func.return_type.to_fajar_type();
@@ -385,8 +422,11 @@ impl AbiCheck {
     /// Checks if a compiler/ABI combination is supported.
     pub fn check(compiler: &str, std_version: &str) -> Self {
         let compatible = matches!(compiler, "gcc" | "clang" | "g++" | "clang++");
-        let warnings = if std_version.starts_with("c++2") { vec![] }
-                       else { vec!["C++17 or newer recommended".to_string()] };
+        let warnings = if std_version.starts_with("c++2") {
+            vec![]
+        } else {
+            vec!["C++17 or newer recommended".to_string()]
+        };
         Self {
             compiler: compiler.to_string(),
             std_version: std_version.to_string(),
@@ -410,10 +450,22 @@ mod tests {
         assert_eq!(CppType::Int(CppIntSize::I32).to_fajar_type(), "i32");
         assert_eq!(CppType::Double.to_fajar_type(), "f64");
         assert_eq!(CppType::String.to_fajar_type(), "str");
-        assert_eq!(CppType::Vector(Box::new(CppType::Float)).to_fajar_type(), "[f32]");
-        assert_eq!(CppType::SharedPtr(Box::new(CppType::Custom("Widget".to_string()))).to_fajar_type(), "Rc<Widget>");
-        assert_eq!(CppType::UniquePtr(Box::new(CppType::Custom("Buffer".to_string()))).to_fajar_type(), "Box<Buffer>");
-        assert_eq!(CppType::Optional(Box::new(CppType::Int(CppIntSize::I64))).to_fajar_type(), "Option<i64>");
+        assert_eq!(
+            CppType::Vector(Box::new(CppType::Float)).to_fajar_type(),
+            "[f32]"
+        );
+        assert_eq!(
+            CppType::SharedPtr(Box::new(CppType::Custom("Widget".to_string()))).to_fajar_type(),
+            "Rc<Widget>"
+        );
+        assert_eq!(
+            CppType::UniquePtr(Box::new(CppType::Custom("Buffer".to_string()))).to_fajar_type(),
+            "Box<Buffer>"
+        );
+        assert_eq!(
+            CppType::Optional(Box::new(CppType::Int(CppIntSize::I64))).to_fajar_type(),
+            "Option<i64>"
+        );
     }
 
     #[test]
@@ -442,23 +494,43 @@ mod tests {
             bases: vec![],
             fields: vec![],
             methods: vec![CppFunction {
-                name: "rows".to_string(), namespace: vec![],
+                name: "rows".to_string(),
+                namespace: vec![],
                 return_type: CppType::Int(CppIntSize::I32),
-                params: vec![], is_static: false, is_const: true,
-                is_virtual: false, is_noexcept: false, template_params: vec![],
+                params: vec![],
+                is_static: false,
+                is_const: true,
+                is_virtual: false,
+                is_noexcept: false,
+                template_params: vec![],
             }],
             constructors: vec![CppFunction {
-                name: "Mat".to_string(), namespace: vec![],
+                name: "Mat".to_string(),
+                namespace: vec![],
                 return_type: CppType::Void,
                 params: vec![
-                    CppParam { name: "rows".to_string(), param_type: CppType::Int(CppIntSize::I32), has_default: false },
-                    CppParam { name: "cols".to_string(), param_type: CppType::Int(CppIntSize::I32), has_default: false },
+                    CppParam {
+                        name: "rows".to_string(),
+                        param_type: CppType::Int(CppIntSize::I32),
+                        has_default: false,
+                    },
+                    CppParam {
+                        name: "cols".to_string(),
+                        param_type: CppType::Int(CppIntSize::I32),
+                        has_default: false,
+                    },
                 ],
-                is_static: false, is_const: false, is_virtual: false,
-                is_noexcept: false, template_params: vec![],
+                is_static: false,
+                is_const: false,
+                is_virtual: false,
+                is_noexcept: false,
+                template_params: vec![],
             }],
-            has_destructor: true, is_abstract: false, template_params: vec![],
-            size_bytes: 96, align_bytes: 8,
+            has_destructor: true,
+            is_abstract: false,
+            template_params: vec![],
+            size_bytes: 96,
+            align_bytes: 8,
         };
         let code = generate_class_binding(&class);
         assert!(code.contains("struct Mat"));
@@ -486,7 +558,10 @@ mod tests {
 
     #[test]
     fn f1_1_map_type() {
-        let t = CppType::Map(Box::new(CppType::String), Box::new(CppType::Int(CppIntSize::I64)));
+        let t = CppType::Map(
+            Box::new(CppType::String),
+            Box::new(CppType::Int(CppIntSize::I64)),
+        );
         assert_eq!(t.to_fajar_type(), "Map<str, i64>");
     }
 

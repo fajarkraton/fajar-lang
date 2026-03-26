@@ -95,7 +95,13 @@ pub struct PwmMotorConfig {
 
 impl Default for PwmMotorConfig {
     fn default() -> Self {
-        Self { pwm_pin: 0, dir_pin: 1, frequency_hz: 20000, max_duty: 1.0, ramp_rate: 2.0 }
+        Self {
+            pwm_pin: 0,
+            dir_pin: 1,
+            frequency_hz: 20000,
+            max_duty: 1.0,
+            ramp_rate: 2.0,
+        }
     }
 }
 
@@ -114,7 +120,12 @@ pub struct ServoConfig {
 
 impl Default for ServoConfig {
     fn default() -> Self {
-        Self { pin: 0, min_pulse_us: 500, max_pulse_us: 2500, max_speed_dps: 300.0 }
+        Self {
+            pin: 0,
+            min_pulse_us: 500,
+            max_pulse_us: 2500,
+            max_speed_dps: 300.0,
+        }
     }
 }
 
@@ -145,7 +156,13 @@ pub struct CanConfig {
 
 impl Default for CanConfig {
     fn default() -> Self {
-        Self { bitrate: 500000, fd_enabled: false, max_dlc: 8, filter_id: 0, filter_mask: 0 }
+        Self {
+            bitrate: 500000,
+            fd_enabled: false,
+            max_dlc: 8,
+            filter_id: 0,
+            filter_mask: 0,
+        }
     }
 }
 
@@ -199,7 +216,11 @@ impl Default for SafetyInterlock {
 impl SafetyInterlock {
     /// Creates a new interlock with no rules.
     pub fn new() -> Self {
-        Self { rules: Vec::new(), tripped: false, trip_reason: None }
+        Self {
+            rules: Vec::new(),
+            tripped: false,
+            trip_reason: None,
+        }
     }
 
     /// Adds a safety rule.
@@ -220,7 +241,9 @@ impl SafetyInterlock {
     }
 
     /// Number of rules.
-    pub fn rule_count(&self) -> usize { self.rules.len() }
+    pub fn rule_count(&self) -> usize {
+        self.rules.len()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -253,16 +276,22 @@ impl PidController {
     /// Creates a new PID controller.
     pub fn new(kp: f64, ki: f64, kd: f64) -> Self {
         Self {
-            kp, ki, kd,
-            integral: 0.0, prev_error: 0.0,
-            output_min: -1.0, output_max: 1.0,
+            kp,
+            ki,
+            kd,
+            integral: 0.0,
+            prev_error: 0.0,
+            output_min: -1.0,
+            output_max: 1.0,
             integral_limit: 100.0,
             setpoint: 0.0,
         }
     }
 
     /// Sets the setpoint (target value).
-    pub fn set_target(&mut self, target: f64) { self.setpoint = target; }
+    pub fn set_target(&mut self, target: f64) {
+        self.setpoint = target;
+    }
 
     /// Computes the PID output given the current measurement.
     pub fn compute(&mut self, measurement: f64, dt: f64) -> f64 {
@@ -273,11 +302,17 @@ impl PidController {
 
         // Integral (with anti-windup)
         self.integral += error * dt;
-        self.integral = self.integral.clamp(-self.integral_limit, self.integral_limit);
+        self.integral = self
+            .integral
+            .clamp(-self.integral_limit, self.integral_limit);
         let i = self.ki * self.integral;
 
         // Derivative
-        let derivative = if dt > 0.0 { (error - self.prev_error) / dt } else { 0.0 };
+        let derivative = if dt > 0.0 {
+            (error - self.prev_error) / dt
+        } else {
+            0.0
+        };
         let d = self.kd * derivative;
 
         self.prev_error = error;
@@ -309,7 +344,10 @@ pub struct RampLimiter {
 impl RampLimiter {
     /// Creates a new ramp limiter.
     pub fn new(initial: f64, max_rate: f64) -> Self {
-        Self { current: initial, max_rate }
+        Self {
+            current: initial,
+            max_rate,
+        }
     }
 
     /// Applies ramp limiting to a target value.
@@ -344,7 +382,9 @@ impl FailSafeConfig {
     }
 
     /// Updates the last command timestamp.
-    pub fn touch(&mut self, now_ms: u64) { self.last_command_ms = now_ms; }
+    pub fn touch(&mut self, now_ms: u64) {
+        self.last_command_ms = now_ms;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -366,7 +406,7 @@ mod tests {
     #[test]
     fn r2_2_servo_clamp() {
         let cfg = ServoConfig::default();
-        assert_eq!(cfg.angle_to_pulse(-10.0), 500);  // clamped to 0
+        assert_eq!(cfg.angle_to_pulse(-10.0), 500); // clamped to 0
         assert_eq!(cfg.angle_to_pulse(200.0), 2500); // clamped to 180
     }
 
@@ -376,14 +416,20 @@ mod tests {
         interlock.add_rule(SafetyRule {
             name: "max_temp".to_string(),
             description: "Temperature must be < 80°C".to_string(),
-            kind: SafetyRuleKind::MaxValue { sensor: "temp".to_string(), threshold: 80.0 },
+            kind: SafetyRuleKind::MaxValue {
+                sensor: "temp".to_string(),
+                threshold: 80.0,
+            },
         });
         assert_eq!(interlock.rule_count(), 1);
         assert!(!interlock.tripped);
 
         interlock.trip("temperature exceeded 80°C");
         assert!(interlock.tripped);
-        assert_eq!(interlock.trip_reason.as_deref(), Some("temperature exceeded 80°C"));
+        assert_eq!(
+            interlock.trip_reason.as_deref(),
+            Some("temperature exceeded 80°C")
+        );
 
         interlock.reset();
         assert!(!interlock.tripped);
@@ -440,7 +486,7 @@ mod tests {
             last_command_ms: 5000,
         };
         assert!(!fs.is_timed_out(5500)); // 500ms < 1000ms
-        assert!(fs.is_timed_out(6500));  // 1500ms > 1000ms
+        assert!(fs.is_timed_out(6500)); // 1500ms > 1000ms
         fs.touch(6500);
         assert!(!fs.is_timed_out(7000)); // 500ms < 1000ms
     }

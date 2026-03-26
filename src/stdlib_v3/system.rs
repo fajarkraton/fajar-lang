@@ -27,7 +27,10 @@ impl Path {
             .filter(|s| !s.is_empty() && *s != ".")
             .map(|s| s.to_string())
             .collect();
-        Self { components, is_absolute }
+        Self {
+            components,
+            is_absolute,
+        }
     }
 
     /// Joins a child path.
@@ -43,7 +46,9 @@ impl Path {
 
     /// Returns the parent path.
     pub fn parent(&self) -> Option<Self> {
-        if self.components.is_empty() { return None; }
+        if self.components.is_empty() {
+            return None;
+        }
         let mut result = self.clone();
         result.components.pop();
         Some(result)
@@ -98,13 +103,20 @@ impl Path {
                 normalized.push(comp.clone());
             }
         }
-        Self { components: normalized, is_absolute: self.is_absolute }
+        Self {
+            components: normalized,
+            is_absolute: self.is_absolute,
+        }
     }
 
     /// Converts to string with `/` separator.
     pub fn to_string_path(&self) -> String {
         let joined = self.components.join("/");
-        if self.is_absolute { format!("/{joined}") } else { joined }
+        if self.is_absolute {
+            format!("/{joined}")
+        } else {
+            joined
+        }
     }
 }
 
@@ -144,11 +156,11 @@ impl LogLevel {
     /// Returns the ANSI color code for this level.
     pub fn color_code(self) -> &'static str {
         match self {
-            Self::Trace => "\x1b[90m",   // gray
-            Self::Debug => "\x1b[36m",   // cyan
-            Self::Info => "\x1b[32m",    // green
-            Self::Warn => "\x1b[33m",    // yellow
-            Self::Error => "\x1b[31m",   // red
+            Self::Trace => "\x1b[90m", // gray
+            Self::Debug => "\x1b[36m", // cyan
+            Self::Info => "\x1b[32m",  // green
+            Self::Warn => "\x1b[33m",  // yellow
+            Self::Error => "\x1b[31m", // red
         }
     }
 }
@@ -170,7 +182,11 @@ pub struct LogRecord {
 
 impl fmt::Display for LogRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} [{}] {}: {}", self.timestamp, self.level, self.module, self.message)?;
+        write!(
+            f,
+            "{} [{}] {}: {}",
+            self.timestamp, self.level, self.module, self.message
+        )?;
         for (k, v) in &self.fields {
             write!(f, " {k}={v}")?;
         }
@@ -253,7 +269,10 @@ impl ParsedArgs {
 
     /// Gets a named argument or default.
     pub fn get_or(&self, name: &str, default: &str) -> String {
-        self.named.get(name).cloned().unwrap_or_else(|| default.to_string())
+        self.named
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
     }
 
     /// Checks if a flag is present.
@@ -279,7 +298,9 @@ pub fn parse_args(args: &[String], defs: &[ArgDef]) -> Result<ParsedArgs, String
             if let Some(def) = def {
                 if def.takes_value {
                     i += 1;
-                    if i >= args.len() { return Err(format!("missing value for --{name}")); }
+                    if i >= args.len() {
+                        return Err(format!("missing value for --{name}"));
+                    }
                     result.named.insert(name.to_string(), args[i].clone());
                 } else {
                     result.named.insert(name.to_string(), "true".to_string());
@@ -293,7 +314,9 @@ pub fn parse_args(args: &[String], defs: &[ArgDef]) -> Result<ParsedArgs, String
             if let Some(def) = def {
                 if def.takes_value {
                     i += 1;
-                    if i >= args.len() { return Err(format!("missing value for -{ch}")); }
+                    if i >= args.len() {
+                        return Err(format!("missing value for -{ch}"));
+                    }
                     result.named.insert(def.long.clone(), args[i].clone());
                 } else {
                     result.named.insert(def.long.clone(), "true".to_string());
@@ -325,12 +348,21 @@ pub fn parse_args(args: &[String], defs: &[ArgDef]) -> Result<ParsedArgs, String
 pub fn generate_help(program: &str, defs: &[ArgDef]) -> String {
     let mut help = format!("Usage: {program} [OPTIONS] [ARGS]\n\nOptions:\n");
     for def in defs {
-        let short = def.short.map(|c| format!("-{c}, ")).unwrap_or_else(|| "    ".to_string());
+        let short = def
+            .short
+            .map(|c| format!("-{c}, "))
+            .unwrap_or_else(|| "    ".to_string());
         let value_hint = if def.takes_value { " <VALUE>" } else { "" };
         let required = if def.required { " (required)" } else { "" };
-        let default = def.default.as_ref().map(|d| format!(" [default: {d}]")).unwrap_or_default();
-        help.push_str(&format!("  {short}--{}{value_hint}\n        {}{required}{default}\n",
-            def.long, def.help));
+        let default = def
+            .default
+            .as_ref()
+            .map(|d| format!(" [default: {d}]"))
+            .unwrap_or_default();
+        help.push_str(&format!(
+            "  {short}--{}{value_hint}\n        {}{required}{default}\n",
+            def.long, def.help
+        ));
     }
     help.push_str("      --help\n        Print this help message\n");
     help
@@ -356,18 +388,29 @@ pub struct ProgressBar {
 impl ProgressBar {
     /// Creates a new progress bar.
     pub fn new(total: u64, message: &str) -> Self {
-        Self { total, current: 0, width: 40, message: message.to_string() }
+        Self {
+            total,
+            current: 0,
+            width: 40,
+            message: message.to_string(),
+        }
     }
 
     /// Updates progress.
-    pub fn set(&mut self, current: u64) { self.current = current.min(self.total); }
+    pub fn set(&mut self, current: u64) {
+        self.current = current.min(self.total);
+    }
 
     /// Increments by 1.
-    pub fn inc(&mut self) { self.set(self.current + 1); }
+    pub fn inc(&mut self) {
+        self.set(self.current + 1);
+    }
 
     /// Returns fraction complete (0.0 to 1.0).
     pub fn fraction(&self) -> f64 {
-        if self.total == 0 { return 1.0; }
+        if self.total == 0 {
+            return 1.0;
+        }
         self.current as f64 / self.total as f64
     }
 
@@ -378,13 +421,20 @@ impl ProgressBar {
         let empty = self.width - filled;
         let bar: String = "█".repeat(filled as usize) + &"░".repeat(empty as usize);
         let pct = (frac * 100.0) as u32;
-        format!("{} [{bar}] {pct}% ({}/{})", self.message, self.current, self.total)
+        format!(
+            "{} [{bar}] {pct}% ({}/{})",
+            self.message, self.current, self.total
+        )
     }
 }
 
 /// Table column alignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Align { Left, Right, Center }
+pub enum Align {
+    Left,
+    Right,
+    Center,
+}
 
 /// Formats data as an ASCII table.
 pub fn format_table(headers: &[&str], rows: &[Vec<String>], align: &[Align]) -> String {
@@ -393,7 +443,9 @@ pub fn format_table(headers: &[&str], rows: &[Vec<String>], align: &[Align]) -> 
     let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
     for row in rows {
         for (i, cell) in row.iter().enumerate() {
-            if i < cols && cell.len() > widths[i] { widths[i] = cell.len(); }
+            if i < cols && cell.len() > widths[i] {
+                widths[i] = cell.len();
+            }
         }
     }
 
@@ -414,7 +466,9 @@ pub fn format_table(headers: &[&str], rows: &[Vec<String>], align: &[Align]) -> 
     for row in rows {
         result.push('|');
         for (i, cell) in row.iter().enumerate() {
-            if i >= cols { break; }
+            if i >= cols {
+                break;
+            }
             let a = align.get(i).copied().unwrap_or(Align::Left);
             let formatted = match a {
                 Align::Left => format!(" {:<width$} ", cell, width = widths[i]),
@@ -453,7 +507,11 @@ impl Default for Stopwatch {
 impl Stopwatch {
     /// Creates a new stopped stopwatch.
     pub fn new() -> Self {
-        Self { start_ns: 0, accumulated_ns: 0, running: false }
+        Self {
+            start_ns: 0,
+            accumulated_ns: 0,
+            running: false,
+        }
     }
 
     /// Returns elapsed time in milliseconds.
@@ -469,9 +527,13 @@ impl Stopwatch {
     /// Formats elapsed time as human-readable string.
     pub fn format(&self) -> String {
         let ms = self.elapsed_ms();
-        if ms < 1.0 { format!("{:.0}μs", ms * 1000.0) }
-        else if ms < 1000.0 { format!("{ms:.1}ms") }
-        else { format!("{:.2}s", ms / 1000.0) }
+        if ms < 1.0 {
+            format!("{:.0}μs", ms * 1000.0)
+        } else if ms < 1000.0 {
+            format!("{ms:.1}ms")
+        } else {
+            format!("{:.2}s", ms / 1000.0)
+        }
     }
 }
 
@@ -548,10 +610,27 @@ mod tests {
     #[test]
     fn s4_5_parse_args() {
         let defs = vec![
-            ArgDef { long: "output".to_string(), short: Some('o'), help: "Output file".to_string(), takes_value: true, required: false, default: None },
-            ArgDef { long: "verbose".to_string(), short: Some('v'), help: "Verbose".to_string(), takes_value: false, required: false, default: None },
+            ArgDef {
+                long: "output".to_string(),
+                short: Some('o'),
+                help: "Output file".to_string(),
+                takes_value: true,
+                required: false,
+                default: None,
+            },
+            ArgDef {
+                long: "verbose".to_string(),
+                short: Some('v'),
+                help: "Verbose".to_string(),
+                takes_value: false,
+                required: false,
+                default: None,
+            },
         ];
-        let args: Vec<String> = vec!["--output", "out.fj", "-v", "input.fj"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = vec!["--output", "out.fj", "-v", "input.fj"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let parsed = parse_args(&args, &defs).unwrap();
         assert_eq!(parsed.get("output"), Some("out.fj"));
         assert!(parsed.has("verbose"));
@@ -567,7 +646,14 @@ mod tests {
 
     #[test]
     fn s4_5_generate_help() {
-        let defs = vec![ArgDef { long: "output".to_string(), short: Some('o'), help: "Output file".to_string(), takes_value: true, required: true, default: None }];
+        let defs = vec![ArgDef {
+            long: "output".to_string(),
+            short: Some('o'),
+            help: "Output file".to_string(),
+            takes_value: true,
+            required: true,
+            default: None,
+        }];
         let help = generate_help("fj", &defs);
         assert!(help.contains("--output"));
         assert!(help.contains("-o"));
@@ -591,8 +677,16 @@ mod tests {
     fn s4_8_format_table() {
         let headers = vec!["Name", "Type", "Size"];
         let rows = vec![
-            vec!["main.fj".to_string(), "source".to_string(), "1.2KB".to_string()],
-            vec!["lib.fj".to_string(), "library".to_string(), "3.5KB".to_string()],
+            vec![
+                "main.fj".to_string(),
+                "source".to_string(),
+                "1.2KB".to_string(),
+            ],
+            vec![
+                "lib.fj".to_string(),
+                "library".to_string(),
+                "3.5KB".to_string(),
+            ],
         ];
         let table = format_table(&headers, &rows, &[Align::Left, Align::Left, Align::Right]);
         assert!(table.contains("main.fj"));

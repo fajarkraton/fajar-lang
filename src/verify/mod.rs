@@ -2,6 +2,6 @@
 //!
 //! Enables safety-critical certification (DO-178C, ISO 26262) for embedded ML.
 
-pub mod spec;
 pub mod smt;
+pub mod spec;
 pub mod tensor_verify;

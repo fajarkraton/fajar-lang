@@ -60,8 +60,7 @@ impl fmt::Display for Digest {
 
 /// SHA-256 initial hash values (first 32 bits of fractional parts of sqrt(primes)).
 pub const SHA256_H: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
 /// SHA-256 round constants.
@@ -95,16 +94,25 @@ pub struct HmacConfig {
 
 /// AES mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AesMode { Cbc, Gcm }
+pub enum AesMode {
+    Cbc,
+    Gcm,
+}
 
 /// AES key size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AesKeySize { Aes128, Aes256 }
+pub enum AesKeySize {
+    Aes128,
+    Aes256,
+}
 
 impl AesKeySize {
     /// Returns key length in bytes.
     pub fn len(self) -> usize {
-        match self { Self::Aes128 => 16, Self::Aes256 => 32 }
+        match self {
+            Self::Aes128 => 16,
+            Self::Aes256 => 32,
+        }
     }
 
     /// Returns whether the key size is empty (always false for valid key sizes).
@@ -141,11 +149,19 @@ pub struct AesResult {
 
 /// RSA key size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RsaKeySize { Rsa2048, Rsa4096 }
+pub enum RsaKeySize {
+    Rsa2048,
+    Rsa4096,
+}
 
 impl RsaKeySize {
     /// Returns bit length.
-    pub fn bits(self) -> u32 { match self { Self::Rsa2048 => 2048, Self::Rsa4096 => 4096 } }
+    pub fn bits(self) -> u32 {
+        match self {
+            Self::Rsa2048 => 2048,
+            Self::Rsa4096 => 4096,
+        }
+    }
 }
 
 /// RSA key pair.
@@ -179,7 +195,12 @@ pub struct Signature {
 
 /// Signature algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignatureAlgorithm { RsaPkcs1Sha256, RsaPssSha256, Ed25519, EcdsaP256 }
+pub enum SignatureAlgorithm {
+    RsaPkcs1Sha256,
+    RsaPssSha256,
+    Ed25519,
+    EcdsaP256,
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // S2.7-S2.8: Key Exchange + Password Hashing
@@ -196,7 +217,10 @@ pub struct X25519Result {
 
 /// Password hashing algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PasswordHashAlg { Pbkdf2Sha256, Argon2id }
+pub enum PasswordHashAlg {
+    Pbkdf2Sha256,
+    Argon2id,
+}
 
 /// Password hash parameters.
 #[derive(Debug, Clone)]
@@ -261,11 +285,17 @@ pub fn base64_encode(data: &[u8]) -> String {
 /// Decodes Base64 to bytes.
 pub fn base64_decode(encoded: &str) -> Result<Vec<u8>, String> {
     let mut result = Vec::new();
-    let bytes: Vec<u8> = encoded.bytes().filter(|b| *b != b'\n' && *b != b'\r').collect();
-    if !bytes.len().is_multiple_of(4) { return Err("invalid base64 length".to_string()); }
+    let bytes: Vec<u8> = encoded
+        .bytes()
+        .filter(|b| *b != b'\n' && *b != b'\r')
+        .collect();
+    if !bytes.len().is_multiple_of(4) {
+        return Err("invalid base64 length".to_string());
+    }
     for chunk in bytes.chunks(4) {
-        let vals: Result<Vec<u32>, String> = chunk.iter().map(|&b| {
-            match b {
+        let vals: Result<Vec<u32>, String> = chunk
+            .iter()
+            .map(|&b| match b {
                 b'A'..=b'Z' => Ok((b - b'A') as u32),
                 b'a'..=b'z' => Ok((b - b'a' + 26) as u32),
                 b'0'..=b'9' => Ok((b - b'0' + 52) as u32),
@@ -273,13 +303,17 @@ pub fn base64_decode(encoded: &str) -> Result<Vec<u8>, String> {
                 b'/' => Ok(63),
                 b'=' => Ok(0),
                 _ => Err(format!("invalid base64 character: {}", b as char)),
-            }
-        }).collect();
+            })
+            .collect();
         let vals = vals?;
         let triple = (vals[0] << 18) | (vals[1] << 12) | (vals[2] << 6) | vals[3];
         result.push(((triple >> 16) & 0xFF) as u8);
-        if chunk[2] != b'=' { result.push(((triple >> 8) & 0xFF) as u8); }
-        if chunk[3] != b'=' { result.push((triple & 0xFF) as u8); }
+        if chunk[2] != b'=' {
+            result.push(((triple >> 8) & 0xFF) as u8);
+        }
+        if chunk[3] != b'=' {
+            result.push((triple & 0xFF) as u8);
+        }
     }
     Ok(result)
 }
@@ -291,7 +325,9 @@ pub fn hex_encode(data: &[u8]) -> String {
 
 /// Decodes hex string to bytes.
 pub fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if !hex.len().is_multiple_of(2) { return Err("odd hex length".to_string()); }
+    if !hex.len().is_multiple_of(2) {
+        return Err("odd hex length".to_string());
+    }
     (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).map_err(|e| format!("{e}")))
@@ -300,7 +336,9 @@ pub fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
 
 /// Constant-time comparison (prevents timing attacks).
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     let mut result = 0u8;
     for (x, y) in a.iter().zip(b.iter()) {
         result |= x ^ y;
@@ -311,7 +349,9 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// Securely zeros memory.
 pub fn secure_zero(buf: &mut [u8]) {
     for byte in buf.iter_mut() {
-        unsafe { std::ptr::write_volatile(byte, 0); }
+        unsafe {
+            std::ptr::write_volatile(byte, 0);
+        }
     }
     std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
 }
@@ -397,7 +437,10 @@ mod tests {
 
     #[test]
     fn s2_1_digest_hex() {
-        let digest = Digest { bytes: vec![0xab, 0xcd, 0xef], algorithm: HashAlgorithm::Sha256 };
+        let digest = Digest {
+            bytes: vec![0xab, 0xcd, 0xef],
+            algorithm: HashAlgorithm::Sha256,
+        };
         assert_eq!(digest.hex(), "abcdef");
         assert_eq!(format!("{digest}"), "abcdef");
     }
@@ -471,7 +514,11 @@ mod tests {
         let claims = JwtClaims {
             iss: Some("fajarlang.dev".to_string()),
             sub: Some("user123".to_string()),
-            aud: None, exp: Some(1000), nbf: Some(500), iat: Some(500), jti: None,
+            aud: None,
+            exp: Some(1000),
+            nbf: Some(500),
+            iat: Some(500),
+            jti: None,
             custom: std::collections::HashMap::new(),
         };
         assert!(!claims.is_expired(900));

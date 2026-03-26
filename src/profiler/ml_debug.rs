@@ -45,7 +45,9 @@ impl GradientSnapshot {
 
     /// Returns the sparsity (fraction of zero gradients).
     pub fn sparsity(&self) -> f64 {
-        if self.num_elements == 0 { return 0.0; }
+        if self.num_elements == 0 {
+            return 0.0;
+        }
         self.num_zeros as f64 / self.num_elements as f64
     }
 }
@@ -85,7 +87,10 @@ impl ShapeTracker {
 
     /// Returns shape history for a specific operation.
     pub fn history_for(&self, operation: &str) -> Vec<&ShapeEvent> {
-        self.events.iter().filter(|e| e.operation == operation).collect()
+        self.events
+            .iter()
+            .filter(|e| e.operation == operation)
+            .collect()
     }
 
     /// Detects shape mismatches (input incompatible with operation).
@@ -124,8 +129,11 @@ pub struct ShapeMismatch {
 
 impl fmt::Display for ShapeMismatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}: shape mismatch in {}: expected {}, got {}",
-            self.file, self.line, self.operation, self.expected, self.actual)
+        write!(
+            f,
+            "{}:{}: shape mismatch in {}: expected {}, got {}",
+            self.file, self.line, self.operation, self.expected, self.actual
+        )
     }
 }
 
@@ -165,7 +173,13 @@ pub struct TensorLocation {
 }
 
 /// Checks a tensor for NaN/Inf values.
-pub fn check_nan_inf(name: &str, data: &[f64], step: u64, file: &str, line: u32) -> Option<TensorLocation> {
+pub fn check_nan_inf(
+    name: &str,
+    data: &[f64],
+    step: u64,
+    file: &str,
+    line: u32,
+) -> Option<TensorLocation> {
     for (i, &val) in data.iter().enumerate() {
         if val.is_nan() || val.is_infinite() {
             return Some(TensorLocation {
@@ -201,7 +215,12 @@ pub struct LossTracker {
 impl LossTracker {
     /// Creates a new loss tracker.
     pub fn new() -> Self {
-        Self { values: Vec::new(), best_loss: f64::INFINITY, best_step: 0, stagnation_count: 0 }
+        Self {
+            values: Vec::new(),
+            best_loss: f64::INFINITY,
+            best_step: 0,
+            stagnation_count: 0,
+        }
     }
 
     /// Records a loss value.
@@ -228,18 +247,34 @@ impl LossTracker {
 
     /// Returns moving average over last N steps.
     pub fn moving_average(&self, window: usize) -> f64 {
-        if self.values.is_empty() { return 0.0; }
-        let start = if self.values.len() > window { self.values.len() - window } else { 0 };
+        if self.values.is_empty() {
+            return 0.0;
+        }
+        let start = if self.values.len() > window {
+            self.values.len() - window
+        } else {
+            0
+        };
         let sum: f64 = self.values[start..].iter().map(|(_, v)| v).sum();
         sum / (self.values.len() - start) as f64
     }
 
     /// Detects if loss is diverging (increasing trend).
     pub fn is_diverging(&self, window: usize) -> bool {
-        if self.values.len() < window * 2 { return false; }
+        if self.values.len() < window * 2 {
+            return false;
+        }
         let n = self.values.len();
-        let recent_avg: f64 = self.values[n - window..].iter().map(|(_, v)| v).sum::<f64>() / window as f64;
-        let prev_avg: f64 = self.values[n - window * 2..n - window].iter().map(|(_, v)| v).sum::<f64>() / window as f64;
+        let recent_avg: f64 = self.values[n - window..]
+            .iter()
+            .map(|(_, v)| v)
+            .sum::<f64>()
+            / window as f64;
+        let prev_avg: f64 = self.values[n - window * 2..n - window]
+            .iter()
+            .map(|(_, v)| v)
+            .sum::<f64>()
+            / window as f64;
         recent_avg > prev_avg * 1.1 // 10% increase
     }
 }
@@ -268,7 +303,14 @@ pub struct Histogram {
 /// Computes a histogram from data.
 pub fn compute_histogram(data: &[f64], num_bins: usize) -> Histogram {
     if data.is_empty() {
-        return Histogram { edges: vec![], counts: vec![], total: 0, min: 0.0, max: 0.0, mean: 0.0 };
+        return Histogram {
+            edges: vec![],
+            counts: vec![],
+            total: 0,
+            min: 0.0,
+            max: 0.0,
+            mean: 0.0,
+        };
     }
 
     let min = data.iter().copied().fold(f64::INFINITY, f64::min);
@@ -276,7 +318,11 @@ pub fn compute_histogram(data: &[f64], num_bins: usize) -> Histogram {
     let mean = data.iter().sum::<f64>() / data.len() as f64;
 
     let range = max - min;
-    let bin_width = if range == 0.0 { 1.0 } else { range / num_bins as f64 };
+    let bin_width = if range == 0.0 {
+        1.0
+    } else {
+        range / num_bins as f64
+    };
 
     let mut edges = Vec::with_capacity(num_bins + 1);
     for i in 0..=num_bins {
@@ -290,7 +336,14 @@ pub fn compute_histogram(data: &[f64], num_bins: usize) -> Histogram {
         counts[bin] += 1;
     }
 
-    Histogram { edges, counts, total: data.len() as u64, min, max, mean }
+    Histogram {
+        edges,
+        counts,
+        total: data.len() as u64,
+        min,
+        max,
+        mean,
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -327,18 +380,21 @@ pub fn check_gradient_health(
     vanish_threshold: f64,
     explode_threshold: f64,
 ) -> Vec<(String, GradientHealth)> {
-    gradients.iter().map(|g| {
-        let health = if g.norm.is_nan() {
-            GradientHealth::Nan
-        } else if g.is_vanishing(vanish_threshold) {
-            GradientHealth::Vanishing
-        } else if g.is_exploding(explode_threshold) {
-            GradientHealth::Exploding
-        } else {
-            GradientHealth::Normal
-        };
-        (g.param_name.clone(), health)
-    }).collect()
+    gradients
+        .iter()
+        .map(|g| {
+            let health = if g.norm.is_nan() {
+                GradientHealth::Nan
+            } else if g.is_vanishing(vanish_threshold) {
+                GradientHealth::Vanishing
+            } else if g.is_exploding(explode_threshold) {
+                GradientHealth::Exploding
+            } else {
+                GradientHealth::Normal
+            };
+            (g.param_name.clone(), health)
+        })
+        .collect()
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -352,9 +408,15 @@ mod tests {
     #[test]
     fn d2_3_gradient_snapshot() {
         let g = GradientSnapshot {
-            param_name: "layer1.weight".to_string(), step: 10,
-            norm: 0.5, mean: 0.01, max_abs: 1.2, min_abs: 0.0001,
-            std_dev: 0.15, num_elements: 1024, num_zeros: 50,
+            param_name: "layer1.weight".to_string(),
+            step: 10,
+            norm: 0.5,
+            mean: 0.01,
+            max_abs: 1.2,
+            min_abs: 0.0001,
+            std_dev: 0.15,
+            num_elements: 1024,
+            num_zeros: 50,
         };
         assert!(!g.is_vanishing(1e-6));
         assert!(!g.is_exploding(100.0));
@@ -364,9 +426,15 @@ mod tests {
     #[test]
     fn d2_3_vanishing_gradient() {
         let g = GradientSnapshot {
-            param_name: "deep.weight".to_string(), step: 100,
-            norm: 1e-10, mean: 1e-11, max_abs: 1e-9, min_abs: 0.0,
-            std_dev: 1e-11, num_elements: 512, num_zeros: 500,
+            param_name: "deep.weight".to_string(),
+            step: 100,
+            norm: 1e-10,
+            mean: 1e-11,
+            max_abs: 1e-9,
+            min_abs: 0.0,
+            std_dev: 1e-11,
+            num_elements: 512,
+            num_zeros: 500,
         };
         assert!(g.is_vanishing(1e-6));
     }
@@ -378,7 +446,9 @@ mod tests {
             operation: "matmul".to_string(),
             input_shapes: vec![vec![4, 3], vec![3, 5]],
             output_shape: vec![4, 5],
-            file: "nn.fj".to_string(), line: 10, step: 1,
+            file: "nn.fj".to_string(),
+            line: 10,
+            step: 1,
         });
         assert!(tracker.detect_mismatches().is_empty()); // shapes compatible
 
@@ -386,7 +456,9 @@ mod tests {
             operation: "matmul".to_string(),
             input_shapes: vec![vec![4, 3], vec![5, 2]], // mismatch: 3 != 5
             output_shape: vec![],
-            file: "nn.fj".to_string(), line: 15, step: 2,
+            file: "nn.fj".to_string(),
+            line: 15,
+            step: 2,
         });
         assert_eq!(tracker.detect_mismatches().len(), 1);
     }
@@ -439,9 +511,13 @@ mod tests {
     fn d2_3_loss_diverging() {
         let mut tracker = LossTracker::new();
         // First 5: low values
-        for i in 0..5 { tracker.record(i, 0.3); }
+        for i in 0..5 {
+            tracker.record(i, 0.3);
+        }
         // Next 5: higher values (diverging)
-        for i in 5..10 { tracker.record(i, 2.0); }
+        for i in 5..10 {
+            tracker.record(i, 2.0);
+        }
         // Window=5: prev_avg=0.3, recent_avg=2.0 → 2.0 > 0.3*1.1
         assert!(tracker.is_diverging(5));
     }
@@ -459,9 +535,39 @@ mod tests {
     #[test]
     fn d2_3_gradient_health() {
         let gradients = vec![
-            GradientSnapshot { param_name: "w1".to_string(), step: 1, norm: 0.5, mean: 0.01, max_abs: 1.0, min_abs: 0.0, std_dev: 0.1, num_elements: 100, num_zeros: 0 },
-            GradientSnapshot { param_name: "w2".to_string(), step: 1, norm: 1e-10, mean: 0.0, max_abs: 1e-9, min_abs: 0.0, std_dev: 0.0, num_elements: 100, num_zeros: 99 },
-            GradientSnapshot { param_name: "w3".to_string(), step: 1, norm: 1e6, mean: 100.0, max_abs: 1e5, min_abs: 0.0, std_dev: 1000.0, num_elements: 100, num_zeros: 0 },
+            GradientSnapshot {
+                param_name: "w1".to_string(),
+                step: 1,
+                norm: 0.5,
+                mean: 0.01,
+                max_abs: 1.0,
+                min_abs: 0.0,
+                std_dev: 0.1,
+                num_elements: 100,
+                num_zeros: 0,
+            },
+            GradientSnapshot {
+                param_name: "w2".to_string(),
+                step: 1,
+                norm: 1e-10,
+                mean: 0.0,
+                max_abs: 1e-9,
+                min_abs: 0.0,
+                std_dev: 0.0,
+                num_elements: 100,
+                num_zeros: 99,
+            },
+            GradientSnapshot {
+                param_name: "w3".to_string(),
+                step: 1,
+                norm: 1e6,
+                mean: 100.0,
+                max_abs: 1e5,
+                min_abs: 0.0,
+                std_dev: 1000.0,
+                num_elements: 100,
+                num_zeros: 0,
+            },
         ];
         let health = check_gradient_health(&gradients, 1e-6, 1e3);
         assert_eq!(health[0].1, GradientHealth::Normal);
@@ -479,7 +585,9 @@ mod tests {
     #[test]
     fn d2_3_moving_average() {
         let mut tracker = LossTracker::new();
-        for i in 0..10 { tracker.record(i, i as f64); }
+        for i in 0..10 {
+            tracker.record(i, i as f64);
+        }
         let ma = tracker.moving_average(5);
         // Last 5 values: 5,6,7,8,9 → avg = 7.0
         assert!((ma - 7.0).abs() < 0.001);
@@ -488,8 +596,11 @@ mod tests {
     #[test]
     fn d2_3_shape_mismatch_display() {
         let mm = ShapeMismatch {
-            operation: "matmul".to_string(), expected: "[..., 10]".to_string(),
-            actual: "[5, ...]".to_string(), file: "nn.fj".to_string(), line: 42,
+            operation: "matmul".to_string(),
+            expected: "[..., 10]".to_string(),
+            actual: "[5, ...]".to_string(),
+            file: "nn.fj".to_string(),
+            line: 42,
         };
         let s = format!("{mm}");
         assert!(s.contains("nn.fj:42"));

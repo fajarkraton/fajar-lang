@@ -20,13 +20,17 @@ pub struct StackEntry {
 
 /// Parses collapsed stack format into entries.
 pub fn parse_collapsed(input: &str) -> Vec<StackEntry> {
-    input.lines()
+    input
+        .lines()
         .filter(|line| !line.is_empty())
         .filter_map(|line| {
             let parts: Vec<&str> = line.rsplitn(2, ' ').collect();
             if parts.len() == 2 {
                 let count = parts[0].parse::<u64>().ok()?;
-                Some(StackEntry { stack: parts[1].to_string(), count })
+                Some(StackEntry {
+                    stack: parts[1].to_string(),
+                    count,
+                })
             } else {
                 None
             }
@@ -60,9 +64,13 @@ pub struct FlameConfig {
 impl Default for FlameConfig {
     fn default() -> Self {
         Self {
-            width: 1200, row_height: 16, font_size: 12,
-            min_text_width: 0.02, palette: Palette::Hot,
-            title: "Flamegraph".to_string(), inverted: false,
+            width: 1200,
+            row_height: 16,
+            font_size: 12,
+            min_text_width: 0.02,
+            palette: Palette::Hot,
+            title: "Flamegraph".to_string(),
+            inverted: false,
         }
     }
 }
@@ -95,7 +103,12 @@ pub struct FlameNode {
 
 /// Builds a flamegraph tree from collapsed stacks.
 pub fn build_flame_tree(entries: &[StackEntry]) -> FlameNode {
-    let mut root = FlameNode { name: "all".to_string(), self_count: 0, total_count: 0, children: Vec::new() };
+    let mut root = FlameNode {
+        name: "all".to_string(),
+        self_count: 0,
+        total_count: 0,
+        children: Vec::new(),
+    };
 
     for entry in entries {
         let frames: Vec<&str> = entry.stack.split(';').collect();
@@ -108,7 +121,10 @@ pub fn build_flame_tree(entries: &[StackEntry]) -> FlameNode {
                 pos
             } else {
                 node.children.push(FlameNode {
-                    name: frame.to_string(), self_count: 0, total_count: 0, children: Vec::new(),
+                    name: frame.to_string(),
+                    self_count: 0,
+                    total_count: 0,
+                    children: Vec::new(),
                 });
                 node.children.len() - 1
             };
@@ -125,7 +141,9 @@ pub fn build_flame_tree(entries: &[StackEntry]) -> FlameNode {
 /// Generates an SVG flamegraph from a flame tree.
 pub fn render_svg(root: &FlameNode, config: &FlameConfig) -> String {
     let total = root.total_count;
-    if total == 0 { return "<svg></svg>".to_string(); }
+    if total == 0 {
+        return "<svg></svg>".to_string();
+    }
 
     let max_depth = tree_depth(root);
     let height = (max_depth + 2) * config.row_height as usize + 40;
@@ -142,7 +160,16 @@ pub fn render_svg(root: &FlameNode, config: &FlameConfig) -> String {
     );
 
     // Render nodes
-    render_node(&mut svg, root, 0.0, config.width as f64, 0, total, config, max_depth);
+    render_node(
+        &mut svg,
+        root,
+        0.0,
+        config.width as f64,
+        0,
+        total,
+        config,
+        max_depth,
+    );
 
     svg.push_str("</svg>");
     svg
@@ -159,7 +186,9 @@ fn render_node(
     config: &FlameConfig,
     max_depth: usize,
 ) {
-    if width < 1.0 { return; }
+    if width < 1.0 {
+        return;
+    }
 
     let y = if config.inverted {
         30 + depth * config.row_height as usize
@@ -183,7 +212,11 @@ fn render_node(
         }
     };
 
-    let pct = if total > 0 { node.total_count as f64 / total as f64 * 100.0 } else { 0.0 };
+    let pct = if total > 0 {
+        node.total_count as f64 / total as f64 * 100.0
+    } else {
+        0.0
+    };
     let title = format!("{} ({:.1}%, {} samples)", node.name, pct, node.total_count);
 
     svg.push_str(&format!(
@@ -193,13 +226,18 @@ fn render_node(
 
     if width > config.font_size as f64 * 3.0 {
         let text = if node.name.len() > (width / config.font_size as f64 * 1.5) as usize {
-            format!("{}..", &node.name[..((width / config.font_size as f64 * 1.2) as usize).min(node.name.len())])
+            format!(
+                "{}..",
+                &node.name
+                    [..((width / config.font_size as f64 * 1.2) as usize).min(node.name.len())]
+            )
         } else {
             node.name.clone()
         };
         svg.push_str(&format!(
             r#"<text x="{:.1}" y="{}" fill="white">{text}</text>"#,
-            x + 3.0, y + config.row_height as usize - 4
+            x + 3.0,
+            y + config.row_height as usize - 4
         ));
     }
     svg.push_str("</g>\n");
@@ -212,14 +250,29 @@ fn render_node(
         } else {
             0.0
         };
-        render_node(svg, child, child_x, child_width, depth + 1, total, config, max_depth);
+        render_node(
+            svg,
+            child,
+            child_x,
+            child_width,
+            depth + 1,
+            total,
+            config,
+            max_depth,
+        );
         child_x += child_width;
     }
 }
 
 fn tree_depth(node: &FlameNode) -> usize {
-    if node.children.is_empty() { return 0; }
-    node.children.iter().map(|c| 1 + tree_depth(c)).max().unwrap_or(0)
+    if node.children.is_empty() {
+        return 0;
+    }
+    node.children
+        .iter()
+        .map(|c| 1 + tree_depth(c))
+        .max()
+        .unwrap_or(0)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -228,18 +281,27 @@ fn tree_depth(node: &FlameNode) -> usize {
 
 /// Computes differential between two profiles (before/after).
 pub fn differential(before: &[StackEntry], after: &[StackEntry]) -> Vec<DiffEntry> {
-    let before_map: HashMap<&str, u64> = before.iter().map(|e| (e.stack.as_str(), e.count)).collect();
+    let before_map: HashMap<&str, u64> =
+        before.iter().map(|e| (e.stack.as_str(), e.count)).collect();
     let after_map: HashMap<&str, u64> = after.iter().map(|e| (e.stack.as_str(), e.count)).collect();
 
     let mut all_stacks: Vec<&str> = before_map.keys().chain(after_map.keys()).copied().collect();
     all_stacks.sort();
     all_stacks.dedup();
 
-    all_stacks.iter().map(|&stack| {
-        let b = before_map.get(stack).copied().unwrap_or(0);
-        let a = after_map.get(stack).copied().unwrap_or(0);
-        DiffEntry { stack: stack.to_string(), before: b, after: a, delta: a as i64 - b as i64 }
-    }).collect()
+    all_stacks
+        .iter()
+        .map(|&stack| {
+            let b = before_map.get(stack).copied().unwrap_or(0);
+            let a = after_map.get(stack).copied().unwrap_or(0);
+            DiffEntry {
+                stack: stack.to_string(),
+                before: b,
+                after: a,
+                delta: a as i64 - b as i64,
+            }
+        })
+        .collect()
 }
 
 /// A differential stack entry.
@@ -301,8 +363,14 @@ mod tests {
     #[test]
     fn d1_2_build_flame_tree() {
         let entries = vec![
-            StackEntry { stack: "main;compute".to_string(), count: 80 },
-            StackEntry { stack: "main;log".to_string(), count: 20 },
+            StackEntry {
+                stack: "main;compute".to_string(),
+                count: 80,
+            },
+            StackEntry {
+                stack: "main;log".to_string(),
+                count: 20,
+            },
         ];
         let tree = build_flame_tree(&entries);
         assert_eq!(tree.name, "all");
@@ -314,8 +382,14 @@ mod tests {
     #[test]
     fn d1_2_render_svg() {
         let entries = vec![
-            StackEntry { stack: "main;fib".to_string(), count: 90 },
-            StackEntry { stack: "main;print".to_string(), count: 10 },
+            StackEntry {
+                stack: "main;fib".to_string(),
+                count: 90,
+            },
+            StackEntry {
+                stack: "main;print".to_string(),
+                count: 10,
+            },
         ];
         let tree = build_flame_tree(&entries);
         let svg = render_svg(&tree, &FlameConfig::default());
@@ -326,9 +400,15 @@ mod tests {
 
     #[test]
     fn d1_2_inverted_flamegraph() {
-        let entries = vec![StackEntry { stack: "a;b".to_string(), count: 10 }];
+        let entries = vec![StackEntry {
+            stack: "a;b".to_string(),
+            count: 10,
+        }];
         let tree = build_flame_tree(&entries);
-        let config = FlameConfig { inverted: true, ..Default::default() };
+        let config = FlameConfig {
+            inverted: true,
+            ..Default::default()
+        };
         let svg = render_svg(&tree, &config);
         assert!(svg.contains("<svg"));
     }
@@ -336,13 +416,28 @@ mod tests {
     #[test]
     fn d1_3_differential() {
         let before = vec![
-            StackEntry { stack: "main;compute".to_string(), count: 100 },
-            StackEntry { stack: "main;log".to_string(), count: 20 },
+            StackEntry {
+                stack: "main;compute".to_string(),
+                count: 100,
+            },
+            StackEntry {
+                stack: "main;log".to_string(),
+                count: 20,
+            },
         ];
         let after = vec![
-            StackEntry { stack: "main;compute".to_string(), count: 80 },
-            StackEntry { stack: "main;log".to_string(), count: 30 },
-            StackEntry { stack: "main;cache".to_string(), count: 10 },
+            StackEntry {
+                stack: "main;compute".to_string(),
+                count: 80,
+            },
+            StackEntry {
+                stack: "main;log".to_string(),
+                count: 30,
+            },
+            StackEntry {
+                stack: "main;cache".to_string(),
+                count: 10,
+            },
         ];
         let diff = differential(&before, &after);
         let compute = diff.iter().find(|d| d.stack == "main;compute").unwrap();

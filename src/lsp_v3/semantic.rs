@@ -48,10 +48,29 @@ impl SemanticTokenType {
     /// Returns all token types for the legend.
     pub fn legend() -> Vec<&'static str> {
         vec![
-            "namespace", "type", "class", "enum", "interface", "struct",
-            "typeParameter", "parameter", "variable", "property", "enumMember",
-            "event", "function", "method", "macro", "keyword", "modifier",
-            "comment", "string", "number", "regexp", "operator", "decorator",
+            "namespace",
+            "type",
+            "class",
+            "enum",
+            "interface",
+            "struct",
+            "typeParameter",
+            "parameter",
+            "variable",
+            "property",
+            "enumMember",
+            "event",
+            "function",
+            "method",
+            "macro",
+            "keyword",
+            "modifier",
+            "comment",
+            "string",
+            "number",
+            "regexp",
+            "operator",
+            "decorator",
             "label",
         ]
     }
@@ -79,8 +98,14 @@ impl SemanticTokenModifier {
     /// Returns all modifier names for the legend.
     pub fn legend() -> Vec<&'static str> {
         vec![
-            "declaration", "definition", "readonly", "static",
-            "deprecated", "abstract", "async", "modification",
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
         ]
     }
 }
@@ -560,7 +585,11 @@ pub struct BreadcrumbItem {
 }
 
 /// Computes breadcrumbs for a cursor position.
-pub fn breadcrumbs_at(symbols: &[DocumentSymbol], line: u32, character: u32) -> Vec<BreadcrumbItem> {
+pub fn breadcrumbs_at(
+    symbols: &[DocumentSymbol],
+    line: u32,
+    character: u32,
+) -> Vec<BreadcrumbItem> {
     let mut result = Vec::new();
     fn walk(
         symbols: &[DocumentSymbol],
@@ -616,9 +645,27 @@ mod tests {
     #[test]
     fn l1_1_encode_semantic_tokens() {
         let tokens = vec![
-            AbsoluteToken { line: 0, start: 0, length: 2, token_type: 15, modifiers: 0 },
-            AbsoluteToken { line: 0, start: 3, length: 4, token_type: 12, modifiers: 1 },
-            AbsoluteToken { line: 1, start: 4, length: 3, token_type: 8, modifiers: 0 },
+            AbsoluteToken {
+                line: 0,
+                start: 0,
+                length: 2,
+                token_type: 15,
+                modifiers: 0,
+            },
+            AbsoluteToken {
+                line: 0,
+                start: 3,
+                length: 4,
+                token_type: 12,
+                modifiers: 1,
+            },
+            AbsoluteToken {
+                line: 1,
+                start: 4,
+                length: 3,
+                token_type: 8,
+                modifiers: 0,
+            },
         ];
         let encoded = encode_semantic_tokens(&tokens);
         assert_eq!(encoded.len(), 3);
@@ -638,7 +685,10 @@ mod tests {
             kind: SymbolKind::Function,
             location: Location {
                 uri: "file:///main.fj".to_string(),
-                line: 10, character: 3, end_line: 10, end_character: 12,
+                line: 10,
+                character: 3,
+                end_line: 10,
+                end_character: 12,
             },
             documentation: Some("Compute fibonacci number".to_string()),
             signature: Some("fn fibonacci(n: i32) -> i32".to_string()),
@@ -653,11 +703,26 @@ mod tests {
         let refs = ReferenceResult {
             definition: Location {
                 uri: "file:///main.fj".to_string(),
-                line: 0, character: 3, end_line: 0, end_character: 12,
+                line: 0,
+                character: 3,
+                end_line: 0,
+                end_character: 12,
             },
             references: vec![
-                Location { uri: "file:///main.fj".to_string(), line: 5, character: 4, end_line: 5, end_character: 13 },
-                Location { uri: "file:///test.fj".to_string(), line: 2, character: 8, end_line: 2, end_character: 17 },
+                Location {
+                    uri: "file:///main.fj".to_string(),
+                    line: 5,
+                    character: 4,
+                    end_line: 5,
+                    end_character: 13,
+                },
+                Location {
+                    uri: "file:///test.fj".to_string(),
+                    line: 2,
+                    character: 8,
+                    end_line: 2,
+                    end_character: 17,
+                },
             ],
             include_definition: false,
         };
@@ -671,13 +736,31 @@ mod tests {
             target: DefinitionInfo {
                 name: "Drawable".to_string(),
                 kind: SymbolKind::Trait,
-                location: Location { uri: "file:///lib.fj".to_string(), line: 0, character: 0, end_line: 5, end_character: 0 },
+                location: Location {
+                    uri: "file:///lib.fj".to_string(),
+                    line: 0,
+                    character: 0,
+                    end_line: 5,
+                    end_character: 0,
+                },
                 documentation: None,
                 signature: Some("trait Drawable".to_string()),
             },
             implementations: vec![
-                Location { uri: "file:///circle.fj".to_string(), line: 3, character: 0, end_line: 10, end_character: 0 },
-                Location { uri: "file:///rect.fj".to_string(), line: 5, character: 0, end_line: 12, end_character: 0 },
+                Location {
+                    uri: "file:///circle.fj".to_string(),
+                    line: 3,
+                    character: 0,
+                    end_line: 10,
+                    end_character: 0,
+                },
+                Location {
+                    uri: "file:///rect.fj".to_string(),
+                    line: 5,
+                    character: 0,
+                    end_line: 12,
+                    end_character: 0,
+                },
             ],
         };
         assert_eq!(result.implementations.len(), 2);
@@ -689,7 +772,13 @@ mod tests {
         let item = TypeHierarchyItem {
             name: "Circle".to_string(),
             kind: SymbolKind::Struct,
-            location: Location { uri: "file:///shapes.fj".to_string(), line: 0, character: 0, end_line: 0, end_character: 0 },
+            location: Location {
+                uri: "file:///shapes.fj".to_string(),
+                line: 0,
+                character: 0,
+                end_line: 0,
+                end_character: 0,
+            },
             supertypes: vec!["Drawable".to_string(), "Debug".to_string()],
             subtypes: vec![],
         };
@@ -703,12 +792,24 @@ mod tests {
         let item = CallHierarchyItem {
             name: "process".to_string(),
             kind: SymbolKind::Function,
-            location: Location { uri: "file:///main.fj".to_string(), line: 10, character: 0, end_line: 20, end_character: 0 },
+            location: Location {
+                uri: "file:///main.fj".to_string(),
+                line: 10,
+                character: 0,
+                end_line: 20,
+                end_character: 0,
+            },
             detail: Some("fn process(data: [i32]) -> Result<i32, str>".to_string()),
         };
         let incoming = IncomingCall {
             from: item.clone(),
-            from_ranges: vec![Location { uri: "file:///main.fj".to_string(), line: 15, character: 4, end_line: 15, end_character: 11 }],
+            from_ranges: vec![Location {
+                uri: "file:///main.fj".to_string(),
+                line: 15,
+                character: 4,
+                end_line: 15,
+                end_character: 11,
+            }],
         };
         assert_eq!(incoming.from_ranges.len(), 1);
     }
@@ -717,9 +818,42 @@ mod tests {
     #[test]
     fn l1_7_workspace_symbol_search() {
         let symbols = vec![
-            WorkspaceSymbol { name: "fibonacci".to_string(), kind: SymbolKind::Function, location: Location { uri: "a".to_string(), line: 0, character: 0, end_line: 0, end_character: 0 }, container: None },
-            WorkspaceSymbol { name: "factorial".to_string(), kind: SymbolKind::Function, location: Location { uri: "b".to_string(), line: 0, character: 0, end_line: 0, end_character: 0 }, container: None },
-            WorkspaceSymbol { name: "Point".to_string(), kind: SymbolKind::Struct, location: Location { uri: "c".to_string(), line: 0, character: 0, end_line: 0, end_character: 0 }, container: None },
+            WorkspaceSymbol {
+                name: "fibonacci".to_string(),
+                kind: SymbolKind::Function,
+                location: Location {
+                    uri: "a".to_string(),
+                    line: 0,
+                    character: 0,
+                    end_line: 0,
+                    end_character: 0,
+                },
+                container: None,
+            },
+            WorkspaceSymbol {
+                name: "factorial".to_string(),
+                kind: SymbolKind::Function,
+                location: Location {
+                    uri: "b".to_string(),
+                    line: 0,
+                    character: 0,
+                    end_line: 0,
+                    end_character: 0,
+                },
+                container: None,
+            },
+            WorkspaceSymbol {
+                name: "Point".to_string(),
+                kind: SymbolKind::Struct,
+                location: Location {
+                    uri: "c".to_string(),
+                    line: 0,
+                    character: 0,
+                    end_line: 0,
+                    end_character: 0,
+                },
+                container: None,
+            },
         ];
         let results = search_workspace_symbols(&symbols, "fib");
         assert_eq!(results.len(), 1);
@@ -739,19 +873,59 @@ mod tests {
             name: "Point".to_string(),
             detail: Some("struct Point".to_string()),
             kind: SymbolKind::Struct,
-            range: Location { uri: "".to_string(), line: 0, character: 0, end_line: 10, end_character: 0 },
-            selection_range: Location { uri: "".to_string(), line: 0, character: 7, end_line: 0, end_character: 12 },
+            range: Location {
+                uri: "".to_string(),
+                line: 0,
+                character: 0,
+                end_line: 10,
+                end_character: 0,
+            },
+            selection_range: Location {
+                uri: "".to_string(),
+                line: 0,
+                character: 7,
+                end_line: 0,
+                end_character: 12,
+            },
             children: vec![
                 DocumentSymbol {
-                    name: "x".to_string(), detail: Some("f64".to_string()), kind: SymbolKind::Field,
-                    range: Location { uri: "".to_string(), line: 1, character: 4, end_line: 1, end_character: 10 },
-                    selection_range: Location { uri: "".to_string(), line: 1, character: 4, end_line: 1, end_character: 5 },
+                    name: "x".to_string(),
+                    detail: Some("f64".to_string()),
+                    kind: SymbolKind::Field,
+                    range: Location {
+                        uri: "".to_string(),
+                        line: 1,
+                        character: 4,
+                        end_line: 1,
+                        end_character: 10,
+                    },
+                    selection_range: Location {
+                        uri: "".to_string(),
+                        line: 1,
+                        character: 4,
+                        end_line: 1,
+                        end_character: 5,
+                    },
                     children: vec![],
                 },
                 DocumentSymbol {
-                    name: "y".to_string(), detail: Some("f64".to_string()), kind: SymbolKind::Field,
-                    range: Location { uri: "".to_string(), line: 2, character: 4, end_line: 2, end_character: 10 },
-                    selection_range: Location { uri: "".to_string(), line: 2, character: 4, end_line: 2, end_character: 5 },
+                    name: "y".to_string(),
+                    detail: Some("f64".to_string()),
+                    kind: SymbolKind::Field,
+                    range: Location {
+                        uri: "".to_string(),
+                        line: 2,
+                        character: 4,
+                        end_line: 2,
+                        end_character: 10,
+                    },
+                    selection_range: Location {
+                        uri: "".to_string(),
+                        line: 2,
+                        character: 4,
+                        end_line: 2,
+                        end_character: 5,
+                    },
                     children: vec![],
                 },
             ],
@@ -765,7 +939,13 @@ mod tests {
         let def = DefinitionInfo {
             name: "sqrt".to_string(),
             kind: SymbolKind::Function,
-            location: Location { uri: "".to_string(), line: 0, character: 0, end_line: 0, end_character: 0 },
+            location: Location {
+                uri: "".to_string(),
+                line: 0,
+                character: 0,
+                end_line: 0,
+                end_character: 0,
+            },
             documentation: Some("Returns the square root.".to_string()),
             signature: Some("fn sqrt(x: f64) -> f64".to_string()),
         };
@@ -779,8 +959,12 @@ mod tests {
     #[test]
     fn l1_13_inlay_hint_kinds() {
         let hint = InlayHint {
-            line: 5, character: 10, label: ": i32".to_string(),
-            kind: InlayHintKind::Type, padding_left: true, padding_right: false,
+            line: 5,
+            character: 10,
+            label: ": i32".to_string(),
+            kind: InlayHintKind::Type,
+            padding_left: true,
+            padding_right: false,
         };
         assert_eq!(hint.kind, InlayHintKind::Type);
         assert!(hint.padding_left);
@@ -791,29 +975,51 @@ mod tests {
     fn l1_15_code_lens_display() {
         assert_eq!(format!("{}", CodeLensKind::TestCount(3)), "3 tests");
         assert_eq!(format!("{}", CodeLensKind::TestCount(1)), "1 test");
-        assert_eq!(format!("{}", CodeLensKind::ReferenceCount(5)), "5 references");
-        assert_eq!(format!("{}", CodeLensKind::ImplCount(2)), "2 implementations");
+        assert_eq!(
+            format!("{}", CodeLensKind::ReferenceCount(5)),
+            "5 references"
+        );
+        assert_eq!(
+            format!("{}", CodeLensKind::ImplCount(2)),
+            "2 implementations"
+        );
         assert_eq!(format!("{}", CodeLensKind::Run), "Run");
     }
 
     // L1.18: Folding ranges
     #[test]
     fn l1_18_folding_range() {
-        let range = FoldingRange { start_line: 5, end_line: 20, kind: FoldingRangeKind::Region };
+        let range = FoldingRange {
+            start_line: 5,
+            end_line: 20,
+            kind: FoldingRangeKind::Region,
+        };
         assert_eq!(range.kind, FoldingRangeKind::Region);
     }
 
     // L1.19: Breadcrumbs
     #[test]
     fn l1_19_breadcrumbs() {
-        let symbols = vec![
-            DocumentSymbol {
-                name: "main".to_string(), detail: None, kind: SymbolKind::Function,
-                range: Location { uri: "".to_string(), line: 0, character: 0, end_line: 10, end_character: 0 },
-                selection_range: Location { uri: "".to_string(), line: 0, character: 3, end_line: 0, end_character: 7 },
-                children: vec![],
+        let symbols = vec![DocumentSymbol {
+            name: "main".to_string(),
+            detail: None,
+            kind: SymbolKind::Function,
+            range: Location {
+                uri: "".to_string(),
+                line: 0,
+                character: 0,
+                end_line: 10,
+                end_character: 0,
             },
-        ];
+            selection_range: Location {
+                uri: "".to_string(),
+                line: 0,
+                character: 3,
+                end_line: 0,
+                end_character: 7,
+            },
+            children: vec![],
+        }];
         let crumbs = breadcrumbs_at(&symbols, 5, 0);
         assert_eq!(crumbs.len(), 1);
         assert_eq!(crumbs[0].name, "main");
@@ -827,8 +1033,14 @@ mod tests {
                 label: "fn add(a: i32, b: i32) -> i32".to_string(),
                 documentation: Some("Add two numbers".to_string()),
                 parameters: vec![
-                    ParameterInfo { label: "a: i32".to_string(), documentation: None },
-                    ParameterInfo { label: "b: i32".to_string(), documentation: None },
+                    ParameterInfo {
+                        label: "a: i32".to_string(),
+                        documentation: None,
+                    },
+                    ParameterInfo {
+                        label: "b: i32".to_string(),
+                        documentation: None,
+                    },
                 ],
             }],
             active_signature: 0,
@@ -841,7 +1053,13 @@ mod tests {
     // L1.20: Location display
     #[test]
     fn l1_20_location_display() {
-        let loc = Location { uri: "file:///main.fj".to_string(), line: 9, character: 3, end_line: 9, end_character: 12 };
+        let loc = Location {
+            uri: "file:///main.fj".to_string(),
+            line: 9,
+            character: 3,
+            end_line: 9,
+            end_character: 12,
+        };
         assert_eq!(format!("{loc}"), "file:///main.fj:10:4");
     }
 }

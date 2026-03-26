@@ -76,11 +76,15 @@ impl fmt::Display for SymbolicShape {
 impl SymbolicShape {
     /// Creates a concrete shape.
     pub fn concrete(dims: &[usize]) -> Self {
-        Self { dims: dims.iter().map(|&d| ShapeDim::Concrete(d)).collect() }
+        Self {
+            dims: dims.iter().map(|&d| ShapeDim::Concrete(d)).collect(),
+        }
     }
 
     /// Number of dimensions (rank).
-    pub fn rank(&self) -> usize { self.dims.len() }
+    pub fn rank(&self) -> usize {
+        self.dims.len()
+    }
 
     /// Returns true if all dimensions are concrete.
     pub fn is_fully_concrete(&self) -> bool {
@@ -89,10 +93,13 @@ impl SymbolicShape {
 
     /// Returns concrete dimensions (panics if any symbolic).
     pub fn to_concrete(&self) -> Option<Vec<usize>> {
-        self.dims.iter().map(|d| match d {
-            ShapeDim::Concrete(n) => Some(*n),
-            _ => None,
-        }).collect()
+        self.dims
+            .iter()
+            .map(|d| match d {
+                ShapeDim::Concrete(n) => Some(*n),
+                _ => None,
+            })
+            .collect()
     }
 }
 
@@ -130,7 +137,14 @@ pub enum ShapeCheck {
     /// Matmul inner dimensions match.
     MatmulCompatible(SymbolicShape, SymbolicShape),
     /// Conv2d output shape valid.
-    Conv2dValid { input_h: ShapeDim, input_w: ShapeDim, kernel_h: ShapeDim, kernel_w: ShapeDim, stride: usize, padding: usize },
+    Conv2dValid {
+        input_h: ShapeDim,
+        input_w: ShapeDim,
+        kernel_h: ShapeDim,
+        kernel_w: ShapeDim,
+        stride: usize,
+        padding: usize,
+    },
 }
 
 /// Shape check status.
@@ -149,16 +163,26 @@ pub enum ShapeCheckStatus {
 /// Verifies matmul shape compatibility: A[..., M, K] × B[..., K, N] → [M, N].
 pub fn verify_matmul(a: &SymbolicShape, b: &SymbolicShape) -> ShapeConstraint {
     let a_last = a.dims.last().cloned().unwrap_or(ShapeDim::Concrete(0));
-    let b_second_last = if b.rank() >= 2 { b.dims[b.rank() - 2].clone() } else { ShapeDim::Concrete(0) };
+    let b_second_last = if b.rank() >= 2 {
+        b.dims[b.rank() - 2].clone()
+    } else {
+        ShapeDim::Concrete(0)
+    };
 
     let status = match (&a_last, &b_second_last) {
         (ShapeDim::Concrete(ak), ShapeDim::Concrete(bk)) => {
-            if ak == bk { ShapeCheckStatus::Valid }
-            else { ShapeCheckStatus::Invalid(format!("inner dimensions mismatch: {ak} != {bk}")) }
+            if ak == bk {
+                ShapeCheckStatus::Valid
+            } else {
+                ShapeCheckStatus::Invalid(format!("inner dimensions mismatch: {ak} != {bk}"))
+            }
         }
         (ShapeDim::Symbolic(a_name), ShapeDim::Symbolic(b_name)) => {
-            if a_name == b_name { ShapeCheckStatus::Valid }
-            else { ShapeCheckStatus::Pending } // needs SMT
+            if a_name == b_name {
+                ShapeCheckStatus::Valid
+            } else {
+                ShapeCheckStatus::Pending
+            } // needs SMT
         }
         _ => ShapeCheckStatus::Pending,
     };
@@ -166,13 +190,17 @@ pub fn verify_matmul(a: &SymbolicShape, b: &SymbolicShape) -> ShapeConstraint {
     ShapeConstraint {
         description: format!("matmul: {} × {}", a, b),
         constraint: ShapeCheck::MatmulCompatible(a.clone(), b.clone()),
-        file: String::new(), line: 0, status,
+        file: String::new(),
+        line: 0,
+        status,
     }
 }
 
 /// Computes the output shape of matmul.
 pub fn matmul_output_shape(a: &SymbolicShape, b: &SymbolicShape) -> Option<SymbolicShape> {
-    if a.rank() < 2 || b.rank() < 2 { return None; }
+    if a.rank() < 2 || b.rank() < 2 {
+        return None;
+    }
     let m = a.dims[a.rank() - 2].clone();
     let n = b.dims[b.rank() - 1].clone();
     Some(SymbolicShape { dims: vec![m, n] })
@@ -188,8 +216,13 @@ pub fn verify_reshape(input: &SymbolicShape, output: &SymbolicShape) -> ShapeCon
         (Some(in_dims), Some(out_dims)) => {
             let in_total: usize = in_dims.iter().product();
             let out_total: usize = out_dims.iter().product();
-            if in_total == out_total { ShapeCheckStatus::Valid }
-            else { ShapeCheckStatus::Invalid(format!("element count mismatch: {in_total} != {out_total}")) }
+            if in_total == out_total {
+                ShapeCheckStatus::Valid
+            } else {
+                ShapeCheckStatus::Invalid(format!(
+                    "element count mismatch: {in_total} != {out_total}"
+                ))
+            }
         }
         _ => ShapeCheckStatus::Pending,
     };
@@ -197,7 +230,9 @@ pub fn verify_reshape(input: &SymbolicShape, output: &SymbolicShape) -> ShapeCon
     ShapeConstraint {
         description: format!("reshape: {} → {}", input, output),
         constraint: ShapeCheck::ElementsPreserved(input.clone(), output.clone()),
-        file: String::new(), line: 0, status,
+        file: String::new(),
+        line: 0,
+        status,
     }
 }
 
@@ -206,19 +241,36 @@ pub fn verify_reshape(input: &SymbolicShape, output: &SymbolicShape) -> ShapeCon
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Verifies broadcast compatibility between two shapes.
-pub fn verify_broadcast(a: &SymbolicShape, b: &SymbolicShape) -> (ShapeCheckStatus, Option<SymbolicShape>) {
+pub fn verify_broadcast(
+    a: &SymbolicShape,
+    b: &SymbolicShape,
+) -> (ShapeCheckStatus, Option<SymbolicShape>) {
     let max_rank = a.rank().max(b.rank());
     let mut result_dims = Vec::new();
 
     for i in 0..max_rank {
-        let a_dim = if i < a.rank() { a.dims[a.rank() - 1 - i].clone() } else { ShapeDim::Concrete(1) };
-        let b_dim = if i < b.rank() { b.dims[b.rank() - 1 - i].clone() } else { ShapeDim::Concrete(1) };
+        let a_dim = if i < a.rank() {
+            a.dims[a.rank() - 1 - i].clone()
+        } else {
+            ShapeDim::Concrete(1)
+        };
+        let b_dim = if i < b.rank() {
+            b.dims[b.rank() - 1 - i].clone()
+        } else {
+            ShapeDim::Concrete(1)
+        };
 
         match (&a_dim, &b_dim) {
             (ShapeDim::Concrete(1), d) | (d, ShapeDim::Concrete(1)) => result_dims.push(d.clone()),
             (ShapeDim::Concrete(a_val), ShapeDim::Concrete(b_val)) => {
-                if a_val == b_val { result_dims.push(ShapeDim::Concrete(*a_val)); }
-                else { return (ShapeCheckStatus::Invalid(format!("cannot broadcast {a_val} with {b_val}")), None); }
+                if a_val == b_val {
+                    result_dims.push(ShapeDim::Concrete(*a_val));
+                } else {
+                    return (
+                        ShapeCheckStatus::Invalid(format!("cannot broadcast {a_val} with {b_val}")),
+                        None,
+                    );
+                }
             }
             (ShapeDim::Symbolic(a_name), ShapeDim::Symbolic(b_name)) if a_name == b_name => {
                 result_dims.push(ShapeDim::Symbolic(a_name.clone()));
@@ -233,7 +285,10 @@ pub fn verify_broadcast(a: &SymbolicShape, b: &SymbolicShape) -> (ShapeCheckStat
     }
 
     result_dims.reverse();
-    (ShapeCheckStatus::Valid, Some(SymbolicShape { dims: result_dims }))
+    (
+        ShapeCheckStatus::Valid,
+        Some(SymbolicShape { dims: result_dims }),
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -242,9 +297,12 @@ pub fn verify_broadcast(a: &SymbolicShape, b: &SymbolicShape) -> (ShapeCheckStat
 
 /// Computes conv2d output shape: (H - K + 2P) / S + 1.
 pub fn conv2d_output_shape(
-    input_h: usize, input_w: usize,
-    kernel_h: usize, kernel_w: usize,
-    stride: usize, padding: usize,
+    input_h: usize,
+    input_w: usize,
+    kernel_h: usize,
+    kernel_w: usize,
+    stride: usize,
+    padding: usize,
 ) -> (usize, usize) {
     let out_h = (input_h - kernel_h + 2 * padding) / stride + 1;
     let out_w = (input_w - kernel_w + 2 * padding) / stride + 1;
@@ -252,12 +310,33 @@ pub fn conv2d_output_shape(
 }
 
 /// Verifies conv2d output shape is valid (> 0).
-pub fn verify_conv2d(input_h: usize, input_w: usize, kernel_h: usize, kernel_w: usize, stride: usize, padding: usize) -> ShapeCheckStatus {
-    if stride == 0 { return ShapeCheckStatus::Invalid("stride cannot be 0".to_string()); }
-    if kernel_h > input_h + 2 * padding { return ShapeCheckStatus::Invalid(format!("kernel_h ({kernel_h}) > input_h + 2*padding ({})", input_h + 2 * padding)); }
-    if kernel_w > input_w + 2 * padding { return ShapeCheckStatus::Invalid(format!("kernel_w ({kernel_w}) > input_w + 2*padding ({})", input_w + 2 * padding)); }
+pub fn verify_conv2d(
+    input_h: usize,
+    input_w: usize,
+    kernel_h: usize,
+    kernel_w: usize,
+    stride: usize,
+    padding: usize,
+) -> ShapeCheckStatus {
+    if stride == 0 {
+        return ShapeCheckStatus::Invalid("stride cannot be 0".to_string());
+    }
+    if kernel_h > input_h + 2 * padding {
+        return ShapeCheckStatus::Invalid(format!(
+            "kernel_h ({kernel_h}) > input_h + 2*padding ({})",
+            input_h + 2 * padding
+        ));
+    }
+    if kernel_w > input_w + 2 * padding {
+        return ShapeCheckStatus::Invalid(format!(
+            "kernel_w ({kernel_w}) > input_w + 2*padding ({})",
+            input_w + 2 * padding
+        ));
+    }
     let (out_h, out_w) = conv2d_output_shape(input_h, input_w, kernel_h, kernel_w, stride, padding);
-    if out_h == 0 || out_w == 0 { return ShapeCheckStatus::Invalid("output dimension is 0".to_string()); }
+    if out_h == 0 || out_w == 0 {
+        return ShapeCheckStatus::Invalid("output dimension is 0".to_string());
+    }
     ShapeCheckStatus::Valid
 }
 
@@ -267,12 +346,18 @@ pub fn verify_conv2d(input_h: usize, input_w: usize, kernel_h: usize, kernel_w: 
 
 /// Verifies concatenation: all shapes must match except on the concat axis.
 pub fn verify_concat(shapes: &[SymbolicShape], axis: usize) -> ShapeCheckStatus {
-    if shapes.is_empty() { return ShapeCheckStatus::Invalid("empty input".to_string()); }
+    if shapes.is_empty() {
+        return ShapeCheckStatus::Invalid("empty input".to_string());
+    }
     let rank = shapes[0].rank();
-    if axis >= rank { return ShapeCheckStatus::Invalid(format!("axis {axis} >= rank {rank}")); }
+    if axis >= rank {
+        return ShapeCheckStatus::Invalid(format!("axis {axis} >= rank {rank}"));
+    }
 
     for (i, shape) in shapes.iter().enumerate().skip(1) {
-        if shape.rank() != rank { return ShapeCheckStatus::Invalid(format!("rank mismatch at input {i}")); }
+        if shape.rank() != rank {
+            return ShapeCheckStatus::Invalid(format!("rank mismatch at input {i}"));
+        }
         for d in 0..rank {
             if d != axis {
                 if shape.dims[d] != shapes[0].dims[d] {
@@ -296,11 +381,17 @@ pub fn verify_split(input_dim: usize, split_sizes: &[usize]) -> ShapeCheckStatus
 
 /// Verifies transpose permutation is valid.
 pub fn verify_transpose(rank: usize, perm: &[usize]) -> ShapeCheckStatus {
-    if perm.len() != rank { return ShapeCheckStatus::Invalid(format!("perm length {} != rank {rank}", perm.len())); }
+    if perm.len() != rank {
+        return ShapeCheckStatus::Invalid(format!("perm length {} != rank {rank}", perm.len()));
+    }
     let mut seen = vec![false; rank];
     for &p in perm {
-        if p >= rank { return ShapeCheckStatus::Invalid(format!("perm index {p} >= rank {rank}")); }
-        if seen[p] { return ShapeCheckStatus::Invalid(format!("duplicate perm index {p}")); }
+        if p >= rank {
+            return ShapeCheckStatus::Invalid(format!("perm index {p} >= rank {rank}"));
+        }
+        if seen[p] {
+            return ShapeCheckStatus::Invalid(format!("duplicate perm index {p}"));
+        }
         seen[p] = true;
     }
     ShapeCheckStatus::Valid
@@ -325,7 +416,9 @@ mod tests {
 
     #[test]
     fn v3_1_symbolic_dims() {
-        let s = SymbolicShape { dims: vec![ShapeDim::Symbolic("N".into()), ShapeDim::Concrete(784)] };
+        let s = SymbolicShape {
+            dims: vec![ShapeDim::Symbolic("N".into()), ShapeDim::Concrete(784)],
+        };
         assert_eq!(s.rank(), 2);
         assert!(!s.is_fully_concrete());
         assert_eq!(format!("{s}"), "[N, 784]");
@@ -349,8 +442,18 @@ mod tests {
 
     #[test]
     fn v3_2_matmul_symbolic() {
-        let a = SymbolicShape { dims: vec![ShapeDim::Symbolic("M".into()), ShapeDim::Symbolic("K".into())] };
-        let b = SymbolicShape { dims: vec![ShapeDim::Symbolic("K".into()), ShapeDim::Symbolic("N".into())] };
+        let a = SymbolicShape {
+            dims: vec![
+                ShapeDim::Symbolic("M".into()),
+                ShapeDim::Symbolic("K".into()),
+            ],
+        };
+        let b = SymbolicShape {
+            dims: vec![
+                ShapeDim::Symbolic("K".into()),
+                ShapeDim::Symbolic("N".into()),
+            ],
+        };
         let constraint = verify_matmul(&a, &b);
         assert_eq!(constraint.status, ShapeCheckStatus::Valid); // same symbolic name
     }
@@ -408,14 +511,16 @@ mod tests {
     #[test]
     fn v3_6_conv2d_valid() {
         let (h, w) = conv2d_output_shape(28, 28, 5, 5, 1, 0);
-        assert_eq!(h, 24); assert_eq!(w, 24);
+        assert_eq!(h, 24);
+        assert_eq!(w, 24);
         assert_eq!(verify_conv2d(28, 28, 5, 5, 1, 0), ShapeCheckStatus::Valid);
     }
 
     #[test]
     fn v3_6_conv2d_with_padding() {
         let (h, w) = conv2d_output_shape(28, 28, 3, 3, 1, 1);
-        assert_eq!(h, 28); assert_eq!(w, 28); // same padding
+        assert_eq!(h, 28);
+        assert_eq!(w, 28); // same padding
     }
 
     #[test]
@@ -439,7 +544,10 @@ mod tests {
             SymbolicShape::concrete(&[3, 4]),
             SymbolicShape::concrete(&[3, 5]),
         ];
-        assert!(matches!(verify_concat(&shapes, 0), ShapeCheckStatus::Invalid(_))); // dim 1 mismatch
+        assert!(matches!(
+            verify_concat(&shapes, 0),
+            ShapeCheckStatus::Invalid(_)
+        )); // dim 1 mismatch
     }
 
     #[test]
@@ -449,7 +557,10 @@ mod tests {
 
     #[test]
     fn v3_8_split_invalid() {
-        assert!(matches!(verify_split(10, &[3, 3, 3]), ShapeCheckStatus::Invalid(_)));
+        assert!(matches!(
+            verify_split(10, &[3, 3, 3]),
+            ShapeCheckStatus::Invalid(_)
+        ));
     }
 
     #[test]
@@ -459,8 +570,14 @@ mod tests {
 
     #[test]
     fn v3_8_transpose_invalid() {
-        assert!(matches!(verify_transpose(3, &[0, 1]), ShapeCheckStatus::Invalid(_))); // wrong length
-        assert!(matches!(verify_transpose(3, &[0, 1, 1]), ShapeCheckStatus::Invalid(_))); // duplicate
+        assert!(matches!(
+            verify_transpose(3, &[0, 1]),
+            ShapeCheckStatus::Invalid(_)
+        )); // wrong length
+        assert!(matches!(
+            verify_transpose(3, &[0, 1, 1]),
+            ShapeCheckStatus::Invalid(_)
+        )); // duplicate
     }
 
     #[test]
@@ -472,7 +589,10 @@ mod tests {
     #[test]
     fn v3_1_shape_expr() {
         let expr = ShapeExpr::Div(
-            Box::new(ShapeExpr::Sub(Box::new(ShapeExpr::Var("H".into())), Box::new(ShapeExpr::Lit(3)))),
+            Box::new(ShapeExpr::Sub(
+                Box::new(ShapeExpr::Var("H".into())),
+                Box::new(ShapeExpr::Lit(3)),
+            )),
             Box::new(ShapeExpr::Lit(2)),
         );
         assert_eq!(format!("{expr}"), "((H - 3) / 2)");

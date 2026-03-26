@@ -20,7 +20,11 @@ pub enum SolverBackend {
 
 impl fmt::Display for SolverBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self { Self::Z3 => write!(f, "Z3"), Self::Cvc5 => write!(f, "CVC5"), Self::Yices2 => write!(f, "Yices2") }
+        match self {
+            Self::Z3 => write!(f, "Z3"),
+            Self::Cvc5 => write!(f, "CVC5"),
+            Self::Yices2 => write!(f, "Yices2"),
+        }
     }
 }
 
@@ -101,11 +105,24 @@ impl fmt::Display for SmtLogic {
 }
 
 /// Selects the appropriate SMT logic for a set of VCs.
-pub fn select_logic(has_arrays: bool, has_quantifiers: bool, has_bitvectors: bool, has_reals: bool) -> SmtLogic {
-    if has_bitvectors { return SmtLogic::QfBv; }
-    if has_quantifiers && has_arrays { return SmtLogic::Auflia; }
-    if has_reals { return SmtLogic::Lra; }
-    if has_arrays { return SmtLogic::QfAlia; }
+pub fn select_logic(
+    has_arrays: bool,
+    has_quantifiers: bool,
+    has_bitvectors: bool,
+    has_reals: bool,
+) -> SmtLogic {
+    if has_bitvectors {
+        return SmtLogic::QfBv;
+    }
+    if has_quantifiers && has_arrays {
+        return SmtLogic::Auflia;
+    }
+    if has_reals {
+        return SmtLogic::Lra;
+    }
+    if has_arrays {
+        return SmtLogic::QfAlia;
+    }
     SmtLogic::QfLia
 }
 
@@ -130,10 +147,14 @@ pub enum SmtResult {
 
 impl SmtResult {
     /// Returns true if the VC was proven.
-    pub fn is_proven(&self) -> bool { matches!(self, Self::Unsat) }
+    pub fn is_proven(&self) -> bool {
+        matches!(self, Self::Unsat)
+    }
 
     /// Returns true if a counterexample was found.
-    pub fn is_failed(&self) -> bool { matches!(self, Self::Sat(_)) }
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::Sat(_))
+    }
 }
 
 /// A counterexample (model) showing how a VC can be violated.
@@ -146,7 +167,9 @@ pub struct Counterexample {
 impl Counterexample {
     /// Formats the counterexample as human-readable text.
     pub fn display(&self) -> String {
-        let mut lines: Vec<String> = self.assignments.iter()
+        let mut lines: Vec<String> = self
+            .assignments
+            .iter()
             .map(|(k, v)| format!("  {k} = {v}"))
             .collect();
         lines.sort();
@@ -174,7 +197,9 @@ impl fmt::Display for SmtValue {
             Self::Array(entries) => {
                 write!(f, "[")?;
                 for (i, (k, v)) in entries.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{k} → {v}")?;
                 }
                 write!(f, "]")
@@ -244,18 +269,29 @@ impl ProofCache {
 
     /// Inserts a result into the cache.
     pub fn insert(&mut self, vc_hash: u64, source_hash: u64, result: SmtResult, now_ms: u64) {
-        self.entries.insert(vc_hash, CachedResult { result, source_hash, timestamp_ms: now_ms });
+        self.entries.insert(
+            vc_hash,
+            CachedResult {
+                result,
+                source_hash,
+                timestamp_ms: now_ms,
+            },
+        );
     }
 
     /// Returns cache hit rate.
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
         self.hits as f64 / total as f64
     }
 
     /// Number of cached entries.
-    pub fn size(&self) -> usize { self.entries.len() }
+    pub fn size(&self) -> usize {
+        self.entries.len()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -299,11 +335,15 @@ pub struct VerificationFailure {
 
 impl VerificationReport {
     /// Returns true if all VCs were proven.
-    pub fn all_proven(&self) -> bool { self.failed == 0 && self.unknown == 0 && self.timeouts == 0 }
+    pub fn all_proven(&self) -> bool {
+        self.failed == 0 && self.unknown == 0 && self.timeouts == 0
+    }
 
     /// Returns verification coverage (fraction proven).
     pub fn coverage(&self) -> f64 {
-        if self.total_vcs == 0 { return 1.0; }
+        if self.total_vcs == 0 {
+            return 1.0;
+        }
         self.proven as f64 / self.total_vcs as f64
     }
 }
@@ -312,7 +352,12 @@ impl fmt::Display for VerificationReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Verification Report:")?;
         writeln!(f, "  Total VCs:  {}", self.total_vcs)?;
-        writeln!(f, "  Proven:     {} ({:.1}%)", self.proven, self.coverage() * 100.0)?;
+        writeln!(
+            f,
+            "  Proven:     {} ({:.1}%)",
+            self.proven,
+            self.coverage() * 100.0
+        )?;
         writeln!(f, "  Failed:     {}", self.failed)?;
         writeln!(f, "  Timeout:    {}", self.timeouts)?;
         writeln!(f, "  Unknown:    {}", self.unknown)?;
@@ -320,7 +365,11 @@ impl fmt::Display for VerificationReport {
         if !self.failures.is_empty() {
             writeln!(f, "\nFailures:")?;
             for fail in &self.failures {
-                writeln!(f, "  {}:{} — {} ({})", fail.file, fail.line, fail.description, fail.kind)?;
+                writeln!(
+                    f,
+                    "  {}:{} — {} ({})",
+                    fail.file, fail.line, fail.description, fail.kind
+                )?;
                 if let Some(ref ce) = fail.counterexample {
                     writeln!(f, "    {ce}")?;
                 }
@@ -434,11 +483,19 @@ mod tests {
     #[test]
     fn v2_6_verification_report() {
         let report = VerificationReport {
-            total_vcs: 20, proven: 18, failed: 1, timeouts: 1, unknown: 0,
-            solver_time_ms: 1234.5, cache_hit_rate: 0.75,
+            total_vcs: 20,
+            proven: 18,
+            failed: 1,
+            timeouts: 1,
+            unknown: 0,
+            solver_time_ms: 1234.5,
+            cache_hit_rate: 0.75,
             failures: vec![VerificationFailure {
-                description: "array bounds".to_string(), kind: "ArrayBoundsCheck".to_string(),
-                file: "main.fj".to_string(), line: 42, counterexample: Some("i = 10, len = 5".to_string()),
+                description: "array bounds".to_string(),
+                kind: "ArrayBoundsCheck".to_string(),
+                file: "main.fj".to_string(),
+                line: 42,
+                counterexample: Some("i = 10, len = 5".to_string()),
             }],
         };
         assert!(!report.all_proven());
@@ -452,8 +509,14 @@ mod tests {
     #[test]
     fn v2_6_all_proven() {
         let report = VerificationReport {
-            total_vcs: 10, proven: 10, failed: 0, timeouts: 0, unknown: 0,
-            solver_time_ms: 100.0, cache_hit_rate: 0.5, failures: vec![],
+            total_vcs: 10,
+            proven: 10,
+            failed: 0,
+            timeouts: 0,
+            unknown: 0,
+            solver_time_ms: 100.0,
+            cache_hit_rate: 0.5,
+            failures: vec![],
         };
         assert!(report.all_proven());
         assert!((report.coverage() - 1.0).abs() < 0.001);
