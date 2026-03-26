@@ -1,0 +1,51 @@
+// Self-Hosted Analyzer v3 — Test Suite for Plan V8 SH3
+// Tests: symbol table, type inference, error detection, formatting
+// Run: cat stdlib/lexer.fj stdlib/analyzer.fj examples/selfhost_analyzer_v3.fj > /tmp/t.fj && fj run /tmp/t.fj
+
+fn main() -> void {
+    let mut pass = 0
+    let mut fail = 0
+    println("=== Self-Hosted Analyzer v3 Test Suite ===")
+
+    // T1: Fresh analyzer has 0 errors
+    let s1 = new_analyzer()
+    if s1.error_count == 0 { println("T01 PASS: fresh analyzer 0 errors"); pass = pass + 1 } else { println("T01 FAIL"); fail = fail + 1 }
+
+    // T2: Built-in functions registered
+    if scope_contains(s1.fn_names, "println") { println("T02 PASS: println built-in"); pass = pass + 1 } else { println("T02 FAIL"); fail = fail + 1 }
+    if scope_contains(s1.fn_names, "sqrt") { println("T03 PASS: sqrt built-in"); pass = pass + 1 } else { println("T03 FAIL"); fail = fail + 1 }
+    if scope_contains(s1.fn_names, "len") { println("T04 PASS: len built-in"); pass = pass + 1 } else { println("T04 FAIL"); fail = fail + 1 }
+
+    // T5: scope_contains works (fresh arrays each call to avoid move issues)
+    if scope_contains(["a", "b", "c"], "b") { println("T05 PASS: scope_contains found"); pass = pass + 1 } else { println("T05 FAIL"); fail = fail + 1 }
+    if !scope_contains(["a", "b", "c"], "z") { println("T06 PASS: scope_contains not found"); pass = pass + 1 } else { println("T06 FAIL"); fail = fail + 1 }
+
+    // T7: scope_find works
+    if scope_find(["a", "b", "c"], "a") == 0 { println("T07 PASS: scope_find idx 0"); pass = pass + 1 } else { println("T07 FAIL"); fail = fail + 1 }
+    if scope_find(["a", "b", "c"], "c") == 2 { println("T08 PASS: scope_find idx 2"); pass = pass + 1 } else { println("T08 FAIL"); fail = fail + 1 }
+    if scope_find(["x", "y", "z"], "missing") == -1 { println("T09 PASS: scope_find -1"); pass = pass + 1 } else { println("T09 FAIL"); fail = fail + 1 }
+
+    // T10: Type inference from token kinds
+    if infer_type_from_token(130) == TY_INT { println("T10 PASS: infer int"); pass = pass + 1 } else { println("T10 FAIL"); fail = fail + 1 }
+    if infer_type_from_token(131) == TY_FLOAT { println("T11 PASS: infer float"); pass = pass + 1 } else { println("T11 FAIL"); fail = fail + 1 }
+    if infer_type_from_token(132) == TY_STR { println("T12 PASS: infer str"); pass = pass + 1 } else { println("T12 FAIL"); fail = fail + 1 }
+    if infer_type_from_token(29) == TY_BOOL { println("T13 PASS: infer bool (true)"); pass = pass + 1 } else { println("T13 FAIL"); fail = fail + 1 }
+    if infer_type_from_token(30) == TY_BOOL { println("T14 PASS: infer bool (false)"); pass = pass + 1 } else { println("T14 FAIL"); fail = fail + 1 }
+    if infer_type_from_token(0) == TY_UNKNOWN { println("T15 PASS: infer unknown"); pass = pass + 1 } else { println("T15 FAIL"); fail = fail + 1 }
+
+    // T16: Type name formatting
+    if type_name(TY_INT) == "i64" { println("T16 PASS: type_name int"); pass = pass + 1 } else { println("T16 FAIL"); fail = fail + 1 }
+    if type_name(TY_FLOAT) == "f64" { println("T17 PASS: type_name float"); pass = pass + 1 } else { println("T17 FAIL"); fail = fail + 1 }
+    if type_name(TY_STR) == "str" { println("T18 PASS: type_name str"); pass = pass + 1 } else { println("T18 FAIL"); fail = fail + 1 }
+    if type_name(TY_BOOL) == "bool" { println("T19 PASS: type_name bool"); pass = pass + 1 } else { println("T19 FAIL"); fail = fail + 1 }
+
+    // T20: analysis_ok
+    if analysis_ok(new_analyzer()) { println("T20 PASS: analysis_ok clean"); pass = pass + 1 } else { println("T20 FAIL"); fail = fail + 1 }
+
+    println(f"\n{'='} Analyzer v3 Results {'='}")
+    println(f"Passed: {pass}/20")
+    println(f"Failed: {fail}/20")
+    if fail == 0 {
+        println("ALL 20 TESTS PASSED!")
+    }
+}

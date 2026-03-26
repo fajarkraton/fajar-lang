@@ -50,7 +50,7 @@ const TY_ARRAY: i64 = 6
 /// Checks if a name exists in the scope (array of names).
 fn scope_contains(names: [str], name: str) -> bool {
     let mut i = 0
-    while i < len(names) {
+    while i < to_int(len(names)) {
         if names[i] == name {
             return true
         }
@@ -62,13 +62,14 @@ fn scope_contains(names: [str], name: str) -> bool {
 /// Finds the index of a name in the scope, or -1.
 fn scope_find(names: [str], name: str) -> i64 {
     let mut i = 0
-    while i < len(names) {
+    let mut result = -1
+    while i < to_int(len(names)) {
         if names[i] == name {
-            return i
+            if result == -1 { result = i }
         }
         i = i + 1
     }
-    -1
+    result
 }
 
 /// Infers a basic type tag from a literal AST node tag.
@@ -198,24 +199,141 @@ fn check_fn_call(state: AnalyzerState, name: str) -> AnalyzerState {
 // Public API
 // ═══════════════════════════════════════════════════════════════════════
 
-/// Analyzes a list of top-level items.
-///
-/// Returns the analyzer state with collected errors.
-/// Check state.error_count > 0 for failures.
+/// Analyze tokens from a tokenized source.
+/// Performs two passes: first registers all fn/struct/enum names,
+/// then walks the token stream checking variable usage, types, and context.
+pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
+    let mut state = new_analyzer()
+    let n = to_int(len(tokens))
+
+    // Pass 1: register all top-level function names
+    let mut i = 0
+    while i < n {
+        // fn name(
+        if tokens[i] == 15 && i + 1 < n && tokens[i + 1] == 133 {
+            let name = extract_ident(source, tokens, i + 1)
+            state = define_fn(state, name, 0)
+            i = i + 2
+            continue
+        }
+        // pub fn name(
+        if tokens[i] == 25 && i + 1 < n && tokens[i + 1] == 15 && i + 2 < n && tokens[i + 2] == 133 {
+            let name = extract_ident(source, tokens, i + 2)
+            state = define_fn(state, name, 0)
+            i = i + 3
+            continue
+        }
+        // struct Name
+        if tokens[i] == 16 && i + 1 < n && tokens[i + 1] == 133 {
+            let name = extract_ident(source, tokens, i + 1)
+            state = define_var(state, name, TY_UNKNOWN) // register as type name
+            i = i + 2
+            continue
+        }
+        // enum Name
+        if tokens[i] == 17 && i + 1 < n && tokens[i + 1] == 133 {
+            let name = extract_ident(source, tokens, i + 1)
+            state = define_var(state, name, TY_UNKNOWN)
+            i = i + 2
+            continue
+        }
+        i = i + 1
+    }
+
+    // Pass 2: check variable definitions and usage
+    state.in_function = false
+    state.in_loop = false
+    let mut j = 0
+    while j < n {
+        let tk = tokens[j]
+
+        // Entering function body
+        if tk == 15 { state.in_function = true }
+
+        // Entering loop
+        if tk == 4 || tk == 5 || tk == 6 { state.in_loop = true } // while/for/loop
+
+        // Let definition: let [mut] name
+        if tk == 13 && j + 1 < n {
+            let mut next = j + 1
+            let mut is_mut = false
+            if tokens[next] == 14 { is_mut = true; next = next + 1 } // mut
+            if next < n && tokens[next] == 133 {
+                let name = extract_ident(source, tokens, next)
+                // Check for duplicate
+                if scope_contains(state.var_names, name) {
+                    state = add_error(state, ERR_DUPLICATE_DEF, name)
+                }
+                // Infer type from value
+                let ty = if next + 2 < n && tokens[next + 1] == 91 { // = sign
+                    infer_type_from_token(tokens[next + 2])
+                } else { TY_UNKNOWN }
+                state = define_var(state, name, ty)
+            }
+        }
+
+        // Const definition
+        if tk == 22 && j + 1 < n && tokens[j + 1] == 133 {
+            let name = extract_ident(source, tokens, j + 1)
+            state = define_var(state, name, TY_UNKNOWN)
+        }
+
+        // Return outside function
+        if tk == 8 && !state.in_function {
+            state = add_error(state, ERR_RETURN_OUTSIDE_FN, "return")
+        }
+
+        // Break/continue outside loop
+        if (tk == 9 || tk == 10) && !state.in_loop {
+            state = add_error(state, ERR_BREAK_OUTSIDE_LOOP, "break/continue")
+        }
+
+        j = j + 1
+    }
+
+    state
+}
+
+/// Infer a basic type tag from a token kind.
+fn infer_type_from_token(kind: i64) -> i64 {
+    if kind == 130 { TY_INT }      // IntLit
+    else if kind == 131 { TY_FLOAT } // FloatLit
+    else if kind == 132 { TY_STR }   // StringLit
+    else if kind == 29 || kind == 30 { TY_BOOL } // true/false
+    else { TY_UNKNOWN }
+}
+
+/// Extract identifier text from source at a token position.
+/// This is a simplified version that returns a placeholder.
+fn extract_ident(source: str, tokens: [i64], idx: i64) -> str {
+    // In a full implementation, we'd track token spans.
+    // For now, return a numbered placeholder.
+    f"var_{idx}"
+}
+
+/// Type name from type tag.
+pub fn type_name(ty: i64) -> str {
+    if ty == TY_INT { "i64" }
+    else if ty == TY_FLOAT { "f64" }
+    else if ty == TY_BOOL { "bool" }
+    else if ty == TY_STR { "str" }
+    else if ty == TY_VOID { "void" }
+    else if ty == TY_ARRAY { "array" }
+    else { "unknown" }
+}
+
+/// Legacy API: analyze from string items.
 pub fn analyze(items: [str]) -> AnalyzerState {
     let mut state = new_analyzer()
-
-    // First pass: register all function definitions
     let mut i = 0
-    while i < len(items) {
+    while i < to_int(len(items)) {
         if items[i] == "fn" {
-            if i + 1 < len(items) {
+            if i + 1 < to_int(len(items)) {
                 state = define_fn(state, items[i + 1], 0)
             }
         }
         i = i + 1
     }
-
     state
 }
 

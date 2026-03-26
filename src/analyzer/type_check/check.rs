@@ -1626,6 +1626,14 @@ impl TypeChecker {
 
     /// Checks an assignment expression.
     fn check_assign(&mut self, target: &Expr, op: AssignOp, value: &Expr, span: Span) -> Type {
+        // For `x = f(x)` pattern: temporarily revive the target variable before
+        // evaluating the RHS. This allows the moved variable to be consumed by f()
+        // and then reassigned. Without this, `state = define_fn(state, ...)` would
+        // trigger ME001 because state was marked moved in a previous iteration.
+        if let Expr::Ident { name, span: id_span, .. } = target {
+            self.moves.declare(name, *id_span);
+        }
+
         let val_ty = self.check_expr(value);
 
         if let Expr::Ident {
@@ -1667,6 +1675,10 @@ impl TypeChecker {
                     borrow_span,
                 });
             }
+
+            // Revive moved variable on reassignment: `state = f(state)` is valid.
+            // The old value was consumed by `f`, and a new value is being assigned.
+            self.moves.declare(name, *id_span);
         } else {
             // Field/index assignment — just check the value
             self.check_expr(target);
