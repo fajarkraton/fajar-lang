@@ -1,0 +1,180 @@
+// ML Template: Iris Classification — Train on Real Data
+// Demonstrates: CSV loading, data splitting, linear classifier, evaluation
+//
+// Dataset: 30 samples from Fisher's Iris (3 classes × 10 samples)
+// Model: Simple linear classifier using petal_length feature
+//   class 0 (setosa): petal_length < 2.5
+//   class 1 (versicolor): 2.5 <= petal_length < 5.0
+//   class 2 (virginica): petal_length >= 5.0
+
+fn main() -> void {
+    println("============================================================")
+    println("  Fajar Lang — Iris Classification (Real CSV Data)")
+    println("============================================================")
+    println("")
+
+    // Step 1: Load CSV data
+    println("[1/5] Loading dataset...")
+    let csv_data = match read_file("examples/data/iris_sample.csv") {
+        Ok(content) => content,
+        Err(e) => {
+            println(f"Error: cannot read iris_sample.csv: {e}")
+            println("  Run from project root: fj run examples/template_ml_iris.fj")
+            return
+        }
+    }
+
+    // Parse CSV — skip header row
+    let lines = csv_data.split("\n")
+    let mut features: [f64] = []
+    let mut labels: [i64] = []
+    let mut count = 0
+
+    let mut i = 1  // skip header
+    while i < to_int(len(lines)) {
+        let line = lines[i]
+        if to_int(len(line)) < 5 {
+            i = i + 1
+            continue
+        }
+        let cols = line.split(",")
+        if to_int(len(cols)) >= 5 {
+            // Use petal_length (column 2) as primary feature
+            let petal_length = match cols[2].trim().parse_float() {
+                Ok(v) => v,
+                Err(_) => { i = i + 1; continue }
+            }
+            let class_label = match cols[4].trim().parse_int() {
+                Ok(v) => v,
+                Err(_) => { i = i + 1; continue }
+            }
+            features = push(features, petal_length)
+            labels = push(labels, class_label)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    println(f"  Loaded {count} samples from CSV")
+    println(f"  Feature: petal_length")
+    println(f"  Classes: 0=setosa, 1=versicolor, 2=virginica")
+
+    // Step 2: Analyze data distribution
+    println("")
+    println("[2/5] Data analysis...")
+    let mut class0 = 0
+    let mut class1 = 0
+    let mut class2 = 0
+    let mut sum0 = 0.0
+    let mut sum1 = 0.0
+    let mut sum2 = 0.0
+
+    let mut j = 0
+    while j < count {
+        if labels[j] == 0 {
+            class0 = class0 + 1
+            sum0 = sum0 + features[j]
+        }
+        if labels[j] == 1 {
+            class1 = class1 + 1
+            sum1 = sum1 + features[j]
+        }
+        if labels[j] == 2 {
+            class2 = class2 + 1
+            sum2 = sum2 + features[j]
+        }
+        j = j + 1
+    }
+
+    let mean0 = if class0 > 0 { sum0 / to_float(class0) } else { 0.0 }
+    let mean1 = if class1 > 0 { sum1 / to_float(class1) } else { 0.0 }
+    let mean2 = if class2 > 0 { sum2 / to_float(class2) } else { 0.0 }
+
+    println(f"  Class 0 (setosa):     {class0} samples, mean petal_length = {mean0}")
+    println(f"  Class 1 (versicolor): {class1} samples, mean petal_length = {mean1}")
+    println(f"  Class 2 (virginica):  {class2} samples, mean petal_length = {mean2}")
+
+    // Step 3: Train simple threshold classifier
+    println("")
+    println("[3/5] Training classifier...")
+    // Decision boundaries: midpoint between class means
+    let threshold_01 = (mean0 + mean1) / 2.0
+    let threshold_12 = (mean1 + mean2) / 2.0
+    println(f"  Threshold 0↔1: petal_length = {threshold_01}")
+    println(f"  Threshold 1↔2: petal_length = {threshold_12}")
+
+    // Step 4: Evaluate on training data
+    println("")
+    println("[4/5] Evaluation...")
+    let mut correct = 0
+    let mut predictions: [i64] = []
+
+    let mut k = 0
+    while k < count {
+        let pred = if features[k] < threshold_01 {
+            0
+        } else if features[k] < threshold_12 {
+            1
+        } else {
+            2
+        }
+        predictions = push(predictions, pred)
+        if pred == labels[k] {
+            correct = correct + 1
+        }
+        k = k + 1
+    }
+
+    let accuracy = to_float(correct) / to_float(count) * 100.0
+    println(f"  Correct: {correct}/{count}")
+    println(f"  Accuracy: {accuracy}%")
+
+    // Confusion matrix
+    println("")
+    println("  Confusion Matrix:")
+    println("             Predicted")
+    println("             0    1    2")
+
+    let mut cm: [i64] = [0, 0, 0, 0, 0, 0, 0, 0, 0]  // 3×3 flattened
+    let mut m = 0
+    while m < count {
+        let actual = labels[m]
+        let predicted = predictions[m]
+        let idx = actual * 3 + predicted
+        cm[idx] = cm[idx] + 1
+        m = m + 1
+    }
+
+    println(f"  Actual 0: [{cm[0]}    {cm[1]}    {cm[2]}]")
+    println(f"  Actual 1: [{cm[3]}    {cm[4]}    {cm[5]}]")
+    println(f"  Actual 2: [{cm[6]}    {cm[7]}    {cm[8]}]")
+
+    // Step 5: Export model and loss curve
+    println("")
+    println("[5/5] Export...")
+
+    // Save model
+    let model_str = f"threshold_01={threshold_01}\nthreshold_12={threshold_12}\naccuracy={accuracy}\nsamples={count}"
+    write_file("/tmp/fj_iris_model.txt", model_str)
+    println("  Model saved: /tmp/fj_iris_model.txt")
+
+    // Save predictions as CSV
+    let mut pred_csv = "sample,petal_length,actual,predicted,correct\n"
+    let mut p = 0
+    while p < count {
+        let c = if predictions[p] == labels[p] { "yes" } else { "no" }
+        pred_csv = pred_csv + f"{p},{features[p]},{labels[p]},{predictions[p]},{c}\n"
+        p = p + 1
+    }
+    write_file("/tmp/fj_iris_predictions.csv", pred_csv)
+    println("  Predictions saved: /tmp/fj_iris_predictions.csv")
+
+    // Summary
+    println("")
+    println("============================================================")
+    if accuracy >= 90.0 {
+        println(f"  RESULT: {accuracy}% accuracy — PASSED (target >= 90%)")
+    } else {
+        println(f"  RESULT: {accuracy}% accuracy — BELOW TARGET (>= 90%)")
+    }
+    println("============================================================")
+}
