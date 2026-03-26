@@ -264,86 +264,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR1.1 | Registry API design | REST API: publish, download, search, yank | [ ] |
-| PR1.2 | Package storage backend | S3-compatible object storage | [ ] |
-| PR1.3 | Sparse index | Git-based sparse index (like crates.io) | [ ] |
-| PR1.4 | Version resolution | PubGrub solver integration | [ ] |
-| PR1.5 | Authentication | API tokens, OAuth2, publish permissions | [ ] |
-| PR1.6 | Rate limiting | Per-token rate limits, abuse prevention | [ ] |
-| PR1.7 | Package validation | Name rules, semver enforcement, size limits | [ ] |
-| PR1.8 | Search engine | Full-text search across names, descriptions, keywords | [ ] |
-| PR1.9 | Download counting | Per-version download statistics | [ ] |
-| PR1.10 | Dependency graph | Transitive dependency resolution, cycle detection | [ ] |
-| PR1.11 | Yanking support | Soft-delete versions, prevent new installs | [ ] |
-| PR1.12 | Audit log | Who published what, when, from where | [ ] |
-| PR1.13 | Webhook notifications | Notify on new versions, security advisories | [ ] |
-| PR1.14 | Mirror support | Read-only mirrors for air-gapped environments | [ ] |
-| PR1.15 | Registry tests (30) | API endpoints, auth, resolution, edge cases | [ ] |
-| PR1.16 | Docker deployment | docker-compose for self-hosted registry | [ ] |
-| PR1.17 | TLS/HTTPS | Certificate management, HSTS | [ ] |
-| PR1.18 | Backup strategy | Automated backups, disaster recovery | [ ] |
-| PR1.19 | Admin dashboard | Web UI for registry management | [ ] |
-| PR1.20 | API documentation | OpenAPI spec, usage examples | [ ] |
+| PR1.1 | Registry API design | REST API: publish, download, search, yank | [x] |
+| PR1.2 | Package storage backend | S3-compatible object storage | [x] |
+| PR1.3 | Sparse index | Git-based sparse index (like crates.io) | [x] |
+| PR1.4 | Version resolution | PubGrub solver integration | [x] |
+| PR1.5 | Authentication | API tokens, OAuth2, publish permissions | [x] |
+| PR1.6 | Rate limiting | Per-token rate limits, abuse prevention | [x] |
+| PR1.7 | Package validation | Name rules, semver enforcement, size limits | [x] |
+| PR1.8 | Search engine | Full-text search across names, descriptions, keywords | [x] |
+| PR1.9 | Download counting | Per-version download statistics | [x] |
+| PR1.10 | Dependency graph | Transitive dependency resolution, cycle detection | [x] |
+| PR1.11 | Yanking support | Soft-delete versions, prevent new installs | [x] |
+| PR1.12 | Audit log | Who published what, when, from where | [x] |
+| PR1.13 | Webhook notifications | Notify on new versions, security advisories | [x] |
+| PR1.14 | Mirror support | Read-only mirrors for air-gapped environments | [x] |
+| PR1.15 | Registry tests (30) | API endpoints, auth, resolution, edge cases | [x] |
+| PR1.16 | Docker deployment | docker-compose for self-hosted registry | [x] |
+| PR1.17 | TLS/HTTPS | Certificate management, HSTS | [x] |
+| PR1.18 | Backup strategy | Automated backups, disaster recovery | [x] |
+| PR1.19 | Admin dashboard | Web UI for registry management | [x] |
+| PR1.20 | API documentation | OpenAPI spec, usage examples | [x] |
 
 ### Phase PR2: CLI Integration (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR2.1 | `fj publish` command | Build, validate, upload to registry | [ ] |
-| PR2.2 | `fj install` command | Download, extract, add to deps | [ ] |
-| PR2.3 | `fj update` command | Update deps to latest compatible versions | [ ] |
-| PR2.4 | `fj search` command | Search registry by name/keyword | [ ] |
-| PR2.5 | `fj yank` command | Yank a published version | [ ] |
-| PR2.6 | `fj login` command | Authenticate with registry | [ ] |
-| PR2.7 | `fj audit` command | Check deps for known vulnerabilities | [ ] |
-| PR2.8 | Lock file (fj.lock) | Reproducible dependency resolution | [ ] |
-| PR2.9 | Workspace support | Multi-package workspaces | [ ] |
-| PR2.10 | Private registries | Configure alternate registry URLs | [ ] |
-| PR2.11 | Offline mode | Install from cache when offline | [ ] |
-| PR2.12 | Dependency tree | `fj tree` shows full dependency graph | [ ] |
-| PR2.13 | Checksum verification | SHA-256 integrity checks on downloads | [ ] |
-| PR2.14 | Proxy support | HTTP/SOCKS proxy for corporate environments | [ ] |
-| PR2.15 | Auto-completion | Shell completions for fj commands | [ ] |
-| PR2.16 | Progress indicators | Download progress bars, spinners | [ ] |
-| PR2.17 | Conflict resolution | Handle version conflicts with clear errors | [ ] |
-| PR2.18 | Feature flags | Optional dependencies via fj.toml features | [ ] |
-| PR2.19 | Build scripts | Pre/post build hooks in fj.toml | [ ] |
-| PR2.20 | CLI tests (30) | All commands, edge cases, error handling | [ ] |
+| PR2.1 | `fj publish` command | Build, validate, upload to registry | [x] |
+| PR2.2 | `fj install` command | Download, extract, add to deps | [x] |
+| PR2.3 | `fj update` command | Update deps to latest compatible versions | [x] |
+| PR2.4 | `fj search` command | Search registry by name/keyword | [x] |
+| PR2.5 | `fj yank` command | Yank a published version | [x] |
+| PR2.6 | `fj login` command | Authenticate with registry | [x] |
+| PR2.7 | `fj audit` command | Check deps for known vulnerabilities | [x] |
+| PR2.8 | Lock file (fj.lock) | Reproducible dependency resolution | [x] |
+| PR2.9 | Workspace support | Multi-package workspaces | [x] |
+| PR2.10 | Private registries | Configure alternate registry URLs | [x] |
+| PR2.11 | Offline mode | Install from cache when offline | [x] |
+| PR2.12 | Dependency tree | `fj tree` shows full dependency graph | [x] |
+| PR2.13 | Checksum verification | SHA-256 integrity checks on downloads | [x] |
+| PR2.14 | Proxy support | HTTP/SOCKS proxy for corporate environments | [x] |
+| PR2.15 | Auto-completion | Shell completions for fj commands | [x] |
+| PR2.16 | Progress indicators | Download progress bars, spinners | [x] |
+| PR2.17 | Conflict resolution | Handle version conflicts with clear errors | [x] |
+| PR2.18 | Feature flags | Optional dependencies via fj.toml features | [x] |
+| PR2.19 | Build scripts | Pre/post build hooks in fj.toml | [x] |
+| PR2.20 | CLI tests (30) | All commands, edge cases, error handling | [x] |
 
 ### Phase PR3: Ecosystem Packages (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| PR3.1 | fj-async — async runtime | Tokio-like async executor for Fajar | [ ] |
-| PR3.2 | fj-log — structured logging | Log levels, JSON output, file rotation | [ ] |
-| PR3.3 | fj-test — advanced testing | Fixtures, mocking, parameterized tests | [ ] |
-| PR3.4 | fj-cli — CLI framework | Argument parsing, subcommands, help gen | [ ] |
-| PR3.5 | fj-db — database drivers | SQLite, PostgreSQL, MySQL bindings | [ ] |
-| PR3.6 | fj-web — web framework | HTTP router, middleware, templates | [ ] |
-| PR3.7 | fj-serial — serialization | Binary, MessagePack, Protocol Buffers | [ ] |
-| PR3.8 | fj-image — image processing | PNG/JPEG decode, resize, filters | [ ] |
-| PR3.9 | fj-regex — regular expressions | NFA/DFA regex engine | [ ] |
-| PR3.10 | fj-toml — TOML parser | Full TOML v1.0 spec | [ ] |
-| PR3.11 | fj-yaml — YAML parser | YAML 1.2 core schema | [ ] |
-| PR3.12 | fj-csv — CSV parser | RFC 4180 compliant | [ ] |
-| PR3.13 | fj-time — date/time | Chrono-like date, time, duration, timezone | [ ] |
-| PR3.14 | fj-uuid — UUID generation | v4 random, v7 timestamp | [ ] |
-| PR3.15 | fj-base64 — encoding | Base64 encode/decode | [ ] |
-| PR3.16 | fj-url — URL parsing | RFC 3986 compliant URL parser | [ ] |
-| PR3.17 | fj-fs — filesystem utils | Walk, glob, watch, temp dirs | [ ] |
-| PR3.18 | fj-env — environment | Env vars, dotenv, config loading | [ ] |
-| PR3.19 | fj-color — terminal colors | ANSI colors, styles, RGB | [ ] |
-| PR3.20 | fj-rand — random numbers | PCG, MT19937, cryptographic RNG | [ ] |
-| PR3.21 | fj-compress — compression | gzip, zstd, lz4 | [ ] |
-| PR3.22 | fj-tls — TLS/SSL | rustls-based TLS for fj-http | [ ] |
-| PR3.23 | fj-mqtt — IoT messaging | MQTT 3.1.1/5.0 client | [ ] |
-| PR3.24 | fj-gpio — GPIO abstraction | Cross-platform GPIO (Linux sysfs, Q6A) | [ ] |
-| PR3.25 | fj-sensor — sensor fusion | Accelerometer, gyroscope, Kalman filter | [ ] |
-| PR3.26 | fj-onnx — ONNX runtime | ONNX model loading and inference | [ ] |
-| PR3.27 | fj-plot — data visualization | Line, bar, scatter plots to SVG/PNG | [ ] |
-| PR3.28 | fj-bench — benchmarking | Criterion-like benchmark framework | [ ] |
-| PR3.29 | fj-doc — documentation | mdBook-like documentation generator | [ ] |
-| PR3.30 | Package ecosystem tests | Cross-package compatibility, integration | [ ] |
+| PR3.1 | fj-async — async runtime | Tokio-like async executor for Fajar | [x] |
+| PR3.2 | fj-log — structured logging | Log levels, JSON output, file rotation | [x] |
+| PR3.3 | fj-test — advanced testing | Fixtures, mocking, parameterized tests | [x] |
+| PR3.4 | fj-cli — CLI framework | Argument parsing, subcommands, help gen | [x] |
+| PR3.5 | fj-db — database drivers | SQLite, PostgreSQL, MySQL bindings | [x] |
+| PR3.6 | fj-web — web framework | HTTP router, middleware, templates | [x] |
+| PR3.7 | fj-serial — serialization | Binary, MessagePack, Protocol Buffers | [x] |
+| PR3.8 | fj-image — image processing | PNG/JPEG decode, resize, filters | [x] |
+| PR3.9 | fj-regex — regular expressions | NFA/DFA regex engine | [x] |
+| PR3.10 | fj-toml — TOML parser | Full TOML v1.0 spec | [x] |
+| PR3.11 | fj-yaml — YAML parser | YAML 1.2 core schema | [x] |
+| PR3.12 | fj-csv — CSV parser | RFC 4180 compliant | [x] |
+| PR3.13 | fj-time — date/time | Chrono-like date, time, duration, timezone | [x] |
+| PR3.14 | fj-uuid — UUID generation | v4 random, v7 timestamp | [x] |
+| PR3.15 | fj-base64 — encoding | Base64 encode/decode | [x] |
+| PR3.16 | fj-url — URL parsing | RFC 3986 compliant URL parser | [x] |
+| PR3.17 | fj-fs — filesystem utils | Walk, glob, watch, temp dirs | [x] |
+| PR3.18 | fj-env — environment | Env vars, dotenv, config loading | [x] |
+| PR3.19 | fj-color — terminal colors | ANSI colors, styles, RGB | [x] |
+| PR3.20 | fj-rand — random numbers | PCG, MT19937, cryptographic RNG | [x] |
+| PR3.21 | fj-compress — compression | gzip, zstd, lz4 | [x] |
+| PR3.22 | fj-tls — TLS/SSL | rustls-based TLS for fj-http | [x] |
+| PR3.23 | fj-mqtt — IoT messaging | MQTT 3.1.1/5.0 client | [x] |
+| PR3.24 | fj-gpio — GPIO abstraction | Cross-platform GPIO (Linux sysfs, Q6A) | [x] |
+| PR3.25 | fj-sensor — sensor fusion | Accelerometer, gyroscope, Kalman filter | [x] |
+| PR3.26 | fj-onnx — ONNX runtime | ONNX model loading and inference | [x] |
+| PR3.27 | fj-plot — data visualization | Line, bar, scatter plots to SVG/PNG | [x] |
+| PR3.28 | fj-bench — benchmarking | Criterion-like benchmark framework | [x] |
+| PR3.29 | fj-doc — documentation | mdBook-like documentation generator | [x] |
+| PR3.30 | Package ecosystem tests | Cross-package compatibility, integration | [x] |
 
 ---
 
