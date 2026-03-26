@@ -1,0 +1,336 @@
+// template_iot_edge.fj — IoT Edge Device Application Template
+//
+// Demonstrates a complete IoT edge device: sensor reading, calibration,
+// anomaly detection, ring buffer, JSON telemetry, fleet reporting.
+//
+// Run: fj run examples/template_iot_edge.fj
+
+const BUFFER_CAPACITY: i64 = 16
+const MAX_SENSORS: i64 = 4
+const DEVICE_VERSION: str = "1.0.0"
+
+// --- Data Types ---
+
+struct SensorReading {
+    sensor_id: i64,
+    value: f64,
+    timestamp: i64,
+    unit: str,
+}
+
+enum SensorType {
+    Temperature,
+    Humidity,
+    Pressure,
+    Light,
+}
+
+fn sensor_type_name(st: SensorType) -> str {
+    match st {
+        SensorType::Temperature => "Temperature",
+        SensorType::Humidity => "Humidity",
+        SensorType::Pressure => "Pressure",
+        SensorType::Light => "Light",
+    }
+}
+
+fn sensor_type_unit(st: SensorType) -> str {
+    match st {
+        SensorType::Temperature => "C",
+        SensorType::Humidity => "%",
+        SensorType::Pressure => "hPa",
+        SensorType::Light => "lux",
+    }
+}
+
+enum PowerState {
+    Active,
+    LowPower,
+    Sleep,
+}
+
+fn power_state_name(ps: PowerState) -> str {
+    match ps {
+        PowerState::Active => "Active",
+        PowerState::LowPower => "LowPower",
+        PowerState::Sleep => "Sleep",
+    }
+}
+
+struct CalibrationProfile {
+    offset: f64,
+    scale: f64,
+}
+
+struct ThresholdConfig {
+    low: f64,
+    high: f64,
+}
+
+struct DeviceConfig {
+    device_id: str,
+    read_interval_ms: i64,
+    temp_threshold: ThresholdConfig,
+    humidity_threshold: ThresholdConfig,
+    pressure_threshold: ThresholdConfig,
+    light_threshold: ThresholdConfig,
+}
+
+// --- Calibration ---
+
+fn calibrate(raw: f64, cal: CalibrationProfile) -> f64 {
+    raw * cal.scale + cal.offset
+}
+
+fn default_calibration(sensor_idx: i64) -> CalibrationProfile {
+    if sensor_idx == 0 {
+        CalibrationProfile { offset: -0.5, scale: 1.02 }
+    } else if sensor_idx == 1 {
+        CalibrationProfile { offset: 1.0, scale: 0.98 }
+    } else if sensor_idx == 2 {
+        CalibrationProfile { offset: 0.0, scale: 1.0 }
+    } else {
+        CalibrationProfile { offset: 5.0, scale: 1.05 }
+    }
+}
+
+// --- Ring Buffer ---
+
+fn buffer_write_index(count: i64) -> i64 {
+    count % BUFFER_CAPACITY
+}
+
+// --- Anomaly Detection ---
+
+fn is_anomaly(value: f64, threshold: ThresholdConfig) -> bool {
+    value < threshold.low || value > threshold.high
+}
+
+fn anomaly_severity(value: f64, threshold: ThresholdConfig) -> str {
+    if value < threshold.low {
+        let delta = threshold.low - value
+        if delta > 20.0 { "CRITICAL-LOW" } else { "WARNING-LOW" }
+    } else if value > threshold.high {
+        let delta = value - threshold.high
+        if delta > 20.0 { "CRITICAL-HIGH" } else { "WARNING-HIGH" }
+    } else {
+        "NORMAL"
+    }
+}
+
+// --- Telemetry Formatting ---
+
+fn format_reading_json(r: SensorReading) -> str {
+    f"{{\"sensor_id\":{r.sensor_id},\"value\":{r.value},\"ts\":{r.timestamp},\"unit\":\"{r.unit}\"}}"
+}
+
+fn format_telemetry(device_id: str, readings: [str], count: i64, power: str) -> str {
+    let mut payload = f"{{\"device\":\"{device_id}\",\"power\":\"{power}\",\"readings\":["
+    let mut i = 0
+    while i < count {
+        if i > 0 { payload = payload + "," }
+        payload = payload + readings[i]
+        i = i + 1
+    }
+    payload + "]}"
+}
+
+// --- Simulated Sensors ---
+
+fn simulate_sensor(sensor_idx: i64, tick: i64) -> f64 {
+    if sensor_idx == 0 { 22.0 + to_float(tick % 7) * 0.9 }
+    else if sensor_idx == 1 { 45.0 + to_float(tick % 5) * 4.2 }
+    else if sensor_idx == 2 { 1013.0 + to_float(tick % 8) * 1.1 }
+    else { 300.0 + to_float(tick % 6) * 90.0 }
+}
+
+fn inject_anomaly(sensor_idx: i64, tick: i64, value: f64) -> f64 {
+    if sensor_idx == 0 && tick == 3 { 55.0 }
+    else if sensor_idx == 3 && tick == 5 { 5.0 }
+    else { value }
+}
+
+// --- Fleet Status Reporting ---
+
+fn fleet_status_report(device_id: str, total_readings: i64, anomaly_count: i64, power: str, uptime_ticks: i64) -> str {
+    let health = if anomaly_count == 0 { "HEALTHY" }
+                 else if anomaly_count < 3 { "DEGRADED" }
+                 else { "CRITICAL" }
+    f"[FLEET] {device_id} | readings={total_readings} | anomalies={anomaly_count} | power={power} | health={health} | uptime={uptime_ticks}"
+}
+
+// --- Main ---
+
+fn main() {
+    println("================================================================")
+    println("  Fajar Lang IoT Edge Device Template")
+    println(f"  Version: {DEVICE_VERSION}")
+    println("================================================================")
+    println("")
+
+    // Device configuration with per-sensor thresholds
+    let config = DeviceConfig {
+        device_id: "edge-node-42",
+        read_interval_ms: 1000,
+        temp_threshold: ThresholdConfig { low: 10.0, high: 45.0 },
+        humidity_threshold: ThresholdConfig { low: 20.0, high: 80.0 },
+        pressure_threshold: ThresholdConfig { low: 980.0, high: 1040.0 },
+        light_threshold: ThresholdConfig { low: 50.0, high: 1000.0 },
+    }
+    println(f"Device ID:       {config.device_id}")
+    println(f"Read interval:   {config.read_interval_ms} ms")
+    println(f"Temp thresholds: [{config.temp_threshold.low}, {config.temp_threshold.high}] C")
+    println("")
+
+    // Calibration profiles
+    let cal_temp = default_calibration(0)
+    let cal_hum = default_calibration(1)
+    println("Calibration Profiles:")
+    println(f"  Temperature: scale={cal_temp.scale}, offset={cal_temp.offset}")
+    println(f"  Humidity:    scale={cal_hum.scale}, offset={cal_hum.offset}")
+    println("")
+
+    // Sensor registry via HashMap
+    let sensor_names = map_new()
+    map_insert(sensor_names, "0", "Temperature")
+    map_insert(sensor_names, "1", "Humidity")
+    map_insert(sensor_names, "2", "Pressure")
+    map_insert(sensor_names, "3", "Light")
+
+    let sensor_units = map_new()
+    map_insert(sensor_units, "0", "C")
+    map_insert(sensor_units, "1", "%")
+    map_insert(sensor_units, "2", "hPa")
+    map_insert(sensor_units, "3", "lux")
+
+    // Ring buffer (parallel arrays for offline data storage)
+    let mut buf_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                          0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    let mut buf_ids = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut buf_count = 0
+
+    // Power state
+    let power = PowerState::Active
+    let power_label = power_state_name(power)
+
+    // Tracking
+    let mut total_anomalies = 0
+    let mut total_readings = 0
+    let log_path = "/tmp/fj_iot_edge.log"
+    let _w = write_file(log_path, f"[BOOT] {config.device_id} v{DEVICE_VERSION}\n")
+
+    // Enum-based sensor type display
+    println("Sensor Types:")
+    let types = [SensorType::Temperature, SensorType::Humidity, SensorType::Pressure, SensorType::Light]
+    let mut s = 0
+    while s < MAX_SENSORS {
+        println(f"  [{s}] {sensor_type_name(types[s])} ({sensor_type_unit(types[s])})")
+        s = s + 1
+    }
+    println("")
+
+    // === Main Sensor Loop ===
+    let num_ticks = 8
+    println(f"=== Sensor Loop ({num_ticks} ticks) ===")
+    println("")
+
+    let mut tick = 0
+    while tick < num_ticks {
+        println(f"--- Tick {tick} ---")
+        let mut json_readings = ["", "", "", ""]
+        let mut sensor_idx = 0
+
+        while sensor_idx < MAX_SENSORS {
+            // Read -> inject anomaly -> calibrate
+            let raw = simulate_sensor(sensor_idx, tick)
+            let raw_adj = inject_anomaly(sensor_idx, tick, raw)
+            let cal = default_calibration(sensor_idx)
+            let calibrated = calibrate(raw_adj, cal)
+
+            let key = to_string(sensor_idx)
+            let unit_str = map_get(sensor_units, key)
+            let name_str = map_get(sensor_names, key)
+            let timestamp = tick * 1000 + sensor_idx * 100
+
+            let reading = SensorReading {
+                sensor_id: sensor_idx,
+                value: calibrated,
+                timestamp: timestamp,
+                unit: unit_str,
+            }
+            json_readings[sensor_idx] = format_reading_json(reading)
+
+            // Anomaly detection
+            let threshold = if sensor_idx == 0 { config.temp_threshold }
+                            else if sensor_idx == 1 { config.humidity_threshold }
+                            else if sensor_idx == 2 { config.pressure_threshold }
+                            else { config.light_threshold }
+
+            if is_anomaly(calibrated, threshold) {
+                let severity = anomaly_severity(calibrated, threshold)
+                println(f"  ALERT [{severity}] {name_str}: {calibrated} {unit_str}")
+                total_anomalies = total_anomalies + 1
+                append_file(log_path, f"[ANOMALY] tick={tick} sensor={name_str} value={calibrated}\n")
+            } else {
+                println(f"  OK {name_str}: {calibrated} {unit_str}")
+            }
+
+            // Buffer the reading (ring buffer)
+            let buf_idx = buffer_write_index(buf_count)
+            buf_values[buf_idx] = calibrated
+            buf_ids[buf_idx] = sensor_idx
+            buf_count = buf_count + 1
+            total_readings = total_readings + 1
+            sensor_idx = sensor_idx + 1
+        }
+
+        // Emit telemetry
+        let telemetry = format_telemetry(config.device_id, json_readings, MAX_SENSORS, power_label)
+        println(f"  Telemetry: {telemetry}")
+        append_file(log_path, f"[TELEMETRY] tick={tick} {telemetry}\n")
+        println("")
+        tick = tick + 1
+    }
+
+    // === Buffer Summary ===
+    println("=== Data Buffer Summary ===")
+    let buf_used = if buf_count > BUFFER_CAPACITY { BUFFER_CAPACITY } else { buf_count }
+    let overflow = if buf_count > BUFFER_CAPACITY { buf_count - BUFFER_CAPACITY } else { 0 }
+    println(f"  Writes: {buf_count} | Capacity: {BUFFER_CAPACITY} | In use: {buf_used} | Overwritten: {overflow}")
+    println("  Recent entries:")
+    let start = if buf_used < 4 { 0 } else { buf_used - 4 }
+    let mut b = start
+    while b < buf_used {
+        let idx = b % BUFFER_CAPACITY
+        let sname = map_get(sensor_names, to_string(buf_ids[idx]))
+        println(f"    [{idx}] {sname} = {buf_values[idx]}")
+        b = b + 1
+    }
+    println("")
+
+    // === Fleet Status ===
+    println("=== Fleet Status ===")
+    let report = fleet_status_report(config.device_id, total_readings, total_anomalies, power_label, num_ticks)
+    println(report)
+    append_file(log_path, report + "\n")
+    println("")
+
+    // === Summary ===
+    println(f"Total readings:  {total_readings}")
+    println(f"Total anomalies: {total_anomalies}")
+    println(f"Log file:        {log_path}")
+
+    if file_exists(log_path) {
+        let log_result = read_file(log_path)
+        match log_result {
+            Ok(content) => {
+                let lines = content.split("\n")
+                println(f"Log lines:       {len(lines)}")
+            },
+            Err(e) => println(f"Log read error: {e}"),
+            _ => println("Unknown"),
+        }
+    }
+    println("")
+    println("IoT Edge Device Template — Complete")
+}

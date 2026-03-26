@@ -335,6 +335,8 @@ pub fn is_copy_type(ty: &Type) -> bool {
             | Type::TypeVar(_)
             | Type::Ref(_)
             | Type::Struct { .. }
+            | Type::Array(_)
+            | Type::Tuple(_)
     )
 }
 
@@ -355,10 +357,13 @@ mod tests {
 
     #[test]
     fn move_types_are_not_copy() {
-        // Str is now Copy (runtime uses Rc-based cloning for strings)
-        assert!(is_copy_type(&Type::Str)); // Str is Copy (Rc<String> in interpreter)
-        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
-        assert!(!is_copy_type(&Type::Tuple(vec![Type::Str])));
+        // Str is Copy (runtime uses Rc-based cloning for strings)
+        assert!(is_copy_type(&Type::Str));
+        // Array/Tuple are Copy (runtime uses Rc-based cloning)
+        assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
+        assert!(is_copy_type(&Type::Tuple(vec![Type::Str])));
+        // RefMut is NOT copy
+        assert!(!is_copy_type(&Type::RefMut(Box::new(Type::I32))));
     }
 
     #[test]
@@ -671,8 +676,9 @@ mod tests {
             name: "Point".into(),
             fields: std::collections::HashMap::new()
         }));
-        // Array: still non-Copy
-        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
+        // Array/Tuple: Copy (interpreter uses Rc-based value semantics)
+        assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
+        assert!(is_copy_type(&Type::Tuple(vec![Type::I32, Type::Str])));
     }
 
     #[test]

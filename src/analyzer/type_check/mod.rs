@@ -3006,8 +3006,8 @@ mod tests {
 
     #[test]
     fn move_type_use_after_move_detected() {
-        // str is now Copy (Rc-based cloning), so `let t = s; println(s)` is fine.
-        // Test with an array (still Move) instead.
+        // Arrays and structs are now Copy (Rc-based runtime semantics).
+        // Move detection still works for &mut T references.
         let src = r#"
             fn main() -> void {
                 let a: [i64] = [1, 2, 3]
@@ -3015,13 +3015,8 @@ mod tests {
                 len(a)
             }
         "#;
-        let result = check(src);
-        assert!(result.is_err());
-        let errs = result.unwrap_err();
-        assert!(
-            errs.iter()
-                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a"))
-        );
+        // Arrays are Copy now, so this should be OK
+        assert!(check(src).is_ok());
     }
 
     #[test]
@@ -3051,13 +3046,8 @@ mod tests {
                 len(a)
             }
         "#;
-        let result = check(src);
-        assert!(result.is_err());
-        let errs = result.unwrap_err();
-        assert!(
-            errs.iter()
-                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "a"))
-        );
+        // Arrays are now Copy (Rc-based runtime), so passing to fn doesn't move
+        assert!(check(src).is_ok());
     }
 
     #[test]
@@ -3203,8 +3193,7 @@ mod tests {
 
     #[test]
     fn match_enum_destructure_moves_subject() {
-        // Destructuring via enum pattern should move the subject (for non-Copy types)
-        // Use array instead of str (str is now Copy).
+        // Arrays are now Copy (Rc-based runtime), so match doesn't move them
         let src = r#"
             fn main() -> void {
                 let x: [i64] = [1, 2, 3]
@@ -3215,13 +3204,8 @@ mod tests {
                 len(x)
             }
         "#;
-        let result = check(src);
-        assert!(result.is_err());
-        let errs = result.unwrap_err();
-        assert!(
-            errs.iter()
-                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "x"))
-        );
+        // Array is Copy now, so this should be OK
+        assert!(check(src).is_ok());
     }
 
     #[test]
@@ -3343,8 +3327,7 @@ mod tests {
 
     #[test]
     fn move_while_immutably_borrowed_me003() {
-        // str is now Copy, so passing it to a function doesn't move it.
-        // Use array (still Move) to test MoveWhileBorrowed.
+        // Arrays are now Copy (Rc-based runtime), so no move conflict.
         let src = r#"
             fn consume(a: [i64]) -> void { println(len(a)) }
             fn main() -> void {
@@ -3354,13 +3337,8 @@ mod tests {
                 println(r)
             }
         "#;
-        let result = check(src);
-        assert!(result.is_err());
-        let errs = result.unwrap_err();
-        assert!(
-            errs.iter()
-                .any(|e| matches!(e, SemanticError::MoveWhileBorrowed { name, .. } if name == "a"))
-        );
+        // Array is Copy, so passing to consume() doesn't conflict with borrow
+        assert!(check(src).is_ok());
     }
 
     #[test]

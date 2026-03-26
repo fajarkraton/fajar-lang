@@ -446,86 +446,86 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| APP1.1 | HTTP server framework | Router, middleware, request/response | [ ] |
-| APP1.2 | JSON API endpoints | CRUD operations with validation | [ ] |
-| APP1.3 | Database integration | SQLite/PostgreSQL connection pool | [ ] |
-| APP1.4 | Authentication | JWT tokens, password hashing | [ ] |
-| APP1.5 | Rate limiting middleware | Token bucket, sliding window | [ ] |
-| APP1.6 | CORS middleware | Configurable origin, methods, headers | [ ] |
-| APP1.7 | Request logging | Structured access logs | [ ] |
-| APP1.8 | Health check endpoint | /health with dependency checks | [ ] |
-| APP1.9 | Graceful shutdown | Handle SIGTERM, drain connections | [ ] |
-| APP1.10 | Configuration | Env vars, TOML config, CLI flags | [ ] |
-| APP1.11 | Error handling | Consistent error responses with codes | [ ] |
-| APP1.12 | Pagination | Cursor-based pagination for lists | [ ] |
-| APP1.13 | WebSocket support | Real-time bidirectional communication | [ ] |
-| APP1.14 | Static file serving | Serve HTML/CSS/JS with caching | [ ] |
-| APP1.15 | Template rendering | HTML templates with variable substitution | [ ] |
-| APP1.16 | Docker deployment | Dockerfile + docker-compose | [ ] |
-| APP1.17 | Integration tests | API endpoint tests with test client | [ ] |
-| APP1.18 | OpenAPI generation | Auto-generate API docs from routes | [ ] |
-| APP1.19 | Performance benchmark | Requests/sec comparison vs Express/Actix | [ ] |
-| APP1.20 | Template documentation | Getting started guide, architecture | [ ] |
+| APP1.1 | HTTP server framework | Router, middleware, request/response | [x] |
+| APP1.2 | JSON API endpoints | CRUD operations with validation | [x] |
+| APP1.3 | Database integration | SQLite/PostgreSQL connection pool | [x] |
+| APP1.4 | Authentication | JWT tokens, password hashing | [x] |
+| APP1.5 | Rate limiting middleware | Token bucket, sliding window | [x] |
+| APP1.6 | CORS middleware | Configurable origin, methods, headers | [x] |
+| APP1.7 | Request logging | Structured access logs | [x] |
+| APP1.8 | Health check endpoint | /health with dependency checks | [x] |
+| APP1.9 | Graceful shutdown | Handle SIGTERM, drain connections | [x] |
+| APP1.10 | Configuration | Env vars, TOML config, CLI flags | [x] |
+| APP1.11 | Error handling | Consistent error responses with codes | [x] |
+| APP1.12 | Pagination | Cursor-based pagination for lists | [x] |
+| APP1.13 | WebSocket support | Real-time bidirectional communication | [x] |
+| APP1.14 | Static file serving | Serve HTML/CSS/JS with caching | [x] |
+| APP1.15 | Template rendering | HTML templates with variable substitution | [x] |
+| APP1.16 | Docker deployment | Dockerfile + docker-compose | [x] |
+| APP1.17 | Integration tests | API endpoint tests with test client | [x] |
+| APP1.18 | OpenAPI generation | Auto-generate API docs from routes | [x] |
+| APP1.19 | Performance benchmark | Requests/sec comparison vs Express/Actix | [x] |
+| APP1.20 | Template documentation | Getting started guide, architecture | [x] |
 
 ### Phase APP2: IoT Edge Device Template (2 sprints, 20 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| APP2.1 | Sensor data collection | Read from I2C/SPI/ADC sensors | [ ] |
-| APP2.2 | Local ML inference | Run quantized model on sensor data | [ ] |
-| APP2.3 | MQTT telemetry | Publish readings to MQTT broker | [ ] |
-| APP2.4 | OTA update support | Download and apply firmware updates | [ ] |
-| APP2.5 | Watchdog integration | Hardware watchdog timer management | [ ] |
-| APP2.6 | Power management | Sleep modes, wake-on-event | [ ] |
-| APP2.7 | Local data buffering | Store readings when offline | [ ] |
-| APP2.8 | Configuration via BLE | Bluetooth Low Energy configuration | [ ] |
-| APP2.9 | Edge-cloud sync | Batch upload when connectivity restored | [ ] |
-| APP2.10 | Alert system | Local alerting on anomaly detection | [ ] |
-| APP2.11 | Sensor calibration | Auto-calibration routines | [ ] |
-| APP2.12 | Data compression | Compress telemetry for bandwidth savings | [ ] |
-| APP2.13 | Secure boot chain | Verified boot with signature checks | [ ] |
-| APP2.14 | Device provisioning | Factory setup and key enrollment | [ ] |
-| APP2.15 | Fleet management | Report status to central dashboard | [ ] |
-| APP2.16 | GPIO abstraction | Cross-platform GPIO for Q6A/RPi/STM32 | [ ] |
-| APP2.17 | Real-time scheduling | Priority-based task scheduling | [ ] |
-| APP2.18 | Memory budget | Static memory allocation with budget | [ ] |
-| APP2.19 | Integration tests | Hardware-in-loop test framework | [ ] |
-| APP2.20 | Template documentation | Hardware setup, wiring, deployment | [ ] |
+| APP2.1 | Sensor data collection | Read from I2C/SPI/ADC sensors | [x] |
+| APP2.2 | Local ML inference | Run quantized model on sensor data | [x] |
+| APP2.3 | MQTT telemetry | Publish readings to MQTT broker | [x] |
+| APP2.4 | OTA update support | Download and apply firmware updates | [x] |
+| APP2.5 | Watchdog integration | Hardware watchdog timer management | [x] |
+| APP2.6 | Power management | Sleep modes, wake-on-event | [x] |
+| APP2.7 | Local data buffering | Store readings when offline | [x] |
+| APP2.8 | Configuration via BLE | Bluetooth Low Energy configuration | [x] |
+| APP2.9 | Edge-cloud sync | Batch upload when connectivity restored | [x] |
+| APP2.10 | Alert system | Local alerting on anomaly detection | [x] |
+| APP2.11 | Sensor calibration | Auto-calibration routines | [x] |
+| APP2.12 | Data compression | Compress telemetry for bandwidth savings | [x] |
+| APP2.13 | Secure boot chain | Verified boot with signature checks | [x] |
+| APP2.14 | Device provisioning | Factory setup and key enrollment | [x] |
+| APP2.15 | Fleet management | Report status to central dashboard | [x] |
+| APP2.16 | GPIO abstraction | Cross-platform GPIO for Q6A/RPi/STM32 | [x] |
+| APP2.17 | Real-time scheduling | Priority-based task scheduling | [x] |
+| APP2.18 | Memory budget | Static memory allocation with budget | [x] |
+| APP2.19 | Integration tests | Hardware-in-loop test framework | [x] |
+| APP2.20 | Template documentation | Hardware setup, wiring, deployment | [x] |
 
 ### Phase APP3: ML Training Pipeline Template (3 sprints, 30 tasks)
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| APP3.1 | Dataset loader | CSV, images, custom formats with batching | [ ] |
-| APP3.2 | Data augmentation | Random crop, flip, normalize, noise | [ ] |
-| APP3.3 | Model definition | Sequential, functional, custom forward() | [ ] |
-| APP3.4 | Training loop | Epoch-batch-step with progress bar | [ ] |
-| APP3.5 | Validation loop | Periodic evaluation on val set | [ ] |
-| APP3.6 | Learning rate scheduler | StepLR, CosineAnnealing, OneCycleLR | [ ] |
-| APP3.7 | Early stopping | Monitor val_loss, patience, restore best | [ ] |
-| APP3.8 | Checkpoint saving | Save model + optimizer + epoch state | [ ] |
-| APP3.9 | TensorBoard logging | Loss, accuracy, learning rate plots | [ ] |
-| APP3.10 | Hyperparameter search | Grid search, random search, Bayesian | [ ] |
-| APP3.11 | Mixed precision training | FP16/BF16 forward, FP32 backward | [ ] |
-| APP3.12 | Gradient clipping | Max norm, value clipping | [ ] |
-| APP3.13 | Weight initialization | Xavier, He, orthogonal, pretrained | [ ] |
-| APP3.14 | Transfer learning | Load pretrained, freeze layers, fine-tune | [ ] |
-| APP3.15 | Model export | ONNX, FJML, quantized INT8 | [ ] |
-| APP3.16 | Deployment pipeline | Train → quantize → deploy to edge | [ ] |
-| APP3.17 | A/B testing | Compare model versions with metrics | [ ] |
-| APP3.18 | Data versioning | Track dataset versions with hashes | [ ] |
-| APP3.19 | Reproducibility | Seed everything, deterministic training | [ ] |
-| APP3.20 | MNIST example | End-to-end MNIST 99%+ with all features | [ ] |
-| APP3.21 | CIFAR-10 example | Conv2d + BatchNorm + Dropout | [ ] |
-| APP3.22 | Text classification | Embedding + LSTM + Dense | [ ] |
-| APP3.23 | Time series | 1D Conv + LSTM for prediction | [ ] |
-| APP3.24 | Anomaly detection | Autoencoder for anomaly scoring | [ ] |
-| APP3.25 | Federated learning | Privacy-preserving distributed training | [ ] |
-| APP3.26 | Model compression | Pruning, distillation, quantization | [ ] |
-| APP3.27 | Inference server | HTTP API for model serving | [ ] |
-| APP3.28 | Batch inference | Process large datasets offline | [ ] |
-| APP3.29 | Pipeline tests (30) | All stages, edge cases, performance | [ ] |
-| APP3.30 | Template documentation | Tutorial, architecture, deployment | [ ] |
+| APP3.1 | Dataset loader | CSV, images, custom formats with batching | [x] |
+| APP3.2 | Data augmentation | Random crop, flip, normalize, noise | [x] |
+| APP3.3 | Model definition | Sequential, functional, custom forward() | [x] |
+| APP3.4 | Training loop | Epoch-batch-step with progress bar | [x] |
+| APP3.5 | Validation loop | Periodic evaluation on val set | [x] |
+| APP3.6 | Learning rate scheduler | StepLR, CosineAnnealing, OneCycleLR | [x] |
+| APP3.7 | Early stopping | Monitor val_loss, patience, restore best | [x] |
+| APP3.8 | Checkpoint saving | Save model + optimizer + epoch state | [x] |
+| APP3.9 | TensorBoard logging | Loss, accuracy, learning rate plots | [x] |
+| APP3.10 | Hyperparameter search | Grid search, random search, Bayesian | [x] |
+| APP3.11 | Mixed precision training | FP16/BF16 forward, FP32 backward | [x] |
+| APP3.12 | Gradient clipping | Max norm, value clipping | [x] |
+| APP3.13 | Weight initialization | Xavier, He, orthogonal, pretrained | [x] |
+| APP3.14 | Transfer learning | Load pretrained, freeze layers, fine-tune | [x] |
+| APP3.15 | Model export | ONNX, FJML, quantized INT8 | [x] |
+| APP3.16 | Deployment pipeline | Train → quantize → deploy to edge | [x] |
+| APP3.17 | A/B testing | Compare model versions with metrics | [x] |
+| APP3.18 | Data versioning | Track dataset versions with hashes | [x] |
+| APP3.19 | Reproducibility | Seed everything, deterministic training | [x] |
+| APP3.20 | MNIST example | End-to-end MNIST 99%+ with all features | [x] |
+| APP3.21 | CIFAR-10 example | Conv2d + BatchNorm + Dropout | [x] |
+| APP3.22 | Text classification | Embedding + LSTM + Dense | [x] |
+| APP3.23 | Time series | 1D Conv + LSTM for prediction | [x] |
+| APP3.24 | Anomaly detection | Autoencoder for anomaly scoring | [x] |
+| APP3.25 | Federated learning | Privacy-preserving distributed training | [x] |
+| APP3.26 | Model compression | Pruning, distillation, quantization | [x] |
+| APP3.27 | Inference server | HTTP API for model serving | [x] |
+| APP3.28 | Batch inference | Process large datasets offline | [x] |
+| APP3.29 | Pipeline tests (30) | All stages, edge cases, performance | [x] |
+| APP3.30 | Template documentation | Tutorial, architecture, deployment | [x] |
 
 ---
 

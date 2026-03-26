@@ -1,0 +1,381 @@
+// ============================================================================
+// template_ml_pipeline.fj — End-to-End ML Training Pipeline Template
+// ============================================================================
+// Demonstrates: structs, enums, arrays, f-strings, pattern matching, math
+// builtins, file I/O, and a complete train/validate/test ML workflow.
+//
+// Dataset: y = 2.0 * x + 3.0 + noise  (linear regression)
+// Run:     fj run examples/template_ml_pipeline.fj
+// ============================================================================
+
+// ── Structs ─────────────────────────────────────────────────────────────────
+
+struct HyperParams {
+    learning_rate: f64, epochs: i64, batch_size: i64,
+    patience: i64, min_delta: f64, train_ratio: f64, val_ratio: f64
+}
+
+struct Dataset { features: [f64], labels: [f64], size: i64 }
+
+struct DataSplit {
+    train_f: [f64], train_l: [f64], train_n: i64,
+    val_f: [f64], val_l: [f64], val_n: i64,
+    test_f: [f64], test_l: [f64], test_n: i64
+}
+
+struct Model { weight: f64, bias: f64, lr: f64 }
+
+struct Gradients { dw: f64, db: f64 }
+
+struct EarlyStop {
+    best_loss: f64, patience: i64, counter: i64,
+    min_delta: f64, should_stop: bool
+}
+
+// ── Hyperparameter Configuration ────────────────────────────────────────────
+
+fn default_hyperparams() -> HyperParams {
+    HyperParams {
+        learning_rate: 0.01, epochs: 100, batch_size: 8,
+        patience: 10, min_delta: 0.0001, train_ratio: 0.6, val_ratio: 0.2
+    }
+}
+
+// ── Dataset Generation ──────────────────────────────────────────────────────
+
+fn generate_dataset(n: i64) -> Dataset {
+    let mut features: [f64] = []
+    let mut labels: [f64] = []
+    let mut i = 0
+    while i < n {
+        let x = (i as f64) * 10.0 / (n as f64)
+        // Deterministic pseudo-random noise in [-0.5, 0.5]
+        let seed = ((i * 7919 + 104729) % 10000) as f64
+        let noise = seed / 10000.0 - 0.5
+        let y = 2.0 * x + 3.0 + noise
+        features = push(features, x)
+        labels = push(labels, y)
+        i = i + 1
+    }
+    Dataset { features: features, labels: labels, size: n }
+}
+
+fn split_dataset(data: Dataset, hp: HyperParams) -> DataSplit {
+    let tr_end = (data.size as f64 * hp.train_ratio) as i64
+    let va_end = tr_end + (data.size as f64 * hp.val_ratio) as i64
+    let mut tf: [f64] = []
+    let mut tl: [f64] = []
+    let mut vf: [f64] = []
+    let mut vl: [f64] = []
+    let mut sf: [f64] = []
+    let mut sl: [f64] = []
+    let mut i = 0
+    while i < data.size {
+        if i < tr_end {
+            tf = push(tf, data.features[i])
+            tl = push(tl, data.labels[i])
+        } else if i < va_end {
+            vf = push(vf, data.features[i])
+            vl = push(vl, data.labels[i])
+        } else {
+            sf = push(sf, data.features[i])
+            sl = push(sl, data.labels[i])
+        }
+        i = i + 1
+    }
+    DataSplit {
+        train_f: tf, train_l: tl, train_n: tr_end,
+        val_f: vf, val_l: vl, val_n: va_end - tr_end,
+        test_f: sf, test_l: sl, test_n: data.size - va_end
+    }
+}
+
+// ── Model ───────────────────────────────────────────────────────────────────
+
+fn new_model(lr: f64) -> Model {
+    Model { weight: 0.1, bias: 0.0, lr: lr }
+}
+
+fn predict(m: Model, x: f64) -> f64 {
+    m.weight * x + m.bias
+}
+
+fn predict_batch(m: Model, features: [f64], n: i64) -> [f64] {
+    let mut preds: [f64] = []
+    let mut i = 0
+    while i < n {
+        preds = push(preds, predict(m, features[i]))
+        i = i + 1
+    }
+    preds
+}
+
+// ── Loss ────────────────────────────────────────────────────────────────────
+
+fn mse_loss(preds: [f64], labels: [f64], n: i64) -> f64 {
+    let mut total = 0.0
+    let mut i = 0
+    while i < n {
+        let d = preds[i] - labels[i]
+        total = total + d * d
+        i = i + 1
+    }
+    total / (n as f64)
+}
+
+// ── Gradients (Manual Backprop) ─────────────────────────────────────────────
+
+fn compute_gradients(m: Model, features: [f64], labels: [f64], n: i64) -> Gradients {
+    let mut dw = 0.0
+    let mut db = 0.0
+    let mut i = 0
+    while i < n {
+        let err = predict(m, features[i]) - labels[i]
+        dw = dw + err * features[i]
+        db = db + err
+        i = i + 1
+    }
+    Gradients { dw: 2.0 * dw / (n as f64), db: 2.0 * db / (n as f64) }
+}
+
+// ── SGD Update ──────────────────────────────────────────────────────────────
+
+fn sgd_step(m: Model, g: Gradients) -> Model {
+    Model { weight: m.weight - m.lr * g.dw, bias: m.bias - m.lr * g.db, lr: m.lr }
+}
+
+// ── Metrics ─────────────────────────────────────────────────────────────────
+
+fn regression_accuracy(preds: [f64], labels: [f64], n: i64, tol: f64) -> f64 {
+    let mut correct = 0
+    let mut i = 0
+    while i < n {
+        let d = preds[i] - labels[i]
+        if abs(d) < tol { correct = correct + 1 }
+        i = i + 1
+    }
+    (correct as f64) / (n as f64) * 100.0
+}
+
+fn compute_mae(preds: [f64], labels: [f64], n: i64) -> f64 {
+    let mut total = 0.0
+    let mut i = 0
+    while i < n {
+        total = total + abs(preds[i] - labels[i])
+        i = i + 1
+    }
+    total / (n as f64)
+}
+
+// ── Early Stopping ──────────────────────────────────────────────────────────
+
+fn new_early_stop(patience: i64, min_delta: f64) -> EarlyStop {
+    EarlyStop { best_loss: 999999.0, patience: patience, counter: 0,
+                min_delta: min_delta, should_stop: false }
+}
+
+fn check_early_stop(es: EarlyStop, val_loss: f64) -> EarlyStop {
+    if val_loss < es.best_loss - es.min_delta {
+        EarlyStop { best_loss: val_loss, patience: es.patience, counter: 0,
+                    min_delta: es.min_delta, should_stop: false }
+    } else {
+        let c = es.counter + 1
+        EarlyStop { best_loss: es.best_loss, patience: es.patience, counter: c,
+                    min_delta: es.min_delta, should_stop: c >= es.patience }
+    }
+}
+
+// ── Model Save / Load ───────────────────────────────────────────────────────
+
+fn save_model(m: Model, path: str) -> bool {
+    let txt = f"weight={m.weight}\nbias={m.bias}\nlearning_rate={m.lr}\n"
+    match write_file(path, txt) {
+        Ok(_) => true,
+        Err(_) => false,
+        _ => false,
+    }
+}
+
+fn load_model(path: str) -> Model {
+    match read_file(path) {
+        Ok(text) => {
+            let lines = text.split("\n")
+            let mut w = 0.1
+            let mut b = 0.0
+            let mut lr = 0.01
+            for line in lines {
+                if line.starts_with("weight=") {
+                    match line.replace("weight=", "").trim().parse_float() {
+                        Ok(v) => { w = v }, Err(_) => {}, _ => {},
+                    }
+                }
+                if line.starts_with("bias=") {
+                    match line.replace("bias=", "").trim().parse_float() {
+                        Ok(v) => { b = v }, Err(_) => {}, _ => {},
+                    }
+                }
+                if line.starts_with("learning_rate=") {
+                    match line.replace("learning_rate=", "").trim().parse_float() {
+                        Ok(v) => { lr = v }, Err(_) => {}, _ => {},
+                    }
+                }
+            }
+            Model { weight: w, bias: b, lr: lr }
+        },
+        Err(_) => { println("  Warning: load failed, using defaults"); new_model(0.01) },
+        _ => new_model(0.01),
+    }
+}
+
+// ── Training Loop ───────────────────────────────────────────────────────────
+
+fn train(split: DataSplit, hp: HyperParams) -> Model {
+    let mut model = new_model(hp.learning_rate)
+    let mut es = new_early_stop(hp.patience, hp.min_delta)
+    let mut best_w = model.weight
+    let mut best_b = model.bias
+
+    println("  +-------+--------------+--------------+----------+")
+    println("  | Epoch |  Train Loss  |   Val Loss   | Accuracy |")
+    println("  +-------+--------------+--------------+----------+")
+
+    let mut epoch = 0
+    while epoch < hp.epochs {
+        // Mini-batch SGD
+        let mut bs = 0
+        while bs < split.train_n {
+            let be = min(bs + hp.batch_size, split.train_n)
+            let bn = be - bs
+            let mut bf: [f64] = []
+            let mut bl: [f64] = []
+            let mut j = bs
+            while j < be {
+                bf = push(bf, split.train_f[j])
+                bl = push(bl, split.train_l[j])
+                j = j + 1
+            }
+            model = sgd_step(model, compute_gradients(model, bf, bl, bn))
+            bs = be
+        }
+
+        // Epoch metrics
+        let tp = predict_batch(model, split.train_f, split.train_n)
+        let tl = mse_loss(tp, split.train_l, split.train_n)
+        let vp = predict_batch(model, split.val_f, split.val_n)
+        let vl = mse_loss(vp, split.val_l, split.val_n)
+        let acc = regression_accuracy(vp, split.val_l, split.val_n, 1.0)
+
+        if epoch % 10 == 0 || epoch == hp.epochs - 1 {
+            let e = epoch + 1
+            println(f"  | {e}    | {tl}  | {vl}  | {acc}%  |")
+        }
+
+        // Early stopping
+        es = check_early_stop(es, vl)
+        if vl <= es.best_loss + hp.min_delta {
+            best_w = model.weight
+            best_b = model.bias
+        }
+        if es.should_stop {
+            let se = epoch + 1
+            println(f"  +-------+--------------+--------------+----------+")
+            println(f"  Early stopping at epoch {se} (patience={hp.patience})")
+            return Model { weight: best_w, bias: best_b, lr: hp.learning_rate }
+        }
+        epoch = epoch + 1
+    }
+    println("  +-------+--------------+--------------+----------+")
+    model
+}
+
+// ── Evaluation ──────────────────────────────────────────────────────────────
+
+fn evaluate(m: Model, features: [f64], labels: [f64], n: i64, name: str) -> void {
+    let p = predict_batch(m, features, n)
+    let mse = mse_loss(p, labels, n)
+    let rmse_val = sqrt(mse)
+    let mae_val = compute_mae(p, labels, n)
+    let a05 = regression_accuracy(p, labels, n, 0.5)
+    let a10 = regression_accuracy(p, labels, n, 1.0)
+    println(f"  {name} ({n} samples):")
+    println(f"    MSE={mse}  RMSE={rmse_val}  MAE={mae_val}")
+    println(f"    Accuracy: {a05}% (tol=0.5), {a10}% (tol=1.0)")
+    println("")
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+
+fn main() {
+    println("============================================================")
+    println("  Fajar Lang — ML Training Pipeline Template")
+    println("  Model:   Linear Regression (y = w*x + b)")
+    println("  Dataset: y = 2.0*x + 3.0 + noise (50 samples)")
+    println("  Method:  Mini-batch SGD + early stopping")
+    println("============================================================")
+    println("")
+
+    // Step 1: Hyperparameters
+    let hp = default_hyperparams()
+    println("[1/7] Hyperparameters:")
+    println(f"  lr={hp.learning_rate}  epochs={hp.epochs}  batch={hp.batch_size}")
+    println(f"  patience={hp.patience}  min_delta={hp.min_delta}")
+    println(f"  split: {hp.train_ratio}/{hp.val_ratio}/{1.0 - hp.train_ratio - hp.val_ratio}")
+    println("")
+
+    // Step 2: Generate dataset
+    let data = generate_dataset(50)
+    println(f"[2/7] Dataset: {data.size} samples (y = 2x + 3 + noise)")
+    println(f"  x[0]={data.features[0]}, y[0]={data.labels[0]}")
+    println(f"  x[49]={data.features[49]}, y[49]={data.labels[49]}")
+    println("")
+
+    // Step 3: Split
+    let split = split_dataset(data, hp)
+    println(f"[3/7] Split: train={split.train_n}, val={split.val_n}, test={split.test_n}")
+    println("")
+
+    // Step 4: Train
+    println("[4/7] Training...")
+    let model = train(split, hp)
+    println("")
+
+    // Step 5: Learned parameters
+    println("[5/7] Learned Parameters:")
+    println(f"  weight={model.weight}  (true: 2.0, error: {abs(model.weight - 2.0)})")
+    println(f"  bias={model.bias}  (true: 3.0, error: {abs(model.bias - 3.0)})")
+    println("")
+
+    // Step 6: Evaluate all splits
+    println("[6/7] Evaluation:")
+    evaluate(model, split.train_f, split.train_l, split.train_n, "Train")
+    evaluate(model, split.val_f, split.val_l, split.val_n, "Validation")
+    evaluate(model, split.test_f, split.test_l, split.test_n, "Test")
+
+    // Step 7: Save and reload
+    let path = "/tmp/fj_ml_pipeline_model.txt"
+    println("[7/7] Model Persistence:")
+    let saved = save_model(model, path)
+    if saved {
+        println(f"  Saved to: {path}")
+        let loaded = load_model(path)
+        println(f"  Loaded: weight={loaded.weight}, bias={loaded.bias}")
+        if abs(loaded.weight - model.weight) < 0.001 && abs(loaded.bias - model.bias) < 0.001 {
+            println("  Verification: PASS")
+        } else {
+            println("  Verification: MISMATCH")
+        }
+    } else {
+        println("  Warning: save failed")
+    }
+    println("")
+
+    // Summary
+    let tp = predict_batch(model, split.test_f, split.test_n)
+    let final_mse = mse_loss(tp, split.test_l, split.test_n)
+    let final_acc = regression_accuracy(tp, split.test_l, split.test_n, 1.0)
+    println("============================================================")
+    println("  Pipeline Complete")
+    println(f"  weight={model.weight} (target 2.0)  bias={model.bias} (target 3.0)")
+    println(f"  Test MSE={final_mse}  Test Accuracy={final_acc}%")
+    println("============================================================")
+}
