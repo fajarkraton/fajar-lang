@@ -379,6 +379,50 @@ pub fn tokenize(source: str) -> [i64] {
     tokens
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// SQ11.8: Token spans — line:col tracking
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Extract the source text of a token given the source and token start/end positions.
+pub fn token_text(source: str, start: i64, end: i64) -> str {
+    source.substring(start, end)
+}
+
+/// Compute line number (1-based) from byte offset.
+pub fn offset_to_line(source: str, offset: i64) -> i64 {
+    let mut line = 1
+    let mut i = 0
+    while i < offset && i < to_int(len(source)) {
+        if source.substring(i, i + 1) == "\n" {
+            line = line + 1
+        }
+        i = i + 1
+    }
+    line
+}
+
+/// Compute column number (1-based) from byte offset.
+pub fn offset_to_col(source: str, offset: i64) -> i64 {
+    let mut col = 1
+    let mut i = 0
+    while i < offset && i < to_int(len(source)) {
+        if source.substring(i, i + 1) == "\n" {
+            col = 1
+        } else {
+            col = col + 1
+        }
+        i = i + 1
+    }
+    col
+}
+
+/// Format a position as "line:col".
+pub fn format_pos(source: str, offset: i64) -> str {
+    let line = offset_to_line(source, offset)
+    let col = offset_to_col(source, offset)
+    f"{line}:{col}"
+}
+
 // Map token kind tag to string name (for debugging/comparison)
 pub fn kind_name(tag: i64) -> str {
     if tag == 0 { return "EOF" }

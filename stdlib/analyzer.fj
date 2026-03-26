@@ -93,6 +93,10 @@ struct AnalyzerState {
     var_types: [i64],
     // Moved flags (1 = moved, can't use)
     var_moved: [i64],
+    // SQ11.4: Scope depth per variable (for push/pop)
+    var_depths: [i64],
+    // Current scope depth (0 = global)
+    scope_depth: i64,
     // Known function names
     fn_names: [str],
     // Function parameter counts
@@ -115,6 +119,8 @@ fn new_analyzer() -> AnalyzerState {
         var_names: [],
         var_types: [],
         var_moved: [],
+        var_depths: [],
+        scope_depth: 0,
         fn_names: ["println", "print", "len", "type_of", "assert", "assert_eq",
                     "push", "pop", "to_string", "parse_int", "parse_float",
                     "sqrt", "abs", "min", "max"],
@@ -127,12 +133,67 @@ fn new_analyzer() -> AnalyzerState {
     }
 }
 
+/// Push a new scope level.
+pub fn push_scope(state: AnalyzerState) -> AnalyzerState {
+    AnalyzerState {
+        var_names: state.var_names,
+        var_types: state.var_types,
+        var_moved: state.var_moved,
+        var_depths: state.var_depths,
+        scope_depth: state.scope_depth + 1,
+        fn_names: state.fn_names,
+        fn_param_counts: state.fn_param_counts,
+        errors: state.errors,
+        error_names: state.error_names,
+        in_function: state.in_function,
+        in_loop: state.in_loop,
+        error_count: state.error_count
+    }
+}
+
+/// Pop the current scope — removes all variables at current depth.
+pub fn pop_scope(state: AnalyzerState) -> AnalyzerState {
+    let depth = state.scope_depth
+    let mut new_names: [str] = []
+    let mut new_types: [i64] = []
+    let mut new_moved: [i64] = []
+    let mut new_depths: [i64] = []
+
+    let mut i = 0
+    while i < to_int(len(state.var_names)) {
+        if state.var_depths[i] < depth {
+            new_names = push(new_names, state.var_names[i])
+            new_types = push(new_types, state.var_types[i])
+            new_moved = push(new_moved, state.var_moved[i])
+            new_depths = push(new_depths, state.var_depths[i])
+        }
+        i = i + 1
+    }
+
+    AnalyzerState {
+        var_names: new_names,
+        var_types: new_types,
+        var_moved: new_moved,
+        var_depths: new_depths,
+        scope_depth: depth - 1,
+        fn_names: state.fn_names,
+        fn_param_counts: state.fn_param_counts,
+        errors: state.errors,
+        error_names: state.error_names,
+        in_function: state.in_function,
+        in_loop: state.in_loop,
+        error_count: state.error_count
+    }
+}
+
 /// Adds an error to the analyzer state.
 fn add_error(state: AnalyzerState, code: i64, name: str) -> AnalyzerState {
     AnalyzerState {
         var_names: state.var_names,
         var_types: state.var_types,
         var_moved: state.var_moved,
+        var_depths: state.var_depths,
+        scope_depth: state.scope_depth,
         fn_names: state.fn_names,
         fn_param_counts: state.fn_param_counts,
         errors: push(state.errors, code),
@@ -143,12 +204,14 @@ fn add_error(state: AnalyzerState, code: i64, name: str) -> AnalyzerState {
     }
 }
 
-/// Defines a variable in the analyzer scope.
+/// Defines a variable in the analyzer scope at current depth.
 fn define_var(state: AnalyzerState, name: str, ty: i64) -> AnalyzerState {
     AnalyzerState {
         var_names: push(state.var_names, name),
         var_types: push(state.var_types, ty),
         var_moved: push(state.var_moved, 0),
+        var_depths: push(state.var_depths, state.scope_depth),
+        scope_depth: state.scope_depth,
         fn_names: state.fn_names,
         fn_param_counts: state.fn_param_counts,
         errors: state.errors,
@@ -165,6 +228,8 @@ fn define_fn(state: AnalyzerState, name: str, param_count: i64) -> AnalyzerState
         var_names: state.var_names,
         var_types: state.var_types,
         var_moved: state.var_moved,
+        var_depths: state.var_depths,
+        scope_depth: state.scope_depth,
         fn_names: push(state.fn_names, name),
         fn_param_counts: push(state.fn_param_counts, param_count),
         errors: state.errors,
