@@ -438,6 +438,349 @@ impl AbiCheck {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V8 GC2.1-GC2.9: Real C++ Header Parsing via libclang
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Parse a C++ header file and extract declarations using libclang.
+///
+/// Requires the `cpp-ffi` feature and libclang installed on the system.
+#[cfg(feature = "cpp-ffi")]
+pub fn parse_header(header_path: &str, include_dirs: &[&str]) -> Result<Vec<CppDecl>, String> {
+    use clang_sys::*;
+    use std::ffi::CString;
+    use std::ptr;
+
+    // Load libclang dynamically
+    if let Err(e) = clang_sys::load() {
+        // Already loaded is OK
+        let msg = format!("{e}");
+        if !msg.contains("already") {
+            return Err(format!("failed to load libclang: {e}"));
+        }
+    }
+
+    let index = unsafe { clang_createIndex(0, 0) };
+    if index.is_null() {
+        return Err("clang_createIndex failed".to_string());
+    }
+
+    // Build arguments
+    let mut args: Vec<CString> = vec![CString::new("-x").unwrap(), CString::new("c++").unwrap()];
+    for dir in include_dirs {
+        args.push(CString::new(format!("-I{dir}")).unwrap());
+    }
+    let c_args: Vec<*const i8> = args.iter().map(|a| a.as_ptr()).collect();
+
+    let c_path = CString::new(header_path).map_err(|e| format!("invalid path: {e}"))?;
+
+    let tu = unsafe {
+        clang_parseTranslationUnit(
+            index,
+            c_path.as_ptr(),
+            c_args.as_ptr(),
+            c_args.len() as i32,
+            ptr::null_mut(),
+            0,
+            CXTranslationUnit_SkipFunctionBodies,
+        )
+    };
+
+    if tu.is_null() {
+        unsafe { clang_disposeIndex(index) };
+        return Err(format!("failed to parse '{header_path}'"));
+    }
+
+    let mut decls = Vec::new();
+    let cursor = unsafe { clang_getTranslationUnitCursor(tu) };
+
+    // Visit top-level declarations
+    unsafe {
+        clang_visitChildren(
+            cursor,
+            visit_decl,
+            &mut decls as *mut Vec<CppDecl> as *mut std::ffi::c_void,
+        );
+    }
+
+    unsafe {
+        clang_disposeTranslationUnit(tu);
+        clang_disposeIndex(index);
+    }
+
+    Ok(decls)
+}
+
+#[cfg(feature = "cpp-ffi")]
+extern "C" fn visit_decl(
+    cursor: clang_sys::CXCursor,
+    _parent: clang_sys::CXCursor,
+    client_data: *mut std::ffi::c_void,
+) -> clang_sys::CXChildVisitResult {
+    use clang_sys::*;
+
+    let decls = unsafe { &mut *(client_data as *mut Vec<CppDecl>) };
+
+    let kind = unsafe { clang_getCursorKind(cursor) };
+    let location = unsafe { clang_getCursorLocation(cursor) };
+
+    // Skip system headers
+    if unsafe { clang_Location_isInSystemHeader(location) } != 0 {
+        return CXChildVisit_Continue;
+    }
+
+    let name = cursor_name(cursor);
+
+    match kind {
+        CXCursor_FunctionDecl => {
+            let func = extract_function(cursor, &name);
+            decls.push(CppDecl::Function(func));
+        }
+        CXCursor_ClassDecl | CXCursor_StructDecl => {
+            let class = extract_class(cursor, &name);
+            decls.push(CppDecl::Class(class));
+        }
+        CXCursor_EnumDecl => {
+            let en = extract_enum(cursor, &name);
+            decls.push(CppDecl::Enum(en));
+        }
+        CXCursor_TypedefDecl | CXCursor_TypeAliasDecl => {
+            decls.push(CppDecl::Typedef(CppTypedef {
+                name: name.clone(),
+                target: CppType::Custom(name),
+            }));
+        }
+        CXCursor_Namespace => {
+            let mut ns_decls = Vec::new();
+            unsafe {
+                clang_visitChildren(
+                    cursor,
+                    visit_decl,
+                    &mut ns_decls as *mut Vec<CppDecl> as *mut std::ffi::c_void,
+                );
+            }
+            decls.push(CppDecl::Namespace(CppNamespace {
+                name,
+                declarations: ns_decls,
+            }));
+        }
+        _ => {}
+    }
+
+    CXChildVisit_Continue
+}
+
+#[cfg(feature = "cpp-ffi")]
+fn cursor_name(cursor: clang_sys::CXCursor) -> String {
+    unsafe {
+        let cx_str = clang_sys::clang_getCursorSpelling(cursor);
+        let c_str = clang_sys::clang_getCString(cx_str);
+        let name = if c_str.is_null() {
+            String::new()
+        } else {
+            std::ffi::CStr::from_ptr(c_str)
+                .to_string_lossy()
+                .into_owned()
+        };
+        clang_sys::clang_disposeString(cx_str);
+        name
+    }
+}
+
+#[cfg(feature = "cpp-ffi")]
+fn extract_function(cursor: clang_sys::CXCursor, name: &str) -> CppFunction {
+    use clang_sys::*;
+
+    let num_args = unsafe { clang_Cursor_getNumArguments(cursor) };
+    let mut params = Vec::new();
+    for i in 0..num_args {
+        let arg = unsafe { clang_Cursor_getArgument(cursor, i as u32) };
+        let arg_name = cursor_name(arg);
+        let arg_type = unsafe { clang_getCursorType(arg) };
+        params.push(CppParam {
+            name: if arg_name.is_empty() {
+                format!("arg{i}")
+            } else {
+                arg_name
+            },
+            param_type: clang_type_to_cpp(arg_type),
+            has_default: false,
+        });
+    }
+
+    let ret_type = unsafe { clang_getCursorResultType(cursor) };
+
+    CppFunction {
+        name: name.to_string(),
+        namespace: vec![],
+        return_type: clang_type_to_cpp(ret_type),
+        params,
+        is_static: unsafe { clang_CXXMethod_isStatic(cursor) } != 0,
+        is_const: unsafe { clang_CXXMethod_isConst(cursor) } != 0,
+        is_virtual: unsafe { clang_CXXMethod_isVirtual(cursor) } != 0,
+        is_noexcept: false,
+        template_params: vec![],
+    }
+}
+
+#[cfg(feature = "cpp-ffi")]
+fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
+    let _methods: Vec<CppFunction> = Vec::new();
+    let _constructors: Vec<CppFunction> = Vec::new();
+    let _fields: Vec<CppField> = Vec::new();
+
+    struct ClassVisitorData {
+        methods: Vec<CppFunction>,
+        constructors: Vec<CppFunction>,
+        fields: Vec<CppField>,
+        has_destructor: bool,
+    }
+
+    let mut data = ClassVisitorData {
+        methods: Vec::new(),
+        constructors: Vec::new(),
+        fields: Vec::new(),
+        has_destructor: false,
+    };
+
+    extern "C" fn visit_member(
+        cursor: clang_sys::CXCursor,
+        _parent: clang_sys::CXCursor,
+        client_data: *mut std::ffi::c_void,
+    ) -> clang_sys::CXChildVisitResult {
+        use clang_sys::*;
+        let data = unsafe { &mut *(client_data as *mut ClassVisitorData) };
+        let kind = unsafe { clang_getCursorKind(cursor) };
+        let member_name = cursor_name(cursor);
+
+        match kind {
+            CXCursor_CXXMethod => {
+                data.methods.push(extract_function(cursor, &member_name));
+            }
+            CXCursor_Constructor => {
+                data.constructors
+                    .push(extract_function(cursor, &member_name));
+            }
+            CXCursor_Destructor => {
+                data.has_destructor = true;
+            }
+            CXCursor_FieldDecl => {
+                let field_type = unsafe { clang_getCursorType(cursor) };
+                data.fields.push(CppField {
+                    name: member_name,
+                    field_type: clang_type_to_cpp(field_type),
+                    is_public: true,
+                    is_static: false,
+                    offset_bytes: 0,
+                });
+            }
+            _ => {}
+        }
+        CXChildVisit_Continue
+    }
+
+    unsafe {
+        clang_sys::clang_visitChildren(
+            cursor,
+            visit_member,
+            &mut data as *mut ClassVisitorData as *mut std::ffi::c_void,
+        );
+    }
+
+    CppClass {
+        name: name.to_string(),
+        namespace: vec![],
+        bases: vec![],
+        fields: data.fields,
+        methods: data.methods,
+        constructors: data.constructors,
+        has_destructor: data.has_destructor,
+        is_abstract: false,
+        template_params: vec![],
+        size_bytes: 0,
+        align_bytes: 0,
+    }
+}
+
+#[cfg(feature = "cpp-ffi")]
+fn extract_enum(cursor: clang_sys::CXCursor, name: &str) -> CppEnum {
+    let mut variants = Vec::new();
+
+    extern "C" fn visit_variant(
+        cursor: clang_sys::CXCursor,
+        _parent: clang_sys::CXCursor,
+        client_data: *mut std::ffi::c_void,
+    ) -> clang_sys::CXChildVisitResult {
+        use clang_sys::*;
+        let variants = unsafe { &mut *(client_data as *mut Vec<(String, i64)>) };
+        let kind = unsafe { clang_getCursorKind(cursor) };
+        if kind == CXCursor_EnumConstantDecl {
+            let vname = cursor_name(cursor);
+            let value = unsafe { clang_getEnumConstantDeclValue(cursor) };
+            variants.push((vname, value));
+        }
+        CXChildVisit_Continue
+    }
+
+    unsafe {
+        clang_sys::clang_visitChildren(
+            cursor,
+            visit_variant,
+            &mut variants as *mut Vec<(String, i64)> as *mut std::ffi::c_void,
+        );
+    }
+
+    CppEnum {
+        name: name.to_string(),
+        namespace: vec![],
+        variants,
+        is_scoped: false,
+    }
+}
+
+#[cfg(feature = "cpp-ffi")]
+fn clang_type_to_cpp(cx_type: clang_sys::CXType) -> CppType {
+    use clang_sys::*;
+    match cx_type.kind {
+        CXType_Void => CppType::Void,
+        CXType_Bool => CppType::Bool,
+        CXType_Char_S | CXType_SChar => CppType::Char,
+        CXType_UChar | CXType_Char_U => CppType::Char,
+        CXType_Short => CppType::Int(CppIntSize::I16),
+        CXType_UShort => CppType::Int(CppIntSize::I16),
+        CXType_Int => CppType::Int(CppIntSize::I32),
+        CXType_UInt => CppType::Int(CppIntSize::I32),
+        CXType_Long | CXType_LongLong => CppType::Int(CppIntSize::I64),
+        CXType_ULong | CXType_ULongLong => CppType::Int(CppIntSize::I64),
+        CXType_Float => CppType::Float,
+        CXType_Double => CppType::Double,
+        CXType_Pointer => {
+            let pointee = unsafe { clang_getPointeeType(cx_type) };
+            CppType::Pointer(Box::new(clang_type_to_cpp(pointee)))
+        }
+        CXType_LValueReference => {
+            let pointee = unsafe { clang_getPointeeType(cx_type) };
+            CppType::Reference(Box::new(clang_type_to_cpp(pointee)))
+        }
+        _ => {
+            let name = unsafe {
+                let cx_str = clang_getTypeSpelling(cx_type);
+                let c_str = clang_getCString(cx_str);
+                let s = if c_str.is_null() {
+                    String::from("unknown")
+                } else {
+                    std::ffi::CStr::from_ptr(c_str)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                clang_disposeString(cx_str);
+                s
+            };
+            CppType::Custom(name)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -569,5 +912,133 @@ mod tests {
     fn f1_2_mangle_void() {
         let mangled = mangle_name(&[], "init", &[]);
         assert_eq!(mangled, "_Z4initv");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC2: Real libclang integration tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn gc2_parse_simple_header() {
+        use std::io::Write;
+        // Create a temporary C++ header
+        let dir = std::env::temp_dir().join("fj_cpp_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("test.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(
+            f,
+            r#"
+int add(int a, int b);
+double multiply(double x, double y);
+
+struct Point {{
+    double x;
+    double y;
+}};
+
+enum Color {{
+    Red = 0,
+    Green = 1,
+    Blue = 2
+}};
+
+class Calculator {{
+public:
+    Calculator();
+    int compute(int input);
+    static double pi();
+}};
+"#
+        )
+        .unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+
+        // Should find functions, struct, enum, class
+        let func_count = decls
+            .iter()
+            .filter(|d| matches!(d, CppDecl::Function(_)))
+            .count();
+        let class_count = decls
+            .iter()
+            .filter(|d| matches!(d, CppDecl::Class(_)))
+            .count();
+        let enum_count = decls
+            .iter()
+            .filter(|d| matches!(d, CppDecl::Enum(_)))
+            .count();
+
+        assert!(func_count >= 2, "expected >=2 functions, got {func_count}");
+        assert!(
+            class_count >= 2,
+            "expected >=2 classes/structs, got {class_count}"
+        );
+        assert!(enum_count >= 1, "expected >=1 enum, got {enum_count}");
+
+        // Verify function details
+        let add_fn = decls.iter().find_map(|d| match d {
+            CppDecl::Function(f) if f.name == "add" => Some(f),
+            _ => None,
+        });
+        assert!(add_fn.is_some(), "should find 'add' function");
+        let add_fn = add_fn.unwrap();
+        assert_eq!(add_fn.params.len(), 2);
+        assert_eq!(add_fn.return_type, CppType::Int(CppIntSize::I32));
+
+        // Verify enum details
+        let color_enum = decls.iter().find_map(|d| match d {
+            CppDecl::Enum(e) if e.name == "Color" => Some(e),
+            _ => None,
+        });
+        assert!(color_enum.is_some(), "should find 'Color' enum");
+        assert_eq!(color_enum.unwrap().variants.len(), 3);
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn gc2_parse_cpp_with_namespace() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cpp_ns_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("ns_test.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(
+            f,
+            r#"
+namespace math {{
+    int abs(int x);
+    double sqrt(double x);
+}}
+
+namespace io {{
+    void print(const char* msg);
+}}
+"#
+        )
+        .unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        let ns_count = decls
+            .iter()
+            .filter(|d| matches!(d, CppDecl::Namespace(_)))
+            .count();
+        assert!(ns_count >= 2, "expected 2 namespaces, got {ns_count}");
+
+        // Verify nested declarations
+        if let Some(CppDecl::Namespace(ns)) = decls.iter().find(|d| {
+            matches!(d, CppDecl::Namespace(n) if n.name == "math")
+        }) {
+            assert!(
+                ns.declarations.len() >= 2,
+                "math namespace should have 2+ functions"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

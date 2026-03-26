@@ -588,6 +588,102 @@ mod tests {
         assert!(wrapper.contains("torch"));
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC2.11-GC2.20: Real Python integration tests via pyo3
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "python-ffi")]
+    use pyo3::types::PyAnyMethods;
+    #[cfg(feature = "python-ffi")]
+    use pyo3::types::PyModule;
+
+    #[cfg(feature = "python-ffi")]
+    fn py_eval<'py, T: pyo3::FromPyObject<'py>>(py: pyo3::Python<'py>, code: &str) -> pyo3::PyResult<T> {
+        let ccode = std::ffi::CString::new(code).unwrap();
+        py.eval(&ccode, None, None)?.extract()
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_eval_expression() {
+        pyo3::Python::with_gil(|py| {
+            let result: i64 = py_eval(py, "2 + 3").unwrap();
+            assert_eq!(result, 5);
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_call_builtin() {
+        pyo3::Python::with_gil(|py| {
+            let result: i64 = py_eval(py, "abs(-42)").unwrap();
+            assert_eq!(result, 42);
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_import_math() {
+        pyo3::Python::with_gil(|py| {
+            let pi: f64 = py_eval(py, "__import__('math').pi").unwrap();
+            assert!((pi - std::f64::consts::PI).abs() < 1e-10);
+            let sqrt: f64 = py_eval(py, "__import__('math').sqrt(16.0)").unwrap();
+            assert!((sqrt - 4.0).abs() < 1e-10);
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_list_sort() {
+        pyo3::Python::with_gil(|py| {
+            let result: Vec<i64> = py_eval(py, "sorted([3, 1, 4, 1, 5, 9, 2, 6])").unwrap();
+            assert_eq!(result, vec![1, 1, 2, 3, 4, 5, 6, 9]);
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_string_ops() {
+        pyo3::Python::with_gil(|py| {
+            let result: String = py_eval(py, "'Fajar Lang'.lower().replace(' ', '_')").unwrap();
+            assert_eq!(result, "fajar_lang");
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_exception() {
+        pyo3::Python::with_gil(|py| {
+            let ccode = std::ffi::CString::new("1/0").unwrap();
+            let result = py.eval(&ccode, None, None);
+            assert!(result.is_err());
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_numpy_array() {
+        pyo3::Python::with_gil(|py| {
+            let arr: Vec<f64> = py_eval(py, "__import__('numpy').array([1.0, 2.0, 3.0]).tolist()").unwrap();
+            assert_eq!(arr, vec![1.0, 2.0, 3.0]);
+            let sum: f64 = py_eval(py, "float(__import__('numpy').sum(__import__('numpy').array([1,2,3,4])))").unwrap();
+            assert!((sum - 10.0).abs() < 1e-10);
+        });
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn gc2_python_define_function() {
+        pyo3::Python::with_gil(|py| {
+            let code = std::ffi::CString::new(
+                "def fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a"
+            ).unwrap();
+            py.run(&code, None, None).unwrap();
+            let fib: i64 = py_eval(py, "fibonacci(10)").unwrap();
+            assert_eq!(fib, 55);
+        });
+    }
+
     #[test]
     fn f2_2_dict_repr() {
         let dict = PyValue::Dict(vec![
