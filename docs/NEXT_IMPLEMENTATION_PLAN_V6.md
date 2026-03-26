@@ -37,7 +37,7 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 ---
 
-## Option 1: Language Playground & Web IDE (6 sprints, 60 tasks)
+## Option 1: Language Playground & Web IDE (6 sprints, 60 tasks) ✅ COMPLETE
 
 **Goal:** Browser-based Fajar Lang playground — write, run, share code instantly
 **Impact:** Lowest barrier to entry; anyone can try Fajar Lang without installing anything
@@ -48,31 +48,31 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P1.1.1 | Compile interpreter to Wasm | `wasm-pack build` with `wasm-bindgen` | [ ] |
-| P1.1.2 | JavaScript bridge | `run_fajar(source: &str) -> String` exported | [ ] |
-| P1.1.3 | stdout/stderr capture | Redirect `println` to JS callback | [ ] |
-| P1.1.4 | Error formatting | miette-style errors as HTML/ANSI | [ ] |
-| P1.1.5 | Execution timeout | Web Worker with 5-second kill | [ ] |
-| P1.1.6 | Memory limit | Wasm linear memory cap (64MB) | [ ] |
-| P1.1.7 | AST dump mode | `dump-ast` as JSON for visualization | [ ] |
-| P1.1.8 | Token dump mode | `dump-tokens` as JSON | [ ] |
-| P1.1.9 | Type check mode | `check` returns diagnostics as JSON | [ ] |
-| P1.1.10 | Wasm size optimization | `wasm-opt -Oz`, strip debug, < 2MB | [ ] |
+| P1.1.1 | Compile interpreter to Wasm | `wasm-pack build` with `wasm-bindgen` | [x] |
+| P1.1.2 | JavaScript bridge | `run_fajar(source: &str) -> String` exported | [x] |
+| P1.1.3 | stdout/stderr capture | Redirect `println` to JS callback | [x] |
+| P1.1.4 | Error formatting | miette-style errors as HTML/ANSI | [x] |
+| P1.1.5 | Execution timeout | Web Worker with 5-second kill | [x] |
+| P1.1.6 | Memory limit | Wasm linear memory cap (64MB) | [x] |
+| P1.1.7 | AST dump mode | `dump-ast` as JSON for visualization | [x] |
+| P1.1.8 | Token dump mode | `dump-tokens` as JSON | [x] |
+| P1.1.9 | Type check mode | `check` returns diagnostics as JSON | [x] |
+| P1.1.10 | Wasm size optimization | `wasm-opt -Oz`, strip debug, < 2MB | [x] |
 
 #### Sprint P1.2: Web Worker Sandbox (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P1.2.1 | Web Worker executor | Run Wasm in dedicated worker thread | [ ] |
-| P1.2.2 | Message protocol | `{type: "run", source: "..."}` → `{type: "output", text: "..."}` | [ ] |
-| P1.2.3 | Cancellation | `worker.terminate()` on timeout or user cancel | [ ] |
-| P1.2.4 | Progress events | Stream output line-by-line | [ ] |
-| P1.2.5 | File system mock | In-memory VFS for `read_file`/`write_file` | [ ] |
-| P1.2.6 | Import resolution | `use std::math` → bundled stdlib | [ ] |
-| P1.2.7 | Tensor operations | ndarray subset compiled to Wasm | [ ] |
-| P1.2.8 | Random seed control | Deterministic `randn` for reproducibility | [ ] |
-| P1.2.9 | Performance metrics | Execution time, memory used, tokens parsed | [ ] |
-| P1.2.10 | Error recovery | Worker crash → graceful restart | [ ] |
+| P1.2.1 | Web Worker executor | Run Wasm in dedicated worker thread | [x] |
+| P1.2.2 | Message protocol | `{type: "run", source: "..."}` → `{type: "output", text: "..."}` | [x] |
+| P1.2.3 | Cancellation | `worker.terminate()` on timeout or user cancel | [x] |
+| P1.2.4 | Progress events | Stream output line-by-line | [x] |
+| P1.2.5 | File system mock | In-memory VFS for `read_file`/`write_file` | [x] |
+| P1.2.6 | Import resolution | `use std::math` → bundled stdlib | [x] |
+| P1.2.7 | Tensor operations | ndarray subset compiled to Wasm | [x] |
+| P1.2.8 | Random seed control | Deterministic `randn` for reproducibility | [x] |
+| P1.2.9 | Performance metrics | Execution time, memory used, tokens parsed | [x] |
+| P1.2.10 | Error recovery | Worker crash → graceful restart | [x] |
 
 ### Phase P2: Editor UI (2 sprints, 20 tasks)
 
@@ -80,31 +80,31 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P2.1.1 | Monaco editor setup | React + Monaco with Fajar Lang mode | [ ] |
-| P2.1.2 | Syntax highlighting | TextMate grammar for `.fj` | [ ] |
-| P2.1.3 | Auto-completion | Keywords, builtins, std library | [ ] |
-| P2.1.4 | Error markers | Red squiggles from type checker | [ ] |
-| P2.1.5 | Output panel | Scrollable output with ANSI colors | [ ] |
-| P2.1.6 | Run button | Execute with keyboard shortcut (Ctrl+Enter) | [ ] |
-| P2.1.7 | Theme toggle | Light/dark theme matching FajarOS colors | [ ] |
-| P2.1.8 | Font configuration | Monospace, size 14px default | [ ] |
-| P2.1.9 | Mobile responsive | Usable on tablet (stack layout) | [ ] |
-| P2.1.10 | Keyboard shortcuts | Ctrl+S save, Ctrl+Enter run, Ctrl+/ comment | [ ] |
+| P2.1.1 | Monaco editor setup | React + Monaco with Fajar Lang mode | [x] |
+| P2.1.2 | Syntax highlighting | TextMate grammar for `.fj` | [x] |
+| P2.1.3 | Auto-completion | Keywords, builtins, std library | [x] |
+| P2.1.4 | Error markers | Red squiggles from type checker | [x] |
+| P2.1.5 | Output panel | Scrollable output with ANSI colors | [x] |
+| P2.1.6 | Run button | Execute with keyboard shortcut (Ctrl+Enter) | [x] |
+| P2.1.7 | Theme toggle | Light/dark theme matching FajarOS colors | [x] |
+| P2.1.8 | Font configuration | Monospace, size 14px default | [x] |
+| P2.1.9 | Mobile responsive | Usable on tablet (stack layout) | [x] |
+| P2.1.10 | Keyboard shortcuts | Ctrl+S save, Ctrl+Enter run, Ctrl+/ comment | [x] |
 
 #### Sprint P2.2: Sharing & Examples (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P2.2.1 | URL hash encoding | Source code in URL fragment (LZ-compressed) | [ ] |
-| P2.2.2 | Share button | Copy shareable link to clipboard | [ ] |
-| P2.2.3 | Example gallery | 20 curated examples from tutorials | [ ] |
-| P2.2.4 | Example categories | Basics, ML, OS, Algorithms, Embedded | [ ] |
-| P2.2.5 | GitHub Gist export | One-click save to Gist | [ ] |
-| P2.2.6 | Embed mode | `<iframe>` snippet for blogs/docs | [ ] |
-| P2.2.7 | QR code | Mobile-friendly sharing | [ ] |
-| P2.2.8 | Version selector | Switch between Fajar Lang versions | [ ] |
-| P2.2.9 | Permalink API | `playground.fajarlang.dev/p/{id}` | [ ] |
-| P2.2.10 | Social meta tags | OpenGraph preview when sharing links | [ ] |
+| P2.2.1 | URL hash encoding | Source code in URL fragment (LZ-compressed) | [x] |
+| P2.2.2 | Share button | Copy shareable link to clipboard | [x] |
+| P2.2.3 | Example gallery | 20 curated examples from tutorials | [x] |
+| P2.2.4 | Example categories | Basics, ML, OS, Algorithms, Embedded | [x] |
+| P2.2.5 | GitHub Gist export | One-click save to Gist | [x] |
+| P2.2.6 | Embed mode | `<iframe>` snippet for blogs/docs | [x] |
+| P2.2.7 | QR code | Mobile-friendly sharing | [x] |
+| P2.2.8 | Version selector | Switch between Fajar Lang versions | [x] |
+| P2.2.9 | Permalink API | `playground.fajarlang.dev/p/{id}` | [x] |
+| P2.2.10 | Social meta tags | OpenGraph preview when sharing links | [x] |
 
 ### Phase P3: Deployment (2 sprints, 20 tasks)
 
@@ -112,31 +112,31 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P3.1.1 | Static site build | Vite/Next.js SSG → Cloudflare Pages | [ ] |
-| P3.1.2 | CDN deployment | Global edge with <50ms TTFB | [ ] |
-| P3.1.3 | Service worker cache | Offline playground support | [ ] |
-| P3.1.4 | Analytics | Plausible (privacy-friendly) page views | [ ] |
-| P3.1.5 | Error reporting | Sentry for JS/Wasm crashes | [ ] |
-| P3.1.6 | CI/CD pipeline | Auto-deploy on main push | [ ] |
-| P3.1.7 | Custom domain | playground.fajarlang.dev | [ ] |
-| P3.1.8 | SSL certificate | Cloudflare auto-SSL | [ ] |
-| P3.1.9 | Rate limiting | 100 executions/minute per IP | [ ] |
-| P3.1.10 | Health check | `/api/health` endpoint | [ ] |
+| P3.1.1 | Static site build | Vite/Next.js SSG → Cloudflare Pages | [x] |
+| P3.1.2 | CDN deployment | Global edge with <50ms TTFB | [x] |
+| P3.1.3 | Service worker cache | Offline playground support | [x] |
+| P3.1.4 | Analytics | Plausible (privacy-friendly) page views | [x] |
+| P3.1.5 | Error reporting | Sentry for JS/Wasm crashes | [x] |
+| P3.1.6 | CI/CD pipeline | Auto-deploy on main push | [x] |
+| P3.1.7 | Custom domain | playground.fajarlang.dev | [x] |
+| P3.1.8 | SSL certificate | Cloudflare auto-SSL | [x] |
+| P3.1.9 | Rate limiting | 100 executions/minute per IP | [x] |
+| P3.1.10 | Health check | `/api/health` endpoint | [x] |
 
 #### Sprint P3.2: Polish & Launch (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P3.2.1 | Landing page | Hero section with live code demo | [ ] |
-| P3.2.2 | Documentation link | "Learn Fajar Lang" → tutorials | [ ] |
-| P3.2.3 | GitHub link | Star button + repo link | [ ] |
-| P3.2.4 | Logo & favicon | FajarOS "sunrise" branding | [ ] |
-| P3.2.5 | SEO optimization | Title, description, structured data | [ ] |
-| P3.2.6 | Accessibility | ARIA labels, keyboard navigation, screen reader | [ ] |
-| P3.2.7 | Browser compatibility | Chrome, Firefox, Safari, Edge | [ ] |
-| P3.2.8 | Loading spinner | Wasm download progress indicator | [ ] |
-| P3.2.9 | Changelog modal | "What's new" on version update | [ ] |
-| P3.2.10 | Blog: "Try Fajar Lang" | Launch announcement with playground link | [ ] |
+| P3.2.1 | Landing page | Hero section with live code demo | [x] |
+| P3.2.2 | Documentation link | "Learn Fajar Lang" → tutorials | [x] |
+| P3.2.3 | GitHub link | Star button + repo link | [x] |
+| P3.2.4 | Logo & favicon | FajarOS "sunrise" branding | [x] |
+| P3.2.5 | SEO optimization | Title, description, structured data | [x] |
+| P3.2.6 | Accessibility | ARIA labels, keyboard navigation, screen reader | [x] |
+| P3.2.7 | Browser compatibility | Chrome, Firefox, Safari, Edge | [x] |
+| P3.2.8 | Loading spinner | Wasm download progress indicator | [x] |
+| P3.2.9 | Changelog modal | "What's new" on version update | [x] |
+| P3.2.10 | Blog: "Try Fajar Lang" | Launch announcement with playground link | [x] |
 
 ---
 
@@ -451,16 +451,16 @@ Python interop benchmark)*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| F3.1 | Rust crate linking | Link `.rlib` / `.so` from Cargo | [ ] |
-| F3.2 | Type mapping | Rust struct ↔ Fajar struct | [ ] |
-| F3.3 | Trait bridging | Rust trait → Fajar trait impl | [ ] |
-| F3.4 | Error bridging | `anyhow::Error` → Fajar `Result` | [ ] |
-| F3.5 | Async bridging | Tokio future ↔ Fajar future | [ ] |
-| F3.6 | Macro export | Use Rust proc macros in Fajar | [ ] |
-| F3.7 | Serde integration | JSON/TOML/YAML via serde | [ ] |
-| F3.8 | Cargo build integration | `[fj-dependencies]` in Cargo.toml | [ ] |
-| F3.9 | Rust → Fajar code generator | Auto-generate bindings | [ ] |
-| F3.10 | Interop benchmark | Call overhead measurement | [ ] |
+| F3.1 | Rust crate linking | Link `.rlib` / `.so` from Cargo | [x] |
+| F3.2 | Type mapping | Rust struct ↔ Fajar struct | [x] |
+| F3.3 | Trait bridging | Rust trait → Fajar trait impl | [x] |
+| F3.4 | Error bridging | `anyhow::Error` → Fajar `Result` | [x] |
+| F3.5 | Async bridging | Tokio future ↔ Fajar future | [x] |
+| F3.6 | Macro export | Use Rust proc macros in Fajar | [x] |
+| F3.7 | Serde integration | JSON/TOML/YAML via serde | [x] |
+| F3.8 | Cargo build integration | `[fj-dependencies]` in Cargo.toml | [x] |
+| F3.9 | Rust → Fajar code generator | Auto-generate bindings | [x] |
+| F3.10 | Interop benchmark | Call overhead measurement | [x] |
 
 ---
 
