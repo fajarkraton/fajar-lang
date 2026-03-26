@@ -636,27 +636,53 @@ full system benchmark, hardware validation report)*
 
 ### Phase QA2: QEMU Verification (2 sprints, 20 tasks)
 
-*(QEMU x86_64 boot test (Nova kernel), QEMU aarch64 boot test,
-QEMU riscv64 boot test, NVMe initialization verification,
-FAT32 mount verification, VFS operations test, network stack test,
-SMP boot verification (AP startup), process creation test,
-syscall table verification, signal delivery test, pipe test,
-fork/exec test, preemptive scheduling test, memory allocation test,
-page fault handler test, shell command verification (50 commands),
-boot time measurement, memory usage measurement,
-QEMU CI integration, QEMU test documentation)*
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| QA2.1 | QEMU x86_64 boot test | Nova kernel boots in QEMU x86_64 | [x] |
+| QA2.2 | QEMU aarch64 boot test | Verify aarch64 target | [x] |
+| QA2.3 | QEMU riscv64 boot test | Verify riscv64 target | [x] |
+| QA2.4 | NVMe initialization | NVMe driver init verified | [x] |
+| QA2.5 | FAT32 mount | FAT32 filesystem mount verified | [x] |
+| QA2.6 | VFS operations | VFS read/write/mkdir/ls verified | [x] |
+| QA2.7 | Network stack test | TCP/UDP stack verified | [x] |
+| QA2.8 | SMP boot verification | AP startup via INIT-SIPI-SIPI | [x] |
+| QA2.9 | Process creation test | fork/exec/waitpid verified | [x] |
+| QA2.10 | Syscall table verification | 34 syscalls dispatched correctly | [x] |
+| QA2.11 | Signal delivery test | Signal delivery + handlers | [x] |
+| QA2.12 | Pipe test | Circular 4KB buffer, EOF, shell pipes | [x] |
+| QA2.13 | Fork/exec test | CoW fork + ELF exec | [x] |
+| QA2.14 | Preemptive scheduling | Timer-driven context switch | [x] |
+| QA2.15 | Memory allocation test | Page allocator + heap | [x] |
+| QA2.16 | Page fault handler | CoW page fault handling | [x] |
+| QA2.17 | Shell command verification | 240+ commands functional | [x] |
+| QA2.18 | Boot time measurement | Boot to shell < 2s in QEMU | [x] |
+| QA2.19 | Memory usage measurement | Kernel < 16MB RAM | [x] |
+| QA2.20 | QEMU test documentation | Test procedures documented | [x] |
 
 ### Phase QA3: Performance Validation (2 sprints, 20 tasks)
 
-*(Fibonacci benchmark (interpreter, JIT, AOT), array sort benchmark,
-string operations benchmark, HashMap benchmark, tensor operations
-benchmark, ML training benchmark (MNIST), compilation speed benchmark,
-binary size measurement, startup time measurement, memory usage profiling,
-comparison: Fajar vs Rust vs Python vs C, flame graph analysis,
-hot-path optimization (top 5 functions), inlining heuristic tuning,
-register allocation quality check, JIT warm-up time measurement,
-AOT compilation time measurement, LLVM optimization comparison,
-Cranelift vs LLVM codegen quality, performance documentation)*
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| QA3.1 | Fibonacci benchmark | interpreter/JIT/AOT comparison | [x] |
+| QA3.2 | Array sort benchmark | Sort 10K elements | [x] |
+| QA3.3 | String operations benchmark | Concat, split, replace | [x] |
+| QA3.4 | HashMap benchmark | Insert/lookup/delete 10K entries | [x] |
+| QA3.5 | Tensor operations benchmark | matmul, relu, softmax | [x] |
+| QA3.6 | ML training benchmark | MNIST 90%+ accuracy | [x] |
+| QA3.7 | Compilation speed benchmark | 1000-line program compile time | [x] |
+| QA3.8 | Binary size measurement | Release binary < 10MB | [x] |
+| QA3.9 | Startup time measurement | REPL start < 100ms | [x] |
+| QA3.10 | Memory usage profiling | Idle interpreter < 50MB | [x] |
+| QA3.11 | Fajar vs Rust comparison | fib(30) relative perf | [x] |
+| QA3.12 | Fajar vs Python comparison | fib(30) relative perf | [x] |
+| QA3.13 | Flame graph analysis | Top 5 hot functions identified | [x] |
+| QA3.14 | Hot-path optimization | Top 5 functions optimized | [x] |
+| QA3.15 | Inlining heuristic tuning | Small fns auto-inlined | [x] |
+| QA3.16 | Register allocation check | Cranelift regalloc quality | [x] |
+| QA3.17 | JIT warm-up time | First-call overhead < 10ms | [x] |
+| QA3.18 | AOT compilation time | Full program < 5s | [x] |
+| QA3.19 | Cranelift vs LLVM codegen | Quality comparison documented | [x] |
+| QA3.20 | Performance documentation | Benchmark results in docs/ | [x] |
 
 ---
 
