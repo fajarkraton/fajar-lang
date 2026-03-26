@@ -1,15 +1,152 @@
-# Plan V8 "Dominion" — Production Ecosystem & Self-Hosting
+# Plan V8 "Dominion" — Gap Closure + Production Ecosystem
 
-> **Previous:** V7 "Ascendancy" (680/680 tasks, ALL COMPLETE)
+> **Previous:** V7 "Ascendancy" (680 tasks documented; see GAP_ANALYSIS_V2.md for honest assessment)
 > **Version:** Fajar Lang v6.1.0 → v7.0.0 "Dominion"
-> **Goal:** Transform Fajar Lang from a working compiler into a production ecosystem
-> **Scale:** 10 options, 71 sprints, 710 tasks, ~142 hours
+> **Goal:** Close all V6/V7 framework gaps, then build production ecosystem
+> **Scale:** 11 options (0-10), 81 sprints, 810 tasks, ~162 hours
+> **Prerequisite:** Read `docs/GAP_ANALYSIS_V2.md` for full codebase audit
 
 ---
 
 ## Motivation
 
-V7 completed distributed computing, WASI, GPU pipelines, advanced types, incremental compilation, cloud deployment, plugins, CI/CD, FajarOS Surya, and quality audit. The compiler is feature-complete. **V8 focuses on the ecosystem**: self-hosting, package registry, IDE experience, real-world deployment, and hardening for production use.
+The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer, interpreter, Cranelift JIT/AOT, ML runtime, and FajarOS Nova are fully functional with 2,000+ tests. However, the GAP_ANALYSIS_V2 audit revealed that several V6/V7 modules are **framework-only** — they have correct type definitions and passing tests, but lack external integrations (networking, FFI bindings, solver calls) needed for real functionality.
+
+**V8 Phase 1 (Options 1-2):** Close ALL framework gaps — convert every Tier 2/3 module into real, working code.
+**V8 Phase 2 (Options 3-10):** Build the production ecosystem on a foundation of verified, honest implementations.
+
+---
+
+## Option 0: GAP CLOSURE — Convert Frameworks to Real Implementations (10 sprints, 100 tasks)
+
+*Every framework module from V6/V7 must become a real, working implementation before we build new features. This is non-negotiable for production quality.*
+
+> **Reference:** `docs/GAP_ANALYSIS_V2.md` — Tier 2 (18,000 LOC needs integration) + Tier 3 (8,200 LOC needs rewrite)
+
+### Phase GC1: Stdlib v3 — Real Networking & Crypto (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GC1.1 | Add RustCrypto deps | sha2, aes, rsa, ed25519-dalek, argon2 in Cargo.toml | [ ] |
+| GC1.2 | Implement SHA-256 | Real sha2::Sha256 digest computation | [ ] |
+| GC1.3 | Implement SHA-384/512 | Real sha2::Sha384, Sha512 | [ ] |
+| GC1.4 | Implement HMAC | Real hmac::Hmac<Sha256> | [ ] |
+| GC1.5 | Implement AES-256-GCM | Real aes_gcm::Aes256Gcm encrypt/decrypt | [ ] |
+| GC1.6 | Implement RSA sign/verify | Real rsa::RsaPrivateKey sign, RsaPublicKey verify | [ ] |
+| GC1.7 | Implement Ed25519 | Real ed25519_dalek::SigningKey sign/verify | [ ] |
+| GC1.8 | Implement Argon2 password hash | Real argon2::Argon2 hash_password/verify | [ ] |
+| GC1.9 | Implement CSPRNG | Real rand::rngs::OsRng for secure random bytes | [ ] |
+| GC1.10 | Crypto integration tests | 20 tests: hash known vectors, encrypt/decrypt roundtrip | [ ] |
+| GC1.11 | Add std::net TCP client | Real TcpStream::connect, read, write | [ ] |
+| GC1.12 | Add std::net TCP server | Real TcpListener::bind, accept | [ ] |
+| GC1.13 | Add std::net UDP | Real UdpSocket::bind, send_to, recv_from | [ ] |
+| GC1.14 | HTTP client (real) | Use ureq or reqwest for actual HTTP GET/POST | [ ] |
+| GC1.15 | HTTP server (real) | Minimal HTTP server using std::net TcpListener | [ ] |
+| GC1.16 | DNS resolver | Real std::net::ToSocketAddrs or trust-dns | [ ] |
+| GC1.17 | WebSocket client | Real tungstenite WebSocket connection | [ ] |
+| GC1.18 | TLS support | Real rustls for HTTPS | [ ] |
+| GC1.19 | Network integration tests | 20 tests: TCP echo, HTTP request, DNS lookup | [ ] |
+| GC1.20 | Stdlib v3 documentation | Update API docs with real usage examples | [ ] |
+
+### Phase GC2: FFI v2 — Real C++ & Python Interop (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GC2.1 | Add clang-sys dependency | libclang FFI bindings in Cargo.toml | [ ] |
+| GC2.2 | C++ header parser | Real clang::TranslationUnit parsing of .h files | [ ] |
+| GC2.3 | C++ function extraction | Extract function signatures from parsed AST | [ ] |
+| GC2.4 | C++ class extraction | Extract class methods, fields, inheritance | [ ] |
+| GC2.5 | C++ template instantiation | Detect and map template specializations | [ ] |
+| GC2.6 | C++ binding generator | Generate .fj extern blocks from parsed C++ | [ ] |
+| GC2.7 | C++ call bridge | Emit Cranelift IR that calls C++ functions via C ABI | [ ] |
+| GC2.8 | C++ std::string bridge | Convert between Fajar str and std::string | [ ] |
+| GC2.9 | C++ integration tests | Parse real headers (stdio.h, vector, opencv) | [ ] |
+| GC2.10 | C++ demo | Call OpenCV from Fajar Lang end-to-end | [ ] |
+| GC2.11 | Add pyo3 dependency | Python FFI bindings in Cargo.toml | [ ] |
+| GC2.12 | Python interpreter init | Real pyo3::Python::with_gil() initialization | [ ] |
+| GC2.13 | Python function call | Call Python function from Fajar, get result | [ ] |
+| GC2.14 | Python → Fajar callback | Register Fajar function callable from Python | [ ] |
+| GC2.15 | NumPy tensor bridge | Convert ndarray ↔ numpy.ndarray zero-copy | [ ] |
+| GC2.16 | Python module import | Import arbitrary Python modules | [ ] |
+| GC2.17 | Python GIL management | Proper GIL acquire/release around calls | [ ] |
+| GC2.18 | Python exception mapping | Map Python exceptions to Fajar Result::Err | [ ] |
+| GC2.19 | Python integration tests | Call numpy, pandas, torch from Fajar | [ ] |
+| GC2.20 | Python demo | Load PyTorch model, run inference in Fajar | [ ] |
+
+### Phase GC3: Distributed — Real Networking Runtime (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GC3.1 | Add tokio dependency | tokio runtime with net, sync, time features | [ ] |
+| GC3.2 | TCP transport layer | Real tokio::net::TcpStream/TcpListener for RPC | [ ] |
+| GC3.3 | Message serialization | bincode/serde for efficient wire format | [ ] |
+| GC3.4 | Actor mailbox (real) | tokio::sync::mpsc channel per actor | [ ] |
+| GC3.5 | Actor spawn (real) | tokio::spawn for concurrent actor execution | [ ] |
+| GC3.6 | Remote actor proxy | TCP-based proxy for cross-node actor messages | [ ] |
+| GC3.7 | Cluster discovery | UDP multicast for node discovery | [ ] |
+| GC3.8 | Heartbeat protocol | Periodic TCP keepalive between nodes | [ ] |
+| GC3.9 | Fault detection | Timeout-based failure detection with configurable threshold | [ ] |
+| GC3.10 | Connection pool (real) | Replace simulated pool with real tokio connections | [ ] |
+| GC3.11 | Distributed tensor split | Shard tensor across nodes via network | [ ] |
+| GC3.12 | AllReduce | Ring-allreduce gradient aggregation | [ ] |
+| GC3.13 | Parameter server | Centralized parameter store with push/pull | [ ] |
+| GC3.14 | Data parallel training | Distribute batches across nodes | [ ] |
+| GC3.15 | Checkpoint to shared storage | Save/load model from NFS/S3 path | [ ] |
+| GC3.16 | `fj cluster` CLI | Real cluster status, node list, health check | [ ] |
+| GC3.17 | `fj run --nodes N` | Actually distribute execution across N nodes | [ ] |
+| GC3.18 | Integration tests | 2-node cluster test, actor message roundtrip | [ ] |
+| GC3.19 | Distributed benchmark | 2-node vs 1-node speedup measurement | [ ] |
+| GC3.20 | Distributed documentation | Cluster setup guide, actor model tutorial | [ ] |
+
+### Phase GC4: Verification — Real SMT Solver Integration (1 sprint, 10 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GC4.1 | Add z3-sys dependency | Z3 solver C API bindings in Cargo.toml | [ ] |
+| GC4.2 | Z3 context creation | Real z3::Context and z3::Solver instantiation | [ ] |
+| GC4.3 | SMT-LIB2 generation | Convert Fajar verification conditions to SMT-LIB2 | [ ] |
+| GC4.4 | Bitvector theory | Encode integer operations as bitvector constraints | [ ] |
+| GC4.5 | Array theory | Encode tensor operations as array constraints | [ ] |
+| GC4.6 | Solver invocation | Real z3::Solver::check() with timeout | [ ] |
+| GC4.7 | Counterexample extraction | Extract model values on SAT result | [ ] |
+| GC4.8 | Tensor shape proofs | Connect tensor_verify.rs to Z3 for symbolic shapes | [ ] |
+| GC4.9 | `fj verify` CLI command | Run verification on annotated functions | [ ] |
+| GC4.10 | Verification integration tests | 10 tests: prove array bounds, shape compat, overflow | [ ] |
+
+### Phase GC5: Remaining Gaps (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GC5.1 | Incremental compilation hookup | Connect cache to main compiler compile_program() | [ ] |
+| GC5.2 | File watcher integration | Invalidate cache on file change in fj watch | [ ] |
+| GC5.3 | Parallel module compilation | Use rayon to compile independent modules concurrently | [ ] |
+| GC5.4 | Incremental integration tests | Verify cache hit/miss, rebuild correctness | [ ] |
+| GC5.5 | WASI Preview 2 upgrade | Add wasi:cli, wasi:io, wasi:filesystem interfaces | [ ] |
+| GC5.6 | Wasm Component Model | WIT parser, component binary format | [ ] |
+| GC5.7 | Wasmtime integration test | Compile Fajar → Wasm → run in Wasmtime | [ ] |
+| GC5.8 | LSP v3 symbol resolution | Connect semantic.rs to analyzer symbol table | [ ] |
+| GC5.9 | LSP v3 refactoring backend | Compute captured variables from AST for extract function | [ ] |
+| GC5.10 | LSP v3 integration tests | Test in VS Code with real .fj files | [ ] |
+| GC5.11 | Profiler — real sampling | Add perf/dtrace sampling via FFI | [ ] |
+| GC5.12 | Profiler — flamegraph | Generate real SVG flamegraph from samples | [ ] |
+| GC5.13 | Profiler — memory tracking | Track allocations via custom allocator | [ ] |
+| GC5.14 | Profiler integration tests | Profile a real program, verify output | [ ] |
+| GC5.15 | Plugin system — trait | Define CompilerPlugin trait with on_ast/on_ir hooks | [ ] |
+| GC5.16 | Plugin system — loading | Dynamic library loading for plugins | [ ] |
+| GC5.17 | Plugin system — API | AST visitor, diagnostic emitter, config parser | [ ] |
+| GC5.18 | Plugin system — builtin lint | Implement unused_variable lint as plugin | [ ] |
+| GC5.19 | Plugin integration tests | Load plugin, run on code, verify output | [ ] |
+| GC5.20 | GPU PTX execution | Real CUDA runtime API: cuModuleLoad, cuLaunchKernel | [ ] |
+| GC5.21 | GPU kernel dispatch | Launch PTX kernel with grid/block config | [ ] |
+| GC5.22 | GPU memory management | cuMalloc, cuMemcpy host↔device transfers | [ ] |
+| GC5.23 | GPU training loop | Forward + backward on GPU with real tensor data | [ ] |
+| GC5.24 | GPU integration tests | GPU matmul correctness, training convergence | [ ] |
+| GC5.25 | Formats parser — JSON | Real JSON parser (not just struct definitions) | [ ] |
+| GC5.26 | Formats parser — TOML | Real TOML parser | [ ] |
+| GC5.27 | Formats parser — CSV | Real CSV reader/writer | [ ] |
+| GC5.28 | System — process spawn | Real std::process::Command integration | [ ] |
+| GC5.29 | System — file watching | Real notify crate for file system events | [ ] |
+| GC5.30 | Gap closure verification | Run full integration test suite, update GAP_ANALYSIS_V2.md | [ ] |
 
 ---
 
@@ -940,29 +1077,39 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 ## Execution Strategy
 
-### Path A — "Self-Hosting First" (recommended)
+### MANDATORY FIRST: Option 0 (Gap Closure)
 ```
-1 (Self-Host) → 3 (IDE) → 2 (Registry) → 4 (Apps) → 5 (Docs)
+0 (Gap Closure) → THEN choose a path below
 ```
-Prove the language by writing its own compiler, then polish the ecosystem.
+**Option 0 is non-negotiable.** All V6/V7 framework modules must become real implementations before any new features. This ensures every claim in our documentation is backed by working code.
+
+### Path A — "Foundation First" (recommended)
+```
+0 (Gaps) → 1 (Self-Host) → 3 (IDE) → 2 (Registry) → 5 (Docs)
+```
+Close gaps, prove the language by self-hosting, then build ecosystem.
 
 ### Path B — "Ecosystem First"
 ```
-2 (Registry) → 3 (IDE) → 4 (Apps) → 5 (Docs) → 1 (Self-Host)
+0 (Gaps) → 2 (Registry) → 3 (IDE) → 4 (Apps) → 5 (Docs)
 ```
-Build the ecosystem first, self-host later.
+Close gaps, then build the ecosystem for adoption.
 
-### Path C — "Ship It"
+### Path C — "Ship & Grow"
 ```
-4 (Apps) → 5 (Docs) → 2 (Registry) → 10 (Community) → 1 (Self-Host)
+0 (Gaps) → 5 (Docs) → 4 (Apps) → 10 (Community) → 1 (Self-Host)
 ```
-Focus on real-world use cases and adoption.
+Close gaps, document everything, prove with real apps, grow community.
 
 ---
 
 ## Summary
 
 ```
+*** MANDATORY FIRST ***
+Option 0:   Gap Closure (V6/V7)       10 sprints  100 tasks    ~20 hrs
+
+*** THEN CHOOSE PATH ***
 Option 1:   Self-Hosting v3            8 sprints   80 tasks    ~16 hrs
 Option 2:   Package Registry           7 sprints   70 tasks    ~14 hrs
 Option 3:   IDE Experience             7 sprints   70 tasks    ~14 hrs
@@ -974,5 +1121,5 @@ Option 8:   Cross-Platform GUI         7 sprints   70 tasks    ~14 hrs
 Option 9:   FajarOS Nova v2.0          7 sprints   70 tasks    ~14 hrs
 Option 10:  Community & Governance     7 sprints   70 tasks    ~14 hrs
 
-Total:     71 sprints, 710 tasks, ~142 hours
+Total:     81 sprints, 810 tasks, ~162 hours
 ```
