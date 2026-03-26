@@ -138,6 +138,10 @@ impl LanguageServer for FajarLspBackend {
                 ),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -587,6 +591,146 @@ impl LanguageServer for FajarLspBackend {
             Ok(Some(locations))
         }
     }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        Ok(Some(compute_folding_ranges(&doc.source)))
+    }
+
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        Ok(Some(compute_code_lenses(&doc.source, &uri)))
+    }
+}
+
+// ── Folding Ranges ──────────────────────────────────────────────────
+
+/// Compute folding ranges for functions, structs, enums, impl blocks, and comments.
+fn compute_folding_ranges(source: &str) -> Vec<FoldingRange> {
+    let mut ranges = Vec::new();
+    let mut brace_stack: Vec<u32> = Vec::new();
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        let line_num = line_idx as u32;
+
+        // Block comment regions
+        if trimmed.starts_with("/*") {
+            brace_stack.push(line_num);
+        }
+        if trimmed.ends_with("*/") || trimmed.contains("*/") {
+            if let Some(start) = brace_stack.pop() {
+                if line_num > start {
+                    ranges.push(FoldingRange {
+                        start_line: start,
+                        start_character: None,
+                        end_line: line_num,
+                        end_character: None,
+                        kind: Some(FoldingRangeKind::Comment),
+                        collapsed_text: None,
+                    });
+                }
+            }
+        }
+
+        // Opening braces start a fold
+        if trimmed.ends_with('{') {
+            brace_stack.push(line_num);
+        }
+        // Closing braces end a fold
+        if trimmed == "}" || trimmed.starts_with('}') {
+            if let Some(start) = brace_stack.pop() {
+                if line_num > start {
+                    ranges.push(FoldingRange {
+                        start_line: start,
+                        start_character: None,
+                        end_line: line_num,
+                        end_character: None,
+                        kind: Some(FoldingRangeKind::Region),
+                        collapsed_text: None,
+                    });
+                }
+            }
+        }
+    }
+
+    ranges
+}
+
+// ── Code Lens ───────────────────────────────────────────────────────
+
+/// Compute code lenses for test functions and reference counts.
+fn compute_code_lenses(source: &str, uri: &Url) -> Vec<CodeLens> {
+    let mut lenses = Vec::new();
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // @test annotation → "Run Test" lens
+        if trimmed.starts_with("@test") {
+            lenses.push(CodeLens {
+                range: Range {
+                    start: Position { line: line_idx as u32, character: 0 },
+                    end: Position { line: line_idx as u32, character: trimmed.len() as u32 },
+                },
+                command: Some(Command {
+                    title: "Run Test".into(),
+                    command: "fajar.runTest".into(),
+                    arguments: Some(vec![
+                        serde_json::Value::String(uri.to_string()),
+                        serde_json::Value::Number((line_idx as u64).into()),
+                    ]),
+                }),
+                data: None,
+            });
+        }
+
+        // fn definitions → "N references" lens
+        if (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn "))
+            && trimmed.contains('(')
+        {
+            let fn_name = trimmed
+                .trim_start_matches("pub ")
+                .trim_start_matches("fn ")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .trim();
+
+            if !fn_name.is_empty() && fn_name != "main" {
+                let ref_count = source
+                    .lines()
+                    .filter(|l| l.contains(fn_name) && !l.trim().starts_with("//"))
+                    .count()
+                    .saturating_sub(1); // subtract the definition itself
+
+                lenses.push(CodeLens {
+                    range: Range {
+                        start: Position { line: line_idx as u32, character: 0 },
+                        end: Position { line: line_idx as u32, character: trimmed.len() as u32 },
+                    },
+                    command: Some(Command {
+                        title: format!("{ref_count} references"),
+                        command: "fajar.showReferences".into(),
+                        arguments: None,
+                    }),
+                    data: None,
+                });
+            }
+        }
+    }
+
+    lenses
 }
 
 // ── Semantic Tokens ─────────────────────────────────────────────────
@@ -1603,5 +1747,66 @@ mod tests {
     fn find_fn_signature_not_found() {
         let source = "fn main() -> void {}";
         assert!(find_fn_signature(source, "nonexistent").is_none());
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V8 IDE1: Folding ranges + Code lens tests
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn ide1_folding_range_function() {
+        let source = "fn main() {\n    let x = 42\n    println(x)\n}";
+        let ranges = compute_folding_ranges(source);
+        assert!(!ranges.is_empty(), "should find at least 1 fold");
+        assert_eq!(ranges[0].start_line, 0);
+        assert_eq!(ranges[0].end_line, 3);
+    }
+
+    #[test]
+    fn ide1_folding_range_nested() {
+        let source = "fn f() {\n    if true {\n        1\n    }\n}";
+        let ranges = compute_folding_ranges(source);
+        assert!(ranges.len() >= 2, "should find 2+ folds (fn + if)");
+    }
+
+    #[test]
+    fn ide1_folding_range_empty() {
+        let source = "let x = 42";
+        let ranges = compute_folding_ranges(source);
+        assert!(ranges.is_empty(), "no braces = no folds");
+    }
+
+    #[test]
+    fn ide1_code_lens_test_annotation() {
+        let source = "@test\nfn test_add() {\n    assert_eq(1 + 1, 2)\n}";
+        let uri = Url::parse("file:///test.fj").unwrap();
+        let lenses = compute_code_lenses(source, &uri);
+        assert!(
+            lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("Run Test"))),
+            "should have Run Test lens"
+        );
+    }
+
+    #[test]
+    fn ide1_code_lens_references() {
+        let source = "fn add(a: i64, b: i64) -> i64 { a + b }\nfn main() { add(1, 2) }";
+        let uri = Url::parse("file:///test.fj").unwrap();
+        let lenses = compute_code_lenses(source, &uri);
+        assert!(
+            lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("reference"))),
+            "should have references lens for add()"
+        );
+    }
+
+    #[test]
+    fn ide1_code_lens_main_excluded() {
+        let source = "fn main() { }";
+        let uri = Url::parse("file:///test.fj").unwrap();
+        let lenses = compute_code_lenses(source, &uri);
+        // main() should not get a references lens (excluded by convention)
+        assert!(
+            !lenses.iter().any(|l| l.command.as_ref().is_some_and(|c| c.title.contains("reference"))),
+            "main() should not get references lens"
+        );
     }
 }
