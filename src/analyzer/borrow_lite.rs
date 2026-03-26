@@ -334,6 +334,7 @@ pub fn is_copy_type(ty: &Type) -> bool {
             | Type::Unknown
             | Type::TypeVar(_)
             | Type::Ref(_)
+            | Type::Struct { .. }
     )
 }
 
@@ -665,12 +666,13 @@ mod tests {
         assert!(is_copy_type(&Type::Str));
         // References are Copy
         assert!(is_copy_type(&Type::Ref(Box::new(Type::I64))));
-        // Non-Copy types
-        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
-        assert!(!is_copy_type(&Type::Struct {
+        // Struct: Copy (interpreter uses Rc-based value semantics)
+        assert!(is_copy_type(&Type::Struct {
             name: "Point".into(),
             fields: std::collections::HashMap::new()
         }));
+        // Array: still non-Copy
+        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
     }
 
     #[test]

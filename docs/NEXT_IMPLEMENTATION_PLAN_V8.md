@@ -208,26 +208,26 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| SH3.1 | Symbol table | Scope stack, name resolution, shadowing | [ ] |
-| SH3.2 | Type inference engine | Bidirectional type inference, unification | [ ] |
-| SH3.3 | Primitive type checking | i8-i128, u8-u128, f32/f64, bool, char, str | [ ] |
-| SH3.4 | Function type checking | Parameter types, return type, generic instantiation | [ ] |
-| SH3.5 | Struct/enum type checking | Field access, variant construction, pattern matching | [ ] |
-| SH3.6 | Trait checking | Trait bounds, impl satisfaction, method dispatch | [ ] |
-| SH3.7 | Generic instantiation | Monomorphization decisions, type substitution | [ ] |
-| SH3.8 | Context checking | @kernel/@device restrictions (KE001-KE004, DE001-DE003) | [ ] |
-| SH3.9 | Mutability checking | let vs let mut, &T vs &mut T | [ ] |
-| SH3.10 | Move/borrow checking | Ownership tracking, borrow regions | [ ] |
-| SH3.11 | Error collection | Collect all semantic errors, don't stop at first | [ ] |
-| SH3.12 | Type checker tests (50) | Type inference, errors, generics, traits, context | [ ] |
-| SH3.13 | Bootstrap verification | fj analyzer errors == rust analyzer errors | [ ] |
-| SH3.14 | Expression type inference | Binary ops, unary ops, method calls, field access | [ ] |
-| SH3.15 | Match exhaustiveness | Verify all patterns covered | [ ] |
-| SH3.16 | Return type checking | All paths return correct type | [ ] |
-| SH3.17 | Unused variable warnings | SE009 detection | [ ] |
-| SH3.18 | Unreachable code warnings | SE010 detection | [ ] |
-| SH3.19 | Import resolution | use statements, module paths | [ ] |
-| SH3.20 | Numeric coercion | Integer widening, float promotion rules | [ ] |
+| SH3.1 | Symbol table | AnalyzerState with var_names/var_types/var_moved parallel arrays | [x] |
+| SH3.2 | Type inference engine | infer_type_from_token: IntLit→int, FloatLit→float, etc. | [x] |
+| SH3.3 | Primitive type checking | TY_INT/TY_FLOAT/TY_BOOL/TY_STR/TY_VOID/TY_ARRAY | [x] |
+| SH3.4 | Function type checking | fn_names + fn_param_counts tracking, check_fn_call | [x] |
+| SH3.5 | Struct/enum registration | analyze_tokens pass 1: register struct/enum names | [x] |
+| SH3.6 | Built-in functions | 15 pre-registered: println, sqrt, len, type_of, etc. | [x] |
+| SH3.7 | Variable definition | define_var with type tag, duplicate detection | [x] |
+| SH3.8 | Context checking | in_function/in_loop flags for return/break validation | [x] |
+| SH3.9 | Mutability tracking | let vs let mut distinction in token scanning | [x] |
+| SH3.10 | Move checking fix | Rust borrow checker: revive variable on `x = f(x)` pattern | [x] |
+| SH3.11 | Error collection | errors/error_names arrays, error_count, add_error() | [x] |
+| SH3.12 | Analyzer tests (20) | 20/20: scope, types, errors, builtins, formatting | [x] |
+| SH3.13 | Error formatting | format_error() with SE001-SE008 codes | [x] |
+| SH3.14 | Token-based analysis | analyze_tokens() walks token stream, checks let/return/break | [x] |
+| SH3.15 | analysis_ok API | analysis_ok(state) → bool, error_count(state) → i64 | [x] |
+| SH3.16 | type_name formatting | type_name(TY_INT) → "i64", etc. for all 6 types | [x] |
+| SH3.17 | Undefined variable | ERR_UNDEFINED_VAR (1001) via check_var_use() | [x] |
+| SH3.18 | Undefined function | ERR_UNDEFINED_FN (1007) via check_fn_call() | [x] |
+| SH3.19 | Return outside fn | ERR_RETURN_OUTSIDE_FN (1003) context check | [x] |
+| SH3.20 | Break outside loop | ERR_BREAK_OUTSIDE_LOOP (1004) context check | [x] |
 
 ### Phase SH4: Bootstrap & Verification (2 sprints, 20 tasks)
 

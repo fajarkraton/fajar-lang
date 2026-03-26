@@ -1,0 +1,60 @@
+// Self-Hosted Bootstrap v3 — Full Pipeline Test
+// V8 SH4: Combines lexer + parser + analyzer + compiler pipeline
+// Run: cat stdlib/lexer.fj stdlib/parser.fj stdlib/analyzer.fj stdlib/compiler.fj examples/selfhost_bootstrap_v3.fj > /tmp/bootstrap.fj && fj run /tmp/bootstrap.fj
+
+fn main() -> void {
+    println("╔═══════════════════════════════════════════════════╗")
+    println("║  Fajar Lang Self-Hosted Compiler v3              ║")
+    println("║  Lexer (469) + Parser (675) + Analyzer (367)     ║")
+    println("║  + Compiler Pipeline = 1,700+ lines of .fj       ║")
+    println("╚═══════════════════════════════════════════════════╝")
+    println("")
+
+    // Phase 1: Bootstrap verification (15 programs)
+    let bootstrap_ok = bootstrap_verify()
+
+    // Phase 2: Differential testing (5 token count comparisons)
+    let diff_ok = differential_test()
+
+    // Phase 3: Stress test (10 to 500 statements)
+    stress_test()
+
+    // Phase 4: Self-compilation test
+    println("\n=== Self-Compilation ===")
+
+    // Compile the lexer source itself
+    let lexer_src = match read_file("stdlib/lexer.fj") {
+        Ok(c) => c,
+        Err(_) => ""
+    }
+    if lexer_src != "" {
+        let r = compile(lexer_src, "stdlib/lexer.fj")
+        display_result(r)
+    } else {
+        println("  (stdlib/lexer.fj not found — skipping)")
+    }
+
+    // Compile the analyzer source
+    let analyzer_src = match read_file("stdlib/analyzer.fj") {
+        Ok(c) => c,
+        Err(_) => ""
+    }
+    if analyzer_src != "" {
+        let r = compile(analyzer_src, "stdlib/analyzer.fj")
+        display_result(r)
+    } else {
+        println("  (stdlib/analyzer.fj not found — skipping)")
+    }
+
+    // Final summary
+    println("\n═══════════════════════════════════════════════════")
+    if bootstrap_ok && diff_ok {
+        println("RESULT: BOOTSTRAP VERIFIED — Self-hosted compiler working!")
+        println("  Stage 0: Rust compiler (fj) executed this .fj file")
+        println("  Stage 1: Self-hosted lex→parse→analyze pipeline")
+        println("  Verified: 15 programs + 5 differential + stress test")
+    } else {
+        println("RESULT: SOME TESTS FAILED — see details above")
+    }
+    println("═══════════════════════════════════════════════════")
+}
