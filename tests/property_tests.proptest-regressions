@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc b54732d3c050fe19de1d2b5756f2718e2ee5d3fcd6a7eee065b3cfd4b3e2196c # shrinks to name = "i8", val = 0
+cc 2a807875e54330a5592fcce9e6b96884bf7a2c25901454b1f09312492f82ea31 # shrinks to name = "Aaa", field = "if"

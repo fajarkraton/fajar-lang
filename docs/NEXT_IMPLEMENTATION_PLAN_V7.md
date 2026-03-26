@@ -613,11 +613,11 @@ full system benchmark, hardware validation report)*
 | QA1.8 | Fix macOS CI | ARM64 cross-compilation | [x] |
 | QA1.9 | Dependency update | `cargo update`, fix breaking changes | [x] |
 | QA1.10 | MSRV pin | Set minimum supported Rust version | [x] |
-| QA1.11 | Fuzz all targets | 10M iterations per target (lexer/parser/analyzer/interp) | [ ] |
-| QA1.12 | Fix fuzz findings | Address the 1 known leak + any new crashes | [ ] |
-| QA1.13 | Property test expansion | 50 new proptest invariants | [ ] |
-| QA1.14 | Integration test expansion | 50 new eval_tests | [ ] |
-| QA1.15 | Benchmark baseline | Record all benchmarks for regression tracking | [ ] |
+| QA1.11 | Fuzz all targets | 10M iterations per target (lexer/parser/analyzer/interp) | [x] |
+| QA1.12 | Fix fuzz findings | Address the 1 known leak + any new crashes | [x] |
+| QA1.13 | Property test expansion | 50 new proptest invariants | [x] |
+| QA1.14 | Integration test expansion | 50 new eval_tests | [x] |
+| QA1.15 | Benchmark baseline | Record all benchmarks for regression tracking | [x] |
 | QA1.16 | Code coverage report | tarpaulin → 85%+ target | [ ] |
 | QA1.17 | Error message audit | All errors have codes, spans, suggestions | [ ] |
 | QA1.18 | REPL stability | Test 100 common REPL interactions | [ ] |
