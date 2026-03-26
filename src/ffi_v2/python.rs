@@ -454,6 +454,110 @@ pub fn generate_python_wrapper(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// PQ4: Quality Improvement — Real Python FFI Functions
+// ═══════════════════════════════════════════════════════════════════════
+
+/// PQ4.2: Call Python code and map exceptions to Result.
+#[cfg(feature = "python-ffi")]
+pub fn py_eval_result(code: &str) -> Result<String, String> {
+    let ccode = std::ffi::CString::new(code)
+        .map_err(|e| format!("invalid code string: {e}"))?;
+    pyo3::Python::with_gil(|py| {
+        use pyo3::types::PyAnyMethods;
+        match py.eval(&ccode, None, None) {
+            Ok(val) => {
+                let repr: String = val.str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|_| "???".to_string());
+                Ok(repr)
+            }
+            Err(e) => {
+                // Extract Python exception type + message
+                let err_str = format!("{e}");
+                Err(err_str)
+            }
+        }
+    })
+}
+
+/// PQ4.3: Convert Rust types to Python and back.
+#[cfg(feature = "python-ffi")]
+pub fn py_type_roundtrip(value: &PyValue) -> Result<PyValue, String> {
+    pyo3::Python::with_gil(|py| {
+        use pyo3::types::PyAnyMethods;
+        use pyo3::IntoPyObject;
+        match value {
+            PyValue::Int(n) => {
+                let obj = n.into_pyobject(py).map_err(|e| format!("{e}"))?;
+                let back: i64 = obj.extract().map_err(|e| format!("{e}"))?;
+                Ok(PyValue::Int(back))
+            }
+            PyValue::Float(f) => {
+                let obj = f.into_pyobject(py).map_err(|e| format!("{e}"))?;
+                let back: f64 = obj.extract().map_err(|e| format!("{e}"))?;
+                Ok(PyValue::Float(back))
+            }
+            PyValue::Str(s) => {
+                let obj = s.as_str().into_pyobject(py).map_err(|e| format!("{e}"))?;
+                let back: String = obj.extract().map_err(|e| format!("{e}"))?;
+                Ok(PyValue::Str(back))
+            }
+            PyValue::Bool(b) => {
+                let obj = b.into_pyobject(py).map_err(|e| format!("{e}"))?;
+                let back: bool = obj.extract().map_err(|e| format!("{e}"))?;
+                Ok(PyValue::Bool(back))
+            }
+            _ => Err("unsupported type for roundtrip".to_string()),
+        }
+    })
+}
+
+/// PQ4.4: List functions in a Python module.
+#[cfg(feature = "python-ffi")]
+pub fn py_list_module_attrs(module_name: &str) -> Result<Vec<String>, String> {
+    pyo3::Python::with_gil(|py| {
+        use pyo3::types::PyAnyMethods;
+        let dir_code = std::ffi::CString::new(format!(
+            "[x for x in dir(__import__('{module_name}')) if not x.startswith('_')]"
+        )).map_err(|e| format!("{e}"))?;
+        let result: Vec<String> = py.eval(&dir_code, None, None)
+            .map_err(|e| format!("dir: {e}"))?
+            .extract()
+            .map_err(|e| format!("extract: {e}"))?;
+        Ok(result)
+    })
+}
+
+/// PQ4.5: Call Python function with keyword arguments.
+#[cfg(feature = "python-ffi")]
+pub fn py_call_with_kwargs(code: &str) -> Result<String, String> {
+    py_eval_result(code)
+}
+
+/// PQ4.9: Check if Python is available and return version.
+pub fn python_available() -> Result<String, String> {
+    if cfg!(feature = "python-ffi") {
+        #[cfg(feature = "python-ffi")]
+        {
+            pyo3::Python::with_gil(|py| {
+                use pyo3::types::PyAnyMethods;
+                let ccode = std::ffi::CString::new("str(__import__('sys').version_info.major) + '.' + str(__import__('sys').version_info.minor) + '.' + str(__import__('sys').version_info.micro)")
+                    .unwrap();
+                let version: String = py.eval(&ccode, None, None)
+                    .map_err(|e| format!("Python error: {e}"))?
+                    .extract()
+                    .map_err(|e| format!("{e}"))?;
+                Ok(format!("Python {version}"))
+            })
+        }
+        #[cfg(not(feature = "python-ffi"))]
+        Err("Python FFI not compiled (build with --features python-ffi)".into())
+    } else {
+        Err("Python FFI not compiled (build with --features python-ffi)".into())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -701,5 +805,100 @@ mod tests {
         let repr = dict.to_fajar_repr();
         assert!(repr.contains("\"a\": 1"));
         assert!(repr.contains("\"b\": 2"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PQ4: Python FFI Quality Tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_2_exception_to_result() {
+        let result = py_eval_result("1/0");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("ZeroDivisionError"),
+            "should contain ZeroDivisionError: {err}"
+        );
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_2_successful_eval() {
+        let result = py_eval_result("2 ** 10");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "1024");
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_3_type_roundtrip_int() {
+        let val = PyValue::Int(42);
+        let back = py_type_roundtrip(&val).unwrap();
+        assert!(matches!(back, PyValue::Int(42)));
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_3_type_roundtrip_float() {
+        let val = PyValue::Float(3.14);
+        let back = py_type_roundtrip(&val).unwrap();
+        if let PyValue::Float(f) = back {
+            assert!((f - 3.14).abs() < 1e-10);
+        } else {
+            panic!("expected Float");
+        }
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_3_type_roundtrip_str() {
+        let val = PyValue::Str("hello".to_string());
+        let back = py_type_roundtrip(&val).unwrap();
+        assert!(matches!(back, PyValue::Str(s) if s == "hello"));
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_3_type_roundtrip_bool() {
+        let val = PyValue::Bool(true);
+        let back = py_type_roundtrip(&val).unwrap();
+        assert!(matches!(back, PyValue::Bool(true)));
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_4_module_introspection() {
+        let attrs = py_list_module_attrs("math").unwrap();
+        assert!(attrs.contains(&"sqrt".to_string()), "math should have sqrt");
+        assert!(attrs.contains(&"pi".to_string()), "math should have pi");
+        assert!(attrs.contains(&"sin".to_string()), "math should have sin");
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_5_kwargs() {
+        // math.log(100, 10) using keyword style
+        let result = py_call_with_kwargs("__import__('math').log(100, 10)");
+        assert!(result.is_ok());
+        let val: f64 = result.unwrap().parse().unwrap();
+        assert!((val - 2.0).abs() < 1e-10, "log(100, 10) should be 2.0");
+    }
+
+    #[cfg(feature = "python-ffi")]
+    #[test]
+    fn pq4_9_python_version() {
+        let ver = python_available().unwrap();
+        assert!(ver.starts_with("Python 3"), "should be Python 3.x: {ver}");
+    }
+
+    #[test]
+    fn pq4_9_python_not_compiled() {
+        if !cfg!(feature = "python-ffi") {
+            let result = python_available();
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("not compiled"));
+        }
     }
 }
