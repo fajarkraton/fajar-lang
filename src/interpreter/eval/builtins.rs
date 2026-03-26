@@ -4398,14 +4398,27 @@ impl Interpreter {
                     )
                 }
             }
-            _ => Err(RuntimeError::TypeError(format!(
-                "cannot access field '{field}' on {}",
-                obj.type_name()
-            ))
-            .into()),
+            _ => {
+                // Check if this might be a method call without ()
+                let type_name = obj.type_name();
+                #[allow(clippy::needless_borrow)]
+                let is_known_method = is_known_method_name(&type_name, field);
+                let hint = if is_known_method {
+                    format!(
+                        " — did you mean `{field}()`? (add parentheses for method call)"
+                    )
+                } else {
+                    String::new()
+                };
+                Err(RuntimeError::TypeError(format!(
+                    "cannot access field '{field}' on {type_name}{hint}"
+                ))
+                .into())
+            }
         }
     }
 
+    /// Evaluates index access: `arr[i]`.
     /// Evaluates index access: `arr[i]`.
     pub(super) fn eval_index(&mut self, object: &Expr, index: &Expr) -> EvalResult {
         let obj = self.eval_expr(object)?;
@@ -5333,5 +5346,23 @@ impl Interpreter {
             .collect();
         let v = vals?;
         Ok((v[0], v[1], v[2], v[3]))
+    }
+}
+
+/// Check if a field name is a known method on a type (for "did you mean X()?" hints).
+fn is_known_method_name(type_name: &str, field: &str) -> bool {
+    match type_name {
+        "str" => matches!(
+            field,
+            "len" | "trim" | "to_uppercase" | "to_lowercase" | "chars"
+                | "split" | "contains" | "starts_with" | "ends_with"
+                | "replace" | "substring" | "parse_int" | "parse_float"
+        ),
+        "array" => matches!(
+            field,
+            "len" | "push" | "pop" | "sort" | "reverse" | "contains"
+                | "iter" | "map" | "filter" | "collect"
+        ),
+        _ => false,
     }
 }

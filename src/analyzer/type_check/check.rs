@@ -939,7 +939,21 @@ impl TypeChecker {
                 ty
             }
             None => {
-                let suggestion = suggest_similar(name, &self.symbols.all_names());
+                let mut suggestion = suggest_similar(name, &self.symbols.all_names());
+
+                // If the name looks like a common function name but isn't defined,
+                // suggest adding `fn` keyword (beginner forgot `fn`)
+                if suggestion.is_none() || suggestion.as_deref() == Some("did you mean 'min'?") {
+                    let common_fn_names = [
+                        "main", "init", "setup", "run", "start", "test", "new",
+                        "create", "build", "parse", "process", "handle", "update",
+                    ];
+                    if common_fn_names.contains(&name) {
+                        suggestion =
+                            Some(format!("did you mean `fn {name}()`? (missing `fn` keyword)"));
+                    }
+                }
+
                 self.errors.push(SemanticError::UndefinedVariable {
                     name: name.to_string(),
                     span,
@@ -1006,11 +1020,30 @@ impl TypeChecker {
                         Type::Unknown
                     }
                 } else {
+                    // Generate helpful hint for common type mismatches
+                    let hint = if (lt.is_numeric() && rt == Type::Str)
+                        || (lt == Type::Str && rt.is_numeric())
+                    {
+                        if op == BinOp::Add {
+                            Some("to concatenate, convert the number: `to_string(x) + s`".into())
+                        } else {
+                            Some("to do arithmetic, convert the string: `parse_int(s)`".into())
+                        }
+                    } else if lt == Type::Str && rt == Type::Str && op != BinOp::Add {
+                        Some("strings only support `+` (concatenation), not arithmetic".into())
+                    } else {
+                        Some(format!(
+                            "cannot use `{}` between {} and {}",
+                            op,
+                            lt.display_name(),
+                            rt.display_name()
+                        ))
+                    };
                     self.errors.push(SemanticError::TypeMismatch {
                         expected: "numeric".into(),
                         found: format!("{} and {}", lt.display_name(), rt.display_name()),
                         span: left.span(),
-                        hint: None,
+                        hint,
                     });
                     Type::Unknown
                 }
