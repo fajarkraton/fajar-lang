@@ -948,7 +948,60 @@ pub fn udp_send_recv(
 
 /// Perform a real HTTP request using std::net::TcpStream.
 /// Supports HTTP/1.1 GET and POST.
+/// Perform an HTTP request, following redirects if configured (NQ2.7).
 pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
+    let mut current_url = req.url.clone();
+    let mut redirects = 0u32;
+
+    loop {
+        let mut single_req = req.clone();
+        single_req.url = current_url.clone();
+
+        let resp = http_request_single(&single_req)?;
+
+        // Check for redirect
+        if req.follow_redirects
+            && (resp.status == 301 || resp.status == 302 || resp.status == 303
+                || resp.status == 307 || resp.status == 308)
+        {
+            redirects += 1;
+            if redirects > req.max_redirects {
+                return Err(format!(
+                    "too many redirects (max {})",
+                    req.max_redirects
+                ));
+            }
+
+            if let Some(location) = resp.header("location") {
+                // Handle absolute and relative redirects
+                if location.starts_with("http://") || location.starts_with("https://") {
+                    current_url = location.to_string();
+                } else {
+                    // Relative redirect — resolve against current URL
+                    let base = Url::parse(&current_url)
+                        .map_err(|e| format!("parse base URL: {e}"))?;
+                    current_url = format!(
+                        "{}://{}:{}{}",
+                        base.scheme, base.host, base.port, location
+                    );
+                }
+
+                // 303: always change method to GET
+                if resp.status == 303 {
+                    single_req.method = HttpMethod::Get;
+                    single_req.body = None;
+                }
+
+                continue;
+            }
+        }
+
+        return Ok(resp);
+    }
+}
+
+/// Perform a single HTTP request without redirect following.
+fn http_request_single(req: &HttpRequest) -> Result<HttpResponse, String> {
     let url = Url::parse(&req.url)?;
     let host = &url.host;
     let port = url.port;
@@ -1981,6 +2034,110 @@ mod tests {
     #[test]
     fn nq2_1_tls_available_check() {
         assert!(tls_available(), "tls feature should be enabled");
+    }
+
+    #[test]
+    fn nq2_7_http_redirect_follow() {
+        // Server that redirects once then serves content
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            // Request 1: send 302 redirect
+            let (mut stream1, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = stream1.read(&mut buf);
+            let redirect = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{addr}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            stream1.write_all(redirect.as_bytes()).unwrap();
+            drop(stream1);
+
+            // Request 2: serve final content
+            let (mut stream2, _) = listener.accept().unwrap();
+            let mut buf2 = [0u8; 1024];
+            let _ = stream2.read(&mut buf2);
+            let body = "redirected successfully";
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream2.write_all(resp.as_bytes()).unwrap();
+        });
+
+        // Request with redirect following
+        let req = HttpRequest::get(&format!("http://{addr}/start"));
+        let resp = http_request(&req).unwrap();
+        assert_eq!(resp.status, 200, "should follow redirect to 200");
+        assert_eq!(
+            resp.text().unwrap(),
+            "redirected successfully",
+            "body should be from final URL"
+        );
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn nq2_7_http_redirect_max_exceeded() {
+        // Server that always redirects to itself (infinite loop)
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            for _ in 0..4 {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let mut buf = [0u8; 512];
+                    let _ = stream.read(&mut buf);
+                    let redirect = format!(
+                        "HTTP/1.1 302 Found\r\nLocation: http://{addr}/loop\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    let _ = stream.write_all(redirect.as_bytes());
+                }
+            }
+        });
+
+        // Request with max_redirects = 3
+        let mut req = HttpRequest::get(&format!("http://{addr}/loop"));
+        req.max_redirects = 3;
+        let result = http_request(&req);
+        assert!(result.is_err(), "should error on too many redirects");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("too many redirects"),
+            "error should mention redirects: {err}"
+        );
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn nq2_7_http_no_redirect_when_disabled() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 512];
+            let _ = stream.read(&mut buf);
+            let redirect = format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{addr}/other\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(redirect.as_bytes()).unwrap();
+        });
+
+        // Request with follow_redirects disabled
+        let mut req = HttpRequest::get(&format!("http://{addr}/start"));
+        req.follow_redirects = false;
+        let resp = http_request(&req).unwrap();
+        assert_eq!(resp.status, 302, "should NOT follow redirect");
+        assert!(
+            resp.header("location").is_some(),
+            "should have Location header"
+        );
+
+        handle.join().unwrap();
     }
 
     #[test]
