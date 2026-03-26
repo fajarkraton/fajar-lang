@@ -996,15 +996,15 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
     }
     stream.flush().map_err(|e| format!("HTTP flush: {e}"))?;
 
-    // Read response
-    let reader = BufReader::new(&stream);
-    let mut lines = reader.lines();
+    // Read entire response using a single BufReader (preserves buffered data)
+    let mut reader = BufReader::new(&stream);
 
     // Parse status line
-    let status_line = lines
-        .next()
-        .ok_or("empty response")?
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
         .map_err(|e| format!("read status: {e}"))?;
+    let status_line = status_line.trim_end().to_string();
     let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
     if parts.len() < 2 {
         return Err(format!("invalid status line: {status_line}"));
@@ -1015,12 +1015,16 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
     // Parse headers
     let mut headers = HashMap::new();
     let mut content_length: usize = 0;
-    for line_result in lines.by_ref() {
-        let line = line_result.map_err(|e| format!("read header: {e}"))?;
-        if line.is_empty() {
+    loop {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|e| format!("read header: {e}"))?;
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
             break;
         }
-        if let Some((k, v)) = line.split_once(": ") {
+        if let Some((k, v)) = trimmed.split_once(": ") {
             let key = k.to_lowercase();
             if key == "content-length" {
                 content_length = v.trim().parse().unwrap_or(0);
@@ -1029,16 +1033,49 @@ pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
         }
     }
 
-    // Read body
+    // Read body — handle Content-Length, chunked transfer, or read-to-EOF
+    let is_chunked = headers
+        .get("transfer-encoding")
+        .is_some_and(|v| v.to_lowercase().contains("chunked"));
+
     let mut body = Vec::new();
-    if content_length > 0 {
+    if is_chunked {
+        // NQ2.4: Chunked transfer encoding (RFC 7230 §4.1)
+        // Same BufReader ensures no data is lost between header and body parsing
+        loop {
+            let mut size_line = String::new();
+            if reader.read_line(&mut size_line).unwrap_or(0) == 0 {
+                break;
+            }
+            let hex = size_line
+                .trim()
+                .split(';')
+                .next()
+                .unwrap_or("0")
+                .trim();
+            let chunk_size = usize::from_str_radix(hex, 16).unwrap_or(0);
+            if chunk_size == 0 {
+                // Final chunk — consume optional trailers + CRLF
+                let mut trailer = String::new();
+                let _ = reader.read_line(&mut trailer);
+                break;
+            }
+            let mut chunk = vec![0u8; chunk_size];
+            if reader.read_exact(&mut chunk).is_err() {
+                break;
+            }
+            body.extend_from_slice(&chunk);
+            // Consume trailing CRLF after chunk data
+            let mut crlf = [0u8; 2];
+            let _ = reader.read_exact(&mut crlf);
+        }
+    } else if content_length > 0 {
         body.resize(content_length, 0);
-        stream
+        reader
             .read_exact(&mut body)
             .map_err(|e| format!("read body: {e}"))?;
     } else {
-        // Read until EOF for chunked/unknown length
-        let _ = stream.read_to_end(&mut body);
+        let _ = reader.read_to_end(&mut body);
     }
 
     let elapsed = start.elapsed();
@@ -1803,6 +1840,50 @@ mod tests {
     #[test]
     fn nq2_1_tls_available_check() {
         assert!(tls_available(), "tls feature should be enabled");
+    }
+
+    #[test]
+    fn nq2_4_chunked_transfer() {
+        // Start HTTP server that sends chunked response
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            // Read request (just drain it)
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+
+            // Send chunked response
+            let response = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Transfer-Encoding: chunked\r\n",
+                "Content-Type: text/plain\r\n",
+                "\r\n",
+                "5\r\n",       // chunk 1: 5 bytes
+                "Hello\r\n",
+                "7\r\n",       // chunk 2: 7 bytes
+                ", World\r\n",
+                "0\r\n",       // final chunk
+                "\r\n"
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        // Make request to our chunked server
+        let req = HttpRequest::get(&format!("http://{addr}/"));
+        let resp = http_request(&req).unwrap();
+
+        assert_eq!(resp.status, 200);
+        let body = resp.text().unwrap();
+        assert_eq!(body, "Hello, World", "chunked body should be reassembled");
+        assert_eq!(
+            resp.header("transfer-encoding"),
+            Some("chunked"),
+            "header should indicate chunked"
+        );
+
+        handle.join().unwrap();
     }
 
     #[test]
