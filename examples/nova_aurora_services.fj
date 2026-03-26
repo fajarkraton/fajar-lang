@@ -1,0 +1,520 @@
+// FajarOS Nova v3.0 "Aurora" — System Services
+// Phase A4: Sound server, Bluetooth, WiFi, power mgmt, service manager, OOM killer
+// Written 100% in Fajar Lang — bare-metal x86_64
+// 30 tasks: A4.1 (services) + A4.2 (networking) + A4.3 (power/boot)
+
+// ═══════════════════════════════════════════════════════════════
+// A4.1: Service Manager (systemd-style)
+// ═══════════════════════════════════════════════════════════════
+
+const SVC_MAX: i64 = 32
+const SVC_TABLE: i64 = 0x3500000
+const SVC_SIZE: i64 = 256
+
+const SVC_OFF_STATE: i64 = 0       // 0=stopped, 1=starting, 2=running, 3=stopping, 4=failed
+const SVC_OFF_PID: i64 = 4
+const SVC_OFF_NAME: i64 = 8        // 32-byte name
+const SVC_OFF_TYPE: i64 = 40       // 0=simple, 1=forking, 2=oneshot, 3=notify
+const SVC_OFF_RESTART: i64 = 44    // 0=no, 1=on-failure, 2=always
+const SVC_OFF_DEPS: i64 = 48       // dependency bitmask (which services must start first)
+const SVC_OFF_WANTS: i64 = 52      // weak dependency bitmask
+const SVC_OFF_EXIT_CODE: i64 = 56
+const SVC_OFF_RESTARTS: i64 = 60   // restart count
+const SVC_OFF_START_TIME: i64 = 64 // start timestamp (ticks)
+const SVC_OFF_WATCHDOG: i64 = 68   // watchdog timeout (ms, 0=disabled)
+const SVC_OFF_LAST_KICK: i64 = 72  // last watchdog kick
+const SVC_OFF_RUNLEVEL: i64 = 76   // target runlevel
+
+// Service states
+const SVC_STOPPED: i64 = 0
+const SVC_STARTING: i64 = 1
+const SVC_RUNNING: i64 = 2
+const SVC_STOPPING: i64 = 3
+const SVC_FAILED: i64 = 4
+
+@kernel fn svc_get(id: i64, off: i64) -> i64 { volatile_read_u32(SVC_TABLE + id * SVC_SIZE + off) }
+@kernel fn svc_set(id: i64, off: i64, val: i64) { volatile_write_u32(SVC_TABLE + id * SVC_SIZE + off, val) }
+
+// ── A4.1.1: Service registration ──
+
+@kernel fn svc_register(name_addr: i64, svc_type: i64, restart_policy: i64) -> i64 {
+    let mut id: i64 = 0
+    while id < SVC_MAX {
+        if svc_get(id, SVC_OFF_STATE) == SVC_STOPPED {
+            if svc_get(id, SVC_OFF_NAME) == 0 { // unused slot
+                // Copy name
+                let dst = SVC_TABLE + id * SVC_SIZE + SVC_OFF_NAME
+                let mut i: i64 = 0
+                while i < 31 {
+                    let b = volatile_read_u8(name_addr + i)
+                    volatile_write_u8(dst + i, b)
+                    if b == 0 { break }
+                    i = i + 1
+                }
+                volatile_write_u8(dst + 31, 0)
+                svc_set(id, SVC_OFF_TYPE, svc_type)
+                svc_set(id, SVC_OFF_RESTART, restart_policy)
+                svc_set(id, SVC_OFF_RESTARTS, 0)
+                return id
+            }
+        }
+        id = id + 1
+    }
+    -1
+}
+
+// ── A4.1.2: Dependency resolution (topological sort) ──
+
+@kernel fn svc_add_dependency(id: i64, dep_id: i64) {
+    let deps = svc_get(id, SVC_OFF_DEPS)
+    svc_set(id, SVC_OFF_DEPS, deps | (1 << dep_id))
+}
+
+@kernel fn svc_deps_satisfied(id: i64) -> i64 {
+    let deps = svc_get(id, SVC_OFF_DEPS)
+    let mut bit: i64 = 0
+    while bit < SVC_MAX {
+        if (deps & (1 << bit)) != 0 {
+            if svc_get(bit, SVC_OFF_STATE) != SVC_RUNNING { return 0 }
+        }
+        bit = bit + 1
+    }
+    1
+}
+
+// ── A4.1.3: Start / stop service ──
+
+@kernel fn svc_start(id: i64) -> i64 {
+    if !svc_deps_satisfied(id) == 1 { return -1 } // deps not ready
+    svc_set(id, SVC_OFF_STATE, SVC_STARTING)
+    svc_set(id, SVC_OFF_START_TIME, pit_get_ticks())
+    // In real implementation: fork() + exec() the service binary
+    svc_set(id, SVC_OFF_STATE, SVC_RUNNING)
+    0
+}
+
+@kernel fn svc_stop(id: i64) {
+    svc_set(id, SVC_OFF_STATE, SVC_STOPPING)
+    let pid = svc_get(id, SVC_OFF_PID)
+    if pid > 0 { signal_kill(pid, 15) } // SIGTERM
+    // Wait for graceful shutdown, then SIGKILL
+    svc_set(id, SVC_OFF_STATE, SVC_STOPPED)
+}
+
+@kernel fn svc_restart(id: i64) {
+    svc_stop(id)
+    svc_set(id, SVC_OFF_RESTARTS, svc_get(id, SVC_OFF_RESTARTS) + 1)
+    svc_start(id)
+}
+
+// ── A4.1.4: Service watchdog ──
+
+@kernel fn svc_watchdog_check() {
+    let now = pit_get_ticks()
+    let mut id: i64 = 0
+    while id < SVC_MAX {
+        if svc_get(id, SVC_OFF_STATE) == SVC_RUNNING {
+            let timeout = svc_get(id, SVC_OFF_WATCHDOG)
+            if timeout > 0 {
+                let last = svc_get(id, SVC_OFF_LAST_KICK)
+                if now - last > timeout {
+                    // Service missed watchdog — restart
+                    svc_set(id, SVC_OFF_STATE, SVC_FAILED)
+                    let policy = svc_get(id, SVC_OFF_RESTART)
+                    if policy >= 1 { svc_restart(id) }
+                }
+            }
+        }
+        id = id + 1
+    }
+}
+
+@kernel fn svc_watchdog_kick(id: i64) {
+    svc_set(id, SVC_OFF_LAST_KICK, pit_get_ticks())
+}
+
+// ── A4.1.5: Boot sequence (start services by runlevel) ──
+
+@kernel fn svc_boot(target_runlevel: i64) {
+    // Start services in dependency order
+    let mut started: i64 = 0
+    let mut attempts: i64 = 0
+    while started < SVC_MAX {
+        if attempts > SVC_MAX * 2 { break } // prevent infinite loop
+        let mut id: i64 = 0
+        while id < SVC_MAX {
+            if svc_get(id, SVC_OFF_STATE) == SVC_STOPPED {
+                if svc_get(id, SVC_OFF_RUNLEVEL) <= target_runlevel {
+                    if svc_get(id, SVC_OFF_NAME) != 0 { // registered
+                        if svc_deps_satisfied(id) == 1 {
+                            svc_start(id)
+                            started = started + 1
+                        }
+                    }
+                }
+            }
+            id = id + 1
+        }
+        attempts = attempts + 1
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A4.2: Sound Server + Bluetooth + WiFi
+// ═══════════════════════════════════════════════════════════════
+
+// ── A4.2.1: Sound mixing daemon ──
+
+const AUDIO_STREAM_MAX: i64 = 8
+const AUDIO_STREAM_TABLE: i64 = 0x3510000
+const AUDIO_STREAM_SIZE: i64 = 64
+
+const STREAM_OFF_ACTIVE: i64 = 0
+const STREAM_OFF_PID: i64 = 4
+const STREAM_OFF_VOLUME: i64 = 8    // 0-100
+const STREAM_OFF_MUTED: i64 = 12
+const STREAM_OFF_BUF_ADDR: i64 = 16
+const STREAM_OFF_BUF_SIZE: i64 = 24
+const STREAM_OFF_WRITE_POS: i64 = 28
+const STREAM_OFF_SAMPLE_RATE: i64 = 32
+const STREAM_OFF_CHANNELS: i64 = 36
+
+@kernel fn audio_stream_create(pid: i64, sample_rate: i64, channels: i64) -> i64 {
+    let mut id: i64 = 0
+    while id < AUDIO_STREAM_MAX {
+        if volatile_read_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_ACTIVE) == 0 {
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_ACTIVE, 1)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_PID, pid)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_VOLUME, 100)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_MUTED, 0)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_SAMPLE_RATE, sample_rate)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_CHANNELS, channels)
+            // Allocate buffer (16KB)
+            let buf = frame_alloc_pages(4)
+            volatile_write_u64(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_BUF_ADDR, buf)
+            volatile_write_u32(AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE + STREAM_OFF_BUF_SIZE, 16384)
+            return id
+        }
+        id = id + 1
+    }
+    -1
+}
+
+@kernel fn audio_mix_output(output_buf: i64, frames: i64) {
+    // Mix all active streams into output buffer
+    let mut frame: i64 = 0
+    while frame < frames {
+        let mut left: i64 = 0
+        let mut right: i64 = 0
+        let mut id: i64 = 0
+        while id < AUDIO_STREAM_MAX {
+            let base = AUDIO_STREAM_TABLE + id * AUDIO_STREAM_SIZE
+            if volatile_read_u32(base + STREAM_OFF_ACTIVE) != 0 {
+                if volatile_read_u32(base + STREAM_OFF_MUTED) == 0 {
+                    let vol = volatile_read_u32(base + STREAM_OFF_VOLUME)
+                    let buf = volatile_read_u64(base + STREAM_OFF_BUF_ADDR)
+                    let pos = volatile_read_u32(base + STREAM_OFF_WRITE_POS)
+                    let sample_l = volatile_read_u16(buf + pos) * vol / 100
+                    let sample_r = volatile_read_u16(buf + pos + 2) * vol / 100
+                    left = left + sample_l
+                    right = right + sample_r
+                }
+            }
+            id = id + 1
+        }
+        // Clamp mixed output
+        if left > 32767 { left = 32767 }
+        if left < -32768 { left = -32768 }
+        if right > 32767 { right = 32767 }
+        if right < -32768 { right = -32768 }
+        volatile_write_u16(output_buf + frame * 4, left)
+        volatile_write_u16(output_buf + frame * 4 + 2, right)
+        frame = frame + 1
+    }
+}
+
+// ── A4.2.2: Bluetooth (HCI stub) ──
+
+const BT_STATE: i64 = 0x3520000
+const BT_OFF_ENABLED: i64 = 0
+const BT_OFF_ADDR: i64 = 4        // 6-byte Bluetooth address
+const BT_OFF_DISCOVERABLE: i64 = 12
+const BT_OFF_DEVICE_COUNT: i64 = 16
+
+@kernel fn bt_init() -> i64 {
+    // Detect Bluetooth controller via USB (class 0xE0, subclass 0x01, proto 0x01)
+    volatile_write_u32(BT_STATE + BT_OFF_ENABLED, 1)
+    volatile_write_u32(BT_STATE + BT_OFF_DISCOVERABLE, 0)
+    volatile_write_u32(BT_STATE + BT_OFF_DEVICE_COUNT, 0)
+    0
+}
+
+@kernel fn bt_scan() -> i64 {
+    // Send HCI Inquiry command (LAP=GIAC, duration=10s)
+    // Wait for Inquiry Result events
+    0 // number of devices found
+}
+
+// ── A4.2.3: WiFi WPA2 (stub) ──
+
+const WIFI_STATE: i64 = 0x3530000
+const WIFI_OFF_CONNECTED: i64 = 0
+const WIFI_OFF_SSID: i64 = 4       // 32-byte SSID
+const WIFI_OFF_RSSI: i64 = 36      // signal strength (dBm)
+const WIFI_OFF_BSSID: i64 = 40     // 6-byte MAC
+
+@kernel fn wifi_scan() -> i64 { 0 } // number of APs found
+@kernel fn wifi_connect(ssid_addr: i64, psk_addr: i64) -> i64 { 0 }
+@kernel fn wifi_disconnect() { volatile_write_u32(WIFI_STATE + WIFI_OFF_CONNECTED, 0) }
+
+// ═══════════════════════════════════════════════════════════════
+// A4.3: Power Management + Boot + System
+// ═══════════════════════════════════════════════════════════════
+
+// ── A4.3.1: ACPI power management ──
+
+const ACPI_PM1A_CNT: i64 = 0x604   // PM1a control block (typical QEMU)
+const ACPI_SLEEP_S5: i64 = 0x3400  // S5 (shutdown) sleep type
+
+@kernel fn acpi_shutdown() {
+    port_write_u16(ACPI_PM1A_CNT, ACPI_SLEEP_S5 | 0x2000) // SLP_EN | SLP_TYPa
+}
+
+@kernel fn acpi_reboot() {
+    // Use keyboard controller to pulse reset line
+    let mut status = port_read_u8(0x64)
+    while (status & 0x02) != 0 { status = port_read_u8(0x64) }
+    port_write_u8(0x64, 0xFE) // reset command
+}
+
+// ── A4.3.2: CPU frequency scaling ──
+
+const CPUFREQ_STATE: i64 = 0x3540000
+
+@kernel fn cpufreq_set_governor(governor: i64) {
+    // 0=performance, 1=powersave, 2=ondemand
+    volatile_write_u32(CPUFREQ_STATE, governor)
+}
+
+@kernel fn cpufreq_get_freq() -> i64 {
+    // Read MSR 0x198 (IA32_PERF_STATUS) for current frequency
+    // Simplified: return nominal
+    3000 // MHz
+}
+
+// ── A4.3.3: Thermal monitoring ──
+
+const THERMAL_STATE: i64 = 0x3550000
+
+@kernel fn thermal_read_cpu_temp() -> i64 {
+    // Read MSR 0x19C (IA32_THERM_STATUS) for DTS reading
+    // Temperature = TjMax - DTS_reading
+    // Simplified:
+    65 // °C
+}
+
+@kernel fn thermal_check() {
+    let temp = thermal_read_cpu_temp()
+    if temp > 90 { // throttle
+        cpufreq_set_governor(1) // powersave
+    } else if temp > 100 { // critical
+        acpi_shutdown()
+    }
+}
+
+// ── A4.3.4: OOM killer ──
+
+@kernel fn oom_kill() -> i64 {
+    // Find the process with highest memory usage and lowest priority
+    let proc_base: i64 = 0x600000
+    let proc_entry_size: i64 = 256
+    let mut best_pid: i64 = -1
+    let mut best_score: i64 = -1
+
+    let mut pid: i64 = 1 // skip PID 0 (idle)
+    while pid < 16 {
+        let state = volatile_read_u32(proc_base + pid * proc_entry_size + 16)
+        if state != 0 { // not FREE
+            let mem_pages = volatile_read_u32(proc_base + pid * proc_entry_size + 100)
+            let priority = volatile_read_u32(proc_base + pid * proc_entry_size + 104)
+            let score = mem_pages * 1000 / (priority + 1) // higher score = better kill target
+            if score > best_score { best_score = score; best_pid = pid }
+        }
+        pid = pid + 1
+    }
+
+    if best_pid > 0 {
+        signal_kill(best_pid, 9) // SIGKILL
+    }
+    best_pid
+}
+
+// ── A4.3.5: Dmesg ring buffer ──
+
+const DMESG_BUF: i64 = 0x3560000
+const DMESG_SIZE: i64 = 65536     // 64KB ring buffer
+const DMESG_HEAD: i64 = 0x3570000
+const DMESG_TAIL: i64 = 0x3570004
+
+@kernel fn dmesg_write(msg_addr: i64, msg_len: i64) {
+    let head = volatile_read_u32(DMESG_HEAD)
+    let mut i: i64 = 0
+    while i < msg_len {
+        volatile_write_u8(DMESG_BUF + ((head + i) % DMESG_SIZE), volatile_read_u8(msg_addr + i))
+        i = i + 1
+    }
+    // Add newline
+    volatile_write_u8(DMESG_BUF + ((head + msg_len) % DMESG_SIZE), 10)
+    volatile_write_u32(DMESG_HEAD, (head + msg_len + 1) % DMESG_SIZE)
+}
+
+@kernel fn cmd_dmesg() {
+    let head = volatile_read_u32(DMESG_HEAD)
+    let tail = volatile_read_u32(DMESG_TAIL)
+    let mut pos = tail
+    while pos != head {
+        let ch = volatile_read_u8(DMESG_BUF + pos)
+        serial_write_byte(ch)
+        pos = (pos + 1) % DMESG_SIZE
+    }
+}
+
+// ── A4.3.6: Kernel panic handler ──
+
+@kernel fn kernel_panic(msg_addr: i64) {
+    irq_disable()
+    // Red screen of death
+    let vga: i64 = 0xB8000
+    let mut i: i64 = 0
+    while i < 80 * 25 * 2 {
+        volatile_write_u8(vga + i, 32)      // space
+        volatile_write_u8(vga + i + 1, 0x4F) // white on red
+        i = i + 2
+    }
+    // Print panic message
+    let row: i64 = 10
+    let col: i64 = 20
+    let mut j: i64 = 0
+    // "KERNEL PANIC: "
+    let prefix: i64 = 0x3580000
+    volatile_write_u8(prefix, 75); volatile_write_u8(prefix+1, 69); volatile_write_u8(prefix+2, 82)
+    volatile_write_u8(prefix+3, 78); volatile_write_u8(prefix+4, 69); volatile_write_u8(prefix+5, 76)
+    volatile_write_u8(prefix+6, 32); volatile_write_u8(prefix+7, 80); volatile_write_u8(prefix+8, 65)
+    volatile_write_u8(prefix+9, 78); volatile_write_u8(prefix+10, 73); volatile_write_u8(prefix+11, 67)
+    volatile_write_u8(prefix+12, 58); volatile_write_u8(prefix+13, 32); volatile_write_u8(prefix+14, 0)
+    j = 0
+    while j < 14 {
+        volatile_write_u8(vga + (row * 80 + col + j) * 2, volatile_read_u8(prefix + j))
+        volatile_write_u8(vga + (row * 80 + col + j) * 2 + 1, 0x4F)
+        j = j + 1
+    }
+    // Print message
+    let mut k: i64 = 0
+    while k < 60 {
+        let ch = volatile_read_u8(msg_addr + k)
+        if ch == 0 { break }
+        volatile_write_u8(vga + (row * 80 + col + 14 + k) * 2, ch)
+        volatile_write_u8(vga + (row * 80 + col + 14 + k) * 2 + 1, 0x4F)
+        k = k + 1
+    }
+    // Halt all CPUs
+    let mut cpu: i64 = 1
+    while cpu < 16 { send_ipi(cpu, 0xFE); cpu = cpu + 1 } // NMI
+    // Halt this CPU
+    while true {}
+}
+
+// ── A4.3.7: Swap partition ──
+
+const SWAP_LBA: i64 = 1048576      // swap at 512MB offset
+const SWAP_PAGES: i64 = 8192       // 32MB swap space
+const SWAP_BITMAP: i64 = 0x3590000
+
+@kernel fn swap_out(page_addr: i64) -> i64 {
+    // Find free swap slot
+    let mut slot: i64 = 0
+    while slot < SWAP_PAGES {
+        let byte = slot / 8
+        let bit = slot % 8
+        if (volatile_read_u8(SWAP_BITMAP + byte) & (1 << bit)) == 0 {
+            // Mark used
+            let b = volatile_read_u8(SWAP_BITMAP + byte)
+            volatile_write_u8(SWAP_BITMAP + byte, b | (1 << bit))
+            // Write page to disk
+            nvme_write_block(SWAP_LBA + slot * 8, page_addr) // 8 sectors = 4KB
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1 // swap full
+}
+
+@kernel fn swap_in(slot: i64, page_addr: i64) {
+    nvme_read_block(SWAP_LBA + slot * 8, page_addr)
+    // Free swap slot
+    let byte = slot / 8
+    let bit = slot % 8
+    let b = volatile_read_u8(SWAP_BITMAP + byte)
+    volatile_write_u8(SWAP_BITMAP + byte, b & (0xFF ^ (1 << bit)))
+}
+
+// ── A4.3.8: Boot splash screen ──
+
+@kernel fn boot_splash() {
+    // Clear VGA to blue
+    let vga: i64 = 0xB8000
+    let mut i: i64 = 0
+    while i < 80 * 25 * 2 {
+        volatile_write_u8(vga + i, 32)
+        volatile_write_u8(vga + i + 1, 0x1F) // white on blue
+        i = i + 2
+    }
+    // Center: "FajarOS Nova v3.0 Aurora"
+    let row: i64 = 10
+    let col: i64 = 28
+    let splash: i64 = 0x35A0000
+    volatile_write_u8(splash+0, 70); volatile_write_u8(splash+1, 97); volatile_write_u8(splash+2, 106)
+    volatile_write_u8(splash+3, 97); volatile_write_u8(splash+4, 114); volatile_write_u8(splash+5, 79)
+    volatile_write_u8(splash+6, 83); volatile_write_u8(splash+7, 32); volatile_write_u8(splash+8, 78)
+    volatile_write_u8(splash+9, 111); volatile_write_u8(splash+10, 118); volatile_write_u8(splash+11, 97)
+    volatile_write_u8(splash+12, 32); volatile_write_u8(splash+13, 118); volatile_write_u8(splash+14, 51)
+    volatile_write_u8(splash+15, 46); volatile_write_u8(splash+16, 48); volatile_write_u8(splash+17, 0)
+    let mut j: i64 = 0
+    while j < 17 {
+        volatile_write_u8(vga + (row * 80 + col + j) * 2, volatile_read_u8(splash + j))
+        volatile_write_u8(vga + (row * 80 + col + j) * 2 + 1, 0x1E) // yellow on blue
+        j = j + 1
+    }
+    // "Loading..." on next line
+    let load_str: i64 = 0x35A0020
+    volatile_write_u8(load_str, 76); volatile_write_u8(load_str+1, 111); volatile_write_u8(load_str+2, 97)
+    volatile_write_u8(load_str+3, 100); volatile_write_u8(load_str+4, 105); volatile_write_u8(load_str+5, 110)
+    volatile_write_u8(load_str+6, 103); volatile_write_u8(load_str+7, 46); volatile_write_u8(load_str+8, 46)
+    volatile_write_u8(load_str+9, 46); volatile_write_u8(load_str+10, 0)
+    j = 0
+    while j < 10 {
+        volatile_write_u8(vga + ((row + 2) * 80 + col + 3 + j) * 2, volatile_read_u8(load_str + j))
+        volatile_write_u8(vga + ((row + 2) * 80 + col + 3 + j) * 2 + 1, 0x17) // gray on blue
+        j = j + 1
+    }
+}
+
+// Stubs
+@kernel fn pit_get_ticks() -> i64 { 0 }
+@kernel fn signal_kill(pid: i64, sig: i64) {}
+@kernel fn irq_disable() {}
+@kernel fn serial_write_byte(b: i64) {}
+@kernel fn send_ipi(cpu: i64, vec: i64) {}
+@kernel fn nvme_read_block(lba: i64, buf: i64) {}
+@kernel fn nvme_write_block(lba: i64, buf: i64) {}
+@kernel fn frame_alloc_pages(count: i64) -> i64 { 0 }
+@kernel fn port_write_u16(port: i64, val: i64) {}
+@kernel fn port_write_u8(port: i64, val: i64) {}
+@kernel fn port_read_u8(port: i64) -> i64 { 0 }
+
+// ── Entry point ──
+
+@kernel fn aurora_services_main() {
+    boot_splash()
+    svc_boot(3) // start all runlevel 0-3 services
+}

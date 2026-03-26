@@ -1,0 +1,520 @@
+// FajarOS Nova v3.0 "Aurora" — SMP & Scheduler v2
+// Phase A1: Per-CPU run queues, work stealing, CFS, priority inheritance
+// Written 100% in Fajar Lang — bare-metal x86_64 multi-core
+// 30 tasks: A1.1 (per-CPU queues) + A1.2 (scheduling) + A1.3 (monitoring)
+
+// ═══════════════════════════════════════════════════════════════
+// A1.1: Per-CPU Data Structures
+// ═══════════════════════════════════════════════════════════════
+
+const MAX_CPUS: i64 = 16
+const PCPU_BASE: i64 = 0x3100000
+const PCPU_SIZE: i64 = 4096
+
+// Per-CPU fields
+const PCPU_ID: i64 = 0
+const PCPU_ONLINE: i64 = 4
+const PCPU_IDLE: i64 = 8
+const PCPU_CURRENT_PID: i64 = 12
+const PCPU_RQ_HEAD: i64 = 16        // run queue head index
+const PCPU_RQ_TAIL: i64 = 20        // run queue tail index
+const PCPU_RQ_COUNT: i64 = 24       // tasks in run queue
+const PCPU_SWITCHES: i64 = 28       // context switch count
+const PCPU_IDLE_TICKS: i64 = 32     // ticks spent idle
+const PCPU_LOAD: i64 = 36           // load average (fixed-point 8.8)
+const PCPU_AFFINITY_MASK: i64 = 40  // CPU affinity bitmask
+const PCPU_STEAL_COUNT: i64 = 44    // work-stealing count
+const PCPU_IPI_PENDING: i64 = 48    // inter-processor interrupt pending
+const PCPU_PREEMPT_COUNT: i64 = 52  // preemption disable depth
+const PCPU_TICKLESS: i64 = 56       // tickless idle enabled
+const PCPU_NUMA_NODE: i64 = 60      // NUMA node ID
+
+// Run queue (per-CPU, max 64 tasks)
+const RQ_MAX: i64 = 64
+const RQ_BASE: i64 = 0x3110000      // 16 CPUs × 64 tasks × 16 bytes
+const RQ_ENTRY_SIZE: i64 = 16
+const RQ_OFF_PID: i64 = 0
+const RQ_OFF_PRIORITY: i64 = 4
+const RQ_OFF_VRUNTIME: i64 = 8      // CFS virtual runtime (nanoseconds)
+
+@kernel fn pcpu_get(cpu: i64, off: i64) -> i64 {
+    volatile_read_u32(PCPU_BASE + cpu * PCPU_SIZE + off)
+}
+
+@kernel fn pcpu_set(cpu: i64, off: i64, val: i64) {
+    volatile_write_u32(PCPU_BASE + cpu * PCPU_SIZE + off, val)
+}
+
+@kernel fn rq_addr(cpu: i64, idx: i64) -> i64 {
+    RQ_BASE + (cpu * RQ_MAX + idx) * RQ_ENTRY_SIZE
+}
+
+// ── A1.1.1: Per-CPU run queue init ──
+
+@kernel fn smp_init_pcpu(cpu_id: i64) {
+    pcpu_set(cpu_id, PCPU_ID, cpu_id)
+    pcpu_set(cpu_id, PCPU_ONLINE, 1)
+    pcpu_set(cpu_id, PCPU_IDLE, 1)
+    pcpu_set(cpu_id, PCPU_CURRENT_PID, 0)
+    pcpu_set(cpu_id, PCPU_RQ_HEAD, 0)
+    pcpu_set(cpu_id, PCPU_RQ_TAIL, 0)
+    pcpu_set(cpu_id, PCPU_RQ_COUNT, 0)
+    pcpu_set(cpu_id, PCPU_SWITCHES, 0)
+    pcpu_set(cpu_id, PCPU_IDLE_TICKS, 0)
+    pcpu_set(cpu_id, PCPU_LOAD, 0)
+    pcpu_set(cpu_id, PCPU_STEAL_COUNT, 0)
+    pcpu_set(cpu_id, PCPU_PREEMPT_COUNT, 0)
+    pcpu_set(cpu_id, PCPU_TICKLESS, 0)
+    pcpu_set(cpu_id, PCPU_NUMA_NODE, 0)
+}
+
+// ── A1.1.2: Enqueue task to CPU's run queue ──
+
+@kernel fn rq_enqueue(cpu: i64, pid: i64, priority: i64, vruntime: i64) -> i64 {
+    let count = pcpu_get(cpu, PCPU_RQ_COUNT)
+    if count >= RQ_MAX { return -1 }
+    let tail = pcpu_get(cpu, PCPU_RQ_TAIL)
+    let addr = rq_addr(cpu, tail)
+    volatile_write_u32(addr + RQ_OFF_PID, pid)
+    volatile_write_u32(addr + RQ_OFF_PRIORITY, priority)
+    volatile_write_u64(addr + RQ_OFF_VRUNTIME, vruntime)
+    pcpu_set(cpu, PCPU_RQ_TAIL, (tail + 1) % RQ_MAX)
+    pcpu_set(cpu, PCPU_RQ_COUNT, count + 1)
+    0
+}
+
+// ── A1.1.3: Dequeue task (pick lowest vruntime — CFS) ──
+
+@kernel fn rq_dequeue_cfs(cpu: i64) -> i64 {
+    let count = pcpu_get(cpu, PCPU_RQ_COUNT)
+    if count == 0 { return -1 }
+
+    // Find task with smallest vruntime
+    let mut best_idx: i64 = -1
+    let mut best_vrt: i64 = 0x7FFFFFFFFFFFFFFF
+    let head = pcpu_get(cpu, PCPU_RQ_HEAD)
+    let mut i: i64 = 0
+    while i < count {
+        let idx = (head + i) % RQ_MAX
+        let vrt = volatile_read_u64(rq_addr(cpu, idx) + RQ_OFF_VRUNTIME)
+        if vrt < best_vrt { best_vrt = vrt; best_idx = idx }
+        i = i + 1
+    }
+
+    if best_idx < 0 { return -1 }
+    let pid = volatile_read_u32(rq_addr(cpu, best_idx) + RQ_OFF_PID)
+
+    // Remove from queue by shifting
+    let tail = pcpu_get(cpu, PCPU_RQ_TAIL)
+    let last = (tail - 1 + RQ_MAX) % RQ_MAX
+    if best_idx != last {
+        // Swap with last entry
+        let mut j: i64 = 0
+        while j < RQ_ENTRY_SIZE {
+            let v = volatile_read_u8(rq_addr(cpu, last) + j)
+            volatile_write_u8(rq_addr(cpu, best_idx) + j, v)
+            j = j + 1
+        }
+    }
+    pcpu_set(cpu, PCPU_RQ_TAIL, last)
+    pcpu_set(cpu, PCPU_RQ_COUNT, count - 1)
+    pid
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A1.2: CFS Scheduler + Work Stealing + IPI
+// ═══════════════════════════════════════════════════════════════
+
+// CFS parameters
+const CFS_LATENCY_NS: i64 = 6000000      // 6ms target latency
+const CFS_MIN_GRANULARITY_NS: i64 = 750000 // 0.75ms minimum timeslice
+const CFS_NICE_0_WEIGHT: i64 = 1024       // weight for nice 0
+
+// ── A1.2.1: CFS timeslice calculation ──
+
+@kernel fn cfs_timeslice(cpu: i64, weight: i64) -> i64 {
+    let nr_running = pcpu_get(cpu, PCPU_RQ_COUNT)
+    if nr_running <= 1 { return CFS_LATENCY_NS }
+    let slice = CFS_LATENCY_NS * weight / (nr_running * CFS_NICE_0_WEIGHT)
+    if slice < CFS_MIN_GRANULARITY_NS { CFS_MIN_GRANULARITY_NS }
+    else { slice }
+}
+
+// ── A1.2.2: Update vruntime after execution ──
+
+@kernel fn cfs_update_vruntime(cpu: i64, pid: i64, delta_ns: i64, weight: i64) {
+    // vruntime += delta_ns * NICE_0_WEIGHT / weight
+    let vrt_delta = delta_ns * CFS_NICE_0_WEIGHT / weight
+    // Find task in run queue and update
+    let count = pcpu_get(cpu, PCPU_RQ_COUNT)
+    let head = pcpu_get(cpu, PCPU_RQ_HEAD)
+    let mut i: i64 = 0
+    while i < count {
+        let idx = (head + i) % RQ_MAX
+        if volatile_read_u32(rq_addr(cpu, idx) + RQ_OFF_PID) == pid {
+            let old_vrt = volatile_read_u64(rq_addr(cpu, idx) + RQ_OFF_VRUNTIME)
+            volatile_write_u64(rq_addr(cpu, idx) + RQ_OFF_VRUNTIME, old_vrt + vrt_delta)
+            return
+        }
+        i = i + 1
+    }
+}
+
+// ── A1.2.3: Work stealing ──
+
+@kernel fn work_steal(thief_cpu: i64) -> i64 {
+    // Find busiest CPU
+    let mut busiest: i64 = -1
+    let mut max_load: i64 = 0
+    let mut cpu: i64 = 0
+    while cpu < MAX_CPUS {
+        if cpu != thief_cpu {
+            if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+                let load = pcpu_get(cpu, PCPU_RQ_COUNT)
+                if load > max_load { max_load = load; busiest = cpu }
+            }
+        }
+        cpu = cpu + 1
+    }
+
+    if busiest < 0 { return -1 }
+    if max_load <= 1 { return -1 } // nothing to steal
+
+    // Steal half the tasks from busiest
+    let steal_count = max_load / 2
+    let mut stolen: i64 = 0
+    while stolen < steal_count {
+        let pid = rq_dequeue_cfs(busiest)
+        if pid < 0 { break }
+        rq_enqueue(thief_cpu, pid, 120, 0) // default priority, reset vruntime
+        stolen = stolen + 1
+    }
+
+    pcpu_set(thief_cpu, PCPU_STEAL_COUNT, pcpu_get(thief_cpu, PCPU_STEAL_COUNT) + stolen)
+    stolen
+}
+
+// ── A1.2.4: Load balancing (periodic) ──
+
+@kernel fn load_balance() {
+    let mut cpu: i64 = 0
+    while cpu < MAX_CPUS {
+        if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+            let load = pcpu_get(cpu, PCPU_RQ_COUNT)
+            // Update load average (exponential moving average)
+            let old_load = pcpu_get(cpu, PCPU_LOAD)
+            let new_load = (old_load * 7 + load * 256) / 8 // 8.8 fixed point
+            pcpu_set(cpu, PCPU_LOAD, new_load)
+
+            // If idle, try to steal work
+            if load == 0 { work_steal(cpu) }
+        }
+        cpu = cpu + 1
+    }
+}
+
+// ── A1.2.5: CPU affinity ──
+
+@kernel fn set_cpu_affinity(pid: i64, mask: i64) {
+    // Store affinity mask in process table
+    let proc_base: i64 = 0x600000
+    let proc_entry_size: i64 = 256
+    volatile_write_u32(proc_base + pid * proc_entry_size + 200, mask)
+}
+
+@kernel fn get_cpu_affinity(pid: i64) -> i64 {
+    let proc_base: i64 = 0x600000
+    let proc_entry_size: i64 = 256
+    volatile_read_u32(proc_base + pid * proc_entry_size + 200)
+}
+
+@kernel fn select_cpu_for_task(pid: i64) -> i64 {
+    let mask = get_cpu_affinity(pid)
+    let effective_mask = if mask == 0 { 0xFFFF } else { mask }
+
+    // Find least loaded CPU in affinity mask
+    let mut best_cpu: i64 = 0
+    let mut min_load: i64 = 0x7FFFFFFF
+    let mut cpu: i64 = 0
+    while cpu < MAX_CPUS {
+        if (effective_mask & (1 << cpu)) != 0 {
+            if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+                let load = pcpu_get(cpu, PCPU_RQ_COUNT)
+                if load < min_load { min_load = load; best_cpu = cpu }
+            }
+        }
+        cpu = cpu + 1
+    }
+    best_cpu
+}
+
+// ── A1.2.6: Inter-Processor Interrupt (IPI) ──
+
+@kernel fn send_ipi(target_cpu: i64, vector: i64) {
+    // Write to Local APIC ICR (Interrupt Command Register)
+    let lapic_base: i64 = 0xFEE00000
+    let icr_low: i64 = 0x300
+    let icr_high: i64 = 0x310
+    // Set destination CPU in ICR high
+    volatile_write_u32(lapic_base + icr_high, target_cpu << 24)
+    // Send IPI: fixed delivery, vector
+    volatile_write_u32(lapic_base + icr_low, vector | 0x4000) // fixed, assert, edge
+}
+
+@kernel fn send_ipi_reschedule(target_cpu: i64) {
+    pcpu_set(target_cpu, PCPU_IPI_PENDING, 1)
+    send_ipi(target_cpu, 0xFD) // reschedule vector
+}
+
+@kernel fn ipi_reschedule_handler() {
+    let cpu = get_current_cpu()
+    pcpu_set(cpu, PCPU_IPI_PENDING, 0)
+    scheduler_tick(cpu)
+}
+
+// ── A1.2.7: Scheduler tick (timer interrupt) ──
+
+@kernel fn scheduler_tick(cpu: i64) {
+    // Check preemption
+    if pcpu_get(cpu, PCPU_PREEMPT_COUNT) > 0 { return }
+
+    let current = pcpu_get(cpu, PCPU_CURRENT_PID)
+    if current == 0 { // idle
+        let next = rq_dequeue_cfs(cpu)
+        if next >= 0 {
+            context_switch(cpu, current, next)
+        } else {
+            pcpu_set(cpu, PCPU_IDLE_TICKS, pcpu_get(cpu, PCPU_IDLE_TICKS) + 1)
+        }
+        return
+    }
+
+    // Update current task's vruntime
+    cfs_update_vruntime(cpu, current, 1000000, CFS_NICE_0_WEIGHT) // 1ms tick
+
+    // Check if preemption needed (another task has lower vruntime)
+    let next = rq_dequeue_cfs(cpu)
+    if next >= 0 {
+        if next != current {
+            rq_enqueue(cpu, current, 120, 0) // re-enqueue current
+            context_switch(cpu, current, next)
+        } else {
+            rq_enqueue(cpu, next, 120, 0) // put it back
+        }
+    }
+}
+
+@kernel fn context_switch(cpu: i64, old_pid: i64, new_pid: i64) {
+    // Save old context, restore new context
+    pcpu_set(cpu, PCPU_CURRENT_PID, new_pid)
+    pcpu_set(cpu, PCPU_IDLE, if new_pid == 0 { 1 } else { 0 })
+    pcpu_set(cpu, PCPU_SWITCHES, pcpu_get(cpu, PCPU_SWITCHES) + 1)
+    // Actual register save/restore would be here (RSP, RIP, CR3, etc.)
+}
+
+// ── A1.2.8: Preemption control ──
+
+@kernel fn preempt_disable() {
+    let cpu = get_current_cpu()
+    pcpu_set(cpu, PCPU_PREEMPT_COUNT, pcpu_get(cpu, PCPU_PREEMPT_COUNT) + 1)
+}
+
+@kernel fn preempt_enable() {
+    let cpu = get_current_cpu()
+    let count = pcpu_get(cpu, PCPU_PREEMPT_COUNT)
+    if count > 0 { pcpu_set(cpu, PCPU_PREEMPT_COUNT, count - 1) }
+    // If preemption re-enabled and IPI pending, reschedule
+    if count == 1 {
+        if pcpu_get(cpu, PCPU_IPI_PENDING) != 0 {
+            scheduler_tick(cpu)
+        }
+    }
+}
+
+// ── A1.2.9: Tickless idle ──
+
+@kernel fn enter_tickless_idle(cpu: i64) {
+    pcpu_set(cpu, PCPU_TICKLESS, 1)
+    // Disable timer interrupt, wait for IPI or device interrupt
+    // In real implementation: HLT instruction + APIC timer disable
+}
+
+@kernel fn exit_tickless_idle(cpu: i64) {
+    pcpu_set(cpu, PCPU_TICKLESS, 0)
+    // Re-enable timer interrupt
+}
+
+// ── A1.2.10: RT scheduling class ──
+
+const SCHED_NORMAL: i64 = 0
+const SCHED_FIFO: i64 = 1
+const SCHED_RR: i64 = 2
+const SCHED_DEADLINE: i64 = 3
+
+@kernel fn set_scheduler(pid: i64, policy: i64, rt_priority: i64) {
+    let proc_base: i64 = 0x600000
+    let proc_entry_size: i64 = 256
+    volatile_write_u32(proc_base + pid * proc_entry_size + 204, policy)
+    volatile_write_u32(proc_base + pid * proc_entry_size + 208, rt_priority)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A1.3: Spinlock + RCU + Monitoring
+// ═══════════════════════════════════════════════════════════════
+
+// ── A1.3.1: Spinlock with exponential backoff ──
+
+@kernel fn spinlock_acquire(lock_addr: i64) {
+    let mut backoff: i64 = 1
+    while true {
+        // Atomic test-and-set
+        let old = atomic_cmpxchg(lock_addr, 0, 1)
+        if old == 0 { return } // acquired
+        // Exponential backoff
+        let mut i: i64 = 0
+        while i < backoff { i = i + 1 } // spin
+        backoff = backoff * 2
+        if backoff > 1024 { backoff = 1024 } // cap
+    }
+}
+
+@kernel fn spinlock_release(lock_addr: i64) {
+    volatile_write_u32(lock_addr, 0)
+}
+
+// ── A1.3.2: RCU (simplified read-side) ──
+
+const RCU_GP_STATE: i64 = 0x3200000   // global grace period counter
+
+@kernel fn rcu_read_lock() {
+    preempt_disable()
+}
+
+@kernel fn rcu_read_unlock() {
+    preempt_enable()
+}
+
+@kernel fn rcu_synchronize() {
+    // Wait for all CPUs to pass through a quiescent state
+    let gp = volatile_read_u64(RCU_GP_STATE)
+    volatile_write_u64(RCU_GP_STATE, gp + 1)
+    // In real implementation: wait for all CPUs to acknowledge
+    let mut cpu: i64 = 0
+    while cpu < MAX_CPUS {
+        if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+            send_ipi_reschedule(cpu) // force context switch
+        }
+        cpu = cpu + 1
+    }
+}
+
+// ── A1.3.3: /proc/cpuinfo (live) ──
+
+@kernel fn cmd_cpuinfo() {
+    let mut cpu: i64 = 0
+    while cpu < MAX_CPUS {
+        if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+            cprint("CPU ", 0x0F)
+            cprint_decimal(cpu, 0x0B)
+            cprint(": ", 0x0F)
+            if pcpu_get(cpu, PCPU_IDLE) == 1 {
+                cprint("idle", 0x08)
+            } else {
+                cprint("PID=", 0x0A)
+                cprint_decimal(pcpu_get(cpu, PCPU_CURRENT_PID), 0x0E)
+            }
+            cprint("  rq=", 0x0F)
+            cprint_decimal(pcpu_get(cpu, PCPU_RQ_COUNT), 0x0B)
+            cprint("  sw=", 0x0F)
+            cprint_decimal(pcpu_get(cpu, PCPU_SWITCHES), 0x0B)
+            cprint("  steal=", 0x0F)
+            cprint_decimal(pcpu_get(cpu, PCPU_STEAL_COUNT), 0x0B)
+            cprintln("", 0x0F)
+        }
+        cpu = cpu + 1
+    }
+}
+
+// ── A1.3.4: htop-style process monitor ──
+
+@kernel fn cmd_htop() {
+    // Header
+    cprintln("  PID  CPU  PRI  STATE    VRUNTIME    NAME", 0x0E)
+    cprintln("─────────────────────────────────────────────", 0x08)
+
+    let proc_base: i64 = 0x600000
+    let proc_entry_size: i64 = 256
+    let mut pid: i64 = 0
+    while pid < 16 {
+        let state = volatile_read_u32(proc_base + pid * proc_entry_size + 16)
+        if state != 0 { // not FREE
+            cprint("  ", 0x0F)
+            cprint_decimal(pid, 0x0B)
+            cprint("    ", 0x0F)
+            // Find which CPU this task is on
+            let mut on_cpu: i64 = -1
+            let mut cpu: i64 = 0
+            while cpu < MAX_CPUS {
+                if pcpu_get(cpu, PCPU_CURRENT_PID) == pid { on_cpu = cpu }
+                cpu = cpu + 1
+            }
+            if on_cpu >= 0 { cprint_decimal(on_cpu, 0x0A) }
+            else { cprint("-", 0x08) }
+            cprintln("", 0x0F)
+        }
+        pid = pid + 1
+    }
+}
+
+// ── A1.3.5: SMP boot (AP trampoline) ──
+
+@kernel fn smp_boot_all() {
+    // BSP (CPU 0) is already running
+    smp_init_pcpu(0)
+
+    // Boot APs via INIT-SIPI-SIPI
+    let mut cpu: i64 = 1
+    while cpu < MAX_CPUS {
+        // Send INIT IPI
+        send_ipi(cpu, 0x500) // INIT
+
+        // Wait 10ms
+        let mut delay: i64 = 0
+        while delay < 10000000 { delay = delay + 1 }
+
+        // Send STARTUP IPI (vector = trampoline page / 4096)
+        let trampoline_page: i64 = 0x8000 / 4096 // 0x08
+        send_ipi(cpu, 0x600 | trampoline_page) // SIPI
+
+        // Wait for AP to set online flag
+        delay = 0
+        while delay < 100000000 {
+            if pcpu_get(cpu, PCPU_ONLINE) == 1 { break }
+            delay = delay + 1
+        }
+
+        if pcpu_get(cpu, PCPU_ONLINE) == 1 {
+            smp_init_pcpu(cpu)
+        }
+
+        cpu = cpu + 1
+    }
+}
+
+// Stubs
+@kernel fn get_current_cpu() -> i64 { 0 }
+@kernel fn atomic_cmpxchg(addr: i64, expected: i64, desired: i64) -> i64 {
+    let old = volatile_read_u32(addr)
+    if old == expected { volatile_write_u32(addr, desired) }
+    old
+}
+@kernel fn cprint(s: i64, attr: i64) {}
+@kernel fn cprint_decimal(n: i64, attr: i64) {}
+@kernel fn cprintln(s: i64, attr: i64) {}
+
+// ── Entry point ──
+
+@kernel fn aurora_smp_main() {
+    smp_boot_all()
+    load_balance()
+}

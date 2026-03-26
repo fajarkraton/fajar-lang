@@ -1,0 +1,496 @@
+// FajarOS Nova v3.0 "Aurora" — Display Manager & Compositor
+// Phase A3: Multi-monitor, Wayland-style compositor, animations, workspaces
+// Written 100% in Fajar Lang — bare-metal x86_64
+// 30 tasks: A3.1 (display) + A3.2 (compositor) + A3.3 (UX)
+
+// ═══════════════════════════════════════════════════════════════
+// A3.1: Display Management
+// ═══════════════════════════════════════════════════════════════
+
+const MAX_MONITORS: i64 = 4
+const MONITOR_TABLE: i64 = 0x3400000
+const MONITOR_SIZE: i64 = 128
+
+const MON_OFF_ACTIVE: i64 = 0
+const MON_OFF_WIDTH: i64 = 4
+const MON_OFF_HEIGHT: i64 = 8
+const MON_OFF_BPP: i64 = 12
+const MON_OFF_REFRESH: i64 = 16     // Hz
+const MON_OFF_FB_ADDR: i64 = 20     // framebuffer physical address
+const MON_OFF_FB_SIZE: i64 = 28
+const MON_OFF_PITCH: i64 = 32       // bytes per scanline
+const MON_OFF_POS_X: i64 = 36       // position in virtual desktop
+const MON_OFF_POS_Y: i64 = 40
+const MON_OFF_ROTATION: i64 = 44    // 0, 90, 180, 270
+const MON_OFF_SCALE: i64 = 48       // DPI scale (100 = 1x, 200 = 2x)
+const MON_OFF_PRIMARY: i64 = 52     // 1 if primary monitor
+const MON_OFF_CONNECTOR: i64 = 56   // connector type ID
+
+@kernel fn mon_get(id: i64, off: i64) -> i64 { volatile_read_u32(MONITOR_TABLE + id * MONITOR_SIZE + off) }
+@kernel fn mon_set(id: i64, off: i64, val: i64) { volatile_write_u32(MONITOR_TABLE + id * MONITOR_SIZE + off, val) }
+
+// ── A3.1.1: Monitor detection (EDID parsing) ──
+
+@kernel fn detect_monitors() -> i64 {
+    let mut count: i64 = 0
+
+    // VirtIO-GPU: query display info
+    // Each scanout represents a monitor
+    let mut scanout: i64 = 0
+    while scanout < MAX_MONITORS {
+        let display_info = gpu_get_display_info(scanout)
+        if display_info > 0 {
+            let w = volatile_read_u32(display_info)
+            let h = volatile_read_u32(display_info + 4)
+            if w > 0 {
+                if h > 0 {
+                    mon_set(count, MON_OFF_ACTIVE, 1)
+                    mon_set(count, MON_OFF_WIDTH, w)
+                    mon_set(count, MON_OFF_HEIGHT, h)
+                    mon_set(count, MON_OFF_BPP, 32)
+                    mon_set(count, MON_OFF_REFRESH, 60)
+                    mon_set(count, MON_OFF_PITCH, w * 4)
+                    mon_set(count, MON_OFF_SCALE, 100)
+                    mon_set(count, MON_OFF_PRIMARY, if count == 0 { 1 } else { 0 })
+                    // Allocate framebuffer
+                    let fb_size = w * h * 4
+                    let fb = frame_alloc_pages((fb_size + 4095) / 4096)
+                    volatile_write_u64(MONITOR_TABLE + count * MONITOR_SIZE + MON_OFF_FB_ADDR, fb)
+                    mon_set(count, MON_OFF_FB_SIZE, fb_size)
+                    count = count + 1
+                }
+            }
+        }
+        scanout = scanout + 1
+    }
+    count
+}
+
+// ── A3.1.2: Mode setting ──
+
+@kernel fn set_resolution(monitor: i64, width: i64, height: i64, refresh: i64) -> i64 {
+    if monitor >= MAX_MONITORS { return -1 }
+    if mon_get(monitor, MON_OFF_ACTIVE) == 0 { return -2 }
+
+    // Free old framebuffer
+    let old_fb = volatile_read_u64(MONITOR_TABLE + monitor * MONITOR_SIZE + MON_OFF_FB_ADDR)
+    let old_size = mon_get(monitor, MON_OFF_FB_SIZE)
+    if old_fb != 0 { frame_free_pages(old_fb, (old_size + 4095) / 4096) }
+
+    // Allocate new framebuffer
+    let new_size = width * height * 4
+    let new_fb = frame_alloc_pages((new_size + 4095) / 4096)
+    if new_fb == 0 { return -3 }
+
+    mon_set(monitor, MON_OFF_WIDTH, width)
+    mon_set(monitor, MON_OFF_HEIGHT, height)
+    mon_set(monitor, MON_OFF_REFRESH, refresh)
+    mon_set(monitor, MON_OFF_PITCH, width * 4)
+    mon_set(monitor, MON_OFF_FB_SIZE, new_size)
+    volatile_write_u64(MONITOR_TABLE + monitor * MONITOR_SIZE + MON_OFF_FB_ADDR, new_fb)
+
+    // Update GPU resource
+    gpu_set_mode(monitor, width, height)
+    0
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A3.2: Wayland-Style Compositor
+// ═══════════════════════════════════════════════════════════════
+
+// Surface table (compositor surfaces)
+const SURFACE_MAX: i64 = 32
+const SURFACE_TABLE: i64 = 0x3410000
+const SURFACE_SIZE: i64 = 128
+
+const SURF_OFF_ACTIVE: i64 = 0
+const SURF_OFF_X: i64 = 4
+const SURF_OFF_Y: i64 = 8
+const SURF_OFF_W: i64 = 12
+const SURF_OFF_H: i64 = 16
+const SURF_OFF_BUF_ADDR: i64 = 20   // client buffer address
+const SURF_OFF_DAMAGE_X: i64 = 28   // dirty region
+const SURF_OFF_DAMAGE_Y: i64 = 32
+const SURF_OFF_DAMAGE_W: i64 = 36
+const SURF_OFF_DAMAGE_H: i64 = 40
+const SURF_OFF_Z: i64 = 44          // z-order
+const SURF_OFF_ALPHA: i64 = 48      // opacity (0-255)
+const SURF_OFF_PID: i64 = 52        // owning process
+const SURF_OFF_WORKSPACE: i64 = 56  // workspace ID
+const SURF_OFF_SNAP: i64 = 60       // snap state (0=none, 1=left, 2=right, 3=max)
+const SURF_OFF_ANIM_STATE: i64 = 64 // animation progress (0-255)
+const SURF_OFF_ANIM_TYPE: i64 = 68  // animation type
+
+@kernel fn surf_get(id: i64, off: i64) -> i64 { volatile_read_u32(SURFACE_TABLE + id * SURFACE_SIZE + off) }
+@kernel fn surf_set(id: i64, off: i64, val: i64) { volatile_write_u32(SURFACE_TABLE + id * SURFACE_SIZE + off, val) }
+
+// ── A3.2.1: Surface allocation ──
+
+@kernel fn surface_create(pid: i64, w: i64, h: i64) -> i64 {
+    let mut id: i64 = 0
+    while id < SURFACE_MAX {
+        if surf_get(id, SURF_OFF_ACTIVE) == 0 {
+            surf_set(id, SURF_OFF_ACTIVE, 1)
+            surf_set(id, SURF_OFF_W, w)
+            surf_set(id, SURF_OFF_H, h)
+            surf_set(id, SURF_OFF_ALPHA, 255)
+            surf_set(id, SURF_OFF_PID, pid)
+            surf_set(id, SURF_OFF_WORKSPACE, 0)
+            surf_set(id, SURF_OFF_ANIM_STATE, 0)
+            // Allocate buffer
+            let buf_size = w * h * 4
+            let buf = frame_alloc_pages((buf_size + 4095) / 4096)
+            volatile_write_u64(SURFACE_TABLE + id * SURFACE_SIZE + SURF_OFF_BUF_ADDR, buf)
+            return id
+        }
+        id = id + 1
+    }
+    -1
+}
+
+@kernel fn surface_destroy(id: i64) {
+    if id < 0 { return }
+    if id >= SURFACE_MAX { return }
+    let buf = volatile_read_u64(SURFACE_TABLE + id * SURFACE_SIZE + SURF_OFF_BUF_ADDR)
+    let w = surf_get(id, SURF_OFF_W)
+    let h = surf_get(id, SURF_OFF_H)
+    if buf != 0 { frame_free_pages(buf, (w * h * 4 + 4095) / 4096) }
+    surf_set(id, SURF_OFF_ACTIVE, 0)
+}
+
+// ── A3.2.2: Damage tracking ──
+
+@kernel fn surface_damage(id: i64, x: i64, y: i64, w: i64, h: i64) {
+    surf_set(id, SURF_OFF_DAMAGE_X, x)
+    surf_set(id, SURF_OFF_DAMAGE_Y, y)
+    surf_set(id, SURF_OFF_DAMAGE_W, w)
+    surf_set(id, SURF_OFF_DAMAGE_H, h)
+}
+
+@kernel fn surface_damage_full(id: i64) {
+    surface_damage(id, 0, 0, surf_get(id, SURF_OFF_W), surf_get(id, SURF_OFF_H))
+}
+
+// ── A3.2.3: Compositing (alpha blending) ──
+
+@kernel fn composite_frame(monitor: i64) {
+    let fb = volatile_read_u64(MONITOR_TABLE + monitor * MONITOR_SIZE + MON_OFF_FB_ADDR)
+    let mw = mon_get(monitor, MON_OFF_WIDTH)
+    let mh = mon_get(monitor, MON_OFF_HEIGHT)
+    let workspace = current_workspace()
+
+    // Clear to desktop color
+    let mut offset: i64 = 0
+    while offset < mw * mh * 4 {
+        volatile_write_u32(fb + offset, 0xFF1A1A2E) // dark background
+        offset = offset + 4
+    }
+
+    // Render wallpaper
+    render_wallpaper(fb, mw, mh)
+
+    // Sort surfaces by z-order and render
+    let mut z: i64 = 0
+    while z < SURFACE_MAX * 2 {
+        let mut id: i64 = 0
+        while id < SURFACE_MAX {
+            if surf_get(id, SURF_OFF_ACTIVE) != 0 {
+                if surf_get(id, SURF_OFF_WORKSPACE) == workspace {
+                    if surf_get(id, SURF_OFF_Z) == z {
+                        composite_surface(fb, mw, mh, id)
+                    }
+                }
+            }
+            id = id + 1
+        }
+        z = z + 1
+    }
+
+    // Render cursor on top
+    render_hw_cursor(fb, mw, mh)
+
+    // VSync: wait for vertical blank then flip
+    gpu_present(monitor)
+}
+
+@kernel fn composite_surface(fb: i64, mw: i64, mh: i64, surf_id: i64) {
+    let sx = surf_get(surf_id, SURF_OFF_X)
+    let sy = surf_get(surf_id, SURF_OFF_Y)
+    let sw = surf_get(surf_id, SURF_OFF_W)
+    let sh = surf_get(surf_id, SURF_OFF_H)
+    let alpha = surf_get(surf_id, SURF_OFF_ALPHA)
+    let buf = volatile_read_u64(SURFACE_TABLE + surf_id * SURFACE_SIZE + SURF_OFF_BUF_ADDR)
+    if buf == 0 { return }
+
+    // Animation fade-in
+    let anim = surf_get(surf_id, SURF_OFF_ANIM_STATE)
+    let effective_alpha = if anim > 0 { if anim < 255 { anim } else { alpha } } else { alpha }
+
+    let mut row: i64 = 0
+    while row < sh {
+        let dy = sy + row
+        if dy >= 0 { if dy < mh {
+            let mut col: i64 = 0
+            while col < sw {
+                let dx = sx + col
+                if dx >= 0 { if dx < mw {
+                    let src = volatile_read_u32(buf + (row * sw + col) * 4)
+                    if effective_alpha == 255 {
+                        volatile_write_u32(fb + (dy * mw + dx) * 4, src)
+                    } else {
+                        // Alpha blend
+                        let dst = volatile_read_u32(fb + (dy * mw + dx) * 4)
+                        let blended = alpha_blend(src, dst, effective_alpha)
+                        volatile_write_u32(fb + (dy * mw + dx) * 4, blended)
+                    }
+                } }
+                col = col + 1
+            }
+        } }
+        row = row + 1
+    }
+
+    // Clear damage
+    surf_set(surf_id, SURF_OFF_DAMAGE_W, 0)
+    surf_set(surf_id, SURF_OFF_DAMAGE_H, 0)
+}
+
+@kernel fn alpha_blend(src: i64, dst: i64, alpha: i64) -> i64 {
+    let sr = src & 0xFF
+    let sg = (src >> 8) & 0xFF
+    let sb = (src >> 16) & 0xFF
+    let dr = dst & 0xFF
+    let dg = (dst >> 8) & 0xFF
+    let db = (dst >> 16) & 0xFF
+    let r = (sr * alpha + dr * (255 - alpha)) / 255
+    let g = (sg * alpha + dg * (255 - alpha)) / 255
+    let b = (sb * alpha + db * (255 - alpha)) / 255
+    0xFF000000 | (b << 16) | (g << 8) | r
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A3.3: UX Features
+// ═══════════════════════════════════════════════════════════════
+
+// ── A3.3.1: Window animations ──
+
+const ANIM_NONE: i64 = 0
+const ANIM_FADE_IN: i64 = 1
+const ANIM_FADE_OUT: i64 = 2
+const ANIM_SLIDE_LEFT: i64 = 3
+const ANIM_SLIDE_RIGHT: i64 = 4
+const ANIM_ZOOM: i64 = 5
+
+@kernel fn animate_surface(id: i64, anim_type: i64, duration_frames: i64) {
+    surf_set(id, SURF_OFF_ANIM_TYPE, anim_type)
+    surf_set(id, SURF_OFF_ANIM_STATE, 1)
+}
+
+@kernel fn update_animations() {
+    let mut id: i64 = 0
+    while id < SURFACE_MAX {
+        if surf_get(id, SURF_OFF_ACTIVE) != 0 {
+            let state = surf_get(id, SURF_OFF_ANIM_STATE)
+            let atype = surf_get(id, SURF_OFF_ANIM_TYPE)
+            if state > 0 { if state < 255 {
+                let new_state = state + 15 // ~17 frames for full animation at 60fps
+                if new_state >= 255 {
+                    surf_set(id, SURF_OFF_ANIM_STATE, 255)
+                    surf_set(id, SURF_OFF_ANIM_TYPE, ANIM_NONE)
+                    if atype == ANIM_FADE_OUT { surface_destroy(id) }
+                } else {
+                    surf_set(id, SURF_OFF_ANIM_STATE, new_state)
+                }
+            } }
+        }
+        id = id + 1
+    }
+}
+
+// ── A3.3.2: Window snapping ──
+
+@kernel fn snap_window(id: i64, snap: i64, mw: i64, mh: i64) {
+    surf_set(id, SURF_OFF_SNAP, snap)
+    if snap == 1 { // left half
+        surf_set(id, SURF_OFF_X, 0)
+        surf_set(id, SURF_OFF_Y, 0)
+        surf_set(id, SURF_OFF_W, mw / 2)
+        surf_set(id, SURF_OFF_H, mh - 28) // leave taskbar space
+    } else if snap == 2 { // right half
+        surf_set(id, SURF_OFF_X, mw / 2)
+        surf_set(id, SURF_OFF_Y, 0)
+        surf_set(id, SURF_OFF_W, mw / 2)
+        surf_set(id, SURF_OFF_H, mh - 28)
+    } else if snap == 3 { // maximize
+        surf_set(id, SURF_OFF_X, 0)
+        surf_set(id, SURF_OFF_Y, 0)
+        surf_set(id, SURF_OFF_W, mw)
+        surf_set(id, SURF_OFF_H, mh - 28)
+    }
+}
+
+// ── A3.3.3: Virtual desktops (workspaces) ──
+
+const MAX_WORKSPACES: i64 = 4
+const CURRENT_WORKSPACE: i64 = 0x3420000
+
+@kernel fn current_workspace() -> i64 { volatile_read_u32(CURRENT_WORKSPACE) }
+
+@kernel fn switch_workspace(ws: i64) {
+    if ws >= MAX_WORKSPACES { return }
+    volatile_write_u32(CURRENT_WORKSPACE, ws)
+}
+
+// ── A3.3.4: Alt-Tab switcher ──
+
+@kernel fn alt_tab_next() {
+    let ws = current_workspace()
+    let mut found_current: i64 = 0
+    let mut first: i64 = -1
+    let mut id: i64 = 0
+    while id < SURFACE_MAX {
+        if surf_get(id, SURF_OFF_ACTIVE) != 0 {
+            if surf_get(id, SURF_OFF_WORKSPACE) == ws {
+                if first < 0 { first = id }
+                if found_current == 1 {
+                    surface_raise(id)
+                    return
+                }
+                // Check if this is the current top surface
+                let mut is_top: i64 = 1
+                let z = surf_get(id, SURF_OFF_Z)
+                let mut j: i64 = 0
+                while j < SURFACE_MAX {
+                    if j != id { if surf_get(j, SURF_OFF_ACTIVE) != 0 {
+                        if surf_get(j, SURF_OFF_WORKSPACE) == ws {
+                            if surf_get(j, SURF_OFF_Z) > z { is_top = 0 }
+                        }
+                    } }
+                    j = j + 1
+                }
+                if is_top == 1 { found_current = 1 }
+            }
+        }
+        id = id + 1
+    }
+    // Wrap around
+    if first >= 0 { surface_raise(first) }
+}
+
+@kernel fn surface_raise(id: i64) {
+    let mut max_z: i64 = 0
+    let mut i: i64 = 0
+    while i < SURFACE_MAX {
+        if surf_get(i, SURF_OFF_ACTIVE) != 0 {
+            let z = surf_get(i, SURF_OFF_Z)
+            if z > max_z { max_z = z }
+        }
+        i = i + 1
+    }
+    surf_set(id, SURF_OFF_Z, max_z + 1)
+}
+
+// ── A3.3.5: Notifications ──
+
+const NOTIF_MAX: i64 = 8
+const NOTIF_TABLE: i64 = 0x3430000
+const NOTIF_SIZE: i64 = 128
+const NOTIF_OFF_ACTIVE: i64 = 0
+const NOTIF_OFF_TITLE: i64 = 4    // 32 bytes
+const NOTIF_OFF_BODY: i64 = 36    // 64 bytes
+const NOTIF_OFF_TIMER: i64 = 100  // frames remaining
+const NOTIF_OFF_Y: i64 = 104      // current Y position (animated slide)
+
+@kernel fn notify(title_addr: i64, body_addr: i64, duration_frames: i64) {
+    let mut slot: i64 = 0
+    while slot < NOTIF_MAX {
+        if volatile_read_u32(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_ACTIVE) == 0 {
+            volatile_write_u32(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_ACTIVE, 1)
+            volatile_write_u32(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_TIMER, duration_frames)
+            volatile_write_u32(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_Y, 0 - 60) // start above screen
+            // Copy title + body
+            let mut i: i64 = 0
+            while i < 31 {
+                let b = volatile_read_u8(title_addr + i)
+                volatile_write_u8(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_TITLE + i, b)
+                if b == 0 { break }
+                i = i + 1
+            }
+            i = 0
+            while i < 63 {
+                let b = volatile_read_u8(body_addr + i)
+                volatile_write_u8(NOTIF_TABLE + slot * NOTIF_SIZE + NOTIF_OFF_BODY + i, b)
+                if b == 0 { break }
+                i = i + 1
+            }
+            return
+        }
+        slot = slot + 1
+    }
+}
+
+// ── A3.3.6: Clipboard ──
+
+const CLIPBOARD_BUF: i64 = 0x3440000
+const CLIPBOARD_SIZE: i64 = 65536
+const CLIPBOARD_LEN: i64 = 0x3450000
+
+@kernel fn clipboard_copy(data: i64, len: i64) {
+    let copy_len = if len > CLIPBOARD_SIZE { CLIPBOARD_SIZE } else { len }
+    let mut i: i64 = 0
+    while i < copy_len {
+        volatile_write_u8(CLIPBOARD_BUF + i, volatile_read_u8(data + i))
+        i = i + 1
+    }
+    volatile_write_u32(CLIPBOARD_LEN, copy_len)
+}
+
+@kernel fn clipboard_paste(buf: i64, max_len: i64) -> i64 {
+    let len = volatile_read_u32(CLIPBOARD_LEN)
+    let copy_len = if len > max_len { max_len } else { len }
+    let mut i: i64 = 0
+    while i < copy_len {
+        volatile_write_u8(buf + i, volatile_read_u8(CLIPBOARD_BUF + i))
+        i = i + 1
+    }
+    copy_len
+}
+
+// ── A3.3.7: Screen lock ──
+
+const SCREEN_LOCKED: i64 = 0x3460000
+
+@kernel fn screen_lock() { volatile_write_u32(SCREEN_LOCKED, 1) }
+@kernel fn screen_unlock() { volatile_write_u32(SCREEN_LOCKED, 0) }
+@kernel fn is_screen_locked() -> i64 { volatile_read_u32(SCREEN_LOCKED) }
+
+// ── A3.3.8: Cursor themes ──
+
+const CURSOR_THEME: i64 = 0x3470000
+const CURSOR_DEFAULT: i64 = 0
+const CURSOR_POINTER: i64 = 1
+const CURSOR_TEXT: i64 = 2
+const CURSOR_MOVE: i64 = 3
+const CURSOR_RESIZE_NS: i64 = 4
+const CURSOR_RESIZE_EW: i64 = 5
+const CURSOR_WAIT: i64 = 6
+
+@kernel fn set_cursor_theme(cursor_type: i64) {
+    volatile_write_u32(CURSOR_THEME, cursor_type)
+}
+
+// Stubs
+@kernel fn gpu_get_display_info(scanout: i64) -> i64 { 0 }
+@kernel fn gpu_set_mode(monitor: i64, w: i64, h: i64) {}
+@kernel fn gpu_present(monitor: i64) {}
+@kernel fn render_wallpaper(fb: i64, w: i64, h: i64) {}
+@kernel fn render_hw_cursor(fb: i64, w: i64, h: i64) {}
+@kernel fn frame_alloc_pages(count: i64) -> i64 { 0 }
+@kernel fn frame_free_pages(addr: i64, count: i64) {}
+
+// ── Entry point ──
+
+@kernel fn aurora_compositor_main() {
+    let monitors = detect_monitors()
+    volatile_write_u32(CURRENT_WORKSPACE, 0)
+}
