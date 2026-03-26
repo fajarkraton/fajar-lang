@@ -551,7 +551,7 @@ refactoring preview (diff before apply))*
 
 ---
 
-## Option 8: Formal Verification v2 (6 sprints, 60 tasks)
+## Option 8: Formal Verification v2 (6 sprints, 60 tasks) ✅ COMPLETE
 
 **Goal:** Prove program correctness with pre/post conditions, invariants, and SMT solver
 **Impact:** Safety-critical certification (DO-178C, ISO 26262) for embedded ML
@@ -562,31 +562,31 @@ refactoring preview (diff before apply))*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| V1.1.1 | `@requires` precondition | `@requires(x > 0)` | [ ] |
-| V1.1.2 | `@ensures` postcondition | `@ensures(result >= 0)` | [ ] |
-| V1.1.3 | `@invariant` loop invariant | `@invariant(i < n)` | [ ] |
-| V1.1.4 | `@assert` proof obligation | Compile-time assertion | [ ] |
-| V1.1.5 | `@decreases` termination proof | Variant expression | [ ] |
-| V1.1.6 | `old(x)` expression | Value of x at function entry | [ ] |
-| V1.1.7 | `forall` quantifier | `@ensures(forall(i, 0..n, arr[i] >= 0))` | [ ] |
-| V1.1.8 | `exists` quantifier | Existential quantification | [ ] |
-| V1.1.9 | Ghost variables | Specification-only state | [ ] |
-| V1.1.10 | Spec parsing in analyzer | Parse and validate annotations | [ ] |
+| V1.1.1 | `@requires` precondition | `@requires(x > 0)` | [x] |
+| V1.1.2 | `@ensures` postcondition | `@ensures(result >= 0)` | [x] |
+| V1.1.3 | `@invariant` loop invariant | `@invariant(i < n)` | [x] |
+| V1.1.4 | `@assert` proof obligation | Compile-time assertion | [x] |
+| V1.1.5 | `@decreases` termination proof | Variant expression | [x] |
+| V1.1.6 | `old(x)` expression | Value of x at function entry | [x] |
+| V1.1.7 | `forall` quantifier | `@ensures(forall(i, 0..n, arr[i] >= 0))` | [x] |
+| V1.1.8 | `exists` quantifier | Existential quantification | [x] |
+| V1.1.9 | Ghost variables | Specification-only state | [x] |
+| V1.1.10 | Spec parsing in analyzer | Parse and validate annotations | [x] |
 
 #### Sprint V1.2: Verification Conditions (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| V1.2.1 | Weakest precondition calculus | wp(stmt, postcondition) | [ ] |
-| V1.2.2 | SSA transformation | Single static assignment for VC gen | [ ] |
-| V1.2.3 | Loop invariant checking | Verify invariant holds at entry + preserved | [ ] |
-| V1.2.4 | Function contract verification | Precondition→body→postcondition | [ ] |
-| V1.2.5 | Array bounds proof | Prove `i < len(arr)` statically | [ ] |
-| V1.2.6 | Integer overflow proof | Prove no overflow in arithmetic | [ ] |
-| V1.2.7 | Null safety proof | Prove Option unwrap is safe | [ ] |
-| V1.2.8 | Division by zero proof | Prove divisor != 0 | [ ] |
-| V1.2.9 | Termination proof | Prove decreasing variant | [ ] |
-| V1.2.10 | VC export (SMT-LIB2) | Export verification conditions | [ ] |
+| V1.2.1 | Weakest precondition calculus | wp(stmt, postcondition) | [x] |
+| V1.2.2 | SSA transformation | Single static assignment for VC gen | [x] |
+| V1.2.3 | Loop invariant checking | Verify invariant holds at entry + preserved | [x] |
+| V1.2.4 | Function contract verification | Precondition→body→postcondition | [x] |
+| V1.2.5 | Array bounds proof | Prove `i < len(arr)` statically | [x] |
+| V1.2.6 | Integer overflow proof | Prove no overflow in arithmetic | [x] |
+| V1.2.7 | Null safety proof | Prove Option unwrap is safe | [x] |
+| V1.2.8 | Division by zero proof | Prove divisor != 0 | [x] |
+| V1.2.9 | Termination proof | Prove decreasing variant | [x] |
+| V1.2.10 | VC export (SMT-LIB2) | Export verification conditions | [x] |
 
 ### Phase V2: SMT Solver Integration (2 sprints, 20 tasks)
 

@@ -59,6 +59,7 @@ pub mod selfhost;
 pub mod stdlib;
 pub mod stdlib_v3;
 pub mod testing;
+pub mod verify;
 pub mod vm;
 
 use analyzer::SemanticError;
