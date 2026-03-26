@@ -1,10 +1,11 @@
-//! Async Networking — TCP/UDP, HTTP client/server, WebSocket, DNS, TLS.
+//! Networking — TCP/UDP, HTTP client/server, WebSocket, DNS, TLS.
 //!
-//! Phase S1: 20 tasks covering the full networking stack with
-//! connection pooling, timeouts, and streaming support.
+//! Phase S1 + V8 GC1: Real networking implementations via std::net.
+//! TCP client/server, UDP, HTTP client/server, DNS resolution.
 
 use std::collections::HashMap;
 use std::fmt;
+use std::io::{BufRead, BufReader, Read, Write};
 
 // ═══════════════════════════════════════════════════════════════════════
 // S1.1-S1.2: TCP Client/Server + UDP
@@ -645,6 +646,323 @@ impl CircuitBreaker {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.11: Real TCP Client
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Connect to a TCP server and exchange data.
+pub fn tcp_connect(addr: &str, data: &[u8], timeout_ms: u64) -> Result<Vec<u8>, String> {
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let timeout = Duration::from_millis(timeout_ms);
+    let stream = TcpStream::connect(addr).map_err(|e| format!("TCP connect failed: {e}"))?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|e| format!("set timeout: {e}"))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|e| format!("set timeout: {e}"))?;
+
+    let mut stream = stream;
+    stream
+        .write_all(data)
+        .map_err(|e| format!("TCP write: {e}"))?;
+    stream.flush().map_err(|e| format!("TCP flush: {e}"))?;
+
+    let mut response = Vec::new();
+    // Read with timeout — will return when data available or timeout
+    let mut buf = [0u8; 4096];
+    match stream.read(&mut buf) {
+        Ok(n) => response.extend_from_slice(&buf[..n]),
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+        Err(e) => return Err(format!("TCP read: {e}")),
+    }
+    Ok(response)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.12: Real TCP Server
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A simple TCP server that accepts connections and calls a handler.
+pub struct TcpServer {
+    listener: std::net::TcpListener,
+}
+
+impl TcpServer {
+    /// Bind to an address. Use "127.0.0.1:0" for OS-assigned port.
+    pub fn bind(addr: &str) -> Result<Self, String> {
+        let listener =
+            std::net::TcpListener::bind(addr).map_err(|e| format!("TCP bind: {e}"))?;
+        Ok(Self { listener })
+    }
+
+    /// Returns the local address (useful when bound to port 0).
+    pub fn local_addr(&self) -> Result<String, String> {
+        self.listener
+            .local_addr()
+            .map(|a| a.to_string())
+            .map_err(|e| format!("{e}"))
+    }
+
+    /// Accept one connection, read request, call handler, send response.
+    pub fn accept_one<F>(&self, handler: F) -> Result<(), String>
+    where
+        F: FnOnce(&[u8]) -> Vec<u8>,
+    {
+        let (mut stream, _addr) = self
+            .listener
+            .accept()
+            .map_err(|e| format!("TCP accept: {e}"))?;
+
+        let mut buf = [0u8; 4096];
+        let n = stream.read(&mut buf).map_err(|e| format!("read: {e}"))?;
+        let response = handler(&buf[..n]);
+        stream
+            .write_all(&response)
+            .map_err(|e| format!("write: {e}"))?;
+        Ok(())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.13: Real UDP
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Send a UDP datagram and optionally receive a response.
+pub fn udp_send_recv(
+    bind_addr: &str,
+    target_addr: &str,
+    data: &[u8],
+    timeout_ms: u64,
+) -> Result<Vec<u8>, String> {
+    use std::net::UdpSocket;
+    use std::time::Duration;
+
+    let socket = UdpSocket::bind(bind_addr).map_err(|e| format!("UDP bind: {e}"))?;
+    socket
+        .set_read_timeout(Some(Duration::from_millis(timeout_ms)))
+        .map_err(|e| format!("set timeout: {e}"))?;
+
+    socket
+        .send_to(data, target_addr)
+        .map_err(|e| format!("UDP send: {e}"))?;
+
+    let mut buf = [0u8; 65535];
+    match socket.recv_from(&mut buf) {
+        Ok((n, _addr)) => Ok(buf[..n].to_vec()),
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(Vec::new()),
+        Err(e) => Err(format!("UDP recv: {e}")),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.14: Real HTTP Client
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Perform a real HTTP request using std::net::TcpStream.
+/// Supports HTTP/1.1 GET and POST.
+pub fn http_request(req: &HttpRequest) -> Result<HttpResponse, String> {
+    let url = Url::parse(&req.url)?;
+    let host = &url.host;
+    let port = url.port;
+    let addr = format!("{host}:{port}");
+
+    let start = std::time::Instant::now();
+
+    let mut stream = std::net::TcpStream::connect(&addr)
+        .map_err(|e| format!("HTTP connect to {addr}: {e}"))?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_millis(req.timeout_ms)))
+        .map_err(|e| format!("set timeout: {e}"))?;
+
+    // Build HTTP/1.1 request
+    let method = format!("{}", req.method);
+    let path = if url.path.is_empty() { "/" } else { &url.path };
+    let mut request_str = format!("{method} {path}");
+    if let Some(q) = &url.query {
+        request_str.push('?');
+        request_str.push_str(q);
+    }
+    request_str.push_str(&format!(" HTTP/1.1\r\nHost: {host}\r\n"));
+
+    for (k, v) in &req.headers {
+        request_str.push_str(&format!("{k}: {v}\r\n"));
+    }
+
+    if let Some(ref body) = req.body {
+        if !body.is_empty() {
+            request_str.push_str(&format!("Content-Length: {}\r\n", body.len()));
+        }
+    }
+
+    request_str.push_str("Connection: close\r\n\r\n");
+
+    stream
+        .write_all(request_str.as_bytes())
+        .map_err(|e| format!("HTTP write: {e}"))?;
+    if let Some(ref body) = req.body {
+        if !body.is_empty() {
+            stream
+                .write_all(body)
+                .map_err(|e| format!("HTTP write body: {e}"))?;
+        }
+    }
+    stream.flush().map_err(|e| format!("HTTP flush: {e}"))?;
+
+    // Read response
+    let reader = BufReader::new(&stream);
+    let mut lines = reader.lines();
+
+    // Parse status line
+    let status_line = lines
+        .next()
+        .ok_or("empty response")?
+        .map_err(|e| format!("read status: {e}"))?;
+    let parts: Vec<&str> = status_line.splitn(3, ' ').collect();
+    if parts.len() < 2 {
+        return Err(format!("invalid status line: {status_line}"));
+    }
+    let status: u16 = parts[1].parse().unwrap_or(0);
+    let status_text = parts.get(2).unwrap_or(&"").to_string();
+
+    // Parse headers
+    let mut headers = HashMap::new();
+    let mut content_length: usize = 0;
+    for line_result in lines.by_ref() {
+        let line = line_result.map_err(|e| format!("read header: {e}"))?;
+        if line.is_empty() {
+            break;
+        }
+        if let Some((k, v)) = line.split_once(": ") {
+            let key = k.to_lowercase();
+            if key == "content-length" {
+                content_length = v.trim().parse().unwrap_or(0);
+            }
+            headers.insert(key, v.trim().to_string());
+        }
+    }
+
+    // Read body
+    let mut body = Vec::new();
+    if content_length > 0 {
+        body.resize(content_length, 0);
+        stream
+            .read_exact(&mut body)
+            .map_err(|e| format!("read body: {e}"))?;
+    } else {
+        // Read until EOF for chunked/unknown length
+        let _ = stream.read_to_end(&mut body);
+    }
+
+    let elapsed = start.elapsed();
+
+    Ok(HttpResponse {
+        status,
+        status_text,
+        headers,
+        body,
+        elapsed_ms: elapsed.as_secs_f64() * 1000.0,
+    })
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.15: Real HTTP Server
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A minimal HTTP server that serves requests.
+pub struct HttpServer {
+    listener: std::net::TcpListener,
+}
+
+impl HttpServer {
+    /// Bind to an address.
+    pub fn bind(addr: &str) -> Result<Self, String> {
+        let listener =
+            std::net::TcpListener::bind(addr).map_err(|e| format!("HTTP bind: {e}"))?;
+        Ok(Self { listener })
+    }
+
+    /// Returns the local address.
+    pub fn local_addr(&self) -> Result<String, String> {
+        self.listener
+            .local_addr()
+            .map(|a| a.to_string())
+            .map_err(|e| format!("{e}"))
+    }
+
+    /// Accept one HTTP request and send a response.
+    pub fn accept_one<F>(&self, handler: F) -> Result<(), String>
+    where
+        F: FnOnce(&str, &str, &HashMap<String, String>) -> (u16, String, Vec<u8>),
+    {
+        let (stream, _addr) = self
+            .listener
+            .accept()
+            .map_err(|e| format!("accept: {e}"))?;
+        let mut reader = BufReader::new(&stream);
+
+        // Read request line
+        let mut request_line = String::new();
+        reader
+            .read_line(&mut request_line)
+            .map_err(|e| format!("read: {e}"))?;
+        let parts: Vec<&str> = request_line.trim().splitn(3, ' ').collect();
+        let method = parts.first().unwrap_or(&"GET");
+        let path = parts.get(1).unwrap_or(&"/");
+
+        // Read headers
+        let mut headers = HashMap::new();
+        loop {
+            let mut line = String::new();
+            reader
+                .read_line(&mut line)
+                .map_err(|e| format!("read header: {e}"))?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                break;
+            }
+            if let Some((k, v)) = trimmed.split_once(": ") {
+                headers.insert(k.to_lowercase(), v.to_string());
+            }
+        }
+
+        let (status, status_text, body) = handler(method, path, &headers);
+
+        // Send response
+        let mut stream = stream;
+        let response = format!(
+            "HTTP/1.1 {status} {status_text}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .map_err(|e| format!("write: {e}"))?;
+        stream
+            .write_all(&body)
+            .map_err(|e| format!("write body: {e}"))?;
+        Ok(())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V8 GC1.16: Real DNS Resolver
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Resolve a hostname to IP addresses using the system resolver.
+pub fn dns_resolve(hostname: &str) -> Result<Vec<String>, String> {
+    use std::net::ToSocketAddrs;
+
+    let addr_str = format!("{hostname}:0");
+    let addrs = addr_str
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS resolve '{hostname}': {e}"))?;
+    Ok(addrs.map(|a| a.ip().to_string()).collect())
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -769,5 +1087,140 @@ mod tests {
         assert_eq!(cb.state, CircuitState::Open);
         assert!(!cb.allow_request(3500)); // still open
         assert!(cb.allow_request(8001)); // half-open after 5s
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC1.19: Real networking integration tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn gc1_tcp_echo_server() {
+        // Start TCP server on random port
+        let server = TcpServer::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+
+        // Spawn server in background thread
+        let handle = std::thread::spawn(move || {
+            server.accept_one(|data| {
+                let mut response = b"ECHO:".to_vec();
+                response.extend_from_slice(data);
+                response
+            })
+        });
+
+        // Client connects and sends data
+        let response = tcp_connect(&addr, b"hello", 5000).unwrap();
+        assert_eq!(response, b"ECHO:hello");
+
+        handle.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn gc1_tcp_large_payload() {
+        let server = TcpServer::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            server.accept_one(|data| {
+                format!("got {} bytes", data.len()).into_bytes()
+            })
+        });
+
+        let payload = vec![0xABu8; 1024];
+        let response = tcp_connect(&addr, &payload, 5000).unwrap();
+        assert_eq!(response, b"got 1024 bytes");
+
+        handle.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn gc1_udp_roundtrip() {
+        // Server socket
+        let server_sock =
+            std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_addr = server_sock.local_addr().unwrap().to_string();
+
+        // Server echoes in background
+        let handle = std::thread::spawn(move || {
+            let mut buf = [0u8; 1024];
+            let (n, src) = server_sock.recv_from(&mut buf).unwrap();
+            server_sock.send_to(&buf[..n], src).unwrap();
+        });
+
+        // Client sends and receives
+        let response =
+            udp_send_recv("127.0.0.1:0", &server_addr, b"ping", 5000).unwrap();
+        assert_eq!(response, b"ping");
+
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn gc1_http_server_client() {
+        let server = HttpServer::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            server.accept_one(|method, path, _headers| {
+                let body = format!("{{\"method\":\"{method}\",\"path\":\"{path}\"}}");
+                (200, "OK".to_string(), body.into_bytes())
+            })
+        });
+
+        // Real HTTP request
+        let req = HttpRequest::get(&format!("http://{addr}/api/test"));
+        let resp = http_request(&req).unwrap();
+        assert_eq!(resp.status, 200);
+        let body = resp.text().unwrap();
+        assert!(body.contains("\"method\":\"GET\""));
+        assert!(body.contains("\"path\":\"/api/test\""));
+
+        handle.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn gc1_http_post() {
+        let server = HttpServer::bind("127.0.0.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+
+        let handle = std::thread::spawn(move || {
+            server.accept_one(|method, _path, _headers| {
+                let body = format!("method={method}");
+                (201, "Created".to_string(), body.into_bytes())
+            })
+        });
+
+        let req = HttpRequest::post_json(
+            &format!("http://{addr}/api/items"),
+            "{\"name\":\"fajar\"}",
+        );
+        let resp = http_request(&req).unwrap();
+        assert_eq!(resp.status, 201);
+
+        handle.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn gc1_dns_resolve_localhost() {
+        let addrs = dns_resolve("localhost").unwrap();
+        assert!(!addrs.is_empty());
+        // localhost should resolve to 127.0.0.1 or ::1
+        assert!(
+            addrs.iter().any(|a| a == "127.0.0.1" || a == "::1"),
+            "localhost should resolve to 127.0.0.1 or ::1, got: {addrs:?}"
+        );
+    }
+
+    #[test]
+    fn gc1_dns_resolve_invalid() {
+        let result = dns_resolve("this.host.definitely.does.not.exist.invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn gc1_tcp_connect_refused() {
+        // Try to connect to a port that's definitely not listening
+        let result = tcp_connect("127.0.0.1:1", b"test", 1000);
+        assert!(result.is_err());
     }
 }
