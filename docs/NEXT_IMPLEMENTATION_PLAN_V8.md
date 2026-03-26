@@ -3,7 +3,7 @@
 > **Previous:** V7 "Ascendancy" (680/680 tasks, ALL COMPLETE)
 > **Version:** Fajar Lang v6.1.0 → v7.0.0 "Dominion"
 > **Goal:** Transform Fajar Lang from a working compiler into a production ecosystem
-> **Scale:** 10 options, 70 sprints, 700 tasks, ~140 hours
+> **Scale:** 10 options, 71 sprints, 710 tasks, ~142 hours
 
 ---
 
@@ -396,7 +396,90 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 *Create world-class documentation that makes Fajar Lang accessible to everyone.*
 
-*(70 tasks: Interactive tutorial (20), API reference (20), Cookbook (30))*
+### Phase DOC1: Interactive Tutorial (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| DOC1.1 | Tutorial framework | Step-by-step lesson engine with progress tracking | [ ] |
+| DOC1.2 | Lesson 1: Hello World | Variables, println, basic types | [ ] |
+| DOC1.3 | Lesson 2: Functions | Parameters, return types, recursion | [ ] |
+| DOC1.4 | Lesson 3: Control Flow | if/else, match, while, for loops | [ ] |
+| DOC1.5 | Lesson 4: Structs & Enums | Custom types, methods, pattern matching | [ ] |
+| DOC1.6 | Lesson 5: Error Handling | Result, Option, ? operator | [ ] |
+| DOC1.7 | Lesson 6: Ownership | Move semantics, borrowing, references | [ ] |
+| DOC1.8 | Lesson 7: Generics & Traits | Type parameters, trait bounds, impl | [ ] |
+| DOC1.9 | Lesson 8: Collections | Arrays, HashMap, iterators | [ ] |
+| DOC1.10 | Lesson 9: Modules | mod, use, pub, project structure | [ ] |
+| DOC1.11 | Lesson 10: Tensor & ML | Tensor creation, operations, autograd basics | [ ] |
+| DOC1.12 | Lesson 11: OS Development | @kernel, @device, bare-metal hello world | [ ] |
+| DOC1.13 | Lesson 12: Concurrency | Threads, channels, async/await | [ ] |
+| DOC1.14 | Lesson 13: FFI | Calling C functions, extern blocks | [ ] |
+| DOC1.15 | Lesson 14: Testing | @test, assert, property-based testing | [ ] |
+| DOC1.16 | Code exercises | 50 interactive exercises with auto-grading | [ ] |
+| DOC1.17 | Progress persistence | Save/resume tutorial progress | [ ] |
+| DOC1.18 | Playground integration | Run lesson code in browser playground | [ ] |
+| DOC1.19 | Multilingual support | English + Bahasa Indonesia | [ ] |
+| DOC1.20 | Tutorial deployment | Static site generation, hosting | [ ] |
+
+### Phase DOC2: API Reference (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| DOC2.1 | Doc generator v2 | Extract /// docs from all pub items | [ ] |
+| DOC2.2 | Type documentation | All primitive types with examples | [ ] |
+| DOC2.3 | Stdlib documentation | All builtins: print, len, type_of, assert, etc. | [ ] |
+| DOC2.4 | Collections API docs | Array methods, HashMap methods, iterators | [ ] |
+| DOC2.5 | String API docs | All 15 string methods with examples | [ ] |
+| DOC2.6 | Math API docs | PI, E, abs, sqrt, sin, cos, etc. | [ ] |
+| DOC2.7 | IO API docs | read_file, write_file, append_file, file_exists | [ ] |
+| DOC2.8 | Tensor API docs | zeros, ones, randn, matmul, reshape, etc. | [ ] |
+| DOC2.9 | Autograd API docs | backward, grad, requires_grad, optimizers | [ ] |
+| DOC2.10 | Layer API docs | Dense, Conv2d, MultiHeadAttention, BatchNorm | [ ] |
+| DOC2.11 | OS API docs | Memory, IRQ, syscall, port I/O builtins | [ ] |
+| DOC2.12 | Error code reference | All 71 error codes with explanations and fixes | [ ] |
+| DOC2.13 | Keyword reference | All keywords with syntax and examples | [ ] |
+| DOC2.14 | Operator reference | All operators with precedence table | [ ] |
+| DOC2.15 | Annotation reference | @kernel, @device, @safe, @unsafe, @test, @entry | [ ] |
+| DOC2.16 | Grammar reference | EBNF grammar with railroad diagrams | [ ] |
+| DOC2.17 | Search functionality | Full-text search across all API docs | [ ] |
+| DOC2.18 | Cross-linking | Automatic links between related items | [ ] |
+| DOC2.19 | Version selector | Show docs for different Fajar Lang versions | [ ] |
+| DOC2.20 | API reference deployment | Static site with navigation, mobile-friendly | [ ] |
+
+### Phase DOC3: Cookbook & Guides (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| DOC3.1 | Getting Started guide | Install, first program, project setup | [ ] |
+| DOC3.2 | Build system guide | fj.toml, fj build, fj run, fj test | [ ] |
+| DOC3.3 | Package management guide | fj new, fj add, fj publish | [ ] |
+| DOC3.4 | Error handling cookbook | Patterns for Result, Option, error propagation | [ ] |
+| DOC3.5 | Concurrency cookbook | Thread patterns, async patterns, channels | [ ] |
+| DOC3.6 | ML cookbook | Training pipeline, inference, quantization | [ ] |
+| DOC3.7 | OS development guide | @kernel program, boot sequence, QEMU testing | [ ] |
+| DOC3.8 | Embedded guide | Cross-compilation, bare-metal, HAL | [ ] |
+| DOC3.9 | FFI guide | C interop, Python bindings, Rust interop | [ ] |
+| DOC3.10 | Testing guide | Unit tests, integration tests, property tests | [ ] |
+| DOC3.11 | Performance guide | Profiling, benchmarking, optimization tips | [ ] |
+| DOC3.12 | Migration guide | From Rust/C/Python to Fajar Lang | [ ] |
+| DOC3.13 | IDE setup guide | VS Code, Neovim, JetBrains configuration | [ ] |
+| DOC3.14 | Deployment guide | Docker, cross-compile, CI/CD setup | [ ] |
+| DOC3.15 | Security guide | Safe coding, audit checklist, context rules | [ ] |
+| DOC3.16 | Dragon Q6A guide | Setup, GPIO, NPU inference, deployment | [ ] |
+| DOC3.17 | FAQ page | 50 most common questions with answers | [ ] |
+| DOC3.18 | Troubleshooting guide | 30 common errors with solutions | [ ] |
+| DOC3.19 | Changelog | Auto-generated from git tags and commits | [ ] |
+| DOC3.20 | Blog platform | Markdown blog for release announcements | [ ] |
+| DOC3.21 | Recipe: REST API | Step-by-step REST API server | [ ] |
+| DOC3.22 | Recipe: CLI tool | Build a command-line application | [ ] |
+| DOC3.23 | Recipe: Web scraper | HTTP requests + JSON parsing | [ ] |
+| DOC3.24 | Recipe: Image classifier | Load model, preprocess, classify | [ ] |
+| DOC3.25 | Recipe: Drone controller | Sensor fusion + PID + ML inference | [ ] |
+| DOC3.26 | Recipe: Chat server | TCP server with multiple clients | [ ] |
+| DOC3.27 | Recipe: Key-value store | Persistent storage with transactions | [ ] |
+| DOC3.28 | Recipe: Game of Life | Terminal-based cellular automaton | [ ] |
+| DOC3.29 | Recipe: Markdown parser | Recursive descent Markdown → HTML | [ ] |
+| DOC3.30 | Documentation CI | Auto-build docs on push, deploy to site | [ ] |
 
 ---
 
@@ -404,7 +487,90 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 *Make Fajar Lang compile faster and produce faster code.*
 
-*(70 tasks: Compilation speed (20), Code quality (20), Binary size (30))*
+### Phase OPT1: Compilation Speed (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OPT1.1 | Parallel lexing | Lex multiple files concurrently | [ ] |
+| OPT1.2 | Parallel parsing | Parse multiple modules concurrently | [ ] |
+| OPT1.3 | Parallel type checking | Per-module type checking with shared context | [ ] |
+| OPT1.4 | Incremental analysis cache | Cache analysis results, reuse on unchanged files | [ ] |
+| OPT1.5 | Lazy module loading | Only load/parse imported modules | [ ] |
+| OPT1.6 | Tokenizer SIMD | Use SIMD for whitespace/delimiter scanning | [ ] |
+| OPT1.7 | String interning | Intern identifiers and keywords (arena allocator) | [ ] |
+| OPT1.8 | AST arena allocation | Allocate AST nodes from typed arena | [ ] |
+| OPT1.9 | Module dependency graph | Topological sort for optimal compilation order | [ ] |
+| OPT1.10 | Precompiled headers | Cache parsed stdlib for instant reuse | [ ] |
+| OPT1.11 | Compile server mode | Persistent daemon with warm caches | [ ] |
+| OPT1.12 | Profile-guided recompilation | Only recompile changed + dependent modules | [ ] |
+| OPT1.13 | Type check caching | Hash-based cache for type inference results | [ ] |
+| OPT1.14 | Parallel codegen | Generate code for independent functions concurrently | [ ] |
+| OPT1.15 | Object file caching | Cache .o files, only regenerate on change | [ ] |
+| OPT1.16 | Linker optimization | Incremental linking, parallel symbol resolution | [ ] |
+| OPT1.17 | Compilation metrics | Track time per phase, show bottlenecks | [ ] |
+| OPT1.18 | Memory usage optimization | Reduce peak memory during compilation | [ ] |
+| OPT1.19 | Benchmark: 10K line program | Compile time < 2s goal | [ ] |
+| OPT1.20 | Benchmark: 100K line project | Incremental rebuild < 500ms goal | [ ] |
+
+### Phase OPT2: Code Quality (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OPT2.1 | Constant folding | Evaluate constant expressions at compile time | [ ] |
+| OPT2.2 | Dead code elimination v2 | Whole-program DCE with call graph analysis | [ ] |
+| OPT2.3 | Function inlining | Cost model, always-inline hint, threshold tuning | [ ] |
+| OPT2.4 | Loop unrolling | Unroll small loops with known trip count | [ ] |
+| OPT2.5 | LICM v2 | Loop-invariant code motion with alias analysis | [ ] |
+| OPT2.6 | Common subexpression elimination v2 | Global CSE across basic blocks | [ ] |
+| OPT2.7 | Strength reduction | Replace expensive ops (mul→shift, div→mul) | [ ] |
+| OPT2.8 | Tail call optimization | Convert tail recursion to loops | [ ] |
+| OPT2.9 | Escape analysis | Stack-allocate non-escaping heap objects | [ ] |
+| OPT2.10 | Devirtualization | Replace dynamic dispatch with static when known | [ ] |
+| OPT2.11 | Alias analysis | Track pointer aliasing for optimization safety | [ ] |
+| OPT2.12 | Auto-vectorization | Detect vectorizable loops, emit SIMD | [ ] |
+| OPT2.13 | Branch prediction hints | Profile-guided branch probability | [ ] |
+| OPT2.14 | Peephole optimizations | Pattern-based instruction simplification | [ ] |
+| OPT2.15 | Copy propagation | Eliminate redundant copies | [ ] |
+| OPT2.16 | Phi node optimization | Simplify SSA phi nodes | [ ] |
+| OPT2.17 | Optimization pipeline | O0/O1/O2/O3/Os optimization levels | [ ] |
+| OPT2.18 | Optimization metrics | Count applied optimizations per level | [ ] |
+| OPT2.19 | Benchmark: fibonacci | Within 2x of C -O2 | [ ] |
+| OPT2.20 | Benchmark: matrix multiply | Within 3x of C -O2 with BLAS | [ ] |
+
+### Phase OPT3: Binary Size & LTO (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OPT3.1 | Dead function elimination | Remove unreachable functions from binary | [ ] |
+| OPT3.2 | Dead global elimination | Remove unused global variables | [ ] |
+| OPT3.3 | String deduplication | Merge identical string literals | [ ] |
+| OPT3.4 | Function merging | Merge identical function bodies | [ ] |
+| OPT3.5 | Section garbage collection | --gc-sections linker flag integration | [ ] |
+| OPT3.6 | Cross-module inlining | Inline small functions across module boundaries | [ ] |
+| OPT3.7 | Thin LTO | Parallel link-time optimization | [ ] |
+| OPT3.8 | Full LTO | Single-module whole-program optimization | [ ] |
+| OPT3.9 | Symbol stripping | Strip debug symbols in release mode | [ ] |
+| OPT3.10 | Compression | UPX-style binary compression option | [ ] |
+| OPT3.11 | Size profiling | Per-function size report (bloaty-style) | [ ] |
+| OPT3.12 | Monomorphization dedup | Detect identical monomorphized instances | [ ] |
+| OPT3.13 | Runtime trimming | Only link used runtime functions | [ ] |
+| OPT3.14 | Panic-free mode | Eliminate panic infrastructure for embedded | [ ] |
+| OPT3.15 | no_std binary | Minimal binary without stdlib | [ ] |
+| OPT3.16 | Custom allocator | Plug custom allocator for binary size | [ ] |
+| OPT3.17 | Embedded profile | Optimize for flash/RAM-constrained targets | [ ] |
+| OPT3.18 | WASM size optimization | wasm-opt integration, tree shaking | [ ] |
+| OPT3.19 | Benchmark: minimal binary | Hello world < 100KB | [ ] |
+| OPT3.20 | Benchmark: embedded binary | Blinky < 16KB for Cortex-M | [ ] |
+| OPT3.21 | PGO profile collection | Instrument build for profile data | [ ] |
+| OPT3.22 | PGO profile application | Use profile data for optimization | [ ] |
+| OPT3.23 | PGO hot/cold splitting | Separate hot and cold code paths | [ ] |
+| OPT3.24 | PGO inline decisions | Profile-guided inlining heuristics | [ ] |
+| OPT3.25 | PGO branch layout | Optimize branch layout from profile | [ ] |
+| OPT3.26 | BOLT integration | Post-link optimization with BOLT | [ ] |
+| OPT3.27 | Compile time tracking | --timings flag showing phase breakdown | [ ] |
+| OPT3.28 | Optimization report | --opt-report showing what was optimized | [ ] |
+| OPT3.29 | Regression tests | 50 optimization correctness tests | [ ] |
+| OPT3.30 | Optimization documentation | Guide for each -O level and trade-offs | [ ] |
 
 ---
 
@@ -412,7 +578,90 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 *Harden Fajar Lang for safety-critical and security-sensitive deployments.*
 
-*(70 tasks: Memory safety (20), Supply chain (20), Audit & certification (30))*
+### Phase SEC1: Memory Safety Hardening (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| SEC1.1 | Stack canaries | Detect stack buffer overflow at runtime | [ ] |
+| SEC1.2 | Stack clash protection | Guard pages between stack frames | [ ] |
+| SEC1.3 | ASLR support | Address space layout randomization for binaries | [ ] |
+| SEC1.4 | CFI (Control Flow Integrity) | Forward-edge CFI for indirect calls | [ ] |
+| SEC1.5 | Shadow stack | Return address protection via shadow stack | [ ] |
+| SEC1.6 | Bounds checking mode | Runtime bounds checks on all array access | [ ] |
+| SEC1.7 | Integer overflow detection | Runtime traps on signed/unsigned overflow | [ ] |
+| SEC1.8 | Use-after-free detection | Quarantine freed memory, detect reuse | [ ] |
+| SEC1.9 | Double-free detection | Track allocation state, trap on double free | [ ] |
+| SEC1.10 | Null pointer protection | Guard page at address 0 | [ ] |
+| SEC1.11 | Memory tagging (MTE) | ARM Memory Tagging Extension support | [ ] |
+| SEC1.12 | SafeStack | Separate stack for safe and unsafe data | [ ] |
+| SEC1.13 | Sanitizer integration | ASan, MSan, TSan, UBSan support | [ ] |
+| SEC1.14 | Fuzzing integration | libFuzzer/AFL++ target generation | [ ] |
+| SEC1.15 | Leak detector | Detect memory leaks at program exit | [ ] |
+| SEC1.16 | Allocation limits | Per-context memory allocation budgets | [ ] |
+| SEC1.17 | Stack depth limit | Configurable recursion depth protection | [ ] |
+| SEC1.18 | Heap hardening | Randomized heap layout, guard pages | [ ] |
+| SEC1.19 | Memory safety tests | 50 tests for all hardening features | [ ] |
+| SEC1.20 | Security benchmark | Overhead measurement for each feature | [ ] |
+
+### Phase SEC2: Supply Chain Security (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| SEC2.1 | Package signing | Ed25519 signatures on published packages | [ ] |
+| SEC2.2 | Signature verification | Verify signatures on download | [ ] |
+| SEC2.3 | Transparency log | Sigstore-style transparency for publishes | [ ] |
+| SEC2.4 | SBOM generation | CycloneDX/SPDX software bill of materials | [ ] |
+| SEC2.5 | License compliance | Detect and report dependency licenses | [ ] |
+| SEC2.6 | Vulnerability database | CVE tracking for Fajar packages | [ ] |
+| SEC2.7 | `fj audit` command | Scan deps against vulnerability database | [ ] |
+| SEC2.8 | Dependency pinning | Exact version pinning in fj.lock | [ ] |
+| SEC2.9 | Checksum verification | SHA-256 integrity on all downloads | [ ] |
+| SEC2.10 | Reproducible builds | Same source → identical binary output | [ ] |
+| SEC2.11 | Build provenance | SLSA-compliant build attestation | [ ] |
+| SEC2.12 | Source verification | Verify package source matches published | [ ] |
+| SEC2.13 | Typosquatting detection | Flag packages with names similar to popular ones | [ ] |
+| SEC2.14 | Namespace reservation | Prevent unauthorized publishes to known names | [ ] |
+| SEC2.15 | Two-factor auth | 2FA for package publish operations | [ ] |
+| SEC2.16 | API token scoping | Fine-grained token permissions (read/write/admin) | [ ] |
+| SEC2.17 | Token rotation | Automatic token expiry and renewal | [ ] |
+| SEC2.18 | Security advisories | Publish and distribute security notices | [ ] |
+| SEC2.19 | Supply chain tests | 30 tests for signing, verification, audit | [ ] |
+| SEC2.20 | Security policy | SECURITY.md, responsible disclosure process | [ ] |
+
+### Phase SEC3: Audit & Certification (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| SEC3.1 | Static analysis rules | 50 custom lint rules for security patterns | [ ] |
+| SEC3.2 | Taint analysis | Track untrusted input through data flow | [ ] |
+| SEC3.3 | SQL injection detection | Flag string concatenation in queries | [ ] |
+| SEC3.4 | Command injection detection | Flag string concatenation in exec calls | [ ] |
+| SEC3.5 | Path traversal detection | Flag user input in file paths | [ ] |
+| SEC3.6 | Cryptographic misuse detection | Flag weak algorithms, hardcoded keys | [ ] |
+| SEC3.7 | Information leak detection | Flag sensitive data in logs/errors | [ ] |
+| SEC3.8 | Race condition detection | Static data race analysis | [ ] |
+| SEC3.9 | Deadlock detection | Lock ordering analysis | [ ] |
+| SEC3.10 | Undefined behavior detection | Flag platform-dependent code | [ ] |
+| SEC3.11 | MISRA-C compliance mode | Subset of MISRA rules for safety-critical | [ ] |
+| SEC3.12 | CERT C compliance mode | CERT C secure coding rules | [ ] |
+| SEC3.13 | ISO 26262 annotations | ASIL classification support for automotive | [ ] |
+| SEC3.14 | DO-178C evidence | Traceability matrices for aerospace | [ ] |
+| SEC3.15 | IEC 62443 support | Industrial cybersecurity compliance | [ ] |
+| SEC3.16 | Formal verification hooks | Pre/post conditions, invariants | [ ] |
+| SEC3.17 | Test coverage enforcement | Minimum coverage thresholds per module | [ ] |
+| SEC3.18 | Mutation testing | Verify test quality with mutation analysis | [ ] |
+| SEC3.19 | Security scorecard | Generate security posture report | [ ] |
+| SEC3.20 | Penetration test suite | Automated security testing framework | [ ] |
+| SEC3.21 | @secure annotation | Mark functions requiring security review | [ ] |
+| SEC3.22 | @trusted annotation | Mark FFI boundaries as trust boundaries | [ ] |
+| SEC3.23 | Capability-based security | Fine-grained permissions for modules | [ ] |
+| SEC3.24 | Sandbox mode | Restrict filesystem/network/exec access | [ ] |
+| SEC3.25 | Secure default configuration | Safe defaults for all compiler options | [ ] |
+| SEC3.26 | Hardening guide | Document all security features and usage | [ ] |
+| SEC3.27 | Threat model | Document attack surfaces and mitigations | [ ] |
+| SEC3.28 | Security review checklist | Checklist for code review | [ ] |
+| SEC3.29 | Audit trail | Log all security-relevant compiler decisions | [ ] |
+| SEC3.30 | Certification documentation | Templates for regulatory submissions | [ ] |
 
 ---
 
@@ -420,15 +669,181 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 *Build native GUI applications with Fajar Lang.*
 
-*(70 tasks: Widget toolkit (30), Layout engine (20), Platform integration (20))*
+### Phase GUI1: Widget Toolkit (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GUI1.1 | Window creation | Platform window (X11/Wayland/Win32/Cocoa) | [ ] |
+| GUI1.2 | Event loop | Mouse, keyboard, resize, close events | [ ] |
+| GUI1.3 | Canvas rendering | 2D drawing: lines, rects, circles, text | [ ] |
+| GUI1.4 | Button widget | Clickable button with text and icon | [ ] |
+| GUI1.5 | Label widget | Static text display with alignment | [ ] |
+| GUI1.6 | TextInput widget | Single-line text entry with cursor | [ ] |
+| GUI1.7 | TextArea widget | Multi-line text editing with scroll | [ ] |
+| GUI1.8 | Checkbox widget | Boolean toggle with label | [ ] |
+| GUI1.9 | RadioButton widget | Exclusive selection group | [ ] |
+| GUI1.10 | Slider widget | Continuous value selection | [ ] |
+| GUI1.11 | ProgressBar widget | Determinate and indeterminate progress | [ ] |
+| GUI1.12 | Dropdown/ComboBox | Selection from list of options | [ ] |
+| GUI1.13 | ListView widget | Scrollable list with selection | [ ] |
+| GUI1.14 | TreeView widget | Hierarchical expandable tree | [ ] |
+| GUI1.15 | Table widget | Grid with columns, sorting, selection | [ ] |
+| GUI1.16 | Image widget | Display PNG/JPEG images | [ ] |
+| GUI1.17 | Dialog windows | Alert, confirm, file picker, color picker | [ ] |
+| GUI1.18 | Menu bar | Application menu with submenus | [ ] |
+| GUI1.19 | Context menu | Right-click popup menus | [ ] |
+| GUI1.20 | Toolbar | Icon button strip with tooltips | [ ] |
+| GUI1.21 | TabView widget | Tabbed container for multiple views | [ ] |
+| GUI1.22 | SplitView widget | Resizable horizontal/vertical split | [ ] |
+| GUI1.23 | ScrollView widget | Scrollable container for any content | [ ] |
+| GUI1.24 | Tooltip | Hover information popup | [ ] |
+| GUI1.25 | StatusBar | Bottom bar with text segments | [ ] |
+| GUI1.26 | Theme system | Light/dark/custom themes | [ ] |
+| GUI1.27 | Font rendering | TrueType/OpenType font loading | [ ] |
+| GUI1.28 | DPI awareness | High-DPI scaling on all platforms | [ ] |
+| GUI1.29 | Widget tests (30) | All widgets, interactions, rendering | [ ] |
+| GUI1.30 | Widget documentation | API docs with visual examples | [ ] |
+
+### Phase GUI2: Layout Engine (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GUI2.1 | Flexbox layout | Row/column flex with wrapping | [ ] |
+| GUI2.2 | Grid layout | CSS Grid-style rows/columns/areas | [ ] |
+| GUI2.3 | Stack layout | Z-order stacking for overlays | [ ] |
+| GUI2.4 | Absolute positioning | Fixed pixel position relative to parent | [ ] |
+| GUI2.5 | Padding and margin | Inner and outer spacing for all widgets | [ ] |
+| GUI2.6 | Min/max constraints | Minimum and maximum size constraints | [ ] |
+| GUI2.7 | Aspect ratio | Maintain aspect ratio during resize | [ ] |
+| GUI2.8 | Alignment | Start, center, end, stretch, baseline | [ ] |
+| GUI2.9 | Overflow handling | Clip, scroll, visible overflow modes | [ ] |
+| GUI2.10 | Responsive breakpoints | Layout changes at width thresholds | [ ] |
+| GUI2.11 | Layout caching | Cache layout calculations, invalidate on change | [ ] |
+| GUI2.12 | Animation system | Tweened property animations (ease, spring) | [ ] |
+| GUI2.13 | Transition system | Animated transitions between states | [ ] |
+| GUI2.14 | Constraint solver | Cassowary-style constraint layout | [ ] |
+| GUI2.15 | Auto-sizing | Text-based size calculation | [ ] |
+| GUI2.16 | Scroll physics | Smooth scrolling with momentum | [ ] |
+| GUI2.17 | Hit testing | Determine widget under mouse coordinates | [ ] |
+| GUI2.18 | Focus management | Tab order, focus ring, keyboard navigation | [ ] |
+| GUI2.19 | Layout tests (30) | All layouts, constraints, edge cases | [ ] |
+| GUI2.20 | Layout performance benchmark | 1000 widgets layout < 16ms | [ ] |
+
+### Phase GUI3: Platform Integration (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| GUI3.1 | Linux/X11 backend | Xlib window creation, events, rendering | [ ] |
+| GUI3.2 | Linux/Wayland backend | wl_surface, xdg_shell, input events | [ ] |
+| GUI3.3 | Windows backend | Win32 HWND, WndProc, GDI/Direct2D | [ ] |
+| GUI3.4 | macOS backend | NSWindow, NSView, Core Graphics | [ ] |
+| GUI3.5 | GPU-accelerated rendering | Vulkan/Metal/D3D12 render backend | [ ] |
+| GUI3.6 | Software renderer | CPU-only fallback renderer | [ ] |
+| GUI3.7 | Clipboard support | Copy/paste text and images | [ ] |
+| GUI3.8 | Drag and drop | Internal and system drag-and-drop | [ ] |
+| GUI3.9 | System tray | Tray icon with menu (Linux/Windows/macOS) | [ ] |
+| GUI3.10 | Notifications | Native OS notification support | [ ] |
+| GUI3.11 | File dialogs | Open/save file dialogs via OS | [ ] |
+| GUI3.12 | Cursor management | Custom cursors, cursor style changes | [ ] |
+| GUI3.13 | Multi-window | Multiple windows per application | [ ] |
+| GUI3.14 | Fullscreen mode | Toggle fullscreen on all platforms | [ ] |
+| GUI3.15 | IME support | Input Method Editor for CJK text | [ ] |
+| GUI3.16 | Accessibility | Screen reader support (AT-SPI/UIAutomation) | [ ] |
+| GUI3.17 | Touch input | Multi-touch gestures for touch screens | [ ] |
+| GUI3.18 | Gamepad input | Controller/joystick input | [ ] |
+| GUI3.19 | Platform integration tests | Cross-platform rendering comparison | [ ] |
+| GUI3.20 | Demo application | Complete GUI app showcasing all widgets | [ ] |
 
 ---
 
 ## Option 9: FajarOS Nova v2.0 "Supernova" (7 sprints, 70 tasks)
 
-*Next-gen OS kernel with SMP, networking, and GPU.*
+*Next-gen OS kernel with advanced SMP, real networking, and GPU compositor.*
 
-*(70 tasks: SMP scheduler (20), Network stack (20), GPU compositor (30))*
+### Phase OS1: Advanced SMP Scheduler (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OS1.1 | Per-CPU run queues | Separate ready queue per CPU core | [ ] |
+| OS1.2 | Work stealing | Idle CPUs steal tasks from busy CPUs | [ ] |
+| OS1.3 | Priority scheduling | 32 priority levels with preemption | [ ] |
+| OS1.4 | Real-time class | SCHED_FIFO and SCHED_RR policies | [ ] |
+| OS1.5 | CPU affinity | Pin processes to specific cores | [ ] |
+| OS1.6 | Load balancer | Periodic rebalancing across CPUs | [ ] |
+| OS1.7 | NUMA awareness | Prefer local memory for tasks | [ ] |
+| OS1.8 | CFS-like scheduler | Completely Fair Scheduler with vruntime | [ ] |
+| OS1.9 | Deadline scheduling | EDF (Earliest Deadline First) for real-time | [ ] |
+| OS1.10 | CPU hotplug | Online/offline CPUs dynamically | [ ] |
+| OS1.11 | Idle management | Per-CPU idle loop with WFI | [ ] |
+| OS1.12 | Context switch optimization | Minimize register save/restore overhead | [ ] |
+| OS1.13 | IPI mechanism | Inter-Processor Interrupt for cross-CPU signals | [ ] |
+| OS1.14 | Spinlock fairness | Ticket locks to prevent starvation | [ ] |
+| OS1.15 | RCU (Read-Copy-Update) | Lock-free reads for shared data structures | [ ] |
+| OS1.16 | Process migration | Move running process to different CPU | [ ] |
+| OS1.17 | Scheduler tracing | Log scheduling decisions for debugging | [ ] |
+| OS1.18 | Latency measurement | Track worst-case scheduling latency | [ ] |
+| OS1.19 | SMP scheduler tests | 30 tests including stress tests | [ ] |
+| OS1.20 | SMP benchmark | 8-core utilization > 90% under load | [ ] |
+
+### Phase OS2: Real Network Stack (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OS2.1 | VirtIO-net driver v2 | Multi-queue, checksum offload, TSO/LRO | [ ] |
+| OS2.2 | Ethernet frame handling | MAC address, VLAN tagging, ARP | [ ] |
+| OS2.3 | IP layer v2 | IPv4 + IPv6 dual stack, ICMP, routing table | [ ] |
+| OS2.4 | TCP v2 | Congestion control (Reno/CUBIC), fast retransmit | [ ] |
+| OS2.5 | UDP v2 | Multicast, broadcast support | [ ] |
+| OS2.6 | DNS resolver | Recursive DNS resolution, caching | [ ] |
+| OS2.7 | DHCP client | Auto-configure IP, gateway, DNS | [ ] |
+| OS2.8 | Socket API v2 | Berkeley sockets: socket/bind/listen/accept/connect | [ ] |
+| OS2.9 | Netfilter/firewall | Packet filtering rules (iptables-style) | [ ] |
+| OS2.10 | Network namespaces | Isolated network stacks per container | [ ] |
+| OS2.11 | TLS integration | TLS 1.3 for secure connections | [ ] |
+| OS2.12 | HTTP server v2 | HTTP/1.1 + HTTP/2 with keep-alive | [ ] |
+| OS2.13 | NTP client | Network time synchronization | [ ] |
+| OS2.14 | Ping utility | ICMP echo request/reply | [ ] |
+| OS2.15 | Netstat utility | Show active connections and listening ports | [ ] |
+| OS2.16 | Wget utility | Download files via HTTP | [ ] |
+| OS2.17 | SSH server | Minimal SSH for remote access | [ ] |
+| OS2.18 | Network benchmarks | Throughput: TCP stream > 100 Mbps in QEMU | [ ] |
+| OS2.19 | Network stack tests | 30 tests: ARP, TCP handshake, HTTP, DNS | [ ] |
+| OS2.20 | Network documentation | Protocol implementation notes, API docs | [ ] |
+
+### Phase OS3: GPU Compositor & Desktop (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| OS3.1 | VirtIO-GPU v2 | 3D acceleration, multi-plane, cursor plane | [ ] |
+| OS3.2 | Framebuffer management | Double buffering, vsync, page flip | [ ] |
+| OS3.3 | Resolution detection | EDID parsing, mode setting | [ ] |
+| OS3.4 | 2D drawing primitives | Lines, rectangles, circles, filled shapes | [ ] |
+| OS3.5 | Font renderer | Bitmap font rendering with glyph cache | [ ] |
+| OS3.6 | Window manager | Floating windows with title bar, resize, move | [ ] |
+| OS3.7 | Window decorations | Title bar, close/minimize/maximize buttons | [ ] |
+| OS3.8 | Desktop background | Solid color / image background rendering | [ ] |
+| OS3.9 | Taskbar | Bottom panel with running applications | [ ] |
+| OS3.10 | Application launcher | Start menu / application grid | [ ] |
+| OS3.11 | Terminal emulator | VT100 terminal in a GUI window | [ ] |
+| OS3.12 | Text editor | Simple Notepad-style text editor | [ ] |
+| OS3.13 | File manager | Browse, open, copy, move, delete files | [ ] |
+| OS3.14 | System monitor | CPU, memory, process monitor | [ ] |
+| OS3.15 | Image viewer | Display PNG/BMP images in a window | [ ] |
+| OS3.16 | Calculator app | Basic calculator with GUI | [ ] |
+| OS3.17 | Mouse cursor rendering | Hardware cursor or software sprite | [ ] |
+| OS3.18 | Keyboard input routing | Focus tracking, key event dispatch | [ ] |
+| OS3.19 | Clipboard system | Copy/paste between applications | [ ] |
+| OS3.20 | Drag and drop | Move windows, drag files | [ ] |
+| OS3.21 | Alpha blending | Transparent windows and overlays | [ ] |
+| OS3.22 | Damage tracking | Only redraw changed screen regions | [ ] |
+| OS3.23 | Multi-monitor | Support multiple display outputs | [ ] |
+| OS3.24 | Screen resolution switch | Runtime resolution change | [ ] |
+| OS3.25 | Theme support | Color scheme, font selection | [ ] |
+| OS3.26 | Wallpaper manager | Change desktop background | [ ] |
+| OS3.27 | Lock screen | Password-protected screen lock | [ ] |
+| OS3.28 | Screenshot utility | Capture screen/window to file | [ ] |
+| OS3.29 | Compositor tests | 30 tests: rendering, layout, events | [ ] |
+| OS3.30 | Desktop documentation | Architecture, window protocol, app development | [ ] |
 
 ---
 
@@ -436,7 +851,90 @@ V7 completed distributed computing, WASI, GPU pipelines, advanced types, increme
 
 *Build the community infrastructure for Fajar Lang adoption.*
 
-*(70 tasks: Website (20), Community (20), Governance (30))*
+### Phase COM1: Website & Online Presence (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| COM1.1 | Landing page | Modern landing page with key features | [ ] |
+| COM1.2 | Download page | Platform-specific binary downloads | [ ] |
+| COM1.3 | Documentation site | Hosted docs with search and navigation | [ ] |
+| COM1.4 | Blog section | Release notes, tutorials, announcements | [ ] |
+| COM1.5 | Playground embed | Inline code playground on website | [ ] |
+| COM1.6 | Package registry UI | Web interface for browsing packages | [ ] |
+| COM1.7 | Showcase gallery | Projects built with Fajar Lang | [ ] |
+| COM1.8 | Comparison page | Fajar vs Rust vs C vs Python feature matrix | [ ] |
+| COM1.9 | Installation wizard | Interactive install guide per platform | [ ] |
+| COM1.10 | SEO optimization | Meta tags, sitemap, structured data | [ ] |
+| COM1.11 | Analytics | Privacy-respecting usage analytics | [ ] |
+| COM1.12 | Performance (Lighthouse) | 90+ score on all Lighthouse metrics | [ ] |
+| COM1.13 | Mobile responsive | Full functionality on mobile devices | [ ] |
+| COM1.14 | Internationalization | English + Bahasa Indonesia | [ ] |
+| COM1.15 | Newsletter | Email signup for release announcements | [ ] |
+| COM1.16 | RSS feed | Blog and release RSS feeds | [ ] |
+| COM1.17 | Status page | Build status, registry uptime | [ ] |
+| COM1.18 | CDN deployment | Global CDN for fast page loads | [ ] |
+| COM1.19 | Website CI/CD | Auto-deploy on push, preview for PRs | [ ] |
+| COM1.20 | Website tests | Link checker, accessibility audit, performance | [ ] |
+
+### Phase COM2: Community Platform (2 sprints, 20 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| COM2.1 | GitHub organization | Transfer repos to fajar-lang org | [ ] |
+| COM2.2 | Issue templates | Bug report, feature request, RFC templates | [ ] |
+| COM2.3 | PR templates | Checklist, description, testing evidence | [ ] |
+| COM2.4 | Discussion forum | GitHub Discussions or Discourse setup | [ ] |
+| COM2.5 | Discord server | Community chat with channels per topic | [ ] |
+| COM2.6 | Code of Conduct | Contributor covenant adoption | [ ] |
+| COM2.7 | Contributing guide | How to contribute code, docs, translations | [ ] |
+| COM2.8 | Good first issues | 20 labeled starter issues for newcomers | [ ] |
+| COM2.9 | Mentorship program | Pair experienced contributors with newcomers | [ ] |
+| COM2.10 | Release process | Documented release cycle (monthly/quarterly) | [ ] |
+| COM2.11 | RFC process | Formal process for language changes | [ ] |
+| COM2.12 | Governance model | Decision-making structure, maintainer roles | [ ] |
+| COM2.13 | Maintainer guide | How to review PRs, triage issues, release | [ ] |
+| COM2.14 | Style guide | Official Fajar Lang coding style | [ ] |
+| COM2.15 | Branding assets | Logo, colors, fonts, usage guidelines | [ ] |
+| COM2.16 | Presentation deck | Slides for conferences and meetups | [ ] |
+| COM2.17 | Demo video | 5-minute intro video showing key features | [ ] |
+| COM2.18 | Social media presence | Twitter/X, LinkedIn, YouTube channels | [ ] |
+| COM2.19 | Community metrics | Track contributors, issues, PRs, stars | [ ] |
+| COM2.20 | Swag store | Stickers, T-shirts, mugs | [ ] |
+
+### Phase COM3: Ecosystem Growth (3 sprints, 30 tasks)
+
+| # | Task | Details | Status |
+|---|------|---------|--------|
+| COM3.1 | Plugin marketplace | Discover and install community plugins | [ ] |
+| COM3.2 | Template marketplace | Project templates shared by community | [ ] |
+| COM3.3 | Example marketplace | Community-contributed examples | [ ] |
+| COM3.4 | Package quality scores | Automated quality scoring for packages | [ ] |
+| COM3.5 | Dependency insights | Usage stats, dependency health dashboard | [ ] |
+| COM3.6 | Security advisories | CVE-style advisories for Fajar packages | [ ] |
+| COM3.7 | Automated releases | Bot for dependency updates and releases | [ ] |
+| COM3.8 | CI templates | GitHub Actions, GitLab CI, Jenkins templates | [ ] |
+| COM3.9 | Docker images | Official Docker images for building/running | [ ] |
+| COM3.10 | Nix/Flake package | Nix package for reproducible builds | [ ] |
+| COM3.11 | Homebrew formula | `brew install fajar` for macOS | [ ] |
+| COM3.12 | APT/YUM packages | Linux distribution packages | [ ] |
+| COM3.13 | Snap/Flatpak | Universal Linux packages | [ ] |
+| COM3.14 | Windows installer | MSI/NSIS installer with PATH setup | [ ] |
+| COM3.15 | Chocolatey package | `choco install fajar` for Windows | [ ] |
+| COM3.16 | asdf plugin | Version management via asdf | [ ] |
+| COM3.17 | GitHub Codespaces | Pre-configured cloud dev environment | [ ] |
+| COM3.18 | Gitpod config | One-click development in browser | [ ] |
+| COM3.19 | Conference talks | Submit talks to FOSDEM, RustConf, PyCon | [ ] |
+| COM3.20 | Workshop materials | 3-hour hands-on workshop curriculum | [ ] |
+| COM3.21 | University curriculum | Course materials for CS education | [ ] |
+| COM3.22 | Certification program | Official Fajar Lang developer certification | [ ] |
+| COM3.23 | Ambassador program | Regional community leaders | [ ] |
+| COM3.24 | Bug bounty | Security bug bounty program | [ ] |
+| COM3.25 | Sponsorship model | Funding model for sustainable development | [ ] |
+| COM3.26 | Annual survey | Community survey for priorities | [ ] |
+| COM3.27 | Roadmap voting | Community input on feature priorities | [ ] |
+| COM3.28 | Contributor recognition | Monthly contributor highlights | [ ] |
+| COM3.29 | Ecosystem health report | Quarterly ecosystem health metrics | [ ] |
+| COM3.30 | Year-one retrospective | Document lessons learned, plan year two | [ ] |
 
 ---
 
@@ -476,5 +974,5 @@ Option 8:   Cross-Platform GUI         7 sprints   70 tasks    ~14 hrs
 Option 9:   FajarOS Nova v2.0          7 sprints   70 tasks    ~14 hrs
 Option 10:  Community & Governance     7 sprints   70 tasks    ~14 hrs
 
-Total:     70 sprints, 700 tasks, ~142 hours
+Total:     71 sprints, 710 tasks, ~142 hours
 ```
