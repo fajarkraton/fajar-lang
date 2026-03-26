@@ -553,6 +553,115 @@ pub fn parse_program(tokens: [i64]) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// SQ11.5: Error Recovery — collect multiple errors
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Parse error record.
+struct ParseError {
+    message: str,
+    pos: i64,
+    kind: i64
+}
+
+/// Parse result with error collection.
+struct ParseResult {
+    items: i64,
+    errors: [str],
+    error_count: i64
+}
+
+/// Synchronize after error — skip to next statement boundary.
+/// Returns the position after the sync point.
+fn synchronize(tokens: [i64], pos: i64) -> i64 {
+    let total = to_int(len(tokens))
+    let mut p = pos
+    while p < total {
+        let kind = peek(tokens, p)
+        // Stop at statement boundaries
+        if kind == TK_EOF { return p }
+        if kind == TK_SEMI { return p + 1 }
+        if kind == TK_RBRACE { return p + 1 }
+        // Stop at new top-level item keywords
+        if kind == TK_FN || kind == TK_STRUCT || kind == TK_ENUM ||
+           kind == TK_IMPL || kind == TK_TRAIT || kind == TK_USE ||
+           kind == TK_PUB || kind == TK_CONST || kind == TK_MOD {
+            return p
+        }
+        p = p + 1
+    }
+    p
+}
+
+/// Parse a program with error recovery.
+/// Continues parsing after errors, collecting all of them.
+pub fn parse_program_recovering(tokens: [i64], source: str) -> ParseResult {
+    let total = to_int(len(tokens))
+    let mut pos: i64 = 0
+    let mut items = 0
+    let mut errors: [str] = []
+    let mut error_count = 0
+
+    while pos < total {
+        let kind = peek(tokens, pos)
+        if kind == TK_EOF {
+            return ParseResult {
+                items: items,
+                errors: errors,
+                error_count: error_count
+            }
+        }
+
+        // Check for suspicious tokens that shouldn't start a statement
+        let is_suspicious = kind == TK_RPAREN || kind == TK_RBRACE || kind == TK_RBRACKET ||
+                            kind == TK_COMMA || kind == TK_FATARROW || kind == TK_COLON
+
+        if is_suspicious {
+            let line = offset_to_line(source, pos)
+            let col = offset_to_col(source, pos)
+            let kind_str = kind_name(kind)
+            let msg = f"parse error at {line}:{col} — unexpected {kind_str} at statement start"
+            errors = push(errors, msg)
+            error_count = error_count + 1
+            pos = synchronize(tokens, pos)
+        } else {
+            let new_pos = parse_stmt(tokens, pos)
+            if new_pos <= pos {
+                let line = offset_to_line(source, pos)
+                let col = offset_to_col(source, pos)
+                let kind_str = kind_name(kind)
+                let msg = f"parse error at {line}:{col} — stuck on {kind_str}"
+                errors = push(errors, msg)
+                error_count = error_count + 1
+                pos = synchronize(tokens, pos)
+            } else {
+                pos = new_pos
+                items = items + 1
+            }
+        }
+    }
+
+    ParseResult {
+        items: items,
+        errors: errors,
+        error_count: error_count
+    }
+}
+
+/// Display all parse errors.
+pub fn display_parse_errors(result: ParseResult) -> void {
+    if result.error_count == 0 {
+        println("No parse errors")
+        return
+    }
+    println(f"{result.error_count} parse error(s):")
+    let mut i = 0
+    while i < to_int(len(result.errors)) {
+        println(f"  {result.errors[i]}")
+        i = i + 1
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Self-test: comprehensive parser test suite
 // ═══════════════════════════════════════════════════════════════════════
 
