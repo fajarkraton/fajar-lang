@@ -250,6 +250,12 @@ pub struct FusionFilter {
     pub vel: [KalmanFilter; 3],
 }
 
+impl Default for FusionFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FusionFilter {
     /// Creates a new fusion filter with default parameters.
     pub fn new() -> Self {
@@ -259,9 +265,9 @@ impl FusionFilter {
 
     /// Updates with IMU acceleration data (integrate to velocity).
     pub fn update_imu(&mut self, accel: [f64; 3], dt: f64) {
-        for i in 0..3 {
+        for (i, a) in accel.iter().enumerate() {
             self.vel[i].predict();
-            self.vel[i].update(self.vel[i].x + accel[i] * dt);
+            self.vel[i].update(self.vel[i].x + a * dt);
         }
     }
 

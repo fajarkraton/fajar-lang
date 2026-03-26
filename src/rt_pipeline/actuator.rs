@@ -190,6 +190,12 @@ pub enum SafetyRuleKind {
     Custom { check_fn: String },
 }
 
+impl Default for SafetyInterlock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SafetyInterlock {
     /// Creates a new interlock with no rules.
     pub fn new() -> Self {

@@ -3,8 +3,6 @@
 //! Phase F1: 20 tasks covering libclang parsing, Itanium name mangling,
 //! class method dispatch, RAII bridging, STL conversions, exception handling.
 
-use std::collections::HashMap;
-use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
 // F1.1: C++ Header Parsing (via libclang model)
@@ -259,7 +257,7 @@ pub fn generate_class_binding(class: &CppClass) -> String {
 
     // Methods
     for method in &class.methods {
-        let self_param = if method.is_static { "" } else { if method.is_const { "self" } else { "mut self" } };
+        let self_param = if method.is_static { "" } else if method.is_const { "self" } else { "mut self" };
         let other_params: Vec<String> = method.params.iter()
             .map(|p| format!("{}: {}", p.name, p.param_type.to_fajar_type()))
             .collect();

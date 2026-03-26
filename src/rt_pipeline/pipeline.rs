@@ -222,6 +222,12 @@ pub struct PriorityInheritance {
     pub effective_priority: Vec<(String, u32)>,
 }
 
+impl Default for PriorityInheritance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PriorityInheritance {
     /// Creates a new priority inheritance tracker.
     pub fn new() -> Self {

@@ -274,8 +274,7 @@ pub fn parse_args(args: &[String], defs: &[ArgDef]) -> Result<ParsedArgs, String
             i += 1;
             continue;
         }
-        if arg.starts_with("--") {
-            let name = &arg[2..];
+        if let Some(name) = arg.strip_prefix("--") {
             let def = defs.iter().find(|d| d.long == name);
             if let Some(def) = def {
                 if def.takes_value {
@@ -443,6 +442,12 @@ pub struct Stopwatch {
     pub accumulated_ns: u64,
     /// Whether the stopwatch is running.
     pub running: bool,
+}
+
+impl Default for Stopwatch {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Stopwatch {

@@ -2,7 +2,6 @@
 //!
 //! Phase S3: 20 tasks covering parsing, serialization, and data manipulation.
 
-use std::collections::HashMap;
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -145,13 +144,13 @@ fn parse_number(input: &str) -> Result<(JsonValue, &str), String> {
 fn parse_array(input: &str) -> Result<(JsonValue, &str), String> {
     let mut rest = input[1..].trim_start();
     let mut arr = Vec::new();
-    if rest.starts_with(']') { return Ok((JsonValue::Array(arr), &rest[1..])); }
+    if let Some(stripped) = rest.strip_prefix(']') { return Ok((JsonValue::Array(arr), stripped)); }
     loop {
         let (val, r) = parse_value(rest)?;
         arr.push(val);
         rest = r.trim_start();
-        if rest.starts_with(']') { return Ok((JsonValue::Array(arr), &rest[1..])); }
-        if rest.starts_with(',') { rest = rest[1..].trim_start(); }
+        if let Some(stripped) = rest.strip_prefix(']') { return Ok((JsonValue::Array(arr), stripped)); }
+        if let Some(stripped) = rest.strip_prefix(',') { rest = stripped.trim_start(); }
         else { return Err("expected ',' or ']' in array".to_string()); }
     }
 }
@@ -159,7 +158,7 @@ fn parse_array(input: &str) -> Result<(JsonValue, &str), String> {
 fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
     let mut rest = input[1..].trim_start();
     let mut entries = Vec::new();
-    if rest.starts_with('}') { return Ok((JsonValue::Object(entries), &rest[1..])); }
+    if let Some(stripped) = rest.strip_prefix('}') { return Ok((JsonValue::Object(entries), stripped)); }
     loop {
         let (key_val, r) = parse_string(rest)?;
         let key = match key_val { JsonValue::String(s) => s, _ => unreachable!() };
@@ -168,8 +167,8 @@ fn parse_object(input: &str) -> Result<(JsonValue, &str), String> {
         let (val, r) = parse_value(&r[1..])?;
         entries.push((key, val));
         rest = r.trim_start();
-        if rest.starts_with('}') { return Ok((JsonValue::Object(entries), &rest[1..])); }
-        if rest.starts_with(',') { rest = rest[1..].trim_start(); }
+        if let Some(stripped) = rest.strip_prefix('}') { return Ok((JsonValue::Object(entries), stripped)); }
+        if let Some(stripped) = rest.strip_prefix(',') { rest = stripped.trim_start(); }
         else { return Err("expected ',' or '}' in object".to_string()); }
     }
 }

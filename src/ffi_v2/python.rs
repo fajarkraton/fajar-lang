@@ -355,18 +355,19 @@ pub fn detect_venv(project_dir: &str) -> Option<VenvInfo> {
         format!("{project_dir}/venv"),
         format!("{project_dir}/env"),
     ];
-    for path in &candidates {
+    if let Some(path) = candidates.first() {
         let python_exe = format!("{path}/bin/python3");
         let site_packages = format!("{path}/lib/python3.11/site-packages");
         // In real impl: check if files exist
-        return Some(VenvInfo {
+        Some(VenvInfo {
             path: path.clone(),
             python_exe,
             site_packages,
             packages: HashMap::new(),
-        });
+        })
+    } else {
+        None
     }
-    None
 }
 
 // ═══════════════════════════════════════════════════════════════════════

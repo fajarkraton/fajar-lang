@@ -3,7 +3,6 @@
 //! D2.3 + D3: 30 tasks covering gradient/tensor diagnostics, loss curves,
 //! weight histograms, activation visualization, and CLI/documentation.
 
-use std::collections::HashMap;
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -4,7 +4,6 @@
 //! detection, loop counting, branch stats, sampling, and Chrome Trace format.
 
 use std::collections::HashMap;
-use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
 // D1.1.1: Function Entry/Exit Hooks

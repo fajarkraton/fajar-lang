@@ -106,6 +106,11 @@ impl AesKeySize {
     pub fn len(self) -> usize {
         match self { Self::Aes128 => 16, Self::Aes256 => 32 }
     }
+
+    /// Returns whether the key size is empty (always false for valid key sizes).
+    pub fn is_empty(self) -> bool {
+        false
+    }
 }
 
 /// AES encryption parameters.
@@ -231,7 +236,7 @@ const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 
 /// Encodes bytes to Base64.
 pub fn base64_encode(data: &[u8]) -> String {
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
@@ -257,7 +262,7 @@ pub fn base64_encode(data: &[u8]) -> String {
 pub fn base64_decode(encoded: &str) -> Result<Vec<u8>, String> {
     let mut result = Vec::new();
     let bytes: Vec<u8> = encoded.bytes().filter(|b| *b != b'\n' && *b != b'\r').collect();
-    if bytes.len() % 4 != 0 { return Err("invalid base64 length".to_string()); }
+    if !bytes.len().is_multiple_of(4) { return Err("invalid base64 length".to_string()); }
     for chunk in bytes.chunks(4) {
         let vals: Result<Vec<u32>, String> = chunk.iter().map(|&b| {
             match b {
@@ -286,7 +291,7 @@ pub fn hex_encode(data: &[u8]) -> String {
 
 /// Decodes hex string to bytes.
 pub fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 { return Err("odd hex length".to_string()); }
+    if !hex.len().is_multiple_of(2) { return Err("odd hex length".to_string()); }
     (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).map_err(|e| format!("{e}")))
@@ -348,12 +353,12 @@ pub struct JwtClaims {
 impl JwtClaims {
     /// Checks if the token is expired.
     pub fn is_expired(&self, now: u64) -> bool {
-        self.exp.map_or(false, |exp| now > exp)
+        self.exp.is_some_and(|exp| now > exp)
     }
 
     /// Checks if the token is not yet valid.
     pub fn is_before_nbf(&self, now: u64) -> bool {
-        self.nbf.map_or(false, |nbf| now < nbf)
+        self.nbf.is_some_and(|nbf| now < nbf)
     }
 }
 

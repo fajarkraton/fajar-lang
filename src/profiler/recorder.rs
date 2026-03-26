@@ -164,7 +164,7 @@ impl Recorder {
         if !self.enabled { return; }
         self.total_statements += 1;
 
-        let is_checkpoint = self.total_statements % self.checkpoint_interval == 0
+        let is_checkpoint = self.total_statements.is_multiple_of(self.checkpoint_interval)
             || self.last_checkpoint.is_none();
 
         if is_checkpoint {

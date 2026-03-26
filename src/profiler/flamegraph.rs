@@ -148,6 +148,7 @@ pub fn render_svg(root: &FlameNode, config: &FlameConfig) -> String {
     svg
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_node(
     svg: &mut String,
     node: &FlameNode,
@@ -168,7 +169,7 @@ fn render_node(
 
     let color = match config.palette {
         Palette::Hot => {
-            let hue = 0 + (depth * 30) % 60; // red to yellow
+            let hue = (depth * 30) % 60; // red to yellow
             format!("hsl({hue}, 80%, 55%)")
         }
         Palette::Memory => {

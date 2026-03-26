@@ -4,7 +4,6 @@
 //! hot-swap, multi-model pipelines, and INT8 quantized inference.
 
 use std::collections::HashMap;
-use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
 // R2.1.1: Model Loader
@@ -158,6 +157,12 @@ pub struct ModelRegistry {
     pub pending: HashMap<String, Model>,
     /// Total swaps performed.
     pub swap_count: u64,
+}
+
+impl Default for ModelRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ModelRegistry {

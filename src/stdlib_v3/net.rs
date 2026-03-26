@@ -297,8 +297,8 @@ pub fn match_route(pattern: &str, url: &str) -> Option<HashMap<String, String>> 
 
     let mut params = HashMap::new();
     for (p, u) in pat_parts.iter().zip(url_parts.iter()) {
-        if p.starts_with(':') {
-            params.insert(p[1..].to_string(), u.to_string());
+        if let Some(stripped) = p.strip_prefix(':') {
+            params.insert(stripped.to_string(), u.to_string());
         } else if p != u {
             return None;
         }

@@ -565,7 +565,7 @@ pub fn breadcrumbs_at(symbols: &[DocumentSymbol], line: u32, character: u32) -> 
     fn walk(
         symbols: &[DocumentSymbol],
         line: u32,
-        character: u32,
+        _character: u32,
         path: &mut Vec<BreadcrumbItem>,
     ) -> bool {
         for sym in symbols {
@@ -576,7 +576,7 @@ pub fn breadcrumbs_at(symbols: &[DocumentSymbol], line: u32, character: u32) -> 
                     range: sym.range.clone(),
                 });
                 if !sym.children.is_empty() {
-                    walk(&sym.children, line, character, path);
+                    walk(&sym.children, line, _character, path);
                 }
                 return true;
             }
