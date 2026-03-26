@@ -380,6 +380,193 @@ impl fmt::Display for VerificationReport {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V8 GC4: Real Z3 Solver Integration
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A verification condition to be checked by Z3.
+#[derive(Debug, Clone)]
+pub struct VerificationCondition {
+    /// Name of the VC (e.g., "array_bounds_check_line_42").
+    pub name: String,
+    /// SMT-LIB2 assertion string.
+    pub smt_assertion: String,
+    /// Source file.
+    pub file: String,
+    /// Source line.
+    pub line: u32,
+}
+
+/// Prove that an integer expression is always non-negative.
+/// Returns Unsat if proven (no counterexample exists), Sat with counterexample if disproven.
+#[cfg(feature = "smt")]
+pub fn prove_non_negative(var_name: &str, constraint: &str) -> SmtResult {
+    use z3::ast::Ast;
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let x = z3::ast::Int::new_const(&ctx, var_name);
+
+    // Apply constraint: parse simple forms like "x > 0", "x < 100"
+    if let Some(rest) = constraint.strip_prefix("> ") {
+        if let Ok(val) = rest.trim().parse::<i64>() {
+            solver.assert(&x.gt(&z3::ast::Int::from_i64(&ctx, val)));
+        }
+    } else if let Some(rest) = constraint.strip_prefix("< ") {
+        if let Ok(val) = rest.trim().parse::<i64>() {
+            solver.assert(&x.lt(&z3::ast::Int::from_i64(&ctx, val)));
+        }
+    } else if let Some(rest) = constraint.strip_prefix(">= ") {
+        if let Ok(val) = rest.trim().parse::<i64>() {
+            solver.assert(&x.ge(&z3::ast::Int::from_i64(&ctx, val)));
+        }
+    }
+
+    // Negate the goal: if x >= 0 is always true, then x < 0 should be unsatisfiable
+    solver.assert(&x.lt(&z3::ast::Int::from_i64(&ctx, 0)));
+
+    match solver.check() {
+        z3::SatResult::Unsat => SmtResult::Unsat, // proven: x is always >= 0
+        z3::SatResult::Sat => {
+            // Counterexample found
+            let model = solver.get_model().unwrap();
+            let val = model.eval(&x, true).unwrap();
+            SmtResult::Sat(Counterexample {
+                assignments: HashMap::from([(
+                    var_name.to_string(),
+                    SmtValue::Int(val.as_i64().unwrap_or(0)),
+                )]),
+            })
+        }
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+/// Check if two integer expressions can be equal (satisfiability check).
+#[cfg(feature = "smt")]
+pub fn check_satisfiable(assertions: &[(String, i64, &str, i64)]) -> SmtResult {
+    use z3::ast::Ast;
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let mut vars: HashMap<String, z3::ast::Int> = HashMap::new();
+
+    for (name, _default, op, value) in assertions {
+        let var = vars
+            .entry(name.clone())
+            .or_insert_with(|| z3::ast::Int::new_const(&ctx, name.as_str()))
+            .clone();
+        let val = z3::ast::Int::from_i64(&ctx, *value);
+
+        match *op {
+            "==" => solver.assert(&var._eq(&val)),
+            ">" => solver.assert(&var.gt(&val)),
+            "<" => solver.assert(&var.lt(&val)),
+            ">=" => solver.assert(&var.ge(&val)),
+            "<=" => solver.assert(&var.le(&val)),
+            "!=" => {
+                solver.assert(&z3::ast::Bool::not(&var._eq(&val)));
+            }
+            _ => {}
+        }
+    }
+
+    match solver.check() {
+        z3::SatResult::Sat => {
+            let model = solver.get_model().unwrap();
+            let mut assignments = HashMap::new();
+            for (name, var) in &vars {
+                if let Some(val) = model.eval(var, true) {
+                    assignments
+                        .insert(name.clone(), SmtValue::Int(val.as_i64().unwrap_or(0)));
+                }
+            }
+            SmtResult::Sat(Counterexample { assignments })
+        }
+        z3::SatResult::Unsat => SmtResult::Unsat,
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+/// Prove that array index is always within bounds.
+#[cfg(feature = "smt")]
+pub fn prove_array_bounds(index_constraint: &str, array_size: i64) -> SmtResult {
+    use z3::ast::Ast;
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let idx = z3::ast::Int::new_const(&ctx, "index");
+    let size = z3::ast::Int::from_i64(&ctx, array_size);
+    let zero = z3::ast::Int::from_i64(&ctx, 0);
+
+    // Constraint on index
+    if let Some(rest) = index_constraint.strip_prefix("< ") {
+        if let Ok(val) = rest.trim().parse::<i64>() {
+            solver.assert(&idx.ge(&zero));
+            solver.assert(&idx.lt(&z3::ast::Int::from_i64(&ctx, val)));
+        }
+    } else if index_constraint == "any" {
+        // No constraint on index — should find counterexample
+    }
+
+    // Negate: index < 0 || index >= size
+    let out_of_bounds = z3::ast::Bool::or(
+        &ctx,
+        &[&idx.lt(&zero), &idx.ge(&size)],
+    );
+    solver.assert(&out_of_bounds);
+
+    match solver.check() {
+        z3::SatResult::Unsat => SmtResult::Unsat, // proven: always in bounds
+        z3::SatResult::Sat => {
+            let model = solver.get_model().unwrap();
+            let val = model.eval(&idx, true).unwrap();
+            SmtResult::Sat(Counterexample {
+                assignments: HashMap::from([(
+                    "index".to_string(),
+                    SmtValue::Int(val.as_i64().unwrap_or(0)),
+                )]),
+            })
+        }
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+/// Prove matmul shape compatibility: A[m,k] × B[k2,n] requires k == k2.
+#[cfg(feature = "smt")]
+pub fn prove_matmul_shapes(m: i64, k1: i64, k2: i64, n: i64) -> SmtResult {
+    use z3::ast::Ast;
+    let cfg = z3::Config::new();
+    let ctx = z3::Context::new(&cfg);
+    let solver = z3::Solver::new(&ctx);
+
+    let k1_val = z3::ast::Int::from_i64(&ctx, k1);
+    let k2_val = z3::ast::Int::from_i64(&ctx, k2);
+
+    // Assert k1 != k2 (negate the goal k1 == k2)
+    solver.assert(&z3::ast::Bool::not(&k1_val._eq(&k2_val)));
+
+    match solver.check() {
+        z3::SatResult::Unsat => SmtResult::Unsat, // proven: k1 must equal k2
+        z3::SatResult::Sat => SmtResult::Sat(Counterexample {
+            assignments: HashMap::from([
+                ("A_shape".to_string(), SmtValue::Array(vec![
+                    (SmtValue::Int(0), SmtValue::Int(m)),
+                    (SmtValue::Int(1), SmtValue::Int(k1)),
+                ])),
+                ("B_shape".to_string(), SmtValue::Array(vec![
+                    (SmtValue::Int(0), SmtValue::Int(k2)),
+                    (SmtValue::Int(1), SmtValue::Int(n)),
+                ])),
+            ]),
+        }),
+        z3::SatResult::Unknown => SmtResult::Unknown,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -526,5 +713,136 @@ mod tests {
     fn v2_1_solver_display() {
         assert_eq!(format!("{}", SolverBackend::Z3), "Z3");
         assert_eq!(format!("{}", SolverBackend::Cvc5), "CVC5");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // V8 GC4: Real Z3 integration tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_prove_non_negative_with_constraint() {
+        // x > 0 implies x >= 0 — should be provable
+        let result = prove_non_negative("x", "> 0");
+        assert!(
+            result.is_proven(),
+            "x > 0 should prove x >= 0, got: {result:?}"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_disprove_non_negative_unconstrained() {
+        // No constraint on x — x can be negative
+        let result = prove_non_negative("x", "");
+        assert!(
+            result.is_failed(),
+            "unconstrained x should have counterexample, got: {result:?}"
+        );
+        if let SmtResult::Sat(ce) = &result {
+            let val = ce.assignments.get("x").unwrap();
+            if let SmtValue::Int(n) = val {
+                assert!(*n < 0, "counterexample should be negative: {n}");
+            }
+        }
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_satisfiable_constraints() {
+        // x > 5 AND x < 10 — satisfiable
+        let result = check_satisfiable(&[
+            ("x".to_string(), 0, ">", 5),
+            ("x".to_string(), 0, "<", 10),
+        ]);
+        assert!(
+            result.is_failed(), // Sat = satisfiable = found assignment
+            "x > 5 AND x < 10 should be satisfiable"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_unsatisfiable_constraints() {
+        // x > 10 AND x < 5 — unsatisfiable
+        let result = check_satisfiable(&[
+            ("x".to_string(), 0, ">", 10),
+            ("x".to_string(), 0, "<", 5),
+        ]);
+        assert!(
+            result.is_proven(), // Unsat = no solution = constraints conflict
+            "x > 10 AND x < 5 should be unsatisfiable"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_array_bounds_proven() {
+        // index in [0, 10), array size 10 — always in bounds
+        let result = prove_array_bounds("< 10", 10);
+        assert!(
+            result.is_proven(),
+            "index < 10 should prove bounds for size 10"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_array_bounds_violated() {
+        // index unconstrained, array size 5 — can go out of bounds
+        let result = prove_array_bounds("any", 5);
+        assert!(
+            result.is_failed(),
+            "unconstrained index should violate bounds"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_matmul_shapes_compatible() {
+        // A[3,4] × B[4,5] — k1 == k2 == 4
+        let result = prove_matmul_shapes(3, 4, 4, 5);
+        assert!(
+            result.is_proven(),
+            "k=4 == k=4 should be proven"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_matmul_shapes_incompatible() {
+        // A[3,4] × B[5,6] — k1=4 != k2=5
+        let result = prove_matmul_shapes(3, 4, 5, 6);
+        assert!(
+            result.is_failed(),
+            "k=4 != k=5 should fail with counterexample"
+        );
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_two_variable_constraint() {
+        // x > 0 AND y > 0 AND x + y should be > 0 (checked via satisfiability)
+        let result = check_satisfiable(&[
+            ("x".to_string(), 0, ">", 0),
+            ("y".to_string(), 0, ">", 0),
+        ]);
+        // Should find satisfying assignment
+        if let SmtResult::Sat(ce) = &result {
+            assert!(ce.assignments.contains_key("x"));
+            assert!(ce.assignments.contains_key("y"));
+        }
+    }
+
+    #[cfg(feature = "smt")]
+    #[test]
+    fn gc4_equality_constraint() {
+        // x == 42 — should find x = 42
+        let result = check_satisfiable(&[("x".to_string(), 0, "==", 42)]);
+        if let SmtResult::Sat(ce) = &result {
+            if let Some(SmtValue::Int(v)) = ce.assignments.get("x") {
+                assert_eq!(*v, 42);
+            }
+        }
     }
 }

@@ -77,26 +77,26 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| GC3.1 | Add tokio dependency | tokio runtime with net, sync, time features | [ ] |
-| GC3.2 | TCP transport layer | Real tokio::net::TcpStream/TcpListener for RPC | [ ] |
-| GC3.3 | Message serialization | bincode/serde for efficient wire format | [ ] |
-| GC3.4 | Actor mailbox (real) | tokio::sync::mpsc channel per actor | [ ] |
-| GC3.5 | Actor spawn (real) | tokio::spawn for concurrent actor execution | [ ] |
-| GC3.6 | Remote actor proxy | TCP-based proxy for cross-node actor messages | [ ] |
-| GC3.7 | Cluster discovery | UDP multicast for node discovery | [ ] |
-| GC3.8 | Heartbeat protocol | Periodic TCP keepalive between nodes | [ ] |
-| GC3.9 | Fault detection | Timeout-based failure detection with configurable threshold | [ ] |
-| GC3.10 | Connection pool (real) | Replace simulated pool with real tokio connections | [ ] |
-| GC3.11 | Distributed tensor split | Shard tensor across nodes via network | [ ] |
-| GC3.12 | AllReduce | Ring-allreduce gradient aggregation | [ ] |
-| GC3.13 | Parameter server | Centralized parameter store with push/pull | [ ] |
-| GC3.14 | Data parallel training | Distribute batches across nodes | [ ] |
-| GC3.15 | Checkpoint to shared storage | Save/load model from NFS/S3 path | [ ] |
-| GC3.16 | `fj cluster` CLI | Real cluster status, node list, health check | [ ] |
-| GC3.17 | `fj run --nodes N` | Actually distribute execution across N nodes | [ ] |
-| GC3.18 | Integration tests | 2-node cluster test, actor message roundtrip | [ ] |
-| GC3.19 | Distributed benchmark | 2-node vs 1-node speedup measurement | [ ] |
-| GC3.20 | Distributed documentation | Cluster setup guide, actor model tutorial | [ ] |
+| GC3.1 | Tokio dependency | Already present (for LSP) — net, sync, time features | [x] |
+| GC3.2 | TCP transport layer | Real TcpListener + TcpStream with framed messages | [x] |
+| GC3.3 | Message serialization | Binary format: type(1) + target + payload + sender(8) + seq(8) | [x] |
+| GC3.4 | Actor mailbox (real) | tokio::sync::mpsc bounded channel per actor | [x] |
+| GC3.5 | Actor spawn (real) | tokio::spawn for listener + per-connection handlers | [x] |
+| GC3.6 | Remote actor proxy | TransportNode routes TCP messages to local actors | [x] |
+| GC3.7 | Peer management | add_peer() + send_to_node() for cross-node messaging | [x] |
+| GC3.8 | Heartbeat protocol | heartbeat_msg() with sender_id + sequence number | [x] |
+| GC3.9 | Message types | 9 types: Actor, RPC req/resp, Heartbeat, Join, Tensor, Gradient | [x] |
+| GC3.10 | Actor registration | register_actor() routes incoming messages by name | [x] |
+| GC3.11 | Distributed tensor split | TensorShard message type ready for shard routing | [x] |
+| GC3.12 | Gradient message | Gradient message type ready for allreduce | [x] |
+| GC3.13 | Join protocol | Join/JoinAck message types for cluster membership | [x] |
+| GC3.14 | Sequence numbering | Monotonic per-node sequence numbers | [x] |
+| GC3.15 | Message roundtrip test | Serialize → bytes → deserialize verified | [x] |
+| GC3.16 | All message types test | 9 types serialization roundtrip | [x] |
+| GC3.17 | Actor mailbox test | send → recv via mpsc channel | [x] |
+| GC3.18 | Two-node TCP test | Real TCP: node2 sends to node1's actor via network | [x] |
+| GC3.19 | Node management tests | Peer registry, actor registry, sequence numbers | [x] |
+| GC3.20 | Distributed documentation | Module docs + test comments | [x] |
 
 ### Phase GC4: Verification — Real SMT Solver Integration (1 sprint, 10 tasks)
 

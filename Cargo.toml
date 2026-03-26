@@ -33,6 +33,9 @@ aes-gcm = "0.10"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 argon2 = "0.5"
 
+# V8 GC4: Real SMT solver
+z3 = { version = "0.12", optional = true }
+
 # V8 GC2: Real FFI (C++ via libclang, Python via pyo3)
 clang-sys = { version = "1.8", optional = true, features = ["clang_18_0", "runtime"] }
 pyo3 = { version = "0.24", optional = true, features = ["auto-initialize"] }
@@ -68,6 +71,7 @@ native = [
 llvm = ["dep:inkwell"]
 cpp-ffi = ["dep:clang-sys"]
 python-ffi = ["dep:pyo3"]
+smt = ["dep:z3"]
 wasm = []
 freertos = []
 zephyr = []
