@@ -6353,7 +6353,6 @@ pub struct ObjectCompiler {
     /// When true, disables standard library (IO, heap) runtime declarations.
     no_std: bool,
     /// When true, generates user-mode (Ring 3) ELF with SYSCALL-based runtime.
-    #[allow(dead_code)]
     user_mode: bool,
     /// User-defined panic handler function name.
     panic_handler_fn: Option<String>,
