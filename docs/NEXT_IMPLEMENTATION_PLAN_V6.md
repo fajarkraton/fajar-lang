@@ -140,7 +140,7 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 ---
 
-## Option 2: Profiler & Time-Travel Debugger (8 sprints, 80 tasks)
+## Option 2: Profiler & Time-Travel Debugger (8 sprints, 80 tasks) ✅ COMPLETE
 
 **Goal:** Production-grade profiling + reverse debugging for embedded ML code
 **Impact:** Debug tensor shape mismatches, memory leaks, and performance bottlenecks
@@ -151,46 +151,46 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.1.1 | Function entry/exit hooks | Timestamp + call depth tracking | [ ] |
-| D1.1.2 | Call graph builder | Parent→child edges with call counts | [ ] |
-| D1.1.3 | Execution time per function | Wall clock + CPU time | [ ] |
-| D1.1.4 | Memory allocation tracking | alloc/free pairs with sizes | [ ] |
-| D1.1.5 | Tensor operation profiling | Shape, dtype, compute time per op | [ ] |
-| D1.1.6 | Hot path detection | Top 10 functions by cumulative time | [ ] |
-| D1.1.7 | Loop iteration counting | Iterations per loop with avg time | [ ] |
-| D1.1.8 | Branch prediction stats | if/else taken ratio | [ ] |
-| D1.1.9 | Sampling profiler | Statistical sampling at 1kHz | [ ] |
-| D1.1.10 | Profile data format | Chrome Trace Event JSON | [ ] |
+| D1.1.1 | Function entry/exit hooks | Timestamp + call depth tracking | [x] |
+| D1.1.2 | Call graph builder | Parent→child edges with call counts | [x] |
+| D1.1.3 | Execution time per function | Wall clock + CPU time | [x] |
+| D1.1.4 | Memory allocation tracking | alloc/free pairs with sizes | [x] |
+| D1.1.5 | Tensor operation profiling | Shape, dtype, compute time per op | [x] |
+| D1.1.6 | Hot path detection | Top 10 functions by cumulative time | [x] |
+| D1.1.7 | Loop iteration counting | Iterations per loop with avg time | [x] |
+| D1.1.8 | Branch prediction stats | if/else taken ratio | [x] |
+| D1.1.9 | Sampling profiler | Statistical sampling at 1kHz | [x] |
+| D1.1.10 | Profile data format | Chrome Trace Event JSON | [x] |
 
 #### Sprint D1.2: Flamegraph Generation (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.2.1 | Stack frame capture | Collapsed stack format | [ ] |
-| D1.2.2 | SVG flamegraph renderer | Interactive zoom/filter | [ ] |
-| D1.2.3 | Differential flamegraph | Compare two runs (red/blue) | [ ] |
-| D1.2.4 | Reverse flamegraph | Callee-first (icicle chart) | [ ] |
-| D1.2.5 | Memory flamegraph | Allocation-weighted stacks | [ ] |
-| D1.2.6 | `fj profile` CLI command | `fj profile run examples/mnist.fj` | [ ] |
-| D1.2.7 | HTML report generation | Self-contained single-file report | [ ] |
-| D1.2.8 | Threshold filtering | Hide functions < 1% total time | [ ] |
-| D1.2.9 | Source annotation | Click flamegraph → jump to source | [ ] |
-| D1.2.10 | JSON export | For CI/CD regression tracking | [ ] |
+| D1.2.1 | Stack frame capture | Collapsed stack format | [x] |
+| D1.2.2 | SVG flamegraph renderer | Interactive zoom/filter | [x] |
+| D1.2.3 | Differential flamegraph | Compare two runs (red/blue) | [x] |
+| D1.2.4 | Reverse flamegraph | Callee-first (icicle chart) | [x] |
+| D1.2.5 | Memory flamegraph | Allocation-weighted stacks | [x] |
+| D1.2.6 | `fj profile` CLI command | `fj profile run examples/mnist.fj` | [x] |
+| D1.2.7 | HTML report generation | Self-contained single-file report | [x] |
+| D1.2.8 | Threshold filtering | Hide functions < 1% total time | [x] |
+| D1.2.9 | Source annotation | Click flamegraph → jump to source | [x] |
+| D1.2.10 | JSON export | For CI/CD regression tracking | [x] |
 
 #### Sprint D1.3: Memory Profiler (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.3.1 | Allocation timeline | Heap size over time | [ ] |
-| D1.3.2 | Leak detection | Unreachable allocations at exit | [ ] |
-| D1.3.3 | Allocation site tracking | File:line for each alloc | [ ] |
-| D1.3.4 | Peak memory analysis | High-water mark + contributing allocs | [ ] |
-| D1.3.5 | Tensor memory tracking | Tensor count, total bytes, peak | [ ] |
-| D1.3.6 | Fragmentation analysis | Free block distribution | [ ] |
-| D1.3.7 | Object graph dump | Reference chains for leak diagnosis | [ ] |
-| D1.3.8 | `fj memprof` CLI | `fj memprof run program.fj` | [ ] |
-| D1.3.9 | GC pressure metrics | Allocation rate, collection frequency | [ ] |
-| D1.3.10 | Valgrind-style report | "Definitely lost", "possibly lost" | [ ] |
+| D1.3.1 | Allocation timeline | Heap size over time | [x] |
+| D1.3.2 | Leak detection | Unreachable allocations at exit | [x] |
+| D1.3.3 | Allocation site tracking | File:line for each alloc | [x] |
+| D1.3.4 | Peak memory analysis | High-water mark + contributing allocs | [x] |
+| D1.3.5 | Tensor memory tracking | Tensor count, total bytes, peak | [x] |
+| D1.3.6 | Fragmentation analysis | Free block distribution | [x] |
+| D1.3.7 | Object graph dump | Reference chains for leak diagnosis | [x] |
+| D1.3.8 | `fj memprof` CLI | `fj memprof run program.fj` | [x] |
+| D1.3.9 | GC pressure metrics | Allocation rate, collection frequency | [x] |
+| D1.3.10 | Valgrind-style report | "Definitely lost", "possibly lost" | [x] |
 
 ### Phase D2: Time-Travel Debugger (3 sprints, 30 tasks)
 
@@ -198,46 +198,46 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.1.1 | State snapshot on each statement | Variable values + PC | [ ] |
-| D2.1.2 | Snapshot compression | Delta encoding (only changed vars) | [ ] |
-| D2.1.3 | Circular buffer (1M snapshots) | Ring buffer with configurable depth | [ ] |
-| D2.1.4 | Checkpoint system | Full snapshot every N statements | [ ] |
-| D2.1.5 | Replay engine | Forward replay from checkpoint | [ ] |
-| D2.1.6 | `step-back` command | Reverse single statement | [ ] |
-| D2.1.7 | `reverse-continue` | Run backwards to previous breakpoint | [ ] |
-| D2.1.8 | `reverse-next` | Step back over function calls | [ ] |
-| D2.1.9 | Watchpoint trigger history | "When did x change to 42?" | [ ] |
-| D2.1.10 | Recording overhead control | 2-5x slowdown acceptable | [ ] |
+| D2.1.1 | State snapshot on each statement | Variable values + PC | [x] |
+| D2.1.2 | Snapshot compression | Delta encoding (only changed vars) | [x] |
+| D2.1.3 | Circular buffer (1M snapshots) | Ring buffer with configurable depth | [x] |
+| D2.1.4 | Checkpoint system | Full snapshot every N statements | [x] |
+| D2.1.5 | Replay engine | Forward replay from checkpoint | [x] |
+| D2.1.6 | `step-back` command | Reverse single statement | [x] |
+| D2.1.7 | `reverse-continue` | Run backwards to previous breakpoint | [x] |
+| D2.1.8 | `reverse-next` | Step back over function calls | [x] |
+| D2.1.9 | Watchpoint trigger history | "When did x change to 42?" | [x] |
+| D2.1.10 | Recording overhead control | 2-5x slowdown acceptable | [x] |
 
 #### Sprint D2.2: DAP Integration (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.2.1 | DAP reverse capabilities | `supportsStepBack: true` | [ ] |
-| D2.2.2 | VS Code reverse debugging UI | Back arrows in debug toolbar | [ ] |
-| D2.2.3 | Variable history | "Show all values of x" panel | [ ] |
-| D2.2.4 | Execution timeline UI | Scrubber bar (drag to any point in time) | [ ] |
-| D2.2.5 | Conditional reverse | "Go back to when `loss < 0.1`" | [ ] |
-| D2.2.6 | Call stack history | Full call stack at each point | [ ] |
-| D2.2.7 | Memory view at time T | Inspect heap state at any snapshot | [ ] |
-| D2.2.8 | Tensor visualization | Show tensor values at each step | [ ] |
-| D2.2.9 | Data breakpoints (reverse) | "What wrote to address 0xFF00?" | [ ] |
-| D2.2.10 | Export trace | Save recording for offline analysis | [ ] |
+| D2.2.1 | DAP reverse capabilities | `supportsStepBack: true` | [x] |
+| D2.2.2 | VS Code reverse debugging UI | Back arrows in debug toolbar | [x] |
+| D2.2.3 | Variable history | "Show all values of x" panel | [x] |
+| D2.2.4 | Execution timeline UI | Scrubber bar (drag to any point in time) | [x] |
+| D2.2.5 | Conditional reverse | "Go back to when `loss < 0.1`" | [x] |
+| D2.2.6 | Call stack history | Full call stack at each point | [x] |
+| D2.2.7 | Memory view at time T | Inspect heap state at any snapshot | [x] |
+| D2.2.8 | Tensor visualization | Show tensor values at each step | [x] |
+| D2.2.9 | Data breakpoints (reverse) | "What wrote to address 0xFF00?" | [x] |
+| D2.2.10 | Export trace | Save recording for offline analysis | [x] |
 
 #### Sprint D2.3: ML-Specific Debugging (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.3.1 | Gradient inspection | Show ∂loss/∂w at each backward step | [ ] |
-| D2.3.2 | Tensor shape tracker | Shape changes through pipeline | [ ] |
-| D2.3.3 | NaN/Inf detector | Break on first NaN in any tensor | [ ] |
-| D2.3.4 | Loss curve live plot | Loss value at each training step | [ ] |
-| D2.3.5 | Weight histogram | Distribution of weights per layer | [ ] |
-| D2.3.6 | Activation visualization | Heatmap of layer outputs | [ ] |
-| D2.3.7 | Gradient explosion detector | Alert when gradient norm > threshold | [ ] |
-| D2.3.8 | Learning rate schedule plot | LR over time | [ ] |
-| D2.3.9 | Batch data inspector | View input batch at each step | [ ] |
-| D2.3.10 | Model architecture diagram | Auto-generated layer graph | [ ] |
+| D2.3.1 | Gradient inspection | Show ∂loss/∂w at each backward step | [x] |
+| D2.3.2 | Tensor shape tracker | Shape changes through pipeline | [x] |
+| D2.3.3 | NaN/Inf detector | Break on first NaN in any tensor | [x] |
+| D2.3.4 | Loss curve live plot | Loss value at each training step | [x] |
+| D2.3.5 | Weight histogram | Distribution of weights per layer | [x] |
+| D2.3.6 | Activation visualization | Heatmap of layer outputs | [x] |
+| D2.3.7 | Gradient explosion detector | Alert when gradient norm > threshold | [x] |
+| D2.3.8 | Learning rate schedule plot | LR over time | [x] |
+| D2.3.9 | Batch data inspector | View input batch at each step | [x] |
+| D2.3.10 | Model architecture diagram | Auto-generated layer graph | [x] |
 
 ### Phase D3: Integration (2 sprints, 20 tasks)
 
@@ -245,31 +245,31 @@ Compiler:      Cranelift JIT/AOT + LLVM backend + Wasm target
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D3.1.1 | `fj debug --record` | Enable recording mode | [ ] |
-| D3.1.2 | `fj debug --replay file.trace` | Replay saved recording | [ ] |
-| D3.1.3 | `fj profile --flamegraph` | Generate flamegraph SVG | [ ] |
-| D3.1.4 | `fj profile --memory` | Memory profiling mode | [ ] |
-| D3.1.5 | `fj profile --tensor` | Tensor operation profiling | [ ] |
-| D3.1.6 | Profile comparison | `fj profile diff a.json b.json` | [ ] |
-| D3.1.7 | CI integration | `fj profile --check --max-time 100ms` | [ ] |
-| D3.1.8 | Benchmark regression | Fail CI if >10% slower | [ ] |
-| D3.1.9 | Profile annotations | `@profile fn heavy_work()` | [ ] |
-| D3.1.10 | REPL profiling | Profile expressions in REPL | [ ] |
+| D3.1.1 | `fj debug --record` | Enable recording mode | [x] |
+| D3.1.2 | `fj debug --replay file.trace` | Replay saved recording | [x] |
+| D3.1.3 | `fj profile --flamegraph` | Generate flamegraph SVG | [x] |
+| D3.1.4 | `fj profile --memory` | Memory profiling mode | [x] |
+| D3.1.5 | `fj profile --tensor` | Tensor operation profiling | [x] |
+| D3.1.6 | Profile comparison | `fj profile diff a.json b.json` | [x] |
+| D3.1.7 | CI integration | `fj profile --check --max-time 100ms` | [x] |
+| D3.1.8 | Benchmark regression | Fail CI if >10% slower | [x] |
+| D3.1.9 | Profile annotations | `@profile fn heavy_work()` | [x] |
+| D3.1.10 | REPL profiling | Profile expressions in REPL | [x] |
 
 #### Sprint D3.2: Documentation (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D3.2.1 | Profiler user guide | Getting started + examples | [ ] |
-| D3.2.2 | Debugger user guide | Breakpoints, stepping, reverse | [ ] |
-| D3.2.3 | ML debugging tutorial | "Finding the vanishing gradient" | [ ] |
-| D3.2.4 | Memory profiling tutorial | "Tracking tensor memory leaks" | [ ] |
-| D3.2.5 | Flamegraph interpretation | How to read flamegraphs | [ ] |
-| D3.2.6 | VS Code extension update | New debug/profile commands | [ ] |
-| D3.2.7 | Performance optimization guide | Common patterns + fixes | [ ] |
-| D3.2.8 | Embedded profiling guide | Profiling on Dragon Q6A | [ ] |
-| D3.2.9 | API reference | Profiler/debugger Rust APIs | [ ] |
-| D3.2.10 | Blog: "Time-Travel Debugging" | Announcement + demo video | [ ] |
+| D3.2.1 | Profiler user guide | Getting started + examples | [x] |
+| D3.2.2 | Debugger user guide | Breakpoints, stepping, reverse | [x] |
+| D3.2.3 | ML debugging tutorial | "Finding the vanishing gradient" | [x] |
+| D3.2.4 | Memory profiling tutorial | "Tracking tensor memory leaks" | [x] |
+| D3.2.5 | Flamegraph interpretation | How to read flamegraphs | [x] |
+| D3.2.6 | VS Code extension update | New debug/profile commands | [x] |
+| D3.2.7 | Performance optimization guide | Common patterns + fixes | [x] |
+| D3.2.8 | Embedded profiling guide | Profiling on Dragon Q6A | [x] |
+| D3.2.9 | API reference | Profiler/debugger Rust APIs | [x] |
+| D3.2.10 | Blog: "Time-Travel Debugging" | Announcement + demo video | [x] |
 
 ---
 
