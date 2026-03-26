@@ -24,9 +24,15 @@ use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
 
 /// Default maximum recursion depth to prevent stack overflow.
-/// Kept conservative (64) to avoid actual Rust stack overflow in debug builds
-/// with the larger Interpreter struct (tape, modules, etc.).
+/// Default recursion depth limit.
+/// Debug builds: 64 (Rust stack is ~2MB, each eval frame is large).
+/// Release builds: 1024 (optimized frames are smaller).
+/// SQ11.7: Release mode handles 500+ statement programs.
+/// Use `set_max_recursion_depth()` or `--stack-depth N` to adjust.
+#[cfg(debug_assertions)]
 const DEFAULT_MAX_RECURSION_DEPTH: usize = 64;
+#[cfg(not(debug_assertions))]
+const DEFAULT_MAX_RECURSION_DEPTH: usize = 1024;
 
 /// A runtime error produced during interpretation.
 #[derive(Debug, Clone, thiserror::Error)]
