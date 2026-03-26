@@ -97,6 +97,40 @@ fn parse_block(tokens: [i64], pos: i64) -> i64 {
     p
 }
 
+// Additional token constants for SH2
+const TK_MATCH: i64 = 3
+const TK_FOR: i64 = 5
+const TK_LOOP: i64 = 6
+const TK_IN: i64 = 7
+const TK_BREAK: i64 = 9
+const TK_CONTINUE: i64 = 10
+const TK_STRUCT: i64 = 16
+const TK_ENUM: i64 = 17
+const TK_IMPL: i64 = 19
+const TK_TRAIT: i64 = 20
+const TK_CONST: i64 = 22
+const TK_USE: i64 = 23
+const TK_MOD: i64 = 24
+const TK_ARROW: i64 = 121
+const TK_FATARROW: i64 = 122
+const TK_LBRACKET: i64 = 114
+const TK_RBRACKET: i64 = 115
+const TK_COLONCOLON: i64 = 117
+const TK_DOT: i64 = 120
+const TK_DOTDOT: i64 = 102
+const TK_DOTDOTEQ: i64 = 103
+const TK_PIPEGT: i64 = 104
+const TK_AT: i64 = 105
+const TK_PERCENT: i64 = 74
+const TK_STARSTAR: i64 = 75
+const TK_BANG: i64 = 84
+const TK_AMP: i64 = 85
+const TK_PIPE: i64 = 86
+const TK_CARET: i64 = 87
+const TK_TILDE: i64 = 88
+const TK_CHARLIT: i64 = 134
+const TK_FSTRING: i64 = 135
+
 // Parse a statement
 fn parse_stmt(tokens: [i64], pos: i64) -> i64 {
     let kind = peek(tokens, pos)
@@ -104,8 +138,14 @@ fn parse_stmt(tokens: [i64], pos: i64) -> i64 {
     if kind == TK_LET {
         return parse_let(tokens, pos)
     }
+    if kind == TK_CONST {
+        return parse_let(tokens, pos)  // const uses same structure as let
+    }
     if kind == TK_RETURN {
         return parse_return(tokens, pos)
+    }
+    if kind == TK_BREAK || kind == TK_CONTINUE {
+        return skip_semi(tokens, advance(pos))
     }
     if kind == TK_IF {
         return parse_if(tokens, pos)
@@ -113,8 +153,40 @@ fn parse_stmt(tokens: [i64], pos: i64) -> i64 {
     if kind == TK_WHILE {
         return parse_while(tokens, pos)
     }
+    if kind == TK_FOR {
+        return parse_for(tokens, pos)
+    }
+    if kind == TK_LOOP {
+        return parse_block(tokens, advance(pos))
+    }
+    if kind == TK_MATCH {
+        return parse_match(tokens, pos)
+    }
     if kind == TK_FN || kind == TK_PUB {
         return parse_fn_def(tokens, pos)
+    }
+    if kind == TK_STRUCT {
+        return parse_struct(tokens, pos)
+    }
+    if kind == TK_ENUM {
+        return parse_enum(tokens, pos)
+    }
+    if kind == TK_IMPL {
+        return parse_impl(tokens, pos)
+    }
+    if kind == TK_TRAIT {
+        return parse_trait(tokens, pos)
+    }
+    if kind == TK_USE {
+        return parse_use(tokens, pos)
+    }
+    if kind == TK_MOD {
+        return skip_semi(tokens, advance(advance(pos)))  // mod name
+    }
+    if kind == TK_AT {
+        // Annotation: skip @name, then parse the item
+        let mut p = advance(advance(pos))
+        return parse_stmt(tokens, p)
     }
 
     // Expression statement
@@ -204,6 +276,134 @@ fn parse_fn_def(tokens: [i64], pos: i64) -> i64 {
     p
 }
 
+// Parse for loop: for name in expr { body }
+fn parse_for(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_FOR)
+    p = expect(tokens, p, TK_IDENT)  // loop variable
+    p = expect(tokens, p, TK_IN)
+    p = parse_expr(tokens, p)
+    p = parse_block(tokens, p)
+    p
+}
+
+// Parse match expression: match expr { pattern => expr, ... }
+fn parse_match(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_MATCH)
+    p = parse_expr(tokens, p)
+    p = expect(tokens, p, TK_LBRACE)
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        // Parse pattern (simplified: consume tokens until =>)
+        while peek(tokens, p) != TK_FATARROW && peek(tokens, p) != TK_RBRACE && peek(tokens, p) != TK_EOF {
+            p = advance(p)
+        }
+        if peek(tokens, p) == TK_FATARROW {
+            p = advance(p)  // skip =>
+            p = parse_expr(tokens, p)
+        }
+        if peek(tokens, p) == TK_COMMA { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse struct definition: struct Name { field: Type, ... }
+fn parse_struct(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_STRUCT)
+    p = expect(tokens, p, TK_IDENT)  // struct name
+    // Optional generic params <T, U>
+    if peek(tokens, p) == TK_LT {
+        p = advance(p)
+        while peek(tokens, p) != TK_GT && peek(tokens, p) != TK_EOF {
+            p = advance(p)
+        }
+        if peek(tokens, p) == TK_GT { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_LBRACE)
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        p = expect(tokens, p, TK_IDENT)  // field name
+        if peek(tokens, p) == TK_COLON {
+            p = advance(p)
+            p = parse_type(tokens, p)
+        }
+        if peek(tokens, p) == TK_COMMA { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse enum definition: enum Name { Variant, Variant(Type), ... }
+fn parse_enum(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_ENUM)
+    p = expect(tokens, p, TK_IDENT)  // enum name
+    // Optional generic params
+    if peek(tokens, p) == TK_LT {
+        p = advance(p)
+        while peek(tokens, p) != TK_GT && peek(tokens, p) != TK_EOF { p = advance(p) }
+        if peek(tokens, p) == TK_GT { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_LBRACE)
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        p = advance(p)  // variant name or payload
+        if peek(tokens, p) == TK_LPAREN {
+            p = advance(p)
+            while peek(tokens, p) != TK_RPAREN && peek(tokens, p) != TK_EOF {
+                p = advance(p)
+            }
+            if peek(tokens, p) == TK_RPAREN { p = advance(p) }
+        }
+        if peek(tokens, p) == TK_COMMA { p = advance(p) }
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse impl block: impl [Trait for] Type { fn... }
+fn parse_impl(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_IMPL)
+    // Type name (or trait name)
+    p = expect(tokens, p, TK_IDENT)
+    // Check for "for" (impl Trait for Type)
+    if peek(tokens, p) == TK_FOR {
+        p = advance(p)
+        p = expect(tokens, p, TK_IDENT)
+    }
+    p = expect(tokens, p, TK_LBRACE)
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        p = parse_stmt(tokens, p)
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse trait: trait Name { fn method(self) -> Type; ... }
+fn parse_trait(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_TRAIT)
+    p = expect(tokens, p, TK_IDENT)
+    p = expect(tokens, p, TK_LBRACE)
+    while peek(tokens, p) != TK_RBRACE {
+        if peek(tokens, p) == TK_EOF { return p }
+        p = parse_stmt(tokens, p)
+    }
+    p = expect(tokens, p, TK_RBRACE)
+    p
+}
+
+// Parse use statement: use mod::item
+fn parse_use(tokens: [i64], pos: i64) -> i64 {
+    let mut p = expect(tokens, pos, TK_USE)
+    // Consume path: ident (:: ident)*
+    p = advance(p)
+    while peek(tokens, p) == TK_COLONCOLON {
+        p = advance(p)  // ::
+        p = advance(p)  // next segment
+    }
+    skip_semi(tokens, p)
+}
+
 // Parse type expression (simplified)
 fn parse_type(tokens: [i64], pos: i64) -> i64 {
     // Simple: just consume the next token (type name)
@@ -222,17 +422,29 @@ fn parse_type(tokens: [i64], pos: i64) -> i64 {
     advance(pos)
 }
 
-// Parse expression (simplified — handles primary + binary ops)
+// Check if a token is a binary operator
+fn is_binop(kind: i64) -> bool {
+    kind == TK_PLUS || kind == TK_MINUS || kind == TK_STAR || kind == TK_SLASH ||
+    kind == TK_PERCENT || kind == TK_STARSTAR ||
+    kind == TK_EQEQ || kind == TK_NEQ || kind == TK_LT || kind == TK_GT ||
+    kind == TK_LTEQ || kind == TK_GTEQ || kind == TK_AND || kind == TK_OR ||
+    kind == TK_AMP || kind == TK_PIPE || kind == TK_CARET ||
+    kind == TK_PIPEGT || kind == TK_DOTDOT || kind == TK_DOTDOTEQ ||
+    kind == TK_EQ || kind == 92 || kind == 93 || kind == 94 || kind == 95  // += -= *= /=
+}
+
+// Parse expression — handles primary + all binary operators
 fn parse_expr(tokens: [i64], pos: i64) -> i64 {
     let mut p = parse_primary(tokens, pos)
-    // Binary operators
-    let mut op = peek(tokens, p)
-    while op == TK_PLUS || op == TK_MINUS || op == TK_STAR || op == TK_SLASH ||
-          op == TK_EQEQ || op == TK_NEQ || op == TK_LT || op == TK_GT ||
-          op == TK_LTEQ || op == TK_GTEQ || op == TK_AND || op == TK_OR {
+    // Binary operators (flat precedence for simplicity — Pratt in v2)
+    while is_binop(peek(tokens, p)) {
         p = advance(p)
         p = parse_primary(tokens, p)
-        op = peek(tokens, p)
+    }
+    // Assignment
+    if peek(tokens, p) == TK_EQ {
+        p = advance(p)
+        p = parse_expr(tokens, p)
     }
     p
 }
@@ -247,8 +459,12 @@ fn parse_primary(tokens: [i64], pos: i64) -> i64 {
     if kind == TK_FLOATLIT { return advance(pos) }
     // String literal
     if kind == TK_STRLIT { return advance(pos) }
-    // true/false
-    if kind == TK_TRUE || kind == TK_FALSE { return advance(pos) }
+    // Char literal
+    if kind == TK_CHARLIT { return advance(pos) }
+    // F-string literal
+    if kind == TK_FSTRING { return advance(pos) }
+    // true/false/null
+    if kind == TK_TRUE || kind == TK_FALSE || kind == 31 { return advance(pos) }
     // Parenthesized expression
     if kind == TK_LPAREN {
         let mut p = advance(pos)
@@ -256,10 +472,34 @@ fn parse_primary(tokens: [i64], pos: i64) -> i64 {
         p = expect(tokens, p, TK_RPAREN)
         return p
     }
-    // Unary minus
-    if kind == TK_MINUS {
+    // Unary: -, !, ~
+    if kind == TK_MINUS || kind == TK_BANG || kind == TK_TILDE {
         let p = advance(pos)
         return parse_primary(tokens, p)
+    }
+    // Unary: &, &mut
+    if kind == TK_AMP {
+        let mut p = advance(pos)
+        if peek(tokens, p) == TK_MUT { p = advance(p) }
+        return parse_primary(tokens, p)
+    }
+    // Array literal: [expr, expr, ...]
+    if kind == TK_LBRACKET {
+        let mut p = advance(pos)
+        while peek(tokens, p) != TK_RBRACKET {
+            if peek(tokens, p) == TK_EOF { return p }
+            p = parse_expr(tokens, p)
+            if peek(tokens, p) == TK_COMMA { p = advance(p) }
+        }
+        return advance(p) // skip ]
+    }
+    // If expression (as expression, not just statement)
+    if kind == TK_IF {
+        return parse_if(tokens, pos)
+    }
+    // Match expression
+    if kind == TK_MATCH {
+        return parse_match(tokens, pos)
     }
     // Identifier (possibly function call)
     if kind == TK_IDENT {
@@ -312,86 +552,124 @@ pub fn parse_program(tokens: [i64]) -> i64 {
     items
 }
 
-// ── Self-test: parse a simple program ──
+// ═══════════════════════════════════════════════════════════════════════
+// Self-test: comprehensive parser test suite
+// ═══════════════════════════════════════════════════════════════════════
 
-fn main() {
-    println("=== Self-Hosted Parser Test ===")
-    println("")
-
-    // Tokenize a test program
-    let source = "fn add(a: i64, b: i64) -> i64 { a + b }
-fn main() {
-    let x = 42
-    let y = add(x, 8)
-    if y > 40 {
-        println(y)
-    }
-    while x > 0 {
-        x = x - 1
-    }
-    return 0
-}"
+fn test_parse(label: str, source: str, expected_items: i64) -> bool {
     let tokens = tokenize(source)
-    let token_count = to_int(len(tokens))
-    println("Tokens: " + to_string(token_count))
-
-    // Parse
     let items = parse_program(tokens)
-    println("Items parsed: " + to_string(items))
-
-    // Verify
-    if items >= 2 {
-        println("[PASS] Parsed 2+ items (fn add + fn main)")
+    if items >= expected_items {
+        println(f"PASS: {label} ({items} items)")
+        return true
     } else {
-        println("[FAIL] Expected 2+ items, got " + to_string(items))
+        println(f"FAIL: {label} — expected {expected_items}+ items, got {items}")
+        return false
     }
+}
 
-    if token_count > 30 {
-        println("[PASS] Tokenized " + to_string(token_count) + " tokens")
-    } else {
-        println("[FAIL] Too few tokens: " + to_string(token_count))
-    }
+fn main() {
+    let mut pass = 0
+    let mut fail = 0
 
-    // Test: parse the lexer source itself
-    let lexer_source = match read_file("stdlib/lexer.fj") {
-        Ok(content) => content,
-        Err(_) => ""
-    }
-    if lexer_source != "" {
-        let lex_tokens = tokenize(lexer_source)
-        let lex_count = to_int(len(lex_tokens))
-        let lex_items = parse_program(lex_tokens)
-        println("")
-        println("Self-parse stdlib/lexer.fj:")
-        println("  Tokens: " + to_string(lex_count))
-        println("  Items: " + to_string(lex_items))
-        if lex_items > 5 {
-            println("  [PASS] Parsed " + to_string(lex_items) + " items from lexer.fj")
-        } else {
-            println("  [FAIL] Too few items")
-        }
-    }
+    println("=== Self-Hosted Parser v3 Test Suite ===")
 
-    // Test: parse parser source itself (self-parse!)
-    let parser_source = match read_file("stdlib/parser.fj") {
-        Ok(content) => content,
-        Err(_) => ""
-    }
-    if parser_source != "" {
-        let par_tokens = tokenize(parser_source)
-        let par_count = to_int(len(par_tokens))
-        let par_items = parse_program(par_tokens)
-        println("")
-        println("Self-parse stdlib/parser.fj:")
-        println("  Tokens: " + to_string(par_count))
-        println("  Items: " + to_string(par_items))
-        if par_items > 10 {
-            println("  [PASS] Self-parsed " + to_string(par_items) + " items!")
-        } else {
-            println("  [FAIL] Too few items")
-        }
-    }
+    // T1: Function definition
+    if test_parse("fn def", "fn add(a: i64, b: i64) -> i64 { a + b }", 1) { pass = pass + 1 } else { fail = fail + 1 }
 
-    println("")
-    println("=== Self-Hosted Parser Test Complete ===")
+    // T2: Let statement
+    if test_parse("let stmt", "let x = 42", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T3: Let mut with type
+    if test_parse("let mut", "let mut counter: i64 = 0", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T4: Const declaration
+    if test_parse("const", "const MAX: i64 = 1024", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T5: Return statement
+    if test_parse("return", "fn f() -> i64 { return 42 }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T6: If-else
+    if test_parse("if-else", "fn f() { if x > 0 { 1 } else { 0 } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T7: While loop
+    if test_parse("while", "fn f() { while x > 0 { x = x - 1 } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T8: For loop
+    if test_parse("for loop", "fn f() { for i in 0..10 { println(i) } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T9: Match expression
+    if test_parse("match", "fn f() { match x { 0 => 1, _ => 2 } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T10: Struct definition
+    if test_parse("struct", "struct Point { x: f64, y: f64 }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T11: Generic struct
+    if test_parse("generic struct", "struct Pair<T> { first: T, second: T }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T12: Enum definition
+    if test_parse("enum", "enum Color { Red, Green, Blue }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T13: Enum with payload
+    if test_parse("enum payload", "enum Option { Some(i64), None }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T14: Impl block
+    if test_parse("impl", "impl Point { fn distance(self) -> f64 { 0.0 } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T15: Trait definition
+    if test_parse("trait", "trait Greet { fn hello(self) -> str { \"hi\" } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T16: Impl trait for type
+    if test_parse("impl trait", "impl Greet for Dog { fn hello(self) -> str { \"woof\" } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T17: Use statement
+    if test_parse("use", "use std::math", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T18: Pub function
+    if test_parse("pub fn", "pub fn tokenize(s: str) -> [i64] { [] }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T19: Multiple items
+    if test_parse("multi-item", "fn a() {} fn b() {} fn c() {}", 3) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T20: Complex program
+    if test_parse("complex", "struct Point { x: f64, y: f64 }
+impl Point { fn new(x: f64, y: f64) -> Point { Point { x: x, y: y } } }
+fn main() { let p = Point::new(3.0, 4.0) }", 3) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T21: Array literal
+    if test_parse("array", "fn f() { let arr = [1, 2, 3] }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T22: Function call with args
+    if test_parse("call", "fn f() { println(add(1, 2)) }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T23: Field access
+    if test_parse("field", "fn f() { let x = point.x }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T24: Binary operators
+    if test_parse("binops", "fn f() { let x = a + b * c - d / e % f }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T25: Comparison operators
+    if test_parse("compare", "fn f() { if a > b && c <= d || e != f {} }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T26: Pipeline operator
+    if test_parse("pipeline", "fn f() { 5 |> double |> add_one }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T27: Nested if-else-if
+    if test_parse("if-else-if", "fn f() { if x > 0 { 1 } else if x < 0 { 2 } else { 0 } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T28: Break and continue
+    if test_parse("break/continue", "fn f() { while true { if done { break } else { continue } } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T29: Loop
+    if test_parse("loop", "fn f() { loop { break } }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    // T30: Annotation
+    if test_parse("annotation", "@kernel fn init() { }", 1) { pass = pass + 1 } else { fail = fail + 1 }
+
+    println(f"\n{'='} Parser v3 Results {'='}")
+    println(f"Passed: {pass}/30")
+    println(f"Failed: {fail}/30")
+    if fail == 0 {
+        println("ALL 30 TESTS PASSED!")
+    }
 }
