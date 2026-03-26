@@ -304,40 +304,31 @@ impl Default for MoveTracker {
 /// Copy types: all integer types, float types, bool, char, void, never.
 /// Move types: String, Array, Struct, Enum, Tensor, Function, etc.
 /// Shared references (`&T`) are Copy. Mutable references (`&mut T`) are not.
-pub fn is_copy_type(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::Void
-            | Type::Never
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::I128
-            | Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::U128
-            | Type::ISize
-            | Type::USize
-            | Type::F32
-            | Type::F64
-            | Type::IntLiteral
-            | Type::FloatLiteral
-            | Type::Bool
-            | Type::Char
-            // NOTE: Str is Copy because the interpreter uses Rc<String> (refcounted).
-            // This matches runtime behavior. In a future ownership overhaul (Phase 1),
-            // strings will be Move types with explicit .clone() for copies.
-            | Type::Str
-            | Type::Unknown
-            | Type::TypeVar(_)
-            | Type::Ref(_)
-            | Type::Struct { .. }
-            | Type::Array(_)
-            | Type::Tuple(_)
-    )
+/// Determines whether a type is Copy (no move on assignment/pass).
+///
+/// # Current semantics (interpreter mode)
+///
+/// The Fajar Lang interpreter uses `Value::clone()` for all assignments and
+/// function argument passing. This means ALL types are effectively Copy at
+/// runtime — `let b = a` clones `a`, and `a` remains valid.
+///
+/// The analyzer matches this runtime behavior: all types are Copy.
+/// This prevents false ME001 (use-after-move) errors that would confuse users.
+///
+/// # Future: native codegen mode
+///
+/// When Cranelift/LLVM native codegen becomes the primary execution path,
+/// move semantics will matter for performance (avoiding unnecessary copies).
+/// At that point, this function should be updated to:
+///   - Primitives (i8-i128, f32/f64, bool, char): Copy
+///   - Str, Array, Struct, Tuple: Move (require explicit .clone())
+///   - Ref: Copy, RefMut: Move
+///
+/// This change will be gated behind a compiler flag: `--strict-ownership`
+pub fn is_copy_type(_ty: &Type) -> bool {
+    // In interpreter mode, all types are Copy (clone on assignment).
+    // This matches the runtime semantics of Value::clone().
+    true
 }
 
 #[cfg(test)]
@@ -356,20 +347,18 @@ mod tests {
     }
 
     #[test]
-    fn move_types_are_not_copy() {
-        // Str is Copy (runtime uses Rc-based cloning for strings)
+    fn all_types_are_copy_in_interpreter_mode() {
+        // In interpreter mode, all types are Copy (Value::clone on assignment).
+        // This matches the runtime semantics.
         assert!(is_copy_type(&Type::Str));
-        // Array/Tuple are Copy (runtime uses Rc-based cloning)
         assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
         assert!(is_copy_type(&Type::Tuple(vec![Type::Str])));
-        // RefMut is NOT copy
-        assert!(!is_copy_type(&Type::RefMut(Box::new(Type::I32))));
-    }
-
-    #[test]
-    fn ref_is_copy_refmut_is_not() {
+        assert!(is_copy_type(&Type::RefMut(Box::new(Type::I32))));
+        assert!(is_copy_type(&Type::Struct {
+            name: "Point".into(),
+            fields: std::collections::HashMap::new()
+        }));
         assert!(is_copy_type(&Type::Ref(Box::new(Type::Str))));
-        assert!(!is_copy_type(&Type::RefMut(Box::new(Type::Str))));
     }
 
     #[test]
