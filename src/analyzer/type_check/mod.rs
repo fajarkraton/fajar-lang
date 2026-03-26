@@ -635,7 +635,7 @@ pub enum SemanticError {
     },
 
     /// SE005: Argument count mismatch.
-    #[error("SE005: expected {expected} arguments, found {found}")]
+    #[error("SE005: expected {expected} arguments, found {found}{}", hint.as_ref().map(|h| format!(" ({h})")).unwrap_or_default())]
     ArgumentCountMismatch {
         /// Expected count.
         expected: usize,
@@ -643,6 +643,8 @@ pub enum SemanticError {
         found: usize,
         /// Source location.
         span: Span,
+        /// Optional hint.
+        hint: Option<String>,
     },
 
     /// SE006: Duplicate definition.
@@ -655,7 +657,7 @@ pub enum SemanticError {
     },
 
     /// SE007: Assignment to immutable variable.
-    #[error("SE007: cannot assign to immutable variable '{name}'")]
+    #[error("SE007: cannot assign to immutable variable '{name}' — declare with `let mut {name}` to allow mutation")]
     ImmutableAssignment {
         /// Variable name.
         name: String,
@@ -675,7 +677,7 @@ pub enum SemanticError {
     },
 
     /// SE009: Unused variable (warning).
-    #[error("SE009: unused variable '{name}'")]
+    #[error("SE009: unused variable '{name}' — prefix with underscore `_{name}` if intentional")]
     UnusedVariable {
         /// Variable name.
         name: String,

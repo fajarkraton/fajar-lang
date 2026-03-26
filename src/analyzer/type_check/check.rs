@@ -184,11 +184,15 @@ impl TypeChecker {
             && !matches!(declared_ret, Type::Void)
             && !matches!(body_type, Type::Void | Type::Never)
         {
+            let hint = type_mismatch_hint(
+                &declared_ret.display_name(),
+                &body_type.display_name(),
+            );
             self.errors.push(SemanticError::TypeMismatch {
                 expected: declared_ret.display_name(),
                 found: body_type.display_name(),
                 span: fndef.span,
-                hint: None,
+                hint,
             });
         }
 
@@ -1351,10 +1355,18 @@ impl TypeChecker {
                 let is_variadic =
                     params.len() == 1 && matches!(params.first(), Some(Type::Unknown));
                 if !is_variadic && params.len() != arg_types.len() {
+                    let hint = if arg_types.len() < params.len() {
+                        let missing = params.len() - arg_types.len();
+                        Some(format!("missing {missing} argument(s)"))
+                    } else {
+                        let extra = arg_types.len() - params.len();
+                        Some(format!("{extra} extra argument(s)"))
+                    };
                     self.errors.push(SemanticError::ArgumentCountMismatch {
                         expected: params.len(),
                         found: arg_types.len(),
                         span,
+                        hint,
                     });
                 }
 
@@ -1917,6 +1929,7 @@ impl TypeChecker {
                         expected: 1,
                         found: params.len(),
                         span,
+                        hint: Some("pipeline `|>` requires a function that takes exactly 1 argument".into()),
                     });
                 } else if !params[0].is_compatible(&arg_ty) {
                     self.errors.push(SemanticError::TypeMismatch {
