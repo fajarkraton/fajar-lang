@@ -279,6 +279,7 @@ impl QnnLibrary {
 
         // Create device handle.
         let mut device_handle: QnnHandle = std::ptr::null_mut();
+        // SAFETY: reading function pointer from QNN interface table
         if let Some(device_fn) = unsafe { (*interface).device_create } {
             // SAFETY: Calling deviceCreate with null config.
             let result = unsafe {
@@ -303,6 +304,7 @@ impl QnnLibrary {
 
     /// Create a QNN context from a pre-compiled binary (`.bin` file).
     fn create_context_from_binary(&self, binary: &[u8]) -> Result<QnnHandle, NpuRuntimeError> {
+        // SAFETY: reading function pointer from QNN interface table
         let create_fn =
             unsafe { (*self.interface).context_create_from_binary }.ok_or_else(|| {
                 NpuRuntimeError::InferenceFailed("QNN contextCreateFromBinary not available".into())
@@ -336,6 +338,7 @@ impl QnnLibrary {
         context_handle: QnnHandle,
         graph_name: &str,
     ) -> Result<QnnHandle, NpuRuntimeError> {
+        // SAFETY: reading function pointer from QNN interface table
         let retrieve_fn = unsafe { (*self.interface).graph_retrieve }.ok_or_else(|| {
             NpuRuntimeError::InferenceFailed("QNN graphRetrieve not available".into())
         })?;
@@ -367,6 +370,7 @@ impl QnnLibrary {
         outputs_ptr: *mut c_void,
         num_outputs: u32,
     ) -> Result<(), NpuRuntimeError> {
+        // SAFETY: reading function pointer from QNN interface table
         let execute_fn = unsafe { (*self.interface).graph_execute }.ok_or_else(|| {
             NpuRuntimeError::InferenceFailed("QNN graphExecute not available".into())
         })?;
@@ -392,6 +396,7 @@ impl QnnLibrary {
 
     /// Free a context handle.
     fn free_context(&self, context_handle: QnnHandle) {
+        // SAFETY: reading function pointer from QNN interface table
         if let Some(free_fn) = unsafe { (*self.interface).context_free } {
             // SAFETY: Freeing a valid context handle.
             unsafe {
@@ -406,6 +411,7 @@ impl Drop for QnnLibrary {
     fn drop(&mut self) {
         // Free device handle.
         if !self.device_handle.is_null() {
+            // SAFETY: reading function pointer from QNN interface table
             if let Some(device_free) = unsafe { (*self.interface).device_free } {
                 // SAFETY: Freeing a valid device handle.
                 unsafe {
@@ -415,6 +421,7 @@ impl Drop for QnnLibrary {
         }
         // Free backend handle.
         if !self.backend_handle.is_null() {
+            // SAFETY: reading function pointer from QNN interface table
             if let Some(backend_free) = unsafe { (*self.interface).backend_free } {
                 // SAFETY: Freeing a valid backend handle.
                 unsafe {

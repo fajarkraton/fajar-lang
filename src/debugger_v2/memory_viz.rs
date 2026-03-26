@@ -555,7 +555,10 @@ pub fn simulate_cache(accesses: &[u64], config: &CacheConfig) -> CacheResult {
             misses += 1;
             if cache.len() >= config.num_lines {
                 // Evict (simplified — remove arbitrary)
-                let to_remove = *cache.iter().next().expect("cache must be non-empty for eviction");
+                let to_remove = *cache
+                    .iter()
+                    .next()
+                    .expect("cache must be non-empty for eviction");
                 cache.remove(&to_remove);
             }
             cache.insert(line);

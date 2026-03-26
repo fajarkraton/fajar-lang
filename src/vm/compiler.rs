@@ -431,7 +431,10 @@ impl Compiler {
                 let idx = self.chunk.add_constant(Value::Null);
                 self.emit(Op::Const(idx), 0);
 
-                let ctx = self.loop_stack.pop().expect("loop stack empty: while loop has no matching context");
+                let ctx = self
+                    .loop_stack
+                    .pop()
+                    .expect("loop stack empty: while loop has no matching context");
                 for patch in ctx.break_patches {
                     self.chunk.patch_jump(patch, after);
                 }
@@ -450,7 +453,10 @@ impl Compiler {
                 self.emit(Op::Jump(loop_start as u32), 0);
 
                 let after = self.chunk.current_offset();
-                let ctx = self.loop_stack.pop().expect("loop stack empty: loop has no matching context");
+                let ctx = self
+                    .loop_stack
+                    .pop()
+                    .expect("loop stack empty: loop has no matching context");
                 for patch in ctx.break_patches {
                     self.chunk.patch_jump(patch, after);
                 }
@@ -802,7 +808,10 @@ impl Compiler {
         let null2 = self.chunk.add_constant(Value::Null);
         self.emit(Op::Const(null2), 0);
 
-        let ctx = self.loop_stack.pop().expect("loop stack empty: for-in loop has no matching context");
+        let ctx = self
+            .loop_stack
+            .pop()
+            .expect("loop stack empty: for-in loop has no matching context");
         for patch in ctx.break_patches {
             self.chunk.patch_jump(patch, after);
         }
@@ -876,7 +885,10 @@ impl Compiler {
         let null = self.chunk.add_constant(Value::Null);
         self.emit(Op::Const(null), 0);
 
-        let ctx = self.loop_stack.pop().expect("loop stack empty: for-range loop has no matching context");
+        let ctx = self
+            .loop_stack
+            .pop()
+            .expect("loop stack empty: for-range loop has no matching context");
         for patch in ctx.break_patches {
             self.chunk.patch_jump(patch, after);
         }

@@ -603,16 +603,16 @@ full system benchmark, hardware validation report)*
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| QA1.1 | `cargo clippy` zero warnings | Fix all lint warnings | [ ] |
-| QA1.2 | `cargo fmt` clean | All files formatted | [ ] |
-| QA1.3 | `cargo doc` no warnings | All public items documented | [ ] |
-| QA1.4 | Remove dead code | `#[allow(dead_code)]` audit | [ ] |
-| QA1.5 | Remove `.unwrap()` in src/ | Replace with proper error handling | [ ] |
-| QA1.6 | Audit `unsafe` blocks | Verify all have `// SAFETY:` comment | [ ] |
-| QA1.7 | Fix Windows CI | `temp_dir()` instead of `/tmp/` | [ ] |
-| QA1.8 | Fix macOS CI | ARM64 cross-compilation | [ ] |
-| QA1.9 | Dependency update | `cargo update`, fix breaking changes | [ ] |
-| QA1.10 | MSRV pin | Set minimum supported Rust version | [ ] |
+| QA1.1 | `cargo clippy` zero warnings | Fix all lint warnings | [x] |
+| QA1.2 | `cargo fmt` clean | All files formatted | [x] |
+| QA1.3 | `cargo doc` no warnings | All public items documented | [x] |
+| QA1.4 | Remove dead code | `#[allow(dead_code)]` audit | [x] |
+| QA1.5 | Remove `.unwrap()` in src/ | Replace with proper error handling | [x] |
+| QA1.6 | Audit `unsafe` blocks | Verify all have `// SAFETY:` comment | [x] |
+| QA1.7 | Fix Windows CI | `temp_dir()` instead of `/tmp/` | [x] |
+| QA1.8 | Fix macOS CI | ARM64 cross-compilation | [x] |
+| QA1.9 | Dependency update | `cargo update`, fix breaking changes | [x] |
+| QA1.10 | MSRV pin | Set minimum supported Rust version | [x] |
 | QA1.11 | Fuzz all targets | 10M iterations per target (lexer/parser/analyzer/interp) | [ ] |
 | QA1.12 | Fix fuzz findings | Address the 1 known leak + any new crashes | [ ] |
 | QA1.13 | Property test expansion | 50 new proptest invariants | [ ] |

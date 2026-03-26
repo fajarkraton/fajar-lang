@@ -2,6 +2,7 @@
 name = "fajar-lang"
 version = "6.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Fajar Lang — Systems programming language for OS and AI/ML"
 license = "MIT"
 

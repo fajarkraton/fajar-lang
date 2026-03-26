@@ -264,9 +264,10 @@ impl GpuDiscovery {
     fn try_detect() -> Result<GpuDiscovery, GpuDetectError> {
         let lib = load_cuda_driver()?;
 
-        // Initialize CUDA
+        // SAFETY: symbol name matches CUDA Driver API; library is valid for discovery lifetime
         let cu_init: CuInitFn = *unsafe { lib.get(b"cuInit\0") }
             .map_err(|_| GpuDetectError::SymbolNotFound("cuInit"))?;
+        // SAFETY: cuInit(0) is the standard CUDA initialization with no flags
         let result = unsafe { cu_init(0) };
         if result != 0 {
             return Err(GpuDetectError::CudaError("cuInit", result));
@@ -286,10 +287,11 @@ impl GpuDiscovery {
             }
         }
 
-        // Get device count
+        // SAFETY: symbol name matches CUDA Driver API signature
         let cu_device_get_count: CuDeviceGetCountFn = *unsafe { lib.get(b"cuDeviceGetCount\0") }
             .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceGetCount"))?;
         let mut count: i32 = 0;
+        // SAFETY: count is a valid stack-allocated i32 pointer
         let result = unsafe { cu_device_get_count(&mut count) };
         if result != 0 {
             return Err(GpuDetectError::CudaError("cuDeviceGetCount", result));
@@ -303,7 +305,7 @@ impl GpuDiscovery {
             });
         }
 
-        // Load remaining symbols
+        // SAFETY: all symbol names match CUDA Driver API signatures; library is valid
         let cu_device_get: CuDeviceGetFn = *unsafe { lib.get(b"cuDeviceGet\0") }
             .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceGet"))?;
         let cu_device_get_name: CuDeviceGetNameFn = *unsafe { lib.get(b"cuDeviceGetName\0") }
@@ -318,6 +320,7 @@ impl GpuDiscovery {
         let mut devices = Vec::with_capacity(count as usize);
         for i in 0..count {
             let mut device: i32 = 0;
+            // SAFETY: device pointer is valid; ordinal i is in range 0..count
             let result = unsafe { cu_device_get(&mut device, i) };
             if result != 0 {
                 continue;
@@ -332,6 +335,7 @@ impl GpuDiscovery {
             let integrated = get_device_attr(&cu_device_get_attribute, device, 18); // INTEGRATED
 
             let mut total_mem: usize = 0;
+            // SAFETY: total_mem pointer is valid; device handle from cuDeviceGet
             unsafe {
                 cu_device_total_mem(&mut total_mem, device);
             }
@@ -450,8 +454,10 @@ fn load_cuda_driver() -> Result<libloading::Library, GpuDetectError> {
 
 /// Get CUDA driver version.
 fn get_driver_version(lib: &libloading::Library) -> Option<u32> {
+    // SAFETY: symbol name matches CUDA Driver API signature
     let func: CuDriverGetVersionFn = *unsafe { lib.get(b"cuDriverGetVersion\0") }.ok()?;
     let mut version: i32 = 0;
+    // SAFETY: version is a valid stack-allocated i32 pointer
     let result = unsafe { func(&mut version) };
     if result == 0 {
         Some(version as u32)
@@ -463,6 +469,7 @@ fn get_driver_version(lib: &libloading::Library) -> Option<u32> {
 /// Get device name string.
 fn get_device_name(func: &CuDeviceGetNameFn, device: i32) -> String {
     let mut name_buf = [0u8; 256];
+    // SAFETY: name_buf is a 256-byte stack buffer matching the len argument
     let result = unsafe { func(name_buf.as_mut_ptr(), 256, device) };
     if result != 0 {
         return String::from("Unknown GPU");
@@ -476,6 +483,7 @@ fn get_device_name(func: &CuDeviceGetNameFn, device: i32) -> String {
 /// Get a device attribute value.
 fn get_device_attr(func: &CuDeviceGetAttributeFn, device: i32, attrib: i32) -> i32 {
     let mut value: i32 = 0;
+    // SAFETY: value pointer is valid; attrib and device are caller-provided integers
     unsafe {
         func(&mut value, attrib, device);
     }

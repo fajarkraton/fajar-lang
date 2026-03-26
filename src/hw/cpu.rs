@@ -304,6 +304,7 @@ impl CpuFeatures {
     #[cfg(target_arch = "x86_64")]
     #[allow(unused_unsafe)]
     fn detect_amx_int8() -> bool {
+        // SAFETY: CPUID leaf 0 is always available on x86_64
         let max_leaf = unsafe { std::arch::x86_64::__cpuid(0) }.eax;
         if max_leaf < 7 {
             return false;
@@ -317,6 +318,7 @@ impl CpuFeatures {
     #[cfg(target_arch = "x86_64")]
     #[allow(unused_unsafe)]
     fn detect_amx_fp16() -> bool {
+        // SAFETY: CPUID leaf 0 is always available on x86_64
         let max_leaf = unsafe { std::arch::x86_64::__cpuid(0) }.eax;
         if max_leaf < 7 {
             return false;

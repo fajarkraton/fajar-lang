@@ -84,6 +84,7 @@ impl FfiManager {
         }
         // Verify the symbol exists
         let lib = &self.libraries[lib_index];
+        // SAFETY: looking up symbol in a loaded library; no call is made
         unsafe {
             let _: libloading::Symbol<unsafe extern "C" fn()> = lib
                 .get(symbol.as_bytes())

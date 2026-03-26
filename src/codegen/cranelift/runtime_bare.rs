@@ -56,17 +56,21 @@ pub extern "C" fn fj_rt_bare_memcpy(dst: *mut u8, src: *const u8, n: i64) -> *mu
         let dst64 = dst as *mut u64;
         let src64 = src as *const u64;
         for i in 0..words {
+            // SAFETY: dst and src are non-null, aligned to 8 bytes, and i < words
+            // which is bounded by count (validated from n > 0).
             unsafe { *dst64.add(i) = *src64.add(i) };
         }
         // Copy remaining bytes
         let remaining = count % 8;
         let offset = words * 8;
         for i in 0..remaining {
+            // SAFETY: dst and src are non-null and offset + i < count.
             unsafe { *dst.add(offset + i) = *src.add(offset + i) };
         }
     } else {
         // Byte-by-byte fallback
         for i in 0..count {
+            // SAFETY: dst and src are non-null and i < count.
             unsafe { *dst.add(i) = *src.add(i) };
         }
     }
@@ -98,15 +102,19 @@ pub extern "C" fn fj_rt_bare_memset(dst: *mut u8, val: i64, n: i64) -> *mut u8 {
         let words = count / 8;
         let dst64 = dst as *mut u64;
         for i in 0..words {
+            // SAFETY: dst is non-null, aligned to 8 bytes, and i < words
+            // which is bounded by count (validated from n > 0).
             unsafe { *dst64.add(i) = fill_word };
         }
         let remaining = count % 8;
         let offset = words * 8;
         for i in 0..remaining {
+            // SAFETY: dst is non-null and offset + i < count.
             unsafe { *dst.add(offset + i) = byte };
         }
     } else {
         for i in 0..count {
+            // SAFETY: dst is non-null and i < count.
             unsafe { *dst.add(i) = byte };
         }
     }
@@ -122,6 +130,7 @@ pub extern "C" fn fj_rt_bare_memcmp(a: *const u8, b: *const u8, n: i64) -> i64 {
     }
     let count = n as usize;
     for i in 0..count {
+        // SAFETY: a and b are non-null (caller contract) and i < count.
         let av = unsafe { *a.add(i) };
         let bv = unsafe { *b.add(i) };
         if av != bv {
@@ -152,6 +161,7 @@ pub extern "C" fn fj_rt_bare_print(ptr: *const u8, len: i64) {
         return;
     }
     for i in 0..len as usize {
+        // SAFETY: ptr is non-null (checked above) and i < len.
         uart_putc(unsafe { *ptr.add(i) });
     }
 }
@@ -445,11 +455,12 @@ pub extern "C" fn fj_rt_bare_uart_read_byte(port: i64) -> i64 {
     if base == 0 {
         return -1;
     }
-    // PL011: check UARTFR (offset 0x18) bit 4 (RXFE = RX FIFO empty)
+    // SAFETY: reading PL011 UARTFR (offset 0x18) bit 4 (RXFE = RX FIFO empty)
     let flags = unsafe { core::ptr::read_volatile((base + 0x18) as *const u32) };
     if flags & (1 << 4) != 0 {
         return -1; // RX FIFO empty
     }
+    // SAFETY: reading PL011 UART data register at validated base address
     let byte = unsafe { core::ptr::read_volatile(base as *const u8) };
     byte as i64
 }
@@ -465,6 +476,7 @@ pub extern "C" fn fj_rt_bare_uart_write_buf(port: i64, ptr: *const u8, len: i64)
         return 0;
     }
     for i in 0..len as usize {
+        // SAFETY: ptr is non-null (checked above) and i < len
         let byte = unsafe { *ptr.add(i) };
         // SAFETY: writing to UART MMIO data register
         unsafe { core::ptr::write_volatile(base as *mut u8, byte) };
@@ -484,10 +496,12 @@ pub extern "C" fn fj_rt_bare_uart_read_buf(port: i64, ptr: *mut u8, max_len: i64
     }
     let mut count = 0i64;
     for i in 0..max_len as usize {
+        // SAFETY: reading PL011 UARTFR register at validated base address
         let flags = unsafe { core::ptr::read_volatile((base + 0x18) as *const u32) };
         if flags & (1 << 4) != 0 {
             break; // RX FIFO empty
         }
+        // SAFETY: reading PL011 UART data register; writing to valid ptr + offset
         let byte = unsafe { core::ptr::read_volatile(base as *const u8) };
         unsafe { *ptr.add(i) = byte };
         count += 1;
@@ -505,7 +519,7 @@ pub extern "C" fn fj_rt_bare_uart_available(port: i64) -> i64 {
     if base == 0 {
         return 0;
     }
-    // PL011: check UARTFR bit 4 (RXFE)
+    // SAFETY: reading PL011 UARTFR bit 4 (RXFE) at validated base address
     let flags = unsafe { core::ptr::read_volatile((base + 0x18) as *const u32) };
     if flags & (1 << 4) != 0 { 0 } else { 1 }
 }
@@ -624,7 +638,7 @@ pub extern "C" fn fj_rt_bare_i2c_write(bus: i64, addr: i64, ptr: *const u8, len:
     // Simulation: store data in I2C_SIM_MEM keyed by (bus * 128 + addr)
     let key = (bus as usize) * 128 + addr as usize;
     if key < I2C_MEM_SLOTS {
-        // Store first byte as "register value" for simulation
+        // SAFETY: ptr is non-null (checked above); reading first byte
         let val = unsafe { *ptr } as u64;
         I2C_SIM_MEM[key].store(val, Ordering::Relaxed);
     }
@@ -651,6 +665,7 @@ pub extern "C" fn fj_rt_bare_i2c_read(bus: i64, addr: i64, ptr: *mut u8, len: i6
         0
     };
     for i in 0..len as usize {
+        // SAFETY: ptr is non-null (checked above) and i < len
         unsafe { *ptr.add(i) = val };
     }
     len
@@ -924,7 +939,7 @@ pub extern "C" fn fj_rt_bare_nvme_read(lba: i64, count: i64, buf: *mut u8) -> i6
     if (lba + count) as usize > BLOCK_COUNT {
         return -1;
     }
-    // Simulation: fill buffer with zeros (no real storage)
+    // SAFETY: buf is non-null (checked above); i < bytes which fits within buf allocation
     let bytes = (count as usize) * BLOCK_SIZE;
     for i in 0..bytes {
         unsafe { *buf.add(i) = 0 };
@@ -2213,6 +2228,7 @@ pub extern "C" fn fj_rt_bare_read_cr3() -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
         let val: u64;
+        // SAFETY: reading CR3 register; requires ring 0 privilege on bare metal
         unsafe {
             core::arch::asm!("mov {}, cr3", out(reg) val);
         }
@@ -2228,6 +2244,7 @@ pub extern "C" fn fj_rt_bare_read_cr3() -> i64 {
 #[allow(unused_unsafe)]
 pub extern "C" fn fj_rt_bare_write_cr3(val: i64) {
     #[cfg(target_arch = "x86_64")]
+    // SAFETY: writing CR3 register to switch page table; requires ring 0 privilege
     unsafe {
         core::arch::asm!("mov cr3, {}", in(reg) val as u64);
     }
@@ -2241,6 +2258,7 @@ pub extern "C" fn fj_rt_bare_read_cr2() -> i64 {
     #[cfg(target_arch = "x86_64")]
     {
         let val: u64;
+        // SAFETY: reading CR2 register (page fault address); requires ring 0 privilege
         unsafe {
             core::arch::asm!("mov {}, cr2", out(reg) val);
         }

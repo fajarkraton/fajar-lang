@@ -132,7 +132,8 @@ impl LinkerConfig {
         };
         let target = TargetConfig::from_triple(triple).unwrap_or_else(|_| {
             // Fallback: create minimal config
-            TargetConfig::from_triple("x86_64-unknown-none").expect("x86_64-unknown-none is a valid triple")
+            TargetConfig::from_triple("x86_64-unknown-none")
+                .expect("x86_64-unknown-none is a valid triple")
         });
         let mut config = Self::for_target(&target);
         // Reserve space for initramfs after .bss

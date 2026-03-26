@@ -169,6 +169,7 @@ pub extern "C" fn fj_rt_format(
     let tpl = unsafe {
         std::str::from_utf8_unchecked(std::slice::from_raw_parts(tpl_ptr, tpl_len as usize))
     };
+    // SAFETY: args_ptr and num_args validated by JIT calling convention
     let args = unsafe { std::slice::from_raw_parts(args_ptr, (num_args as usize) * 3) };
 
     let mut result = String::new();
@@ -233,10 +234,12 @@ pub extern "C" fn fj_rt_parse_int(ptr: *const u8, len: i64, out_tag: *mut i64, o
     // SAFETY: caller guarantees valid string slice
     let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len as usize)) };
     match s.trim().parse::<i64>() {
+        // SAFETY: out_tag and out_val are valid pointers provided by JIT caller
         Ok(n) => unsafe {
             *out_tag = 0;
             *out_val = n;
         },
+        // SAFETY: out_tag and out_val are valid pointers provided by JIT caller
         Err(_) => unsafe {
             *out_tag = 1;
             *out_val = 0;
@@ -259,10 +262,12 @@ pub extern "C" fn fj_rt_parse_float(
     // SAFETY: caller guarantees valid string slice
     let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len as usize)) };
     match s.trim().parse::<f64>() {
+        // SAFETY: out_tag and out_val are valid pointers provided by JIT caller
         Ok(f) => unsafe {
             *out_tag = 0;
             *out_val = f.to_bits() as i64;
         },
+        // SAFETY: out_tag and out_val are valid pointers provided by JIT caller
         Err(_) => unsafe {
             *out_tag = 1;
             *out_val = 0;
@@ -2402,6 +2407,7 @@ pub extern "C" fn fj_rt_bare_atomic_cas(addr: *mut i64, expected: i64, desired: 
 
 /// Atomic load with SeqCst ordering.
 pub extern "C" fn fj_rt_bare_atomic_load(addr: *const i64) -> i64 {
+    // SAFETY: addr points to a properly aligned i64 allocated by the Fajar runtime
     unsafe {
         let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
         atomic.load(std::sync::atomic::Ordering::SeqCst)
@@ -2410,6 +2416,7 @@ pub extern "C" fn fj_rt_bare_atomic_load(addr: *const i64) -> i64 {
 
 /// Atomic store with SeqCst ordering.
 pub extern "C" fn fj_rt_bare_atomic_store(addr: *mut i64, value: i64) {
+    // SAFETY: addr points to a properly aligned i64 allocated by the Fajar runtime
     unsafe {
         let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
         atomic.store(value, std::sync::atomic::Ordering::SeqCst);
@@ -2418,6 +2425,7 @@ pub extern "C" fn fj_rt_bare_atomic_store(addr: *mut i64, value: i64) {
 
 /// Atomic fetch-add: returns old value, stores old + value.
 pub extern "C" fn fj_rt_bare_atomic_add(addr: *mut i64, value: i64) -> i64 {
+    // SAFETY: addr points to a properly aligned i64 allocated by the Fajar runtime
     unsafe {
         let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
         atomic.fetch_add(value, std::sync::atomic::Ordering::SeqCst)
@@ -2426,6 +2434,7 @@ pub extern "C" fn fj_rt_bare_atomic_add(addr: *mut i64, value: i64) -> i64 {
 
 /// Atomic fetch-sub: returns old value, stores old - value.
 pub extern "C" fn fj_rt_bare_atomic_sub(addr: *mut i64, value: i64) -> i64 {
+    // SAFETY: addr points to a properly aligned i64 allocated by the Fajar runtime
     unsafe {
         let atomic = &*(addr as *const std::sync::atomic::AtomicI64);
         atomic.fetch_sub(value, std::sync::atomic::Ordering::SeqCst)
@@ -3008,6 +3017,7 @@ pub extern "C" fn fj_rt_grad_tensor_free(ptr: *mut u8) {
 ///
 /// The caller must ensure `ptr` is a valid GradTensor pointer.
 pub extern "C" fn fj_rt_grad_relu(ptr: *mut u8) -> *mut u8 {
+    // SAFETY: ptr is a GradTensor allocated by fj_rt_grad_* or fj_rt_tensor_* functions
     let gt = unsafe { &mut *(ptr as *mut GradTensor) };
     let output = gt.data.mapv(|x| if x > 0.0 { x } else { 0.0 });
     // Backward: d_relu/d_input = 1 if input > 0, else 0
@@ -3034,6 +3044,7 @@ pub extern "C" fn fj_rt_grad_relu(ptr: *mut u8) -> *mut u8 {
 ///
 /// The caller must ensure `ptr` is a valid GradTensor pointer.
 pub extern "C" fn fj_rt_grad_sigmoid(ptr: *mut u8) -> *mut u8 {
+    // SAFETY: ptr is a GradTensor allocated by fj_rt_grad_* or fj_rt_tensor_* functions
     let gt = unsafe { &mut *(ptr as *mut GradTensor) };
     let sig = gt.data.mapv(|x| 1.0 / (1.0 + (-x).exp()));
     if gt.requires_grad {
@@ -3059,6 +3070,7 @@ pub extern "C" fn fj_rt_grad_sigmoid(ptr: *mut u8) -> *mut u8 {
 ///
 /// The caller must ensure `ptr` is a valid GradTensor pointer.
 pub extern "C" fn fj_rt_grad_softmax(ptr: *mut u8) -> *mut u8 {
+    // SAFETY: ptr is a GradTensor allocated by fj_rt_grad_* or fj_rt_tensor_* functions
     let gt = unsafe { &mut *(ptr as *mut GradTensor) };
     let (rows, cols) = gt.data.dim();
     let mut sm = Array2::<f64>::zeros((rows, cols));
@@ -3102,7 +3114,9 @@ pub extern "C" fn fj_rt_grad_softmax(ptr: *mut u8) -> *mut u8 {
 ///
 /// Both pointers must be valid: `a_ptr` is a GradTensor, `b_ptr` is a TensorHandle.
 pub extern "C" fn fj_rt_grad_matmul(a_ptr: *mut u8, b_ptr: *mut u8) -> *mut u8 {
+    // SAFETY: a_ptr is a GradTensor allocated by fj_rt_grad_* functions
     let a = unsafe { &mut *(a_ptr as *mut GradTensor) };
+    // SAFETY: b_ptr is a TensorHandle allocated by fj_rt_tensor_* functions
     let b = unsafe { &*(b_ptr as *const TensorHandle) };
     let output = a.data.dot(b);
     if a.requires_grad {
@@ -4361,7 +4375,7 @@ pub extern "C" fn fj_rt_executor_free(exec_ptr: *mut u8) {
     let exec = unsafe { Box::from_raw(exec_ptr as *mut ExecutorHandle) };
     for &task_ptr in &exec.tasks {
         if !task_ptr.is_null() {
-            // Free each FutureHandle
+            // SAFETY: task_ptr is a FutureHandle originally leaked via Box::into_raw
             let _ = unsafe { Box::from_raw(task_ptr as *mut FutureHandle) };
         }
     }
@@ -4438,6 +4452,7 @@ pub extern "C" fn fj_rt_waker_drop(ptr: *mut u8) {
     let waker = unsafe { &mut *(ptr as *mut WakerHandle) };
     waker.ref_count -= 1;
     if waker.ref_count <= 0 {
+        // SAFETY: reclaiming Box originally leaked via Box::into_raw; ref_count is zero
         let _ = unsafe { Box::from_raw(ptr as *mut WakerHandle) };
     }
 }
@@ -4737,7 +4752,7 @@ pub extern "C" fn fj_rt_threadpool_free(pool_ptr: *mut u8) {
     let pool = unsafe { Box::from_raw(pool_ptr as *mut ThreadPoolHandle) };
     for &task_ptr in &pool.tasks {
         if !task_ptr.is_null() {
-            // Free each FutureHandle
+            // SAFETY: task_ptr is a FutureHandle originally leaked via Box::into_raw
             let _ = unsafe { Box::from_raw(task_ptr as *mut FutureHandle) };
         }
     }
@@ -6534,8 +6549,9 @@ pub extern "C" fn fj_rt_closure_call_1(ptr: *mut u8, arg: i64) -> i64 {
     let fn_ptr = handle.fn_ptr;
     let caps = &handle.captures;
 
-    // Call the underlying function with captures prepended
-    // We need to use a function pointer cast based on capture count
+    // Call the underlying function with captures prepended.
+    // SAFETY: fn_ptr is a JIT-compiled function with the matching signature
+    // (captures..., arg) -> i64, stored by fj_rt_closure_new.
     match caps.len() {
         0 => {
             let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(fn_ptr) };
@@ -6575,6 +6591,8 @@ pub extern "C" fn fj_rt_closure_call_0(ptr: *mut u8) -> i64 {
     let fn_ptr = handle.fn_ptr;
     let caps = &handle.captures;
 
+    // SAFETY: fn_ptr is a JIT-compiled function with the matching signature
+    // (captures...) -> i64, stored by fj_rt_closure_new.
     match caps.len() {
         0 => {
             let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
@@ -6606,6 +6624,8 @@ pub extern "C" fn fj_rt_closure_call_2(ptr: *mut u8, arg1: i64, arg2: i64) -> i6
     let fn_ptr = handle.fn_ptr;
     let caps = &handle.captures;
 
+    // SAFETY: fn_ptr is a JIT-compiled function with the matching signature
+    // (captures..., arg1, arg2) -> i64, stored by fj_rt_closure_new.
     match caps.len() {
         0 => {
             let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(fn_ptr) };

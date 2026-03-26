@@ -12,6 +12,8 @@
 #[inline(always)]
 fn syscall0(num: i64) -> i64 {
     let ret: i64;
+    // SAFETY: Issuing a raw x86_64 syscall instruction with the syscall number
+    // in RAX. The kernel ABI guarantees RCX and R11 are clobbered.
     #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!(
@@ -33,6 +35,8 @@ fn syscall0(num: i64) -> i64 {
 #[inline(always)]
 fn syscall1(num: i64, arg0: i64) -> i64 {
     let ret: i64;
+    // SAFETY: Issuing a raw x86_64 syscall instruction with the syscall number
+    // in RAX and one argument in RDI. The kernel ABI guarantees RCX and R11 are clobbered.
     #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!(
@@ -55,6 +59,9 @@ fn syscall1(num: i64, arg0: i64) -> i64 {
 #[inline(always)]
 fn syscall3(num: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
     let ret: i64;
+    // SAFETY: Issuing a raw x86_64 syscall instruction with the syscall number
+    // in RAX and three arguments in RDI, RSI, RDX. The kernel ABI guarantees
+    // RCX and R11 are clobbered.
     #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!(

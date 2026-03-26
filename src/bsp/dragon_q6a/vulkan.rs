@@ -195,6 +195,7 @@ impl VulkanCompute {
     /// and pre-compiles compute pipelines for all supported operations.
     pub fn new() -> Result<Self, VulkanError> {
         // Load Vulkan dynamically
+        // SAFETY: Vulkan entry point is loaded dynamically; no preconditions required.
         let entry = unsafe { ash::Entry::load() }
             .map_err(|e| VulkanError::NotAvailable(format!("failed to load libvulkan: {e}")))?;
 
@@ -210,10 +211,12 @@ impl VulkanCompute {
 
         let create_info = vk::InstanceCreateInfo::default().application_info(&app_info);
 
+        // SAFETY: entry is valid; create_info and app_info are well-formed per Vulkan spec.
         let instance = unsafe { entry.create_instance(&create_info, None) }
             .map_err(|e| VulkanError::NotAvailable(format!("vkCreateInstance failed: {e}")))?;
 
         // Select physical device (prefer integrated/discrete GPU over CPU)
+        // SAFETY: instance is valid; Vulkan spec guarantees safe enumeration.
         let physical_devices = unsafe { instance.enumerate_physical_devices() }
             .map_err(|e| VulkanError::NotAvailable(format!("enumerate devices failed: {e}")))?;
 
@@ -225,6 +228,7 @@ impl VulkanCompute {
         let mut selected = None;
         let mut selected_priority = 0u32;
         for &pd in &physical_devices {
+            // SAFETY: instance is valid; pd was returned by enumerate_physical_devices.
             let props = unsafe { instance.get_physical_device_properties(pd) };
             let priority = match props.device_type {
                 vk::PhysicalDeviceType::DISCRETE_GPU => 4,
@@ -240,10 +244,13 @@ impl VulkanCompute {
         }
 
         let physical_device = selected.ok_or(VulkanError::NoComputeDevice)?;
+        // SAFETY: instance and physical_device are valid; returned by enumerate above.
         let props = unsafe { instance.get_physical_device_properties(physical_device) };
+        // SAFETY: instance and physical_device are valid; querying memory properties is safe.
         let mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
         // Find compute queue family
+        // SAFETY: instance and physical_device are valid; querying queue families is safe.
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
@@ -264,9 +271,11 @@ impl VulkanCompute {
         let device_create_info =
             vk::DeviceCreateInfo::default().queue_create_infos(&queue_create_infos);
 
+        // SAFETY: instance and physical_device are valid; device_create_info matches Vulkan spec.
         let device = unsafe { instance.create_device(physical_device, &device_create_info, None) }
             .map_err(|e| VulkanError::NotAvailable(format!("vkCreateDevice failed: {e}")))?;
 
+        // SAFETY: device is valid; compute_family was verified to exist with COMPUTE capability.
         let compute_queue = unsafe { device.get_device_queue(compute_family, 0) };
 
         // Create command pool
@@ -274,6 +283,7 @@ impl VulkanCompute {
             .queue_family_index(compute_family)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
 
+        // SAFETY: device is valid; pool_info references a valid queue family index.
         let command_pool = unsafe { device.create_command_pool(&pool_info, None) }
             .map_err(|e| VulkanError::DispatchError(format!("create command pool: {e}")))?;
 
@@ -287,10 +297,12 @@ impl VulkanCompute {
             .pool_sizes(&pool_sizes)
             .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
 
+        // SAFETY: device is valid; dp_info parameters are within Vulkan spec limits.
         let descriptor_pool = unsafe { device.create_descriptor_pool(&dp_info, None) }
             .map_err(|e| VulkanError::DispatchError(format!("create descriptor pool: {e}")))?;
 
         // Build device info
+        // SAFETY: props.device_name is a null-terminated C string from Vulkan driver.
         let device_name = unsafe {
             std::ffi::CStr::from_ptr(props.device_name.as_ptr())
                 .to_string_lossy()
@@ -362,6 +374,7 @@ impl VulkanCompute {
 
     /// Check if Vulkan compute is available on this system.
     pub fn is_available() -> bool {
+        // SAFETY: Vulkan entry point is loaded dynamically; no preconditions required.
         unsafe { ash::Entry::load() }.is_ok()
     }
 
@@ -376,9 +389,11 @@ impl VulkanCompute {
             .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
+        // SAFETY: device is valid; buffer_info specifies valid usage flags and size.
         let buffer = unsafe { self.device.create_buffer(&buffer_info, None) }
             .map_err(|e| VulkanError::BufferError(format!("create buffer: {e}")))?;
 
+        // SAFETY: device and buffer are valid; buffer was just created above.
         let mem_reqs = unsafe { self.device.get_buffer_memory_requirements(buffer) };
 
         let mem_type_index = self.find_memory_type(
@@ -390,9 +405,11 @@ impl VulkanCompute {
             .allocation_size(mem_reqs.size)
             .memory_type_index(mem_type_index);
 
+        // SAFETY: device is valid; alloc_info size matches memory requirements; type index is valid.
         let memory = unsafe { self.device.allocate_memory(&alloc_info, None) }
             .map_err(|e| VulkanError::BufferError(format!("allocate memory: {e}")))?;
 
+        // SAFETY: buffer and memory are valid; offset 0 is within allocation; memory type is compatible.
         unsafe { self.device.bind_buffer_memory(buffer, memory, 0) }
             .map_err(|e| VulkanError::BufferError(format!("bind buffer memory: {e}")))?;
 
@@ -413,6 +430,8 @@ impl VulkanCompute {
             )));
         }
 
+        // SAFETY: buffer memory is host-visible; byte_size verified <= buffer.size;
+        // mapped pointer is valid for byte_size bytes; unmap balances the map call.
         unsafe {
             let ptr = self
                 .device
@@ -445,6 +464,8 @@ impl VulkanCompute {
         }
 
         let mut result = vec![0.0f32; count];
+        // SAFETY: buffer memory is host-visible and coherent; byte_size verified <= buffer.size;
+        // mapped pointer is valid for byte_size bytes; result vec has sufficient capacity.
         unsafe {
             let ptr = self
                 .device
@@ -464,6 +485,8 @@ impl VulkanCompute {
 
     /// Destroy a buffer and free its memory.
     pub fn destroy_buffer(&self, buffer: VulkanBuffer) {
+        // SAFETY: device is valid; buffer and memory are valid and not in use (caller
+        // ensures no pending GPU work references them); each is destroyed exactly once.
         unsafe {
             self.device.destroy_buffer(buffer.buffer, None);
             self.device.free_memory(buffer.memory, None);
@@ -557,6 +580,8 @@ impl VulkanCompute {
         self.upload_f32(&buf_a, a)?;
         self.upload_f32(&buf_b, b)?;
         // Upload dimensions as raw bytes
+        // SAFETY: buf_dims memory is host-visible; 12 bytes (3 x u32) fits within the
+        // 12-byte buffer; mapped pointer is valid; unmap balances the map call.
         unsafe {
             let ptr = self
                 .device
@@ -662,6 +687,7 @@ impl VulkanCompute {
             .descriptor_pool(self.descriptor_pool)
             .set_layouts(&layouts);
 
+        // SAFETY: device and descriptor_pool are valid; layout matches the kernel's descriptor set layout.
         let descriptor_sets = unsafe { self.device.allocate_descriptor_sets(&ds_alloc) }
             .map_err(|e| VulkanError::DispatchError(format!("allocate descriptor set: {e}")))?;
         let descriptor_set = descriptor_sets[0];
@@ -689,6 +715,8 @@ impl VulkanCompute {
             })
             .collect();
 
+        // SAFETY: device is valid; descriptor_set and buffer handles are valid; write descriptors
+        // reference valid buffer_info entries with correct binding indices.
         unsafe { self.device.update_descriptor_sets(&writes, &[]) };
 
         // Allocate and record command buffer
@@ -697,6 +725,7 @@ impl VulkanCompute {
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
 
+        // SAFETY: device and command_pool are valid; allocating 1 primary command buffer.
         let command_buffers = unsafe { self.device.allocate_command_buffers(&cb_alloc) }
             .map_err(|e| VulkanError::DispatchError(format!("allocate command buffer: {e}")))?;
         let cmd = command_buffers[0];
@@ -704,6 +733,9 @@ impl VulkanCompute {
         let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
+        // SAFETY: device, cmd, pipeline, descriptor_set, and pipeline_layout are all valid;
+        // command buffer is in initial state; workgroup counts are within device limits;
+        // memory barrier ensures compute shader writes are visible to host before readback.
         unsafe {
             self.device
                 .begin_command_buffer(cmd, &begin_info)
@@ -748,9 +780,12 @@ impl VulkanCompute {
         let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
         let fence_info = vk::FenceCreateInfo::default();
+        // SAFETY: device is valid; fence_info uses default (unsignaled) state.
         let fence = unsafe { self.device.create_fence(&fence_info, None) }
             .map_err(|e| VulkanError::DispatchError(format!("create fence: {e}")))?;
 
+        // SAFETY: device, queue, fence, command_buffers, and descriptor_set are all valid;
+        // wait_for_fences blocks until GPU work completes; resources are freed after completion.
         unsafe {
             self.device
                 .queue_submit(self.compute_queue, &[submit_info], fence)
@@ -780,6 +815,7 @@ impl VulkanCompute {
         type_filter: u32,
         properties: vk::MemoryPropertyFlags,
     ) -> Result<u32, VulkanError> {
+        // SAFETY: instance and physical_device are valid for the lifetime of VulkanCompute.
         let mem_props = unsafe {
             self.instance
                 .get_physical_device_memory_properties(self.physical_device)
@@ -810,6 +846,7 @@ impl VulkanCompute {
         // Create shader module
         let shader_info = vk::ShaderModuleCreateInfo::default().code(spirv);
 
+        // SAFETY: device is valid; shader_info contains well-formed SPIR-V bytecode.
         let shader_module = unsafe { self.device.create_shader_module(&shader_info, None) }
             .map_err(|e| VulkanError::ShaderError(format!("create shader module: {e}")))?;
 
@@ -826,6 +863,7 @@ impl VulkanCompute {
 
         let dsl_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
+        // SAFETY: device is valid; dsl_info bindings match the SPIR-V shader's expected layout.
         let descriptor_set_layout =
             unsafe { self.device.create_descriptor_set_layout(&dsl_info, None) }
                 .map_err(|e| VulkanError::ShaderError(format!("create dsl: {e}")))?;
@@ -834,6 +872,7 @@ impl VulkanCompute {
         let set_layouts = [descriptor_set_layout];
         let pl_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
 
+        // SAFETY: device is valid; set_layouts references the descriptor_set_layout created above.
         let pipeline_layout = unsafe { self.device.create_pipeline_layout(&pl_info, None) }
             .map_err(|e| VulkanError::ShaderError(format!("create pipeline layout: {e}")))?;
 
@@ -848,6 +887,8 @@ impl VulkanCompute {
             .stage(stage)
             .layout(pipeline_layout);
 
+        // SAFETY: device is valid; shader module and pipeline layout are valid;
+        // pipeline cache is null (not cached); pipeline_info matches Vulkan spec.
         let pipelines = unsafe {
             self.device
                 .create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
@@ -855,6 +896,8 @@ impl VulkanCompute {
         .map_err(|(_pipelines, e)| VulkanError::ShaderError(format!("create pipeline: {e}")))?;
 
         // Cleanup shader module (not needed after pipeline creation)
+        // SAFETY: device and shader_module are valid; pipeline has been created and no longer
+        // references the module; destroyed exactly once.
         unsafe { self.device.destroy_shader_module(shader_module, None) };
 
         Ok(ComputeKernel {
@@ -868,6 +911,9 @@ impl VulkanCompute {
 
 impl Drop for VulkanCompute {
     fn drop(&mut self) {
+        // SAFETY: destroying all Vulkan resources in reverse creation order;
+        // device_wait_idle ensures no GPU work is in flight; each resource is
+        // destroyed exactly once; device and instance are still valid.
         unsafe {
             let _ = self.device.device_wait_idle();
 

@@ -32,6 +32,7 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
     let cu_init: Symbol<unsafe extern "C" fn(u32) -> i32> = unsafe { lib.get(b"cuInit") }
         .map_err(|e| GpuError::BackendError(format!("cuInit not found: {e}")))?;
 
+    // SAFETY: cuInit(0) is the standard CUDA initialization call
     let result = unsafe { cu_init(0) };
     if result != 0 {
         return Err(GpuError::BackendError(format!(
@@ -39,18 +40,19 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
         )));
     }
 
-    // Get device count
+    // SAFETY: symbol names match CUDA Driver API signatures; library is valid
     let cu_device_get_count: Symbol<unsafe extern "C" fn(*mut i32) -> i32> =
         unsafe { lib.get(b"cuDeviceGetCount") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
 
     let mut count: i32 = 0;
+    // SAFETY: count is a valid stack-allocated i32 pointer
     let result = unsafe { cu_device_get_count(&mut count) };
     if result != 0 || count == 0 {
         return Err(GpuError::NotAvailable);
     }
 
-    // Get device name
+    // SAFETY: all symbol names match CUDA Driver API signatures; library is valid
     let cu_device_get: Symbol<unsafe extern "C" fn(*mut i32, i32) -> i32> =
         unsafe { lib.get(b"cuDeviceGet") }.map_err(|e| GpuError::BackendError(e.to_string()))?;
 
@@ -66,7 +68,6 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
         unsafe { lib.get(b"cuDeviceGetAttribute") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
 
-    // Create context
     let cu_ctx_create: Symbol<unsafe extern "C" fn(*mut *mut c_void, u32, i32) -> i32> =
         unsafe { lib.get(b"cuCtxCreate_v2") }.map_err(|e| GpuError::BackendError(e.to_string()))?;
 
@@ -122,6 +123,7 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
 
         devices.push(Box::new(CudaDevice {
             info,
+            // SAFETY: loading libcuda.so for the device's lifetime
             _lib: unsafe { Library::new("libcuda.so") }
                 .map_err(|e| GpuError::BackendError(e.to_string()))?,
             context,

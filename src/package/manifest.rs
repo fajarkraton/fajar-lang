@@ -277,11 +277,12 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 /// Returns the local package cache directory (`~/.fj/cache/`).
 ///
-/// Falls back to `/tmp/.fj/cache/` if the home directory cannot be determined.
+/// Falls back to the system temp directory if the home directory cannot be determined.
 pub fn cache_dir() -> PathBuf {
     let base = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"));
+        .unwrap_or_else(|_| std::env::temp_dir());
     base.join(".fj").join("cache")
 }
 
@@ -294,12 +295,13 @@ pub fn install_path(name: &str, version: &SemVer) -> PathBuf {
 
 /// Returns the path to the credentials file (`~/.fj/credentials.toml`).
 ///
-/// Falls back to `/tmp/.fj/credentials.toml` if the home directory
+/// Falls back to the system temp directory if the home directory
 /// cannot be determined.
 pub fn credentials_path() -> PathBuf {
     let base = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"));
+        .unwrap_or_else(|_| std::env::temp_dir());
     base.join(".fj").join("credentials.toml")
 }
 

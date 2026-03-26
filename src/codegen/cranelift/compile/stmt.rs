@@ -738,8 +738,7 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                         let fn_names: Vec<Option<String>> =
                             elements.iter().map(extract_expr_fn_name).collect();
                         if fn_names.iter().all(|n| n.is_some()) {
-                            let fn_names: Vec<String> =
-                                fn_names.into_iter().flatten().collect();
+                            let fn_names: Vec<String> = fn_names.into_iter().flatten().collect();
                             // Check all names are known functions
                             let fn_ids: Vec<_> = fn_names
                                 .iter()

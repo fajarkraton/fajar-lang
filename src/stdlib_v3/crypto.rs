@@ -349,6 +349,8 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// Securely zeros memory.
 pub fn secure_zero(buf: &mut [u8]) {
     for byte in buf.iter_mut() {
+        // SAFETY: write_volatile ensures the zero write is not optimized away,
+        // preventing sensitive data from lingering in memory.
         unsafe {
             std::ptr::write_volatile(byte, 0);
         }
