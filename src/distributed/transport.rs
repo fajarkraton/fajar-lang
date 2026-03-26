@@ -281,6 +281,169 @@ impl TransportNode {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// DQ5.2: Heartbeat Timeout Detection
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Tracks heartbeat timestamps per node for failure detection.
+pub struct HeartbeatTracker {
+    /// Last heartbeat time per node (milliseconds).
+    last_seen: HashMap<u64, u64>,
+    /// Timeout threshold in milliseconds.
+    timeout_ms: u64,
+}
+
+impl HeartbeatTracker {
+    /// Create a new tracker with given timeout.
+    pub fn new(timeout_ms: u64) -> Self {
+        Self {
+            last_seen: HashMap::new(),
+            timeout_ms,
+        }
+    }
+
+    /// Record a heartbeat from a node.
+    pub fn record_heartbeat(&mut self, node_id: u64, now_ms: u64) {
+        self.last_seen.insert(node_id, now_ms);
+    }
+
+    /// Check which nodes are considered dead (no heartbeat within timeout).
+    pub fn dead_nodes(&self, now_ms: u64) -> Vec<u64> {
+        self.last_seen
+            .iter()
+            .filter(|(_, last)| now_ms.saturating_sub(**last) > self.timeout_ms)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Check if a specific node is alive.
+    pub fn is_alive(&self, node_id: u64, now_ms: u64) -> bool {
+        self.last_seen
+            .get(&node_id)
+            .is_some_and(|last| now_ms.saturating_sub(*last) <= self.timeout_ms)
+    }
+
+    /// Number of tracked nodes.
+    pub fn node_count(&self) -> usize {
+        self.last_seen.len()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DQ5.4: FIFO Message Ordering
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Reorders messages by sequence number to guarantee FIFO per sender.
+pub struct FifoBuffer {
+    /// Expected next sequence per sender.
+    expected_seq: HashMap<u64, u64>,
+    /// Buffered out-of-order messages per sender.
+    pending: HashMap<u64, Vec<NetMessage>>,
+}
+
+impl FifoBuffer {
+    /// Create a new FIFO buffer.
+    pub fn new() -> Self {
+        Self {
+            expected_seq: HashMap::new(),
+            pending: HashMap::new(),
+        }
+    }
+
+    /// Process an incoming message. Returns messages ready for delivery (in order).
+    pub fn receive(&mut self, msg: NetMessage) -> Vec<NetMessage> {
+        let sender = msg.sender_id;
+        let expected = self.expected_seq.entry(sender).or_insert(1);
+        let mut ready = Vec::new();
+
+        if msg.seq == *expected {
+            ready.push(msg);
+            *expected += 1;
+
+            // Check if any buffered messages are now in order
+            let pending = self.pending.entry(sender).or_default();
+            while let Some(pos) = pending.iter().position(|m| m.seq == *expected) {
+                ready.push(pending.remove(pos));
+                *expected += 1;
+            }
+        } else {
+            // Out of order — buffer it
+            self.pending.entry(sender).or_default().push(msg);
+        }
+
+        ready
+    }
+
+    /// Number of pending (buffered) messages.
+    pub fn pending_count(&self) -> usize {
+        self.pending.values().map(|v| v.len()).sum()
+    }
+}
+
+impl Default for FifoBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DQ5.9: Transport Metrics
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Metrics for the transport layer.
+#[derive(Debug, Clone, Default)]
+pub struct TransportMetrics {
+    /// Total messages sent.
+    pub messages_sent: u64,
+    /// Total messages received.
+    pub messages_received: u64,
+    /// Total bytes sent.
+    pub bytes_sent: u64,
+    /// Total bytes received.
+    pub bytes_received: u64,
+    /// Send errors.
+    pub send_errors: u64,
+    /// Connection count.
+    pub connections: u64,
+}
+
+impl TransportMetrics {
+    /// Record a sent message.
+    pub fn record_send(&mut self, bytes: u64) {
+        self.messages_sent += 1;
+        self.bytes_sent += bytes;
+    }
+
+    /// Record a received message.
+    pub fn record_recv(&mut self, bytes: u64) {
+        self.messages_received += 1;
+        self.bytes_received += bytes;
+    }
+
+    /// Record a send error.
+    pub fn record_error(&mut self) {
+        self.send_errors += 1;
+    }
+
+    /// Format as Prometheus-compatible text.
+    pub fn to_prometheus(&self, prefix: &str) -> String {
+        format!(
+            "{prefix}_messages_sent {}\n\
+             {prefix}_messages_received {}\n\
+             {prefix}_bytes_sent {}\n\
+             {prefix}_bytes_received {}\n\
+             {prefix}_send_errors {}\n\
+             {prefix}_connections {}\n",
+            self.messages_sent,
+            self.messages_received,
+            self.bytes_sent,
+            self.bytes_received,
+            self.send_errors,
+            self.connections,
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -425,5 +588,129 @@ mod tests {
         assert_eq!(hb.msg_type, MessageType::Heartbeat);
         assert_eq!(hb.sender_id, 42);
         assert_eq!(hb.seq, 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DQ5: Quality improvement tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn dq5_2_heartbeat_alive() {
+        let mut tracker = HeartbeatTracker::new(5000);
+        tracker.record_heartbeat(1, 1000);
+        tracker.record_heartbeat(2, 1000);
+
+        assert!(tracker.is_alive(1, 3000)); // 2s < 5s timeout
+        assert!(tracker.is_alive(2, 3000));
+        assert_eq!(tracker.node_count(), 2);
+    }
+
+    #[test]
+    fn dq5_2_heartbeat_dead() {
+        let mut tracker = HeartbeatTracker::new(5000);
+        tracker.record_heartbeat(1, 1000);
+        tracker.record_heartbeat(2, 1000);
+
+        // At t=7000, node 1 is dead (6s > 5s)
+        assert!(!tracker.is_alive(1, 7000));
+        let dead = tracker.dead_nodes(7000);
+        assert!(dead.contains(&1));
+        assert!(dead.contains(&2));
+    }
+
+    #[test]
+    fn dq5_2_heartbeat_refresh() {
+        let mut tracker = HeartbeatTracker::new(5000);
+        tracker.record_heartbeat(1, 1000);
+        tracker.record_heartbeat(1, 4000); // refresh
+
+        // At t=8000: last seen at 4000, 4s < 5s → alive
+        assert!(tracker.is_alive(1, 8000));
+        // At t=10000: last seen at 4000, 6s > 5s → dead
+        assert!(!tracker.is_alive(1, 10000));
+    }
+
+    #[test]
+    fn dq5_4_fifo_in_order() {
+        let mut fifo = FifoBuffer::new();
+        let msg1 = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "t".into(),
+            payload: b"1".to_vec(),
+            sender_id: 1,
+            seq: 1,
+        };
+        let msg2 = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "t".into(),
+            payload: b"2".to_vec(),
+            sender_id: 1,
+            seq: 2,
+        };
+
+        let ready1 = fifo.receive(msg1);
+        assert_eq!(ready1.len(), 1);
+        assert_eq!(ready1[0].seq, 1);
+
+        let ready2 = fifo.receive(msg2);
+        assert_eq!(ready2.len(), 1);
+        assert_eq!(ready2[0].seq, 2);
+    }
+
+    #[test]
+    fn dq5_4_fifo_out_of_order() {
+        let mut fifo = FifoBuffer::new();
+        // Send seq 2 before seq 1
+        let msg2 = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "t".into(),
+            payload: b"2".to_vec(),
+            sender_id: 1,
+            seq: 2,
+        };
+        let msg1 = NetMessage {
+            msg_type: MessageType::ActorMessage,
+            target: "t".into(),
+            payload: b"1".to_vec(),
+            sender_id: 1,
+            seq: 1,
+        };
+
+        let ready_first = fifo.receive(msg2);
+        assert_eq!(ready_first.len(), 0, "seq 2 should be buffered (waiting for 1)");
+        assert_eq!(fifo.pending_count(), 1);
+
+        // Now send seq 1 — both should be released in order
+        let ready_second = fifo.receive(msg1);
+        assert_eq!(ready_second.len(), 2, "should release seq 1 + buffered seq 2");
+        assert_eq!(ready_second[0].seq, 1);
+        assert_eq!(ready_second[1].seq, 2);
+        assert_eq!(fifo.pending_count(), 0);
+    }
+
+    #[test]
+    fn dq5_9_metrics_recording() {
+        let mut metrics = TransportMetrics::default();
+        metrics.record_send(100);
+        metrics.record_send(200);
+        metrics.record_recv(150);
+        metrics.record_error();
+
+        assert_eq!(metrics.messages_sent, 2);
+        assert_eq!(metrics.bytes_sent, 300);
+        assert_eq!(metrics.messages_received, 1);
+        assert_eq!(metrics.bytes_received, 150);
+        assert_eq!(metrics.send_errors, 1);
+    }
+
+    #[test]
+    fn dq5_9_prometheus_format() {
+        let mut metrics = TransportMetrics::default();
+        metrics.record_send(100);
+        metrics.record_recv(50);
+        let prom = metrics.to_prometheus("fj_transport");
+        assert!(prom.contains("fj_transport_messages_sent 1"));
+        assert!(prom.contains("fj_transport_bytes_sent 100"));
+        assert!(prom.contains("fj_transport_messages_received 1"));
     }
 }
