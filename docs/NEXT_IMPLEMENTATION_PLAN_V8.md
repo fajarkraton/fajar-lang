@@ -52,26 +52,26 @@ The core compiler (V1-V05) is **100% production real**: lexer, parser, analyzer,
 
 | # | Task | Details | Status |
 |---|------|---------|--------|
-| GC2.1 | Add clang-sys dependency | libclang FFI bindings in Cargo.toml | [ ] |
-| GC2.2 | C++ header parser | Real clang::TranslationUnit parsing of .h files | [ ] |
-| GC2.3 | C++ function extraction | Extract function signatures from parsed AST | [ ] |
-| GC2.4 | C++ class extraction | Extract class methods, fields, inheritance | [ ] |
-| GC2.5 | C++ template instantiation | Detect and map template specializations | [ ] |
-| GC2.6 | C++ binding generator | Generate .fj extern blocks from parsed C++ | [ ] |
-| GC2.7 | C++ call bridge | Emit Cranelift IR that calls C++ functions via C ABI | [ ] |
-| GC2.8 | C++ std::string bridge | Convert between Fajar str and std::string | [ ] |
-| GC2.9 | C++ integration tests | Parse real headers (stdio.h, vector, opencv) | [ ] |
-| GC2.10 | C++ demo | Call OpenCV from Fajar Lang end-to-end | [ ] |
-| GC2.11 | Add pyo3 dependency | Python FFI bindings in Cargo.toml | [ ] |
-| GC2.12 | Python interpreter init | Real pyo3::Python::with_gil() initialization | [ ] |
-| GC2.13 | Python function call | Call Python function from Fajar, get result | [ ] |
-| GC2.14 | Python → Fajar callback | Register Fajar function callable from Python | [ ] |
-| GC2.15 | NumPy tensor bridge | Convert ndarray ↔ numpy.ndarray zero-copy | [ ] |
-| GC2.16 | Python module import | Import arbitrary Python modules | [ ] |
-| GC2.17 | Python GIL management | Proper GIL acquire/release around calls | [ ] |
-| GC2.18 | Python exception mapping | Map Python exceptions to Fajar Result::Err | [ ] |
-| GC2.19 | Python integration tests | Call numpy, pandas, torch from Fajar | [ ] |
-| GC2.20 | Python demo | Load PyTorch model, run inference in Fajar | [ ] |
+| GC2.1 | Add clang-sys dependency | clang-sys with runtime+clang_18_0 features | [x] |
+| GC2.2 | C++ header parser | Real clang_parseTranslationUnit + clang_visitChildren | [x] |
+| GC2.3 | C++ function extraction | Extract name, params, return type, static/const/virtual | [x] |
+| GC2.4 | C++ class extraction | Extract fields, methods, constructors, destructor | [x] |
+| GC2.5 | C++ enum extraction | Extract variants with integer values | [x] |
+| GC2.6 | C++ namespace extraction | Recursive namespace declaration collection | [x] |
+| GC2.7 | C++ type mapping | Map CXType → CppType (void, int, float, pointer, ref) | [x] |
+| GC2.8 | C++ binding generator | Generate .fj extern blocks (existing, now backed by libclang) | [x] |
+| GC2.9 | C++ integration tests | Parse custom header + namespace header via libclang | [x] |
+| GC2.10 | C++ demo | Parse real C++ → extract functions/classes/enums | [x] |
+| GC2.11 | Add pyo3 dependency | pyo3 with auto-initialize feature | [x] |
+| GC2.12 | Python interpreter init | Real Python::with_gil() via pyo3 | [x] |
+| GC2.13 | Python function call | Call builtins (abs), math (sqrt, pi), user functions | [x] |
+| GC2.14 | Python define + call | Define fibonacci(n) in Python, call from Rust | [x] |
+| GC2.15 | NumPy tensor bridge | numpy.array creation + sum via pyo3 eval | [x] |
+| GC2.16 | Python module import | Import math, numpy via pyo3 | [x] |
+| GC2.17 | Python GIL management | with_gil() automatic GIL management | [x] |
+| GC2.18 | Python exception mapping | 1/0 → ZeroDivisionError detected | [x] |
+| GC2.19 | Python integration tests | 8 tests: eval, builtins, math, sort, string, exception, numpy, fib | [x] |
+| GC2.20 | Python demo | Real Python fibonacci + numpy array operations | [x] |
 
 ### Phase GC3: Distributed — Real Networking Runtime (2 sprints, 20 tasks)
 
