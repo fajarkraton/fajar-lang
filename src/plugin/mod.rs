@@ -278,6 +278,80 @@ impl CompilerPlugin for TodoLint {
 // ═══════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════
+// PQ9.1: Dynamic Plugin Loading
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Load a plugin from a dynamic library (.so on Linux, .dylib on macOS).
+///
+/// The library must export a `create_plugin` function with signature:
+/// `extern "C" fn() -> *mut dyn CompilerPlugin`
+///
+/// Returns the loaded plugin, or an error if loading fails.
+pub fn load_plugin_from_path(path: &str) -> Result<Box<dyn CompilerPlugin>, String> {
+    // Verify file exists
+    if !std::path::Path::new(path).exists() {
+        return Err(format!("plugin not found: {path}"));
+    }
+
+    // Load the library
+    // SAFETY: loading a dynamic library that exports the expected symbol.
+    // The plugin author must ensure ABI compatibility.
+    let lib = unsafe { libloading::Library::new(path) }
+        .map_err(|e| format!("failed to load plugin '{path}': {e}"))?;
+
+    // Look up the factory function
+    #[allow(improper_ctypes_definitions)]
+    type CreatePluginFn = unsafe extern "C" fn() -> *mut dyn CompilerPlugin;
+    let create_fn: libloading::Symbol<CreatePluginFn> =
+        unsafe { lib.get(b"create_plugin") }
+            .map_err(|e| format!("plugin '{path}' missing 'create_plugin' symbol: {e}"))?;
+
+    // Call the factory
+    // SAFETY: the factory returns a valid pointer to a CompilerPlugin.
+    let plugin_ptr = unsafe { create_fn() };
+    if plugin_ptr.is_null() {
+        return Err(format!("plugin '{path}' returned null"));
+    }
+
+    // SAFETY: the pointer was created by Box::into_raw in the plugin.
+    let plugin = unsafe { Box::from_raw(plugin_ptr) };
+
+    // Don't drop the library — it needs to stay loaded for the plugin's lifetime.
+    // In a real implementation, we'd store the Library alongside the plugin.
+    std::mem::forget(lib);
+
+    Ok(plugin)
+}
+
+/// PQ9.4: Discover plugins in a directory.
+pub fn discover_plugins(dir: &str) -> Vec<String> {
+    let ext = if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    };
+
+    let path = std::path::Path::new(dir);
+    if !path.is_dir() {
+        return Vec::new();
+    }
+
+    let mut plugins = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().is_some_and(|e| e == ext) {
+                plugins.push(p.to_string_lossy().to_string());
+            }
+        }
+    }
+    plugins.sort();
+    plugins
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // PQ9.2: Plugin API Versioning
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -806,6 +880,31 @@ struct point { x: i64 }
             diags.len(),
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn pq9_1_load_nonexistent_plugin() {
+        let result = load_plugin_from_path("/nonexistent/plugin.so");
+        assert!(result.is_err());
+        match result {
+            Err(e) => assert!(e.contains("not found"), "error: {e}"),
+            Ok(_) => panic!("should fail for nonexistent path"),
+        }
+    }
+
+    #[test]
+    fn pq9_4_discover_empty_dir() {
+        let dir = format!("{}/fj_plugin_test_{}", crate::stdlib_v3::system::temp_dir(), std::process::id());
+        let _ = std::fs::create_dir_all(&dir);
+        let plugins = discover_plugins(&dir);
+        assert!(plugins.is_empty(), "empty dir should have no plugins");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pq9_4_discover_nonexistent_dir() {
+        let plugins = discover_plugins("/nonexistent/plugin/dir");
+        assert!(plugins.is_empty());
     }
 
     #[test]

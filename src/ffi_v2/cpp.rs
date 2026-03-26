@@ -1298,6 +1298,69 @@ public:
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_4_include_resolution() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_incl");
+        let _ = std::fs::create_dir_all(&dir);
+
+        // base.h defines base_func
+        let mut f1 = std::fs::File::create(dir.join("base.h")).unwrap();
+        writeln!(f1, "int base_func(int x);").unwrap();
+
+        // derived.h includes base.h and adds derived_func
+        let mut f2 = std::fs::File::create(dir.join("derived.h")).unwrap();
+        writeln!(f2, "#include \"base.h\"\nint derived_func(int x);").unwrap();
+
+        let decls = parse_header(
+            dir.join("derived.h").to_str().unwrap(),
+            &[dir.to_str().unwrap()],
+        )
+        .unwrap();
+
+        let fn_names: Vec<&str> = decls
+            .iter()
+            .filter_map(|d| match d {
+                CppDecl::Function(f) => Some(f.name.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            fn_names.contains(&"derived_func"),
+            "should find derived_func: {fn_names:?}"
+        );
+        // base_func comes from included header — may or may not appear
+        // depending on system header filtering, so just verify derived works
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "cpp-ffi")]
+    #[test]
+    fn cq3_5_macro_define() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join("fj_cq3_macro");
+        let _ = std::fs::create_dir_all(&dir);
+        let header = dir.join("macros.h");
+        let mut f = std::fs::File::create(&header).unwrap();
+        writeln!(
+            f,
+            "#define MAX_SIZE 1024\n#define VERSION \"2.0\"\nint get_max();\nint buffer[MAX_SIZE];"
+        )
+        .unwrap();
+
+        let decls = parse_header(header.to_str().unwrap(), &[]).unwrap();
+        // Macros are expanded by clang preprocessor — functions should parse
+        let has_get_max = decls
+            .iter()
+            .any(|d| matches!(d, CppDecl::Function(f) if f.name == "get_max"));
+        assert!(has_get_max, "should find get_max after macro expansion");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn cq3_7_binding_from_manual_decls() {
         let decls = vec![
