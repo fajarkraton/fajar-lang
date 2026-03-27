@@ -1,0 +1,155 @@
+// Recipe: Drone Flight Controller
+// Demonstrates: Sensor fusion, PID control, @kernel/@device contexts, real-time loop
+// Usage: fj run examples/recipes/drone_controller.fj
+
+struct Vec3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+struct PidController {
+    kp: f64,
+    ki: f64,
+    kd: f64,
+    integral: f64,
+    prev_error: f64,
+}
+
+struct DroneState {
+    position: Vec3,
+    velocity: Vec3,
+    attitude: Vec3,     // roll, pitch, yaw in radians
+    altitude: f64,
+}
+
+struct MotorOutput {
+    front_left: f64,
+    front_right: f64,
+    rear_left: f64,
+    rear_right: f64,
+}
+
+impl PidController {
+    fn new(kp: f64, ki: f64, kd: f64) -> PidController {
+        PidController {
+            kp: kp, ki: ki, kd: kd,
+            integral: 0.0, prev_error: 0.0,
+        }
+    }
+
+    fn update(&mut self, error: f64, dt: f64) -> f64 {
+        self.integral += error * dt
+        // Anti-windup clamp
+        self.integral = clamp(self.integral, -100.0, 100.0)
+
+        let derivative = (error - self.prev_error) / dt
+        self.prev_error = error
+
+        self.kp * error + self.ki * self.integral + self.kd * derivative
+    }
+
+    fn reset(&mut self) {
+        self.integral = 0.0
+        self.prev_error = 0.0
+    }
+}
+
+@kernel
+fn read_imu() -> Vec3 {
+    // Read accelerometer via SPI
+    let ax = port_read(0x100) as f64 / 16384.0
+    let ay = port_read(0x102) as f64 / 16384.0
+    let az = port_read(0x104) as f64 / 16384.0
+    Vec3 { x: ax, y: ay, z: az }
+}
+
+@kernel
+fn read_gyro() -> Vec3 {
+    let gx = port_read(0x106) as f64 / 131.0
+    let gy = port_read(0x108) as f64 / 131.0
+    let gz = port_read(0x10A) as f64 / 131.0
+    Vec3 { x: gx, y: gy, z: gz }
+}
+
+@kernel
+fn read_barometer() -> f64 {
+    let raw = port_read(0x110) as f64
+    // Convert to altitude in meters
+    44330.0 * (1.0 - (raw / 101325.0) ** 0.1903)
+}
+
+fn complementary_filter(accel: Vec3, gyro: Vec3, prev_attitude: Vec3, dt: f64) -> Vec3 {
+    let alpha = 0.98
+    Vec3 {
+        x: alpha * (prev_attitude.x + gyro.x * dt) + (1.0 - alpha) * accel.x,
+        y: alpha * (prev_attitude.y + gyro.y * dt) + (1.0 - alpha) * accel.y,
+        z: prev_attitude.z + gyro.z * dt,
+    }
+}
+
+fn compute_motor_output(
+    roll_out: f64,
+    pitch_out: f64,
+    yaw_out: f64,
+    throttle: f64,
+) -> MotorOutput {
+    MotorOutput {
+        front_left:  clamp(throttle + roll_out + pitch_out - yaw_out, 0.0, 1.0),
+        front_right: clamp(throttle - roll_out + pitch_out + yaw_out, 0.0, 1.0),
+        rear_left:   clamp(throttle + roll_out - pitch_out + yaw_out, 0.0, 1.0),
+        rear_right:  clamp(throttle - roll_out - pitch_out - yaw_out, 0.0, 1.0),
+    }
+}
+
+@kernel
+fn set_motors(output: MotorOutput) {
+    port_write(0x200, (output.front_left * 2000.0 + 1000.0) as u16)
+    port_write(0x202, (output.front_right * 2000.0 + 1000.0) as u16)
+    port_write(0x204, (output.rear_left * 2000.0 + 1000.0) as u16)
+    port_write(0x206, (output.rear_right * 2000.0 + 1000.0) as u16)
+}
+
+fn main() {
+    let mut roll_pid = PidController::new(1.2, 0.01, 0.5)
+    let mut pitch_pid = PidController::new(1.2, 0.01, 0.5)
+    let mut yaw_pid = PidController::new(2.0, 0.02, 0.3)
+    let mut alt_pid = PidController::new(0.8, 0.005, 0.4)
+
+    let target_altitude = 10.0    // meters
+    let target_attitude = Vec3 { x: 0.0, y: 0.0, z: 0.0 }
+
+    let mut state = DroneState {
+        position: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+        velocity: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+        attitude: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+        altitude: 0.0,
+    }
+
+    let dt = 0.004   // 250 Hz control loop
+
+    println("Drone controller starting...")
+
+    // Main control loop
+    for tick in 0..10000 {
+        let accel = read_imu()
+        let gyro = read_gyro()
+        state.altitude = read_barometer()
+
+        state.attitude = complementary_filter(accel, gyro, state.attitude, dt)
+
+        let roll_out = roll_pid.update(target_attitude.x - state.attitude.x, dt)
+        let pitch_out = pitch_pid.update(target_attitude.y - state.attitude.y, dt)
+        let yaw_out = yaw_pid.update(target_attitude.z - state.attitude.z, dt)
+        let throttle = alt_pid.update(target_altitude - state.altitude, dt) + 0.5
+
+        let motors = compute_motor_output(roll_out, pitch_out, yaw_out, throttle)
+        set_motors(motors)
+
+        if tick % 250 == 0 {
+            println(f"[{tick * dt:.1}s] alt={state.altitude:.1}m roll={state.attitude.x:.2} pitch={state.attitude.y:.2}")
+        }
+    }
+
+    println("Flight complete.")
+}

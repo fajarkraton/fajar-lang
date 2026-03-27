@@ -1,0 +1,173 @@
+// Recipe: Key-Value Store with SQLite Backend
+// Demonstrates: Database operations, REPL pattern, command parsing, error handling
+// Usage: fj run examples/recipes/kv_store.fj
+
+struct KvStore {
+    db_path: str,
+}
+
+impl KvStore {
+    fn new(path: str) -> Result<KvStore, str> {
+        let db = db_open(path)?
+        db_execute(db, "CREATE TABLE IF NOT EXISTS kv (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )")?
+        Ok(KvStore { db_path: path })
+    }
+
+    fn get(&self, key: str) -> Option<str> {
+        let db = db_open(self.db_path).ok()?
+        let rows = db_execute(db, f"SELECT value FROM kv WHERE key = '{key}'").ok()?
+        if len(rows) > 0 {
+            Some(rows[0]["value"])
+        } else {
+            None
+        }
+    }
+
+    fn set(&self, key: str, value: str) -> Result<(), str> {
+        let db = db_open(self.db_path)?
+        db_execute(db, f"INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('{key}', '{value}', datetime('now'))")?
+        Ok(())
+    }
+
+    fn delete(&self, key: str) -> Result<bool, str> {
+        let db = db_open(self.db_path)?
+        let affected = db_execute(db, f"DELETE FROM kv WHERE key = '{key}'")?
+        Ok(affected > 0)
+    }
+
+    fn list(&self) -> Result<[(str, str)], str> {
+        let db = db_open(self.db_path)?
+        let rows = db_execute(db, "SELECT key, value FROM kv ORDER BY key")?
+        let pairs = rows.iter()
+            .map(|r| (r["key"], r["value"]))
+            .collect()
+        Ok(pairs)
+    }
+
+    fn count(&self) -> Result<i32, str> {
+        let db = db_open(self.db_path)?
+        let rows = db_execute(db, "SELECT COUNT(*) as cnt FROM kv")?
+        Ok(rows[0]["cnt"].parse_int().unwrap_or(0))
+    }
+
+    fn search(&self, pattern: str) -> Result<[(str, str)], str> {
+        let db = db_open(self.db_path)?
+        let rows = db_execute(db, f"SELECT key, value FROM kv WHERE key LIKE '%{pattern}%' OR value LIKE '%{pattern}%'")?
+        let pairs = rows.iter()
+            .map(|r| (r["key"], r["value"]))
+            .collect()
+        Ok(pairs)
+    }
+}
+
+fn print_help() {
+    println("Commands:")
+    println("  GET <key>            Retrieve a value")
+    println("  SET <key> <value>    Store a value")
+    println("  DEL <key>            Delete a key")
+    println("  LIST                 Show all key-value pairs")
+    println("  SEARCH <pattern>     Search keys and values")
+    println("  COUNT                Show total entries")
+    println("  HELP                 Show this message")
+    println("  QUIT                 Exit")
+}
+
+fn main() {
+    let store = match KvStore::new("kvstore.db") {
+        Ok(s) => s,
+        Err(e) => {
+            println(f"Failed to open database: {e}")
+            return
+        },
+    }
+
+    println("Fajar KV Store v1.0")
+    println("Type HELP for commands.\n")
+
+    loop {
+        let input = read_line("kv> ").trim()
+        if len(input) == 0 {
+            continue
+        }
+
+        let parts = input.split(" ")
+        let cmd = parts[0].to_upper()
+
+        match cmd {
+            "GET" => {
+                if len(parts) < 2 {
+                    println("Usage: GET <key>")
+                } else {
+                    match store.get(parts[1]) {
+                        Some(val) => println(val),
+                        None => println("(nil)"),
+                    }
+                }
+            },
+            "SET" => {
+                if len(parts) < 3 {
+                    println("Usage: SET <key> <value>")
+                } else {
+                    let value = parts[2..].join(" ")
+                    match store.set(parts[1], value) {
+                        Ok(_) => println("OK"),
+                        Err(e) => println(f"Error: {e}"),
+                    }
+                }
+            },
+            "DEL" => {
+                if len(parts) < 2 {
+                    println("Usage: DEL <key>")
+                } else {
+                    match store.delete(parts[1]) {
+                        Ok(true) => println("(deleted)"),
+                        Ok(false) => println("(not found)"),
+                        Err(e) => println(f"Error: {e}"),
+                    }
+                }
+            },
+            "LIST" => {
+                match store.list() {
+                    Ok(pairs) => {
+                        for (k, v) in pairs {
+                            println(f"  {k} = {v}")
+                        }
+                    },
+                    Err(e) => println(f"Error: {e}"),
+                }
+            },
+            "SEARCH" => {
+                if len(parts) < 2 {
+                    println("Usage: SEARCH <pattern>")
+                } else {
+                    match store.search(parts[1]) {
+                        Ok(pairs) => {
+                            println(f"Found {len(pairs)} results:")
+                            for (k, v) in pairs {
+                                println(f"  {k} = {v}")
+                            }
+                        },
+                        Err(e) => println(f"Error: {e}"),
+                    }
+                }
+            },
+            "COUNT" => {
+                match store.count() {
+                    Ok(n) => println(f"{n} entries"),
+                    Err(e) => println(f"Error: {e}"),
+                }
+            },
+            "HELP" => print_help(),
+            "QUIT" => {
+                println("Goodbye.")
+                return
+            },
+            _ => println(f"Unknown command: {cmd}. Type HELP for usage."),
+        }
+    }
+}

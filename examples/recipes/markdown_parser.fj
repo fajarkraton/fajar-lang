@@ -1,0 +1,190 @@
+// Recipe: Markdown to HTML Converter
+// Demonstrates: String processing, pattern matching, recursive parsing, file I/O
+// Usage: fj run examples/recipes/markdown_parser.fj
+
+fn convert_inline(text: str) -> str {
+    let mut result = text
+
+    // Bold: **text** -> <strong>text</strong>
+    result = replace_pattern(result, "**", "**", "<strong>", "</strong>")
+
+    // Italic: *text* -> <em>text</em>
+    result = replace_pattern(result, "*", "*", "<em>", "</em>")
+
+    // Code: `text` -> <code>text</code>
+    result = replace_pattern(result, "`", "`", "<code>", "</code>")
+
+    // Links: [text](url) -> <a href="url">text</a>
+    result = convert_links(result)
+
+    result
+}
+
+fn replace_pattern(text: str, open: str, close: str, html_open: str, html_close: str) -> str {
+    let mut result = ""
+    let mut pos = 0
+    let mut in_tag = false
+
+    while pos < len(text) {
+        if !in_tag && text.substring(pos, pos + len(open)) == open {
+            result += html_open
+            pos += len(open)
+            in_tag = true
+        } else if in_tag && text.substring(pos, pos + len(close)) == close {
+            result += html_close
+            pos += len(close)
+            in_tag = false
+        } else {
+            result += text.substring(pos, pos + 1)
+            pos += 1
+        }
+    }
+
+    result
+}
+
+fn convert_links(text: str) -> str {
+    let mut result = ""
+    let mut pos = 0
+
+    while pos < len(text) {
+        if text.substring(pos, pos + 1) == "[" {
+            let close_bracket = text.find_from("]", pos)
+            if close_bracket != -1 && text.substring(close_bracket + 1, close_bracket + 2) == "(" {
+                let close_paren = text.find_from(")", close_bracket)
+                if close_paren != -1 {
+                    let link_text = text.substring(pos + 1, close_bracket)
+                    let url = text.substring(close_bracket + 2, close_paren)
+                    result += f"<a href=\"{url}\">{link_text}</a>"
+                    pos = close_paren + 1
+                    continue
+                }
+            }
+        }
+        result += text.substring(pos, pos + 1)
+        pos += 1
+    }
+
+    result
+}
+
+fn convert_line(line: str) -> str {
+    // Headings
+    if line.starts_with("### ") {
+        return f"<h3>{convert_inline(line.substring(4, len(line)))}</h3>"
+    }
+    if line.starts_with("## ") {
+        return f"<h2>{convert_inline(line.substring(3, len(line)))}</h2>"
+    }
+    if line.starts_with("# ") {
+        return f"<h1>{convert_inline(line.substring(2, len(line)))}</h1>"
+    }
+
+    // Horizontal rule
+    if line == "---" || line == "***" || line == "___" {
+        return "<hr>"
+    }
+
+    // Unordered list
+    if line.starts_with("- ") || line.starts_with("* ") {
+        return f"<li>{convert_inline(line.substring(2, len(line)))}</li>"
+    }
+
+    // Blockquote
+    if line.starts_with("> ") {
+        return f"<blockquote>{convert_inline(line.substring(2, len(line)))}</blockquote>"
+    }
+
+    // Empty line
+    if len(line.trim()) == 0 {
+        return ""
+    }
+
+    // Paragraph
+    f"<p>{convert_inline(line)}</p>"
+}
+
+fn markdown_to_html(markdown: str) -> str {
+    let lines = markdown.split("\n")
+    let mut html = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"
+    html += "<style>body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:20px;}"
+    html += "code{background:#f4f4f4;padding:2px 6px;border-radius:3px;}"
+    html += "blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#666;}"
+    html += "</style>\n</head>\n<body>\n"
+
+    let mut in_code_block = false
+    let mut in_list = false
+
+    for line in lines {
+        // Code blocks
+        if line.starts_with("```") {
+            if in_code_block {
+                html += "</code></pre>\n"
+                in_code_block = false
+            } else {
+                html += "<pre><code>"
+                in_code_block = true
+            }
+            continue
+        }
+
+        if in_code_block {
+            html += line + "\n"
+            continue
+        }
+
+        // Track list state
+        let is_list_item = line.starts_with("- ") || line.starts_with("* ")
+        if is_list_item && !in_list {
+            html += "<ul>\n"
+            in_list = true
+        } else if !is_list_item && in_list {
+            html += "</ul>\n"
+            in_list = false
+        }
+
+        let converted = convert_line(line)
+        if len(converted) > 0 {
+            html += converted + "\n"
+        }
+    }
+
+    if in_list { html += "</ul>\n" }
+    if in_code_block { html += "</code></pre>\n" }
+
+    html += "</body>\n</html>"
+    html
+}
+
+fn main() {
+    let sample = "# Fajar Lang
+
+A **systems programming language** for *embedded ML*.
+
+## Features
+
+- Native tensor types
+- `@kernel` context annotations
+- Zero-cost abstractions
+
+### Code Example
+
+```
+fn main() {
+    println(\"Hello!\")
+}
+```
+
+> Fajar Lang: where OS kernels and neural networks share one codebase.
+
+---
+
+Learn more at [fajar-lang.org](https://fajar-lang.org)."
+
+    let html = markdown_to_html(sample)
+    println(html)
+
+    // Write to file
+    write_file("output.html", html)
+    println("\nWritten to output.html")
+}

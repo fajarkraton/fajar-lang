@@ -1,0 +1,105 @@
+// Recipe: CLI Tool with Subcommands
+// Demonstrates: argument parsing, subcommands, file I/O, string formatting
+// Usage: fj run examples/recipes/cli_tool.fj -- greet --name "Fajar"
+
+use std::io
+
+enum Command {
+    Greet { name: str, loud: bool },
+    Count { file: str },
+    Convert { input: str, format: str },
+    Help,
+}
+
+fn parse_args(args: [str]) -> Command {
+    if len(args) < 1 {
+        return Command::Help
+    }
+
+    match args[0] {
+        "greet" => {
+            let name = find_flag(args, "--name").unwrap_or("World")
+            let loud = has_flag(args, "--loud")
+            Command::Greet { name: name, loud: loud }
+        },
+        "count" => {
+            let file = find_flag(args, "--file").unwrap_or("input.txt")
+            Command::Count { file: file }
+        },
+        "convert" => {
+            let input = find_flag(args, "--input").unwrap_or("")
+            let format = find_flag(args, "--format").unwrap_or("json")
+            Command::Convert { input: input, format: format }
+        },
+        _ => Command::Help,
+    }
+}
+
+fn find_flag(args: [str], flag: str) -> Option<str> {
+    for i in 0..len(args) - 1 {
+        if args[i] == flag {
+            return Some(args[i + 1])
+        }
+    }
+    None
+}
+
+fn has_flag(args: [str], flag: str) -> bool {
+    args.iter().any(|a| a == flag)
+}
+
+fn cmd_greet(name: str, loud: bool) {
+    let msg = f"Hello, {name}!"
+    if loud {
+        println(msg.to_upper())
+    } else {
+        println(msg)
+    }
+}
+
+fn cmd_count(file: str) {
+    let content = read_file(file)
+    let lines = content.split("\n")
+    let words = content.split(" ")
+    let chars = len(content)
+
+    println(f"  File: {file}")
+    println(f" Lines: {len(lines)}")
+    println(f" Words: {len(words)}")
+    println(f" Chars: {chars}")
+}
+
+fn cmd_convert(input: str, format: str) {
+    match format {
+        "upper" => println(input.to_upper()),
+        "lower" => println(input.to_lower()),
+        "reverse" => println(input.reverse()),
+        "length" => println(f"{len(input)}"),
+        _ => println(f"Unknown format: {format}"),
+    }
+}
+
+fn print_help() {
+    println("fj-tool -- A sample CLI tool")
+    println("")
+    println("USAGE:")
+    println("  fj-tool <command> [options]")
+    println("")
+    println("COMMANDS:")
+    println("  greet    --name <name> [--loud]     Say hello")
+    println("  count    --file <path>              Count lines/words/chars")
+    println("  convert  --input <text> --format <fmt>  Convert text")
+    println("  help                                Show this message")
+}
+
+fn main() {
+    let args = get_args()
+    let cmd = parse_args(args)
+
+    match cmd {
+        Command::Greet { name, loud } => cmd_greet(name, loud),
+        Command::Count { file } => cmd_count(file),
+        Command::Convert { input, format } => cmd_convert(input, format),
+        Command::Help => print_help(),
+    }
+}

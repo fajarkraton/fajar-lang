@@ -1,0 +1,88 @@
+// Recipe: Web Scraper
+// Demonstrates: HTTP client, string parsing, Result handling, data extraction
+// Usage: fj run examples/recipes/web_scraper.fj
+
+struct Link {
+    url: str,
+    text: str,
+}
+
+fn extract_links(html: str) -> [Link] {
+    let mut links: [Link] = []
+    let mut pos = 0
+
+    while pos < len(html) {
+        let href_start = html.find_from("<a href=\"", pos)
+        if href_start == -1 {
+            break
+        }
+
+        let url_start = href_start + 9
+        let url_end = html.find_from("\"", url_start)
+        if url_end == -1 {
+            break
+        }
+
+        let url = html.substring(url_start, url_end)
+
+        let text_start = html.find_from(">", url_end)
+        let text_end = html.find_from("</a>", text_start)
+        let text = if text_start != -1 && text_end != -1 {
+            html.substring(text_start + 1, text_end).trim()
+        } else {
+            ""
+        }
+
+        links.push(Link { url: url, text: text })
+        pos = url_end + 1
+    }
+
+    links
+}
+
+fn extract_title(html: str) -> str {
+    let start = html.find("<title>")
+    let end = html.find("</title>")
+    if start != -1 && end != -1 {
+        html.substring(start + 7, end).trim()
+    } else {
+        "(no title)"
+    }
+}
+
+fn fetch_and_parse(url: str) -> Result<(), str> {
+    println(f"Fetching: {url}")
+
+    let response = http_get(url)?
+    let html = response.body
+
+    let title = extract_title(html)
+    println(f"Title: {title}")
+    println(f"Status: {response.status}")
+    println(f"Size: {len(html)} bytes")
+
+    let links = extract_links(html)
+    println(f"Found {len(links)} links:")
+
+    for link in links {
+        if link.text != "" {
+            println(f"  [{link.text}] -> {link.url}")
+        }
+    }
+
+    Ok(())
+}
+
+fn main() {
+    let urls = [
+        "https://example.com",
+        "https://httpbin.org/html",
+    ]
+
+    for url in urls {
+        match fetch_and_parse(url) {
+            Ok(_) => println(""),
+            Err(e) => println(f"Error fetching {url}: {e}"),
+        }
+    }
+}

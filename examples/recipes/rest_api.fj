@@ -1,0 +1,114 @@
+// Recipe: REST API Server
+// Demonstrates: HTTP server, routing, JSON serialization, CRUD operations
+// Usage: fj run examples/recipes/rest_api.fj
+
+use std::collections::HashMap
+
+struct Todo {
+    id: i32,
+    title: str,
+    completed: bool,
+}
+
+struct AppState {
+    todos: HashMap<i32, Todo>,
+    next_id: i32,
+}
+
+impl AppState {
+    fn new() -> AppState {
+        AppState { todos: HashMap::new(), next_id: 1 }
+    }
+
+    fn add_todo(&mut self, title: str) -> Todo {
+        let todo = Todo { id: self.next_id, title: title, completed: false }
+        self.todos.insert(self.next_id, todo)
+        self.next_id += 1
+        todo
+    }
+
+    fn get_todo(&self, id: i32) -> Option<Todo> {
+        self.todos.get(id)
+    }
+
+    fn update_todo(&mut self, id: i32, completed: bool) -> Option<Todo> {
+        match self.todos.get_mut(id) {
+            Some(todo) => {
+                todo.completed = completed
+                Some(todo)
+            },
+            None => None,
+        }
+    }
+
+    fn delete_todo(&mut self, id: i32) -> bool {
+        self.todos.remove(id).is_some()
+    }
+
+    fn list_todos(&self) -> [Todo] {
+        self.todos.values().collect()
+    }
+}
+
+fn to_json(todo: &Todo) -> str {
+    f"\{\"id\": {todo.id}, \"title\": \"{todo.title}\", \"completed\": {todo.completed}\}"
+}
+
+fn to_json_list(todos: &[Todo]) -> str {
+    let items = todos.iter()
+        .map(|t| to_json(t))
+        .collect::<[str]>()
+        .join(", ")
+    f"[{items}]"
+}
+
+fn main() {
+    let mut state = AppState::new()
+
+    // Seed data
+    state.add_todo("Learn Fajar Lang")
+    state.add_todo("Build a REST API")
+    state.add_todo("Deploy to production")
+
+    let server = http_server("0.0.0.0", 8080)
+
+    server.get("/todos", |_req| {
+        let todos = state.list_todos()
+        Response::json(200, to_json_list(&todos))
+    })
+
+    server.get("/todos/:id", |req| {
+        let id = req.param("id").parse_int().unwrap_or(0)
+        match state.get_todo(id) {
+            Some(todo) => Response::json(200, to_json(&todo)),
+            None => Response::json(404, "{\"error\": \"not found\"}"),
+        }
+    })
+
+    server.post("/todos", |req| {
+        let title = req.body_json().get("title").unwrap_or("untitled")
+        let todo = state.add_todo(title)
+        Response::json(201, to_json(&todo))
+    })
+
+    server.put("/todos/:id", |req| {
+        let id = req.param("id").parse_int().unwrap_or(0)
+        let completed = req.body_json().get("completed").unwrap_or("false") == "true"
+        match state.update_todo(id, completed) {
+            Some(todo) => Response::json(200, to_json(&todo)),
+            None => Response::json(404, "{\"error\": \"not found\"}"),
+        }
+    })
+
+    server.delete("/todos/:id", |req| {
+        let id = req.param("id").parse_int().unwrap_or(0)
+        if state.delete_todo(id) {
+            Response::json(200, "{\"deleted\": true}")
+        } else {
+            Response::json(404, "{\"error\": \"not found\"}")
+        }
+    })
+
+    println("Server running on http://0.0.0.0:8080")
+    server.listen()
+}

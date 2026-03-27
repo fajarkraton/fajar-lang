@@ -1,0 +1,91 @@
+// Recipe: Image Classifier
+// Demonstrates: Model loading, tensor preprocessing, inference, top-k prediction
+// Usage: fj run examples/recipes/image_classifier.fj
+
+struct Prediction {
+    label: str,
+    confidence: f64,
+}
+
+fn load_labels(path: str) -> [str] {
+    let content = read_file(path)
+    content.split("\n")
+        .iter()
+        .filter(|line| len(line) > 0)
+        .collect()
+}
+
+fn preprocess_image(raw_pixels: [f32], width: i32, height: i32) -> Tensor {
+    // Resize to 224x224 (model input size)
+    let resized = from_data(raw_pixels)
+    let reshaped = reshape(resized, [1, 3, height, width])
+
+    // Normalize with ImageNet mean and std
+    let mean = from_data([0.485, 0.456, 0.406])
+    let std = from_data([0.229, 0.224, 0.225])
+
+    let normalized = (reshaped - mean) / std
+    normalized
+}
+
+fn top_k(output: Tensor, labels: &[str], k: i32) -> [Prediction] {
+    let probs = softmax(output)
+    let mut predictions: [Prediction] = []
+
+    // Find top-k predictions
+    let mut used: [bool] = [false; len(labels)]
+
+    for _ in 0..k {
+        let mut best_idx = 0
+        let mut best_val = -1.0
+
+        for i in 0..len(labels) {
+            if !used[i] && probs[i] > best_val {
+                best_val = probs[i]
+                best_idx = i
+            }
+        }
+
+        used[best_idx] = true
+        predictions.push(Prediction {
+            label: labels[best_idx],
+            confidence: best_val,
+        })
+    }
+
+    predictions
+}
+
+fn classify_image(model_path: str, image_path: str, labels_path: str) -> Result<(), str> {
+    println(f"Loading model: {model_path}")
+    let model = onnx_import(model_path)?
+
+    println(f"Loading labels: {labels_path}")
+    let labels = load_labels(labels_path)
+
+    println(f"Processing image: {image_path}")
+    // Simulate loading image pixels (in real use, read from file)
+    let raw_pixels = randn(1 * 3 * 224 * 224)
+    let input = preprocess_image(raw_pixels, 224, 224)
+
+    println("Running inference...")
+    let output = model.forward(input)
+
+    let predictions = top_k(output, &labels, 5)
+
+    println("\nTop 5 Predictions:")
+    println("------------------")
+    for pred in predictions {
+        let pct = pred.confidence * 100.0
+        println(f"  {pred.label}: {pct:.1}%")
+    }
+
+    Ok(())
+}
+
+fn main() {
+    match classify_image("resnet18.onnx", "cat.jpg", "imagenet_labels.txt") {
+        Ok(_) => println("\nClassification complete."),
+        Err(e) => println(f"Error: {e}"),
+    }
+}
