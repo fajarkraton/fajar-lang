@@ -1,0 +1,262 @@
+// fj-fs — Filesystem Path Utilities for Fajar Lang
+//
+// Provides path manipulation, querying, and directory traversal
+// utilities. Path operations are pure string logic; actual I/O
+// delegates to built-in file_exists/read_file/write_file.
+
+// ── Path separator ──
+
+const PATH_SEP: str = "/"
+
+// ── Path info structure ──
+
+/// Holds decomposed parts of a filesystem path.
+struct PathInfo {
+    directory: str,
+    filename: str,
+    stem: str,
+    extension: str
+}
+
+/// Entry from a directory walk.
+struct DirEntry {
+    path: str,
+    name: str,
+    is_directory: bool,
+    depth: i32
+}
+
+// ── Core path operations ──
+
+/// Check if a path exists on the filesystem.
+/// Delegates to the built-in file_exists() function.
+fn exists(path: str) -> bool {
+    file_exists(path)
+}
+
+/// Check if a path is a file (exists and is not a directory).
+/// Heuristic: a file has an extension or is not a bare directory path.
+fn is_file(path: str) -> bool {
+    if !file_exists(path) { return false }
+    let ext = extension(path)
+    len(ext) > 0
+}
+
+/// Check if a path is a directory (ends with / or has no extension).
+fn is_dir(path: str) -> bool {
+    if !file_exists(path) { return false }
+    let n = len(path)
+    if n > 0 && path[n - 1] == '/' { return true }
+    let ext = extension(path)
+    len(ext) == 0
+}
+
+/// Join two path segments with the platform separator.
+fn join_path(base: str, child: str) -> str {
+    if len(base) == 0 { return child }
+    if len(child) == 0 { return base }
+    let last = base[len(base) - 1]
+    if last == '/' {
+        base + child
+    } else {
+        base + PATH_SEP + child
+    }
+}
+
+/// Join multiple path segments.
+fn join_paths(parts: [str]) -> str {
+    let mut result = ""
+    for part in parts {
+        result = join_path(result, part)
+    }
+    result
+}
+
+/// Get the file extension (without the dot).
+/// Example: "image.png" => "png", "Makefile" => ""
+fn extension(path: str) -> str {
+    let name = filename(path)
+    let mut last_dot: i32 = -1
+    for i in 0..len(name) {
+        if name[i] == '.' {
+            last_dot = i as i32
+        }
+    }
+    if last_dot <= 0 { return "" }
+    let mut ext = ""
+    for i in (last_dot + 1)..len(name) as i32 {
+        ext = ext + to_string(name[i as usize])
+    }
+    ext
+}
+
+/// Get the filename stem (without extension).
+/// Example: "image.png" => "image", "archive.tar.gz" => "archive.tar"
+fn stem(path: str) -> str {
+    let name = filename(path)
+    let mut last_dot: i32 = -1
+    for i in 0..len(name) {
+        if name[i] == '.' {
+            last_dot = i as i32
+        }
+    }
+    if last_dot <= 0 { return name }
+    let mut s = ""
+    for i in 0..last_dot {
+        s = s + to_string(name[i as usize])
+    }
+    s
+}
+
+/// Get the filename (last component of the path).
+/// Example: "/home/user/file.txt" => "file.txt"
+fn filename(path: str) -> str {
+    let mut last_sep: i32 = -1
+    for i in 0..len(path) {
+        if path[i] == '/' {
+            last_sep = i as i32
+        }
+    }
+    if last_sep < 0 { return path }
+    let mut name = ""
+    for i in (last_sep + 1)..len(path) as i32 {
+        name = name + to_string(path[i as usize])
+    }
+    name
+}
+
+/// Get the parent directory of a path.
+/// Example: "/home/user/file.txt" => "/home/user"
+fn parent(path: str) -> str {
+    let mut last_sep: i32 = -1
+    for i in 0..len(path) {
+        if path[i] == '/' {
+            last_sep = i as i32
+        }
+    }
+    if last_sep < 0 { return "." }
+    if last_sep == 0 { return "/" }
+    let mut dir = ""
+    for i in 0..last_sep {
+        dir = dir + to_string(path[i as usize])
+    }
+    dir
+}
+
+/// Normalize a path by resolving "." and ".." components and collapsing
+/// duplicate separators.
+fn normalize(path: str) -> str {
+    let parts = split(path, "/")
+    let mut stack: [str] = []
+    let is_absolute = len(path) > 0 && path[0] == '/'
+
+    for part in parts {
+        if part == "" || part == "." {
+            // Skip empty and current-dir references
+        } else if part == ".." {
+            if len(stack) > 0 && stack[len(stack) - 1] != ".." {
+                // Pop last component
+                let mut new_stack: [str] = []
+                for i in 0..(len(stack) - 1) {
+                    new_stack = new_stack + [stack[i]]
+                }
+                stack = new_stack
+            } else if !is_absolute {
+                stack = stack + [".."]
+            }
+        } else {
+            stack = stack + [part]
+        }
+    }
+
+    let mut result = ""
+    if is_absolute { result = "/" }
+    for i in 0..len(stack) {
+        if i > 0 { result = result + "/" }
+        result = result + stack[i]
+    }
+    if len(result) == 0 { result = "." }
+    result
+}
+
+/// Decompose a path into its parts.
+fn path_info(path: str) -> PathInfo {
+    PathInfo {
+        directory: parent(path),
+        filename: filename(path),
+        stem: stem(path),
+        extension: extension(path)
+    }
+}
+
+/// Check if a path is absolute (starts with /).
+fn is_absolute(path: str) -> bool {
+    len(path) > 0 && path[0] == '/'
+}
+
+/// Check if a path is relative (does not start with /).
+fn is_relative(path: str) -> bool {
+    !is_absolute(path)
+}
+
+/// Change the extension of a path.
+/// Example: change_extension("file.txt", "md") => "file.md"
+fn change_extension(path: str, new_ext: str) -> str {
+    let dir = parent(path)
+    let s = stem(path)
+    let new_name = if len(new_ext) > 0 { s + "." + new_ext } else { s }
+    if dir == "." { new_name } else { join_path(dir, new_name) }
+}
+
+/// Match a filename against a simple glob pattern.
+/// Supports only '*' as a wildcard that matches any sequence of characters.
+fn matches_glob(name: str, pattern: str) -> bool {
+    // Simple two-pointer glob matching for single '*'
+    let mut ni = 0
+    let mut pi = 0
+    let mut star_p: i32 = -1
+    let mut match_n: i32 = -1
+
+    while ni < len(name) {
+        if pi < len(pattern) && (pattern[pi] == name[ni] || pattern[pi] == '?') {
+            ni = ni + 1
+            pi = pi + 1
+        } else if pi < len(pattern) && pattern[pi] == '*' {
+            star_p = pi as i32
+            match_n = ni as i32
+            pi = pi + 1
+        } else if star_p >= 0 {
+            pi = (star_p + 1) as usize
+            match_n = match_n + 1
+            ni = match_n as usize
+        } else {
+            return false
+        }
+    }
+    while pi < len(pattern) && pattern[pi] == '*' {
+        pi = pi + 1
+    }
+    pi == len(pattern)
+}
+
+/// Build a list of DirEntry from a directory listing string.
+/// The listing is expected as newline-separated filenames from the OS.
+fn walk_dir(base_path: str, pattern: str) -> [DirEntry] {
+    let mut entries: [DirEntry] = []
+    // Read directory listing if available
+    let listing = read_file(base_path)
+    if len(listing) == 0 { return entries }
+    let names = split(listing, "\n")
+    for name in names {
+        if len(name) > 0 && matches_glob(name, pattern) {
+            let full = join_path(base_path, name)
+            entries = entries + [DirEntry {
+                path: full,
+                name: name,
+                is_directory: !contains(name, "."),
+                depth: 0
+            }]
+        }
+    }
+    entries
+}

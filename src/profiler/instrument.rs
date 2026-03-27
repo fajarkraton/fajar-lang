@@ -655,7 +655,11 @@ impl SamplingProfiler {
     /// Returns the sampling profile.
     pub fn finish(self) -> SamplingProfile {
         let total_ns = if self.samples.len() >= 2 {
-            self.samples.last().unwrap().timestamp_ns - self.samples[0].timestamp_ns
+            self.samples
+                .last()
+                .expect("samples non-empty after length check")
+                .timestamp_ns
+                - self.samples[0].timestamp_ns
         } else {
             0
         };

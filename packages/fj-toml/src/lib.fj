@@ -1,0 +1,253 @@
+// fj-toml -- TOML Parser for Fajar Lang
+//
+// Parses TOML documents into a value tree and provides accessors
+// for string, integer, float, boolean, array, and table values.
+
+// ── Value types ──
+
+enum TomlValue {
+    Str(str),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Array([TomlValue]),
+    Table([TomlPair]),
+}
+
+struct TomlPair {
+    key: str,
+    value: TomlValue,
+}
+
+// ── Construction ──
+
+/// Create a TOML string value.
+fn toml_str(s: str) -> TomlValue { TomlValue::Str(s) }
+
+/// Create a TOML integer value.
+fn toml_int(n: i64) -> TomlValue { TomlValue::Int(n) }
+
+/// Create a TOML float value.
+fn toml_float(f: f64) -> TomlValue { TomlValue::Float(f) }
+
+/// Create a TOML boolean value.
+fn toml_bool(b: bool) -> TomlValue { TomlValue::Bool(b) }
+
+/// Create a TOML array.
+fn toml_array(items: [TomlValue]) -> TomlValue { TomlValue::Array(items) }
+
+/// Create a TOML table.
+fn toml_table(pairs: [TomlPair]) -> TomlValue { TomlValue::Table(pairs) }
+
+/// Create a key-value pair.
+fn toml_pair(key: str, value: TomlValue) -> TomlPair {
+    TomlPair { key: key, value: value }
+}
+
+// ── Accessors ──
+
+/// Get a value from a table by key.  Returns Str("") if not found.
+fn toml_get(table: TomlValue, key: str) -> TomlValue {
+    match table {
+        TomlValue::Table(pairs) => {
+            for p in pairs {
+                if p.key == key { return p.value }
+            }
+            TomlValue::Str("")
+        },
+        _ => TomlValue::Str(""),
+    }
+}
+
+/// Get a string from a table by key.
+fn get_string(table: TomlValue, key: str) -> str {
+    let val = toml_get(table, key)
+    match val {
+        TomlValue::Str(s) => s,
+        _ => "",
+    }
+}
+
+/// Get an integer from a table by key.
+fn get_int(table: TomlValue, key: str) -> i64 {
+    let val = toml_get(table, key)
+    match val {
+        TomlValue::Int(n) => n,
+        _ => 0,
+    }
+}
+
+/// Get a float from a table by key.
+fn get_float(table: TomlValue, key: str) -> f64 {
+    let val = toml_get(table, key)
+    match val {
+        TomlValue::Float(f) => f,
+        _ => 0.0,
+    }
+}
+
+/// Get a boolean from a table by key.
+fn get_bool(table: TomlValue, key: str) -> bool {
+    let val = toml_get(table, key)
+    match val {
+        TomlValue::Bool(b) => b,
+        _ => false,
+    }
+}
+
+/// Get an array from a table by key.
+fn get_array(table: TomlValue, key: str) -> [TomlValue] {
+    let val = toml_get(table, key)
+    match val {
+        TomlValue::Array(items) => items,
+        _ => [],
+    }
+}
+
+/// Get a nested table by key.
+fn get_table(table: TomlValue, key: str) -> TomlValue {
+    toml_get(table, key)
+}
+
+// ── Parser helpers ──
+
+/// Strip leading whitespace from a string.
+fn lstrip(s: str) -> str {
+    let mut i = 0
+    while i < len(s) && (s[i] == " " || s[i] == "\t") {
+        i = i + 1
+    }
+    s[i..len(s)]
+}
+
+/// Strip surrounding quotes from a string value.
+fn unquote(s: str) -> str {
+    let n = len(s)
+    if n >= 2 && s[0] == "\"" && s[n - 1] == "\"" {
+        return s[1..n - 1]
+    }
+    s
+}
+
+/// Try to parse a value token into the appropriate TomlValue.
+fn parse_value(raw: str) -> TomlValue {
+    let s = lstrip(raw)
+    if s == "true"  { return toml_bool(true) }
+    if s == "false" { return toml_bool(false) }
+    if len(s) >= 2 && s[0] == "\"" {
+        return toml_str(unquote(s))
+    }
+    // Check for float (contains '.')
+    if s.contains(".") {
+        return toml_float(parse_float(s))
+    }
+    // Try integer
+    toml_int(parse_int(s))
+}
+
+/// Parse an inline array like [1, 2, 3] or ["a", "b"].
+fn parse_inline_array(raw: str) -> TomlValue {
+    let s = lstrip(raw)
+    let n = len(s)
+    if n < 2 { return toml_array([]) }
+    // Strip [ and ]
+    let inner = s[1..n - 1]
+    let parts = inner.split(",")
+    let mut items: [TomlValue] = []
+    for part in parts {
+        let trimmed = lstrip(part).trim()
+        if len(trimmed) > 0 {
+            items.push(parse_value(trimmed))
+        }
+    }
+    toml_array(items)
+}
+
+// ── Main parser ──
+
+/// Parse a TOML document string into a TomlValue::Table.
+fn parse_toml(source: str) -> TomlValue {
+    let lines = source.split("\n")
+    let mut root_pairs: [TomlPair] = []
+    let mut current_section = ""
+    let mut section_pairs: [TomlPair] = []
+
+    for line in lines {
+        let trimmed = lstrip(line).trim()
+
+        // Skip empty lines and comments
+        if len(trimmed) == 0 { continue }
+        if trimmed[0] == "#" { continue }
+
+        // Section header [section]
+        if trimmed[0] == "[" && !trimmed.starts_with("[[") {
+            // Flush previous section
+            if current_section != "" {
+                root_pairs.push(toml_pair(current_section, toml_table(section_pairs)))
+                section_pairs = []
+            }
+            let end = trimmed.split("]")
+            current_section = end[0][1..len(end[0])]
+            continue
+        }
+
+        // Key = Value
+        if trimmed.contains("=") {
+            let eq_pos = trimmed.split("=")
+            let key = eq_pos[0].trim()
+            // Rejoin the rest in case value contains '='
+            let mut val_str = eq_pos[1]
+            for i in 2..len(eq_pos) {
+                val_str = val_str + "=" + eq_pos[i]
+            }
+            val_str = lstrip(val_str).trim()
+
+            let value = if val_str.starts_with("[") {
+                parse_inline_array(val_str)
+            } else {
+                parse_value(val_str)
+            }
+
+            let pair = toml_pair(key, value)
+            if current_section == "" {
+                root_pairs.push(pair)
+            } else {
+                section_pairs.push(pair)
+            }
+        }
+    }
+
+    // Flush last section
+    if current_section != "" {
+        root_pairs.push(toml_pair(current_section, toml_table(section_pairs)))
+    }
+
+    toml_table(root_pairs)
+}
+
+// ── Serialization ──
+
+/// Serialize a TomlValue back to a TOML string.
+fn to_toml(val: TomlValue) -> str {
+    match val {
+        TomlValue::Str(s)    => "\"" + s + "\"",
+        TomlValue::Int(n)    => to_string(n),
+        TomlValue::Float(f)  => to_string(f),
+        TomlValue::Bool(b)   => if b { "true" } else { "false" },
+        TomlValue::Array(items) => {
+            let mut out = "["
+            for i in 0..len(items) {
+                if i > 0 { out = out + ", " }
+                out = out + to_toml(items[i])
+            }
+            out + "]"
+        },
+        TomlValue::Table(pairs) => {
+            let mut out = ""
+            for p in pairs {
+                out = out + p.key + " = " + to_toml(p.value) + "\n"
+            }
+            out
+        },
+    }
+}

@@ -217,6 +217,8 @@ pub struct Interpreter {
     async_tasks: HashMap<u64, (Box<Expr>, Rc<RefCell<Environment>>)>,
     /// Next async task ID.
     next_task_id: u64,
+    /// SQLite database connection manager (TQ12.2).
+    db_manager: crate::stdlib_v3::database::DbManager,
 }
 
 impl Interpreter {
@@ -252,6 +254,7 @@ impl Interpreter {
             inference_cache: HashMap::new(),
             async_tasks: HashMap::new(),
             next_task_id: 1,
+            db_manager: crate::stdlib_v3::database::DbManager::new(),
         };
         interp.register_builtins();
         interp
@@ -289,6 +292,7 @@ impl Interpreter {
             inference_cache: HashMap::new(),
             async_tasks: HashMap::new(),
             next_task_id: 1,
+            db_manager: crate::stdlib_v3::database::DbManager::new(),
         };
         interp.register_builtins();
         interp
@@ -832,6 +836,14 @@ impl Interpreter {
             "net_close",
             // HTTP server (TQ12.1)
             "http_listen",
+            // Database (TQ12.2)
+            "db_open",
+            "db_execute",
+            "db_query",
+            "db_close",
+            "db_begin",
+            "db_commit",
+            "db_rollback",
         ]
     }
 

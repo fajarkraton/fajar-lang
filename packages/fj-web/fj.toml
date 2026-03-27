@@ -1,0 +1,9 @@
+[package]
+name = "fj-web"
+version = "1.0.0"
+description = "Web framework: routing, middleware, request/response, and JSON helpers"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

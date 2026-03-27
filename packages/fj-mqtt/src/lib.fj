@@ -1,0 +1,373 @@
+// fj-mqtt — MQTT Client Protocol for Fajar Lang
+//
+// Implements MQTT 3.1.1 protocol structures including packet types,
+// QoS levels, topic matching with wildcards, message queuing, and
+// a client state machine for IoT applications.
+
+// ── QoS levels ──
+
+/// MQTT Quality of Service levels.
+enum QoS {
+    AtMostOnce,   // QoS 0 — fire and forget
+    AtLeastOnce,  // QoS 1 — acknowledged delivery
+    ExactlyOnce   // QoS 2 — four-part handshake
+}
+
+/// Get the numeric QoS value.
+fn qos_value(q: QoS) -> i32 {
+    match q {
+        QoS::AtMostOnce => 0,
+        QoS::AtLeastOnce => 1,
+        QoS::ExactlyOnce => 2
+    }
+}
+
+/// Get QoS from numeric value.
+fn qos_from_int(v: i32) -> QoS {
+    match v {
+        0 => QoS::AtMostOnce,
+        1 => QoS::AtLeastOnce,
+        _ => QoS::ExactlyOnce
+    }
+}
+
+// ── Packet types ──
+
+/// MQTT control packet types.
+enum PacketType {
+    Connect,
+    Connack,
+    Publish,
+    Puback,
+    Pubrec,
+    Pubrel,
+    Pubcomp,
+    Subscribe,
+    Suback,
+    Unsubscribe,
+    Unsuback,
+    Pingreq,
+    Pingresp,
+    Disconnect
+}
+
+/// Get the packet type number (per MQTT spec).
+fn packet_type_id(pt: PacketType) -> i32 {
+    match pt {
+        PacketType::Connect => 1,
+        PacketType::Connack => 2,
+        PacketType::Publish => 3,
+        PacketType::Puback => 4,
+        PacketType::Pubrec => 5,
+        PacketType::Pubrel => 6,
+        PacketType::Pubcomp => 7,
+        PacketType::Subscribe => 8,
+        PacketType::Suback => 9,
+        PacketType::Unsubscribe => 10,
+        PacketType::Unsuback => 11,
+        PacketType::Pingreq => 12,
+        PacketType::Pingresp => 13,
+        PacketType::Disconnect => 14
+    }
+}
+
+// ── Connection return codes ──
+
+/// CONNACK return codes.
+enum ConnectResult {
+    Accepted,
+    UnacceptableProtocol,
+    IdentifierRejected,
+    ServerUnavailable,
+    BadCredentials,
+    NotAuthorized
+}
+
+/// Get the return code description.
+fn connect_result_msg(r: ConnectResult) -> str {
+    match r {
+        ConnectResult::Accepted => "Connection accepted",
+        ConnectResult::UnacceptableProtocol => "Unacceptable protocol version",
+        ConnectResult::IdentifierRejected => "Client identifier rejected",
+        ConnectResult::ServerUnavailable => "Server unavailable",
+        ConnectResult::BadCredentials => "Bad username or password",
+        ConnectResult::NotAuthorized => "Not authorized"
+    }
+}
+
+// ── Messages ──
+
+/// An MQTT message (publish payload).
+struct MqttMessage {
+    topic: str,
+    payload: str,
+    qos: QoS,
+    retain: bool,
+    packet_id: i32
+}
+
+/// Create a new message.
+fn message_new(topic: str, payload: str, qos: QoS) -> MqttMessage {
+    MqttMessage {
+        topic: topic,
+        payload: payload,
+        qos: qos,
+        retain: false,
+        packet_id: 0
+    }
+}
+
+/// Create a retained message.
+fn message_retained(topic: str, payload: str, qos: QoS) -> MqttMessage {
+    let mut msg = message_new(topic, payload, qos)
+    msg.retain = true
+    msg
+}
+
+// ── Subscription ──
+
+/// An MQTT topic subscription.
+struct Subscription {
+    topic_filter: str,
+    qos: QoS
+}
+
+// ── Topic matching with wildcards ──
+
+/// Check if a topic matches a filter pattern.
+/// Supports '+' (single-level wildcard) and '#' (multi-level wildcard).
+///
+/// Examples:
+///   "sensors/temp" matches "sensors/temp" => true
+///   "sensors/temp" matches "sensors/+" => true
+///   "sensors/temp" matches "#" => true
+///   "sensors/room1/temp" matches "sensors/+/temp" => true
+///   "sensors/room1/temp" matches "sensors/#" => true
+///   "$SYS/info" matches "#" => false ($ topics need explicit match)
+fn topic_matches(topic: str, filter: str) -> bool {
+    // $SYS topics require explicit subscription
+    if len(topic) > 0 && topic[0] == '$' {
+        if len(filter) > 0 && filter[0] != '$' {
+            return false
+        }
+    }
+
+    let topic_parts = split(topic, "/")
+    let filter_parts = split(filter, "/")
+
+    let mut ti = 0
+    let mut fi = 0
+
+    while fi < len(filter_parts) {
+        let fp = filter_parts[fi]
+
+        if fp == "#" {
+            // '#' matches everything from here on
+            return true
+        }
+
+        if ti >= len(topic_parts) {
+            return false
+        }
+
+        if fp != "+" && fp != topic_parts[ti] {
+            return false
+        }
+
+        // '+' matches exactly one level, or exact match
+        ti = ti + 1
+        fi = fi + 1
+    }
+
+    // Both must be fully consumed
+    ti == len(topic_parts) && fi == len(filter_parts)
+}
+
+/// Validate a topic name (no wildcards allowed in publish topics).
+fn is_valid_topic(topic: str) -> bool {
+    if len(topic) == 0 { return false }
+    if len(topic) > 65535 { return false }
+    // Publish topics must not contain wildcards
+    for i in 0..len(topic) {
+        if topic[i] == '+' || topic[i] == '#' {
+            return false
+        }
+    }
+    true
+}
+
+/// Validate a topic filter (wildcards in correct positions).
+fn is_valid_filter(filter: str) -> bool {
+    if len(filter) == 0 { return false }
+    let parts = split(filter, "/")
+    for i in 0..len(parts) {
+        let part = parts[i]
+        if part == "#" {
+            // '#' must be the last level
+            if i != len(parts) - 1 { return false }
+        } else if contains(part, "#") {
+            // '#' must be alone in its level
+            return false
+        }
+        // '+' must be alone in its level
+        if part != "+" && contains(part, "+") {
+            return false
+        }
+    }
+    true
+}
+
+// ── Client state ──
+
+/// MQTT client connection state.
+enum ClientState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Disconnecting
+}
+
+/// MQTT Client.
+struct MqttClient {
+    client_id: str,
+    host: str,
+    port: i32,
+    state: ClientState,
+    clean_session: bool,
+    keep_alive: i32,
+    username: str,
+    password: str,
+    will_topic: str,
+    will_message: str,
+    will_qos: QoS,
+    will_retain: bool,
+    subscriptions: [Subscription],
+    pending_messages: [MqttMessage],
+    next_packet_id: i32
+}
+
+/// Create a new MQTT client.
+fn mqtt_client(client_id: str, host: str, port: i32) -> MqttClient {
+    MqttClient {
+        client_id: client_id,
+        host: host,
+        port: port,
+        state: ClientState::Disconnected,
+        clean_session: true,
+        keep_alive: 60,
+        username: "",
+        password: "",
+        will_topic: "",
+        will_message: "",
+        will_qos: QoS::AtMostOnce,
+        will_retain: false,
+        subscriptions: [],
+        pending_messages: [],
+        next_packet_id: 1
+    }
+}
+
+/// Set credentials on the client.
+fn set_credentials(client: MqttClient, user: str, pass: str) -> MqttClient {
+    let mut c = client
+    c.username = user
+    c.password = pass
+    c
+}
+
+/// Set the Last Will and Testament.
+fn set_will(client: MqttClient, topic: str, message: str, qos: QoS) -> MqttClient {
+    let mut c = client
+    c.will_topic = topic
+    c.will_message = message
+    c.will_qos = qos
+    c
+}
+
+/// Initiate a connection (state transition).
+fn connect(client: MqttClient) -> MqttClient {
+    let mut c = client
+    c.state = ClientState::Connecting
+    // In a real implementation, this would open a TCP socket
+    // and send a CONNECT packet. Here we simulate the state machine.
+    c.state = ClientState::Connected
+    c
+}
+
+/// Disconnect the client.
+fn disconnect(client: MqttClient) -> MqttClient {
+    let mut c = client
+    c.state = ClientState::Disconnecting
+    c.state = ClientState::Disconnected
+    c
+}
+
+/// Allocate a new packet ID.
+fn alloc_packet_id(client: MqttClient) -> (MqttClient, i32) {
+    let mut c = client
+    let id = c.next_packet_id
+    c.next_packet_id = c.next_packet_id + 1
+    if c.next_packet_id > 65535 {
+        c.next_packet_id = 1
+    }
+    (c, id)
+}
+
+/// Publish a message to a topic.
+fn publish(client: MqttClient, topic: str, payload: str, qos: QoS) -> MqttClient {
+    let mut c = client
+    let mut msg = message_new(topic, payload, qos)
+    if qos_value(qos) > 0 {
+        let (new_client, pid) = alloc_packet_id(c)
+        c = new_client
+        msg.packet_id = pid
+        c.pending_messages = c.pending_messages + [msg]
+    }
+    c
+}
+
+/// Subscribe to a topic filter.
+fn subscribe(client: MqttClient, topic_filter: str, qos: QoS) -> MqttClient {
+    let mut c = client
+    c.subscriptions = c.subscriptions + [Subscription {
+        topic_filter: topic_filter,
+        qos: qos
+    }]
+    c
+}
+
+/// Unsubscribe from a topic filter.
+fn unsubscribe(client: MqttClient, topic_filter: str) -> MqttClient {
+    let mut c = client
+    let mut new_subs: [Subscription] = []
+    for sub in c.subscriptions {
+        if sub.topic_filter != topic_filter {
+            new_subs = new_subs + [sub]
+        }
+    }
+    c.subscriptions = new_subs
+    c
+}
+
+/// Check if a message matches any of the client's subscriptions.
+fn matches_subscription(client: MqttClient, topic: str) -> bool {
+    for sub in client.subscriptions {
+        if topic_matches(topic, sub.topic_filter) {
+            return true
+        }
+    }
+    false
+}
+
+/// Get the number of pending QoS 1/2 messages.
+fn pending_count(client: MqttClient) -> i32 {
+    len(client.pending_messages) as i32
+}
+
+/// Check if the client is connected.
+fn is_connected(client: MqttClient) -> bool {
+    match client.state {
+        ClientState::Connected => true,
+        _ => false
+    }
+}

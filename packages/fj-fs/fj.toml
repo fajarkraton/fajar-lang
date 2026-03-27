@@ -1,0 +1,9 @@
+[package]
+name = "fj-fs"
+version = "1.0.0"
+description = "Filesystem path utilities for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

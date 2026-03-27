@@ -69,7 +69,7 @@ impl FajarLspBackend {
     async fn publish_diagnostics(&self, uri: Url) {
         // Collect diagnostics synchronously under the lock, then publish async after dropping it.
         let diagnostics = {
-            let docs = self.documents.lock().unwrap();
+            let docs = self.documents.lock().expect("lsp state lock");
             let doc = match docs.get(&uri) {
                 Some(d) => d,
                 None => return,
@@ -164,7 +164,10 @@ impl LanguageServer for FajarLspBackend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         let doc = DocumentState::new(params.text_document.text);
-        self.documents.lock().unwrap().insert(uri.clone(), doc);
+        self.documents
+            .lock()
+            .expect("lsp state lock")
+            .insert(uri.clone(), doc);
         self.publish_diagnostics(uri).await;
     }
 
@@ -172,14 +175,17 @@ impl LanguageServer for FajarLspBackend {
         let uri = params.text_document.uri.clone();
         if let Some(change) = params.content_changes.into_iter().last() {
             let doc = DocumentState::new(change.text);
-            self.documents.lock().unwrap().insert(uri.clone(), doc);
+            self.documents
+                .lock()
+                .expect("lsp state lock")
+                .insert(uri.clone(), doc);
             self.publish_diagnostics(uri).await;
         }
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        self.documents.lock().unwrap().remove(&uri);
+        self.documents.lock().expect("lsp state lock").remove(&uri);
         // Clear diagnostics
         self.client.publish_diagnostics(uri, Vec::new(), None).await;
     }
@@ -188,7 +194,7 @@ impl LanguageServer for FajarLspBackend {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
 
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -287,7 +293,7 @@ impl LanguageServer for FajarLspBackend {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
 
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -330,7 +336,7 @@ impl LanguageServer for FajarLspBackend {
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = &params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -342,7 +348,7 @@ impl LanguageServer for FajarLspBackend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let uri = &params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -422,7 +428,7 @@ impl LanguageServer for FajarLspBackend {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
 
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -484,7 +490,7 @@ impl LanguageServer for FajarLspBackend {
         let pos = params.text_document_position.position;
         let new_name = &params.new_name;
 
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -545,7 +551,7 @@ impl LanguageServer for FajarLspBackend {
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(&uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -560,7 +566,7 @@ impl LanguageServer for FajarLspBackend {
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(&uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -573,7 +579,7 @@ impl LanguageServer for FajarLspBackend {
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         let uri = params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(&uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -594,7 +600,7 @@ impl LanguageServer for FajarLspBackend {
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(&uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -604,7 +610,7 @@ impl LanguageServer for FajarLspBackend {
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.lock().unwrap();
+        let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(&uri) {
             Some(d) => d,
             None => return Ok(None),
@@ -1351,7 +1357,7 @@ fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> 
                 deprecated: None,
                 location: Location {
                     uri: Url::parse("file:///")
-                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").expect("static URL")),
                     range: Range::new(
                         Position::new(i as u32, 0),
                         doc.offset_to_position(offset + line.len()),
@@ -1369,7 +1375,7 @@ fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> 
                 deprecated: None,
                 location: Location {
                     uri: Url::parse("file:///")
-                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").expect("static URL")),
                     range: Range::new(
                         Position::new(i as u32, 0),
                         doc.offset_to_position(offset + line.len()),
@@ -1387,7 +1393,7 @@ fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> 
                 deprecated: None,
                 location: Location {
                     uri: Url::parse("file:///")
-                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").expect("static URL")),
                     range: Range::new(
                         Position::new(i as u32, 0),
                         doc.offset_to_position(offset + line.len()),
@@ -1405,7 +1411,7 @@ fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> 
                 deprecated: None,
                 location: Location {
                     uri: Url::parse("file:///")
-                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").expect("static URL")),
                     range: Range::new(
                         Position::new(i as u32, 0),
                         doc.offset_to_position(offset + line.len()),
@@ -1423,7 +1429,7 @@ fn extract_symbols(source: &str, doc: &DocumentState) -> Vec<SymbolInformation> 
                 deprecated: None,
                 location: Location {
                     uri: Url::parse("file:///")
-                        .unwrap_or_else(|_| Url::parse("file:///tmp").unwrap()),
+                        .unwrap_or_else(|_| Url::parse("file:///tmp").expect("static URL")),
                     range: Range::new(
                         Position::new(i as u32, 0),
                         doc.offset_to_position(offset + line.len()),

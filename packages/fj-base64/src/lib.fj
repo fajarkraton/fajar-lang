@@ -1,0 +1,250 @@
+// fj-base64 -- Base64 Encoding/Decoding for Fajar Lang
+//
+// Implements RFC 4648 Base64 with standard and URL-safe alphabets.
+// Operates on byte arrays represented as [i64] (values 0-255).
+
+// ── Alphabet tables ──
+
+const B64_STANDARD: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const B64_URL_SAFE: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+/// Look up the character at position `i` in the alphabet.
+fn b64_char(alphabet: str, i: i64) -> str {
+    alphabet[i..i + 1]
+}
+
+/// Reverse lookup: find the index of character `c` in the alphabet.
+/// Returns -1 if not found or if `c` is padding ('=').
+fn b64_index(alphabet: str, c: str) -> i64 {
+    if c == "=" { return -1 }
+    for i in 0..64 {
+        if alphabet[i..i + 1] == c { return i }
+    }
+    -1
+}
+
+// ── String to bytes ──
+
+/// Convert a string to a byte array (ASCII values).
+fn str_to_bytes(s: str) -> [i64] {
+    let mut bytes: [i64] = []
+    for i in 0..len(s) {
+        let c = s[i]
+        // ASCII conversion via character comparison
+        let code = char_code(c)
+        bytes.push(code)
+    }
+    bytes
+}
+
+/// Get the ASCII code of a single character.
+fn char_code(c: str) -> i64 {
+    // Map common ASCII characters to their codes
+    if c == "\0" { return 0 }
+    if c == "\n" { return 10 }
+    if c == "\r" { return 13 }
+    if c == " "  { return 32 }
+    if c == "!"  { return 33 }
+    if c == "\"" { return 34 }
+    if c == "#"  { return 35 }
+    if c == "$"  { return 36 }
+    if c == "%"  { return 37 }
+    if c == "&"  { return 38 }
+    if c == "'"  { return 39 }
+    if c == "("  { return 40 }
+    if c == ")"  { return 41 }
+    if c == "*"  { return 42 }
+    if c == "+"  { return 43 }
+    if c == ","  { return 44 }
+    if c == "-"  { return 45 }
+    if c == "."  { return 46 }
+    if c == "/"  { return 47 }
+    // Digits 0-9
+    if c >= "0" && c <= "9" {
+        return 48 + parse_int(c)
+    }
+    if c == ":"  { return 58 }
+    if c == ";"  { return 59 }
+    if c == "<"  { return 60 }
+    if c == "="  { return 61 }
+    if c == ">"  { return 62 }
+    if c == "?"  { return 63 }
+    if c == "@"  { return 64 }
+    // Uppercase A-Z
+    if c >= "A" && c <= "Z" {
+        let offset = ord_upper(c)
+        return 65 + offset
+    }
+    if c == "["  { return 91 }
+    if c == "\\" { return 92 }
+    if c == "]"  { return 93 }
+    if c == "^"  { return 94 }
+    if c == "_"  { return 95 }
+    if c == "`"  { return 96 }
+    // Lowercase a-z
+    if c >= "a" && c <= "z" {
+        let offset = ord_lower(c)
+        return 97 + offset
+    }
+    if c == "{"  { return 123 }
+    if c == "|"  { return 124 }
+    if c == "}"  { return 125 }
+    if c == "~"  { return 126 }
+    0
+}
+
+/// Helper: offset of uppercase letter from 'A'.
+fn ord_upper(c: str) -> i64 {
+    let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    for i in 0..26 {
+        if letters[i..i + 1] == c { return i }
+    }
+    0
+}
+
+/// Helper: offset of lowercase letter from 'a'.
+fn ord_lower(c: str) -> i64 {
+    let letters = "abcdefghijklmnopqrstuvwxyz"
+    for i in 0..26 {
+        if letters[i..i + 1] == c { return i }
+    }
+    0
+}
+
+/// Convert a byte (0-255) to its ASCII character.
+fn byte_to_char(b: i64) -> str {
+    let all = "\0\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r"
+    // For printable ASCII (32-126), use a lookup table
+    let printable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    if b >= 32 && b <= 126 {
+        let idx = b - 32
+        return printable[idx..idx + 1]
+    }
+    "?"
+}
+
+/// Convert a byte array back to a string.
+fn bytes_to_str(bytes: [i64]) -> str {
+    let mut s = ""
+    for b in bytes {
+        s = s + byte_to_char(b)
+    }
+    s
+}
+
+// ── Core encoding ──
+
+/// Encode a byte array to Base64 using the given alphabet.
+fn encode_bytes(data: [i64], alphabet: str) -> str {
+    let n = len(data)
+    let mut out = ""
+    let mut i = 0
+
+    while i < n {
+        let b0 = data[i]
+        let b1 = if i + 1 < n { data[i + 1] } else { 0 }
+        let b2 = if i + 2 < n { data[i + 2] } else { 0 }
+
+        // Split 3 bytes into 4 6-bit groups
+        let c0 = b0 / 4
+        let c1 = ((b0 % 4) * 16) + (b1 / 16)
+        let c2 = ((b1 % 16) * 4) + (b2 / 64)
+        let c3 = b2 % 64
+
+        out = out + b64_char(alphabet, c0)
+        out = out + b64_char(alphabet, c1)
+
+        if i + 1 < n {
+            out = out + b64_char(alphabet, c2)
+        } else {
+            out = out + "="
+        }
+
+        if i + 2 < n {
+            out = out + b64_char(alphabet, c3)
+        } else {
+            out = out + "="
+        }
+
+        i = i + 3
+    }
+    out
+}
+
+/// Decode a Base64 string back to a byte array using the given alphabet.
+fn decode_bytes(encoded: str, alphabet: str) -> [i64] {
+    let mut bytes: [i64] = []
+    let n = len(encoded)
+    let mut i = 0
+
+    while i < n {
+        let c0 = b64_index(alphabet, encoded[i..i + 1])
+        let c1 = if i + 1 < n { b64_index(alphabet, encoded[i + 1..i + 2]) } else { 0 }
+        let c2 = if i + 2 < n { b64_index(alphabet, encoded[i + 2..i + 3]) } else { -1 }
+        let c3 = if i + 3 < n { b64_index(alphabet, encoded[i + 3..i + 4]) } else { -1 }
+
+        if c0 < 0 || c1 < 0 { break }
+
+        // Reconstruct bytes
+        bytes.push((c0 * 4) + (c1 / 16))
+
+        if c2 >= 0 {
+            bytes.push(((c1 % 16) * 16) + (c2 / 4))
+        }
+
+        if c3 >= 0 {
+            bytes.push(((c2 % 4) * 64) + c3)
+        }
+
+        i = i + 4
+    }
+    bytes
+}
+
+// ── Public API (string convenience) ──
+
+/// Encode a string to standard Base64.
+fn encode(input: str) -> str {
+    let data = str_to_bytes(input)
+    encode_bytes(data, B64_STANDARD)
+}
+
+/// Decode a standard Base64 string back to a string.
+fn decode(encoded: str) -> str {
+    let bytes = decode_bytes(encoded, B64_STANDARD)
+    bytes_to_str(bytes)
+}
+
+/// Encode a string to URL-safe Base64.
+fn url_safe_encode(input: str) -> str {
+    let data = str_to_bytes(input)
+    encode_bytes(data, B64_URL_SAFE)
+}
+
+/// Decode a URL-safe Base64 string back to a string.
+fn url_safe_decode(encoded: str) -> str {
+    let bytes = decode_bytes(encoded, B64_URL_SAFE)
+    bytes_to_str(bytes)
+}
+
+/// Check whether a string is valid standard Base64.
+fn is_valid_base64(s: str) -> bool {
+    let n = len(s)
+    if n % 4 != 0 { return false }
+    for i in 0..n {
+        let c = s[i..i + 1]
+        if c == "=" { continue }
+        if b64_index(B64_STANDARD, c) < 0 { return false }
+    }
+    true
+}
+
+/// Encode a byte array to standard Base64.
+fn encode_raw(data: [i64]) -> str {
+    encode_bytes(data, B64_STANDARD)
+}
+
+/// Decode standard Base64 to a byte array.
+fn decode_raw(encoded: str) -> [i64] {
+    decode_bytes(encoded, B64_STANDARD)
+}

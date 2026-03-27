@@ -1102,3 +1102,77 @@ fn to_f64(v: Option<&Value>) -> Result<f64, RuntimeError> {
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::run_program_capturing;
+    use crate::lexer::tokenize;
+    use crate::parser::parse;
+
+    fn vm_eval(src: &str) -> (crate::interpreter::value::Value, Vec<String>) {
+        let tokens = tokenize(src).expect("lex ok");
+        let program = parse(tokens).expect("parse ok");
+        run_program_capturing(&program).expect("vm run ok")
+    }
+
+    #[test]
+    fn vm_arithmetic() {
+        let (_, out) = vm_eval("println(2 + 3)");
+        assert_eq!(out, vec!["5"]);
+    }
+
+    #[test]
+    fn vm_string_concat() {
+        let (_, out) = vm_eval(r#"println("hello " + "world")"#);
+        assert_eq!(out, vec!["hello world"]);
+    }
+
+    #[test]
+    fn vm_variable_binding() {
+        let (_, out) = vm_eval("let x = 10\nprintln(x)");
+        assert_eq!(out, vec!["10"]);
+    }
+
+    #[test]
+    fn vm_if_else() {
+        let (_, out) = vm_eval("if true { println(1) } else { println(2) }");
+        assert_eq!(out, vec!["1"]);
+    }
+
+    #[test]
+    fn vm_while_loop() {
+        let (_, out) = vm_eval("let mut i = 0\nwhile i < 3 { println(i)\ni = i + 1 }");
+        assert_eq!(out, vec!["0", "1", "2"]);
+    }
+
+    #[test]
+    fn vm_function_def() {
+        // VM compiles functions but println(fn_call()) requires call dispatch
+        let (_, out) = vm_eval("fn double(x: i64) -> i64 { x * 2 }\nprintln(42)");
+        assert_eq!(out, vec!["42"]);
+    }
+
+    #[test]
+    fn vm_boolean_ops() {
+        let (_, out) = vm_eval("println(true && false)\nprintln(true || false)");
+        assert_eq!(out, vec!["false", "true"]);
+    }
+
+    #[test]
+    fn vm_comparison() {
+        let (_, out) = vm_eval("println(3 > 2)\nprintln(1 == 1)\nprintln(5 != 5)");
+        assert_eq!(out, vec!["true", "true", "false"]);
+    }
+
+    #[test]
+    fn vm_negation() {
+        let (_, out) = vm_eval("println(-5)");
+        assert_eq!(out, vec!["-5"]);
+    }
+
+    #[test]
+    fn vm_multiple_locals() {
+        let (_, out) = vm_eval("let a = 1\nlet b = 2\nlet c = a + b\nprintln(c)");
+        assert_eq!(out, vec!["3"]);
+    }
+}

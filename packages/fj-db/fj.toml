@@ -1,0 +1,9 @@
+[package]
+name = "fj-db"
+version = "1.0.0"
+description = "In-memory database: tables, queries, transactions, and parameterized operations"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

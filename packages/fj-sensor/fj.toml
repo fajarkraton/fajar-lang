@@ -1,0 +1,9 @@
+[package]
+name = "fj-sensor"
+version = "1.0.0"
+description = "Sensor fusion algorithms (Kalman, Madgwick, complementary) for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

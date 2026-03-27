@@ -1,0 +1,9 @@
+[package]
+name = "fj-gpio"
+version = "1.0.0"
+description = "GPIO pin control for embedded Fajar Lang applications"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

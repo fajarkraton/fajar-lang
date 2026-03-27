@@ -1,0 +1,9 @@
+[package]
+name = "fj-regex"
+version = "1.0.0"
+description = "Simple regex engine: NFA-based matching with literal, dot, star, plus, question"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

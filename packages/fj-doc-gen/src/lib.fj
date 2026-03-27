@@ -1,0 +1,411 @@
+// fj-doc-gen — Documentation Generator for Fajar Lang
+//
+// Parses doc comments (/// and //!) from Fajar Lang source files,
+// extracts function/struct/enum signatures, and generates HTML or
+// Markdown documentation.
+
+// ── Document item types ──
+
+/// The kind of documented item.
+enum DocKind {
+    Function,
+    Struct,
+    Enum,
+    Constant,
+    Module,
+    Trait,
+    Impl
+}
+
+/// Get the kind as a string.
+fn doc_kind_str(k: DocKind) -> str {
+    match k {
+        DocKind::Function => "Function",
+        DocKind::Struct => "Struct",
+        DocKind::Enum => "Enum",
+        DocKind::Constant => "Constant",
+        DocKind::Module => "Module",
+        DocKind::Trait => "Trait",
+        DocKind::Impl => "Impl"
+    }
+}
+
+// ── Document items ──
+
+/// A documented item extracted from source code.
+struct DocItem {
+    name: str,
+    kind: DocKind,
+    doc_comment: str,
+    signature: str,
+    module: str,
+    line_number: i32,
+    is_public: bool
+}
+
+/// Create a new doc item.
+fn doc_item_new(name: str, kind: DocKind, doc: str, sig: str) -> DocItem {
+    DocItem {
+        name: name,
+        kind: kind,
+        doc_comment: doc,
+        signature: sig,
+        module: "",
+        line_number: 0,
+        is_public: true
+    }
+}
+
+/// Module-level documentation.
+struct ModuleDoc {
+    name: str,
+    description: str,
+    items: [DocItem]
+}
+
+/// Create a new module doc.
+fn module_doc_new(name: str, desc: str) -> ModuleDoc {
+    ModuleDoc { name: name, description: desc, items: [] }
+}
+
+/// Add an item to a module doc.
+fn module_add_item(m: ModuleDoc, item: DocItem) -> ModuleDoc {
+    let mut result = m
+    result.items = result.items + [item]
+    result
+}
+
+// ── Parsing helpers ──
+
+/// Trim leading whitespace from a string.
+fn trim_leading(s: str) -> str {
+    let mut start = 0
+    while start < len(s) && (s[start] == ' ' || s[start] == '\t') {
+        start = start + 1
+    }
+    let mut result = ""
+    for i in start..len(s) {
+        result = result + to_string(s[i])
+    }
+    result
+}
+
+/// Check if a string starts with a prefix.
+fn starts_with_str(s: str, prefix: str) -> bool {
+    if len(prefix) > len(s) { return false }
+    for i in 0..len(prefix) {
+        if s[i] != prefix[i] { return false }
+    }
+    true
+}
+
+/// Extract text after a prefix.
+fn after_prefix(s: str, prefix: str) -> str {
+    if !starts_with_str(s, prefix) { return s }
+    let mut result = ""
+    for i in len(prefix)..len(s) {
+        result = result + to_string(s[i])
+    }
+    result
+}
+
+/// Extract substring from start to end index.
+fn substr(s: str, start: i32, end: i32) -> str {
+    let mut result = ""
+    let lo = if start < 0 { 0 } else { start }
+    let hi = if end > len(s) as i32 { len(s) as i32 } else { end }
+    for i in lo..hi {
+        result = result + to_string(s[i as usize])
+    }
+    result
+}
+
+// ── Source code parsing ──
+
+/// Parse doc comments from source code lines.
+/// Returns a list of DocItem extracted from the source.
+fn parse_doc_comments(source: str) -> [DocItem] {
+    let mut items: [DocItem] = []
+    let lines = split(source, "\n")
+    let mut current_doc = ""
+    let mut line_num = 0
+
+    for line in lines {
+        line_num = line_num + 1
+        let trimmed = trim_leading(line)
+
+        // Collect doc comments (///)
+        if starts_with_str(trimmed, "///") {
+            let comment_text = after_prefix(trimmed, "///")
+            let cleaned = trim_leading(comment_text)
+            if len(current_doc) > 0 {
+                current_doc = current_doc + "\n" + cleaned
+            } else {
+                current_doc = cleaned
+            }
+        } else if len(current_doc) > 0 {
+            // The line after doc comments should be a declaration
+            if starts_with_str(trimmed, "pub fn ") || starts_with_str(trimmed, "fn ") {
+                let sig = extract_fn_sig(trimmed)
+                let name = extract_fn_name(trimmed)
+                items = items + [DocItem {
+                    name: name,
+                    kind: DocKind::Function,
+                    doc_comment: current_doc,
+                    signature: sig,
+                    module: "",
+                    line_number: line_num,
+                    is_public: starts_with_str(trimmed, "pub ")
+                }]
+                current_doc = ""
+            } else if starts_with_str(trimmed, "pub struct ") || starts_with_str(trimmed, "struct ") {
+                let name = extract_item_name(trimmed, "struct")
+                items = items + [DocItem {
+                    name: name,
+                    kind: DocKind::Struct,
+                    doc_comment: current_doc,
+                    signature: trimmed,
+                    module: "",
+                    line_number: line_num,
+                    is_public: starts_with_str(trimmed, "pub ")
+                }]
+                current_doc = ""
+            } else if starts_with_str(trimmed, "pub enum ") || starts_with_str(trimmed, "enum ") {
+                let name = extract_item_name(trimmed, "enum")
+                items = items + [DocItem {
+                    name: name,
+                    kind: DocKind::Enum,
+                    doc_comment: current_doc,
+                    signature: trimmed,
+                    module: "",
+                    line_number: line_num,
+                    is_public: starts_with_str(trimmed, "pub ")
+                }]
+                current_doc = ""
+            } else if starts_with_str(trimmed, "const ") {
+                let name = extract_item_name(trimmed, "const")
+                items = items + [DocItem {
+                    name: name,
+                    kind: DocKind::Constant,
+                    doc_comment: current_doc,
+                    signature: trimmed,
+                    module: "",
+                    line_number: line_num,
+                    is_public: false
+                }]
+                current_doc = ""
+            } else {
+                // Not a declaration, discard accumulated doc
+                current_doc = ""
+            }
+        }
+    }
+    items
+}
+
+/// Extract the function name from a fn declaration line.
+fn extract_fn_name(line: str) -> str {
+    let trimmed = trim_leading(line)
+    let after_fn = if starts_with_str(trimmed, "pub fn ") {
+        after_prefix(trimmed, "pub fn ")
+    } else {
+        after_prefix(trimmed, "fn ")
+    }
+    // Name ends at '(' or '<'
+    let mut name = ""
+    for i in 0..len(after_fn) {
+        let c = after_fn[i]
+        if c == '(' || c == '<' || c == ' ' { break }
+        name = name + to_string(c)
+    }
+    name
+}
+
+/// Extract the full function signature (up to the opening brace).
+fn extract_fn_sig(line: str) -> str {
+    let mut sig = ""
+    for i in 0..len(line) {
+        if line[i] == '{' { break }
+        sig = sig + to_string(line[i])
+    }
+    trim_leading(sig)
+}
+
+/// Extract the name after a keyword (struct, enum, const, trait).
+fn extract_item_name(line: str, keyword: str) -> str {
+    let trimmed = trim_leading(line)
+    let prefix = if starts_with_str(trimmed, "pub ") {
+        "pub " + keyword + " "
+    } else {
+        keyword + " "
+    }
+    let after_kw = after_prefix(trimmed, prefix)
+    let mut name = ""
+    for i in 0..len(after_kw) {
+        let c = after_kw[i]
+        if c == ' ' || c == '{' || c == '(' || c == '<' || c == ':' { break }
+        name = name + to_string(c)
+    }
+    name
+}
+
+// ── HTML generation ──
+
+/// Escape HTML special characters.
+fn html_escape(text: str) -> str {
+    let mut result = ""
+    for i in 0..len(text) {
+        let c = text[i]
+        if c == '<' { result = result + "&lt;" }
+        else if c == '>' { result = result + "&gt;" }
+        else if c == '&' { result = result + "&amp;" }
+        else if c == '"' { result = result + "&quot;" }
+        else { result = result + to_string(c) }
+    }
+    result
+}
+
+/// Generate HTML documentation for a list of doc items.
+fn generate_html(items: [DocItem], title: str) -> str {
+    let mut html = "<!DOCTYPE html>\n<html>\n<head>\n"
+    html = html + "<meta charset=\"utf-8\">\n"
+    html = html + "<title>" + html_escape(title) + "</title>\n"
+    html = html + "<style>\n"
+    html = html + "body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }\n"
+    html = html + "h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }\n"
+    html = html + ".item { margin: 20px 0; border: 1px solid #e0e0e0; border-radius: 6px; padding: 15px; }\n"
+    html = html + ".item h3 { margin-top: 0; color: #1a73e8; }\n"
+    html = html + ".kind { background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 4px; font-size: 12px; }\n"
+    html = html + ".sig { background: #f5f5f5; padding: 8px 12px; border-radius: 4px; font-family: monospace; margin: 8px 0; }\n"
+    html = html + ".doc { color: #555; line-height: 1.6; }\n"
+    html = html + "</style>\n</head>\n<body>\n"
+    html = html + "<h1>" + html_escape(title) + "</h1>\n"
+
+    // Group by kind
+    let kinds = ["Function", "Struct", "Enum", "Constant", "Trait"]
+    for kind_name in kinds {
+        let mut kind_items: [DocItem] = []
+        for item in items {
+            if doc_kind_str(item.kind) == kind_name {
+                kind_items = kind_items + [item]
+            }
+        }
+        if len(kind_items) == 0 { continue }
+
+        html = html + "<h2>" + kind_name + "s</h2>\n"
+        for item in kind_items {
+            html = html + "<div class=\"item\">\n"
+            html = html + "  <h3>" + html_escape(item.name) + " <span class=\"kind\">"
+            html = html + doc_kind_str(item.kind) + "</span></h3>\n"
+            html = html + "  <div class=\"sig\">" + html_escape(item.signature) + "</div>\n"
+            html = html + "  <div class=\"doc\">" + html_escape(item.doc_comment) + "</div>\n"
+            html = html + "</div>\n"
+        }
+    }
+
+    html = html + "</body>\n</html>"
+    html
+}
+
+// ── Markdown generation ──
+
+/// Generate Markdown documentation for a list of doc items.
+fn generate_markdown(items: [DocItem], title: str) -> str {
+    let mut md = "# " + title + "\n\n"
+
+    let kinds = ["Function", "Struct", "Enum", "Constant", "Trait"]
+    for kind_name in kinds {
+        let mut kind_items: [DocItem] = []
+        for item in items {
+            if doc_kind_str(item.kind) == kind_name {
+                kind_items = kind_items + [item]
+            }
+        }
+        if len(kind_items) == 0 { continue }
+
+        md = md + "## " + kind_name + "s\n\n"
+        for item in kind_items {
+            md = md + "### `" + item.name + "`\n\n"
+            md = md + "```fajar\n" + item.signature + "\n```\n\n"
+            if len(item.doc_comment) > 0 {
+                md = md + item.doc_comment + "\n\n"
+            }
+            md = md + "---\n\n"
+        }
+    }
+    md
+}
+
+/// Parse source and generate HTML.
+fn doc_html(source: str, title: str) -> str {
+    let items = parse_doc_comments(source)
+    generate_html(items, title)
+}
+
+/// Parse source and generate Markdown.
+fn doc_markdown(source: str, title: str) -> str {
+    let items = parse_doc_comments(source)
+    generate_markdown(items, title)
+}
+
+/// Generate documentation for a module from its file path.
+fn module_docs(path: str) -> ModuleDoc {
+    let source = read_file(path)
+    let items = parse_doc_comments(source)
+
+    // Extract module-level doc (//! comments at the top)
+    let lines = split(source, "\n")
+    let mut module_desc = ""
+    for line in lines {
+        let trimmed = trim_leading(line)
+        if starts_with_str(trimmed, "//!") {
+            let text = trim_leading(after_prefix(trimmed, "//!"))
+            if len(module_desc) > 0 {
+                module_desc = module_desc + "\n" + text
+            } else {
+                module_desc = text
+            }
+        } else if !starts_with_str(trimmed, "//") && len(trimmed) > 0 {
+            break
+        }
+    }
+
+    // Derive module name from file path
+    let mut name = path
+    let parts = split(path, "/")
+    if len(parts) > 0 {
+        let filename = parts[len(parts) - 1]
+        let dot_parts = split(filename, ".")
+        if len(dot_parts) > 0 {
+            name = dot_parts[0]
+        }
+    }
+
+    let mut doc = module_doc_new(name, module_desc)
+    for item in items {
+        doc = module_add_item(doc, item)
+    }
+    doc
+}
+
+/// Count the number of documented items by kind.
+fn count_by_kind(items: [DocItem], kind: DocKind) -> i32 {
+    let target = doc_kind_str(kind)
+    let mut count = 0
+    for item in items {
+        if doc_kind_str(item.kind) == target {
+            count = count + 1
+        }
+    }
+    count
+}
+
+/// Generate a table of contents from doc items.
+fn table_of_contents(items: [DocItem]) -> str {
+    let mut toc = "## Table of Contents\n\n"
+    for item in items {
+        let anchor = item.name
+        toc = toc + "- [" + item.name + "](#" + anchor + ") — " + doc_kind_str(item.kind) + "\n"
+    }
+    toc + "\n"
+}

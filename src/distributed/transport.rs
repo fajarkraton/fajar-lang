@@ -89,19 +89,22 @@ impl NetMessage {
         };
 
         let mut pos = 1;
-        let target_len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+        let target_len =
+            u32::from_le_bytes(data[pos..pos + 4].try_into().expect("4-byte target_len")) as usize;
         pos += 4;
         let target = String::from_utf8_lossy(&data[pos..pos + target_len]).into_owned();
         pos += target_len;
 
-        let payload_len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+        let payload_len =
+            u32::from_le_bytes(data[pos..pos + 4].try_into().expect("4-byte payload_len")) as usize;
         pos += 4;
         let payload = data[pos..pos + payload_len].to_vec();
         pos += payload_len;
 
-        let sender_id = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
+        let sender_id =
+            u64::from_le_bytes(data[pos..pos + 8].try_into().expect("8-byte sender_id"));
         pos += 8;
-        let seq = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
+        let seq = u64::from_le_bytes(data[pos..pos + 8].try_into().expect("8-byte seq"));
 
         Ok(NetMessage {
             msg_type,
@@ -184,18 +187,24 @@ impl TransportNode {
 
     /// Register a local actor.
     pub fn register_actor(&self, name: &str, sender: mpsc::Sender<NetMessage>) {
-        self.actors.lock().unwrap().insert(name.to_string(), sender);
+        self.actors
+            .lock()
+            .expect("mutex poisoned")
+            .insert(name.to_string(), sender);
     }
 
     /// Add a known peer.
     pub fn add_peer(&self, peer_id: u64, addr: &str) {
-        self.peers.lock().unwrap().insert(peer_id, addr.to_string());
+        self.peers
+            .lock()
+            .expect("mutex poisoned")
+            .insert(peer_id, addr.to_string());
     }
 
     /// Send a message to a remote node via TCP.
     pub async fn send_to_node(&self, peer_id: u64, msg: NetMessage) -> Result<(), String> {
         let addr = {
-            let peers = self.peers.lock().unwrap();
+            let peers = self.peers.lock().expect("mutex poisoned");
             peers
                 .get(&peer_id)
                 .ok_or_else(|| format!("unknown peer: {peer_id}"))?
@@ -248,7 +257,7 @@ impl TransportNode {
                             return;
                         }
                         if let Ok(msg) = NetMessage::from_bytes(&data) {
-                            let actors = actors.lock().unwrap();
+                            let actors = actors.lock().expect("mutex poisoned");
                             if let Some(sender) = actors.get(&msg.target) {
                                 let _ = sender.try_send(msg);
                             }
@@ -263,7 +272,7 @@ impl TransportNode {
 
     /// Next sequence number.
     pub fn next_seq(&self) -> u64 {
-        let mut seq = self.seq.lock().unwrap();
+        let mut seq = self.seq.lock().expect("mutex poisoned");
         *seq += 1;
         *seq
     }
@@ -372,7 +381,7 @@ impl ConnectionPool {
     pub async fn get_or_connect(&self, addr: &str) -> Result<TcpStream, String> {
         // Try to get an existing connection
         {
-            let mut pool = self.pool.lock().unwrap();
+            let mut pool = self.pool.lock().expect("mutex poisoned");
             if let Some(conns) = pool.get_mut(addr) {
                 if let Some(stream) = conns.pop() {
                     return Ok(stream);
@@ -388,7 +397,7 @@ impl ConnectionPool {
 
     /// Return a connection to the pool for reuse.
     pub fn return_connection(&self, addr: &str, stream: TcpStream) {
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock().expect("mutex poisoned");
         let conns = pool.entry(addr.to_string()).or_default();
         if conns.len() < self.max_per_addr {
             conns.push(stream);
@@ -398,19 +407,19 @@ impl ConnectionPool {
 
     /// Number of pooled connections for an address.
     pub fn pooled_count(&self, addr: &str) -> usize {
-        let pool = self.pool.lock().unwrap();
+        let pool = self.pool.lock().expect("mutex poisoned");
         pool.get(addr).map_or(0, |c| c.len())
     }
 
     /// Total pooled connections across all addresses.
     pub fn total_pooled(&self) -> usize {
-        let pool = self.pool.lock().unwrap();
+        let pool = self.pool.lock().expect("mutex poisoned");
         pool.values().map(|c| c.len()).sum()
     }
 
     /// Clear all pooled connections for a given address.
     pub fn clear_addr(&self, addr: &str) {
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock().expect("mutex poisoned");
         pool.remove(addr);
     }
 }
@@ -778,7 +787,7 @@ mod tests {
         let node = TransportNode::new(1, "127.0.0.1:0");
         assert_eq!(node.node_id, 1);
         node.add_peer(2, "127.0.0.1:9001");
-        assert!(node.peers.lock().unwrap().contains_key(&2));
+        assert!(node.peers.lock().expect("mutex poisoned").contains_key(&2));
     }
 
     #[test]
@@ -786,7 +795,12 @@ mod tests {
         let node = TransportNode::new(1, "127.0.0.1:0");
         let actor = Actor::new("worker", 10);
         node.register_actor("worker", actor.mailbox_tx.clone());
-        assert!(node.actors.lock().unwrap().contains_key("worker"));
+        assert!(
+            node.actors
+                .lock()
+                .expect("mutex poisoned")
+                .contains_key("worker")
+        );
     }
 
     #[test]

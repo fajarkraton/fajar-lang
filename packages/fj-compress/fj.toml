@@ -1,0 +1,9 @@
+[package]
+name = "fj-compress"
+version = "1.0.0"
+description = "Data compression (RLE, LZ77) for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

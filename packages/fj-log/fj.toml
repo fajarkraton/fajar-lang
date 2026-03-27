@@ -1,0 +1,9 @@
+[package]
+name = "fj-log"
+version = "1.0.0"
+description = "Structured logging with levels, timestamps, and JSON output"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

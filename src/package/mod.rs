@@ -12,6 +12,8 @@ pub mod portal;
 pub mod pubgrub;
 pub mod publish;
 pub mod registry;
+pub mod registry_cli;
+pub mod registry_db;
 pub mod resolver;
 pub mod sbom;
 pub mod server;

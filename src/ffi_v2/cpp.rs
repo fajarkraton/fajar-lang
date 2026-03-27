@@ -459,20 +459,28 @@ pub fn parse_header(header_path: &str, include_dirs: &[&str]) -> Result<Vec<CppD
         }
     }
 
+    // SAFETY: clang_sys FFI call — creates a new libclang index; no preconditions.
     let index = unsafe { clang_createIndex(0, 0) };
     if index.is_null() {
         return Err("clang_createIndex failed".to_string());
     }
 
     // Build arguments
-    let mut args: Vec<CString> = vec![CString::new("-x").unwrap(), CString::new("c++").unwrap()];
+    let mut args: Vec<CString> = vec![
+        CString::new("-x").expect("CString::new for clang -x flag"),
+        CString::new("c++").expect("CString::new for clang c++ language arg"),
+    ];
     for dir in include_dirs {
-        args.push(CString::new(format!("-I{dir}")).unwrap());
+        args.push(
+            CString::new(format!("-I{dir}")).expect("CString::new for clang include dir arg"),
+        );
     }
     let c_args: Vec<*const i8> = args.iter().map(|a| a.as_ptr()).collect();
 
     let c_path = CString::new(header_path).map_err(|e| format!("invalid path: {e}"))?;
 
+    // SAFETY: clang_sys FFI call — index is valid (checked above); c_path and c_args are
+    // valid CStrings whose lifetimes outlive this call.
     let tu = unsafe {
         clang_parseTranslationUnit(
             index,
@@ -486,14 +494,17 @@ pub fn parse_header(header_path: &str, include_dirs: &[&str]) -> Result<Vec<CppD
     };
 
     if tu.is_null() {
+        // SAFETY: clang_sys FFI call — index is valid; disposing before early return.
         unsafe { clang_disposeIndex(index) };
         return Err(format!("failed to parse '{header_path}'"));
     }
 
     let mut decls = Vec::new();
+    // SAFETY: clang_sys FFI call — TU is valid (non-null checked above).
     let cursor = unsafe { clang_getTranslationUnitCursor(tu) };
 
     // Visit top-level declarations
+    // SAFETY: clang_sys FFI call — cursor is valid; decls pointer lives for the duration of traversal.
     unsafe {
         clang_visitChildren(
             cursor,
@@ -502,6 +513,7 @@ pub fn parse_header(header_path: &str, include_dirs: &[&str]) -> Result<Vec<CppD
         );
     }
 
+    // SAFETY: clang_sys FFI call — TU and index are valid; disposing after traversal complete.
     unsafe {
         clang_disposeTranslationUnit(tu);
         clang_disposeIndex(index);
@@ -518,12 +530,15 @@ extern "C" fn visit_decl(
 ) -> clang_sys::CXChildVisitResult {
     use clang_sys::*;
 
+    // SAFETY: client_data is a valid *mut Vec<CppDecl> passed by our caller (parse_header).
     let decls = unsafe { &mut *(client_data as *mut Vec<CppDecl>) };
 
+    // SAFETY: clang_sys FFI calls — cursor is valid; returned by clang_visitChildren callback.
     let kind = unsafe { clang_getCursorKind(cursor) };
     let location = unsafe { clang_getCursorLocation(cursor) };
 
     // Skip system headers
+    // SAFETY: clang_sys FFI call — location is valid, returned from clang_getCursorLocation.
     if unsafe { clang_Location_isInSystemHeader(location) } != 0 {
         return CXChildVisit_Continue;
     }
@@ -551,6 +566,7 @@ extern "C" fn visit_decl(
         }
         CXCursor_Namespace => {
             let mut ns_decls = Vec::new();
+            // SAFETY: clang_sys FFI call — cursor is valid; ns_decls pointer lives for traversal duration.
             unsafe {
                 clang_visitChildren(
                     cursor,
@@ -571,6 +587,7 @@ extern "C" fn visit_decl(
 
 #[cfg(feature = "cpp-ffi")]
 fn cursor_name(cursor: clang_sys::CXCursor) -> String {
+    // SAFETY: clang_sys FFI calls — cursor is valid; CXString disposed before return.
     unsafe {
         let cx_str = clang_sys::clang_getCursorSpelling(cursor);
         let c_str = clang_sys::clang_getCString(cx_str);
@@ -590,11 +607,14 @@ fn cursor_name(cursor: clang_sys::CXCursor) -> String {
 fn extract_function(cursor: clang_sys::CXCursor, name: &str) -> CppFunction {
     use clang_sys::*;
 
+    // SAFETY: clang_sys FFI call — cursor is valid; querying argument count.
     let num_args = unsafe { clang_Cursor_getNumArguments(cursor) };
     let mut params = Vec::new();
     for i in 0..num_args {
+        // SAFETY: clang_sys FFI call — cursor is valid; i is in range 0..num_args.
         let arg = unsafe { clang_Cursor_getArgument(cursor, i as u32) };
         let arg_name = cursor_name(arg);
+        // SAFETY: clang_sys FFI call — arg cursor is valid, returned by clang_Cursor_getArgument.
         let arg_type = unsafe { clang_getCursorType(arg) };
         params.push(CppParam {
             name: if arg_name.is_empty() {
@@ -607,6 +627,7 @@ fn extract_function(cursor: clang_sys::CXCursor, name: &str) -> CppFunction {
         });
     }
 
+    // SAFETY: clang_sys FFI call — cursor is valid; querying return type.
     let ret_type = unsafe { clang_getCursorResultType(cursor) };
 
     CppFunction {
@@ -614,6 +635,7 @@ fn extract_function(cursor: clang_sys::CXCursor, name: &str) -> CppFunction {
         namespace: vec![],
         return_type: clang_type_to_cpp(ret_type),
         params,
+        // SAFETY: clang_sys FFI calls — cursor is valid; querying method properties.
         is_static: unsafe { clang_CXXMethod_isStatic(cursor) } != 0,
         is_const: unsafe { clang_CXXMethod_isConst(cursor) } != 0,
         is_virtual: unsafe { clang_CXXMethod_isVirtual(cursor) } != 0,
@@ -652,7 +674,9 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
         client_data: *mut std::ffi::c_void,
     ) -> clang_sys::CXChildVisitResult {
         use clang_sys::*;
+        // SAFETY: client_data is a valid *mut ClassVisitorData passed by extract_class.
         let data = unsafe { &mut *(client_data as *mut ClassVisitorData) };
+        // SAFETY: clang_sys FFI call — cursor is valid; returned by clang_visitChildren callback.
         let kind = unsafe { clang_getCursorKind(cursor) };
         let member_name = cursor_name(cursor);
 
@@ -668,6 +692,7 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
                 data.has_destructor = true;
             }
             CXCursor_FieldDecl => {
+                // SAFETY: clang_sys FFI call — cursor is valid; querying field type.
                 let field_type = unsafe { clang_getCursorType(cursor) };
                 data.fields.push(CppField {
                     name: member_name,
@@ -679,6 +704,7 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
             }
             // CQ3.2: Extract base classes
             CXCursor_CXXBaseSpecifier => {
+                // SAFETY: clang_sys FFI call — cursor is valid; querying base class type.
                 let base_type = unsafe { clang_getCursorType(cursor) };
                 let base_name = clang_type_name(base_type);
                 data.bases.push(base_name);
@@ -692,6 +718,7 @@ fn extract_class(cursor: clang_sys::CXCursor, name: &str) -> CppClass {
         CXChildVisit_Continue
     }
 
+    // SAFETY: clang_sys FFI call — cursor is valid; data pointer lives for traversal duration.
     unsafe {
         clang_sys::clang_visitChildren(
             cursor,
@@ -725,16 +752,20 @@ fn extract_enum(cursor: clang_sys::CXCursor, name: &str) -> CppEnum {
         client_data: *mut std::ffi::c_void,
     ) -> clang_sys::CXChildVisitResult {
         use clang_sys::*;
+        // SAFETY: client_data is a valid *mut Vec<(String, i64)> passed by extract_enum.
         let variants = unsafe { &mut *(client_data as *mut Vec<(String, i64)>) };
+        // SAFETY: clang_sys FFI call — cursor is valid; returned by clang_visitChildren callback.
         let kind = unsafe { clang_getCursorKind(cursor) };
         if kind == CXCursor_EnumConstantDecl {
             let vname = cursor_name(cursor);
+            // SAFETY: clang_sys FFI call — cursor is a valid EnumConstantDecl.
             let value = unsafe { clang_getEnumConstantDeclValue(cursor) };
             variants.push((vname, value));
         }
         CXChildVisit_Continue
     }
 
+    // SAFETY: clang_sys FFI call — cursor is valid; variants pointer lives for traversal duration.
     unsafe {
         clang_sys::clang_visitChildren(
             cursor,
@@ -768,14 +799,17 @@ fn clang_type_to_cpp(cx_type: clang_sys::CXType) -> CppType {
         CXType_Float => CppType::Float,
         CXType_Double => CppType::Double,
         CXType_Pointer => {
+            // SAFETY: clang_sys FFI call — cx_type is valid; getting pointee type.
             let pointee = unsafe { clang_getPointeeType(cx_type) };
             CppType::Pointer(Box::new(clang_type_to_cpp(pointee)))
         }
         CXType_LValueReference => {
+            // SAFETY: clang_sys FFI call — cx_type is valid; getting pointee type.
             let pointee = unsafe { clang_getPointeeType(cx_type) };
             CppType::Reference(Box::new(clang_type_to_cpp(pointee)))
         }
         _ => {
+            // SAFETY: clang_sys FFI calls — cx_type is valid; CXString disposed before return.
             let name = unsafe {
                 let cx_str = clang_getTypeSpelling(cx_type);
                 let c_str = clang_getCString(cx_str);
@@ -820,6 +854,7 @@ pub fn cpp_string_to_fajar(data: &[u8], length: usize) -> String {
 /// Get the type name from a clang CXType.
 #[cfg(feature = "cpp-ffi")]
 fn clang_type_name(cx_type: clang_sys::CXType) -> String {
+    // SAFETY: clang_sys FFI calls — cx_type is valid; CXString disposed before return.
     unsafe {
         let cx_str = clang_sys::clang_getTypeSpelling(cx_type);
         let c_str = clang_sys::clang_getCString(cx_str);

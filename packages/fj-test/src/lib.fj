@@ -1,0 +1,219 @@
+// fj-test -- Testing Utilities for Fajar Lang
+//
+// Provides rich assertion helpers, a test-suite runner with pass/fail
+// tracking, and a fixture pattern for setup/teardown.
+
+// ── Assertions ──
+
+/// Assert that two floats are within `eps` of each other.
+fn assert_near(a: f64, b: f64, eps: f64) {
+    let diff = a - b
+    if diff < 0.0 { diff = -diff }
+    if diff > eps {
+        panic("assert_near failed: " + to_string(a) + " vs " + to_string(b) + " (eps=" + to_string(eps) + ")")
+    }
+}
+
+/// Assert that `haystack` contains `needle` as a substring.
+fn assert_contains(haystack: str, needle: str) {
+    if !haystack.contains(needle) {
+        panic("assert_contains failed: \"" + haystack + "\" does not contain \"" + needle + "\"")
+    }
+}
+
+/// Assert that `haystack` starts with `prefix`.
+fn assert_starts_with(haystack: str, prefix: str) {
+    if !haystack.starts_with(prefix) {
+        panic("assert_starts_with failed: \"" + haystack + "\" does not start with \"" + prefix + "\"")
+    }
+}
+
+/// Assert that `haystack` ends with `suffix`.
+fn assert_ends_with(haystack: str, suffix: str) {
+    if !haystack.ends_with(suffix) {
+        panic("assert_ends_with failed: \"" + haystack + "\" does not end with \"" + suffix + "\"")
+    }
+}
+
+/// Assert that a value is true.
+fn assert_true(value: bool, message: str) {
+    if !value {
+        panic("assert_true failed: " + message)
+    }
+}
+
+/// Assert that a value is false.
+fn assert_false(value: bool, message: str) {
+    if value {
+        panic("assert_false failed: " + message)
+    }
+}
+
+/// Assert that two integers are equal.
+fn assert_eq_int(a: i64, b: i64) {
+    if a != b {
+        panic("assert_eq_int failed: " + to_string(a) + " != " + to_string(b))
+    }
+}
+
+/// Assert that two strings are equal.
+fn assert_eq_str(a: str, b: str) {
+    if a != b {
+        panic("assert_eq_str failed: \"" + a + "\" != \"" + b + "\"")
+    }
+}
+
+/// Assert that `a > b` for floats.
+fn assert_greater(a: f64, b: f64) {
+    if a <= b {
+        panic("assert_greater failed: " + to_string(a) + " <= " + to_string(b))
+    }
+}
+
+/// Assert that `a < b` for floats.
+fn assert_less(a: f64, b: f64) {
+    if a >= b {
+        panic("assert_less failed: " + to_string(a) + " >= " + to_string(b))
+    }
+}
+
+// ── Test case ──
+
+enum TestResult {
+    Pass,
+    Fail(str),
+    Skipped,
+}
+
+struct TestCase {
+    name: str,
+    result: TestResult,
+}
+
+/// Create a passing test case.
+fn test_pass(name: str) -> TestCase {
+    TestCase { name: name, result: TestResult::Pass }
+}
+
+/// Create a failing test case with a reason.
+fn test_fail(name: str, reason: str) -> TestCase {
+    TestCase { name: name, result: TestResult::Fail(reason) }
+}
+
+/// Create a skipped test case.
+fn test_skip(name: str) -> TestCase {
+    TestCase { name: name, result: TestResult::Skipped }
+}
+
+/// Check whether a test case passed.
+fn is_pass(tc: TestCase) -> bool {
+    match tc.result {
+        TestResult::Pass => true,
+        _ => false,
+    }
+}
+
+// ── Test suite ──
+
+struct TestSuite {
+    name: str,
+    cases: [TestCase],
+}
+
+/// Create a new empty test suite.
+fn test_suite(name: str) -> TestSuite {
+    TestSuite { name: name, cases: [] }
+}
+
+/// Add a test case to the suite.
+fn add_case(suite: TestSuite, tc: TestCase) -> TestSuite {
+    let mut cases = suite.cases
+    cases.push(tc)
+    TestSuite { name: suite.name, cases: cases }
+}
+
+/// Count passing tests.
+fn pass_count(suite: TestSuite) -> i64 {
+    let mut count = 0
+    for tc in suite.cases {
+        match tc.result {
+            TestResult::Pass => count = count + 1,
+            _ => {},
+        }
+    }
+    count
+}
+
+/// Count failing tests.
+fn fail_count(suite: TestSuite) -> i64 {
+    let mut count = 0
+    for tc in suite.cases {
+        match tc.result {
+            TestResult::Fail(_) => count = count + 1,
+            _ => {},
+        }
+    }
+    count
+}
+
+/// Count skipped tests.
+fn skip_count(suite: TestSuite) -> i64 {
+    let mut count = 0
+    for tc in suite.cases {
+        match tc.result {
+            TestResult::Skipped => count = count + 1,
+            _ => {},
+        }
+    }
+    count
+}
+
+/// Total number of test cases.
+fn total_count(suite: TestSuite) -> i64 {
+    len(suite.cases)
+}
+
+/// Print a summary report of the test suite.
+fn run_tests(suite: TestSuite) {
+    println("=== Test Suite: " + suite.name + " ===")
+    for tc in suite.cases {
+        match tc.result {
+            TestResult::Pass => println("  PASS  " + tc.name),
+            TestResult::Fail(reason) => println("  FAIL  " + tc.name + " -- " + reason),
+            TestResult::Skipped => println("  SKIP  " + tc.name),
+        }
+    }
+    let p = pass_count(suite)
+    let f = fail_count(suite)
+    let s = skip_count(suite)
+    let t = total_count(suite)
+    println("")
+    println("Results: " + to_string(p) + " passed, " + to_string(f) + " failed, " + to_string(s) + " skipped / " + to_string(t) + " total")
+    if f > 0 {
+        println("SUITE FAILED")
+    } else {
+        println("SUITE PASSED")
+    }
+}
+
+// ── Fixture pattern ──
+
+struct Fixture {
+    name: str,
+    data: [str],
+}
+
+/// Create a named fixture with initial string data.
+fn fixture(name: str, data: [str]) -> Fixture {
+    Fixture { name: name, data: data }
+}
+
+/// Retrieve the i-th element of a fixture.
+fn fixture_get(f: Fixture, index: i64) -> str {
+    f.data[index]
+}
+
+/// Return the size of the fixture data.
+fn fixture_len(f: Fixture) -> i64 {
+    len(f.data)
+}

@@ -1,0 +1,9 @@
+[package]
+name = "fj-env"
+version = "1.0.0"
+description = "Environment variables and configuration for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

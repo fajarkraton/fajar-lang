@@ -1,0 +1,251 @@
+// fj-compress — Data Compression for Fajar Lang
+//
+// Implements Run-Length Encoding (RLE) and a simplified LZ77-like
+// sliding window compressor/decompressor. Pure implementation with
+// no external dependencies.
+
+// ── RLE (Run-Length Encoding) ──
+
+/// An RLE run: a byte value repeated `count` times.
+struct RleRun {
+    value: i32,
+    count: i32
+}
+
+/// Encode a byte array using Run-Length Encoding.
+/// Consecutive identical bytes are collapsed into (value, count) pairs.
+fn rle_encode(data: [i32]) -> [RleRun] {
+    let mut runs: [RleRun] = []
+    if len(data) == 0 { return runs }
+
+    let mut current = data[0]
+    let mut count = 1
+
+    for i in 1..len(data) {
+        if data[i] == current && count < 255 {
+            count = count + 1
+        } else {
+            runs = runs + [RleRun { value: current, count: count }]
+            current = data[i]
+            count = 1
+        }
+    }
+    runs = runs + [RleRun { value: current, count: count }]
+    runs
+}
+
+/// Decode RLE runs back into a byte array.
+fn rle_decode(runs: [RleRun]) -> [i32] {
+    let mut data: [i32] = []
+    for run in runs {
+        for _ in 0..run.count {
+            data = data + [run.value]
+        }
+    }
+    data
+}
+
+/// Encode a string using RLE.
+/// Returns a compact string representation: "A3B2C1" for "AAABBC".
+fn rle_encode_str(input: str) -> str {
+    if len(input) == 0 { return "" }
+    let mut result = ""
+    let mut current = input[0]
+    let mut count = 1
+
+    for i in 1..len(input) {
+        if input[i] == current && count < 255 {
+            count = count + 1
+        } else {
+            result = result + to_string(current) + to_string(count)
+            current = input[i]
+            count = 1
+        }
+    }
+    result = result + to_string(current) + to_string(count)
+    result
+}
+
+/// Decode an RLE-encoded string back to the original.
+/// Input: "A3B2C1" => "AAABBC"
+fn rle_decode_str(encoded: str) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < len(encoded) {
+        if i + 1 >= len(encoded) { break }
+        let ch = encoded[i]
+        // Parse the count (may be multi-digit)
+        let mut count = 0
+        let mut j = i + 1
+        while j < len(encoded) && encoded[j] >= '0' && encoded[j] <= '9' {
+            count = count * 10 + (encoded[j] as i32 - '0' as i32)
+            j = j + 1
+        }
+        if count == 0 { count = 1 }
+        for _ in 0..count {
+            result = result + to_string(ch)
+        }
+        i = j
+    }
+    result
+}
+
+// ── LZ77-like compression ──
+
+/// An LZ77 token: either a literal byte or a (distance, length) back-reference.
+struct Lz77Token {
+    is_literal: bool,
+    literal: i32,
+    distance: i32,
+    length: i32
+}
+
+/// Create a literal token.
+fn lz77_literal(byte: i32) -> Lz77Token {
+    Lz77Token { is_literal: true, literal: byte, distance: 0, length: 0 }
+}
+
+/// Create a back-reference token.
+fn lz77_match(dist: i32, len_val: i32) -> Lz77Token {
+    Lz77Token { is_literal: false, literal: 0, distance: dist, length: len_val }
+}
+
+/// Find the longest match in the sliding window.
+/// Returns (distance, length) or (0, 0) if no match of length >= 3.
+fn find_match(data: [i32], pos: i32, window_size: i32) -> Lz77Token {
+    let mut best_dist = 0
+    let mut best_len = 0
+    let start = if pos - window_size > 0 { pos - window_size } else { 0 }
+
+    for i in start..pos {
+        let mut match_len = 0
+        while (pos + match_len) < len(data) as i32 && match_len < 258 {
+            if data[(i + match_len) as usize] == data[(pos + match_len) as usize] {
+                match_len = match_len + 1
+            } else {
+                break
+            }
+        }
+        if match_len >= 3 && match_len > best_len {
+            best_dist = pos - i
+            best_len = match_len
+        }
+    }
+
+    if best_len >= 3 {
+        lz77_match(best_dist, best_len)
+    } else {
+        lz77_literal(0)  // sentinel: no match
+    }
+}
+
+/// Compress byte data using LZ77-like sliding window.
+/// Window size defaults to 4096 bytes.
+fn lz77_compress(data: [i32]) -> [Lz77Token] {
+    let mut tokens: [Lz77Token] = []
+    let window_size = 4096
+    let mut pos = 0
+
+    while pos < len(data) as i32 {
+        let m = find_match(data, pos, window_size)
+        if !m.is_literal && m.length >= 3 {
+            tokens = tokens + [lz77_match(m.distance, m.length)]
+            pos = pos + m.length
+        } else {
+            tokens = tokens + [lz77_literal(data[pos as usize])]
+            pos = pos + 1
+        }
+    }
+    tokens
+}
+
+/// Decompress LZ77 tokens back into byte data.
+fn lz77_decompress(tokens: [Lz77Token]) -> [i32] {
+    let mut output: [i32] = []
+    for token in tokens {
+        if token.is_literal {
+            output = output + [token.literal]
+        } else {
+            let start = len(output) as i32 - token.distance
+            for i in 0..token.length {
+                let idx = (start + i) as usize
+                output = output + [output[idx]]
+            }
+        }
+    }
+    output
+}
+
+// ── High-level API ──
+
+/// Compress a string using RLE (simple, best for repetitive data).
+fn compress(input: str) -> str {
+    rle_encode_str(input)
+}
+
+/// Decompress an RLE-compressed string.
+fn decompress(input: str) -> str {
+    rle_decode_str(input)
+}
+
+/// Calculate the compression ratio (compressed_size / original_size).
+fn compression_ratio(original: str, compressed: str) -> f64 {
+    if len(original) == 0 { return 1.0 }
+    (len(compressed) as f64) / (len(original) as f64)
+}
+
+/// Estimate the entropy of byte data (Shannon entropy in bits).
+fn entropy(data: [i32]) -> f64 {
+    let n = len(data)
+    if n == 0 { return 0.0 }
+
+    // Count frequency of each byte value (0-255)
+    let mut freq: [i32] = []
+    for _ in 0..256 {
+        freq = freq + [0]
+    }
+    for byte in data {
+        let idx = if byte < 0 { 0 } else if byte > 255 { 255 } else { byte }
+        freq[idx as usize] = freq[idx as usize] + 1
+    }
+
+    // H = -sum(p * log2(p))
+    let mut h = 0.0
+    for i in 0..256 {
+        if freq[i] > 0 {
+            let p = (freq[i] as f64) / (n as f64)
+            // log2(p) = ln(p) / ln(2)
+            // Approximate ln(p) using the series: ln(x) = 2 * sum((t^(2k+1))/(2k+1))
+            // where t = (x-1)/(x+1)
+            let t = (p - 1.0) / (p + 1.0)
+            let mut ln_p = 0.0
+            let mut power = t
+            for k in 0..20 {
+                ln_p = ln_p + power / (2 * k + 1) as f64
+                power = power * t * t
+            }
+            ln_p = 2.0 * ln_p
+            let log2_p = ln_p / 0.6931471805599453  // ln(2)
+            h = h - p * log2_p
+        }
+    }
+    h
+}
+
+/// Convert a string to a byte array (character code points).
+fn str_to_bytes(s: str) -> [i32] {
+    let mut bytes: [i32] = []
+    for i in 0..len(s) {
+        bytes = bytes + [s[i] as i32]
+    }
+    bytes
+}
+
+/// Convert a byte array back to a string.
+fn bytes_to_str(bytes: [i32]) -> str {
+    let mut s = ""
+    for b in bytes {
+        s = s + to_string(b as char)
+    }
+    s
+}

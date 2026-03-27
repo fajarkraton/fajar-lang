@@ -1,0 +1,9 @@
+[package]
+name = "fj-bench"
+version = "1.0.0"
+description = "Micro-benchmarking framework for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

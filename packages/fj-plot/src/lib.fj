@@ -1,0 +1,330 @@
+// fj-plot — SVG Plotting and Charting for Fajar Lang
+//
+// Generates SVG markup for line plots, bar charts, and scatter plots.
+// Pure string-based SVG generation with configurable axes, colors,
+// labels, and series support.
+
+// ── Constants ──
+
+const DEFAULT_WIDTH: i32 = 800
+const DEFAULT_HEIGHT: i32 = 400
+const MARGIN_TOP: i32 = 40
+const MARGIN_RIGHT: i32 = 40
+const MARGIN_BOTTOM: i32 = 60
+const MARGIN_LEFT: i32 = 70
+
+// ── Data types ──
+
+/// A single data point.
+struct Point {
+    x: f64,
+    y: f64
+}
+
+/// A data series with a name, color, and points.
+struct Series {
+    name: str,
+    color: str,
+    points: [Point]
+}
+
+/// Create a new series.
+fn series_new(name: str, color: str) -> Series {
+    Series { name: name, color: color, points: [] }
+}
+
+/// Add a point to a series.
+fn series_add(s: Series, x: f64, y: f64) -> Series {
+    let mut result = s
+    result.points = result.points + [Point { x: x, y: y }]
+    result
+}
+
+/// Create a series from parallel x and y arrays.
+fn series_from_arrays(name: str, color: str, xs: [f64], ys: [f64]) -> Series {
+    let mut s = series_new(name, color)
+    let n = if len(xs) < len(ys) { len(xs) } else { len(ys) }
+    for i in 0..n {
+        s = series_add(s, xs[i], ys[i])
+    }
+    s
+}
+
+// ── Plot configuration ──
+
+/// Plot configuration and data container.
+struct Plot {
+    title: str,
+    x_label: str,
+    y_label: str,
+    width: i32,
+    height: i32,
+    series_list: [Series],
+    show_grid: bool,
+    show_legend: bool,
+    background: str
+}
+
+/// Create a new plot with default settings.
+fn plot_new(title: str) -> Plot {
+    Plot {
+        title: title,
+        x_label: "X",
+        y_label: "Y",
+        width: DEFAULT_WIDTH,
+        height: DEFAULT_HEIGHT,
+        series_list: [],
+        show_grid: true,
+        show_legend: true,
+        background: "#ffffff"
+    }
+}
+
+/// Set axis labels.
+fn set_labels(p: Plot, x_label: str, y_label: str) -> Plot {
+    let mut result = p
+    result.x_label = x_label
+    result.y_label = y_label
+    result
+}
+
+/// Set plot dimensions.
+fn set_size(p: Plot, width: i32, height: i32) -> Plot {
+    let mut result = p
+    result.width = width
+    result.height = height
+    result
+}
+
+/// Add a series to the plot.
+fn add_series(p: Plot, s: Series) -> Plot {
+    let mut result = p
+    result.series_list = result.series_list + [s]
+    result
+}
+
+// ── Data range computation ──
+
+/// Find min and max values across all series.
+fn compute_bounds(series_list: [Series]) -> (f64, f64, f64, f64) {
+    let mut x_min = 1.0e30
+    let mut x_max = -1.0e30
+    let mut y_min = 1.0e30
+    let mut y_max = -1.0e30
+    for s in series_list {
+        for pt in s.points {
+            if pt.x < x_min { x_min = pt.x }
+            if pt.x > x_max { x_max = pt.x }
+            if pt.y < y_min { y_min = pt.y }
+            if pt.y > y_max { y_max = pt.y }
+        }
+    }
+    // Add 5% padding
+    let x_pad = (x_max - x_min) * 0.05
+    let y_pad = (y_max - y_min) * 0.05
+    if x_pad == 0.0 { x_min = x_min - 1.0; x_max = x_max + 1.0 }
+    else { x_min = x_min - x_pad; x_max = x_max + x_pad }
+    if y_pad == 0.0 { y_min = y_min - 1.0; y_max = y_max + 1.0 }
+    else { y_min = y_min - y_pad; y_max = y_max + y_pad }
+    (x_min, x_max, y_min, y_max)
+}
+
+// ── Coordinate mapping ──
+
+/// Map a data x value to SVG pixel x.
+fn map_x(val: f64, x_min: f64, x_max: f64, width: i32) -> f64 {
+    let plot_w = (width - MARGIN_LEFT - MARGIN_RIGHT) as f64
+    MARGIN_LEFT as f64 + (val - x_min) / (x_max - x_min) * plot_w
+}
+
+/// Map a data y value to SVG pixel y (inverted because SVG y grows downward).
+fn map_y(val: f64, y_min: f64, y_max: f64, height: i32) -> f64 {
+    let plot_h = (height - MARGIN_TOP - MARGIN_BOTTOM) as f64
+    (height - MARGIN_BOTTOM) as f64 - (val - y_min) / (y_max - y_min) * plot_h
+}
+
+// ── Number formatting ──
+
+/// Format a float to a string with limited decimal places.
+fn fmt_num(v: f64) -> str {
+    let int_part = v as i64
+    let frac = v - (int_part as f64)
+    let frac_abs = if frac < 0.0 { -frac } else { frac }
+    let frac_2 = (frac_abs * 100.0) as i64
+    if frac_2 == 0 {
+        to_string(int_part)
+    } else {
+        let frac_str = if frac_2 < 10 { "0" + to_string(frac_2) } else { to_string(frac_2) }
+        to_string(int_part) + "." + frac_str
+    }
+}
+
+// ── SVG generation ──
+
+/// Generate SVG header.
+fn svg_header(width: i32, height: i32, bg: str) -> str {
+    let mut s = "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+    s = s + "width=\"" + to_string(width) + "\" height=\"" + to_string(height) + "\">\n"
+    s = s + "<rect width=\"100%\" height=\"100%\" fill=\"" + bg + "\"/>\n"
+    s
+}
+
+/// Generate SVG grid lines.
+fn svg_grid(x_min: f64, x_max: f64, y_min: f64, y_max: f64, width: i32, height: i32) -> str {
+    let mut s = "<g stroke=\"#e0e0e0\" stroke-width=\"1\">\n"
+    // Horizontal grid lines (5 lines)
+    for i in 0..6 {
+        let y_val = y_min + (y_max - y_min) * (i as f64) / 5.0
+        let py = map_y(y_val, y_min, y_max, height)
+        s = s + "  <line x1=\"" + to_string(MARGIN_LEFT) + "\" y1=\"" + fmt_num(py)
+        s = s + "\" x2=\"" + to_string(width - MARGIN_RIGHT) + "\" y2=\"" + fmt_num(py) + "\"/>\n"
+        // Y-axis label
+        s = s + "  <text x=\"" + to_string(MARGIN_LEFT - 10) + "\" y=\"" + fmt_num(py + 4.0)
+        s = s + "\" text-anchor=\"end\" font-size=\"11\" fill=\"#666\">" + fmt_num(y_val) + "</text>\n"
+    }
+    // Vertical grid lines (5 lines)
+    for i in 0..6 {
+        let x_val = x_min + (x_max - x_min) * (i as f64) / 5.0
+        let px = map_x(x_val, x_min, x_max, width)
+        s = s + "  <line x1=\"" + fmt_num(px) + "\" y1=\"" + to_string(MARGIN_TOP)
+        s = s + "\" x2=\"" + fmt_num(px) + "\" y2=\"" + to_string(height - MARGIN_BOTTOM) + "\"/>\n"
+        // X-axis label
+        s = s + "  <text x=\"" + fmt_num(px) + "\" y=\"" + to_string(height - MARGIN_BOTTOM + 20)
+        s = s + "\" text-anchor=\"middle\" font-size=\"11\" fill=\"#666\">" + fmt_num(x_val) + "</text>\n"
+    }
+    s = s + "</g>\n"
+    s
+}
+
+/// Generate a line plot SVG.
+fn line_plot(p: Plot) -> str {
+    let (x_min, x_max, y_min, y_max) = compute_bounds(p.series_list)
+    let mut svg = svg_header(p.width, p.height, p.background)
+
+    // Title
+    svg = svg + "<text x=\"" + to_string(p.width / 2) + "\" y=\"25\" text-anchor=\"middle\" "
+    svg = svg + "font-size=\"16\" font-weight=\"bold\" fill=\"#333\">" + p.title + "</text>\n"
+
+    // Grid
+    if p.show_grid {
+        svg = svg + svg_grid(x_min, x_max, y_min, y_max, p.width, p.height)
+    }
+
+    // Axis labels
+    svg = svg + "<text x=\"" + to_string(p.width / 2) + "\" y=\"" + to_string(p.height - 10)
+    svg = svg + "\" text-anchor=\"middle\" font-size=\"13\" fill=\"#333\">" + p.x_label + "</text>\n"
+    svg = svg + "<text x=\"15\" y=\"" + to_string(p.height / 2)
+    svg = svg + "\" text-anchor=\"middle\" font-size=\"13\" fill=\"#333\" "
+    svg = svg + "transform=\"rotate(-90,15," + to_string(p.height / 2) + ")\">" + p.y_label + "</text>\n"
+
+    // Draw each series as a polyline
+    for si in 0..len(p.series_list) {
+        let s = p.series_list[si]
+        svg = svg + "<polyline fill=\"none\" stroke=\"" + s.color + "\" stroke-width=\"2\" points=\""
+        for pt in s.points {
+            let px = map_x(pt.x, x_min, x_max, p.width)
+            let py = map_y(pt.y, y_min, y_max, p.height)
+            svg = svg + fmt_num(px) + "," + fmt_num(py) + " "
+        }
+        svg = svg + "\"/>\n"
+    }
+
+    // Legend
+    if p.show_legend && len(p.series_list) > 0 {
+        svg = svg + "<g font-size=\"12\">\n"
+        for si in 0..len(p.series_list) {
+            let s = p.series_list[si]
+            let ly = MARGIN_TOP + 10 + si * 20
+            svg = svg + "  <rect x=\"" + to_string(p.width - MARGIN_RIGHT - 100) + "\" y=\""
+            svg = svg + to_string(ly) + "\" width=\"12\" height=\"12\" fill=\"" + s.color + "\"/>\n"
+            svg = svg + "  <text x=\"" + to_string(p.width - MARGIN_RIGHT - 84) + "\" y=\""
+            svg = svg + to_string(ly + 11) + "\" fill=\"#333\">" + s.name + "</text>\n"
+        }
+        svg = svg + "</g>\n"
+    }
+
+    svg = svg + "</svg>"
+    svg
+}
+
+/// Generate a bar chart SVG.
+fn bar_plot(p: Plot) -> str {
+    let (x_min, x_max, y_min_raw, y_max) = compute_bounds(p.series_list)
+    let y_min = if y_min_raw > 0.0 { 0.0 } else { y_min_raw }
+    let mut svg = svg_header(p.width, p.height, p.background)
+
+    // Title
+    svg = svg + "<text x=\"" + to_string(p.width / 2) + "\" y=\"25\" text-anchor=\"middle\" "
+    svg = svg + "font-size=\"16\" font-weight=\"bold\" fill=\"#333\">" + p.title + "</text>\n"
+
+    if p.show_grid {
+        svg = svg + svg_grid(x_min, x_max, y_min, y_max, p.width, p.height)
+    }
+
+    // Draw bars for each series
+    let num_series = len(p.series_list)
+    for si in 0..num_series {
+        let s = p.series_list[si]
+        let n = len(s.points)
+        if n == 0 { continue }
+        let plot_w = (p.width - MARGIN_LEFT - MARGIN_RIGHT) as f64
+        let bar_group_w = plot_w / (n as f64)
+        let bar_w = bar_group_w * 0.7 / (num_series as f64)
+
+        for pi in 0..n {
+            let pt = s.points[pi]
+            let base_x = MARGIN_LEFT as f64 + (pi as f64) * bar_group_w + bar_group_w * 0.15
+            let bx = base_x + (si as f64) * bar_w
+            let by_top = map_y(pt.y, y_min, y_max, p.height)
+            let by_base = map_y(0.0, y_min, y_max, p.height)
+            let bh = by_base - by_top
+            svg = svg + "<rect x=\"" + fmt_num(bx) + "\" y=\"" + fmt_num(by_top)
+            svg = svg + "\" width=\"" + fmt_num(bar_w) + "\" height=\"" + fmt_num(bh)
+            svg = svg + "\" fill=\"" + s.color + "\" opacity=\"0.85\"/>\n"
+        }
+    }
+
+    svg = svg + "</svg>"
+    svg
+}
+
+/// Generate a scatter plot SVG.
+fn scatter(p: Plot) -> str {
+    let (x_min, x_max, y_min, y_max) = compute_bounds(p.series_list)
+    let mut svg = svg_header(p.width, p.height, p.background)
+
+    // Title
+    svg = svg + "<text x=\"" + to_string(p.width / 2) + "\" y=\"25\" text-anchor=\"middle\" "
+    svg = svg + "font-size=\"16\" font-weight=\"bold\" fill=\"#333\">" + p.title + "</text>\n"
+
+    if p.show_grid {
+        svg = svg + svg_grid(x_min, x_max, y_min, y_max, p.width, p.height)
+    }
+
+    // Draw points
+    for s in p.series_list {
+        for pt in s.points {
+            let px = map_x(pt.x, x_min, x_max, p.width)
+            let py = map_y(pt.y, y_min, y_max, p.height)
+            svg = svg + "<circle cx=\"" + fmt_num(px) + "\" cy=\"" + fmt_num(py)
+            svg = svg + "\" r=\"4\" fill=\"" + s.color + "\" opacity=\"0.7\"/>\n"
+        }
+    }
+
+    svg = svg + "</svg>"
+    svg
+}
+
+/// Save the SVG string to a file.
+fn to_svg(p: Plot, filename: str) {
+    let svg_content = line_plot(p)
+    write_file(filename, svg_content)
+}
+
+/// Predefined color palette for multiple series.
+fn palette(index: i32) -> str {
+    let colors = ["#2196F3", "#F44336", "#4CAF50", "#FF9800", "#9C27B0",
+                  "#00BCD4", "#795548", "#607D8B", "#E91E63", "#3F51B5"]
+    let i = index % len(colors) as i32
+    colors[i as usize]
+}

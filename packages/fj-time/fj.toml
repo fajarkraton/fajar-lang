@@ -1,0 +1,9 @@
+[package]
+name = "fj-time"
+version = "1.0.0"
+description = "Date/Time: DateTime struct, duration arithmetic, formatting, leap year checks"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

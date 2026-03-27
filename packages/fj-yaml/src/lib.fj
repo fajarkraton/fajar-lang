@@ -1,0 +1,255 @@
+// fj-yaml -- YAML Parser for Fajar Lang
+//
+// Parses YAML documents with indent-based structure.  Supports
+// scalars (string, int, float, bool, null), sequences (- item),
+// and mappings (key: value).
+
+// ── Value types ──
+
+enum YamlValue {
+    Null,
+    Str(str),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Sequence([YamlValue]),
+    Mapping([YamlPair]),
+}
+
+struct YamlPair {
+    key: str,
+    value: YamlValue,
+}
+
+// ── Construction helpers ──
+
+fn yaml_null() -> YamlValue { YamlValue::Null }
+fn yaml_str(s: str) -> YamlValue { YamlValue::Str(s) }
+fn yaml_int(n: i64) -> YamlValue { YamlValue::Int(n) }
+fn yaml_float(f: f64) -> YamlValue { YamlValue::Float(f) }
+fn yaml_bool(b: bool) -> YamlValue { YamlValue::Bool(b) }
+fn yaml_seq(items: [YamlValue]) -> YamlValue { YamlValue::Sequence(items) }
+fn yaml_map(pairs: [YamlPair]) -> YamlValue { YamlValue::Mapping(pairs) }
+
+fn yaml_pair(key: str, value: YamlValue) -> YamlPair {
+    YamlPair { key: key, value: value }
+}
+
+// ── Accessors ──
+
+/// Get a value from a mapping by key.
+fn yaml_get(mapping: YamlValue, key: str) -> YamlValue {
+    match mapping {
+        YamlValue::Mapping(pairs) => {
+            for p in pairs {
+                if p.key == key { return p.value }
+            }
+            YamlValue::Null
+        },
+        _ => YamlValue::Null,
+    }
+}
+
+/// Get a string from a mapping by key.
+fn yaml_get_str(mapping: YamlValue, key: str) -> str {
+    match yaml_get(mapping, key) {
+        YamlValue::Str(s) => s,
+        _ => "",
+    }
+}
+
+/// Get an integer from a mapping.
+fn yaml_get_int(mapping: YamlValue, key: str) -> i64 {
+    match yaml_get(mapping, key) {
+        YamlValue::Int(n) => n,
+        _ => 0,
+    }
+}
+
+/// Get a boolean from a mapping.
+fn yaml_get_bool(mapping: YamlValue, key: str) -> bool {
+    match yaml_get(mapping, key) {
+        YamlValue::Bool(b) => b,
+        _ => false,
+    }
+}
+
+/// Get a sequence from a mapping.
+fn yaml_get_seq(mapping: YamlValue, key: str) -> [YamlValue] {
+    match yaml_get(mapping, key) {
+        YamlValue::Sequence(items) => items,
+        _ => [],
+    }
+}
+
+// ── Parser helpers ──
+
+/// Count leading spaces on a line (indent level).
+fn indent_level(line: str) -> i64 {
+    let mut count = 0
+    for i in 0..len(line) {
+        if line[i] == " " { count = count + 1 }
+        else { break }
+    }
+    count
+}
+
+/// Strip leading spaces.
+fn strip_indent(line: str) -> str {
+    let il = indent_level(line)
+    line[il..len(line)]
+}
+
+/// Try to parse a scalar string into the best-fit YamlValue.
+fn parse_scalar(s: str) -> YamlValue {
+    let trimmed = s.trim()
+    if trimmed == "null" || trimmed == "~" || trimmed == "" {
+        return YamlValue::Null
+    }
+    if trimmed == "true" || trimmed == "yes" { return yaml_bool(true) }
+    if trimmed == "false" || trimmed == "no" { return yaml_bool(false) }
+
+    // Quoted string
+    let n = len(trimmed)
+    if n >= 2 {
+        if (trimmed[0] == "\"" && trimmed[n - 1] == "\"") ||
+           (trimmed[0] == "'" && trimmed[n - 1] == "'") {
+            return yaml_str(trimmed[1..n - 1])
+        }
+    }
+
+    // Float (contains '.')
+    if trimmed.contains(".") {
+        return yaml_float(parse_float(trimmed))
+    }
+
+    // Try integer
+    let as_int = parse_int(trimmed)
+    if to_string(as_int) == trimmed {
+        return yaml_int(as_int)
+    }
+
+    // Default to string
+    yaml_str(trimmed)
+}
+
+// ── Line-based parser ──
+
+struct ParseState {
+    lines: [str],
+    pos: i64,
+}
+
+/// Parse lines starting at `state.pos` with a minimum indent of `min_indent`.
+/// Returns a YamlValue and advances the position.
+fn parse_block(state: ParseState, min_indent: i64) -> YamlValue {
+    let n = len(state.lines)
+    if state.pos >= n { return YamlValue::Null }
+
+    let first_line = state.lines[state.pos]
+    let stripped = strip_indent(first_line)
+
+    // Is it a sequence item?
+    if stripped.starts_with("- ") {
+        let mut items: [YamlValue] = []
+        while state.pos < n {
+            let line = state.lines[state.pos]
+            let il = indent_level(line)
+            if il < min_indent { break }
+            let sl = strip_indent(line)
+            if !sl.starts_with("- ") { break }
+            let val_str = sl[2..len(sl)]
+            items.push(parse_scalar(val_str))
+            state.pos = state.pos + 1
+        }
+        return yaml_seq(items)
+    }
+
+    // Is it a mapping?
+    if stripped.contains(": ") || stripped.ends_with(":") {
+        let mut pairs: [YamlPair] = []
+        while state.pos < n {
+            let line = state.lines[state.pos]
+            let il = indent_level(line)
+            if il < min_indent { break }
+            let sl = strip_indent(line)
+            if len(sl) == 0 || sl[0] == "#" {
+                state.pos = state.pos + 1
+                continue
+            }
+            let colon_parts = sl.split(": ")
+            if len(colon_parts) >= 2 {
+                let key = colon_parts[0].trim()
+                let mut val_part = colon_parts[1]
+                for j in 2..len(colon_parts) {
+                    val_part = val_part + ": " + colon_parts[j]
+                }
+                pairs.push(yaml_pair(key, parse_scalar(val_part)))
+            } else if sl.ends_with(":") {
+                let key = sl[0..len(sl) - 1].trim()
+                state.pos = state.pos + 1
+                // Parse nested block at deeper indent
+                let nested = parse_block(state, il + 2)
+                pairs.push(yaml_pair(key, nested))
+                continue
+            }
+            state.pos = state.pos + 1
+        }
+        return yaml_map(pairs)
+    }
+
+    // Scalar
+    state.pos = state.pos + 1
+    parse_scalar(stripped)
+}
+
+/// Parse a YAML document string.
+fn parse_yaml(source: str) -> YamlValue {
+    let raw_lines = source.split("\n")
+    let mut lines: [str] = []
+    for line in raw_lines {
+        // Keep all lines including empty (for structure)
+        lines.push(line)
+    }
+    let state = ParseState { lines: lines, pos: 0 }
+    parse_block(state, 0)
+}
+
+// ── Serialization ──
+
+/// Serialize a YamlValue back to a YAML string.
+fn to_yaml(val: YamlValue) -> str {
+    to_yaml_indent(val, 0)
+}
+
+fn to_yaml_indent(val: YamlValue, indent: i64) -> str {
+    let sp = repeat_spaces(indent)
+    match val {
+        YamlValue::Null     => "null",
+        YamlValue::Str(s)   => s,
+        YamlValue::Int(n)   => to_string(n),
+        YamlValue::Float(f) => to_string(f),
+        YamlValue::Bool(b)  => if b { "true" } else { "false" },
+        YamlValue::Sequence(items) => {
+            let mut out = ""
+            for item in items {
+                out = out + sp + "- " + to_yaml_indent(item, indent + 2) + "\n"
+            }
+            out
+        },
+        YamlValue::Mapping(pairs) => {
+            let mut out = ""
+            for p in pairs {
+                out = out + sp + p.key + ": " + to_yaml_indent(p.value, indent + 2) + "\n"
+            }
+            out
+        },
+    }
+}
+
+/// Generate `n` spaces.
+fn repeat_spaces(n: i64) -> str {
+    let mut s = ""
+    for _ in 0..n { s = s + " " }
+    s
+}

@@ -1,0 +1,9 @@
+[package]
+name = "fj-mqtt"
+version = "1.0.0"
+description = "MQTT client protocol for Fajar Lang IoT applications"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

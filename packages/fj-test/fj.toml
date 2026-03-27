@@ -1,0 +1,9 @@
+[package]
+name = "fj-test"
+version = "1.0.0"
+description = "Testing utilities: assertions, test suites, fixtures, and result reporting"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

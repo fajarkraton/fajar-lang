@@ -1,0 +1,273 @@
+// fj-web -- Web Framework for Fajar Lang
+//
+// Provides routing, middleware, Request/Response types, and
+// JSON response helpers.  Designed for building HTTP APIs.
+
+// ── HTTP method ──
+
+enum HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    PATCH,
+    HEAD,
+    OPTIONS,
+}
+
+/// Convert a method enum to its string representation.
+fn method_to_str(m: HttpMethod) -> str {
+    match m {
+        HttpMethod::GET     => "GET",
+        HttpMethod::POST    => "POST",
+        HttpMethod::PUT     => "PUT",
+        HttpMethod::DELETE  => "DELETE",
+        HttpMethod::PATCH   => "PATCH",
+        HttpMethod::HEAD    => "HEAD",
+        HttpMethod::OPTIONS => "OPTIONS",
+    }
+}
+
+/// Parse a string into an HttpMethod.  Defaults to GET for unknown.
+fn str_to_method(s: str) -> HttpMethod {
+    if s == "POST"    { return HttpMethod::POST }
+    if s == "PUT"     { return HttpMethod::PUT }
+    if s == "DELETE"  { return HttpMethod::DELETE }
+    if s == "PATCH"   { return HttpMethod::PATCH }
+    if s == "HEAD"    { return HttpMethod::HEAD }
+    if s == "OPTIONS" { return HttpMethod::OPTIONS }
+    HttpMethod::GET
+}
+
+// ── Header ──
+
+struct Header {
+    name: str,
+    value: str,
+}
+
+/// Create a header.
+fn header(name: str, value: str) -> Header {
+    Header { name: name, value: value }
+}
+
+/// Find a header value by name (case-sensitive).  Returns "" if not found.
+fn find_header(headers: [Header], name: str) -> str {
+    for h in headers {
+        if h.name == name { return h.value }
+    }
+    ""
+}
+
+// ── Request ──
+
+struct Request {
+    method: HttpMethod,
+    path: str,
+    headers: [Header],
+    body: str,
+    query_string: str,
+}
+
+/// Build a request.
+fn request(method: HttpMethod, path: str, body: str) -> Request {
+    Request {
+        method: method,
+        path: path,
+        headers: [],
+        body: body,
+        query_string: "",
+    }
+}
+
+/// Add a header to the request.
+fn with_header(req: Request, name: str, value: str) -> Request {
+    let mut headers = req.headers
+    headers.push(Header { name: name, value: value })
+    Request {
+        method: req.method,
+        path: req.path,
+        headers: headers,
+        body: req.body,
+        query_string: req.query_string,
+    }
+}
+
+/// Set query string on the request.
+fn with_query(req: Request, qs: str) -> Request {
+    Request {
+        method: req.method,
+        path: req.path,
+        headers: req.headers,
+        body: req.body,
+        query_string: qs,
+    }
+}
+
+// ── Response ──
+
+struct Response {
+    status: i64,
+    headers: [Header],
+    body: str,
+}
+
+/// Create a response with a status code and body.
+fn response(status: i64, body: str) -> Response {
+    Response { status: status, headers: [], body: body }
+}
+
+/// Add a header to the response.
+fn response_header(resp: Response, name: str, value: str) -> Response {
+    let mut headers = resp.headers
+    headers.push(Header { name: name, value: value })
+    Response { status: resp.status, headers: headers, body: resp.body }
+}
+
+/// Create a 200 OK response.
+fn ok(body: str) -> Response {
+    response(200, body)
+}
+
+/// Create a 201 Created response.
+fn created(body: str) -> Response {
+    response(201, body)
+}
+
+/// Create a 204 No Content response.
+fn no_content() -> Response {
+    response(204, "")
+}
+
+/// Create a 400 Bad Request response.
+fn bad_request(message: str) -> Response {
+    response(400, message)
+}
+
+/// Create a 404 Not Found response.
+fn not_found() -> Response {
+    response(404, "Not Found")
+}
+
+/// Create a 500 Internal Server Error response.
+fn internal_error(message: str) -> Response {
+    response(500, message)
+}
+
+/// Create a JSON response with the correct Content-Type header.
+fn json_response(status: i64, json_body: str) -> Response {
+    let resp = response(status, json_body)
+    response_header(resp, "Content-Type", "application/json")
+}
+
+/// Create a redirect response (302 Found).
+fn redirect(location: str) -> Response {
+    let resp = response(302, "")
+    response_header(resp, "Location", location)
+}
+
+// ── Routing ──
+
+struct Route {
+    method: HttpMethod,
+    pattern: str,
+    handler_name: str,
+}
+
+struct Router {
+    routes: [Route],
+    middleware: [str],
+    prefix: str,
+}
+
+/// Create a new empty router.
+fn router_new() -> Router {
+    Router { routes: [], middleware: [], prefix: "" }
+}
+
+/// Create a router with a path prefix.
+fn router_with_prefix(prefix: str) -> Router {
+    Router { routes: [], middleware: [], prefix: prefix }
+}
+
+/// Register a route with a method, pattern, and handler name.
+fn route(r: Router, method: HttpMethod, pattern: str, handler_name: str) -> Router {
+    let full_pattern = r.prefix + pattern
+    let rt = Route { method: method, pattern: full_pattern, handler_name: handler_name }
+    let mut routes = r.routes
+    routes.push(rt)
+    Router { routes: routes, middleware: r.middleware, prefix: r.prefix }
+}
+
+/// Shorthand for GET route.
+fn get(r: Router, pattern: str, handler: str) -> Router {
+    route(r, HttpMethod::GET, pattern, handler)
+}
+
+/// Shorthand for POST route.
+fn post(r: Router, pattern: str, handler: str) -> Router {
+    route(r, HttpMethod::POST, pattern, handler)
+}
+
+/// Shorthand for PUT route.
+fn put(r: Router, pattern: str, handler: str) -> Router {
+    route(r, HttpMethod::PUT, pattern, handler)
+}
+
+/// Shorthand for DELETE route.
+fn delete(r: Router, pattern: str, handler: str) -> Router {
+    route(r, HttpMethod::DELETE, pattern, handler)
+}
+
+/// Add a middleware name to the router.
+fn use_middleware(r: Router, mw_name: str) -> Router {
+    let mut middleware = r.middleware
+    middleware.push(mw_name)
+    Router { routes: r.routes, middleware: middleware, prefix: r.prefix }
+}
+
+// ── Route matching ──
+
+/// Check whether a request path matches a route pattern.
+/// Supports exact match and simple `:param` segments.
+fn path_matches(pattern: str, path: str) -> bool {
+    let pat_parts = pattern.split("/")
+    let path_parts = path.split("/")
+    if len(pat_parts) != len(path_parts) { return false }
+    for i in 0..len(pat_parts) {
+        let pp = pat_parts[i]
+        if pp.starts_with(":") { continue }
+        if pp != path_parts[i] { return false }
+    }
+    true
+}
+
+/// Find the handler name for a given request.  Returns "" if no match.
+fn match_route(router: Router, req: Request) -> str {
+    let req_method = method_to_str(req.method)
+    for rt in router.routes {
+        let rt_method = method_to_str(rt.method)
+        if rt_method == req_method && path_matches(rt.pattern, req.path) {
+            return rt.handler_name
+        }
+    }
+    ""
+}
+
+/// Extract a path parameter value by name from a pattern/path pair.
+fn path_param(pattern: str, path: str, param_name: str) -> str {
+    let pat_parts = pattern.split("/")
+    let path_parts = path.split("/")
+    for i in 0..len(pat_parts) {
+        let pp = pat_parts[i]
+        if pp == ":" + param_name {
+            return path_parts[i]
+        }
+    }
+    ""
+}
+
+/// Count registered routes.
+fn route_count(router: Router) -> i64 {
+    len(router.routes)
+}

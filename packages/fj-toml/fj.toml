@@ -1,0 +1,9 @@
+[package]
+name = "fj-toml"
+version = "1.0.0"
+description = "TOML parser: parse, access, and construct TOML documents"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

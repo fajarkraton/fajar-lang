@@ -1,0 +1,9 @@
+[package]
+name = "fj-cli-fw"
+version = "1.0.0"
+description = "CLI framework: argument parsing, subcommand routing, flags, and help generation"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

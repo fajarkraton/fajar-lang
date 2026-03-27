@@ -1,0 +1,9 @@
+[package]
+name = "fj-async"
+version = "1.0.0"
+description = "Async runtime primitives: tasks, channels, timers, and spawn/await simulation"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

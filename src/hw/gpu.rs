@@ -310,9 +310,11 @@ impl GpuDiscovery {
             .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceGet"))?;
         let cu_device_get_name: CuDeviceGetNameFn = *unsafe { lib.get(b"cuDeviceGetName\0") }
             .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceGetName"))?;
+        // SAFETY: CUDA driver API symbol lookup — null-terminated name, error handled
         let cu_device_get_attribute: CuDeviceGetAttributeFn =
             *unsafe { lib.get(b"cuDeviceGetAttribute\0") }
                 .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceGetAttribute"))?;
+        // SAFETY: CUDA driver API symbol lookup — null-terminated name, error handled
         let cu_device_total_mem: CuDeviceTotalMemFn = *unsafe { lib.get(b"cuDeviceTotalMem_v2\0") }
             .map_err(|_| GpuDetectError::SymbolNotFound("cuDeviceTotalMem_v2"))?;
 

@@ -1,0 +1,9 @@
+[package]
+name = "fj-serial"
+version = "1.0.0"
+description = "Serialization: JSON and TLV binary encoding/decoding"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

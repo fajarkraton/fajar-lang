@@ -1,0 +1,385 @@
+// fj-sensor — Sensor Fusion Algorithms for Fajar Lang
+//
+// Provides 3D vector math, quaternion representation, 1D Kalman
+// filter, complementary filter, and Madgwick AHRS algorithm for
+// IMU sensor fusion. Pure implementation for embedded use.
+
+// ── 3D Vector ──
+
+/// A 3D vector (x, y, z).
+struct Vec3 {
+    x: f64,
+    y: f64,
+    z: f64
+}
+
+/// Create a zero vector.
+fn vec3_zero() -> Vec3 {
+    Vec3 { x: 0.0, y: 0.0, z: 0.0 }
+}
+
+/// Create a vector from components.
+fn vec3_new(x: f64, y: f64, z: f64) -> Vec3 {
+    Vec3 { x: x, y: y, z: z }
+}
+
+/// Add two vectors.
+fn vec3_add(a: Vec3, b: Vec3) -> Vec3 {
+    Vec3 { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
+}
+
+/// Subtract two vectors.
+fn vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
+    Vec3 { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
+}
+
+/// Scale a vector by a scalar.
+fn vec3_scale(v: Vec3, s: f64) -> Vec3 {
+    Vec3 { x: v.x * s, y: v.y * s, z: v.z * s }
+}
+
+/// Dot product of two vectors.
+fn vec3_dot(a: Vec3, b: Vec3) -> f64 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+/// Cross product of two vectors.
+fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
+    Vec3 {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    }
+}
+
+/// Magnitude (length) of a vector.
+fn vec3_magnitude(v: Vec3) -> f64 {
+    sqrt_approx(v.x * v.x + v.y * v.y + v.z * v.z)
+}
+
+/// Normalize a vector to unit length.
+fn vec3_normalize(v: Vec3) -> Vec3 {
+    let m = vec3_magnitude(v)
+    if m < 0.000001 { return vec3_zero() }
+    vec3_scale(v, 1.0 / m)
+}
+
+/// Square root approximation using Newton's method.
+fn sqrt_approx(x: f64) -> f64 {
+    if x <= 0.0 { return 0.0 }
+    let mut guess = x / 2.0
+    for _ in 0..32 {
+        guess = (guess + x / guess) / 2.0
+    }
+    guess
+}
+
+// ── Quaternion ──
+
+/// A unit quaternion representing 3D rotation.
+/// Convention: q = w + xi + yj + zk
+struct Quaternion {
+    w: f64,
+    x: f64,
+    y: f64,
+    z: f64
+}
+
+/// Create an identity quaternion (no rotation).
+fn quat_identity() -> Quaternion {
+    Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 }
+}
+
+/// Create a quaternion from components.
+fn quat_new(w: f64, x: f64, y: f64, z: f64) -> Quaternion {
+    Quaternion { w: w, x: x, y: y, z: z }
+}
+
+/// Quaternion multiplication (Hamilton product).
+fn quat_mul(a: Quaternion, b: Quaternion) -> Quaternion {
+    Quaternion {
+        w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+        x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
+    }
+}
+
+/// Quaternion conjugate.
+fn quat_conjugate(q: Quaternion) -> Quaternion {
+    Quaternion { w: q.w, x: -q.x, y: -q.y, z: -q.z }
+}
+
+/// Quaternion norm (magnitude).
+fn quat_norm(q: Quaternion) -> f64 {
+    sqrt_approx(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+}
+
+/// Normalize a quaternion to unit length.
+fn quat_normalize(q: Quaternion) -> Quaternion {
+    let n = quat_norm(q)
+    if n < 0.000001 { return quat_identity() }
+    Quaternion { w: q.w / n, x: q.x / n, y: q.y / n, z: q.z / n }
+}
+
+/// Rotate a vector by a quaternion: v' = q * v * q^-1
+fn quat_rotate(q: Quaternion, v: Vec3) -> Vec3 {
+    let qv = Quaternion { w: 0.0, x: v.x, y: v.y, z: v.z }
+    let result = quat_mul(quat_mul(q, qv), quat_conjugate(q))
+    Vec3 { x: result.x, y: result.y, z: result.z }
+}
+
+/// Convert quaternion to Euler angles (roll, pitch, yaw) in radians.
+fn quat_to_euler(q: Quaternion) -> Vec3 {
+    // Roll (x-axis rotation)
+    let sinr = 2.0 * (q.w * q.x + q.y * q.z)
+    let cosr = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+    let roll = atan2_approx(sinr, cosr)
+
+    // Pitch (y-axis rotation)
+    let sinp = 2.0 * (q.w * q.y - q.z * q.x)
+    let pitch = if sinp > 1.0 { 1.5707963 }
+                else if sinp < -1.0 { -1.5707963 }
+                else { asin_approx(sinp) }
+
+    // Yaw (z-axis rotation)
+    let siny = 2.0 * (q.w * q.z + q.x * q.y)
+    let cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    let yaw = atan2_approx(siny, cosy)
+
+    Vec3 { x: roll, y: pitch, z: yaw }
+}
+
+/// Approximate atan2 using a polynomial.
+fn atan2_approx(y: f64, x: f64) -> f64 {
+    let pi = 3.141592653589793
+    if x == 0.0 {
+        if y > 0.0 { return pi / 2.0 }
+        if y < 0.0 { return -pi / 2.0 }
+        return 0.0
+    }
+    let ratio = y / x
+    let atan_val = atan_approx(ratio)
+    if x > 0.0 { atan_val }
+    else if y >= 0.0 { atan_val + pi }
+    else { atan_val - pi }
+}
+
+/// Approximate atan using a rational approximation.
+fn atan_approx(x: f64) -> f64 {
+    let pi_half = 1.5707963267948966
+    if x > 1.0 { return pi_half - atan_approx(1.0 / x) }
+    if x < -1.0 { return -pi_half - atan_approx(1.0 / x) }
+    // Polynomial: atan(x) ~ x - x^3/3 + x^5/5 - x^7/7 + ...
+    let x2 = x * x
+    let mut sum = 0.0
+    let mut term = x
+    for k in 0..15 {
+        let denom = (2 * k + 1) as f64
+        if k % 2 == 0 {
+            sum = sum + term / denom
+        } else {
+            sum = sum - term / denom
+        }
+        term = term * x2
+    }
+    sum
+}
+
+/// Approximate asin using atan identity: asin(x) = atan(x / sqrt(1 - x^2))
+fn asin_approx(x: f64) -> f64 {
+    if x >= 1.0 { return 1.5707963 }
+    if x <= -1.0 { return -1.5707963 }
+    let denom = sqrt_approx(1.0 - x * x)
+    if denom < 0.000001 { return if x > 0.0 { 1.5707963 } else { -1.5707963 } }
+    atan_approx(x / denom)
+}
+
+// ── 1D Kalman Filter ──
+
+/// A simple 1D Kalman filter for scalar measurements.
+struct KalmanFilter1D {
+    x: f64,           // state estimate
+    p: f64,           // estimation error covariance
+    q: f64,           // process noise covariance
+    r: f64,           // measurement noise covariance
+    k: f64            // Kalman gain (computed each step)
+}
+
+/// Create a new 1D Kalman filter.
+/// q = process noise (how much the state changes per step)
+/// r = measurement noise (how noisy the sensor is)
+fn kalman_new(initial: f64, q: f64, r: f64) -> KalmanFilter1D {
+    KalmanFilter1D { x: initial, p: 1.0, q: q, r: r, k: 0.0 }
+}
+
+/// Update the Kalman filter with a new measurement.
+/// Returns the updated filter with the new estimate in .x
+fn kalman_update(kf: KalmanFilter1D, measurement: f64) -> KalmanFilter1D {
+    // Predict step
+    let p_predicted = kf.p + kf.q
+
+    // Update step
+    let k = p_predicted / (p_predicted + kf.r)
+    let x_new = kf.x + k * (measurement - kf.x)
+    let p_new = (1.0 - k) * p_predicted
+
+    KalmanFilter1D { x: x_new, p: p_new, q: kf.q, r: kf.r, k: k }
+}
+
+/// Get the current estimate from the filter.
+fn kalman_estimate(kf: KalmanFilter1D) -> f64 {
+    kf.x
+}
+
+/// Get the current Kalman gain.
+fn kalman_gain(kf: KalmanFilter1D) -> f64 {
+    kf.k
+}
+
+// ── Complementary Filter ──
+
+/// Complementary filter state for fusing gyro and accelerometer.
+struct ComplementaryFilter {
+    angle: f64,
+    alpha: f64   // weight for gyro (typically 0.96-0.98)
+}
+
+/// Create a new complementary filter.
+/// alpha = gyro weight (0.0 to 1.0); higher means more gyro trust.
+fn complementary_new(alpha: f64) -> ComplementaryFilter {
+    ComplementaryFilter { angle: 0.0, alpha: alpha }
+}
+
+/// Update the complementary filter.
+/// gyro_rate = angular velocity from gyroscope (rad/s)
+/// accel_angle = angle derived from accelerometer (rad)
+/// dt = time step (seconds)
+fn complementary_update(cf: ComplementaryFilter, gyro_rate: f64, accel_angle: f64, dt: f64) -> ComplementaryFilter {
+    let gyro_angle = cf.angle + gyro_rate * dt
+    let fused = cf.alpha * gyro_angle + (1.0 - cf.alpha) * accel_angle
+    ComplementaryFilter { angle: fused, alpha: cf.alpha }
+}
+
+/// Get the current angle estimate.
+fn complementary_angle(cf: ComplementaryFilter) -> f64 {
+    cf.angle
+}
+
+// ── Madgwick AHRS Filter ──
+
+/// Madgwick AHRS orientation filter.
+struct MadgwickFilter {
+    q: Quaternion,
+    beta: f64       // algorithm gain (typically 0.01 to 0.1)
+}
+
+/// Create a new Madgwick filter.
+/// beta = filter gain (higher = faster convergence but more noise)
+fn madgwick_new(beta: f64) -> MadgwickFilter {
+    MadgwickFilter { q: quat_identity(), beta: beta }
+}
+
+/// Update the Madgwick filter with gyroscope and accelerometer data.
+/// gyro = angular velocity (rad/s), accel = acceleration (m/s^2)
+/// dt = time step (seconds)
+fn madgwick_update(mf: MadgwickFilter, gyro: Vec3, accel: Vec3, dt: f64) -> MadgwickFilter {
+    let mut q = mf.q
+    let beta = mf.beta
+
+    // Normalize accelerometer measurement
+    let a = vec3_normalize(accel)
+    if vec3_magnitude(a) < 0.001 { return mf }  // Skip if no valid accel
+
+    // Gradient descent algorithm
+    // Objective function: f = q* * g * q - a
+    // where g = (0, 0, 0, 1) is gravity reference
+    let two_q0 = 2.0 * q.w
+    let two_q1 = 2.0 * q.x
+    let two_q2 = 2.0 * q.y
+    let two_q3 = 2.0 * q.z
+
+    let f1 = two_q1 * q.z - two_q0 * q.y - a.x
+    let f2 = two_q0 * q.x + two_q2 * q.z - a.y
+    let f3 = 1.0 - two_q1 * q.x - two_q2 * q.y - a.z
+
+    // Jacobian * f (gradient)
+    let grad_w = -two_q2 * f1 + two_q1 * f2
+    let grad_x = two_q3 * f1 + two_q0 * f2 - 2.0 * two_q1 * f3
+    let grad_y = -two_q0 * f1 + two_q3 * f2 - 2.0 * two_q2 * f3
+    let grad_z = two_q1 * f1 + two_q2 * f2
+
+    // Normalize gradient
+    let grad_norm = sqrt_approx(grad_w * grad_w + grad_x * grad_x + grad_y * grad_y + grad_z * grad_z)
+    let inv_norm = if grad_norm > 0.000001 { 1.0 / grad_norm } else { 0.0 }
+
+    // Apply gyroscope quaternion derivative: dq/dt = 0.5 * q * omega
+    let half_dt = 0.5 * dt
+    let qd_w = half_dt * (-q.x * gyro.x - q.y * gyro.y - q.z * gyro.z)
+    let qd_x = half_dt * (q.w * gyro.x + q.y * gyro.z - q.z * gyro.y)
+    let qd_y = half_dt * (q.w * gyro.y - q.x * gyro.z + q.z * gyro.x)
+    let qd_z = half_dt * (q.w * gyro.z + q.x * gyro.y - q.y * gyro.x)
+
+    // Apply correction
+    q.w = q.w + qd_w - beta * grad_w * inv_norm * dt
+    q.x = q.x + qd_x - beta * grad_x * inv_norm * dt
+    q.y = q.y + qd_y - beta * grad_y * inv_norm * dt
+    q.z = q.z + qd_z - beta * grad_z * inv_norm * dt
+
+    q = quat_normalize(q)
+    MadgwickFilter { q: q, beta: beta }
+}
+
+/// Get the orientation as Euler angles (roll, pitch, yaw).
+fn madgwick_euler(mf: MadgwickFilter) -> Vec3 {
+    quat_to_euler(mf.q)
+}
+
+/// Get the orientation quaternion.
+fn madgwick_quaternion(mf: MadgwickFilter) -> Quaternion {
+    mf.q
+}
+
+// ── Calibration ──
+
+/// Sensor calibration data (offset and scale for each axis).
+struct Calibration {
+    offset: Vec3,
+    scale: Vec3
+}
+
+/// Create a default calibration (no offset, unit scale).
+fn calibration_default() -> Calibration {
+    Calibration {
+        offset: vec3_zero(),
+        scale: vec3_new(1.0, 1.0, 1.0)
+    }
+}
+
+/// Calibrate by computing average offset from N samples.
+/// Assumes the sensor is stationary and the expected value is `expected`.
+fn calibrate(samples: [Vec3], expected: Vec3) -> Calibration {
+    let n = len(samples) as f64
+    if n < 1.0 { return calibration_default() }
+
+    let mut sum = vec3_zero()
+    for s in samples {
+        sum = vec3_add(sum, s)
+    }
+    let mean = vec3_scale(sum, 1.0 / n)
+    let offset = vec3_sub(mean, expected)
+
+    Calibration {
+        offset: offset,
+        scale: vec3_new(1.0, 1.0, 1.0)
+    }
+}
+
+/// Apply calibration to a raw reading.
+fn apply_calibration(cal: Calibration, raw: Vec3) -> Vec3 {
+    Vec3 {
+        x: (raw.x - cal.offset.x) * cal.scale.x,
+        y: (raw.y - cal.offset.y) * cal.scale.y,
+        z: (raw.z - cal.offset.z) * cal.scale.z
+    }
+}

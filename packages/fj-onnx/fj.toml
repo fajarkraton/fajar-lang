@@ -1,0 +1,9 @@
+[package]
+name = "fj-onnx"
+version = "1.0.0"
+description = "ONNX model loading and inference for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

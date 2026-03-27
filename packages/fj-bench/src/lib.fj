@@ -1,0 +1,345 @@
+// fj-bench — Micro-Benchmarking Framework for Fajar Lang
+//
+// Provides a benchmarking framework with configurable warmup,
+// iterations, statistical analysis (mean, median, stddev, min, max),
+// and formatted reporting.
+
+// ── Time measurement ──
+
+/// A time measurement in nanoseconds.
+struct Duration {
+    nanos: i64
+}
+
+/// Convert nanoseconds to milliseconds.
+fn to_ms(d: Duration) -> f64 {
+    (d.nanos as f64) / 1000000.0
+}
+
+/// Convert nanoseconds to microseconds.
+fn to_us(d: Duration) -> f64 {
+    (d.nanos as f64) / 1000.0
+}
+
+/// Convert nanoseconds to seconds.
+fn to_secs(d: Duration) -> f64 {
+    (d.nanos as f64) / 1000000000.0
+}
+
+/// Format a duration for human-readable display.
+fn format_duration(nanos: i64) -> str {
+    if nanos < 1000 {
+        to_string(nanos) + " ns"
+    } else if nanos < 1000000 {
+        let us = (nanos as f64) / 1000.0
+        fmt_float(us, 2) + " us"
+    } else if nanos < 1000000000 {
+        let ms = (nanos as f64) / 1000000.0
+        fmt_float(ms, 2) + " ms"
+    } else {
+        let s = (nanos as f64) / 1000000000.0
+        fmt_float(s, 3) + " s"
+    }
+}
+
+/// Format a float to a fixed number of decimal places.
+fn fmt_float(val: f64, decimals: i32) -> str {
+    let int_part = val as i64
+    let frac = val - (int_part as f64)
+    let frac_abs = if frac < 0.0 { -frac } else { frac }
+    let mut multiplier: i64 = 1
+    for _ in 0..decimals {
+        multiplier = multiplier * 10
+    }
+    let frac_int = (frac_abs * (multiplier as f64)) as i64
+    let mut frac_str = to_string(frac_int)
+    // Pad with leading zeros
+    while len(frac_str) as i32 < decimals {
+        frac_str = "0" + frac_str
+    }
+    to_string(int_part) + "." + frac_str
+}
+
+// ── Statistics ──
+
+/// Statistical summary of benchmark results.
+struct BenchStats {
+    mean: i64,
+    median: i64,
+    stddev: f64,
+    min: i64,
+    max: i64,
+    count: i64,
+    total: i64,
+    p95: i64,
+    p99: i64
+}
+
+/// Compute statistics from a list of timing samples (in nanoseconds).
+fn compute_stats(samples: [i64]) -> BenchStats {
+    let n = len(samples)
+    if n == 0 {
+        return BenchStats { mean: 0, median: 0, stddev: 0.0, min: 0, max: 0, count: 0, total: 0, p95: 0, p99: 0 }
+    }
+
+    // Sort (insertion sort for simplicity)
+    let mut sorted = samples
+    for i in 1..n {
+        let key = sorted[i]
+        let mut j = i as i32 - 1
+        while j >= 0 && sorted[j as usize] > key {
+            sorted[(j + 1) as usize] = sorted[j as usize]
+            j = j - 1
+        }
+        sorted[(j + 1) as usize] = key
+    }
+
+    // Min, Max
+    let min_val = sorted[0]
+    let max_val = sorted[n - 1]
+
+    // Sum and mean
+    let mut total: i64 = 0
+    for s in sorted {
+        total = total + s
+    }
+    let mean_val = total / (n as i64)
+
+    // Median
+    let median_val = if n % 2 == 1 {
+        sorted[n / 2]
+    } else {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2
+    }
+
+    // Standard deviation
+    let mut var_sum = 0.0
+    let mean_f = mean_val as f64
+    for s in sorted {
+        let diff = (s as f64) - mean_f
+        var_sum = var_sum + diff * diff
+    }
+    let variance = var_sum / (n as f64)
+    let stddev = sqrt_approx(variance)
+
+    // Percentiles
+    let p95_idx = (n as f64 * 0.95) as usize
+    let p99_idx = (n as f64 * 0.99) as usize
+    let p95_val = sorted[if p95_idx >= n { n - 1 } else { p95_idx }]
+    let p99_val = sorted[if p99_idx >= n { n - 1 } else { p99_idx }]
+
+    BenchStats {
+        mean: mean_val,
+        median: median_val,
+        stddev: stddev,
+        min: min_val,
+        max: max_val,
+        count: n as i64,
+        total: total,
+        p95: p95_val,
+        p99: p99_val
+    }
+}
+
+/// Square root approximation (Newton's method).
+fn sqrt_approx(x: f64) -> f64 {
+    if x <= 0.0 { return 0.0 }
+    let mut guess = x / 2.0
+    for _ in 0..32 {
+        guess = (guess + x / guess) / 2.0
+    }
+    guess
+}
+
+// ── Benchmark configuration ──
+
+/// Benchmark configuration.
+struct BenchConfig {
+    name: str,
+    iterations: i64,
+    warmup: i64,
+    min_time_ns: i64
+}
+
+/// Create a default benchmark config.
+fn bench_config(name: str) -> BenchConfig {
+    BenchConfig {
+        name: name,
+        iterations: 100,
+        warmup: 10,
+        min_time_ns: 1000000  // 1 ms minimum
+    }
+}
+
+/// Set number of iterations.
+fn with_iterations(cfg: BenchConfig, n: i64) -> BenchConfig {
+    let mut c = cfg
+    c.iterations = n
+    c
+}
+
+/// Set number of warmup iterations.
+fn with_warmup(cfg: BenchConfig, n: i64) -> BenchConfig {
+    let mut c = cfg
+    c.warmup = n
+    c
+}
+
+// ── Benchmark result ──
+
+/// Complete benchmark result.
+struct BenchResult {
+    name: str,
+    stats: BenchStats,
+    samples: [i64],
+    iterations: i64,
+    warmup: i64
+}
+
+/// Measure the time of a single operation in nanoseconds.
+/// In a real implementation, this would use a high-resolution timer.
+/// Here it provides the framework for integration with the runtime.
+fn measure_ns(operation_result: i64) -> i64 {
+    // The runtime should intercept this and return actual wall-clock time.
+    // The operation_result parameter forces execution (prevent dead code elimination).
+    // Returns estimated nanoseconds.
+    operation_result + 0
+}
+
+/// Run a benchmark with the given config and sample timings.
+/// In practice, the caller collects timings; this function computes stats.
+fn bench(name: str, samples: [i64]) -> BenchResult {
+    let stats = compute_stats(samples)
+    BenchResult {
+        name: name,
+        stats: stats,
+        samples: samples,
+        iterations: len(samples) as i64,
+        warmup: 0
+    }
+}
+
+/// Run a benchmark with explicit warmup samples (discarded) and measured samples.
+fn bench_with_warmup(name: str, warmup_samples: [i64], samples: [i64]) -> BenchResult {
+    let stats = compute_stats(samples)
+    BenchResult {
+        name: name,
+        stats: stats,
+        samples: samples,
+        iterations: len(samples) as i64,
+        warmup: len(warmup_samples) as i64
+    }
+}
+
+// ── Reporting ──
+
+/// Generate a text report for a single benchmark result.
+fn report(r: BenchResult) -> str {
+    let s = r.stats
+    let mut text = "Benchmark: " + r.name + "\n"
+    text = text + "  Iterations: " + to_string(r.iterations) + "\n"
+    if r.warmup > 0 {
+        text = text + "  Warmup:     " + to_string(r.warmup) + "\n"
+    }
+    text = text + "  Mean:       " + format_duration(s.mean) + "\n"
+    text = text + "  Median:     " + format_duration(s.median) + "\n"
+    text = text + "  Std Dev:    " + format_duration(s.stddev as i64) + "\n"
+    text = text + "  Min:        " + format_duration(s.min) + "\n"
+    text = text + "  Max:        " + format_duration(s.max) + "\n"
+    text = text + "  P95:        " + format_duration(s.p95) + "\n"
+    text = text + "  P99:        " + format_duration(s.p99) + "\n"
+    text
+}
+
+/// Generate a comparison report for multiple benchmark results.
+fn compare_report(results: [BenchResult]) -> str {
+    let mut text = "Benchmark Comparison\n"
+    text = text + "====================\n\n"
+
+    // Header
+    text = text + "Name                    Mean         Median       Min          Max\n"
+    text = text + "----                    ----         ------       ---          ---\n"
+
+    for r in results {
+        let mut line = r.name
+        // Pad name to 24 chars
+        while len(line) < 24 {
+            line = line + " "
+        }
+        line = line + format_duration(r.stats.mean)
+        while len(line) < 37 {
+            line = line + " "
+        }
+        line = line + format_duration(r.stats.median)
+        while len(line) < 50 {
+            line = line + " "
+        }
+        line = line + format_duration(r.stats.min)
+        while len(line) < 63 {
+            line = line + " "
+        }
+        line = line + format_duration(r.stats.max)
+        text = text + line + "\n"
+    }
+
+    text
+}
+
+/// Calculate throughput (operations per second) from mean time.
+fn throughput_ops(stats: BenchStats) -> f64 {
+    if stats.mean <= 0 { return 0.0 }
+    1000000000.0 / (stats.mean as f64)
+}
+
+/// Calculate relative speed difference between two results.
+/// Returns how many times faster `a` is compared to `b`.
+fn speedup(a: BenchResult, b: BenchResult) -> f64 {
+    if a.stats.mean <= 0 { return 0.0 }
+    (b.stats.mean as f64) / (a.stats.mean as f64)
+}
+
+/// Generate a histogram of timing distribution.
+fn histogram(samples: [i64], num_buckets: i32) -> str {
+    if len(samples) == 0 { return "(no data)" }
+
+    // Find range
+    let mut min_val = samples[0]
+    let mut max_val = samples[0]
+    for s in samples {
+        if s < min_val { min_val = s }
+        if s > max_val { max_val = s }
+    }
+
+    let range = max_val - min_val
+    if range == 0 { return format_duration(min_val) + " (all identical)" }
+
+    let bucket_size = range / (num_buckets as i64) + 1
+    let mut buckets: [i32] = []
+    for _ in 0..num_buckets {
+        buckets = buckets + [0]
+    }
+
+    for s in samples {
+        let idx = ((s - min_val) / bucket_size) as i32
+        let bi = if idx >= num_buckets { num_buckets - 1 } else { idx }
+        buckets[bi as usize] = buckets[bi as usize] + 1
+    }
+
+    // Find max count for scaling
+    let mut max_count = 0
+    for c in buckets {
+        if c > max_count { max_count = c }
+    }
+
+    let mut text = ""
+    for i in 0..num_buckets {
+        let lo = min_val + (i as i64) * bucket_size
+        let bar_len = if max_count > 0 { buckets[i as usize] * 40 / max_count } else { 0 }
+        let mut bar = ""
+        for _ in 0..bar_len {
+            bar = bar + "#"
+        }
+        text = text + format_duration(lo) + " | " + bar + " (" + to_string(buckets[i as usize]) + ")\n"
+    }
+    text
+}

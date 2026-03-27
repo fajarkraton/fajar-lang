@@ -67,7 +67,7 @@ impl PitTimer {
 
     /// Create with default 100 Hz frequency.
     pub fn default_100hz() -> Self {
-        Self::new(DEFAULT_FREQ_HZ).expect("100Hz is valid")
+        Self::new(DEFAULT_FREQ_HZ).expect("PIT: DEFAULT_FREQ_HZ (100) must be valid — this is a compile-time constant within the 19..=1193182 range")
     }
 
     /// Start the timer.

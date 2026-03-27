@@ -1,0 +1,334 @@
+// fj-gpio — GPIO Pin Control for Embedded Fajar Lang
+//
+// Provides GPIO pin abstraction with direction control, digital
+// read/write, PWM output, debounce filtering, and pin group
+// operations for embedded systems.
+
+// ── Pin mode ──
+
+/// GPIO pin operating mode.
+enum PinMode {
+    Input,
+    Output,
+    InputPullUp,
+    InputPullDown,
+    OutputOpenDrain,
+    PWM,
+    Analog,
+    Disabled
+}
+
+/// Get pin mode as string.
+fn pin_mode_str(mode: PinMode) -> str {
+    match mode {
+        PinMode::Input => "INPUT",
+        PinMode::Output => "OUTPUT",
+        PinMode::InputPullUp => "INPUT_PULLUP",
+        PinMode::InputPullDown => "INPUT_PULLDOWN",
+        PinMode::OutputOpenDrain => "OUTPUT_OPENDRAIN",
+        PinMode::PWM => "PWM",
+        PinMode::Analog => "ANALOG",
+        PinMode::Disabled => "DISABLED"
+    }
+}
+
+// ── Pin logic levels ──
+
+/// Logic level for a digital pin.
+enum Level {
+    Low,
+    High
+}
+
+/// Convert a boolean to a level.
+fn to_level(value: bool) -> Level {
+    if value { Level::High } else { Level::Low }
+}
+
+/// Convert a level to a boolean.
+fn level_is_high(l: Level) -> bool {
+    match l {
+        Level::High => true,
+        Level::Low => false
+    }
+}
+
+/// Convert a level to integer (0 or 1).
+fn level_value(l: Level) -> i32 {
+    match l {
+        Level::Low => 0,
+        Level::High => 1
+    }
+}
+
+// ── Edge detection ──
+
+/// Edge trigger types for interrupts.
+enum Edge {
+    Rising,
+    Falling,
+    Both,
+    None
+}
+
+// ── GPIO Pin ──
+
+/// A GPIO pin with its current state and configuration.
+struct Pin {
+    number: i32,
+    mode: PinMode,
+    value: Level,
+    is_open: bool,
+    pwm_duty: f64,
+    pwm_frequency: i32,
+    debounce_ms: i32,
+    label: str
+}
+
+/// Open a GPIO pin by number. Starts in disabled mode.
+fn open(pin_number: i32) -> Pin {
+    Pin {
+        number: pin_number,
+        mode: PinMode::Disabled,
+        value: Level::Low,
+        is_open: true,
+        pwm_duty: 0.0,
+        pwm_frequency: 1000,
+        debounce_ms: 0,
+        label: "GPIO" + to_string(pin_number)
+    }
+}
+
+/// Open a pin with a descriptive label.
+fn open_labeled(pin_number: i32, label: str) -> Pin {
+    let mut p = open(pin_number)
+    p.label = label
+    p
+}
+
+/// Close a GPIO pin (release the resource).
+fn close(pin: Pin) -> Pin {
+    let mut p = pin
+    p.mode = PinMode::Disabled
+    p.is_open = false
+    p.value = Level::Low
+    p.pwm_duty = 0.0
+    p
+}
+
+/// Set the direction/mode of a pin.
+fn set_direction(pin: Pin, mode: PinMode) -> Pin {
+    let mut p = pin
+    p.mode = mode
+    // Reset value when changing mode
+    match mode {
+        PinMode::InputPullUp => { p.value = Level::High }
+        PinMode::InputPullDown => { p.value = Level::Low }
+        _ => { p.value = Level::Low }
+    }
+    p
+}
+
+// ── Digital I/O ──
+
+/// Write a logic level to an output pin.
+fn write(pin: Pin, level: Level) -> Pin {
+    let mut p = pin
+    match p.mode {
+        PinMode::Output => { p.value = level }
+        PinMode::OutputOpenDrain => { p.value = level }
+        _ => {}  // No-op for input pins
+    }
+    p
+}
+
+/// Write a high level.
+fn write_high(pin: Pin) -> Pin {
+    write(pin, Level::High)
+}
+
+/// Write a low level.
+fn write_low(pin: Pin) -> Pin {
+    write(pin, Level::Low)
+}
+
+/// Toggle the output value.
+fn toggle(pin: Pin) -> Pin {
+    let new_level = match pin.value {
+        Level::High => Level::Low,
+        Level::Low => Level::High
+    }
+    write(pin, new_level)
+}
+
+/// Read the current pin value.
+fn read(pin: Pin) -> Level {
+    pin.value
+}
+
+/// Read the pin value as a boolean.
+fn read_bool(pin: Pin) -> bool {
+    level_is_high(pin.value)
+}
+
+/// Read the pin value as an integer (0 or 1).
+fn read_int(pin: Pin) -> i32 {
+    level_value(pin.value)
+}
+
+// ── PWM ──
+
+/// Configure PWM mode with frequency and duty cycle.
+fn set_pwm(pin: Pin, frequency: i32, duty: f64) -> Pin {
+    let mut p = pin
+    p.mode = PinMode::PWM
+    p.pwm_frequency = if frequency > 0 { frequency } else { 1000 }
+    p.pwm_duty = if duty < 0.0 { 0.0 } else if duty > 1.0 { 1.0 } else { duty }
+    p
+}
+
+/// Set PWM duty cycle (0.0 to 1.0).
+fn set_duty(pin: Pin, duty: f64) -> Pin {
+    let mut p = pin
+    p.pwm_duty = if duty < 0.0 { 0.0 } else if duty > 1.0 { 1.0 } else { duty }
+    p
+}
+
+/// Set PWM frequency in Hz.
+fn set_frequency(pin: Pin, frequency: i32) -> Pin {
+    let mut p = pin
+    p.pwm_frequency = if frequency > 0 { frequency } else { 1000 }
+    p
+}
+
+/// Get PWM duty cycle as a percentage (0-100).
+fn duty_percent(pin: Pin) -> f64 {
+    pin.pwm_duty * 100.0
+}
+
+// ── Debounce ──
+
+/// Set debounce time in milliseconds for input pins.
+fn debounce(pin: Pin, ms: i32) -> Pin {
+    let mut p = pin
+    p.debounce_ms = if ms >= 0 { ms } else { 0 }
+    p
+}
+
+/// Debounced read: simulates waiting for stable signal.
+/// In a real system this would sample over debounce_ms and
+/// return the majority value.
+struct DebounceState {
+    last_value: Level,
+    stable_count: i32,
+    threshold: i32
+}
+
+/// Create a new debounce state.
+fn debounce_new(threshold: i32) -> DebounceState {
+    DebounceState {
+        last_value: Level::Low,
+        stable_count: 0,
+        threshold: threshold
+    }
+}
+
+/// Feed a sample into the debounce filter.
+/// Returns the debounced value (only changes after `threshold` consistent readings).
+fn debounce_sample(state: DebounceState, sample: Level) -> (DebounceState, Level) {
+    let mut s = state
+    let same = match (s.last_value, sample) {
+        (Level::High, Level::High) => true,
+        (Level::Low, Level::Low) => true,
+        _ => false
+    }
+    if same {
+        if s.stable_count < s.threshold {
+            s.stable_count = s.stable_count + 1
+        }
+    } else {
+        s.stable_count = 1
+        s.last_value = sample
+    }
+    let output = if s.stable_count >= s.threshold { s.last_value } else { state.last_value }
+    (s, output)
+}
+
+// ── Pin groups ──
+
+/// A group of pins for batch operations.
+struct PinGroup {
+    pins: [Pin],
+    name: str
+}
+
+/// Create a pin group from an array of pin numbers.
+fn pin_group(name: str, numbers: [i32]) -> PinGroup {
+    let mut pins: [Pin] = []
+    for n in numbers {
+        pins = pins + [open(n)]
+    }
+    PinGroup { pins: pins, name: name }
+}
+
+/// Set all pins in a group to the same mode.
+fn group_set_mode(group: PinGroup, mode: PinMode) -> PinGroup {
+    let mut g = group
+    let mut new_pins: [Pin] = []
+    for p in g.pins {
+        new_pins = new_pins + [set_direction(p, mode)]
+    }
+    g.pins = new_pins
+    g
+}
+
+/// Write a value to all pins in a group.
+fn group_write(group: PinGroup, level: Level) -> PinGroup {
+    let mut g = group
+    let mut new_pins: [Pin] = []
+    for p in g.pins {
+        new_pins = new_pins + [write(p, level)]
+    }
+    g.pins = new_pins
+    g
+}
+
+/// Write a binary pattern to a pin group (e.g., 0b1010 sets pins 1,3 high).
+fn group_write_pattern(group: PinGroup, pattern: i32) -> PinGroup {
+    let mut g = group
+    let mut new_pins: [Pin] = []
+    for i in 0..len(g.pins) {
+        let bit = (pattern >> i) & 1
+        let level = if bit == 1 { Level::High } else { Level::Low }
+        new_pins = new_pins + [write(g.pins[i], level)]
+    }
+    g.pins = new_pins
+    g
+}
+
+/// Read all pins in a group as a binary pattern.
+fn group_read_pattern(group: PinGroup) -> i32 {
+    let mut result = 0
+    for i in 0..len(group.pins) {
+        let v = level_value(group.pins[i].value)
+        result = result | (v << i)
+    }
+    result
+}
+
+/// Get a summary of pin states.
+fn pin_info(pin: Pin) -> str {
+    pin.label + " [" + to_string(pin.number) + "] " +
+    pin_mode_str(pin.mode) + " = " + to_string(level_value(pin.value))
+}
+
+/// Close all pins in a group.
+fn group_close(group: PinGroup) -> PinGroup {
+    let mut g = group
+    let mut new_pins: [Pin] = []
+    for p in g.pins {
+        new_pins = new_pins + [close(p)]
+    }
+    g.pins = new_pins
+    g
+}

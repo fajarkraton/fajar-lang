@@ -1,0 +1,226 @@
+// fj-color — Terminal Colors and Formatting for Fajar Lang
+//
+// Provides ANSI escape code based terminal coloring, text styling
+// (bold, underline, dim, italic), and 24-bit RGB color support.
+
+// ── ANSI escape code prefix ──
+
+const ESC: str = "\x1b["
+const RESET_CODE: str = "\x1b[0m"
+
+// ── Color enum ──
+
+/// Standard terminal colors.
+enum Color {
+    Black,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+    BrightBlack,
+    BrightRed,
+    BrightGreen,
+    BrightYellow,
+    BrightBlue,
+    BrightMagenta,
+    BrightCyan,
+    BrightWhite
+}
+
+/// Get the ANSI foreground code for a Color.
+fn fg_code(c: Color) -> i32 {
+    match c {
+        Color::Black => 30,
+        Color::Red => 31,
+        Color::Green => 32,
+        Color::Yellow => 33,
+        Color::Blue => 34,
+        Color::Magenta => 35,
+        Color::Cyan => 36,
+        Color::White => 37,
+        Color::BrightBlack => 90,
+        Color::BrightRed => 91,
+        Color::BrightGreen => 92,
+        Color::BrightYellow => 93,
+        Color::BrightBlue => 94,
+        Color::BrightMagenta => 95,
+        Color::BrightCyan => 96,
+        Color::BrightWhite => 97
+    }
+}
+
+/// Get the ANSI background code for a Color.
+fn bg_code(c: Color) -> i32 {
+    fg_code(c) + 10
+}
+
+// ── Core colorize function ──
+
+/// Apply a foreground color to a string.
+fn colorize(text: str, c: Color) -> str {
+    ESC + to_string(fg_code(c)) + "m" + text + RESET_CODE
+}
+
+/// Apply a background color to a string.
+fn bg_colorize(text: str, c: Color) -> str {
+    ESC + to_string(bg_code(c)) + "m" + text + RESET_CODE
+}
+
+/// Apply both foreground and background colors.
+fn color_on_bg(text: str, fg: Color, bg: Color) -> str {
+    ESC + to_string(fg_code(fg)) + ";" + to_string(bg_code(bg)) + "m" + text + RESET_CODE
+}
+
+// ── Convenience color functions ──
+
+/// Red text.
+fn red(text: str) -> str { colorize(text, Color::Red) }
+
+/// Green text.
+fn green(text: str) -> str { colorize(text, Color::Green) }
+
+/// Yellow text.
+fn yellow(text: str) -> str { colorize(text, Color::Yellow) }
+
+/// Blue text.
+fn blue(text: str) -> str { colorize(text, Color::Blue) }
+
+/// Magenta text.
+fn magenta(text: str) -> str { colorize(text, Color::Magenta) }
+
+/// Cyan text.
+fn cyan(text: str) -> str { colorize(text, Color::Cyan) }
+
+/// White text.
+fn white(text: str) -> str { colorize(text, Color::White) }
+
+/// Black text.
+fn black(text: str) -> str { colorize(text, Color::Black) }
+
+// ── Text styling ──
+
+/// Bold text.
+fn bold(text: str) -> str {
+    ESC + "1m" + text + RESET_CODE
+}
+
+/// Dim (faint) text.
+fn dim(text: str) -> str {
+    ESC + "2m" + text + RESET_CODE
+}
+
+/// Italic text.
+fn italic(text: str) -> str {
+    ESC + "3m" + text + RESET_CODE
+}
+
+/// Underline text.
+fn underline(text: str) -> str {
+    ESC + "4m" + text + RESET_CODE
+}
+
+/// Blinking text.
+fn blink(text: str) -> str {
+    ESC + "5m" + text + RESET_CODE
+}
+
+/// Inverse (swap fg/bg) text.
+fn inverse(text: str) -> str {
+    ESC + "7m" + text + RESET_CODE
+}
+
+/// Strikethrough text.
+fn strikethrough(text: str) -> str {
+    ESC + "9m" + text + RESET_CODE
+}
+
+// ── Reset ──
+
+/// Return the ANSI reset sequence.
+fn reset() -> str {
+    RESET_CODE
+}
+
+// ── 24-bit RGB color ──
+
+/// Apply a 24-bit RGB foreground color.
+fn rgb(text: str, r: i32, g: i32, b: i32) -> str {
+    let r_clamped = if r < 0 { 0 } else if r > 255 { 255 } else { r }
+    let g_clamped = if g < 0 { 0 } else if g > 255 { 255 } else { g }
+    let b_clamped = if b < 0 { 0 } else if b > 255 { 255 } else { b }
+    ESC + "38;2;" + to_string(r_clamped) + ";" + to_string(g_clamped) + ";" + to_string(b_clamped) + "m" + text + RESET_CODE
+}
+
+/// Apply a 24-bit RGB background color.
+fn rgb_bg(text: str, r: i32, g: i32, b: i32) -> str {
+    let r_clamped = if r < 0 { 0 } else if r > 255 { 255 } else { r }
+    let g_clamped = if g < 0 { 0 } else if g > 255 { 255 } else { g }
+    let b_clamped = if b < 0 { 0 } else if b > 255 { 255 } else { b }
+    ESC + "48;2;" + to_string(r_clamped) + ";" + to_string(g_clamped) + ";" + to_string(b_clamped) + "m" + text + RESET_CODE
+}
+
+// ── 256-color palette ──
+
+/// Apply a 256-color foreground (0-255).
+fn color256(text: str, code: i32) -> str {
+    let c = if code < 0 { 0 } else if code > 255 { 255 } else { code }
+    ESC + "38;5;" + to_string(c) + "m" + text + RESET_CODE
+}
+
+/// Apply a 256-color background (0-255).
+fn color256_bg(text: str, code: i32) -> str {
+    let c = if code < 0 { 0 } else if code > 255 { 255 } else { code }
+    ESC + "48;5;" + to_string(c) + "m" + text + RESET_CODE
+}
+
+// ── Combined styling ──
+
+/// Apply bold + color.
+fn bold_color(text: str, c: Color) -> str {
+    ESC + "1;" + to_string(fg_code(c)) + "m" + text + RESET_CODE
+}
+
+/// Apply underline + color.
+fn underline_color(text: str, c: Color) -> str {
+    ESC + "4;" + to_string(fg_code(c)) + "m" + text + RESET_CODE
+}
+
+// ── Styled output helpers ──
+
+/// Format a success message (green bold).
+fn success(text: str) -> str { bold_color(text, Color::Green) }
+
+/// Format a warning message (yellow bold).
+fn warning(text: str) -> str { bold_color(text, Color::Yellow) }
+
+/// Format an error message (red bold).
+fn error(text: str) -> str { bold_color(text, Color::Red) }
+
+/// Format an info message (cyan).
+fn info(text: str) -> str { colorize(text, Color::Cyan) }
+
+/// Format a debug message (dim).
+fn debug_msg(text: str) -> str { dim(text) }
+
+/// Strip all ANSI escape codes from a string.
+fn strip_ansi(text: str) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < len(text) {
+        if i + 1 < len(text) && text[i] == '\x1b' && text[i + 1] == '[' {
+            // Skip until 'm'
+            i = i + 2
+            while i < len(text) && text[i] != 'm' {
+                i = i + 1
+            }
+            i = i + 1  // skip the 'm'
+        } else {
+            result = result + to_string(text[i])
+            i = i + 1
+        }
+    }
+    result
+}

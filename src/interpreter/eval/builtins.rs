@@ -1602,6 +1602,29 @@ impl Interpreter {
                     return self.builtin_http_listen(args);
                 }
 
+                // TQ12.2: Database builtins
+                if name == "db_open" {
+                    return self.builtin_db_open(args);
+                }
+                if name == "db_execute" {
+                    return self.builtin_db_execute(args);
+                }
+                if name == "db_query" {
+                    return self.builtin_db_query(args);
+                }
+                if name == "db_close" {
+                    return self.builtin_db_close(args);
+                }
+                if name == "db_begin" {
+                    return self.builtin_db_begin(args);
+                }
+                if name == "db_commit" {
+                    return self.builtin_db_commit(args);
+                }
+                if name == "db_rollback" {
+                    return self.builtin_db_rollback(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
@@ -1683,6 +1706,249 @@ impl Interpreter {
 
         println!("[http] Served {served} requests");
         Ok(Value::Int(served))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TQ12.2: SQLite database builtins
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// `db_open(path)` → Int handle.
+    /// Opens a SQLite database. Use ":memory:" for in-memory databases.
+    fn builtin_db_open(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let path = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("db_open: path must be string".into()).into());
+            }
+        };
+        let handle = self
+            .db_manager
+            .open(&path)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Int(handle))
+    }
+
+    /// `db_execute(handle, sql)` or `db_execute(handle, sql, params_array)` → Int rows_changed.
+    fn builtin_db_execute(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_execute: handle must be integer".into()).into(),
+                );
+            }
+        };
+        let sql = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_execute: sql must be string".into()).into(),
+                );
+            }
+        };
+        let params = if args.len() == 3 {
+            Self::value_to_db_params(&args[2])?
+        } else {
+            vec![]
+        };
+        let changed = self
+            .db_manager
+            .execute(handle, &sql, &params)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Int(changed))
+    }
+
+    /// `db_query(handle, sql)` or `db_query(handle, sql, params_array)` → Array of Maps.
+    fn builtin_db_query(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_query: handle must be integer".into()).into(),
+                );
+            }
+        };
+        let sql = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("db_query: sql must be string".into()).into());
+            }
+        };
+        let params = if args.len() == 3 {
+            Self::value_to_db_params(&args[2])?
+        } else {
+            vec![]
+        };
+        let rows = self
+            .db_manager
+            .query(handle, &sql, &params)
+            .map_err(RuntimeError::TypeError)?;
+
+        // Convert Vec<HashMap<String, DbValue>> → Value::Array(Vec<Value::Map>)
+        let result: Vec<Value> = rows
+            .into_iter()
+            .map(|row| {
+                let map: std::collections::HashMap<String, Value> = row
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let val = match v {
+                            crate::stdlib_v3::database::DbValue::Int(n) => Value::Int(n),
+                            crate::stdlib_v3::database::DbValue::Float(f) => Value::Float(f),
+                            crate::stdlib_v3::database::DbValue::Text(s) => Value::Str(s),
+                            crate::stdlib_v3::database::DbValue::Null => Value::Null,
+                        };
+                        (k, val)
+                    })
+                    .collect();
+                Value::Map(map)
+            })
+            .collect();
+        Ok(Value::Array(result))
+    }
+
+    /// `db_close(handle)` → Null.
+    fn builtin_db_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_close: handle must be integer".into()).into(),
+                );
+            }
+        };
+        self.db_manager
+            .close(handle)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Null)
+    }
+
+    /// `db_begin(handle)` → Null. Begin a transaction.
+    fn builtin_db_begin(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_begin: handle must be integer".into()).into(),
+                );
+            }
+        };
+        self.db_manager
+            .begin(handle)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Null)
+    }
+
+    /// `db_commit(handle)` → Null. Commit the current transaction.
+    fn builtin_db_commit(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_commit: handle must be integer".into()).into(),
+                );
+            }
+        };
+        self.db_manager
+            .commit(handle)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Null)
+    }
+
+    /// `db_rollback(handle)` → Null. Rollback the current transaction.
+    fn builtin_db_rollback(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("db_rollback: handle must be integer".into()).into(),
+                );
+            }
+        };
+        self.db_manager
+            .rollback(handle)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Null)
+    }
+
+    /// Convert a Value::Array of params to Vec<DbParam>.
+    fn value_to_db_params(
+        val: &Value,
+    ) -> Result<Vec<crate::stdlib_v3::database::DbParam>, EvalError> {
+        use crate::stdlib_v3::database::DbParam;
+        match val {
+            Value::Array(arr) => {
+                let mut params = Vec::with_capacity(arr.len());
+                for v in arr {
+                    let p = match v {
+                        Value::Int(n) => DbParam::Int(*n),
+                        Value::Float(f) => DbParam::Float(*f),
+                        Value::Str(s) => DbParam::Text(s.clone()),
+                        Value::Null => DbParam::Null,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "db params: each element must be int, float, string, or null"
+                                    .into(),
+                            )
+                            .into());
+                        }
+                    };
+                    params.push(p);
+                }
+                Ok(params)
+            }
+            _ => Err(
+                RuntimeError::TypeError("db params: third argument must be an array".into()).into(),
+            ),
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════

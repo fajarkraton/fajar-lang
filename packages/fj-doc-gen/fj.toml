@@ -1,0 +1,9 @@
+[package]
+name = "fj-doc-gen"
+version = "1.0.0"
+description = "Documentation generator for Fajar Lang source files"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

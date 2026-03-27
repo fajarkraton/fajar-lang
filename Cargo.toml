@@ -25,6 +25,7 @@ serde_json = "1.0"            # Hardware profile JSON serialization
 toml = "0.8"                  # Phase 5.4: parse fj.toml
 libloading = "0.8"            # Phase 7: FFI dynamic library loading
 dap = "0.4.1-alpha1"          # Phase 2: Debug Adapter Protocol server
+rusqlite = { version = "0.34", features = ["bundled"] }  # TQ12.2: SQLite database
 
 # V8 GC1: Real crypto (RustCrypto)
 sha2 = "0.10"

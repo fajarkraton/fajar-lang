@@ -1,0 +1,291 @@
+// fj-tls — TLS Protocol Types and Stream Abstraction for Fajar Lang
+//
+// Provides TLS 1.2/1.3 protocol structures, handshake state machine,
+// cipher suite definitions, certificate validation types, and a
+// TlsStream wrapper for secure communication.
+
+// ── TLS version ──
+
+/// TLS protocol version.
+enum TlsVersion {
+    Tls10,
+    Tls11,
+    Tls12,
+    Tls13
+}
+
+/// Get the version string for display.
+fn tls_version_str(v: TlsVersion) -> str {
+    match v {
+        TlsVersion::Tls10 => "TLS 1.0",
+        TlsVersion::Tls11 => "TLS 1.1",
+        TlsVersion::Tls12 => "TLS 1.2",
+        TlsVersion::Tls13 => "TLS 1.3"
+    }
+}
+
+/// Get the protocol version bytes (major, minor).
+fn tls_version_bytes(v: TlsVersion) -> (i32, i32) {
+    match v {
+        TlsVersion::Tls10 => (3, 1),
+        TlsVersion::Tls11 => (3, 2),
+        TlsVersion::Tls12 => (3, 3),
+        TlsVersion::Tls13 => (3, 4)
+    }
+}
+
+// ── Cipher suites ──
+
+/// Supported cipher suites.
+enum CipherSuite {
+    TLS_AES_128_GCM_SHA256,
+    TLS_AES_256_GCM_SHA384,
+    TLS_CHACHA20_POLY1305_SHA256,
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+}
+
+/// Get human-readable cipher suite name.
+fn cipher_suite_name(cs: CipherSuite) -> str {
+    match cs {
+        CipherSuite::TLS_AES_128_GCM_SHA256 => "TLS_AES_128_GCM_SHA256",
+        CipherSuite::TLS_AES_256_GCM_SHA384 => "TLS_AES_256_GCM_SHA384",
+        CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => "TLS_CHACHA20_POLY1305_SHA256",
+        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+    }
+}
+
+/// Check if a cipher suite is TLS 1.3 only.
+fn is_tls13_suite(cs: CipherSuite) -> bool {
+    match cs {
+        CipherSuite::TLS_AES_128_GCM_SHA256 => true,
+        CipherSuite::TLS_AES_256_GCM_SHA384 => true,
+        CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => true,
+        _ => false
+    }
+}
+
+/// Get the key length in bits for a cipher suite.
+fn cipher_key_bits(cs: CipherSuite) -> i32 {
+    match cs {
+        CipherSuite::TLS_AES_128_GCM_SHA256 => 128,
+        CipherSuite::TLS_AES_256_GCM_SHA384 => 256,
+        CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => 256,
+        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => 128,
+        CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => 256,
+        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => 128
+    }
+}
+
+// ── Handshake state machine ──
+
+/// TLS handshake states.
+enum HandshakeState {
+    Initial,
+    ClientHelloSent,
+    ServerHelloReceived,
+    CertificateReceived,
+    KeyExchangeDone,
+    ChangeCipherSpec,
+    Finished,
+    Established,
+    Closed,
+    Error
+}
+
+/// Get the next expected state in the handshake.
+fn next_state(current: HandshakeState) -> HandshakeState {
+    match current {
+        HandshakeState::Initial => HandshakeState::ClientHelloSent,
+        HandshakeState::ClientHelloSent => HandshakeState::ServerHelloReceived,
+        HandshakeState::ServerHelloReceived => HandshakeState::CertificateReceived,
+        HandshakeState::CertificateReceived => HandshakeState::KeyExchangeDone,
+        HandshakeState::KeyExchangeDone => HandshakeState::ChangeCipherSpec,
+        HandshakeState::ChangeCipherSpec => HandshakeState::Finished,
+        HandshakeState::Finished => HandshakeState::Established,
+        HandshakeState::Established => HandshakeState::Closed,
+        _ => HandshakeState::Error
+    }
+}
+
+/// Check if the handshake is complete and data can be sent.
+fn is_established(state: HandshakeState) -> bool {
+    match state {
+        HandshakeState::Established => true,
+        _ => false
+    }
+}
+
+// ── Certificate types ──
+
+/// X.509 certificate information.
+struct Certificate {
+    subject: str,
+    issuer: str,
+    serial: str,
+    not_before: str,
+    not_after: str,
+    key_algorithm: str,
+    key_bits: i32,
+    is_ca: bool
+}
+
+/// Certificate validation result.
+enum CertValidation {
+    Valid,
+    Expired,
+    NotYetValid,
+    UnknownIssuer,
+    Revoked,
+    SelfSigned,
+    HostnameMismatch,
+    WeakKey
+}
+
+/// Get validation result description.
+fn validation_message(v: CertValidation) -> str {
+    match v {
+        CertValidation::Valid => "Certificate is valid",
+        CertValidation::Expired => "Certificate has expired",
+        CertValidation::NotYetValid => "Certificate is not yet valid",
+        CertValidation::UnknownIssuer => "Certificate issuer is unknown",
+        CertValidation::Revoked => "Certificate has been revoked",
+        CertValidation::SelfSigned => "Certificate is self-signed",
+        CertValidation::HostnameMismatch => "Hostname does not match certificate",
+        CertValidation::WeakKey => "Certificate uses a weak key"
+    }
+}
+
+/// Check if a key size is considered strong.
+fn is_strong_key(algorithm: str, bits: i32) -> bool {
+    if algorithm == "RSA" { bits >= 2048 }
+    else if algorithm == "EC" || algorithm == "ECDSA" { bits >= 256 }
+    else if algorithm == "Ed25519" { true }
+    else { bits >= 2048 }
+}
+
+// ── TLS configuration ──
+
+/// TLS configuration for establishing connections.
+struct TlsConfig {
+    min_version: TlsVersion,
+    max_version: TlsVersion,
+    cipher_suites: [CipherSuite],
+    verify_certificates: bool,
+    verify_hostname: bool,
+    ca_file: str,
+    cert_file: str,
+    key_file: str,
+    alpn_protocols: [str],
+    sni_hostname: str
+}
+
+/// Create a default secure TLS configuration (TLS 1.2+, verify enabled).
+fn tls_config_default() -> TlsConfig {
+    TlsConfig {
+        min_version: TlsVersion::Tls12,
+        max_version: TlsVersion::Tls13,
+        cipher_suites: [
+            CipherSuite::TLS_AES_256_GCM_SHA384,
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            CipherSuite::TLS_CHACHA20_POLY1305_SHA256
+        ],
+        verify_certificates: true,
+        verify_hostname: true,
+        ca_file: "",
+        cert_file: "",
+        key_file: "",
+        alpn_protocols: ["h2", "http/1.1"],
+        sni_hostname: ""
+    }
+}
+
+/// Create an insecure TLS configuration (for testing only).
+fn tls_config_insecure() -> TlsConfig {
+    let mut cfg = tls_config_default()
+    cfg.verify_certificates = false
+    cfg.verify_hostname = false
+    cfg.min_version = TlsVersion::Tls10
+    cfg
+}
+
+/// Create a mutual TLS configuration with client certificates.
+fn tls_config_mtls(ca: str, cert: str, key: str) -> TlsConfig {
+    let mut cfg = tls_config_default()
+    cfg.ca_file = ca
+    cfg.cert_file = cert
+    cfg.key_file = key
+    cfg
+}
+
+// ── TLS stream ──
+
+/// A TLS-wrapped stream with connection metadata.
+struct TlsStream {
+    state: HandshakeState,
+    config: TlsConfig,
+    negotiated_version: TlsVersion,
+    negotiated_cipher: CipherSuite,
+    peer_certificate: Certificate,
+    bytes_sent: i64,
+    bytes_received: i64,
+    is_client: bool
+}
+
+/// Create a new TLS client stream.
+fn tls_client(config: TlsConfig) -> TlsStream {
+    TlsStream {
+        state: HandshakeState::Initial,
+        config: config,
+        negotiated_version: config.max_version,
+        negotiated_cipher: CipherSuite::TLS_AES_256_GCM_SHA384,
+        peer_certificate: Certificate {
+            subject: "", issuer: "", serial: "",
+            not_before: "", not_after: "",
+            key_algorithm: "", key_bits: 0, is_ca: false
+        },
+        bytes_sent: 0,
+        bytes_received: 0,
+        is_client: true
+    }
+}
+
+/// Create a new TLS server stream.
+fn tls_server(config: TlsConfig) -> TlsStream {
+    let mut stream = tls_client(config)
+    stream.is_client = false
+    stream
+}
+
+/// Advance the handshake by one step.
+fn handshake_step(stream: TlsStream) -> TlsStream {
+    let mut s = stream
+    s.state = next_state(s.state)
+    s
+}
+
+/// Run the full handshake to completion.
+fn handshake(stream: TlsStream) -> TlsStream {
+    let mut s = stream
+    while !is_established(s.state) {
+        let new_state = next_state(s.state)
+        match new_state {
+            HandshakeState::Error => { break }
+            _ => { s.state = new_state }
+        }
+    }
+    s
+}
+
+/// Get a summary of the TLS connection.
+fn tls_info(stream: TlsStream) -> str {
+    let ver = tls_version_str(stream.negotiated_version)
+    let cipher = cipher_suite_name(stream.negotiated_cipher)
+    let role = if stream.is_client { "client" } else { "server" }
+    ver + " | " + cipher + " | " + role +
+    " | sent=" + to_string(stream.bytes_sent) +
+    " recv=" + to_string(stream.bytes_received)
+}

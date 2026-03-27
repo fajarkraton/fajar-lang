@@ -544,7 +544,7 @@ pub fn python_available() -> Result<String, String> {
             pyo3::Python::with_gil(|py| {
                 use pyo3::types::PyAnyMethods;
                 let ccode = std::ffi::CString::new("str(__import__('sys').version_info.major) + '.' + str(__import__('sys').version_info.minor) + '.' + str(__import__('sys').version_info.micro)")
-                    .unwrap();
+                    .expect("CString::new for Python version query code");
                 let version: String = py
                     .eval(&ccode, None, None)
                     .map_err(|e| format!("Python error: {e}"))?
@@ -670,13 +670,22 @@ pub fn numpy_to_buffer(code: &str) -> Result<NumpyBuffer, String> {
         let shape_code = format!("list(({code}).shape)");
 
         let data_list: Vec<f64> = py
-            .eval(&std::ffi::CString::new(data_code).unwrap(), None, None)
+            .eval(
+                &std::ffi::CString::new(data_code).expect("CString::new for numpy data eval code"),
+                None,
+                None,
+            )
             .map_err(|e| format!("numpy data eval: {e}"))?
             .extract()
             .map_err(|e| format!("numpy data extract: {e}"))?;
 
         let shape: Vec<usize> = py
-            .eval(&std::ffi::CString::new(shape_code).unwrap(), None, None)
+            .eval(
+                &std::ffi::CString::new(shape_code)
+                    .expect("CString::new for numpy shape eval code"),
+                None,
+                None,
+            )
             .map_err(|e| format!("numpy shape eval: {e}"))?
             .extract()
             .map_err(|e| format!("numpy shape extract: {e}"))?;

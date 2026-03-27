@@ -1,0 +1,9 @@
+[package]
+name = "fj-url"
+version = "1.0.0"
+description = "URL parsing and manipulation for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

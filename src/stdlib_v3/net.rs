@@ -807,7 +807,7 @@ pub fn tcp_connect_opts(addr: &str, data: &[u8], opts: &TcpOptions) -> Result<Ve
     }
 
     let mut stream = stream.ok_or_else(|| {
-        let e = last_err.unwrap();
+        let e = last_err.expect("connection error after all connect attempts failed");
         if e.kind() == std::io::ErrorKind::TimedOut {
             NetError::ConnectTimeout {
                 addr: addr.to_string(),

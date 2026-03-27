@@ -1,0 +1,9 @@
+[package]
+name = "fj-color"
+version = "1.0.0"
+description = "Terminal color and formatting for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

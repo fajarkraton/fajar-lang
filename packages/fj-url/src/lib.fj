@@ -1,0 +1,299 @@
+// fj-url — URL Parsing and Manipulation for Fajar Lang
+//
+// Provides RFC 3986-inspired URL parsing, construction, and query
+// parameter encoding/decoding. Pure implementation with no FFI.
+
+// ── URL structure ──
+
+/// Parsed URL with all standard components.
+struct Url {
+    scheme: str,
+    host: str,
+    port: i32,
+    path: str,
+    query: str,
+    fragment: str
+}
+
+/// Create a default empty URL.
+fn url_new() -> Url {
+    Url {
+        scheme: "",
+        host: "",
+        port: 0,
+        path: "/",
+        query: "",
+        fragment: ""
+    }
+}
+
+// ── Character classification helpers ──
+
+/// Check if a character is an unreserved URL character.
+fn is_unreserved(c: char) -> bool {
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+    (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~'
+}
+
+/// Convert a hex digit character to its integer value.
+fn hex_val(c: char) -> i32 {
+    if c >= '0' && c <= '9' { c as i32 - '0' as i32 }
+    else if c >= 'a' && c <= 'f' { c as i32 - 'a' as i32 + 10 }
+    else if c >= 'A' && c <= 'F' { c as i32 - 'A' as i32 + 10 }
+    else { -1 }
+}
+
+/// Convert an integer 0-15 to its hex character.
+fn to_hex_char(v: i32) -> char {
+    let digits = "0123456789ABCDEF"
+    digits[v]
+}
+
+// ── Percent encoding/decoding ──
+
+/// Percent-encode a string for use in URLs.
+/// Encodes all characters except unreserved ones (A-Z, a-z, 0-9, -, _, ., ~).
+fn encode(input: str) -> str {
+    let mut result = ""
+    for i in 0..len(input) {
+        let c = input[i]
+        if is_unreserved(c) {
+            result = result + to_string(c)
+        } else {
+            let byte = c as i32
+            let hi = byte / 16
+            let lo = byte % 16
+            result = result + "%" + to_string(to_hex_char(hi)) + to_string(to_hex_char(lo))
+        }
+    }
+    result
+}
+
+/// Decode a percent-encoded string.
+fn decode(input: str) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < len(input) {
+        if input[i] == '%' && i + 2 < len(input) {
+            let hi = hex_val(input[i + 1])
+            let lo = hex_val(input[i + 2])
+            if hi >= 0 && lo >= 0 {
+                let code = hi * 16 + lo
+                result = result + to_string(code as char)
+                i = i + 3
+            } else {
+                result = result + "%"
+                i = i + 1
+            }
+        } else if input[i] == '+' {
+            result = result + " "
+            i = i + 1
+        } else {
+            result = result + to_string(input[i])
+            i = i + 1
+        }
+    }
+    result
+}
+
+// ── Query parameter helpers ──
+
+/// A single key=value query parameter.
+struct QueryParam {
+    key: str,
+    value: str
+}
+
+/// Encode a list of query parameters into a query string.
+/// Example: [QueryParam{key:"a",value:"1"}, QueryParam{key:"b",value:"hi there"}]
+///          => "a=1&b=hi%20there"
+fn encode_query_params(params: [QueryParam]) -> str {
+    let mut result = ""
+    for i in 0..len(params) {
+        if i > 0 {
+            result = result + "&"
+        }
+        result = result + encode(params[i].key) + "=" + encode(params[i].value)
+    }
+    result
+}
+
+/// Decode a query string into key=value pairs.
+/// Example: "a=1&b=hi%20there" => [QueryParam{key:"a",value:"1"}, ...]
+fn decode_query_params(query: str) -> [QueryParam] {
+    let mut params: [QueryParam] = []
+    if len(query) == 0 {
+        return params
+    }
+    let pairs = split(query, "&")
+    for pair in pairs {
+        let kv = split(pair, "=")
+        if len(kv) == 2 {
+            params = params + [QueryParam { key: decode(kv[0]), value: decode(kv[1]) }]
+        } else if len(kv) == 1 {
+            params = params + [QueryParam { key: decode(kv[0]), value: "" }]
+        }
+    }
+    params
+}
+
+// ── URL parsing ──
+
+/// Find the index of the first occurrence of a substring.
+fn find_str(haystack: str, needle: str) -> i32 {
+    let nlen = len(needle)
+    if nlen == 0 { return 0 }
+    if nlen > len(haystack) { return -1 }
+    for i in 0..(len(haystack) - nlen + 1) {
+        let mut found = true
+        for j in 0..nlen {
+            if haystack[i + j] != needle[j] {
+                found = false
+                break
+            }
+        }
+        if found { return i as i32 }
+    }
+    -1
+}
+
+/// Extract a substring from start (inclusive) to end (exclusive).
+fn substr(s: str, start: i32, end: i32) -> str {
+    let mut result = ""
+    let lo = if start < 0 { 0 } else { start }
+    let hi = if end > len(s) as i32 { len(s) as i32 } else { end }
+    for i in lo..hi {
+        result = result + to_string(s[i as usize])
+    }
+    result
+}
+
+/// Parse a URL string into a Url struct.
+/// Supports: scheme://host:port/path?query#fragment
+fn parse_url(input: str) -> Url {
+    let mut url = url_new()
+    let mut rest = input
+
+    // Extract fragment (#...)
+    let frag_pos = find_str(rest, "#")
+    if frag_pos >= 0 {
+        url.fragment = substr(rest, frag_pos + 1, len(rest) as i32)
+        rest = substr(rest, 0, frag_pos)
+    }
+
+    // Extract query (?...)
+    let query_pos = find_str(rest, "?")
+    if query_pos >= 0 {
+        url.query = substr(rest, query_pos + 1, len(rest) as i32)
+        rest = substr(rest, 0, query_pos)
+    }
+
+    // Extract scheme (xxx://)
+    let scheme_pos = find_str(rest, "://")
+    if scheme_pos >= 0 {
+        url.scheme = substr(rest, 0, scheme_pos)
+        rest = substr(rest, scheme_pos + 3, len(rest) as i32)
+    }
+
+    // Separate host(:port) from path
+    let path_pos = find_str(rest, "/")
+    let mut authority = rest
+    if path_pos >= 0 {
+        authority = substr(rest, 0, path_pos)
+        url.path = substr(rest, path_pos, len(rest) as i32)
+    } else {
+        url.path = "/"
+    }
+
+    // Extract port from authority
+    let colon_pos = find_str(authority, ":")
+    if colon_pos >= 0 {
+        url.host = substr(authority, 0, colon_pos)
+        let port_str = substr(authority, colon_pos + 1, len(authority) as i32)
+        url.port = parse_int(port_str)
+    } else {
+        url.host = authority
+        // Default ports by scheme
+        if url.scheme == "http" { url.port = 80 }
+        else if url.scheme == "https" { url.port = 443 }
+        else if url.scheme == "ftp" { url.port = 21 }
+    }
+
+    url
+}
+
+// ── URL serialization ──
+
+/// Convert a Url struct back to a string representation.
+fn url_to_string(url: Url) -> str {
+    let mut result = ""
+    if len(url.scheme) > 0 {
+        result = result + url.scheme + "://"
+    }
+    result = result + url.host
+    // Only show port if non-standard
+    let show_port = url.port > 0 &&
+        !(url.scheme == "http" && url.port == 80) &&
+        !(url.scheme == "https" && url.port == 443)
+    if show_port {
+        result = result + ":" + to_string(url.port)
+    }
+    result = result + url.path
+    if len(url.query) > 0 {
+        result = result + "?" + url.query
+    }
+    if len(url.fragment) > 0 {
+        result = result + "#" + url.fragment
+    }
+    result
+}
+
+/// Check if a URL uses a secure scheme (https, wss, ftps).
+fn is_secure(url: Url) -> bool {
+    url.scheme == "https" || url.scheme == "wss" || url.scheme == "ftps"
+}
+
+/// Get a query parameter value by key, or return default if not found.
+fn get_query_param(url: Url, key: str, default: str) -> str {
+    let params = decode_query_params(url.query)
+    for p in params {
+        if p.key == key {
+            return p.value
+        }
+    }
+    default
+}
+
+/// Set or add a query parameter on a URL, returning a new URL.
+fn set_query_param(url: Url, key: str, value: str) -> Url {
+    let mut params = decode_query_params(url.query)
+    let mut found = false
+    for i in 0..len(params) {
+        if params[i].key == key {
+            params[i].value = value
+            found = true
+        }
+    }
+    if !found {
+        params = params + [QueryParam { key: key, value: value }]
+    }
+    let mut new_url = url
+    new_url.query = encode_query_params(params)
+    new_url
+}
+
+/// Join a base URL with a relative path.
+fn url_join(base: Url, relative_path: str) -> Url {
+    let mut result = base
+    if len(relative_path) > 0 && relative_path[0] == '/' {
+        result.path = relative_path
+    } else {
+        // Append to existing path
+        let base_path = if base.path == "/" { "/" } else { base.path + "/" }
+        result.path = base_path + relative_path
+    }
+    // Clear query/fragment on join
+    result.query = ""
+    result.fragment = ""
+    result
+}

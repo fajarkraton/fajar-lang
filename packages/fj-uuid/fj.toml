@@ -1,0 +1,9 @@
+[package]
+name = "fj-uuid"
+version = "1.0.0"
+description = "UUID generation: v4 (random), v7 (timestamp), parsing, and validation"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

@@ -1,0 +1,9 @@
+[package]
+name = "fj-yaml"
+version = "1.0.0"
+description = "YAML parser: indent-based parsing with scalars, sequences, and mappings"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

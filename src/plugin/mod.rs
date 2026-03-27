@@ -300,6 +300,7 @@ pub fn load_plugin_from_path(path: &str) -> Result<Box<dyn CompilerPlugin>, Stri
     // Look up the factory function
     #[allow(improper_ctypes_definitions)]
     type CreatePluginFn = unsafe extern "C" fn() -> *mut dyn CompilerPlugin;
+    // SAFETY: Plugin symbol lookup via libloading — caller ensures ABI compatibility
     let create_fn: libloading::Symbol<CreatePluginFn> = unsafe { lib.get(b"create_plugin") }
         .map_err(|e| format!("plugin '{path}' missing 'create_plugin' symbol: {e}"))?;
 

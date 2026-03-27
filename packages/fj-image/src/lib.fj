@@ -1,0 +1,228 @@
+// fj-image -- Image Processing for Fajar Lang
+//
+// Provides pixel-level manipulation, color transforms, and basic
+// image operations (grayscale, brightness, contrast, resize).
+
+// ── Pixel ──
+
+struct Pixel {
+    r: i64,
+    g: i64,
+    b: i64,
+    a: i64,
+}
+
+/// Create an opaque pixel.
+fn pixel(r: i64, g: i64, b: i64) -> Pixel {
+    Pixel { r: clamp_byte(r), g: clamp_byte(g), b: clamp_byte(b), a: 255 }
+}
+
+/// Create a pixel with alpha.
+fn pixel_rgba(r: i64, g: i64, b: i64, a: i64) -> Pixel {
+    Pixel { r: clamp_byte(r), g: clamp_byte(g), b: clamp_byte(b), a: clamp_byte(a) }
+}
+
+/// Clamp a value to 0..255 range.
+fn clamp_byte(v: i64) -> i64 {
+    if v < 0 { 0 }
+    else if v > 255 { 255 }
+    else { v }
+}
+
+/// Predefined colors.
+fn black() -> Pixel { pixel(0, 0, 0) }
+fn white() -> Pixel { pixel(255, 255, 255) }
+fn red() -> Pixel   { pixel(255, 0, 0) }
+fn green() -> Pixel { pixel(0, 255, 0) }
+fn blue() -> Pixel  { pixel(0, 0, 255) }
+
+/// Convert a pixel to grayscale using luminance weights.
+fn to_gray(p: Pixel) -> Pixel {
+    // ITU-R BT.601 weights scaled to integer: 0.299, 0.587, 0.114
+    let gray = (p.r * 299 + p.g * 587 + p.b * 114) / 1000
+    Pixel { r: gray, g: gray, b: gray, a: p.a }
+}
+
+/// Adjust pixel brightness by `delta` (-255 to +255).
+fn adjust_brightness(p: Pixel, delta: i64) -> Pixel {
+    pixel_rgba(p.r + delta, p.g + delta, p.b + delta, p.a)
+}
+
+/// Invert a pixel's colors.
+fn invert(p: Pixel) -> Pixel {
+    pixel_rgba(255 - p.r, 255 - p.g, 255 - p.b, p.a)
+}
+
+/// Linear interpolation between two pixels.
+fn lerp_pixel(a: Pixel, b: Pixel, t: f64) -> Pixel {
+    let r = a.r as f64 + (b.r - a.r) as f64 * t
+    let g = a.g as f64 + (b.g - a.g) as f64 * t
+    let bl = a.b as f64 + (b.b - a.b) as f64 * t
+    let al = a.a as f64 + (b.a - a.a) as f64 * t
+    pixel_rgba(r as i64, g as i64, bl as i64, al as i64)
+}
+
+/// Alpha-blend pixel `fg` over `bg`.
+fn blend(fg: Pixel, bg: Pixel) -> Pixel {
+    let alpha = fg.a as f64 / 255.0
+    let inv = 1.0 - alpha
+    let r = fg.r as f64 * alpha + bg.r as f64 * inv
+    let g = fg.g as f64 * alpha + bg.g as f64 * inv
+    let b = fg.b as f64 * alpha + bg.b as f64 * inv
+    pixel(r as i64, g as i64, b as i64)
+}
+
+// ── Image ──
+
+struct Image {
+    width: i64,
+    height: i64,
+    pixels: [Pixel],
+}
+
+/// Create a solid-color image.
+fn image_new(width: i64, height: i64, fill: Pixel) -> Image {
+    let mut pixels: [Pixel] = []
+    let total = width * height
+    for _ in 0..total {
+        pixels.push(fill)
+    }
+    Image { width: width, height: height, pixels: pixels }
+}
+
+/// Get the pixel at (x, y).
+fn get_pixel(img: Image, x: i64, y: i64) -> Pixel {
+    let idx = y * img.width + x
+    img.pixels[idx]
+}
+
+/// Set the pixel at (x, y).
+fn set_pixel(img: Image, x: i64, y: i64, p: Pixel) -> Image {
+    let idx = y * img.width + x
+    let mut pixels = img.pixels
+    pixels[idx] = p
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Total number of pixels.
+fn pixel_count(img: Image) -> i64 {
+    img.width * img.height
+}
+
+// ── Image transforms ──
+
+/// Convert entire image to grayscale.
+fn grayscale(img: Image) -> Image {
+    let mut pixels: [Pixel] = []
+    for p in img.pixels {
+        pixels.push(to_gray(p))
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Adjust brightness of entire image.
+fn brightness(img: Image, delta: i64) -> Image {
+    let mut pixels: [Pixel] = []
+    for p in img.pixels {
+        pixels.push(adjust_brightness(p, delta))
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Invert all pixel colors.
+fn invert_image(img: Image) -> Image {
+    let mut pixels: [Pixel] = []
+    for p in img.pixels {
+        pixels.push(invert(p))
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Adjust contrast by a factor around midpoint 128.
+fn contrast(img: Image, factor: f64) -> Image {
+    let mut pixels: [Pixel] = []
+    for p in img.pixels {
+        let r = ((p.r as f64 - 128.0) * factor + 128.0) as i64
+        let g = ((p.g as f64 - 128.0) * factor + 128.0) as i64
+        let b = ((p.b as f64 - 128.0) * factor + 128.0) as i64
+        pixels.push(pixel_rgba(clamp_byte(r), clamp_byte(g), clamp_byte(b), p.a))
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Resize using nearest-neighbor sampling.
+fn resize(img: Image, new_width: i64, new_height: i64) -> Image {
+    let mut pixels: [Pixel] = []
+    for y in 0..new_height {
+        for x in 0..new_width {
+            let src_x = x * img.width / new_width
+            let src_y = y * img.height / new_height
+            let p = get_pixel(img, src_x, src_y)
+            pixels.push(p)
+        }
+    }
+    Image { width: new_width, height: new_height, pixels: pixels }
+}
+
+/// Flip image horizontally (mirror).
+fn flip_horizontal(img: Image) -> Image {
+    let mut pixels: [Pixel] = []
+    for y in 0..img.height {
+        for x in 0..img.width {
+            let src_x = img.width - 1 - x
+            pixels.push(get_pixel(img, src_x, y))
+        }
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Flip image vertically.
+fn flip_vertical(img: Image) -> Image {
+    let mut pixels: [Pixel] = []
+    for y in 0..img.height {
+        let src_y = img.height - 1 - y
+        for x in 0..img.width {
+            pixels.push(get_pixel(img, x, src_y))
+        }
+    }
+    Image { width: img.width, height: img.height, pixels: pixels }
+}
+
+/// Crop a rectangular region from the image.
+fn crop(img: Image, x0: i64, y0: i64, w: i64, h: i64) -> Image {
+    let mut pixels: [Pixel] = []
+    for y in y0..(y0 + h) {
+        for x in x0..(x0 + w) {
+            pixels.push(get_pixel(img, x, y))
+        }
+    }
+    Image { width: w, height: h, pixels: pixels }
+}
+
+/// Draw a filled rectangle on the image.
+fn draw_rect(img: Image, x0: i64, y0: i64, w: i64, h: i64, color: Pixel) -> Image {
+    let mut result = img
+    for y in y0..(y0 + h) {
+        for x in x0..(x0 + w) {
+            if x >= 0 && x < img.width && y >= 0 && y < img.height {
+                result = set_pixel(result, x, y, color)
+            }
+        }
+    }
+    result
+}
+
+/// Compute average color of the entire image.
+fn average_color(img: Image) -> Pixel {
+    let n = pixel_count(img)
+    if n == 0 { return black() }
+    let mut sr: i64 = 0
+    let mut sg: i64 = 0
+    let mut sb: i64 = 0
+    for p in img.pixels {
+        sr = sr + p.r
+        sg = sg + p.g
+        sb = sb + p.b
+    }
+    pixel(sr / n, sg / n, sb / n)
+}

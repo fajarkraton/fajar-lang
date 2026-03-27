@@ -348,7 +348,10 @@ fn find_recursion(
     stack: &mut Vec<String>,
 ) -> Option<Vec<String>> {
     if stack.contains(&fn_name.to_string()) {
-        let cycle_start = stack.iter().position(|n| n == fn_name).unwrap();
+        let cycle_start = stack
+            .iter()
+            .position(|n| n == fn_name)
+            .expect("cycle start position after contains check");
         let mut cycle: Vec<String> = stack[cycle_start..].to_vec();
         cycle.push(fn_name.to_string());
         return Some(cycle);

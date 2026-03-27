@@ -1,0 +1,306 @@
+// fj-time -- Date/Time Library for Fajar Lang
+//
+// Provides DateTime, Duration, date arithmetic, formatting,
+// and calendar utilities.  Epoch: 1970-01-01 00:00:00 UTC.
+
+// ── Constants ──
+
+const SECONDS_PER_MINUTE: i64 = 60
+const SECONDS_PER_HOUR: i64 = 3600
+const SECONDS_PER_DAY: i64 = 86400
+
+// ── DateTime ──
+
+struct DateTime {
+    year: i64,
+    month: i64,
+    day: i64,
+    hour: i64,
+    minute: i64,
+    second: i64,
+}
+
+/// Create a DateTime from components.
+fn datetime(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64) -> DateTime {
+    DateTime {
+        year: year,
+        month: month,
+        day: day,
+        hour: hour,
+        minute: minute,
+        second: second,
+    }
+}
+
+/// Create a date (time set to 00:00:00).
+fn date(year: i64, month: i64, day: i64) -> DateTime {
+    datetime(year, month, day, 0, 0, 0)
+}
+
+/// Create a DateTime representing the Unix epoch.
+fn epoch() -> DateTime {
+    datetime(1970, 1, 1, 0, 0, 0)
+}
+
+// ── Duration ──
+
+struct Duration {
+    total_seconds: i64,
+}
+
+/// Create a duration from seconds.
+fn seconds(s: i64) -> Duration { Duration { total_seconds: s } }
+
+/// Create a duration from minutes.
+fn minutes(m: i64) -> Duration { Duration { total_seconds: m * SECONDS_PER_MINUTE } }
+
+/// Create a duration from hours.
+fn hours(h: i64) -> Duration { Duration { total_seconds: h * SECONDS_PER_HOUR } }
+
+/// Create a duration from days.
+fn days(d: i64) -> Duration { Duration { total_seconds: d * SECONDS_PER_DAY } }
+
+/// Get the total seconds of a duration.
+fn as_seconds(d: Duration) -> i64 { d.total_seconds }
+
+/// Get the total minutes of a duration (truncated).
+fn as_minutes(d: Duration) -> i64 { d.total_seconds / SECONDS_PER_MINUTE }
+
+/// Get the total hours of a duration (truncated).
+fn as_hours(d: Duration) -> i64 { d.total_seconds / SECONDS_PER_HOUR }
+
+/// Get the total days of a duration (truncated).
+fn as_days(d: Duration) -> i64 { d.total_seconds / SECONDS_PER_DAY }
+
+/// Add two durations.
+fn add_duration(a: Duration, b: Duration) -> Duration {
+    Duration { total_seconds: a.total_seconds + b.total_seconds }
+}
+
+/// Subtract duration b from a.
+fn sub_duration(a: Duration, b: Duration) -> Duration {
+    Duration { total_seconds: a.total_seconds - b.total_seconds }
+}
+
+// ── Calendar utilities ──
+
+/// Check if a year is a leap year.
+fn is_leap_year(year: i64) -> bool {
+    if year % 400 == 0 { return true }
+    if year % 100 == 0 { return false }
+    year % 4 == 0
+}
+
+/// Number of days in a given month (1-12) of a given year.
+fn days_in_month(year: i64, month: i64) -> i64 {
+    if month == 1 || month == 3 || month == 5 || month == 7 ||
+       month == 8 || month == 10 || month == 12 {
+        31
+    } else if month == 4 || month == 6 || month == 9 || month == 11 {
+        30
+    } else if month == 2 {
+        if is_leap_year(year) { 29 } else { 28 }
+    } else {
+        0
+    }
+}
+
+/// Number of days in a year.
+fn days_in_year(year: i64) -> i64 {
+    if is_leap_year(year) { 366 } else { 365 }
+}
+
+/// Day of year (1-366) for a given date.
+fn day_of_year(dt: DateTime) -> i64 {
+    let mut total = 0
+    for m in 1..dt.month {
+        total = total + days_in_month(dt.year, m)
+    }
+    total + dt.day
+}
+
+/// Day of week (0=Monday, 6=Sunday) using Tomohiko Sakamoto's algorithm.
+fn day_of_week(dt: DateTime) -> i64 {
+    let offsets = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+    let mut y = dt.year
+    if dt.month < 3 { y = y - 1 }
+    let dow = (y + y / 4 - y / 100 + y / 400 + offsets[dt.month - 1] + dt.day) % 7
+    // Convert: 0=Sun -> 6, 1=Mon -> 0, ..., 6=Sat -> 5
+    if dow == 0 { 6 } else { dow - 1 }
+}
+
+/// Name of the day of week.
+fn weekday_name(dow: i64) -> str {
+    if dow == 0 { "Monday" }
+    else if dow == 1 { "Tuesday" }
+    else if dow == 2 { "Wednesday" }
+    else if dow == 3 { "Thursday" }
+    else if dow == 4 { "Friday" }
+    else if dow == 5 { "Saturday" }
+    else { "Sunday" }
+}
+
+/// Name of the month.
+fn month_name(month: i64) -> str {
+    if month == 1 { "January" }
+    else if month == 2 { "February" }
+    else if month == 3 { "March" }
+    else if month == 4 { "April" }
+    else if month == 5 { "May" }
+    else if month == 6 { "June" }
+    else if month == 7 { "July" }
+    else if month == 8 { "August" }
+    else if month == 9 { "September" }
+    else if month == 10 { "October" }
+    else if month == 11 { "November" }
+    else { "December" }
+}
+
+// ── Date arithmetic ──
+
+/// Add days to a DateTime.
+fn add_days(dt: DateTime, n: i64) -> DateTime {
+    let mut day = dt.day + n
+    let mut month = dt.month
+    let mut year = dt.year
+    while day > days_in_month(year, month) {
+        day = day - days_in_month(year, month)
+        month = month + 1
+        if month > 12 {
+            month = 1
+            year = year + 1
+        }
+    }
+    while day < 1 {
+        month = month - 1
+        if month < 1 {
+            month = 12
+            year = year - 1
+        }
+        day = day + days_in_month(year, month)
+    }
+    datetime(year, month, day, dt.hour, dt.minute, dt.second)
+}
+
+/// Add hours to a DateTime.
+fn add_hours(dt: DateTime, n: i64) -> DateTime {
+    let mut second = dt.second
+    let mut minute = dt.minute
+    let mut hour = dt.hour + n
+    let mut day_carry = 0
+    while hour >= 24 {
+        hour = hour - 24
+        day_carry = day_carry + 1
+    }
+    while hour < 0 {
+        hour = hour + 24
+        day_carry = day_carry - 1
+    }
+    let base = datetime(dt.year, dt.month, dt.day, hour, minute, second)
+    if day_carry != 0 { add_days(base, day_carry) } else { base }
+}
+
+/// Add minutes to a DateTime.
+fn add_minutes(dt: DateTime, n: i64) -> DateTime {
+    let total_min = dt.minute + n
+    let hour_carry = total_min / 60
+    let mut minute = total_min % 60
+    if minute < 0 { minute = minute + 60 }
+    let adjusted_carry = if total_min < 0 && minute != 0 { hour_carry - 1 } else { hour_carry }
+    let base = datetime(dt.year, dt.month, dt.day, dt.hour, minute, dt.second)
+    if adjusted_carry != 0 { add_hours(base, adjusted_carry) } else { base }
+}
+
+/// Calculate the difference in days between two dates (a - b).
+fn diff_days(a: DateTime, b: DateTime) -> i64 {
+    // Convert both to days since epoch for simplicity
+    let da = to_epoch_days(a)
+    let db = to_epoch_days(b)
+    da - db
+}
+
+/// Convert a DateTime to days since epoch (approximate, for diff).
+fn to_epoch_days(dt: DateTime) -> i64 {
+    let mut total = 0
+    // Years
+    for y in 1970..dt.year {
+        total = total + days_in_year(y)
+    }
+    // Months
+    for m in 1..dt.month {
+        total = total + days_in_month(dt.year, m)
+    }
+    // Days
+    total + dt.day - 1
+}
+
+// ── Formatting ──
+
+/// Pad an integer with leading zeros to `width` characters.
+fn zero_pad(n: i64, width: i64) -> str {
+    let s = to_string(n)
+    let mut padded = s
+    while len(padded) < width {
+        padded = "0" + padded
+    }
+    padded
+}
+
+/// Format DateTime as ISO 8601: "YYYY-MM-DDTHH:MM:SS"
+fn format_iso(dt: DateTime) -> str {
+    zero_pad(dt.year, 4) + "-" + zero_pad(dt.month, 2) + "-" + zero_pad(dt.day, 2) +
+    "T" + zero_pad(dt.hour, 2) + ":" + zero_pad(dt.minute, 2) + ":" + zero_pad(dt.second, 2)
+}
+
+/// Format DateTime as date only: "YYYY-MM-DD"
+fn format_date(dt: DateTime) -> str {
+    zero_pad(dt.year, 4) + "-" + zero_pad(dt.month, 2) + "-" + zero_pad(dt.day, 2)
+}
+
+/// Format DateTime as time only: "HH:MM:SS"
+fn format_time(dt: DateTime) -> str {
+    zero_pad(dt.hour, 2) + ":" + zero_pad(dt.minute, 2) + ":" + zero_pad(dt.second, 2)
+}
+
+/// Format with a custom pattern.
+/// Supported tokens: %Y (year), %m (month), %d (day),
+///                   %H (hour), %M (minute), %S (second)
+fn format(dt: DateTime, pattern: str) -> str {
+    let mut out = pattern
+    out = out.replace("%Y", zero_pad(dt.year, 4))
+    out = out.replace("%m", zero_pad(dt.month, 2))
+    out = out.replace("%d", zero_pad(dt.day, 2))
+    out = out.replace("%H", zero_pad(dt.hour, 2))
+    out = out.replace("%M", zero_pad(dt.minute, 2))
+    out = out.replace("%S", zero_pad(dt.second, 2))
+    out
+}
+
+/// Human-readable string: "Monday, January 1, 2026"
+fn format_human(dt: DateTime) -> str {
+    let dow = day_of_week(dt)
+    weekday_name(dow) + ", " + month_name(dt.month) + " " + to_string(dt.day) + ", " + to_string(dt.year)
+}
+
+// ── Comparison ──
+
+/// Check if two DateTimes are equal.
+fn dt_eq(a: DateTime, b: DateTime) -> bool {
+    a.year == b.year && a.month == b.month && a.day == b.day &&
+    a.hour == b.hour && a.minute == b.minute && a.second == b.second
+}
+
+/// Check if DateTime a is before b.
+fn dt_before(a: DateTime, b: DateTime) -> bool {
+    if a.year != b.year { return a.year < b.year }
+    if a.month != b.month { return a.month < b.month }
+    if a.day != b.day { return a.day < b.day }
+    if a.hour != b.hour { return a.hour < b.hour }
+    if a.minute != b.minute { return a.minute < b.minute }
+    a.second < b.second
+}
+
+/// Check if DateTime a is after b.
+fn dt_after(a: DateTime, b: DateTime) -> bool {
+    dt_before(b, a)
+}

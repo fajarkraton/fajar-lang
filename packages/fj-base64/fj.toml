@@ -1,0 +1,9 @@
+[package]
+name = "fj-base64"
+version = "1.0.0"
+description = "Base64 encoding and decoding with standard and URL-safe alphabets"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

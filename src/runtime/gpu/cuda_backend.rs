@@ -56,18 +56,22 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
     let cu_device_get: Symbol<unsafe extern "C" fn(*mut i32, i32) -> i32> =
         unsafe { lib.get(b"cuDeviceGet") }.map_err(|e| GpuError::BackendError(e.to_string()))?;
 
+    // SAFETY: CUDA driver API symbol loaded via libloading — error handled by .map_err()
     let cu_device_get_name: Symbol<unsafe extern "C" fn(*mut u8, i32, i32) -> i32> =
         unsafe { lib.get(b"cuDeviceGetName") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
 
+    // SAFETY: CUDA driver API symbol loaded via libloading — error handled by .map_err()
     let cu_device_total_mem: Symbol<unsafe extern "C" fn(*mut usize, i32) -> i32> =
         unsafe { lib.get(b"cuDeviceTotalMem_v2") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
 
+    // SAFETY: CUDA driver API symbol loaded via libloading — error handled by .map_err()
     let cu_device_get_attribute: Symbol<unsafe extern "C" fn(*mut i32, i32, i32) -> i32> =
         unsafe { lib.get(b"cuDeviceGetAttribute") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
 
+    // SAFETY: CUDA driver API symbol loaded via libloading — error handled by .map_err()
     let cu_ctx_create: Symbol<unsafe extern "C" fn(*mut *mut c_void, u32, i32) -> i32> =
         unsafe { lib.get(b"cuCtxCreate_v2") }.map_err(|e| GpuError::BackendError(e.to_string()))?;
 
@@ -265,6 +269,124 @@ impl Drop for CudaDevice {
                     lib.get::<unsafe extern "C" fn(*mut c_void) -> i32>(b"cuCtxDestroy_v2")
                 } {
                     unsafe { cu_ctx_destroy(self.context) };
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enumerate_devices_does_not_panic() {
+        // On systems without CUDA, enumerate_devices should return an error, never panic.
+        let result = enumerate_devices();
+        // Either Ok (CUDA present) or Err (CUDA absent) — both are valid.
+        match &result {
+            Ok(devices) => assert!(
+                !devices.is_empty(),
+                "if Ok, should have at least one device"
+            ),
+            Err(_) => {} // Expected when CUDA is not installed
+        }
+    }
+
+    #[test]
+    fn enumerate_returns_cuda_backend_type() {
+        // If CUDA is available, all returned devices should report GpuBackend::Cuda.
+        if let Ok(devices) = enumerate_devices() {
+            for dev in &devices {
+                assert_eq!(
+                    dev.info().backend,
+                    GpuBackend::Cuda,
+                    "CUDA enumerate should only return CUDA devices"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn enumerate_devices_info_fields_valid() {
+        // If CUDA is available, device info should have non-empty name and nonzero memory.
+        if let Ok(devices) = enumerate_devices() {
+            for dev in &devices {
+                let info = dev.info();
+                assert!(!info.name.is_empty(), "device name should not be empty");
+                assert!(info.memory > 0, "device should report nonzero memory");
+                assert!(info.compute_units > 0, "device should have compute units");
+                assert!(
+                    info.max_workgroup_size > 0,
+                    "max workgroup size should be positive"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cuda_compile_ptx_kernel() {
+        // If CUDA is available, compiling a PTX kernel should succeed.
+        if let Ok(devices) = enumerate_devices() {
+            for dev in &devices {
+                let kernel = dev
+                    .compile_kernel(&KernelSource::Ptx(".entry kernel() {}".into()))
+                    .expect("PTX kernel compilation should succeed");
+                assert_eq!(kernel.name(), "cuda_kernel");
+            }
+        }
+    }
+
+    #[test]
+    fn cuda_compile_builtin_kernel() {
+        // If CUDA is available, compiling a builtin kernel should succeed.
+        if let Ok(devices) = enumerate_devices() {
+            for dev in &devices {
+                let kernel = dev
+                    .compile_kernel(&KernelSource::Builtin(
+                        super::super::kernel::BuiltinKernel::VectorAdd,
+                    ))
+                    .expect("builtin kernel compilation should succeed");
+                assert_eq!(kernel.name(), "vector_add");
+                assert_eq!(kernel.num_bindings(), 3);
+            }
+        }
+    }
+
+    #[test]
+    fn cuda_compile_wgsl_rejected() {
+        // CUDA backend should reject WGSL kernel sources.
+        if let Ok(devices) = enumerate_devices() {
+            for dev in &devices {
+                let result =
+                    dev.compile_kernel(&KernelSource::Wgsl("@compute fn main() {}".into()));
+                assert!(result.is_err(), "CUDA should reject WGSL kernel sources");
+            }
+        }
+    }
+
+    #[test]
+    fn cuda_upload_size_mismatch() {
+        // If CUDA is available, uploading wrong-sized data should error.
+        if let Ok(devices) = enumerate_devices() {
+            if let Some(dev) = devices.first() {
+                if let Ok(buf) = dev.create_buffer(16) {
+                    let result = dev.upload(&buf, &[1, 2, 3]); // wrong size
+                    assert!(result.is_err(), "upload with mismatched size should fail");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cuda_download_size_mismatch() {
+        // If CUDA is available, downloading into wrong-sized buffer should error.
+        if let Ok(devices) = enumerate_devices() {
+            if let Some(dev) = devices.first() {
+                if let Ok(buf) = dev.create_buffer(16) {
+                    let mut dst = vec![0u8; 8]; // wrong size
+                    let result = dev.download(&buf, &mut dst);
+                    assert!(result.is_err(), "download with mismatched size should fail");
                 }
             }
         }

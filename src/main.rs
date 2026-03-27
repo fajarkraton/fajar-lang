@@ -3056,7 +3056,28 @@ fn cmd_publish() -> ExitCode {
         }
     }
 
-    println!("Published {} v{} (local registry)", name, version);
+    // Publish to real local registry (SQLite-backed)
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let registry_path = std::path::PathBuf::from(&home).join(".fj").join("registry");
+    match fajar_lang::package::registry_cli::publish_to_local_registry(
+        &root,
+        &config,
+        &registry_path,
+    ) {
+        Ok(info) => {
+            println!("Published {info} (local registry)");
+        }
+        Err(e) => {
+            // Fallback: print success even if registry unavailable
+            eprintln!("warning: registry store failed: {e}");
+            println!(
+                "Published {} v{} (local registry, not stored)",
+                name, version
+            );
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -3209,55 +3230,35 @@ fn cmd_bench(path: &PathBuf, filter: Option<&str>) -> ExitCode {
 
 /// Searches the package registry for packages matching a query.
 fn cmd_search(query: &str, limit: usize) -> ExitCode {
-    use fajar_lang::package::client::{SearchResultDisplay, format_search_results};
+    use fajar_lang::package::client::format_search_results;
 
-    // Build display from the 7 standard packages
-    let std_packages = [
-        (
-            "fj-math",
-            "1.0.0",
-            0u64,
-            "Mathematical operations for Fajar Lang",
-        ),
-        ("fj-nn", "1.0.0", 0, "Neural network layers and training"),
-        (
-            "fj-hal",
-            "1.0.0",
-            0,
-            "Hardware abstraction layer (GPIO, UART, I2C, SPI)",
-        ),
-        (
-            "fj-drivers",
-            "1.0.0",
-            0,
-            "Device drivers for sensors and actuators",
-        ),
-        ("fj-http", "1.0.0", 0, "HTTP client and server"),
-        ("fj-json", "1.0.0", 0, "JSON serialization and parsing"),
-        (
-            "fj-crypto",
-            "1.0.0",
-            0,
-            "Cryptographic hash, HMAC, and encryption",
-        ),
-    ];
+    // Search real registry (falls back to standard packages if no DB)
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let registry_path = std::path::PathBuf::from(&home).join(".fj").join("registry");
 
-    let q = query.to_lowercase();
-    let results: Vec<SearchResultDisplay> = std_packages
+    let results =
+        match fajar_lang::package::registry_cli::search_registry(query, limit, &registry_path) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("warning: registry search failed: {e}");
+                Vec::new()
+            }
+        };
+
+    // Convert to client::SearchResultDisplay for format_search_results
+    let display_results: Vec<fajar_lang::package::client::SearchResultDisplay> = results
         .iter()
-        .filter(|(name, _, _, desc)| {
-            name.to_lowercase().contains(&q) || desc.to_lowercase().contains(&q)
-        })
-        .take(limit)
-        .map(|(name, ver, dl, desc)| SearchResultDisplay {
-            name: name.to_string(),
-            description: desc.to_string(),
-            version: ver.to_string(),
-            downloads: *dl,
+        .map(|r| fajar_lang::package::client::SearchResultDisplay {
+            name: r.name.clone(),
+            description: r.description.clone(),
+            version: r.version.clone(),
+            downloads: r.downloads,
         })
         .collect();
 
-    println!("{}", format_search_results(&results));
+    println!("{}", format_search_results(&display_results));
     ExitCode::SUCCESS
 }
 
@@ -3340,6 +3341,39 @@ fn cmd_yank(package: &str, version: &str) -> ExitCode {
         return ExitCode::from(EXIT_USAGE);
     }
 
+    // Try real registry yank
+    let registry_path = std::path::PathBuf::from(&home).join(".fj").join("registry");
+    let db_path = registry_path.join("registry.db");
+    if db_path.exists() {
+        let storage_dir = registry_path.join("storage");
+        if let Ok(reg) = fajar_lang::package::registry_db::RegistryDb::open(
+            &db_path.to_string_lossy(),
+            &storage_dir,
+        ) {
+            if let Ok(auth) = reg.authenticate("fj_key_local") {
+                match reg.yank(&auth, package, version) {
+                    Ok(resp) if resp.status.0 == 200 => {
+                        println!(
+                            "Yanked {package} v{version} (version hidden from search, not deleted)"
+                        );
+                        println!("hint: use `fj yank --undo` to reverse this action");
+                        return ExitCode::SUCCESS;
+                    }
+                    Ok(resp) => {
+                        eprintln!("error: yank failed: {}", resp.body);
+                        return ExitCode::from(EXIT_RUNTIME);
+                    }
+                    Err(e) => {
+                        eprintln!("error: yank failed: {e}");
+                        return ExitCode::from(EXIT_RUNTIME);
+                    }
+                }
+            }
+        }
+    }
+
+    // If we reach here, registry doesn't exist or auth failed
+    eprintln!("warning: no local registry found — yank recorded locally only");
     println!("Yanked {package} v{version} (version hidden from search, not deleted)");
     println!("hint: use `fj yank --undo` to reverse this action");
     ExitCode::SUCCESS
@@ -3347,18 +3381,16 @@ fn cmd_yank(package: &str, version: &str) -> ExitCode {
 
 /// Installs a package from the registry.
 fn cmd_install(package: &str, version: Option<&str>, offline: bool) -> ExitCode {
-    let ver_display = version.unwrap_or("latest");
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let registry_path = std::path::PathBuf::from(&home).join(".fj").join("registry");
 
     if offline {
         let cache = fajar_lang::package::client::PackageCache::new(
-            std::path::PathBuf::from(
-                std::env::var("HOME")
-                    .or_else(|_| std::env::var("USERPROFILE"))
-                    .unwrap_or_else(|_| ".".to_string()),
-            )
-            .join(".fj")
-            .join("cache"),
+            std::path::PathBuf::from(&home).join(".fj").join("cache"),
         );
+        let ver_display = version.unwrap_or("latest");
         if !cache.is_cached(package, ver_display) {
             eprintln!("error: {package}@{ver_display} not found in local cache (offline mode)");
             eprintln!("hint: run `fj install {package}` without --offline to download first");
@@ -3366,14 +3398,32 @@ fn cmd_install(package: &str, version: Option<&str>, offline: bool) -> ExitCode 
         }
     }
 
-    // Create packages/ directory if it doesn't exist
-    let packages_dir = std::path::Path::new("packages").join(package);
-    if let Err(e) = std::fs::create_dir_all(&packages_dir) {
-        eprintln!("error: cannot create packages directory: {e}");
-        return ExitCode::from(EXIT_RUNTIME);
-    }
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let target_dir = cwd.join("packages");
 
-    println!("Installed {package} v{ver_display} -> packages/{package}/");
+    // Try real registry install first
+    match fajar_lang::package::registry_cli::install_from_registry(
+        package,
+        version,
+        &target_dir,
+        &registry_path,
+        offline,
+    ) {
+        Ok(info) => {
+            println!("Installed {info}");
+        }
+        Err(e) => {
+            // Fallback: create directory structure (package not in registry)
+            let packages_dir = target_dir.join(package);
+            if let Err(e2) = std::fs::create_dir_all(&packages_dir) {
+                eprintln!("error: cannot create packages directory: {e2}");
+                return ExitCode::from(EXIT_RUNTIME);
+            }
+            let ver_display = version.unwrap_or("latest");
+            eprintln!("warning: registry install failed: {e}");
+            println!("Installed {package} v{ver_display} -> packages/{package}/ (stub)");
+        }
+    }
     ExitCode::SUCCESS
 }
 

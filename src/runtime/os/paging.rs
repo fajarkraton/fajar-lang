@@ -345,7 +345,9 @@ impl FourLevelPageTable {
 
         // Ensure PDP → PD link exists
         if let Some(frame) = frame_pd {
-            let pdp = self.pdp_tables.get_mut(&pml4_idx).expect("pdp exists");
+            let pdp = self.pdp_tables.get_mut(&pml4_idx).expect(
+                "paging: PDP table must exist for pml4_idx after PML4→PDP link was just created",
+            );
             pdp.entries[pdp_idx] = PageTableEntry::new(PhysAddr(frame), PageTableFlags::KERNEL_RW);
             self.pd_tables
                 .insert((pml4_idx, pdp_idx), PageTableLevel::new());
@@ -356,7 +358,9 @@ impl FourLevelPageTable {
             let pd = self
                 .pd_tables
                 .get_mut(&(pml4_idx, pdp_idx))
-                .expect("pd exists");
+                .expect(
+                    "paging: PD table must exist for (pml4_idx, pdp_idx) after PDP→PD link was just created",
+                );
             pd.entries[pd_idx] = PageTableEntry::new(PhysAddr(frame), PageTableFlags::KERNEL_RW);
             self.pt_tables
                 .insert((pml4_idx, pdp_idx, pd_idx), PageTableLevel::new());
@@ -366,7 +370,9 @@ impl FourLevelPageTable {
         let pt = self
             .pt_tables
             .get_mut(&(pml4_idx, pdp_idx, pd_idx))
-            .expect("pt exists");
+            .expect(
+                "paging: PT table must exist for (pml4_idx, pdp_idx, pd_idx) after PD→PT link was created or pre-existed",
+            );
 
         if pt.entries[pt_idx].is_present() {
             return Err(PagingError::AlreadyMapped { virt: virt.0 });

@@ -1,0 +1,232 @@
+// fj-async -- Async Runtime Primitives for Fajar Lang
+//
+// Provides cooperative multitasking via Task structs, channels for
+// inter-task communication, and timer simulation.  All scheduling
+// is single-threaded round-robin; no OS threads required.
+
+// ── Task state machine ──
+
+enum TaskState {
+    Ready,
+    Running,
+    Waiting,
+    Completed,
+}
+
+struct Task {
+    id: i64,
+    name: str,
+    state: TaskState,
+    result: str,
+    priority: i64,
+}
+
+/// Create a new task in the Ready state.
+fn task_new(id: i64, name: str) -> Task {
+    Task {
+        id: id,
+        name: name,
+        state: TaskState::Ready,
+        priority: 0,
+        result: "",
+    }
+}
+
+/// Create a task with explicit priority (lower = higher priority).
+fn task_with_priority(id: i64, name: str, priority: i64) -> Task {
+    Task {
+        id: id,
+        name: name,
+        state: TaskState::Ready,
+        priority: priority,
+        result: "",
+    }
+}
+
+/// Mark a task as running.
+fn task_start(t: Task) -> Task {
+    Task {
+        id: t.id,
+        name: t.name,
+        state: TaskState::Running,
+        priority: t.priority,
+        result: t.result,
+    }
+}
+
+/// Mark a task as completed with a result string.
+fn task_complete(t: Task, result: str) -> Task {
+    Task {
+        id: t.id,
+        name: t.name,
+        state: TaskState::Completed,
+        priority: t.priority,
+        result: result,
+    }
+}
+
+/// Check whether a task has finished.
+fn task_is_done(t: Task) -> bool {
+    match t.state {
+        TaskState::Completed => true,
+        _ => false,
+    }
+}
+
+// ── Scheduler (round-robin) ──
+
+struct Scheduler {
+    tasks: [Task],
+    next_id: i64,
+    tick: i64,
+}
+
+/// Create an empty scheduler.
+fn scheduler_new() -> Scheduler {
+    Scheduler { tasks: [], next_id: 1, tick: 0 }
+}
+
+/// Spawn a named task into the scheduler. Returns the assigned task id.
+fn spawn(sched: Scheduler, name: str) -> Scheduler {
+    let t = task_new(sched.next_id, name)
+    let mut tasks = sched.tasks
+    tasks.push(t)
+    Scheduler { tasks: tasks, next_id: sched.next_id + 1, tick: sched.tick }
+}
+
+/// Advance the scheduler by one tick.  The next Ready task is moved to
+/// Running, and the previously Running task is moved back to Ready
+/// (cooperative yield).
+fn scheduler_tick(sched: Scheduler) -> Scheduler {
+    let mut tasks = sched.tasks
+    let n = len(tasks)
+    let slot = sched.tick % n
+    for i in 0..n {
+        let t = tasks[i]
+        if i == slot {
+            if !task_is_done(t) {
+                tasks[i] = task_start(t)
+            }
+        } else {
+            if !task_is_done(t) {
+                tasks[i] = task_new(t.id, t.name)
+            }
+        }
+    }
+    Scheduler { tasks: tasks, next_id: sched.next_id, tick: sched.tick + 1 }
+}
+
+/// Count how many tasks are still not completed.
+fn pending_count(sched: Scheduler) -> i64 {
+    let mut count = 0
+    for t in sched.tasks {
+        if !task_is_done(t) {
+            count = count + 1
+        }
+    }
+    count
+}
+
+// ── Channel (bounded FIFO queue) ──
+
+struct Channel {
+    buffer: [str],
+    capacity: i64,
+    closed: bool,
+}
+
+/// Create a bounded channel.
+fn channel_new(capacity: i64) -> Channel {
+    Channel { buffer: [], capacity: capacity, closed: false }
+}
+
+/// Send a value into the channel.  Returns false if the channel is full
+/// or closed.
+fn channel_send(ch: Channel, value: str) -> bool {
+    if ch.closed { return false }
+    if len(ch.buffer) >= ch.capacity { return false }
+    ch.buffer.push(value)
+    true
+}
+
+/// Receive a value from the channel.  Returns "" if the channel is empty.
+fn channel_recv(ch: Channel) -> str {
+    if len(ch.buffer) == 0 { return "" }
+    let value = ch.buffer[0]
+    ch.buffer.remove(0)
+    value
+}
+
+/// Check whether the channel has messages waiting.
+fn channel_is_empty(ch: Channel) -> bool {
+    len(ch.buffer) == 0
+}
+
+/// Close the channel so no more sends are accepted.
+fn channel_close(ch: Channel) -> Channel {
+    Channel { buffer: ch.buffer, capacity: ch.capacity, closed: true }
+}
+
+/// Number of messages currently buffered.
+fn channel_len(ch: Channel) -> i64 {
+    len(ch.buffer)
+}
+
+// ── Timer (countdown simulation) ──
+
+struct Timer {
+    name: str,
+    remaining_ticks: i64,
+    fired: bool,
+}
+
+/// Create a timer that fires after `ticks` scheduler ticks.
+fn timer_new(name: str, ticks: i64) -> Timer {
+    Timer { name: name, remaining_ticks: ticks, fired: false }
+}
+
+/// Advance the timer by one tick.  Returns an updated Timer whose
+/// `fired` field becomes true when the countdown reaches zero.
+fn timer_tick(t: Timer) -> Timer {
+    if t.fired { return t }
+    let remaining = t.remaining_ticks - 1
+    if remaining <= 0 {
+        Timer { name: t.name, remaining_ticks: 0, fired: true }
+    } else {
+        Timer { name: t.name, remaining_ticks: remaining, fired: false }
+    }
+}
+
+/// Check whether the timer has fired.
+fn timer_is_fired(t: Timer) -> bool {
+    t.fired
+}
+
+// ── Helpers ──
+
+/// Simple sleep simulation: returns a timer set to `ms` ticks.
+fn sleep(ms: i64) -> Timer {
+    timer_new("sleep", ms)
+}
+
+/// Create a oneshot future-like value that resolves immediately.
+fn resolve(value: str) -> Task {
+    Task {
+        id: 0,
+        name: "resolved",
+        state: TaskState::Completed,
+        priority: 0,
+        result: value,
+    }
+}
+
+/// Create a task that represents a pending computation.
+fn pending(name: str) -> Task {
+    Task {
+        id: 0,
+        name: name,
+        state: TaskState::Waiting,
+        priority: 0,
+        result: "",
+    }
+}

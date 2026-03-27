@@ -1,0 +1,232 @@
+// fj-db -- In-Memory Database for Fajar Lang
+//
+// Provides table-based storage with insert, query, update, delete,
+// parameterized queries, and a basic transaction pattern.
+
+// ── Core types ──
+
+struct Column {
+    name: str,
+    col_type: str,
+}
+
+struct Row {
+    values: [str],
+}
+
+struct Table {
+    name: str,
+    columns: [Column],
+    rows: [Row],
+}
+
+struct Database {
+    name: str,
+    tables: [Table],
+}
+
+// ── Database lifecycle ──
+
+/// Create a new empty database.
+fn db_new(name: str) -> Database {
+    Database { name: name, tables: [] }
+}
+
+/// Create a table with named columns.
+fn create_table(db: Database, table_name: str, columns: [Column]) -> Database {
+    let table = Table { name: table_name, columns: columns, rows: [] }
+    let mut tables = db.tables
+    tables.push(table)
+    Database { name: db.name, tables: tables }
+}
+
+/// Define a column.
+fn column(name: str, col_type: str) -> Column {
+    Column { name: name, col_type: col_type }
+}
+
+/// Find the index of a table by name.  Returns -1 if not found.
+fn find_table(db: Database, table_name: str) -> i64 {
+    for i in 0..len(db.tables) {
+        if db.tables[i].name == table_name { return i }
+    }
+    -1
+}
+
+// ── Insert ──
+
+/// Insert a row (list of string values) into the named table.
+fn insert(db: Database, table_name: str, values: [str]) -> Database {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return db }
+    let mut tables = db.tables
+    let mut table = tables[idx]
+    let mut rows = table.rows
+    rows.push(Row { values: values })
+    table = Table { name: table.name, columns: table.columns, rows: rows }
+    tables[idx] = table
+    Database { name: db.name, tables: tables }
+}
+
+// ── Query ──
+
+/// Find the column index by name within a table.
+fn column_index(table: Table, col_name: str) -> i64 {
+    for i in 0..len(table.columns) {
+        if table.columns[i].name == col_name { return i }
+    }
+    -1
+}
+
+/// Query rows where `column = value`.  Returns matching rows.
+fn query_where(db: Database, table_name: str, col_name: str, value: str) -> [Row] {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return [] }
+    let table = db.tables[idx]
+    let ci = column_index(table, col_name)
+    if ci < 0 { return [] }
+    let mut results: [Row] = []
+    for row in table.rows {
+        if row.values[ci] == value {
+            results.push(row)
+        }
+    }
+    results
+}
+
+/// Return all rows from a table.
+fn query_all(db: Database, table_name: str) -> [Row] {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return [] }
+    db.tables[idx].rows
+}
+
+/// Count total rows in a table.
+fn row_count(db: Database, table_name: str) -> i64 {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return 0 }
+    len(db.tables[idx].rows)
+}
+
+// ── Update ──
+
+/// Update rows where `match_col = match_val`, setting `set_col` to `set_val`.
+fn update_where(db: Database, table_name: str, match_col: str, match_val: str, set_col: str, set_val: str) -> Database {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return db }
+    let mut tables = db.tables
+    let table = tables[idx]
+    let mi = column_index(table, match_col)
+    let si = column_index(table, set_col)
+    if mi < 0 || si < 0 { return db }
+    let mut rows = table.rows
+    for i in 0..len(rows) {
+        if rows[i].values[mi] == match_val {
+            let mut vals = rows[i].values
+            vals[si] = set_val
+            rows[i] = Row { values: vals }
+        }
+    }
+    tables[idx] = Table { name: table.name, columns: table.columns, rows: rows }
+    Database { name: db.name, tables: tables }
+}
+
+// ── Delete ──
+
+/// Delete rows where `col_name = value`.
+fn delete_where(db: Database, table_name: str, col_name: str, value: str) -> Database {
+    let idx = find_table(db, table_name)
+    if idx < 0 { return db }
+    let mut tables = db.tables
+    let table = tables[idx]
+    let ci = column_index(table, col_name)
+    if ci < 0 { return db }
+    let mut kept: [Row] = []
+    for row in table.rows {
+        if row.values[ci] != value {
+            kept.push(row)
+        }
+    }
+    tables[idx] = Table { name: table.name, columns: table.columns, rows: kept }
+    Database { name: db.name, tables: tables }
+}
+
+/// Drop (remove) a table from the database.
+fn drop_table(db: Database, table_name: str) -> Database {
+    let mut tables: [Table] = []
+    for t in db.tables {
+        if t.name != table_name {
+            tables.push(t)
+        }
+    }
+    Database { name: db.name, tables: tables }
+}
+
+// ── Parameterized query ──
+
+struct Param {
+    placeholder: str,
+    value: str,
+}
+
+/// Create a query parameter.
+fn param(placeholder: str, value: str) -> Param {
+    Param { placeholder: placeholder, value: value }
+}
+
+/// Substitute parameters in a template string.
+/// Replaces each `$name` with the corresponding value.
+fn bind_params(template: str, params: [Param]) -> str {
+    let mut result = template
+    for p in params {
+        result = result.replace(p.placeholder, p.value)
+    }
+    result
+}
+
+// ── Transaction pattern ──
+
+enum TxState {
+    Active,
+    Committed,
+    RolledBack,
+}
+
+struct Transaction {
+    state: TxState,
+    snapshot: Database,
+    current: Database,
+}
+
+/// Begin a transaction by snapshotting the current database.
+fn begin_tx(db: Database) -> Transaction {
+    Transaction {
+        state: TxState::Active,
+        snapshot: db,
+        current: db,
+    }
+}
+
+/// Execute an insert within a transaction.
+fn tx_insert(tx: Transaction, table_name: str, values: [str]) -> Transaction {
+    let updated = insert(tx.current, table_name, values)
+    Transaction { state: tx.state, snapshot: tx.snapshot, current: updated }
+}
+
+/// Commit the transaction, returning the modified database.
+fn commit(tx: Transaction) -> Database {
+    tx.current
+}
+
+/// Roll back the transaction, returning the original snapshot.
+fn rollback(tx: Transaction) -> Database {
+    tx.snapshot
+}
+
+/// Check whether the transaction is still active.
+fn tx_is_active(tx: Transaction) -> bool {
+    match tx.state {
+        TxState::Active => true,
+        _ => false,
+    }
+}

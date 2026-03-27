@@ -361,7 +361,9 @@ impl MemoryManager {
                 mem_size: self.backing.len(),
             });
         }
-        let bytes: [u8; 4] = self.backing[offset..offset + 4].try_into().unwrap();
+        let bytes: [u8; 4] = self.backing[offset..offset + 4]
+            .try_into()
+            .expect("slice to [u8; 4] for u32 read after bounds check");
         Ok(u32::from_le_bytes(bytes))
     }
 
@@ -390,7 +392,9 @@ impl MemoryManager {
                 mem_size: self.backing.len(),
             });
         }
-        let bytes: [u8; 8] = self.backing[offset..offset + 8].try_into().unwrap();
+        let bytes: [u8; 8] = self.backing[offset..offset + 8]
+            .try_into()
+            .expect("slice to [u8; 8] for u64 read after bounds check");
         Ok(u64::from_le_bytes(bytes))
     }
 

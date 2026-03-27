@@ -1,0 +1,9 @@
+[package]
+name = "fj-csv"
+version = "1.0.0"
+description = "CSV parser: read/write CSV with quoted fields, escape handling, and row access"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

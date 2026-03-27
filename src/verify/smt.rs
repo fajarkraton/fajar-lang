@@ -429,8 +429,10 @@ pub fn prove_non_negative(var_name: &str, constraint: &str) -> SmtResult {
         z3::SatResult::Unsat => SmtResult::Unsat, // proven: x is always >= 0
         z3::SatResult::Sat => {
             // Counterexample found
-            let model = solver.get_model().unwrap();
-            let val = model.eval(&x, true).unwrap();
+            let model = solver
+                .get_model()
+                .expect("Z3 solver model after SAT result");
+            let val = model.eval(&x, true).expect("Z3 model eval for variable");
             SmtResult::Sat(Counterexample {
                 assignments: HashMap::from([(
                     var_name.to_string(),
@@ -474,7 +476,9 @@ pub fn check_satisfiable(assertions: &[(String, i64, &str, i64)]) -> SmtResult {
 
     match solver.check() {
         z3::SatResult::Sat => {
-            let model = solver.get_model().unwrap();
+            let model = solver
+                .get_model()
+                .expect("Z3 solver model after SAT result");
             let mut assignments = HashMap::new();
             for (name, var) in &vars {
                 if let Some(val) = model.eval(var, true) {
@@ -517,8 +521,12 @@ pub fn prove_array_bounds(index_constraint: &str, array_size: i64) -> SmtResult 
     match solver.check() {
         z3::SatResult::Unsat => SmtResult::Unsat, // proven: always in bounds
         z3::SatResult::Sat => {
-            let model = solver.get_model().unwrap();
-            let val = model.eval(&idx, true).unwrap();
+            let model = solver
+                .get_model()
+                .expect("Z3 solver model after SAT result");
+            let val = model
+                .eval(&idx, true)
+                .expect("Z3 model eval for index variable");
             SmtResult::Sat(Counterexample {
                 assignments: HashMap::from([(
                     "index".to_string(),
@@ -614,9 +622,11 @@ pub fn prove_no_i32_overflow(a_min: i32, a_max: i32, b_min: i32, b_max: i32) -> 
     match solver.check() {
         z3::SatResult::Unsat => SmtResult::Unsat, // no overflow possible
         z3::SatResult::Sat => {
-            let model = solver.get_model().unwrap();
-            let a_val = model.eval(&a, true).unwrap();
-            let b_val = model.eval(&b, true).unwrap();
+            let model = solver
+                .get_model()
+                .expect("Z3 solver model after SAT result");
+            let a_val = model.eval(&a, true).expect("Z3 model eval for operand a");
+            let b_val = model.eval(&b, true).expect("Z3 model eval for operand b");
             SmtResult::Sat(Counterexample {
                 assignments: HashMap::from([
                     ("a".to_string(), SmtValue::Int(a_val.as_i64().unwrap_or(0))),
@@ -655,8 +665,10 @@ pub fn prove_with_timeout(var_name: &str, constraint: &str, timeout_ms: u64) -> 
     match solver.check() {
         z3::SatResult::Unsat => SmtResult::Unsat,
         z3::SatResult::Sat => {
-            let model = solver.get_model().unwrap();
-            let val = model.eval(&x, true).unwrap();
+            let model = solver
+                .get_model()
+                .expect("Z3 solver model after SAT result");
+            let val = model.eval(&x, true).expect("Z3 model eval for variable");
             SmtResult::Sat(Counterexample {
                 assignments: HashMap::from([(
                     var_name.to_string(),

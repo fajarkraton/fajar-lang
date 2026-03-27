@@ -214,8 +214,14 @@ impl TensorBackend for CpuBackend {
             });
         }
 
-        let a_2d = a.view().into_shape_with_order((m, k)).unwrap();
-        let b_2d = b.view().into_shape_with_order((k, n)).unwrap();
+        let a_2d = a
+            .view()
+            .into_shape_with_order((m, k))
+            .expect("reshape A to 2D for matmul");
+        let b_2d = b
+            .view()
+            .into_shape_with_order((k, n))
+            .expect("reshape B to 2D for matmul");
         let c = a_2d.dot(&b_2d);
         Ok(c.into_dyn())
     }
@@ -339,7 +345,8 @@ impl TensorBackend for VulkanBackend {
 
         // Convert f32 → f64
         let result_f64: Vec<f64> = result_f32.iter().map(|&v| v as f64).collect();
-        Ok(ArrayD::from_shape_vec(vec![m, n], result_f64).unwrap())
+        Ok(ArrayD::from_shape_vec(vec![m, n], result_f64)
+            .expect("construct matmul result array from GPU output"))
     }
 
     fn add(&self, a: &ArrayD<f64>, b: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
@@ -359,7 +366,8 @@ impl TensorBackend for VulkanBackend {
                 backend: format!("vulkan: {e}"),
             })?;
         let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
-        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data).unwrap())
+        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data)
+            .expect("construct add result array from GPU output"))
     }
 
     fn mul(&self, a: &ArrayD<f64>, b: &ArrayD<f64>) -> Result<ArrayD<f64>, BackendError> {
@@ -379,7 +387,8 @@ impl TensorBackend for VulkanBackend {
                 backend: format!("vulkan: {e}"),
             })?;
         let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
-        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data).unwrap())
+        Ok(ArrayD::from_shape_vec(a.shape().to_vec(), f64_data)
+            .expect("construct mul result array from GPU output"))
     }
 
     fn relu(&self, x: &ArrayD<f64>) -> ArrayD<f64> {
@@ -387,7 +396,8 @@ impl TensorBackend for VulkanBackend {
         match self.vk.tensor_relu(&f32_data) {
             Ok(result) => {
                 let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
-                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data).unwrap()
+                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data)
+                    .expect("construct relu result array from GPU output")
             }
             Err(_) => x.mapv(|v| if v > 0.0 { v } else { 0.0 }), // CPU fallback
         }
@@ -406,7 +416,8 @@ impl TensorBackend for VulkanBackend {
         match self.vk.tensor_sigmoid(&f32_data) {
             Ok(result) => {
                 let f64_data: Vec<f64> = result.iter().map(|&v| v as f64).collect();
-                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data).unwrap()
+                ArrayD::from_shape_vec(x.shape().to_vec(), f64_data)
+                    .expect("construct sigmoid result array from GPU output")
             }
             Err(_) => x.mapv(|v| 1.0 / (1.0 + (-v).exp())), // CPU fallback
         }

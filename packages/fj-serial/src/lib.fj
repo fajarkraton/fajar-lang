@@ -1,0 +1,242 @@
+// fj-serial -- Serialization Library for Fajar Lang
+//
+// Provides JSON serialization/deserialization and a simple TLV
+// (Type-Length-Value) binary encoding for structured data.
+
+// ── JSON value ──
+
+enum JsonValue {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(str),
+    Array([JsonValue]),
+    Object([JsonPair]),
+}
+
+struct JsonPair {
+    key: str,
+    value: JsonValue,
+}
+
+// ── JSON construction ──
+
+/// Create a JSON null.
+fn json_null() -> JsonValue { JsonValue::Null }
+
+/// Create a JSON boolean.
+fn json_bool(b: bool) -> JsonValue { JsonValue::Bool(b) }
+
+/// Create a JSON integer.
+fn json_int(n: i64) -> JsonValue { JsonValue::Int(n) }
+
+/// Create a JSON float.
+fn json_float(f: f64) -> JsonValue { JsonValue::Float(f) }
+
+/// Create a JSON string.
+fn json_str(s: str) -> JsonValue { JsonValue::Str(s) }
+
+/// Create a JSON array.
+fn json_array(items: [JsonValue]) -> JsonValue { JsonValue::Array(items) }
+
+/// Create a JSON object from key-value pairs.
+fn json_object(pairs: [JsonPair]) -> JsonValue { JsonValue::Object(pairs) }
+
+/// Create a key-value pair for objects.
+fn json_pair(key: str, value: JsonValue) -> JsonPair {
+    JsonPair { key: key, value: value }
+}
+
+// ── JSON serialization ──
+
+/// Escape special characters in a JSON string value.
+fn json_escape(s: str) -> str {
+    let mut out = ""
+    for i in 0..len(s) {
+        let c = s[i]
+        if c == '"' { out = out + "\\\"" }
+        else if c == '\\' { out = out + "\\\\" }
+        else if c == '\n' { out = out + "\\n" }
+        else if c == '\r' { out = out + "\\r" }
+        else if c == '\t' { out = out + "\\t" }
+        else { out = out + to_string(c) }
+    }
+    out
+}
+
+/// Serialize a JsonValue to a JSON string.
+fn to_json(val: JsonValue) -> str {
+    match val {
+        JsonValue::Null     => "null",
+        JsonValue::Bool(b)  => if b { "true" } else { "false" },
+        JsonValue::Int(n)   => to_string(n),
+        JsonValue::Float(f) => to_string(f),
+        JsonValue::Str(s)   => "\"" + json_escape(s) + "\"",
+        JsonValue::Array(items) => {
+            let mut out = "["
+            for i in 0..len(items) {
+                if i > 0 { out = out + "," }
+                out = out + to_json(items[i])
+            }
+            out + "]"
+        },
+        JsonValue::Object(pairs) => {
+            let mut out = "{"
+            for i in 0..len(pairs) {
+                if i > 0 { out = out + "," }
+                out = out + "\"" + json_escape(pairs[i].key) + "\":" + to_json(pairs[i].value)
+            }
+            out + "}"
+        },
+    }
+}
+
+/// Pretty-print JSON with indentation.
+fn to_json_pretty(val: JsonValue, indent: i64) -> str {
+    let sp = repeat_str("  ", indent)
+    let sp1 = repeat_str("  ", indent + 1)
+    match val {
+        JsonValue::Null     => "null",
+        JsonValue::Bool(b)  => if b { "true" } else { "false" },
+        JsonValue::Int(n)   => to_string(n),
+        JsonValue::Float(f) => to_string(f),
+        JsonValue::Str(s)   => "\"" + json_escape(s) + "\"",
+        JsonValue::Array(items) => {
+            if len(items) == 0 { return "[]" }
+            let mut out = "[\n"
+            for i in 0..len(items) {
+                out = out + sp1 + to_json_pretty(items[i], indent + 1)
+                if i < len(items) - 1 { out = out + "," }
+                out = out + "\n"
+            }
+            out + sp + "]"
+        },
+        JsonValue::Object(pairs) => {
+            if len(pairs) == 0 { return "{}" }
+            let mut out = "{\n"
+            for i in 0..len(pairs) {
+                out = out + sp1 + "\"" + pairs[i].key + "\": " + to_json_pretty(pairs[i].value, indent + 1)
+                if i < len(pairs) - 1 { out = out + "," }
+                out = out + "\n"
+            }
+            out + sp + "}"
+        },
+    }
+}
+
+/// Repeat a string `n` times.
+fn repeat_str(s: str, n: i64) -> str {
+    let mut out = ""
+    for _ in 0..n { out = out + s }
+    out
+}
+
+// ── JSON object helpers ──
+
+/// Get a string value from a JSON object by key.
+fn json_get_str(obj: JsonValue, key: str) -> str {
+    match obj {
+        JsonValue::Object(pairs) => {
+            for p in pairs {
+                if p.key == key {
+                    match p.value {
+                        JsonValue::Str(s) => return s,
+                        _ => return "",
+                    }
+                }
+            }
+            ""
+        },
+        _ => "",
+    }
+}
+
+/// Get an integer value from a JSON object by key.
+fn json_get_int(obj: JsonValue, key: str) -> i64 {
+    match obj {
+        JsonValue::Object(pairs) => {
+            for p in pairs {
+                if p.key == key {
+                    match p.value {
+                        JsonValue::Int(n) => return n,
+                        _ => return 0,
+                    }
+                }
+            }
+            0
+        },
+        _ => 0,
+    }
+}
+
+// ── TLV binary encoding ──
+//
+// Simple Type-Length-Value scheme:
+//   Type:   1 byte  (0=null, 1=bool, 2=int, 3=float, 4=string)
+//   Length: 4 bytes  (big-endian, number of value bytes)
+//   Value:  N bytes  (string representation for portability)
+
+/// Encode a type tag and value into a TLV string frame.
+fn tlv_encode(type_tag: i64, value: str) -> str {
+    let tag = to_string(type_tag)
+    let length = to_string(len(value))
+    tag + ":" + length + ":" + value
+}
+
+/// Encode a string as TLV (type=4).
+fn to_binary_str(s: str) -> str {
+    tlv_encode(4, s)
+}
+
+/// Encode an integer as TLV (type=2).
+fn to_binary_int(n: i64) -> str {
+    tlv_encode(2, to_string(n))
+}
+
+/// Encode a boolean as TLV (type=1).
+fn to_binary_bool(b: bool) -> str {
+    if b { tlv_encode(1, "1") }
+    else { tlv_encode(1, "0") }
+}
+
+/// Encode null as TLV (type=0).
+fn to_binary_null() -> str {
+    tlv_encode(0, "")
+}
+
+/// Decode the type tag from a TLV frame.
+fn tlv_type(frame: str) -> i64 {
+    let parts = frame.split(":")
+    if len(parts) < 3 { return -1 }
+    parse_int(parts[0])
+}
+
+/// Decode the value payload from a TLV frame.
+fn tlv_value(frame: str) -> str {
+    let parts = frame.split(":")
+    if len(parts) < 3 { return "" }
+    // Rejoin in case value itself contains ':'
+    let mut val = parts[2]
+    for i in 3..len(parts) {
+        val = val + ":" + parts[i]
+    }
+    val
+}
+
+// ── MessagePack-like compound ──
+
+/// Encode multiple fields as a sequence of TLV frames joined by newlines.
+fn pack_fields(fields: [str]) -> str {
+    let mut out = ""
+    for i in 0..len(fields) {
+        if i > 0 { out = out + "\n" }
+        out = out + fields[i]
+    }
+    out
+}
+
+/// Decode a packed message back into individual TLV frames.
+fn unpack_fields(packed: str) -> [str] {
+    packed.split("\n")
+}

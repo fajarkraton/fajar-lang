@@ -1,0 +1,9 @@
+[package]
+name = "fj-image"
+version = "1.0.0"
+description = "Image processing: pixel operations, grayscale, brightness, resize, blending"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

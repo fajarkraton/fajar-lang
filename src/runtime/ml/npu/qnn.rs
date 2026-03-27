@@ -49,6 +49,7 @@ type QnnResult = u64;
 ///     uint32_t* numProviders
 /// );
 /// ```
+// SAFETY: QNN FFI function pointer type — matches vendor ABI (QnnInterface.h).
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 type QnnGetProvidersFn = unsafe extern "C" fn(
     provider_list: *mut *const QnnProvider,
@@ -97,6 +98,8 @@ struct QnnVersion {
 ///
 /// This mirrors a subset of `QnnInterface_t::QNN_INTERFACE_VER_1`.
 /// Fields are `Option<fn>` because some may not be provided.
+// SAFETY: QNN FFI function pointer types — all signatures match vendor ABI (QnnInterface.h).
+// Each field is an `Option<unsafe extern "C" fn(...)>` matching the corresponding QNN SDK function.
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 #[repr(C)]
 #[derive(Debug)]

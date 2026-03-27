@@ -1,0 +1,228 @@
+// fj-rand — Pseudo-Random Number Generation for Fajar Lang
+//
+// Implements a linear congruential generator (LCG) with the Numerical
+// Recipes constants, plus higher-level utilities like shuffle, choice,
+// and random distributions. Pure implementation, no FFI.
+
+// ── LCG state ──
+
+/// Global RNG state. Uses LCG with Numerical Recipes constants:
+/// next = (a * state + c) mod m
+/// a = 1664525, c = 1013904223, m = 2^32
+let mut _rng_state: i64 = 42
+
+// ── LCG constants ──
+const LCG_A: i64 = 1664525
+const LCG_C: i64 = 1013904223
+const LCG_M: i64 = 4294967296  // 2^32
+
+// ── Core RNG ──
+
+/// Seed the random number generator.
+fn seed(s: i64) {
+    _rng_state = if s == 0 { 1 } else { s }
+}
+
+/// Advance the LCG and return the next raw state value (0..2^32-1).
+fn next_raw() -> i64 {
+    _rng_state = (LCG_A * _rng_state + LCG_C) % LCG_M
+    if _rng_state < 0 { _rng_state = -_rng_state }
+    _rng_state
+}
+
+// ── Integer random ──
+
+/// Generate a random integer in [min, max] (inclusive).
+fn rand_int(min: i64, max: i64) -> i64 {
+    if min >= max { return min }
+    let range = max - min + 1
+    let raw = next_raw()
+    min + (raw % range)
+}
+
+/// Generate a random unsigned integer in [0, bound).
+fn rand_below(bound: i64) -> i64 {
+    if bound <= 0 { return 0 }
+    let raw = next_raw()
+    raw % bound
+}
+
+// ── Float random ──
+
+/// Generate a random float in [0.0, 1.0).
+fn rand_float() -> f64 {
+    let raw = next_raw()
+    (raw as f64) / (LCG_M as f64)
+}
+
+/// Generate a random float in [min, max).
+fn rand_float_range(min: f64, max: f64) -> f64 {
+    min + rand_float() * (max - min)
+}
+
+// ── Boolean random ──
+
+/// Generate a random boolean with 50% probability.
+fn rand_bool() -> bool {
+    rand_float() < 0.5
+}
+
+/// Generate a random boolean with given probability (0.0 to 1.0).
+fn rand_bool_p(p: f64) -> bool {
+    rand_float() < p
+}
+
+// ── Array operations ──
+
+/// Shuffle an array in place using Fisher-Yates algorithm.
+fn shuffle(arr: [i64]) -> [i64] {
+    let mut result = arr
+    let n = len(result)
+    for i in 0..n {
+        let j_idx = n - 1 - i
+        if j_idx > 0 {
+            let swap_idx = rand_below(j_idx as i64 + 1) as usize
+            let tmp = result[j_idx]
+            result[j_idx] = result[swap_idx]
+            result[swap_idx] = tmp
+        }
+    }
+    result
+}
+
+/// Shuffle an array of strings.
+fn shuffle_str(arr: [str]) -> [str] {
+    let mut result = arr
+    let n = len(result)
+    for i in 0..n {
+        let j_idx = n - 1 - i
+        if j_idx > 0 {
+            let swap_idx = rand_below(j_idx as i64 + 1) as usize
+            let tmp = result[j_idx]
+            result[j_idx] = result[swap_idx]
+            result[swap_idx] = tmp
+        }
+    }
+    result
+}
+
+/// Pick a random element from an integer array.
+fn choice(arr: [i64]) -> i64 {
+    let idx = rand_below(len(arr) as i64) as usize
+    arr[idx]
+}
+
+/// Pick a random element from a string array.
+fn choice_str(arr: [str]) -> str {
+    let idx = rand_below(len(arr) as i64) as usize
+    arr[idx]
+}
+
+/// Pick n random elements from an array (sampling without replacement).
+fn sample(arr: [i64], n: i64) -> [i64] {
+    let shuffled = shuffle(arr)
+    let count = if n > len(arr) as i64 { len(arr) } else { n as usize }
+    let mut result: [i64] = []
+    for i in 0..count {
+        result = result + [shuffled[i]]
+    }
+    result
+}
+
+// ── Distribution helpers ──
+
+/// Generate a random value from an approximate normal distribution
+/// using the Box-Muller transform (simplified Irwin-Hall with 12 uniforms).
+fn rand_normal(mean: f64, stddev: f64) -> f64 {
+    // Irwin-Hall approximation: sum of 12 uniform [0,1) minus 6
+    let mut sum = 0.0
+    for _ in 0..12 {
+        sum = sum + rand_float()
+    }
+    mean + stddev * (sum - 6.0)
+}
+
+/// Generate a random value from an exponential distribution.
+fn rand_exponential(lambda: f64) -> f64 {
+    // -ln(U) / lambda, using Taylor series for -ln(1-x) ~ x + x^2/2 + ...
+    let u = rand_float()
+    let safe_u = if u < 0.0001 { 0.0001 } else { u }
+    // Approximate -ln(u) using the identity: -ln(u) = -ln(1-(1-u))
+    let x = 1.0 - safe_u
+    // Taylor: -ln(x) ~ (1-x) + (1-x)^2/2 + (1-x)^3/3 + ...
+    let t = 1.0 - x
+    let mut ln_approx = 0.0
+    let mut power = t
+    for k in 1..20 {
+        ln_approx = ln_approx + power / (k as f64)
+        power = power * t
+    }
+    ln_approx / lambda
+}
+
+/// Generate a random integer following a Poisson distribution (Knuth algorithm).
+fn rand_poisson(lambda: f64) -> i64 {
+    // e^(-lambda)
+    let mut e_neg_lambda = 1.0
+    let mut l = lambda
+    while l > 0.0 {
+        if l > 500.0 {
+            e_neg_lambda = 0.0
+            break
+        }
+        // Compute e^(-lambda) iteratively
+        e_neg_lambda = e_neg_lambda * 2.718281828
+        l = l - 1.0
+    }
+    // Invert: e^(-lambda) = 1 / e^lambda
+    if e_neg_lambda > 0.0 {
+        e_neg_lambda = 1.0 / e_neg_lambda
+    }
+
+    let limit = e_neg_lambda
+    let mut k: i64 = 0
+    let mut p = 1.0
+    while p > limit {
+        k = k + 1
+        p = p * rand_float()
+    }
+    k - 1
+}
+
+/// Generate a random dice roll (1 to sides).
+fn roll_dice(sides: i64) -> i64 {
+    rand_int(1, sides)
+}
+
+/// Generate a random string of given length from a character set.
+fn rand_string(length: i64, charset: str) -> str {
+    let mut result = ""
+    let n = len(charset)
+    for _ in 0..length {
+        let idx = rand_below(n as i64) as usize
+        result = result + to_string(charset[idx])
+    }
+    result
+}
+
+/// Generate a random alphanumeric string.
+fn rand_alphanum(length: i64) -> str {
+    rand_string(length, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+}
+
+/// Generate a UUID v4 (random) as a string.
+fn rand_uuid() -> str {
+    let hex = "0123456789abcdef"
+    let mut parts: [str] = []
+    // 8-4-4-4-12
+    let lengths = [8, 4, 4, 4, 12]
+    for seg_len in lengths {
+        let mut seg = ""
+        for _ in 0..seg_len {
+            let idx = rand_below(16) as usize
+            seg = seg + to_string(hex[idx])
+        }
+        parts = parts + [seg]
+    }
+    parts[0] + "-" + parts[1] + "-" + parts[2] + "-" + parts[3] + "-" + parts[4]
+}

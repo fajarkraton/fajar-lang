@@ -1,0 +1,260 @@
+// fj-cli-fw -- CLI Framework for Fajar Lang
+//
+// Provides argument parsing, flag extraction, subcommand routing,
+// and automatic help/version generation.
+
+// ── Argument types ──
+
+enum ArgKind {
+    Positional,
+    Flag,
+    Option,
+}
+
+struct ArgDef {
+    name: str,
+    short: str,
+    long: str,
+    description: str,
+    kind: ArgKind,
+    required: bool,
+    default_value: str,
+}
+
+/// Define a positional argument.
+fn positional(name: str, description: str, required: bool) -> ArgDef {
+    ArgDef {
+        name: name,
+        short: "",
+        long: "",
+        description: description,
+        kind: ArgKind::Positional,
+        required: required,
+        default_value: "",
+    }
+}
+
+/// Define a boolean flag (e.g. --verbose / -v).
+fn flag(name: str, short: str, long: str, description: str) -> ArgDef {
+    ArgDef {
+        name: name,
+        short: short,
+        long: long,
+        description: description,
+        kind: ArgKind::Flag,
+        required: false,
+        default_value: "false",
+    }
+}
+
+/// Define a key-value option (e.g. --output file.txt / -o file.txt).
+fn option(name: str, short: str, long: str, description: str, default_value: str) -> ArgDef {
+    ArgDef {
+        name: name,
+        short: short,
+        long: long,
+        description: description,
+        kind: ArgKind::Option,
+        required: false,
+        default_value: default_value,
+    }
+}
+
+// ── Parsed result ──
+
+struct ParsedArg {
+    name: str,
+    value: str,
+}
+
+struct ParsedArgs {
+    command: str,
+    args: [ParsedArg],
+    positionals: [str],
+    errors: [str],
+}
+
+/// Retrieve the value of a named argument, or `fallback` if not found.
+fn get_arg(parsed: ParsedArgs, name: str, fallback: str) -> str {
+    for a in parsed.args {
+        if a.name == name { return a.value }
+    }
+    fallback
+}
+
+/// Check whether a flag was set.
+fn has_flag(parsed: ParsedArgs, name: str) -> bool {
+    get_arg(parsed, name, "false") == "true"
+}
+
+/// Return the i-th positional argument or "" if out of range.
+fn get_positional(parsed: ParsedArgs, index: i64) -> str {
+    if index < 0 { return "" }
+    if index >= len(parsed.positionals) { return "" }
+    parsed.positionals[index]
+}
+
+// ── Parsing engine ──
+
+/// Parse a list of raw argument strings against a set of definitions.
+fn parse_args(defs: [ArgDef], raw: [str]) -> ParsedArgs {
+    let mut args: [ParsedArg] = []
+    let mut positionals: [str] = []
+    let mut errors: [str] = []
+    let mut command = ""
+    let mut i = 0
+    let n = len(raw)
+
+    // First token may be the command/subcommand name
+    if n > 0 {
+        let first = raw[0]
+        if !first.starts_with("-") {
+            command = first
+            i = 1
+        }
+    }
+
+    while i < n {
+        let token = raw[i]
+        let mut matched = false
+
+        // Try matching against definitions
+        for d in defs {
+            if token == d.short || token == d.long {
+                match d.kind {
+                    ArgKind::Flag => {
+                        args.push(ParsedArg { name: d.name, value: "true" })
+                        matched = true
+                    },
+                    ArgKind::Option => {
+                        if i + 1 < n {
+                            i = i + 1
+                            args.push(ParsedArg { name: d.name, value: raw[i] })
+                        } else {
+                            errors.push("Missing value for option: " + d.long)
+                        }
+                        matched = true
+                    },
+                    _ => {},
+                }
+            }
+        }
+
+        if !matched {
+            if token.starts_with("-") {
+                errors.push("Unknown flag: " + token)
+            } else {
+                positionals.push(token)
+            }
+        }
+        i = i + 1
+    }
+
+    // Apply defaults for missing options
+    for d in defs {
+        match d.kind {
+            ArgKind::Option => {
+                let existing = get_arg(ParsedArgs { command: "", args: args, positionals: [], errors: [] }, d.name, "")
+                if existing == "" && d.default_value != "" {
+                    args.push(ParsedArg { name: d.name, value: d.default_value })
+                }
+            },
+            _ => {},
+        }
+    }
+
+    // Check required positional arguments
+    let mut pos_idx = 0
+    for d in defs {
+        match d.kind {
+            ArgKind::Positional => {
+                if d.required && pos_idx >= len(positionals) {
+                    errors.push("Missing required argument: " + d.name)
+                }
+                pos_idx = pos_idx + 1
+            },
+            _ => {},
+        }
+    }
+
+    ParsedArgs { command: command, args: args, positionals: positionals, errors: errors }
+}
+
+// ── Subcommand routing ──
+
+struct Subcommand {
+    name: str,
+    description: str,
+    args: [ArgDef],
+}
+
+/// Create a subcommand definition.
+fn subcommand(name: str, description: str, args: [ArgDef]) -> Subcommand {
+    Subcommand { name: name, description: description, args: args }
+}
+
+/// Find the matching subcommand for a parsed result.
+fn find_subcommand(subs: [Subcommand], name: str) -> i64 {
+    for i in 0..len(subs) {
+        if subs[i].name == name { return i }
+    }
+    -1
+}
+
+// ── Help generation ──
+
+struct App {
+    name: str,
+    version: str,
+    description: str,
+    args: [ArgDef],
+    subcommands: [Subcommand],
+}
+
+/// Create an application definition.
+fn app(name: str, version: str, description: str) -> App {
+    App { name: name, version: version, description: description, args: [], subcommands: [] }
+}
+
+/// Add a global argument definition.
+fn add_arg(a: App, def: ArgDef) -> App {
+    let mut args = a.args
+    args.push(def)
+    App { name: a.name, version: a.version, description: a.description, args: args, subcommands: a.subcommands }
+}
+
+/// Add a subcommand to the app.
+fn add_subcommand(a: App, sub: Subcommand) -> App {
+    let mut subs = a.subcommands
+    subs.push(sub)
+    App { name: a.name, version: a.version, description: a.description, args: a.args, subcommands: subs }
+}
+
+/// Generate a help string for the application.
+fn help_text(a: App) -> str {
+    let mut out = a.name + " " + a.version + "\n"
+    out = out + a.description + "\n\n"
+    out = out + "USAGE:\n    " + a.name + " [OPTIONS] [COMMAND]\n\n"
+
+    if len(a.subcommands) > 0 {
+        out = out + "COMMANDS:\n"
+        for s in a.subcommands {
+            out = out + "    " + s.name + "    " + s.description + "\n"
+        }
+        out = out + "\n"
+    }
+
+    if len(a.args) > 0 {
+        out = out + "OPTIONS:\n"
+        for d in a.args {
+            let flag_str = if d.short != "" { d.short + ", " + d.long } else { "    " + d.long }
+            out = out + "    " + flag_str + "    " + d.description + "\n"
+        }
+    }
+    out
+}
+
+/// Generate a version string.
+fn version_text(a: App) -> str {
+    a.name + " " + a.version
+}

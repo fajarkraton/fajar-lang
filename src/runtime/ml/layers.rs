@@ -470,7 +470,7 @@ impl Conv2d {
                     ndarray::IxDyn(&[batch * out_h * out_w, out_ch]),
                     go_flat_data,
                 )
-                .expect("grad reshape");
+                .expect("Conv2d backward: reshape grad_output to [batch*out_h*out_w, out_ch]");
 
                 // dW = col.T @ go_flat → [col_size, out_channels]
                 let col_2d = col_data_saved
@@ -479,23 +479,23 @@ impl Conv2d {
                         batch * out_h * out_w,
                         in_channels * kernel_size * kernel_size,
                     ))
-                    .expect("col reshape");
+                    .expect("Conv2d backward: reshape col_data to [batch*out_h*out_w, in_ch*k*k] for dW computation");
                 let col_t = col_2d.t();
                 let go_flat_2d = go_flat
                     .clone()
                     .into_shape_with_order(ndarray::Ix2(batch * out_h * out_w, out_ch))
-                    .expect("go_flat 2d");
+                    .expect("Conv2d backward: reshape go_flat to Ix2 [batch*out_h*out_w, out_ch] for dW dot product");
                 let grad_w = col_t.dot(&go_flat_2d).into_dyn();
 
                 // db = sum(go_flat, axis=0) → [1, out_channels]
                 let go_2d = go_flat
                     .clone()
                     .into_shape_with_order(ndarray::Ix2(batch * out_h * out_w, out_ch))
-                    .expect("go 2d");
+                    .expect("Conv2d backward: reshape go_flat to Ix2 [batch*out_h*out_w, out_ch] for bias gradient sum");
                 let grad_b_1d = go_2d.sum_axis(ndarray::Axis(0));
                 let grad_b = grad_b_1d
                     .into_shape_with_order(ndarray::IxDyn(&[1, out_ch]))
-                    .expect("bias reshape")
+                    .expect("Conv2d backward: reshape bias gradient to [1, out_ch]")
                     .into_dyn();
 
                 // dX = col2im(go_flat @ W) — accumulate into input shape
@@ -506,14 +506,14 @@ impl Conv2d {
                 // go_flat @ W → [batch*out_h*out_w, col_size]
                 let go_2d = go_flat
                     .into_shape_with_order(ndarray::Ix2(batch * out_h * out_w, out_ch))
-                    .expect("go 2d for dx");
+                    .expect("Conv2d backward: reshape go_flat to Ix2 [batch*out_h*out_w, out_ch] for dX computation");
                 let w_2d = w_data_saved
                     .clone()
                     .into_shape_with_order(ndarray::Ix2(
                         out_ch,
                         in_channels * kernel_size * kernel_size,
                     ))
-                    .expect("w 2d");
+                    .expect("Conv2d backward: reshape weight to Ix2 [out_ch, in_ch*k*k] for dX dot product");
                 let dcol = go_2d.dot(&w_2d);
 
                 // col2im: scatter dcol back to grad_x
@@ -651,19 +651,19 @@ pub fn scaled_dot_product_attention_tracked(
                     weights_data.shape()[0],
                     weights_data.shape()[1],
                 ))
-                .expect("w shape");
+                .expect("attention backward: reshape attn_weights to Ix2 [seq_q, seq_k] for dV computation");
             let w_t = w_2d.t();
             let go_2d = go
                 .clone()
                 .into_shape_with_order(ndarray::Ix2(go.shape()[0], go.shape()[1]))
-                .expect("go shape");
+                .expect("attention backward: reshape grad_output to Ix2 [seq_q, d_v] for dV computation");
             let grad_v = w_t.dot(&go_2d);
 
             // d_attn = d_out @ V.T
             let v_2d = v_data
                 .clone()
                 .into_shape_with_order(ndarray::Ix2(v_data.shape()[0], v_data.shape()[1]))
-                .expect("v shape");
+                .expect("attention backward: reshape V to Ix2 [seq_k, d_v] for d_attn computation");
             let v_t = v_2d.t();
             let d_attn = go_2d.dot(&v_t);
 
@@ -686,7 +686,7 @@ pub fn scaled_dot_product_attention_tracked(
             let k_2d = k_data
                 .clone()
                 .into_shape_with_order(ndarray::Ix2(k_data.shape()[0], k_data.shape()[1]))
-                .expect("k shape");
+                .expect("attention backward: reshape K to Ix2 [seq_k, d_k] for dQ computation");
             let grad_q = d_scores.dot(&k_2d) * scale_val;
 
             // dK = d_scores.T @ Q * scale
@@ -694,7 +694,7 @@ pub fn scaled_dot_product_attention_tracked(
             let q_2d = q_data
                 .clone()
                 .into_shape_with_order(ndarray::Ix2(q_data.shape()[0], q_data.shape()[1]))
-                .expect("q shape");
+                .expect("attention backward: reshape Q to Ix2 [seq_q, d_k] for dK computation");
             let grad_k = d_scores_t.to_owned().dot(&q_2d) * scale_val;
 
             vec![grad_q.into_dyn(), grad_k.into_dyn(), grad_v.into_dyn()]

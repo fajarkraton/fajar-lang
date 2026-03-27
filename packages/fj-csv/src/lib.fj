@@ -1,0 +1,226 @@
+// fj-csv -- CSV Parser for Fajar Lang
+//
+// RFC 4180-inspired CSV reader/writer with support for quoted fields,
+// embedded commas, embedded newlines (in quotes), and escaped quotes.
+
+// ── Types ──
+
+struct CsvRow {
+    fields: [str],
+}
+
+struct CsvTable {
+    headers: [str],
+    rows: [CsvRow],
+}
+
+// ── Row construction ──
+
+/// Create a row from a list of field values.
+fn csv_row(fields: [str]) -> CsvRow {
+    CsvRow { fields: fields }
+}
+
+/// Get the i-th field from a row.  Returns "" if out of range.
+fn get_field(row: CsvRow, index: i64) -> str {
+    if index < 0 || index >= len(row.fields) { return "" }
+    row.fields[index]
+}
+
+/// Number of fields in a row.
+fn field_count(row: CsvRow) -> i64 {
+    len(row.fields)
+}
+
+// ── Parsing ──
+
+/// Parse a single CSV line into fields, handling quoted values.
+fn parse_csv_line(line: str) -> CsvRow {
+    let mut fields: [str] = []
+    let mut current = ""
+    let mut in_quotes = false
+    let n = len(line)
+    let mut i = 0
+
+    while i < n {
+        let c = line[i]
+
+        if in_quotes {
+            if c == "\"" {
+                // Check for escaped quote ("")
+                if i + 1 < n && line[i + 1] == "\"" {
+                    current = current + "\""
+                    i = i + 2
+                    continue
+                } else {
+                    in_quotes = false
+                }
+            } else {
+                current = current + c
+            }
+        } else {
+            if c == "\"" {
+                in_quotes = true
+            } else if c == "," {
+                fields.push(current)
+                current = ""
+            } else {
+                current = current + c
+            }
+        }
+        i = i + 1
+    }
+    // Push last field
+    fields.push(current)
+    CsvRow { fields: fields }
+}
+
+/// Parse a full CSV string (multi-line) into a CsvTable.
+/// The first line is treated as headers.
+fn parse_csv(source: str) -> CsvTable {
+    let lines = source.split("\n")
+    let mut headers: [str] = []
+    let mut rows: [CsvRow] = []
+    let mut first = true
+
+    for line in lines {
+        let trimmed = line.trim()
+        if len(trimmed) == 0 { continue }
+        let row = parse_csv_line(trimmed)
+        if first {
+            headers = row.fields
+            first = false
+        } else {
+            rows.push(row)
+        }
+    }
+
+    CsvTable { headers: headers, rows: rows }
+}
+
+/// Parse CSV without headers — all lines are data rows.
+fn parse_csv_no_header(source: str) -> [CsvRow] {
+    let lines = source.split("\n")
+    let mut rows: [CsvRow] = []
+    for line in lines {
+        let trimmed = line.trim()
+        if len(trimmed) == 0 { continue }
+        rows.push(parse_csv_line(trimmed))
+    }
+    rows
+}
+
+// ── Accessors ──
+
+/// Get the number of data rows (excluding header).
+fn row_count(table: CsvTable) -> i64 {
+    len(table.rows)
+}
+
+/// Get a row by index.
+fn get_row(table: CsvTable, index: i64) -> CsvRow {
+    table.rows[index]
+}
+
+/// Find the column index for a header name.  Returns -1 if not found.
+fn column_index(table: CsvTable, header: str) -> i64 {
+    for i in 0..len(table.headers) {
+        if table.headers[i] == header { return i }
+    }
+    -1
+}
+
+/// Get a field by row index and column name.
+fn get_by_name(table: CsvTable, row_idx: i64, col_name: str) -> str {
+    let ci = column_index(table, col_name)
+    if ci < 0 { return "" }
+    get_field(table.rows[row_idx], ci)
+}
+
+// ── Serialization ──
+
+/// Escape a field value for CSV output: quote if it contains comma,
+/// quote, or newline.
+fn escape_field(s: str) -> str {
+    let needs_quote = s.contains(",") || s.contains("\"") || s.contains("\n")
+    if !needs_quote { return s }
+    let mut escaped = "\""
+    for i in 0..len(s) {
+        let c = s[i]
+        if c == "\"" { escaped = escaped + "\"\"" }
+        else { escaped = escaped + c }
+    }
+    escaped + "\""
+}
+
+/// Serialize a row to a CSV line.
+fn row_to_csv(row: CsvRow) -> str {
+    let mut out = ""
+    for i in 0..len(row.fields) {
+        if i > 0 { out = out + "," }
+        out = out + escape_field(row.fields[i])
+    }
+    out
+}
+
+/// Serialize a full CsvTable back to a CSV string.
+fn to_csv(table: CsvTable) -> str {
+    let mut out = ""
+    // Headers
+    for i in 0..len(table.headers) {
+        if i > 0 { out = out + "," }
+        out = out + escape_field(table.headers[i])
+    }
+    out = out + "\n"
+    // Rows
+    for row in table.rows {
+        out = out + row_to_csv(row) + "\n"
+    }
+    out
+}
+
+// ── Table construction ──
+
+/// Create an empty table with headers.
+fn csv_table(headers: [str]) -> CsvTable {
+    CsvTable { headers: headers, rows: [] }
+}
+
+/// Add a row to a table.
+fn add_row(table: CsvTable, row: CsvRow) -> CsvTable {
+    let mut rows = table.rows
+    rows.push(row)
+    CsvTable { headers: table.headers, rows: rows }
+}
+
+/// Filter rows where the column `col_name` equals `value`.
+fn filter_by(table: CsvTable, col_name: str, value: str) -> [CsvRow] {
+    let ci = column_index(table, col_name)
+    if ci < 0 { return [] }
+    let mut result: [CsvRow] = []
+    for row in table.rows {
+        if get_field(row, ci) == value {
+            result.push(row)
+        }
+    }
+    result
+}
+
+/// Sort rows by a column (simple string sort, ascending).
+fn sort_by(table: CsvTable, col_name: str) -> CsvTable {
+    let ci = column_index(table, col_name)
+    if ci < 0 { return table }
+    let mut rows = table.rows
+    // Simple bubble sort
+    let n = len(rows)
+    for i in 0..n {
+        for j in 0..n - 1 - i {
+            if get_field(rows[j], ci) > get_field(rows[j + 1], ci) {
+                let tmp = rows[j]
+                rows[j] = rows[j + 1]
+                rows[j + 1] = tmp
+            }
+        }
+    }
+    CsvTable { headers: table.headers, rows: rows }
+}

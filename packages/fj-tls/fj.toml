@@ -1,0 +1,9 @@
+[package]
+name = "fj-tls"
+version = "1.0.0"
+description = "TLS protocol types and stream abstraction for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

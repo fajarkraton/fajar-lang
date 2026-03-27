@@ -1,0 +1,251 @@
+// fj-env — Environment Variables and Configuration for Fajar Lang
+//
+// Provides environment variable access, .env file parsing, and a
+// typed configuration store. Uses built-in get_env/set_env where
+// available and provides pure-Fajar config management.
+
+// ── Environment variable access ──
+
+/// Get an environment variable value.
+/// Returns empty string if not set. Delegates to built-in.
+fn get_env(name: str) -> str {
+    // Delegates to runtime built-in env lookup
+    let result = env_get(name)
+    result
+}
+
+/// Set an environment variable.
+fn set_env(name: str, value: str) {
+    env_set(name, value)
+}
+
+/// Get an environment variable with a default fallback.
+fn env_or_default(name: str, default: str) -> str {
+    let val = get_env(name)
+    if len(val) == 0 { default } else { val }
+}
+
+/// Check if an environment variable is set (non-empty).
+fn has_env(name: str) -> bool {
+    len(get_env(name)) > 0
+}
+
+/// Get an environment variable as an integer, or return default.
+fn env_int(name: str, default: i64) -> i64 {
+    let val = get_env(name)
+    if len(val) == 0 { return default }
+    parse_int(val)
+}
+
+/// Get an environment variable as a boolean.
+/// Recognizes "true", "1", "yes", "on" as true.
+fn env_bool(name: str, default: bool) -> bool {
+    let val = get_env(name)
+    if len(val) == 0 { return default }
+    let lower = to_lowercase(val)
+    lower == "true" || lower == "1" || lower == "yes" || lower == "on"
+}
+
+// ── Configuration store ──
+
+/// A key-value configuration entry.
+struct ConfigEntry {
+    key: str,
+    value: str
+}
+
+/// In-memory configuration store.
+struct Config {
+    entries: [ConfigEntry],
+    name: str
+}
+
+/// Create a new empty Config.
+fn config_new(name: str) -> Config {
+    Config { entries: [], name: name }
+}
+
+/// Get a value from the config by key. Returns empty string if not found.
+fn config_get(cfg: Config, key: str) -> str {
+    for entry in cfg.entries {
+        if entry.key == key {
+            return entry.value
+        }
+    }
+    ""
+}
+
+/// Get a value from the config with a default fallback.
+fn config_get_or(cfg: Config, key: str, default: str) -> str {
+    let val = config_get(cfg, key)
+    if len(val) == 0 { default } else { val }
+}
+
+/// Set a value in the config. If key exists, update it; otherwise add.
+fn config_set(cfg: Config, key: str, value: str) -> Config {
+    let mut new_entries: [ConfigEntry] = []
+    let mut found = false
+    for entry in cfg.entries {
+        if entry.key == key {
+            new_entries = new_entries + [ConfigEntry { key: key, value: value }]
+            found = true
+        } else {
+            new_entries = new_entries + [entry]
+        }
+    }
+    if !found {
+        new_entries = new_entries + [ConfigEntry { key: key, value: value }]
+    }
+    Config { entries: new_entries, name: cfg.name }
+}
+
+/// Remove a key from the config.
+fn config_remove(cfg: Config, key: str) -> Config {
+    let mut new_entries: [ConfigEntry] = []
+    for entry in cfg.entries {
+        if entry.key != key {
+            new_entries = new_entries + [entry]
+        }
+    }
+    Config { entries: new_entries, name: cfg.name }
+}
+
+/// Check if a key exists in the config.
+fn config_has(cfg: Config, key: str) -> bool {
+    for entry in cfg.entries {
+        if entry.key == key {
+            return true
+        }
+    }
+    false
+}
+
+/// Get all keys in the config.
+fn config_keys(cfg: Config) -> [str] {
+    let mut keys: [str] = []
+    for entry in cfg.entries {
+        keys = keys + [entry.key]
+    }
+    keys
+}
+
+/// Get the number of entries in the config.
+fn config_len(cfg: Config) -> i64 {
+    len(cfg.entries) as i64
+}
+
+// ── .env file parsing ──
+
+/// Trim leading and trailing whitespace from a string.
+fn trim_ws(s: str) -> str {
+    let mut start = 0
+    while start < len(s) && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
+        start = start + 1
+    }
+    let mut end = len(s)
+    while end > start && (s[end - 1] == ' ' || s[end - 1] == '\t' || s[end - 1] == '\r') {
+        end = end - 1
+    }
+    let mut result = ""
+    for i in start..end {
+        result = result + to_string(s[i])
+    }
+    result
+}
+
+/// Strip surrounding quotes from a value string.
+fn strip_quotes(s: str) -> str {
+    let n = len(s)
+    if n >= 2 {
+        let first = s[0]
+        let last = s[n - 1]
+        if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+            let mut result = ""
+            for i in 1..(n - 1) {
+                result = result + to_string(s[i])
+            }
+            return result
+        }
+    }
+    s
+}
+
+/// Parse a .env file contents into a Config.
+/// Format: KEY=VALUE, one per line. # comments, empty lines ignored.
+/// Supports quoted values: KEY="value with spaces"
+fn parse_dotenv(contents: str) -> Config {
+    let mut cfg = config_new(".env")
+    let lines = split(contents, "\n")
+    for line in lines {
+        let trimmed = trim_ws(line)
+        // Skip empty lines and comments
+        if len(trimmed) == 0 { continue }
+        if trimmed[0] == '#' { continue }
+
+        // Find the first '='
+        let mut eq_pos: i32 = -1
+        for i in 0..len(trimmed) {
+            if trimmed[i] == '=' {
+                eq_pos = i as i32
+                break
+            }
+        }
+        if eq_pos < 0 { continue }
+
+        // Extract key and value
+        let mut key = ""
+        for i in 0..eq_pos {
+            key = key + to_string(trimmed[i as usize])
+        }
+        let mut value = ""
+        for i in (eq_pos + 1)..len(trimmed) as i32 {
+            value = value + to_string(trimmed[i as usize])
+        }
+
+        key = trim_ws(key)
+        value = trim_ws(value)
+        value = strip_quotes(value)
+
+        if len(key) > 0 {
+            cfg = config_set(cfg, key, value)
+        }
+    }
+    cfg
+}
+
+/// Load a .env file from a path and parse it into a Config.
+fn load_dotenv(path: str) -> Config {
+    let contents = read_file(path)
+    parse_dotenv(contents)
+}
+
+/// Load a .env file and apply all entries as environment variables.
+fn apply_dotenv(path: str) {
+    let cfg = load_dotenv(path)
+    for entry in cfg.entries {
+        set_env(entry.key, entry.value)
+    }
+}
+
+/// Serialize a Config back into .env file format.
+fn config_to_dotenv(cfg: Config) -> str {
+    let mut result = ""
+    for entry in cfg.entries {
+        let needs_quotes = contains(entry.value, " ") || contains(entry.value, "=")
+        if needs_quotes {
+            result = result + entry.key + "=\"" + entry.value + "\"\n"
+        } else {
+            result = result + entry.key + "=" + entry.value + "\n"
+        }
+    }
+    result
+}
+
+/// Merge two configs. Values from the second config override the first.
+fn config_merge(base: Config, overlay: Config) -> Config {
+    let mut result = base
+    for entry in overlay.entries {
+        result = config_set(result, entry.key, entry.value)
+    }
+    result
+}

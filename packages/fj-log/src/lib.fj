@@ -1,0 +1,215 @@
+// fj-log -- Structured Logging for Fajar Lang
+//
+// Provides levelled logging with human-readable and JSON output.
+// Supports filtering by minimum level, module tagging, and
+// structured key-value fields.
+
+// ── Log levels ──
+
+enum LogLevel {
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+}
+
+/// Numeric weight for ordering (lower = more verbose).
+fn level_value(level: LogLevel) -> i64 {
+    match level {
+        LogLevel::DEBUG => 0,
+        LogLevel::INFO  => 1,
+        LogLevel::WARN  => 2,
+        LogLevel::ERROR => 3,
+    }
+}
+
+/// Human-readable label for a log level.
+fn level_name(level: LogLevel) -> str {
+    match level {
+        LogLevel::DEBUG => "DEBUG",
+        LogLevel::INFO  => "INFO",
+        LogLevel::WARN  => "WARN",
+        LogLevel::ERROR => "ERROR",
+    }
+}
+
+/// ANSI color code prefix for terminal output.
+fn level_color(level: LogLevel) -> str {
+    match level {
+        LogLevel::DEBUG => "\x1b[36m",
+        LogLevel::INFO  => "\x1b[32m",
+        LogLevel::WARN  => "\x1b[33m",
+        LogLevel::ERROR => "\x1b[31m",
+    }
+}
+
+// ── Log entry ──
+
+struct LogEntry {
+    level: LogLevel,
+    message: str,
+    module: str,
+    timestamp: i64,
+}
+
+/// Build a log entry.
+fn log_entry(level: LogLevel, module: str, message: str, timestamp: i64) -> LogEntry {
+    LogEntry {
+        level: level,
+        message: message,
+        module: module,
+        timestamp: timestamp,
+    }
+}
+
+// ── Logger ──
+
+struct Logger {
+    min_level: LogLevel,
+    module: str,
+    entries: [LogEntry],
+    use_color: bool,
+}
+
+/// Create a new logger with the given minimum level and module name.
+fn logger_new(module: str, min_level: LogLevel) -> Logger {
+    Logger {
+        min_level: min_level,
+        module: module,
+        entries: [],
+        use_color: true,
+    }
+}
+
+/// Change the minimum log level.
+fn set_level(logger: Logger, level: LogLevel) -> Logger {
+    Logger {
+        min_level: level,
+        module: logger.module,
+        entries: logger.entries,
+        use_color: logger.use_color,
+    }
+}
+
+/// Check whether a message at `level` should be emitted.
+fn should_log(logger: Logger, level: LogLevel) -> bool {
+    level_value(level) >= level_value(logger.min_level)
+}
+
+// ── Formatting ──
+
+/// Format a log entry as a human-readable line.
+fn format_entry(entry: LogEntry) -> str {
+    let lvl = level_name(entry.level)
+    let ts = to_string(entry.timestamp)
+    "[" + ts + "] [" + lvl + "] " + entry.module + ": " + entry.message
+}
+
+/// Format a log entry with ANSI colors.
+fn format_entry_color(entry: LogEntry) -> str {
+    let color = level_color(entry.level)
+    let reset = "\x1b[0m"
+    let lvl = level_name(entry.level)
+    let ts = to_string(entry.timestamp)
+    "[" + ts + "] " + color + lvl + reset + " " + entry.module + ": " + entry.message
+}
+
+/// Format a log entry as a JSON object string.
+fn json_log(entry: LogEntry) -> str {
+    let lvl = level_name(entry.level)
+    let ts = to_string(entry.timestamp)
+    "{\"timestamp\":" + ts + ",\"level\":\"" + lvl + "\",\"module\":\"" + entry.module + "\",\"message\":\"" + entry.message + "\"}"
+}
+
+// ── Logging functions ──
+
+/// Log a message at the given level.  Returns the updated logger.
+fn log(logger: Logger, level: LogLevel, message: str, timestamp: i64) -> Logger {
+    if !should_log(logger, level) { return logger }
+    let entry = log_entry(level, logger.module, message, timestamp)
+    if logger.use_color {
+        println(format_entry_color(entry))
+    } else {
+        println(format_entry(entry))
+    }
+    let mut entries = logger.entries
+    entries.push(entry)
+    Logger {
+        min_level: logger.min_level,
+        module: logger.module,
+        entries: entries,
+        use_color: logger.use_color,
+    }
+}
+
+/// Log a DEBUG message.
+fn debug(logger: Logger, message: str, timestamp: i64) -> Logger {
+    log(logger, LogLevel::DEBUG, message, timestamp)
+}
+
+/// Log an INFO message.
+fn info(logger: Logger, message: str, timestamp: i64) -> Logger {
+    log(logger, LogLevel::INFO, message, timestamp)
+}
+
+/// Log a WARN message.
+fn warn(logger: Logger, message: str, timestamp: i64) -> Logger {
+    log(logger, LogLevel::WARN, message, timestamp)
+}
+
+/// Log an ERROR message.
+fn error(logger: Logger, message: str, timestamp: i64) -> Logger {
+    log(logger, LogLevel::ERROR, message, timestamp)
+}
+
+// ── Structured fields ──
+
+struct Field {
+    key: str,
+    value: str,
+}
+
+/// Create a key-value field.
+fn field(key: str, value: str) -> Field {
+    Field { key: key, value: value }
+}
+
+/// Format structured fields as a JSON fragment: "key1":"val1","key2":"val2"
+fn format_fields(fields: [Field]) -> str {
+    let mut out = ""
+    for i in 0..len(fields) {
+        if i > 0 { out = out + "," }
+        out = out + "\"" + fields[i].key + "\":\"" + fields[i].value + "\""
+    }
+    out
+}
+
+/// Build a JSON log line with extra structured fields.
+fn json_log_with_fields(entry: LogEntry, fields: [Field]) -> str {
+    let base = json_log(entry)
+    let extra = format_fields(fields)
+    if extra == "" { return base }
+    // Replace closing brace with extra fields
+    let prefix = base
+    // Manual construction for reliability
+    let lvl = level_name(entry.level)
+    let ts = to_string(entry.timestamp)
+    "{\"timestamp\":" + ts + ",\"level\":\"" + lvl + "\",\"module\":\"" + entry.module + "\",\"message\":\"" + entry.message + "\"," + extra + "}"
+}
+
+/// Count logged entries at a specific level.
+fn count_at_level(logger: Logger, level: LogLevel) -> i64 {
+    let target = level_value(level)
+    let mut count = 0
+    for e in logger.entries {
+        if level_value(e.level) == target {
+            count = count + 1
+        }
+    }
+    count
+}
+
+/// Total number of entries recorded.
+fn entry_count(logger: Logger) -> i64 {
+    len(logger.entries)
+}

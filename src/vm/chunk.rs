@@ -87,7 +87,10 @@ impl Chunk {
             Op::Jump(t) | Op::JumpIfFalse(t) | Op::JumpIfTrue(t) => {
                 *t = target as u32;
             }
-            _ => panic!("patch_jump called on non-jump instruction"),
+            other => unreachable!(
+                "patch_jump called on {:?}, expected Jump/JumpIfFalse/JumpIfTrue",
+                other
+            ),
         }
     }
 }
@@ -108,5 +111,84 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         (Value::Char(a), Value::Char(b)) => a == b,
         (Value::Null, Value::Null) => true,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chunk_new_is_empty() {
+        let chunk = Chunk::new();
+        assert!(chunk.code.is_empty());
+        assert!(chunk.constants.is_empty());
+        assert!(chunk.names.is_empty());
+        assert!(chunk.functions.is_empty());
+    }
+
+    #[test]
+    fn chunk_emit_and_offset() {
+        let mut chunk = Chunk::new();
+        assert_eq!(chunk.current_offset(), 0);
+        chunk.emit(Op::Const(0), 1);
+        assert_eq!(chunk.current_offset(), 1);
+        chunk.emit(Op::Add, 1);
+        assert_eq!(chunk.current_offset(), 2);
+        assert_eq!(chunk.code[0], Op::Const(0));
+        assert_eq!(chunk.code[1], Op::Add);
+    }
+
+    #[test]
+    fn chunk_add_constant_deduplicates() {
+        let mut chunk = Chunk::new();
+        let idx1 = chunk.add_constant(Value::Int(42));
+        let idx2 = chunk.add_constant(Value::Int(42));
+        assert_eq!(idx1, idx2);
+        assert_eq!(chunk.constants.len(), 1);
+    }
+
+    #[test]
+    fn chunk_add_constant_different_values() {
+        let mut chunk = Chunk::new();
+        let idx1 = chunk.add_constant(Value::Int(1));
+        let idx2 = chunk.add_constant(Value::Int(2));
+        assert_ne!(idx1, idx2);
+        assert_eq!(chunk.constants.len(), 2);
+    }
+
+    #[test]
+    fn chunk_add_name() {
+        let mut chunk = Chunk::new();
+        let idx = chunk.add_name("hello");
+        assert_eq!(chunk.names[idx as usize], "hello");
+    }
+
+    #[test]
+    fn chunk_patch_jump() {
+        let mut chunk = Chunk::new();
+        let offset = chunk.emit(Op::Jump(0), 1);
+        chunk.emit(Op::Const(0), 2);
+        chunk.emit(Op::Pop, 3);
+        chunk.patch_jump(offset, 3);
+        assert_eq!(chunk.code[offset], Op::Jump(3));
+    }
+
+    #[test]
+    fn chunk_default_is_new() {
+        let chunk = Chunk::default();
+        assert!(chunk.code.is_empty());
+    }
+
+    #[test]
+    fn values_equal_ints() {
+        assert!(values_equal(&Value::Int(42), &Value::Int(42)));
+        assert!(!values_equal(&Value::Int(1), &Value::Int(2)));
+    }
+
+    #[test]
+    fn values_equal_different_types() {
+        assert!(!values_equal(&Value::Int(1), &Value::Float(1.0)));
+        assert!(!values_equal(&Value::Bool(true), &Value::Int(1)));
     }
 }

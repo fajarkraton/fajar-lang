@@ -1,0 +1,9 @@
+[package]
+name = "fj-plot"
+version = "1.0.0"
+description = "SVG plotting and charting for Fajar Lang"
+authors = ["Fajar <fajar@primecore.id>"]
+license = "MIT"
+entry = "src/lib.fj"
+
+[dependencies]

@@ -200,8 +200,9 @@ impl VulkanCompute {
             .map_err(|e| VulkanError::NotAvailable(format!("failed to load libvulkan: {e}")))?;
 
         // Create instance
-        let app_name = CString::new("FajarLang").unwrap();
-        let engine_name = CString::new("FajarCompute").unwrap();
+        let app_name = CString::new("FajarLang").expect("CString::new for Vulkan app name");
+        let engine_name =
+            CString::new("FajarCompute").expect("CString::new for Vulkan engine name");
         let app_info = vk::ApplicationInfo::default()
             .application_name(&app_name)
             .application_version(vk::make_api_version(0, 3, 0, 0))
@@ -656,7 +657,10 @@ impl VulkanCompute {
 
     /// Ensure a kernel is compiled, compiling it lazily if needed.
     fn ensure_kernel(&self, op: KernelOp) -> Result<(), VulkanError> {
-        let mut kernels = self.kernels.lock().unwrap();
+        let mut kernels = self
+            .kernels
+            .lock()
+            .expect("lock kernel cache mutex in ensure_kernel");
         if kernels.contains_key(&op) {
             return Ok(());
         }
@@ -678,8 +682,13 @@ impl VulkanCompute {
         workgroups: (u32, u32, u32),
     ) -> Result<(), VulkanError> {
         self.ensure_kernel(op)?;
-        let kernels = self.kernels.lock().unwrap();
-        let kernel = kernels.get(&op).unwrap();
+        let kernels = self
+            .kernels
+            .lock()
+            .expect("lock kernel cache mutex in dispatch_kernel");
+        let kernel = kernels
+            .get(&op)
+            .expect("kernel must exist after ensure_kernel");
 
         // Allocate descriptor set
         let layouts = [kernel.descriptor_set_layout];
@@ -877,7 +886,7 @@ impl VulkanCompute {
             .map_err(|e| VulkanError::ShaderError(format!("create pipeline layout: {e}")))?;
 
         // Compute pipeline
-        let entry_name = CString::new("main").unwrap();
+        let entry_name = CString::new("main").expect("CString::new for SPIR-V entry point name");
         let stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(shader_module)
