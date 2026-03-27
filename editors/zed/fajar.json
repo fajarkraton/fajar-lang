@@ -1,0 +1,72 @@
+{
+  "id": "fajar",
+  "name": "Fajar Lang",
+  "version": "1.0.0",
+  "description": "Fajar Lang support for Zed — syntax highlighting, LSP, and snippets",
+  "authors": ["Fajar (PrimeCore.id)"],
+  "repository": "https://github.com/fajarkraton/fajar-lang",
+  "license": "MIT",
+  "grammars": {
+    "fajar": {
+      "repository": "https://github.com/fajarkraton/tree-sitter-fajar",
+      "rev": "main"
+    }
+  },
+  "languages": {
+    "Fajar Lang": {
+      "config": {
+        "name": "Fajar Lang",
+        "grammar": "fajar",
+        "path_suffixes": ["fj"],
+        "line_comments": ["// "],
+        "block_comment": ["/* ", " */"],
+        "autoclose_before": ";:.,=}])>` \n\t",
+        "brackets": [
+          { "start": "{", "end": "}", "close": true, "newline": true },
+          { "start": "[", "end": "]", "close": true, "newline": false },
+          { "start": "(", "end": ")", "close": true, "newline": false },
+          { "start": "\"", "end": "\"", "close": true, "newline": false },
+          { "start": "'", "end": "'", "close": true, "newline": false }
+        ],
+        "word_characters": ["_"],
+        "tab_size": 4
+      },
+      "highlights": "highlights.scm"
+    }
+  },
+  "language_servers": {
+    "fajar-lsp": {
+      "name": "Fajar Lang LSP",
+      "language": "Fajar Lang",
+      "command": {
+        "path": "fj",
+        "arguments": ["lsp"]
+      },
+      "languages": ["Fajar Lang"],
+      "initialization_options": {}
+    }
+  },
+  "themes": {
+    "Fajar Dark": {
+      "name": "Fajar Dark",
+      "appearance": "dark",
+      "style": {
+        "background": "#0d1117",
+        "editor.background": "#0d1117",
+        "editor.foreground": "#e6edf3",
+        "syntax": {
+          "keyword": { "color": "#f85149", "font_weight": 700 },
+          "type": { "color": "#79c0ff" },
+          "function": { "color": "#d2a8ff" },
+          "string": { "color": "#3fb950" },
+          "number": { "color": "#d2a8ff" },
+          "comment": { "color": "#8b949e", "font_style": "italic" },
+          "attribute": { "color": "#d29922", "font_weight": 700 },
+          "operator": { "color": "#ff7b72" },
+          "variable": { "color": "#e6edf3" },
+          "constant": { "color": "#79c0ff" }
+        }
+      }
+    }
+  }
+}

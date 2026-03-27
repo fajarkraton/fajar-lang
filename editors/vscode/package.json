@@ -109,6 +109,45 @@
         ]
       }
     ],
+    "problemMatchers": [
+      {
+        "name": "fj",
+        "owner": "fajar",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^error\\[(\\w+)\\]:\\s+(.+)\\s+-->\\s+(.+):(\\d+):(\\d+)$",
+          "code": 1,
+          "message": 2,
+          "file": 3,
+          "line": 4,
+          "column": 5
+        }
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "fj",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The fj command to run (build, test, run, check, fmt)"
+          },
+          "file": {
+            "type": "string",
+            "description": "Target file (optional)"
+          }
+        }
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "workbench.action.tasks.runTask",
+        "key": "ctrl+shift+b",
+        "when": "editorLangId == fajar",
+        "args": "fj: Build"
+      }
+    ],
     "configuration": {
       "title": "Fajar Lang",
       "properties": {

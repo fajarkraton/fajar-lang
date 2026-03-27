@@ -142,6 +142,12 @@ impl LanguageServer for FajarLspBackend {
                 code_lens_provider: Some(CodeLensOptions {
                     resolve_provider: Some(false),
                 }),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+                linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
+                    true,
+                )),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -616,6 +622,430 @@ impl LanguageServer for FajarLspBackend {
             None => return Ok(None),
         };
         Ok(Some(compute_code_lenses(&doc.source, &uri)))
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let mut ranges = Vec::new();
+        for pos in &params.positions {
+            let offset = position_to_offset(&doc.line_starts, *pos);
+            let (ws, we) = find_word_range_at(&doc.source, offset);
+            let ls = doc.line_starts.get(pos.line as usize).copied().unwrap_or(0);
+            let le = doc
+                .line_starts
+                .get(pos.line as usize + 1)
+                .copied()
+                .unwrap_or(doc.source.len());
+
+            let inner = SelectionRange {
+                range: Range::new(doc.offset_to_position(ws), doc.offset_to_position(we)),
+                parent: Some(Box::new(SelectionRange {
+                    range: Range::new(doc.offset_to_position(ls), doc.offset_to_position(le)),
+                    parent: Some(Box::new(SelectionRange {
+                        range: Range::new(
+                            Position::new(0, 0),
+                            doc.offset_to_position(doc.source.len()),
+                        ),
+                        parent: None,
+                    })),
+                })),
+            };
+            ranges.push(inner);
+        }
+        Ok(Some(ranges))
+    }
+
+    async fn linked_editing_range(
+        &self,
+        params: LinkedEditingRangeParams,
+    ) -> Result<Option<LinkedEditingRanges>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        let mut ranges = Vec::new();
+        let bytes = doc.source.as_bytes();
+        let mut i = 0;
+        while i < doc.source.len() {
+            if let Some(idx) = doc.source[i..].find(&word) {
+                let abs = i + idx;
+                let before_ok =
+                    abs == 0 || (!bytes[abs - 1].is_ascii_alphanumeric() && bytes[abs - 1] != b'_');
+                let end = abs + word.len();
+                let after_ok = end >= bytes.len()
+                    || (!bytes[end].is_ascii_alphanumeric() && bytes[end] != b'_');
+                if before_ok && after_ok {
+                    ranges.push(Range::new(
+                        doc.offset_to_position(abs),
+                        doc.offset_to_position(end),
+                    ));
+                }
+                i = end;
+            } else {
+                break;
+            }
+        }
+
+        if ranges.len() <= 1 {
+            return Ok(None);
+        }
+        Ok(Some(LinkedEditingRanges {
+            ranges,
+            word_pattern: None,
+        }))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query.to_lowercase();
+        let docs = self.documents.lock().expect("lsp state lock");
+        let mut symbols = Vec::new();
+
+        for (uri, doc) in docs.iter() {
+            for (line_idx, line) in doc.source.lines().enumerate() {
+                let trimmed = line.trim();
+                let (kind, name) = if trimmed.starts_with("fn ") {
+                    (SymbolKind::FUNCTION, extract_name(trimmed, "fn "))
+                } else if trimmed.starts_with("pub fn ") {
+                    (SymbolKind::FUNCTION, extract_name(trimmed, "pub fn "))
+                } else if trimmed.starts_with("struct ") {
+                    (SymbolKind::STRUCT, extract_name(trimmed, "struct "))
+                } else if trimmed.starts_with("enum ") {
+                    (SymbolKind::ENUM, extract_name(trimmed, "enum "))
+                } else if trimmed.starts_with("trait ") {
+                    (SymbolKind::INTERFACE, extract_name(trimmed, "trait "))
+                } else if trimmed.starts_with("const ") {
+                    (SymbolKind::CONSTANT, extract_name(trimmed, "const "))
+                } else {
+                    continue;
+                };
+
+                if !query.is_empty() && !name.to_lowercase().contains(&query) {
+                    continue;
+                }
+
+                #[allow(deprecated)]
+                symbols.push(SymbolInformation {
+                    name,
+                    kind,
+                    tags: None,
+                    deprecated: None,
+                    location: Location {
+                        uri: uri.clone(),
+                        range: Range::new(
+                            Position::new(line_idx as u32, 0),
+                            Position::new(line_idx as u32, line.len() as u32),
+                        ),
+                    },
+                    container_name: None,
+                });
+            }
+        }
+        Ok(Some(symbols))
+    }
+
+    async fn prepare_call_hierarchy(
+        &self,
+        params: CallHierarchyPrepareParams,
+    ) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        // Check if the word is a function name at its definition
+        let line = doc.source.lines().nth(pos.line as usize).unwrap_or("");
+        let trimmed = line.trim();
+        if trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
+            let range = Range::new(
+                Position::new(pos.line, 0),
+                Position::new(pos.line, line.len() as u32),
+            );
+            Ok(Some(vec![CallHierarchyItem {
+                name: word,
+                kind: SymbolKind::FUNCTION,
+                tags: None,
+                detail: Some(trimmed.to_string()),
+                uri: uri.clone(),
+                range,
+                selection_range: range,
+                data: None,
+            }]))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn incoming_calls(
+        &self,
+        params: CallHierarchyIncomingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let uri = &params.item.uri;
+        let fn_name = &params.item.name;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let mut calls = Vec::new();
+        for (line_idx, line) in doc.source.lines().enumerate() {
+            let trimmed = line.trim();
+            if line_idx as u32 == params.item.range.start.line {
+                continue; // Skip the definition itself
+            }
+            if line.contains(fn_name) && line.contains('(') {
+                // Find the enclosing function
+                let caller_name = find_enclosing_function(&doc.source, line_idx);
+                let range = Range::new(
+                    Position::new(line_idx as u32, 0),
+                    Position::new(line_idx as u32, line.len() as u32),
+                );
+                calls.push(CallHierarchyIncomingCall {
+                    from: CallHierarchyItem {
+                        name: caller_name,
+                        kind: SymbolKind::FUNCTION,
+                        tags: None,
+                        detail: Some(trimmed.to_string()),
+                        uri: uri.clone(),
+                        range,
+                        selection_range: range,
+                        data: None,
+                    },
+                    from_ranges: vec![range],
+                });
+            }
+        }
+        Ok(Some(calls))
+    }
+
+    async fn outgoing_calls(
+        &self,
+        params: CallHierarchyOutgoingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let uri = &params.item.uri;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        // Find function body and extract called functions
+        let start_line = params.item.range.start.line as usize;
+        let mut calls = Vec::new();
+        let mut in_body = false;
+        let mut brace_depth = 0i32;
+
+        for (line_idx, line) in doc.source.lines().enumerate().skip(start_line) {
+            for ch in line.chars() {
+                if ch == '{' {
+                    brace_depth += 1;
+                    in_body = true;
+                }
+                if ch == '}' {
+                    brace_depth -= 1;
+                }
+            }
+            if in_body && brace_depth <= 0 && line_idx > start_line {
+                break;
+            }
+            if in_body && line_idx > start_line {
+                // Look for function calls: name(
+                for cap in find_function_calls(line) {
+                    let range = Range::new(
+                        Position::new(line_idx as u32, 0),
+                        Position::new(line_idx as u32, line.len() as u32),
+                    );
+                    calls.push(CallHierarchyOutgoingCall {
+                        to: CallHierarchyItem {
+                            name: cap,
+                            kind: SymbolKind::FUNCTION,
+                            tags: None,
+                            detail: None,
+                            uri: uri.clone(),
+                            range,
+                            selection_range: range,
+                            data: None,
+                        },
+                        from_ranges: vec![range],
+                    });
+                }
+            }
+        }
+        Ok(Some(calls))
+    }
+
+    async fn prepare_type_hierarchy(
+        &self,
+        params: TypeHierarchyPrepareParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let word = word_at_position(&doc.source, &doc.line_starts, pos);
+        if word.is_empty() {
+            return Ok(None);
+        }
+
+        let line = doc.source.lines().nth(pos.line as usize).unwrap_or("");
+        let trimmed = line.trim();
+        if trimmed.starts_with("struct ")
+            || trimmed.starts_with("enum ")
+            || trimmed.starts_with("trait ")
+        {
+            let kind = if trimmed.starts_with("struct ") {
+                SymbolKind::STRUCT
+            } else if trimmed.starts_with("enum ") {
+                SymbolKind::ENUM
+            } else {
+                SymbolKind::INTERFACE
+            };
+            let range = Range::new(
+                Position::new(pos.line, 0),
+                Position::new(pos.line, line.len() as u32),
+            );
+            Ok(Some(vec![TypeHierarchyItem {
+                name: word,
+                kind,
+                tags: None,
+                detail: Some(trimmed.to_string()),
+                uri: uri.clone(),
+                range,
+                selection_range: range,
+                data: None,
+            }]))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn supertypes(
+        &self,
+        params: TypeHierarchySupertypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = &params.item.uri;
+        let type_name = &params.item.name;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        // Find "impl TraitName for TypeName" patterns
+        let mut supertypes = Vec::new();
+        for (line_idx, line) in doc.source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("impl ")
+                && trimmed.contains(" for ")
+                && trimmed.contains(type_name)
+            {
+                let trait_name = trimmed
+                    .trim_start_matches("impl ")
+                    .split(" for ")
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                if !trait_name.is_empty() {
+                    let range = Range::new(
+                        Position::new(line_idx as u32, 0),
+                        Position::new(line_idx as u32, line.len() as u32),
+                    );
+                    supertypes.push(TypeHierarchyItem {
+                        name: trait_name,
+                        kind: SymbolKind::INTERFACE,
+                        tags: None,
+                        detail: Some(trimmed.to_string()),
+                        uri: uri.clone(),
+                        range,
+                        selection_range: range,
+                        data: None,
+                    });
+                }
+            }
+        }
+        Ok(Some(supertypes))
+    }
+
+    async fn subtypes(
+        &self,
+        params: TypeHierarchySubtypesParams,
+    ) -> Result<Option<Vec<TypeHierarchyItem>>> {
+        let uri = &params.item.uri;
+        let trait_name = &params.item.name;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let mut subtypes = Vec::new();
+        for (line_idx, line) in doc.source.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("impl ")
+                && trimmed.contains(trait_name)
+                && trimmed.contains(" for ")
+            {
+                let impl_type = trimmed
+                    .split(" for ")
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim()
+                    .trim_end_matches('{')
+                    .trim()
+                    .to_string();
+                if !impl_type.is_empty() {
+                    let range = Range::new(
+                        Position::new(line_idx as u32, 0),
+                        Position::new(line_idx as u32, line.len() as u32),
+                    );
+                    subtypes.push(TypeHierarchyItem {
+                        name: impl_type,
+                        kind: SymbolKind::STRUCT,
+                        tags: None,
+                        detail: Some(trimmed.to_string()),
+                        uri: uri.clone(),
+                        range,
+                        selection_range: range,
+                        data: None,
+                    });
+                }
+            }
+        }
+        Ok(Some(subtypes))
     }
 }
 
@@ -1195,6 +1625,87 @@ fn word_at_position(source: &str, line_starts: &[usize], pos: Position) -> Strin
 
 fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Convert an LSP Position to a byte offset.
+fn position_to_offset(line_starts: &[usize], pos: Position) -> usize {
+    let line = pos.line as usize;
+    if line >= line_starts.len() {
+        return 0;
+    }
+    line_starts[line] + pos.character as usize
+}
+
+/// Find word boundaries at a byte offset.
+fn find_word_range_at(source: &str, offset: usize) -> (usize, usize) {
+    let bytes = source.as_bytes();
+    let mut start = offset;
+    while start > 0 && is_ident_char(bytes[start - 1]) {
+        start -= 1;
+    }
+    let mut end = offset;
+    while end < bytes.len() && is_ident_char(bytes[end]) {
+        end += 1;
+    }
+    (start, end.max(start))
+}
+
+/// Extract the identifier name after a prefix (e.g., "fn " → name).
+fn extract_name(line: &str, prefix: &str) -> String {
+    let rest = line.trim_start_matches(prefix);
+    rest.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+/// Find the name of the function enclosing a given line index.
+fn find_enclosing_function(source: &str, target_line: usize) -> String {
+    let mut last_fn = "<module>".to_string();
+    for (i, line) in source.lines().enumerate() {
+        if i >= target_line {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
+            let prefix = if trimmed.starts_with("pub fn ") {
+                "pub fn "
+            } else {
+                "fn "
+            };
+            last_fn = extract_name(trimmed, prefix);
+        }
+    }
+    last_fn
+}
+
+/// Find function call names in a line (identifiers followed by `(`).
+fn find_function_calls(line: &str) -> Vec<String> {
+    let mut calls = Vec::new();
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'(' && i > 0 {
+            // Walk backward to find function name
+            let end = i;
+            let mut start = i;
+            while start > 0 && is_ident_char(bytes[start - 1]) {
+                start -= 1;
+            }
+            if start < end {
+                let name = &line[start..end];
+                // Skip keywords
+                if !matches!(
+                    name,
+                    "if" | "while" | "for" | "match" | "return" | "let" | "mut"
+                ) {
+                    calls.push(name.to_string());
+                }
+            }
+        }
+        i += 1;
+    }
+    calls
 }
 
 fn keyword_info(word: &str) -> Option<String> {

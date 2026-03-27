@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fajar Lang JetBrains Plugin Descriptor
+  Minimal plugin for IntelliJ IDEA, CLion, WebStorm, etc.
+  Provides file type recognition, syntax highlighting, and LSP integration.
+-->
+<idea-plugin>
+  <id>dev.fajarlang.plugin</id>
+  <name>Fajar Lang</name>
+  <version>1.0.0</version>
+  <vendor email="fajar@primecore.id" url="https://fajarlang.dev">PrimeCore.id</vendor>
+
+  <description><![CDATA[
+    <h2>Fajar Lang Support for JetBrains IDEs</h2>
+    <p>Language support for <b>Fajar Lang</b> (.fj) — a statically-typed systems programming language
+    for embedded ML + OS integration.</p>
+
+    <h3>Features</h3>
+    <ul>
+      <li>Syntax highlighting for .fj files</li>
+      <li>LSP integration via <code>fj lsp</code></li>
+      <li>File type detection (.fj extension, fj.toml project files)</li>
+      <li>Code commenting (// line, /* block */)</li>
+      <li>Bracket matching and auto-close</li>
+      <li>Run configurations for fj build/run/test/check</li>
+    </ul>
+
+    <h3>Requirements</h3>
+    <p>Install the <code>fj</code> binary and ensure it is on your PATH.</p>
+
+    <h3>Links</h3>
+    <ul>
+      <li><a href="https://github.com/fajarkraton/fajar-lang">GitHub Repository</a></li>
+      <li><a href="https://fajarlang.dev">Documentation</a></li>
+    </ul>
+  ]]></description>
+
+  <change-notes><![CDATA[
+    <h3>1.0.0</h3>
+    <ul>
+      <li>Initial release</li>
+      <li>File type recognition (.fj)</li>
+      <li>TextMate-based syntax highlighting</li>
+      <li>LSP client integration</li>
+      <li>Run configurations</li>
+    </ul>
+  ]]></change-notes>
+
+  <idea-version since-build="232" until-build="252.*"/>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends optional="true" config-file="lsp-support.xml">com.intellij.modules.lang</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- File type registration -->
+    <fileType
+        name="Fajar Lang"
+        implementationClass="dev.fajarlang.plugin.FajarFileType"
+        fieldName="INSTANCE"
+        language="Fajar"
+        extensions="fj"/>
+
+    <!-- Language definition -->
+    <lang.parserDefinition
+        language="Fajar"
+        implementationClass="dev.fajarlang.plugin.FajarParserDefinition"/>
+
+    <!-- Syntax highlighter -->
+    <lang.syntaxHighlighterFactory
+        language="Fajar"
+        implementationClass="dev.fajarlang.plugin.FajarSyntaxHighlighterFactory"/>
+
+    <!-- Commenter (// and /* */) -->
+    <lang.commenter
+        language="Fajar"
+        implementationClass="dev.fajarlang.plugin.FajarCommenter"/>
+
+    <!-- Bracket matcher -->
+    <lang.bracketMatcher
+        language="Fajar"
+        implementationClass="dev.fajarlang.plugin.FajarBracketMatcher"/>
+
+    <!-- Color settings page -->
+    <colorSettingsPage
+        implementation="dev.fajarlang.plugin.FajarColorSettingsPage"/>
+
+    <!-- LSP server support (requires LSP plugin or built-in LSP in 2024.2+) -->
+    <lsp.serverSupportProvider
+        implementation="dev.fajarlang.plugin.FajarLspServerSupportProvider"/>
+
+    <!-- Run configuration -->
+    <configurationType
+        implementation="dev.fajarlang.plugin.run.FajarRunConfigurationType"/>
+
+    <!-- Project template -->
+    <directoryProjectGenerator
+        implementation="dev.fajarlang.plugin.FajarProjectGenerator"/>
+  </extensions>
+
+  <actions>
+    <!-- Tools menu actions -->
+    <group id="FajarLang.ToolsMenu" text="Fajar Lang" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+      <action id="FajarLang.Run"
+              class="dev.fajarlang.plugin.actions.RunFileAction"
+              text="Run File"
+              description="Run the current .fj file"
+              icon="AllIcons.Actions.Execute">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift F10"/>
+      </action>
+
+      <action id="FajarLang.Check"
+              class="dev.fajarlang.plugin.actions.CheckFileAction"
+              text="Check File"
+              description="Type-check the current .fj file">
+      </action>
+
+      <action id="FajarLang.Format"
+              class="dev.fajarlang.plugin.actions.FormatFileAction"
+              text="Format File"
+              description="Format the current .fj file with fj fmt">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift F"/>
+      </action>
+
+      <action id="FajarLang.Test"
+              class="dev.fajarlang.plugin.actions.RunTestsAction"
+              text="Run Tests"
+              description="Run fj test in the project">
+      </action>
+
+      <action id="FajarLang.Build"
+              class="dev.fajarlang.plugin.actions.BuildAction"
+              text="Build Project"
+              description="Run fj build">
+      </action>
+
+      <action id="FajarLang.REPL"
+              class="dev.fajarlang.plugin.actions.OpenReplAction"
+              text="Open REPL"
+              description="Open an interactive Fajar Lang REPL">
+      </action>
+    </group>
+  </actions>
+</idea-plugin>

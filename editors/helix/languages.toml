@@ -1,0 +1,27 @@
+# =====================================================
+# Fajar Lang — Helix Editor Configuration
+# Copy to ~/.config/helix/languages.toml or merge with existing
+# =====================================================
+
+[[language]]
+name = "fajar"
+scope = "source.fajar"
+file-types = ["fj"]
+roots = ["fj.toml"]
+language-server = { command = "fj", args = ["lsp"] }
+comment-token = "//"
+block-comment-tokens = { start = "/*", end = "*/" }
+indent = { tab-width = 4, unit = "    " }
+auto-format = false
+formatter = { command = "fj", args = ["fmt", "-"] }
+
+[language.auto-pairs]
+'(' = ')'
+'{' = '}'
+'[' = ']'
+'"' = '"'
+"'" = "'"
+
+[[grammar]]
+name = "fajar"
+source = { git = "https://github.com/fajarkraton/tree-sitter-fajar", rev = "main" }

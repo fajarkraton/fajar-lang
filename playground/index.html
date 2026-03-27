@@ -28,6 +28,7 @@
       </select>
     </div>
     <div class="header-right">
+      <button id="btn-shortcuts" title="Keyboard Shortcuts (F1)">Keys</button>
       <button id="btn-share" title="Share (Ctrl+Shift+S)">Share</button>
       <button id="btn-theme" title="Toggle theme">Dark</button>
       <a href="https://github.com/fajarkraton/fajar-lang" target="_blank" class="github-link" title="GitHub">
@@ -74,8 +75,8 @@
         <pre id="output-stdout" class="output-pane active"></pre>
         <pre id="output-result" class="output-pane"></pre>
         <pre id="output-errors" class="output-pane"></pre>
-        <pre id="output-ast" class="output-pane"></pre>
-        <pre id="output-tokens" class="output-pane"></pre>
+        <div id="output-ast" class="output-pane ast-viewer"></div>
+        <div id="output-tokens" class="output-pane token-viewer"></div>
       </div>
     </div>
   </main>
@@ -108,6 +109,33 @@
           <textarea id="share-embed" readonly rows="3"></textarea>
           <button id="btn-copy-embed">Copy</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts modal -->
+  <div id="shortcuts-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Keyboard Shortcuts</h2>
+        <button class="modal-close" id="shortcuts-close">&times;</button>
+      </div>
+      <div class="modal-body shortcuts-body">
+        <table class="shortcuts-table">
+          <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Run code</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Format code</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Share code</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Clear output</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>Toggle comment</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Select next occurrence</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd></td><td>Delete line</td></tr>
+            <tr><td><kbd>Alt</kbd>+<kbd>Up/Down</kbd></td><td>Move line up/down</td></tr>
+            <tr><td><kbd>F1</kbd></td><td>Show keyboard shortcuts</td></tr>
+            <tr><td><kbd>Escape</kbd></td><td>Close modal</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

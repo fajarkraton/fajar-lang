@@ -1,0 +1,123 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "fj: Build",
+      "type": "shell",
+      "command": "fj build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": {
+        "owner": "fajar",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^error\\[(\\w+)\\]:\\s+(.+)\\s+-->\\s+(.+):(\\d+):(\\d+)$",
+          "code": 1,
+          "message": 2,
+          "file": 3,
+          "line": 4,
+          "column": 5
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: Test",
+      "type": "shell",
+      "command": "fj test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: Run",
+      "type": "shell",
+      "command": "fj run ${file}",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: Check",
+      "type": "shell",
+      "command": "fj check ${file}",
+      "group": "none",
+      "problemMatcher": {
+        "owner": "fajar",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^error\\[(\\w+)\\]:\\s+(.+)\\s+-->\\s+(.+):(\\d+):(\\d+)$",
+          "code": 1,
+          "message": 2,
+          "file": 3,
+          "line": 4,
+          "column": 5
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: Format",
+      "type": "shell",
+      "command": "fj fmt ${file}",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: REPL",
+      "type": "shell",
+      "command": "fj repl",
+      "group": "none",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "fj: Dump Tokens",
+      "type": "shell",
+      "command": "fj dump-tokens ${file}",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "fj: Dump AST",
+      "type": "shell",
+      "command": "fj dump-ast ${file}",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}
