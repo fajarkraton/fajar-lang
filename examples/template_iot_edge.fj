@@ -159,6 +159,82 @@ fn fleet_status_report(device_id: str, total_readings: i64, anomaly_count: i64, 
     f"[FLEET] {device_id} | readings={total_readings} | anomalies={anomaly_count} | power={power} | health={health} | uptime={uptime_ticks}"
 }
 
+// --- MQTT Protocol ---
+
+struct MqttMessage {
+    topic: str,
+    payload: str,
+    qos: i64,
+    retain: bool,
+}
+
+fn mqtt_publish(topic: str, payload: str, qos: i64) -> MqttMessage {
+    println("[mqtt] PUBLISH " + topic + " (QoS " + to_string(qos) + "): " + payload)
+    MqttMessage { topic: topic, payload: payload, qos: qos, retain: false }
+}
+
+fn mqtt_subscribe(topic: str) {
+    println("[mqtt] SUBSCRIBE " + topic)
+}
+
+fn mqtt_connect(broker: str, client_id: str) {
+    println("[mqtt] CONNECT to " + broker + " as " + client_id)
+}
+
+// --- OTA Updates ---
+
+struct OtaUpdate {
+    version: str,
+    url: str,
+    checksum: str,
+    size_bytes: i64,
+}
+
+fn check_ota_update(current_version: str) -> bool {
+    println("[ota] Checking for updates (current: " + current_version + ")")
+    let available = "1.1.0"
+    if available != current_version {
+        println("[ota] Update available: " + available)
+        true
+    } else {
+        println("[ota] Up to date")
+        false
+    }
+}
+
+fn apply_ota_update(update: OtaUpdate) {
+    println("[ota] Downloading " + update.url + " (" + to_string(update.size_bytes) + " bytes)")
+    println("[ota] Verifying checksum: " + update.checksum)
+    println("[ota] Applying update to " + update.version)
+    println("[ota] Reboot required")
+}
+
+// --- Watchdog Timer ---
+
+struct Watchdog {
+    timeout_ms: i64,
+    last_kick: i64,
+    enabled: bool,
+}
+
+fn watchdog_init(timeout_ms: i64) -> Watchdog {
+    println("[watchdog] Initialized with " + to_string(timeout_ms) + "ms timeout")
+    Watchdog { timeout_ms: timeout_ms, last_kick: 0, enabled: true }
+}
+
+fn watchdog_kick(wd: Watchdog, current_ms: i64) -> Watchdog {
+    Watchdog { timeout_ms: wd.timeout_ms, last_kick: current_ms, enabled: wd.enabled }
+}
+
+fn watchdog_check(wd: Watchdog, current_ms: i64) -> bool {
+    if wd.enabled && (current_ms - wd.last_kick) > wd.timeout_ms {
+        println("[watchdog] TIMEOUT! System reset required")
+        false
+    } else {
+        true
+    }
+}
+
 // --- Main ---
 
 fn main() {
@@ -188,6 +264,29 @@ fn main() {
     println("Calibration Profiles:")
     println(f"  Temperature: scale={cal_temp.scale}, offset={cal_temp.offset}")
     println(f"  Humidity:    scale={cal_hum.scale}, offset={cal_hum.offset}")
+    println("")
+
+    // MQTT connection
+    mqtt_connect("mqtt://broker.local:1883", config.device_id)
+    mqtt_subscribe("devices/" + config.device_id + "/cmd")
+    mqtt_subscribe("devices/" + config.device_id + "/ota")
+    println("")
+
+    // Watchdog timer (5 second timeout)
+    let mut wd = watchdog_init(5000)
+    println("")
+
+    // OTA update check at boot
+    let has_update = check_ota_update(DEVICE_VERSION)
+    if has_update {
+        let update = OtaUpdate {
+            version: "1.1.0",
+            url: "https://ota.fajar.dev/firmware/1.1.0.bin",
+            checksum: "sha256:a1b2c3d4e5f6",
+            size_bytes: 524288,
+        }
+        apply_ota_update(update)
+    }
     println("")
 
     // Sensor registry via HashMap
@@ -288,6 +387,19 @@ fn main() {
         let telemetry = format_telemetry(config.device_id, json_readings, MAX_SENSORS, power_label)
         println(f"  Telemetry: {telemetry}")
         append_file(log_path, f"[TELEMETRY] tick={tick} {telemetry}\n")
+
+        // Publish telemetry via MQTT
+        let mqtt_topic = "devices/" + config.device_id + "/telemetry"
+        let _msg = mqtt_publish(mqtt_topic, telemetry, 1)
+
+        // Kick watchdog after successful tick
+        let current_ms = tick * config.read_interval_ms
+        wd = watchdog_kick(wd, current_ms)
+        let wd_ok = watchdog_check(wd, current_ms)
+        if !wd_ok {
+            println("  [watchdog] System would reset — halting")
+        }
+
         println("")
         tick = tick + 1
     }

@@ -1289,4 +1289,45 @@ mod tests {
             failed,
         );
     }
+
+    // APP4: Verify all application templates lex+parse
+    #[test]
+    fn app4_templates_lex_and_parse() {
+        let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let templates = vec![
+            "template_web_service.fj",
+            "template_iot_edge.fj",
+            "template_ml_pipeline.fj",
+            "template_ml_iris.fj",
+        ];
+        let mut passed = 0;
+        let mut failed = Vec::new();
+        for tmpl in &templates {
+            let path = examples_dir.join(tmpl);
+            if !path.exists() {
+                failed.push(format!("{tmpl}: file not found"));
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).expect("read template");
+            match crate::lexer::tokenize(&source) {
+                Ok(tokens) => match crate::parser::parse(tokens) {
+                    Ok(_) => {
+                        passed += 1;
+                    }
+                    Err(errors) => {
+                        failed.push(format!("{tmpl}: {} parse errors", errors.len()));
+                    }
+                },
+                Err(errors) => {
+                    failed.push(format!("{tmpl}: {} lex errors", errors.len()));
+                }
+            }
+        }
+        assert!(
+            failed.is_empty(),
+            "template parse failures: {:?} ({passed}/{} passed)",
+            failed,
+            templates.len(),
+        );
+    }
 }

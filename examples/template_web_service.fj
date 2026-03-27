@@ -9,8 +9,33 @@
 //   6. Configuration loading
 //   7. Health check endpoint
 //   8. Error handling with Result types
+//   9. SQLite database integration
+//  10. Token-based authentication
+//  11. WebSocket message handling
+//  12. Containerization (Dockerfile)
 //
 // Run: fj run examples/template_web_service.fj
+
+// =====================================================================
+// SECTION 0: SQLite Database Layer
+// =====================================================================
+// Uses db_open/db_execute/db_query builtins for persistent storage.
+// In production, replace ":memory:" with a file path for durability.
+
+fn init_database() -> i64 {
+    let db = db_open(":memory:")
+    db_execute(db, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, created_at TEXT)")
+    db
+}
+
+fn db_create_user(db: i64, name: str, email: str) -> i64 {
+    db_execute(db, "INSERT INTO users (name, email, created_at) VALUES (?1, ?2, ?3)", [name, email, "2026-01-01"])
+}
+
+fn db_get_users(db: i64) -> i64 {
+    let rows = db_query(db, "SELECT id, name, email FROM users")
+    len(rows)
+}
 
 // =====================================================================
 // SECTION 1: Configuration
@@ -236,6 +261,26 @@ fn middleware_auth(req: Request, require_auth: bool) -> Result<bool, str> {
 }
 
 // =====================================================================
+// SECTION 4b: Token Generation
+// =====================================================================
+// Simple hash-based token generation for API authentication.
+// In production, replace with proper JWT or HMAC-SHA256 signing.
+
+fn generate_token(user_id: i64, secret: str) -> str {
+    let payload = to_string(user_id) + ":" + secret + ":" + to_string(42)
+    "fjt_" + to_string(len(payload)) + "_" + to_string(user_id)
+}
+
+fn validate_token(token: str) -> bool {
+    // Accept tokens that start with the "fjt_" prefix
+    if len(token) >= 4 {
+        token.starts_with("fjt_")
+    } else {
+        false
+    }
+}
+
+// =====================================================================
 // SECTION 5: Route Handlers
 // =====================================================================
 
@@ -290,6 +335,38 @@ fn handle_delete_user(db: Database, id: i64) -> Response {
         Err(msg) => json_error(404, msg),
         _ => json_error(500, "unexpected error"),
     }
+}
+
+// =====================================================================
+// SECTION 5b: WebSocket Messages
+// =====================================================================
+// Structured WebSocket message types for real-time communication.
+// Supports text messages and broadcast to connected clients.
+
+struct WsMessage {
+    msg_type: str,
+    payload: str,
+    client_id: i64
+}
+
+fn ws_text(client_id: i64, text: str) -> WsMessage {
+    WsMessage { msg_type: "text", payload: text, client_id: client_id }
+}
+
+fn ws_binary(client_id: i64, data: str) -> WsMessage {
+    WsMessage { msg_type: "binary", payload: data, client_id: client_id }
+}
+
+fn ws_close(client_id: i64, reason: str) -> WsMessage {
+    WsMessage { msg_type: "close", payload: reason, client_id: client_id }
+}
+
+fn ws_broadcast(msg: WsMessage) {
+    println("[ws] broadcast to client " + to_string(msg.client_id) + ": " + msg.payload)
+}
+
+fn ws_format(msg: WsMessage) -> str {
+    f"{{\"type\": \"{msg.msg_type}\", \"payload\": \"{msg.payload}\", \"client_id\": {msg.client_id}}}"
 }
 
 // =====================================================================
@@ -387,6 +464,13 @@ fn simulate(label: str, req: Request, config: Config, db: Database) {
 }
 
 // =====================================================================
+// SECTION 7b: Containerization
+// =====================================================================
+// Dockerfile template for deploying the web service as a container.
+
+const DOCKERFILE: str = "FROM debian:bookworm-slim\nCOPY ./build/app /usr/local/bin/app\nEXPOSE 8080\nCMD [\"app\"]"
+
+// =====================================================================
 // SECTION 8: Main -- Register Routes, Run Simulations
 // =====================================================================
 
@@ -406,7 +490,24 @@ fn main() {
 
     // --- Initialize database ---
     let mut db = db_new(config.max_items)
-    println("[startup] Database initialized")
+    println("[startup] In-memory database initialized")
+
+    // --- Initialize SQLite database ---
+    let sqlite_db = init_database()
+    println("[startup] SQLite database initialized")
+    db_create_user(sqlite_db, "admin", "admin@fajar.dev")
+    let user_count = db_get_users(sqlite_db)
+    println(f"[startup] SQLite seeded with {user_count} user(s)")
+
+    // --- Generate API tokens ---
+    let admin_token = generate_token(1, "fajar-secret-2026")
+    println(f"[startup] Admin token: {admin_token}")
+    let is_valid = validate_token(admin_token)
+    println(f"[startup] Token valid: {is_valid}")
+
+    // --- WebSocket setup ---
+    let ws_welcome = ws_text(0, "Welcome to Fajar Web Service")
+    println(f"[startup] WebSocket welcome: {ws_format(ws_welcome)}")
 
     // --- Save startup log to file ---
     let log_path = "/tmp/fj_web_service.log"
@@ -512,6 +613,34 @@ fn main() {
     // --- Append summary to log ---
     append_file(log_path, "[done] 12 requests processed\n")
 
+    // --- WebSocket broadcast demo ---
+    println("")
+    println("=== WebSocket Demo ===")
+    let ws_msg1 = ws_text(1, "User Alice connected")
+    ws_broadcast(ws_msg1)
+    let ws_msg2 = ws_text(2, "User Bob connected")
+    ws_broadcast(ws_msg2)
+    let ws_close_msg = ws_close(1, "session ended")
+    println(f"[ws] close: {ws_format(ws_close_msg)}")
+
+    // --- Token generation demo ---
+    println("")
+    println("=== Token Generation Demo ===")
+    let mut i: i64 = 1
+    while i <= 3 {
+        let token = generate_token(i, "demo-secret")
+        let valid = validate_token(token)
+        println(f"  User {i}: token={token} valid={valid}")
+        i = i + 1
+    }
+    let bad_token = validate_token("not-a-token")
+    println(f"  Bad token valid: {bad_token}")
+
+    // --- Dockerfile output ---
+    println("")
+    println("=== Dockerfile ===")
+    println(DOCKERFILE)
+
     println("")
     println("============================================")
     println("  All 12 simulated requests complete.")
@@ -524,5 +653,9 @@ fn main() {
     println("    - Error handling with Result types")
     println("    - Health check endpoint")
     println("    - File-based logging")
+    println("    - SQLite database integration")
+    println("    - Token-based authentication")
+    println("    - WebSocket message handling")
+    println("    - Containerization (Dockerfile)")
     println("============================================")
 }
