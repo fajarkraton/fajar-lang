@@ -1732,8 +1732,8 @@ impl NumaTopology {
     /// Adds a node to the topology.
     ///
     /// The distance matrix is expanded: the new node has local distance
-    /// to itself and [`NUMA_LOCAL_DISTANCE`] * 2 to all existing nodes
-    /// as a conservative default. Call [`set_distance`] to override.
+    /// to itself and `NUMA_LOCAL_DISTANCE` * 2 to all existing nodes
+    /// as a conservative default. Call `set_distance` to override.
     pub fn add_node(&mut self, node: NumaNode) {
         let old_len = self.nodes.len();
         let new_len = old_len + 1;

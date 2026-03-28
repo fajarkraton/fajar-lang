@@ -410,7 +410,7 @@ pub fn compare_profiles(before: &[CallRecord], after: &[CallRecord]) -> ProfileC
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Export call records to speedscope JSON format.
-/// Speedscope: https://www.speedscope.app/
+/// Speedscope: <https://www.speedscope.app/>
 pub fn to_speedscope(records: &[CallRecord]) -> String {
     let mut frames = Vec::new();
     let mut frame_map: HashMap<String, usize> = HashMap::new();

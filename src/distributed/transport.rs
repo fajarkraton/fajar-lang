@@ -52,7 +52,7 @@ pub enum MessageType {
 }
 
 impl NetMessage {
-    /// Serialize to bytes: [type:1][target_len:4][target][payload_len:4][payload][sender:8][seq:8]
+    /// Serialize to bytes: `[type:1][target_len:4][target][payload_len:4][payload][sender:8][seq:8]`
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.push(self.msg_type as u8);
@@ -442,7 +442,7 @@ pub struct ServiceAnnouncement {
 }
 
 impl ServiceAnnouncement {
-    /// Serialize to bytes: [node_id:8][ts:8][name_len:4][name][addr_len:4][addr]
+    /// Serialize to bytes: `[node_id:8][ts:8][name_len:4][name][addr_len:4][addr]`
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(&self.node_id.to_le_bytes());

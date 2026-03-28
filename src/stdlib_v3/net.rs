@@ -773,7 +773,7 @@ pub fn tcp_connect(addr: &str, data: &[u8], timeout_ms: u64) -> Result<Vec<u8>, 
 /// Supports:
 /// - Separate connect/read/write timeouts
 /// - TCP_NODELAY for low-latency communication
-/// - IPv6 addresses ([::1]:port)
+/// - IPv6 addresses (`[::1]:port`)
 /// - Specific NetError variants for each failure mode
 pub fn tcp_connect_opts(addr: &str, data: &[u8], opts: &TcpOptions) -> Result<Vec<u8>, NetError> {
     use std::net::{TcpStream, ToSocketAddrs};

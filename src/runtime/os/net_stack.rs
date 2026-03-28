@@ -1003,8 +1003,8 @@ impl EthernetFrame {
 
 /// Simulated VirtIO network device with TX/RX queues.
 ///
-/// Frames enqueued via [`send_frame`] sit in `tx_queue` awaiting delivery,
-/// and [`receive_frame`] pops from `rx_queue`. Stats are updated on every
+/// Frames enqueued via `send_frame` sit in `tx_queue` awaiting delivery,
+/// and `receive_frame` pops from `rx_queue`. Stats are updated on every
 /// successful send/receive operation.
 #[derive(Debug)]
 pub struct VirtioNetDevice {
