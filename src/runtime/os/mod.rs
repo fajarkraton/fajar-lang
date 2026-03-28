@@ -19,6 +19,7 @@
 
 pub mod aarch64;
 pub mod bus;
+pub mod compositor;
 pub mod display;
 pub mod dma;
 pub mod gdt;
@@ -28,6 +29,7 @@ pub mod intrinsics;
 pub mod irq;
 pub mod keyboard;
 pub mod memory;
+pub mod net_stack;
 pub mod network;
 pub mod paging;
 pub mod pit;
@@ -35,6 +37,7 @@ pub mod power;
 pub mod riscv;
 pub mod serial;
 pub mod shell;
+pub mod smp;
 pub mod syscall;
 pub mod timer;
 pub mod vfs;
