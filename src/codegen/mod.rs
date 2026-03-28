@@ -23,6 +23,7 @@ pub mod avx512;
 pub mod benchmarks;
 pub mod interop;
 pub mod nostd;
+pub mod opt_passes;
 pub mod optimizer;
 pub mod perf_report;
 pub mod pgo;
