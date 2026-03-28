@@ -28,6 +28,7 @@ pub mod optimizer;
 pub mod perf_report;
 pub mod pgo;
 pub mod ptx;
+pub mod security;
 
 #[cfg(feature = "native")]
 pub mod abi;
