@@ -47,6 +47,10 @@ z3 = { version = "0.12", optional = true }
 clang-sys = { version = "1.8", optional = true, features = ["clang_18_0", "runtime"] }
 pyo3 = { version = "0.24", optional = true, features = ["auto-initialize"] }
 
+# GUI windowing (feature-gated)
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
+
 # GPU compute (feature-gated)
 wgpu = { version = "28.0", optional = true }
 ash = { version = "0.38", optional = true, default-features = false, features = ["loaded", "std"] }
@@ -80,6 +84,7 @@ tls = ["dep:rustls", "dep:webpki-roots"]
 cpp-ffi = ["dep:clang-sys"]
 python-ffi = ["dep:pyo3"]
 smt = ["dep:z3"]
+gui = ["dep:winit", "dep:softbuffer"]
 wasm = []
 freertos = []
 zephyr = []

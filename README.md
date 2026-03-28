@@ -116,6 +116,17 @@ sudo apt-get install llvm-18-dev libpolly-18-dev libzstd-dev
 cargo build --release --features llvm
 ```
 
+### Optional Feature Flags
+
+```bash
+cargo build --features gui          # Real OS windowing (winit + softbuffer)
+cargo build --features smt          # Z3 SMT solver (needs libz3-dev)
+cargo build --features cpp-ffi      # C++ FFI via libclang (needs libclang-dev)
+cargo build --features python-ffi   # Python interop via pyo3 (needs python3-dev)
+cargo build --features llvm         # LLVM backend (needs llvm-18-dev)
+cargo build --features vulkan       # Vulkan compute (needs Vulkan SDK)
+```
+
 ### Start the REPL
 
 ```bash

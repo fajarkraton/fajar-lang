@@ -643,9 +643,36 @@ impl PlatformInfo {
             "Unknown"
         };
 
+        // When gui feature is enabled, query real monitor info via winit.
+        #[cfg(feature = "gui")]
+        {
+            if let Ok(event_loop) = winit::event_loop::EventLoop::new() {
+                let monitors: Vec<_> = event_loop.available_monitors().collect();
+                let display_count = monitors.len().max(1) as u32;
+                let primary = monitors.first().map(|m| {
+                    let size = m.size();
+                    MonitorInfo {
+                        width: size.width,
+                        height: size.height,
+                        refresh_rate: m
+                            .current_video_mode()
+                            .map(|v| v.refresh_rate_millihertz().unwrap_or(60_000) / 1000)
+                            .unwrap_or(60),
+                    }
+                });
+                return Self {
+                    os_name: os_name.to_string(),
+                    os_version: String::new(),
+                    display_count,
+                    primary_monitor: primary,
+                };
+            }
+        }
+
+        // Fallback: reasonable defaults when gui feature not available.
         Self {
             os_name: os_name.to_string(),
-            os_version: String::new(), // Would query /etc/os-release, GetVersionEx, etc.
+            os_version: String::new(),
             display_count: 1,
             primary_monitor: Some(MonitorInfo {
                 width: 1920,
@@ -699,6 +726,124 @@ pub fn detect_render_backend() -> RenderBackend {
         return RenderBackend::Vulkan;
     }
     RenderBackend::Software
+}
+
+// ---------------------------------------------------------------------------
+// Winit Real Window Backend (feature-gated: --features gui)
+// ---------------------------------------------------------------------------
+
+/// Opens a real OS window using winit + softbuffer and runs the event loop.
+///
+/// The `render_fn` is called each frame with a mutable pixel buffer
+/// (`&mut [u32]`, width, height) in XRGB format. The caller draws into this
+/// buffer and the backend presents it to the screen.
+///
+/// This function blocks until the window is closed.
+///
+/// Only available with `--features gui`. Without the feature, this function
+/// prints an error and returns immediately.
+#[cfg(feature = "gui")]
+pub fn run_windowed<F>(config: WindowConfig, mut render_fn: F)
+where
+    F: FnMut(&mut [u32], u32, u32) + 'static,
+{
+    use winit::application::ApplicationHandler;
+    use winit::event::WindowEvent;
+    use winit::event_loop::{ActiveEventLoop, EventLoop};
+    use winit::window::{Window, WindowId as WinitWindowId};
+
+    struct App<R: FnMut(&mut [u32], u32, u32)> {
+        config: WindowConfig,
+        window: Option<std::sync::Arc<Window>>,
+        surface: Option<softbuffer::Surface<std::sync::Arc<Window>, std::sync::Arc<Window>>>,
+        render_fn: R,
+    }
+
+    impl<R: FnMut(&mut [u32], u32, u32)> ApplicationHandler for App<R> {
+        fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+            if self.window.is_none() {
+                let attrs = Window::default_attributes()
+                    .with_title(&self.config.title)
+                    .with_inner_size(winit::dpi::LogicalSize::new(
+                        self.config.width,
+                        self.config.height,
+                    ))
+                    .with_resizable(self.config.resizable);
+                if let Ok(win) = event_loop.create_window(attrs) {
+                    let win = std::sync::Arc::new(win);
+                    let context = softbuffer::Context::new(win.clone()).ok();
+                    let surface =
+                        context.and_then(|ctx| softbuffer::Surface::new(ctx, win.clone()).ok());
+                    self.window = Some(win);
+                    self.surface = surface;
+                }
+            }
+        }
+
+        fn window_event(
+            &mut self,
+            event_loop: &ActiveEventLoop,
+            _id: WinitWindowId,
+            event: WindowEvent,
+        ) {
+            match event {
+                WindowEvent::CloseRequested => {
+                    event_loop.exit();
+                }
+                WindowEvent::RedrawRequested => {
+                    if let (Some(win), Some(surface)) = (&self.window, &mut self.surface) {
+                        let size = win.inner_size();
+                        let w = size.width.max(1);
+                        let h = size.height.max(1);
+                        if surface
+                            .resize(
+                                std::num::NonZeroU32::new(w)
+                                    .unwrap_or(std::num::NonZeroU32::new(1).expect("non-zero")),
+                                std::num::NonZeroU32::new(h)
+                                    .unwrap_or(std::num::NonZeroU32::new(1).expect("non-zero")),
+                            )
+                            .is_ok()
+                        {
+                            if let Ok(mut buf) = surface.buffer_mut() {
+                                (self.render_fn)(buf.as_mut(), w, h);
+                                if buf.present().is_err() {
+                                    eprintln!("[gui] present failed");
+                                }
+                            }
+                        }
+                        win.request_redraw();
+                    }
+                }
+                WindowEvent::Resized(_) => {
+                    if let Some(win) = &self.window {
+                        win.request_redraw();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let event_loop = EventLoop::new().expect("failed to create event loop");
+    let mut app = App {
+        config,
+        window: None,
+        surface: None,
+        render_fn,
+    };
+    if let Err(e) = event_loop.run_app(&mut app) {
+        eprintln!("[gui] event loop error: {e}");
+    }
+}
+
+/// Stub when gui feature is not enabled.
+#[cfg(not(feature = "gui"))]
+pub fn run_windowed<F>(_config: WindowConfig, _render_fn: F)
+where
+    F: FnMut(&mut [u32], u32, u32) + 'static,
+{
+    eprintln!("error: GUI windowing not available");
+    eprintln!("hint: rebuild with `cargo build --features gui`");
 }
 
 // ---------------------------------------------------------------------------
