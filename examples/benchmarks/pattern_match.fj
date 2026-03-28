@@ -1,0 +1,26 @@
+// Benchmark: Pattern matching — measures match dispatch overhead
+enum Shape {
+    Circle(f64),
+    Rect(f64, f64),
+    Triangle(f64, f64, f64),
+}
+fn area(s: Shape) -> f64 {
+    match s {
+        Shape::Circle(r) => 3.14159 * r * r,
+        Shape::Rect(w, h) => w * h,
+        Shape::Triangle(a, b, c) => {
+            let s = (a + b + c) / 2.0
+            sqrt(s * (s - a) * (s - b) * (s - c))
+        }
+    }
+}
+fn main() {
+    let mut total: f64 = 0.0
+    let mut i: i64 = 0
+    while i < 10000 {
+        total = total + area(Shape::Circle(1.5))
+        total = total + area(Shape::Rect(3.0, 4.0))
+        i = i + 1
+    }
+    println(total)
+}

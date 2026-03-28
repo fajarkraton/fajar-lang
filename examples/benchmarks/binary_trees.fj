@@ -1,0 +1,19 @@
+// Benchmark: Binary tree alloc/checksum — measures allocation performance
+// Uses array-based tree: node[i] has left=2*i+1, right=2*i+2
+fn tree_check(nodes: [i64], idx: i64, size: i64) -> i64 {
+    if idx >= size { return 0 }
+    nodes[idx] + tree_check(nodes, 2 * idx + 1, size) - tree_check(nodes, 2 * idx + 2, size)
+}
+fn main() {
+    let depth: i64 = 14
+    let size: i64 = (1 << depth) - 1
+    // Build complete binary tree
+    let mut nodes: [i64] = []
+    let mut i: i64 = 0
+    while i < size {
+        nodes = push(nodes, i)
+        i = i + 1
+    }
+    let check = tree_check(nodes, 0, size)
+    println(check)
+}

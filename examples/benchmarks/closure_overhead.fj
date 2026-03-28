@@ -1,0 +1,16 @@
+// Benchmark: Closure call overhead — measures higher-order function dispatch
+fn double(x: i64) -> i64 { x * 2 }
+
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    f(x)
+}
+
+fn main() {
+    let mut sum: i64 = 0
+    let mut i: i64 = 0
+    while i < 100000 {
+        sum = sum + apply(double, i)
+        i = i + 1
+    }
+    println(sum)
+}

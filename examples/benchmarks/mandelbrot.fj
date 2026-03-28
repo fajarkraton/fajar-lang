@@ -1,0 +1,31 @@
+// Benchmark: Mandelbrot fractal — measures floating-point + loop performance
+fn mandelbrot(cx: f64, cy: f64, max_iter: i64) -> i64 {
+    let mut zx: f64 = 0.0
+    let mut zy: f64 = 0.0
+    let mut i: i64 = 0
+    while i < max_iter {
+        let zx2 = zx * zx
+        let zy2 = zy * zy
+        if zx2 + zy2 > 4.0 { return i }
+        zy = 2.0 * zx * zy + cy
+        zx = zx2 - zy2 + cx
+        i = i + 1
+    }
+    max_iter
+}
+fn main() {
+    let size: i64 = 80
+    let mut total: i64 = 0
+    let mut y: i64 = 0
+    while y < size {
+        let mut x: i64 = 0
+        while x < size {
+            let cx = (to_float(x) / to_float(size)) * 3.5 - 2.5
+            let cy = (to_float(y) / to_float(size)) * 2.0 - 1.0
+            total = total + mandelbrot(cx, cy, 100)
+            x = x + 1
+        }
+        y = y + 1
+    }
+    println(total)
+}

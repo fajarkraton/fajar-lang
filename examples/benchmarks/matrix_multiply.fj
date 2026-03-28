@@ -1,0 +1,8 @@
+// Benchmark: Matrix multiply (tensor) — measures ML backend performance
+fn main() {
+    let a = randn(64, 64)
+    let b = randn(64, 64)
+    let c = matmul(a, b)
+    let shape = tensor_shape(c)
+    println(shape)
+}

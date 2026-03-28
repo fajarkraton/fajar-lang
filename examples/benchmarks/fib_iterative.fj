@@ -1,0 +1,17 @@
+// Benchmark: Fibonacci (iterative) — measures loop performance
+fn fib_iter(n: i64) -> i64 {
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut i: i64 = 0
+    while i < n {
+        let temp = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+    a
+}
+fn main() {
+    let result = fib_iter(40)
+    println(result)
+}

@@ -1,0 +1,10 @@
+// Benchmark: String concatenation — measures string allocation
+fn main() {
+    let mut s = ""
+    let mut i: i64 = 0
+    while i < 1000 {
+        s = s + "x"
+        i = i + 1
+    }
+    println(len(s))
+}

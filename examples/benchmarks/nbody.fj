@@ -1,0 +1,42 @@
+// Benchmark: N-body gravitational simulation — measures floating-point
+const N: i64 = 5
+const DT: f64 = 0.01
+const STEPS: i64 = 1000
+
+fn main() {
+    // Masses
+    let m = [1.0, 0.1, 0.2, 0.05, 0.15]
+    // Positions (x)
+    let mut px = [0.0, 1.0, 2.0, 3.0, 4.0]
+    // Velocities (x — 1D simplified)
+    let mut vx = [0.0, 0.5, -0.3, 0.2, -0.1]
+
+    let mut step: i64 = 0
+    while step < STEPS {
+        // Compute forces
+        let mut i: i64 = 0
+        while i < N {
+            let mut j: i64 = i + 1
+            while j < N {
+                let dx = px[j] - px[i]
+                let dist = abs(dx)
+                if dist > 0.01 {
+                    let force = m[i] * m[j] / (dist * dist)
+                    let dir = if dx > 0.0 { 1.0 } else { -1.0 }
+                    vx[i] = vx[i] + DT * force * dir / m[i]
+                    vx[j] = vx[j] - DT * force * dir / m[j]
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        // Update positions
+        i = 0
+        while i < N {
+            px[i] = px[i] + DT * vx[i]
+            i = i + 1
+        }
+        step = step + 1
+    }
+    println(px[0])
+}

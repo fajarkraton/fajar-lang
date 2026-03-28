@@ -1,0 +1,27 @@
+// Benchmark: Quicksort — measures array operations + recursion
+fn quicksort(arr: [i64], lo: i64, hi: i64) {
+    if lo < hi {
+        let pivot = arr[hi]
+        let mut i: i64 = lo
+        let mut j: i64 = lo
+        while j < hi {
+            if arr[j] < pivot {
+                let tmp = arr[i]
+                arr[i] = arr[j]
+                arr[j] = tmp
+                i = i + 1
+            }
+            j = j + 1
+        }
+        let tmp = arr[i]
+        arr[i] = arr[hi]
+        arr[hi] = tmp
+        quicksort(arr, lo, i - 1)
+        quicksort(arr, i + 1, hi)
+    }
+}
+fn main() {
+    let mut arr = [5, 3, 8, 1, 9, 2, 7, 4, 6, 0]
+    quicksort(arr, 0, 9)
+    println(arr)
+}
