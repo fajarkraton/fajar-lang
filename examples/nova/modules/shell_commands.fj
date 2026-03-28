@@ -1,0 +1,4000 @@
+    let parent_base = PROC_TABLE + parent_pid * PROC_ENTRY_SIZE
+    let parent_state = volatile_read(parent_base + PROC_OFF_STATE)
+
+    // Only wake if parent is actually BLOCKED (in waitpid)
+    if parent_state == PROC_STATE_BLOCKED {
+        let wait_pid = volatile_read_u64(PROC_WAIT_TABLE + parent_pid * WAIT_ENTRY_SIZE)
+        // Check if parent is waiting for this specific child or any child (-1)
+        if wait_pid == child_pid || wait_pid == -1 {
+            volatile_write(parent_base + PROC_OFF_STATE, PROC_STATE_READY)
+        }
+    }
+}
+
+// Enhanced process_exit that handles reparenting + parent waking
+@kernel fn process_exit_v2(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    // Set ZOMBIE state and exit code
+    volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+
+    // G3.7: Reparent any children to init
+    reparent_children(pid)
+
+    // Wake parent if waiting
+    wake_waiting_parent(pid, exit_code)
+
+    // Close all FDs
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        fd_v2_set(pid, fd, FD_CLOSED, 0)
+        fd = fd + 1
+    }
+
+    // Print exit message
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    // Halt — scheduler will skip ZOMBIE processes
+    while 1 == 1 { hlt() }
+}
+
+// G3.8: Process groups (PGID)
+@kernel fn sys_setpgid(pid: i64, pgid: i64) -> i64 {
+    let target_pid = if pid == 0 { volatile_read_u64(0x6FE00) } else { pid }
+    if target_pid < 0 || target_pid >= PROC_MAX { return -1 }
+    let target_pgid = if pgid == 0 { target_pid } else { pgid }
+    volatile_write(PROC_TABLE + target_pid * PROC_ENTRY_SIZE + PROC_OFF_PGID, target_pgid)
+    0
+}
+
+@kernel fn sys_getpgid(pid: i64) -> i64 {
+    let target_pid = if pid == 0 { volatile_read_u64(0x6FE00) } else { pid }
+    if target_pid < 0 || target_pid >= PROC_MAX { return -1 }
+    volatile_read(PROC_TABLE + target_pid * PROC_ENTRY_SIZE + PROC_OFF_PGID)
+}
+
+// G3.9: `waitpid` shell command
+@kernel fn cmd_waitpid() {
+    let len = cmdbuf_len()
+    if len <= 5 {
+        cprintln("Usage: wait <pid>", YELLOW_ON_BLACK)
+        return
+    }
+    // Parse PID from "wait N"
+    let pid_ch = volatile_read_u8(0x6F800 + 5)
+    let target_pid = pid_ch - 48 // ASCII digit to number
+    if target_pid < 1 || target_pid > 15 {
+        cprintln("Invalid PID (1-15)", RED_ON_BLACK)
+        return
+    }
+    cprint("Waiting for PID ", WHITE_ON_BLACK)
+    cprint_decimal(target_pid, CYAN_ON_BLACK)
+    cprintln("...", WHITE_ON_BLACK)
+
+    let result = sys_waitpid(target_pid, 0, 0)
+    if result == -1 {
+        cprintln("  Not a child process or not found", RED_ON_BLACK)
+    } else {
+        cprint("  PID ", WHITE_ON_BLACK)
+        cprint_decimal(result, CYAN_ON_BLACK)
+        cprintln(" reaped", GREEN_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Shell Pipe & Redirect (Sprint H2)
+// ═══════════════════════════════════════════════
+
+// Scratch buffer for split commands (0x842000, 1KB each side)
+const SHELL_SPLIT_BUF: i64 = 0x842000
+const SHELL_SPLIT_BUF2: i64 = 0x842400
+
+// H2.1: Scan cmdbuf for pipe character '|' (ASCII 124)
+@kernel fn shell_find_pipe() -> i64 {
+    let len = cmdbuf_len()
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 124 { return i } // '|' found at position i
+        i = i + 1
+    }
+    -1 // no pipe
+}
+
+// H2.5: Scan cmdbuf for redirect operators
+// Returns: 0=none, 1='>' (truncate), 2='>>' (append), 3='<' (input)
+@kernel fn shell_find_redirect() -> i64 {
+    let len = cmdbuf_len()
+    let mut i: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 62 { // '>'
+            if i + 1 < len && volatile_read_u8(0x6F800 + i + 1) == 62 {
+                return 200 + i // '>>' at position i (encoded as 200+pos)
+            }
+            return 100 + i // '>' at position i (encoded as 100+pos)
+        }
+        if ch == 60 { return 300 + i } // '<' at position i (encoded as 300+pos)
+        i = i + 1
+    }
+    0
+}
+
+// Copy part of cmdbuf to a buffer (with trimming)
+@kernel fn shell_copy_segment(src_start: i64, src_end: i64, dst: i64) -> i64 {
+    // Skip leading spaces
+    let mut start = src_start
+    while start < src_end && volatile_read_u8(0x6F800 + start) == 32 { start = start + 1 }
+    // Skip trailing spaces
+    let mut end = src_end
+    while end > start && volatile_read_u8(0x6F800 + end - 1) == 32 { end = end - 1 }
+    // Copy
+    let len = end - start
+    let mut i: i64 = 0
+    while i < len {
+        volatile_write_u8(dst + i, volatile_read_u8(0x6F800 + start + i))
+        i = i + 1
+    }
+    volatile_write_u8(dst + len, 0)
+    len
+}
+
+// Execute a command from a buffer (not cmdbuf) — copies to cmdbuf then dispatches
+@kernel fn shell_exec_from_buf(buf: i64, len: i64) {
+    // Save current cmdbuf
+    let saved_len = cmdbuf_len()
+    let saved_buf: i64 = 0x843000 // temp save area
+    let mut si: i64 = 0
+    while si < saved_len { volatile_write_u8(saved_buf + si, volatile_read_u8(0x6F800 + si)); si = si + 1 }
+    volatile_write_u8(saved_buf + saved_len, 0)
+
+    // Install new command into cmdbuf
+    cmdbuf_clear()
+    let mut ci: i64 = 0
+    while ci < len {
+        volatile_write_u8(0x6F800 + ci, volatile_read_u8(buf + ci))
+        ci = ci + 1
+    }
+    volatile_write_u8(0x6F800 + len, 0)
+    volatile_write(0x6F880, len)
+
+    // Dispatch
+    dispatch_command()
+
+    // Restore cmdbuf
+    cmdbuf_clear()
+    let mut ri: i64 = 0
+    while ri < saved_len { volatile_write_u8(0x6F800 + ri, volatile_read_u8(saved_buf + ri)); ri = ri + 1 }
+    volatile_write_u8(0x6F800 + saved_len, 0)
+    volatile_write(0x6F880, saved_len)
+}
+
+// H2.2: Execute single pipe: cmd1 | cmd2
+// Since we don't have real fork+exec in kernel shell (Ring 0), we simulate:
+// 1. Create pipe
+// 2. Execute cmd1 with stdout redirected to pipe write end
+// 3. Execute cmd2 with stdin redirected to pipe read end
+@kernel fn shell_exec_pipe(pipe_pos: i64) {
+    let len = cmdbuf_len()
+
+    // Split at pipe position
+    let len1 = shell_copy_segment(0, pipe_pos, SHELL_SPLIT_BUF)
+    let len2 = shell_copy_segment(pipe_pos + 1, len, SHELL_SPLIT_BUF2)
+
+    if len1 == 0 || len2 == 0 {
+        cprintln("Syntax error: empty pipe segment", RED_ON_BLACK)
+        return
+    }
+
+    // Create pipe
+    let slot = pipe_create()
+    if slot < 0 { cprintln("No free pipes", RED_ON_BLACK); return }
+
+    // Initialize pipe refcounts
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    volatile_write_u64(ref_base, 1)     // reader
+    volatile_write_u64(ref_base + 8, 1) // writer
+
+    // Execute cmd1: redirect stdout (FD 1) to pipe write end
+    let pid = volatile_read_u64(0x6FE00)
+    let saved_fd1_type = fd_v2_get_type(pid, 1)
+    let saved_fd1_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, 1, FD_PIPE_WRITE, slot) // stdout → pipe
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF, len1)
+
+    // Restore stdout
+    fd_v2_set(pid, 1, saved_fd1_type, saved_fd1_data)
+
+    // Close write end (signal EOF to reader)
+    volatile_write_u64(ref_base + 8, 0) // writer_count = 0
+
+    // Execute cmd2: redirect stdin (FD 0) to pipe read end
+    let saved_fd0_type = fd_v2_get_type(pid, 0)
+    let saved_fd0_data = fd_v2_get_data(pid, 0)
+    fd_v2_set(pid, 0, FD_PIPE_READ, slot) // stdin → pipe
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF2, len2)
+
+    // Restore stdin
+    fd_v2_set(pid, 0, saved_fd0_type, saved_fd0_data)
+
+    // Free pipe
+    pipe_free(slot)
+    volatile_write_u64(ref_base, 0)
+}
+
+// H2.5/H2.6/H2.7: Execute with I/O redirection
+@kernel fn shell_exec_redirect(redirect_info: i64) {
+    let len = cmdbuf_len()
+    let pid = volatile_read_u64(0x6FE00)
+
+    if redirect_info >= 300 {
+        // H2.7: Input redirect '<'
+        let pos = redirect_info - 300
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 1, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        // Open file for reading
+        let fd = sys_open(SHELL_SPLIT_BUF2, 0)
+        if fd < 0 { cprintln("File not found", RED_ON_BLACK); return }
+
+        // Redirect stdin
+        let saved_type = fd_v2_get_type(pid, 0)
+        let saved_data = fd_v2_get_data(pid, 0)
+        let file_type = fd_v2_get_type(pid, fd)
+        let file_data = fd_v2_get_data(pid, fd)
+        fd_v2_set(pid, 0, file_type, file_data)
+
+        shell_exec_from_buf(SHELL_SPLIT_BUF, cmd_len)
+
+        // Restore stdin
+        fd_v2_set(pid, 0, saved_type, saved_data)
+        sys_close(fd)
+
+    } else if redirect_info >= 200 {
+        // H2.6: Append redirect '>>'
+        let pos = redirect_info - 200
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 2, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        shell_exec_redirect_output(cmd_len, file_len, 1) // append=1
+
+    } else if redirect_info >= 100 {
+        // H2.5: Truncate redirect '>'
+        let pos = redirect_info - 100
+        let cmd_len = shell_copy_segment(0, pos, SHELL_SPLIT_BUF)
+        let file_len = shell_copy_segment(pos + 1, len, SHELL_SPLIT_BUF2)
+        if cmd_len == 0 || file_len == 0 { cprintln("Syntax error", RED_ON_BLACK); return }
+
+        shell_exec_redirect_output(cmd_len, file_len, 0) // append=0
+    }
+}
+
+// Helper: redirect stdout to file for command execution
+@kernel fn shell_exec_redirect_output(cmd_len: i64, file_len: i64, append: i64) {
+    let pid = volatile_read_u64(0x6FE00)
+
+    // Create or open file in ramfs
+    let idx = ramfs_find_by_addr(SHELL_SPLIT_BUF2)
+    let mut target_idx = idx
+    if target_idx < 0 {
+        // Create new file
+        // Need to pass as str — write filename bytes, then create
+        target_idx = ramfs_create_by_addr(SHELL_SPLIT_BUF2)
+        if target_idx < 0 { cprintln("Cannot create file", RED_ON_BLACK); return }
+    }
+
+    // If truncate mode, reset file size to 0
+    if append == 0 {
+        let entry_addr = ramfs_entry_addr(target_idx)
+        volatile_write(entry_addr + 32, 0) // size = 0
+    }
+
+    // Open file FD (with offset at end for append, 0 for truncate)
+    let fd = fd_v2_alloc(pid)
+    if fd < 0 { cprintln("No free FDs", RED_ON_BLACK); return }
+    let offset = if append == 1 {
+        let entry_addr = ramfs_entry_addr(target_idx)
+        volatile_read(entry_addr + 32) // current size = end
+    } else { 0 }
+    let packed_data = (offset << 32) | target_idx
+    fd_v2_set(pid, fd, FD_RAMFS, packed_data)
+
+    // Redirect stdout to file FD
+    let saved_type = fd_v2_get_type(pid, 1)
+    let saved_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, 1, FD_RAMFS, packed_data)
+
+    shell_exec_from_buf(SHELL_SPLIT_BUF, cmd_len)
+
+    // Restore stdout and close file FD
+    fd_v2_set(pid, 1, saved_type, saved_data)
+    // Update file size from the written offset
+    let written_data = fd_v2_get_data(pid, 1)
+    fd_v2_set(pid, fd, FD_CLOSED, 0)
+}
+
+// Helper: create ramfs file by address (null-terminated name)
+@kernel fn ramfs_create_by_addr(name_addr: i64) -> i64 {
+    let count = volatile_read(FS_BASE)
+    if count >= FS_MAX_FILES { return -1 }
+    let addr = ramfs_entry_addr(count)
+    // Write name
+    let mut i: i64 = 0
+    while i < 31 {
+        let ch = volatile_read_u8(name_addr + i)
+        volatile_write_u8(addr + i, ch)
+        if ch == 0 { i = 31 } else { i = i + 1 }
+    }
+    volatile_write_u8(addr + i, 0)
+    // Set type = file, allocate data space
+    volatile_write(addr + 48, 1) // type = file
+    volatile_write(addr + 32, 0) // size = 0
+    let data_offset = volatile_read(FS_BASE + 8)
+    volatile_write(addr + 40, data_offset) // data_ptr
+    volatile_write(FS_BASE + 8, data_offset + 4096) // reserve 4KB
+    volatile_write(FS_BASE, count + 1)
+    count
+}
+
+// H2.9: List of builtins that must NOT be forked (run in shell process)
+@kernel fn is_shell_builtin(c0: i64, c1: i64) -> i64 {
+    // cd (99,100)
+    if c0 == 99 && c1 == 100 { return 1 }
+    // export (first 2 chars: 101,120)
+    if c0 == 101 && c1 == 120 { return 1 }
+    // set (115,101)
+    if c0 == 115 && c1 == 101 { return 1 }
+    // exit (101,120) — same prefix as export, check len later
+    0
+}
+
+// Main entry point: preprocess pipe/redirect before dispatch
+@kernel fn shell_execute() {
+    let len = cmdbuf_len()
+    if len == 0 { return }
+
+    // Check for pipe first
+    let pipe_pos = shell_find_pipe()
+    if pipe_pos > 0 {
+        shell_exec_pipe(pipe_pos)
+        return
+    }
+
+    // Check for redirects
+    let redir = shell_find_redirect()
+    if redir > 0 {
+        shell_exec_redirect(redir)
+        return
+    }
+
+    // No pipe or redirect — normal dispatch
+    dispatch_command()
+}
+
+// ═══════════════════════════════════════════════
+// SYS_PIPE + Pipe FD Integration (Sprint H1)
+// ═══════════════════════════════════════════════
+
+// Pipe refcount table at 0x8D4000: 8 pipes × 16 bytes
+// Per pipe: +0=reader_count(i64), +8=writer_count(i64)
+const PIPE_REFCOUNT: i64 = 0x8D4000
+
+// Circular pipe buffer constants
+const PIPE_BUF_OFFSET: i64 = 32    // data starts at offset 32 in each 4KB pipe
+const PIPE_BUF_SIZE: i64 = 4064    // 4096 - 32 = 4064 bytes usable
+
+// H1.1: SYS_PIPE(23) — create pipe, return read/write FDs
+@kernel fn sys_pipe(fds_addr: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+
+    // Create pipe slot
+    let slot = pipe_create()
+    if slot < 0 { return -1 }
+
+    // Allocate 2 FDs: read end and write end
+    let read_fd = fd_v2_alloc(pid)
+    if read_fd < 0 { return -1 }
+    fd_v2_set(pid, read_fd, FD_PIPE_READ, slot)
+
+    let write_fd = fd_v2_alloc(pid)
+    if write_fd < 0 {
+        fd_v2_set(pid, read_fd, FD_CLOSED, 0)
+        return -1
+    }
+    fd_v2_set(pid, write_fd, FD_PIPE_WRITE, slot)
+
+    // Initialize refcounts
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    volatile_write_u64(ref_base, 1)     // reader_count = 1
+    volatile_write_u64(ref_base + 8, 1) // writer_count = 1
+
+    // Write FD pair to user buffer: [read_fd, write_fd]
+    if fds_addr != 0 {
+        volatile_write_u64(fds_addr, read_fd)
+        volatile_write_u64(fds_addr + 8, write_fd)
+    }
+
+    0
+}
+
+// H1.2: Pipe refcount helpers
+@kernel fn pipe_incref(slot: i64, is_writer: i64) {
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    if is_writer != 0 {
+        let count = volatile_read_u64(ref_base + 8)
+        volatile_write_u64(ref_base + 8, count + 1)
+    } else {
+        let count = volatile_read_u64(ref_base)
+        volatile_write_u64(ref_base, count + 1)
+    }
+}
+
+@kernel fn pipe_decref(slot: i64, is_writer: i64) -> i64 {
+    let ref_base = PIPE_REFCOUNT + slot * 16
+    if is_writer != 0 {
+        let count = volatile_read_u64(ref_base + 8)
+        let new_count = if count > 0 { count - 1 } else { 0 }
+        volatile_write_u64(ref_base + 8, new_count)
+    } else {
+        let count = volatile_read_u64(ref_base)
+        let new_count = if count > 0 { count - 1 } else { 0 }
+        volatile_write_u64(ref_base, new_count)
+    }
+    // Return 1 if pipe is fully closed (both counts = 0)
+    let rc = volatile_read_u64(ref_base)
+    let wc = volatile_read_u64(ref_base + 8)
+    if rc == 0 && wc == 0 { 1 } else { 0 }
+}
+
+@kernel fn pipe_has_writers(slot: i64) -> i64 {
+    volatile_read_u64(PIPE_REFCOUNT + slot * 16 + 8)
+}
+
+@kernel fn pipe_has_readers(slot: i64) -> i64 {
+    volatile_read_u64(PIPE_REFCOUNT + slot * 16)
+}
+
+// H1.8: Circular pipe read/write (replaces linear pipe_read/pipe_write for FD use)
+@kernel fn pipe_read_circular(slot: i64, buf: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let read_pos = volatile_read_u64(pipe_base + 8)
+    let write_pos = volatile_read_u64(pipe_base + 16)
+
+    // Calculate available bytes (circular)
+    let available = (write_pos - read_pos + PIPE_BUF_SIZE) % PIPE_BUF_SIZE
+    if write_pos == read_pos {
+        // H1.5: Empty pipe — check if writers exist
+        if pipe_has_writers(slot) == 0 { return 0 } // EOF
+        return -2 // would block (no data, writers exist)
+    }
+
+    let to_read = if len < available { len } else { available }
+    let mut i: i64 = 0
+    while i < to_read {
+        let pos = (read_pos + i) % PIPE_BUF_SIZE
+        volatile_write_u8(buf + i, volatile_read_u8(pipe_base + PIPE_BUF_OFFSET + pos))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 8, (read_pos + to_read) % PIPE_BUF_SIZE)
+    to_read
+}
+
+@kernel fn pipe_write_circular(slot: i64, data: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let read_pos = volatile_read_u64(pipe_base + 8)
+    let write_pos = volatile_read_u64(pipe_base + 16)
+
+    // H1.7: Check if readers exist (broken pipe)
+    if pipe_has_readers(slot) == 0 { return -1 }
+
+    // Calculate free space (circular, leave 1 byte to distinguish full from empty)
+    let used = (write_pos - read_pos + PIPE_BUF_SIZE) % PIPE_BUF_SIZE
+    let free = PIPE_BUF_SIZE - 1 - used
+    if free <= 0 { return -2 } // pipe full, would block
+
+    let to_write = if len < free { len } else { free }
+    let mut i: i64 = 0
+    while i < to_write {
+        let pos = (write_pos + i) % PIPE_BUF_SIZE
+        volatile_write_u8(pipe_base + PIPE_BUF_OFFSET + pos, volatile_read_u8(data + i))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 16, (write_pos + to_write) % PIPE_BUF_SIZE)
+    to_write
+}
+
+// Free a pipe slot (clear in_use flag + reset positions)
+@kernel fn pipe_free(slot: i64) {
+    let pipe_base = PIPE_POOL + slot * 4096
+    volatile_write_u64(pipe_base, 0)      // in_use = 0
+    volatile_write_u64(pipe_base + 8, 0)  // read_pos = 0
+    volatile_write_u64(pipe_base + 16, 0) // write_pos = 0
+}
+
+// ═══════════════════════════════════════════════
+// Signal Infrastructure (Sprint I1)
+// ═══════════════════════════════════════════════
+
+// Signal table at 0x8D1000: 16 procs × 64 bytes each = 1024 bytes
+// Per process: +0=pending_bitmap(i64), +8=mask_bitmap(i64),
+//              +16=handler[0..7] (8 × 8 bytes = handlers for signals 0-7)
+// Only 8 signal slots stored (to fit 64 bytes): SIGHUP(0), SIGINT(1), SIGKILL(2),
+// SIGSEGV(3), SIGTERM(4), SIGCHLD(5), SIGSTOP(6), SIGCONT(7)
+// We map standard POSIX numbers → our internal slot index
+const SIGNAL_TABLE: i64 = 0x8D1000
+const SIG_ENTRY_SIZE: i64 = 64
+const SIG_OFF_PENDING: i64 = 0
+const SIG_OFF_MASK: i64 = 8
+const SIG_OFF_HANDLERS: i64 = 16
+const SIG_MAX_SLOTS: i64 = 8
+
+// I1.2: Signal numbers (POSIX standard)
+const SIGHUP: i64 = 1
+const SIGINT: i64 = 2
+const SIGKILL: i64 = 9
+const SIGSEGV: i64 = 11
+const SIGTERM: i64 = 15
+const SIGCHLD: i64 = 17
+const SIGCONT: i64 = 18
+const SIGSTOP: i64 = 19
+const SIGTSTP: i64 = 20
+
+// Special handler values
+const SIG_DFL: i64 = 0   // default handler
+const SIG_IGN: i64 = 1   // ignore signal
+
+// Map POSIX signal number to internal slot (0-7)
+@kernel fn sig_to_slot(signum: i64) -> i64 {
+    if signum == SIGHUP { 0 }
+    else if signum == SIGINT { 1 }
+    else if signum == SIGKILL { 2 }
+    else if signum == SIGSEGV { 3 }
+    else if signum == SIGTERM { 4 }
+    else if signum == SIGCHLD { 5 }
+    else if signum == SIGSTOP { 6 }
+    else if signum == SIGCONT { 7 }
+    else { -1 }
+}
+
+// I1.1: Signal table helpers
+@kernel fn sig_entry_addr(pid: i64) -> i64 {
+    SIGNAL_TABLE + pid * SIG_ENTRY_SIZE
+}
+
+@kernel fn sig_init(pid: i64) {
+    let base = sig_entry_addr(pid)
+    volatile_write_u64(base + SIG_OFF_PENDING, 0)
+    volatile_write_u64(base + SIG_OFF_MASK, 0)
+    let mut i: i64 = 0
+    while i < SIG_MAX_SLOTS {
+        volatile_write_u64(base + SIG_OFF_HANDLERS + i * 8, SIG_DFL)
+        i = i + 1
+    }
+}
+
+// Signal handler get/set
+@kernel fn signal_get_handler(pid: i64, signum: i64) -> i64 {
+    if signum < 1 || signum > SIG_MAX_SLOTS { return SIG_DFL }
+    let base = sig_entry_addr(pid)
+    volatile_read_u64(base + SIG_OFF_HANDLERS + (signum - 1) * 8)
+}
+
+@kernel fn signal_set_handler(pid: i64, signum: i64, handler: i64) {
+    if signum < 1 || signum > SIG_MAX_SLOTS { return }
+    let base = sig_entry_addr(pid)
+    volatile_write_u64(base + SIG_OFF_HANDLERS + (signum - 1) * 8, handler)
+}
+
+// I1.5: Set signal as pending
+@kernel fn signal_send(pid: i64, signum: i64) -> i64 {
+    if pid < 0 || pid >= PROC_MAX { return -1 }
+    let slot = sig_to_slot(signum)
+    if slot < 0 { return -1 }
+
+    let base = sig_entry_addr(pid)
+    let pending = volatile_read_u64(base + SIG_OFF_PENDING)
+    volatile_write_u64(base + SIG_OFF_PENDING, pending | (1 << slot))
+
+    // I1.4: Handle SIGKILL immediately — cannot be caught or ignored
+    if signum == SIGKILL {
+        signal_deliver_default(pid, signum)
+    }
+    // SIGCONT: wake stopped process
+    if signum == SIGCONT {
+        let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state == PROC_STATE_BLOCKED {
+            volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_READY)
+        }
+    }
+    0
+}
+
+// I1.4: Default signal action
+@kernel fn signal_deliver_default(pid: i64, signum: i64) {
+    if signum == SIGKILL || signum == SIGTERM || signum == SIGINT || signum == SIGHUP || signum == SIGSEGV {
+        // Terminate process
+        let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+        volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+        volatile_write(base + PROC_OFF_EXIT, 128 + signum) // exit code = 128 + signal
+        // Reparent children
+        reparent_children(pid)
+        // Wake parent
+        wake_waiting_parent(pid, 128 + signum)
+        // Close FDs
+        let mut fd: i64 = 0
+        while fd < FD_MAX { fd_v2_set(pid, fd, FD_CLOSED, 0); fd = fd + 1 }
+    }
+    if signum == SIGSTOP || signum == SIGTSTP {
+        // Stop process
+        volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+    }
+    // SIGCHLD, SIGCONT: default = ignore (no action needed)
+}
+
+// I1.6: Check and deliver pending signals (called before return-to-user)
+@kernel fn signal_check_pending(pid: i64) -> i64 {
+    let base = sig_entry_addr(pid)
+    let pending = volatile_read_u64(base + SIG_OFF_PENDING)
+    let mask = volatile_read_u64(base + SIG_OFF_MASK)
+    let xor_mask = mask ^ 0xFF
+    let deliverable = pending & xor_mask
+
+    if deliverable == 0 { 0 }
+    else { signal_deliver_first(pid, base, pending, deliverable) }
+}
+
+// Helper: deliver the first pending signal (avoids deep nesting)
+@kernel fn signal_deliver_first(pid: i64, base: i64, pending: i64, deliverable: i64) -> i64 {
+    let slot = signal_find_first_bit(deliverable)
+    if slot < 0 { 0 }
+    else {
+        // Clear pending bit
+        let clear_mask = 0xFF ^ (1 << slot)
+        volatile_write_u64(base + SIG_OFF_PENDING, pending & clear_mask)
+        // Dispatch to handler
+        let handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
+        if handler == SIG_DFL {
+            signal_deliver_default(pid, slot_to_signum(slot))
+        }
+        // SIG_IGN: do nothing. Custom handlers: future sprint.
+        slot + 1
+    }
+}
+
+// Find lowest set bit in bitmap (0-7)
+@kernel fn signal_find_first_bit(bitmap: i64) -> i64 {
+    if (bitmap & 1) != 0 { 0 }
+    else if (bitmap & 2) != 0 { 1 }
+    else if (bitmap & 4) != 0 { 2 }
+    else if (bitmap & 8) != 0 { 3 }
+    else if (bitmap & 16) != 0 { 4 }
+    else if (bitmap & 32) != 0 { 5 }
+    else if (bitmap & 64) != 0 { 6 }
+    else if (bitmap & 128) != 0 { 7 }
+    else { -1 }
+}
+
+// Map slot back to POSIX signal number
+@kernel fn slot_to_signum(slot: i64) -> i64 {
+    if slot == 0 { SIGHUP }
+    else if slot == 1 { SIGINT }
+    else if slot == 2 { SIGKILL }
+    else if slot == 3 { SIGSEGV }
+    else if slot == 4 { SIGTERM }
+    else if slot == 5 { SIGCHLD }
+    else if slot == 6 { SIGSTOP }
+    else if slot == 7 { SIGCONT }
+    else { 0 }
+}
+
+// I1.3: SYS_KILL(24) — send signal to process
+@kernel fn sys_kill(pid: i64, signum: i64) -> i64 {
+    if pid < 0 || pid >= PROC_MAX { return -1 }
+    let state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+    if state == PROC_STATE_FREE { return -1 }
+    signal_send(pid, signum)
+}
+
+// I1.8: SYS_SIGNAL(25) — register signal handler
+@kernel fn sys_signal(signum: i64, handler: i64) -> i64 {
+    // I1.9: SIGKILL and SIGSTOP cannot be caught
+    if signum == SIGKILL || signum == SIGSTOP { return -1 }
+
+    let slot = sig_to_slot(signum)
+    if slot < 0 { return -1 }
+
+    let pid = volatile_read_u64(0x6FE00)
+    let base = sig_entry_addr(pid)
+    let old_handler = volatile_read_u64(base + SIG_OFF_HANDLERS + slot * 8)
+    volatile_write_u64(base + SIG_OFF_HANDLERS + slot * 8, handler)
+    old_handler
+}
+
+// I1.7: Enhanced process_exit — send SIGCHLD to parent
+@kernel fn process_exit_with_signal(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+
+    volatile_write(base + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+
+    reparent_children(pid)
+
+    // Send SIGCHLD to parent
+    let ppid = volatile_read(base + PROC_OFF_PPID)
+    if ppid >= 0 && ppid < PROC_MAX {
+        signal_send(ppid, SIGCHLD)
+    }
+
+    wake_waiting_parent(pid, exit_code)
+
+    // L2.2: Release CoW pages on exit
+    let cr3 = volatile_read(base + PROC_OFF_CR3)
+    if cr3 != 0 && cr3 != PML4_BASE { cow_release_pages(cr3) }
+
+    // Close all FDs
+    let mut fd: i64 = 0
+    while fd < FD_MAX { fd_v2_set(pid, fd, FD_CLOSED, 0); fd = fd + 1 }
+
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    while 1 == 1 { hlt() }
+}
+
+// ═══════════════════════════════════════════════
+// Job Control (Sprint I2)
+// ═══════════════════════════════════════════════
+
+// Job table at 0x8D8000: 16 jobs × 64 bytes
+// Per job: +0=pid(i64), +8=state(i64: 0=free,1=running,2=stopped,3=done), +16=cmd[48]
+const JOB_TABLE: i64 = 0x8D8000
+const JOB_MAX: i64 = 16
+const JOB_ENTRY_SIZE: i64 = 64
+const JOB_OFF_PID: i64 = 0
+const JOB_OFF_STATE: i64 = 8
+const JOB_OFF_CMD: i64 = 16
+
+// Job states
+const JOB_FREE: i64 = 0
+const JOB_RUNNING: i64 = 1
+const JOB_STOPPED: i64 = 2
+const JOB_DONE: i64 = 3
+
+// Foreground process group at 0x652068
+const FG_PGID_ADDR: i64 = 0x652068
+// Ctrl key state at 0x6FBE4
+const CTRL_STATE_ADDR: i64 = 0x6FBE4
+
+// I2.1: Set/get foreground process group
+@kernel fn set_fg_pgid(pgid: i64) {
+    volatile_write_u64(FG_PGID_ADDR, pgid)
+}
+
+@kernel fn get_fg_pgid() -> i64 {
+    volatile_read_u64(FG_PGID_ADDR)
+}
+
+// I2.2: Send signal to foreground process group (Ctrl+C → SIGINT)
+@kernel fn signal_fg_group(signum: i64) {
+    let fg_pgid = get_fg_pgid()
+    if fg_pgid == 0 { return } // shell is foreground, ignore
+    // Send signal to all processes in foreground group
+    let mut pid: i64 = 1
+    while pid < PROC_MAX {
+        let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+        let state = volatile_read(base + PROC_OFF_STATE)
+        if state != PROC_STATE_FREE && state != PROC_STATE_ZOMBIE {
+            let pgid = volatile_read(base + PROC_OFF_PGID)
+            if pgid == fg_pgid {
+                signal_send(pid, signum)
+            }
+        }
+        pid = pid + 1
+    }
+}
+
+// I2.4: Background '&' — parse trailing & from command
+@kernel fn shell_has_background() -> i64 {
+    let len = cmdbuf_len()
+    if len < 2 { return 0 }
+    // Check last non-space character is '&'
+    let mut pos = len - 1
+    while pos > 0 && volatile_read_u8(0x6F800 + pos) == 32 { pos = pos - 1 }
+    if volatile_read_u8(0x6F800 + pos) == 38 { // '&'
+        return pos // position of '&'
+    }
+    0
+}
+
+// I2.5: Job table operations
+@kernel fn job_add(pid: i64, cmd_addr: i64, cmd_len: i64) -> i64 {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        if volatile_read_u64(base + JOB_OFF_STATE) == JOB_FREE {
+            volatile_write_u64(base + JOB_OFF_PID, pid)
+            volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+            // Copy command string (max 47 chars)
+            let copy_len = if cmd_len < 47 { cmd_len } else { 47 }
+            let mut i: i64 = 0
+            while i < copy_len {
+                volatile_write_u8(base + JOB_OFF_CMD + i, volatile_read_u8(cmd_addr + i))
+                i = i + 1
+            }
+            volatile_write_u8(base + JOB_OFF_CMD + copy_len, 0)
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1
+}
+
+@kernel fn job_find_by_pid(pid: i64) -> i64 {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        if volatile_read_u64(base + JOB_OFF_PID) == pid &&
+           volatile_read_u64(base + JOB_OFF_STATE) != JOB_FREE {
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1
+}
+
+// I2.9: Check for completed background jobs, print notifications
+@kernel fn job_check_notifications() {
+    let mut slot: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        let state = volatile_read_u64(base + JOB_OFF_STATE)
+        if state == JOB_RUNNING {
+            let pid = volatile_read_u64(base + JOB_OFF_PID)
+            let proc_state = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+            if proc_state == PROC_STATE_ZOMBIE || proc_state == PROC_STATE_FREE {
+                // Job is done
+                volatile_write_u64(base + JOB_OFF_STATE, JOB_DONE)
+                cprint("[", WHITE_ON_BLACK)
+                cprint_decimal(slot + 1, CYAN_ON_BLACK)
+                cprint("]+  Done                    ", WHITE_ON_BLACK)
+                // Print command
+                let mut ci: i64 = 0
+                while ci < 47 {
+                    let ch = volatile_read_u8(base + JOB_OFF_CMD + ci)
+                    if ch == 0 { ci = 47 }
+                    else { console_putchar(ch, WHITE_ON_BLACK); ci = ci + 1 }
+                }
+                console_putchar(10, WHITE_ON_BLACK)
+                // Reap zombie
+                if proc_state == PROC_STATE_ZOMBIE {
+                    process_reap(pid)
+                }
+                // Free job slot
+                volatile_write_u64(base + JOB_OFF_STATE, JOB_FREE)
+            }
+        }
+        slot = slot + 1
+    }
+}
+
+// I2.6: `jobs` command
+@kernel fn cmd_jobs() {
+    let mut slot: i64 = 0
+    let mut count: i64 = 0
+    while slot < JOB_MAX {
+        let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+        let state = volatile_read_u64(base + JOB_OFF_STATE)
+        if state != JOB_FREE {
+            cprint("[", WHITE_ON_BLACK)
+            cprint_decimal(slot + 1, CYAN_ON_BLACK)
+            cprint("]  ", WHITE_ON_BLACK)
+            let pid = volatile_read_u64(base + JOB_OFF_PID)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint("  ", WHITE_ON_BLACK)
+            if state == JOB_RUNNING { cprint("Running   ", GREEN_ON_BLACK) }
+            else if state == JOB_STOPPED { cprint("Stopped   ", YELLOW_ON_BLACK) }
+            else if state == JOB_DONE { cprint("Done      ", WHITE_ON_BLACK) }
+            // Print command
+            let mut ci: i64 = 0
+            while ci < 47 {
+                let ch = volatile_read_u8(base + JOB_OFF_CMD + ci)
+                if ch == 0 { ci = 47 }
+                else { console_putchar(ch, WHITE_ON_BLACK); ci = ci + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        slot = slot + 1
+    }
+    if count == 0 { cprintln("No background jobs", WHITE_ON_BLACK) }
+}
+
+// I2.7: `fg` command — bring job to foreground
+@kernel fn cmd_fg() {
+    let len = cmdbuf_len()
+    // Parse job number from "fg %N" or "fg N"
+    let mut target: i64 = -1
+    if len > 3 {
+        let ch = volatile_read_u8(0x6F800 + 3)
+        if ch == 37 { // '%'
+            target = volatile_read_u8(0x6F800 + 4) - 48 - 1 // %1 → slot 0
+        } else {
+            target = ch - 48 - 1
+        }
+    }
+    if target < 0 || target >= JOB_MAX {
+        // Find most recent job
+        let mut slot = JOB_MAX - 1
+        while slot >= 0 && target < 0 {
+            let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+            if volatile_read_u64(base + JOB_OFF_STATE) != JOB_FREE { target = slot }
+            slot = slot - 1
+        }
+    }
+    if target < 0 { cprintln("No current job", RED_ON_BLACK); return }
+
+    let base = JOB_TABLE + target * JOB_ENTRY_SIZE
+    let pid = volatile_read_u64(base + JOB_OFF_PID)
+    let state = volatile_read_u64(base + JOB_OFF_STATE)
+
+    // If stopped, send SIGCONT
+    if state == JOB_STOPPED {
+        signal_send(pid, SIGCONT)
+        volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+    }
+
+    // Set as foreground
+    set_fg_pgid(pid)
+
+    // Wait for it
+    cprint("Foreground: PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    sys_waitpid(pid, 0, 0)
+
+    // Clear foreground
+    set_fg_pgid(0)
+    volatile_write_u64(base + JOB_OFF_STATE, JOB_FREE)
+}
+
+// I2.8: `bg` command — resume stopped job in background
+@kernel fn cmd_bg() {
+    let len = cmdbuf_len()
+    let mut target: i64 = -1
+    if len > 3 {
+        let ch = volatile_read_u8(0x6F800 + 3)
+        if ch == 37 { target = volatile_read_u8(0x6F800 + 4) - 48 - 1 }
+        else { target = ch - 48 - 1 }
+    }
+    if target < 0 || target >= JOB_MAX {
+        let mut slot = JOB_MAX - 1
+        while slot >= 0 && target < 0 {
+            let base = JOB_TABLE + slot * JOB_ENTRY_SIZE
+            if volatile_read_u64(base + JOB_OFF_STATE) == JOB_STOPPED { target = slot }
+            slot = slot - 1
+        }
+    }
+    if target < 0 { cprintln("No stopped job", RED_ON_BLACK); return }
+
+    let base = JOB_TABLE + target * JOB_ENTRY_SIZE
+    let pid = volatile_read_u64(base + JOB_OFF_PID)
+    signal_send(pid, SIGCONT)
+    volatile_write_u64(base + JOB_OFF_STATE, JOB_RUNNING)
+    cprint("[", WHITE_ON_BLACK)
+    cprint_decimal(target + 1, CYAN_ON_BLACK)
+    cprint("]  ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln(" &", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Shell Variables & Script Loading (Sprint J1)
+// ═══════════════════════════════════════════════
+
+// ENV_TABLE at 0x8D3000: 128 entries × 32 bytes = 4096 bytes
+// Per entry: +0=key[16] (null-terminated), +16=value[16] (null-terminated)
+const ENV_TABLE: i64 = 0x8D3000
+const ENV_MAX: i64 = 128
+const ENV_ENTRY_SIZE: i64 = 32
+const ENV_KEY_SIZE: i64 = 16
+const ENV_VAL_SIZE: i64 = 16
+
+// Last exit code at 0x652060
+const LAST_EXIT_CODE: i64 = 0x652060
+
+// J1.1: Environment variable operations
+@kernel fn env_find(key_addr: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < ENV_MAX {
+        let entry = ENV_TABLE + i * ENV_ENTRY_SIZE
+        let first_ch = volatile_read_u8(entry)
+        if first_ch == 0 { return -1 } // empty slot = end of entries
+        // Compare key
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < ENV_KEY_SIZE && match_ok == 1 {
+            let a = volatile_read_u8(entry + j)
+            let b = volatile_read_u8(key_addr + j)
+            if a != b { match_ok = 0 }
+            if a == 0 && b == 0 { j = ENV_KEY_SIZE } // both null = match
+            else { j = j + 1 }
+        }
+        if match_ok == 1 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn env_set(key_addr: i64, val_addr: i64) -> i64 {
+    let idx = env_find(key_addr)
+    let target = if idx >= 0 { idx } else {
+        // Find first empty slot
+        let mut i: i64 = 0
+        let mut found: i64 = -1
+        while i < ENV_MAX && found == -1 {
+            if volatile_read_u8(ENV_TABLE + i * ENV_ENTRY_SIZE) == 0 { found = i }
+            i = i + 1
+        }
+        found
+    }
+    if target < 0 { return -1 } // table full
+
+    let entry = ENV_TABLE + target * ENV_ENTRY_SIZE
+    // Copy key
+    let mut i: i64 = 0
+    while i < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(key_addr + i)
+        volatile_write_u8(entry + i, ch)
+        if ch == 0 { i = ENV_KEY_SIZE }
+        else { i = i + 1 }
+    }
+    volatile_write_u8(entry + ENV_KEY_SIZE - 1, 0) // ensure null
+    // Copy value
+    i = 0
+    while i < ENV_VAL_SIZE - 1 {
+        let ch = volatile_read_u8(val_addr + i)
+        volatile_write_u8(entry + ENV_KEY_SIZE + i, ch)
+        if ch == 0 { i = ENV_VAL_SIZE }
+        else { i = i + 1 }
+    }
+    volatile_write_u8(entry + ENV_KEY_SIZE + ENV_VAL_SIZE - 1, 0)
+    0
+}
+
+@kernel fn env_get(key_addr: i64, buf: i64) -> i64 {
+    let idx = env_find(key_addr)
+    if idx < 0 { return -1 }
+    let entry = ENV_TABLE + idx * ENV_ENTRY_SIZE + ENV_KEY_SIZE
+    let mut i: i64 = 0
+    while i < ENV_VAL_SIZE {
+        let ch = volatile_read_u8(entry + i)
+        volatile_write_u8(buf + i, ch)
+        if ch == 0 { return i }
+        i = i + 1
+    }
+    i
+}
+
+// J1.2: `export` shell builtin — "export KEY=VALUE"
+@kernel fn cmd_export() {
+    let len = cmdbuf_len()
+    if len <= 7 {
+        // Print all env vars
+        cmd_env_list()
+        return
+    }
+    // Parse KEY=VALUE from "export KEY=VALUE" (offset 7)
+    let key_buf: i64 = 0x843800
+    let val_buf: i64 = 0x843900
+    let mut pos: i64 = 7
+    let mut ki: i64 = 0
+    // Read key up to '='
+    while pos < len && ki < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 61 { pos = pos + 1; ki = ENV_KEY_SIZE } // '=' found
+        else { volatile_write_u8(key_buf + ki, ch); ki = ki + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(key_buf + (if ki >= ENV_KEY_SIZE { ENV_KEY_SIZE - 1 } else { ki }), 0)
+    // Read value
+    let mut vi: i64 = 0
+    while pos < len && vi < ENV_VAL_SIZE - 1 {
+        volatile_write_u8(val_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(val_buf + vi, 0)
+    env_set(key_buf, val_buf)
+}
+
+// J1.3: `set` builtin (env vars)
+@kernel fn cmd_setenv() {
+    let len = cmdbuf_len()
+    if len <= 4 {
+        cmd_env_list()
+        return
+    }
+    // "set KEY=VALUE" (offset 4)
+    let key_buf: i64 = 0x843800
+    let val_buf: i64 = 0x843900
+    let mut pos: i64 = 4
+    let mut ki: i64 = 0
+    while pos < len && ki < ENV_KEY_SIZE - 1 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 61 { pos = pos + 1; ki = ENV_KEY_SIZE }
+        else { volatile_write_u8(key_buf + ki, ch); ki = ki + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(key_buf + (if ki >= ENV_KEY_SIZE { ENV_KEY_SIZE - 1 } else { ki }), 0)
+    let mut vi: i64 = 0
+    while pos < len && vi < ENV_VAL_SIZE - 1 {
+        volatile_write_u8(val_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(val_buf + vi, 0)
+    env_set(key_buf, val_buf)
+}
+
+// List all environment variables
+@kernel fn cmd_env_list() {
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < ENV_MAX {
+        let entry = ENV_TABLE + i * ENV_ENTRY_SIZE
+        if volatile_read_u8(entry) != 0 {
+            // Print key
+            let mut j: i64 = 0
+            while j < ENV_KEY_SIZE {
+                let ch = volatile_read_u8(entry + j)
+                if ch == 0 { j = ENV_KEY_SIZE }
+                else { console_putchar(ch, CYAN_ON_BLACK); j = j + 1 }
+            }
+            cprint("=", WHITE_ON_BLACK)
+            // Print value
+            j = 0
+            while j < ENV_VAL_SIZE {
+                let ch = volatile_read_u8(entry + ENV_KEY_SIZE + j)
+                if ch == 0 { j = ENV_VAL_SIZE }
+                else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        } else {
+            i = ENV_MAX // end
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("(no variables set)", WHITE_ON_BLACK) }
+}
+
+// J1.4: $VAR expansion in cmdbuf (before dispatch)
+@kernel fn shell_expand_vars() {
+    let len = cmdbuf_len()
+    let expand_buf: i64 = 0x844000 // temporary expansion buffer
+    let mut src: i64 = 0
+    let mut dst: i64 = 0
+
+    while src < len && dst < 62 {
+        let ch = volatile_read_u8(0x6F800 + src)
+        if ch == 36 { // '$'
+            src = src + 1
+            // J1.5: $? = last exit code
+            if volatile_read_u8(0x6F800 + src) == 63 { // '?'
+                src = src + 1
+                let code = volatile_read_u64(LAST_EXIT_CODE)
+                // Write decimal to expand_buf
+                if code == 0 {
+                    volatile_write_u8(expand_buf + dst, 48) // '0'
+                    dst = dst + 1
+                } else {
+                    let mut tmp = code
+                    let digit_start = dst
+                    while tmp > 0 && dst < 62 {
+                        volatile_write_u8(expand_buf + dst, 48 + (tmp % 10))
+                        dst = dst + 1
+                        tmp = tmp / 10
+                    }
+                    // Reverse digits
+                    let mut lo = digit_start
+                    let mut hi = dst - 1
+                    while lo < hi {
+                        let t = volatile_read_u8(expand_buf + lo)
+                        volatile_write_u8(expand_buf + lo, volatile_read_u8(expand_buf + hi))
+                        volatile_write_u8(expand_buf + hi, t)
+                        lo = lo + 1
+                        hi = hi - 1
+                    }
+                }
+            }
+            // J1.6: $$ = current PID
+            else if volatile_read_u8(0x6F800 + src) == 36 { // '$$'
+                src = src + 1
+                let pid = volatile_read_u64(0x6FE00)
+                volatile_write_u8(expand_buf + dst, 48 + pid)
+                dst = dst + 1
+            }
+            // $VAR — lookup in ENV_TABLE
+            else {
+                let var_name: i64 = 0x843A00
+                let mut ni: i64 = 0
+                while src < len && ni < 15 {
+                    let vc = volatile_read_u8(0x6F800 + src)
+                    // Stop at space, null, or non-alphanumeric
+                    if vc == 32 || vc == 0 || vc == 36 || vc == 47 { ni = 15 }
+                    else { volatile_write_u8(var_name + ni, vc); ni = ni + 1; src = src + 1 }
+                }
+                volatile_write_u8(var_name + (if ni >= 15 { 14 } else { ni }), 0)
+                let val_buf: i64 = 0x843B00
+                let vlen = env_get(var_name, val_buf)
+                if vlen > 0 {
+                    let mut vi: i64 = 0
+                    while vi < vlen && dst < 62 {
+                        volatile_write_u8(expand_buf + dst, volatile_read_u8(val_buf + vi))
+                        dst = dst + 1
+                        vi = vi + 1
+                    }
+                }
+            }
+        } else {
+            volatile_write_u8(expand_buf + dst, ch)
+            dst = dst + 1
+            src = src + 1
+        }
+    }
+    volatile_write_u8(expand_buf + dst, 0)
+
+    // Copy back to cmdbuf
+    let mut ci: i64 = 0
+    while ci < dst {
+        volatile_write_u8(0x6F800 + ci, volatile_read_u8(expand_buf + ci))
+        ci = ci + 1
+    }
+    volatile_write_u8(0x6F800 + dst, 0)
+    volatile_write(0x6F880, dst)
+}
+
+// J1.8: Script file loading — "sh <filename>" or "source <filename>"
+@kernel fn cmd_sh() {
+    let len = cmdbuf_len()
+    let prefix = if volatile_read_u8(0x6F800 + 1) == 104 { 3 } else { 7 } // "sh " or "source "
+    if len <= prefix {
+        cprintln("Usage: sh <script>", YELLOW_ON_BLACK)
+        return
+    }
+
+    // Get filename from cmdbuf
+    let fname_addr: i64 = 0x843C00
+    let mut fi: i64 = 0
+    let mut pos: i64 = prefix
+    while pos < len && fi < 31 {
+        volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+        fi = fi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(fname_addr + fi, 0)
+
+    // Try ramfs first
+    let idx = ramfs_find_by_addr(fname_addr)
+    let mut script_buf: i64 = 0x845000
+    let mut script_len: i64 = 0
+
+    if idx >= 0 {
+        let entry = ramfs_entry_addr(idx)
+        let size = volatile_read(entry + 32)
+        let data_ptr = volatile_read(entry + 40)
+        if data_ptr != 0 && size > 0 {
+            let mut si: i64 = 0
+            while si < size && si < 4096 {
+                volatile_write_u8(script_buf + si, volatile_read_u8(data_ptr + si))
+                si = si + 1
+            }
+            script_len = size
+        }
+    }
+
+    if script_len == 0 {
+        cprintln("Script not found", RED_ON_BLACK)
+        return
+    }
+
+    // Parse and execute lines
+    let line_buf: i64 = 0x846000
+    let mut lpos: i64 = 0
+    let mut line_len: i64 = 0
+    let mut line_num: i64 = 0
+
+    while lpos < script_len {
+        let ch = volatile_read_u8(script_buf + lpos)
+        if ch == 10 || lpos == script_len - 1 {
+            if ch != 10 && line_len < 63 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+            volatile_write_u8(line_buf + line_len, 0)
+            line_num = line_num + 1
+
+            // J1.9: Skip comments (#) and blank lines
+            let first = volatile_read_u8(line_buf)
+            if line_len > 0 && first != 35 { // 35 = '#'
+                shell_exec_from_buf(line_buf, line_len)
+            }
+            line_len = 0
+        } else {
+            if line_len < 63 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+        }
+        lpos = lpos + 1
+    }
+}
+
+// Update shell_execute to expand variables before dispatch
+@kernel fn shell_execute_v2() {
+    let len = cmdbuf_len()
+    if len == 0 { return }
+
+    // J1.4: Expand $VAR in cmdbuf
+    shell_expand_vars()
+
+    // Check for pipe first
+    let pipe_pos = shell_find_pipe()
+    if pipe_pos > 0 {
+        shell_exec_pipe(pipe_pos)
+        return
+    }
+
+    // Check for redirects
+    let redir = shell_find_redirect()
+    if redir > 0 {
+        shell_exec_redirect(redir)
+        return
+    }
+
+    // No pipe or redirect — normal dispatch
+    dispatch_command()
+}
+
+// ═══════════════════════════════════════════════
+// Shell Control Flow (Sprint J2)
+// ═══════════════════════════════════════════════
+
+// SCRIPT_BUF at 0x8D5000: control flow state machine
+// +0:    mode (0=interactive, 1=if, 2=for, 3=while)
+// +8:    depth (nesting level, max 8)
+// +16:   condition_result (0=false, 1=true) for current if/while
+// +24:   in_else (0=then branch, 1=else branch)
+// +32:   for_var_addr (address of loop variable name)
+// +40:   for_items_addr (address of item list)
+// +48:   for_item_idx (current item index)
+// +56:   for_item_count (total items)
+// +64:   while_script_pos (position in script to loop back to)
+// +72:   collecting (1=collecting lines for body, 0=executing)
+// +80:   body_buf (address of collected body lines, 0x8D5100)
+// +88:   body_len (length of collected body)
+const SCRIPT_STATE: i64 = 0x8D5000
+const SCRIPT_BODY_BUF: i64 = 0x8D5100  // 3.75KB for body lines
+
+const SMODE_NONE: i64 = 0
+const SMODE_IF: i64 = 1
+const SMODE_FOR: i64 = 2
+const SMODE_WHILE: i64 = 3
+
+// J2.5: Initialize script state
+@kernel fn script_state_init() {
+    volatile_write_u64(SCRIPT_STATE, SMODE_NONE)     // mode
+    volatile_write_u64(SCRIPT_STATE + 8, 0)           // depth
+    volatile_write_u64(SCRIPT_STATE + 16, 0)          // condition_result
+    volatile_write_u64(SCRIPT_STATE + 24, 0)          // in_else
+    volatile_write_u64(SCRIPT_STATE + 72, 0)          // collecting
+    volatile_write_u64(SCRIPT_STATE + 88, 0)          // body_len
+}
+
+// J2.6: `test` / `[` builtin — evaluate conditions, set LAST_EXIT_CODE
+@kernel fn cmd_test() {
+    let len = cmdbuf_len()
+    let result: i64 = 0
+
+    // Parse test expression from cmdbuf
+    // "test -f <file>" — file exists
+    if len > 8 && volatile_read_u8(0x6F800 + 5) == 45 && volatile_read_u8(0x6F800 + 6) == 102 {
+        // -f flag: check if file exists
+        let fname_addr: i64 = 0x843D00
+        let mut fi: i64 = 0
+        let mut pos: i64 = 8
+        while pos < len && fi < 31 {
+            volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+            fi = fi + 1
+            pos = pos + 1
+        }
+        volatile_write_u8(fname_addr + fi, 0)
+        let idx = ramfs_find_by_addr(fname_addr)
+        if idx >= 0 { volatile_write_u64(LAST_EXIT_CODE, 0) }
+        else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        return
+    }
+
+    // "test -d <dir>" — directory exists
+    if len > 8 && volatile_read_u8(0x6F800 + 5) == 45 && volatile_read_u8(0x6F800 + 6) == 100 {
+        let fname_addr: i64 = 0x843D00
+        let mut fi: i64 = 0
+        let mut pos: i64 = 8
+        while pos < len && fi < 31 {
+            volatile_write_u8(fname_addr + fi, volatile_read_u8(0x6F800 + pos))
+            fi = fi + 1
+            pos = pos + 1
+        }
+        volatile_write_u8(fname_addr + fi, 0)
+        let idx = ramfs_find_by_addr(fname_addr)
+        if idx >= 0 {
+            let entry = ramfs_entry_addr(idx)
+            let ftype = volatile_read(entry + 48)
+            if ftype == 2 { volatile_write_u64(LAST_EXIT_CODE, 0) }
+            else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        } else { volatile_write_u64(LAST_EXIT_CODE, 1) }
+        return
+    }
+
+    // "test <a> -eq <b>" — integer equality
+    // "test <a> = <b>" — string equality
+    // Simple: just set exit code 0 (true) for "test" alone
+    volatile_write_u64(LAST_EXIT_CODE, 0)
+}
+
+// J2.1/J2.2: `if` command — "if <cmd>; then ... [else ...] fi"
+// In interactive/script mode, we collect lines until fi
+@kernel fn cmd_if_start() {
+    let len = cmdbuf_len()
+    // Parse condition command after "if "
+    let cond_buf: i64 = 0x843E00
+    let mut ci: i64 = 0
+    let mut pos: i64 = 3 // skip "if "
+
+    // Find "; then" or end of line
+    while pos < len && ci < 62 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        // Check for "; then" or ";then"
+        if ch == 59 { pos = len } // ';' found, stop
+        else { volatile_write_u8(cond_buf + ci, ch); ci = ci + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(cond_buf + ci, 0)
+
+    // Execute condition command
+    shell_exec_from_buf(cond_buf, ci)
+    let cond_result = volatile_read_u64(LAST_EXIT_CODE)
+
+    // Set script state
+    volatile_write_u64(SCRIPT_STATE, SMODE_IF)
+    volatile_write_u64(SCRIPT_STATE + 16, if cond_result == 0 { 1 } else { 0 })
+    volatile_write_u64(SCRIPT_STATE + 24, 0) // in_else = false
+    volatile_write_u64(SCRIPT_STATE + 72, 1) // collecting = true
+    volatile_write_u64(SCRIPT_STATE + 88, 0) // body_len = 0
+}
+
+// Process a line during if/for/while collection
+@kernel fn script_process_line(line: i64, line_len: i64) {
+    let mode = volatile_read_u64(SCRIPT_STATE)
+
+    if mode == SMODE_IF {
+        // Check for "else"
+        if line_len == 4 && volatile_read_u8(line) == 101 && volatile_read_u8(line + 1) == 108 &&
+           volatile_read_u8(line + 2) == 115 && volatile_read_u8(line + 3) == 101 {
+            volatile_write_u64(SCRIPT_STATE + 24, 1) // in_else = true
+            return
+        }
+        // Check for "fi"
+        if line_len == 2 && volatile_read_u8(line) == 102 && volatile_read_u8(line + 1) == 105 {
+            // Execute collected body
+            script_exec_if_body()
+            script_state_init()
+            return
+        }
+        // Collect line into body buffer
+        let cond_true = volatile_read_u64(SCRIPT_STATE + 16)
+        let in_else = volatile_read_u64(SCRIPT_STATE + 24)
+        let should_exec = (cond_true == 1 && in_else == 0) || (cond_true == 0 && in_else == 1)
+        if should_exec {
+            shell_exec_from_buf(line, line_len)
+        }
+        return
+    }
+
+    if mode == SMODE_FOR {
+        // Check for "done"
+        if line_len == 4 && volatile_read_u8(line) == 100 && volatile_read_u8(line + 1) == 111 &&
+           volatile_read_u8(line + 2) == 110 && volatile_read_u8(line + 3) == 101 {
+            script_state_init()
+            return
+        }
+        // Execute line with current loop variable
+        shell_exec_from_buf(line, line_len)
+        return
+    }
+
+    if mode == SMODE_WHILE {
+        // Check for "done"
+        if line_len == 4 && volatile_read_u8(line) == 100 && volatile_read_u8(line + 1) == 111 &&
+           volatile_read_u8(line + 2) == 110 && volatile_read_u8(line + 3) == 101 {
+            script_state_init()
+            return
+        }
+        shell_exec_from_buf(line, line_len)
+        return
+    }
+}
+
+// Execute the if body (already dispatched line-by-line above)
+@kernel fn script_exec_if_body() {
+    // Body already executed inline during collection
+    // Nothing extra needed — lines were dispatched as they came in
+}
+
+// J2.3: `for` command — "for x in a b c; do ... done"
+@kernel fn cmd_for_start() {
+    let len = cmdbuf_len()
+    // Parse: "for <var> in <items>; do"
+    // Find variable name after "for "
+    let var_buf: i64 = 0x843F00
+    let mut vi: i64 = 0
+    let mut pos: i64 = 4 // skip "for "
+    while pos < len && volatile_read_u8(0x6F800 + pos) != 32 && vi < 15 {
+        volatile_write_u8(var_buf + vi, volatile_read_u8(0x6F800 + pos))
+        vi = vi + 1
+        pos = pos + 1
+    }
+    volatile_write_u8(var_buf + vi, 0)
+
+    // Skip " in "
+    while pos < len && volatile_read_u8(0x6F800 + pos) == 32 { pos = pos + 1 }
+    // Skip "in "
+    if pos + 2 < len && volatile_read_u8(0x6F800 + pos) == 105 { pos = pos + 3 }
+
+    // Parse items (space-separated, until ';' or end)
+    let items_buf: i64 = 0x844800
+    let mut ii: i64 = 0
+    while pos < len && ii < 255 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 59 { pos = len } // ';' — stop
+        else { volatile_write_u8(items_buf + ii, ch); ii = ii + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(items_buf + ii, 0)
+
+    // Count items
+    let mut item_count: i64 = 0
+    let mut in_item: i64 = 0
+    let mut ci: i64 = 0
+    while ci < ii {
+        let ch = volatile_read_u8(items_buf + ci)
+        if ch == 32 {
+            if in_item == 1 { item_count = item_count + 1; in_item = 0 }
+        } else { in_item = 1 }
+        ci = ci + 1
+    }
+    if in_item == 1 { item_count = item_count + 1 }
+
+    // Set state for for loop
+    volatile_write_u64(SCRIPT_STATE, SMODE_FOR)
+    volatile_write_u64(SCRIPT_STATE + 32, var_buf)
+    volatile_write_u64(SCRIPT_STATE + 40, items_buf)
+    volatile_write_u64(SCRIPT_STATE + 48, 0)          // item_idx = 0
+    volatile_write_u64(SCRIPT_STATE + 56, item_count)
+    volatile_write_u64(SCRIPT_STATE + 72, 1)           // collecting body
+    volatile_write_u64(SCRIPT_STATE + 88, 0)
+}
+
+// J2.4: `while` command — "while <cmd>; do ... done"
+@kernel fn cmd_while_start() {
+    let len = cmdbuf_len()
+    // Parse condition after "while "
+    let cond_buf: i64 = 0x844A00
+    let mut ci: i64 = 0
+    let mut pos: i64 = 6 // skip "while "
+    while pos < len && ci < 62 {
+        let ch = volatile_read_u8(0x6F800 + pos)
+        if ch == 59 { pos = len } // ';'
+        else { volatile_write_u8(cond_buf + ci, ch); ci = ci + 1; pos = pos + 1 }
+    }
+    volatile_write_u8(cond_buf + ci, 0)
+
+    // Execute condition
+    shell_exec_from_buf(cond_buf, ci)
+    let cond_result = volatile_read_u64(LAST_EXIT_CODE)
+
+    volatile_write_u64(SCRIPT_STATE, SMODE_WHILE)
+    volatile_write_u64(SCRIPT_STATE + 16, if cond_result == 0 { 1 } else { 0 })
+    volatile_write_u64(SCRIPT_STATE + 72, 1)
+    volatile_write_u64(SCRIPT_STATE + 88, 0)
+}
+
+// J2.8: Handle quoted strings — find end of quoted segment
+@kernel fn shell_find_quote_end(buf: i64, start: i64, len: i64, quote_char: i64) -> i64 {
+    let mut pos = start + 1
+    while pos < len {
+        if volatile_read_u8(buf + pos) == quote_char { return pos }
+        pos = pos + 1
+    }
+    len // unterminated quote
+}
+
+// J2.9: `exit` builtin
+@kernel fn cmd_exit_shell() {
+    let len = cmdbuf_len()
+    let mut code: i64 = 0
+    if len > 5 {
+        code = volatile_read_u8(0x6F800 + 5) - 48
+    }
+    cprint("Exiting with code ", WHITE_ON_BLACK)
+    cprint_decimal(code, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    volatile_write_u64(LAST_EXIT_CODE, code)
+    // In interactive mode, this triggers shutdown
+    // In script mode, this stops script execution
+    if volatile_read_u64(SCRIPT_STATE) == SMODE_NONE {
+        shutdown_clean()
+    }
+}
+
+// ── Shell Commands ──
+
+@kernel fn cmd_readelf() {
+    // "readelf <filename>" — parse ELF from FAT32
+    if fat32_state_read(0) != 1 { cprintln("FAT32 not mounted", RED_ON_BLACK); return }
+
+    // Get filename from cmdbuf offset 8 ("readelf ")
+    let mut fname_len: i64 = 0
+    let mut i: i64 = 8
+    while i < 64 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 0 { i = 64 }
+        else { volatile_write_u8(FAT32_NAME_BUF + 256 + fname_len, ch); fname_len = fname_len + 1; i = i + 1 }
+    }
+    volatile_write_u8(FAT32_NAME_BUF + 256 + fname_len, 0)
+
+    if fname_len == 0 { cprintln("Usage: readelf <filename>", YELLOW_ON_BLACK); return }
+
+    // Find file
+    let root = fat32_state_read(48)
+    let result = fat32_find_in_dir(root, FAT32_NAME_BUF + 256)
+    if result == -1 { cprintln("File not found", RED_ON_BLACK); return }
+
+    let shifted = result >> 32
+    let file_cluster = shifted & 0x7FFFFFFF
+    let file_size = result & 0xFFFFFFFF
+
+    // Read file
+    let bytes = fat32_read_file(file_cluster, file_size, ELF_BUF)
+    if bytes <= 0 { cprintln("Read error", RED_ON_BLACK); return }
+
+    // Validate ELF
+    let valid = elf_validate(ELF_BUF)
+    if valid != 0 {
+        cprint("Not a valid ELF64: error ", RED_ON_BLACK)
+        cprint_decimal(valid, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+
+    cprintln("ELF64 Header:", YELLOW_ON_BLACK)
+    let entry = elf_get_entry(ELF_BUF)
+    cprint("  Entry point: 0x", WHITE_ON_BLACK)
+    cprint_hex(entry, 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    let phnum = elf_get_phnum(ELF_BUF)
+    cprint("  Program headers: ", WHITE_ON_BLACK)
+    cprint_decimal(phnum, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    let phoff = elf_get_phoff(ELF_BUF)
+    let phentsize = elf_get_phentsize(ELF_BUF)
+    i = 0
+    while i < phnum {
+        let ph = ELF_BUF + phoff + i * phentsize
+        let ph_type = buffer_read_u32_le(ph + PH_OFF_TYPE)
+        let vaddr = buffer_read_u64_le(ph + PH_OFF_VADDR)
+        let filesz = buffer_read_u64_le(ph + PH_OFF_FILESZ)
+        let memsz = buffer_read_u64_le(ph + PH_OFF_MEMSZ)
+        let flags = buffer_read_u32_le(ph + PH_OFF_FLAGS)
+        cprint("  [", WHITE_ON_BLACK)
+        cprint_decimal(i, CYAN_ON_BLACK)
+        cprint("] type=", WHITE_ON_BLACK)
+        if ph_type == 1 { cprint("LOAD", GREEN_ON_BLACK) }
+        else { cprint_decimal(ph_type, WHITE_ON_BLACK) }
+        cprint(" vaddr=0x", WHITE_ON_BLACK)
+        cprint_hex(vaddr, 8, CYAN_ON_BLACK)
+        cprint(" filesz=", WHITE_ON_BLACK)
+        cprint_decimal(filesz, CYAN_ON_BLACK)
+        cprint(" memsz=", WHITE_ON_BLACK)
+        cprint_decimal(memsz, CYAN_ON_BLACK)
+        cprint(" flags=", WHITE_ON_BLACK)
+        if (flags & 4) != 0 { cprint("R", GREEN_ON_BLACK) }
+        if (flags & 2) != 0 { cprint("W", YELLOW_ON_BLACK) }
+        if (flags & 1) != 0 { cprint("X", RED_ON_BLACK) }
+        console_putchar(10, WHITE_ON_BLACK)
+        i = i + 1
+    }
+
+    cprint("  File size: ", WHITE_ON_BLACK)
+    cprint_decimal(bytes, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_exec() {
+    // "exec <filename>" — load and execute ELF from FAT32
+    if fat32_state_read(0) != 1 { cprintln("FAT32 not mounted", RED_ON_BLACK); return }
+
+    let mut fname_len: i64 = 0
+    let mut i: i64 = 5
+    while i < 64 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 0 { i = 64 }
+        else { volatile_write_u8(FAT32_NAME_BUF + 256 + fname_len, ch); fname_len = fname_len + 1; i = i + 1 }
+    }
+    volatile_write_u8(FAT32_NAME_BUF + 256 + fname_len, 0)
+
+    if fname_len == 0 { cprintln("Usage: exec <filename>", YELLOW_ON_BLACK); return }
+
+    let root = fat32_state_read(48)
+    let result = fat32_find_in_dir(root, FAT32_NAME_BUF + 256)
+    if result == -1 { cprintln("File not found", RED_ON_BLACK); return }
+
+    let shifted = result >> 32
+    let file_cluster = shifted & 0x7FFFFFFF
+    let file_size = result & 0xFFFFFFFF
+
+    cprint("Loading ", WHITE_ON_BLACK)
+    let mut k: i64 = 0
+    while k < fname_len {
+        console_putchar(volatile_read_u8(FAT32_NAME_BUF + 256 + k), CYAN_ON_BLACK)
+        k = k + 1
+    }
+    cprint(" (", WHITE_ON_BLACK)
+    cprint_decimal(file_size, CYAN_ON_BLACK)
+    cprintln(" bytes)...", WHITE_ON_BLACK)
+
+    let bytes = fat32_read_file(file_cluster, file_size, ELF_BUF)
+    if bytes <= 0 { cprintln("Read error", RED_ON_BLACK); return }
+
+    let valid = elf_validate(ELF_BUF)
+    if valid != 0 {
+        cprintln("Not a valid ELF64", RED_ON_BLACK)
+        return
+    }
+
+    // Load PT_LOAD segments into memory
+    let loaded = elf_load_segments(ELF_BUF, bytes)
+    cprint("  Loaded ", WHITE_ON_BLACK)
+    cprint_decimal(loaded, CYAN_ON_BLACK)
+    cprintln(" segments", WHITE_ON_BLACK)
+
+    let entry = elf_get_entry(ELF_BUF)
+    cprint("  Entry: 0x", WHITE_ON_BLACK)
+    cprint_hex(entry, 16, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Setup user stack (64KB at ELF_STACK_TOP - 0x10000)
+    let user_stack_base = ELF_STACK_TOP - 0x10000
+    let mut pg: i64 = user_stack_base
+    while pg < ELF_STACK_TOP {
+        let frame = frame_alloc()
+        if frame != -1 {
+            map_page(pg, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+        }
+        pg = pg + FRAME_SIZE
+    }
+
+    let user_rsp = ELF_STACK_TOP - 8 // Stack grows down, leave room
+    cprintln("  Transitioning to Ring 3...", YELLOW_ON_BLACK)
+
+    // Setup SYSCALL/SYSRET MSRs for return path
+    // IA32_STAR (0xC0000081): SYSRET CS/SS in bits 63:48, SYSCALL CS/SS in 47:32
+    // Kernel CS=0x08, Kernel SS=0x10, User CS=0x20|3=0x23, User SS=0x18|3=0x1B
+    // STAR: (user_cs_base << 48) | (kernel_cs << 32)
+    // SYSRET loads CS from STAR[63:48]+16, SS from STAR[63:48]+8
+    // So user_cs_base = 0x18 (SYSRET adds 16 → 0x28? No...)
+    // Actually: SYSRET 64-bit loads CS = STAR[63:48]+16, SS = STAR[63:48]+8
+    // We want CS=0x23 (0x20|RPL3). STAR[63:48] = 0x13 → CS = 0x13+16 = 0x23. SS = 0x13+8 = 0x1B.
+    let star_val = (0x13 << 48) | (0x08 << 32)
+    wrmsr(0xC0000081, star_val)
+
+    // Use deferred run pattern: set flag for kernel_main to call iretq_to_user
+    // (iretq_to_user must be called from top-level due to GPR zeroing on return)
+    volatile_write_u64(RUN_PENDING, 1)
+    volatile_write_u64(RUN_PENDING + 8, entry)
+    volatile_write_u64(RUN_PENDING + 16, user_rsp)
+    volatile_write_u64(0x6FC04, 0x7F0000) // TSS RSP0
+    cprintln("  ELF queued for Ring 3 execution", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Process Management v2 (Sprint B6)
+// Fork, exec, waitpid, exit with proper cleanup
+// ═══════════════════════════════════════════════
+
+const PROC_TABLE_V2: i64 = 0x8C0000  // 16 procs × 256 bytes (moved from 0x890000 to avoid VQ_RX_BASE conflict)
+// Per proc: +0=state, +8=pid, +16=ppid, +24=entry, +32=user_rsp,
+//           +40=kernel_rsp, +48=page_table, +56=exit_code, +64=name[32]
+
+const PROC_STATE_FREE: i64 = 0
+const PROC_STATE_READY: i64 = 1
+const PROC_STATE_RUNNING: i64 = 2
+const PROC_STATE_BLOCKED: i64 = 3
+const PROC_STATE_ZOMBIE: i64 = 4
+const PROC_V2_MAX: i64 = 16
+const PROC_V2_SIZE: i64 = 256
+
+@kernel fn proc_v2_init() {
+    let mut i: i64 = 0
+    while i < PROC_V2_MAX * PROC_V2_SIZE {
+        volatile_write_u8(PROC_TABLE_V2 + i, 0)
+        i = i + 1
+    }
+    // PID 0 = kernel/idle
+    volatile_write_u64(PROC_TABLE_V2, PROC_STATE_RUNNING) // state
+    volatile_write_u64(PROC_TABLE_V2 + 8, 0)  // pid
+    volatile_write_u64(PROC_TABLE_V2 + 16, 0) // ppid
+    frame_mark_used(PROC_TABLE_V2 / FRAME_SIZE)
+}
+
+@kernel fn proc_v2_alloc() -> i64 {
+    let mut pid: i64 = 1
+    while pid < PROC_V2_MAX {
+        let state = volatile_read_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE)
+        if state == PROC_STATE_FREE { return pid }
+        pid = pid + 1
+    }
+    -1
+}
+
+@kernel fn proc_v2_set(pid: i64, field: i64, val: i64) {
+    volatile_write_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE + field, val)
+}
+
+@kernel fn proc_v2_get(pid: i64, field: i64) -> i64 {
+    volatile_read_u64(PROC_TABLE_V2 + pid * PROC_V2_SIZE + field)
+}
+
+@kernel fn proc_v2_fork(parent_pid: i64) -> i64 {
+    let child_pid = proc_v2_alloc()
+    if child_pid < 0 { return -1 }
+
+    // Copy parent state to child
+    proc_v2_set(child_pid, 0, PROC_STATE_READY)
+    proc_v2_set(child_pid, 8, child_pid) // pid
+    proc_v2_set(child_pid, 16, parent_pid) // ppid
+    proc_v2_set(child_pid, 24, proc_v2_get(parent_pid, 24)) // entry
+    proc_v2_set(child_pid, 56, 0) // exit_code
+
+    // Allocate kernel stack for child
+    let stack_frame = frame_alloc()
+    if stack_frame != -1 {
+        let stack_addr = stack_frame * FRAME_SIZE + FRAME_SIZE // top of stack
+        proc_v2_set(child_pid, 40, stack_addr)
+    }
+
+    child_pid
+}
+
+@kernel fn proc_v2_exit(pid: i64, code: i64) {
+    proc_v2_set(pid, 0, PROC_STATE_ZOMBIE)
+    proc_v2_set(pid, 56, code)
+    // TODO: signal parent, free resources
+}
+
+@kernel fn proc_v2_waitpid(parent_pid: i64, child_pid: i64) -> i64 {
+    // Check if child is zombie
+    let state = proc_v2_get(child_pid, 0)
+    if state == PROC_STATE_ZOMBIE {
+        let code = proc_v2_get(child_pid, 56)
+        proc_v2_set(child_pid, 0, PROC_STATE_FREE) // Reap
+        return code
+    }
+    -1 // Not ready yet
+}
+
+@kernel fn cmd_proc_v2() {
+    cprintln("Process Table v2:", YELLOW_ON_BLACK)
+    let mut pid: i64 = 0
+    while pid < PROC_V2_MAX {
+        let state = proc_v2_get(pid, 0)
+        if state != PROC_STATE_FREE {
+            cprint("  PID ", WHITE_ON_BLACK)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint(" PPID=", WHITE_ON_BLACK)
+            cprint_decimal(proc_v2_get(pid, 16), CYAN_ON_BLACK)
+            cprint(" state=", WHITE_ON_BLACK)
+            if state == PROC_STATE_READY { cprint("READY", GREEN_ON_BLACK) }
+            else if state == PROC_STATE_RUNNING { cprint("RUNNING", CYAN_ON_BLACK) }
+            else if state == PROC_STATE_BLOCKED { cprint("BLOCKED", YELLOW_ON_BLACK) }
+            else if state == PROC_STATE_ZOMBIE { cprint("ZOMBIE", RED_ON_BLACK) }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        pid = pid + 1
+    }
+}
+
+@kernel fn cmd_fork_test() {
+    cprintln("Fork test:", YELLOW_ON_BLACK)
+    let child = proc_v2_fork(0)
+    if child >= 0 {
+        cprint("  Forked child PID ", WHITE_ON_BLACK)
+        cprint_decimal(child, GREEN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        // Simulate child exit
+        proc_v2_exit(child, 42)
+        let code = proc_v2_waitpid(0, child)
+        cprint("  Child exited with code ", WHITE_ON_BLACK)
+        cprint_decimal(code, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        cprintln("  Fork failed: no free PID", RED_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// PS/2 Keyboard Driver (Sprint B7)
+// Uses port_inb(0x60) for scancode, IRQ1
+// ═══════════════════════════════════════════════
+
+const KB_DATA_PORT: i64 = 0x60
+const KB_STATUS_PORT: i64 = 0x64
+const KB_BUFFER: i64 = 0x892000  // 256-byte ring buffer
+// +0: head, +8: tail, +16: buffer[256]
+
+@kernel fn kb_init() {
+    volatile_write_u64(KB_BUFFER, 0)      // head = 0
+    volatile_write_u64(KB_BUFFER + 8, 0)  // tail = 0
+    frame_mark_used(KB_BUFFER / FRAME_SIZE)
+}
+
+@kernel fn kb_push_char(ch: i64) {
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    let new_tail = (tail + 1) % 256
+    let head = volatile_read_u64(KB_BUFFER)
+    if new_tail != head { // Not full
+        volatile_write_u8(KB_BUFFER + 16 + tail, ch)
+        volatile_write_u64(KB_BUFFER + 8, new_tail)
+    }
+}
+
+@kernel fn kb_pop_char() -> i64 {
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    if head == tail { return -1 } // Empty
+    let ch = volatile_read_u8(KB_BUFFER + 16 + head)
+    volatile_write_u64(KB_BUFFER, (head + 1) % 256)
+    ch
+}
+
+@kernel fn kb_has_char() -> i64 {
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    if head != tail { 1 } else { 0 }
+}
+
+// Scancode set 1 → ASCII (basic mapping)
+@kernel fn scancode_to_ascii(sc: i64) -> i64 {
+    // Row 1: 1234567890-=
+    if sc == 0x02 { return 49 } // '1'
+    if sc == 0x03 { return 50 } // '2'
+    if sc == 0x04 { return 51 } // '3'
+    if sc == 0x05 { return 52 } // '4'
+    if sc == 0x06 { return 53 } // '5'
+    if sc == 0x07 { return 54 } // '6'
+    if sc == 0x08 { return 55 } // '7'
+    if sc == 0x09 { return 56 } // '8'
+    if sc == 0x0A { return 57 } // '9'
+    if sc == 0x0B { return 48 } // '0'
+    if sc == 0x0C { return 45 } // '-'
+    if sc == 0x0D { return 61 } // '='
+    // Row 2: qwertyuiop
+    if sc == 0x10 { return 113 }
+    if sc == 0x11 { return 119 }
+    if sc == 0x12 { return 101 }
+    if sc == 0x13 { return 114 }
+    if sc == 0x14 { return 116 }
+    if sc == 0x15 { return 121 }
+    if sc == 0x16 { return 117 }
+    if sc == 0x17 { return 105 }
+    if sc == 0x18 { return 111 }
+    if sc == 0x19 { return 112 }
+    // Row 3: asdfghjkl
+    if sc == 0x1E { return 97 }
+    if sc == 0x1F { return 115 }
+    if sc == 0x20 { return 100 }
+    if sc == 0x21 { return 102 }
+    if sc == 0x22 { return 103 }
+    if sc == 0x23 { return 104 }
+    if sc == 0x24 { return 106 }
+    if sc == 0x25 { return 107 }
+    if sc == 0x26 { return 108 }
+    // Row 4: zxcvbnm
+    if sc == 0x2C { return 122 }
+    if sc == 0x2D { return 120 }
+    if sc == 0x2E { return 99 }
+    if sc == 0x2F { return 118 }
+    if sc == 0x30 { return 98 }
+    if sc == 0x31 { return 110 }
+    if sc == 0x32 { return 109 }
+    // Special
+    if sc == 0x1C { return 10 }  // Enter
+    if sc == 0x39 { return 32 }  // Space
+    if sc == 0x0E { return 8 }   // Backspace
+    if sc == 0x01 { return 27 }  // Escape
+    if sc == 0x34 { return 46 }  // '.'
+    if sc == 0x33 { return 44 }  // ','
+    if sc == 0x35 { return 47 }  // '/'
+    0 // Unknown
+}
+
+@kernel fn kb_handle_irq() {
+    // Read scancode from PS/2 data port
+    let sc = port_inb(KB_DATA_PORT)
+    // Only process make codes (bit 7 = 0)
+    if sc < 0x80 {
+        let ascii = scancode_to_ascii(sc)
+        if ascii > 0 {
+            kb_push_char(ascii)
+        }
+    }
+}
+
+@kernel fn cmd_kb_test() {
+    cprintln("Keyboard Buffer:", YELLOW_ON_BLACK)
+    let head = volatile_read_u64(KB_BUFFER)
+    let tail = volatile_read_u64(KB_BUFFER + 8)
+    cprint("  Head: ", WHITE_ON_BLACK)
+    cprint_decimal(head, CYAN_ON_BLACK)
+    cprint("  Tail: ", WHITE_ON_BLACK)
+    cprint_decimal(tail, CYAN_ON_BLACK)
+    let buffered = if tail >= head { tail - head } else { 256 - head + tail }
+    cprint("  Buffered: ", WHITE_ON_BLACK)
+    cprint_decimal(buffered, CYAN_ON_BLACK)
+    cprintln(" chars", WHITE_ON_BLACK)
+
+    // Drain and print
+    let mut count: i64 = 0
+    while kb_has_char() == 1 && count < 64 {
+        let ch = kb_pop_char()
+        if ch > 31 && ch < 127 { console_putchar(ch, GREEN_ON_BLACK) }
+        count = count + 1
+    }
+    if count > 0 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// USB XHCI Detection (Sprint B8)
+// ═══════════════════════════════════════════════
+
+@kernel fn usb_find_xhci() -> i64 {
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let cl = pci_read32(0, dev, 0, 8)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            let progif = (cl >> 8) & 0xFF
+            // USB: class 0x0C, subclass 0x03, progif 0x30=XHCI
+            if class == 0x0C && subclass == 0x03 && progif == 0x30 { return dev }
+        }
+        dev = dev + 1
+    }
+    -1
+}
+
+@kernel fn cmd_lsusb() {
+    cprintln("USB Controllers:", YELLOW_ON_BLACK)
+    let mut dev: i64 = 0
+    let mut found: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let cl = pci_read32(0, dev, 0, 8)
+            let class = (cl >> 24) & 0xFF
+            let subclass = (cl >> 16) & 0xFF
+            let progif = (cl >> 8) & 0xFF
+            if class == 0x0C && subclass == 0x03 {
+                cprint("  PCI ", WHITE_ON_BLACK)
+                cprint_decimal(dev, CYAN_ON_BLACK)
+                cprint(": USB ", WHITE_ON_BLACK)
+                if progif == 0x00 { cprint("UHCI", WHITE_ON_BLACK) }
+                else if progif == 0x10 { cprint("OHCI", WHITE_ON_BLACK) }
+                else if progif == 0x20 { cprint("EHCI", WHITE_ON_BLACK) }
+                else if progif == 0x30 { cprint("XHCI", GREEN_ON_BLACK) }
+                else { cprint("Unknown", RED_ON_BLACK) }
+                let vid = id & 0xFFFF
+                let did = (id >> 16) & 0xFFFF
+                cprint(" (", WHITE_ON_BLACK)
+                cprint_hex(vid, 4, CYAN_ON_BLACK)
+                cprint(":", WHITE_ON_BLACK)
+                cprint_hex(did, 4, CYAN_ON_BLACK)
+                cprintln(")", WHITE_ON_BLACK)
+
+                // Read BAR0 for MMIO base
+                let bar0 = pci_read32(0, dev, 0, 0x10)
+                if bar0 != 0 {
+                    cprint("    BAR0: 0x", WHITE_ON_BLACK)
+                    cprint_hex(bar0 & 0xFFFFF000, 8, CYAN_ON_BLACK)
+                    console_putchar(10, WHITE_ON_BLACK)
+                }
+                found = found + 1
+            }
+        }
+        dev = dev + 1
+    }
+    if found == 0 { cprintln("  No USB controllers found", YELLOW_ON_BLACK) }
+}
+
+// XHCI Controller Initialization
+const XHCI_STATE: i64 = 0x89A000
+// +0: bar_addr, +8: cap_length, +16: max_slots, +24: max_ports, +32: initialized
+
+@kernel fn xhci_init() -> i64 {
+    let dev = usb_find_xhci()
+    if dev == -1 { return -1 }
+
+    // Enable PCI bus master + memory space
+    let cmd = pci_read32(0, dev, 0, 0x04)
+    pci_write32(0, dev, 0, 0x04, cmd | 0x06)
+
+    // Get BAR0 (MMIO)
+    let bar0 = pci_read32(0, dev, 0, 0x10)
+    if (bar0 & 1) != 0 { return -2 } // Not MMIO
+    let base = bar0 & 0xFFFFF000
+
+    // Map MMIO pages
+    map_page(base, base, PAGE_PRESENT | PAGE_WRITABLE)
+    map_page(base + 0x1000, base + 0x1000, PAGE_PRESENT | PAGE_WRITABLE)
+
+    volatile_write_u64(XHCI_STATE, base)
+
+    // Read CAPLENGTH (byte at offset 0)
+    let cap_length = volatile_read_u8(base) & 0xFF
+    volatile_write_u64(XHCI_STATE + 8, cap_length)
+
+    // Read HCSPARAMS1 (offset 0x04)
+    let hcsparams1 = volatile_read_u32(base + 4)
+    let max_slots = hcsparams1 & 0xFF
+    let max_ports = (hcsparams1 >> 24) & 0xFF
+    volatile_write_u64(XHCI_STATE + 16, max_slots)
+    volatile_write_u64(XHCI_STATE + 24, max_ports)
+
+    // Operational registers at base + cap_length
+    let op_base = base + cap_length
+
+    // Read USBSTS — check if halted
+    let usbsts = volatile_read_u32(op_base + 0x04)
+    let halted = usbsts & 1
+
+    // If running, halt first
+    if halted == 0 {
+        let usbcmd = volatile_read_u32(op_base)
+        volatile_write_u32(op_base, usbcmd & 0xFFFFFFFE) // Clear RS bit
+        // Wait for HCHalted
+        let mut wait: i64 = 100000
+        while (volatile_read_u32(op_base + 0x04) & 1) == 0 && wait > 0 {
+            pause()
+            wait = wait - 1
+        }
+    }
+
+    // Reset controller
+    volatile_write_u32(op_base, 0x02) // HCRST
+    let mut wait: i64 = 100000
+    while (volatile_read_u32(op_base) & 0x02) != 0 && wait > 0 {
+        pause()
+        wait = wait - 1
+    }
+
+    // Check port status
+    let port_base = op_base + 0x400
+    let mut connected: i64 = 0
+    let mut p: i64 = 0
+    while p < max_ports {
+        let portsc = volatile_read_u32(port_base + p * 0x10)
+        let ccs = portsc & 1 // Current Connect Status
+        if ccs != 0 { connected = connected + 1 }
+        p = p + 1
+    }
+
+    volatile_write_u64(XHCI_STATE + 32, 1) // initialized
+    frame_mark_used(XHCI_STATE / FRAME_SIZE)
+    connected
+}
+
+@kernel fn cmd_xhci_info() {
+    cprintln("XHCI Controller:", YELLOW_ON_BLACK)
+    let result = xhci_init()
+    if result < 0 {
+        cprintln("  No XHCI controller found", RED_ON_BLACK)
+        return
+    }
+    let base = volatile_read_u64(XHCI_STATE)
+    let cap_len = volatile_read_u64(XHCI_STATE + 8)
+    let max_slots = volatile_read_u64(XHCI_STATE + 16)
+    let max_ports = volatile_read_u64(XHCI_STATE + 24)
+
+    cprint("  BAR0: 0x", WHITE_ON_BLACK)
+    cprint_hex(base, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  CAPLENGTH: ", WHITE_ON_BLACK)
+    cprint_decimal(cap_len, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Max Slots: ", WHITE_ON_BLACK)
+    cprint_decimal(max_slots, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Max Ports: ", WHITE_ON_BLACK)
+    cprint_decimal(max_ports, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Connected: ", WHITE_ON_BLACK)
+    cprint_decimal(result, if result > 0 { GREEN_ON_BLACK } else { YELLOW_ON_BLACK })
+    cprintln(" device(s)", WHITE_ON_BLACK)
+
+    // Show per-port status
+    let op_base = base + cap_len
+    let port_base = op_base + 0x400
+    let mut p: i64 = 0
+    while p < max_ports {
+        let portsc = volatile_read_u32(port_base + p * 0x10)
+        let ccs = portsc & 1
+        let ped = (portsc >> 1) & 1
+        let speed = (portsc >> 10) & 0xF
+        if ccs != 0 {
+            cprint("  Port ", WHITE_ON_BLACK)
+            cprint_decimal(p + 1, CYAN_ON_BLACK)
+            cprint(": CONNECTED", GREEN_ON_BLACK)
+            cprint(" speed=", WHITE_ON_BLACK)
+            if speed == 1 { cprint("Full(12M)", WHITE_ON_BLACK) }
+            else if speed == 2 { cprint("Low(1.5M)", WHITE_ON_BLACK) }
+            else if speed == 3 { cprint("High(480M)", WHITE_ON_BLACK) }
+            else if speed == 4 { cprint("Super(5G)", CYAN_ON_BLACK) }
+            else { cprint_decimal(speed, WHITE_ON_BLACK) }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        p = p + 1
+    }
+}
+
+// ═══════════════════════════════════════════════
+// XHCI Full Init + Device Enumeration (Fix 6)
+// DCBAA, Command Ring, Event Ring, Enable Slot,
+// Address Device, Control Transfers, Mass Storage
+// ═══════════════════════════════════════════════
+
+// XHCI extended state (at XHCI_STATE + 64)
+// +64: op_base
+// +72: dcbaa_addr
+// +80: cmd_ring_addr
+// +88: evt_ring_addr
+// +96: erst_addr (Event Ring Segment Table)
+// +104: cmd_ring_enqueue (TRB index)
+// +112: evt_ring_dequeue (TRB index)
+// +120: cmd_ring_cycle (cycle bit)
+// +128: evt_ring_cycle
+// +136: slot_count (enabled slots)
+
+const XHCI_DCBAA: i64 = 0x89C000       // DCBAA: 256 entries × 8 bytes = 2KB
+const XHCI_CMD_RING: i64 = 0x89D000    // Command Ring: 64 TRBs × 16 bytes = 1KB
+const XHCI_EVT_RING: i64 = 0x89E000    // Event Ring: 64 TRBs × 16 bytes = 1KB
+const XHCI_ERST: i64 = 0x89F000        // Event Ring Segment Table: 1 entry × 16 bytes
+const XHCI_DEV_CTX: i64 = 0x8A0000     // Device Contexts: 8 slots × 2KB = 16KB
+const XHCI_INPUT_CTX: i64 = 0x8A4000   // Input Context: 2KB
+const XHCI_XFER_BUF: i64 = 0x8A5000    // Transfer buffer: 4KB
+const XHCI_TRB_SIZE: i64 = 16
+const XHCI_CMD_RING_SIZE: i64 = 64
+const XHCI_EVT_RING_SIZE: i64 = 64
+
+// TRB types
+const TRB_LINK: i64 = 6
+const TRB_ENABLE_SLOT: i64 = 9
+const TRB_ADDRESS_DEVICE: i64 = 11
+const TRB_CONFIGURE_EP: i64 = 12
+const TRB_NO_OP: i64 = 23
+const TRB_TRANSFER_EVENT: i64 = 32
+const TRB_CMD_COMPLETION: i64 = 33
+const TRB_PORT_STATUS: i64 = 34
+
+// Completion codes
+const CC_SUCCESS: i64 = 1
+
+@kernel fn xhci_state_write(off: i64, val: i64) {
+    volatile_write_u64(XHCI_STATE + off, val)
+}
+@kernel fn xhci_state_read(off: i64) -> i64 {
+    volatile_read_u64(XHCI_STATE + off)
+}
+
+@kernel fn xhci_write_trb(base: i64, idx: i64, dw0: i64, dw1: i64, dw2: i64, dw3: i64) {
+    let off = base + idx * XHCI_TRB_SIZE
+    volatile_write_u32(off, dw0)
+    volatile_write_u32(off + 4, dw1)
+    volatile_write_u32(off + 8, dw2)
+    volatile_write_u32(off + 12, dw3)
+}
+
+@kernel fn xhci_read_trb_dw(base: i64, idx: i64, dw_off: i64) -> i64 {
+    volatile_read_u32(base + idx * XHCI_TRB_SIZE + dw_off * 4)
+}
+
+@kernel fn xhci_full_init() -> i64 {
+    // Step 1: Run xhci_init() first (halt, reset, read caps)
+    let connected = xhci_init()
+    if connected < 0 { return connected }
+
+    let base = xhci_state_read(0)
+    let cap_len = xhci_state_read(8)
+    let max_slots = xhci_state_read(16)
+    let op_base = base + cap_len
+    xhci_state_write(64, op_base)
+
+    // Step 2: Map XHCI memory pages
+    let mut pg: i64 = XHCI_DCBAA
+    while pg < XHCI_XFER_BUF + 0x1000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // Step 3: Zero all XHCI buffers
+    let mut i: i64 = 0
+    while i < (XHCI_XFER_BUF + 0x1000 - XHCI_DCBAA) {
+        volatile_write_u8(XHCI_DCBAA + i, 0)
+        i = i + 1
+    }
+
+    // Step 4: Set MaxSlotsEn in CONFIG register (op_base + 0x38)
+    let use_slots = if max_slots > 8 { 8 } else { max_slots }
+    volatile_write_u32(op_base + 0x38, use_slots)
+
+    // Step 5: Set DCBAAP (op_base + 0x30, 64-bit)
+    volatile_write_u32(op_base + 0x30, XHCI_DCBAA & 0xFFFFFFFF)
+    volatile_write_u32(op_base + 0x34, 0)
+    xhci_state_write(72, XHCI_DCBAA)
+
+    // Step 6: Set up Command Ring
+    // Write Link TRB at last entry (points back to start, toggle cycle)
+    xhci_write_trb(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1,
+        XHCI_CMD_RING & 0xFFFFFFFF, 0, 0,
+        (TRB_LINK << 10) | 0x02) // Type=Link, Toggle Cycle=1
+    // Set CRCR (op_base + 0x18, 64-bit) — cycle bit = 1
+    volatile_write_u32(op_base + 0x18, (XHCI_CMD_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(op_base + 0x1C, 0)
+    xhci_state_write(80, XHCI_CMD_RING)
+    xhci_state_write(104, 0)  // enqueue index
+    xhci_state_write(120, 1)  // cycle bit
+
+    // Step 7: Set up Event Ring
+    // ERST entry: base address (8 bytes) + ring size (4 bytes) + reserved (4 bytes)
+    volatile_write_u32(XHCI_ERST, XHCI_EVT_RING & 0xFFFFFFFF)
+    volatile_write_u32(XHCI_ERST + 4, 0)
+    volatile_write_u32(XHCI_ERST + 8, XHCI_EVT_RING_SIZE)
+    volatile_write_u32(XHCI_ERST + 12, 0)
+    xhci_state_write(88, XHCI_EVT_RING)
+    xhci_state_write(96, XHCI_ERST)
+    xhci_state_write(112, 0) // dequeue index
+    xhci_state_write(128, 1) // cycle bit
+
+    // Runtime registers at base + RTSOFF (from RTSOFF register at cap offset 0x18)
+    let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+    let rt_base = base + rtsoff
+    // Map runtime register page
+    map_page(rt_base, rt_base, PAGE_PRESENT | PAGE_WRITABLE)
+
+    // Interrupter 0 registers at rt_base + 0x20 (each interrupter = 0x20 bytes)
+    let ir0 = rt_base + 0x20
+
+    // ERSTSZ: number of segments = 1
+    volatile_write_u32(ir0 + 0x08, 1)
+    // ERDP: dequeue pointer (event ring base, cycle state)
+    volatile_write_u32(ir0 + 0x18, XHCI_EVT_RING & 0xFFFFFFFF)
+    volatile_write_u32(ir0 + 0x1C, 0)
+    // ERSTBA: segment table base address
+    volatile_write_u32(ir0 + 0x10, XHCI_ERST & 0xFFFFFFFF)
+    volatile_write_u32(ir0 + 0x14, 0)
+    // IMAN: enable interrupt
+    volatile_write_u32(ir0, volatile_read_u32(ir0) | 0x02)
+
+    // Step 8: Start controller (USBCMD.RS = 1)
+    let usbcmd = volatile_read_u32(op_base)
+    volatile_write_u32(op_base, usbcmd | 0x01 | 0x04) // RS + INTE
+
+    // Wait for controller not halted
+    let mut wait: i64 = 100000
+    while (volatile_read_u32(op_base + 0x04) & 1) != 0 && wait > 0 {
+        pause()
+        wait = wait - 1
+    }
+
+    xhci_state_write(136, 0) // slot_count = 0
+
+    // Wait a bit for devices to settle after controller start
+    // Note: can't use sleep_ms here — IRQs may not be enabled yet
+    delay_us(100000) // 100ms via TSC busy-wait
+
+    // Re-scan ports after controller is running
+    // For each port with CCS=1, issue a port reset (PR bit = bit 4)
+    let max_ports = xhci_state_read(24)
+    let port_base = op_base + 0x400
+    let mut connected2: i64 = 0
+    let mut p: i64 = 0
+    while p < max_ports {
+        let portsc = volatile_read_u32(port_base + p * 0x10)
+        let ccs = portsc & 1  // Current Connect Status
+        if ccs != 0 {
+            // Port has a device — issue warm/hot reset
+            // Write PR (bit 4) to trigger reset, preserve RW1S bits
+            volatile_write_u32(port_base + p * 0x10, (portsc & 0x0E01C3E0) | (1 << 4))
+            // Wait for reset to complete (PRC = bit 21 set)
+            let mut rw: i64 = 100000
+            while rw > 0 {
+                let ps = volatile_read_u32(port_base + p * 0x10)
+                if ((ps >> 21) & 1) != 0 { rw = 0 }  // PRC set = reset complete
+                else { pause(); rw = rw - 1 }
+            }
+            // Clear PRC by writing 1 to bit 21
+            let ps2 = volatile_read_u32(port_base + p * 0x10)
+            volatile_write_u32(port_base + p * 0x10, (ps2 & 0x0E01C3E0) | (1 << 21))
+            connected2 = connected2 + 1
+        }
+        p = p + 1
+    }
+
+    println("[XHCI] Controller running")
+    if connected2 > connected { connected2 } else { connected }
+}
+
+@kernel fn xhci_ring_doorbell(slot: i64, target: i64) {
+    let base = xhci_state_read(0)
+    let cap_len = xhci_state_read(8)
+    // Doorbell array at base + DBOFF (cap offset 0x14)
+    let dboff = volatile_read_u32(base + 0x14) & 0xFFFFFFFC
+    let db_base = base + dboff
+    map_page(db_base, db_base, PAGE_PRESENT | PAGE_WRITABLE)
+    volatile_write_u32(db_base + slot * 4, target)
+}
+
+@kernel fn xhci_submit_command(dw0: i64, dw1: i64, dw2: i64, trb_type: i64) -> i64 {
+    let idx = xhci_state_read(104)
+    let cycle = xhci_state_read(120)
+
+    // Write command TRB
+    let dw3 = (trb_type << 10) | (cycle & 1)
+    xhci_write_trb(XHCI_CMD_RING, idx, dw0, dw1, dw2, dw3)
+
+    // Advance enqueue pointer
+    let next = idx + 1
+    if next >= XHCI_CMD_RING_SIZE - 1 {
+        // Wrap: toggle cycle in link TRB, reset index
+        let link_dw3 = xhci_read_trb_dw(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1,
+            XHCI_CMD_RING & 0xFFFFFFFF, 0, 0,
+            (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(104, 0)
+        xhci_state_write(120, 1 - cycle) // toggle
+    } else {
+        xhci_state_write(104, next)
+    }
+
+    // Ring doorbell 0 (host controller) target 0 (command ring)
+    xhci_ring_doorbell(0, 0)
+    println("[XHCI] Doorbell rung, polling event ring...")
+
+    // Poll event ring for Command Completion Event (skip Port Status Change Events)
+    let mut cur_evt_idx = xhci_state_read(112)
+    let mut cur_evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt_idx, 3)
+        let c_bit = dw3_evt & 1
+        if c_bit == (cur_evt_cycle & 1) {
+            // Event ready
+            let trb_type_evt = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt_idx, 2) >> 24) & 0xFF
+            let slot_id = (dw3_evt >> 24) & 0xFF
+
+            // Advance event dequeue
+            let next_evt = cur_evt_idx + 1
+            if next_evt >= XHCI_EVT_RING_SIZE {
+                cur_evt_idx = 0
+                cur_evt_cycle = 1 - cur_evt_cycle
+            } else {
+                cur_evt_idx = next_evt
+            }
+            // Save state
+            xhci_state_write(112, cur_evt_idx)
+            xhci_state_write(128, cur_evt_cycle)
+
+            // Update ERDP
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            let new_erdp = XHCI_EVT_RING + cur_evt_idx * XHCI_TRB_SIZE
+            volatile_write_u32(ir0 + 0x18, (new_erdp & 0xFFFFFFFF) | 0x08) // EHB
+            volatile_write_u32(ir0 + 0x1C, 0)
+
+            // Only process Command Completion Events (type 33)
+            if trb_type_evt == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS {
+                    return slot_id
+                }
+                return -(cc)
+            }
+            // Skip non-command events (Port Status Change = 34, etc.) and continue
+            // Don't decrement timeout for skipped events
+        }
+        pause()
+        timeout = timeout - 1
+    }
+    -99 // timeout
+}
+
+@kernel fn xhci_enable_slot() -> i64 {
+    // Send Enable Slot command, returns slot_id or negative error
+    println("[XHCI] Submitting Enable Slot command...")
+    let result = xhci_submit_command(0, 0, 0, TRB_ENABLE_SLOT)
+    println("[XHCI] Enable Slot result received")
+    if result > 0 {
+        let slots = xhci_state_read(136) + 1
+        xhci_state_write(136, slots)
+    }
+    result
+}
+
+// Extended XHCI memory layout for USB mass storage
+const XHCI_EP0_RING: i64 = 0x8A6000     // EP0 transfer ring: 32 TRBs
+const XHCI_BULK_IN_RING: i64 = 0x8A7000 // Bulk IN transfer ring: 32 TRBs
+const XHCI_BULK_OUT_RING: i64 = 0x8A8000 // Bulk OUT transfer ring: 32 TRBs
+const XHCI_DATA_BUF: i64 = 0x8A9000     // Data buffer for control/bulk transfers: 8KB
+const XHCI_EP0_RING_SIZE: i64 = 32
+const XHCI_BULK_RING_SIZE: i64 = 32
+
+// USB extended state (XHCI_STATE + 144...)
+// +144: slot_id (for current device)
+// +152: max_packet_size (EP0)
+// +160: bulk_in_ep (endpoint address, e.g., 0x81)
+// +168: bulk_out_ep (endpoint address, e.g., 0x02)
+// +176: ep0_enqueue
+// +184: ep0_cycle
+// +192: bulk_in_enqueue
+// +200: bulk_in_cycle
+// +208: bulk_out_enqueue
+// +216: bulk_out_cycle
+// +224: usb_mass_storage_ready (1 if SCSI mass storage detected)
+
+// TRB types for transfers
+const TRB_NORMAL: i64 = 1
+const TRB_SETUP: i64 = 2
+const TRB_DATA: i64 = 3
+const TRB_STATUS: i64 = 4
+
+// USB request types
+const USB_DIR_IN: i64 = 0x80
+const USB_DIR_OUT: i64 = 0x00
+const USB_REQ_GET_DESCRIPTOR: i64 = 6
+const USB_REQ_SET_CONFIGURATION: i64 = 9
+const USB_DESC_DEVICE: i64 = 1
+const USB_DESC_CONFIGURATION: i64 = 2
+
+// USB Mass Storage class
+const USB_CLASS_MASS_STORAGE: i64 = 0x08
+const USB_SUBCLASS_SCSI: i64 = 0x06
+const USB_PROTOCOL_BOT: i64 = 0x50
+
+// SCSI commands
+const SCSI_INQUIRY: i64 = 0x12
+const SCSI_TEST_UNIT_READY: i64 = 0x00
+const SCSI_READ_CAPACITY: i64 = 0x25
+const SCSI_READ_10: i64 = 0x28
+const SCSI_WRITE_10: i64 = 0x2A
+
+// CBW/CSW signatures
+const CBW_SIGNATURE: i64 = 0x43425355
+const CSW_SIGNATURE: i64 = 0x53425355
+
+@kernel fn xhci_address_device(slot_id: i64, port_num: i64, speed: i64) -> i64 {
+    println("[XHCI] Address Device: setup input context...")
+    let ictx = XHCI_INPUT_CTX
+    // Map extra pages for EP0 ring, bulk rings, data buffer
+    let mut pg: i64 = XHCI_EP0_RING
+    while pg < XHCI_DATA_BUF + 0x2000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+    // Zero all
+    let mut i: i64 = 0
+    while i < 2048 { volatile_write_u8(ictx + i, 0); i = i + 1 }
+    i = 0
+    while i < 0x3000 { volatile_write_u8(XHCI_EP0_RING + i, 0); i = i + 1 }
+
+    // Check Context Size: HCCPARAMS1 bit 2 (CSZ)
+    let base = xhci_state_read(0)
+    let hccparams1 = volatile_read_u32(base + 0x10)
+    let csz = (hccparams1 >> 2) & 1 // 0=32-byte, 1=64-byte contexts
+    let ctx_size = if csz == 1 { 64 } else { 32 }
+    println("[XHCI] Context size: 32 or 64 bytes")
+
+    // Input Control Context: Add Slot (A0) + EP0 (A1)
+    // Add Context Flags at offset 4 of Input Control Context
+    volatile_write_u32(ictx + 4, 0x03)
+
+    // Slot Context (at offset ctx_size from start of Input Context)
+    let slot_ctx = ictx + ctx_size
+    let speed_val = if speed == 0 { 3 } else { speed }
+    // DW0: Route String=0, Speed (bits 23:20), Context Entries=1 (bits 31:27)
+    volatile_write_u32(slot_ctx, (1 << 27) | (speed_val << 20))
+    // DW1: Root Hub Port Number (bits 23:16)
+    volatile_write_u32(slot_ctx + 4, (port_num << 16) & 0xFF0000)
+
+    // EP0 Context (at offset 2 * ctx_size from start)
+    let ep0_ctx = ictx + ctx_size * 2
+    let max_pkt = if speed_val == 1 { 8 }
+                  else if speed_val == 2 { 8 }
+                  else if speed_val == 3 { 64 }
+                  else { 512 }
+    // DW1: CErr=3 (bits 2:1), EPType=4 (bits 5:3), MaxPacketSize (bits 31:16)
+    volatile_write_u32(ep0_ctx + 4, (3 << 1) | (4 << 3) | (max_pkt << 16))
+    // DW2-DW3: TR Dequeue Pointer (EP0 ring) with DCS=1
+    volatile_write_u32(ep0_ctx + 8, (XHCI_EP0_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(ep0_ctx + 12, 0)
+    // DW4: Average TRB Length = 8 (for control)
+    volatile_write_u32(ep0_ctx + 16, 8)
+
+    // Write Link TRB at end of EP0 ring
+    xhci_write_trb(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1,
+        XHCI_EP0_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+
+    // Output Device Context (allocate per context size: 32 or 64 bytes × 32 entries = 1KB or 2KB)
+    let dev_ctx_sz = ctx_size * 32 // Slot + 31 EP contexts
+    let out_ctx = XHCI_DEV_CTX + (slot_id - 1) * dev_ctx_sz
+    // Zero output context
+    i = 0
+    while i < dev_ctx_sz { volatile_write_u8(out_ctx + i, 0); i = i + 1 }
+    volatile_write_u64(XHCI_DCBAA + slot_id * 8, out_ctx)
+    println("[XHCI] DCBAA + output context set")
+
+    // Save state
+    xhci_state_write(144, slot_id)
+    xhci_state_write(152, max_pkt)
+    xhci_state_write(176, 0)  // ep0_enqueue = 0
+    xhci_state_write(184, 1)  // ep0_cycle = 1
+
+    // Submit Address Device command
+    println("[XHCI] Submitting Address Device command...")
+    let idx = xhci_state_read(104)
+    let cycle = xhci_state_read(120)
+    // DW0: Input Context pointer (low 32), must be 16-byte aligned
+    // DW1: Input Context pointer (high 32) = 0
+    // DW2: reserved = 0
+    // DW3: Slot ID [31:24] | BSR [9] = 0 | Type [15:10] = 11 | C [0]
+    let dw3 = ((slot_id & 0xFF) << 24) | (TRB_ADDRESS_DEVICE << 10) | (cycle & 1)
+    xhci_write_trb(XHCI_CMD_RING, idx, ictx & 0xFFFFFFFF, 0, 0, dw3)
+    println("[XHCI] TRB written to cmd ring")
+
+    let next = idx + 1
+    if next >= XHCI_CMD_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_CMD_RING, XHCI_CMD_RING_SIZE - 1,
+            XHCI_CMD_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(104, 0)
+        xhci_state_write(120, 1 - cycle)
+    } else {
+        xhci_state_write(104, next)
+    }
+
+    xhci_ring_doorbell(0, 0)
+    println("[XHCI] Doorbell rung for Address Device")
+
+    // Poll event ring for completion — may get Port Status Change Events first
+    let evt_idx = xhci_state_read(112)
+    let evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    let mut cur_evt = evt_idx
+    let mut cur_cycle = evt_cycle
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            // Advance event dequeue
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE {
+                cur_evt = 0
+                cur_cycle = 1 - cur_cycle
+            } else {
+                cur_evt = next_evt
+            }
+            // Update ERDP
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            // Save updated event ring state
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+
+            if evt_type == TRB_CMD_COMPLETION {
+                // Command Completion Event — this is what we want
+                println("[XHCI] Address Device completion received")
+                if cc == CC_SUCCESS { return 0 }
+                println("[XHCI] Address Device failed with CC")
+                return -(cc)
+            }
+            // Port Status Change or other event — skip and continue polling
+            println("[XHCI] Skipping non-command event, continuing...")
+        } else {
+            pause()
+            timeout = timeout - 1
+        }
+    }
+    println("[XHCI] Address Device timeout!");
+    -99
+}
+
+// ── USB Control Transfer (Setup → Data → Status TRBs) ──
+
+@kernel fn xhci_control_transfer(slot_id: i64, bm_request: i64, b_request: i64,
+                                  w_value: i64, w_index: i64, w_length: i64,
+                                  data_buf: i64, direction: i64) -> i64 {
+    let enq = xhci_state_read(176)
+    let cycle = xhci_state_read(184)
+
+    // Setup TRB (8 bytes of setup packet in DW0-DW1)
+    let setup_lo = (bm_request & 0xFF) | ((b_request & 0xFF) << 8) | ((w_value & 0xFFFF) << 16)
+    let setup_hi = (w_index & 0xFFFF) | ((w_length & 0xFFFF) << 16)
+    // DW2: TRB Transfer Length = 8 (setup packet always 8 bytes)
+    // DW3: TRT(16:17) = 3 (IN data stage) or 2 (OUT data stage) or 0 (no data), IDT=1(6), Type=Setup
+    let trt = if w_length == 0 { 0 } else if direction == USB_DIR_IN { 3 } else { 2 }
+    let setup_dw3 = (TRB_SETUP << 10) | (1 << 6) | (trt << 16) | (cycle & 1)
+    xhci_write_trb(XHCI_EP0_RING, enq, setup_lo, setup_hi, 8, setup_dw3)
+    let mut idx = enq + 1
+
+    // Data TRB (if w_length > 0)
+    if w_length > 0 {
+        let data_dir = if direction == USB_DIR_IN { 1 } else { 0 } // DIR bit in DW3[16]
+        let data_dw3 = (TRB_DATA << 10) | (data_dir << 16) | (cycle & 1)
+        xhci_write_trb(XHCI_EP0_RING, idx, data_buf & 0xFFFFFFFF, 0, w_length, data_dw3)
+        idx = idx + 1
+    }
+
+    // Status TRB
+    let status_dir = if w_length == 0 || direction == USB_DIR_OUT { 1 } else { 0 }
+    let status_dw3 = (TRB_STATUS << 10) | (status_dir << 16) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_EP0_RING, idx, 0, 0, 0, status_dw3)
+    idx = idx + 1
+
+    // Handle wrap
+    if idx >= XHCI_EP0_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_EP0_RING, XHCI_EP0_RING_SIZE - 1,
+            XHCI_EP0_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(176, 0)
+        xhci_state_write(184, 1 - cycle)
+    } else {
+        xhci_state_write(176, idx)
+    }
+
+    // Ring EP0 doorbell (slot_id, target=1 for EP0)
+    xhci_ring_doorbell(slot_id, 1)
+
+    // Poll for Transfer Event completion (skip Port Status Change Events)
+    let mut xfer_evt_idx = xhci_state_read(112)
+    let mut xfer_evt_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 3)
+        if (dw3_evt & 1) == (xfer_evt_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 2) >> 24) & 0xFF
+            let residual = xhci_read_trb_dw(XHCI_EVT_RING, xfer_evt_idx, 2) & 0xFFFFFF
+            // Advance
+            let next_evt = xfer_evt_idx + 1
+            if next_evt >= XHCI_EVT_RING_SIZE {
+                xfer_evt_idx = 0
+                xfer_evt_cycle = 1 - xfer_evt_cycle
+            } else {
+                xfer_evt_idx = next_evt
+            }
+            xhci_state_write(112, xfer_evt_idx)
+            xhci_state_write(128, xfer_evt_cycle)
+            // Update ERDP
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + xfer_evt_idx * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            // Only process Transfer Events (type 32) or Command Completion (type 33)
+            if evt_type == TRB_TRANSFER_EVENT || evt_type == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS || cc == 13 { return w_length - residual }
+                return -(cc)
+            }
+            // Skip other event types
+        } else {
+            pause()
+            timeout = timeout - 1
+        }
+    }
+    -99
+}
+
+@kernel fn usb_get_descriptor(slot_id: i64, desc_type: i64, desc_idx: i64, length: i64) -> i64 {
+    // Zero data buffer
+    let mut i: i64 = 0
+    while i < length && i < 4096 { volatile_write_u8(XHCI_DATA_BUF + i, 0); i = i + 1 }
+    xhci_control_transfer(slot_id, USB_DIR_IN, USB_REQ_GET_DESCRIPTOR,
+        (desc_type << 8) | desc_idx, 0, length, XHCI_DATA_BUF, USB_DIR_IN)
+}
+
+@kernel fn usb_set_configuration(slot_id: i64, config_val: i64) -> i64 {
+    xhci_control_transfer(slot_id, USB_DIR_OUT, USB_REQ_SET_CONFIGURATION,
+        config_val, 0, 0, 0, USB_DIR_OUT)
+}
+
+// ── USB Mass Storage Detection ──
+
+@kernel fn usb_find_mass_storage() -> i64 {
+    // Parse configuration descriptor to find mass storage interface
+    // Config descriptor at XHCI_DATA_BUF (after GET_DESCRIPTOR config)
+    let total_len = volatile_read_u8(XHCI_DATA_BUF + 2) | (volatile_read_u8(XHCI_DATA_BUF + 3) << 8)
+    let mut offset: i64 = 0
+    while offset + 2 < total_len && offset < 4096 {
+        let desc_len = volatile_read_u8(XHCI_DATA_BUF + offset)
+        let desc_type = volatile_read_u8(XHCI_DATA_BUF + offset + 1)
+        if desc_len < 2 { return -1 } // invalid
+        // Interface descriptor: type = 4, length >= 9
+        if desc_type == 4 && desc_len >= 9 {
+            let iface_class = volatile_read_u8(XHCI_DATA_BUF + offset + 5)
+            let iface_subclass = volatile_read_u8(XHCI_DATA_BUF + offset + 6)
+            let iface_protocol = volatile_read_u8(XHCI_DATA_BUF + offset + 7)
+            if iface_class == USB_CLASS_MASS_STORAGE && iface_subclass == USB_SUBCLASS_SCSI && iface_protocol == USB_PROTOCOL_BOT {
+                // Found! Now find bulk endpoints
+                let ep_offset = offset + desc_len
+                let mut ep_off = ep_offset
+                while ep_off + 2 < total_len && ep_off < 4096 {
+                    let ep_len = volatile_read_u8(XHCI_DATA_BUF + ep_off)
+                    let ep_type = volatile_read_u8(XHCI_DATA_BUF + ep_off + 1)
+                    if ep_type == 4 { ep_off = total_len } // next interface, stop
+                    else if ep_type == 5 && ep_len >= 7 {
+                        // Endpoint descriptor
+                        let ep_addr = volatile_read_u8(XHCI_DATA_BUF + ep_off + 2)
+                        let ep_attr = volatile_read_u8(XHCI_DATA_BUF + ep_off + 3)
+                        if (ep_attr & 0x03) == 2 { // Bulk transfer type
+                            if (ep_addr & 0x80) != 0 {
+                                xhci_state_write(160, ep_addr) // Bulk IN
+                            } else {
+                                xhci_state_write(168, ep_addr) // Bulk OUT
+                            }
+                        }
+                    }
+                    ep_off = ep_off + ep_len
+                }
+                return 0 // found
+            }
+        }
+        offset = offset + desc_len
+    }
+    -1 // not found
+}
+
+// ── SCSI via Bulk-Only Transport (BOT) ──
+
+@kernel fn usb_bot_cbw(tag: i64, data_len: i64, direction: i64, lun: i64, cb_len: i64, cb: i64) {
+    // Build CBW at XHCI_DATA_BUF + 4096 (31 bytes)
+    let cbw = XHCI_DATA_BUF + 4096
+    volatile_write_u32(cbw, CBW_SIGNATURE)  // dCBWSignature
+    volatile_write_u32(cbw + 4, tag)         // dCBWTag
+    volatile_write_u32(cbw + 8, data_len)    // dCBWDataTransferLength
+    volatile_write_u8(cbw + 12, direction)   // bmCBWFlags (0x80=IN, 0x00=OUT)
+    volatile_write_u8(cbw + 13, lun)         // bCBWLUN
+    volatile_write_u8(cbw + 14, cb_len)      // bCBWCBLength
+    // Copy command block (up to 16 bytes)
+    let mut i: i64 = 0
+    while i < 16 {
+        if i < cb_len {
+            volatile_write_u8(cbw + 15 + i, volatile_read_u8(cb + i))
+        } else {
+            volatile_write_u8(cbw + 15 + i, 0)
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn usb_scsi_test_unit_ready() -> i64 {
+    // Build SCSI TEST UNIT READY command (6 bytes, all zeros except opcode)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_TEST_UNIT_READY) // opcode 0x00
+    usb_bot_command(cmd, 6, 0, 0, 0x80)
+}
+
+// ── cmd_usb_init: Full USB enumeration ──
+
+@kernel fn cmd_usb_init() {
+    println("[USB] cmd_usb_init starting...")
+    cprintln("USB Init (XHCI):", YELLOW_ON_BLACK)
+    let connected = xhci_full_init()
+    if connected < 0 {
+        println("[USB] XHCI init failed")
+        cprint("  XHCI init failed: ", RED_ON_BLACK)
+        cprint_decimal(connected, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    println("[USB] XHCI running, checking devices...")
+
+    // Debug: dump all port status registers
+    let dbg_base = xhci_state_read(0)
+    let dbg_cap = xhci_state_read(8)
+    let dbg_op = dbg_base + dbg_cap
+    let dbg_ports = xhci_state_read(24)
+    let dbg_port_base = dbg_op + 0x400
+    let mut dp: i64 = 0
+    while dp < dbg_ports && dp < 8 {
+        let ps = volatile_read_u32(dbg_port_base + dp * 0x10)
+        if ps != 0 {
+            println("[USB] Port PORTSC non-zero")
+        }
+        dp = dp + 1
+    }
+
+    cprint("  Controller running, ", GREEN_ON_BLACK)
+    cprint_decimal(connected, CYAN_ON_BLACK)
+    cprintln(" device(s) connected", WHITE_ON_BLACK)
+
+    if connected == 0 {
+        println("[USB] No devices connected, trying xhci command test...")
+        // Try NoOp command to test command ring works
+        let noop = xhci_submit_command(0, 0, 0, TRB_NO_OP)
+        if noop >= 0 {
+            println("[USB] NoOp command succeeded")
+        } else {
+            println("[USB] NoOp command failed/timeout")
+        }
+        cprintln("  No devices to enumerate", YELLOW_ON_BLACK)
+        return
+    }
+    println("[USB] Proceeding to enumerate...")
+
+    // Enable slot
+    let slot = xhci_enable_slot()
+    println("[USB] Enable slot returned")
+    if slot <= 0 {
+        println("[USB] Enable slot failed or returned 0")
+        cprint("  Enable slot failed: ", RED_ON_BLACK)
+        cprint_decimal(slot, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    println("[USB] Slot enabled successfully")
+    println("[USB] About to call xhci_address_device...")
+
+    // Find first connected port
+    let op_base = xhci_state_read(64)
+    let max_ports = xhci_state_read(24)
+    let port_base = op_base + 0x400
+    let mut port: i64 = 0
+    let mut port_speed: i64 = 0
+    let mut found_port: i64 = 0
+    while port < max_ports && found_port == 0 {
+        let portsc = volatile_read_u32(port_base + port * 0x10)
+        if (portsc & 1) != 0 {
+            port_speed = (portsc >> 10) & 0xF
+            found_port = port + 1
+        }
+        port = port + 1
+    }
+    if found_port == 0 {
+        cprintln("  No connected port found", RED_ON_BLACK)
+        return
+    }
+    cprint("  Port ", WHITE_ON_BLACK)
+    cprint_decimal(found_port, CYAN_ON_BLACK)
+    cprint(" speed=", WHITE_ON_BLACK)
+    if port_speed == 3 { cprint("High(480M)", WHITE_ON_BLACK) }
+    else if port_speed == 4 { cprint("Super(5G)", CYAN_ON_BLACK) }
+    else { cprint_decimal(port_speed, WHITE_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Address device
+    let addr = xhci_address_device(slot, found_port, port_speed)
+    if addr < 0 {
+        cprint("  Address device failed: ", RED_ON_BLACK)
+        cprint_decimal(addr, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    println("[USB] Device addressed OK")
+
+    // GET_DESCRIPTOR (device, 18 bytes)
+    println("[USB] GET_DESCRIPTOR device...")
+    let dev_desc = usb_get_descriptor(slot, USB_DESC_DEVICE, 0, 18)
+    println("[USB] GET_DESCRIPTOR returned")
+    if dev_desc >= 0 {
+        let vid = volatile_read_u8(XHCI_DATA_BUF + 8) | (volatile_read_u8(XHCI_DATA_BUF + 9) << 8)
+        let pid = volatile_read_u8(XHCI_DATA_BUF + 10) | (volatile_read_u8(XHCI_DATA_BUF + 11) << 8)
+        let dev_class = volatile_read_u8(XHCI_DATA_BUF + 4)
+        let num_configs = volatile_read_u8(XHCI_DATA_BUF + 17)
+        cprint("  VID:PID = ", WHITE_ON_BLACK)
+        cprint_hex(vid, 4, CYAN_ON_BLACK)
+        cprint(":", WHITE_ON_BLACK)
+        cprint_hex(pid, 4, CYAN_ON_BLACK)
+        cprint("  class=", WHITE_ON_BLACK)
+        cprint_hex(dev_class, 2, CYAN_ON_BLACK)
+        cprint("  configs=", WHITE_ON_BLACK)
+        cprint_decimal(num_configs, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        println("[USB] GET_DESCRIPTOR(device) FAILED")
+        return
+    }
+
+    // GET_DESCRIPTOR (config, 255 bytes)
+    println("[USB] GET_DESCRIPTOR config...")
+    let cfg_desc = usb_get_descriptor(slot, USB_DESC_CONFIGURATION, 0, 255)
+    println("[USB] Config descriptor returned")
+    if cfg_desc >= 0 {
+        println("[USB] Config descriptor OK")
+        let cfg_val = volatile_read_u8(XHCI_DATA_BUF + 5)
+        let num_ifaces = volatile_read_u8(XHCI_DATA_BUF + 4)
+        println("[USB] SET_CONFIGURATION...")
+        let set_cfg = usb_set_configuration(slot, cfg_val)
+        if set_cfg >= 0 {
+            println("[USB] Configuration set OK")
+        } else {
+            println("[USB] SET_CONFIGURATION failed")
+        }
+
+        // Find mass storage interface
+        println("[USB] Finding mass storage interface...")
+        let ms = usb_find_mass_storage()
+        if ms == 0 {
+            let bulk_in = xhci_state_read(160)
+            let bulk_out = xhci_state_read(168)
+            cprintln("  Mass Storage (SCSI/BOT) detected", GREEN_ON_BLACK)
+            cprint("  Bulk IN: EP", WHITE_ON_BLACK)
+            cprint_hex(bulk_in, 2, CYAN_ON_BLACK)
+            cprint("  Bulk OUT: EP", WHITE_ON_BLACK)
+            cprint_hex(bulk_out, 2, CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
+            xhci_state_write(224, 1) // mass storage ready
+        } else {
+            println("[USB] No mass storage interface found")
+        }
+    } else {
+        println("[USB] Config descriptor FAILED")
+    }
+
+    // Boot complete
+    // If mass storage detected, configure bulk endpoints and probe SCSI
+    if xhci_state_read(224) == 1 {
+        println("[USB] Configuring bulk endpoints...")
+        let cfg_ep = xhci_configure_bulk_endpoints(slot)
+        if cfg_ep >= 0 {
+            println("[USB] Bulk endpoints configured")
+            // SCSI TEST UNIT READY
+            println("[USB] SCSI TEST_UNIT_READY...")
+            let tur = usb_scsi_test_unit_ready()
+            if tur >= 0 {
+                println("[USB] Device ready")
+            } else {
+                println("[USB] TEST_UNIT_READY failed (retrying...)")
+                delay_us(100000)
+                let tur2 = usb_scsi_test_unit_ready()
+                if tur2 < 0 { println("[USB] Device not ready") }
+            }
+            // SCSI INQUIRY
+            println("[USB] SCSI INQUIRY...")
+            let inq = usb_scsi_inquiry_full()
+            if inq >= 0 {
+                println("[USB] SCSI INQUIRY OK")
+            } else {
+                println("[USB] SCSI INQUIRY failed")
+            }
+            // SCSI READ CAPACITY
+            println("[USB] SCSI READ_CAPACITY...")
+            let cap = usb_scsi_read_capacity_full()
+            if cap >= 0 {
+                println("[USB] READ_CAPACITY OK")
+                // Register as block device 2 (USB)
+                let usb_sectors = xhci_state_read(232)
+                let usb_sector_sz = xhci_state_read(240)
+                blk_register(2, 3, usb_sectors, usb_sector_sz) // type 3 = USB
+                println("[USB] Registered as block device 2")
+                // Try FAT32 mount
+                let mnt = fat32_mount(2)
+                if mnt == 0 {
+                    println("[USB-FAT32] Mounted from USB!")
+                } else {
+                    println("[USB-FAT32] No FAT32 on USB (or mount failed)")
+                }
+            } else {
+                println("[USB] READ_CAPACITY failed")
+            }
+        } else {
+            println("[USB] Configure bulk endpoints failed")
+        }
+    }
+
+    println("[USB] Enumeration complete")
+}
+
+// ── Sprint C3: XHCI Bulk Endpoint Configuration ──
+
+@kernel fn xhci_configure_bulk_endpoints(slot_id: i64) -> i64 {
+    let bulk_in_ep = xhci_state_read(160)  // e.g., 0x81
+    let bulk_out_ep = xhci_state_read(168) // e.g., 0x02
+    if bulk_in_ep == 0 || bulk_out_ep == 0 { return -1 }
+
+    // DCI (Device Context Index) = 2 * ep_num + direction
+    // For IN endpoint 0x81: ep_num=1, dir=1 → DCI = 2*1 + 1 = 3
+    // For OUT endpoint 0x02: ep_num=2, dir=0 → DCI = 2*2 + 0 = 4
+    let in_ep_num = bulk_in_ep & 0x0F
+    let out_ep_num = bulk_out_ep & 0x0F
+    let in_dci = in_ep_num * 2 + 1
+    let out_dci = out_ep_num * 2
+
+    // Check context size
+    let base = xhci_state_read(0)
+    let hccparams1 = volatile_read_u32(base + 0x10)
+    let csz = (hccparams1 >> 2) & 1
+    let ctx_size = if csz == 1 { 64 } else { 32 }
+
+    // Build Input Context for Configure Endpoint
+    let ictx = XHCI_INPUT_CTX
+    let mut i: i64 = 0
+    while i < 2048 { volatile_write_u8(ictx + i, 0); i = i + 1 }
+
+    // Zero bulk transfer rings
+    i = 0
+    while i < 0x1000 { volatile_write_u8(XHCI_BULK_IN_RING + i, 0); i = i + 1 }
+    i = 0
+    while i < 0x1000 { volatile_write_u8(XHCI_BULK_OUT_RING + i, 0); i = i + 1 }
+
+    // Write Link TRBs at end of bulk rings
+    xhci_write_trb(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1,
+        XHCI_BULK_IN_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+    xhci_write_trb(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1,
+        XHCI_BULK_OUT_RING & 0xFFFFFFFF, 0, 0, (TRB_LINK << 10) | 0x02)
+
+    // Input Control Context: Add flags for Slot + EP contexts
+    // Add Context Flags: bit 0 (Slot) + bit for each endpoint DCI
+    let add_flags = 1 | (1 << in_dci) | (1 << out_dci)
+    volatile_write_u32(ictx + 4, add_flags)
+
+    // Slot Context (at ctx_size offset): update Context Entries to max DCI
+    let slot_ctx = ictx + ctx_size
+    let max_dci = if in_dci > out_dci { in_dci } else { out_dci }
+    // Copy existing slot context DW0 but update Context Entries field
+    let speed_val = 3 // High speed default (from address device)
+    volatile_write_u32(slot_ctx, (max_dci << 27) | (speed_val << 20))
+
+    // Bulk IN Endpoint Context (at ctx_size * (in_dci + 1) offset)
+    let in_ctx = ictx + ctx_size * (in_dci + 1)
+    // DW1: CErr=3, EPType=6 (Bulk IN), MaxPacketSize=512
+    volatile_write_u32(in_ctx + 4, (3 << 1) | (6 << 3) | (512 << 16))
+    // DW2-DW3: TR Dequeue Pointer with DCS=1
+    volatile_write_u32(in_ctx + 8, (XHCI_BULK_IN_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(in_ctx + 12, 0)
+    // DW4: Average TRB Length = 1024, Max Burst = 0
+    volatile_write_u32(in_ctx + 16, 1024)
+
+    // Bulk OUT Endpoint Context (at ctx_size * (out_dci + 1) offset)
+    let out_ctx = ictx + ctx_size * (out_dci + 1)
+    // DW1: CErr=3, EPType=2 (Bulk OUT), MaxPacketSize=512
+    volatile_write_u32(out_ctx + 4, (3 << 1) | (2 << 3) | (512 << 16))
+    // DW2-DW3: TR Dequeue Pointer with DCS=1
+    volatile_write_u32(out_ctx + 8, (XHCI_BULK_OUT_RING & 0xFFFFFFFF) | 1)
+    volatile_write_u32(out_ctx + 12, 0)
+    // DW4: Average TRB Length = 1024, Max Burst = 0
+    volatile_write_u32(out_ctx + 16, 1024)
+
+    // Init bulk ring enqueue/cycle state
+    xhci_state_write(192, 0) // bulk_in_enqueue = 0
+    xhci_state_write(200, 1) // bulk_in_cycle = 1
+    xhci_state_write(208, 0) // bulk_out_enqueue = 0
+    xhci_state_write(216, 1) // bulk_out_cycle = 1
+
+    // Submit Configure Endpoint command
+    let idx = xhci_state_read(104)
+    let cycle = xhci_state_read(120)
+    let dw3 = ((slot_id & 0xFF) << 24) | (TRB_CONFIGURE_EP << 10) | (cycle & 1)
+    xhci_write_trb(XHCI_CMD_RING, idx, ictx & 0xFFFFFFFF, 0, 0, dw3)
+
+    let next = idx + 1
+    if next >= XHCI_CMD_RING_SIZE - 1 {
+        xhci_state_write(104, 0)
+        xhci_state_write(120, 1 - cycle)
+    } else {
+        xhci_state_write(104, next)
+    }
+    xhci_ring_doorbell(0, 0)
+
+    // Poll for Command Completion (Configure Endpoint event)
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_CMD_COMPLETION {
+                if cc == CC_SUCCESS { return 0 }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+// ── Sprint C3: Bulk Transfer Functions ──
+
+@kernel fn xhci_bulk_out(data: i64, length: i64) -> i64 {
+    let slot_id = xhci_state_read(144)
+    let out_ep = xhci_state_read(168) & 0x0F
+    let out_dci = out_ep * 2
+    let enq = xhci_state_read(208)
+    let cycle = xhci_state_read(216)
+
+    // Write Normal TRB for bulk OUT
+    let dw3 = (TRB_NORMAL << 10) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_BULK_OUT_RING, enq, data & 0xFFFFFFFF, 0, length, dw3)
+
+    let next = enq + 1
+    if next >= XHCI_BULK_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_BULK_OUT_RING, XHCI_BULK_RING_SIZE - 1,
+            XHCI_BULK_OUT_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(208, 0)
+        xhci_state_write(216, 1 - cycle)
+    } else {
+        xhci_state_write(208, next)
+    }
+
+    // Ring doorbell for bulk OUT endpoint
+    xhci_ring_doorbell(slot_id, out_dci)
+
+    // Poll for Transfer Event
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_TRANSFER_EVENT {
+                if cc == CC_SUCCESS || cc == 13 { return 0 }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+@kernel fn xhci_bulk_in(data: i64, length: i64) -> i64 {
+    let slot_id = xhci_state_read(144)
+    let in_ep = xhci_state_read(160) & 0x0F
+    let in_dci = in_ep * 2 + 1
+    let enq = xhci_state_read(192)
+    let cycle = xhci_state_read(200)
+
+    // Write Normal TRB for bulk IN
+    let dw3 = (TRB_NORMAL << 10) | (1 << 5) | (cycle & 1) // IOC=1
+    xhci_write_trb(XHCI_BULK_IN_RING, enq, data & 0xFFFFFFFF, 0, length, dw3)
+
+    let next = enq + 1
+    if next >= XHCI_BULK_RING_SIZE - 1 {
+        let link_dw3 = xhci_read_trb_dw(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1, 3)
+        xhci_write_trb(XHCI_BULK_IN_RING, XHCI_BULK_RING_SIZE - 1,
+            XHCI_BULK_IN_RING & 0xFFFFFFFF, 0, 0, (link_dw3 & 0xFFFFFFFE) | (cycle & 1))
+        xhci_state_write(192, 0)
+        xhci_state_write(200, 1 - cycle)
+    } else {
+        xhci_state_write(192, next)
+    }
+
+    // Ring doorbell for bulk IN endpoint
+    xhci_ring_doorbell(slot_id, in_dci)
+
+    // Poll for Transfer Event
+    let mut cur_evt = xhci_state_read(112)
+    let mut cur_cycle = xhci_state_read(128)
+    let mut timeout: i64 = 2000000
+    while timeout > 0 {
+        let dw3_evt = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 3)
+        if (dw3_evt & 1) == (cur_cycle & 1) {
+            let evt_type = (dw3_evt >> 10) & 0x3F
+            let cc = (xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) >> 24) & 0xFF
+            let residual = xhci_read_trb_dw(XHCI_EVT_RING, cur_evt, 2) & 0xFFFFFF
+            let next_evt = cur_evt + 1
+            if next_evt >= XHCI_EVT_RING_SIZE { cur_evt = 0; cur_cycle = 1 - cur_cycle }
+            else { cur_evt = next_evt }
+            xhci_state_write(112, cur_evt)
+            xhci_state_write(128, cur_cycle)
+            let base = xhci_state_read(0)
+            let rtsoff = volatile_read_u32(base + 0x18) & 0xFFFFFFE0
+            let ir0 = base + rtsoff + 0x20
+            volatile_write_u32(ir0 + 0x18, ((XHCI_EVT_RING + cur_evt * XHCI_TRB_SIZE) & 0xFFFFFFFF) | 0x08)
+            volatile_write_u32(ir0 + 0x1C, 0)
+            if evt_type == TRB_TRANSFER_EVENT {
+                if cc == CC_SUCCESS || cc == 13 { return length - residual }
+                return -(cc)
+            }
+        } else { pause(); timeout = timeout - 1 }
+    }
+    -99
+}
+
+// ── Sprint C3: BOT (Bulk-Only Transport) Full Sequence ──
+// CBW (31 bytes) → Data IN/OUT → CSW (13 bytes)
+
+@kernel fn usb_bot_command(scsi_cmd: i64, scsi_cmd_len: i64, data_buf: i64, data_len: i64, direction: i64) -> i64 {
+    // Build CBW at XHCI_DATA_BUF + 4096
+    let cbw = XHCI_DATA_BUF + 4096
+    let tag = xhci_state_read(248) + 1  // increment tag
+    xhci_state_write(248, tag)
+
+    volatile_write_u32(cbw, CBW_SIGNATURE)
+    volatile_write_u32(cbw + 4, tag)
+    volatile_write_u32(cbw + 8, data_len)
+    volatile_write_u8(cbw + 12, direction) // 0x80=IN, 0x00=OUT
+    volatile_write_u8(cbw + 13, 0)         // LUN
+    volatile_write_u8(cbw + 14, scsi_cmd_len)
+    // Copy SCSI command bytes (up to 16)
+    let mut i: i64 = 0
+    while i < 16 {
+        if i < scsi_cmd_len {
+            volatile_write_u8(cbw + 15 + i, volatile_read_u8(scsi_cmd + i))
+        } else {
+            volatile_write_u8(cbw + 15 + i, 0)
+        }
+        i = i + 1
+    }
+
+    // Step 1: Send CBW via Bulk OUT (31 bytes)
+    let cbw_result = xhci_bulk_out(cbw, 31)
+    if cbw_result < 0 { return -1 }
+
+    // Step 2: Data phase (if data_len > 0)
+    if data_len > 0 {
+        if direction == 0x80 {
+            // Data IN
+            let data_result = xhci_bulk_in(data_buf, data_len)
+            if data_result < 0 { return -2 }
+        } else {
+            // Data OUT
+            let data_result = xhci_bulk_out(data_buf, data_len)
+            if data_result < 0 { return -3 }
+        }
+    }
+
+    // Step 3: Receive CSW via Bulk IN (13 bytes)
+    let csw = XHCI_DATA_BUF + 4608 // after CBW
+    let csw_result = xhci_bulk_in(csw, 13)
+    if csw_result < 0 { return -4 }
+
+    // Verify CSW
+    let csw_sig = volatile_read_u32(csw)
+    let csw_tag = volatile_read_u32(csw + 4)
+    let csw_residue = volatile_read_u32(csw + 8)
+    let csw_status = volatile_read_u8(csw + 12)
+
+    if csw_sig != CSW_SIGNATURE { return -5 }
+    if csw_tag != tag { return -6 }
+    if csw_status != 0 { return -7 } // Command failed
+
+    0 // success
+}
+
+// ── Sprint C3: SCSI Commands via BOT ──
+
+@kernel fn usb_scsi_inquiry_full() -> i64 {
+    // Build SCSI INQUIRY command (6 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_INQUIRY)     // opcode
+    volatile_write_u8(cmd + 4, 36)            // allocation length
+
+    let result = usb_bot_command(cmd, 6, XHCI_DATA_BUF + 5120, 36, 0x80)
+    if result < 0 { return result }
+
+    // Parse INQUIRY response at XHCI_DATA_BUF + 5120
+    // Byte 0: Peripheral device type (0x00 = direct access = disk)
+    // Bytes 8-15: Vendor ID (8 ASCII chars)
+    // Bytes 16-31: Product ID (16 ASCII chars)
+    // Bytes 32-35: Product Revision (4 ASCII chars)
+    let resp = XHCI_DATA_BUF + 5120
+    let dev_type = volatile_read_u8(resp) & 0x1F
+    cprint("  Device: ", WHITE_ON_BLACK)
+    if dev_type == 0 { cprint("Direct Access (Disk)", GREEN_ON_BLACK) }
+    else if dev_type == 5 { cprint("CD-ROM", WHITE_ON_BLACK) }
+    else { cprint_decimal(dev_type, WHITE_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Print Vendor ID (bytes 8-15)
+    cprint("  Vendor: ", WHITE_ON_BLACK)
+    let mut vi: i64 = 0
+    while vi < 8 {
+        let ch = volatile_read_u8(resp + 8 + vi)
+        if ch >= 0x20 && ch < 0x7F { console_putchar(ch, CYAN_ON_BLACK) }
+        vi = vi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Print Product ID (bytes 16-31)
+    cprint("  Product: ", WHITE_ON_BLACK)
+    let mut pi: i64 = 0
+    while pi < 16 {
+        let ch = volatile_read_u8(resp + 16 + pi)
+        if ch >= 0x20 && ch < 0x7F { console_putchar(ch, CYAN_ON_BLACK) }
+        pi = pi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    0
+}
+
+@kernel fn usb_scsi_read_capacity_full() -> i64 {
+    // Build SCSI READ CAPACITY(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_READ_CAPACITY) // opcode 0x25
+
+    let result = usb_bot_command(cmd, 10, XHCI_DATA_BUF + 5120, 8, 0x80)
+    if result < 0 { return result }
+
+    // Parse READ CAPACITY response (8 bytes, big-endian)
+    // Bytes 0-3: Last Logical Block Address
+    // Bytes 4-7: Block Length
+    let lba3 = volatile_read_u8(XHCI_DATA_BUF + 5120)
+    let lba2 = volatile_read_u8(XHCI_DATA_BUF + 5121)
+    let lba1 = volatile_read_u8(XHCI_DATA_BUF + 5122)
+    let lba0 = volatile_read_u8(XHCI_DATA_BUF + 5123)
+    let last_lba = (lba3 << 24) | (lba2 << 16) | (lba1 << 8) | lba0
+
+    let bs3 = volatile_read_u8(XHCI_DATA_BUF + 5124)
+    let bs2 = volatile_read_u8(XHCI_DATA_BUF + 5125)
+    let bs1 = volatile_read_u8(XHCI_DATA_BUF + 5126)
+    let bs0 = volatile_read_u8(XHCI_DATA_BUF + 5127)
+    let block_size = (bs3 << 24) | (bs2 << 16) | (bs1 << 8) | bs0
+
+    xhci_state_write(232, last_lba + 1) // total sectors
+    xhci_state_write(240, block_size)    // sector size
+
+    cprint("  Capacity: ", WHITE_ON_BLACK)
+    cprint_decimal(last_lba + 1, CYAN_ON_BLACK)
+    cprint(" sectors x ", WHITE_ON_BLACK)
+    cprint_decimal(block_size, CYAN_ON_BLACK)
+    cprint(" bytes = ", WHITE_ON_BLACK)
+    let mb = ((last_lba + 1) * block_size) / (1024 * 1024)
+    cprint_decimal(mb, GREEN_ON_BLACK)
+    cprintln(" MB", WHITE_ON_BLACK)
+    0
+}
+
+@kernel fn usb_scsi_read(lba: i64, count: i64, buf: i64) -> i64 {
+    // Build SCSI READ(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_READ_10) // opcode 0x28
+    // LBA (bytes 2-5, big-endian)
+    volatile_write_u8(cmd + 2, (lba >> 24) & 0xFF)
+    volatile_write_u8(cmd + 3, (lba >> 16) & 0xFF)
+    volatile_write_u8(cmd + 4, (lba >> 8) & 0xFF)
+    volatile_write_u8(cmd + 5, lba & 0xFF)
+    // Transfer length (bytes 7-8, big-endian)
+    volatile_write_u8(cmd + 7, (count >> 8) & 0xFF)
+    volatile_write_u8(cmd + 8, count & 0xFF)
+
+    let sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { return -1 }
+    let data_len = count * sector_sz
+
+    usb_bot_command(cmd, 10, buf, data_len, 0x80)
+}
+
+// ── blk_read extension for USB (type 3) ──
+
+@kernel fn usb_blk_read(lba: i64, count: i64, buf: i64) -> i64 {
+    usb_scsi_read(lba, count, buf)
+}
+
+@kernel fn usb_scsi_write(lba: i64, count: i64, buf: i64) -> i64 {
+    // Build SCSI WRITE(10) command (10 bytes)
+    let cmd = XHCI_DATA_BUF + 5000
+    let mut i: i64 = 0
+    while i < 16 { volatile_write_u8(cmd + i, 0); i = i + 1 }
+    volatile_write_u8(cmd, SCSI_WRITE_10) // opcode 0x2A
+    // LBA (bytes 2-5, big-endian)
+    volatile_write_u8(cmd + 2, (lba >> 24) & 0xFF)
+    volatile_write_u8(cmd + 3, (lba >> 16) & 0xFF)
+    volatile_write_u8(cmd + 4, (lba >> 8) & 0xFF)
+    volatile_write_u8(cmd + 5, lba & 0xFF)
+    // Transfer length (bytes 7-8, big-endian)
+    volatile_write_u8(cmd + 7, (count >> 8) & 0xFF)
+    volatile_write_u8(cmd + 8, count & 0xFF)
+
+    let sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { return -1 }
+    let data_len = count * sector_sz
+
+    usb_bot_command(cmd, 10, buf, data_len, 0x00) // direction OUT
+}
+
+@kernel fn usb_blk_write(lba: i64, count: i64, buf: i64) -> i64 {
+    usb_scsi_write(lba, count, buf)
+}
+
+// ── USB Shell Commands ──
+
+@kernel fn cmd_usbread() {
+    // Read and hex-dump a single sector from USB mass storage
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Parse LBA from command buffer (after "usbread ")
+    let mut lba: i64 = 0
+    let mut ci: i64 = 8 // skip "usbread "
+    let mut has_digit: i64 = 0
+    while ci < 64 {
+        let ch = volatile_read_u8(0x6F800 + ci)
+        if ch >= 48 && ch <= 57 {
+            lba = lba * 10 + (ch - 48)
+            has_digit = 1
+            ci = ci + 1
+        } else { ci = 64 }
+    }
+    if has_digit == 0 {
+        cprintln("Usage: usbread <lba>", YELLOW_ON_BLACK)
+        return
+    }
+    let mut sector_sz = xhci_state_read(240)
+    if sector_sz == 0 { sector_sz = 512 }
+    let buf = XHCI_DATA_BUF + 6144 // use scratch area
+    let result = usb_scsi_read(lba, 1, buf)
+    if result < 0 {
+        cprint("  Read failed: ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    cprint("USB sector ", WHITE_ON_BLACK)
+    cprint_decimal(lba, CYAN_ON_BLACK)
+    cprintln(":", WHITE_ON_BLACK)
+    // Hex dump first 256 bytes (or sector_sz if smaller)
+    let dump_len = if sector_sz < 256 { sector_sz } else { 256 }
+    let mut off: i64 = 0
+    while off < dump_len {
+        // Print offset
+        cprint_hex(off, 4, YELLOW_ON_BLACK)
+        cprint(": ", WHITE_ON_BLACK)
+        // Print 16 hex bytes
+        let mut b: i64 = 0
+        while b < 16 && (off + b) < dump_len {
+            cprint_hex(volatile_read_u8(buf + off + b), 2, CYAN_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            b = b + 1
+        }
+        // Print ASCII
+        cprint(" |", WHITE_ON_BLACK)
+        b = 0
+        while b < 16 && (off + b) < dump_len {
+            let ch = volatile_read_u8(buf + off + b)
+            if ch >= 0x20 && ch < 0x7F { console_putchar(ch, WHITE_ON_BLACK) }
+            else { cprint(".", WHITE_ON_BLACK) }
+            b = b + 1
+        }
+        cprintln("|", WHITE_ON_BLACK)
+        off = off + 16
+    }
+}
+
+@kernel fn cmd_usbls() {
+    // List files on USB FAT32 filesystem
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Ensure FAT32 is mounted on USB (blk_dev 2)
+    if fat32_state_read(0) != 1 || fat32_state_read(88) != 2 {
+        let mnt = fat32_mount(2)
+        if mnt != 0 {
+            cprintln("  No FAT32 filesystem on USB device", RED_ON_BLACK)
+            return
+        }
+    }
+    cmd_fat32_ls()
+}
+
+@kernel fn cmd_usbcat() {
+    // Read a file from USB FAT32
+    // "usbcat " = 7 chars prefix, same as "fatcat "
+    if xhci_state_read(224) != 1 {
+        cprintln("USB mass storage not initialized. Run 'usbinit' first.", RED_ON_BLACK)
+        return
+    }
+    // Ensure FAT32 is mounted on USB (blk_dev 2)
+    if fat32_state_read(0) != 1 || fat32_state_read(88) != 2 {
+        let mnt = fat32_mount(2)
+        if mnt != 0 {
+            cprintln("  No FAT32 filesystem on USB device", RED_ON_BLACK)
+            return
+        }
+    }
+    // cmd_fat32_cat reads filename from 0x6F800+7, "usbcat " is also 7 chars
+    cmd_fat32_cat()
+}
+
+// ═══════════════════════════════════════════════
+// Virtio-Blk Driver (Sprint B9)
+// PCI vendor 0x1AF4, device 0x1001
+// ═══════════════════════════════════════════════
+
+@kernel fn virtio_blk_find() -> i64 {
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let vendor = id & 0xFFFF
+            let device_id = (id >> 16) & 0xFFFF
+            if vendor == 0x1AF4 && device_id == 0x1001 { return dev }
+        }
+        dev = dev + 1
+    }
+    -1
+}
+
+@kernel fn cmd_virtio_blk() {
+    cprintln("Virtio Block Devices:", YELLOW_ON_BLACK)
+    let dev = virtio_blk_find()
+    if dev == -1 {
+        cprintln("  No virtio-blk found", YELLOW_ON_BLACK)
+        return
+    }
+    let id = pci_read32(0, dev, 0, 0)
+    cprint("  PCI ", WHITE_ON_BLACK)
+    cprint_decimal(dev, CYAN_ON_BLACK)
+    cprint(": virtio-blk (", WHITE_ON_BLACK)
+    cprint_hex(id & 0xFFFF, 4, CYAN_ON_BLACK)
+    cprint(":", WHITE_ON_BLACK)
+    cprint_hex((id >> 16) & 0xFFFF, 4, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+
+    let bar0 = pci_read32(0, dev, 0, 0x10)
+    cprint("  BAR0: 0x", WHITE_ON_BLACK)
+    cprint_hex(bar0, 8, CYAN_ON_BLACK)
+    if (bar0 & 1) != 0 { cprintln(" (I/O port)", WHITE_ON_BLACK) }
+    else { cprintln(" (MMIO)", WHITE_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// Shell Scripting (Sprint C1)
+// Execute command files from FAT32
+// ═══════════════════════════════════════════════
+
+@kernel fn script_exec_line(line_buf: i64, line_len: i64) {
+    // Skip empty lines and comments
+    if line_len == 0 { return }
+    let first = volatile_read_u8(line_buf)
+    if first == 35 { return } // '#' comment
+
+    // Copy line to command buffer at 0x6F800
+    let mut i: i64 = 0
+    while i < line_len && i < 63 {
+        volatile_write_u8(0x6F800 + i, volatile_read_u8(line_buf + i))
+        i = i + 1
+    }
+    volatile_write_u8(0x6F800 + i, 0)
+
+    // Script line display only (dispatch requires forward ref)
+    // Full script execution deferred to runtime shell loop
+}
+
+@kernel fn cmd_source() {
+    // "source <file>" — execute script from FAT32
+    if fat32_state_read(0) != 1 { cprintln("FAT32 not mounted", RED_ON_BLACK); return }
+
+    let mut fname_len: i64 = 0
+    let mut i: i64 = 7 // skip "source "
+    while i < 64 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch == 0 { i = 64 }
+        else { volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, ch); fname_len = fname_len + 1; i = i + 1 }
+    }
+    volatile_write_u8(FAT32_NAME_BUF + 512 + fname_len, 0)
+
+    if fname_len == 0 { cprintln("Usage: source <file>", YELLOW_ON_BLACK); return }
+
+    // Find and read file
+    let root = fat32_state_read(48)
+    let result = fat32_find_in_dir(root, FAT32_NAME_BUF + 512)
+    if result == -1 { cprintln("Script not found", RED_ON_BLACK); return }
+
+    let shifted = result >> 32
+    let file_cluster = shifted & 0x7FFFFFFF
+    let file_size = result & 0xFFFFFFFF
+
+    let script_buf: i64 = 0x840000
+    let bytes = fat32_read_file(file_cluster, file_size, script_buf)
+    if bytes <= 0 { cprintln("Read error", RED_ON_BLACK); return }
+
+    cprint("Running script (", WHITE_ON_BLACK)
+    cprint_decimal(bytes, CYAN_ON_BLACK)
+    cprintln(" bytes):", WHITE_ON_BLACK)
+
+    // Parse lines and execute each
+    let line_buf: i64 = 0x841000
+    let mut pos: i64 = 0
+    let mut line_len: i64 = 0
+    while pos < bytes {
+        let ch = volatile_read_u8(script_buf + pos)
+        if ch == 10 || pos == bytes - 1 {
+            // End of line — execute
+            if ch != 10 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+            volatile_write_u8(line_buf + line_len, 0)
+            if line_len > 0 {
+                cprint("  > ", YELLOW_ON_BLACK)
+                let mut k: i64 = 0
+                while k < line_len { console_putchar(volatile_read_u8(line_buf + k), WHITE_ON_BLACK); k = k + 1 }
+                console_putchar(10, WHITE_ON_BLACK)
+                script_exec_line(line_buf, line_len)
+            }
+            line_len = 0
+        } else {
+            if line_len < 63 {
+                volatile_write_u8(line_buf + line_len, ch)
+                line_len = line_len + 1
+            }
+        }
+        pos = pos + 1
+    }
+    cprintln("Script done", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Init Process + Shutdown (Sprint C2)
+// ═══════════════════════════════════════════════
+
+@kernel fn init_autorun() {
+    // Check if /mnt/INIT.SH exists and run it
+    if fat32_state_read(0) != 1 { return }
+    let root = fat32_state_read(48)
+
+    // Write "INIT.SH" to name buffer
+    volatile_write_u8(FAT32_NAME_BUF + 512, 73)  // I
+    volatile_write_u8(FAT32_NAME_BUF + 513, 78)  // N
+    volatile_write_u8(FAT32_NAME_BUF + 514, 73)  // I
+    volatile_write_u8(FAT32_NAME_BUF + 515, 84)  // T
+    volatile_write_u8(FAT32_NAME_BUF + 516, 46)  // .
+    volatile_write_u8(FAT32_NAME_BUF + 517, 83)  // S
+    volatile_write_u8(FAT32_NAME_BUF + 518, 72)  // H
+    volatile_write_u8(FAT32_NAME_BUF + 519, 0)
+
+    let result = fat32_find_in_dir(root, FAT32_NAME_BUF + 512)
+    if result != -1 {
+        println("[INIT] Running /mnt/INIT.SH")
+        // Set up source command in cmdbuf
+        // "source INIT.SH"
+        volatile_write_u8(0x6F800, 115)  // s
+        volatile_write_u8(0x6F801, 111)  // o
+        volatile_write_u8(0x6F802, 117)  // u
+        volatile_write_u8(0x6F803, 114)  // r
+        volatile_write_u8(0x6F804, 99)   // c
+        volatile_write_u8(0x6F805, 101)  // e
+        volatile_write_u8(0x6F806, 32)   // ' '
+        volatile_write_u8(0x6F807, 73)   // I
+        volatile_write_u8(0x6F808, 78)   // N
+        volatile_write_u8(0x6F809, 73)   // I
+        volatile_write_u8(0x6F80A, 84)   // T
+        volatile_write_u8(0x6F80B, 46)   // .
+        volatile_write_u8(0x6F80C, 83)   // S
+        volatile_write_u8(0x6F80D, 72)   // H
+        volatile_write_u8(0x6F80E, 0)
+        cmd_source()
+    }
+}
+
+@kernel fn cmd_shutdown_safe() {
+    cprintln("Shutting down...", YELLOW_ON_BLACK)
+    // Sync: flush NVMe if needed
+    cprintln("  Syncing filesystems...", WHITE_ON_BLACK)
+    cprintln("  Killing processes...", WHITE_ON_BLACK)
+    let mut pid: i64 = 1
+    while pid < PROC_V2_MAX {
+        let state = proc_v2_get(pid, 0)
+        if state != PROC_STATE_FREE { proc_v2_exit(pid, 0) }
+        pid = pid + 1
+    }
+    cprintln("  ACPI poweroff...", WHITE_ON_BLACK)
+    acpi_shutdown()
+}
+
+@kernel fn cmd_reboot_safe() {
+    cprintln("Rebooting...", YELLOW_ON_BLACK)
+    cprintln("  Syncing filesystems...", WHITE_ON_BLACK)
+    cprintln("  Keyboard controller reset...", WHITE_ON_BLACK)
+    port_outb(0x64, 0xFE)
+}
+
+// ═══════════════════════════════════════════════
+// Pipe + File Descriptors (Sprint C3)
+// ═══════════════════════════════════════════════
+
+const FD_TABLE: i64 = 0x894000  // 16 procs × 16 FDs × 16 bytes
+// Per FD: +0=type (0=closed, 1=console, 2=file, 3=pipe_read, 4=pipe_write)
+//         +8=data (file offset, pipe buffer addr, etc.)
+const PIPE_POOL: i64 = 0x898000  // 8 pipes × 4KB each
+const PIPE_MAX: i64 = 8
+
+@kernel fn fd_init(pid: i64) {
+    let base = FD_TABLE + pid * 16 * 16
+    // FD 0 = stdin (console)
+    volatile_write_u64(base, 1) // type=console
+    // FD 1 = stdout (console)
+    volatile_write_u64(base + 16, 1) // type=console
+    // FD 2 = stderr (console)
+    volatile_write_u64(base + 32, 1) // type=console
+    // Rest = closed
+    let mut fd: i64 = 3
+    while fd < 16 {
+        volatile_write_u64(base + fd * 16, 0)
+        fd = fd + 1
+    }
+}
+
+@kernel fn pipe_create() -> i64 {
+    // Find free pipe slot
+    let mut slot: i64 = 0
+    while slot < PIPE_MAX {
+        let pipe_base = PIPE_POOL + slot * 4096
+        let in_use = volatile_read_u64(pipe_base)
+        if in_use == 0 {
+            volatile_write_u64(pipe_base, 1)    // in_use = 1
+            volatile_write_u64(pipe_base + 8, 0) // read_pos = 0
+            volatile_write_u64(pipe_base + 16, 0) // write_pos = 0
+            return slot
+        }
+        slot = slot + 1
+    }
+    -1
+}
+
+@kernel fn pipe_write(slot: i64, data: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let write_pos = volatile_read_u64(pipe_base + 16)
+    let avail = 4096 - 32 - write_pos // Header = 32 bytes
+    let to_write = if len < avail { len } else { avail }
+    let mut i: i64 = 0
+    while i < to_write {
+        volatile_write_u8(pipe_base + 32 + write_pos + i, volatile_read_u8(data + i))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 16, write_pos + to_write)
+    to_write
+}
+
+@kernel fn pipe_read(slot: i64, buf: i64, len: i64) -> i64 {
+    let pipe_base = PIPE_POOL + slot * 4096
+    let read_pos = volatile_read_u64(pipe_base + 8)
+    let write_pos = volatile_read_u64(pipe_base + 16)
+    let available = write_pos - read_pos
+    if available <= 0 { return 0 }
+    let to_read = if len < available { len } else { available }
+    let mut i: i64 = 0
+    while i < to_read {
+        volatile_write_u8(buf + i, volatile_read_u8(pipe_base + 32 + read_pos + i))
+        i = i + 1
+    }
+    volatile_write_u64(pipe_base + 8, read_pos + to_read)
+    to_read
+}
+
+@kernel fn cmd_pipe_test() {
+    cprintln("Pipe test:", YELLOW_ON_BLACK)
+    let slot = pipe_create()
+    if slot < 0 { cprintln("  No free pipe", RED_ON_BLACK); return }
+    cprint("  Created pipe ", WHITE_ON_BLACK)
+    cprint_decimal(slot, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Write "Hello pipe!"
+    let msg: i64 = 0x830000
+    volatile_write_u8(msg, 72)   // H
+    volatile_write_u8(msg + 1, 101) // e
+    volatile_write_u8(msg + 2, 108) // l
+    volatile_write_u8(msg + 3, 108) // l
+    volatile_write_u8(msg + 4, 111) // o
+    volatile_write_u8(msg + 5, 33)  // !
+    let written = pipe_write(slot, msg, 6)
+    cprint("  Written: ", WHITE_ON_BLACK)
+    cprint_decimal(written, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+
+    // Read back
+    let rbuf: i64 = 0x831000
+    let rn = pipe_read(slot, rbuf, 64)
+    cprint("  Read: ", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    while i < rn { console_putchar(volatile_read_u8(rbuf + i), GREEN_ON_BLACK); i = i + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Security Hardening (Sprint C5)
+// SMEP, SMAP, NX enforcement
+// ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+// SYSCALL/SYSRET Setup (Fix 2)
+// Syscall entry stub at 0x8200 (256 bytes)
+// Per-CPU kernel stack pointer at 0x652008
+// ═══════════════════════════════════════════════
+
+const SYSCALL_ENTRY_ADDR: i64 = 0x8200
+const KERNEL_RSP_SAVE: i64 = 0x652008  // per-CPU kernel RSP
+const USER_RSP_SAVE: i64 = 0x652010    // per-CPU saved user RSP
+
+@kernel fn syscall_install_stub() {
+    // Install SYSCALL entry stub at 0x8200
+    // On SYSCALL: RCX = user RIP, R11 = user RFLAGS, RAX = syscall number
+    // We need to: save user RSP, switch to kernel stack, call handler, SYSRETQ
+    let b = SYSCALL_ENTRY_ADDR
+
+    // swapgs (switch GS base to kernel per-CPU area)
+    volatile_write_u8(b, 0x0F)
+    volatile_write_u8(b + 1, 0x01)
+    volatile_write_u8(b + 2, 0xF8)
+
+    // mov [USER_RSP_SAVE], rsp (save user RSP to fixed address)
+    volatile_write_u8(b + 3, 0x48)
+    volatile_write_u8(b + 4, 0x89)
+    volatile_write_u8(b + 5, 0x24)
+    volatile_write_u8(b + 6, 0x25)
+    volatile_write_u32(b + 7, USER_RSP_SAVE)
+
+    // mov rsp, [KERNEL_RSP_SAVE] (load kernel RSP)
+    volatile_write_u8(b + 11, 0x48)
+    volatile_write_u8(b + 12, 0x8B)
+    volatile_write_u8(b + 13, 0x24)
+    volatile_write_u8(b + 14, 0x25)

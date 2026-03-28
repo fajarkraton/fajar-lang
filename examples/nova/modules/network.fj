@@ -1,0 +1,1458 @@
+// ═══════════════════════════════════════════════
+// Network Stack (Phase 15)
+// Virtio-net driver + Ethernet + ARP + IPv4 + ICMP + UDP
+// State at 0x860000, RX/TX buffers at 0x870000
+// ═══════════════════════════════════════════════
+
+const NET_STATE: i64 = 0x860000
+// +0: initialized (1 if driver ready)
+// +8: mac[0..5] (6 bytes at offset 8)
+// +16: ip_addr (packed as u32, e.g., 10.0.2.15 = 0x0A00020F)
+// +24: gateway (e.g., 10.0.2.2 = 0x0A000202)
+// +32: netmask (e.g., 255.255.255.0 = 0xFFFFFF00)
+// +40: rx_count
+// +48: tx_count
+// +56: virtio_bar (BAR0 base for virtio-net)
+
+const NET_RX_BUF: i64 = 0x870000  // 16KB RX buffer
+const NET_TX_BUF: i64 = 0x874000  // 16KB TX buffer
+const NET_ARP_CACHE: i64 = 0x878000  // ARP cache: 16 entries × 16 bytes (ip:4 + mac:6 + pad:6)
+const NET_PKT_BUF: i64 = 0x87C000  // Temp packet build buffer (4KB)
+
+// Virtqueue memory layout (at 0x890000, page-aligned)
+// Queue 0 = RX, Queue 1 = TX
+// Each queue: 16 descriptors × 16 bytes = 256 bytes descriptors
+//   + avail ring: 6 + 16*2 = 38 bytes (padded to 4096 boundary)
+//   + used ring: 4 + 16*8 = 132 bytes
+// Total per queue: ~4KB (page-aligned)
+// IMPORTANT: This must match what the device reports via port_inw(io_base + 0x0C).
+// QEMU virtio-net typically reports 256. The driver MUST use this value for
+// ring layout calculations, even if we only fill a subset of descriptors.
+const VQ_NUM_ENTRIES: i64 = 256
+const VQ_RX_BASE: i64 = 0x890000     // RX queue (page 0)
+const VQ_TX_BASE: i64 = 0x894000     // TX queue (page 1)
+const VQ_RX_BUFS: i64 = 0x898000    // RX packet buffers: 16 × 2KB = 32KB
+const VIRTIO_NET_HDR_SIZE: i64 = 10  // virtio-net header prepended to each packet
+
+// Net state extended offsets:
+// +64: rx_avail_idx (current avail ring index for RX)
+// +72: tx_avail_idx
+// +80: rx_used_last (last processed used ring index)
+// +88: tx_used_last
+
+// Descriptor flags
+const VRING_DESC_F_NEXT: i64 = 1
+const VRING_DESC_F_WRITE: i64 = 2  // buffer is write-only (for device → driver)
+
+// Virtqueue descriptor: 16 bytes
+// +0: addr (u64) — physical address of buffer
+// +8: len  (u32) — buffer length
+// +12: flags (u16) — VRING_DESC_F_*
+// +14: next (u16) — next descriptor index (if F_NEXT)
+
+@kernel fn vq_desc_set(base: i64, idx: i64, addr: i64, len: i64, flags: i64, next: i64) {
+    let off = base + idx * 16
+    volatile_write_u64(off, addr)
+    volatile_write_u32(off + 8, len)
+    volatile_write_u16(off + 12, flags)
+    volatile_write_u16(off + 14, next)
+}
+
+// Avail ring layout (after descriptors):
+// +0: flags (u16) — 0 = no interrupt suppression
+// +2: idx (u16) — next slot to fill
+// +4: ring[N] (u16 each) — descriptor indices
+
+@kernel fn vq_avail_offset(base: i64) -> i64 {
+    // Avail ring starts after descriptor table: N * 16 bytes
+    base + VQ_NUM_ENTRIES * 16
+}
+
+@kernel fn vq_avail_add(base: i64, desc_idx: i64) {
+    let avail = vq_avail_offset(base)
+    let idx = volatile_read_u16(avail + 2) & 0xFFFF
+    let ring_idx = idx % VQ_NUM_ENTRIES
+    volatile_write_u16(avail + 4 + ring_idx * 2, desc_idx)
+    // Memory barrier (ensure descriptor is visible before updating idx)
+    // On x86 stores are ordered, but add a compiler fence
+    volatile_write_u16(avail + 2, (idx + 1) & 0xFFFF)
+}
+
+// Used ring layout (page-aligned after avail ring):
+// +0: flags (u16)
+// +2: idx (u16)
+// +4: ring[N] × 8 bytes: id(u32) + len(u32)
+
+@kernel fn vq_used_offset(base: i64) -> i64 {
+    // Used ring: page-aligned after descriptors + available ring
+    // virtio spec: align(sizeof_desc + sizeof_avail, VIRTIO_PCI_VRING_ALIGN)
+    // VIRTIO_PCI_VRING_ALIGN = 4096 for legacy PCI
+    // sizeof_desc = VQ_NUM_ENTRIES * 16
+    // sizeof_avail = 4 + 2 * VQ_NUM_ENTRIES  (flags:2 + idx:2 + ring[N]:N*2)
+    let avail_end = VQ_NUM_ENTRIES * 16 + 4 + VQ_NUM_ENTRIES * 2
+    let used_offset = ((avail_end + 4095) / 4096) * 4096
+    base + used_offset
+}
+
+@kernel fn vq_used_idx(base: i64) -> i64 {
+    // Check if we have a discovered used ring offset (from scan)
+    let discovered = net_state_read(96)
+    if discovered > 0 {
+        return volatile_read_u16(base + discovered + 2) & 0xFFFF
+    }
+    volatile_read_u16(vq_used_offset(base) + 2) & 0xFFFF
+}
+
+@kernel fn vq_setup_queue(io_base: i64, queue_idx: i64, queue_base: i64) {
+    // Select queue
+    port_outw(io_base + 0x0E, queue_idx)
+    // Read queue size (should return max entries)
+    let qsz = port_inw(io_base + 0x0C) & 0xFFFF
+    if qsz == 0 {
+        println("[VQ] Queue size = 0, skipping")
+        return
+    }
+    // Log actual queue size from device
+    println("[VQ] Queue size from device (should be 256)")
+    // Write queue PFN (physical address >> 12 = page frame number)
+    port_outd(io_base + 0x08, queue_base / 4096)
+}
+
+@kernel fn vq_init_mem(base: i64) {
+    // Zero the entire queue region: descriptors + avail ring + used ring
+    // For 256 entries: desc=4096, avail=518, used at 8192, used=2052
+    // Total: ~10KB, zero 16KB to be safe (4 pages)
+    let mut i: i64 = 0
+    while i < 16384 { volatile_write_u8(base + i, 0); i = i + 1 }
+}
+
+const VQ_RX_FILL: i64 = 16  // Only pre-fill 16 RX buffers (not all 256)
+
+@kernel fn net_setup_rx_queue() {
+    // Pre-fill first 16 RX descriptors (device writes received packets here)
+    let mut i: i64 = 0
+    while i < VQ_RX_FILL {
+        let buf_addr = VQ_RX_BUFS + i * 2048  // 2KB per RX buffer
+        // Descriptor: addr=buf, len=2048, flags=WRITE (device fills it), no next
+        vq_desc_set(VQ_RX_BASE, i, buf_addr, 2048, VRING_DESC_F_WRITE, 0)
+        // Add to avail ring
+        vq_avail_add(VQ_RX_BASE, i)
+        i = i + 1
+    }
+    // Store our tracking indices
+    net_state_write(64, VQ_RX_FILL)  // rx_avail_idx = 16 (we filled 16 entries)
+    net_state_write(80, 0)               // rx_used_last = 0
+
+    // CRITICAL: Notify the device that RX buffers are available (kick RX queue 0)
+    let io_base = net_state_read(56)
+    if io_base != 0 {
+        port_outw(io_base + 0x10, 0) // Notify queue 0 (RX)
+    }
+}
+
+@kernel fn net_tx_packet(data: i64, len: i64) -> i64 {
+    // Send a packet via virtio-net TX queue
+    // data must include the 10-byte virtio-net header prepended
+    let io_base = net_state_read(56)
+    if io_base == 0 { return -1 }
+
+    let tx_idx = net_state_read(72) & 0xFFFF
+    let desc_idx = tx_idx % VQ_NUM_ENTRIES
+
+    // Set descriptor: point to TX buffer with data
+    vq_desc_set(VQ_TX_BASE, desc_idx, data, len, 0, 0)
+
+    // Add to avail ring
+    vq_avail_add(VQ_TX_BASE, desc_idx)
+
+    // Update our tracking
+    net_state_write(72, tx_idx + 1)
+
+    // Kick the device (notify TX queue = queue 1)
+    port_outw(io_base + 0x10, 1)
+
+    // Increment TX counter
+    net_state_write(48, net_state_read(48) + 1)
+
+    0
+}
+
+@kernel fn net_rx_poll() -> i64 {
+    // Check for received packets. Returns length of packet or -1 if none.
+    // Received packet data is at VQ_RX_BUFS + desc_idx * 2048
+    let used_idx = vq_used_idx(VQ_RX_BASE)
+    let last = net_state_read(80) & 0xFFFF
+    if used_idx == last { return -1 }  // no new packets
+
+    // Read the used ring entry
+    let used_base = vq_used_offset(VQ_RX_BASE)
+    let ring_idx = last % VQ_NUM_ENTRIES
+    let desc_id = volatile_read_u32(used_base + 4 + ring_idx * 8) & 0xFFFF
+    let pkt_len = volatile_read_u32(used_base + 4 + ring_idx * 8 + 4)
+
+    // Advance last-processed index
+    net_state_write(80, last + 1)
+
+    // Increment RX counter
+    net_state_write(40, net_state_read(40) + 1)
+
+    // Copy received data to NET_RX_BUF for parsing
+    let src = VQ_RX_BUFS + desc_id * 2048
+    let mut i: i64 = 0
+    while i < pkt_len && i < 16384 {
+        volatile_write_u8(NET_RX_BUF + i, volatile_read_u8(src + i))
+        i = i + 1
+    }
+
+    // Re-add this descriptor to available ring for future receives
+    vq_avail_add(VQ_RX_BASE, desc_id)
+    net_state_write(64, net_state_read(64) + 1)
+
+    // Notify RX queue
+    let io_base = net_state_read(56)
+    port_outw(io_base + 0x10, 0)
+
+    pkt_len
+}
+
+@kernel fn net_send_frame(frame_data: i64, frame_len: i64) -> i64 {
+    // Prepend 10-byte virtio-net header + send via TX queue
+    // Header: flags(1)=0, gso_type(1)=0, hdr_len(2)=0, gso_size(2)=0,
+    //         csum_start(2)=0, csum_offset(2)=0
+    let tx_buf = NET_TX_BUF + 4096  // Use upper part of TX buffer area
+    // Zero virtio-net header
+    let mut i: i64 = 0
+    while i < VIRTIO_NET_HDR_SIZE { volatile_write_u8(tx_buf + i, 0); i = i + 1 }
+    // Copy frame after header
+    i = 0
+    while i < frame_len { volatile_write_u8(tx_buf + VIRTIO_NET_HDR_SIZE + i, volatile_read_u8(frame_data + i)); i = i + 1 }
+
+    net_tx_packet(tx_buf, VIRTIO_NET_HDR_SIZE + frame_len)
+}
+
+@kernel fn net_check_icmp_reply() -> i64 {
+    // Poll for ICMP echo reply. Returns RTT in TSC cycles or -1.
+    let t0 = rdtsc()
+    let mut attempts: i64 = 0
+    while attempts < 50000000 {  // ~5 second timeout
+        let pkt_len = net_rx_poll()
+        if pkt_len > 0 {
+            // Skip virtio-net header (10 bytes)
+            let eth_off = VIRTIO_NET_HDR_SIZE
+            // Check ethertype at offset 12 (after 6+6 MAC addresses)
+            let et_hi = volatile_read_u8(NET_RX_BUF + eth_off + 12)
+            let et_lo = volatile_read_u8(NET_RX_BUF + eth_off + 13)
+            if et_hi == 0x08 && et_lo == 0x00 {
+                // IPv4 — check protocol at IP offset 9
+                let ip_off = eth_off + 14
+                let proto = volatile_read_u8(NET_RX_BUF + ip_off + 9)
+                if proto == 1 {
+                    // ICMP — check type at ICMP offset 0
+                    let icmp_off = ip_off + 20
+                    let icmp_type = volatile_read_u8(NET_RX_BUF + icmp_off)
+                    if icmp_type == 0 {
+                        // Type 0 = Echo Reply!
+                        return rdtsc() - t0
+                    }
+                }
+            }
+        }
+        pause()
+        attempts = attempts + 1
+    }
+    -1  // timeout
+}
+
+@kernel fn net_state_read(off: i64) -> i64 { volatile_read_u64(NET_STATE + off) }
+@kernel fn net_state_write(off: i64, val: i64) { volatile_write_u64(NET_STATE + off, val) }
+
+// ── Virtio-Net PCI Discovery ──
+
+@kernel fn net_find_virtio() -> i64 {
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 {
+            let vendor = id & 0xFFFF
+            let device_id = (id >> 16) & 0xFFFF
+            // Virtio vendor: 0x1AF4, network device: 0x1000 (legacy) or 0x1041 (modern)
+            if vendor == 0x1AF4 && (device_id == 0x1000 || device_id == 0x1041) {
+                return dev
+            }
+        }
+        dev = dev + 1
+    }
+    -1
+}
+
+@kernel fn net_init() -> i64 {
+    let dev = net_find_virtio()
+    if dev == -1 {
+        // No virtio-net — set up with static config for simulation
+        // Use fake MAC 52:54:00:12:34:56 (QEMU default)
+        volatile_write_u8(NET_STATE + 8, 0x52)
+        volatile_write_u8(NET_STATE + 9, 0x54)
+        volatile_write_u8(NET_STATE + 10, 0x00)
+        volatile_write_u8(NET_STATE + 11, 0x12)
+        volatile_write_u8(NET_STATE + 12, 0x34)
+        volatile_write_u8(NET_STATE + 13, 0x56)
+        // Default QEMU user-mode IP
+        net_state_write(16, 0x0A00020F) // 10.0.2.15
+        net_state_write(24, 0x0A000202) // 10.0.2.2
+        net_state_write(32, 0xFFFFFF00) // 255.255.255.0
+        net_state_write(0, 1) // initialized
+        return 0
+    }
+
+    // Enable PCI bus master + I/O space
+    let cmd = pci_read32(0, dev, 0, 0x04)
+    pci_write32(0, dev, 0, 0x04, cmd | 0x07)
+
+    // Get BAR0 (I/O port base for legacy virtio)
+    let bar0 = pci_read32(0, dev, 0, 0x10)
+    let io_base = bar0 & 0xFFFFFFFC
+    net_state_write(56, io_base)
+
+    // Virtio legacy device initialization sequence
+    // 1. Reset device: write 0 to status register (offset 0x12)
+    port_outb(io_base + 0x12, 0)
+    // 2. Set ACKNOWLEDGE status bit (1)
+    port_outb(io_base + 0x12, 1)
+    // 3. Set DRIVER status bit (2)
+    port_outb(io_base + 0x12, 3)
+
+    // 4. Read device features (offset 0x00, 32-bit)
+    let features = port_ind(io_base)
+    // 5. Write accepted features (offset 0x04) — accept MAC feature
+    port_outd(io_base + 4, features & 0x20) // VIRTIO_NET_F_MAC (bit 5)
+
+    // 6. Set FEATURES_OK (8)
+    port_outb(io_base + 0x12, 11) // ACKNOWLEDGE | DRIVER | FEATURES_OK
+
+    // 7. Read MAC address from device config (offset 0x14-0x19)
+    let mut i: i64 = 0
+    while i < 6 {
+        let mac_byte = port_inb(io_base + 0x14 + i) & 0xFF
+        volatile_write_u8(NET_STATE + 8 + i, mac_byte)
+        i = i + 1
+    }
+
+    // 7.5. Set up virtqueues BEFORE DRIVER_OK
+    // Initialize queue memory
+    vq_init_mem(VQ_RX_BASE)
+    vq_init_mem(VQ_TX_BASE)
+    // Zero RX buffers
+    i = 0
+    while i < 16 * 2048 { volatile_write_u8(VQ_RX_BUFS + i, 0); i = i + 1 }
+    // Mark queue memory as used in frame allocator
+    let mut f: i64 = VQ_RX_BASE / FRAME_SIZE
+    while f < (VQ_RX_BUFS + 16 * 2048) / FRAME_SIZE { frame_mark_used(f); f = f + 1 }
+    // Map queue pages
+    let mut pg: i64 = VQ_RX_BASE
+    while pg < VQ_RX_BUFS + 16 * 2048 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        pg = pg + FRAME_SIZE
+    }
+    // Set up RX queue (index 0)
+    vq_setup_queue(io_base, 0, VQ_RX_BASE)
+    // Set up TX queue (index 1)
+    vq_setup_queue(io_base, 1, VQ_TX_BASE)
+    // Pre-fill RX queue with empty buffers
+    net_setup_rx_queue()
+    println("[NET] Virtqueues configured (RX=0, TX=1)")
+
+    // 8. Set DRIVER_OK (4) — device is live
+    port_outb(io_base + 0x12, 15) // ACKNOWLEDGE | DRIVER | FEATURES_OK | DRIVER_OK
+
+    // Default IP config (QEMU user-mode networking)
+    net_state_write(16, 0x0A00020F) // 10.0.2.15
+    net_state_write(24, 0x0A000202) // 10.0.2.2
+    net_state_write(32, 0xFFFFFF00) // 255.255.255.0
+
+    // Mark memory used
+    let mut f: i64 = NET_STATE / FRAME_SIZE
+    while f < 0x880000 / FRAME_SIZE { frame_mark_used(f); f = f + 1 }
+
+    net_state_write(40, 0) // rx_count
+    net_state_write(48, 0) // tx_count
+    net_state_write(0, 1)  // initialized
+
+    0
+}
+
+// ── Ethernet Frame Build/Parse ──
+
+@kernel fn eth_build_frame(dst_mac: i64, ethertype: i64, payload: i64, payload_len: i64) -> i64 {
+    let buf = NET_TX_BUF
+    // Destination MAC (6 bytes from dst_mac address)
+    let mut i: i64 = 0
+    while i < 6 { volatile_write_u8(buf + i, volatile_read_u8(dst_mac + i)); i = i + 1 }
+    // Source MAC (our MAC)
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 6 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+    // EtherType (big-endian u16)
+    volatile_write_u8(buf + 12, (ethertype >> 8) & 0xFF)
+    volatile_write_u8(buf + 13, ethertype & 0xFF)
+    // Payload
+    i = 0
+    while i < payload_len { volatile_write_u8(buf + 14 + i, volatile_read_u8(payload + i)); i = i + 1 }
+    14 + payload_len // total frame length
+}
+
+// ── ARP ──
+
+@kernel fn arp_build_request(target_ip: i64) -> i64 {
+    let buf = NET_PKT_BUF
+    // Hardware type: Ethernet (1)
+    buffer_write_u16_be(buf, 1)
+    // Protocol type: IPv4 (0x0800)
+    buffer_write_u16_be(buf + 2, 0x0800)
+    // Hardware addr len: 6, Protocol addr len: 4
+    volatile_write_u8(buf + 4, 6)
+    volatile_write_u8(buf + 5, 4)
+    // Operation: request (1)
+    buffer_write_u16_be(buf + 6, 1)
+    // Sender MAC (our MAC)
+    let mut i: i64 = 0
+    while i < 6 { volatile_write_u8(buf + 8 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+    // Sender IP
+    let our_ip = net_state_read(16)
+    buffer_write_u32_be(buf + 14, our_ip)
+    // Target MAC (zeros for request)
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 18 + i, 0); i = i + 1 }
+    // Target IP
+    buffer_write_u32_be(buf + 24, target_ip)
+    28 // ARP packet size
+}
+
+@kernel fn arp_cache_lookup(ip: i64) -> i64 {
+    // Returns address of MAC in cache, or -1 if not found
+    let mut i: i64 = 0
+    while i < 16 {
+        let cached_ip = buffer_read_u32_be(NET_ARP_CACHE + i * 16)
+        if cached_ip == ip { return NET_ARP_CACHE + i * 16 + 4 }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn arp_cache_add(ip: i64, mac_addr: i64) {
+    // Find empty slot or overwrite oldest
+    let mut slot: i64 = 0
+    let mut i: i64 = 0
+    while i < 16 {
+        if buffer_read_u32_be(NET_ARP_CACHE + i * 16) == 0 { slot = i; i = 16 }
+        else { i = i + 1 }
+    }
+    buffer_write_u32_be(NET_ARP_CACHE + slot * 16, ip)
+    let mut j: i64 = 0
+    while j < 6 {
+        volatile_write_u8(NET_ARP_CACHE + slot * 16 + 4 + j, volatile_read_u8(mac_addr + j))
+        j = j + 1
+    }
+}
+
+// ── IPv4 ──
+
+@kernel fn ip_build_header(dst_ip: i64, proto: i64, payload_len: i64) -> i64 {
+    let buf = NET_PKT_BUF + 512 // Use offset 512 for IP header build
+    let total_len = 20 + payload_len
+    // Version(4) + IHL(5) = 0x45
+    volatile_write_u8(buf, 0x45)
+    // DSCP/ECN
+    volatile_write_u8(buf + 1, 0)
+    // Total length
+    buffer_write_u16_be(buf + 2, total_len)
+    // Identification
+    buffer_write_u16_be(buf + 4, 0x1234)
+    // Flags + Fragment offset
+    buffer_write_u16_be(buf + 6, 0x4000) // Don't Fragment
+    // TTL
+    volatile_write_u8(buf + 8, 64)
+    // Protocol (1=ICMP, 6=TCP, 17=UDP)
+    volatile_write_u8(buf + 9, proto)
+    // Checksum (set to 0, compute later)
+    buffer_write_u16_be(buf + 10, 0)
+    // Source IP
+    buffer_write_u32_be(buf + 12, net_state_read(16))
+    // Destination IP
+    buffer_write_u32_be(buf + 16, dst_ip)
+
+    // Compute checksum
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < 20 {
+        let word = buffer_read_u16_be(buf + k)
+        sum = sum + word
+        k = k + 2
+    }
+    // Fold carries
+    while sum > 0xFFFF { sum = (sum & 0xFFFF) + (sum >> 16) }
+    let checksum = (sum ^ 0xFFFF) & 0xFFFF
+    buffer_write_u16_be(buf + 10, checksum)
+
+    20 // header length
+}
+
+// ── ICMP (Ping) ──
+
+@kernel fn icmp_build_echo_request(seq: i64) -> i64 {
+    let buf = NET_PKT_BUF + 1024
+    // Type: 8 (Echo Request)
+    volatile_write_u8(buf, 8)
+    // Code: 0
+    volatile_write_u8(buf + 1, 0)
+    // Checksum: 0 (compute after)
+    buffer_write_u16_be(buf + 2, 0)
+    // Identifier
+    buffer_write_u16_be(buf + 4, 0xFAFA)
+    // Sequence number
+    buffer_write_u16_be(buf + 6, seq)
+    // Payload: 8 bytes of pattern
+    let mut i: i64 = 0
+    while i < 8 { volatile_write_u8(buf + 8 + i, 0x41 + i); i = i + 1 }
+
+    // Compute ICMP checksum
+    let pkt_len: i64 = 16
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < pkt_len {
+        sum = sum + buffer_read_u16_be(buf + k)
+        k = k + 2
+    }
+    while sum > 0xFFFF { sum = (sum & 0xFFFF) + (sum >> 16) }
+    buffer_write_u16_be(buf + 2, (sum ^ 0xFFFF) & 0xFFFF)
+
+    pkt_len
+}
+
+// ── UDP ──
+
+@kernel fn udp_build(src_port: i64, dst_port: i64, payload: i64, payload_len: i64) -> i64 {
+    // Build UDP header at NET_PKT_BUF + 1536
+    let buf = NET_PKT_BUF + 1536
+    let udp_len = 8 + payload_len
+    buffer_write_u16_be(buf, src_port)       // Source port
+    buffer_write_u16_be(buf + 2, dst_port)   // Destination port
+    buffer_write_u16_be(buf + 4, udp_len)    // Length (header + data)
+    buffer_write_u16_be(buf + 6, 0)          // Checksum (0 = disabled)
+    // Copy payload after header
+    let mut i: i64 = 0
+    while i < payload_len { volatile_write_u8(buf + 8 + i, volatile_read_u8(payload + i)); i = i + 1 }
+    udp_len
+}
+
+// ── DHCP Client ──
+
+const DHCP_BUF: i64 = 0x87E000  // 2KB DHCP packet buffer
+const DHCP_XID: i64 = 0xFAFA1234  // Transaction ID
+
+@kernel fn dhcp_build_discover() -> i64 {
+    // Build DHCP Discover packet at DHCP_BUF (236 + options bytes)
+    let buf = DHCP_BUF
+    let mut i: i64 = 0
+    while i < 576 { volatile_write_u8(buf + i, 0); i = i + 1 }
+
+    volatile_write_u8(buf, 1)          // op: BOOTREQUEST
+    volatile_write_u8(buf + 1, 1)      // htype: Ethernet
+    volatile_write_u8(buf + 2, 6)      // hlen: 6 bytes MAC
+    volatile_write_u8(buf + 3, 0)      // hops: 0
+    buffer_write_u32_be(buf + 4, DHCP_XID)  // xid: transaction ID
+
+    // chaddr: our MAC address (at NET_STATE + 8)
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 28 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+
+    // Magic cookie: 0x63825363
+    volatile_write_u8(buf + 236, 0x63)
+    volatile_write_u8(buf + 237, 0x82)
+    volatile_write_u8(buf + 238, 0x53)
+    volatile_write_u8(buf + 239, 0x63)
+
+    // DHCP options
+    let mut opt: i64 = 240
+    // Option 53: DHCP Message Type = 1 (Discover)
+    volatile_write_u8(buf + opt, 53); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1   // Discover
+
+    // Option 55: Parameter Request List
+    volatile_write_u8(buf + opt, 55); opt = opt + 1
+    volatile_write_u8(buf + opt, 3); opt = opt + 1   // 3 params
+    volatile_write_u8(buf + opt, 1); opt = opt + 1   // Subnet Mask
+    volatile_write_u8(buf + opt, 3); opt = opt + 1   // Router
+    volatile_write_u8(buf + opt, 6); opt = opt + 1   // DNS
+
+    // End option
+    volatile_write_u8(buf + opt, 255); opt = opt + 1
+
+    opt // total DHCP packet length
+}
+
+@kernel fn dhcp_build_request(server_ip: i64, offered_ip: i64) -> i64 {
+    let buf = DHCP_BUF
+    let mut i: i64 = 0
+    while i < 576 { volatile_write_u8(buf + i, 0); i = i + 1 }
+
+    volatile_write_u8(buf, 1)          // op: BOOTREQUEST
+    volatile_write_u8(buf + 1, 1)      // htype: Ethernet
+    volatile_write_u8(buf + 2, 6)      // hlen: 6
+    buffer_write_u32_be(buf + 4, DHCP_XID)
+
+    // chaddr: our MAC
+    i = 0
+    while i < 6 { volatile_write_u8(buf + 28 + i, volatile_read_u8(NET_STATE + 8 + i)); i = i + 1 }
+
+    // Magic cookie
+    volatile_write_u8(buf + 236, 0x63)
+    volatile_write_u8(buf + 237, 0x82)
+    volatile_write_u8(buf + 238, 0x53)
+    volatile_write_u8(buf + 239, 0x63)
+
+    let mut opt: i64 = 240
+    // Option 53: DHCP Message Type = 3 (Request)
+    volatile_write_u8(buf + opt, 53); opt = opt + 1
+    volatile_write_u8(buf + opt, 1); opt = opt + 1
+    volatile_write_u8(buf + opt, 3); opt = opt + 1
+
+    // Option 50: Requested IP
+    volatile_write_u8(buf + opt, 50); opt = opt + 1
+    volatile_write_u8(buf + opt, 4); opt = opt + 1
+    buffer_write_u32_be(buf + opt, offered_ip); opt = opt + 4
+
+    // Option 54: Server Identifier
+    volatile_write_u8(buf + opt, 54); opt = opt + 1
+    volatile_write_u8(buf + opt, 4); opt = opt + 1
+    buffer_write_u32_be(buf + opt, server_ip); opt = opt + 4
+
+    // End
+    volatile_write_u8(buf + opt, 255); opt = opt + 1
+    opt
+}
+
+@kernel fn dhcp_parse_offer(buf: i64, len: i64) -> i64 {
+    // Parse DHCP Offer/Ack. Returns offered IP or -1.
+    // DHCP response: op=2 (BOOTREPLY), yiaddr at offset 16
+    if volatile_read_u8(buf) != 2 { return -1 }  // not a reply
+    let xid = buffer_read_u32_be(buf + 4)
+    if xid != DHCP_XID { return -2 }  // wrong transaction
+
+    let offered_ip = buffer_read_u32_be(buf + 16) // yiaddr
+    if offered_ip == 0 { return -3 }
+
+    // Find DHCP message type in options (after magic cookie at 236+4=240)
+    let mut opt: i64 = 240
+    let mut msg_type: i64 = 0
+    let mut server_ip: i64 = 0
+    let mut subnet: i64 = 0
+    let mut router: i64 = 0
+    while opt < len && opt < 576 {
+        let code = volatile_read_u8(buf + opt)
+        if code == 255 { opt = len }  // end
+        else if code == 0 { opt = opt + 1 }  // pad
+        else {
+            let olen = volatile_read_u8(buf + opt + 1)
+            if code == 53 { msg_type = volatile_read_u8(buf + opt + 2) }
+            if code == 54 { server_ip = buffer_read_u32_be(buf + opt + 2) }
+            if code == 1 { subnet = buffer_read_u32_be(buf + opt + 2) }
+            if code == 3 { router = buffer_read_u32_be(buf + opt + 2) }
+            opt = opt + 2 + olen
+        }
+    }
+
+    // Store parsed values
+    net_state_write(104, server_ip) // DHCP server IP
+    net_state_write(112, subnet)    // subnet mask
+    if router != 0 { net_state_write(24, router) } // gateway
+
+    // Return: msg_type in high byte, offered_ip
+    // Pack as msg_type * 0x100000000 + offered_ip (64-bit)
+    (msg_type << 32) | (offered_ip & 0xFFFFFFFF)
+}
+
+@kernel fn dhcp_do() -> i64 {
+    // Full DHCP: Discover → Offer → Request → Ack
+    println("[DHCP] Sending Discover...")
+
+    // Build DHCP Discover
+    let dhcp_len = dhcp_build_discover()
+    // Wrap in UDP: src=68, dst=67
+    let udp_len = udp_build(68, 67, DHCP_BUF, dhcp_len)
+    // Wrap in IP: src=0.0.0.0, dst=255.255.255.255, proto=17 (UDP)
+    // Special: for DHCP, src IP must be 0.0.0.0
+    let old_ip = net_state_read(16)
+    net_state_write(16, 0) // temporarily set src IP to 0.0.0.0
+    let ip_len = ip_build_header(0xFFFFFFFF, 17, udp_len) // broadcast, UDP
+    net_state_write(16, old_ip) // restore
+
+    // Combine IP + UDP into packet
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+    ci = 0
+    while ci < udp_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci)); ci = ci + 1 }
+
+    // Send as broadcast ethernet frame
+    let bcast: i64 = NET_PKT_BUF + 3072
+    let mut bj: i64 = 0
+    while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
+    let frame_len = eth_build_frame(bcast, 0x0800, pkt, ip_len + udp_len)
+    net_send_frame(NET_TX_BUF, frame_len)
+
+    // Wait for Offer
+    delay_us(500000) // 500ms
+    let mut found_offer: i64 = 0
+    let mut offered_ip: i64 = 0
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 && found_offer == 0 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        // Scan for DHCP magic cookie (0x63825363) starting after IP+UDP headers
+        let mut off: i64 = 0
+        while off < 300 && found_offer == 0 {
+            if volatile_read_u8(rb + off) == 0x63 && volatile_read_u8(rb + off + 1) == 0x82 && volatile_read_u8(rb + off + 2) == 0x53 && volatile_read_u8(rb + off + 3) == 0x63 {
+                // Found DHCP packet! Parse from start of DHCP header (off - 236)
+                let dhcp_start = off - 236
+                if dhcp_start >= 0 {
+                    let result = dhcp_parse_offer(rb + dhcp_start, 576)
+                    let msg = (result >> 32) & 0xFF
+                    let ip = result & 0xFFFFFFFF
+                    if msg == 2 && ip > 0 { // Offer
+                        offered_ip = ip
+                        found_offer = 1
+                        println("[DHCP] Offer received!")
+                    } else if msg == 5 && ip > 0 { // Ack (if server skips to Ack)
+                        offered_ip = ip
+                        found_offer = 2 // already acked
+                        println("[DHCP] Ack received directly!")
+                    }
+                }
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+
+    if found_offer == 0 {
+        println("[DHCP] No offer received")
+        return -1
+    }
+
+    // Configure IP from offer
+    net_state_write(16, offered_ip)
+    println("[DHCP] IP address assigned!")
+
+    if found_offer == 1 {
+        // Send DHCP Request
+        println("[DHCP] Sending Request...")
+        let server_ip = net_state_read(104)
+        let req_len = dhcp_build_request(server_ip, offered_ip)
+        let req_udp = udp_build(68, 67, DHCP_BUF, req_len)
+        net_state_write(16, 0)
+        let req_ip = ip_build_header(0xFFFFFFFF, 17, req_udp)
+        net_state_write(16, offered_ip)
+        let req_pkt: i64 = NET_PKT_BUF + 2048
+        ci = 0
+        while ci < req_ip { volatile_write_u8(req_pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+        ci = 0
+        while ci < req_udp { volatile_write_u8(req_pkt + req_ip + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci)); ci = ci + 1 }
+        let req_frame = eth_build_frame(bcast, 0x0800, req_pkt, req_ip + req_udp)
+        net_send_frame(NET_TX_BUF, req_frame)
+        println("[DHCP] Request sent, waiting for Ack...")
+        delay_us(500000)
+    }
+
+    println("[DHCP] Configuration complete")
+    0
+}
+
+// ── TCP Client ──
+
+// TCP state at 0x87F000 (256 bytes)
+const TCP_STATE: i64 = 0x87F000
+// +0: state (0=closed, 1=syn_sent, 2=established, 3=fin_wait)
+// +8: local_port
+// +16: remote_port
+// +24: remote_ip
+// +32: seq_num (our sequence number)
+// +40: ack_num (their sequence number)
+// +48: remote_seq (for tracking)
+
+const TCP_DATA_BUF: i64 = 0x87F100 // 3KB for TCP send/recv data
+
+@kernel fn tcp_state_write(off: i64, val: i64) { volatile_write_u64(TCP_STATE + off, val) }
+@kernel fn tcp_state_read(off: i64) -> i64 { volatile_read_u64(TCP_STATE + off) }
+
+@kernel fn tcp_build_header(src_port: i64, dst_port: i64, seq: i64, ack: i64, flags: i64, payload_len: i64) -> i64 {
+    // Build TCP header at NET_PKT_BUF + 1792 (20 bytes, no options)
+    let buf = NET_PKT_BUF + 1792
+    buffer_write_u16_be(buf, src_port)        // Source port
+    buffer_write_u16_be(buf + 2, dst_port)    // Destination port
+    buffer_write_u32_be(buf + 4, seq)          // Sequence number
+    buffer_write_u32_be(buf + 8, ack)          // Acknowledgment number
+    // Data offset (5 = 20 bytes, in upper 4 bits of byte) + reserved
+    volatile_write_u8(buf + 12, 0x50)          // 5 << 4 = 0x50 (20-byte header)
+    volatile_write_u8(buf + 13, flags & 0xFF)  // Flags: FIN=1, SYN=2, RST=4, PSH=8, ACK=16
+    buffer_write_u16_be(buf + 14, 8192)        // Window size
+    buffer_write_u16_be(buf + 16, 0)           // Checksum (0 for now — QEMU accepts without)
+    buffer_write_u16_be(buf + 18, 0)           // Urgent pointer
+    20 // TCP header length
+}
+
+@kernel fn tcp_send_packet(flags: i64, payload: i64, payload_len: i64) -> i64 {
+    let src_port = tcp_state_read(8)
+    let dst_port = tcp_state_read(16)
+    let remote_ip = tcp_state_read(24)
+    let seq = tcp_state_read(32)
+    let ack = tcp_state_read(40)
+
+    // Build TCP header
+    let tcp_len = tcp_build_header(src_port, dst_port, seq, ack, flags, payload_len)
+
+    // Copy payload after TCP header
+    let tcp_buf = NET_PKT_BUF + 1792
+    let mut i: i64 = 0
+    while i < payload_len { volatile_write_u8(tcp_buf + tcp_len + i, volatile_read_u8(payload + i)); i = i + 1 }
+
+    // Build IP header (proto=6 for TCP)
+    let ip_len = ip_build_header(remote_ip, 6, tcp_len + payload_len)
+
+    // Combine IP + TCP into packet
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+    ci = 0
+    while ci < tcp_len + payload_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(tcp_buf + ci)); ci = ci + 1 }
+
+    // Get destination MAC from ARP cache
+    let dst_mac = arp_cache_lookup(remote_ip)
+    if dst_mac < 0 {
+        // Use gateway MAC
+        let gw = net_state_read(24)
+        let gw_mac = arp_cache_lookup(gw)
+        if gw_mac < 0 { return -1 }
+        let frame_len = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + tcp_len + payload_len)
+        return net_send_frame(NET_TX_BUF, frame_len)
+    }
+    let frame_len = eth_build_frame(dst_mac, 0x0800, pkt, ip_len + tcp_len + payload_len)
+    net_send_frame(NET_TX_BUF, frame_len)
+}
+
+@kernel fn tcp_find_response() -> i64 {
+    // Scan RX buffers for TCP packet (IP proto=6)
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        let mut off: i64 = 0
+        while off < 50 {
+            // Look for IPv4 header (0x45) followed by proto=6 (TCP) at +9
+            if volatile_read_u8(rb + off) == 0x45 && volatile_read_u8(rb + off + 9) == 6 {
+                // Found TCP packet! Return buffer offset
+                // Copy to TCP_DATA_BUF for parsing
+                let mut c: i64 = 0
+                while c < 1500 { volatile_write_u8(TCP_DATA_BUF + c, volatile_read_u8(rb + off + c)); c = c + 1 }
+                return off
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+    -1
+}
+
+@kernel fn tcp_connect_simple(remote_ip: i64, remote_port: i64) -> i64 {
+    // TCP 3-way handshake: SYN → SYN-ACK → ACK
+    let local_port: i64 = 49152 + (rdtsc() % 16384) // ephemeral port
+
+    tcp_state_write(0, 0)  // closed
+    tcp_state_write(8, local_port)
+    tcp_state_write(16, remote_port)
+    tcp_state_write(24, remote_ip)
+    tcp_state_write(32, rdtsc() & 0xFFFFFFFF) // initial seq number
+    tcp_state_write(40, 0)  // ack = 0
+
+    // Step 1: Send SYN (flags = 0x02)
+    println("[TCP] Sending SYN...")
+    tcp_state_write(0, 1)  // syn_sent
+    let syn_result = tcp_send_packet(0x02, 0, 0) // SYN flag
+    if syn_result < 0 { println("[TCP] SYN send failed"); return -1 }
+
+    // Step 2: Wait for SYN-ACK
+    delay_us(500000) // 500ms
+    let resp = tcp_find_response()
+    if resp < 0 { println("[TCP] No SYN-ACK received"); return -2 }
+
+    // Parse SYN-ACK: TCP header at IP offset 20
+    let tcp_off: i64 = 20 // after IP header
+    let flags = volatile_read_u8(TCP_DATA_BUF + tcp_off + 13)
+    if (flags & 0x12) != 0x12 { // SYN+ACK = 0x12
+        println("[TCP] Not a SYN-ACK")
+        return -3
+    }
+    println("[TCP] SYN-ACK received!")
+
+    // Extract server's seq number and ack
+    let server_seq = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 4)
+    let server_ack = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 8)
+
+    // Update state
+    tcp_state_write(32, server_ack) // our next seq = their ack
+    tcp_state_write(40, server_seq + 1) // our ack = their seq + 1
+    tcp_state_write(48, server_seq)
+
+    // Step 3: Send ACK (flags = 0x10)
+    println("[TCP] Sending ACK...")
+    tcp_send_packet(0x10, 0, 0) // ACK flag
+    tcp_state_write(0, 2) // established
+    println("[TCP] Connection ESTABLISHED!")
+    0
+}
+
+@kernel fn tcp_send(data: i64, len: i64) -> i64 {
+    // Send data on established connection (PSH+ACK = 0x18)
+    if tcp_state_read(0) != 2 { return -1 } // not established
+    let result = tcp_send_packet(0x18, data, len)
+    // Advance seq number
+    tcp_state_write(32, tcp_state_read(32) + len)
+    result
+}
+
+@kernel fn tcp_recv() -> i64 {
+    // Check for received TCP data, return length or -1
+    delay_us(500000) // wait for response
+    let resp = tcp_find_response()
+    if resp < 0 { return -1 }
+
+    let tcp_off: i64 = 20
+    let flags = volatile_read_u8(TCP_DATA_BUF + tcp_off + 13)
+    let data_off_byte = volatile_read_u8(TCP_DATA_BUF + tcp_off + 12)
+    let tcp_hdr_len = ((data_off_byte >> 4) & 0xF) * 4
+    let ip_total = buffer_read_u16_be(TCP_DATA_BUF + 2)
+    let data_len = ip_total - 20 - tcp_hdr_len
+
+    if data_len > 0 {
+        // Copy data payload to TCP_DATA_BUF + 512
+        let data_start = tcp_off + tcp_hdr_len
+        let mut i: i64 = 0
+        while i < data_len && i < 1024 {
+            volatile_write_u8(TCP_DATA_BUF + 512 + i, volatile_read_u8(TCP_DATA_BUF + data_start + i))
+            i = i + 1
+        }
+
+        // Send ACK for received data
+        let server_seq = buffer_read_u32_be(TCP_DATA_BUF + tcp_off + 4)
+        tcp_state_write(40, server_seq + data_len) // ack their data
+        tcp_send_packet(0x10, 0, 0) // ACK
+    }
+
+    data_len
+}
+
+@kernel fn cmd_wget() {
+    // wget — simple HTTP GET via TCP
+    // Connects to 10.0.2.2:80 (QEMU host)
+    if net_state_read(0) != 1 { cprintln("Network not ready", RED_ON_BLACK); return }
+
+    let host_ip = ip_pack(10, 0, 2, 2) // QEMU host gateway
+    println("[HTTP] Connecting to 10.0.2.2:80...")
+    let conn = tcp_connect(0, host_ip, 80, 49200)
+    if conn < 0 {
+        println("[HTTP] Connection failed")
+        return
+    }
+
+    // Send HTTP GET request
+    let req = TCP_DATA_BUF + 1024
+    // "GET / HTTP/1.0\r\nHost: 10.0.2.2\r\n\r\n"
+    let mut ri: i64 = 0
+    let http_req_bytes: [i64; 38] = [71, 69, 84, 32, 47, 32, 72, 84, 84, 80, 47, 49, 46, 48, 13, 10, 72, 111, 115, 116, 58, 32, 49, 48, 46, 48, 46, 50, 46, 50, 13, 10, 13, 10, 0, 0, 0, 0]
+    while ri < 34 { volatile_write_u8(req + ri, http_req_bytes[ri]); ri = ri + 1 }
+
+    println("[HTTP] Sending GET /...")
+    tcp_send(req, 34)
+
+    // Receive response
+    let recv_len = tcp_recv()
+    if recv_len > 0 {
+        println("[HTTP] Response received!")
+        // Print first 200 bytes of response to serial
+        let mut pi: i64 = 0
+        while pi < recv_len && pi < 200 {
+            let ch = volatile_read_u8(TCP_DATA_BUF + 512 + pi)
+            if ch > 31 && ch < 127 {
+                port_outb(0x3F8, ch) // print to serial
+            } else if ch == 10 || ch == 13 {
+                port_outb(0x3F8, ch)
+            }
+            pi = pi + 1
+        }
+        port_outb(0x3F8, 10) // newline
+    } else {
+        println("[HTTP] No response data")
+    }
+}
+
+// ── IP address helpers ──
+
+@kernel fn ip_pack(a: i64, b: i64, c: i64, d: i64) -> i64 {
+    (a << 24) | (b << 16) | (c << 8) | d
+}
+
+@kernel fn ip_print(ip: i64) {
+    cprint_decimal((ip >> 24) & 0xFF, CYAN_ON_BLACK)
+    cprint(".", WHITE_ON_BLACK)
+    cprint_decimal((ip >> 16) & 0xFF, CYAN_ON_BLACK)
+    cprint(".", WHITE_ON_BLACK)
+    cprint_decimal((ip >> 8) & 0xFF, CYAN_ON_BLACK)
+    cprint(".", WHITE_ON_BLACK)
+    cprint_decimal(ip & 0xFF, CYAN_ON_BLACK)
+}
+
+@kernel fn mac_print(addr: i64) {
+    let mut i: i64 = 0
+    while i < 6 {
+        if i > 0 { cprint(":", WHITE_ON_BLACK) }
+        cprint_hex(volatile_read_u8(addr + i), 2, CYAN_ON_BLACK)
+        i = i + 1
+    }
+}
+
+// ── Shell Commands ──
+
+@kernel fn cmd_ifconfig() {
+    if net_state_read(0) != 1 { cprintln("Network not initialized", RED_ON_BLACK); return }
+    cprintln("Network Interface:", YELLOW_ON_BLACK)
+    cprint("  MAC:     ", WHITE_ON_BLACK)
+    mac_print(NET_STATE + 8)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  IPv4:    ", WHITE_ON_BLACK)
+    ip_print(net_state_read(16))
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Gateway: ", WHITE_ON_BLACK)
+    ip_print(net_state_read(24))
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Netmask: ", WHITE_ON_BLACK)
+    ip_print(net_state_read(32))
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  RX pkts: ", WHITE_ON_BLACK)
+    cprint_decimal(net_state_read(40), CYAN_ON_BLACK)
+    cprint("  TX pkts: ", WHITE_ON_BLACK)
+    cprint_decimal(net_state_read(48), CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    let vbar = net_state_read(56)
+    if vbar != 0 {
+        cprint("  Virtio:  BAR0=0x", WHITE_ON_BLACK)
+        cprint_hex(vbar, 4, CYAN_ON_BLACK)
+        cprintln(" (active)", GREEN_ON_BLACK)
+    } else {
+        cprintln("  Driver:  simulated (no virtio-net)", YELLOW_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_ping() {
+    if net_state_read(0) != 1 { cprintln("Network not initialized", RED_ON_BLACK); return }
+    let target = net_state_read(24) // ping gateway by default
+    cprint("PING ", WHITE_ON_BLACK)
+    ip_print(target)
+    cprintln(":", WHITE_ON_BLACK)
+
+    // Build ICMP echo request
+    let icmp_len = icmp_build_echo_request(1)
+    // Build IP header
+    let ip_len = ip_build_header(target, 1, icmp_len)
+
+    // Copy IP header + ICMP payload together
+    let pkt_buf: i64 = NET_PKT_BUF + 2048
+    let mut i: i64 = 0
+    while i < ip_len { volatile_write_u8(pkt_buf + i, volatile_read_u8(NET_PKT_BUF + 512 + i)); i = i + 1 }
+    i = 0
+    while i < icmp_len { volatile_write_u8(pkt_buf + ip_len + i, volatile_read_u8(NET_PKT_BUF + 1024 + i)); i = i + 1 }
+
+    // Build ethernet frame with broadcast MAC (for simplicity)
+    let bcast_mac: i64 = NET_PKT_BUF + 3072
+    let mut j: i64 = 0
+    while j < 6 { volatile_write_u8(bcast_mac + j, 0xFF); j = j + 1 }
+    let frame_len = eth_build_frame(bcast_mac, 0x0800, pkt_buf, ip_len + icmp_len)
+
+    // Increment TX counter
+    net_state_write(48, net_state_read(48) + 1)
+
+    cprint("  Sent ", WHITE_ON_BLACK)
+    cprint_decimal(frame_len, CYAN_ON_BLACK)
+    cprint(" byte ICMP echo to ", WHITE_ON_BLACK)
+    ip_print(target)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Send packet via virtio-net or simulate
+    if net_state_read(56) == 0 {
+        cprintln("  (simulated — no virtio-net device found)", YELLOW_ON_BLACK)
+        cprintln("  Reply: 64 bytes, ttl=64, time<1ms (simulated)", GREEN_ON_BLACK)
+    } else {
+        // Real TX via virtqueue
+        let tx_result = net_send_frame(NET_TX_BUF, frame_len)
+        if tx_result == 0 {
+            cprintln("  Packet sent via virtio-net TX", GREEN_ON_BLACK)
+            // Wait for ICMP echo reply
+            let rtt = net_check_icmp_reply()
+            if rtt >= 0 {
+                cprint("  Reply from ", WHITE_ON_BLACK)
+                ip_print(target)
+                cprint(": time=", WHITE_ON_BLACK)
+                // Convert TSC cycles to approximate microseconds
+                // Assume ~2GHz TSC → rtt/2000 = microseconds
+                cprint_decimal(rtt / 2000, CYAN_ON_BLACK)
+                cprintln("us", WHITE_ON_BLACK)
+            } else {
+                cprintln("  Request timed out", RED_ON_BLACK)
+            }
+        } else {
+            cprintln("  TX failed", RED_ON_BLACK)
+        }
+    }
+}
+
+@kernel fn cmd_arp() {
+    cprintln("ARP Cache:", YELLOW_ON_BLACK)
+    let mut count: i64 = 0
+    let mut i: i64 = 0
+    while i < 16 {
+        let ip = buffer_read_u32_be(NET_ARP_CACHE + i * 16)
+        if ip != 0 {
+            cprint("  ", WHITE_ON_BLACK)
+            ip_print(ip)
+            cprint(" -> ", WHITE_ON_BLACK)
+            mac_print(NET_ARP_CACHE + i * 16 + 4)
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+}
+
+@kernel fn cmd_net_init() {
+    let r = net_init()
+    if r == 0 {
+        cprintln("Network initialized", GREEN_ON_BLACK)
+        cmd_ifconfig()
+    } else {
+        cprintln("Network init failed", RED_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Phase E3: DNS Resolver + nslookup
+// Minimal DNS client: sends UDP query to 10.0.2.3 (QEMU DNS)
+// Response parsed for A records (IPv4 addresses)
+// ═══════════════════════════════════════════════
+
+const DNS_SERVER: i64 = 0x0A000203  // 10.0.2.3 (QEMU user-mode DNS)
+const DNS_PORT: i64 = 53
+const DNS_BUF: i64 = 0x87A200  // DNS packet build buffer (512B)
+const DNS_RESP: i64 = 0x87A400  // DNS response buffer (512B)
+
+// ── E3.8: Build DNS query for hostname ──
+@kernel fn dns_build_query(name_addr: i64, name_len: i64) -> i64 {
+    let b = DNS_BUF
+    // DNS header (12 bytes)
+    // Transaction ID = 0xFAFA
+    volatile_write_u8(b, 0xFA)
+    volatile_write_u8(b + 1, 0xFA)
+    // Flags: 0x0100 (standard query, recursion desired)
+    volatile_write_u8(b + 2, 0x01)
+    volatile_write_u8(b + 3, 0x00)
+    // QDCOUNT = 1
+    volatile_write_u8(b + 4, 0x00)
+    volatile_write_u8(b + 5, 0x01)
+    // ANCOUNT, NSCOUNT, ARCOUNT = 0
+    let mut i: i64 = 6
+    while i < 12 { volatile_write_u8(b + i, 0); i = i + 1 }
+
+    // Question section: encode hostname as DNS labels
+    // e.g., "example.com" → [7]example[3]com[0]
+    let mut off: i64 = 12
+    let mut label_start = off
+    off = off + 1  // skip length byte (filled later)
+    let mut label_len: i64 = 0
+    i = 0
+    while i < name_len {
+        let ch = volatile_read_u8(name_addr + i)
+        if ch == 46 {  // '.' — end of label
+            volatile_write_u8(b + label_start, label_len)
+            label_start = off
+            off = off + 1
+            label_len = 0
+        } else {
+            volatile_write_u8(b + off, ch)
+            off = off + 1
+            label_len = label_len + 1
+        }
+        i = i + 1
+    }
+    // Final label
+    volatile_write_u8(b + label_start, label_len)
+    // Null terminator
+    volatile_write_u8(b + off, 0)
+    off = off + 1
+
+    // QTYPE = A (1) — 2 bytes big-endian
+    volatile_write_u8(b + off, 0x00)
+    volatile_write_u8(b + off + 1, 0x01)
+    off = off + 2
+    // QCLASS = IN (1) — 2 bytes big-endian
+    volatile_write_u8(b + off, 0x00)
+    volatile_write_u8(b + off + 1, 0x01)
+    off = off + 2
+
+    off  // total query length
+}
+
+// ── Parse DNS response for A record ──
+@kernel fn dns_parse_response(buf: i64, len: i64) -> i64 {
+    if len < 12 { return -1 }
+
+    // Check transaction ID
+    let tid = volatile_read_u8(buf) * 256 + volatile_read_u8(buf + 1)
+    if tid != 0xFAFA { return -2 }
+
+    // Check flags: QR bit must be set (response)
+    let flags = volatile_read_u8(buf + 2)
+    if (flags & 0x80) == 0 { return -3 }
+
+    // Answer count
+    let ancount = volatile_read_u8(buf + 6) * 256 + volatile_read_u8(buf + 7)
+    if ancount == 0 { return -4 }
+
+    // Skip question section (variable length)
+    let mut off: i64 = 12
+    // Skip QNAME (labels until 0x00)
+    while off < len && volatile_read_u8(buf + off) != 0 {
+        let label_len = volatile_read_u8(buf + off)
+        if (label_len & 0xC0) == 0xC0 {
+            off = off + 2  // compressed pointer
+            off = off - 1  // will be incremented below
+        }
+        off = off + label_len + 1
+    }
+    off = off + 1  // skip null
+    off = off + 4  // skip QTYPE + QCLASS
+
+    // Parse first answer
+    if off + 12 > len { return -5 }
+
+    // Skip NAME (may be compressed pointer 0xC0xx)
+    if (volatile_read_u8(buf + off) & 0xC0) == 0xC0 {
+        off = off + 2  // compressed pointer
+    } else {
+        while off < len && volatile_read_u8(buf + off) != 0 {
+            off = off + volatile_read_u8(buf + off) + 1
+        }
+        off = off + 1
+    }
+
+    // TYPE (2B), CLASS (2B), TTL (4B), RDLENGTH (2B)
+    let rtype = volatile_read_u8(buf + off) * 256 + volatile_read_u8(buf + off + 1)
+    off = off + 2  // skip TYPE
+    off = off + 2  // skip CLASS
+    off = off + 4  // skip TTL
+    let rdlen = volatile_read_u8(buf + off) * 256 + volatile_read_u8(buf + off + 1)
+    off = off + 2
+
+    if rtype != 1 || rdlen != 4 { return -6 }  // not A record or wrong length
+
+    // Read 4-byte IPv4 address
+    let a = volatile_read_u8(buf + off)
+    let b = volatile_read_u8(buf + off + 1)
+    let c = volatile_read_u8(buf + off + 2)
+    let d = volatile_read_u8(buf + off + 3)
+
+    ip_pack(a, b, c, d)
+}
+
+// ── E3.8: DNS query function ──
+@kernel fn dns_resolve(name_addr: i64, name_len: i64) -> i64 {
+    if net_state_read(0) == 0 { return -1 }  // network not initialized
+
+    // Build DNS query
+    let query_len = dns_build_query(name_addr, name_len)
+
+    // Wrap in UDP (src=12345, dst=53)
+    let udp_len = udp_build(12345, DNS_PORT, DNS_BUF, query_len)
+
+    // Wrap in IP header (protocol=17=UDP, dst=DNS_SERVER)
+    let ip_len = ip_build_header(DNS_SERVER, 17, udp_len)
+
+    // Build packet: IP + UDP in contiguous buffer
+    let pkt: i64 = NET_PKT_BUF + 2048
+    let mut ci: i64 = 0
+    while ci < ip_len {
+        volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci))
+        ci = ci + 1
+    }
+    ci = 0
+    while ci < udp_len {
+        volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1536 + ci))
+        ci = ci + 1
+    }
+
+    // Send via gateway
+    let gw_mac = arp_cache_lookup(net_state_read(24))
+    if gw_mac < 0 {
+        // No gateway MAC — send broadcast
+        let bcast: i64 = NET_PKT_BUF + 3072
+        let mut bj: i64 = 0
+        while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
+        let flen = eth_build_frame(bcast, 0x0800, pkt, ip_len + udp_len)
+        net_send_frame(NET_TX_BUF, flen)
+    } else {
+        let flen = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + udp_len)
+        net_send_frame(NET_TX_BUF, flen)
+    }
+
+    // Wait for response (poll RX buffers, 1 second timeout)
+    delay_us(500000)
+
+    // Scan RX buffers for DNS response (UDP port 53)
+    let mut found: i64 = -1
+    let mut buf_idx: i64 = 0
+    while buf_idx < 16 && found == -1 {
+        let rb = VQ_RX_BUFS + buf_idx * 2048
+        // Look for IP protocol=17 (UDP) and DNS transaction ID 0xFAFA
+        let mut off: i64 = 0
+        while off < 100 && found == -1 {
+            if volatile_read_u8(rb + off) == 0x45 {  // IP version+IHL
+                if volatile_read_u8(rb + off + 9) == 17 {  // UDP
+                    // UDP starts at IP + 20
+                    let udp_off = off + 20
+                    // DNS starts at UDP + 8
+                    let dns_off = udp_off + 8
+                    let tid = volatile_read_u8(rb + dns_off) * 256 + volatile_read_u8(rb + dns_off + 1)
+                    if tid == 0xFAFA {
+                        // Copy response
+                        let resp_len = volatile_read_u8(rb + udp_off + 4) * 256 + volatile_read_u8(rb + udp_off + 5) - 8
+                        let mut k: i64 = 0
+                        while k < resp_len && k < 512 {
+                            volatile_write_u8(DNS_RESP + k, volatile_read_u8(rb + dns_off + k))
+                            k = k + 1
+                        }
+                        found = dns_parse_response(DNS_RESP, resp_len)
+                    }
+                }
+            }
+            off = off + 1
+        }
+        buf_idx = buf_idx + 1
+    }
+
+    found
+}
+
+// ── E3.9: nslookup command ──
+@kernel fn cmd_nslookup() {
+    let len = cmdbuf_len()
+    if len <= 9 {
+        cprintln("Usage: nslookup <hostname>", YELLOW_ON_BLACK)
+        cprintln("  Example: nslookup example.com", WHITE_ON_BLACK)
+        return
+    }
+
+    // Copy hostname from command buffer (skip "nslookup ")
+    let name_start: i64 = 0x87A600
+    let name_len = len - 9
+    let mut i: i64 = 0
+    while i < name_len && i < 128 {
+        volatile_write_u8(name_start + i, volatile_read_u8(0x6F800 + 9 + i))
+        i = i + 1
+    }
+
+    cprint("Server:  10.0.2.3 (QEMU DNS)\n", WHITE_ON_BLACK)
+    cprint("Name:    ", WHITE_ON_BLACK)
+    i = 0
+    while i < name_len {
+        console_putchar(volatile_read_u8(name_start + i), CYAN_ON_BLACK)
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    let result = dns_resolve(name_start, name_len)
+    if result > 0 {
+        cprint("Address: ", WHITE_ON_BLACK)
+        ip_print(result)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else if result == -1 {
+        cprintln("Error: network not initialized", RED_ON_BLACK)
+    } else {
+        cprint("Error: DNS query failed (code ", RED_ON_BLACK)
+        cprint_decimal(result, RED_ON_BLACK)
+        cprintln(")", RED_ON_BLACK)
+        cprintln("  DNS responses may not be reaching us via virtio-net", YELLOW_ON_BLACK)
+    }
+}
+
+// ── E3.10: Network demo command ──
+@kernel fn cmd_netdemo() {
+    cprintln("=== Network Stack Demo ===", YELLOW_ON_BLACK)
+
+    // Step 1: Interface
+    cprintln("[1/5] Network Interface:", WHITE_ON_BLACK)
+    let mac0 = net_state_read(8)
+    let our_ip = net_state_read(16)
+    let gw_ip = net_state_read(24)
+    cprint("  MAC: ", WHITE_ON_BLACK)
+    let mut mi: i64 = 0
+    while mi < 6 {
+        cprint_hex(volatile_read_u8(mac0 + mi), 2, CYAN_ON_BLACK)
+        if mi < 5 { cprint(":", WHITE_ON_BLACK) }
+        mi = mi + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  IP:  ", WHITE_ON_BLACK)
+    ip_print(our_ip)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  GW:  ", WHITE_ON_BLACK)
+    ip_print(gw_ip)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // Step 2: ICMP Ping
+    cprintln("[2/5] ICMP Ping:", WHITE_ON_BLACK)
+    cprint("  Sending echo to gateway... ", WHITE_ON_BLACK)
+    let icmp_len = icmp_build_echo_request(42)
+    let ip_len = ip_build_header(gw_ip, 1, icmp_len)
+    cprintln("sent", GREEN_ON_BLACK)
+
+    // Step 3: ARP cache
+    cprintln("[3/5] ARP Cache:", WHITE_ON_BLACK)
+    let mut ai: i64 = 0
+    let mut arp_count: i64 = 0
+    while ai < 16 {
+        let entry_ip = volatile_read_u64(NET_ARP_CACHE + ai * 16)
+        if entry_ip != 0 {
+            cprint("  ", WHITE_ON_BLACK)
+            ip_print(entry_ip)
+            cprintln(" → cached", CYAN_ON_BLACK)
+            arp_count = arp_count + 1
+        }
+        ai = ai + 1
+    }
+    if arp_count == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+
+    // Step 4: TCP status
+    cprintln("[4/5] TCP State:", WHITE_ON_BLACK)
+    let tcp_state = volatile_read_u64(TCP_STATE)
+    cprint("  State: ", WHITE_ON_BLACK)
+    if tcp_state == 0 { cprintln("closed", WHITE_ON_BLACK) }
+    else if tcp_state == 1 { cprintln("syn_sent", YELLOW_ON_BLACK) }
+    else if tcp_state == 2 { cprintln("established", GREEN_ON_BLACK) }
+    else if tcp_state == 3 { cprintln("fin_wait", YELLOW_ON_BLACK) }
+    else { cprintln("unknown", RED_ON_BLACK) }
+
+    // Step 5: DNS test
+    cprintln("[5/5] DNS Resolver:", WHITE_ON_BLACK)
+    cprint("  Server: 10.0.2.3 (port 53)\n", WHITE_ON_BLACK)
+    cprintln("  Use 'nslookup <host>' to test", WHITE_ON_BLACK)
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Network stack: Ethernet + ARP + IPv4 + ICMP + UDP + TCP + DHCP + DNS", GREEN_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════

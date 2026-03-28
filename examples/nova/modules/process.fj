@@ -1,0 +1,780 @@
+// ═══════════════════════════════════════════════
+
+// FD table v2 helpers (relocated to 0x8D0000)
+
+@kernel fn fd_v2_addr(pid: i64, fd: i64) -> i64 {
+    FD_TABLE_V2 + pid * FD_MAX * FD_ENTRY_SIZE + fd * FD_ENTRY_SIZE
+}
+
+@kernel fn fd_v2_get_type(pid: i64, fd: i64) -> i64 {
+    volatile_read_u64(fd_v2_addr(pid, fd))
+}
+
+@kernel fn fd_v2_get_data(pid: i64, fd: i64) -> i64 {
+    volatile_read_u64(fd_v2_addr(pid, fd) + 8)
+}
+
+@kernel fn fd_v2_set(pid: i64, fd: i64, ftype: i64, data: i64) {
+    let addr = fd_v2_addr(pid, fd)
+    volatile_write_u64(addr, ftype)
+    volatile_write_u64(addr + 8, data)
+}
+
+@kernel fn fd_v2_init(pid: i64) {
+    // FD 0=stdin, 1=stdout, 2=stderr (all console)
+    fd_v2_set(pid, 0, FD_CONSOLE, 0)
+    fd_v2_set(pid, 1, FD_CONSOLE, 0)
+    fd_v2_set(pid, 2, FD_CONSOLE, 0)
+    let mut fd: i64 = 3
+    while fd < FD_MAX {
+        fd_v2_set(pid, fd, FD_CLOSED, 0)
+        fd = fd + 1
+    }
+}
+
+@kernel fn fd_v2_alloc(pid: i64) -> i64 {
+    // Find lowest free FD
+    let mut fd: i64 = 0
+    while fd < FD_MAX {
+        if fd_v2_get_type(pid, fd) == FD_CLOSED { return fd }
+        fd = fd + 1
+    }
+    -1
+}
+
+// Helper: find ramfs entry by buffer address (null-terminated string)
+@kernel fn ramfs_find_by_addr(name_addr: i64) -> i64 {
+    let count = volatile_read(FS_BASE)
+    // Get name length
+    let mut nlen: i64 = 0
+    while nlen < 31 && volatile_read_u8(name_addr + nlen) != 0 { nlen = nlen + 1 }
+    if nlen == 0 { return -1 }
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < nlen && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(name_addr + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + nlen) == 0 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+// SYS_OPEN(10): open file, return FD
+// data field packs: low 32 bits = ramfs_index, high 32 bits = offset
+@kernel fn sys_open(path_addr: i64, flags: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let fd = fd_v2_alloc(pid)
+    if fd == -1 { return -1 } // no free FDs
+
+    // Try ramfs first
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let ftype = volatile_read(entry_addr + 48)
+        if ftype != 1 { return -1 } // not a regular file
+        // M2.5: Check read permission
+        if fs_check_perm(entry_addr, 4) != 0 { return -1 } // no read access
+        fd_v2_set(pid, fd, FD_RAMFS, idx)
+        return fd
+    }
+
+    // TODO: try FAT32 (future sprint)
+    -1 // file not found
+}
+
+// SYS_CLOSE(11): close FD
+@kernel fn sys_close(fd: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype == FD_CLOSED { return -1 }
+    // Pipe refcount handling (H1)
+    if ftype == FD_PIPE_READ {
+        let slot = fd_v2_get_data(pid, fd)
+        let freed = pipe_decref(slot, 0) // is_writer=0
+        if freed == 1 { pipe_free(slot) }
+    }
+    if ftype == FD_PIPE_WRITE {
+        let slot = fd_v2_get_data(pid, fd)
+        let freed = pipe_decref(slot, 1) // is_writer=1
+        if freed == 1 { pipe_free(slot) }
+    }
+    fd_v2_set(pid, fd, FD_CLOSED, 0)
+    0
+}
+
+// SYS_STAT(12): stat file by path, write size to user buffer
+// buf layout: +0=size(i64), +8=type(i64: 1=file, 2=dir)
+@kernel fn sys_stat(path_addr: i64, buf_addr: i64) -> i64 {
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let ftype = volatile_read(entry_addr + 48)
+        volatile_write_u64(buf_addr, size)
+        volatile_write_u64(buf_addr + 8, ftype)
+        return 0
+    }
+    -1 // not found
+}
+
+// SYS_FSTAT(13): stat by FD
+@kernel fn sys_fstat(fd: i64, buf_addr: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype == FD_CONSOLE {
+        volatile_write_u64(buf_addr, 0)     // size = 0 (stream)
+        volatile_write_u64(buf_addr + 8, 0) // type = special
+        return 0
+    }
+    if ftype == FD_RAMFS {
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let ft = volatile_read(entry_addr + 48)
+        volatile_write_u64(buf_addr, size)
+        volatile_write_u64(buf_addr + 8, ft)
+        return 0
+    }
+    -1
+}
+
+// SYS_LSEEK(14): set file offset
+@kernel fn sys_lseek(fd: i64, offset: i64, whence: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype != FD_RAMFS && ftype != FD_FAT32 { return -1 } // not seekable
+
+    let data = fd_v2_get_data(pid, fd)
+    let idx = data & 0xFFFFFFFF
+    let current_offset = (data >> 32) & 0xFFFFFFFF
+
+    let new_offset = if whence == SEEK_SET {
+        offset
+    } else if whence == SEEK_CUR {
+        current_offset + offset
+    } else if whence == SEEK_END {
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        size + offset
+    } else {
+        -1
+    }
+
+    if new_offset < 0 { return -1 }
+    // Pack new offset into data high 32 bits
+    let new_data = (new_offset << 32) | idx
+    fd_v2_set(pid, fd, ftype, new_data)
+    new_offset
+}
+
+// SYS_DUP(15): duplicate FD to lowest free slot
+@kernel fn sys_dup(old_fd: i64) -> i64 {
+    if old_fd < 0 || old_fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, old_fd)
+    if ftype == FD_CLOSED { return -1 }
+    let new_fd = fd_v2_alloc(pid)
+    if new_fd == -1 { return -1 }
+    let data = fd_v2_get_data(pid, old_fd)
+    fd_v2_set(pid, new_fd, ftype, data)
+    new_fd
+}
+
+// SYS_DUP2(16): duplicate FD to specific slot
+@kernel fn sys_dup2(old_fd: i64, new_fd: i64) -> i64 {
+    if old_fd < 0 || old_fd >= FD_MAX { return -1 }
+    if new_fd < 0 || new_fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, old_fd)
+    if ftype == FD_CLOSED { return -1 }
+    if old_fd == new_fd { return new_fd }
+    // Close target if open
+    let target_type = fd_v2_get_type(pid, new_fd)
+    if target_type != FD_CLOSED { sys_close(new_fd) }
+    // Copy
+    let data = fd_v2_get_data(pid, old_fd)
+    fd_v2_set(pid, new_fd, ftype, data)
+    new_fd
+}
+
+// SYS_GETCWD(17): get current working directory
+@kernel fn sys_getcwd(buf_addr: i64, size: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let cwd_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CWD
+    // Read CWD string from process table
+    let mut len: i64 = 0
+    while len < 31 && len < size - 1 {
+        let ch = volatile_read_u8(cwd_addr + len)
+        if ch == 0 { len = size } // break
+        else { volatile_write_u8(buf_addr + len, ch); len = len + 1 }
+    }
+    // If CWD is empty, default to "/"
+    if len == 0 || len >= size {
+        volatile_write_u8(buf_addr, 47) // '/'
+        volatile_write_u8(buf_addr + 1, 0)
+        return 1
+    }
+    volatile_write_u8(buf_addr + len, 0)
+    len
+}
+
+// SYS_CHDIR(18): change working directory
+@kernel fn sys_chdir(path_addr: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let cwd_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CWD
+    // Verify path exists (check ramfs for directory)
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx >= 0 {
+        let entry_addr = ramfs_entry_addr(idx)
+        let ftype = volatile_read(entry_addr + 48)
+        if ftype != 2 { return -1 } // not a directory
+    }
+    // Copy path to process CWD (max 31 chars)
+    let mut i: i64 = 0
+    while i < 31 {
+        let ch = volatile_read_u8(path_addr + i)
+        volatile_write_u8(cwd_addr + i, ch)
+        if ch == 0 { return 0 }
+        i = i + 1
+    }
+    volatile_write_u8(cwd_addr + 31, 0)
+    0
+}
+
+// SYS_UNLINK(19): remove file
+@kernel fn sys_unlink(path_addr: i64) -> i64 {
+    let idx = ramfs_find_by_addr(path_addr)
+    if idx < 0 { return -1 }
+    let entry_addr = ramfs_entry_addr(idx)
+    let ftype = volatile_read(entry_addr + 48)
+    if ftype == 2 { return -1 } // can't unlink directory
+    // M2.7: Check write permission
+    if fs_check_perm(entry_addr, 2) != 0 { return -1 }
+    // Mark entry as unused
+    volatile_write_u8(entry_addr, 0)
+    volatile_write(entry_addr + 32, 0) // size = 0
+    volatile_write(entry_addr + 48, 0) // type = unused
+    0
+}
+
+// ═══════════════════════════════════════════════
+// Copy-on-Write (Sprint L1 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// CoW page flag: PTE bit 9 (AVL) = 0x200
+const PAGE_COW: i64 = 0x200
+
+// Page refcount table at 0x950000: 32K entries × 2 bytes = 64KB
+// Covers 32K frames × 4KB = 128MB physical memory
+const PAGE_REFCOUNT: i64 = 0x950000
+const PAGE_REFCOUNT_MAX: i64 = 32768
+
+// L1.4: Initialize refcount table (all counts = 0)
+@kernel fn cow_init() {
+    let mut i: i64 = 0
+    while i < PAGE_REFCOUNT_MAX * 2 {
+        volatile_write_u8(PAGE_REFCOUNT + i, 0)
+        i = i + 1
+    }
+}
+
+// L1.5: Get/set refcount for a physical frame
+@kernel fn cow_refcount_get(frame_idx: i64) -> i64 {
+    if frame_idx < 0 || frame_idx >= PAGE_REFCOUNT_MAX { return 0 }
+    let addr = PAGE_REFCOUNT + frame_idx * 2
+    volatile_read_u8(addr) + volatile_read_u8(addr + 1) * 256
+}
+
+@kernel fn cow_refcount_set(frame_idx: i64, count: i64) {
+    if frame_idx >= 0 && frame_idx < PAGE_REFCOUNT_MAX {
+        let addr = PAGE_REFCOUNT + frame_idx * 2
+        volatile_write_u8(addr, count & 0xFF)
+        volatile_write_u8(addr + 1, (count >> 8) & 0xFF)
+    }
+}
+
+@kernel fn cow_refcount_inc(frame_idx: i64) {
+    let count = cow_refcount_get(frame_idx)
+    cow_refcount_set(frame_idx, count + 1)
+}
+
+@kernel fn cow_refcount_dec(frame_idx: i64) -> i64 {
+    let count = cow_refcount_get(frame_idx)
+    let new_count = if count > 0 { count - 1 } else { 0 }
+    cow_refcount_set(frame_idx, new_count)
+    new_count
+}
+
+// L1.3: Mark a PTE as CoW (remove WRITABLE, set COW bit)
+@kernel fn cow_mark_readonly(table: i64, idx: i64) {
+    let entry = page_table_entry(table, idx)
+    if entry != 0 && (entry & PAGE_PRESENT) != 0 && (entry & PAGE_WRITABLE) != 0 {
+        // Clear WRITABLE, set COW flag
+        let new_entry = (entry & (0xFFFFFFFFFFFF ^ PAGE_WRITABLE)) | PAGE_COW
+        page_table_set(table, idx, new_entry)
+    }
+}
+
+// L1.6: Handle CoW page fault — called from page fault handler
+// Returns 0 on success (page copied), -1 if not a CoW fault
+@kernel fn cow_handle_fault(fault_addr: i64) -> i64 {
+    // Walk page tables to find the PTE for fault_addr
+    let pml4_idx = (fault_addr >> 39) & 0x1FF
+    let pdpt_idx = (fault_addr >> 30) & 0x1FF
+    let pd_idx = (fault_addr >> 21) & 0x1FF
+    let pt_idx = (fault_addr >> 12) & 0x1FF
+
+    let pml4_entry = page_table_entry(PML4_BASE, pml4_idx)
+    if (pml4_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pdpt_addr = pml4_entry & 0xFFFFFFFFF000
+
+    let pdpt_entry = page_table_entry(pdpt_addr, pdpt_idx)
+    if (pdpt_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pd_addr = pdpt_entry & 0xFFFFFFFFF000
+
+    let pd_entry = page_table_entry(pd_addr, pd_idx)
+    if (pd_entry & PAGE_PRESENT) == 0 { return -1 }
+    let pt_addr = pd_entry & 0xFFFFFFFFF000
+
+    let pt_entry = page_table_entry(pt_addr, pt_idx)
+    if (pt_entry & PAGE_PRESENT) == 0 { return -1 }
+
+    // Check if this is a CoW page
+    if (pt_entry & PAGE_COW) == 0 { return -1 } // not CoW, real fault
+
+    let old_phys = pt_entry & 0xFFFFFFFFF000
+    let old_frame = old_phys / FRAME_SIZE
+    let old_flags = pt_entry & 0xFFF
+
+    // Check refcount
+    let refcount = cow_refcount_get(old_frame)
+
+    if refcount <= 1 {
+        // Last reference — just make writable again (no copy needed)
+        let new_flags = (old_flags | PAGE_WRITABLE) & (0xFFF ^ PAGE_COW)
+        page_table_set(pt_addr, pt_idx, old_phys | new_flags)
+    } else {
+        // Multiple references — need to copy
+        let new_phys = frame_alloc()
+        if new_phys == -1 { return -1 } // OOM
+        let new_frame = new_phys / FRAME_SIZE
+
+        // Copy 4KB page content
+        let mut i: i64 = 0
+        while i < FRAME_SIZE {
+            volatile_write_u8(new_phys + i, volatile_read_u8(old_phys + i))
+            i = i + 1
+        }
+
+        // Remap to new page (writable, clear CoW)
+        let new_flags = (old_flags | PAGE_WRITABLE) & (0xFFF ^ PAGE_COW)
+        page_table_set(pt_addr, pt_idx, new_phys | new_flags)
+
+        // Decrement old page refcount
+        cow_refcount_dec(old_frame)
+
+        // Set new page refcount to 1
+        cow_refcount_set(new_frame, 1)
+    }
+
+    // L1.6: TLB flush + L2.7: increment fault counter
+    cow_invlpg(fault_addr)
+    let faults = volatile_read_u64(COW_FAULT_COUNT)
+    volatile_write_u64(COW_FAULT_COUNT, faults + 1)
+    0
+}
+
+// Invalidate TLB entry for a virtual address
+@kernel fn cow_invlpg(addr: i64) {
+    // invlpg instruction — flush single TLB entry
+    // This would be asm!("invlpg [rdi]") in real code
+    // For now, use write_cr3(read_cr3()) as full TLB flush fallback
+    write_cr3(read_cr3())
+}
+
+// L1.3 (modified): Fork with CoW instead of deep-copy
+// Replaces fork_copy_page_level at PT level
+@kernel fn fork_cow_share_pt(parent_table: i64, child_table: i64) {
+    let mut idx: i64 = 0
+    while idx < 512 {
+        let entry = page_table_entry(parent_table, idx)
+        if entry != 0 && (entry & PAGE_PRESENT) != 0 && (entry & PAGE_USER) != 0 {
+            let phys = entry & 0xFFFFFFFFF000
+            let frame_idx = phys / FRAME_SIZE
+
+            // Mark parent page as read-only + CoW
+            cow_mark_readonly(parent_table, idx)
+
+            // Child gets same physical page (read-only + CoW)
+            let cow_flags = (entry & (0xFFF ^ PAGE_WRITABLE)) | PAGE_COW
+            page_table_set(child_table, idx, phys | cow_flags)
+
+            // Increment refcount
+            let current_rc = cow_refcount_get(frame_idx)
+            if current_rc == 0 {
+                cow_refcount_set(frame_idx, 2) // was 1 (parent), now 2 (parent + child)
+            } else {
+                cow_refcount_inc(frame_idx)
+            }
+        }
+        idx = idx + 1
+    }
+}
+
+// L1.7: Decrement refcounts for all user pages of a process (on exit)
+@kernel fn cow_release_pages(pml4: i64) {
+    let mut pml4_idx: i64 = 0
+    while pml4_idx < 512 {
+        let pml4_entry = page_table_entry(pml4, pml4_idx)
+        if pml4_entry != 0 && (pml4_entry & PAGE_USER) != 0 {
+            cow_release_level(pml4_entry & 0xFFFFFFFFF000, 3)
+        }
+        pml4_idx = pml4_idx + 1
+    }
+}
+
+@kernel fn cow_release_level(table: i64, level: i64) {
+    let mut idx: i64 = 0
+    while idx < 512 {
+        let entry = page_table_entry(table, idx)
+        if entry != 0 && (entry & PAGE_PRESENT) != 0 {
+            if level == 1 {
+                // PT level: decrement refcount, free if last
+                let phys = entry & 0xFFFFFFFFF000
+                let frame_idx = phys / FRAME_SIZE
+                let remaining = cow_refcount_dec(frame_idx)
+                if remaining == 0 { frame_mark_free(frame_idx) }
+            } else {
+                if (entry & PAGE_USER) != 0 {
+                    cow_release_level(entry & 0xFFFFFFFFF000, level - 1)
+                }
+            }
+        }
+        idx = idx + 1
+    }
+}
+
+// CoW fault counter at 0x950048
+const COW_FAULT_COUNT: i64 = 0x950048
+
+// L1.8: CoW statistics command
+@kernel fn cmd_cowstat() {
+    cprintln("CoW Statistics:", YELLOW_ON_BLACK)
+    let mut shared: i64 = 0
+    let mut total: i64 = 0
+    let mut i: i64 = 0
+    while i < PAGE_REFCOUNT_MAX {
+        let rc = cow_refcount_get(i)
+        if rc > 0 { total = total + 1 }
+        if rc > 1 { shared = shared + 1 }
+        i = i + 1
+    }
+    cprint("  Tracked pages: ", WHITE_ON_BLACK)
+    cprint_decimal(total, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Shared (CoW): ", WHITE_ON_BLACK)
+    cprint_decimal(shared, GREEN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Private: ", WHITE_ON_BLACK)
+    cprint_decimal(total - shared, WHITE_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  CoW faults: ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(COW_FAULT_COUNT), YELLOW_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Multi-User Account System (Sprint M1 — v0.8 "Bastion")
+// ═══════════════════════════════════════════════
+
+// User table at 0x960000: 16 users × 64 bytes
+// Per user: +0=uid(i64), +8=username[16], +24=password_hash(i64), +32=gid(i64), +40=home[16], +56=active(i64)
+const USER_TABLE: i64 = 0x960000
+const USER_MAX: i64 = 16
+const USER_ENTRY_SIZE: i64 = 64
+const USER_OFF_UID: i64 = 0
+const USER_OFF_NAME: i64 = 8
+const USER_OFF_PASS: i64 = 24
+const USER_OFF_GID: i64 = 32
+const USER_OFF_HOME: i64 = 40
+const USER_OFF_ACTIVE: i64 = 56
+
+// Per-process UID/GID: PROC_TABLE + pid*256 + 168/176
+const PROC_OFF_UID: i64 = 168
+const PROC_OFF_GID: i64 = 176
+
+// Current session UID at 0x652070
+const CURRENT_UID_ADDR: i64 = 0x652070
+
+// M1.1: Simple hash for passwords (FNV-1a variant)
+@kernel fn simple_hash(addr: i64) -> i64 {
+    let mut hash: i64 = 0x811C9DC5 // FNV offset basis (32-bit)
+    let mut i: i64 = 0
+    while i < 16 {
+        let ch = volatile_read_u8(addr + i)
+        if ch == 0 { i = 16 }
+        else {
+            hash = hash ^ ch
+            hash = (hash * 16777619) & 0x7FFFFFFF // FNV prime, keep positive
+            i = i + 1
+        }
+    }
+    hash
+}
+
+// M1.2: Initialize user table with root
+@kernel fn user_init() {
+    // Clear table
+    let mut i: i64 = 0
+    while i < USER_MAX * USER_ENTRY_SIZE { volatile_write_u8(USER_TABLE + i, 0); i = i + 1 }
+    // Create root user (uid=0)
+    let root = USER_TABLE
+    volatile_write_u64(root + USER_OFF_UID, 0)
+    // username = "root"
+    volatile_write_u8(root + USER_OFF_NAME, 114) // r
+    volatile_write_u8(root + USER_OFF_NAME + 1, 111) // o
+    volatile_write_u8(root + USER_OFF_NAME + 2, 111) // o
+    volatile_write_u8(root + USER_OFF_NAME + 3, 116) // t
+    volatile_write_u8(root + USER_OFF_NAME + 4, 0)
+    // password hash for "root"
+    let pass_buf: i64 = 0x843E80
+    volatile_write_u8(pass_buf, 114)
+    volatile_write_u8(pass_buf + 1, 111)
+    volatile_write_u8(pass_buf + 2, 111)
+    volatile_write_u8(pass_buf + 3, 116)
+    volatile_write_u8(pass_buf + 4, 0)
+    volatile_write_u64(root + USER_OFF_PASS, simple_hash(pass_buf))
+    volatile_write_u64(root + USER_OFF_GID, 0)
+    // home = "/"
+    volatile_write_u8(root + USER_OFF_HOME, 47)
+    volatile_write_u8(root + USER_OFF_HOME + 1, 0)
+    volatile_write_u64(root + USER_OFF_ACTIVE, 1)
+
+    // Set current session UID to root
+    volatile_write_u64(CURRENT_UID_ADDR, 0)
+}
+
+// M1.3: Find user by name (returns slot index or -1)
+@kernel fn user_find(name_addr: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < USER_MAX {
+        let entry = USER_TABLE + i * USER_ENTRY_SIZE
+        if volatile_read_u64(entry + USER_OFF_ACTIVE) == 1 {
+            let mut match_ok: i64 = 1
+            let mut j: i64 = 0
+            while j < 16 && match_ok == 1 {
+                let a = volatile_read_u8(entry + USER_OFF_NAME + j)
+                let b = volatile_read_u8(name_addr + j)
+                if a != b { match_ok = 0 }
+                if a == 0 && b == 0 { j = 16 }
+                else { j = j + 1 }
+            }
+            if match_ok == 1 { return i }
+        }
+        i = i + 1
+    }
+    -1
+}
+
+// M1.3: `adduser` command — "adduser <name> <password>"
+@kernel fn cmd_adduser() {
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: adduser <name> <pass>", YELLOW_ON_BLACK); return }
+    // Only root can add users
+    if volatile_read_u64(CURRENT_UID_ADDR) != 0 { cprintln("Permission denied (root only)", RED_ON_BLACK); return }
+    // Parse name and password
+    let name_buf: i64 = 0x843E00
+    let pass_buf: i64 = 0x843E40
+    let mut pos: i64 = 8
+    let mut ni: i64 = 0
+    while pos < len && volatile_read_u8(0x6F800 + pos) != 32 && ni < 15 {
+        volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos))
+        ni = ni + 1; pos = pos + 1
+    }
+    volatile_write_u8(name_buf + ni, 0)
+    pos = pos + 1 // skip space
+    let mut pi: i64 = 0
+    while pos < len && pi < 15 {
+        volatile_write_u8(pass_buf + pi, volatile_read_u8(0x6F800 + pos))
+        pi = pi + 1; pos = pos + 1
+    }
+    volatile_write_u8(pass_buf + pi, 0)
+    // Check if user exists
+    if user_find(name_buf) >= 0 { cprintln("User already exists", RED_ON_BLACK); return }
+    // Find free slot
+    let mut slot: i64 = -1
+    let mut si: i64 = 0
+    while si < USER_MAX && slot == -1 {
+        if volatile_read_u64(USER_TABLE + si * USER_ENTRY_SIZE + USER_OFF_ACTIVE) == 0 { slot = si }
+        si = si + 1
+    }
+    if slot == -1 { cprintln("User table full", RED_ON_BLACK); return }
+    // Create user
+    let entry = USER_TABLE + slot * USER_ENTRY_SIZE
+    volatile_write_u64(entry + USER_OFF_UID, slot)
+    let mut ci: i64 = 0
+    while ci <= ni { volatile_write_u8(entry + USER_OFF_NAME + ci, volatile_read_u8(name_buf + ci)); ci = ci + 1 }
+    volatile_write_u64(entry + USER_OFF_PASS, simple_hash(pass_buf))
+    volatile_write_u64(entry + USER_OFF_GID, slot)
+    // home = /home/<name>
+    volatile_write_u8(entry + USER_OFF_HOME, 47) // /
+    ci = 0
+    while ci < ni { volatile_write_u8(entry + USER_OFF_HOME + 1 + ci, volatile_read_u8(name_buf + ci)); ci = ci + 1 }
+    volatile_write_u8(entry + USER_OFF_HOME + 1 + ni, 0)
+    volatile_write_u64(entry + USER_OFF_ACTIVE, 1)
+    cprint("User created: ", WHITE_ON_BLACK)
+    ci = 0
+    while ci < ni { console_putchar(volatile_read_u8(name_buf + ci), GREEN_ON_BLACK); ci = ci + 1 }
+    cprint(" (uid=", WHITE_ON_BLACK)
+    cprint_decimal(slot, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+}
+
+// M1.4: `passwd` command — "passwd <newpassword>"
+@kernel fn cmd_passwd() {
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: passwd <newpass>", YELLOW_ON_BLACK); return }
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    let entry = USER_TABLE + uid * USER_ENTRY_SIZE
+    let pass_buf: i64 = 0x843E40
+    let mut pi: i64 = 0
+    let mut pos: i64 = 7
+    while pos < len && pi < 15 {
+        volatile_write_u8(pass_buf + pi, volatile_read_u8(0x6F800 + pos))
+        pi = pi + 1; pos = pos + 1
+    }
+    volatile_write_u8(pass_buf + pi, 0)
+    volatile_write_u64(entry + USER_OFF_PASS, simple_hash(pass_buf))
+    cprintln("Password changed", GREEN_ON_BLACK)
+}
+
+// M1.5: `login` command — "login <name> <password>"
+@kernel fn cmd_login_v1() {
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: login <name> <pass>", YELLOW_ON_BLACK); return }
+    let name_buf: i64 = 0x843E00
+    let pass_buf: i64 = 0x843E40
+    let mut pos: i64 = 6
+    let mut ni: i64 = 0
+    while pos < len && volatile_read_u8(0x6F800 + pos) != 32 && ni < 15 {
+        volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos))
+        ni = ni + 1; pos = pos + 1
+    }
+    volatile_write_u8(name_buf + ni, 0)
+    pos = pos + 1
+    let mut pi: i64 = 0
+    while pos < len && pi < 15 {
+        volatile_write_u8(pass_buf + pi, volatile_read_u8(0x6F800 + pos))
+        pi = pi + 1; pos = pos + 1
+    }
+    volatile_write_u8(pass_buf + pi, 0)
+    let slot = user_find(name_buf)
+    if slot < 0 { cprintln("User not found", RED_ON_BLACK); return }
+    let entry = USER_TABLE + slot * USER_ENTRY_SIZE
+    let stored_hash = volatile_read_u64(entry + USER_OFF_PASS)
+    let input_hash = simple_hash(pass_buf)
+    if stored_hash != input_hash { cprintln("Wrong password", RED_ON_BLACK); return }
+    // Login success
+    volatile_write_u64(CURRENT_UID_ADDR, slot)
+    // M1.9: Set UID/GID on PID 0
+    let pid = volatile_read_u64(0x6FE00)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_UID, slot)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_GID, volatile_read_u64(entry + USER_OFF_GID))
+    cprint("Logged in as ", WHITE_ON_BLACK)
+    let mut ci: i64 = 0
+    while ci < ni { console_putchar(volatile_read_u8(name_buf + ci), GREEN_ON_BLACK); ci = ci + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M1.6: `whoami` — show current user
+@kernel fn cmd_whoami_user() {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    let entry = USER_TABLE + uid * USER_ENTRY_SIZE
+    let mut i: i64 = 0
+    while i < 16 {
+        let ch = volatile_read_u8(entry + USER_OFF_NAME + i)
+        if ch == 0 { i = 16 } else { console_putchar(ch, WHITE_ON_BLACK); i = i + 1 }
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M1.7: `su` command — "su <name>"
+@kernel fn cmd_su() {
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: su <name>", YELLOW_ON_BLACK); return }
+    let name_buf: i64 = 0x843E00
+    let mut ni: i64 = 0
+    let mut pos: i64 = 3
+    while pos < len && ni < 15 {
+        volatile_write_u8(name_buf + ni, volatile_read_u8(0x6F800 + pos))
+        ni = ni + 1; pos = pos + 1
+    }
+    volatile_write_u8(name_buf + ni, 0)
+    let slot = user_find(name_buf)
+    if slot < 0 { cprintln("User not found", RED_ON_BLACK); return }
+    // Root can switch without password
+    let current_uid = volatile_read_u64(CURRENT_UID_ADDR)
+    if current_uid != 0 { cprintln("Permission denied (root only)", RED_ON_BLACK); return }
+    volatile_write_u64(CURRENT_UID_ADDR, slot)
+    let pid = volatile_read_u64(0x6FE00)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_UID, slot)
+    volatile_write(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_GID, volatile_read_u64(USER_TABLE + slot * USER_ENTRY_SIZE + USER_OFF_GID))
+    cprint("Switched to ", WHITE_ON_BLACK)
+    let mut ci: i64 = 0
+    while ci < ni { console_putchar(volatile_read_u8(name_buf + ci), GREEN_ON_BLACK); ci = ci + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M1.8: `id` command — show uid, gid, username
+@kernel fn cmd_id_v1() {
+    let uid = volatile_read_u64(CURRENT_UID_ADDR)
+    let entry = USER_TABLE + uid * USER_ENTRY_SIZE
+    cprint("uid=", WHITE_ON_BLACK)
+    cprint_decimal(uid, CYAN_ON_BLACK)
+    cprint("(", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    while i < 16 {
+        let ch = volatile_read_u8(entry + USER_OFF_NAME + i)
+        if ch == 0 { i = 16 } else { console_putchar(ch, CYAN_ON_BLACK); i = i + 1 }
+    }
+    cprint(") gid=", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read_u64(entry + USER_OFF_GID), CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// M1.10: `users` command — list all users
+@kernel fn cmd_users() {
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < USER_MAX {
+        let entry = USER_TABLE + i * USER_ENTRY_SIZE
+        if volatile_read_u64(entry + USER_OFF_ACTIVE) == 1 {
+            cprint("  uid=", WHITE_ON_BLACK)
+            cprint_decimal(volatile_read_u64(entry + USER_OFF_UID), CYAN_ON_BLACK)
+            cprint(" ", WHITE_ON_BLACK)
+            let mut j: i64 = 0
+            while j < 16 {
+                let ch = volatile_read_u8(entry + USER_OFF_NAME + j)
+                if ch == 0 { j = 16 } else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 }
+            }
+            cprint(" home=", WHITE_ON_BLACK)
+            j = 0
+            while j < 16 {
+                let ch = volatile_read_u8(entry + USER_OFF_HOME + j)
+                if ch == 0 { j = 16 } else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("No users configured", WHITE_ON_BLACK) }

@@ -1,0 +1,410 @@
+// ELF Loader + Syscall ABI (Phase 16)
+// Loads and executes ELF64 binaries from FAT32
+// Syscall dispatch table for user-space programs
+// ═══════════════════════════════════════════════
+
+const ELF_LOAD_BASE: i64 = 0x2000000  // 32MB — user ELF load address
+const ELF_STACK_TOP: i64 = 0x3000000  // 48MB — user stack top
+const ELF_BUF: i64 = 0x880000  // ELF read buffer (64KB)
+const ELF_MAGIC: i64 = 0x464C457F // \x7FELF
+
+// ELF64 header offsets
+const ELF_OFF_MAGIC: i64 = 0
+const ELF_OFF_CLASS: i64 = 4   // 1=32-bit, 2=64-bit
+const ELF_OFF_DATA: i64 = 5    // 1=LE, 2=BE
+const ELF_OFF_TYPE: i64 = 16   // 2=ET_EXEC, 3=ET_DYN
+const ELF_OFF_MACHINE: i64 = 18 // 0x3E=x86_64
+const ELF_OFF_ENTRY: i64 = 24  // Entry point (8 bytes)
+const ELF_OFF_PHOFF: i64 = 32  // Program header offset (8 bytes)
+const ELF_OFF_PHENTSIZE: i64 = 54 // Program header entry size (2 bytes)
+const ELF_OFF_PHNUM: i64 = 56  // Number of program headers (2 bytes)
+
+// Program header offsets (64-bit)
+const PH_OFF_TYPE: i64 = 0     // 1=PT_LOAD
+const PH_OFF_FLAGS: i64 = 4    // PF_X=1, PF_W=2, PF_R=4
+const PH_OFF_OFFSET: i64 = 8   // File offset (8 bytes)
+const PH_OFF_VADDR: i64 = 16   // Virtual address (8 bytes)
+const PH_OFF_FILESZ: i64 = 32  // Size in file (8 bytes)
+const PH_OFF_MEMSZ: i64 = 40   // Size in memory (8 bytes)
+
+@kernel fn elf_validate(buf: i64) -> i64 {
+    // Check ELF magic: 0x7F 'E' 'L' 'F'
+    let m0 = volatile_read_u8(buf)
+    let m1 = volatile_read_u8(buf + 1)
+    let m2 = volatile_read_u8(buf + 2)
+    let m3 = volatile_read_u8(buf + 3)
+    if m0 != 0x7F || m1 != 0x45 || m2 != 0x4C || m3 != 0x46 { return -1 }
+    // Check 64-bit
+    if volatile_read_u8(buf + ELF_OFF_CLASS) != 2 { return -2 }
+    // Check little-endian
+    if volatile_read_u8(buf + ELF_OFF_DATA) != 1 { return -3 }
+    // Check x86_64
+    let machine = buffer_read_u16_le(buf + ELF_OFF_MACHINE)
+    if machine != 0x3E { return -4 }
+    0
+}
+
+@kernel fn elf_get_entry(buf: i64) -> i64 {
+    buffer_read_u64_le(buf + ELF_OFF_ENTRY)
+}
+
+@kernel fn elf_get_phoff(buf: i64) -> i64 {
+    buffer_read_u64_le(buf + ELF_OFF_PHOFF)
+}
+
+@kernel fn elf_get_phnum(buf: i64) -> i64 {
+    buffer_read_u16_le(buf + ELF_OFF_PHNUM)
+}
+
+@kernel fn elf_get_phentsize(buf: i64) -> i64 {
+    buffer_read_u16_le(buf + ELF_OFF_PHENTSIZE)
+}
+
+@kernel fn elf_load_segments(buf: i64, file_size: i64) -> i64 {
+    let phoff = elf_get_phoff(buf)
+    let phnum = elf_get_phnum(buf)
+    let phentsize = elf_get_phentsize(buf)
+    let mut loaded: i64 = 0
+
+    let mut i: i64 = 0
+    while i < phnum {
+        let ph = buf + phoff + i * phentsize
+        let ph_type = buffer_read_u32_le(ph + PH_OFF_TYPE)
+
+        if ph_type == 1 { // PT_LOAD
+            let offset = buffer_read_u64_le(ph + PH_OFF_OFFSET)
+            let vaddr = buffer_read_u64_le(ph + PH_OFF_VADDR)
+            let filesz = buffer_read_u64_le(ph + PH_OFF_FILESZ)
+            let memsz = buffer_read_u64_le(ph + PH_OFF_MEMSZ)
+
+            // Map pages for this segment
+            let mut pg: i64 = vaddr & 0xFFFFF000
+            let end_pg = (vaddr + memsz + 0xFFF) & 0xFFFFF000
+            while pg < end_pg {
+                // Allocate frame and map
+                let frame = frame_alloc()
+                if frame != -1 {
+                    map_page(pg, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+                }
+                pg = pg + FRAME_SIZE
+            }
+
+            // Copy file data to memory
+            let mut j: i64 = 0
+            while j < filesz {
+                if offset + j < file_size {
+                    volatile_write_u8(vaddr + j, volatile_read_u8(buf + offset + j))
+                }
+                j = j + 1
+            }
+
+            // Zero BSS (memsz - filesz)
+            while j < memsz {
+                volatile_write_u8(vaddr + j, 0)
+                j = j + 1
+            }
+
+            loaded = loaded + 1
+        }
+        i = i + 1
+    }
+    loaded
+}
+
+// ── Syscall Dispatch Table (v0.7 "Nexus") ──
+
+const SYSCALL_TABLE: i64 = 0x884000      // 32 entries × 8 bytes (fn pointers)
+const SYSCALL_DISPATCH_FN: i64 = 0x884008 // fn pointer for linker indirect call
+
+// Syscall numbers (v0.7 — 26 syscalls)
+const SYS_EXIT: i64 = 0       // EXIT handled in linker asm (never returns)
+const SYS_WRITE: i64 = 1      // write(fd, buf, len) -> bytes_written
+const SYS_READ: i64 = 2       // read(fd, buf, len) -> bytes_read
+const SYS_GETPID: i64 = 3     // getpid() -> pid
+const SYS_YIELD: i64 = 4      // yield() -> 0
+const SYS_BRK: i64 = 5        // brk(increment) -> new_brk
+const SYS_MMAP: i64 = 6       // mmap(addr, len, prot) -> va
+const SYS_CLOCK: i64 = 7      // clock() -> ticks
+const SYS_SLEEP: i64 = 8      // sleep(ms) -> 0
+const SYS_SBRK: i64 = 9       // sbrk(increment) -> old_brk
+
+// File I/O syscalls (F2)
+const SYS_OPEN: i64 = 10      // open(path, flags) -> fd
+const SYS_CLOSE: i64 = 11     // close(fd) -> 0
+const SYS_STAT: i64 = 12      // stat(path, buf) -> 0
+const SYS_FSTAT: i64 = 13     // fstat(fd, buf) -> 0
+const SYS_LSEEK: i64 = 14     // lseek(fd, offset, whence) -> new_offset
+const SYS_DUP: i64 = 15       // dup(old_fd) -> new_fd
+const SYS_DUP2: i64 = 16      // dup2(old_fd, new_fd) -> new_fd
+const SYS_GETCWD: i64 = 17    // getcwd(buf, size) -> len
+const SYS_CHDIR: i64 = 18     // chdir(path) -> 0
+const SYS_UNLINK: i64 = 19    // unlink(path) -> 0
+
+// FD_TABLE_V2 at 0x8D0000 (relocated from 0x894000 to fix virtio TX conflict)
+const FD_TABLE_V2: i64 = 0x8D0000  // 16 procs × 16 FDs × 16 bytes = 4096 bytes
+const FD_MAX: i64 = 16
+const FD_ENTRY_SIZE: i64 = 16
+// FD types
+const FD_CLOSED: i64 = 0
+const FD_CONSOLE: i64 = 1
+const FD_RAMFS: i64 = 2
+const FD_PIPE_READ: i64 = 3
+const FD_PIPE_WRITE: i64 = 4
+const FD_FAT32: i64 = 5
+
+// LSEEK whence values
+const SEEK_SET: i64 = 0
+const SEEK_CUR: i64 = 1
+const SEEK_END: i64 = 2
+
+// Per-process heap tracking base: PROC_TABLE + pid*256 + 96
+const PROC_OFF_BRK: i64 = 96
+// Per-process CWD: PROC_TABLE + pid*256 + 128 (32 bytes)
+const PROC_OFF_CWD: i64 = 128
+// User heap region: 0x2800000 (40MB)
+const USER_HEAP_BASE: i64 = 0x2800000
+
+@kernel fn syscall_init() {
+    // Clear syscall table
+    let mut i: i64 = 0
+    while i < 32 * 8 { volatile_write_u8(SYSCALL_TABLE + i, 0); i = i + 1 }
+    frame_mark_used(SYSCALL_TABLE / FRAME_SIZE)
+}
+
+// Store syscall_dispatch fn pointer for linker indirect call (F1.1)
+@kernel fn syscall_register_dispatch() {
+    volatile_write_u64(SYSCALL_DISPATCH_FN, fn_addr("syscall_dispatch"))
+}
+
+// Main syscall dispatcher — called from linker __syscall_entry via indirect call
+// System V ABI: RDI=num, RSI=arg0, RDX=arg1, RCX=arg2
+// Returns result in RAX
+@kernel fn syscall_dispatch(num: i64, arg0: i64, arg1: i64, arg2: i64) -> i64 {
+    if num == SYS_WRITE { return sys_write(arg0, arg1, arg2) }
+    if num == SYS_READ { return sys_read(arg0, arg1, arg2) }
+    if num == SYS_GETPID { return sys_getpid() }
+    if num == SYS_YIELD { return sys_yield() }
+    if num == SYS_BRK { return sys_brk(arg0) }
+    if num == SYS_MMAP { return sys_mmap(arg0, arg1, arg2) }
+    if num == SYS_CLOCK { return sys_clock() }
+    if num == SYS_SLEEP { return sys_sleep(arg0) }
+    if num == SYS_SBRK { return sys_sbrk(arg0) }
+    // File I/O syscalls (Sprint F2)
+    if num == SYS_OPEN { return sys_open(arg0, arg1) }
+    if num == SYS_CLOSE { return sys_close(arg0) }
+    if num == SYS_STAT { return sys_stat(arg0, arg1) }
+    if num == SYS_FSTAT { return sys_fstat(arg0, arg1) }
+    if num == SYS_LSEEK { return sys_lseek(arg0, arg1, arg2) }
+    if num == SYS_DUP { return sys_dup(arg0) }
+    if num == SYS_DUP2 { return sys_dup2(arg0, arg1) }
+    if num == SYS_GETCWD { return sys_getcwd(arg0, arg1) }
+    if num == SYS_CHDIR { return sys_chdir(arg0) }
+    if num == SYS_UNLINK { return sys_unlink(arg0) }
+    // Process syscalls (Sprint G1-G3)
+    if num == SYS_FORK { return sys_fork() }
+    if num == SYS_EXEC { return sys_exec(arg0, arg1) }
+    if num == SYS_WAITPID { return sys_waitpid(arg0, arg1, arg2) }
+    if num == SYS_SETPGID { return sys_setpgid(arg0, arg1) }
+    if num == SYS_PIPE { return sys_pipe(arg0) }
+    if num == SYS_KILL { return sys_kill(arg0, arg1) }
+    if num == SYS_SIGNAL { return sys_signal(arg0, arg1) }
+    // Socket syscalls (Phase O)
+    if num == SYS_SOCKET { return sys_socket(arg0) }
+    if num == SYS_BIND { return sys_bind(arg0, arg1) }
+    if num == SYS_LISTEN { return sys_listen(arg0, arg1) }
+    if num == SYS_ACCEPT { return sys_accept(arg0) }
+    if num == SYS_CONNECT_SOCK { return sys_connect_sock(arg0, arg1, arg2) }
+    // GPU compute syscalls (Phase R)
+    if num == SYS_GPU_ALLOC { return sys_gpu_alloc(arg0, arg1, arg2) }
+    if num == SYS_GPU_DISPATCH { return sys_gpu_dispatch(arg0, arg1, arg2, 0) }
+    -1 // Unknown syscall
+}
+
+// SYS_WRITE(1): write to fd via FD table v2
+@kernel fn sys_write(fd: i64, buf_addr: i64, len: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+
+    if ftype == FD_CONSOLE {
+        let mut i: i64 = 0
+        while i < len {
+            let ch = volatile_read_u8(buf_addr + i)
+            console_putchar(ch, WHITE_ON_BLACK)
+            i = i + 1
+        }
+        return len
+    }
+    if ftype == FD_RAMFS {
+        // Write to ramfs file (append at current offset)
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let offset = (data >> 32) & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let data_ptr = volatile_read(entry_addr + 40)
+        if data_ptr == 0 { return -1 }
+        let mut i: i64 = 0
+        while i < len {
+            volatile_write_u8(data_ptr + offset + i, volatile_read_u8(buf_addr + i))
+            i = i + 1
+        }
+        let new_offset = offset + len
+        let new_data = (new_offset << 32) | idx
+        fd_v2_set(pid, fd, ftype, new_data)
+        let old_size = volatile_read(entry_addr + 32)
+        if new_offset > old_size { volatile_write(entry_addr + 32, new_offset) }
+        return len
+    }
+    if ftype == FD_PIPE_WRITE {
+        let slot = fd_v2_get_data(pid, fd)
+        return pipe_write_circular(slot, buf_addr, len)
+    }
+    if ftype == FD_SOCKET {
+        return socket_write(fd_v2_get_data(pid, fd), buf_addr, len)
+    }
+    -1
+}
+
+// SYS_READ(2): read from fd via FD table v2
+@kernel fn sys_read(fd: i64, buf_addr: i64, len: i64) -> i64 {
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let pid = volatile_read_u64(0x6FE00)
+    let ftype = fd_v2_get_type(pid, fd)
+
+    if ftype == FD_CONSOLE {
+        // Read from keyboard ring buffer
+        let read_idx = volatile_read_u8(0x6FBF8)
+        let write_idx = volatile_read_u8(0x6FBF0)
+        if read_idx == write_idx { return 0 }
+        let ch = volatile_read_u8(0x6FB00 + read_idx)
+        volatile_write_u8(buf_addr, ch)
+        volatile_write_u8(0x6FBF8, (read_idx + 1) % 256)
+        return 1
+    }
+    if ftype == FD_RAMFS {
+        // Read from ramfs file at current offset
+        let data = fd_v2_get_data(pid, fd)
+        let idx = data & 0xFFFFFFFF
+        let offset = (data >> 32) & 0xFFFFFFFF
+        let entry_addr = ramfs_entry_addr(idx)
+        let size = volatile_read(entry_addr + 32)
+        let data_ptr = volatile_read(entry_addr + 40)
+        if data_ptr == 0 { return 0 }
+        let available = size - offset
+        if available <= 0 { return 0 } // EOF
+        let to_read = if len < available { len } else { available }
+        let mut i: i64 = 0
+        while i < to_read {
+            volatile_write_u8(buf_addr + i, volatile_read_u8(data_ptr + offset + i))
+            i = i + 1
+        }
+        let new_offset = offset + to_read
+        let new_data = (new_offset << 32) | idx
+        fd_v2_set(pid, fd, ftype, new_data)
+        return to_read
+    }
+    if ftype == FD_PIPE_READ {
+        let slot = fd_v2_get_data(pid, fd)
+        return pipe_read_circular(slot, buf_addr, len)
+    }
+    if ftype == FD_SOCKET {
+        return socket_read(fd_v2_get_data(pid, fd), buf_addr, len)
+    }
+    -1
+}
+
+// SYS_GETPID(3): return current process ID
+@kernel fn sys_getpid() -> i64 {
+    volatile_read_u64(0x6FE00)
+}
+
+// SYS_YIELD(4): voluntarily yield CPU
+@kernel fn sys_yield() -> i64 {
+    // Mark current process READY, let scheduler pick next on timer
+    let pid = volatile_read_u64(0x6FE00)
+    if pid > 0 {
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_READY)
+    }
+    0
+}
+
+// SYS_BRK(5): set program break (heap end)
+@kernel fn sys_brk(new_brk: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let brk_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_BRK
+    let current_brk = volatile_read_u64(brk_addr)
+    if new_brk == 0 {
+        // Query current break
+        if current_brk == 0 {
+            // Initialize heap
+            volatile_write_u64(brk_addr, USER_HEAP_BASE)
+            return USER_HEAP_BASE
+        }
+        return current_brk
+    }
+    if new_brk >= USER_HEAP_BASE && new_brk < ELF_STACK_TOP - 0x10000 {
+        // Allocate pages between current_brk and new_brk
+        let old = if current_brk == 0 { USER_HEAP_BASE } else { current_brk }
+        let mut page = (old + FRAME_SIZE - 1) / FRAME_SIZE * FRAME_SIZE
+        while page < new_brk {
+            let frame = frame_alloc()
+            if frame != -1 {
+                map_page(page, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+            }
+            page = page + FRAME_SIZE
+        }
+        volatile_write_u64(brk_addr, new_brk)
+        return new_brk
+    }
+    -1
+}
+
+// SYS_MMAP(6): allocate pages in user space
+@kernel fn sys_mmap(addr: i64, len: i64, prot: i64) -> i64 {
+    let pages = (len + FRAME_SIZE - 1) / FRAME_SIZE
+    let base = if addr != 0 { addr } else { USER_HEAP_BASE + 0x100000 }
+    let mut pg: i64 = 0
+    while pg < pages {
+        let frame = frame_alloc()
+        if frame != -1 {
+            map_page(base + pg * FRAME_SIZE, frame * FRAME_SIZE, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+        }
+        pg = pg + 1
+    }
+    base
+}
+
+// SYS_CLOCK(7): return timer ticks since boot (100 Hz)
+@kernel fn sys_clock() -> i64 {
+    volatile_read_u64(0x6FE08)
+}
+
+// SYS_SLEEP(8): sleep for N milliseconds
+@kernel fn sys_sleep(ms: i64) -> i64 {
+    let target_ticks = volatile_read_u64(0x6FE08) + (ms + 9) / 10  // 10ms per tick
+    let pid = volatile_read_u64(0x6FE00)
+    if pid > 0 {
+        // Store wake-up tick at proc entry +104 (PROC_OFF_WAKE)
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + 104, target_ticks)
+        volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_BLOCKED)
+    }
+    // Busy-wait fallback for PID 0 (shell)
+    while volatile_read_u64(0x6FE08) < target_ticks { }
+    0
+}
+
+// SYS_SBRK(9): increment program break, return OLD break
+@kernel fn sys_sbrk(increment: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let brk_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_BRK
+    let current_brk = volatile_read_u64(brk_addr)
+    let old = if current_brk == 0 { USER_HEAP_BASE } else { current_brk }
+    if increment == 0 { return old }
+    let new_brk = old + increment
+    let result = sys_brk(new_brk)
+    if result == -1 { return -1 }
+    old
+}
+
+// ═══════════════════════════════════════════════
+// File I/O Syscalls (Sprint F2)

@@ -1,0 +1,585 @@
+// FajarOS Nova v1.4.0 "Zenith" — x86_64 Bare-Metal OS
+// 142 commands, Ring 3 "Hello Ring 3!", NVMe + FAT32 + VFS + SMP + Net
+// Written 100% in Fajar Lang — 8,800+ lines
+// Milestone: User program calls SYSCALL from Ring 3 and prints to serial
+
+const VGA_BASE: i64 = 0xB8000
+const VGA_COLS: i64 = 80
+const VGA_ROWS: i64 = 25
+const WHITE_ON_BLACK: i64 = 0x0F
+const WHITE_ON_BLUE: i64 = 0x1F
+const GREEN_ON_BLACK: i64 = 0x0A
+const CYAN_ON_BLACK: i64 = 0x0B
+const YELLOW_ON_BLACK: i64 = 0x0E
+const RED_ON_BLACK: i64 = 0x0C
+
+// ═══════════════════════════════════════════════
+// Bitmap Frame Allocator (Phase 2)
+// 128MB = 32768 × 4KB frames
+// Bitmap at 0x580000 (4096 bytes = 32768 bits)
+// ═══════════════════════════════════════════════
+
+const FRAME_SIZE: i64 = 4096
+const TOTAL_FRAMES: i64 = 32768
+const BITMAP_BASE: i64 = 0x580000
+const BITMAP_SIZE: i64 = 4096
+
+@kernel fn frames_init() {
+    // Clear bitmap (all free)
+    let mut i: i64 = 0
+    while i < BITMAP_SIZE {
+        volatile_write_u8(BITMAP_BASE + i, 0)
+        i = i + 1
+    }
+    // Mark frames 0-0x7F as used (first 512KB: IVT, BDA, VGA, BIOS)
+    let mut f: i64 = 0
+    while f < 128 { frame_mark_used(f); f = f + 1 }
+    // Mark kernel frames (0x100000 - 0x120000 = frames 256-288)
+    f = 256
+    while f < 288 { frame_mark_used(f); f = f + 1 }
+    // Mark page tables (0x70000 - 0x73000 = frames 112-115)
+    f = 112
+    while f < 116 { frame_mark_used(f); f = f + 1 }
+    // Mark heap area (0x400000 - 0x580000 = frames 1024-1408)
+    f = 1024
+    while f < 1408 { frame_mark_used(f); f = f + 1 }
+    // Mark bitmap itself (0x580000 - 0x581000 = frame 1408)
+    frame_mark_used(1408)
+    // Mark process table + cmdbuf region (0x600000 - 0x700000 = frames 1536-1792)
+    f = 1536
+    while f < 1792 { frame_mark_used(f); f = f + 1 }
+    // Mark ramfs (0x700000 - 0x7E0000 = frames 1792-2016)
+    f = 1792
+    while f < 2016 { frame_mark_used(f); f = f + 1 }
+    // Mark stack (0x7F0000 - 0x800000 = frames 2032-2048)
+    f = 2032
+    while f < 2048 { frame_mark_used(f); f = f + 1 }
+}
+
+@kernel fn frame_mark_used(frame: i64) {
+    let byte_idx = frame / 8
+    let bit_idx = frame % 8
+    let old = volatile_read_u8(BITMAP_BASE + byte_idx)
+    volatile_write_u8(BITMAP_BASE + byte_idx, old | (1 << bit_idx))
+}
+
+@kernel fn frame_mark_free(frame: i64) {
+    let byte_idx = frame / 8
+    let bit_idx = frame % 8
+    let old = volatile_read_u8(BITMAP_BASE + byte_idx)
+    volatile_write_u8(BITMAP_BASE + byte_idx, old & (255 - (1 << bit_idx)))
+}
+
+@kernel fn frame_is_used(frame: i64) -> i64 {
+    let byte_idx = frame / 8
+    let bit_idx = frame % 8
+    let val = volatile_read_u8(BITMAP_BASE + byte_idx)
+    if (val & (1 << bit_idx)) != 0 { 1 } else { 0 }
+}
+
+@kernel fn frame_alloc() -> i64 {
+    // Find first free frame, returns physical address or -1
+    let mut f: i64 = 0
+    while f < TOTAL_FRAMES {
+        if frame_is_used(f) == 0 {
+            frame_mark_used(f)
+            return f * FRAME_SIZE
+        }
+        f = f + 1
+    }
+    -1  // OOM
+}
+
+@kernel fn frame_free(addr: i64) {
+    let frame = addr / FRAME_SIZE
+    if frame >= 0 && frame < TOTAL_FRAMES {
+        frame_mark_free(frame)
+    }
+}
+
+@kernel fn frame_alloc_contiguous(count: i64) -> i64 {
+    // Find 'count' contiguous free frames, returns base physical address or -1
+    let mut start: i64 = 2048  // Start after reserved area
+    while start + count <= TOTAL_FRAMES {
+        let mut ok: i64 = 1
+        let mut i: i64 = 0
+        while i < count && ok == 1 {
+            if frame_is_used(start + i) == 1 { ok = 0 }
+            i = i + 1
+        }
+        if ok == 1 {
+            i = 0
+            while i < count { frame_mark_used(start + i); i = i + 1 }
+            return start * FRAME_SIZE
+        }
+        start = start + 1
+    }
+    -1
+}
+
+@kernel fn frame_stats_total() -> i64 { TOTAL_FRAMES }
+
+@kernel fn frame_stats_used() -> i64 {
+    let mut count: i64 = 0
+    let mut f: i64 = 0
+    while f < TOTAL_FRAMES {
+        if frame_is_used(f) == 1 { count = count + 1 }
+        f = f + 1
+    }
+    count
+}
+
+@kernel fn frame_stats_free() -> i64 {
+    TOTAL_FRAMES - frame_stats_used()
+}
+
+// ═══════════════════════════════════════════════
+// Page Table Management (Phase 2)
+// PML4 at 0x70000, PDPT at 0x71000, PD at 0x72000
+// Currently: 64 × 2MB huge pages = 128MB identity
+// New: support 4KB page mapping via PT entries
+// ═══════════════════════════════════════════════
+
+const PML4_BASE: i64 = 0x70000
+const PAGE_PRESENT: i64 = 1
+const PAGE_WRITABLE: i64 = 2
+const PAGE_USER: i64 = 4
+const PAGE_HUGE: i64 = 128
+const PAGE_NX: i64 = 0  // Would be bit 63, needs EFER.NXE
+
+@kernel fn page_table_entry(table_base: i64, index: i64) -> i64 {
+    volatile_read(table_base + index * 8)
+}
+
+@kernel fn page_table_set(table_base: i64, index: i64, value: i64) {
+    volatile_write(table_base + index * 8, value)
+}
+
+@kernel fn map_page(virt: i64, phys: i64, flags: i64) {
+    // Map a 4KB page: virt → phys with given flags
+    // Walk PML4 → PDPT → PD → PT, allocating tables as needed
+    let pml4_idx = (virt >> 39) & 0x1FF
+    let pdpt_idx = (virt >> 30) & 0x1FF
+    let pd_idx = (virt >> 21) & 0x1FF
+    let pt_idx = (virt >> 12) & 0x1FF
+
+    // Propagate USER flag to intermediate entries if requested
+    let user_flag = flags & PAGE_USER
+
+    // Get or create PDPT
+    let mut pdpt_addr: i64 = 0
+    let pml4_entry = page_table_entry(PML4_BASE, pml4_idx)
+    if (pml4_entry & PAGE_PRESENT) != 0 {
+        pdpt_addr = pml4_entry & 0xFFFFF000
+        // Add USER flag to existing entry if needed
+        if user_flag != 0 && (pml4_entry & PAGE_USER) == 0 {
+            page_table_set(PML4_BASE, pml4_idx, pml4_entry | PAGE_USER)
+        }
+    } else {
+        pdpt_addr = frame_alloc()
+        if pdpt_addr == -1 { return }
+        let mut i: i64 = 0
+        while i < 4096 { volatile_write_u8(pdpt_addr + i, 0); i = i + 1 }
+        page_table_set(PML4_BASE, pml4_idx, pdpt_addr | PAGE_PRESENT | PAGE_WRITABLE | user_flag)
+    }
+
+    // Get or create PD
+    let mut pd_addr: i64 = 0
+    let pdpt_entry = page_table_entry(pdpt_addr, pdpt_idx)
+    if (pdpt_entry & PAGE_PRESENT) != 0 {
+        pd_addr = pdpt_entry & 0xFFFFF000
+        if user_flag != 0 && (pdpt_entry & PAGE_USER) == 0 {
+            page_table_set(pdpt_addr, pdpt_idx, pdpt_entry | PAGE_USER)
+        }
+    } else {
+        pd_addr = frame_alloc()
+        if pd_addr == -1 { return }
+        let mut i: i64 = 0
+        while i < 4096 { volatile_write_u8(pd_addr + i, 0); i = i + 1 }
+        page_table_set(pdpt_addr, pdpt_idx, pd_addr | PAGE_PRESENT | PAGE_WRITABLE | user_flag)
+    }
+
+    // Check if PD entry is a 2MB huge page
+    let pd_entry = page_table_entry(pd_addr, pd_idx)
+    if (pd_entry & PAGE_HUGE) != 0 {
+        // Add USER flag to existing huge page if needed
+        if user_flag != 0 && (pd_entry & PAGE_USER) == 0 {
+            page_table_set(pd_addr, pd_idx, pd_entry | PAGE_USER)
+        }
+        return
+    }
+
+    // Get or create PT (4KB page table)
+    let mut pt_addr: i64 = 0
+    if (pd_entry & PAGE_PRESENT) != 0 {
+        pt_addr = pd_entry & 0xFFFFF000
+    } else {
+        pt_addr = frame_alloc()
+        if pt_addr == -1 { return }
+        let mut i: i64 = 0
+        while i < 4096 { volatile_write_u8(pt_addr + i, 0); i = i + 1 }
+        page_table_set(pd_addr, pd_idx, pt_addr | PAGE_PRESENT | PAGE_WRITABLE)
+    }
+
+    // Set the PT entry
+    page_table_set(pt_addr, pt_idx, phys | flags)
+}
+
+@kernel fn unmap_page(virt: i64) {
+    // Unmap a 4KB page
+    let pml4_idx = (virt >> 39) & 0x1FF
+    let pdpt_idx = (virt >> 30) & 0x1FF
+    let pd_idx = (virt >> 21) & 0x1FF
+    let pt_idx = (virt >> 12) & 0x1FF
+
+    let pml4_entry = page_table_entry(PML4_BASE, pml4_idx)
+    if (pml4_entry & PAGE_PRESENT) == 0 { return }
+    let pdpt_addr = pml4_entry & 0xFFFFF000
+
+    let pdpt_entry = page_table_entry(pdpt_addr, pdpt_idx)
+    if (pdpt_entry & PAGE_PRESENT) == 0 { return }
+    let pd_addr = pdpt_entry & 0xFFFFF000
+
+    let pd_entry = page_table_entry(pd_addr, pd_idx)
+    if (pd_entry & PAGE_PRESENT) == 0 || (pd_entry & PAGE_HUGE) != 0 { return }
+    let pt_addr = pd_entry & 0xFFFFF000
+
+    // Clear PT entry and flush TLB
+    page_table_set(pt_addr, pt_idx, 0)
+    invlpg(virt)
+}
+
+// ── Per-Process Page Tables (Phase 3) ──
+
+@kernel fn clone_kernel_pml4() -> i64 {
+    // Allocate a new PML4 page and copy kernel entries from the shared PML4
+    let new_pml4 = frame_alloc()
+    if new_pml4 == -1 { return -1 }
+
+    // Zero the new PML4
+    let mut i: i64 = 0
+    while i < 4096 { volatile_write_u8(new_pml4 + i, 0); i = i + 1 }
+
+    // Copy all entries from kernel PML4 (identity map + kernel pages)
+    // PML4 has 512 entries × 8 bytes = 4096 bytes
+    i = 0
+    while i < 512 {
+        let entry = page_table_entry(PML4_BASE, i)
+        if entry != 0 {
+            page_table_set(new_pml4, i, entry)
+        }
+        i = i + 1
+    }
+
+    new_pml4
+}
+
+@kernel fn sched_spawn_user(code_addr: i64, stack_addr: i64) -> i64 {
+    // Spawn a Ring 3 process with its own page table
+    let mut pid: i64 = -1
+    let mut i: i64 = 1
+    while i < 16 && pid == -1 {
+        if volatile_read(0x600000 + i * 256 + 8) == 0 { pid = i }
+        i = i + 1
+    }
+    if pid == -1 { return -1 }
+
+    // Clone kernel page tables for this process
+    let pml4 = clone_kernel_pml4()
+    if pml4 == -1 { return -2 }
+
+    // Allocate process kernel stack
+    let kstack_base = 0x700000 + pid * 0x4000
+    let kstack_top = kstack_base + 0x3FF0
+    let mut pg: i64 = kstack_base
+    while pg < kstack_base + 0x4000 {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // Build fake interrupt frame for Ring 3 process
+    let mut sp = kstack_top
+
+    // IRETQ frame: Ring 3
+    sp = sp - 8; volatile_write_u64(sp, 0x1B)         // SS = user data (0x18 | RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, stack_addr)    // RSP = user stack
+    sp = sp - 8; volatile_write_u64(sp, 0x202)        // RFLAGS (IF=1)
+    sp = sp - 8; volatile_write_u64(sp, 0x23)         // CS = user code (0x20 | RPL=3)
+    sp = sp - 8; volatile_write_u64(sp, code_addr)    // RIP = user entry
+
+    // 15 GPRs (zeroed)
+    let mut r: i64 = 0
+    while r < 15 { sp = sp - 8; volatile_write_u64(sp, 0); r = r + 1 }
+
+    // Set process table entry
+    let base = 0x600000 + pid * 256
+    volatile_write(base + 8, 1)      // state = READY
+    volatile_write(base + 16, sp)    // saved RSP
+    volatile_write(base + 32, 0)     // ticks = 0
+    volatile_write(base + 40, pml4)  // CR3 = per-process page table
+
+    pid
+}
+
+// ═══════════════════════════════════════════════
+// Memory Commands
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_frames() {
+    let used = frame_stats_used()
+    let free = frame_stats_free()
+    let total = frame_stats_total()
+    cprintln("Frame Allocator:", YELLOW_ON_BLACK)
+    cprint("  Total:  ", WHITE_ON_BLACK)
+    cprint_decimal(total, CYAN_ON_BLACK)
+    cprint(" frames (", WHITE_ON_BLACK)
+    cprint_decimal(total * 4 / 1024, CYAN_ON_BLACK)
+    cprintln(" MB)", WHITE_ON_BLACK)
+    cprint("  Used:   ", WHITE_ON_BLACK)
+    cprint_decimal(used, CYAN_ON_BLACK)
+    cprint(" frames (", WHITE_ON_BLACK)
+    cprint_decimal(used * 4, CYAN_ON_BLACK)
+    cprintln(" KB)", WHITE_ON_BLACK)
+    cprint("  Free:   ", WHITE_ON_BLACK)
+    cprint_decimal(free, CYAN_ON_BLACK)
+    cprint(" frames (", WHITE_ON_BLACK)
+    cprint_decimal(free * 4 / 1024, CYAN_ON_BLACK)
+    cprintln(" MB)", WHITE_ON_BLACK)
+    cprint("  Usage:  ", WHITE_ON_BLACK)
+    cprint_decimal(used * 100 / total, CYAN_ON_BLACK)
+    cprintln("%", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_mmap() {
+    // mmap — show memory map
+    cprintln("Memory Map:", YELLOW_ON_BLACK)
+    cprintln("  0x000000-0x07FFFF  512K  Low memory (IVT+BDA)", WHITE_ON_BLACK)
+    cprintln("  0x0B8000-0x0B8FA0  4K    VGA text buffer", CYAN_ON_BLACK)
+    cprintln("  0x0E0000-0x0FFFFF  128K  BIOS/ACPI", WHITE_ON_BLACK)
+    cprintln("  0x100000-0x120000  128K  Kernel .text+.rodata", GREEN_ON_BLACK)
+    cprintln("  0x400000-0x580000  1.5M  Heap (bump)", WHITE_ON_BLACK)
+    cprintln("  0x580000-0x581000  4K    Frame bitmap", CYAN_ON_BLACK)
+    cprintln("  0x600000-0x601000  4K    Process table", WHITE_ON_BLACK)
+    cprintln("  0x6F8000-0x6FD000  20K   Shell state", WHITE_ON_BLACK)
+    cprintln("  0x700000-0x7E0000  896K  RamFS", CYAN_ON_BLACK)
+    cprintln("  0x7F0000-0x800000  64K   Stack", WHITE_ON_BLACK)
+    cprintln("  0x800000-0x7FFFFFF 120M  Free frames", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_alloc() {
+    // alloc <N> — allocate N frames and show addresses
+    let len = cmdbuf_len()
+    let mut n: i64 = 1
+    if len > 6 {
+        n = 0
+        let mut i: i64 = 6
+        while i < len {
+            let ch = volatile_read_u8(0x6F800 + i)
+            if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+            i = i + 1
+        }
+    }
+    if n > 16 { n = 16 }  // max 16 at a time
+    let mut i: i64 = 0
+    while i < n {
+        let addr = frame_alloc()
+        if addr == -1 {
+            cprintln("OOM: no free frames", RED_ON_BLACK)
+            return
+        }
+        cprint("  Allocated frame at 0x", WHITE_ON_BLACK)
+        cprint_hex(addr, 8, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_dealloc() {
+    // dealloc <addr> — free frame at address
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: dealloc <hex_addr>", YELLOW_ON_BLACK); return }
+    // Parse hex address after "dealloc "
+    let mut addr: i64 = 0
+    let mut i: i64 = 8
+    // Skip "0x" prefix if present
+    if i + 1 < len && volatile_read_u8(0x6F800 + i) == 48 && volatile_read_u8(0x6F800 + i + 1) == 120 {
+        i = i + 2
+    }
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        addr = addr * 16
+        if ch >= 48 && ch <= 57 { addr = addr + (ch - 48) }
+        else if ch >= 97 && ch <= 102 { addr = addr + (ch - 87) }
+        else if ch >= 65 && ch <= 70 { addr = addr + (ch - 55) }
+        i = i + 1
+    }
+    frame_free(addr)
+    cprint("  Freed frame at 0x", GREEN_ON_BLACK)
+    cprint_hex(addr, 8, GREEN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Freelist Heap Allocator (Phase 2 Sprint 6)
+// Heap region: 0x400000 - 0x580000 (1.5MB)
+// Free list: linked list of (size, next_ptr) blocks
+// Header: 16 bytes (size: i64, next: i64)
+// Magic: 0xABCD1234 at offset -8 for double-free detect
+// ═══════════════════════════════════════════════
+
+const HEAP_START: i64 = 0x400000
+const HEAP_END: i64 = 0x580000
+const HEAP_HDR: i64 = 16
+const HEAP_MAGIC: i64 = 0xABCD1234
+
+@kernel fn heap_init() {
+    // Initialize free list: one big free block
+    volatile_write(HEAP_START, HEAP_END - HEAP_START - HEAP_HDR)  // size of free block
+    volatile_write(HEAP_START + 8, 0)  // next = null
+    // Stats at 0x581010
+    volatile_write(0x581010, 0)              // total allocated bytes
+    volatile_write(0x581018, HEAP_END - HEAP_START) // total heap size
+    volatile_write(0x581020, 0)              // allocation count
+}
+
+@kernel fn kmalloc(size: i64) -> i64 {
+    // First-fit allocation from free list
+    let aligned_size = ((size + 7) / 8) * 8  // 8-byte align
+    let mut prev: i64 = 0
+    let mut curr = HEAP_START
+    while curr != 0 {
+        let blk_size = volatile_read(curr)
+        if blk_size >= aligned_size {
+            // Found a block! Split if large enough
+            if blk_size >= aligned_size + HEAP_HDR + 16 {
+                // Split: create new free block after allocation
+                let new_free = curr + HEAP_HDR + aligned_size
+                volatile_write(new_free, blk_size - aligned_size - HEAP_HDR)
+                volatile_write(new_free + 8, volatile_read(curr + 8))
+                // Update current to allocated size
+                volatile_write(curr, aligned_size)
+                // Link previous to new free
+                if prev != 0 { volatile_write(prev + 8, new_free) }
+                else {
+                    // curr was head — update head to new_free
+                    // Store free list head at 0x581008
+                    volatile_write(0x581008, new_free)
+                }
+            } else {
+                // Use entire block
+                if prev != 0 { volatile_write(prev + 8, volatile_read(curr + 8)) }
+                else { volatile_write(0x581008, volatile_read(curr + 8)) }
+            }
+            // Write magic for double-free detection
+            volatile_write(curr + 8, HEAP_MAGIC)
+            // Update stats
+            volatile_write(0x581010, volatile_read(0x581010) + aligned_size)
+            volatile_write(0x581020, volatile_read(0x581020) + 1)
+            return curr + HEAP_HDR  // return pointer past header
+        }
+        prev = curr
+        curr = volatile_read(curr + 8)
+    }
+    -1  // OOM
+}
+
+@kernel fn kfree(ptr: i64) {
+    if ptr <= HEAP_START || ptr >= HEAP_END { return }
+    let hdr = ptr - HEAP_HDR
+    let magic = volatile_read(hdr + 8)
+    if magic != HEAP_MAGIC {
+        cprintln("PANIC: double-free or corruption detected!", RED_ON_BLACK)
+        return
+    }
+    let size = volatile_read(hdr)
+    // Clear magic
+    volatile_write(hdr + 8, 0)
+    // Add to front of free list
+    let old_head = volatile_read(0x581008)
+    volatile_write(hdr + 8, old_head)
+    volatile_write(0x581008, hdr)
+    // Update stats
+    volatile_write(0x581010, volatile_read(0x581010) - size)
+    volatile_write(0x581020, volatile_read(0x581020) - 1)
+}
+
+@kernel fn cmd_heap() {
+    let used = volatile_read(0x581010)
+    let total = volatile_read(0x581018)
+    let count = volatile_read(0x581020)
+    cprintln("Heap Allocator (freelist):", YELLOW_ON_BLACK)
+    cprint("  Total:   ", WHITE_ON_BLACK)
+    cprint_decimal(total / 1024, CYAN_ON_BLACK)
+    cprintln(" KB", WHITE_ON_BLACK)
+    cprint("  Used:    ", WHITE_ON_BLACK)
+    cprint_decimal(used, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+    cprint("  Free:    ", WHITE_ON_BLACK)
+    cprint_decimal((total - used) / 1024, CYAN_ON_BLACK)
+    cprintln(" KB", WHITE_ON_BLACK)
+    cprint("  Allocs:  ", WHITE_ON_BLACK)
+    cprint_decimal(count, CYAN_ON_BLACK)
+    cprintln(" active", WHITE_ON_BLACK)
+    cprint("  Usage:   ", WHITE_ON_BLACK)
+    if total > 0 { cprint_decimal(used * 100 / total, CYAN_ON_BLACK) }
+    else { console_putchar(48, CYAN_ON_BLACK) }
+    cprintln("%", WHITE_ON_BLACK)
+    // Walk free list
+    cprint("  Blocks:  ", WHITE_ON_BLACK)
+    let mut blk_count: i64 = 0
+    let mut curr = volatile_read(0x581008)
+    while curr != 0 && blk_count < 20 {
+        blk_count = blk_count + 1
+        curr = volatile_read(curr + 8)
+    }
+    cprint_decimal(blk_count, CYAN_ON_BLACK)
+    cprintln(" free blocks", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_kmalloc() {
+    // kmalloc <size> — allocate from heap
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: kmalloc <size>", YELLOW_ON_BLACK); return }
+    let mut size: i64 = 0
+    let mut i: i64 = 8
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { size = size * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if size <= 0 || size > 65536 { cprintln("kmalloc: size 1-65536", YELLOW_ON_BLACK); return }
+    let ptr = kmalloc(size)
+    if ptr == -1 {
+        cprintln("kmalloc: OOM", RED_ON_BLACK)
+    } else {
+        cprint("  Allocated ", GREEN_ON_BLACK)
+        cprint_decimal(size, CYAN_ON_BLACK)
+        cprint(" bytes at 0x", WHITE_ON_BLACK)
+        cprint_hex(ptr, 8, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_kfree() {
+    // kfree <addr> — free heap allocation
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: kfree <hex_addr>", YELLOW_ON_BLACK); return }
+    let mut addr: i64 = 0
+    let mut i: i64 = 6
+    if i + 1 < len && volatile_read_u8(0x6F800 + i) == 48 && volatile_read_u8(0x6F800 + i + 1) == 120 { i = i + 2 }
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        addr = addr * 16
+        if ch >= 48 && ch <= 57 { addr = addr + (ch - 48) }
+        else if ch >= 97 && ch <= 102 { addr = addr + (ch - 87) }
+        else if ch >= 65 && ch <= 70 { addr = addr + (ch - 55) }
+        i = i + 1
+    }
+    kfree(addr)
+    cprint("  Freed at 0x", GREEN_ON_BLACK)
+    cprint_hex(addr, 8, GREEN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════

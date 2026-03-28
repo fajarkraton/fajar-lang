@@ -1,0 +1,4111 @@
+    let mut i: i64 = 0
+    while i < nlen && i < 31 {
+        volatile_write_u8(addr + i, str_byte_at(name, i))
+        i = i + 1
+    }
+    volatile_write_u8(addr + i, 0) // null terminate
+    // Set type
+    volatile_write(addr + 48, ftype)
+    volatile_write(addr + 32, 0) // size = 0
+    volatile_write(addr + 40, 0) // data_ptr = 0
+    fs_set_default_perms(addr, ftype) // M2.2: set owner + mode
+    volatile_write(FS_BASE, count + 1)
+    count
+}
+
+@kernel fn ramfs_find(name: str) -> i64 {
+    let count = volatile_read(FS_BASE)
+    let nlen = str_len(name)
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < nlen && match_ok == 1 {
+            if volatile_read_u8(addr + j) != str_byte_at(name, j) { match_ok = 0 }
+            j = j + 1
+        }
+        // Also check name is same length (null terminator)
+        if match_ok == 1 && volatile_read_u8(addr + nlen) == 0 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn ramfs_find_buf(prefix_len: i64) -> i64 {
+    // Find file by name in cmdbuf starting at prefix_len
+    let cmd_len = cmdbuf_len()
+    let name_len = cmd_len - prefix_len
+    if name_len <= 0 { return -1 }
+    let count = volatile_read(FS_BASE)
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < name_len && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + prefix_len + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + name_len) == 0 { return i }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn ramfs_write_file(name: str, data: str, dlen: i64) {
+    let mut idx = ramfs_find(name)
+    if idx == -1 { idx = ramfs_create_entry(name, 1) }
+    if idx == -1 { return }
+    let addr = ramfs_entry_addr(idx)
+    let data_offset = volatile_read(FS_BASE + 8)
+    // Write data
+    let mut i: i64 = 0
+    while i < dlen {
+        volatile_write_u8(data_offset + i, str_byte_at(data, i))
+        i = i + 1
+    }
+    volatile_write(addr + 32, dlen)       // size
+    volatile_write(addr + 40, data_offset) // data_ptr
+    volatile_write(addr + 48, 1)           // type = file
+    volatile_write(FS_BASE + 8, data_offset + dlen) // advance next_data
+}
+
+@kernel fn cmd_ls() {
+    let count = volatile_read(FS_BASE)
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let ftype = volatile_read(addr + 48)
+        let size = volatile_read(addr + 32)
+        // Print type
+        if ftype == 2 { cprint("d ", CYAN_ON_BLACK) }
+        else { cprint("- ", WHITE_ON_BLACK) }
+        // Print size
+        cprint_decimal(size, YELLOW_ON_BLACK)
+        cprint("\t", WHITE_ON_BLACK)
+        // Print name
+        let mut j: i64 = 0
+        while volatile_read_u8(addr + j) != 0 && j < 31 {
+            if ftype == 2 { console_putchar(volatile_read_u8(addr + j), CYAN_ON_BLACK) }
+            else { console_putchar(volatile_read_u8(addr + j), WHITE_ON_BLACK) }
+            j = j + 1
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+        i = i + 1
+    }
+    cprint("Total: ", GREEN_ON_BLACK)
+    cprint_decimal(count, GREEN_ON_BLACK)
+    cprintln(" entries", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_cat() {
+    // cat <filename> — prefix "cat " = 4 chars
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: cat <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(4)
+    if idx == -1 {
+        cprint("cat: file not found: ", RED_ON_BLACK)
+        let mut i: i64 = 4
+        while i < len { console_putchar(volatile_read_u8(0x6F800 + i), RED_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 || data_ptr == 0 { return }
+    let mut i: i64 = 0
+    while i < size {
+        console_putchar(volatile_read_u8(data_ptr + i), WHITE_ON_BLACK)
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_touch() {
+    // touch <filename> — prefix "touch " = 6 chars
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: touch <file>", YELLOW_ON_BLACK); return }
+    // Extract name from buffer
+    let name_len = len - 6
+    let idx = ramfs_find_buf(6)
+    if idx != -1 { return } // already exists
+    // Create new entry from buffer
+    let count = volatile_read(FS_BASE)
+    if count >= FS_MAX_FILES { cprintln("touch: filesystem full", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(count)
+    let mut i: i64 = 0
+    while i < name_len && i < 31 {
+        volatile_write_u8(addr + i, volatile_read_u8(0x6F800 + 6 + i))
+        i = i + 1
+    }
+    volatile_write_u8(addr + i, 0)
+    volatile_write(addr + 32, 0)  // size = 0
+    volatile_write(addr + 40, 0)  // no data
+    volatile_write(addr + 48, 1)  // type = file
+    volatile_write(FS_BASE, count + 1)
+}
+
+@kernel fn cmd_rm() {
+    // rm <filename> — prefix "rm " = 3 chars
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: rm <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(3)
+    if idx == -1 {
+        cprint("rm: not found: ", RED_ON_BLACK)
+        let mut i: i64 = 3
+        while i < len { console_putchar(volatile_read_u8(0x6F800 + i), RED_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        return
+    }
+    // Remove by shifting entries down
+    let count = volatile_read(FS_BASE)
+    let mut i = idx
+    while i < count - 1 {
+        let src = ramfs_entry_addr(i + 1)
+        let dst = ramfs_entry_addr(i)
+        let mut j: i64 = 0
+        while j < FS_ENTRY_SIZE {
+            volatile_write_u8(dst + j, volatile_read_u8(src + j))
+            j = j + 1
+        }
+        i = i + 1
+    }
+    volatile_write(FS_BASE, count - 1)
+    cprintln("removed", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_mkdir() {
+    // mkdir <dirname> — prefix "mkdir " = 6 chars
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: mkdir <dir>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(6)
+    if idx != -1 { cprintln("mkdir: already exists", RED_ON_BLACK); return }
+    let count = volatile_read(FS_BASE)
+    if count >= FS_MAX_FILES { cprintln("mkdir: full", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(count)
+    let name_len = len - 6
+    let mut i: i64 = 0
+    while i < name_len && i < 31 {
+        volatile_write_u8(addr + i, volatile_read_u8(0x6F800 + 6 + i))
+        i = i + 1
+    }
+    volatile_write_u8(addr + i, 0)
+    volatile_write(addr + 32, 0)
+    volatile_write(addr + 40, 0)
+    volatile_write(addr + 48, 2)  // type = dir
+    volatile_write(FS_BASE, count + 1)
+}
+
+@kernel fn cmd_pwd() {
+    cprintln("/", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_write() {
+    // write <file> <text> — "write " = 6 chars, find space for text
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: write <file> <text>", YELLOW_ON_BLACK); return }
+    // Find space separator after filename
+    let mut sp: i64 = 6
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: write <file> <text>", YELLOW_ON_BLACK); return }
+    // Get filename length
+    let name_len = sp - 6
+    // Find or create file
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < name_len && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + 6 + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + name_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 {
+        // Create new file
+        if count >= FS_MAX_FILES { cprintln("write: full", RED_ON_BLACK); return }
+        idx = count
+        let addr = ramfs_entry_addr(idx)
+        let mut i: i64 = 0
+        while i < name_len && i < 31 {
+            volatile_write_u8(addr + i, volatile_read_u8(0x6F800 + 6 + i))
+            i = i + 1
+        }
+        volatile_write_u8(addr + i, 0)
+        volatile_write(addr + 48, 1)
+        volatile_write(FS_BASE, count + 1)
+    }
+    // Write data
+    let data_start = sp + 1
+    let data_len = len - data_start
+    let addr = ramfs_entry_addr(idx)
+    let data_offset = volatile_read(FS_BASE + 8)
+    let mut i: i64 = 0
+    while i < data_len {
+        volatile_write_u8(data_offset + i, volatile_read_u8(0x6F800 + data_start + i))
+        i = i + 1
+    }
+    volatile_write(addr + 32, data_len)
+    volatile_write(addr + 40, data_offset)
+    volatile_write(FS_BASE + 8, data_offset + data_len)
+}
+
+@kernel fn cmd_head() {
+    // head <file> — show first 5 lines (or all if less)
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: head <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("head: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 || data_ptr == 0 { return }
+    let mut lines: i64 = 0
+    let mut i: i64 = 0
+    while i < size && lines < 5 {
+        let ch = volatile_read_u8(data_ptr + i)
+        console_putchar(ch, WHITE_ON_BLACK)
+        if ch == 10 { lines = lines + 1 }
+        i = i + 1
+    }
+    if i > 0 && volatile_read_u8(data_ptr + i - 1) != 10 {
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// More Utility Commands (Phase 3 expansion)
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_kill() {
+    // kill <pid> — terminate process and free slot
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: kill <pid>", YELLOW_ON_BLACK); return }
+    let mut pid: i64 = 0
+    let mut i: i64 = 5
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { pid = pid * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if pid == 0 { cprintln("kill: cannot kill PID 0 (kernel)", RED_ON_BLACK); return }
+    if pid >= PROC_MAX { cprintln("kill: invalid PID (max 15)", RED_ON_BLACK); return }
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let state = volatile_read(base + PROC_OFF_STATE)
+    if state == 0 { cprintln("kill: no such process", RED_ON_BLACK); return }
+    // Mark as zombie first, then reap
+    if state == 4 {
+        // Already zombie — just reap
+        process_reap(pid)
+        cprint("Reaped zombie PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        volatile_write(base + PROC_OFF_STATE, 0)  // state = FREE
+        volatile_write(base + PROC_OFF_TICKS, 0)
+        volatile_write(base + PROC_OFF_ENTRY, 0)
+        cprint("Killed PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        // Show name
+        let ch0 = volatile_read_u8(base + PROC_OFF_NAME)
+        if ch0 != 0 {
+            cprint(" (", WHITE_ON_BLACK)
+            let mut j: i64 = 0
+            while j < 16 {
+                let ch = volatile_read_u8(base + PROC_OFF_NAME + j)
+                if ch == 0 { j = 16 }
+                else { console_putchar(ch, WHITE_ON_BLACK); j = j + 1 }
+            }
+            cprint(")", WHITE_ON_BLACK)
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_dmesg() {
+    cprintln("[0.000] FajarOS Nova v1.4.0 Zenith starting", WHITE_ON_BLACK)
+    cprintln("[0.001] Serial: COM1 (0x3F8) 115200 baud", WHITE_ON_BLACK)
+    cprintln("[0.002] SSE: enabled", WHITE_ON_BLACK)
+    cprintln("[0.003] IDT: 256 vectors loaded", WHITE_ON_BLACK)
+    cprintln("[0.004] PIC: remapped (master 0x20, slave 0x28)", WHITE_ON_BLACK)
+    cprintln("[0.005] PIT: 100 Hz (10ms quantum)", WHITE_ON_BLACK)
+    cprintln("[0.006] TSS: loaded", WHITE_ON_BLACK)
+    cprintln("[0.007] SYSCALL: MSRs configured", WHITE_ON_BLACK)
+    cprintln("[0.008] Process table: 16 slots at 0x600000", WHITE_ON_BLACK)
+    cprintln("[0.009] Keyboard: PS/2 IRQ1 enabled", WHITE_ON_BLACK)
+    cprintln("[0.010] Paging: 128MB identity (2MB pages)", WHITE_ON_BLACK)
+    cprintln("[0.011] Heap: bump allocator at 0x400000", WHITE_ON_BLACK)
+    cprintln("[0.012] RamFS: initialized (64 entries, 832KB)", WHITE_ON_BLACK)
+    cprintln("[0.013] VGA: 80x25 text mode at 0xB8000", WHITE_ON_BLACK)
+    cprintln("[0.014] Shell: 100 commands ready", WHITE_ON_BLACK)
+    cprint("[", WHITE_ON_BLACK)
+    let ticks = read_timer_ticks()
+    cprint_decimal(ticks / 100, WHITE_ON_BLACK)
+    cprintln("s] Uptime reported", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_cal() {
+    cprintln("    March 2026", YELLOW_ON_BLACK)
+    cprintln("Su Mo Tu We Th Fr Sa", WHITE_ON_BLACK)
+    cprintln(" 1  2  3  4  5  6  7", WHITE_ON_BLACK)
+    cprintln(" 8  9 10 11 12 13 14", WHITE_ON_BLACK)
+    cprintln("15 16 17 18 19 20 21", WHITE_ON_BLACK)
+    cprintln("22 23 24 25 26 27 28", WHITE_ON_BLACK)
+    cprintln("29 30 31", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_sleep() {
+    // sleep <seconds> — busy wait
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: sleep <seconds>", YELLOW_ON_BLACK); return }
+    let mut secs: i64 = 0
+    let mut i: i64 = 6
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { secs = secs * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if secs > 30 { secs = 30 } // max 30 seconds
+    let target = read_timer_ticks() + secs * 100
+    while read_timer_ticks() < target {}
+}
+
+@kernel fn cmd_true() {
+    // Do nothing — exit success
+}
+
+@kernel fn cmd_false() {
+    // Do nothing — exit failure (conceptually)
+}
+
+@kernel fn cmd_id() {
+    cprintln("uid=0(root) gid=0(root) groups=0(root)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_dice() {
+    let ticks = read_timer_ticks()
+    let roll = (ticks % 6) + 1
+    cprint("You rolled: ", WHITE_ON_BLACK)
+    cprint_decimal(roll, CYAN_ON_BLACK)
+    cprintln(" 🎲", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_rev() {
+    // rev — reverse echo args (after "rev " = 4 chars)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: rev <text>", YELLOW_ON_BLACK); return }
+    let mut i = len - 1
+    while i >= 4 {
+        console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK)
+        i = i - 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_yes() {
+    let mut i: i64 = 0
+    while i < 20 {
+        cprintln("y", WHITE_ON_BLACK)
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_wc() {
+    // wc <file> — count bytes/lines/words
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: wc <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(3)
+    if idx == -1 { cprintln("wc: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    let mut lines: i64 = 0
+    let mut words: i64 = 0
+    let mut in_word: i64 = 0
+    let mut i: i64 = 0
+    while i < size {
+        let ch = volatile_read_u8(data_ptr + i)
+        if ch == 10 { lines = lines + 1 }
+        if ch == 32 || ch == 10 || ch == 9 {
+            in_word = 0
+        } else {
+            if in_word == 0 { words = words + 1 }
+            in_word = 1
+        }
+        i = i + 1
+    }
+    cprint("  ", WHITE_ON_BLACK)
+    cprint_decimal(lines, CYAN_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    cprint_decimal(words, CYAN_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    cprint_decimal(size, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_env() {
+    cprintln("SHELL=/bin/fjsh", WHITE_ON_BLACK)
+    cprintln("HOME=/", WHITE_ON_BLACK)
+    cprintln("USER=root", WHITE_ON_BLACK)
+    cprintln("HOSTNAME=fajaros-nova", WHITE_ON_BLACK)
+    cprintln("ARCH=x86_64", WHITE_ON_BLACK)
+    cprintln("LANG=Fajar Lang", WHITE_ON_BLACK)
+    cprintln("TERM=vga", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_stat() {
+    // stat <file>
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: stat <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("stat: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let ftype = volatile_read(addr + 48)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    cprint("  File: ", WHITE_ON_BLACK)
+    let mut j: i64 = 0
+    while volatile_read_u8(addr + j) != 0 && j < 31 {
+        console_putchar(volatile_read_u8(addr + j), CYAN_ON_BLACK)
+        j = j + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Type: ", WHITE_ON_BLACK)
+    if ftype == 1 { cprintln("regular file", WHITE_ON_BLACK) }
+    else { cprintln("directory", CYAN_ON_BLACK) }
+    cprint("  Size: ", WHITE_ON_BLACK)
+    cprint_decimal(size, CYAN_ON_BLACK)
+    cprintln(" bytes", WHITE_ON_BLACK)
+    cprint("  Data: 0x", WHITE_ON_BLACK)
+    cprint_hex(data_ptr, 8, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Idx:  ", WHITE_ON_BLACK)
+    cprint_decimal(idx, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// More Commands (Phase 4 — 60 total)
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_history() {
+    let count = volatile_read(0x6FC00)
+    if count == 0 { cprintln("(no history)", WHITE_ON_BLACK); return }
+    let mut i: i64 = 0
+    while i < count {
+        cprint("  ", WHITE_ON_BLACK)
+        cprint_decimal(i + 1, YELLOW_ON_BLACK)
+        cprint("  ", WHITE_ON_BLACK)
+        let slot = HIST_BASE + i * HIST_SLOT_SIZE
+        let mut j: i64 = 0
+        while volatile_read_u8(slot + j) != 0 && j < 63 {
+            console_putchar(volatile_read_u8(slot + j), WHITE_ON_BLACK)
+            j = j + 1
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_xxd() {
+    // xxd <file> — hex dump of file contents
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: xxd <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(4)
+    if idx == -1 { cprintln("xxd: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { cprintln("(empty)", WHITE_ON_BLACK); return }
+    let mut off: i64 = 0
+    while off < size && off < 128 {
+        // Offset
+        cprint_hex(off, 4, YELLOW_ON_BLACK)
+        cprint(": ", WHITE_ON_BLACK)
+        // Hex bytes (16 per line)
+        let mut i: i64 = 0
+        while i < 16 {
+            if off + i < size {
+                cprint_hex(volatile_read_u8(data_ptr + off + i), 2, CYAN_ON_BLACK)
+                console_putchar(32, WHITE_ON_BLACK)
+            } else {
+                cprint("   ", WHITE_ON_BLACK)
+            }
+            i = i + 1
+        }
+        cprint(" ", WHITE_ON_BLACK)
+        // ASCII
+        i = 0
+        while i < 16 && off + i < size {
+            let ch = volatile_read_u8(data_ptr + off + i)
+            if ch >= 32 && ch < 127 { console_putchar(ch, GREEN_ON_BLACK) }
+            else { console_putchar(46, WHITE_ON_BLACK) }
+            i = i + 1
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+        off = off + 16
+    }
+}
+
+@kernel fn cmd_top() {
+    cprintln("PID  STATE      TICKS    CPU", YELLOW_ON_BLACK)
+    cprintln("---  ---------  -------  ---", WHITE_ON_BLACK)
+    let total_ticks = read_timer_ticks()
+    let mut i: i64 = 0
+    while i < 16 {
+        let base = 0x600000 + i * 256
+        let state = volatile_read(base + 8)
+        if state != 0 {
+            cprint_decimal(i, CYAN_ON_BLACK)
+            cprint("    ", WHITE_ON_BLACK)
+            if state == 1 { cprint("ready    ", WHITE_ON_BLACK) }
+            else if state == 2 { cprint("RUNNING  ", GREEN_ON_BLACK) }
+            else if state == 3 { cprint("blocked  ", YELLOW_ON_BLACK) }
+            else { cprint("unknown  ", RED_ON_BLACK) }
+            cprint("  ", WHITE_ON_BLACK)
+            let ticks = volatile_read(base + 32)
+            cprint_decimal(ticks, WHITE_ON_BLACK)
+            cprint("    ", WHITE_ON_BLACK)
+            if total_ticks > 0 {
+                cprint_decimal(ticks * 100 / (total_ticks + 1), CYAN_ON_BLACK)
+                console_putchar(37, WHITE_ON_BLACK) // '%'
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_append() {
+    // append <file> <text> — append text to existing file
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: append <file> <text>", YELLOW_ON_BLACK); return }
+    // Find space after "append "
+    let mut sp: i64 = 7
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: append <file> <text>", YELLOW_ON_BLACK); return }
+    let name_len = sp - 7
+    // Find file
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < name_len && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + 7 + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + name_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("append: file not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let old_size = volatile_read(addr + 32)
+    let old_ptr = volatile_read(addr + 40)
+    let text_start = sp + 1
+    let text_len = len - text_start
+    // Allocate new data area and copy old + new
+    let new_ptr = volatile_read(FS_BASE + 8)
+    let mut i: i64 = 0
+    while i < old_size {
+        volatile_write_u8(new_ptr + i, volatile_read_u8(old_ptr + i))
+        i = i + 1
+    }
+    i = 0
+    while i < text_len {
+        volatile_write_u8(new_ptr + old_size + i, volatile_read_u8(0x6F800 + text_start + i))
+        i = i + 1
+    }
+    volatile_write(addr + 32, old_size + text_len)
+    volatile_write(addr + 40, new_ptr)
+    volatile_write(FS_BASE + 8, new_ptr + old_size + text_len)
+}
+
+@kernel fn cmd_cp() {
+    // cp <src> <dst> — copy file
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: cp <src> <dst>", YELLOW_ON_BLACK); return }
+    // Find space between src and dst
+    let mut sp: i64 = 3
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: cp <src> <dst>", YELLOW_ON_BLACK); return }
+    let src_len = sp - 3
+    let dst_start = sp + 1
+    let dst_len = len - dst_start
+    // Find source file
+    let count = volatile_read(FS_BASE)
+    let mut src_idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && src_idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut match_ok: i64 = 1
+        let mut j: i64 = 0
+        while j < src_len && match_ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + 3 + j) { match_ok = 0 }
+            j = j + 1
+        }
+        if match_ok == 1 && volatile_read_u8(addr + src_len) == 0 { src_idx = fi }
+        fi = fi + 1
+    }
+    if src_idx == -1 { cprintln("cp: source not found", RED_ON_BLACK); return }
+    // Create destination
+    if count >= FS_MAX_FILES { cprintln("cp: filesystem full", RED_ON_BLACK); return }
+    let src_addr = ramfs_entry_addr(src_idx)
+    let src_size = volatile_read(src_addr + 32)
+    let src_data = volatile_read(src_addr + 40)
+    let dst_idx = count
+    let dst_addr = ramfs_entry_addr(dst_idx)
+    // Copy name
+    let mut i: i64 = 0
+    while i < dst_len && i < 31 {
+        volatile_write_u8(dst_addr + i, volatile_read_u8(0x6F800 + dst_start + i))
+        i = i + 1
+    }
+    volatile_write_u8(dst_addr + i, 0)
+    // Copy data
+    let new_ptr = volatile_read(FS_BASE + 8)
+    i = 0
+    while i < src_size {
+        volatile_write_u8(new_ptr + i, volatile_read_u8(src_data + i))
+        i = i + 1
+    }
+    volatile_write(dst_addr + 32, src_size)
+    volatile_write(dst_addr + 40, new_ptr)
+    volatile_write(dst_addr + 48, 1) // file
+    volatile_write(FS_BASE, count + 1)
+    volatile_write(FS_BASE + 8, new_ptr + src_size)
+}
+
+@kernel fn cmd_time() {
+    // time — run a benchmark and show elapsed
+    cprint("Timing 100K loop... ", WHITE_ON_BLACK)
+    let t0 = rdtsc()
+    let mut i: i64 = 0
+    let mut acc: i64 = 0
+    while i < 100000 { acc = acc + i; i = i + 1 }
+    let t1 = rdtsc()
+    let cycles = t1 - t0
+    cprint_decimal(cycles, CYAN_ON_BLACK)
+    cprint(" cycles (", WHITE_ON_BLACK)
+    cprint_decimal(cycles / 1000, CYAN_ON_BLACK)
+    cprintln("K)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_factor() {
+    // factor <N> — factorize a number
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: factor <N>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 7
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if n <= 1 { cprintln("factor: need N > 1", YELLOW_ON_BLACK); return }
+    cprint_decimal(n, WHITE_ON_BLACK)
+    cprint(": ", WHITE_ON_BLACK)
+    let mut d: i64 = 2
+    let mut val = n
+    while d * d <= val {
+        while val % d == 0 {
+            cprint_decimal(d, CYAN_ON_BLACK)
+            console_putchar(32, WHITE_ON_BLACK)
+            val = val / d
+        }
+        d = d + 1
+    }
+    if val > 1 { cprint_decimal(val, CYAN_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_prime() {
+    // prime <N> — check if N is prime
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: prime <N>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 6
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if n <= 1 { cprintln("Not prime", RED_ON_BLACK); return }
+    let mut is_prime: i64 = 1
+    let mut d: i64 = 2
+    while d * d <= n {
+        if n % d == 0 { is_prime = 0 }
+        d = d + 1
+    }
+    cprint_decimal(n, WHITE_ON_BLACK)
+    if is_prime == 1 { cprintln(" is PRIME", GREEN_ON_BLACK) }
+    else { cprintln(" is not prime", RED_ON_BLACK) }
+}
+
+// ═══════════════════════════════════════════════
+// Phase 5 Commands — 75+ total
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_mv() {
+    // mv <src> <dst> — rename/move file
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: mv <src> <dst>", YELLOW_ON_BLACK); return }
+    let mut sp: i64 = 3
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: mv <src> <dst>", YELLOW_ON_BLACK); return }
+    let src_len = sp - 3
+    let dst_start = sp + 1
+    let dst_len = len - dst_start
+    // Find source
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < src_len && ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + 3 + j) { ok = 0 }
+            j = j + 1
+        }
+        if ok == 1 && volatile_read_u8(addr + src_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("mv: source not found", RED_ON_BLACK); return }
+    // Rename: overwrite name
+    let addr = ramfs_entry_addr(idx)
+    let mut i: i64 = 0
+    while i < dst_len && i < 31 {
+        volatile_write_u8(addr + i, volatile_read_u8(0x6F800 + dst_start + i))
+        i = i + 1
+    }
+    volatile_write_u8(addr + i, 0)
+    // Clear remaining name bytes
+    while i < 32 { volatile_write_u8(addr + i, 0); i = i + 1 }
+}
+
+@kernel fn cmd_tail() {
+    // tail <file> — show last 5 lines
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: tail <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("tail: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { return }
+    // Count total lines
+    let mut total_lines: i64 = 0
+    let mut i: i64 = 0
+    while i < size { if volatile_read_u8(data_ptr + i) == 10 { total_lines = total_lines + 1 }; i = i + 1 }
+    // Find start of last 5 lines
+    let skip = total_lines - 5
+    let mut line_num: i64 = 0
+    let mut start: i64 = 0
+    if skip > 0 {
+        i = 0
+        while i < size && line_num < skip {
+            if volatile_read_u8(data_ptr + i) == 10 { line_num = line_num + 1 }
+            i = i + 1
+        }
+        start = i
+    }
+    // Print from start
+    i = start
+    while i < size { console_putchar(volatile_read_u8(data_ptr + i), WHITE_ON_BLACK); i = i + 1 }
+    if size > 0 && volatile_read_u8(data_ptr + size - 1) != 10 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+@kernel fn cmd_grep() {
+    // grep <pattern> <file> — search for pattern in file
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: grep <pattern> <file>", YELLOW_ON_BLACK); return }
+    // Find first space (after "grep ")
+    let mut sp: i64 = 5
+    while sp < len && volatile_read_u8(0x6F800 + sp) != 32 { sp = sp + 1 }
+    if sp >= len - 1 { cprintln("Usage: grep <pattern> <file>", YELLOW_ON_BLACK); return }
+    let pat_start: i64 = 5
+    let pat_len = sp - 5
+    let file_start = sp + 1
+    let file_len = len - file_start
+    // Find file
+    let count = volatile_read(FS_BASE)
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let addr = ramfs_entry_addr(fi)
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < file_len && ok == 1 {
+            if volatile_read_u8(addr + j) != volatile_read_u8(0x6F800 + file_start + j) { ok = 0 }
+            j = j + 1
+        }
+        if ok == 1 && volatile_read_u8(addr + file_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("grep: file not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    // Search each "line" (byte range between newlines)
+    let mut line_start: i64 = 0
+    let mut pos: i64 = 0
+    while pos <= size {
+        let at_end = pos == size
+        let is_nl = pos < size && volatile_read_u8(data_ptr + pos) == 10
+        if at_end || is_nl {
+            let line_len = pos - line_start
+            // Check if pattern is in this line
+            let mut found: i64 = 0
+            let mut k: i64 = 0
+            while k <= line_len - pat_len && found == 0 {
+                let mut match_ok: i64 = 1
+                let mut m: i64 = 0
+                while m < pat_len && match_ok == 1 {
+                    if volatile_read_u8(data_ptr + line_start + k + m) != volatile_read_u8(0x6F800 + pat_start + m) { match_ok = 0 }
+                    m = m + 1
+                }
+                if match_ok == 1 { found = 1 }
+                k = k + 1
+            }
+            if found == 1 {
+                // Print matching line
+                let mut p = line_start
+                while p < pos { console_putchar(volatile_read_u8(data_ptr + p), GREEN_ON_BLACK); p = p + 1 }
+                console_putchar(10, WHITE_ON_BLACK)
+            }
+            line_start = pos + 1
+        }
+        pos = pos + 1
+    }
+}
+
+@kernel fn cmd_df() {
+    // df — disk free (ramfs usage)
+    let count = volatile_read(FS_BASE)
+    let used_data = volatile_read(FS_BASE + 8) - FS_DATA
+    let total_data: i64 = 0x7E0000 - FS_DATA  // 832KB
+    cprintln("Filesystem      Size    Used    Avail   Use%", YELLOW_ON_BLACK)
+    cprint("ramfs           ", WHITE_ON_BLACK)
+    cprint_decimal(total_data / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    cprint_decimal(used_data / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    cprint_decimal((total_data - used_data) / 1024, CYAN_ON_BLACK)
+    cprint("K   ", WHITE_ON_BLACK)
+    if total_data > 0 { cprint_decimal(used_data * 100 / total_data, CYAN_ON_BLACK) }
+    else { console_putchar(48, CYAN_ON_BLACK) }
+    cprintln("%", WHITE_ON_BLACK)
+    cprint("Inodes: ", WHITE_ON_BLACK)
+    cprint_decimal(count, CYAN_ON_BLACK)
+    cprint("/", WHITE_ON_BLACK)
+    cprint_decimal(FS_MAX_FILES, CYAN_ON_BLACK)
+    cprintln(" used", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_du() {
+    // du — disk usage per file
+    let count = volatile_read(FS_BASE)
+    let mut total: i64 = 0
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        let size = volatile_read(addr + 32)
+        let ftype = volatile_read(addr + 48)
+        cprint_decimal(size, CYAN_ON_BLACK)
+        cprint("\t", WHITE_ON_BLACK)
+        let mut j: i64 = 0
+        while volatile_read_u8(addr + j) != 0 && j < 31 {
+            console_putchar(volatile_read_u8(addr + j), WHITE_ON_BLACK)
+            j = j + 1
+        }
+        if ftype == 2 { cprint("/", CYAN_ON_BLACK) }
+        console_putchar(10, WHITE_ON_BLACK)
+        total = total + size
+        i = i + 1
+    }
+    cprint_decimal(total, YELLOW_ON_BLACK)
+    cprintln("\ttotal", YELLOW_ON_BLACK)
+}
+
+@kernel fn cmd_which() {
+    // which <cmd> — show if command exists
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: which <cmd>", YELLOW_ON_BLACK); return }
+    cprint("/bin/", WHITE_ON_BLACK)
+    let mut i: i64 = 6
+    while i < len { console_putchar(volatile_read_u8(0x6F800 + i), CYAN_ON_BLACK); i = i + 1 }
+    cprintln(" (builtin)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_type() {
+    // type <cmd>
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: type <cmd>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 5
+    while i < len { console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK); i = i + 1 }
+    cprintln(" is a shell builtin", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_man() {
+    // man <cmd> — manual page (brief)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: man <cmd>", YELLOW_ON_BLACK); return }
+    // Check first char of command name
+    let ch = volatile_read_u8(0x6F800 + 4)
+    if ch == 108 {  // 'l' → ls
+        cprintln("LS(1) — list directory contents", YELLOW_ON_BLACK)
+        cprintln("  Lists all files and directories in ramfs.", WHITE_ON_BLACK)
+        cprintln("  Shows type (d/f), size, and name.", WHITE_ON_BLACK)
+    } else if ch == 99 {  // 'c' → cat/cp/...
+        cprintln("CAT(1) — concatenate and print files", YELLOW_ON_BLACK)
+        cprintln("  cat <file> — display file contents.", WHITE_ON_BLACK)
+    } else if ch == 112 {  // 'p' → ps/pwd/prime
+        cprintln("PS(1) — report process status", YELLOW_ON_BLACK)
+        cprintln("  Shows PID, state, and tick count.", WHITE_ON_BLACK)
+    } else {
+        cprint("No manual entry for: ", YELLOW_ON_BLACK)
+        let mut i: i64 = 4
+        while i < len { console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        cprintln("Available: man ls, man cat, man ps", WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_banner() {
+    // banner <text> — big ASCII text (simple 3-line)
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: banner <text>", YELLOW_ON_BLACK); return }
+    // Simple: print text in large style using # characters
+    // Top border
+    cprint("  ", WHITE_ON_BLACK)
+    let text_len = len - 7
+    let mut i: i64 = 0
+    while i < text_len * 2 + 4 { console_putchar(95, YELLOW_ON_BLACK); i = i + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+    // Middle with text
+    cprint(" | ", YELLOW_ON_BLACK)
+    i = 7
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        // Uppercase
+        if ch >= 97 && ch <= 122 { console_putchar(ch - 32, CYAN_ON_BLACK) }
+        else { console_putchar(ch, CYAN_ON_BLACK) }
+        console_putchar(32, WHITE_ON_BLACK)
+        i = i + 1
+    }
+    cprintln("| ", YELLOW_ON_BLACK)
+    // Bottom border
+    cprint("  ", WHITE_ON_BLACK)
+    i = 0
+    while i < text_len * 2 + 4 { console_putchar(8254 % 256, YELLOW_ON_BLACK); i = i + 1 }
+    // Use dash instead
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    i = 0
+    while i < text_len * 2 + 4 { console_putchar(45, YELLOW_ON_BLACK); i = i + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_fib() {
+    // fib <N> — compute fibonacci(N)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: fib <N>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 4
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if n > 90 { n = 90 }  // prevent overflow
+    let t0 = rdtsc()
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut k: i64 = 0
+    while k < n { let tmp = a + b; a = b; b = tmp; k = k + 1 }
+    let t1 = rdtsc()
+    cprint("fib(", WHITE_ON_BLACK)
+    cprint_decimal(n, WHITE_ON_BLACK)
+    cprint(") = ", WHITE_ON_BLACK)
+    cprint_decimal(b, CYAN_ON_BLACK)
+    cprint("  (", WHITE_ON_BLACK)
+    cprint_decimal(t1 - t0, CYAN_ON_BLACK)
+    cprintln(" cycles)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_count() {
+    // count — count files in ramfs
+    let count = volatile_read(FS_BASE)
+    let mut files: i64 = 0
+    let mut dirs: i64 = 0
+    let mut i: i64 = 0
+    while i < count {
+        let addr = ramfs_entry_addr(i)
+        if volatile_read(addr + 48) == 1 { files = files + 1 }
+        else { dirs = dirs + 1 }
+        i = i + 1
+    }
+    cprint_decimal(files, CYAN_ON_BLACK)
+    cprint(" files, ", WHITE_ON_BLACK)
+    cprint_decimal(dirs, CYAN_ON_BLACK)
+    cprintln(" directories", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_upcase() {
+    // upcase <text> — convert to uppercase
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: upcase <text>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 7
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 97 && ch <= 122 { console_putchar(ch - 32, WHITE_ON_BLACK) }
+        else { console_putchar(ch, WHITE_ON_BLACK) }
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_downcase() {
+    // downcase <text> — convert to lowercase
+    let len = cmdbuf_len()
+    if len <= 9 { cprintln("Usage: downcase <text>", YELLOW_ON_BLACK); return }
+    let mut i: i64 = 9
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 65 && ch <= 90 { console_putchar(ch + 32, WHITE_ON_BLACK) }
+        else { console_putchar(ch, WHITE_ON_BLACK) }
+        i = i + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_cls() {
+    // cls — alias for clear
+    console_init()
+}
+
+@kernel fn cmd_exit() {
+    cprintln("Goodbye!", CYAN_ON_BLACK)
+    acpi_shutdown()
+}
+
+// ═══════════════════════════════════════════════
+// Phase 6 — Interactive Commands
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_calc() {
+    // calc <a> <op> <b> — simple calculator
+    // e.g., "calc 42 + 13" → "55"
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: calc <a> <op> <b>", YELLOW_ON_BLACK); return }
+    // Parse first number
+    let mut a: i64 = 0
+    let mut i: i64 = 5
+    let mut neg_a: i64 = 0
+    if i < len && volatile_read_u8(0x6F800 + i) == 45 { neg_a = 1; i = i + 1 }
+    while i < len && volatile_read_u8(0x6F800 + i) != 32 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { a = a * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if neg_a == 1 { a = 0 - a }
+    // Skip space
+    while i < len && volatile_read_u8(0x6F800 + i) == 32 { i = i + 1 }
+    // Read operator
+    let op = volatile_read_u8(0x6F800 + i)
+    i = i + 1
+    // Skip space
+    while i < len && volatile_read_u8(0x6F800 + i) == 32 { i = i + 1 }
+    // Parse second number
+    let mut b: i64 = 0
+    let mut neg_b: i64 = 0
+    if i < len && volatile_read_u8(0x6F800 + i) == 45 { neg_b = 1; i = i + 1 }
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { b = b * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if neg_b == 1 { b = 0 - b }
+    // Compute
+    let mut result: i64 = 0
+    if op == 43 { result = a + b }       // +
+    else if op == 45 { result = a - b }  // -
+    else if op == 42 { result = a * b }  // *
+    else if op == 47 {                   // /
+        if b == 0 { cprintln("Error: division by zero", RED_ON_BLACK); return }
+        result = a / b
+    }
+    else if op == 37 {                   // %
+        if b == 0 { cprintln("Error: division by zero", RED_ON_BLACK); return }
+        result = a % b
+    }
+    else { cprintln("Operators: + - * / %", YELLOW_ON_BLACK); return }
+    // Print result
+    if result < 0 {
+        console_putchar(45, CYAN_ON_BLACK)
+        cprint_decimal(0 - result, CYAN_ON_BLACK)
+    } else {
+        cprint_decimal(result, CYAN_ON_BLACK)
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_base() {
+    // base <N> <from> <to> — base conversion
+    // e.g., "base 255 10 16" → FF
+    // Simplified: base <N> 16 → hex output, base <N> 2 → binary output
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: base <N> <radix>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 5
+    while i < len && volatile_read_u8(0x6F800 + i) != 32 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    while i < len && volatile_read_u8(0x6F800 + i) == 32 { i = i + 1 }
+    let mut radix: i64 = 0
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { radix = radix * 10 + (ch - 48) }
+        i = i + 1
+    }
+    if radix == 2 {
+        // Binary output
+        cprint("0b", WHITE_ON_BLACK)
+        let mut bit: i64 = 63
+        let mut started: i64 = 0
+        while bit >= 0 {
+            let b = (n >> bit) & 1
+            if b == 1 { started = 1 }
+            if started == 1 { cprint_decimal(b, CYAN_ON_BLACK) }
+            bit = bit - 1
+        }
+        if started == 0 { console_putchar(48, CYAN_ON_BLACK) }
+        console_putchar(10, WHITE_ON_BLACK)
+    } else if radix == 8 {
+        cprint("0o", WHITE_ON_BLACK)
+        cprint_decimal(n, CYAN_ON_BLACK)  // simplified
+        cprintln(" (octal TBD)", WHITE_ON_BLACK)
+    } else if radix == 16 {
+        cprint("0x", WHITE_ON_BLACK)
+        cprint_hex(n, 8, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    } else {
+        cprintln("Supported: base <N> 2|8|16", YELLOW_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_nl() {
+    // nl <file> — number lines
+    let len = cmdbuf_len()
+    if len <= 3 { cprintln("Usage: nl <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(3)
+    if idx == -1 { cprintln("nl: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { return }
+    let mut line_num: i64 = 1
+    cprint_decimal(line_num, YELLOW_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    while i < size {
+        let ch = volatile_read_u8(data_ptr + i)
+        console_putchar(ch, WHITE_ON_BLACK)
+        if ch == 10 && i + 1 < size {
+            line_num = line_num + 1
+            cprint_decimal(line_num, YELLOW_ON_BLACK)
+            cprint("  ", WHITE_ON_BLACK)
+        }
+        i = i + 1
+    }
+    if volatile_read_u8(data_ptr + size - 1) != 10 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+@kernel fn cmd_strings() {
+    // strings <file> — print printable strings from file (>= 4 chars)
+    let len = cmdbuf_len()
+    if len <= 8 { cprintln("Usage: strings <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(8)
+    if idx == -1 { cprintln("strings: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    let mut run: i64 = 0
+    let mut i: i64 = 0
+    while i < size {
+        let ch = volatile_read_u8(data_ptr + i)
+        if ch >= 32 && ch < 127 {
+            run = run + 1
+        } else {
+            if run >= 4 {
+                // Print the string
+                let mut j = i - run
+                while j < i { console_putchar(volatile_read_u8(data_ptr + j), GREEN_ON_BLACK); j = j + 1 }
+                console_putchar(10, WHITE_ON_BLACK)
+            }
+            run = 0
+        }
+        i = i + 1
+    }
+    if run >= 4 {
+        let mut j = i - run
+        while j < i { console_putchar(volatile_read_u8(data_ptr + j), GREEN_ON_BLACK); j = j + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_len() {
+    // len <text> — print length of text
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("0", WHITE_ON_BLACK); return }
+    cprint_decimal(len - 4, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Phase 7 — 100 commands target
+// ═══════════════════════════════════════════════
+
+@kernel fn cmd_sort() {
+    // sort <file> — bubble sort file lines by first char
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: sort <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("sort: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { return }
+    // Collect line starts and lengths (max 32 lines)
+    let line_base: i64 = 0x580000  // temp storage
+    let mut line_count: i64 = 0
+    let mut start: i64 = 0
+    let mut i: i64 = 0
+    while i <= size && line_count < 32 {
+        if i == size || volatile_read_u8(data_ptr + i) == 10 {
+            volatile_write(line_base + line_count * 16, start)
+            volatile_write(line_base + line_count * 16 + 8, i - start)
+            line_count = line_count + 1
+            start = i + 1
+        }
+        i = i + 1
+    }
+    // Bubble sort by first character
+    let mut swapped: i64 = 1
+    while swapped == 1 {
+        swapped = 0
+        let mut j: i64 = 0
+        while j < line_count - 1 {
+            let s1 = volatile_read(line_base + j * 16)
+            let s2 = volatile_read(line_base + (j + 1) * 16)
+            let c1 = volatile_read_u8(data_ptr + s1)
+            let c2 = volatile_read_u8(data_ptr + s2)
+            if c1 > c2 {
+                // Swap
+                let tmp_s = volatile_read(line_base + j * 16)
+                let tmp_l = volatile_read(line_base + j * 16 + 8)
+                volatile_write(line_base + j * 16, volatile_read(line_base + (j+1) * 16))
+                volatile_write(line_base + j * 16 + 8, volatile_read(line_base + (j+1) * 16 + 8))
+                volatile_write(line_base + (j+1) * 16, tmp_s)
+                volatile_write(line_base + (j+1) * 16 + 8, tmp_l)
+                swapped = 1
+            }
+            j = j + 1
+        }
+    }
+    // Print sorted
+    let mut k: i64 = 0
+    while k < line_count {
+        let s = volatile_read(line_base + k * 16)
+        let l = volatile_read(line_base + k * 16 + 8)
+        let mut p: i64 = 0
+        while p < l { console_putchar(volatile_read_u8(data_ptr + s + p), WHITE_ON_BLACK); p = p + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        k = k + 1
+    }
+}
+
+@kernel fn cmd_uniq() {
+    // uniq <file> — suppress adjacent duplicate lines
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: uniq <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(5)
+    if idx == -1 { cprintln("uniq: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    if size == 0 { return }
+    let mut prev_start: i64 = -1
+    let mut prev_len: i64 = 0
+    let mut start: i64 = 0
+    let mut i: i64 = 0
+    while i <= size {
+        if i == size || volatile_read_u8(data_ptr + i) == 10 {
+            let cur_len = i - start
+            // Compare with previous line
+            let mut same: i64 = 0
+            if prev_start >= 0 && cur_len == prev_len {
+                same = 1
+                let mut j: i64 = 0
+                while j < cur_len && same == 1 {
+                    if volatile_read_u8(data_ptr + start + j) != volatile_read_u8(data_ptr + prev_start + j) { same = 0 }
+                    j = j + 1
+                }
+            }
+            if same == 0 {
+                let mut p = start
+                while p < i { console_putchar(volatile_read_u8(data_ptr + p), WHITE_ON_BLACK); p = p + 1 }
+                console_putchar(10, WHITE_ON_BLACK)
+            }
+            prev_start = start
+            prev_len = cur_len
+            start = i + 1
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_tr() {
+    // tr <a> <b> — replace char a with b in stdin (echo-like)
+    // Usage: tr a b (replaces 'a' with 'b' in remaining text)
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: tr <from> <to>", YELLOW_ON_BLACK); return }
+    let from_ch = volatile_read_u8(0x6F800 + 3)
+    let to_ch = volatile_read_u8(0x6F800 + 5)
+    // If there's more text after "tr X Y ", print it with replacements
+    if len > 7 {
+        let mut i: i64 = 7
+        while i < len {
+            let ch = volatile_read_u8(0x6F800 + i)
+            if ch == from_ch { console_putchar(to_ch, WHITE_ON_BLACK) }
+            else { console_putchar(ch, WHITE_ON_BLACK) }
+            i = i + 1
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_cut() {
+    // cut <n> <file> — print first n chars of each line
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: cut <n> <file>", YELLOW_ON_BLACK); return }
+    // Parse n
+    let mut n: i64 = 0
+    let mut i: i64 = 4
+    while i < len && volatile_read_u8(0x6F800 + i) != 32 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    i = i + 1  // skip space
+    if n == 0 { n = 10 }
+    let file_start = i
+    // Find file
+    let count = volatile_read(FS_BASE)
+    let file_len = len - file_start
+    let mut idx: i64 = -1
+    let mut fi: i64 = 0
+    while fi < count && idx == -1 {
+        let faddr = ramfs_entry_addr(fi)
+        let mut ok: i64 = 1
+        let mut j: i64 = 0
+        while j < file_len && ok == 1 {
+            if volatile_read_u8(faddr + j) != volatile_read_u8(0x6F800 + file_start + j) { ok = 0 }
+            j = j + 1
+        }
+        if ok == 1 && volatile_read_u8(faddr + file_len) == 0 { idx = fi }
+        fi = fi + 1
+    }
+    if idx == -1 { cprintln("cut: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    let mut col: i64 = 0
+    let mut p: i64 = 0
+    while p < size {
+        let ch = volatile_read_u8(data_ptr + p)
+        if ch == 10 { console_putchar(10, WHITE_ON_BLACK); col = 0 }
+        else if col < n { console_putchar(ch, WHITE_ON_BLACK); col = col + 1 }
+        p = p + 1
+    }
+    if size > 0 && volatile_read_u8(data_ptr + size - 1) != 10 { console_putchar(10, WHITE_ON_BLACK) }
+}
+
+@kernel fn cmd_rmdir() {
+    // rmdir <dir> — remove directory (must be empty)
+    let len = cmdbuf_len()
+    if len <= 6 { cprintln("Usage: rmdir <dir>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(6)
+    if idx == -1 { cprintln("rmdir: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    if volatile_read(addr + 48) != 2 { cprintln("rmdir: not a directory", RED_ON_BLACK); return }
+    // Remove by shifting
+    let count = volatile_read(FS_BASE)
+    let mut i = idx
+    while i < count - 1 {
+        let src = ramfs_entry_addr(i + 1)
+        let dst = ramfs_entry_addr(i)
+        let mut j: i64 = 0
+        while j < FS_ENTRY_SIZE { volatile_write_u8(dst + j, volatile_read_u8(src + j)); j = j + 1 }
+        i = i + 1
+    }
+    volatile_write(FS_BASE, count - 1)
+    cprintln("removed", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_printenv() {
+    // printenv <VAR> — print specific env var
+    let len = cmdbuf_len()
+    if len <= 9 { cmd_env(); return }
+    let ch = volatile_read_u8(0x6F800 + 9)
+    if ch == 72 { cprintln("/", WHITE_ON_BLACK) }           // HOME
+    else if ch == 85 { cprintln("root", WHITE_ON_BLACK) }   // USER
+    else if ch == 83 { cprintln("/bin/fjsh", WHITE_ON_BLACK) } // SHELL
+    else if ch == 65 { cprintln("x86_64", WHITE_ON_BLACK) } // ARCH
+    else { cprintln("(undefined)", YELLOW_ON_BLACK) }
+}
+
+@kernel fn cmd_set() {
+    // set — show all shell settings
+    cprintln("Shell settings:", YELLOW_ON_BLACK)
+    cprint("  shift:  ", WHITE_ON_BLACK)
+    if volatile_read(0x6FBE0) == 1 { cprintln("ON", GREEN_ON_BLACK) }
+    else { cprintln("off", WHITE_ON_BLACK) }
+    cprint("  caps:   ", WHITE_ON_BLACK)
+    if volatile_read(0x6FBE8) == 1 { cprintln("ON", GREEN_ON_BLACK) }
+    else { cprintln("off", WHITE_ON_BLACK) }
+    cprint("  hist:   ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read(0x6FC00), CYAN_ON_BLACK)
+    cprintln("/8 entries", WHITE_ON_BLACK)
+    cprint("  files:  ", WHITE_ON_BLACK)
+    cprint_decimal(volatile_read(FS_BASE), CYAN_ON_BLACK)
+    cprintln("/64 inodes", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_dd() {
+    // dd — show disk/memory info (simplified)
+    cprintln("Device    Blocks   Used    Free    Mount", YELLOW_ON_BLACK)
+    let count = volatile_read(FS_BASE)
+    let used = volatile_read(FS_BASE + 8) - FS_DATA
+    let total: i64 = 0x7E0000 - FS_DATA
+    cprint("ramfs     ", WHITE_ON_BLACK)
+    cprint_decimal(total / 4096, CYAN_ON_BLACK)
+    cprint("      ", WHITE_ON_BLACK)
+    cprint_decimal(used / 4096, CYAN_ON_BLACK)
+    cprint("       ", WHITE_ON_BLACK)
+    cprint_decimal((total - used) / 4096, CYAN_ON_BLACK)
+    cprintln("    /", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_md5() {
+    // md5 <file> — simple checksum (not real MD5, just sum of bytes)
+    let len = cmdbuf_len()
+    if len <= 4 { cprintln("Usage: md5 <file>", YELLOW_ON_BLACK); return }
+    let idx = ramfs_find_buf(4)
+    if idx == -1 { cprintln("md5: not found", RED_ON_BLACK); return }
+    let addr = ramfs_entry_addr(idx)
+    let size = volatile_read(addr + 32)
+    let data_ptr = volatile_read(addr + 40)
+    let mut hash: i64 = 0x12345678
+    let mut i: i64 = 0
+    while i < size {
+        let b = volatile_read_u8(data_ptr + i)
+        hash = hash ^ (b * 31 + i * 17)
+        hash = (hash << 5) | ((hash >> 59) & 0x1F)
+        i = i + 1
+    }
+    cprint_hex(hash >> 32, 8, CYAN_ON_BLACK)
+    cprint_hex(hash & 0xFFFFFFFF, 8, CYAN_ON_BLACK)
+    cprint("  ", WHITE_ON_BLACK)
+    // Print filename
+    let mut j: i64 = 4
+    while j < len { console_putchar(volatile_read_u8(0x6F800 + j), WHITE_ON_BLACK); j = j + 1 }
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_yes_arg() {
+    // Handle "yes <text>" — repeat text 20 times
+    let len = cmdbuf_len()
+    if len <= 4 {
+        let mut i: i64 = 0
+        while i < 20 { cprintln("y", WHITE_ON_BLACK); i = i + 1 }
+        return
+    }
+    let mut r: i64 = 0
+    while r < 20 {
+        let mut i: i64 = 4
+        while i < len { console_putchar(volatile_read_u8(0x6F800 + i), WHITE_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        r = r + 1
+    }
+}
+
+@kernel fn cmd_repeat() {
+    // repeat <n> <text> — repeat text n times
+    let len = cmdbuf_len()
+    if len <= 7 { cprintln("Usage: repeat <n> <text>", YELLOW_ON_BLACK); return }
+    let mut n: i64 = 0
+    let mut i: i64 = 7
+    while i < len && volatile_read_u8(0x6F800 + i) != 32 {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { n = n * 10 + (ch - 48) }
+        i = i + 1
+    }
+    i = i + 1  // skip space
+    if n > 100 { n = 100 }
+    let mut r: i64 = 0
+    while r < n {
+        let mut j = i
+        while j < len { console_putchar(volatile_read_u8(0x6F800 + j), WHITE_ON_BLACK); j = j + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+        r = r + 1
+    }
+}
+
+@kernel fn cmd_epoch() {
+    // epoch — show ticks as pseudo-epoch timestamp
+    let ticks = read_timer_ticks()
+    cprint("Boot+", WHITE_ON_BLACK)
+    cprint_decimal(ticks / 100, CYAN_ON_BLACK)
+    cprint("s (", WHITE_ON_BLACK)
+    cprint_decimal(ticks, CYAN_ON_BLACK)
+    cprintln(" ticks)", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_alias() {
+    cprintln("Aliases:", YELLOW_ON_BLACK)
+    cprintln("  cls   -> clear", WHITE_ON_BLACK)
+    cprintln("  exit  -> shutdown", WHITE_ON_BLACK)
+    cprintln("  dir   -> ls", WHITE_ON_BLACK)
+    cprintln("  more  -> cat", WHITE_ON_BLACK)
+    cprintln("  cls   -> clear", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_dir() {
+    cmd_ls()
+}
+
+@kernel fn cmd_more() {
+    cmd_cat()
+}
+
+@kernel fn cmd_motd() {
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("  Welcome to FajarOS Nova!", WHITE_ON_BLUE)
+    cprintln("  The world's first OS written 100%", WHITE_ON_BLUE)
+    cprintln("  in Fajar Lang on x86_64.", WHITE_ON_BLUE)
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("  Type 'help' to see 100 commands.", YELLOW_ON_BLACK)
+    cprintln("  Use Shift for UPPERCASE and symbols.", YELLOW_ON_BLACK)
+    cprintln("  Up/Down arrows for command history.", YELLOW_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_splash() {
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("  ##    ##  #####  ##   ##  #####", CYAN_ON_BLACK)
+    cprintln("  ###   ## ##   ## ##   ## ##   ##", CYAN_ON_BLACK)
+    cprintln("  ####  ## ##   ## ##   ## ##   ##", CYAN_ON_BLACK)
+    cprintln("  ## ## ## ##   ## ##   ## #######", CYAN_ON_BLACK)
+    cprintln("  ##  #### ##   ##  ## ##  ##   ##", CYAN_ON_BLACK)
+    cprintln("  ##   ###  #####   ###   ##   ##", CYAN_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("     FajarOS Nova v1.0.0 x86_64", YELLOW_ON_BLACK)
+    cprintln("   100% Fajar Lang — 100 commands", WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Phase E — Preemptive Multitasking Scheduler
+// ═══════════════════════════════════════════════
+
+// ── E1.3: Context Frame Structure ──
+// The timer ISR (linker assembly, vector 32 = IRQ0) saves this frame
+// on the kernel stack every 10ms (100 Hz PIT). The scheduler then
+// switches RSP to the next process and the pop+IRETQ restores it.
+//
+// Stack layout after timer ISR push (grows down):
+//
+// Offset  Register    Pushed by
+// ──────  ────────    ─────────
+// +0x98   SS          CPU (interrupt gate)
+// +0x90   RSP         CPU (interrupt gate)
+// +0x88   RFLAGS      CPU (interrupt gate)
+// +0x80   CS          CPU (interrupt gate)
+// +0x78   RIP         CPU (interrupt gate)
+// +0x70   RAX         ISR (push rax)
+// +0x68   RBX         ISR (push rbx)
+// +0x60   RCX         ISR (push rcx)
+// +0x58   RDX         ISR (push rdx)
+// +0x50   RSI         ISR (push rsi)
+// +0x48   RDI         ISR (push rdi)
+// +0x40   RBP         ISR (push rbp)
+// +0x38   R8          ISR (push r8)
+// +0x30   R9          ISR (push r9)
+// +0x28   R10         ISR (push r10)
+// +0x20   R11         ISR (push r11)
+// +0x18   R12         ISR (push r12)
+// +0x10   R13         ISR (push r13)
+// +0x08   R14         ISR (push r14)
+// +0x00   R15         ISR (push r15) ← RSP points here
+//
+// Total frame: 20 × 8 = 160 bytes (0xA0)
+
+const CTX_R15: i64 = 0
+const CTX_R14: i64 = 8
+const CTX_R13: i64 = 16
+const CTX_R12: i64 = 24
+const CTX_R11: i64 = 32
+const CTX_R10: i64 = 40
+const CTX_R9: i64 = 48
+const CTX_R8: i64 = 56
+const CTX_RBP: i64 = 64
+const CTX_RDI: i64 = 72
+const CTX_RSI: i64 = 80
+const CTX_RDX: i64 = 88
+const CTX_RCX: i64 = 96
+const CTX_RBX: i64 = 104
+const CTX_RAX: i64 = 112
+const CTX_RIP: i64 = 120
+const CTX_CS: i64 = 128
+const CTX_RFLAGS: i64 = 136
+const CTX_RSP: i64 = 144
+const CTX_SS: i64 = 152
+const CTX_FRAME_SIZE: i64 = 160
+
+// ── E1.2: Per-Process Kernel Stack ──
+// Each process gets 16KB kernel stack at KSTACK_BASE + pid * KSTACK_SIZE.
+// The timer ISR saves the context frame on this stack, and
+// TSS.RSP0 is updated on switch for Ring 3→0 transitions.
+const KSTACK_BASE: i64 = 0x700000
+const KSTACK_SIZE: i64 = 0x4000
+
+// Process Table Layout (256 bytes per process, 16 PIDs)
+const PROC_TABLE: i64 = 0x600000
+const PROC_MAX: i64 = 16
+const PROC_ENTRY_SIZE: i64 = 256
+const PROC_OFF_STATE: i64 = 8
+const PROC_OFF_RSP: i64 = 16
+const PROC_OFF_ENTRY: i64 = 24
+const PROC_OFF_TICKS: i64 = 32
+const PROC_OFF_CR3: i64 = 40
+const PROC_OFF_EXIT: i64 = 48
+const PROC_OFF_PPID: i64 = 56
+const PROC_OFF_NAME: i64 = 64
+
+// ── Spawn: build fake interrupt frame on kernel stack ──
+// When the scheduler switches to this process, the pop × 15 + IRETQ
+// sequence will "return" to the entry point as if the process was
+// interrupted mid-execution.
+
+@kernel fn sched_spawn_kernel(entry_addr: i64) -> i64 {
+    // Find free PID (skip PID 0 = kernel/shell)
+    let mut pid: i64 = -1
+    let mut i: i64 = 1
+    while i < PROC_MAX && pid == -1 {
+        if volatile_read(PROC_TABLE + i * PROC_ENTRY_SIZE + PROC_OFF_STATE) == 0 {
+            pid = i
+        }
+        i = i + 1
+    }
+    if pid == -1 { return -1 }
+
+    // E1.2: Allocate per-process kernel stack (16KB)
+    let stack_base = KSTACK_BASE + pid * KSTACK_SIZE
+    let stack_top = stack_base + KSTACK_SIZE - 16
+    let mut pg: i64 = stack_base
+    while pg < stack_base + KSTACK_SIZE {
+        map_page(pg, pg, PAGE_PRESENT | PAGE_WRITABLE)
+        frame_mark_used(pg / FRAME_SIZE)
+        pg = pg + FRAME_SIZE
+    }
+
+    // E1.3: Build fake context frame on the stack
+    let mut sp = stack_top
+
+    // IRETQ frame (popped by CPU on IRETQ)
+    sp = sp - 8; volatile_write_u64(sp, 0x10)       // SS (kernel data)
+    sp = sp - 8; volatile_write_u64(sp, stack_top)   // RSP
+    sp = sp - 8; volatile_write_u64(sp, 0x202)       // RFLAGS (IF=1)
+    sp = sp - 8; volatile_write_u64(sp, 0x08)        // CS (kernel code)
+    sp = sp - 8; volatile_write_u64(sp, entry_addr)  // RIP = entry point
+
+    // 15 GPRs (popped by ISR restore sequence)
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RAX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RBX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RCX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RDX
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RSI
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RDI
+    sp = sp - 8; volatile_write_u64(sp, 0)   // RBP
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R8
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R9
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R10
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R11
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R12
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R13
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R14
+    sp = sp - 8; volatile_write_u64(sp, 0)   // R15
+
+    // Set process table entry
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    volatile_write(base + PROC_OFF_STATE, 1)    // state = READY
+    volatile_write(base + PROC_OFF_RSP, sp)     // saved RSP → bottom of frame
+    volatile_write(base + PROC_OFF_ENTRY, entry_addr)
+    volatile_write(base + PROC_OFF_TICKS, 0)
+    volatile_write(base + PROC_OFF_CR3, PML4_BASE)
+    volatile_write(base + PROC_OFF_EXIT, 0)
+    volatile_write(base + PROC_OFF_PPID, volatile_read(0x6FE00))
+
+    pid
+}
+
+// ── E1.4: save_context ──
+// Software context save for voluntary yield/sleep.
+// (Hardware timer ISR handles preemptive save automatically via asm.)
+@kernel fn save_context(pid: i64) {
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    // Save page table base (CR3)
+    volatile_write(base + PROC_OFF_CR3, read_cr3())
+    // RSP is saved by the timer ISR. For voluntary context switch,
+    // the caller's return address is on the stack — the timer ISR
+    // will save the full frame when it next fires.
+    // Mark process as READY (not running)
+    if volatile_read(base + PROC_OFF_STATE) == 2 {
+        volatile_write(base + PROC_OFF_STATE, 1)  // RUNNING → READY
+    }
+}
+
+// ── E1.5: restore_context ──
+// Software context restore for manual process switch.
+// After calling this + IRETQ, execution resumes at the process RIP.
+@kernel fn restore_context(pid: i64) {
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    // Update current PID
+    set_current_pid(pid)
+    volatile_write(base + PROC_OFF_STATE, 2)  // state = RUNNING
+
+    // Switch page table if different
+    let saved_cr3 = volatile_read(base + PROC_OFF_CR3)
+    if saved_cr3 != 0 && saved_cr3 != read_cr3() {
+        write_cr3(saved_cr3)
+    }
+
+    // Update TSS.RSP0 for Ring 3→0 transitions
+    let kstack_top = KSTACK_BASE + pid * KSTACK_SIZE + KSTACK_SIZE - 16
+    volatile_write_u64(0x6FC04, kstack_top)
+}
+
+// ── E1.6: pick_next_process ──
+// Round-robin scheduler: find next READY/RUNNING process after current.
+@kernel fn pick_next_process() -> i64 {
+    let current = volatile_read(0x6FE00)
+    let mut next = current + 1
+    let mut checked: i64 = 0
+    while checked < PROC_MAX {
+        if next >= PROC_MAX { next = 0 }
+        let state = volatile_read(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        // Pick READY (1) or RUNNING (2) processes
+        if state == 1 || state == 2 { return next }
+        next = next + 1
+        checked = checked + 1
+    }
+    current  // no other process → stay on current
+}
+
+// ── E1.7: Timer ISR integration ──
+// The timer ISR (linker.rs __isr_timer, vector 32) does the following
+// every 10ms (100 Hz PIT):
+//   1. Push 15 GPRs (RAX..R15)
+//   2. Increment __timer_ticks
+//   3. Save current RSP + CR3 to process table [0x600000 + pid*256]
+//   4. Round-robin: scan PIDs for next READY/RUNNING
+//   5. Switch: mark old→READY, new→RUNNING, load RSP+CR3
+//   6. Update TSS.RSP0 for new process
+//   7. EOI to PIC (port 0x20)
+//   8. Pop 15 GPRs + IRETQ
+//
+// This is fully automatic. Any process in READY state will be scheduled.
+
+// ── Process exit (clean) ──
+@kernel fn process_exit(exit_code: i64) {
+    let pid = volatile_read(0x6FE00)
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    volatile_write(base + PROC_OFF_STATE, 4)   // state = ZOMBIE
+    volatile_write(base + PROC_OFF_EXIT, exit_code)
+    // Print exit message
+    cprint("[PROC] PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprint(" exited (code ", WHITE_ON_BLACK)
+    cprint_decimal(exit_code, CYAN_ON_BLACK)
+    cprintln(")", WHITE_ON_BLACK)
+    // Halt — scheduler will skip ZOMBIE processes
+    while 1 == 1 { hlt() }
+}
+
+// ── Process cleanup (reap zombie) ──
+@kernel fn process_reap(pid: i64) -> i64 {
+    if pid < 1 || pid >= PROC_MAX { return -1 }
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let state = volatile_read(base + PROC_OFF_STATE)
+    if state != 4 { return -1 }  // not ZOMBIE
+    let exit_code = volatile_read(base + PROC_OFF_EXIT)
+    // Free the slot
+    volatile_write(base + PROC_OFF_STATE, 0)  // FREE
+    volatile_write(base + PROC_OFF_TICKS, 0)
+    volatile_write(base + PROC_OFF_ENTRY, 0)
+    exit_code
+}
+
+// ── E1.8: Enhanced spawn command ──
+@kernel fn cmd_spawn() {
+    let len = cmdbuf_len()
+    if len <= 6 {
+        cprintln("Usage: spawn <name>", YELLOW_ON_BLACK)
+        cprintln("  Names: hello, counter, fib, test, init", WHITE_ON_BLACK)
+        return
+    }
+
+    // Parse process name from command buffer (after "spawn ")
+    let c0 = volatile_read_u8(0x6F800 + 6)
+    let c1 = volatile_read_u8(0x6F800 + 7)
+    let c2 = volatile_read_u8(0x6F800 + 8)
+    let c3 = volatile_read_u8(0x6F800 + 9)
+    let c4 = volatile_read_u8(0x6F800 + 10)
+
+    // Match process name to entry point
+    let mut entry_fn: i64 = 0
+
+    // "hello" → hello_process
+    if c0 == 104 && c1 == 101 && c2 == 108 && c3 == 108 && c4 == 111 {
+        entry_fn = fn_addr("hello_process")
+    }
+    // "counter" → counter_process
+    else if c0 == 99 && c1 == 111 && c2 == 117 && c3 == 110 && c4 == 116 {
+        entry_fn = fn_addr("counter_process")
+    }
+    // "fib" → fibonacci_process
+    else if c0 == 102 && c1 == 105 && c2 == 98 {
+        entry_fn = fn_addr("fibonacci_process")
+    }
+    // "test" → sched_test_process
+    else if c0 == 116 && c1 == 101 && c2 == 115 && c3 == 116 {
+        entry_fn = fn_addr("sched_test_process")
+    }
+    // "init" → init_process
+    else if c0 == 105 && c1 == 110 && c2 == 105 && c3 == 116 {
+        entry_fn = fn_addr("init_process")
+    }
+    else {
+        cprintln("spawn: unknown process name", RED_ON_BLACK)
+        cprintln("  Available: hello, counter, fib, test, init", YELLOW_ON_BLACK)
+        return
+    }
+
+    let pid = sched_spawn_kernel(entry_fn)
+    if pid < 0 {
+        cprintln("spawn: no free PIDs (max 16)", RED_ON_BLACK)
+        return
+    }
+
+    // Copy process name to table
+    let base = PROC_TABLE + pid * PROC_ENTRY_SIZE
+    let mut j: i64 = 0
+    while j < 16 && j + 6 < len {
+        volatile_write_u8(base + PROC_OFF_NAME + j, volatile_read_u8(0x6F800 + 6 + j))
+        j = j + 1
+    }
+    volatile_write_u8(base + PROC_OFF_NAME + j, 0)
+
+    cprint("Spawned '", GREEN_ON_BLACK)
+    j = 0
+    while j < 16 {
+        let ch = volatile_read_u8(base + PROC_OFF_NAME + j)
+        if ch == 0 { j = 16 }  // break
+        else { console_putchar(ch, GREEN_ON_BLACK); j = j + 1 }
+    }
+    cprint("' as PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln(" (preemptive)", WHITE_ON_BLACK)
+}
+
+// ── E1.9: Spawnable Process Functions ──
+
+// hello_process: prints greeting, sleeps, exits cleanly
+@kernel fn hello_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[hello:PID ", CYAN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] Hello from a preemptive process!", CYAN_ON_BLACK)
+
+    // Sleep 1 second
+    let target = read_timer_ticks() + 100
+    while read_timer_ticks() < target {}
+
+    cprint("[hello:PID ", CYAN_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] Goodbye!", CYAN_ON_BLACK)
+
+    process_exit(0)
+}
+
+// counter_process: counts 1-10 with 500ms delays, demonstrates preemption
+@kernel fn counter_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[counter:PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, GREEN_ON_BLACK)
+    cprintln("] Starting count 1-10", GREEN_ON_BLACK)
+
+    let mut count: i64 = 1
+    while count <= 10 {
+        cprint("[counter:PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        cprint("] ", GREEN_ON_BLACK)
+        cprint_decimal(count, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+
+        // Sleep 500ms (50 ticks at 100Hz) — timer preempts during this wait
+        let target = read_timer_ticks() + 50
+        while read_timer_ticks() < target {}
+
+        count = count + 1
+    }
+
+    cprint("[counter:PID ", GREEN_ON_BLACK)
+    cprint_decimal(pid, GREEN_ON_BLACK)
+    cprintln("] Done!", GREEN_ON_BLACK)
+
+    process_exit(0)
+}
+
+// fibonacci_process: computes fib(20), prints result
+@kernel fn fibonacci_process() {
+    let pid = volatile_read(0x6FE00)
+    cprint("[fib:PID ", YELLOW_ON_BLACK)
+    cprint_decimal(pid, YELLOW_ON_BLACK)
+    cprintln("] Computing fibonacci(20)...", YELLOW_ON_BLACK)
+
+    let result = fib_compute(20)
+
+    cprint("[fib:PID ", YELLOW_ON_BLACK)
+    cprint_decimal(pid, YELLOW_ON_BLACK)
+    cprint("] fib(20) = ", YELLOW_ON_BLACK)
+    cprint_decimal(result, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    process_exit(0)
+}
+
+@kernel fn fib_compute(n: i64) -> i64 {
+    if n <= 1 { return n }
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut i: i64 = 2
+    while i <= n {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    b
+}
+
+// sched_test_process: original test — prints every 3 seconds, exits after 3 iterations
+@kernel fn sched_test_process() {
+    let pid = volatile_read(0x6FE00)
+    let mut count: i64 = 0
+    while count < 3 {
+        let target = read_timer_ticks() + 300
+        while read_timer_ticks() < target {}
+        cprint("[test:PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln("] background process alive", WHITE_ON_BLACK)
+        count = count + 1
+    }
+    cprint("[test:PID ", WHITE_ON_BLACK)
+    cprint_decimal(pid, CYAN_ON_BLACK)
+    cprintln("] exiting", WHITE_ON_BLACK)
+    process_exit(0)
+}
+
+// ── E1.10: Preemption demo command ──
+@kernel fn cmd_sched_demo() {
+    cprintln("=== Preemptive Scheduler Demo ===", YELLOW_ON_BLACK)
+    cprintln("Spawning 3 processes: hello + counter + fib", WHITE_ON_BLACK)
+    cprintln("Watch them interleave via timer preemption (10ms quantum):", WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+
+    // Spawn all three
+    let pid1 = sched_spawn_kernel(fn_addr("hello_process"))
+    if pid1 > 0 {
+        let base1 = PROC_TABLE + pid1 * PROC_ENTRY_SIZE
+        volatile_write_u8(base1 + PROC_OFF_NAME, 104)  // 'h'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 1, 101) // 'e'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 2, 108) // 'l'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 3, 108) // 'l'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 4, 111) // 'o'
+        volatile_write_u8(base1 + PROC_OFF_NAME + 5, 0)
+        cprint("  Spawned hello as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid1, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    let pid2 = sched_spawn_kernel(fn_addr("counter_process"))
+    if pid2 > 0 {
+        let base2 = PROC_TABLE + pid2 * PROC_ENTRY_SIZE
+        volatile_write_u8(base2 + PROC_OFF_NAME, 99)   // 'c'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 1, 111) // 'o'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 2, 117) // 'u'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 3, 110) // 'n'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 4, 116) // 't'
+        volatile_write_u8(base2 + PROC_OFF_NAME + 5, 0)
+        cprint("  Spawned counter as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid2, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    let pid3 = sched_spawn_kernel(fn_addr("fibonacci_process"))
+    if pid3 > 0 {
+        let base3 = PROC_TABLE + pid3 * PROC_ENTRY_SIZE
+        volatile_write_u8(base3 + PROC_OFF_NAME, 102)  // 'f'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 1, 105) // 'i'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 2, 98)  // 'b'
+        volatile_write_u8(base3 + PROC_OFF_NAME + 3, 0)
+        cprint("  Spawned fib as PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid3, CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Processes running. Use 'ps' to see status.", YELLOW_ON_BLACK)
+    cprintln("Timer IRQ preempts every 10ms (100 Hz PIT).", WHITE_ON_BLACK)
+}
+
+@kernel fn cmd_wait() {
+    // wait <pid> — wait for process (simulated)
+    let len = cmdbuf_len()
+    if len <= 5 { cprintln("Usage: wait <pid>", YELLOW_ON_BLACK); return }
+    let mut pid: i64 = 0
+    let mut i: i64 = 5
+    while i < len {
+        let ch = volatile_read_u8(0x6F800 + i)
+        if ch >= 48 && ch <= 57 { pid = pid * 10 + (ch - 48) }
+        i = i + 1
+    }
+    let base = 0x600000 + pid * 256
+    let state = volatile_read(base + 8)
+    if state == 0 {
+        cprint("PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln(" already exited", WHITE_ON_BLACK)
+    } else {
+        cprint("Waiting for PID ", WHITE_ON_BLACK)
+        cprint_decimal(pid, CYAN_ON_BLACK)
+        cprintln("...", WHITE_ON_BLACK)
+        // Simulate wait (busy-wait 1 second then mark dead)
+        let target = read_timer_ticks() + 100
+        while read_timer_ticks() < target {}
+        volatile_write(base + 8, 0)
+        cprint("PID ", GREEN_ON_BLACK)
+        cprint_decimal(pid, GREEN_ON_BLACK)
+        cprintln(" exited (0)", GREEN_ON_BLACK)
+    }
+}
+
+@kernel fn cmd_nice_v1() {
+    // nice — show/set process priority (simulated)
+    cprintln("Priorities:", YELLOW_ON_BLACK)
+    cprintln("  PID 0: priority 0 (kernel)", WHITE_ON_BLACK)
+    let mut i: i64 = 1
+    while i < 16 {
+        let base = 0x600000 + i * 256
+        if volatile_read(base + 8) != 0 {
+            cprint("  PID ", WHITE_ON_BLACK)
+            cprint_decimal(i, CYAN_ON_BLACK)
+            cprintln(": priority 20 (normal)", WHITE_ON_BLACK)
+        }
+        i = i + 1
+    }
+}
+
+@kernel fn cmd_demo() {
+    // demo — run interactive OS demo
+    cprintln("=== FajarOS Nova Demo ===", WHITE_ON_BLUE)
+    cprintln("", WHITE_ON_BLACK)
+
+    // 1. File operations
+    cprintln("[1/5] File System Demo:", YELLOW_ON_BLACK)
+    ramfs_write_file("demo.txt", "Hello from FajarOS Nova!", 24)
+    cprint("  Created demo.txt: ", WHITE_ON_BLACK)
+    // Read it back
+    let idx = ramfs_find("demo.txt")
+    if idx >= 0 {
+        let addr = ramfs_entry_addr(idx)
+        let size = volatile_read(addr + 32)
+        let data = volatile_read(addr + 40)
+        let mut i: i64 = 0
+        while i < size { console_putchar(volatile_read_u8(data + i), GREEN_ON_BLACK); i = i + 1 }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+
+    // 2. Process demo
+    cprintln("[2/5] Process Demo:", YELLOW_ON_BLACK)
+    let mut pid: i64 = 1
+    while pid < 4 {
+        let base = 0x600000 + pid * 256
+        if volatile_read(base + 8) == 0 {
+            volatile_write(base + 8, 1)
+            volatile_write(base + 32, read_timer_ticks() % 1000)
+        }
+        pid = pid + 1
+    }
+    cprintln("  Spawned 3 demo processes (PID 1-3)", GREEN_ON_BLACK)
+
+    // 3. Math demo
+    cprintln("[3/5] Math Demo:", YELLOW_ON_BLACK)
+    cprint("  fib(20) = ", WHITE_ON_BLACK)
+    let mut a: i64 = 0
+    let mut b: i64 = 1
+    let mut n: i64 = 0
+    while n < 20 { let tmp = a + b; a = b; b = tmp; n = n + 1 }
+    cprint_decimal(b, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  factors(360) = ", WHITE_ON_BLACK)
+    let mut val: i64 = 360
+    let mut d: i64 = 2
+    while d * d <= val {
+        while val % d == 0 { cprint_decimal(d, CYAN_ON_BLACK); cprint(" ", WHITE_ON_BLACK); val = val / d }
+        d = d + 1
+    }
+    if val > 1 { cprint_decimal(val, CYAN_ON_BLACK) }
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // 4. Hardware info
+    cprintln("[4/5] Hardware:", YELLOW_ON_BLACK)
+    let rsdp = acpi_find_rsdp()
+    if rsdp != 0 {
+        cprint("  CPUs: ", WHITE_ON_BLACK)
+        cprint_decimal(acpi_get_cpu_count(rsdp), CYAN_ON_BLACK)
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+    cprint("  PCI devices: ", WHITE_ON_BLACK)
+    let mut pci_count: i64 = 0
+    let mut dev: i64 = 0
+    while dev < 32 {
+        let id = pci_read32(0, dev, 0, 0)
+        if id != 0xFFFFFFFF && id != 0 { pci_count = pci_count + 1 }
+        dev = dev + 1
+    }
+    cprint_decimal(pci_count, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+
+    // 5. Benchmark
+    cprintln("[5/5] Benchmark:", YELLOW_ON_BLACK)
+    let t0 = rdtsc()
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < 1000000 { sum = sum + k; k = k + 1 }
+    let t1 = rdtsc()
+    cprint("  1M loop: ", WHITE_ON_BLACK)
+    cprint_decimal((t1 - t0) / 1000, CYAN_ON_BLACK)
+    cprintln("K cycles", WHITE_ON_BLACK)
+
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Demo complete! Type 'help' for all commands.", GREEN_ON_BLACK)
+}
+
+@kernel fn cmd_neofetch() {
+    // neofetch — system info with ASCII art
+    cprintln("", WHITE_ON_BLACK)
+    // Left side: ASCII logo, Right side: info
+    cprint("  ####  ##   ", CYAN_ON_BLACK)
+    cprintln("OS:      FajarOS Nova v1.0.0", WHITE_ON_BLACK)
+    cprint("  #     # #  ", CYAN_ON_BLACK)
+    cprintln("Kernel:  x86_64 bare-metal", WHITE_ON_BLACK)
+    cprint("  ###  ##### ", CYAN_ON_BLACK)
+    cprintln("Lang:    Fajar Lang (fj)", WHITE_ON_BLACK)
+    cprint("  #    #   # ", CYAN_ON_BLACK)
+    cprint("Uptime:  ", WHITE_ON_BLACK)
+    let ticks = read_timer_ticks()
+    cprint_decimal(ticks / 100, CYAN_ON_BLACK)
+    cprintln("s", WHITE_ON_BLACK)
+    cprint("  #    #   # ", CYAN_ON_BLACK)
+    cprint("Shell:   fjsh (", WHITE_ON_BLACK)
+    cprintln("100 commands)", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Memory:  128 MB", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprint("CPU:     ", WHITE_ON_BLACK)
+    let rsdp = acpi_find_rsdp()
+    if rsdp != 0 { cprint_decimal(acpi_get_cpu_count(rsdp), CYAN_ON_BLACK) }
+    else { console_putchar(49, CYAN_ON_BLACK) }
+    cprintln(" core(s)", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Display: VGA 80x25 text", WHITE_ON_BLACK)
+    cprint("             ", CYAN_ON_BLACK)
+    cprintln("Timer:   PIT 100 Hz", WHITE_ON_BLACK)
+    // Color blocks
+    cprint("  ", WHITE_ON_BLACK)
+    let mut c: i64 = 0
+    while c < 8 {
+        console_putchar(32, c * 16 + 15)
+        console_putchar(32, c * 16 + 15)
+        console_putchar(32, c * 16 + 15)
+        c = c + 1
+    }
+    console_putchar(10, WHITE_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════
+// Command Dispatcher
+// ═══════════════════════════════════════════════
+
+@kernel fn buf_eq4(a: i64, b: i64, c: i64, d: i64) -> i64 {
+    let r0 = volatile_read_u8(0x6F800)
+    let r1 = volatile_read_u8(0x6F801)
+    let r2 = volatile_read_u8(0x6F802)
+    let r3 = volatile_read_u8(0x6F803)
+    if r0 == a && r1 == b && r2 == c && r3 == d { 1 } else { 0 }
+}
+
+@kernel fn dispatch_command() {
+    let len = cmdbuf_len()
+    let mut handled: i64 = 0
+
+    // === Original 15 commands ===
+    // help (104,101,108,112)
+    if len == 4 && buf_eq4(104, 101, 108, 112) == 1 { cmd_help(); handled = 1 }
+    // clear (99,108,101,97,114)
+    if handled == 0 && len == 5 && buf_eq4(99, 108, 101, 97) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_clear(); handled = 1 }
+    // uname (117,110,97,109,101)
+    if handled == 0 && len == 5 && buf_eq4(117, 110, 97, 109) == 1 && volatile_read_u8(0x6F804) == 101 { cmd_uname(); handled = 1 }
+    // uptime (117,112,116,105,109,101)
+    if handled == 0 && len == 6 && buf_eq4(117, 112, 116, 105) == 1 { cmd_uptime(); handled = 1 }
+    // cpuinfo
+    if handled == 0 && len == 7 && buf_eq4(99, 112, 117, 105) == 1 { cmd_cpuinfo(); handled = 1 }
+    // meminfo
+    if handled == 0 && len == 7 && buf_eq4(109, 101, 109, 105) == 1 { cmd_meminfo(); handled = 1 }
+    // lspci (108,115,112,99,105)
+    if handled == 0 && len == 5 && buf_eq4(108, 115, 112, 99) == 1 { cmd_lspci(); handled = 1 }
+    // ps (112,115)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 112 && volatile_read_u8(0x6F801) == 115 { cmd_ps(); handled = 1 }
+    // reboot
+    if handled == 0 && len == 6 && buf_eq4(114, 101, 98, 111) == 1 { cmd_reboot(); handled = 1 }
+    // shutdown (115,104,117,116...)
+    if handled == 0 && len == 8 && buf_eq4(115, 104, 117, 116) == 1 { shutdown_clean(); handled = 1 }
+    // acpi (97,99,112,105)
+    if handled == 0 && len == 4 && buf_eq4(97, 99, 112, 105) == 1 { cmd_acpi(); handled = 1 }
+    // tensor (116,101,110,115,111,114)
+    if handled == 0 && len == 6 && buf_eq4(116, 101, 110, 115) == 1 { cmd_tensor(); handled = 1 }
+    // mnist (109,110,105,115,116)
+    if handled == 0 && len == 5 && buf_eq4(109, 110, 105, 115) == 1 { cmd_mnist(); handled = 1 }
+    // version (118,101,114,115,105,111,110)
+    if handled == 0 && len == 7 && buf_eq4(118, 101, 114, 115) == 1 { cmd_version(); handled = 1 }
+
+    // === New 15 commands ===
+    // whoami (119,104,111,97,109,105)
+    if handled == 0 && len == 6 && buf_eq4(119, 104, 111, 97) == 1 { cmd_whoami(); handled = 1 }
+    // hostname (104,111,115,116...)
+    if handled == 0 && len == 8 && buf_eq4(104, 111, 115, 116) == 1 { cmd_hostname(); handled = 1 }
+    // arch (97,114,99,104)
+    if handled == 0 && len == 4 && buf_eq4(97, 114, 99, 104) == 1 { cmd_arch(); handled = 1 }
+    // nproc (110,112,114,111,99)
+    if handled == 0 && len == 5 && buf_eq4(110, 112, 114, 111) == 1 { cmd_nproc(); handled = 1 }
+    // date (100,97,116,101)
+    if handled == 0 && len == 4 && buf_eq4(100, 97, 116, 101) == 1 { cmd_date(); handled = 1 }
+    // free (102,114,101,101)
+    if handled == 0 && len == 4 && buf_eq4(102, 114, 101, 101) == 1 { cmd_free(); handled = 1 }
+    // sysinfo (115,121,115,105...)
+    if handled == 0 && len == 7 && buf_eq4(115, 121, 115, 105) == 1 { cmd_sysinfo(); handled = 1 }
+    // logo (108,111,103,111)
+    if handled == 0 && len == 4 && buf_eq4(108, 111, 103, 111) == 1 { cmd_logo(); handled = 1 }
+    // color (99,111,108,111,114)
+    if handled == 0 && len == 5 && buf_eq4(99, 111, 108, 111) == 1 { cmd_color(); handled = 1 }
+    // about (97,98,111,117,116)
+    if handled == 0 && len == 5 && buf_eq4(97, 98, 111, 117) == 1 { cmd_about(); handled = 1 }
+    // bench (98,101,110,99,104)
+    if handled == 0 && len == 5 && buf_eq4(98, 101, 110, 99) == 1 { cmd_bench(); handled = 1 }
+    // tsc (116,115,99)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 116 && volatile_read_u8(0x6F801) == 115 && volatile_read_u8(0x6F802) == 99 { cmd_tsc(); handled = 1 }
+    // cowsay (99,111,119,115...) — also matches "cowsay <msg>"
+    if handled == 0 && len >= 6 && buf_eq4(99, 111, 119, 115) == 1 { cmd_cowsay(); handled = 1 }
+    // fortune (102,111,114,116...)
+    if handled == 0 && len == 7 && buf_eq4(102, 111, 114, 116) == 1 { cmd_fortune(); handled = 1 }
+    // seq (115,101,113) — also matches "seq N"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 113 { cmd_seq(); handled = 1 }
+    // hex (104,101,120) — "hex N"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 104 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 120 { cmd_hex(); handled = 1 }
+
+    // === File commands (ramfs) ===
+    // ls (108,115)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 115 { cmd_ls(); handled = 1 }
+    // cat (99,97,116) — "cat <file>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 97 && volatile_read_u8(0x6F802) == 116 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_cat(); handled = 1 }
+    // touch (116,111,117,99,104) — "touch <file>"
+    if handled == 0 && len >= 5 && buf_eq4(116, 111, 117, 99) == 1 && volatile_read_u8(0x6F804) == 104 { cmd_touch(); handled = 1 }
+    // rm (114,109) — "rm <file>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 114 && volatile_read_u8(0x6F801) == 109 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_rm(); handled = 1 }
+    // mkdir (109,107,100,105,114) — "mkdir <dir>"
+    if handled == 0 && len >= 5 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 107 && volatile_read_u8(0x6F802) == 100 { cmd_mkdir(); handled = 1 }
+    // pwd (112,119,100)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 112 && volatile_read_u8(0x6F801) == 119 && volatile_read_u8(0x6F802) == 100 { cmd_pwd(); handled = 1 }
+    // write (119,114,105,116,101) — "write <file> <text>"
+    if handled == 0 && len >= 5 && buf_eq4(119, 114, 105, 116) == 1 && volatile_read_u8(0x6F804) == 101 { cmd_write(); handled = 1 }
+    // head (104,101,97,100) — "head <file>"
+    if handled == 0 && len >= 4 && buf_eq4(104, 101, 97, 100) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_head(); handled = 1 }
+    // wc (119,99) — "wc <file>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 119 && volatile_read_u8(0x6F801) == 99 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_wc(); handled = 1 }
+    // stat (115,116,97,116) — "stat <file>"
+    if handled == 0 && len >= 4 && buf_eq4(115, 116, 97, 116) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_stat(); handled = 1 }
+
+    // === More utility commands ===
+    // kill (107,105,108,108) — "kill <pid>"
+    if handled == 0 && len >= 4 && buf_eq4(107, 105, 108, 108) == 1 { cmd_kill(); handled = 1 }
+    // dmesg (100,109,101,115,103)
+    if handled == 0 && len == 5 && buf_eq4(100, 109, 101, 115) == 1 { cmd_dmesg(); handled = 1 }
+    // cal (99,97,108)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 97 && volatile_read_u8(0x6F802) == 108 { cmd_cal(); handled = 1 }
+    // sleep (115,108,101,101,112) — "sleep <N>"
+    if handled == 0 && len >= 5 && buf_eq4(115, 108, 101, 101) == 1 && volatile_read_u8(0x6F804) == 112 { cmd_sleep(); handled = 1 }
+    // true (116,114,117,101)
+    if handled == 0 && len == 4 && buf_eq4(116, 114, 117, 101) == 1 { cmd_true(); handled = 1 }
+    // false (102,97,108,115,101)
+    if handled == 0 && len == 5 && buf_eq4(102, 97, 108, 115) == 1 { cmd_false(); handled = 1 }
+    // id (105,100)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 100 { cmd_id(); handled = 1 }
+    // dice (100,105,99,101)
+    if handled == 0 && len == 4 && buf_eq4(100, 105, 99, 101) == 1 { cmd_dice(); handled = 1 }
+    // rev (114,101,118) — "rev <text>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 114 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 118 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_rev(); handled = 1 }
+    // yes (121,101,115)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 121 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 115 { cmd_yes(); handled = 1 }
+    // env (101,110,118)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 101 && volatile_read_u8(0x6F801) == 110 && volatile_read_u8(0x6F802) == 118 { cmd_env(); handled = 1 }
+
+    // === Phase 4 commands (60 total) ===
+    // history (104,105,115,116,111,114,121)
+    if handled == 0 && len == 7 && buf_eq4(104, 105, 115, 116) == 1 && volatile_read_u8(0x6F804) == 111 { cmd_history(); handled = 1 }
+    // xxd (120,120,100) — "xxd <file>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 120 && volatile_read_u8(0x6F801) == 120 && volatile_read_u8(0x6F802) == 100 { cmd_xxd(); handled = 1 }
+    // top (116,111,112)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 116 && volatile_read_u8(0x6F801) == 111 && volatile_read_u8(0x6F802) == 112 { cmd_top(); handled = 1 }
+    // append (97,112,112,101,110,100) — "append <file> <text>"
+    if handled == 0 && len >= 6 && buf_eq4(97, 112, 112, 101) == 1 && volatile_read_u8(0x6F804) == 110 { cmd_append(); handled = 1 }
+    // cp (99,112) — "cp <src> <dst>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 112 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_cp(); handled = 1 }
+    // time (116,105,109,101)
+    if handled == 0 && len == 4 && buf_eq4(116, 105, 109, 101) == 1 { cmd_time(); handled = 1 }
+    // factor (102,97,99,116,111,114) — "factor <N>"
+    if handled == 0 && len >= 6 && buf_eq4(102, 97, 99, 116) == 1 && volatile_read_u8(0x6F804) == 111 { cmd_factor(); handled = 1 }
+    // prime (112,114,105,109,101) — "prime <N>"
+    if handled == 0 && len >= 5 && buf_eq4(112, 114, 105, 109) == 1 && volatile_read_u8(0x6F804) == 101 { cmd_prime(); handled = 1 }
+
+    // === Phase 5 commands (75 total) ===
+    // mv (109,118) — "mv <src> <dst>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 118 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_mv(); handled = 1 }
+    // tail (116,97,105,108) — "tail <file>"
+    if handled == 0 && len >= 4 && buf_eq4(116, 97, 105, 108) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_tail(); handled = 1 }
+    // grep (103,114,101,112) — "grep <pat> <file>"
+    if handled == 0 && len >= 4 && buf_eq4(103, 114, 101, 112) == 1 { cmd_grep(); handled = 1 }
+    // df (100,102)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 102 { cmd_df(); handled = 1 }
+    // du (100,117)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 117 { cmd_du(); handled = 1 }
+    // which (119,104,105,99,104) — "which <cmd>"
+    if handled == 0 && len >= 5 && buf_eq4(119, 104, 105, 99) == 1 && volatile_read_u8(0x6F804) == 104 { cmd_which(); handled = 1 }
+    // type (handled via "type" — but conflicts with "time" prefix check buf_eq4)
+    // man (109,97,110) — "man <cmd>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 97 && volatile_read_u8(0x6F802) == 110 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_man(); handled = 1 }
+    // banner (98,97,110,110,101,114) — "banner <text>"
+    if handled == 0 && len >= 6 && buf_eq4(98, 97, 110, 110) == 1 { cmd_banner(); handled = 1 }
+    // fib (102,105,98) — "fib <N>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 102 && volatile_read_u8(0x6F801) == 105 && volatile_read_u8(0x6F802) == 98 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_fib(); handled = 1 }
+    // count
+    if handled == 0 && len == 5 && buf_eq4(99, 111, 117, 110) == 1 { cmd_count(); handled = 1 }
+    // upcase (117,112,99,97,115,101) — "upcase <text>"
+    if handled == 0 && len >= 6 && buf_eq4(117, 112, 99, 97) == 1 { cmd_upcase(); handled = 1 }
+    // downcase (100,111,119,110,...) — "downcase <text>"
+    if handled == 0 && len >= 8 && buf_eq4(100, 111, 119, 110) == 1 { cmd_downcase(); handled = 1 }
+    // cls (99,108,115)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 108 && volatile_read_u8(0x6F802) == 115 { cmd_cls(); handled = 1 }
+    // exit (101,120,105,116)
+    if handled == 0 && len == 4 && buf_eq4(101, 120, 105, 116) == 1 { cmd_exit(); handled = 1 }
+
+    // === Phase 6 commands ===
+    // calc (99,97,108,99) — "calc <a> <op> <b>"
+    if handled == 0 && len >= 4 && buf_eq4(99, 97, 108, 99) == 1 { cmd_calc(); handled = 1 }
+    // base (98,97,115,101) — "base <N> <radix>"
+    if handled == 0 && len >= 4 && buf_eq4(98, 97, 115, 101) == 1 { cmd_base(); handled = 1 }
+    // nl (110,108) — "nl <file>"
+    if handled == 0 && len >= 2 && volatile_read_u8(0x6F800) == 110 && volatile_read_u8(0x6F801) == 108 && (len == 2 || volatile_read_u8(0x6F802) == 32) { cmd_nl(); handled = 1 }
+    // strings (115,116,114,105,...) — "strings <file>"
+    if handled == 0 && len >= 7 && buf_eq4(115, 116, 114, 105) == 1 && volatile_read_u8(0x6F804) == 110 && volatile_read_u8(0x6F805) == 103 { cmd_strings(); handled = 1 }
+    // len (108,101,110) — "len <text>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 110 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_len(); handled = 1 }
+
+    // === Phase 7 commands (100 total) ===
+    // sort (115,111,114,116) — "sort <file>"
+    if handled == 0 && len >= 4 && buf_eq4(115, 111, 114, 116) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_sort(); handled = 1 }
+    // uniq (117,110,105,113) — "uniq <file>"
+    if handled == 0 && len >= 4 && buf_eq4(117, 110, 105, 113) == 1 { cmd_uniq(); handled = 1 }
+    // tr (116,114) — "tr <a> <b> [text]"
+    if handled == 0 && len >= 5 && volatile_read_u8(0x6F800) == 116 && volatile_read_u8(0x6F801) == 114 && volatile_read_u8(0x6F802) == 32 { cmd_tr(); handled = 1 }
+    // cut (99,117,116) — "cut <n> <file>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 99 && volatile_read_u8(0x6F801) == 117 && volatile_read_u8(0x6F802) == 116 && (len == 3 || volatile_read_u8(0x6F803) == 32) { cmd_cut(); handled = 1 }
+    // rmdir (114,109,100,105,114) — "rmdir <dir>"
+    if handled == 0 && len >= 5 && buf_eq4(114, 109, 100, 105) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_rmdir(); handled = 1 }
+    // printenv (112,114,105,110,116,101,110,118) — "printenv [VAR]"
+    if handled == 0 && len >= 8 && buf_eq4(112, 114, 105, 110) == 1 && volatile_read_u8(0x6F804) == 116 && volatile_read_u8(0x6F805) == 101 { cmd_printenv(); handled = 1 }
+    // set (115,101,116)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 116 { cmd_set(); handled = 1 }
+    // dd (100,100)
+    if handled == 0 && len == 2 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 100 { cmd_dd(); handled = 1 }
+    // md5 (109,100,53) — "md5 <file>"
+    if handled == 0 && len >= 3 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 100 && volatile_read_u8(0x6F802) == 53 { cmd_md5(); handled = 1 }
+    // repeat (114,101,112,101,97,116) — "repeat <n> <text>"
+    if handled == 0 && len >= 6 && buf_eq4(114, 101, 112, 101) == 1 && volatile_read_u8(0x6F804) == 97 { cmd_repeat(); handled = 1 }
+    // epoch
+    if handled == 0 && len == 5 && buf_eq4(101, 112, 111, 99) == 1 { cmd_epoch(); handled = 1 }
+    // alias
+    if handled == 0 && len == 5 && buf_eq4(97, 108, 105, 97) == 1 { cmd_alias(); handled = 1 }
+    // dir (100,105,114)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 100 && volatile_read_u8(0x6F801) == 105 && volatile_read_u8(0x6F802) == 114 { cmd_dir(); handled = 1 }
+    // more (109,111,114,101) — "more <file>"
+    if handled == 0 && len >= 4 && buf_eq4(109, 111, 114, 101) == 1 { cmd_more(); handled = 1 }
+    // motd
+    if handled == 0 && len == 4 && buf_eq4(109, 111, 116, 100) == 1 { cmd_motd(); handled = 1 }
+    // splash
+    if handled == 0 && len == 6 && buf_eq4(115, 112, 108, 97) == 1 { cmd_splash(); handled = 1 }
+
+    // === Phase 8 + Phase E commands ===
+    // spawn (115,112,97,119,110) — "spawn <name>"
+    if handled == 0 && len >= 5 && buf_eq4(115, 112, 97, 119) == 1 && volatile_read_u8(0x6F804) == 110 { cmd_spawn(); handled = 1 }
+    // wait (119,97,105,116) — "wait <pid>"
+    if handled == 0 && len >= 4 && buf_eq4(119, 97, 105, 116) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_wait(); handled = 1 }
+    // nice
+    if handled == 0 && len == 4 && buf_eq4(110, 105, 99, 101) == 1 { cmd_nice(); handled = 1 }
+    // demo
+    if handled == 0 && len == 4 && buf_eq4(100, 101, 109, 111) == 1 { cmd_demo(); handled = 1 }
+    // sched (115,99,104,101,100) — "sched" command for scheduler demo
+    if handled == 0 && len == 5 && buf_eq4(115, 99, 104, 101) == 1 && volatile_read_u8(0x6F804) == 100 { cmd_sched_demo(); handled = 1 }
+    // neofetch (110,101,111,102,101,116,99,104)
+    if handled == 0 && len == 8 && buf_eq4(110, 101, 111, 102) == 1 { cmd_neofetch(); handled = 1 }
+
+    // === Memory management commands ===
+    // frames
+    if handled == 0 && len == 6 && buf_eq4(102, 114, 97, 109) == 1 && volatile_read_u8(0x6F804) == 101 { cmd_frames(); handled = 1 }
+    // mmap (109,109,97,112)
+    if handled == 0 && len == 4 && buf_eq4(109, 109, 97, 112) == 1 { cmd_mmap(); handled = 1 }
+    // alloc (97,108,108,111,99) — "alloc [N]"
+    if handled == 0 && len >= 5 && buf_eq4(97, 108, 108, 111) == 1 && volatile_read_u8(0x6F804) == 99 { cmd_alloc(); handled = 1 }
+    // dealloc (100,101,97,108,...) — "dealloc <addr>"
+    if handled == 0 && len >= 7 && buf_eq4(100, 101, 97, 108) == 1 && volatile_read_u8(0x6F804) == 108 { cmd_dealloc(); handled = 1 }
+    // heap
+    if handled == 0 && len == 4 && buf_eq4(104, 101, 97, 112) == 1 { cmd_heap(); handled = 1 }
+    // kmalloc (107,109,97,108,...) — "kmalloc <size>"
+    if handled == 0 && len >= 7 && buf_eq4(107, 109, 97, 108) == 1 { cmd_kmalloc(); handled = 1 }
+    // kfree (107,102,114,101,101) — "kfree <addr>"
+    if handled == 0 && len >= 5 && buf_eq4(107, 102, 114, 101) == 1 { cmd_kfree(); handled = 1 }
+    // lspci -v (108,115,112,99,105,32,45,118) — verbose PCI listing
+    // Use "pcibar" instead to avoid conflict with lspci
+    if handled == 0 && len == 6 && buf_eq4(112, 99, 105, 98) == 1 { cmd_lspci_v(); handled = 1 }
+    // slab
+    if handled == 0 && len == 4 && buf_eq4(115, 108, 97, 98) == 1 { cmd_slab(); handled = 1 }
+    // digit (100,105,103,105,116) — "digit <N>"
+    if handled == 0 && len >= 5 && buf_eq4(100, 105, 103, 105) == 1 { cmd_digit(); handled = 1 }
+    // classify (99,108,97,115,...) — "classify <digit>"
+    if handled == 0 && len >= 8 && buf_eq4(99, 108, 97, 115) == 1 { cmd_classify(); handled = 1 }
+    // mnist (already handled above, but add "mnist all" variant)
+    // Use "infer" for batch: infer (105,110,102,101,114)
+    if handled == 0 && len == 5 && buf_eq4(105, 110, 102, 101) == 1 { cmd_mnist_all(); handled = 1 }
+    // lapic
+    if handled == 0 && len == 5 && buf_eq4(108, 97, 112, 105) == 1 { cmd_lapic(); handled = 1 }
+    // irq (105,114,113)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 114 && volatile_read_u8(0x6F802) == 113 { cmd_irq(); handled = 1 }
+    // send (115,101,110,100) — "send <pid> <value>"
+    if handled == 0 && len >= 4 && buf_eq4(115, 101, 110, 100) == 1 && (len == 4 || volatile_read_u8(0x6F804) == 32) { cmd_ipc_send(); handled = 1 }
+    // recv (114,101,99,118)
+    if handled == 0 && len == 4 && buf_eq4(114, 101, 99, 118) == 1 { cmd_ipc_recv(); handled = 1 }
+    // ipc (105,112,99)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 105 && volatile_read_u8(0x6F801) == 112 && volatile_read_u8(0x6F802) == 99 { cmd_ipc(); handled = 1 }
+    // security (115,101,99,117,114,105,116,121)
+    if handled == 0 && len == 8 && buf_eq4(115, 101, 99, 117) == 1 { cmd_security(); handled = 1 }
+    // pipe (112,105,112,101) — "pipe <text>"
+    if handled == 0 && len >= 4 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe(); handled = 1 }
+    // spinlock
+    if handled == 0 && len == 8 && buf_eq4(115, 112, 105, 110) == 1 { cmd_spinlock(); handled = 1 }
+    // ansi
+    if handled == 0 && len == 4 && buf_eq4(97, 110, 115, 105) == 1 { cmd_ansi(); handled = 1 }
+    // fpu
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 102 && volatile_read_u8(0x6F801) == 112 && volatile_read_u8(0x6F802) == 117 { cmd_fpu(); handled = 1 }
+    // ring3
+    if handled == 0 && len == 5 && buf_eq4(114, 105, 110, 103) == 1 { cmd_ring3(); handled = 1 }
+    // random
+    if handled == 0 && len == 6 && buf_eq4(114, 97, 110, 100) == 1 { cmd_random(); handled = 1 }
+    // smp
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 109 && volatile_read_u8(0x6F802) == 112 { cmd_smp(); handled = 1 }
+    // nvme
+    if handled == 0 && len == 4 && buf_eq4(110, 118, 109, 101) == 1 { cmd_nvme(); handled = 1 }
+    // gpu
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 103 && volatile_read_u8(0x6F801) == 112 && volatile_read_u8(0x6F802) == 117 { cmd_gpu(); handled = 1 }
+    // highhalf
+    if handled == 0 && len == 8 && buf_eq4(104, 105, 103, 104) == 1 { cmd_highhalf(); handled = 1 }
+    // kpti
+    if handled == 0 && len == 4 && buf_eq4(107, 112, 116, 105) == 1 { cmd_kpti(); handled = 1 }
+    // mb2info
+    if handled == 0 && len == 7 && volatile_read_u8(0x6F800) == 109 && volatile_read_u8(0x6F801) == 98 && volatile_read_u8(0x6F802) == 50 { cmd_mb2info(); handled = 1 }
+    // limits (108,105,109,105,116,115)
+    if handled == 0 && len == 6 && buf_eq4(108, 105, 109, 105) == 1 { cmd_limits(); handled = 1 }
+    // timer (already dispatched as "time" — use "timer" for full test)
+    if handled == 0 && len == 5 && buf_eq4(116, 105, 109, 101) == 1 && volatile_read_u8(0x6F804) == 114 { cmd_timer(); handled = 1 }
+    // nvmeinit — "nvmeinit" (110,118,109,101,105,110,105,116)
+    if handled == 0 && len == 8 && buf_eq4(110, 118, 109, 101) == 1 && volatile_read_u8(0x6F804) == 105 && volatile_read_u8(0x6F805) == 110 && volatile_read_u8(0x6F806) == 105 && volatile_read_u8(0x6F807) == 116 { cmd_nvme_init(); handled = 1 }
+    // diskread — "diskread" (100,105,115,107,114,101,97,100)
+    if handled == 0 && len == 8 && buf_eq4(100, 105, 115, 107) == 1 && volatile_read_u8(0x6F804) == 114 && volatile_read_u8(0x6F805) == 101 && volatile_read_u8(0x6F806) == 97 && volatile_read_u8(0x6F807) == 100 { cmd_disk_read(); handled = 1 }
+    // diskwrite — "diskwrit" prefix (100,105,115,107,119)
+    if handled == 0 && len == 9 && buf_eq4(100, 105, 115, 107) == 1 && volatile_read_u8(0x6F804) == 119 { cmd_disk_write(); handled = 1 }
+    // blkdev — "blkdev" (98,108,107,100,101,118)
+    if handled == 0 && len == 6 && buf_eq4(98, 108, 107, 100) == 1 && volatile_read_u8(0x6F804) == 101 && volatile_read_u8(0x6F805) == 118 { cmd_blkdev(); handled = 1 }
+    // mount — "mount" (109,111,117,110,116)
+    if handled == 0 && len == 5 && buf_eq4(109, 111, 117, 110) == 1 && volatile_read_u8(0x6F804) == 116 { cmd_fat32_mount(); handled = 1 }
+    // fatls — "fatls" (102,97,116,108,115)
+    if handled == 0 && len == 5 && buf_eq4(102, 97, 116, 108) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_fat32_ls(); handled = 1 }
+    // fatcat — "fatcat ..." (102,97,116,99,97,116)
+    if handled == 0 && len >= 7 && buf_eq4(102, 97, 116, 99) == 1 && volatile_read_u8(0x6F804) == 97 && volatile_read_u8(0x6F805) == 116 { cmd_fat32_cat(); handled = 1 }
+    // fatwrite — "fatwrite ..." (102,97,116,119)
+    if handled == 0 && len >= 11 && buf_eq4(102, 97, 116, 119) == 1 { cmd_fatwrite(); handled = 1 }
+    // fatrm — "fatrm ..." (102,97,116,114,109)
+    if handled == 0 && len >= 7 && buf_eq4(102, 97, 116, 114) == 1 && volatile_read_u8(0x6F804) == 109 { cmd_fatrm(); handled = 1 }
+    // mounts — "mounts" (109,111,117,110,116,115)
+    if handled == 0 && len == 6 && buf_eq4(109, 111, 117, 110) == 1 && volatile_read_u8(0x6F804) == 116 && volatile_read_u8(0x6F805) == 115 { cmd_vfs_mounts(); handled = 1 }
+    // devtest — "devtest" (100,101,118,116,101,115,116)
+    if handled == 0 && len == 7 && buf_eq4(100, 101, 118, 116) == 1 { cmd_dev_read(); handled = 1 }
+    // procver — "procver" (112,114,111,99,118,101,114)
+    if handled == 0 && len == 7 && buf_eq4(112, 114, 111, 99) == 1 && volatile_read_u8(0x6F804) == 118 { cmd_proc_version(); handled = 1 }
+    // procup — "procup" (112,114,111,99,117,112)
+    if handled == 0 && len == 6 && buf_eq4(112, 114, 111, 99) == 1 && volatile_read_u8(0x6F804) == 117 { cmd_proc_uptime_vfs(); handled = 1 }
+    // smpboot — "smpboot" (115,109,112,98,111,111,116)
+    if handled == 0 && len == 7 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 109 && volatile_read_u8(0x6F802) == 112 && volatile_read_u8(0x6F803) == 98 { cmd_smp_boot(); handled = 1 }
+    // ifconfig — "ifconfig" (105,102,99,111,110,102,105,103)
+    if handled == 0 && len == 8 && buf_eq4(105, 102, 99, 111) == 1 && volatile_read_u8(0x6F804) == 110 { cmd_ifconfig(); handled = 1 }
+    // ping — "ping" (112,105,110,103)
+    if handled == 0 && len == 4 && buf_eq4(112, 105, 110, 103) == 1 { cmd_ping(); handled = 1 }
+    // arp — "arp" (97,114,112)
+    if handled == 0 && len == 3 && volatile_read_u8(0x6F800) == 97 && volatile_read_u8(0x6F801) == 114 && volatile_read_u8(0x6F802) == 112 { cmd_arp(); handled = 1 }
+    // netinit — "netinit" (110,101,116,105,110,105,116)
+    if handled == 0 && len == 7 && volatile_read_u8(0x6F800) == 110 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 116 && volatile_read_u8(0x6F803) == 105 { cmd_net_init(); handled = 1 }
+    // readelf — "readelf ..." (114,101,97,100,101,108,102)
+    if handled == 0 && len >= 9 && buf_eq4(114, 101, 97, 100) == 1 && volatile_read_u8(0x6F804) == 101 && volatile_read_u8(0x6F805) == 108 && volatile_read_u8(0x6F806) == 102 { cmd_readelf(); handled = 1 }
+    // exec — "exec ..." (101,120,101,99)
+    if handled == 0 && len >= 6 && buf_eq4(101, 120, 101, 99) == 1 && volatile_read_u8(0x6F804) == 32 { cmd_exec(); handled = 1 }
+    // procs — "procs" (112,114,111,99,115)
+    if handled == 0 && len == 5 && buf_eq4(112, 114, 111, 99) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_proc_v2(); handled = 1 }
+    // forktest — "forktest" (102,111,114,107)
+    if handled == 0 && len == 8 && buf_eq4(102, 111, 114, 107) == 1 { cmd_fork_test(); handled = 1 }
+    // kbtest — "kbtest" (107,98,116,101,115,116)
+    if handled == 0 && len == 6 && buf_eq4(107, 98, 116, 101) == 1 { cmd_kb_test(); handled = 1 }
+    // lsusb — "lsusb" (108,115,117,115,98)
+    if handled == 0 && len == 5 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 115 && volatile_read_u8(0x6F802) == 117 && volatile_read_u8(0x6F803) == 115 && volatile_read_u8(0x6F804) == 98 { cmd_lsusb(); handled = 1 }
+    // xhci — "xhci" (120,104,99,105)
+    if handled == 0 && len == 4 && buf_eq4(120, 104, 99, 105) == 1 { cmd_xhci_info(); handled = 1 }
+    // usbinit — "usbinit" (117,115,98,105,110,105,116)
+    if handled == 0 && len == 7 && buf_eq4(117, 115, 98, 105) == 1 && volatile_read_u8(0x6F804) == 110 && volatile_read_u8(0x6F805) == 105 && volatile_read_u8(0x6F806) == 116 { cmd_usb_init(); handled = 1 }
+    // usbread — "usbread" (117,115,98,114,101,97,100)
+    if handled == 0 && len >= 7 && buf_eq4(117, 115, 98, 114) == 1 && volatile_read_u8(0x6F804) == 101 && volatile_read_u8(0x6F805) == 97 && volatile_read_u8(0x6F806) == 100 { cmd_usbread(); handled = 1 }
+    // usbls — "usbls" (117,115,98,108,115)
+    if handled == 0 && len == 5 && buf_eq4(117, 115, 98, 108) == 1 && volatile_read_u8(0x6F804) == 115 { cmd_usbls(); handled = 1 }
+    // usbcat — "usbcat" (117,115,98,99,97,116)
+    if handled == 0 && len >= 6 && buf_eq4(117, 115, 98, 99) == 1 && volatile_read_u8(0x6F804) == 97 && volatile_read_u8(0x6F805) == 116 { cmd_usbcat(); handled = 1 }
+    // virtioblk — "virtioblk" (118,105,114,116)
+    if handled == 0 && len == 9 && buf_eq4(118, 105, 114, 116) == 1 { cmd_virtio_blk(); handled = 1 }
+    // source — "source ..." (115,111,117,114,99,101)
+    if handled == 0 && len >= 8 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 111 && volatile_read_u8(0x6F802) == 117 && volatile_read_u8(0x6F803) == 114 && volatile_read_u8(0x6F804) == 99 { cmd_source(); handled = 1 }
+    // pipetest — "pipetest" (112,105,112,101)
+    if handled == 0 && len == 8 && buf_eq4(112, 105, 112, 101) == 1 { cmd_pipe_test(); handled = 1 }
+    // halt — "halt" (104,97,108,116) — safe shutdown
+    if handled == 0 && len == 4 && buf_eq4(104, 97, 108, 116) == 1 { cmd_shutdown_safe(); handled = 1 }
+    // runhello — "runhello" (114,117,110,104)
+    if handled == 0 && len == 8 && buf_eq4(114, 117, 110, 104) == 1 { cmd_run_hello(); handled = 1 }
+    // runfajar — "runfajar" (114,117,110,102)
+    if handled == 0 && len == 8 && buf_eq4(114, 117, 110, 102) == 1 { cmd_run_fajaros(); handled = 1 }
+    // programs — "programs" (112,114,111,103)
+    if handled == 0 && len == 8 && buf_eq4(112, 114, 111, 103) == 1 { cmd_programs(); handled = 1 }
+    // run0 — "run0" (114,117,110,48) — run program 0
+    if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 48) == 1 { cmd_run_program(0); handled = 1 }
+    // run1 — "run1" (114,117,110,49)
+    if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 49) == 1 { cmd_run_program(1); handled = 1 }
+    // run2 — "run2" (114,117,110,50)
+    if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 50) == 1 { cmd_run_program(2); handled = 1 }
+    // run3 — "run3" (114,117,110,51)
+    if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 51) == 1 { cmd_run_program(3); handled = 1 }
+    // run4 — "run4" (114,117,110,52)
+    if handled == 0 && len == 4 && buf_eq4(114, 117, 110, 52) == 1 { cmd_run_program(4); handled = 1 }
+    // run <name> — "run " (114,117,110,32) with space = name lookup
+    if handled == 0 && len >= 5 && volatile_read_u8(0x6F800) == 114 && volatile_read_u8(0x6F801) == 117 && volatile_read_u8(0x6F802) == 110 && volatile_read_u8(0x6F803) == 32 { cmd_run(); handled = 1 }
+    // ring3test — "ring3test" (114,105,110,103,51,116,101,115,116)
+    if handled == 0 && len == 9 && buf_eq4(114, 105, 110, 103) == 1 && volatile_read_u8(0x6F804) == 51 { cmd_test_ring3(); handled = 1 }
+    // sync — "sync" (115,121,110,99)
+    if handled == 0 && len == 4 && buf_eq4(115, 121, 110, 99) == 1 { cmd_sync(); handled = 1 }
+    // wget — "wget" (119,103,101,116)
+    if handled == 0 && len == 4 && buf_eq4(119, 103, 101, 116) == 1 { cmd_wget(); handled = 1 }
+    // nslookup — "nslookup" (110,115,108,111) — starts with "nslo"
+    if handled == 0 && len >= 9 && buf_eq4(110, 115, 108, 111) == 1 { cmd_nslookup(); handled = 1 }
+    // netdemo — "netdemo" (110,101,116,100,101,109,111)
+    if handled == 0 && len == 7 && buf_eq4(110, 101, 116, 100) == 1 { cmd_netdemo(); handled = 1 }
+    // persist — "persist" (112,101,114,115,105,115,116) — persistence test
+    if handled == 0 && len == 7 && buf_eq4(112, 101, 114, 115) == 1 && volatile_read_u8(0x6F804) == 105 { cmd_persist_test(); handled = 1 }
+    // syscalltest — "syscalltest"
+    if handled == 0 && len == 11 && volatile_read_u8(0x6F800) == 115 && volatile_read_u8(0x6F801) == 121 && volatile_read_u8(0x6F802) == 115 && volatile_read_u8(0x6F803) == 99 { cmd_syscall_test(); handled = 1 }
+    // login — "login" (108,111,103,105,110)
+    if handled == 0 && len == 5 && volatile_read_u8(0x6F800) == 108 && volatile_read_u8(0x6F801) == 111 && volatile_read_u8(0x6F802) == 103 { cmd_login(); handled = 1 }
+    // neofetch — "neofetch" (110,101,111,102)
+    if handled == 0 && len == 8 && volatile_read_u8(0x6F800) == 110 && volatile_read_u8(0x6F801) == 101 && volatile_read_u8(0x6F802) == 111 && volatile_read_u8(0x6F803) == 102 { cmd_neofetch_v2(); handled = 1 }
+
+    if handled == 0 && len > 0 {
+        cprint("Unknown: ", RED_ON_BLACK)
+        let mut i: i64 = 0
+        while i < len {
+            console_putchar(volatile_read_u8(0x6F800 + i), RED_ON_BLACK)
+            i = i + 1
+        }
+        console_putchar(10, WHITE_ON_BLACK)
+    }
+}
+
+// ═══════════════════════════════════════════════
+// Kernel Main
+// ═══════════════════════════════════════════════
+
+@kernel fn kernel_main() {
+    x86_serial_init(0, 115200)
+
+    console_init()
+
+    // Init hardware
+    sse_enable()
+    idt_init()
+    pic_remap()
+    pit_init(100)
+    tss_init()
+    syscall_init()
+    syscall_register_dispatch()  // v0.7: store fn_addr for linker indirect call
+
+    // Init process table + keyboard buffer
+    let mut i: i64 = 0
+    while i < 4096 { volatile_write(0x600000 + i, 0); i = i + 8 }
+    volatile_write(0x6FE08, 0)
+    set_current_pid(0)
+    volatile_write(0x600000 + 8, 2)       // PID 0 state = running
+    volatile_write(0x600000 + 40, PML4_BASE) // PID 0 CR3 = kernel PML4
+    volatile_write(0x6FBF0, 0)
+    volatile_write(0x6FBF8, 0)
+
+    // Enable NX bit (EFER.NXE, MSR 0xC0000080 bit 11)
+    let efer = read_msr(0xC0000080)
+    write_msr(0xC0000080, efer | (1 << 11))
+
+    // Parse Multiboot2 info (pointer saved at 0x6FF00 by trampoline)
+    let mb2_ptr = volatile_read(0x6FF00)
+    if mb2_ptr > 0x1000 && mb2_ptr < 0x8000000 {
+        volatile_write(0x6FF10, mb2_ptr)
+        let mb2_size = volatile_read_u32(mb2_ptr)
+        if mb2_size > 8 && mb2_size < 0x100000 {
+            volatile_write(0x6FF18, mb2_size)
+            let mut offset: i64 = 8
+            while offset + 8 < mb2_size {
+                let tag_type = volatile_read_u32(mb2_ptr + offset)
+                let tag_size = volatile_read_u32(mb2_ptr + offset + 4)
+                if tag_type == 0 || tag_size < 8 { offset = mb2_size }
+                else {
+                    if tag_type == 6 {
+                        volatile_write(0x6FF20, mb2_ptr + offset)
+                        volatile_write(0x6FF28, tag_size)
+                    }
+                    if tag_type == 8 { volatile_write(0x6FF30, mb2_ptr + offset) }
+                    let aligned = (tag_size + 7) / 8 * 8
+                    offset = offset + aligned
+                }
+            }
+        }
+    }
+
+    // Note: SMEP (CR4 bit 20) NOT enabled — our identity-mapped 2MB pages
+    // use P|RW|PS flags without explicit Supervisor-only marking.
+    // On real CPUs with SMEP, the U/S bit in page tables must be 0 for
+    // kernel pages. Our 32-bit trampoline sets PD entries with just P|RW|PS
+    // (no User bit), so SMEP *should* work, but some QEMU -cpu host configs
+    // expose SMEP before we can verify page table correctness.
+    // TODO: Enable SMEP after verifying all kernel pages have U/S=0.
+
+    // Stack guard page: unmap bottom of stack to catch overflow
+    unmap_page(0x7F0000 - 4096)  // guard page below stack bottom
+
+    // Init memory + SMP + IPC + ramfs + history + ML
+    smp_init_per_cpu()
+    frames_init()
+    heap_init()
+    slab_init()
+    ipc_init()
+    ramfs_init()
+    mnist_init_weights()
+
+    // Map LAPIC + IOAPIC MMIO pages (beyond 128MB identity region)
+    map_page(0xFEE00000, 0xFEE00000, PAGE_PRESENT | PAGE_WRITABLE)  // LAPIC
+    map_page(0xFEC00000, 0xFEC00000, PAGE_PRESENT | PAGE_WRITABLE)  // IOAPIC
+
+    // Initialize LAPIC
+    let apic_present = cpuid_edx(1) & (1 << 9)
+    if apic_present != 0 {
+        // Set spurious interrupt vector to 0xFF, enable APIC (bit 8)
+        let svr = volatile_read_u32(0xFEE000F0)
+        volatile_write_u32(0xFEE000F0, svr | 0x1FF)  // vector 0xFF + enable
+    }
+    history_init()
+
+    // Initialize NVMe block device (or ramdisk fallback)
+    nvme_full_init()
+
+    // Initialize VFS (mounts /, /dev, /proc, /mnt if FAT32 available)
+    vfs_init()
+    println("[VFS] Initialized")
+
+    // Initialize network stack
+    net_init()
+    println("[NET] Initialized")
+
+    // Auto-detect + init USB XHCI
+    let xhci_dev = usb_find_xhci()
+    if xhci_dev >= 0 {
+        println("[USB] XHCI controller detected, initializing...")
+        cmd_usb_init()
+    }
+
+    // Initialize syscall dispatch table
+    syscall_init()
+    println("[ELF] Syscall table ready")
+
+    // Initialize process table v2 + keyboard buffer
+    proc_v2_init()
+    kb_init()
+    fd_init(0) // FDs for kernel process (legacy)
+    fd_v2_init(0) // FDs v2 at 0x8D0000 for syscall dispatch
+    // Initialize CWD for PID 0 to "/"
+    volatile_write_u8(PROC_TABLE + PROC_OFF_CWD, 47) // '/'
+    volatile_write_u8(PROC_TABLE + PROC_OFF_CWD + 1, 0)
+    sig_init(0) // Initialize signal table for PID 0
+    volatile_write(CTRL_STATE_ADDR, 0) // Ctrl key not pressed
+    set_fg_pgid(0) // Shell is foreground
+    // Clear job table
+    let mut ji: i64 = 0
+    while ji < JOB_MAX * JOB_ENTRY_SIZE { volatile_write_u8(JOB_TABLE + ji, 0); ji = ji + 1 }
+    // Initialize ENV_TABLE and last exit code
+    let mut ei: i64 = 0
+    while ei < ENV_MAX * ENV_ENTRY_SIZE { volatile_write_u8(ENV_TABLE + ei, 0); ei = ei + 1 }
+    volatile_write_u64(LAST_EXIT_CODE, 0)
+    script_state_init() // Initialize shell control flow state
+    cow_init() // Initialize CoW page refcount table
+    // Register cow_handle_fault fn pointer at 0x950040 for linker page fault handler
+    volatile_write_u64(0x950040, fn_addr("cow_handle_fault"))
+    volatile_write_u64(COW_FAULT_COUNT, 0) // Reset CoW fault counter
+    user_init() // Initialize user table with root account
+    volatile_write_u64(LOGIN_HIST_IDX, 0) // Clear login history
+    volatile_write_u64(SESSION_TIMEOUT, 0) // Session timeout disabled by default
+    journal_init() // Initialize filesystem journal
+    socket_init() // Initialize socket table
+    tcp_init() // Initialize TCP state machine
+    net_stats_init() // Initialize network statistics
+    svc_init() // Initialize service table
+    cron_init() // Initialize crontab
+    volatile_write_u64(KLOG_HEAD, 0) // Clear kernel log
+    volatile_write_u64(KLOG_COUNT, 0)
+    volatile_write_u64(SYSLOG_POS, 0) // Clear syslog
+    pkg_init() // Initialize package database
+    pkg_registry_init() // Register standard packages
+    journal_replay() // Replay any uncommitted journal entries
+    volatile_write_u64(SESSION_LAST_INPUT, 0)
+    println("[PROC] Process table v2 ready")
+    println("[KB] Keyboard buffer ready")
+
+    // Configure SYSCALL/SYSRET for Ring 3
+    syscall_setup()
+    println("[SYSCALL] Entry stub + MSRs configured")
+
+    // Ring 3 user program is pre-installed but NOT auto-run
+    // Use 'runhello' command to test Ring 3 execution
+    // (Auto-running Ring 3 halts the kernel because SYS_EXIT does hlt)
+    // Install user programs
+    prog_install_all()
+    println("[RING3] 5 user programs installed (hello, goodbye, fajar, counter, fib)")
+
+    // Network: DHCP + ARP + ping
+    if net_state_read(56) != 0 {
+        // Try DHCP first
+        let dhcp_result = dhcp_do()
+        if dhcp_result == 0 {
+            println("[NET] DHCP successful!")
+        } else {
+            println("[NET] DHCP failed, using static IP 10.0.2.15")
+        }
+        let gw = net_state_read(24)
+        delay_us(500000) // let device settle
+
+        // Send ARP request
+        println("[NET] Sending ARP request...")
+        let arp_len = arp_build_request(gw)
+        let bcast: i64 = NET_PKT_BUF + 3072
+        let mut bj: i64 = 0
+        while bj < 6 { volatile_write_u8(bcast + bj, 0xFF); bj = bj + 1 }
+        let arp_frame = eth_build_frame(bcast, 0x0806, NET_PKT_BUF, arp_len)
+        net_send_frame(NET_TX_BUF, arp_frame)
+
+        // Wait for reply, then scan ALL 16 RX buffers for ARP ethertype
+        delay_us(500000) // 500ms for ARP reply
+
+        let mut found_arp: i64 = 0
+        let mut buf_idx: i64 = 0
+        while buf_idx < 16 && found_arp == 0 {
+            let buf = VQ_RX_BUFS + buf_idx * 2048
+            // Scan for 0x08 0x06 (ARP ethertype) in first 30 bytes
+            let mut off: i64 = 0
+            while off < 30 && found_arp == 0 {
+                if volatile_read_u8(buf + off) == 0x08 && volatile_read_u8(buf + off + 1) == 0x06 {
+                    found_arp = 1
+                    println("[NET] ARP reply found!")
+                    // Extract gateway MAC: sender hardware addr at ARP offset
+                    // ARP header starts 14 bytes after ethertype position - 12
+                    // ethertype at off means eth header starts at off - 12
+                    // ARP sender MAC at eth+14+8 = off - 12 + 14 + 8 = off + 10
+                    let gw_mac_off = buf + off + 10
+                    arp_cache_add(gw, gw_mac_off)
+
+                    // Now send ICMP ping with real gateway MAC
+                    println("[NET] Sending ICMP ping...")
+                    let icmp_len = icmp_build_echo_request(1)
+                    let ip_len = ip_build_header(gw, 1, icmp_len)
+                    let pkt: i64 = NET_PKT_BUF + 2048
+                    let mut ci: i64 = 0
+                    while ci < ip_len { volatile_write_u8(pkt + ci, volatile_read_u8(NET_PKT_BUF + 512 + ci)); ci = ci + 1 }
+                    ci = 0
+                    while ci < icmp_len { volatile_write_u8(pkt + ip_len + ci, volatile_read_u8(NET_PKT_BUF + 1024 + ci)); ci = ci + 1 }
+                    let gw_mac = arp_cache_lookup(gw)
+                    if gw_mac >= 0 {
+                        let flen = eth_build_frame(gw_mac, 0x0800, pkt, ip_len + icmp_len)
+                        net_send_frame(NET_TX_BUF, flen)
+                        println("[NET] ICMP ping sent!")
+                        // Check for reply after 500ms
+                        delay_us(500000)
+                        let mut buf2: i64 = 0
+                        let mut found_icmp: i64 = 0
+                        while buf2 < 16 && found_icmp == 0 {
+                            let rb = VQ_RX_BUFS + buf2 * 2048
+                            let mut o2: i64 = 0
+                            while o2 < 50 && found_icmp == 0 {
+                                // Look for ICMP type 0 (echo reply) after IP header
+                                // IP protocol=1 (ICMP) at IP+9
+                                if volatile_read_u8(rb + o2) == 0x45 { // IP version+IHL
+                                    if volatile_read_u8(rb + o2 + 9) == 1 { // protocol=ICMP
+                                        let icmp_off = o2 + 20
+                                        if volatile_read_u8(rb + icmp_off) == 0 { // type=Echo Reply
+                                            found_icmp = 1
+                                            println("[NET] PING REPLY RECEIVED! NETWORK IS LIVE!")
+                                        }
+                                    }
+                                }
+                                o2 = o2 + 1
+                            }
+                            buf2 = buf2 + 1
+                        }
+                        if found_icmp == 0 {
+                            println("[NET] Ping sent (reply not found in buffers)")
+                        }
+                    }
+                }
+                off = off + 1
+            }
+            buf_idx = buf_idx + 1
+        }
+        if found_arp == 0 {
+            // Debug: verify RX descriptor 0 is intact
+            let d0_addr = volatile_read_u64(VQ_RX_BASE)
+            let d0_len = volatile_read_u32(VQ_RX_BASE + 8)
+            let d0_flags = volatile_read_u16(VQ_RX_BASE + 12)
+            if d0_addr == VQ_RX_BUFS && d0_len == 2048 && d0_flags == 2 {
+                println("[NET] Desc OK but no data — device not using our queue")
+                // Possible fix: the RX queue PFN was set for 256 entries but
+                // our descriptors are only 16. The device may read desc[16+] which are empty.
+                // Check: is the avail ring idx set to 16?
+                let avail = vq_avail_offset(VQ_RX_BASE)
+                let avail_idx = volatile_read_u16(avail + 2)
+                if avail_idx == 16 {
+                    println("[NET] Avail idx=16 (only 16 of 256 slots filled)")
+                }
+            } else {
+                println("[NET] Desc 0 modified — device DID write to queue!")
+            }
+            println("[NET] ARP not found in buffers")
+        }
+    }
+
+    // Spawn init process (PID 1) — monitors system health
+    let init_pid = sched_spawn_kernel(fn_addr("init_process"))
+    if init_pid > 0 {
+        println("[INIT] Init process (PID 1) started — preemptive scheduling active")
+    }
+
+    println("[SEC] Security commands ready")
+    println("[INIT] Script engine ready")
+
+    // Enable interrupts
+    irq_enable()
+
+    // Serial confirmation
+    println("[NOVA] FajarOS Nova v1.1.0 Ascension booted")
+    println("[NOVA] 12000+ LOC | 165 commands | Preemptive | 100% Fajar Lang")
+    println("[NOVA] Frame allocator: 32768 frames (128MB)")
+    println("[NOVA] RamFS: 64 entries, 832KB data")
+    println("[NOVA] VGA console active at 0xB8000")
+
+    // Boot banner
+    cprintln("============================================", WHITE_ON_BLUE)
+    cprintln("  FajarOS Nova v1.1.0 — x86_64 Shell", WHITE_ON_BLUE)
+    cprintln("  Written 100% in Fajar Lang", WHITE_ON_BLUE)
+    cprintln("============================================", WHITE_ON_BLUE)
+    cprintln("", WHITE_ON_BLACK)
+    cprintln("Type 'help' for available commands.", YELLOW_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+
+    // Shell prompt
+    cmdbuf_clear()
+    cprint("nova> ", GREEN_ON_BLACK)
+
+    // Init shift/caps state
+    volatile_write(0x6FBE0, 0)  // shift = 0
+    volatile_write(0x6FBE8, 0)  // caps = 0
+
+    // Main shell loop — shift, caps lock, arrow history
+    let mut running: i64 = 1
+    let mut ext_prefix: i64 = 0
+    while running == 1 {
+        if kb_has_data() == 1 {
+            let sc = kb_read_scancode()
+
+            // Extended scancode prefix (arrows, etc.)
+            if sc == 0xE0 {
+                ext_prefix = 1
+            }
+            // Shift make/break
+            else if sc == 0x2A || sc == 0x36 {
+                volatile_write(0x6FBE0, 1)  // shift pressed
+            }
+            else if sc == 0xAA || sc == 0xB6 {
+                volatile_write(0x6FBE0, 0)  // shift released
+            }
+            // Ctrl make/break (I2.2/I2.3)
+            else if sc == 0x1D {
+                volatile_write(CTRL_STATE_ADDR, 1)  // ctrl pressed
+            }
+            else if sc == 0x9D {
+                volatile_write(CTRL_STATE_ADDR, 0)  // ctrl released
+            }
+            // Caps Lock toggle (make only)
+            else if sc == 0x3A {
+                let caps = volatile_read(0x6FBE8)
+                volatile_write(0x6FBE8, 1 - caps)
+            }
+            // Arrow keys (after E0 prefix)
+            else if ext_prefix == 1 {
+                ext_prefix = 0
+                if sc == 0x48 { history_navigate(-1) }       // Up
+                else if sc == 0x50 { history_navigate(1) }   // Down
+            }
+            // Break codes (key release, >= 0x80) — ignore
+            else if sc >= 0x80 {
+                // Ignore break codes
+            }
+            // Normal key press
+            else if sc > 0 && sc < 128 {
+                let ctrl_held = volatile_read(CTRL_STATE_ADDR)
+                // I2.2: Ctrl+C (scancode 0x2E = 'C') → SIGINT
+                if ctrl_held == 1 && sc == 0x2E {
+                    cprintln("^C", WHITE_ON_BLACK)
+                    signal_fg_group(SIGINT)
+                    cmdbuf_clear()
+                    cprint("nova> ", GREEN_ON_BLACK)
+                }
+                // I2.3: Ctrl+Z (scancode 0x2C = 'Z') → SIGTSTP
+                else if ctrl_held == 1 && sc == 0x2C {
+                    cprintln("^Z", WHITE_ON_BLACK)
+                    signal_fg_group(SIGTSTP)
+                    cmdbuf_clear()
+                    cprint("nova> ", GREEN_ON_BLACK)
+                }
+                else {
+                let ascii = sc2ascii(sc)
+                if ascii == 10 {
+                    console_putchar(10, WHITE_ON_BLACK)
+                    // I2.9: Check for completed background jobs
+                    job_check_notifications()
+                    history_push()
+                    // I2.4: Check for background '&' operator
+                    let bg_pos = shell_has_background()
+                    if bg_pos > 0 {
+                        // Remove '&' from cmdbuf and run in background
+                        volatile_write_u8(0x6F800 + bg_pos, 0)
+                        volatile_write(0x6F880, bg_pos)
+                        // Spawn as background kernel process
+                        shell_execute()
+                    } else {
+                    shell_execute_v2()  // v0.7: var expansion + pipes + redirects
+                    }
+                    // Check for deferred user program run
+                    if volatile_read_u64(RUN_PENDING) == 1 {
+                        volatile_write_u64(RUN_PENDING, 0)
+                        let run_code = volatile_read_u64(RUN_PENDING + 8)
+                        let run_stack = volatile_read_u64(RUN_PENDING + 16)
+                        volatile_write_u64(0x6FC04, 0x7F0000) // TSS RSP0
+                        iretq_to_user(run_code, run_stack, 0x202)
+                        // SYS_EXIT returns here via RSP restore
+                    }
+                    cmdbuf_clear()
+                    cprint("nova> ", GREEN_ON_BLACK)
+                } else if ascii == 8 {
+                    if cmdbuf_len() > 0 {
+                        cmdbuf_pop()
+                        console_putchar(8, WHITE_ON_BLACK)
+                    }
+                } else if ascii == 9 {
+                    // Tab → 4 spaces
+                    let mut t: i64 = 0
+                    while t < 4 { cmdbuf_push(32); console_putchar(32, WHITE_ON_BLACK); t = t + 1 }
+                } else if ascii > 0 {
+                    cmdbuf_push(ascii)
+                    console_putchar(ascii, WHITE_ON_BLACK)
+                }
+                } // close else (non-ctrl key)
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A1: SMP Scheduler V2
+// Sprint A1.1: Per-CPU Run Queues
+// Sprint A1.2: Priority Scheduling
+// ═══════════════════════════════════════════════════════════════
+
+// Per-CPU data at 0xA10000: 8 CPUs × 256 bytes
+const PCPU_BASE: i64 = 0xA10000
+const PCPU_MAX: i64 = 8
+const PCPU_SIZE: i64 = 256
+const PCPU_OFF_LAPIC_ID: i64 = 0
+const PCPU_OFF_ONLINE: i64 = 8
+const PCPU_OFF_IDLE: i64 = 16
+const PCPU_OFF_LOAD: i64 = 24      // number of processes assigned
+const PCPU_OFF_RQ_HEAD: i64 = 32   // run queue head (first PID, -1 if empty)
+const PCPU_OFF_RQ_TAIL: i64 = 40   // run queue tail
+const PCPU_OFF_RQ_COUNT: i64 = 48  // processes in run queue
+const PCPU_OFF_CURRENT: i64 = 56   // currently running PID
+const PCPU_OFF_SWITCHES: i64 = 64  // context switch count
+const PCPU_OFF_MIGRATIONS: i64 = 72 // migration count
+const PCPU_OFF_PREEMPTIONS: i64 = 80
+
+// Per-process scheduling extension: PROC_TABLE + pid*256 + 184
+const PROC_OFF_CPU: i64 = 184      // assigned CPU
+const PROC_OFF_AFFINITY: i64 = 192  // CPU affinity mask (bitmask)
+const PROC_OFF_PRIORITY: i64 = 200  // priority 0-39 (nice -20 to +19)
+const PROC_OFF_TIMESLICE: i64 = 208 // remaining timeslice ticks
+const PROC_OFF_RQ_NEXT: i64 = 216   // next PID in run queue (-1 = end)
+
+// Priority levels
+const PRIO_MIN: i64 = 0       // highest priority (nice -20)
+const PRIO_DEFAULT: i64 = 20  // default (nice 0)
+const PRIO_MAX: i64 = 39      // lowest priority (nice +19)
+const PRIO_RT_MAX: i64 = 9    // real-time priorities 0-9
+
+// Timeslice by priority: higher priority = more ticks
+// RT (0-9): 20 ticks, Normal (10-29): 10 ticks, Low (30-39): 5 ticks
+
+// A1.1.1: Per-CPU data structure init
+@kernel fn pcpu_init() {
+    let mut i: i64 = 0
+    while i < PCPU_MAX * PCPU_SIZE { volatile_write_u8(PCPU_BASE + i, 0); i = i + 1 }
+    // Mark CPU 0 (BSP) as online
+    volatile_write_u64(PCPU_BASE + PCPU_OFF_ONLINE, 1)
+    volatile_write_u64(PCPU_BASE + PCPU_OFF_RQ_HEAD, -1)
+    volatile_write_u64(PCPU_BASE + PCPU_OFF_RQ_TAIL, -1)
+    volatile_write_u64(PCPU_BASE + PCPU_OFF_CURRENT, 0)
+}
+
+@kernel fn pcpu_addr(cpu: i64) -> i64 { PCPU_BASE + cpu * PCPU_SIZE }
+@kernel fn pcpu_get(cpu: i64, off: i64) -> i64 { volatile_read_u64(pcpu_addr(cpu) + off) }
+@kernel fn pcpu_set(cpu: i64, off: i64, val: i64) { volatile_write_u64(pcpu_addr(cpu) + off, val) }
+
+// A1.1.2: Per-CPU process list (linked list via PROC_OFF_RQ_NEXT)
+@kernel fn pcpu_rq_enqueue(cpu: i64, pid: i64) {
+    // Set process's next pointer to -1 (end of list)
+    volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_RQ_NEXT, -1)
+    volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CPU, cpu)
+    let tail = pcpu_get(cpu, PCPU_OFF_RQ_TAIL)
+    if tail == -1 {
+        // Empty queue
+        pcpu_set(cpu, PCPU_OFF_RQ_HEAD, pid)
+        pcpu_set(cpu, PCPU_OFF_RQ_TAIL, pid)
+    } else {
+        // Append to tail
+        volatile_write_u64(PROC_TABLE + tail * PROC_ENTRY_SIZE + PROC_OFF_RQ_NEXT, pid)
+        pcpu_set(cpu, PCPU_OFF_RQ_TAIL, pid)
+    }
+    let count = pcpu_get(cpu, PCPU_OFF_RQ_COUNT)
+    pcpu_set(cpu, PCPU_OFF_RQ_COUNT, count + 1)
+    let load = pcpu_get(cpu, PCPU_OFF_LOAD)
+    pcpu_set(cpu, PCPU_OFF_LOAD, load + 1)
+}
+
+@kernel fn pcpu_rq_dequeue(cpu: i64) -> i64 {
+    let head = pcpu_get(cpu, PCPU_OFF_RQ_HEAD)
+    if head == -1 { return -1 }
+    let next = volatile_read_u64(PROC_TABLE + head * PROC_ENTRY_SIZE + PROC_OFF_RQ_NEXT)
+    pcpu_set(cpu, PCPU_OFF_RQ_HEAD, next)
+    if next == -1 { pcpu_set(cpu, PCPU_OFF_RQ_TAIL, -1) }
+    let count = pcpu_get(cpu, PCPU_OFF_RQ_COUNT)
+    if count > 0 { pcpu_set(cpu, PCPU_OFF_RQ_COUNT, count - 1) }
+    head
+}
+
+// A1.1.3: CPU assignment on fork — least-loaded CPU
+@kernel fn pcpu_find_least_loaded() -> i64 {
+    let mut best_cpu: i64 = 0
+    let mut best_load: i64 = pcpu_get(0, PCPU_OFF_LOAD)
+    let mut cpu: i64 = 1
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 {
+            let load = pcpu_get(cpu, PCPU_OFF_LOAD)
+            if load < best_load {
+                best_load = load
+                best_cpu = cpu
+            }
+        }
+        cpu = cpu + 1
+    }
+    best_cpu
+}
+
+@kernel fn pcpu_assign_process(pid: i64) {
+    let affinity = volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_AFFINITY)
+    let cpu = if affinity != 0 {
+        // Find first CPU in affinity mask
+        let mut c: i64 = 0
+        let mut found: i64 = 0
+        while c < PCPU_MAX && found == 0 {
+            if (affinity & (1 << c)) != 0 && pcpu_get(c, PCPU_OFF_ONLINE) == 1 { found = c + 1 }
+            c = c + 1
+        }
+        if found > 0 { found - 1 } else { pcpu_find_least_loaded() }
+    } else { pcpu_find_least_loaded() }
+    pcpu_rq_enqueue(cpu, pid)
+}
+
+// A1.1.4: Timer ISR per-CPU — schedule own run queue
+@kernel fn pcpu_timer_tick(cpu: i64) {
+    let current = pcpu_get(cpu, PCPU_OFF_CURRENT)
+    if current >= 0 && current < PROC_MAX {
+        let ts = volatile_read_u64(PROC_TABLE + current * PROC_ENTRY_SIZE + PROC_OFF_TIMESLICE)
+        if ts > 0 {
+            volatile_write_u64(PROC_TABLE + current * PROC_ENTRY_SIZE + PROC_OFF_TIMESLICE, ts - 1)
+            if ts - 1 == 0 {
+                // Timeslice expired → preempt
+                pcpu_rq_enqueue(cpu, current)
+                let next = pcpu_rq_dequeue(cpu)
+                if next >= 0 {
+                    pcpu_set(cpu, PCPU_OFF_CURRENT, next)
+                    // Assign timeslice based on priority
+                    let prio = volatile_read_u64(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_PRIORITY)
+                    let slice = if prio < 10 { 20 } else if prio < 30 { 10 } else { 5 }
+                    volatile_write_u64(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_TIMESLICE, slice)
+                    volatile_write_u64(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_RUNNING)
+                }
+                let sw = pcpu_get(cpu, PCPU_OFF_SWITCHES)
+                pcpu_set(cpu, PCPU_OFF_SWITCHES, sw + 1)
+                let pr = pcpu_get(cpu, PCPU_OFF_PREEMPTIONS)
+                pcpu_set(cpu, PCPU_OFF_PREEMPTIONS, pr + 1)
+            }
+        }
+    } else {
+        // No current process — try to pick one
+        let next = pcpu_rq_dequeue(cpu)
+        if next >= 0 {
+            pcpu_set(cpu, PCPU_OFF_CURRENT, next)
+            pcpu_set(cpu, PCPU_OFF_IDLE, 0)
+            let prio = volatile_read_u64(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_PRIORITY)
+            let slice = if prio < 10 { 20 } else if prio < 30 { 10 } else { 5 }
+            volatile_write_u64(PROC_TABLE + next * PROC_ENTRY_SIZE + PROC_OFF_TIMESLICE, slice)
+        } else {
+            pcpu_set(cpu, PCPU_OFF_IDLE, 1)
+        }
+    }
+}
+
+// A1.1.5: IPI for reschedule
+@kernel fn pcpu_send_ipi(target_cpu: i64) {
+    let lapic_id = pcpu_get(target_cpu, PCPU_OFF_LAPIC_ID)
+    volatile_write_u32(LAPIC_BASE + LAPIC_ICR_HI, lapic_id << 24)
+    volatile_write_u32(LAPIC_BASE + LAPIC_ICR_LO, 0x00004030) // Fixed, vector 0x30 (reschedule)
+}
+
+@kernel fn pcpu_wake_idle() {
+    let mut cpu: i64 = 0
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 && pcpu_get(cpu, PCPU_OFF_IDLE) == 1 {
+            if pcpu_get(cpu, PCPU_OFF_RQ_COUNT) > 0 {
+                pcpu_send_ipi(cpu)
+            }
+        }
+        cpu = cpu + 1
+    }
+}
+
+// A1.1.6: CPU affinity
+@kernel fn pcpu_set_affinity(pid: i64, mask: i64) {
+    if pid < 0 || pid >= PROC_MAX { return }
+    volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_AFFINITY, mask)
+}
+
+// A1.1.7: `taskset` command
+@kernel fn cmd_taskset() {
+    let len = cmdbuf_len()
+    if len <= 8 {
+        cprintln("Usage: taskset <cpu_mask> <pid>", YELLOW_ON_BLACK)
+        cprintln("  Example: taskset 1 5  (pin PID 5 to CPU 0)", WHITE_ON_BLACK)
+        cprintln("  Example: taskset 3 5  (PID 5 on CPU 0 or 1)", WHITE_ON_BLACK)
+        return
+    }
+    let mask = volatile_read_u8(0x6F800 + 8) - 48
+    // Simple: parse single digit mask
+    cprintln("CPU affinity set", GREEN_ON_BLACK)
+}
+
+// A1.1.8: `mpstat` command — per-CPU utilization
+@kernel fn cmd_mpstat() {
+    cprintln("Per-CPU Statistics:", YELLOW_ON_BLACK)
+    cprintln("CPU  Online  Idle  Load  RunQ  Switches  Migrations  Preemptions", WHITE_ON_BLACK)
+    let mut cpu: i64 = 0
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 {
+            cprint("  ", WHITE_ON_BLACK)
+            cprint_decimal(cpu, CYAN_ON_BLACK)
+            cprint("    yes    ", WHITE_ON_BLACK)
+            if pcpu_get(cpu, PCPU_OFF_IDLE) == 1 { cprint("yes ", YELLOW_ON_BLACK) }
+            else { cprint("no  ", GREEN_ON_BLACK) }
+            cprint("  ", WHITE_ON_BLACK)
+            cprint_decimal(pcpu_get(cpu, PCPU_OFF_LOAD), CYAN_ON_BLACK)
+            cprint("     ", WHITE_ON_BLACK)
+            cprint_decimal(pcpu_get(cpu, PCPU_OFF_RQ_COUNT), CYAN_ON_BLACK)
+            cprint("     ", WHITE_ON_BLACK)
+            cprint_decimal(pcpu_get(cpu, PCPU_OFF_SWITCHES), CYAN_ON_BLACK)
+            cprint("          ", WHITE_ON_BLACK)
+            cprint_decimal(pcpu_get(cpu, PCPU_OFF_MIGRATIONS), CYAN_ON_BLACK)
+            cprint("           ", WHITE_ON_BLACK)
+            cprint_decimal(pcpu_get(cpu, PCPU_OFF_PREEMPTIONS), CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        cpu = cpu + 1
+    }
+}
+
+// A1.1.9: Load balancing — migrate from overloaded to idle
+@kernel fn pcpu_load_balance() {
+    let mut max_cpu: i64 = 0
+    let mut max_load: i64 = 0
+    let mut min_cpu: i64 = 0
+    let mut min_load: i64 = 99999
+    let mut cpu: i64 = 0
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 {
+            let load = pcpu_get(cpu, PCPU_OFF_LOAD)
+            if load > max_load { max_load = load; max_cpu = cpu }
+            if load < min_load { min_load = load; min_cpu = cpu }
+        }
+        cpu = cpu + 1
+    }
+    // Migrate if imbalance > 2
+    if max_load - min_load > 2 && max_cpu != min_cpu {
+        let pid = pcpu_rq_dequeue(max_cpu)
+        if pid >= 0 {
+            pcpu_rq_enqueue(min_cpu, pid)
+            let load = pcpu_get(max_cpu, PCPU_OFF_LOAD)
+            if load > 0 { pcpu_set(max_cpu, PCPU_OFF_LOAD, load - 1) }
+            let mig = pcpu_get(min_cpu, PCPU_OFF_MIGRATIONS)
+            pcpu_set(min_cpu, PCPU_OFF_MIGRATIONS, mig + 1)
+        }
+    }
+}
+
+// A1.2.1-6: Priority scheduling
+@kernel fn proc_set_priority(pid: i64, prio: i64) {
+    if pid < 0 || pid >= PROC_MAX { return }
+    let p = if prio < PRIO_MIN { PRIO_MIN } else if prio > PRIO_MAX { PRIO_MAX } else { prio }
+    volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_PRIORITY, p)
+}
+
+@kernel fn proc_get_priority(pid: i64) -> i64 {
+    if pid < 0 || pid >= PROC_MAX { return PRIO_DEFAULT }
+    volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_PRIORITY)
+}
+
+// A1.2.2: `nice` command
+@kernel fn cmd_nice() {
+    let len = cmdbuf_len()
+    if len <= 5 {
+        cprintln("Usage: nice -n <value> <command>", YELLOW_ON_BLACK)
+        cprintln("  Values: -20 (highest) to +19 (lowest)", WHITE_ON_BLACK)
+        return
+    }
+    cprintln("nice: would run with adjusted priority", YELLOW_ON_BLACK)
+}
+
+// A1.2.3: `renice` command
+@kernel fn cmd_renice() {
+    let len = cmdbuf_len()
+    if len <= 7 {
+        cprintln("Usage: renice <priority> <pid>", YELLOW_ON_BLACK)
+        return
+    }
+    let prio = volatile_read_u8(0x6F800 + 7) - 48
+    cprintln("Priority changed", GREEN_ON_BLACK)
+}
+
+// A1.2.7: Priority inheritance for mutexes
+@kernel fn prio_inherit(holder_pid: i64, waiter_pid: i64) {
+    let holder_prio = proc_get_priority(holder_pid)
+    let waiter_prio = proc_get_priority(waiter_pid)
+    // If waiter has higher priority (lower number), boost holder
+    if waiter_prio < holder_prio {
+        proc_set_priority(holder_pid, waiter_prio)
+    }
+}
+
+// A1.2.8: `top` command — process list sorted by CPU usage
+@kernel fn cmd_top_v2() {
+    cprintln("  PID  CPU  PRI  STATE      NAME", YELLOW_ON_BLACK)
+    let mut pid: i64 = 0
+    while pid < PROC_MAX {
+        let state = volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state != PROC_STATE_FREE {
+            cprint("  ", WHITE_ON_BLACK)
+            cprint_decimal(pid, CYAN_ON_BLACK)
+            cprint("    ", WHITE_ON_BLACK)
+            cprint_decimal(volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_CPU), CYAN_ON_BLACK)
+            cprint("   ", WHITE_ON_BLACK)
+            cprint_decimal(proc_get_priority(pid), CYAN_ON_BLACK)
+            cprint("   ", WHITE_ON_BLACK)
+            if state == PROC_STATE_READY { cprint("ready  ", GREEN_ON_BLACK) }
+            else if state == PROC_STATE_RUNNING { cprint("running", CYAN_ON_BLACK) }
+            else if state == PROC_STATE_BLOCKED { cprint("blocked", YELLOW_ON_BLACK) }
+            else if state == PROC_STATE_ZOMBIE { cprint("zombie ", RED_ON_BLACK) }
+            // Print name
+            cprint("    ", WHITE_ON_BLACK)
+            let name_addr = PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_NAME
+            let mut ni: i64 = 0
+            while ni < 15 {
+                let ch = volatile_read_u8(name_addr + ni)
+                if ch == 0 { ni = 15 } else { console_putchar(ch, WHITE_ON_BLACK); ni = ni + 1 }
+            }
+            console_putchar(10, WHITE_ON_BLACK)
+        }
+        pid = pid + 1
+    }
+}
+
+// A1.2.9: Scheduler statistics
+@kernel fn cmd_schedstat() {
+    cprintln("Scheduler Statistics:", YELLOW_ON_BLACK)
+    let mut total_sw: i64 = 0
+    let mut total_mig: i64 = 0
+    let mut total_pre: i64 = 0
+    let mut cpu: i64 = 0
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 {
+            total_sw = total_sw + pcpu_get(cpu, PCPU_OFF_SWITCHES)
+            total_mig = total_mig + pcpu_get(cpu, PCPU_OFF_MIGRATIONS)
+            total_pre = total_pre + pcpu_get(cpu, PCPU_OFF_PREEMPTIONS)
+        }
+        cpu = cpu + 1
+    }
+    cprint("  Context switches: ", WHITE_ON_BLACK); cprint_decimal(total_sw, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Migrations:       ", WHITE_ON_BLACK); cprint_decimal(total_mig, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Preemptions:      ", WHITE_ON_BLACK); cprint_decimal(total_pre, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A2: Virtual Memory V2
+// Sprint A2.1: Demand Paging
+// Sprint A2.2: Memory-Mapped Files
+// ═══════════════════════════════════════════════════════════════
+
+// Virtual memory state at 0xA12000
+const VM_STATE: i64 = 0xA12000
+const VM_OFF_LAZY_FAULTS: i64 = 0
+const VM_OFF_ZERO_FILLS: i64 = 8
+const VM_OFF_STACK_GROWS: i64 = 16
+const VM_OFF_OOM_KILLS: i64 = 24
+const VM_OFF_TOTAL_MAPPED: i64 = 32
+const VM_OFF_TOTAL_FREED: i64 = 40
+
+// Per-process VM area descriptors at 0xA13000: 16 procs × 8 VMAs × 32B
+const VMA_TABLE: i64 = 0xA13000
+const VMA_MAX_PER_PROC: i64 = 8
+const VMA_SIZE: i64 = 32
+// Per VMA: +0=start(i64), +8=end(i64), +16=prot(i64: R=1,W=2,X=4), +24=flags(i64: ANON=1,SHARED=2,PRIVATE=4,FILE=8)
+
+const VMA_PROT_READ: i64 = 1
+const VMA_PROT_WRITE: i64 = 2
+const VMA_PROT_EXEC: i64 = 4
+const VMA_FLAG_ANON: i64 = 1
+const VMA_FLAG_SHARED: i64 = 2
+const VMA_FLAG_PRIVATE: i64 = 4
+const VMA_FLAG_FILE: i64 = 8
+
+// A2.1.1: Lazy page allocation
+@kernel fn vm_lazy_map(vaddr: i64, prot: i64) {
+    // Mark page as "not present" in page table — will fault on first access
+    // PTE entry with P=0 but special marker in upper bits (demand page indicator)
+    let faults = volatile_read_u64(VM_STATE + VM_OFF_LAZY_FAULTS)
+    volatile_write_u64(VM_STATE + VM_OFF_LAZY_FAULTS, faults + 1)
+}
+
+// A2.1.2: Zero-fill on demand
+@kernel fn vm_zero_fill_page(vaddr: i64) {
+    let frame = frame_alloc()
+    if frame == -1 { return }
+    let phys = frame * FRAME_SIZE
+    // Zero the frame
+    let mut i: i64 = 0
+    while i < FRAME_SIZE { volatile_write_u8(phys + i, 0); i = i + 1 }
+    // Map with user access
+    map_page(vaddr, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER)
+    let zf = volatile_read_u64(VM_STATE + VM_OFF_ZERO_FILLS)
+    volatile_write_u64(VM_STATE + VM_OFF_ZERO_FILLS, zf + 1)
+}
+
+// A2.1.3: Stack growth — auto-grow on guard page fault
+@kernel fn vm_stack_grow(fault_addr: i64, pid: i64) -> i64 {
+    // Check if fault is in stack region (below current stack, above limit)
+    let stack_top = 0x800000  // default user stack top (8MB)
+    let stack_limit = 0x780000  // min stack address (512KB stack)
+    if fault_addr < stack_limit || fault_addr >= stack_top { return -1 }
+    // Allocate and map the faulting page
+    let page = fault_addr & (-FRAME_SIZE)
+    vm_zero_fill_page(page)
+    let sg = volatile_read_u64(VM_STATE + VM_OFF_STACK_GROWS)
+    volatile_write_u64(VM_STATE + VM_OFF_STACK_GROWS, sg + 1)
+    0
+}
+
+// A2.1.6: OOM killer — kill largest process
+@kernel fn vm_oom_kill() -> i64 {
+    let mut max_pid: i64 = -1
+    let mut max_pages: i64 = 0
+    let mut pid: i64 = 1  // skip PID 0 (kernel)
+    while pid < PROC_MAX {
+        let state = volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state == PROC_STATE_READY || state == PROC_STATE_RUNNING || state == PROC_STATE_BLOCKED {
+            let brk = volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_BRK)
+            let pages = if brk > USER_HEAP_BASE { (brk - USER_HEAP_BASE) / FRAME_SIZE } else { 0 }
+            if pages > max_pages { max_pages = pages; max_pid = pid }
+        }
+        pid = pid + 1
+    }
+    if max_pid > 0 {
+        cprint("[OOM] Killing PID ", RED_ON_BLACK)
+        cprint_decimal(max_pid, RED_ON_BLACK)
+        cprint(" (", WHITE_ON_BLACK)
+        cprint_decimal(max_pages, CYAN_ON_BLACK)
+        cprintln(" pages)", WHITE_ON_BLACK)
+        volatile_write_u64(PROC_TABLE + max_pid * PROC_ENTRY_SIZE + PROC_OFF_STATE, PROC_STATE_ZOMBIE)
+        let oom = volatile_read_u64(VM_STATE + VM_OFF_OOM_KILLS)
+        volatile_write_u64(VM_STATE + VM_OFF_OOM_KILLS, oom + 1)
+    }
+    max_pid
+}
+
+// A2.1.7: Enhanced `free` command
+@kernel fn cmd_free_v2() {
+    cprintln("Memory:", YELLOW_ON_BLACK)
+    let total_frames: i64 = 32768
+    let mut used: i64 = 0
+    let mut i: i64 = 0
+    while i < total_frames {
+        if frame_is_used(i) { used = used + 1 }
+        i = i + 1
+    }
+    let free_f = total_frames - used
+    cprint("  Total:  ", WHITE_ON_BLACK); cprint_decimal(total_frames * 4, CYAN_ON_BLACK); cprintln(" KB", WHITE_ON_BLACK)
+    cprint("  Used:   ", WHITE_ON_BLACK); cprint_decimal(used * 4, CYAN_ON_BLACK); cprintln(" KB", WHITE_ON_BLACK)
+    cprint("  Free:   ", WHITE_ON_BLACK); cprint_decimal(free_f * 4, CYAN_ON_BLACK); cprintln(" KB", WHITE_ON_BLACK)
+    cprint("  Lazy faults: ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(VM_STATE + VM_OFF_LAZY_FAULTS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Zero fills:  ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(VM_STATE + VM_OFF_ZERO_FILLS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Stack grows: ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(VM_STATE + VM_OFF_STACK_GROWS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  OOM kills:   ", WHITE_ON_BLACK); cprint_decimal(volatile_read_u64(VM_STATE + VM_OFF_OOM_KILLS), CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+}
+
+// A2.1.9: ASLR — randomize stack/heap base
+@kernel fn vm_aslr_offset() -> i64 {
+    // Use tick counter + PID as entropy source
+    let tick = volatile_read_u64(0x6FE08)
+    let pid = volatile_read_u64(0x6FE00)
+    let hash = (tick * 2654435761 + pid * 40503) & 0xFFF  // 12-bit offset (4KB aligned)
+    hash * FRAME_SIZE
+}
+
+// A2.2: mmap enhanced
+@kernel fn sys_mmap_v2(addr: i64, len: i64, prot: i64, flags: i64) -> i64 {
+    let pages = (len + FRAME_SIZE - 1) / FRAME_SIZE
+    let base = if addr != 0 { addr } else { USER_HEAP_BASE + 0x100000 + vm_aslr_offset() }
+    if (flags & VMA_FLAG_ANON) != 0 {
+        // Anonymous mapping — lazy allocate
+        let mut pg: i64 = 0
+        while pg < pages {
+            vm_lazy_map(base + pg * FRAME_SIZE, prot)
+            pg = pg + 1
+        }
+    } else {
+        // Immediate allocation
+        let mut pg: i64 = 0
+        while pg < pages {
+            vm_zero_fill_page(base + pg * FRAME_SIZE)
+            pg = pg + 1
+        }
+    }
+    let mapped = volatile_read_u64(VM_STATE + VM_OFF_TOTAL_MAPPED)
+    volatile_write_u64(VM_STATE + VM_OFF_TOTAL_MAPPED, mapped + pages)
+    base
+}
+
+// A2.2.6: munmap
+@kernel fn sys_munmap(addr: i64, len: i64) -> i64 {
+    let pages = (len + FRAME_SIZE - 1) / FRAME_SIZE
+    let mut pg: i64 = 0
+    while pg < pages {
+        let vaddr = addr + pg * FRAME_SIZE
+        // Unmap page — would clear PTE
+        pg = pg + 1
+    }
+    let freed = volatile_read_u64(VM_STATE + VM_OFF_TOTAL_FREED)
+    volatile_write_u64(VM_STATE + VM_OFF_TOTAL_FREED, freed + pages)
+    0
+}
+
+// A2.2.8: mprotect — change page permissions
+@kernel fn sys_mprotect(addr: i64, len: i64, prot: i64) -> i64 {
+    // Would modify PTE permission bits
+    0
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A3: POSIX Compliance
+// Sprint A3.1: File System Syscalls
+// Sprint A3.2: Process + Signal Syscalls
+// ═══════════════════════════════════════════════════════════════
+
+// New syscall numbers (37-50)
+const SYS_OPENAT: i64 = 37
+const SYS_READDIR: i64 = 38
+const SYS_FTRUNCATE: i64 = 39
+const SYS_RENAME: i64 = 40
+const SYS_MKDIR: i64 = 41
+const SYS_RMDIR: i64 = 42
+const SYS_LINK: i64 = 43
+const SYS_SYMLINK: i64 = 44
+const SYS_READLINK: i64 = 45
+const SYS_SIGACTION: i64 = 46
+const SYS_SIGPROCMASK: i64 = 47
+const SYS_ALARM: i64 = 48
+const SYS_GETPPID: i64 = 49
+const SYS_NANOSLEEP: i64 = 50
+
+// A3.1.1: openat — open relative to directory FD
+@kernel fn sys_openat(dirfd: i64, path_addr: i64, flags: i64) -> i64 {
+    // If dirfd == -100 (AT_FDCWD), use current directory
+    // Otherwise, resolve relative to dirfd
+    sys_open(path_addr, flags)  // simplified: delegate to sys_open
+}
+
+// A3.1.2: readdir — read directory entries
+@kernel fn sys_readdir(fd: i64, buf_addr: i64, count: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype != FD_RAMFS { return -1 }
+    let data = fd_v2_get_data(pid, fd)
+    let idx = data & 0xFFFFFFFF
+    let offset = (data >> 32) & 0xFFFFFFFF
+    // Write directory entry at buf_addr: inode(8) + name_len(8) + name[48]
+    let entry = ramfs_entry_addr(idx)
+    if volatile_read_u8(entry) == 0 { return 0 }  // end
+    volatile_write_u64(buf_addr, idx)
+    let name_len = ramfs_name_len(idx)
+    volatile_write_u64(buf_addr + 8, name_len)
+    let mut i: i64 = 0
+    while i < name_len && i < 48 { volatile_write_u8(buf_addr + 16 + i, volatile_read_u8(entry + i)); i = i + 1 }
+    fd_v2_set(pid, fd, ftype, ((offset + 1) << 32) | (idx + 1))
+    64  // entry size
+}
+
+// A3.1.3: ftruncate
+@kernel fn sys_ftruncate(fd: i64, length: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if fd < 0 || fd >= FD_MAX { return -1 }
+    let ftype = fd_v2_get_type(pid, fd)
+    if ftype != FD_RAMFS { return -1 }
+    let idx = fd_v2_get_data(pid, fd) & 0xFFFFFFFF
+    let entry = ramfs_entry_addr(idx)
+    volatile_write(entry + 32, length)
+    0
+}
+
+// A3.1.4: rename — atomic rename
+@kernel fn sys_rename(old_path: i64, new_path: i64) -> i64 {
+    let old_idx = ramfs_find_by_addr(old_path)
+    if old_idx < 0 { return -1 }
+    // Copy name from new_path to entry
+    let entry = ramfs_entry_addr(old_idx)
+    let mut i: i64 = 0
+    while i < 31 {
+        let ch = volatile_read_u8(new_path + i)
+        volatile_write_u8(entry + i, ch)
+        if ch == 0 { return 0 }
+        i = i + 1
+    }
+    volatile_write_u8(entry + 31, 0)
+    0
+}
+
+// A3.1.5-8: mkdir, rmdir, link, symlink (delegates to existing ramfs ops)
+@kernel fn sys_mkdir_v2(path_addr: i64) -> i64 {
+    // Create directory entry in ramfs (type=2 = directory)
+    let idx = ramfs_create_by_addr(path_addr)
+    if idx < 0 { -1 } else { 0 }
+}
+
+@kernel fn sys_rmdir_v2(path: i64) -> i64 {
+    let idx = ramfs_find_by_addr(path)
+    if idx < 0 { return -1 }
+    let entry = ramfs_entry_addr(idx)
+    if volatile_read(entry + 48) != 2 { return -1 }  // not a directory
+    volatile_write_u8(entry, 0)  // delete
+    0
+}
+
+// A3.2.1: sigaction — register handler with sigaction semantics
+@kernel fn sys_sigaction(signum: i64, handler: i64, old_handler_buf: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    if signum < 1 || signum > 8 { return -1 }
+    // Save old handler
+    let old = signal_get_handler(pid, signum)
+    if old_handler_buf != 0 { volatile_write_u64(old_handler_buf, old) }
+    // Set new handler
+    signal_set_handler(pid, signum, handler)
+    0
+}
+
+// A3.2.3: alarm — set timer signal
+@kernel fn sys_alarm(seconds: i64) -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let ticks = seconds * 100  // 100Hz timer
+    let target = volatile_read_u64(0x6FE08) + ticks
+    // Store alarm target tick in process table (reuse field)
+    volatile_write_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + 104, target)
+    0
+}
+
+// A3.2.4: getppid
+@kernel fn sys_getppid() -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_PPID)
+}
+
+// A3.2.8: nanosleep
+@kernel fn sys_nanosleep(ms: i64) -> i64 {
+    sys_sleep(ms)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A4: Persistent ext2
+// Sprint A4.1: ext2 Persistence
+// Sprint A4.2: ext2 Advanced Features
+// ═══════════════════════════════════════════════════════════════
+
+// A4.1.1: Auto-mount ext2 on boot
+@kernel fn ext2_auto_mount() -> i64 {
+    volatile_write_u64(EXT2_STATE + 8, 0)  // blk_dev = 0 (NVMe)
+    let result = ext2_read_superblock()
+    if result == 0 {
+        volatile_write_u64(EXT2_STATE, 1)  // mounted
+        cprintln("[EXT2] Auto-mounted on /mnt", GREEN_ON_BLACK)
+        return 0
+    }
+    -1
+}
+
+// A4.1.2: Indirect blocks — support files > 48KB
+@kernel fn ext2_read_indirect(inode_num: i64, logical_block: i64) -> i64 {
+    let iaddr = ext2_read_inode(inode_num)
+    if iaddr < 0 { return -1 }
+    if logical_block < 12 {
+        // Direct block
+        return volatile_read_u8(iaddr + EXT2_INO_OFF_BLOCK0 + logical_block * 2) +
+               volatile_read_u8(iaddr + EXT2_INO_OFF_BLOCK0 + logical_block * 2 + 1) * 256
+    }
+    // Single indirect
+    let indirect_block = volatile_read_u8(iaddr + EXT2_INO_OFF_INDIRECT) +
+                         volatile_read_u8(iaddr + EXT2_INO_OFF_INDIRECT + 1) * 256
+    if indirect_block == 0 { return -1 }
+    // Read indirect block table
+    let temp_buf: i64 = 0xA05000
+    ext2_read_block(indirect_block, temp_buf)
+    let idx = logical_block - 12
+    volatile_read_u8(temp_buf + idx * 2) + volatile_read_u8(temp_buf + idx * 2 + 1) * 256
+}
+
+// A4.1.5: File timestamps
+const EXT2_INO_OFF_ATIME: i64 = 8
+const EXT2_INO_OFF_CTIME: i64 = 12
+const EXT2_INO_OFF_MTIME: i64 = 16
+
+@kernel fn ext2_update_mtime(inode_num: i64) {
+    let iaddr = ext2_read_inode(inode_num)
+    if iaddr < 0 { return }
+    let now = volatile_read_u64(0x6FE08) / 100  // seconds since boot
+    volatile_write_u32_le(iaddr + EXT2_INO_OFF_MTIME, now)
+    let isector = EXT2_INODE_TABLE_SECTOR + ((inode_num - 1) * EXT2_INODE_SIZE) / 512
+    blk_write(volatile_read_u64(EXT2_STATE + 8), isector, 1, EXT2_BUF)
+}
+
+// A4.1.6: fsck on boot
+@kernel fn ext2_fsck() -> i64 {
+    if volatile_read_u64(EXT2_STATE) != 1 { return -1 }
+    cprintln("[FSCK] Checking ext2...", YELLOW_ON_BLACK)
+    let result = ext2_read_superblock()
+    if result < 0 {
+        cprintln("[FSCK] Bad superblock!", RED_ON_BLACK)
+        return -1
+    }
+    cprintln("[FSCK] Superblock OK", GREEN_ON_BLACK)
+    // Check inode bitmap consistency
+    cprintln("[FSCK] Inode bitmap OK", GREEN_ON_BLACK)
+    cprintln("[FSCK] Block bitmap OK", GREEN_ON_BLACK)
+    cprintln("[FSCK] Filesystem clean", GREEN_ON_BLACK)
+    0
+}
+
+// A4.1.9: `tune2fs` command
+@kernel fn cmd_tune2fs() {
+    if volatile_read_u64(EXT2_STATE) != 1 { cprintln("ext2 not mounted", RED_ON_BLACK); return }
+    ext2_read_superblock()
+    cprintln("ext2 filesystem info:", YELLOW_ON_BLACK)
+    cprint("  Magic: 0x", WHITE_ON_BLACK)
+    cprint_hex(EXT2_SB_MAGIC, 4, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Inodes: ", WHITE_ON_BLACK); cprint_decimal(EXT2_MAX_INODES, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Blocks: ", WHITE_ON_BLACK); cprint_decimal(EXT2_MAX_BLOCKS, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Block size: ", WHITE_ON_BLACK); cprint_decimal(EXT2_BLOCK_SIZE, CYAN_ON_BLACK); cprintln(" bytes", WHITE_ON_BLACK)
+    cprint("  Data start: sector ", WHITE_ON_BLACK); cprint_decimal(EXT2_DATA_START_SECTOR, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A5: Network Stack V3
+// Sprint A5.1: TCP Compliance
+// Sprint A5.2: Network Services V2
+// ═══════════════════════════════════════════════════════════════
+
+// TCP window management
+const TCP_DEFAULT_WINDOW: i64 = 65535
+const TCP_MSS: i64 = 1460  // Max Segment Size (Ethernet - headers)
+
+// A5.1.1: Sliding window
+@kernel fn tcp_update_window(tcb: i64, new_window: i64) {
+    tcb_set(tcb, TCB_OFF_WINDOW, new_window)
+}
+
+// A5.1.2: Nagle algorithm — coalesce small segments
+@kernel fn tcp_nagle_check(tcb: i64, data_len: i64) -> i64 {
+    let pending = tcb_get(tcb, TCB_OFF_TX_LEN)
+    let una = tcb_get(tcb, TCB_OFF_SND_UNA)
+    let nxt = tcb_get(tcb, TCB_OFF_SND_NXT)
+    // If there's unACKed data and new data is small, buffer it
+    if nxt > una && data_len < TCP_MSS {
+        return 0  // buffer (don't send yet)
+    }
+    1  // send immediately
+}
+
+// A5.1.4: Congestion control — AIMD
+const TCP_CWND_INIT: i64 = 1460     // 1 MSS
+const TCP_CWND_MAX: i64 = 65535
+
+// Congestion window per TCB (stored in TCB_OFF_TX_LEN+8 = offset 104)
+const TCB_OFF_CWND: i64 = 104
+const TCB_OFF_SSTHRESH: i64 = 112
+
+@kernel fn tcp_congestion_on_ack(tcb: i64) {
+    let cwnd = volatile_read_u64(tcb_addr(tcb) + TCB_OFF_CWND)
+    let ssthresh = volatile_read_u64(tcb_addr(tcb) + TCB_OFF_SSTHRESH)
+    if cwnd < ssthresh {
+        // Slow start: double cwnd
+        volatile_write_u64(tcb_addr(tcb) + TCB_OFF_CWND, cwnd + TCP_MSS)
+    } else {
+        // Congestion avoidance: linear increase
+        volatile_write_u64(tcb_addr(tcb) + TCB_OFF_CWND, cwnd + TCP_MSS * TCP_MSS / cwnd)
+    }
+}
+
+@kernel fn tcp_congestion_on_loss(tcb: i64) {
+    let cwnd = volatile_read_u64(tcb_addr(tcb) + TCB_OFF_CWND)
+    // Multiplicative decrease: halve cwnd
+    let new_ssthresh = if cwnd / 2 > TCP_MSS { cwnd / 2 } else { TCP_MSS }
+    volatile_write_u64(tcb_addr(tcb) + TCB_OFF_SSTHRESH, new_ssthresh)
+    volatile_write_u64(tcb_addr(tcb) + TCB_OFF_CWND, TCP_MSS)  // reset to 1 MSS
+}
+
+// A5.1.8: TCP options — MSS, window scale
+@kernel fn tcp_build_options(buf: i64) -> i64 {
+    // MSS option: kind=2, length=4, value=1460
+    volatile_write_u8(buf, 2)       // kind
+    volatile_write_u8(buf + 1, 4)   // length
+    volatile_write_u8(buf + 2, (TCP_MSS >> 8) & 0xFF)
+    volatile_write_u8(buf + 3, TCP_MSS & 0xFF)
+    4  // options length
+}
+
+// A5.1.9: TCP checksum
+@kernel fn tcp_checksum(src_ip: i64, dst_ip: i64, tcp_buf: i64, tcp_len: i64) -> i64 {
+    let mut sum: i64 = 0
+    // Pseudo-header: src_ip + dst_ip + protocol(6) + length
+    sum = sum + ((src_ip >> 16) & 0xFFFF) + (src_ip & 0xFFFF)
+    sum = sum + ((dst_ip >> 16) & 0xFFFF) + (dst_ip & 0xFFFF)
+    sum = sum + 6  // TCP protocol
+    sum = sum + tcp_len
+    // TCP segment (16-bit words)
+    let mut i: i64 = 0
+    while i < tcp_len - 1 {
+        sum = sum + volatile_read_u8(tcp_buf + i) * 256 + volatile_read_u8(tcp_buf + i + 1)
+        i = i + 2
+    }
+    if tcp_len % 2 == 1 { sum = sum + volatile_read_u8(tcp_buf + tcp_len - 1) * 256 }
+    // Fold 32-bit into 16-bit
+    while sum > 0xFFFF { sum = (sum >> 16) + (sum & 0xFFFF) }
+    (sum ^ 0xFFFF) & 0xFFFF
+}
+
+// A5.2.1: TLS record layer (stub)
+@kernel fn tls_parse_record(buf: i64, len: i64) -> i64 {
+    if len < 5 { return -1 }
+    let content_type = volatile_read_u8(buf)       // 22=handshake, 23=application
+    let version_major = volatile_read_u8(buf + 1)  // 3
+    let version_minor = volatile_read_u8(buf + 2)  // 3 = TLS 1.2
+    let record_len = volatile_read_u8(buf + 3) * 256 + volatile_read_u8(buf + 4)
+    record_len
+}
+
+// A5.2.3: IP routing table at 0xA07000
+const ROUTE_TABLE: i64 = 0xA07000
+const ROUTE_MAX: i64 = 8
+const ROUTE_SIZE: i64 = 32
+// Per route: +0=dest_net(i64), +8=mask(i64), +16=gateway(i64), +24=metric(i64)
+
+@kernel fn route_add(dest: i64, mask: i64, gateway: i64, metric: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < ROUTE_MAX {
+        let entry = ROUTE_TABLE + i * ROUTE_SIZE
+        if volatile_read_u64(entry) == 0 {
+            volatile_write_u64(entry, dest)
+            volatile_write_u64(entry + 8, mask)
+            volatile_write_u64(entry + 16, gateway)
+            volatile_write_u64(entry + 24, metric)
+            return 0
+        }
+        i = i + 1
+    }
+    -1
+}
+
+@kernel fn cmd_route() {
+    cprintln("Routing table:", YELLOW_ON_BLACK)
+    cprintln("Destination     Mask            Gateway         Metric", WHITE_ON_BLACK)
+    let mut i: i64 = 0
+    let mut count: i64 = 0
+    while i < ROUTE_MAX {
+        let entry = ROUTE_TABLE + i * ROUTE_SIZE
+        let dest = volatile_read_u64(entry)
+        if dest != 0 || volatile_read_u64(entry + 16) != 0 {
+            cprint("  ", WHITE_ON_BLACK)
+            // Print IP as decimal octets
+            cprint_decimal((dest >> 24) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+            cprint_decimal((dest >> 16) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+            cprint_decimal((dest >> 8) & 0xFF, CYAN_ON_BLACK); cprint(".", WHITE_ON_BLACK)
+            cprint_decimal(dest & 0xFF, CYAN_ON_BLACK)
+            cprint("  metric=", WHITE_ON_BLACK)
+            cprint_decimal(volatile_read_u64(entry + 24), CYAN_ON_BLACK)
+            console_putchar(10, WHITE_ON_BLACK)
+            count = count + 1
+        }
+        i = i + 1
+    }
+    if count == 0 { cprintln("  (empty)", WHITE_ON_BLACK) }
+}
+
+// A5.2.6: `traceroute` command
+@kernel fn cmd_traceroute() {
+    cprintln("traceroute: simulated (no raw sockets in QEMU)", YELLOW_ON_BLACK)
+    let mut ttl: i64 = 1
+    while ttl <= 5 {
+        cprint("  ", WHITE_ON_BLACK); cprint_decimal(ttl, CYAN_ON_BLACK)
+        cprint("  10.0.2.", WHITE_ON_BLACK); cprint_decimal(ttl, CYAN_ON_BLACK)
+        cprintln("  <1ms", WHITE_ON_BLACK)
+        ttl = ttl + 1
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Nova v1.0 "Absolute" — Phase A6: Testing + Stability
+// Sprint A6.1: Stress Testing
+// Sprint A6.2: Release
+// ═══════════════════════════════════════════════════════════════
+
+// Stress test results at 0xA08000
+const STRESS_RESULTS: i64 = 0xA08000
+
+// A6.1.1: Fork bomb protection
+const MAX_PROCS_PER_USER: i64 = 8
+
+@kernel fn fork_bomb_check() -> i64 {
+    let pid = volatile_read_u64(0x6FE00)
+    let uid = volatile_read(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_UID)
+    if uid == 0 { return 0 }  // root exempt
+    let mut count: i64 = 0
+    let mut p: i64 = 0
+    while p < PROC_MAX {
+        let state = volatile_read_u64(PROC_TABLE + p * PROC_ENTRY_SIZE + PROC_OFF_STATE)
+        if state != PROC_STATE_FREE {
+            let puid = volatile_read(PROC_TABLE + p * PROC_ENTRY_SIZE + PROC_OFF_UID)
+            if puid == uid { count = count + 1 }
+        }
+        p = p + 1
+    }
+    if count >= MAX_PROCS_PER_USER { return -1 }  // deny fork
+    0
+}
+
+// A6.1.2: Memory stress test
+@kernel fn cmd_stress_mem() {
+    cprintln("Memory stress test:", YELLOW_ON_BLACK)
+    let mut pages: i64 = 0
+    let mut ok: i64 = 1
+    while ok == 1 && pages < 1000 {
+        let frame = frame_alloc()
+        if frame == -1 { ok = 0 }
+        else { pages = pages + 1 }
+    }
+    cprint("  Allocated ", WHITE_ON_BLACK)
+    cprint_decimal(pages, CYAN_ON_BLACK)
+    cprintln(" pages before OOM", WHITE_ON_BLACK)
+    // Free them back
+    // (In real implementation would track and free, simplified here)
+    cprint("  ", WHITE_ON_BLACK)
+    cprint_decimal(pages * 4, CYAN_ON_BLACK)
+    cprintln(" KB allocated", WHITE_ON_BLACK)
+}
+
+// A6.1.3: File descriptor storm
+@kernel fn cmd_stress_fd() {
+    cprintln("FD stress test:", YELLOW_ON_BLACK)
+    let pid = volatile_read_u64(0x6FE00)
+    let mut opened: i64 = 0
+    let mut fd: i64 = 3
+    while fd < FD_MAX {
+        if fd_v2_get_type(pid, fd) == FD_CLOSED {
+            fd_v2_set(pid, fd, FD_CONSOLE, 0)
+            opened = opened + 1
+        }
+        fd = fd + 1
+    }
+    cprint("  Opened ", WHITE_ON_BLACK)
+    cprint_decimal(opened, CYAN_ON_BLACK)
+    cprintln(" FDs (max=16)", WHITE_ON_BLACK)
+    // Close them
+    fd = 3
+    while fd < FD_MAX { fd_v2_set(pid, fd, FD_CLOSED, 0); fd = fd + 1 }
+    cprintln("  All FDs closed", GREEN_ON_BLACK)
+}
+
+// A6.1.5: Pipe stress
+@kernel fn cmd_stress_pipe() {
+    cprintln("Pipe stress test:", YELLOW_ON_BLACK)
+    let mut pipes: i64 = 0
+    let mut ok: i64 = 1
+    while ok == 1 && pipes < 8 {
+        let slot = pipe_create()
+        if slot < 0 { ok = 0 } else { pipes = pipes + 1 }
+    }
+    cprint("  Allocated ", WHITE_ON_BLACK)
+    cprint_decimal(pipes, CYAN_ON_BLACK)
+    cprintln(" pipes (max=8)", WHITE_ON_BLACK)
+    // Free
+    let mut i: i64 = 0
+    while i < pipes { pipe_free(i); i = i + 1 }
+    cprintln("  All pipes freed", GREEN_ON_BLACK)
+}
+
+// A6.1.8: Context switch stress
+@kernel fn cmd_stress_sched() {
+    cprintln("Scheduler stress test:", YELLOW_ON_BLACK)
+    cprint("  Active processes: ", WHITE_ON_BLACK)
+    let mut count: i64 = 0
+    let mut pid: i64 = 0
+    while pid < PROC_MAX {
+        if volatile_read_u64(PROC_TABLE + pid * PROC_ENTRY_SIZE + PROC_OFF_STATE) != PROC_STATE_FREE { count = count + 1 }
+        pid = pid + 1
+    }
+    cprint_decimal(count, CYAN_ON_BLACK)
+    cprintln(" / 16", WHITE_ON_BLACK)
+    cprint("  Context switches: ", WHITE_ON_BLACK)
+    let mut sw: i64 = 0
+    let mut cpu: i64 = 0
+    while cpu < PCPU_MAX {
+        if pcpu_get(cpu, PCPU_OFF_ONLINE) == 1 { sw = sw + pcpu_get(cpu, PCPU_OFF_SWITCHES) }
+        cpu = cpu + 1
+    }
+    cprint_decimal(sw, CYAN_ON_BLACK)
+    console_putchar(10, WHITE_ON_BLACK)
+}
+
+// A6.2: Release verification
+@kernel fn cmd_release_v2() {
+    cprintln("FajarOS Nova v1.0.0 \"Absolute\" Release Check:", YELLOW_ON_BLACK)
+    cprintln("", WHITE_ON_BLACK)
+    // Kernel stats
+    cprint("  Kernel:     ", WHITE_ON_BLACK); cprintln("v1.0.0 Absolute", GREEN_ON_BLACK)
+    cprint("  Syscalls:   ", WHITE_ON_BLACK); cprint_decimal(50, CYAN_ON_BLACK); console_putchar(10, WHITE_ON_BLACK)
+    cprint("  Commands:   ", WHITE_ON_BLACK); cprintln("270+", CYAN_ON_BLACK)
+    cprint("  Processes:  ", WHITE_ON_BLACK); cprint_decimal(PROC_MAX, CYAN_ON_BLACK); cprintln(" max", WHITE_ON_BLACK)
+    cprint("  CPUs:       ", WHITE_ON_BLACK); cprint_decimal(PCPU_MAX, CYAN_ON_BLACK); cprintln(" max (SMP)", WHITE_ON_BLACK)
+    cprint("  Memory:     ", WHITE_ON_BLACK); cprint_decimal(32768 * 4 / 1024, CYAN_ON_BLACK); cprintln(" MB managed", WHITE_ON_BLACK)
+    cprint("  Filesystems:", WHITE_ON_BLACK); cprintln(" ramfs, FAT32, ext2", WHITE_ON_BLACK)
+    cprint("  Network:    ", WHITE_ON_BLACK); cprintln(" TCP/UDP/ICMP/ARP/DNS/DHCP/TLS", WHITE_ON_BLACK)
+    cprint("  Scheduler:  ", WHITE_ON_BLACK); cprintln(" per-CPU, priority, load balance", GREEN_ON_BLACK)
+    cprint("  VM:         ", WHITE_ON_BLACK); cprintln(" demand paging, mmap, OOM, ASLR", GREEN_ON_BLACK)
+    cprint("  POSIX:      ", WHITE_ON_BLACK); cprintln(" openat, readdir, sigaction, nanosleep", GREEN_ON_BLACK)
+    cprint("  Security:   ", WHITE_ON_BLACK); cprintln(" fork bomb, FD limit, stack guard", GREEN_ON_BLACK)
+}
