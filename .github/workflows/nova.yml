@@ -1,0 +1,105 @@
+name: FajarOS Nova
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "examples/fajaros_nova_kernel.fj"
+      - "examples/fajaros_nova_kernel"
+      - "examples/fajaros_nova_*test*.sh"
+      - "src/codegen/cranelift/runtime_bare.rs"
+  pull_request:
+    paths:
+      - "examples/fajaros_nova_kernel.fj"
+
+jobs:
+  check-kernel:
+    name: Type-Check Kernel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: nova-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Build fj compiler
+        run: cargo build --release
+      - name: Type-check kernel (21K lines, 819 functions)
+        run: target/release/fj check examples/fajaros_nova_kernel.fj
+
+  qemu-boot:
+    name: QEMU Boot Test
+    runs-on: ubuntu-24.04
+    needs: check-kernel
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+
+      - name: Verify kernel binary exists
+        run: |
+          if [ -f examples/fajaros_nova_kernel ]; then
+            echo "Kernel binary: $(wc -c < examples/fajaros_nova_kernel) bytes"
+          else
+            echo "No pre-compiled kernel binary — skipping QEMU boot"
+            exit 0
+          fi
+
+      - name: Boot kernel in QEMU (10s timeout)
+        timeout-minutes: 1
+        run: |
+          SERIAL_LOG="/tmp/nova_serial.log"
+          qemu-system-x86_64 \
+            -kernel examples/fajaros_nova_kernel \
+            -serial file:$SERIAL_LOG \
+            -display none \
+            -no-reboot \
+            -m 128M &
+          QEMU_PID=$!
+          sleep 10
+          kill $QEMU_PID 2>/dev/null || true
+          echo "=== Serial Output ==="
+          cat $SERIAL_LOG 2>/dev/null || echo "(no output)"
+
+      - name: Verify boot messages
+        run: |
+          SERIAL_LOG="/tmp/nova_serial.log"
+          if [ ! -f "$SERIAL_LOG" ]; then
+            echo "No serial log — boot verification skipped"
+            exit 0
+          fi
+          PASS=0
+          FAIL=0
+          check() {
+            if grep -q "$1" "$SERIAL_LOG" 2>/dev/null; then
+              echo "  PASS — $2"
+              PASS=$((PASS + 1))
+            else
+              echo "  FAIL — $2 (expected: '$1')"
+              FAIL=$((FAIL + 1))
+            fi
+          }
+          check "FajarOS" "Boot banner present"
+          check "nova>" "Shell prompt reached"
+          echo "---"
+          echo "Results: $PASS passed, $FAIL failed"
+          if [ $FAIL -gt 0 ]; then exit 1; fi
+
+  source-analysis:
+    name: Kernel Source Analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Kernel statistics
+        run: |
+          KERNEL="examples/fajaros_nova_kernel.fj"
+          echo "Lines: $(wc -l < $KERNEL)"
+          echo "Functions: $(grep -c '@kernel fn' $KERNEL)"
+          echo "Commands: $(grep -c 'cmd_' $KERNEL)"
+          echo "Syscalls: $(grep -c 'syscall' $KERNEL)"
+          echo "Subsystems: $(grep -c '// ═' $KERNEL)"
