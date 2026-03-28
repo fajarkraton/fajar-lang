@@ -265,9 +265,26 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
                 Type::Void,
             ),
-            // Volatile read/write u64
+            // Volatile read/write (all widths)
+            ("volatile_read", vec![Type::I64], Type::I64),
+            ("volatile_write", vec![Type::I64, Type::I64], Type::Void),
+            ("volatile_read_u8", vec![Type::I64], Type::I64),
+            ("volatile_write_u8", vec![Type::I64, Type::I64], Type::Void),
+            ("volatile_read_u16", vec![Type::I64], Type::I64),
+            ("volatile_write_u16", vec![Type::I64, Type::I64], Type::Void),
+            ("volatile_read_u32", vec![Type::I64], Type::I64),
+            ("volatile_write_u32", vec![Type::I64, Type::I64], Type::Void),
             ("volatile_read_u64", vec![Type::I64], Type::I64),
             ("volatile_write_u64", vec![Type::I64, Type::I64], Type::Void),
+            // Memory fence
+            ("memory_fence", vec![], Type::Void),
+            // Function address intrinsic (returns address of named function)
+            ("fn_addr", vec![Type::Str], Type::I64),
+            // Signal handlers
+            ("signal_set_handler", vec![Type::I64, Type::I64], Type::Void),
+            ("signal_get_handler", vec![Type::I64], Type::I64),
+            // RamFS helpers
+            ("ramfs_name_len", vec![Type::I64], Type::I64),
             // Buffer read/write helpers (LE + BE)
             ("buffer_read_u16_le", vec![Type::I64], Type::I64),
             ("buffer_read_u32_le", vec![Type::I64], Type::I64),
@@ -515,6 +532,21 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64],
                 Type::I64,
             ),
+            // WebSocket builtins
+            ("ws_connect", vec![Type::Str], Type::I64),
+            ("ws_send", vec![Type::I64, Type::Str], Type::I64),
+            ("ws_recv", vec![Type::I64], Type::Str),
+            ("ws_close", vec![Type::I64], Type::Void),
+            // MQTT builtins
+            ("mqtt_connect", vec![Type::Str], Type::I64),
+            (
+                "mqtt_publish",
+                vec![Type::I64, Type::Str, Type::Str],
+                Type::Void,
+            ),
+            ("mqtt_subscribe", vec![Type::I64, Type::Str], Type::Void),
+            ("mqtt_recv", vec![Type::I64], Type::Unknown),
+            ("mqtt_disconnect", vec![Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

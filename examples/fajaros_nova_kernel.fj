@@ -21132,7 +21132,7 @@ const MAX_PROCS_PER_USER: i64 = 8
     let mut pipes: i64 = 0
     let mut ok: i64 = 1
     while ok == 1 && pipes < 8 {
-        let slot = pipe_alloc()
+        let slot = pipe_create()
         if slot < 0 { ok = 0 } else { pipes = pipes + 1 }
     }
     cprint("  Allocated ", WHITE_ON_BLACK)
