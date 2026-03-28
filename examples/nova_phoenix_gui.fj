@@ -1,3 +1,16 @@
+// Kernel constants (shared with fajaros_nova_kernel.fj)
+const FRAME_SIZE: i64 = 4096
+const TOTAL_FRAMES: i64 = 32768
+const BITMAP_BASE: i64 = 0x580000
+const BITMAP_SIZE: i64 = 4096
+
+@kernel fn frame_mark_used(frame: i64) {
+    let byte_idx = frame / 8
+    let bit_idx = frame % 8
+    let old = volatile_read_u8(BITMAP_BASE + byte_idx)
+    volatile_write_u8(BITMAP_BASE + byte_idx, old | (1 << bit_idx))
+}
+
 // FajarOS Nova v2.0 "Phoenix" — GUI Framework
 // Phase N1: Framebuffer + Primitives + Window Manager + Widgets + Applications
 // Written 100% in Fajar Lang — VirtIO-GPU, double-buffered, event-driven
