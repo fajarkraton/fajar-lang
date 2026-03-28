@@ -2,4 +2,6 @@
 //!
 //! Provides widgets, layout engine, event handling, and platform abstraction.
 
+pub mod layout;
+pub mod platform;
 pub mod widgets;
