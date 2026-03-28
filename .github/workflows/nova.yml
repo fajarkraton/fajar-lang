@@ -111,3 +111,31 @@ jobs:
 
       - name: Run subsystem verification
         run: bash examples/nova/test_qemu.sh --timeout 10 || true
+
+  arm64-cross:
+    name: ARM64 Cross-Compilation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: nova-arm64-${{ hashFiles('Cargo.lock') }}
+      - name: Build fj compiler with native feature
+        run: cargo build --features native
+      - name: Install QEMU ARM64
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
+      - name: Cross-compile ARM64 examples
+        run: |
+          for f in examples/fajaros_arm64_*.fj; do
+            echo "Compiling: $f"
+            target/debug/fj build --target aarch64-unknown-none-elf --no-std "$f"
+          done
+      - name: Verify ARM64 ELF binaries
+        run: |
+          file examples/fajaros_arm64_boot | grep "ARM aarch64"
+          echo "ARM64 cross-compilation verified"
