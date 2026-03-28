@@ -7,3 +7,4 @@ pub mod examples;
 pub mod sandbox;
 pub mod share;
 pub mod ui;
+pub mod wasm_api;

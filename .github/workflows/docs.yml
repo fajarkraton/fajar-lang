@@ -37,11 +37,20 @@ jobs:
       - name: Generate API docs
         run: cargo doc --no-deps --document-private-items
 
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Build playground WASM
+        run: |
+          rustup target add wasm32-unknown-unknown
+          wasm-pack build --target web --out-dir playground/pkg --features playground-wasm -- --lib || echo "WASM build skipped (optional)"
+
       - name: Merge outputs
         run: |
           mkdir -p _site
           cp -r book/book/* _site/
           cp -r target/doc _site/api
+          cp -r playground _site/playground 2>/dev/null || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
