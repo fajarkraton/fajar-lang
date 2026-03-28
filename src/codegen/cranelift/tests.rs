@@ -17428,3 +17428,58 @@ fn native_mem_buf_operations_compile() {
         }
     }
 }
+
+// ─── Security integration tests ───────────────────────────────────────────────
+
+/// SEC-1: Security config defaults off — neither security_enabled nor lint_on_compile
+/// is set on a freshly created CraneliftCompiler.
+#[test]
+fn test_security_config_defaults_off() {
+    let compiler = CraneliftCompiler::new().expect("compiler init");
+    // Fields are private; verify indirectly: compile a simple program without
+    // any security-related panic (security hardening is off by default).
+    let tokens = tokenize("fn main() -> i64 { 42 }").expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = compiler;
+    compiler
+        .compile_program(&program)
+        .expect("compile should succeed with security off");
+}
+
+/// SEC-2: Security linter runs on compile — enable lint, compile a program,
+/// verify no panic (lint emits warnings to stderr but does not fail).
+#[test]
+fn test_security_linter_runs_on_compile() {
+    let tokens = tokenize("fn main() -> i64 { 1 + 2 }").expect("lex");
+    let program = parse(tokens).expect("parse");
+    let mut compiler = CraneliftCompiler::new().expect("compiler init");
+    compiler.enable_lint();
+    // Should not panic — linter emits to stderr but compile_program returns Ok.
+    compiler
+        .compile_program(&program)
+        .expect("compile with linter enabled should succeed");
+}
+
+/// SEC-3: fj_rt_bounds_check returns the index when in bounds.
+#[test]
+fn test_bounds_check_runtime_fn_valid() {
+    use crate::codegen::cranelift::runtime_fns::fj_rt_bounds_check;
+    assert_eq!(fj_rt_bounds_check(0, 10), 0);
+    assert_eq!(fj_rt_bounds_check(5, 10), 5);
+    assert_eq!(fj_rt_bounds_check(9, 10), 9);
+}
+
+/// SEC-4: fj_rt_checked_add returns correct result and does not overflow for
+/// values far from i64::MAX.
+#[test]
+fn test_checked_add_no_overflow() {
+    use crate::codegen::cranelift::runtime_fns::{
+        fj_rt_checked_add, fj_rt_checked_mul, fj_rt_checked_sub,
+    };
+    assert_eq!(fj_rt_checked_add(3, 4), 7);
+    assert_eq!(fj_rt_checked_add(-10, 5), -5);
+    assert_eq!(fj_rt_checked_sub(10, 3), 7);
+    assert_eq!(fj_rt_checked_sub(0, 5), -5);
+    assert_eq!(fj_rt_checked_mul(6, 7), 42);
+    assert_eq!(fj_rt_checked_mul(-3, 4), -12);
+}

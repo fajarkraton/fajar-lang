@@ -48,6 +48,12 @@ enum Command {
         /// Use LLVM JIT native compilation (requires `llvm` feature).
         #[arg(long)]
         llvm: bool,
+        /// Enable function-call profiling and write trace to --profile-output.
+        #[arg(long)]
+        profile: bool,
+        /// Output file for the profile trace (Chrome JSON format).
+        #[arg(long, default_value = "fj-profile.json")]
+        profile_output: Option<String>,
     },
     /// Start an interactive REPL.
     Repl,
@@ -138,6 +144,12 @@ enum Command {
         /// Release build: uses LLVM backend with -O2 for best codegen quality.
         #[arg(long)]
         release: bool,
+        /// Enable runtime security hardening (bounds checks, overflow checks).
+        #[arg(long)]
+        security: bool,
+        /// Enable security linter pre-pass before compilation.
+        #[arg(long)]
+        lint: bool,
     },
     /// Publish a package to the local registry.
     Publish,
@@ -282,6 +294,8 @@ fn main_inner() -> ExitCode {
             vm,
             native,
             llvm,
+            profile,
+            profile_output,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -299,6 +313,9 @@ fn main_inner() -> ExitCode {
                 cmd_run_native(&path)
             } else if vm {
                 cmd_run_vm(&path)
+            } else if profile {
+                let out = profile_output.unwrap_or_else(|| "fj-profile.json".to_string());
+                cmd_run_profile(&path, &out)
             } else {
                 cmd_run(&path)
             }
@@ -332,6 +349,8 @@ fn main_inner() -> ExitCode {
             incremental,
             all,
             release,
+            security,
+            lint,
         } => {
             // --all flag: build all targets from fj.toml
             if all {
@@ -400,6 +419,8 @@ fn main_inner() -> ExitCode {
                         no_std,
                         ls.as_deref(),
                         linker.as_deref(),
+                        security,
+                        lint,
                     );
                     // Update incremental cache on success
                     if incremental && r == ExitCode::SUCCESS {
@@ -793,6 +814,76 @@ fn cmd_run(path: &PathBuf) -> ExitCode {
     if let Err(e) = interp.call_main() {
         FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
         return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    ExitCode::SUCCESS
+}
+
+/// Runs a Fajar Lang program with function-call profiling enabled.
+///
+/// After execution the Chrome-format JSON trace is written to `output_path`.
+fn cmd_run_profile(path: &PathBuf, output_path: &str) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    // Lex
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Parse
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Analyze
+    if let Err(errors) = analyze(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Interpret with profiling enabled
+    let mut interp = Interpreter::new();
+    if let Some(parent) = path.parent() {
+        interp.set_source_dir(parent.to_path_buf());
+    }
+    interp.enable_profiling();
+
+    if let Err(e) = interp.eval_program(&program) {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    if let Err(e) = interp.call_main() {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    // Write profile trace
+    if let Some(ref session) = interp.profile_session {
+        let trace = session.to_trace();
+        if let Err(e) = std::fs::write(output_path, &trace) {
+            eprintln!("warning: could not write profile to '{output_path}': {e}");
+        } else {
+            eprintln!("Profile written to {output_path}");
+        }
     }
 
     ExitCode::SUCCESS
@@ -1442,6 +1533,8 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
                 true, // no_std
                 ls.as_ref().and_then(|p| p.to_str()),
                 None,
+                false,
+                false,
             );
             if result == ExitCode::SUCCESS {
                 eprintln!("  ✅ kernel → {}", output_path.display());
@@ -1484,6 +1577,8 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
                 true, // no_std for user services too
                 None,
                 None,
+                false,
+                false,
             );
             if result == ExitCode::SUCCESS {
                 eprintln!(
@@ -1829,6 +1924,7 @@ fn cmd_new(name: &str) -> ExitCode {
 
 /// Builds a Fajar Lang source file to a native binary.
 #[cfg(feature = "native")]
+#[allow(clippy::too_many_arguments)]
 fn cmd_build(
     path: &PathBuf,
     target: &str,
@@ -1836,12 +1932,24 @@ fn cmd_build(
     no_std: bool,
     linker_script: Option<&str>,
     linker_override: Option<&str>,
+    security: bool,
+    lint: bool,
 ) -> ExitCode {
-    cmd_build_native(path, target, output, no_std, linker_script, linker_override)
+    cmd_build_native(
+        path,
+        target,
+        output,
+        no_std,
+        linker_script,
+        linker_override,
+        security,
+        lint,
+    )
 }
 
 /// Stub when native feature is not enabled.
 #[cfg(not(feature = "native"))]
+#[allow(clippy::too_many_arguments)]
 fn cmd_build(
     path: &PathBuf,
     _target: &str,
@@ -1849,6 +1957,8 @@ fn cmd_build(
     _no_std: bool,
     _linker_script: Option<&str>,
     _linker_override: Option<&str>,
+    _security: bool,
+    _lint: bool,
 ) -> ExitCode {
     eprintln!("error: native compilation not available");
     eprintln!("hint: rebuild with `cargo build --features native`");
@@ -1951,7 +2061,16 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
         fajar_lang::bsp::BspArch::Aarch64Linux => {
             let target_triple = board.arch().to_string();
             println!("\nCross-compiling for {target_triple}...");
-            return cmd_build(path, &target_triple, output, false, None, None);
+            return cmd_build(
+                path,
+                &target_triple,
+                output,
+                false,
+                None,
+                None,
+                false,
+                false,
+            );
         }
         _ => {
             // Bare-metal MCU boards: generate BSP artifacts only
@@ -2099,6 +2218,7 @@ fn cmd_build_llvm(_path: &PathBuf, _output: Option<&std::path::Path>, _opt_level
 
 /// Compiles a Fajar Lang program to a native binary via Cranelift + system linker.
 #[cfg(feature = "native")]
+#[allow(clippy::too_many_arguments)]
 fn cmd_build_native(
     path: &PathBuf,
     target_str: &str,
@@ -2106,6 +2226,8 @@ fn cmd_build_native(
     no_std: bool,
     linker_script: Option<&str>,
     linker_override: Option<&str>,
+    security: bool,
+    lint: bool,
 ) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
@@ -2194,6 +2316,13 @@ fn cmd_build_native(
                 }
             }
         }
+    }
+    // Enable security hardening and linter if requested.
+    if security {
+        compiler.enable_security();
+    }
+    if lint {
+        compiler.enable_lint();
     }
 
     if let Err(errors) = compiler.compile_program(&program) {

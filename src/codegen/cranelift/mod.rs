@@ -170,6 +170,10 @@ pub struct CraneliftCompiler {
     /// Functions annotated with `@interrupt` — need assembly wrapper with
     /// register save/restore and `eret` instead of `ret`.
     interrupt_fns: Vec<String>,
+    /// Security configuration for codegen hardening.
+    security_enabled: bool,
+    /// Run security linter before compilation.
+    lint_on_compile: bool,
 }
 
 /// Coerces a return value to match the declared function return type.
@@ -490,6 +494,8 @@ impl CraneliftCompiler {
             data_sections: HashMap::new(),
             global_data: HashMap::new(),
             interrupt_fns: Vec::new(),
+            security_enabled: false,
+            lint_on_compile: false,
         })
     }
 
@@ -504,6 +510,16 @@ impl CraneliftCompiler {
     /// Enables no_std mode: disables IO/heap runtime declarations.
     pub fn set_no_std(&mut self, enabled: bool) {
         self.no_std = enabled;
+    }
+
+    /// Enables runtime security hardening (bounds checks, overflow checks).
+    pub fn enable_security(&mut self) {
+        self.security_enabled = true;
+    }
+
+    /// Enables the security linter pre-pass before compilation.
+    pub fn enable_lint(&mut self) {
+        self.lint_on_compile = true;
     }
 
     /// Declares built-in runtime functions (println, print) in the module.
@@ -4579,12 +4595,63 @@ impl CraneliftCompiler {
         self.functions
             .insert("__saturating_mul".to_string(), sat_mul_id);
 
+        // Security runtime functions: bounds_check(index, length) -> index
+        // and checked arithmetic: checked_add/sub/mul(a, b) -> result
+        {
+            let int_ty = clif_types::default_int_type();
+            use cranelift_codegen::ir::AbiParam as AP;
+
+            // (i64, i64) -> i64
+            let mut sig_sec_2i = self.module.make_signature();
+            sig_sec_2i.params.push(AP::new(int_ty));
+            sig_sec_2i.params.push(AP::new(int_ty));
+            sig_sec_2i.returns.push(AP::new(int_ty));
+
+            let bounds_id = self
+                .module
+                .declare_function("fj_rt_bounds_check", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__bounds_check".to_string(), bounds_id);
+
+            let checked_add_id = self
+                .module
+                .declare_function("fj_rt_checked_add", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_add".to_string(), checked_add_id);
+
+            let checked_sub_id = self
+                .module
+                .declare_function("fj_rt_checked_sub", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_sub".to_string(), checked_sub_id);
+
+            let checked_mul_id = self
+                .module
+                .declare_function("fj_rt_checked_mul", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_mul".to_string(), checked_mul_id);
+        }
+
         Ok(())
     }
 
     /// Compiles all functions in a program.
     pub fn compile_program(&mut self, program: &Program) -> Result<(), Vec<CodegenError>> {
         let mut errors = Vec::new();
+
+        // Security linter pre-pass: emit warnings for known unsafe patterns.
+        if self.lint_on_compile {
+            let source_repr = format!("{program:?}");
+            let linter = crate::codegen::security::SecurityLinter::new();
+            let violations = linter.lint(&source_repr);
+            for v in &violations {
+                eprintln!("security: [{}] line {}: {}", v.rule_id, v.line, v.message);
+            }
+        }
 
         // H1: Enforce no_std compliance when enabled
         if self.no_std {
@@ -5669,6 +5736,7 @@ impl CraneliftCompiler {
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
                 current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                security_enabled: self.security_enabled,
             };
 
             // Inject top-level const definitions as variables.
@@ -6375,6 +6443,10 @@ pub struct ObjectCompiler {
     /// Functions annotated with `@interrupt` — need assembly wrapper with
     /// register save/restore and `eret` instead of `ret`.
     interrupt_fns: Vec<String>,
+    /// Security configuration for codegen hardening.
+    security_enabled: bool,
+    /// Run security linter before compilation.
+    lint_on_compile: bool,
 }
 
 impl ObjectCompiler {
@@ -6442,6 +6514,8 @@ impl ObjectCompiler {
             source_file: None,
             fn_source_locations: HashMap::new(),
             interrupt_fns: Vec::new(),
+            security_enabled: false,
+            lint_on_compile: false,
         })
     }
 
@@ -6503,6 +6577,8 @@ impl ObjectCompiler {
             source_file: None,
             fn_source_locations: HashMap::new(),
             interrupt_fns: Vec::new(),
+            security_enabled: false,
+            lint_on_compile: false,
         })
     }
 
@@ -11501,6 +11577,47 @@ impl ObjectCompiler {
         self.functions
             .insert("__saturating_mul".to_string(), sat_mul_id);
 
+        // Security runtime functions: bounds_check(index, length) -> index
+        // and checked arithmetic: checked_add/sub/mul(a, b) -> result
+        {
+            let int_ty = clif_types::default_int_type();
+            use cranelift_codegen::ir::AbiParam as AP;
+
+            // (i64, i64) -> i64
+            let mut sig_sec_2i = self.module.make_signature();
+            sig_sec_2i.params.push(AP::new(int_ty));
+            sig_sec_2i.params.push(AP::new(int_ty));
+            sig_sec_2i.returns.push(AP::new(int_ty));
+
+            let bounds_id = self
+                .module
+                .declare_function("fj_rt_bounds_check", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__bounds_check".to_string(), bounds_id);
+
+            let checked_add_id = self
+                .module
+                .declare_function("fj_rt_checked_add", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_add".to_string(), checked_add_id);
+
+            let checked_sub_id = self
+                .module
+                .declare_function("fj_rt_checked_sub", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_sub".to_string(), checked_sub_id);
+
+            let checked_mul_id = self
+                .module
+                .declare_function("fj_rt_checked_mul", Linkage::Import, &sig_sec_2i)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__checked_mul".to_string(), checked_mul_id);
+        }
+
         Ok(())
     }
 
@@ -11513,6 +11630,16 @@ impl ObjectCompiler {
     /// Uses SYSCALL for I/O instead of direct hardware access.
     pub fn set_user_mode(&mut self, enabled: bool) {
         self.user_mode = enabled;
+    }
+
+    /// Enables runtime security hardening (bounds checks, overflow checks).
+    pub fn enable_security(&mut self) {
+        self.security_enabled = true;
+    }
+
+    /// Enables the security linter pre-pass before compilation.
+    pub fn enable_lint(&mut self) {
+        self.lint_on_compile = true;
     }
 
     /// Enables debug information generation.
@@ -11535,6 +11662,16 @@ impl ObjectCompiler {
     /// Compiles all functions in a program to object code.
     pub fn compile_program(&mut self, program: &Program) -> Result<(), Vec<CodegenError>> {
         let mut errors = Vec::new();
+
+        // Security linter pre-pass: emit warnings for known unsafe patterns.
+        if self.lint_on_compile {
+            let source_repr = format!("{program:?}");
+            let linter = crate::codegen::security::SecurityLinter::new();
+            let violations = linter.lint(&source_repr);
+            for v in &violations {
+                eprintln!("security: [{}] line {}: {}", v.rule_id, v.line, v.message);
+            }
+        }
 
         // H1: Enforce no_std compliance for bare-metal targets
         if self.no_std {
@@ -12764,6 +12901,7 @@ impl ObjectCompiler {
                 fn_ret_type: ret_type,
                 is_enum_return_fn: self.fn_returns_enum.contains(&fndef.name),
                 current_context: fndef.annotation.as_ref().map(|a| a.name.clone()),
+                security_enabled: self.security_enabled,
             };
 
             // Inject top-level const definitions as variables.

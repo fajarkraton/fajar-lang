@@ -3829,6 +3829,64 @@ pub extern "C" fn fj_rt_saturating_mul(a: i64, b: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Security hardening runtime functions
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Runtime bounds check — called before array access when security is enabled.
+///
+/// Aborts the process with a diagnostic message if `index` is out of bounds.
+/// Returns `index` unchanged on success for use in a value chain.
+pub extern "C" fn fj_rt_bounds_check(index: i64, length: i64) -> i64 {
+    if index < 0 || index >= length {
+        eprintln!(
+            "FATAL: array index {} out of bounds (length {})",
+            index, length
+        );
+        std::process::abort();
+    }
+    index
+}
+
+/// Runtime overflow check for i64 addition.
+///
+/// Aborts with a diagnostic message on overflow; returns the result on success.
+pub extern "C" fn fj_rt_checked_add(a: i64, b: i64) -> i64 {
+    match a.checked_add(b) {
+        Some(result) => result,
+        None => {
+            eprintln!("FATAL: integer overflow in {} + {}", a, b);
+            std::process::abort();
+        }
+    }
+}
+
+/// Runtime overflow check for i64 subtraction.
+///
+/// Aborts with a diagnostic message on overflow; returns the result on success.
+pub extern "C" fn fj_rt_checked_sub(a: i64, b: i64) -> i64 {
+    match a.checked_sub(b) {
+        Some(result) => result,
+        None => {
+            eprintln!("FATAL: integer overflow in {} - {}", a, b);
+            std::process::abort();
+        }
+    }
+}
+
+/// Runtime overflow check for i64 multiplication.
+///
+/// Aborts with a diagnostic message on overflow; returns the result on success.
+pub extern "C" fn fj_rt_checked_mul(a: i64, b: i64) -> i64 {
+    match a.checked_mul(b) {
+        Some(result) => result,
+        None => {
+            eprintln!("FATAL: integer overflow in {} * {}", a, b);
+            std::process::abort();
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Arc (atomic reference counting)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -7114,6 +7172,7 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_barrier_free" => Some(fj_rt_barrier_free as *const u8),
         "fj_rt_barrier_new" => Some(fj_rt_barrier_new as *const u8),
         "fj_rt_barrier_wait" => Some(fj_rt_barrier_wait as *const u8),
+        "fj_rt_bounds_check" => Some(fj_rt_bounds_check as *const u8),
         "fj_rt_bump_alloc" => Some(fj_rt_bump_alloc as *const u8),
         "fj_rt_bump_destroy" => Some(fj_rt_bump_destroy as *const u8),
         "fj_rt_bump_new" => Some(fj_rt_bump_new as *const u8),
@@ -7140,6 +7199,9 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_closure_get_fn" => Some(fj_rt_closure_get_fn as *const u8),
         "fj_rt_closure_new" => Some(fj_rt_closure_new as *const u8),
         "fj_rt_closure_set_capture" => Some(fj_rt_closure_set_capture as *const u8),
+        "fj_rt_checked_add" => Some(fj_rt_checked_add as *const u8),
+        "fj_rt_checked_mul" => Some(fj_rt_checked_mul as *const u8),
+        "fj_rt_checked_sub" => Some(fj_rt_checked_sub as *const u8),
         "fj_rt_checkpoint_epoch" => Some(fj_rt_checkpoint_epoch as *const u8),
         "fj_rt_checkpoint_load" => Some(fj_rt_checkpoint_load as *const u8),
         "fj_rt_checkpoint_loss" => Some(fj_rt_checkpoint_loss as *const u8),

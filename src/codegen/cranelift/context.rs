@@ -305,6 +305,10 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     /// Current function's context annotation (@kernel, @device, @safe, @unsafe).
     /// Used for codegen-level enforcement of context restrictions (Sprint 5).
     pub current_context: Option<String>,
+    /// When true, security hardening checks (bounds, overflow) are active.
+    /// Reserved for use by array-access and arithmetic codegen when security mode is on.
+    #[allow(dead_code)]
+    pub security_enabled: bool,
 }
 
 /// Pushes a new owned resource to both `owned_ptrs` and the current scope (if any).

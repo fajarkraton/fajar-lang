@@ -838,7 +838,10 @@ mod tests {
         assert!(cb.has_image());
         assert!(!cb.has_text());
         let data = cb.get().expect("should have data");
-        assert_eq!(data.image_data.as_ref().expect("should have image"), &pixels);
+        assert_eq!(
+            data.image_data.as_ref().expect("should have image"),
+            &pixels
+        );
     }
 
     // -- Notification -----------------------------------------------------

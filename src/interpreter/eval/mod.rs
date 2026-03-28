@@ -219,6 +219,8 @@ pub struct Interpreter {
     next_task_id: u64,
     /// SQLite database connection manager (TQ12.2).
     db_manager: crate::stdlib_v3::database::DbManager,
+    /// Active profiling session (None = profiling disabled).
+    pub profile_session: Option<crate::profiler::instrument::ProfileSession>,
 }
 
 impl Interpreter {
@@ -255,6 +257,7 @@ impl Interpreter {
             async_tasks: HashMap::new(),
             next_task_id: 1,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
+            profile_session: None,
         };
         interp.register_builtins();
         interp
@@ -293,9 +296,17 @@ impl Interpreter {
             async_tasks: HashMap::new(),
             next_task_id: 1,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
+            profile_session: None,
         };
         interp.register_builtins();
         interp
+    }
+
+    /// Enables profiling for this interpreter session.
+    ///
+    /// After execution, inspect `self.profile_session` for results.
+    pub fn enable_profiling(&mut self) {
+        self.profile_session = Some(crate::profiler::instrument::ProfileSession::new());
     }
 
     /// Attaches a debug state to enable debugging (breakpoints, stepping).
@@ -1562,7 +1573,14 @@ impl Interpreter {
             }
             Value::BuiltinFn(name) => {
                 let vals: Vec<Value> = arg_vals.into_iter().map(|(_, v)| v).collect();
-                self.call_builtin(&name, vals)
+                if let Some(ref mut session) = self.profile_session {
+                    session.enter_fn(&name, "", 0);
+                }
+                let result = self.call_builtin(&name, vals);
+                if let Some(ref mut session) = self.profile_session {
+                    session.exit_fn();
+                }
+                result
             }
             _ => {
                 let desc = format!("{func}");
@@ -1616,7 +1634,7 @@ impl Interpreter {
         } else {
             fv.name.clone()
         };
-        self.call_stack.push(fn_name);
+        self.call_stack.push(fn_name.clone());
 
         if self.call_depth > self.max_recursion_depth {
             let backtrace = self.format_backtrace();
@@ -1627,6 +1645,11 @@ impl Interpreter {
                 backtrace,
             }
             .into());
+        }
+
+        // Record function entry in profiling session (if active).
+        if let Some(ref mut session) = self.profile_session {
+            session.enter_fn(&fn_name, "", 0);
         }
 
         // Create new scope with closure's environment as parent
@@ -1656,6 +1679,11 @@ impl Interpreter {
         self.env = prev_env;
         self.call_stack.pop();
         self.call_depth -= 1;
+
+        // Record function exit in profiling session (if active).
+        if let Some(ref mut session) = self.profile_session {
+            session.exit_fn();
+        }
 
         result
     }
@@ -2929,5 +2957,81 @@ mod tests {
         let program = parse(tokens).unwrap();
         let result = analyze(&program);
         assert!(result.is_err(), "const assignment should be rejected");
+    }
+
+    // ── Profiler tests ──
+
+    /// Profiling session records function calls when enabled.
+    #[test]
+    fn test_profiler_records_function_calls() {
+        let src = r#"
+            fn add(a: i64, b: i64) -> i64 { a + b }
+            fn run() -> i64 { add(1, 2) }
+            run()
+        "#;
+        let tokens = tokenize(src).expect("lex error");
+        let program = parse(tokens).expect("parse error");
+        let mut interp = Interpreter::new_capturing();
+        interp.enable_profiling();
+        interp.eval_program(&program).expect("runtime error");
+        let session = interp.profile_session.as_ref().expect("session missing");
+        assert!(
+            session.call_count() > 0,
+            "expected at least one call recorded, got {}",
+            session.call_count()
+        );
+    }
+
+    /// Profiling tracks nested call depth correctly.
+    #[test]
+    fn test_profiler_nested_calls() {
+        let src = r#"
+            fn inner() -> i64 { 42 }
+            fn middle() -> i64 { inner() }
+            fn outer() -> i64 { middle() }
+            outer()
+        "#;
+        let tokens = tokenize(src).expect("lex error");
+        let program = parse(tokens).expect("parse error");
+        let mut interp = Interpreter::new_capturing();
+        interp.enable_profiling();
+        interp.eval_program(&program).expect("runtime error");
+        let session = interp.profile_session.as_ref().expect("session missing");
+        // outer + middle + inner = 3 calls minimum
+        assert!(
+            session.call_count() >= 3,
+            "expected at least 3 nested calls, got {}",
+            session.call_count()
+        );
+        // At least one call should have depth > 0 (i.e., nested)
+        let has_nested = session.records().iter().any(|r| r.depth > 0);
+        assert!(
+            has_nested,
+            "expected at least one nested call with depth > 0"
+        );
+    }
+
+    /// to_trace() produces well-formed Chrome JSON trace output.
+    #[test]
+    fn test_profiler_output_json() {
+        let src = r#"
+            fn greet() -> i64 { 1 }
+            greet()
+        "#;
+        let tokens = tokenize(src).expect("lex error");
+        let program = parse(tokens).expect("parse error");
+        let mut interp = Interpreter::new_capturing();
+        interp.enable_profiling();
+        interp.eval_program(&program).expect("runtime error");
+        let session = interp.profile_session.as_ref().expect("session missing");
+        let trace = session.to_trace();
+        // Chrome trace is a JSON array: starts with '[' and ends with ']'
+        assert!(trace.starts_with('['), "trace should start with '['");
+        assert!(trace.ends_with(']'), "trace should end with ']'");
+        // Should contain the function name
+        assert!(
+            trace.contains("greet"),
+            "trace should contain function name 'greet'"
+        );
     }
 }

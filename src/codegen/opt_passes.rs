@@ -1622,9 +1622,11 @@ fn run_pass(pass_name: &str, program: &Program) -> usize {
             result.original_count - result.unique_count
         }
         "inline" => count_inline_opportunities(program),
-        // Passes that are analysis-only stubs (licm, cse, devirtualize, vectorize, fn_merge)
-        // return 0 — these need IR-level data to operate on
-        "licm" | "cse" | "devirtualize" | "vectorize" | "fn_merge" => 0,
+        "licm" => count_licm_opportunities(program),
+        "cse" => count_cse_opportunities(program),
+        "devirtualize" => count_devirtualize_opportunities(program),
+        "vectorize" => count_vectorize_opportunities(program),
+        "fn_merge" => count_fn_merge_candidates(program),
         _ => 0,
     }
 }
@@ -1641,6 +1643,708 @@ fn count_inline_opportunities(program: &Program) -> usize {
         }
     }
     count
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LICM — Loop-Invariant Code Motion
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Counts expressions in loop bodies that could be hoisted out (loop-invariant).
+///
+/// An expression is loop-invariant when it is a pure computation (no calls,
+/// no assignments, no index writes) and every variable it reads is not
+/// modified inside the loop body.  Such expressions compute the same value
+/// on every iteration and can be moved before the loop.
+fn count_licm_opportunities(program: &Program) -> usize {
+    let mut count = 0;
+    for item in &program.items {
+        if let Item::FnDef(fndef) = item {
+            count_licm_in_expr(&fndef.body, &mut count);
+        }
+    }
+    count
+}
+
+/// Recursively walks expressions, counting LICM opportunities inside loops.
+fn count_licm_in_expr(expr: &Expr, count: &mut usize) {
+    match expr {
+        Expr::For {
+            variable,
+            iterable,
+            body,
+            ..
+        } => {
+            // Collect names written inside the loop body (loop-variant set).
+            let mut written: HashSet<String> = HashSet::new();
+            written.insert(variable.clone()); // the loop variable itself is variant
+            collect_written_names(body, &mut written);
+            collect_written_names(iterable, &mut written);
+
+            // Count sub-expressions of the body that are loop-invariant.
+            *count += count_invariant_exprs(body, &written);
+
+            // Recurse into nested loops.
+            count_licm_in_expr(body, count);
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            let mut written: HashSet<String> = HashSet::new();
+            collect_written_names(body, &mut written);
+            collect_written_names(condition, &mut written);
+
+            *count += count_invariant_exprs(body, &written);
+            count_licm_in_expr(body, count);
+        }
+        Expr::Loop { body, .. } => {
+            let mut written: HashSet<String> = HashSet::new();
+            collect_written_names(body, &mut written);
+
+            *count += count_invariant_exprs(body, &written);
+            count_licm_in_expr(body, count);
+        }
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { value, .. }
+                    | Stmt::Const { value, .. }
+                    | Stmt::Expr { expr: value, .. } => count_licm_in_expr(value, count),
+                    _ => {}
+                }
+            }
+            if let Some(e) = expr {
+                count_licm_in_expr(e, count);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            count_licm_in_expr(condition, count);
+            count_licm_in_expr(then_branch, count);
+            if let Some(eb) = else_branch {
+                count_licm_in_expr(eb, count);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collects all variable names that are assigned (written) inside an expression tree.
+fn collect_written_names(expr: &Expr, written: &mut HashSet<String>) {
+    match expr {
+        Expr::Assign { target, value, .. } => {
+            if let Expr::Ident { name, .. } = target.as_ref() {
+                written.insert(name.clone());
+            }
+            collect_written_names(value, written);
+        }
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { name, value, .. } | Stmt::Const { name, value, .. } => {
+                        written.insert(name.clone());
+                        collect_written_names(value, written);
+                    }
+                    Stmt::Expr { expr, .. } => collect_written_names(expr, written),
+                    _ => {}
+                }
+            }
+            if let Some(e) = expr {
+                collect_written_names(e, written);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_written_names(condition, written);
+            collect_written_names(then_branch, written);
+            if let Some(eb) = else_branch {
+                collect_written_names(eb, written);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        }
+        | Expr::For {
+            iterable: condition,
+            body,
+            ..
+        } => {
+            collect_written_names(condition, written);
+            collect_written_names(body, written);
+        }
+        Expr::Loop { body, .. } => collect_written_names(body, written),
+        Expr::Binary { left, right, .. } | Expr::Pipe { left, right, .. } => {
+            collect_written_names(left, written);
+            collect_written_names(right, written);
+        }
+        Expr::Unary { operand, .. } => collect_written_names(operand, written),
+        _ => {}
+    }
+}
+
+/// Returns true when an expression is "pure" — no calls, no assignments, no side effects.
+fn is_pure_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal { .. } | Expr::Ident { .. } => true,
+        Expr::Binary { left, right, .. } | Expr::Pipe { left, right, .. } => {
+            is_pure_expr(left) && is_pure_expr(right)
+        }
+        Expr::Unary { operand, .. } => is_pure_expr(operand),
+        Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } => is_pure_expr(expr),
+        Expr::Field { object, .. } => is_pure_expr(object),
+        Expr::Index { object, index, .. } => is_pure_expr(object) && is_pure_expr(index),
+        // Calls and assignments are never pure
+        _ => false,
+    }
+}
+
+/// Counts top-level sub-expressions inside a loop body that are loop-invariant.
+///
+/// An expression qualifies when it is pure and reads no variable in `written`.
+fn count_invariant_exprs(expr: &Expr, written: &HashSet<String>) -> usize {
+    /// Returns true when `expr` reads a variable that is in `written`.
+    fn reads_written(expr: &Expr, written: &HashSet<String>) -> bool {
+        match expr {
+            Expr::Ident { name, .. } => written.contains(name.as_str()),
+            Expr::Binary { left, right, .. } | Expr::Pipe { left, right, .. } => {
+                reads_written(left, written) || reads_written(right, written)
+            }
+            Expr::Unary { operand, .. } => reads_written(operand, written),
+            Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } => reads_written(expr, written),
+            Expr::Field { object, .. } => reads_written(object, written),
+            Expr::Index { object, index, .. } => {
+                reads_written(object, written) || reads_written(index, written)
+            }
+            _ => false,
+        }
+    }
+
+    let mut count = 0;
+    // Only examine direct children of the block, not deeply nested loops
+    if let Expr::Block { stmts, expr, .. } = expr {
+        for stmt in stmts {
+            let val_expr: Option<&Expr> = match stmt {
+                Stmt::Let { value, .. } | Stmt::Const { value, .. } => Some(value),
+                Stmt::Expr { expr, .. } => Some(expr),
+                _ => None,
+            };
+            if let Some(e) = val_expr {
+                if is_pure_expr(e) && !reads_written(e, written) {
+                    count += 1;
+                }
+            }
+        }
+        if let Some(e) = expr {
+            if is_pure_expr(e) && !reads_written(e, written) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CSE — Common Subexpression Elimination
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Counts duplicate sub-expressions inside each function body.
+///
+/// Two expressions are "identical" when they have the same structural
+/// fingerprint (same operator tree + same leaf values/names).  For each
+/// pair of identical expressions found in the same function scope, one
+/// occurrence could be eliminated.
+fn count_cse_opportunities(program: &Program) -> usize {
+    let mut count = 0;
+    for item in &program.items {
+        if let Item::FnDef(fndef) = item {
+            count += count_cse_in_expr(&fndef.body);
+        }
+    }
+    count
+}
+
+/// Collects expression fingerprints from a block body and counts duplicates.
+fn count_cse_in_expr(expr: &Expr) -> usize {
+    let mut fingerprints: Vec<String> = Vec::new();
+    collect_expr_fingerprints(expr, &mut fingerprints);
+
+    // Count fingerprints that appear more than once
+    let mut freq: HashMap<&str, usize> = HashMap::new();
+    for fp in &fingerprints {
+        *freq.entry(fp.as_str()).or_insert(0) += 1;
+    }
+    freq.values().filter(|&&c| c > 1).count()
+}
+
+/// Produces a canonical string fingerprint for an expression.
+///
+/// Only pure, non-trivial expressions (binary operations, unary on non-literal)
+/// are fingerprinted — literals and bare identifiers are excluded because
+/// they are already "free" to duplicate.
+fn expr_fingerprint(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Binary {
+            left, op, right, ..
+        } => {
+            let l = expr_fingerprint(left).unwrap_or_else(|| leaf_fp(left));
+            let r = expr_fingerprint(right).unwrap_or_else(|| leaf_fp(right));
+            Some(format!("({} {:?} {})", l, op, r))
+        }
+        Expr::Unary { op, operand, .. } => {
+            // Only fingerprint unary on a non-literal operand
+            if matches!(operand.as_ref(), Expr::Literal { .. }) {
+                None
+            } else {
+                let inner = expr_fingerprint(operand).unwrap_or_else(|| leaf_fp(operand));
+                Some(format!("({:?} {})", op, inner))
+            }
+        }
+        Expr::Field { object, field, .. } => {
+            let obj = expr_fingerprint(object).unwrap_or_else(|| leaf_fp(object));
+            Some(format!("{}.{}", obj, field))
+        }
+        Expr::Index { object, index, .. } => {
+            let obj = expr_fingerprint(object).unwrap_or_else(|| leaf_fp(object));
+            let idx = expr_fingerprint(index).unwrap_or_else(|| leaf_fp(index));
+            Some(format!("{}[{}]", obj, idx))
+        }
+        Expr::Grouped { expr, .. } => expr_fingerprint(expr),
+        Expr::Cast { expr, .. } => expr_fingerprint(expr),
+        _ => None,
+    }
+}
+
+/// Returns a simple leaf string for identifiers and literals (used by `expr_fingerprint`).
+fn leaf_fp(expr: &Expr) -> String {
+    match expr {
+        Expr::Ident { name, .. } => name.clone(),
+        Expr::Literal { kind, .. } => format!("{:?}", kind),
+        _ => "_".to_string(),
+    }
+}
+
+/// Walks an expression tree and pushes fingerprints for every non-trivial sub-expression.
+fn collect_expr_fingerprints(expr: &Expr, fps: &mut Vec<String>) {
+    if let Some(fp) = expr_fingerprint(expr) {
+        fps.push(fp);
+    }
+    // Recurse into children
+    match expr {
+        Expr::Binary { left, right, .. } | Expr::Pipe { left, right, .. } => {
+            collect_expr_fingerprints(left, fps);
+            collect_expr_fingerprints(right, fps);
+        }
+        Expr::Unary { operand, .. } => collect_expr_fingerprints(operand, fps),
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { value, .. }
+                    | Stmt::Const { value, .. }
+                    | Stmt::Expr { expr: value, .. } => collect_expr_fingerprints(value, fps),
+                    _ => {}
+                }
+            }
+            if let Some(e) = expr {
+                collect_expr_fingerprints(e, fps);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_expr_fingerprints(condition, fps);
+            collect_expr_fingerprints(then_branch, fps);
+            if let Some(eb) = else_branch {
+                collect_expr_fingerprints(eb, fps);
+            }
+        }
+        Expr::For { iterable, body, .. } => {
+            collect_expr_fingerprints(iterable, fps);
+            collect_expr_fingerprints(body, fps);
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            collect_expr_fingerprints(condition, fps);
+            collect_expr_fingerprints(body, fps);
+        }
+        Expr::Loop { body, .. } => collect_expr_fingerprints(body, fps),
+        Expr::Assign { target, value, .. } => {
+            collect_expr_fingerprints(target, fps);
+            collect_expr_fingerprints(value, fps);
+        }
+        Expr::Field { object, .. } => collect_expr_fingerprints(object, fps),
+        Expr::Index { object, index, .. } => {
+            collect_expr_fingerprints(object, fps);
+            collect_expr_fingerprints(index, fps);
+        }
+        Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } | Expr::Try { expr, .. } => {
+            collect_expr_fingerprints(expr, fps)
+        }
+        _ => {}
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Devirtualize — Direct dispatch for concrete-type method calls
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Counts method calls that could be devirtualized because the receiver's
+/// concrete struct type is known at the call site.
+///
+/// A call site qualifies when the receiver is an identifier that was bound
+/// via a `StructInit` expression (concrete type, not a trait object).
+fn count_devirtualize_opportunities(program: &Program) -> usize {
+    let mut count = 0;
+    for item in &program.items {
+        if let Item::FnDef(fndef) = item {
+            count += count_devirt_in_expr(&fndef.body, &HashMap::new());
+        }
+    }
+    count
+}
+
+/// Walks the expression tree, tracking which variables are bound to known struct
+/// types and counting method calls on those variables.
+fn count_devirt_in_expr(expr: &Expr, known: &HashMap<String, String>) -> usize {
+    match expr {
+        Expr::MethodCall { receiver, args, .. } => {
+            // Count this call if receiver is a concrete-typed variable
+            let is_concrete = match receiver.as_ref() {
+                Expr::Ident { name, .. } => known.contains_key(name.as_str()),
+                _ => false,
+            };
+            let self_count = if is_concrete { 1 } else { 0 };
+            let arg_count: usize = args
+                .iter()
+                .map(|a| count_devirt_in_expr(&a.value, known))
+                .sum();
+            self_count + count_devirt_in_expr(receiver, known) + arg_count
+        }
+        Expr::Block { stmts, expr, .. } => {
+            // Build a new scope that inherits and extends `known`
+            let mut local: HashMap<String, String> = known.clone();
+            let mut count = 0;
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { name, value, .. } | Stmt::Const { name, value, .. } => {
+                        // Track struct-init bindings
+                        if let Expr::StructInit {
+                            name: struct_name, ..
+                        } = value.as_ref()
+                        {
+                            local.insert(name.clone(), struct_name.clone());
+                        }
+                        count += count_devirt_in_expr(value, &local);
+                    }
+                    Stmt::Expr { expr, .. } => count += count_devirt_in_expr(expr, &local),
+                    _ => {}
+                }
+            }
+            if let Some(e) = expr {
+                count += count_devirt_in_expr(e, &local);
+            }
+            count
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let mut c =
+                count_devirt_in_expr(condition, known) + count_devirt_in_expr(then_branch, known);
+            if let Some(eb) = else_branch {
+                c += count_devirt_in_expr(eb, known);
+            }
+            c
+        }
+        Expr::For { iterable, body, .. }
+        | Expr::While {
+            condition: iterable,
+            body,
+            ..
+        } => count_devirt_in_expr(iterable, known) + count_devirt_in_expr(body, known),
+        Expr::Loop { body, .. } => count_devirt_in_expr(body, known),
+        Expr::Binary { left, right, .. } | Expr::Pipe { left, right, .. } => {
+            count_devirt_in_expr(left, known) + count_devirt_in_expr(right, known)
+        }
+        Expr::Unary { operand, .. } => count_devirt_in_expr(operand, known),
+        Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } | Expr::Try { expr, .. } => {
+            count_devirt_in_expr(expr, known)
+        }
+        _ => 0,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Vectorize — Element-wise loop detection
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Counts for-loops that iterate over a range and perform only element-wise
+/// array operations (no loop-carried dependencies), making them candidates
+/// for auto-vectorization (SIMD).
+///
+/// Pattern: `for i in 0..n { a[i] = b[i] op c[i] }` where `i` appears only
+/// as an index and every iteration is independent.
+fn count_vectorize_opportunities(program: &Program) -> usize {
+    let mut count = 0;
+    for item in &program.items {
+        if let Item::FnDef(fndef) = item {
+            count_vectorize_in_expr(&fndef.body, &mut count);
+        }
+    }
+    count
+}
+
+/// Recursively searches for vectorizable loops.
+fn count_vectorize_in_expr(expr: &Expr, count: &mut usize) {
+    match expr {
+        Expr::For {
+            variable,
+            iterable,
+            body,
+            ..
+        } => {
+            // Only consider range-iterated loops
+            let is_range = matches!(iterable.as_ref(), Expr::Range { .. });
+            if is_range && is_elementwise_body(body, variable) {
+                *count += 1;
+            }
+            // Recurse into nested loops
+            count_vectorize_in_expr(body, count);
+        }
+        Expr::Block { stmts, expr, .. } => {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let { value, .. }
+                    | Stmt::Const { value, .. }
+                    | Stmt::Expr { expr: value, .. } => count_vectorize_in_expr(value, count),
+                    _ => {}
+                }
+            }
+            if let Some(e) = expr {
+                count_vectorize_in_expr(e, count);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            count_vectorize_in_expr(condition, count);
+            count_vectorize_in_expr(then_branch, count);
+            if let Some(eb) = else_branch {
+                count_vectorize_in_expr(eb, count);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            count_vectorize_in_expr(condition, count);
+            count_vectorize_in_expr(body, count);
+        }
+        Expr::Loop { body, .. } => {
+            count_vectorize_in_expr(body, count);
+        }
+        _ => {}
+    }
+}
+
+/// Returns true when a loop body consists only of element-wise operations.
+///
+/// "Element-wise" means: the loop variable `var` is used only as an array
+/// index (inside `[]`), and the body is a flat block with no nested loops,
+/// no conditionals, and no calls that could carry state across iterations.
+fn is_elementwise_body(body: &Expr, var: &str) -> bool {
+    match body {
+        Expr::Block { stmts, expr, .. } => {
+            // Every statement must be an assignment `arr[var] = expr`
+            // or an expression-statement that is an element-wise operation
+            let stmts_ok = stmts.iter().all(|s| match s {
+                Stmt::Expr { expr, .. } => is_elementwise_expr(expr, var),
+                Stmt::Let { value, .. } => is_elementwise_expr(value, var),
+                _ => false,
+            });
+            let tail_ok = expr.as_ref().is_none_or(|e| is_elementwise_expr(e, var));
+            stmts_ok && tail_ok
+        }
+        // A single expression body
+        _ => is_elementwise_expr(body, var),
+    }
+}
+
+/// Returns true when `expr` is an element-wise expression over the loop variable.
+fn is_elementwise_expr(expr: &Expr, var: &str) -> bool {
+    match expr {
+        // `arr[var] = rhs` — assignment to indexed slot
+        Expr::Assign { target, value, .. } => {
+            is_index_of_var(target, var) && is_elementwise_expr(value, var)
+        }
+        // `arr[var]` — reading an indexed slot
+        Expr::Index { .. } => is_index_of_var(expr, var),
+        // Binary op on two elementwise sub-expressions
+        Expr::Binary { left, right, .. } => {
+            is_elementwise_expr(left, var) && is_elementwise_expr(right, var)
+        }
+        // Grouping / cast is transparent
+        Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } => is_elementwise_expr(expr, var),
+        // Literals and non-loop identifiers are fine (broadcast scalars)
+        Expr::Literal { .. } => true,
+        Expr::Ident { name, .. } => name != var, // raw `var` outside index = dependency
+        _ => false,
+    }
+}
+
+/// Returns true when `expr` is of the form `something[var]`.
+fn is_index_of_var(expr: &Expr, var: &str) -> bool {
+    if let Expr::Index { index, .. } = expr {
+        matches!(index.as_ref(), Expr::Ident { name, .. } if name == var)
+    } else {
+        false
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Function Merge — Structurally identical function detection
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Counts functions in a program that have structurally identical bodies and
+/// could be merged (one kept, others replaced with a call to the canonical copy).
+///
+/// Two functions are structurally identical when they have:
+/// - The same number of parameters
+/// - Bodies with the same statement-type sequence and expression-kind tree
+///   (variable *names* are ignored — only shape matters)
+fn count_fn_merge_candidates(program: &Program) -> usize {
+    let fndefs: Vec<&FnDef> = program
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let Item::FnDef(fndef) = item {
+                Some(fndef)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if fndefs.len() < 2 {
+        return 0;
+    }
+
+    // Compute a structural signature for each function
+    let sigs: Vec<String> = fndefs.iter().map(|f| fn_structure_sig(f)).collect();
+
+    // Count how many functions share a signature with at least one other
+    let mut freq: HashMap<&str, usize> = HashMap::new();
+    for sig in &sigs {
+        *freq.entry(sig.as_str()).or_insert(0) += 1;
+    }
+
+    // Every function beyond the first in a group is a merge candidate
+    freq.values().filter(|&&c| c > 1).map(|&c| c - 1).sum()
+}
+
+/// Builds a structural signature for a function.
+///
+/// The signature captures parameter count, return type presence, and the
+/// expression-shape of the body — ignoring concrete names so that two
+/// functions that differ only in variable/field names produce the same string.
+fn fn_structure_sig(fndef: &FnDef) -> String {
+    let param_count = fndef.params.len();
+    let has_ret = if fndef.return_type.is_some() {
+        "R"
+    } else {
+        "V"
+    };
+    let body_sig = expr_shape_sig(&fndef.body);
+    format!("{}:{}:{}", param_count, has_ret, body_sig)
+}
+
+/// Returns a shape-only string for an expression (no names, no literal values).
+fn expr_shape_sig(expr: &Expr) -> String {
+    match expr {
+        Expr::Literal { .. } => "L".to_string(),
+        Expr::Ident { .. } => "I".to_string(),
+        Expr::Binary {
+            left, op, right, ..
+        } => {
+            format!(
+                "B({:?},{},{})",
+                op,
+                expr_shape_sig(left),
+                expr_shape_sig(right)
+            )
+        }
+        Expr::Unary { op, operand, .. } => {
+            format!("U({:?},{})", op, expr_shape_sig(operand))
+        }
+        Expr::Call { args, .. } => {
+            let arg_sigs: Vec<String> = args.iter().map(|a| expr_shape_sig(&a.value)).collect();
+            format!("C({})", arg_sigs.join(","))
+        }
+        Expr::MethodCall { args, .. } => {
+            let arg_sigs: Vec<String> = args.iter().map(|a| expr_shape_sig(&a.value)).collect();
+            format!("M({})", arg_sigs.join(","))
+        }
+        Expr::Block { stmts, expr, .. } => {
+            let stmt_sigs: Vec<String> = stmts.iter().map(stmt_shape_sig).collect();
+            let tail = expr.as_ref().map_or("_".to_string(), |e| expr_shape_sig(e));
+            format!("{{{}|{}}}", stmt_sigs.join(";"), tail)
+        }
+        Expr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let else_sig = else_branch
+                .as_ref()
+                .map_or("_".to_string(), |e| expr_shape_sig(e));
+            format!("IF({},{})", expr_shape_sig(then_branch), else_sig)
+        }
+        Expr::For { body, .. } => format!("FOR({})", expr_shape_sig(body)),
+        Expr::While { body, .. } | Expr::Loop { body, .. } => {
+            format!("WH({})", expr_shape_sig(body))
+        }
+        Expr::Assign { value, .. } => format!("ASS({})", expr_shape_sig(value)),
+        Expr::Index { object, index, .. } => {
+            format!("IDX({},{})", expr_shape_sig(object), expr_shape_sig(index))
+        }
+        Expr::Field { .. } => "FLD".to_string(),
+        Expr::Grouped { expr, .. } | Expr::Cast { expr, .. } | Expr::Try { expr, .. } => {
+            expr_shape_sig(expr)
+        }
+        _ => "?".to_string(),
+    }
+}
+
+/// Returns the shape signature of a statement.
+fn stmt_shape_sig(stmt: &Stmt) -> String {
+    match stmt {
+        Stmt::Let { value, .. } | Stmt::Const { value, .. } => {
+            format!("LET({})", expr_shape_sig(value))
+        }
+        Stmt::Expr { expr, .. } => format!("EXPR({})", expr_shape_sig(expr)),
+        Stmt::Return { value, .. } => {
+            let v = value
+                .as_ref()
+                .map_or("_".to_string(), |e| expr_shape_sig(e));
+            format!("RET({})", v)
+        }
+        Stmt::Break { .. } | Stmt::Continue { .. } => "BC".to_string(),
+        Stmt::Item(_) => "ITEM".to_string(),
+    }
 }
 
 /// Counts variables that do not escape in any function (useful for stack allocation).
@@ -2845,5 +3549,120 @@ fn main() { used() }"#,
         let program = parse_program("fn main() { 42 }");
         let report = generate_opt_report(&program, OptLevel::O0);
         assert!(report.contains("O0"));
+    }
+
+    // ── LICM ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_licm_finds_invariant_in_loop() {
+        // `2 + 3` inside the for-loop body does not depend on `i`,
+        // so it should be detected as a hoistable expression.
+        let program = parse_program("fn f() { for i in 0..10 { let x = 2 + 3 } }");
+        let count = count_licm_opportunities(&program);
+        assert!(
+            count > 0,
+            "expected at least 1 LICM opportunity, got {}",
+            count
+        );
+    }
+
+    #[test]
+    fn test_licm_no_opportunity_when_variant() {
+        // `i + 1` depends on the loop variable `i` — not invariant.
+        let program = parse_program("fn f() { for i in 0..10 { let x = i + 1 } }");
+        let count = count_licm_opportunities(&program);
+        assert_eq!(count, 0, "i+1 is NOT loop-invariant");
+    }
+
+    // ── CSE ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_cse_finds_duplicate_exprs() {
+        // `a + b` appears twice → 1 group with count 2 → 1 CSE opportunity.
+        let program =
+            parse_program("fn f(a: i32, b: i32) -> i32 { let x = a + b\n let y = a + b\n x + y }");
+        let count = count_cse_opportunities(&program);
+        assert!(
+            count > 0,
+            "expected CSE opportunity for duplicate a+b, got {}",
+            count
+        );
+    }
+
+    #[test]
+    fn test_cse_no_duplicates() {
+        // All sub-expressions are unique.
+        let program =
+            parse_program("fn f(a: i32, b: i32) -> i32 { let x = a + b\n let y = a - b\n x }");
+        let count = count_cse_opportunities(&program);
+        assert_eq!(count, 0, "no duplicate expressions expected");
+    }
+
+    // ── Devirtualize ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_devirtualize_known_type() {
+        // `p` is bound to `Point { ... }` — a concrete struct type.
+        // The call `p.area()` can be devirtualized.
+        let program = parse_program("fn f() { let p = Point { x: 1, y: 2 }\n p.area() }");
+        let count = count_devirtualize_opportunities(&program);
+        assert!(
+            count > 0,
+            "expected devirtualize opportunity, got {}",
+            count
+        );
+    }
+
+    #[test]
+    fn test_devirtualize_unknown_type() {
+        // `x` is bound to a literal, not a struct — no method to devirtualize.
+        let program = parse_program("fn f() { let x = 42\n x }");
+        let count = count_devirtualize_opportunities(&program);
+        assert_eq!(count, 0);
+    }
+
+    // ── Vectorize ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_vectorize_elementwise_loop() {
+        // Classic SIMD pattern: `a[i] = b[i] + c[i]`
+        let program = parse_program("fn f() { for i in 0..n { a[i] = b[i] + c[i] } }");
+        let count = count_vectorize_opportunities(&program);
+        assert!(count > 0, "expected vectorize opportunity, got {}", count);
+    }
+
+    #[test]
+    fn test_vectorize_no_opportunity_non_elementwise() {
+        // Loop body uses `i` directly (not as an index) — not vectorizable.
+        let program = parse_program("fn f() { for i in 0..10 { let x = i * 2 } }");
+        let count = count_vectorize_opportunities(&program);
+        assert_eq!(
+            count, 0,
+            "scalar loop should not be flagged as vectorizable"
+        );
+    }
+
+    // ── Function Merge ────────────────────────────────────────────────
+
+    #[test]
+    fn test_fn_merge_identical_bodies() {
+        // Two functions with the same structure (return a+b / return x+y).
+        let program = parse_program(
+            "fn add_i(a: i32, b: i32) -> i32 { a + b }\nfn add_f(x: f64, y: f64) -> f64 { x + y }",
+        );
+        let count = count_fn_merge_candidates(&program);
+        assert!(count > 0, "expected 1 merge candidate, got {}", count);
+    }
+
+    #[test]
+    fn test_fn_merge_different_structures() {
+        // Completely different bodies — no merge candidates.
+        let program =
+            parse_program("fn foo(a: i32) -> i32 { a + 1 }\nfn bar(a: i32) -> i32 { a * 2 }");
+        let count = count_fn_merge_candidates(&program);
+        assert_eq!(
+            count, 0,
+            "structurally different functions should not be merged"
+        );
     }
 }
