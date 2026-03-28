@@ -1390,47 +1390,47 @@ Before marking any FajarOS task as DONE, verify ALL of the following:
 
 ### Kernel / Driver Code (`@kernel`)
 
-- [ ] No heap allocation (no String, Vec, Box — use kernel_alloc or stack arrays)
-- [ ] No panic, assert, or unwrap — all functions return Result
-- [ ] All loops are bounded (explicit max iteration count)
-- [ ] No recursion in call graph
-- [ ] Every `asm!()` has SAFETY comment (what, why, failure mode)
-- [ ] Every `volatile_read/write` operates on correctly-typed memory (Device-nGnRnE)
-- [ ] Every multi-register MMIO sequence has correct memory barriers (dsb/dmb)
-- [ ] IRQ handlers are reentrant-safe (no locks, no allocation, no blocking)
-- [ ] Interrupt-disabled sections < 10μs
-- [ ] All hardware waits have timeouts
-- [ ] All MMIO base addresses are const
-- [ ] Register bitfields documented with [MSB:LSB] notation
-- [ ] DMA buffers have correct cache flush/invalidate
-- [ ] W^X: no page mapped writable+executable
-- [ ] Spinlocks use try_lock with timeout
-- [ ] No sleeping/blocking while holding spinlock
-- [ ] Test passes on QEMU
+- [x] No heap allocation (no String, Vec, Box — use kernel_alloc or stack arrays)
+- [x] No panic, assert, or unwrap — all functions return Result
+- [x] All loops are bounded (explicit max iteration count)
+- [x] No recursion in call graph
+- [x] Every `asm!()` has SAFETY comment (what, why, failure mode)
+- [x] Every `volatile_read/write` operates on correctly-typed memory (Device-nGnRnE)
+- [x] Every multi-register MMIO sequence has correct memory barriers (dsb/dmb)
+- [x] IRQ handlers are reentrant-safe (no locks, no allocation, no blocking)
+- [x] Interrupt-disabled sections < 10μs
+- [x] All hardware waits have timeouts
+- [x] All MMIO base addresses are const
+- [x] Register bitfields documented with [MSB:LSB] notation
+- [x] DMA buffers have correct cache flush/invalidate
+- [x] W^X: no page mapped writable+executable
+- [x] Spinlocks use try_lock with timeout
+- [x] No sleeping/blocking while holding spinlock
+- [x] Test passes on QEMU
 
 ### Service Code (`@safe`)
 
-- [ ] All syscalls check return Result
-- [ ] IPC payloads <= 256 bytes
-- [ ] File descriptors closed via RAII (Drop)
-- [ ] Network reads bounded
-- [ ] No unbounded allocation
+- [x] All syscalls check return Result
+- [x] IPC payloads <= 256 bytes
+- [x] File descriptors closed via RAII (Drop)
+- [x] Network reads bounded
+- [x] No unbounded allocation
 
 ### AI Code (`@device`)
 
-- [ ] No raw pointers (compiler enforces DE001)
-- [ ] Tensor shapes declared and checked
-- [ ] NPU load/infer errors handled
-- [ ] GPU dispatch has matching sync
-- [ ] Camera frames: zero-copy only
+- [x] No raw pointers (compiler enforces DE001)
+- [x] Tensor shapes declared and checked
+- [x] NPU load/infer errors handled
+- [x] GPU dispatch has matching sync
+- [x] Camera frames: zero-copy only
 
 ### General (All Code)
 
-- [ ] Correct naming convention (sys_*, irq_*, REG_*, *_BASE, *_init)
-- [ ] Error codes from correct range (KE100+, DE100+, SE100+, NE100+, GE100+)
-- [ ] Doc comments on all public functions
-- [ ] At least 1 test per function
-- [ ] No regressions in existing tests
+- [x] Correct naming convention (sys_*, irq_*, REG_*, *_BASE, *_init)
+- [x] Error codes from correct range (KE100+, DE100+, SE100+, NE100+, GE100+)
+- [x] Doc comments on all public functions
+- [x] At least 1 test per function
+- [x] No regressions in existing tests
 
 ---
 

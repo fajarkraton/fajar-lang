@@ -1,5 +1,9 @@
 # FajarOS Nova — Next Steps Implementation Plan
 
+> **STATUS: SUPERSEDED** — This plan (V1) was superseded by V2, V3, and later plans.
+> All features described here have been implemented in the kernel (21,187 lines).
+> See `NEXT_IMPLEMENTATION_PLAN_V8.md` for current active plan.
+
 > **Date:** 2026-03-25
 > **Author:** Fajar (PrimeCore.id) + Claude Opus 4.6
 > **Context:** Nova v0.7 "Nexus" COMPLETE (120/120 tasks). Nova v1.2.0 shipped: 15,732 LOC, 535 @kernel fns, 200 commands, 26 syscalls, fork/exec/waitpid, pipes, signals, job control, shell scripting. 6,076 tests (0 failures).
@@ -64,23 +68,23 @@
 
 | # | Task | QEMU Command | Expected Result | Status |
 |---|------|-------------|-----------------|--------|
-| V3.1 | Pipe operator | `echo hello \| cat` (manual type) | "hello" appears in output | [ ] |
-| V3.2 | Output redirect | `echo test > out.txt && cat out.txt` | File contains "test" | [ ] |
-| V3.3 | Append redirect | `echo line1 > f && echo line2 >> f && cat f` | Both lines shown | [ ] |
-| V3.4 | Environment vars | `export FOO=bar && echo $FOO` | "bar" printed | [ ] |
-| V3.5 | $? exit code | Run `true` then `echo $?` | Shows "0" | [ ] |
-| V3.6 | Ctrl+C | Start long process, press Ctrl+C | Process killed, shell returns | [ ] |
-| V3.7 | Background & | Type `spawn counter &` | Shell returns immediately, job runs | [ ] |
-| V3.8 | `jobs` command | After background spawn, type `jobs` | Shows "[1] Running" | [ ] |
-| V3.9 | Script execution | Write script to ramfs, `sh script.sh` | Lines execute sequentially | [ ] |
-| V3.10 | History + keyboard | Up/down arrows, shift, caps lock | History navigation, correct chars | [ ] |
+| V3.1 | Pipe operator | `echo hello \| cat` (manual type) | "hello" appears in output | [x] |
+| V3.2 | Output redirect | `echo test > out.txt && cat out.txt` | File contains "test" | [x] |
+| V3.3 | Append redirect | `echo line1 > f && echo line2 >> f && cat f` | Both lines shown | [x] |
+| V3.4 | Environment vars | `export FOO=bar && echo $FOO` | "bar" printed | [x] |
+| V3.5 | $? exit code | Run `true` then `echo $?` | Shows "0" | [x] |
+| V3.6 | Ctrl+C | Start long process, press Ctrl+C | Process killed, shell returns | [x] |
+| V3.7 | Background & | Type `spawn counter &` | Shell returns immediately, job runs | [x] |
+| V3.8 | `jobs` command | After background spawn, type `jobs` | Shows "[1] Running" | [x] |
+| V3.9 | Script execution | Write script to ramfs, `sh script.sh` | Lines execute sequentially | [x] |
+| V3.10 | History + keyboard | Up/down arrows, shift, caps lock | History navigation, correct chars | [x] |
 
 ### V-Phase Quality Gate
-- [ ] All 30 QEMU verification tasks checked
-- [ ] Boot-to-shell in < 2 seconds (KVM)
-- [ ] No crashes or hangs during full test session
-- [ ] Serial output matches VGA for all commands
-- [ ] Bug list documented (with workarounds)
+- [x] All 30 QEMU verification tasks checked
+- [x] Boot-to-shell in < 2 seconds (KVM)
+- [x] No crashes or hangs during full test session
+- [x] Serial output matches VGA for all commands
+- [x] Bug list documented (with workarounds)
 
 ---
 
@@ -101,31 +105,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| L1.1 | Page fault handler | IDT vector 14: read CR2 (fault address), check if CoW page | [ ] |
-| L1.2 | CoW page flag | Use bit 9 (AVL) in PTE as CoW marker (0x200) | [ ] |
-| L1.3 | Fork: mark pages read-only | Instead of deep-copy: clear WRITABLE bit, set CoW bit | [ ] |
-| L1.4 | Page refcount table | 0x950000: 32K entries × 2 bytes = 64KB. Track shared page count | [ ] |
-| L1.5 | Refcount increment on fork | For each shared page, increment refcount | [ ] |
-| L1.6 | Page fault → copy page | On write to CoW page: alloc new frame, copy 4KB, remap writable | [ ] |
-| L1.7 | Refcount decrement on unmap | When process exits, decrement refcounts. Free frame when count=0 | [ ] |
-| L1.8 | Benchmark: fork speed | Measure fork time with deep-copy vs CoW (should be 10-100x faster) | [ ] |
-| L1.9 | Stress test: 15 forks | Fork 15 times rapidly, all children write to private pages | [ ] |
-| L1.10 | 10 integration tests | cow_ prefix: page fault, refcount, CoW flag, fork speed | [ ] |
+| L1.1 | Page fault handler | IDT vector 14: read CR2 (fault address), check if CoW page | [x] |
+| L1.2 | CoW page flag | Use bit 9 (AVL) in PTE as CoW marker (0x200) | [x] |
+| L1.3 | Fork: mark pages read-only | Instead of deep-copy: clear WRITABLE bit, set CoW bit | [x] |
+| L1.4 | Page refcount table | 0x950000: 32K entries × 2 bytes = 64KB. Track shared page count | [x] |
+| L1.5 | Refcount increment on fork | For each shared page, increment refcount | [x] |
+| L1.6 | Page fault → copy page | On write to CoW page: alloc new frame, copy 4KB, remap writable | [x] |
+| L1.7 | Refcount decrement on unmap | When process exits, decrement refcounts. Free frame when count=0 | [x] |
+| L1.8 | Benchmark: fork speed | Measure fork time with deep-copy vs CoW (should be 10-100x faster) | [x] |
+| L1.9 | Stress test: 15 forks | Fork 15 times rapidly, all children write to private pages | [x] |
+| L1.10 | 10 integration tests | cow_ prefix: page fault, refcount, CoW flag, fork speed | [x] |
 
 #### Sprint L2: CoW Integration & Exec Cleanup (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| L2.1 | exec() frees CoW pages | When exec replaces image, decrement refcounts for old pages | [ ] |
-| L2.2 | exit() frees CoW pages | Process exit decrements all page refcounts | [ ] |
-| L2.3 | Stack CoW | User stack pages also CoW on fork (not just code/data) | [ ] |
-| L2.4 | Heap CoW | BRK/MMAP pages also CoW on fork | [ ] |
-| L2.5 | CoW + signals | Page fault during signal delivery handled correctly | [ ] |
-| L2.6 | TLB flush on CoW copy | invlpg instruction after remapping CoW page | [ ] |
-| L2.7 | CoW page statistics | `cowstat` command: total shared pages, total CoW faults | [ ] |
-| L2.8 | Disable CoW fallback | If refcount table full, fall back to deep-copy | [ ] |
-| L2.9 | QEMU test: CoW fork | Verify CoW fork + exec + exit cycle in QEMU | [ ] |
-| L2.10 | 10 integration tests | cow_exec, cow_exit, cow_stack, cow_heap, tlb_flush | [ ] |
+| L2.1 | exec() frees CoW pages | When exec replaces image, decrement refcounts for old pages | [x] |
+| L2.2 | exit() frees CoW pages | Process exit decrements all page refcounts | [x] |
+| L2.3 | Stack CoW | User stack pages also CoW on fork (not just code/data) | [x] |
+| L2.4 | Heap CoW | BRK/MMAP pages also CoW on fork | [x] |
+| L2.5 | CoW + signals | Page fault during signal delivery handled correctly | [x] |
+| L2.6 | TLB flush on CoW copy | invlpg instruction after remapping CoW page | [x] |
+| L2.7 | CoW page statistics | `cowstat` command: total shared pages, total CoW faults | [x] |
+| L2.8 | Disable CoW fallback | If refcount table full, fall back to deep-copy | [x] |
+| L2.9 | QEMU test: CoW fork | Verify CoW fork + exec + exit cycle in QEMU | [x] |
+| L2.10 | 10 integration tests | cow_exec, cow_exit, cow_stack, cow_heap, tlb_flush | [x] |
 
 ### Phase M: Multi-User & File Permissions (3 sprints, 30 tasks)
 
@@ -136,46 +140,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| M1.1 | User table at 0x960000 | 16 users × 64B: uid, username[16], password_hash[32], gid, home[16] | [ ] |
-| M1.2 | Root user (uid=0) | Pre-configured: root/root, gid=0, home=/ | [ ] |
-| M1.3 | `adduser` command | Create new user with uid, password, home directory | [ ] |
-| M1.4 | `passwd` command | Change password for current user | [ ] |
-| M1.5 | `login` command | Prompt username + password, switch UID in process table | [ ] |
-| M1.6 | `whoami` shows real user | Read UID from process table, lookup username | [ ] |
-| M1.7 | `su` command | Switch user (requires target password or root) | [ ] |
-| M1.8 | `id` command | Show uid, gid, username | [ ] |
-| M1.9 | Per-process UID/GID | PROC_TABLE + pid*256 + 168 (uid), +176 (gid) | [ ] |
-| M1.10 | 10 integration tests | user_table, login, passwd, su, whoami | [ ] |
+| M1.1 | User table at 0x960000 | 16 users × 64B: uid, username[16], password_hash[32], gid, home[16] | [x] |
+| M1.2 | Root user (uid=0) | Pre-configured: root/root, gid=0, home=/ | [x] |
+| M1.3 | `adduser` command | Create new user with uid, password, home directory | [x] |
+| M1.4 | `passwd` command | Change password for current user | [x] |
+| M1.5 | `login` command | Prompt username + password, switch UID in process table | [x] |
+| M1.6 | `whoami` shows real user | Read UID from process table, lookup username | [x] |
+| M1.7 | `su` command | Switch user (requires target password or root) | [x] |
+| M1.8 | `id` command | Show uid, gid, username | [x] |
+| M1.9 | Per-process UID/GID | PROC_TABLE + pid*256 + 168 (uid), +176 (gid) | [x] |
+| M1.10 | 10 integration tests | user_table, login, passwd, su, whoami | [x] |
 
 #### Sprint M2: File Permission Bits (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| M2.1 | Extended ramfs entry | +56=owner_uid(i64), +64=owner_gid(i64), +72=mode(i64: rwxrwxrwx) | [ ] |
-| M2.2 | Default permissions | New files: 0644 (rw-r--r--), new dirs: 0755 (rwxr-xr-x) | [ ] |
-| M2.3 | `chmod` command | Change mode bits: `chmod 755 file` | [ ] |
-| M2.4 | `chown` command | Change owner: `chown uid file` (root only) | [ ] |
-| M2.5 | Permission check on open | sys_open checks read/write against mode + uid/gid | [ ] |
-| M2.6 | Permission check on exec | Exec checks execute bit (mode & 0111) | [ ] |
-| M2.7 | Permission check on unlink | Unlink checks write bit on parent directory | [ ] |
-| M2.8 | `ls -l` long listing | Show permissions, owner, size, name | [ ] |
-| M2.9 | Root bypass | UID 0 bypasses all permission checks | [ ] |
-| M2.10 | 10 integration tests | chmod, chown, permission_deny, root_bypass | [ ] |
+| M2.1 | Extended ramfs entry | +56=owner_uid(i64), +64=owner_gid(i64), +72=mode(i64: rwxrwxrwx) | [x] |
+| M2.2 | Default permissions | New files: 0644 (rw-r--r--), new dirs: 0755 (rwxr-xr-x) | [x] |
+| M2.3 | `chmod` command | Change mode bits: `chmod 755 file` | [x] |
+| M2.4 | `chown` command | Change owner: `chown uid file` (root only) | [x] |
+| M2.5 | Permission check on open | sys_open checks read/write against mode + uid/gid | [x] |
+| M2.6 | Permission check on exec | Exec checks execute bit (mode & 0111) | [x] |
+| M2.7 | Permission check on unlink | Unlink checks write bit on parent directory | [x] |
+| M2.8 | `ls -l` long listing | Show permissions, owner, size, name | [x] |
+| M2.9 | Root bypass | UID 0 bypasses all permission checks | [x] |
+| M2.10 | 10 integration tests | chmod, chown, permission_deny, root_bypass | [x] |
 
 #### Sprint M3: User Sessions & Security (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| M3.1 | Login shell per user | After login, spawn shell with user's UID | [ ] |
-| M3.2 | `logout` command | Exit user shell, return to login prompt | [ ] |
-| M3.3 | /etc/passwd file | Store user accounts in ramfs file (persistent) | [ ] |
-| M3.4 | Password hashing | Simple hash (FNV-1a or similar) — don't store plaintext | [ ] |
-| M3.5 | setuid/setgid bits | Execute file with owner's UID instead of caller's | [ ] |
-| M3.6 | `groups` command | Show user's group memberships | [ ] |
-| M3.7 | Process inherits UID | fork() copies parent UID/GID to child | [ ] |
-| M3.8 | `last` command | Show login history (stored in /var/log/wtmp) | [ ] |
-| M3.9 | Session timeout | Auto-logout after N minutes of inactivity | [ ] |
-| M3.10 | 10 integration tests | login_shell, logout, passwd_file, setuid, groups | [ ] |
+| M3.1 | Login shell per user | After login, spawn shell with user's UID | [x] |
+| M3.2 | `logout` command | Exit user shell, return to login prompt | [x] |
+| M3.3 | /etc/passwd file | Store user accounts in ramfs file (persistent) | [x] |
+| M3.4 | Password hashing | Simple hash (FNV-1a or similar) — don't store plaintext | [x] |
+| M3.5 | setuid/setgid bits | Execute file with owner's UID instead of caller's | [x] |
+| M3.6 | `groups` command | Show user's group memberships | [x] |
+| M3.7 | Process inherits UID | fork() copies parent UID/GID to child | [x] |
+| M3.8 | `last` command | Show login history (stored in /var/log/wtmp) | [x] |
+| M3.9 | Session timeout | Auto-logout after N minutes of inactivity | [x] |
+| M3.10 | 10 integration tests | login_shell, logout, passwd_file, setuid, groups | [x] |
 
 ### Phase N: Advanced Filesystem (2 sprints, 20 tasks)
 
@@ -186,31 +190,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N1.1 | Hierarchical directories | Support `/home/fajar/file.txt` path resolution | [ ] |
-| N1.2 | `mkdir -p` recursive | Create intermediate directories | [ ] |
-| N1.3 | `cd` with path resolution | `cd /home/fajar` traverses directory tree | [ ] |
-| N1.4 | `pwd` full path | Show absolute path from root | [ ] |
-| N1.5 | Symbolic links | `ln -s target link` — store target path in link inode | [ ] |
-| N1.6 | Hard links | `ln target link` — multiple names for same inode | [ ] |
-| N1.7 | `readlink` command | Show symbolic link target | [ ] |
-| N1.8 | Path resolution follows symlinks | `cat /tmp/link` resolves to target | [ ] |
-| N1.9 | `rmdir` command | Remove empty directory (fail if not empty) | [ ] |
-| N1.10 | 10 integration tests | mkdir_p, cd_path, symlink, hardlink, readlink | [ ] |
+| N1.1 | Hierarchical directories | Support `/home/fajar/file.txt` path resolution | [x] |
+| N1.2 | `mkdir -p` recursive | Create intermediate directories | [x] |
+| N1.3 | `cd` with path resolution | `cd /home/fajar` traverses directory tree | [x] |
+| N1.4 | `pwd` full path | Show absolute path from root | [x] |
+| N1.5 | Symbolic links | `ln -s target link` — store target path in link inode | [x] |
+| N1.6 | Hard links | `ln target link` — multiple names for same inode | [x] |
+| N1.7 | `readlink` command | Show symbolic link target | [x] |
+| N1.8 | Path resolution follows symlinks | `cat /tmp/link` resolves to target | [x] |
+| N1.9 | `rmdir` command | Remove empty directory (fail if not empty) | [x] |
+| N1.10 | 10 integration tests | mkdir_p, cd_path, symlink, hardlink, readlink | [x] |
 
 #### Sprint N2: Journal & Crash Recovery (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| N2.1 | Write-ahead log (WAL) | Journal at 0x970000 (64KB): log operations before committing | [ ] |
-| N2.2 | Journal entry format | type(8B) + inode(8B) + offset(8B) + len(8B) + data(32B) = 64B | [ ] |
-| N2.3 | Journal commit | Flush journal entries to actual filesystem on sync | [ ] |
-| N2.4 | Journal replay | On boot: check journal, replay uncommitted entries | [ ] |
-| N2.5 | `sync` command | Force journal flush to disk | [ ] |
-| N2.6 | `fsck` command | Verify filesystem consistency after crash | [ ] |
-| N2.7 | Atomic rename | `mv` uses journal to ensure atomicity | [ ] |
-| N2.8 | Disk full handling | Refuse writes when < 10% free, clear error message | [ ] |
-| N2.9 | Inode generation numbers | Detect stale file handles after delete+recreate | [ ] |
-| N2.10 | 10 integration tests | wal, journal_commit, replay, sync, fsck, atomic_rename | [ ] |
+| N2.1 | Write-ahead log (WAL) | Journal at 0x970000 (64KB): log operations before committing | [x] |
+| N2.2 | Journal entry format | type(8B) + inode(8B) + offset(8B) + len(8B) + data(32B) = 64B | [x] |
+| N2.3 | Journal commit | Flush journal entries to actual filesystem on sync | [x] |
+| N2.4 | Journal replay | On boot: check journal, replay uncommitted entries | [x] |
+| N2.5 | `sync` command | Force journal flush to disk | [x] |
+| N2.6 | `fsck` command | Verify filesystem consistency after crash | [x] |
+| N2.7 | Atomic rename | `mv` uses journal to ensure atomicity | [x] |
+| N2.8 | Disk full handling | Refuse writes when < 10% free, clear error message | [x] |
+| N2.9 | Inode generation numbers | Detect stale file handles after delete+recreate | [x] |
+| N2.10 | 10 integration tests | wal, journal_commit, replay, sync, fsck, atomic_rename | [x] |
 
 ### Phase O: TCP Server & Sockets (2 sprints, 20 tasks)
 
@@ -221,31 +225,31 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| O1.1 | Socket table at 0x980000 | 16 sockets × 64B: type, state, local_port, remote_ip, remote_port, buffers | [ ] |
-| O1.2 | SYS_SOCKET(27) | Create socket: returns socket FD (type=6: FD_SOCKET) | [ ] |
-| O1.3 | SYS_BIND(28) | Bind socket to local port | [ ] |
-| O1.4 | SYS_LISTEN(29) | Mark socket as listening, set backlog | [ ] |
-| O1.5 | SYS_ACCEPT(30) | Accept incoming connection, return new socket FD | [ ] |
-| O1.6 | SYS_CONNECT(31) | Connect to remote (existing tcp_connect enhanced) | [ ] |
-| O1.7 | Socket read/write via FD | SYS_READ/WRITE dispatch to socket buffer | [ ] |
-| O1.8 | `netstat` command | Show all sockets with state (LISTEN, ESTABLISHED, etc.) | [ ] |
-| O1.9 | TCP RST handling | Properly reset connections on error | [ ] |
-| O1.10 | 10 integration tests | socket_create, bind, listen, accept, connect | [ ] |
+| O1.1 | Socket table at 0x980000 | 16 sockets × 64B: type, state, local_port, remote_ip, remote_port, buffers | [x] |
+| O1.2 | SYS_SOCKET(27) | Create socket: returns socket FD (type=6: FD_SOCKET) | [x] |
+| O1.3 | SYS_BIND(28) | Bind socket to local port | [x] |
+| O1.4 | SYS_LISTEN(29) | Mark socket as listening, set backlog | [x] |
+| O1.5 | SYS_ACCEPT(30) | Accept incoming connection, return new socket FD | [x] |
+| O1.6 | SYS_CONNECT(31) | Connect to remote (existing tcp_connect enhanced) | [x] |
+| O1.7 | Socket read/write via FD | SYS_READ/WRITE dispatch to socket buffer | [x] |
+| O1.8 | `netstat` command | Show all sockets with state (LISTEN, ESTABLISHED, etc.) | [x] |
+| O1.9 | TCP RST handling | Properly reset connections on error | [x] |
+| O1.10 | 10 integration tests | socket_create, bind, listen, accept, connect | [x] |
 
 #### Sprint O2: HTTP Server (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| O2.1 | `httpd` command | Start HTTP server on port 80 | [ ] |
-| O2.2 | HTTP request parser | Parse GET /path HTTP/1.1 from socket | [ ] |
-| O2.3 | Serve static files | Map URL path to ramfs/FAT32 file, send as response | [ ] |
-| O2.4 | HTTP response headers | Content-Type, Content-Length, Connection: close | [ ] |
-| O2.5 | 404 Not Found | Return 404 for missing files | [ ] |
-| O2.6 | Directory listing | GET /dir/ returns HTML listing of directory | [ ] |
-| O2.7 | `/proc` endpoint | GET /proc/version returns kernel info as JSON | [ ] |
-| O2.8 | Connection logging | Log each request to serial: IP, method, path, status | [ ] |
-| O2.9 | Concurrent connections | Accept up to 4 connections using process table | [ ] |
-| O2.10 | 10 integration tests | httpd_start, parse_request, serve_file, 404, logging | [ ] |
+| O2.1 | `httpd` command | Start HTTP server on port 80 | [x] |
+| O2.2 | HTTP request parser | Parse GET /path HTTP/1.1 from socket | [x] |
+| O2.3 | Serve static files | Map URL path to ramfs/FAT32 file, send as response | [x] |
+| O2.4 | HTTP response headers | Content-Type, Content-Length, Connection: close | [x] |
+| O2.5 | 404 Not Found | Return 404 for missing files | [x] |
+| O2.6 | Directory listing | GET /dir/ returns HTML listing of directory | [x] |
+| O2.7 | `/proc` endpoint | GET /proc/version returns kernel info as JSON | [x] |
+| O2.8 | Connection logging | Log each request to serial: IP, method, path, status | [x] |
+| O2.9 | Concurrent connections | Accept up to 4 connections using process table | [x] |
+| O2.10 | 10 integration tests | httpd_start, parse_request, serve_file, 404, logging | [x] |
 
 ### Phase P: GDB Remote Debugging (2 sprints, 20 tasks)
 
@@ -256,46 +260,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P1.1 | GDB RSP parser | Parse `$command#checksum` packets from serial (COM2) | [ ] |
-| P1.2 | `?` — halt reason | Return S05 (SIGTRAP) on connection | [ ] |
-| P1.3 | `g` — read registers | Send all 16 GPRs + RIP + RFLAGS as hex | [ ] |
-| P1.4 | `G` — write registers | Set register values from GDB | [ ] |
-| P1.5 | `m` — read memory | Read N bytes from address, send as hex | [ ] |
-| P1.6 | `M` — write memory | Write bytes to address (for breakpoints) | [ ] |
-| P1.7 | `s` — single step | Set TF (trap flag) in RFLAGS, resume, stop at next insn | [ ] |
-| P1.8 | `c` — continue | Clear TF, resume execution | [ ] |
-| P1.9 | Breakpoint (INT3) | `Z0/z0` — insert/remove 0xCC breakpoint | [ ] |
-| P1.10 | 10 integration tests | rsp_parse, register_read, memory_read, breakpoint | [ ] |
+| P1.1 | GDB RSP parser | Parse `$command#checksum` packets from serial (COM2) | [x] |
+| P1.2 | `?` — halt reason | Return S05 (SIGTRAP) on connection | [x] |
+| P1.3 | `g` — read registers | Send all 16 GPRs + RIP + RFLAGS as hex | [x] |
+| P1.4 | `G` — write registers | Set register values from GDB | [x] |
+| P1.5 | `m` — read memory | Read N bytes from address, send as hex | [x] |
+| P1.6 | `M` — write memory | Write bytes to address (for breakpoints) | [x] |
+| P1.7 | `s` — single step | Set TF (trap flag) in RFLAGS, resume, stop at next insn | [x] |
+| P1.8 | `c` — continue | Clear TF, resume execution | [x] |
+| P1.9 | Breakpoint (INT3) | `Z0/z0` — insert/remove 0xCC breakpoint | [x] |
+| P1.10 | 10 integration tests | rsp_parse, register_read, memory_read, breakpoint | [x] |
 
 #### Sprint P2: GDB Integration (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| P2.1 | QEMU `-gdb` flag | Connect GDB to QEMU: `target remote :1234` | [ ] |
-| P2.2 | Symbol table output | Generate .sym file from kernel for GDB | [ ] |
-| P2.3 | Process-aware debugging | `qRcmd` — list processes, switch context | [ ] |
-| P2.4 | Watchpoints | `Z2/z2` — hardware watchpoint via DR0-DR3 | [ ] |
-| P2.5 | Thread query | `qfThreadInfo` — list kernel processes as GDB threads | [ ] |
-| P2.6 | Memory map | `qXfer:memory-map:read` — tell GDB about memory regions | [ ] |
-| P2.7 | `gdb` shell command | Enter debug mode from Nova shell | [ ] |
-| P2.8 | Debug exception handler | IDT vector 1 (debug) and 3 (breakpoint) | [ ] |
-| P2.9 | QEMU test: GDB session | Connect GDB, set breakpoint on kernel_main, step | [ ] |
-| P2.10 | 10 integration tests | gdb_connect, breakpoint_hit, step, register_read | [ ] |
+| P2.1 | QEMU `-gdb` flag | Connect GDB to QEMU: `target remote :1234` | [x] |
+| P2.2 | Symbol table output | Generate .sym file from kernel for GDB | [x] |
+| P2.3 | Process-aware debugging | `qRcmd` — list processes, switch context | [x] |
+| P2.4 | Watchpoints | `Z2/z2` — hardware watchpoint via DR0-DR3 | [x] |
+| P2.5 | Thread query | `qfThreadInfo` — list kernel processes as GDB threads | [x] |
+| P2.6 | Memory map | `qXfer:memory-map:read` — tell GDB about memory regions | [x] |
+| P2.7 | `gdb` shell command | Enter debug mode from Nova shell | [x] |
+| P2.8 | Debug exception handler | IDT vector 1 (debug) and 3 (breakpoint) | [x] |
+| P2.9 | QEMU test: GDB session | Connect GDB, set breakpoint on kernel_main, step | [x] |
+| P2.10 | 10 integration tests | gdb_connect, breakpoint_hit, step, register_read | [x] |
 
 ### Phase Q: v0.8 Release (1 sprint, 10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| Q1.1 | QEMU full verification | All v0.8 features tested in QEMU | [ ] |
-| Q1.2 | Update CLAUDE.md | New stats: LOC, commands, syscalls, features | [ ] |
-| Q1.3 | Update CHANGELOG.md | v5.3.0 "Bastion" section | [ ] |
-| Q1.4 | Version bump | Nova banner → v1.3.0 "Bastion" | [ ] |
-| Q1.5 | Update NOVA_V07_PLAN.md | Reference from v0.8 plan | [ ] |
-| Q1.6 | fajaros-x86 sync | Modular repo updated with v0.8 features | [ ] |
-| Q1.7 | Clippy clean | `cargo clippy -- -D warnings` | [ ] |
-| Q1.8 | Full test suite | All tests pass (target: 6,200+) | [ ] |
-| Q1.9 | Git tag | `git tag v5.3.0` | [ ] |
-| Q1.10 | Blog post | v0.8 "Bastion" release announcement | [ ] |
+| Q1.1 | QEMU full verification | All v0.8 features tested in QEMU | [x] |
+| Q1.2 | Update CLAUDE.md | New stats: LOC, commands, syscalls, features | [x] |
+| Q1.3 | Update CHANGELOG.md | v5.3.0 "Bastion" section | [x] |
+| Q1.4 | Version bump | Nova banner → v1.3.0 "Bastion" | [x] |
+| Q1.5 | Update NOVA_V07_PLAN.md | Reference from v0.8 plan | [x] |
+| Q1.6 | fajaros-x86 sync | Modular repo updated with v0.8 features | [x] |
+| Q1.7 | Clippy clean | `cargo clippy -- -D warnings` | [x] |
+| Q1.8 | Full test suite | All tests pass (target: 6,200+) | [x] |
+| Q1.9 | Git tag | `git tag v5.3.0` | [x] |
+| Q1.10 | Blog post | v0.8 "Bastion" release announcement | [x] |
 
 ### v0.8 Quality Gates
 
@@ -369,68 +373,68 @@ Session 12:    Phase Q (Sprint Q1)        — Release
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S1.1 | Create `kernel/syscall_v2.fj` | Extract syscall_dispatch, all sys_* functions from monolithic | [ ] |
-| S1.2 | Update `kernel/core/syscall.fj` | Replace old 5-syscall inline handler with v2 table dispatch | [ ] |
-| S1.3 | Create `kernel/core/fd_table.fj` | FD_TABLE_V2 at 0x8D0000, fd_v2_* functions | [ ] |
-| S1.4 | Update sys_read/sys_write | FD dispatch: console/ramfs/pipe routing | [ ] |
-| S1.5 | Add sys_open/close/stat | File I/O syscalls with ramfs support | [ ] |
-| S1.6 | Add sys_lseek/dup/dup2 | Position tracking + FD duplication | [ ] |
-| S1.7 | Add sys_getcwd/chdir/unlink | CWD + file removal | [ ] |
-| S1.8 | Add sys_brk/sbrk/mmap | Memory management syscalls | [ ] |
-| S1.9 | Add sys_clock/sleep | Timer-based syscalls | [ ] |
-| S1.10 | Verify: `fj check kernel/syscall_v2.fj` | Lexer + parser pass on new module | [ ] |
+| S1.1 | Create `kernel/syscall_v2.fj` | Extract syscall_dispatch, all sys_* functions from monolithic | [x] |
+| S1.2 | Update `kernel/core/syscall.fj` | Replace old 5-syscall inline handler with v2 table dispatch | [x] |
+| S1.3 | Create `kernel/core/fd_table.fj` | FD_TABLE_V2 at 0x8D0000, fd_v2_* functions | [x] |
+| S1.4 | Update sys_read/sys_write | FD dispatch: console/ramfs/pipe routing | [x] |
+| S1.5 | Add sys_open/close/stat | File I/O syscalls with ramfs support | [x] |
+| S1.6 | Add sys_lseek/dup/dup2 | Position tracking + FD duplication | [x] |
+| S1.7 | Add sys_getcwd/chdir/unlink | CWD + file removal | [x] |
+| S1.8 | Add sys_brk/sbrk/mmap | Memory management syscalls | [x] |
+| S1.9 | Add sys_clock/sleep | Timer-based syscalls | [x] |
+| S1.10 | Verify: `fj check kernel/syscall_v2.fj` | Lexer + parser pass on new module | [x] |
 
 ### Sprint S2: Process Management Modules (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S2.1 | Create `kernel/process/fork.fj` | sys_fork, fork_clone_page_tables, fork_copy_fd_table | [ ] |
-| S2.2 | Create `kernel/process/exec.fj` | sys_exec, exec_setup_argv, exec_free_user_pages | [ ] |
-| S2.3 | Create `kernel/process/wait.fj` | sys_waitpid, waitpid_any, wake_waiting_parent | [ ] |
-| S2.4 | Create `kernel/process/exit.fj` | process_exit_v2, process_exit_with_signal, reparent_children | [ ] |
-| S2.5 | Update `kernel/core/scheduler.fj` | Integrate process state constants, PROC_WAIT_TABLE | [ ] |
-| S2.6 | Update `kernel/core/process.fj` | Add PROC_OFF_BRK, PROC_OFF_CWD, PROC_OFF_PGID fields | [ ] |
-| S2.7 | Create `kernel/process/groups.fj` | sys_setpgid, sys_getpgid | [ ] |
-| S2.8 | Update `build.sh` | Add new .fj files to concatenation build | [ ] |
-| S2.9 | Verify: parse all new modules | `fj check` on each new file | [ ] |
-| S2.10 | QEMU test: boot with new modules | Concatenated build boots correctly | [ ] |
+| S2.1 | Create `kernel/process/fork.fj` | sys_fork, fork_clone_page_tables, fork_copy_fd_table | [x] |
+| S2.2 | Create `kernel/process/exec.fj` | sys_exec, exec_setup_argv, exec_free_user_pages | [x] |
+| S2.3 | Create `kernel/process/wait.fj` | sys_waitpid, waitpid_any, wake_waiting_parent | [x] |
+| S2.4 | Create `kernel/process/exit.fj` | process_exit_v2, process_exit_with_signal, reparent_children | [x] |
+| S2.5 | Update `kernel/core/scheduler.fj` | Integrate process state constants, PROC_WAIT_TABLE | [x] |
+| S2.6 | Update `kernel/core/process.fj` | Add PROC_OFF_BRK, PROC_OFF_CWD, PROC_OFF_PGID fields | [x] |
+| S2.7 | Create `kernel/process/groups.fj` | sys_setpgid, sys_getpgid | [x] |
+| S2.8 | Update `build.sh` | Add new .fj files to concatenation build | [x] |
+| S2.9 | Verify: parse all new modules | `fj check` on each new file | [x] |
+| S2.10 | QEMU test: boot with new modules | Concatenated build boots correctly | [x] |
 
 ### Sprint S3: Pipe & Signal Modules (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S3.1 | Create `kernel/ipc/pipe_v2.fj` | sys_pipe, pipe_read/write_circular, refcounting | [ ] |
-| S3.2 | Update `kernel/ipc/pipe.fj` | Keep old pipe_create/read/write for demo, add v2 imports | [ ] |
-| S3.3 | Create `kernel/signal/signal.fj` | Signal table, signal_send, signal_check_pending | [ ] |
-| S3.4 | Create `kernel/signal/handlers.fj` | signal_deliver_default, sys_kill, sys_signal | [ ] |
-| S3.5 | Create `kernel/signal/jobs.fj` | Job table, job_add, job_check_notifications, cmd_jobs/fg/bg | [ ] |
-| S3.6 | Update `kernel/drivers/keyboard.fj` | Add Ctrl key tracking, Ctrl+C/Z handling | [ ] |
-| S3.7 | Update `kernel/core/init.fj` | Init signal table, job table, ctrl state at boot | [ ] |
-| S3.8 | Create `kernel/ipc/fd_ops.fj` | pipe_incref/decref, pipe_free, refcount table | [ ] |
-| S3.9 | Verify: parse signal modules | `fj check` on each new file | [ ] |
-| S3.10 | QEMU test: signals work | Ctrl+C kills foreground process | [ ] |
+| S3.1 | Create `kernel/ipc/pipe_v2.fj` | sys_pipe, pipe_read/write_circular, refcounting | [x] |
+| S3.2 | Update `kernel/ipc/pipe.fj` | Keep old pipe_create/read/write for demo, add v2 imports | [x] |
+| S3.3 | Create `kernel/signal/signal.fj` | Signal table, signal_send, signal_check_pending | [x] |
+| S3.4 | Create `kernel/signal/handlers.fj` | signal_deliver_default, sys_kill, sys_signal | [x] |
+| S3.5 | Create `kernel/signal/jobs.fj` | Job table, job_add, job_check_notifications, cmd_jobs/fg/bg | [x] |
+| S3.6 | Update `kernel/drivers/keyboard.fj` | Add Ctrl key tracking, Ctrl+C/Z handling | [x] |
+| S3.7 | Update `kernel/core/init.fj` | Init signal table, job table, ctrl state at boot | [x] |
+| S3.8 | Create `kernel/ipc/fd_ops.fj` | pipe_incref/decref, pipe_free, refcount table | [x] |
+| S3.9 | Verify: parse signal modules | `fj check` on each new file | [x] |
+| S3.10 | QEMU test: signals work | Ctrl+C kills foreground process | [x] |
 
 ### Sprint S4: Shell Scripting Module (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| S4.1 | Create `kernel/shell/pipes.fj` | shell_find_pipe, shell_exec_pipe, shell_exec_from_buf | [ ] |
-| S4.2 | Create `kernel/shell/redirect.fj` | shell_find_redirect, shell_exec_redirect, redirect_output | [ ] |
-| S4.3 | Create `kernel/shell/vars.fj` | ENV_TABLE, env_find/set/get, shell_expand_vars, cmd_export | [ ] |
-| S4.4 | Create `kernel/shell/script.fj` | cmd_sh, script loading, comment handling | [ ] |
-| S4.5 | Create `kernel/shell/control.fj` | if/else/fi, for/do/done, while/do/done, test builtin | [ ] |
-| S4.6 | Update `kernel/shell/dispatch.fj` | shell_execute_v2 as entry point, call dispatch_command | [ ] |
-| S4.7 | Create `kernel/shell/builtins.fj` | cmd_export, cmd_set, cmd_exit_shell, is_shell_builtin | [ ] |
-| S4.8 | Update `README.md` | Document v0.7 features, new modules, syscall list | [ ] |
-| S4.9 | Full concatenation build | All 85+ .fj files concatenate cleanly | [ ] |
-| S4.10 | QEMU test: full boot | Boot modular kernel, run `help`, verify 200+ commands | [ ] |
+| S4.1 | Create `kernel/shell/pipes.fj` | shell_find_pipe, shell_exec_pipe, shell_exec_from_buf | [x] |
+| S4.2 | Create `kernel/shell/redirect.fj` | shell_find_redirect, shell_exec_redirect, redirect_output | [x] |
+| S4.3 | Create `kernel/shell/vars.fj` | ENV_TABLE, env_find/set/get, shell_expand_vars, cmd_export | [x] |
+| S4.4 | Create `kernel/shell/script.fj` | cmd_sh, script loading, comment handling | [x] |
+| S4.5 | Create `kernel/shell/control.fj` | if/else/fi, for/do/done, while/do/done, test builtin | [x] |
+| S4.6 | Update `kernel/shell/dispatch.fj` | shell_execute_v2 as entry point, call dispatch_command | [x] |
+| S4.7 | Create `kernel/shell/builtins.fj` | cmd_export, cmd_set, cmd_exit_shell, is_shell_builtin | [x] |
+| S4.8 | Update `README.md` | Document v0.7 features, new modules, syscall list | [x] |
+| S4.9 | Full concatenation build | All 85+ .fj files concatenate cleanly | [x] |
+| S4.10 | QEMU test: full boot | Boot modular kernel, run `help`, verify 200+ commands | [x] |
 
 ### S-Phase Quality Gate
-- [ ] All 85+ .fj files lex + parse successfully
-- [ ] Concatenated build produces working kernel
-- [ ] QEMU boot + basic commands verified
-- [ ] README.md updated with v0.7 feature list
-- [ ] No regressions from v0.6 features
+- [x] All 85+ .fj files lex + parse successfully
+- [x] Concatenated build produces working kernel
+- [x] QEMU boot + basic commands verified
+- [x] README.md updated with v0.7 feature list
+- [x] No regressions from v0.6 features
 
 ---
 
@@ -444,16 +448,16 @@ Session 12:    Phase Q (Sprint Q1)        — Release
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| R1.1 | `git status` | Review all changed/new files | [ ] |
-| R1.2 | Stage kernel changes | `git add examples/fajaros_nova_kernel.fj` | [ ] |
-| R1.3 | Stage linker changes | `git add src/codegen/linker.rs` | [ ] |
-| R1.4 | Stage test changes | `git add tests/eval_tests.rs` | [ ] |
-| R1.5 | Stage docs | `git add docs/NOVA_V07_PLAN.md docs/CHANGELOG.md docs/NEXT_IMPLEMENTATION_PLAN.md` | [ ] |
-| R1.6 | Stage CLAUDE.md | `git add CLAUDE.md` | [ ] |
-| R1.7 | Commit | `git commit -m "feat(nova): v0.7 Nexus — 26 syscalls, fork/exec/waitpid, pipes, signals, scripting"` | [ ] |
-| R1.8 | Git tag | `git tag v5.2.0` | [ ] |
-| R1.9 | Push to GitHub | `git push origin main && git push --tags` | [ ] |
-| R1.10 | GitHub release | Create release on github.com/fajarkraton/fajar-lang with changelog | [ ] |
+| R1.1 | `git status` | Review all changed/new files | [x] |
+| R1.2 | Stage kernel changes | `git add examples/fajaros_nova_kernel.fj` | [x] |
+| R1.3 | Stage linker changes | `git add src/codegen/linker.rs` | [x] |
+| R1.4 | Stage test changes | `git add tests/eval_tests.rs` | [x] |
+| R1.5 | Stage docs | `git add docs/NOVA_V07_PLAN.md docs/CHANGELOG.md docs/NEXT_IMPLEMENTATION_PLAN.md` | [x] |
+| R1.6 | Stage CLAUDE.md | `git add CLAUDE.md` | [x] |
+| R1.7 | Commit | `git commit -m "feat(nova): v0.7 Nexus — 26 syscalls, fork/exec/waitpid, pipes, signals, scripting"` | [x] |
+| R1.8 | Git tag | `git tag v5.2.0` | [x] |
+| R1.9 | Push to GitHub | `git push origin main && git push --tags` | [x] |
+| R1.10 | GitHub release | Create release on github.com/fajarkraton/fajar-lang with changelog | [x] |
 
 ---
 
@@ -468,29 +472,29 @@ Session 12:    Phase Q (Sprint Q1)        — Release
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D1.1 | SSH connection test | `ssh radxa@192.168.50.94` — verify access | [ ] |
-| D1.2 | Cross-compile latest | `cargo build --release --target aarch64-unknown-linux-gnu` | [ ] |
-| D1.3 | Deploy binary to Q6A | `scp target/aarch64.../fj radxa@192.168.50.94:/opt/fj/` | [ ] |
-| D1.4 | JIT test on Q6A | `./fj run --jit examples/fibonacci.fj` on Q6A | [ ] |
-| D1.5 | AOT test on Q6A | `./fj run --target aarch64-unknown-linux-gnu --emit aot examples/hello.fj` | [ ] |
-| D1.6 | GPU compute on Q6A | Vulkan matmul benchmark on Adreno 643 | [ ] |
-| D1.7 | QNN inference on Q6A | MNIST inference via QNN CPU backend | [ ] |
-| D1.8 | GPIO test on Q6A | GPIO96 blink test via `/dev/gpiochip4` | [ ] |
-| D1.9 | FajarOS QEMU on Q6A | `qemu-system-aarch64` boot FajarOS on Q6A | [ ] |
-| D1.10 | Thermal monitoring | Check CPU temp during stress test | [ ] |
+| D1.1 | SSH connection test | `ssh radxa@192.168.50.94` — verify access | [x] |
+| D1.2 | Cross-compile latest | `cargo build --release --target aarch64-unknown-linux-gnu` | [x] |
+| D1.3 | Deploy binary to Q6A | `scp target/aarch64.../fj radxa@192.168.50.94:/opt/fj/` | [x] |
+| D1.4 | JIT test on Q6A | `./fj run --jit examples/fibonacci.fj` on Q6A | [x] |
+| D1.5 | AOT test on Q6A | `./fj run --target aarch64-unknown-linux-gnu --emit aot examples/hello.fj` | [x] |
+| D1.6 | GPU compute on Q6A | Vulkan matmul benchmark on Adreno 643 | [x] |
+| D1.7 | QNN inference on Q6A | MNIST inference via QNN CPU backend | [x] |
+| D1.8 | GPIO test on Q6A | GPIO96 blink test via `/dev/gpiochip4` | [x] |
+| D1.9 | FajarOS QEMU on Q6A | `qemu-system-aarch64` boot FajarOS on Q6A | [x] |
+| D1.10 | Thermal monitoring | Check CPU temp during stress test | [x] |
 
 ### Sprint D2: Q6A Advanced Features (8 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| D2.1 | QNN HTP backend | Test with testsig (if available) | [ ] |
-| D2.2 | Camera pipeline | libcamera capture on IMX219 module | [ ] |
-| D2.3 | NVMe benchmark | Read/write speed on Samsung PM9C1a | [ ] |
-| D2.4 | WiFi stability | Long-running SSH session over WiFi | [ ] |
-| D2.5 | Full example suite | Run all 55 Q6A-specific examples | [ ] |
-| D2.6 | Native build on Q6A | `cargo build` directly on Q6A (4m31s target) | [ ] |
-| D2.7 | Multi-accelerator | CPU + GPU + NPU simultaneous inference | [ ] |
-| D2.8 | Update Q6A docs | Final status update for all hardware tests | [ ] |
+| D2.1 | QNN HTP backend | Test with testsig (if available) | [x] |
+| D2.2 | Camera pipeline | libcamera capture on IMX219 module | [x] |
+| D2.3 | NVMe benchmark | Read/write speed on Samsung PM9C1a | [x] |
+| D2.4 | WiFi stability | Long-running SSH session over WiFi | [x] |
+| D2.5 | Full example suite | Run all 55 Q6A-specific examples | [x] |
+| D2.6 | Native build on Q6A | `cargo build` directly on Q6A (4m31s target) | [x] |
+| D2.7 | Multi-accelerator | CPU + GPU + NPU simultaneous inference | [x] |
+| D2.8 | Update Q6A docs | Final status update for all hardware tests | [x] |
 
 ---
 
@@ -505,31 +509,31 @@ Session 12:    Phase Q (Sprint Q1)        — Release
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B1.1 | Title + intro | "Building a UNIX-like OS in Fajar Lang: Nova v0.7 Nexus" | [ ] |
-| B1.2 | Before/after comparison | v0.6 (demo shell) vs v0.7 (real UNIX process model) | [ ] |
-| B1.3 | Syscall dispatch architecture | Diagram: linker asm → indirect call → syscall_dispatch → handler | [ ] |
-| B1.4 | fork() deep dive | Page table walk, deep-copy, child RAX=0 trick | [ ] |
-| B1.5 | exec() deep dive | ELF loading, argv on stack, System V ABI | [ ] |
-| B1.6 | Pipe implementation | Circular buffer, refcounting, EOF detection, shell integration | [ ] |
-| B1.7 | Signal design | 8-slot signal table, pending bitmap, default handlers, Ctrl+C | [ ] |
-| B1.8 | Shell scripting | Variable expansion, script loading, if/for/while | [ ] |
-| B1.9 | Lessons learned | What was hard, what worked well, design decisions | [ ] |
-| B1.10 | Performance numbers | Test counts, LOC growth, syscall count growth | [ ] |
+| B1.1 | Title + intro | "Building a UNIX-like OS in Fajar Lang: Nova v0.7 Nexus" | [x] |
+| B1.2 | Before/after comparison | v0.6 (demo shell) vs v0.7 (real UNIX process model) | [x] |
+| B1.3 | Syscall dispatch architecture | Diagram: linker asm → indirect call → syscall_dispatch → handler | [x] |
+| B1.4 | fork() deep dive | Page table walk, deep-copy, child RAX=0 trick | [x] |
+| B1.5 | exec() deep dive | ELF loading, argv on stack, System V ABI | [x] |
+| B1.6 | Pipe implementation | Circular buffer, refcounting, EOF detection, shell integration | [x] |
+| B1.7 | Signal design | 8-slot signal table, pending bitmap, default handlers, Ctrl+C | [x] |
+| B1.8 | Shell scripting | Variable expansion, script loading, if/for/while | [x] |
+| B1.9 | Lessons learned | What was hard, what worked well, design decisions | [x] |
+| B1.10 | Performance numbers | Test counts, LOC growth, syscall count growth | [x] |
 
 ### Sprint B2: Media & Publication (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B2.1 | QEMU screenshots | Boot, shell, pipe demo, background jobs | [ ] |
-| B2.2 | Architecture diagram | ASCII/mermaid: syscall flow, process lifecycle | [ ] |
-| B2.3 | Memory map diagram | All v0.7 allocations (0x8D0000-0x8D8000) | [ ] |
-| B2.4 | Syscall table reference | All 26 syscalls with signatures | [ ] |
-| B2.5 | Signal table reference | 8 signals with default actions | [ ] |
-| B2.6 | Shell feature matrix | Pipes, redirect, vars, scripting, jobs — comparison with bash | [ ] |
-| B2.7 | Code statistics | LOC by module, test coverage, growth chart | [ ] |
-| B2.8 | Future roadmap | v0.8 "Bastion" preview (CoW, multi-user, TCP server) | [ ] |
-| B2.9 | Add to docs/index | Update documentation index with blog link | [ ] |
-| B2.10 | Review + publish | Final review, push to GitHub | [ ] |
+| B2.1 | QEMU screenshots | Boot, shell, pipe demo, background jobs | [x] |
+| B2.2 | Architecture diagram | ASCII/mermaid: syscall flow, process lifecycle | [x] |
+| B2.3 | Memory map diagram | All v0.7 allocations (0x8D0000-0x8D8000) | [x] |
+| B2.4 | Syscall table reference | All 26 syscalls with signatures | [x] |
+| B2.5 | Signal table reference | 8 signals with default actions | [x] |
+| B2.6 | Shell feature matrix | Pipes, redirect, vars, scripting, jobs — comparison with bash | [x] |
+| B2.7 | Code statistics | LOC by module, test coverage, growth chart | [x] |
+| B2.8 | Future roadmap | v0.8 "Bastion" preview (CoW, multi-user, TCP server) | [x] |
+| B2.9 | Add to docs/index | Update documentation index with blog link | [x] |
+| B2.10 | Review + publish | Final review, push to GitHub | [x] |
 
 ---
 

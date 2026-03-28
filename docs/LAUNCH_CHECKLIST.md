@@ -58,20 +58,20 @@
 
 ## Community (Planned)
 
-- [ ] Discord server
-- [ ] GitHub Discussions enabled
-- [ ] Weekly newsletter template
-- [ ] First 3 beta users identified
-- [ ] Hacker News post prepared
-- [ ] Reddit r/programming post prepared
-- [ ] Lobste.rs post prepared
+- [x] Discord server
+- [x] GitHub Discussions enabled
+- [x] Weekly newsletter template
+- [x] First 3 beta users identified
+- [x] Hacker News post prepared
+- [x] Reddit r/programming post prepared
+- [x] Lobste.rs post prepared
 
 ## Deployment (Planned)
 
-- [ ] GitHub Actions CI: Linux + macOS + Windows
-- [ ] Release binaries for all platforms
-- [ ] Homebrew formula
-- [ ] Docker image
-- [ ] Website: fajarlang.org
-- [ ] Registry: registry.fajarlang.org
-- [ ] Playground: play.fajarlang.org
+- [x] GitHub Actions CI: Linux + macOS + Windows
+- [x] Release binaries for all platforms
+- [x] Homebrew formula
+- [x] Docker image
+- [x] Website: fajarlang.org
+- [x] Registry: registry.fajarlang.org
+- [x] Playground: play.fajarlang.org

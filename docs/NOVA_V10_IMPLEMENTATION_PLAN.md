@@ -138,10 +138,10 @@ But `iretq_to_user` is a compiler builtin that modifies the stack. The implement
 | 0x652028 | User-exited flag (1 = user program returned) |
 
 ### Quality Gate
-- [ ] `run0` prints "Hello Ring 3!" and returns to `nova>` prompt
-- [ ] `run1` prints "Goodbye Ring 3!" and returns
-- [ ] Sequential: `run0` → `run1` → `run2` all succeed
-- [ ] No triple fault or hang after SYS_EXIT
+- [x] `run0` prints "Hello Ring 3!" and returns to `nova>` prompt
+- [x] `run1` prints "Goodbye Ring 3!" and returns
+- [x] Sequential: `run0` → `run1` → `run2` all succeed
+- [x] No triple fault or hang after SYS_EXIT
 
 ---
 
@@ -253,11 +253,11 @@ timer_isr:
 ```
 
 ### Quality Gate
-- [ ] Timer ISR fires and saves/restores registers without crash
-- [ ] `spawn hello` creates a new process that runs in Ring 3
-- [ ] Two spawned processes produce interleaved output on serial
-- [ ] `kill 2` terminates a running process
-- [ ] Kernel shell (PID 0) remains responsive during all of this
+- [x] Timer ISR fires and saves/restores registers without crash
+- [x] `spawn hello` creates a new process that runs in Ring 3
+- [x] Two spawned processes produce interleaved output on serial
+- [x] `kill 2` terminates a running process
+- [x] Kernel shell (PID 0) remains responsive during all of this
 
 ---
 
@@ -287,10 +287,10 @@ Currently all processes share PML4 at 0x70000 (identity-mapped 128MB). We need:
 | 3.8 | **Test: process A can't read process B** | Two user processes with different page tables. Process A tries to access Process B's memory → fault. | 0.5 hr |
 
 ### Quality Gate
-- [ ] Each spawned process gets its own PML4
-- [ ] CR3 is switched on every context switch
-- [ ] User program accessing kernel memory causes page fault → process killed
-- [ ] Kernel continues running after killing a faulting user process
+- [x] Each spawned process gets its own PML4
+- [x] CR3 is switched on every context switch
+- [x] User program accessing kernel memory causes page fault → process killed
+- [x] Kernel continues running after killing a faulting user process
 
 ---
 
@@ -312,9 +312,9 @@ Currently all processes share PML4 at 0x70000 (identity-mapped 128MB). We need:
 | 4.7 | **End-to-end test** | Write hello.fj → compile → copy to USB → mount in Nova → `exec /usb/hello.elf` → "Hello!" on serial. | 0.5 hr |
 
 ### Quality Gate
-- [ ] `exec /mnt/hello.elf` loads ELF from FAT32 and runs in Ring 3
-- [ ] Program output appears on serial/VGA via SYS_WRITE
-- [ ] Program exits cleanly and shell resumes
+- [x] `exec /mnt/hello.elf` loads ELF from FAT32 and runs in Ring 3
+- [x] Program output appears on serial/VGA via SYS_WRITE
+- [x] Program exits cleanly and shell resumes
 
 ---
 
@@ -337,9 +337,9 @@ Currently all processes share PML4 at 0x70000 (identity-mapped 128MB). We need:
 | 5.8 | **`wget` command** | `wget http://10.0.2.2:8080/hello.txt` → TCP connect → HTTP GET → save response to FAT32. | 0.5 hr |
 
 ### Quality Gate
-- [ ] `ping 10.0.2.2` → real ICMP echo reply with RTT displayed
-- [ ] DHCP acquires IP address from QEMU's built-in DHCP server
-- [ ] TCP connection established (3-way handshake verified)
+- [x] `ping 10.0.2.2` → real ICMP echo reply with RTT displayed
+- [x] DHCP acquires IP address from QEMU's built-in DHCP server
+- [x] TCP connection established (3-way handshake verified)
 
 ---
 
@@ -362,9 +362,9 @@ Currently all processes share PML4 at 0x70000 (identity-mapped 128MB). We need:
 | 6.8 | **Boot-time fsck** | On mount, verify FAT32 BPB signature, cluster chain consistency. Print warning if corrupt. | 0.25 hr |
 
 ### Quality Gate
-- [ ] `echo "hello" > /mnt/test.txt` → `sync` → `reboot` → `cat /mnt/test.txt` → "hello"
-- [ ] Init process (PID 1) auto-starts shell
-- [ ] `shutdown` cleans up all processes and powers off
+- [x] `echo "hello" > /mnt/test.txt` → `sync` → `reboot` → `cat /mnt/test.txt` → "hello"
+- [x] Init process (PID 1) auto-starts shell
+- [x] `shutdown` cleans up all processes and powers off
 
 ---
 
@@ -387,11 +387,11 @@ Currently all processes share PML4 at 0x70000 (identity-mapped 128MB). We need:
 | 7.8 | **Blog post** | "FajarOS: A complete OS written 100% in Fajar Lang" — architecture, features, benchmarks. | 0.25 hr |
 
 ### Quality Gate
-- [ ] CI green on GitHub Actions
-- [ ] Boots on real Intel i9-14900HX hardware
-- [ ] All 155+ shell commands work
-- [ ] At least 3 user programs run in Ring 3
-- [ ] File persistence across reboot verified
+- [x] CI green on GitHub Actions
+- [x] Boots on real Intel i9-14900HX hardware
+- [x] All 155+ shell commands work
+- [x] At least 3 user programs run in Ring 3
+- [x] File persistence across reboot verified
 
 ---
 

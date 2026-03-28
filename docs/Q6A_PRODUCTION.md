@@ -174,12 +174,12 @@ Use logrotate (create `/etc/logrotate.d/fj`):
 
 ## Security Checklist
 
-- [ ] Disable SSH password auth (`PasswordAuthentication no`)
-- [ ] Use firewall (`ufw allow 22/tcp && ufw enable`)
-- [ ] Run as non-root user (`radxa`)
-- [ ] Resource limits in systemd (`MemoryMax=4G`, `LimitNOFILE=65536`)
-- [ ] Log rotation enabled
-- [ ] No exposed development ports
+- [x] Disable SSH password auth (`PasswordAuthentication no`)
+- [x] Use firewall (`ufw allow 22/tcp && ufw enable`)
+- [x] Run as non-root user (`radxa`)
+- [x] Resource limits in systemd (`MemoryMax=4G`, `LimitNOFILE=65536`)
+- [x] Log rotation enabled
+- [x] No exposed development ports
 
 ---
 

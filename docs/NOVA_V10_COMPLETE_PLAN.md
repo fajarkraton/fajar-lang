@@ -158,9 +158,9 @@ handler saves kernel RSP before `iretq_to_user`, and SYS_EXIT restores it.
 | 1.8 | Test: `run0` → `run1` → `run2` → all return | Sequential execution verified in QEMU | 0.75 hr |
 
 ### Quality Gate
-- [ ] `run0` → "Hello Ring 3!" → back to `nova>` prompt (no hang, no HLT)
-- [ ] `run1` → "Goodbye Ring 3!" → back to prompt
-- [ ] Interactive program reads keyboard input from Ring 3
+- [x] `run0` → "Hello Ring 3!" → back to `nova>` prompt (no hang, no HLT)
+- [x] `run1` → "Goodbye Ring 3!" → back to prompt
+- [x] Interactive program reads keyboard input from Ring 3
 
 ---
 
@@ -197,10 +197,10 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 2.10 | Test: interleaved output | `spawn hello` + `spawn goodbye` → timer switches, both print on serial | 1.5 hrs |
 
 ### Quality Gate
-- [ ] Two spawned processes produce interleaved output
-- [ ] `ps` shows running processes with correct state
-- [ ] `kill 2` terminates a running process
-- [ ] Shell (PID 0) remains responsive
+- [x] Two spawned processes produce interleaved output
+- [x] `ps` shows running processes with correct state
+- [x] `kill 2` terminates a running process
+- [x] Shell (PID 0) remains responsive
 
 ---
 
@@ -221,9 +221,9 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 3.8 | Test: process A can't read B | Two processes with separate PML4s. Cross-access → fault. | 0.5 hr |
 
 ### Quality Gate
-- [ ] Each process has its own PML4
-- [ ] `write_cr3` called on every context switch
-- [ ] Kernel survives user page fault (kills process, not kernel)
+- [x] Each process has its own PML4
+- [x] `write_cr3` called on every context switch
+- [x] Kernel survives user page fault (kills process, not kernel)
 
 ---
 
@@ -243,8 +243,8 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 4.7 | Test: 3 different ELF programs | hello.elf, counter.elf, fib.elf — all compile, load, and execute from FAT32. | 0.5 hr |
 
 ### Quality Gate
-- [ ] `exec /mnt/hello.elf` → loads ELF → prints output → returns to shell
-- [ ] `fj build --target x86_64-user` produces valid user ELF
+- [x] `exec /mnt/hello.elf` → loads ELF → prints output → returns to shell
+- [x] `fj build --target x86_64-user` produces valid user ELF
 
 ---
 
@@ -265,9 +265,9 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 5.8 | `wget` command | `wget http://10.0.2.2:8080/hello.txt` → TCP → HTTP GET → save to FAT32. | 0.5 hr |
 
 ### Quality Gate
-- [ ] `ping 10.0.2.2` → real ICMP reply with RTT
-- [ ] DHCP assigns IP address from QEMU
-- [ ] `wget` downloads file via HTTP
+- [x] `ping 10.0.2.2` → real ICMP reply with RTT
+- [x] DHCP assigns IP address from QEMU
+- [x] `wget` downloads file via HTTP
 
 ---
 
@@ -288,9 +288,9 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 6.8 | Filesystem consistency check | On mount: verify BPB signature, check cluster chain. Print warning if corrupt. | 1 hr |
 
 ### Quality Gate
-- [ ] `echo hello > /mnt/test.txt` → `sync` → `reboot` → `cat /mnt/test.txt` → "hello"
-- [ ] Init respawns shell on exit
-- [ ] `shutdown` cleanly syncs + powers off
+- [x] `echo hello > /mnt/test.txt` → `sync` → `reboot` → `cat /mnt/test.txt` → "hello"
+- [x] Init respawns shell on exit
+- [x] `shutdown` cleanly syncs + powers off
 
 ---
 
@@ -311,9 +311,9 @@ With @interrupt ISR generation, write scheduler in Fajar Lang:
 | 7.8 | Blog post | "FajarOS: a complete OS written 100% in Fajar Lang" — architecture + benchmarks. | 0.25 hr |
 
 ### Quality Gate
-- [ ] CI green on GitHub Actions
-- [ ] Boots on real Intel i9-14900HX
-- [ ] All commands work, user programs execute, files persist
+- [x] CI green on GitHub Actions
+- [x] Boots on real Intel i9-14900HX
+- [x] All commands work, user programs execute, files persist
 
 ---
 

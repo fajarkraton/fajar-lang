@@ -64,46 +64,46 @@ Hardware:      RTX 4090, Dragon Q6A (QCS6490), QEMU x86/arm64/riscv
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC1.1.1 | Actor trait | `trait Actor { fn receive(msg: Message) }` | [ ] |
-| DC1.1.2 | Mailbox (bounded MPSC) | Per-actor message queue with backpressure | [ ] |
-| DC1.1.3 | Actor spawning | `spawn<A: Actor>(actor: A) -> ActorRef` | [ ] |
-| DC1.1.4 | ActorRef (typed handle) | `ref.send(msg)`, `ref.ask(msg) -> Future<Reply>` | [ ] |
-| DC1.1.5 | Actor lifecycle | PreStart → Running → PostStop hooks | [ ] |
-| DC1.1.6 | Supervision strategy | OneForOne, AllForOne, restart limits | [ ] |
-| DC1.1.7 | Actor hierarchy | Parent → children tree, supervised restarts | [ ] |
-| DC1.1.8 | Dead letter queue | Messages to stopped actors | [ ] |
-| DC1.1.9 | Actor scheduler | Work-stealing thread pool for actor execution | [ ] |
-| DC1.1.10 | 10 actor tests | Spawn, send, ask, supervision, lifecycle | [ ] |
+| DC1.1.1 | Actor trait | `trait Actor { fn receive(msg: Message) }` | [x] |
+| DC1.1.2 | Mailbox (bounded MPSC) | Per-actor message queue with backpressure | [x] |
+| DC1.1.3 | Actor spawning | `spawn<A: Actor>(actor: A) -> ActorRef` | [x] |
+| DC1.1.4 | ActorRef (typed handle) | `ref.send(msg)`, `ref.ask(msg) -> Future<Reply>` | [x] |
+| DC1.1.5 | Actor lifecycle | PreStart → Running → PostStop hooks | [x] |
+| DC1.1.6 | Supervision strategy | OneForOne, AllForOne, restart limits | [x] |
+| DC1.1.7 | Actor hierarchy | Parent → children tree, supervised restarts | [x] |
+| DC1.1.8 | Dead letter queue | Messages to stopped actors | [x] |
+| DC1.1.9 | Actor scheduler | Work-stealing thread pool for actor execution | [x] |
+| DC1.1.10 | 10 actor tests | Spawn, send, ask, supervision, lifecycle | [x] |
 
 #### Sprint DC1.2: Messaging Patterns (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC1.2.1 | Request-reply | `ask()` with timeout | [ ] |
-| DC1.2.2 | Pub/sub | Topic-based broadcast | [ ] |
-| DC1.2.3 | Router (round-robin) | Distribute work across N actors | [ ] |
-| DC1.2.4 | Router (consistent hash) | Route by key to same actor | [ ] |
-| DC1.2.5 | Aggregator | Collect replies from N actors | [ ] |
-| DC1.2.6 | Circuit breaker | Fail-fast when target overwhelmed | [ ] |
-| DC1.2.7 | Backpressure protocol | Flow control between actors | [ ] |
-| DC1.2.8 | Priority mailbox | Priority queue for messages | [ ] |
-| DC1.2.9 | Stash/unstash | Defer messages during state transition | [ ] |
-| DC1.2.10 | Message serialization | serde for cross-process messages | [ ] |
+| DC1.2.1 | Request-reply | `ask()` with timeout | [x] |
+| DC1.2.2 | Pub/sub | Topic-based broadcast | [x] |
+| DC1.2.3 | Router (round-robin) | Distribute work across N actors | [x] |
+| DC1.2.4 | Router (consistent hash) | Route by key to same actor | [x] |
+| DC1.2.5 | Aggregator | Collect replies from N actors | [x] |
+| DC1.2.6 | Circuit breaker | Fail-fast when target overwhelmed | [x] |
+| DC1.2.7 | Backpressure protocol | Flow control between actors | [x] |
+| DC1.2.8 | Priority mailbox | Priority queue for messages | [x] |
+| DC1.2.9 | Stash/unstash | Defer messages during state transition | [x] |
+| DC1.2.10 | Message serialization | serde for cross-process messages | [x] |
 
 #### Sprint DC1.3: Concurrency Primitives (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC1.3.1 | Actor timer | Scheduled messages (once, periodic) | [ ] |
-| DC1.3.2 | FSM (finite state machine) | Actor with typed state transitions | [ ] |
-| DC1.3.3 | Event sourcing | Persist events, replay for recovery | [ ] |
-| DC1.3.4 | Saga pattern | Distributed transaction with compensations | [ ] |
-| DC1.3.5 | Actor persistence | Save/restore actor state to disk | [ ] |
-| DC1.3.6 | Cluster singleton | Exactly one instance across cluster | [ ] |
-| DC1.3.7 | Sharding | Automatic actor distribution by entity ID | [ ] |
-| DC1.3.8 | Stream processing | Actor-based data stream pipeline | [ ] |
-| DC1.3.9 | Batched processing | Accumulate messages, process in batch | [ ] |
-| DC1.3.10 | Actor benchmarks | Throughput, latency, overhead | [ ] |
+| DC1.3.1 | Actor timer | Scheduled messages (once, periodic) | [x] |
+| DC1.3.2 | FSM (finite state machine) | Actor with typed state transitions | [x] |
+| DC1.3.3 | Event sourcing | Persist events, replay for recovery | [x] |
+| DC1.3.4 | Saga pattern | Distributed transaction with compensations | [x] |
+| DC1.3.5 | Actor persistence | Save/restore actor state to disk | [x] |
+| DC1.3.6 | Cluster singleton | Exactly one instance across cluster | [x] |
+| DC1.3.7 | Sharding | Automatic actor distribution by entity ID | [x] |
+| DC1.3.8 | Stream processing | Actor-based data stream pipeline | [x] |
+| DC1.3.9 | Batched processing | Accumulate messages, process in batch | [x] |
+| DC1.3.10 | Actor benchmarks | Throughput, latency, overhead | [x] |
 
 ### Phase DC2: Cluster & Distribution (3 sprints, 30 tasks)
 
@@ -111,46 +111,46 @@ Hardware:      RTX 4090, Dragon Q6A (QCS6490), QEMU x86/arm64/riscv
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC2.1.1 | Node discovery | DNS seed, static list, mDNS | [ ] |
-| DC2.1.2 | Gossip protocol | Membership + failure detection (SWIM) | [ ] |
-| DC2.1.3 | Cluster join/leave | Graceful join with state sync | [ ] |
-| DC2.1.4 | Split-brain resolver | Quorum-based, keep-majority | [ ] |
-| DC2.1.5 | Node roles | Leader, worker, seed, client | [ ] |
-| DC2.1.6 | Heartbeat | Failure detection with phi-accrual | [ ] |
-| DC2.1.7 | Cluster events | MemberJoined, MemberLeft, MemberUnreachable | [ ] |
-| DC2.1.8 | Serialized transport | TCP + TLS between nodes | [ ] |
-| DC2.1.9 | Cluster metrics | Node count, message throughput, latency | [ ] |
-| DC2.1.10 | Cluster tests | Split-brain, recovery, partition tolerance | [ ] |
+| DC2.1.1 | Node discovery | DNS seed, static list, mDNS | [x] |
+| DC2.1.2 | Gossip protocol | Membership + failure detection (SWIM) | [x] |
+| DC2.1.3 | Cluster join/leave | Graceful join with state sync | [x] |
+| DC2.1.4 | Split-brain resolver | Quorum-based, keep-majority | [x] |
+| DC2.1.5 | Node roles | Leader, worker, seed, client | [x] |
+| DC2.1.6 | Heartbeat | Failure detection with phi-accrual | [x] |
+| DC2.1.7 | Cluster events | MemberJoined, MemberLeft, MemberUnreachable | [x] |
+| DC2.1.8 | Serialized transport | TCP + TLS between nodes | [x] |
+| DC2.1.9 | Cluster metrics | Node count, message throughput, latency | [x] |
+| DC2.1.10 | Cluster tests | Split-brain, recovery, partition tolerance | [x] |
 
 #### Sprint DC2.2: Remote Actors (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC2.2.1 | Remote actor ref | `ActorRef` that sends over network | [ ] |
-| DC2.2.2 | Location transparency | Same API for local and remote actors | [ ] |
-| DC2.2.3 | Remote deployment | `spawn_on(node, actor)` | [ ] |
-| DC2.2.4 | Actor migration | Move actor state to another node | [ ] |
-| DC2.2.5 | Remote supervision | Supervise actors on other nodes | [ ] |
-| DC2.2.6 | Cluster-aware router | Route to actors across cluster | [ ] |
-| DC2.2.7 | gRPC transport | Protobuf serialization for messages | [ ] |
-| DC2.2.8 | mTLS authentication | Mutual TLS for node-to-node communication | [ ] |
-| DC2.2.9 | Message deduplication | Exactly-once delivery guarantee | [ ] |
-| DC2.2.10 | Remote actor benchmarks | Cross-node latency, throughput | [ ] |
+| DC2.2.1 | Remote actor ref | `ActorRef` that sends over network | [x] |
+| DC2.2.2 | Location transparency | Same API for local and remote actors | [x] |
+| DC2.2.3 | Remote deployment | `spawn_on(node, actor)` | [x] |
+| DC2.2.4 | Actor migration | Move actor state to another node | [x] |
+| DC2.2.5 | Remote supervision | Supervise actors on other nodes | [x] |
+| DC2.2.6 | Cluster-aware router | Route to actors across cluster | [x] |
+| DC2.2.7 | gRPC transport | Protobuf serialization for messages | [x] |
+| DC2.2.8 | mTLS authentication | Mutual TLS for node-to-node communication | [x] |
+| DC2.2.9 | Message deduplication | Exactly-once delivery guarantee | [x] |
+| DC2.2.10 | Remote actor benchmarks | Cross-node latency, throughput | [x] |
 
 #### Sprint DC2.3: Distributed ML (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| DC2.3.1 | Data-parallel training | Split dataset across workers | [ ] |
-| DC2.3.2 | Gradient aggregation | AllReduce via ring or tree topology | [ ] |
-| DC2.3.3 | Parameter server | Centralized weight storage + update | [ ] |
-| DC2.3.4 | Model-parallel training | Split model layers across nodes | [ ] |
-| DC2.3.5 | Pipeline parallelism | Forward/backward across pipeline stages | [ ] |
-| DC2.3.6 | Elastic training | Add/remove workers during training | [ ] |
-| DC2.3.7 | Checkpoint + recovery | Save training state, resume on failure | [ ] |
-| DC2.3.8 | Federated learning | Train on-device, aggregate centrally | [ ] |
-| DC2.3.9 | Distributed inference | Shard model across edge devices | [ ] |
-| DC2.3.10 | Distributed training benchmark | MNIST across 4 nodes | [ ] |
+| DC2.3.1 | Data-parallel training | Split dataset across workers | [x] |
+| DC2.3.2 | Gradient aggregation | AllReduce via ring or tree topology | [x] |
+| DC2.3.3 | Parameter server | Centralized weight storage + update | [x] |
+| DC2.3.4 | Model-parallel training | Split model layers across nodes | [x] |
+| DC2.3.5 | Pipeline parallelism | Forward/backward across pipeline stages | [x] |
+| DC2.3.6 | Elastic training | Add/remove workers during training | [x] |
+| DC2.3.7 | Checkpoint + recovery | Save training state, resume on failure | [x] |
+| DC2.3.8 | Federated learning | Train on-device, aggregate centrally | [x] |
+| DC2.3.9 | Distributed inference | Shard model across edge devices | [x] |
+| DC2.3.10 | Distributed training benchmark | MNIST across 4 nodes | [x] |
 
 ### Phase DC3: Integration (2 sprints, 20 tasks)
 
@@ -819,16 +819,16 @@ Hardware:      RTX 4090, Dragon Q6A (QCS6490), QEMU x86/arm64/riscv
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| PL3.1 | VS Code extension plugin API | Allow plugins to add diagnostics | [ ] |
-| PL3.2 | Custom code actions from plugins | Plugin-provided quick fixes | [ ] |
-| PL3.3 | Custom completion from plugins | Plugin-provided suggestions | [ ] |
-| PL3.4 | Custom hover info from plugins | Plugin-provided documentation | [ ] |
-| PL3.5 | Plugin-based code lens | Custom annotations above functions | [ ] |
-| PL3.6 | Plugin-based inlay hints | Custom inline hints | [ ] |
-| PL3.7 | Debugger extensions | Plugin-provided debug visualizers | [ ] |
-| PL3.8 | REPL extensions | Plugin commands in REPL | [ ] |
-| PL3.9 | Build tool extensions | Plugin-provided build steps | [ ] |
-| PL3.10 | Plugin system documentation | How to write plugins | [ ] |
+| PL3.1 | VS Code extension plugin API | Allow plugins to add diagnostics | [x] |
+| PL3.2 | Custom code actions from plugins | Plugin-provided quick fixes | [x] |
+| PL3.3 | Custom completion from plugins | Plugin-provided suggestions | [x] |
+| PL3.4 | Custom hover info from plugins | Plugin-provided documentation | [x] |
+| PL3.5 | Plugin-based code lens | Custom annotations above functions | [x] |
+| PL3.6 | Plugin-based inlay hints | Custom inline hints | [x] |
+| PL3.7 | Debugger extensions | Plugin-provided debug visualizers | [x] |
+| PL3.8 | REPL extensions | Plugin commands in REPL | [x] |
+| PL3.9 | Build tool extensions | Plugin-provided build steps | [x] |
+| PL3.10 | Plugin system documentation | How to write plugins | [x] |
 
 ---
 
@@ -905,16 +905,16 @@ Hardware:      RTX 4090, Dragon Q6A (QCS6490), QEMU x86/arm64/riscv
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| CI3.1 | Minimum test coverage gate | Fail if < 85% coverage | [ ] |
-| CI3.2 | Performance regression gate | Fail if > 10% slower | [ ] |
-| CI3.3 | Binary size regression gate | Fail if > 5% larger | [ ] |
-| CI3.4 | Dependency audit | cargo audit (CVE check) | [ ] |
-| CI3.5 | License compliance | cargo deny (check licenses) | [ ] |
-| CI3.6 | Documentation coverage | All public items documented | [ ] |
-| CI3.7 | Semver compatibility | cargo semver-checks | [ ] |
-| CI3.8 | Fuzz regression | Run fuzz corpus (no new crashes) | [ ] |
-| CI3.9 | MSRV verification | Minimum Supported Rust Version | [ ] |
-| CI3.10 | Release checklist | Automated pre-release verification | [ ] |
+| CI3.1 | Minimum test coverage gate | Fail if < 85% coverage | [x] |
+| CI3.2 | Performance regression gate | Fail if > 10% slower | [x] |
+| CI3.3 | Binary size regression gate | Fail if > 5% larger | [x] |
+| CI3.4 | Dependency audit | cargo audit (CVE check) | [x] |
+| CI3.5 | License compliance | cargo deny (check licenses) | [x] |
+| CI3.6 | Documentation coverage | All public items documented | [x] |
+| CI3.7 | Semver compatibility | cargo semver-checks | [x] |
+| CI3.8 | Fuzz regression | Run fuzz corpus (no new crashes) | [x] |
+| CI3.9 | MSRV verification | Minimum Supported Rust Version | [x] |
+| CI3.10 | Release checklist | Automated pre-release verification | [x] |
 
 ---
 

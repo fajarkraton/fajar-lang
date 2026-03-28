@@ -808,6 +808,11 @@
 
 ## Option 8: Benchmarks Suite (3 sprints, 30 tasks)
 
+> **STATUS: PARTIALLY COMPLETE** — 4 criterion bench files exist (34 benchmarks)
+> covering interpreter, embedded, concurrency, and ARM64. The cross-language
+> comparison benchmarks (fj vs Rust vs C vs Python) below are planned for
+> GAP_CLOSURE_PLAN_V9 Phase F. See `docs/GAP_CLOSURE_PLAN_V9.md`.
+
 **Goal:** Formal benchmarks vs Rust, C, Python, Zig
 **Effort:** ~6 hours
 

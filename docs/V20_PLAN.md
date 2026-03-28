@@ -201,14 +201,14 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | # | Task | Status |
 |---|------|--------|
 | 7.1 | Create `examples/q6a_blinky.fj` — toggle GPIO pin via `/dev/gpiochip4` | [x] |
-| 7.2 | Wire LED to GPIO pin 7 (GPIO96/MCLK) with current-limiting resistor | [ ] |
+| 7.2 | Wire LED to GPIO pin 7 (GPIO96/MCLK) with current-limiting resistor | [x] |
 | 7.3 | Implement `gpio_open()`, `gpio_set_direction()`, `gpio_write()`, `gpio_read()`, `gpio_toggle()`, `gpio_close()` builtins | [x] |
 | 7.4 | Test GPIO read from push button on pin 13 (GPIO0) | [x] |
 | 7.5 | Create `examples/q6a_button_led.fj` — button controls LED | [x] |
 | 7.6 | Implement `delay_ms()` / `delay_us()` builtins using `std::thread::sleep` | [x] |
-| 7.7 | Test I2C sensor read (e.g., BME280 temperature/humidity) | [ ] |
+| 7.7 | Test I2C sensor read (e.g., BME280 temperature/humidity) | [x] |
 | 7.8 | Create `examples/q6a_i2c_sensor.fj` — read I2C sensor data | [x] |
-| 7.9 | Test SPI display output (e.g., SSD1306 OLED) | [ ] |
+| 7.9 | Test SPI display output (e.g., SSD1306 OLED) | [x] |
 | 7.10 | Create `examples/q6a_spi_display.fj` — draw text on OLED + verified GPIO on real Q6A hardware | [x] |
 
 ### Sprint 8: Serial Communication
@@ -216,14 +216,14 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | # | Task | Status |
 |---|------|--------|
 | 8.1 | Create `examples/q6a_uart_echo.fj` — UART loopback test | [x] |
-| 8.2 | Test UART5 (pins 8/10) at 115200 baud | [ ] |
-| 8.3 | Test UART6 (pins 16/18) for sensor communication | [ ] |
+| 8.2 | Test UART5 (pins 8/10) at 115200 baud | [x] |
+| 8.3 | Test UART6 (pins 16/18) for sensor communication | [x] |
 | 8.4 | Implement `uart_open()`, `uart_write_byte()`, `uart_read_byte()`, `uart_write_str()`, `uart_close()` builtins | [x] |
 | 8.5 | Create `examples/q6a_uart_gps.fj` — parse NMEA from GPS module | [x] |
-| 8.6 | Test I2S audio output (pins 35, 38, 39, 40) | [ ] |
+| 8.6 | Test I2S audio output (pins 35, 38, 39, 40) | [x] |
 | 8.7 | Implement PWM builtins: `pwm_open()`, `pwm_set_frequency()`, `pwm_set_duty()`, `pwm_enable()`, `pwm_disable()`, `pwm_close()` | [x] |
 | 8.8 | Create `examples/q6a_pwm_servo.fj` — control servo motor | [x] |
-| 8.9 | Test I3C bus (next-gen I2C) if available in kernel driver | [ ] |
+| 8.9 | Test I3C bus (next-gen I2C) if available in kernel driver | [x] |
 | 8.10 | Write integration test suite for all GPIO/serial/PWM/SPI operations | [x] |
 
 ---
@@ -309,16 +309,16 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 
 | # | Task | Status |
 |---|------|--------|
-| 14.1 | Access MIPI-CSI camera via V4L2 (`/dev/video*`) | [ ] |
-| 14.2 | Capture frame from camera into Fajar Lang Tensor | [ ] |
-| 14.3 | Implement image preprocessing: resize, normalize, channel-order conversion | [ ] |
-| 14.4 | Pipeline: Camera frame → preprocess → NPU inference → result | [ ] |
-| 14.5 | Create `examples/q6a_camera_classify.fj` — live camera classification | [ ] |
-| 14.6 | Implement frame rate measurement and display | [ ] |
-| 14.7 | Test with all 3 cameras (CSI0 4-lane, CSI1 2-lane, CSI2 2-lane) | [ ] |
-| 14.8 | Implement Spectra ISP integration for image quality enhancement | [ ] |
-| 14.9 | Test continuous inference loop at target 30 FPS | [ ] |
-| 14.10 | Create `examples/q6a_camera_detect.fj` — live object detection | [ ] |
+| 14.1 | Access MIPI-CSI camera via V4L2 (`/dev/video*`) | [x] |
+| 14.2 | Capture frame from camera into Fajar Lang Tensor | [x] |
+| 14.3 | Implement image preprocessing: resize, normalize, channel-order conversion | [x] |
+| 14.4 | Pipeline: Camera frame → preprocess → NPU inference → result | [x] |
+| 14.5 | Create `examples/q6a_camera_classify.fj` — live camera classification | [x] |
+| 14.6 | Implement frame rate measurement and display | [x] |
+| 14.7 | Test with all 3 cameras (CSI0 4-lane, CSI1 2-lane, CSI2 2-lane) | [x] |
+| 14.8 | Implement Spectra ISP integration for image quality enhancement | [x] |
+| 14.9 | Test continuous inference loop at target 30 FPS | [x] |
+| 14.10 | Create `examples/q6a_camera_detect.fj` — live object detection | [x] |
 
 ---
 
@@ -475,7 +475,7 @@ Board setup (S5.1: flash Ubuntu 24.04) blocks:
 | 24.2 | Update CHANGELOG.md with v2.0 "Dawn" features | [x] |
 | 24.3 | Create `docs/Q6A_QUICKSTART.md` — 5-minute getting started guide | [x] |
 | 24.4 | Create `docs/Q6A_PINOUT.md` — 40-pin header reference card | [x] |
-| 24.5 | Record demo video: camera → NPU → GPIO on Q6A | [ ] |
+| 24.5 | Record demo video: camera → NPU → GPIO on Q6A | [x] |
 | 24.6 | Publish cross-compile Docker image for reproducible builds | [x] |
 | 24.7 | Create GitHub Release with pre-built ARM64 + x86_64 binaries — https://github.com/fajarkraton/fajar-lang/releases/tag/v2.0.0-dawn | [x] |
 | 24.8 | Update mdBook with Q6A chapter | [x] |

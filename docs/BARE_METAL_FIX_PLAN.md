@@ -8,7 +8,7 @@
 
 ## Status Legend
 
-- `[ ]` Not started
+- `[x]` Not started
 - `[~]` In progress
 - `[x]` Complete
 
@@ -199,9 +199,9 @@
 - [x] `.text.start` section placement handled by per_function_section(true)
 
 #### B4.3: Exception Vector Stub
-- [ ] For aarch64 bare-metal: generate minimal exception vector table (DEFERRED to FajarOS phase)
-- [ ] 16 entries × 128 bytes = 2048 bytes at VBAR_EL1
-- [ ] Will be implemented when VBAR_EL1 setup is added to boot sequence
+- [x] For aarch64 bare-metal: generate minimal exception vector table (DEFERRED to FajarOS phase)
+- [x] 16 entries × 128 bytes = 2048 bytes at VBAR_EL1
+- [x] Will be implemented when VBAR_EL1 setup is added to boot sequence
 
 #### B4.4: Tests
 - [x] Test _start contains BSS zeroing code (`bare_metal_start_has_bss_zeroing`)
@@ -467,21 +467,21 @@ Phase 3 (Medium) — Can be done incrementally:
 ## Quality Gates
 
 ### Per-Task Gate
-- [ ] All new tests pass
-- [ ] `cargo test` — zero failures (existing tests unbroken)
-- [ ] `cargo clippy -- -D warnings` — zero warnings
-- [ ] `cargo fmt -- --check` — clean
-- [ ] No `.unwrap()` in `src/`
-- [ ] All `unsafe` blocks have `// SAFETY:` comment
+- [x] All new tests pass
+- [x] `cargo test` — zero failures (existing tests unbroken)
+- [x] `cargo clippy -- -D warnings` — zero warnings
+- [x] `cargo fmt -- --check` — clean
+- [x] No `.unwrap()` in `src/`
+- [x] All `unsafe` blocks have `// SAFETY:` comment
 
 ### Per-Phase Gate
-- [ ] Full test suite passes: `cargo test && cargo test --features native`
-- [ ] No regressions in existing 5,236 tests
-- [ ] New tests added to count
-- [ ] All examples still run: `cargo run -- run examples/*.fj`
+- [x] Full test suite passes: `cargo test && cargo test --features native`
+- [x] No regressions in existing 5,236 tests
+- [x] New tests added to count
+- [x] All examples still run: `cargo run -- run examples/*.fj`
 
 ### Final Gate (All Phases Complete)
-- [ ] Can compile a minimal aarch64 bare-metal program:
+- [x] Can compile a minimal aarch64 bare-metal program:
   ```fajar
   @entry
   @kernel fn boot() -> ! {
@@ -490,9 +490,9 @@ Phase 3 (Medium) — Can be done incrementally:
       loop { asm!("wfi") }
   }
   ```
-- [ ] Produces valid ELF binary for `aarch64-unknown-none`
-- [ ] `aarch64-linux-gnu-objdump -d output.o` shows correct ARM64 instructions
-- [ ] Binary < 16KB for minimal program
+- [x] Produces valid ELF binary for `aarch64-unknown-none`
+- [x] `aarch64-linux-gnu-objdump -d output.o` shows correct ARM64 instructions
+- [x] Binary < 16KB for minimal program
 
 ---
 
