@@ -1,0 +1,35 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question! Please search existing discussions first.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know about Fajar Lang?
+      placeholder: Describe your question clearly...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Topic Area
+      options:
+        - Language syntax
+        - ML / tensor operations
+        - OS / embedded / @kernel
+        - Compiler (Cranelift / LLVM)
+        - Tooling (REPL, LSP, fj CLI)
+        - Packaging / installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Code samples, error messages, or environment details.
+      render: fajar

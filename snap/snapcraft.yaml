@@ -1,0 +1,28 @@
+# Snap package for Fajar Lang
+# Build:   snapcraft
+# Install: sudo snap install fj --classic
+
+name: fj
+version: "6.1.0"
+summary: Fajar Lang -- systems programming for embedded AI + OS
+description: |
+  Statically-typed systems programming language with compiler-enforced
+  context isolation (@kernel/@device/@safe), first-class tensor types,
+  and Cranelift/LLVM native compilation. Designed for embedded ML and
+  OS integration.
+
+base: core22
+confinement: classic
+grade: stable
+
+parts:
+  fj:
+    plugin: rust
+    source: .
+    build-packages:
+      - gcc
+      - pkg-config
+
+apps:
+  fj:
+    command: bin/fj

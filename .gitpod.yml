@@ -1,0 +1,22 @@
+# Gitpod configuration for Fajar Lang
+# Open: https://gitpod.io/#https://github.com/fajarkraton/fajar-lang
+
+image: gitpod/workspace-rust
+
+tasks:
+  - name: Build
+    init: cargo build
+    command: cargo test --lib
+
+ports:
+  - port: 8080
+    onOpen: ignore
+    name: Playground
+  - port: 5000
+    onOpen: ignore
+    name: Registry
+
+vscode:
+  extensions:
+    - rust-lang.rust-analyzer
+    - tamasfe.even-better-toml

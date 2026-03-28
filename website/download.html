@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download - Fajar Lang</title>
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --secondary: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text: #e0e0e0;
+            --text-muted: #a0a0b0;
+            --bg: #0d0d1a;
+            --card-bg: #141428;
+            --border: #2a2a4a;
+            --code-bg: #1c1c34;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        a { color: var(--highlight); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code, pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+        nav {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem; background: var(--primary);
+            border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+        }
+        nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--highlight); }
+        nav .logo span { color: var(--text); }
+        nav .links { display: flex; gap: 1.5rem; }
+        nav .links a { color: var(--text-muted); font-size: 0.95rem; }
+        nav .links a:hover { color: var(--text); text-decoration: none; }
+
+        .page { max-width: 800px; margin: 0 auto; padding: 3rem 2rem; }
+        .page h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .page .subtitle { color: var(--text-muted); margin-bottom: 2.5rem; }
+
+        .tabs { display: flex; gap: 0; margin-bottom: 0; }
+        .tab {
+            padding: 0.6rem 1.5rem; background: var(--primary); border: 1px solid var(--border);
+            border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer;
+            color: var(--text-muted); font-weight: 600; font-size: 0.95rem;
+        }
+        .tab.active { background: var(--code-bg); color: var(--text); border-color: var(--highlight); }
+        .tab-content {
+            display: none; background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: 0 8px 8px 8px; padding: 1.5rem; margin-bottom: 2rem;
+        }
+        .tab-content.active { display: block; }
+        .tab-content h3 { margin-bottom: 0.75rem; font-size: 1rem; color: var(--highlight); }
+        .tab-content pre {
+            background: var(--primary); padding: 0.75rem 1rem; border-radius: 6px;
+            margin-bottom: 1rem; overflow-x: auto; font-size: 0.9rem;
+        }
+        .tab-content p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
+
+        .checksums { margin-top: 2rem; }
+        .checksums h2 { font-size: 1.5rem; margin-bottom: 1rem; }
+        .checksums table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .checksums th, .checksums td {
+            padding: 0.6rem 1rem; text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .checksums th { color: var(--text-muted); font-weight: 600; }
+        .checksums td code { background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.8rem; }
+
+        footer {
+            text-align: center; padding: 2rem; border-top: 1px solid var(--border);
+            color: var(--text-muted); font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="logo">fj<span>lang</span></div>
+    <div class="links">
+        <a href="index.html">Home</a>
+        <a href="download.html">Download</a>
+        <a href="comparison.html">Compare</a>
+        <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
+        <a href="https://github.com/fajarkraton/fajar-lang/tree/main/book">Docs</a>
+    </div>
+</nav>
+
+<div class="page">
+    <h1>Download Fajar Lang</h1>
+    <p class="subtitle">Install the <code>fj</code> compiler and toolchain for your platform.</p>
+
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('linux')">Linux</div>
+        <div class="tab" onclick="showTab('macos')">macOS</div>
+        <div class="tab" onclick="showTab('windows')">Windows</div>
+        <div class="tab" onclick="showTab('source')">From Source</div>
+    </div>
+
+    <div id="linux" class="tab-content active">
+        <h3>Install via Cargo (recommended)</h3>
+        <pre>cargo install fajar-lang</pre>
+
+        <h3>Install via shell script</h3>
+        <pre>curl -sSf https://fajarlang.org/install.sh | sh</pre>
+
+        <h3>Download binary</h3>
+        <p>Download the latest release from
+           <a href="https://github.com/fajarkraton/fajar-lang/releases">GitHub Releases</a>.</p>
+        <pre>tar -xzf fj-x86_64-unknown-linux-gnu.tar.gz
+sudo mv fj /usr/local/bin/</pre>
+    </div>
+
+    <div id="macos" class="tab-content">
+        <h3>Install via Homebrew</h3>
+        <pre>brew install fajarkraton/tap/fajar-lang</pre>
+
+        <h3>Install via Cargo</h3>
+        <pre>cargo install fajar-lang</pre>
+
+        <h3>Download binary</h3>
+        <p>Download the latest release from
+           <a href="https://github.com/fajarkraton/fajar-lang/releases">GitHub Releases</a>.</p>
+        <pre>tar -xzf fj-aarch64-apple-darwin.tar.gz
+sudo mv fj /usr/local/bin/</pre>
+    </div>
+
+    <div id="windows" class="tab-content">
+        <h3>Install via Chocolatey</h3>
+        <pre>choco install fajar-lang</pre>
+
+        <h3>Install via Cargo</h3>
+        <pre>cargo install fajar-lang</pre>
+
+        <h3>Download binary</h3>
+        <p>Download <code>fj-x86_64-pc-windows-msvc.zip</code> from
+           <a href="https://github.com/fajarkraton/fajar-lang/releases">GitHub Releases</a>
+           and add the extracted directory to your PATH.</p>
+    </div>
+
+    <div id="source" class="tab-content">
+        <h3>Build from source</h3>
+        <pre>git clone https://github.com/fajarkraton/fajar-lang.git
+cd fajar-lang
+cargo build --release
+# Binary at target/release/fj</pre>
+
+        <h3>Build with LLVM backend</h3>
+        <pre># Install LLVM 18 first:
+# Ubuntu: sudo apt-get install llvm-18-dev libpolly-18-dev libzstd-dev
+# macOS:  brew install llvm@18
+
+cargo build --release --features llvm</pre>
+
+        <p>Requires Rust 1.87+ (stable). See
+           <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+           for full build instructions.</p>
+    </div>
+
+    <div class="checksums">
+        <h2>Checksums (SHA-256)</h2>
+        <table>
+            <tr>
+                <th>File</th>
+                <th>SHA-256</th>
+            </tr>
+            <tr>
+                <td>fj-x86_64-unknown-linux-gnu.tar.gz</td>
+                <td><code>See release page</code></td>
+            </tr>
+            <tr>
+                <td>fj-aarch64-unknown-linux-gnu.tar.gz</td>
+                <td><code>See release page</code></td>
+            </tr>
+            <tr>
+                <td>fj-aarch64-apple-darwin.tar.gz</td>
+                <td><code>See release page</code></td>
+            </tr>
+            <tr>
+                <td>fj-x86_64-apple-darwin.tar.gz</td>
+                <td><code>See release page</code></td>
+            </tr>
+            <tr>
+                <td>fj-x86_64-pc-windows-msvc.zip</td>
+                <td><code>See release page</code></td>
+            </tr>
+        </table>
+        <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.85rem;">
+            Checksums are published alongside each
+            <a href="https://github.com/fajarkraton/fajar-lang/releases">GitHub Release</a>.
+            Verify with: <code>sha256sum -c checksums.txt</code>
+        </p>
+    </div>
+</div>
+
+<footer>
+    <p>Fajar Lang is open source under the MIT License. Created by Fajar (TaxPrime / PrimeCore.id)</p>
+</footer>
+
+<script>
+function showTab(id) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

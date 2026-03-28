@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparison - Fajar Lang vs Rust vs C vs Python</title>
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --secondary: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text: #e0e0e0;
+            --text-muted: #a0a0b0;
+            --bg: #0d0d1a;
+            --card-bg: #141428;
+            --border: #2a2a4a;
+            --green: #98c379;
+            --yellow: #e5c07b;
+            --red: #e06c75;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg); color: var(--text); line-height: 1.6;
+        }
+        a { color: var(--highlight); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        nav {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem; background: var(--primary);
+            border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+        }
+        nav .logo { font-size: 1.5rem; font-weight: 700; color: var(--highlight); }
+        nav .logo span { color: var(--text); }
+        nav .links { display: flex; gap: 1.5rem; }
+        nav .links a { color: var(--text-muted); font-size: 0.95rem; }
+        nav .links a:hover { color: var(--text); text-decoration: none; }
+
+        .page { max-width: 960px; margin: 0 auto; padding: 3rem 2rem; }
+        .page h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .page .subtitle { color: var(--text-muted); margin-bottom: 2.5rem; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+        th, td { padding: 0.7rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        th { color: var(--text-muted); font-weight: 600; background: var(--primary); position: sticky; top: 52px; }
+        th:first-child { border-radius: 8px 0 0 0; }
+        th:last-child { border-radius: 0 8px 0 0; }
+        td:first-child { font-weight: 600; }
+        tr:hover { background: var(--card-bg); }
+        .yes { color: var(--green); }
+        .partial { color: var(--yellow); }
+        .no { color: var(--red); }
+
+        .note { margin-top: 2rem; padding: 1rem; background: var(--card-bg); border-left: 3px solid var(--highlight); border-radius: 0 8px 8px 0; font-size: 0.9rem; color: var(--text-muted); }
+
+        footer { text-align: center; padding: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="logo">fj<span>lang</span></div>
+    <div class="links">
+        <a href="index.html">Home</a>
+        <a href="download.html">Download</a>
+        <a href="comparison.html">Compare</a>
+        <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
+        <a href="https://github.com/fajarkraton/fajar-lang/tree/main/book">Docs</a>
+    </div>
+</nav>
+
+<div class="page">
+    <h1>Language Comparison</h1>
+    <p class="subtitle">How Fajar Lang compares to Rust, C, and Python for embedded ML and OS workloads.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>Fajar Lang</th>
+                <th>Rust</th>
+                <th>C</th>
+                <th>Python</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Memory safety (no GC)</td>
+                <td class="yes">Yes (ownership)</td>
+                <td class="yes">Yes (ownership + lifetimes)</td>
+                <td class="no">No (manual)</td>
+                <td class="partial">GC-managed</td>
+            </tr>
+            <tr>
+                <td>Lifetime annotations</td>
+                <td class="yes">Not required</td>
+                <td class="partial">Required</td>
+                <td>N/A</td>
+                <td>N/A</td>
+            </tr>
+            <tr>
+                <td>Native tensor type</td>
+                <td class="yes">First-class</td>
+                <td class="no">Via libraries</td>
+                <td class="no">No</td>
+                <td class="partial">Via NumPy</td>
+            </tr>
+            <tr>
+                <td>Compile-time shape checking</td>
+                <td class="yes">Yes</td>
+                <td class="no">No</td>
+                <td class="no">No</td>
+                <td class="no">No</td>
+            </tr>
+            <tr>
+                <td>Built-in autograd</td>
+                <td class="yes">Yes (backward, grad)</td>
+                <td class="no">No</td>
+                <td class="no">No</td>
+                <td class="partial">Via PyTorch</td>
+            </tr>
+            <tr>
+                <td>OS kernel development</td>
+                <td class="yes">Yes (@kernel context)</td>
+                <td class="yes">Yes (no_std)</td>
+                <td class="yes">Yes</td>
+                <td class="no">No</td>
+            </tr>
+            <tr>
+                <td>Context isolation (ML + OS)</td>
+                <td class="yes">Compiler-enforced</td>
+                <td class="no">Convention only</td>
+                <td class="no">No</td>
+                <td class="no">No</td>
+            </tr>
+            <tr>
+                <td>Inline assembly</td>
+                <td class="yes">Yes</td>
+                <td class="yes">Yes (asm!)</td>
+                <td class="yes">Yes (__asm__)</td>
+                <td class="no">No</td>
+            </tr>
+            <tr>
+                <td>Cross-compilation (ARM64, RISC-V)</td>
+                <td class="yes">Built-in</td>
+                <td class="yes">Via targets</td>
+                <td class="yes">Via toolchain</td>
+                <td class="no">Interpreted</td>
+            </tr>
+            <tr>
+                <td>INT8 quantization</td>
+                <td class="yes">Native</td>
+                <td class="no">Via libraries</td>
+                <td class="no">Manual</td>
+                <td class="partial">Via frameworks</td>
+            </tr>
+            <tr>
+                <td>Pattern matching</td>
+                <td class="yes">Yes</td>
+                <td class="yes">Yes</td>
+                <td class="no">No (switch)</td>
+                <td class="partial">match (3.10+)</td>
+            </tr>
+            <tr>
+                <td>Generics</td>
+                <td class="yes">Monomorphized</td>
+                <td class="yes">Monomorphized</td>
+                <td class="no">No (macros/void*)</td>
+                <td class="partial">Type hints only</td>
+            </tr>
+            <tr>
+                <td>Trait / interface system</td>
+                <td class="yes">Traits + dyn dispatch</td>
+                <td class="yes">Traits</td>
+                <td class="no">No</td>
+                <td class="partial">Protocols (ABC)</td>
+            </tr>
+            <tr>
+                <td>Async / await</td>
+                <td class="yes">Yes</td>
+                <td class="yes">Yes</td>
+                <td class="no">No</td>
+                <td class="yes">Yes (asyncio)</td>
+            </tr>
+            <tr>
+                <td>REPL</td>
+                <td class="yes">Yes (fj repl)</td>
+                <td class="no">No (unofficial)</td>
+                <td class="no">No</td>
+                <td class="yes">Yes</td>
+            </tr>
+            <tr>
+                <td>Package manager</td>
+                <td class="yes">Built-in (fj.toml)</td>
+                <td class="yes">Cargo</td>
+                <td class="no">No standard</td>
+                <td class="yes">pip</td>
+            </tr>
+            <tr>
+                <td>Learning curve</td>
+                <td class="yes">Moderate</td>
+                <td class="partial">Steep</td>
+                <td class="partial">Moderate (unsafe)</td>
+                <td class="yes">Easy</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note">
+        <strong>Note:</strong> This comparison reflects the design goals and current capabilities of each language
+        for the specific domain of embedded ML + OS integration. Each language has strengths in other domains
+        not represented here. Rust and C have decades-mature ecosystems; Python dominates data science tooling.
+        Fajar Lang is purpose-built for the intersection of OS-level control and ML inference in a single binary.
+    </div>
+</div>
+
+<footer>
+    <p>Fajar Lang is open source under the MIT License. Created by Fajar (TaxPrime / PrimeCore.id)</p>
+</footer>
+
+</body>
+</html>

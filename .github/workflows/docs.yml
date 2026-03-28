@@ -1,0 +1,53 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "book/**"
+      - "src/**"
+      - "docs/**"
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+jobs:
+  build-docs:
+    name: Build and Deploy Docs
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install mdBook
+        run: |
+          curl -sSL https://github.com/rust-lang/mdBook/releases/latest/download/mdbook-v0.4.43-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv mdbook /usr/local/bin/
+
+      - name: Build mdBook
+        run: mdbook build book/
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate API docs
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Merge outputs
+        run: |
+          mkdir -p _site
+          cp -r book/book/* _site/
+          cp -r target/doc _site/api
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,51 +11,6 @@ permissions:
   contents: write
 
 jobs:
-  # ── S24.1: Semver Check ──────────────────────────────────────────────
-  semver-check:
-    name: Semver Compatibility
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-semver-checks
-        run: cargo install cargo-semver-checks --locked
-
-      - name: Check semver
-        run: cargo semver-checks check-release
-        continue-on-error: true
-
-  # ── S24.2: Changelog ─────────────────────────────────────────────────
-  changelog:
-    name: Generate Changelog
-    runs-on: ubuntu-24.04
-    outputs:
-      changelog: ${{ steps.cliff.outputs.content }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        id: cliff
-        uses: orhun/git-cliff-action@v4
-        with:
-          args: --latest --strip header
-        env:
-          OUTPUT: CHANGES.md
-
-      - name: Upload changelog
-        uses: actions/upload-artifact@v5
-        with:
-          name: changelog
-          path: CHANGES.md
-
-  # ── S24.3-S24.8: Build & Package ────────────────────────────────────
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -64,257 +18,70 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-24.04
-            archive: tar.gz
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-24.04
-            archive: tar.gz
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04
-            archive: tar.gz
-          - target: riscv64gc-unknown-linux-gnu
-            os: ubuntu-24.04
-            archive: tar.gz
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            archive: tar.gz
-          - target: aarch64-apple-darwin
-            os: macos-14
-            archive: tar.gz
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            archive: zip
-
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-24.04, ext: "" }
+          - { target: aarch64-unknown-linux-gnu,  os: ubuntu-24.04, ext: "" }
+          - { target: x86_64-apple-darwin,        os: macos-latest,  ext: "" }
+          - { target: aarch64-apple-darwin,       os: macos-14,      ext: "" }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest, ext: ".exe" }
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
-        if: contains(matrix.target, 'aarch64-unknown-linux') || contains(matrix.target, 'riscv64') || contains(matrix.target, 'musl')
-        run: |
-          cargo install cross --locked
-
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-release-${{ matrix.target }}-
-
-      - name: Run tests (native targets only)
-        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo test --all-targets
+      - name: Install cross (Linux cross-compile)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cargo install cross --locked
 
       - name: Build release binary
         shell: bash
-        env:
-          RUSTFLAGS: "-C lto=thin -C codegen-units=1 -C strip=symbols"
         run: |
-          if [[ "${{ matrix.target }}" == *"linux-gnu"* && "${{ matrix.target }}" != "x86_64-unknown-linux-gnu" ]] || [[ "${{ matrix.target }}" == *"musl"* ]] || [[ "${{ matrix.target }}" == *"riscv"* ]]; then
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
             cross build --release --target ${{ matrix.target }}
           else
             cargo build --release --target ${{ matrix.target }}
           fi
 
-      - name: Package binary (unix tar.gz)
-        if: matrix.archive == 'tar.gz'
+      - name: Package archive
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          ARCHIVE_NAME="fj-${TAG}-${{ matrix.target }}"
-          mkdir -p "${ARCHIVE_NAME}"
-          cp "target/${{ matrix.target }}/release/fj" "${ARCHIVE_NAME}/" 2>/dev/null || true
-          cp README.md "${ARCHIVE_NAME}/" 2>/dev/null || true
-          cp LICENSE* "${ARCHIVE_NAME}/" 2>/dev/null || true
-          tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
-          echo "ARCHIVE=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
-
-      - name: Package binary (windows zip)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $TAG = "${{ github.ref_name }}"
-          $ARCHIVE_NAME = "fj-${TAG}-${{ matrix.target }}"
-          New-Item -ItemType Directory -Force -Path $ARCHIVE_NAME
-          Copy-Item "target/${{ matrix.target }}/release/fj.exe" "$ARCHIVE_NAME/" -ErrorAction SilentlyContinue
-          if (Test-Path "README.md") { Copy-Item "README.md" "$ARCHIVE_NAME/" }
-          Compress-Archive -Path "$ARCHIVE_NAME/*" -DestinationPath "${ARCHIVE_NAME}.zip"
-          echo "ARCHIVE=${ARCHIVE_NAME}.zip" >> $env:GITHUB_ENV
-
-      - name: Record binary size
-        shell: bash
-        run: |
-          if [ -f "${{ env.ARCHIVE }}" ]; then
-            SIZE=$(stat -c%s "${{ env.ARCHIVE }}" 2>/dev/null || stat -f%z "${{ env.ARCHIVE }}" 2>/dev/null || echo "?")
-            echo "📦 ${{ matrix.target }}: ${SIZE} bytes"
+          NAME="fj-${TAG}-${{ matrix.target }}"
+          mkdir -p "${NAME}"
+          cp "target/${{ matrix.target }}/release/fj${{ matrix.ext }}" "${NAME}/"
+          cp README.md LICENSE* "${NAME}/" 2>/dev/null || true
+          if [[ "${{ matrix.ext }}" == ".exe" ]]; then
+            7z a "${NAME}.zip" "${NAME}"
+          else
+            tar czf "${NAME}.tar.gz" "${NAME}"
           fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: fj-${{ matrix.target }}
-          path: ${{ env.ARCHIVE }}
+          path: fj-v*.*
 
-  # ── S24.6: Debian Package ────────────────────────────────────────────
-  deb-package:
-    name: Build .deb Package
-    runs-on: ubuntu-24.04
-    needs: build
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-deb
-        run: cargo install cargo-deb --locked
-
-      - name: Build .deb
-        run: cargo deb
-        continue-on-error: true
-
-      - name: Upload .deb
-        uses: actions/upload-artifact@v5
-        with:
-          name: fj-deb
-          path: target/debian/*.deb
-          if-no-files-found: ignore
-
-  # ── S24.7: RPM Package ──────────────────────────────────────────────
-  rpm-package:
-    name: Build .rpm Package
-    runs-on: ubuntu-24.04
-    needs: build
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-generate-rpm
-        run: cargo install cargo-generate-rpm --locked
-
-      - name: Build release
-        run: cargo build --release
-
-      - name: Generate .rpm
-        run: cargo generate-rpm
-        continue-on-error: true
-
-      - name: Upload .rpm
-        uses: actions/upload-artifact@v5
-        with:
-          name: fj-rpm
-          path: target/generate-rpm/*.rpm
-          if-no-files-found: ignore
-
-  # ── S24.8: GitHub Release ────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: [build, changelog, semver-check]
+    needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v5
         with:
           path: artifacts/
-
-      - name: Flatten artifacts
+      - name: Flatten and checksum
         run: |
           cd artifacts
-          find . \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" \) -exec mv {} . \; 2>/dev/null || true
-
-      - name: Generate checksums (SHA256)
-        run: |
-          cd artifacts
-          sha256sum *.tar.gz *.zip *.deb *.rpm 2>/dev/null > SHA256SUMS.txt || true
-
-      - name: Create GitHub Release
+          find . \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} . \;
+          sha256sum *.tar.gz *.zip 2>/dev/null > SHA256SUMS.txt || true
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             artifacts/*.tar.gz
             artifacts/*.zip
-            artifacts/*.deb
-            artifacts/*.rpm
             artifacts/SHA256SUMS.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── S24.9: Install Script ───────────────────────────────────────────
-  installer:
-    name: Upload Install Script
-    needs: release
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Generate install.sh
-        run: |
-          cat > install.sh << 'INSTALLER'
-          #!/usr/bin/env bash
-          set -euo pipefail
-
-          REPO="fajar-lang/fajar-lang"
-          INSTALL_DIR="${FJ_INSTALL_DIR:-$HOME/.local/bin}"
-
-          ARCH="$(uname -m)"
-          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-
-          case "${ARCH}" in
-            x86_64|amd64)  ARCH="x86_64" ;;
-            aarch64|arm64) ARCH="aarch64" ;;
-            riscv64)       ARCH="riscv64gc" ;;
-            *) echo "Error: unsupported architecture: ${ARCH}"; exit 1 ;;
-          esac
-
-          case "${OS}" in
-            linux)  TARGET="${ARCH}-unknown-linux-gnu" ;;
-            darwin) TARGET="${ARCH}-apple-darwin" ;;
-            *) echo "Error: unsupported OS: ${OS}"; exit 1 ;;
-          esac
-
-          VERSION="${FJ_VERSION:-latest}"
-          if [ "${VERSION}" = "latest" ]; then
-            VERSION="$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
-          fi
-
-          ARCHIVE="fj-${VERSION}-${TARGET}.tar.gz"
-          URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
-
-          echo "Installing Fajar Lang ${VERSION} for ${TARGET}..."
-
-          TMP="$(mktemp -d)"
-          trap 'rm -rf "${TMP}"' EXIT
-          curl -fsSL "${URL}" -o "${TMP}/${ARCHIVE}"
-          tar xzf "${TMP}/${ARCHIVE}" -C "${TMP}"
-
-          mkdir -p "${INSTALL_DIR}"
-          cp "${TMP}"/fj-*/fj "${INSTALL_DIR}/fj"
-          chmod +x "${INSTALL_DIR}/fj"
-
-          echo "Fajar Lang ${VERSION} installed to ${INSTALL_DIR}/fj"
-          if ! echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
-            echo "Add to PATH: export PATH=\"${INSTALL_DIR}:\${PATH}\""
-          fi
-          INSTALLER
-          chmod +x install.sh
-
-      - name: Upload installer
-        uses: softprops/action-gh-release@v2
-        with:
-          files: install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

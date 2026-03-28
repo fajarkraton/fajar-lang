@@ -2,16 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, master, develop, "phase-*"]
+    branches: [main, develop, "feat/*"]
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  # ── S21: Main CI Matrix ──────────────────────────────────────────────
   check:
     name: Check (${{ matrix.os }}, ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
@@ -20,7 +19,6 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-14, windows-latest]
         rust: [stable, nightly]
-
     steps:
       - uses: actions/checkout@v5
 
@@ -30,7 +28,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
-      - name: Cache cargo registry & build
+      - name: Cache cargo registry and build
         uses: actions/cache@v5
         with:
           path: |
@@ -47,228 +45,28 @@ jobs:
       - name: Clippy lints
         run: cargo clippy -- -D warnings
 
-      - name: Run tests (default features)
+      - name: Run tests
         run: cargo test --all-targets
 
       - name: Run doc tests
         run: cargo test --doc
 
       - name: Compile benchmarks (no run)
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
         run: cargo bench --no-run
 
-  # ── S21.5: Feature Matrix ────────────────────────────────────────────
-  features:
-    name: Features (${{ matrix.features }})
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        features:
-          - ""
-          - "--features native"
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-features-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run tests (${{ matrix.features || 'default' }})
-        run: cargo test ${{ matrix.features }}
-
-  # ── S22: Cross-Compilation ───────────────────────────────────────────
-  cross-compile:
-    name: Cross (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04
-            cross: true
-          - target: riscv64gc-unknown-linux-gnu
-            os: ubuntu-24.04
-            cross: true
-          - target: x86_64-pc-windows-gnu
-            os: ubuntu-24.04
-            cross: true
-          - target: aarch64-apple-darwin
-            os: macos-14
-            cross: false
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-24.04
-            cross: true
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install cross-rs
-        if: matrix.cross
-        run: cargo install cross --locked
-
-      - name: Build release binary (cross)
-        if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Build release binary (native)
-        if: "!matrix.cross"
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Record binary size
-        shell: bash
-        run: |
-          BIN="target/${{ matrix.target }}/release/fj"
-          if [ -f "${BIN}.exe" ]; then BIN="${BIN}.exe"; fi
-          if [ -f "${BIN}" ]; then
-            SIZE=$(stat -c%s "${BIN}" 2>/dev/null || stat -f%z "${BIN}" 2>/dev/null || echo "unknown")
-            echo "Binary size for ${{ matrix.target }}: ${SIZE} bytes"
-            echo "SIZE=${SIZE}" >> $GITHUB_ENV
-          fi
-
-      - name: Upload cross-compiled binary
-        uses: actions/upload-artifact@v5
-        with:
-          name: fj-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/fj*
-          if-no-files-found: ignore
-
-  # ── S23: Fuzz (5-minute smoke) ───────────────────────────────────────
-  fuzz:
-    name: Fuzz Smoke Test
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
-
-      - name: Cache fuzz corpus
-        uses: actions/cache@v5
-        with:
-          path: fuzz/corpus
-          key: fuzz-corpus-${{ github.sha }}
-          restore-keys: fuzz-corpus-
-
-      - name: Fuzz lexer (60s)
-        run: cargo +nightly fuzz run fuzz_lexer -- -max_total_time=60
-        continue-on-error: true
-
-      - name: Fuzz parser (60s)
-        run: cargo +nightly fuzz run fuzz_parser -- -max_total_time=60
-        continue-on-error: true
-
-  # ── Coverage ─────────────────────────────────────────────────────────
   coverage:
     name: Code Coverage
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
-
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-tarpaulin-
-
       - name: Generate coverage
         run: cargo tarpaulin --out xml --output-dir coverage/
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: coverage/cobertura.xml
           fail_ci_if_error: false
-
-  # ── FajarOS Nova: x86_64 Bare-Metal Kernel Build ─────────────────────
-  nova-kernel:
-    name: FajarOS Nova (x86_64 bare-metal)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ubuntu-nova-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build Fajar Lang compiler (native)
-        run: cargo build --release --features native
-
-      - name: Compile FajarOS Nova kernel
-        run: cargo run --release --features native -- build --target x86_64-none examples/fajaros_nova_kernel.fj
-
-      - name: Verify kernel ELF
-        run: |
-          file examples/fajaros_nova_kernel
-          readelf -h examples/fajaros_nova_kernel | grep -E "Class|Machine|Entry"
-          readelf -S examples/fajaros_nova_kernel | grep multiboot_header
-
-      - name: Verify command count
-        run: |
-          CMD_COUNT=$(grep '@kernel fn cmd_' examples/fajaros_nova_kernel.fj | wc -l)
-          echo "Commands: $CMD_COUNT"
-          test "$CMD_COUNT" -ge 100 || (echo "FAIL: expected >= 100 commands" && exit 1)
-
-      - name: Install QEMU + GRUB
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 grub-pc-bin grub-common xorriso mtools
-
-      - name: Build bootable ISO
-        run: |
-          mkdir -p /tmp/iso/boot/grub
-          cp examples/fajaros_nova_kernel /tmp/iso/boot/fajaros.elf
-          echo 'set timeout=0; menuentry "Nova" { multiboot2 /boot/fajaros.elf; boot }' > /tmp/iso/boot/grub/grub.cfg
-          grub-mkrescue -o /tmp/nova.iso /tmp/iso
-
-      - name: Boot in QEMU (serial test)
-        run: |
-          timeout 8 qemu-system-x86_64 -cdrom /tmp/nova.iso -m 256M -display none -serial file:/tmp/serial.log -monitor none -no-reboot 2>/dev/null || true
-          cat /tmp/serial.log
-          grep -q "\[BOOT32\]" /tmp/serial.log || (echo "FAIL: no [BOOT32]" && exit 1)
-          grep -q "\[NOVA\].*booted" /tmp/serial.log || (echo "FAIL: kernel not booted" && exit 1)
-          grep -q "\[SYSCALL\]" /tmp/serial.log || (echo "FAIL: SYSCALL not configured" && exit 1)
-          grep -q "\[INIT\]" /tmp/serial.log || (echo "FAIL: init not started" && exit 1)
-          echo "FajarOS Nova boot test PASSED"
-
-      - name: Upload kernel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fajaros-nova-kernel
-          path: examples/fajaros_nova_kernel

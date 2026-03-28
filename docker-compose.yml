@@ -1,0 +1,31 @@
+# Fajar Lang Development Environment
+# Usage: docker compose up -d
+#        docker compose exec dev fj repl
+#        docker compose exec dev fj run /work/program.fj
+
+services:
+  dev:
+    build: .
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/work
+    working_dir: /work
+
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+
+  playground:
+    build: .
+    ports:
+      - "8080:8080"
+    command: ["repl", "--web", "--port", "8080"]
+    restart: unless-stopped
+
+volumes:
+  registry-data:
