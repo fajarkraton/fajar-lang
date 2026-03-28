@@ -11494,7 +11494,7 @@ const SMODE_WHILE: i64 = 3
         let cond_true = volatile_read_u64(SCRIPT_STATE + 16)
         let in_else = volatile_read_u64(SCRIPT_STATE + 24)
         let should_exec = (cond_true == 1 && in_else == 0) || (cond_true == 0 && in_else == 1)
-        if should_exec == 1 {
+        if should_exec {
             shell_exec_from_buf(line, line_len)
         }
         return
@@ -12730,7 +12730,7 @@ const CSW_SIGNATURE: i64 = 0x53425355
             timeout = timeout - 1
         }
     }
-    println("[XHCI] Address Device timeout!")
+    println("[XHCI] Address Device timeout!");
     -99
 }
 
@@ -20649,7 +20649,7 @@ const VMA_FLAG_FILE: i64 = 8
 @kernel fn sys_mmap_v2(addr: i64, len: i64, prot: i64, flags: i64) -> i64 {
     let pages = (len + FRAME_SIZE - 1) / FRAME_SIZE
     let base = if addr != 0 { addr } else { USER_HEAP_BASE + 0x100000 + vm_aslr_offset() }
-    if flags & VMA_FLAG_ANON != 0 {
+    if (flags & VMA_FLAG_ANON) != 0 {
         // Anonymous mapping — lazy allocate
         let mut pg: i64 = 0
         while pg < pages {
@@ -20769,9 +20769,9 @@ const SYS_NANOSLEEP: i64 = 50
 }
 
 // A3.1.5-8: mkdir, rmdir, link, symlink (delegates to existing ramfs ops)
-@kernel fn sys_mkdir_v2(path: i64) -> i64 {
-    // Create directory entry in ramfs
-    let idx = ramfs_create_entry(path, 2)  // type=2 (dir)
+@kernel fn sys_mkdir_v2(path_addr: i64) -> i64 {
+    // Create directory entry in ramfs (type=2 = directory)
+    let idx = ramfs_create_by_addr(path_addr)
     if idx < 0 { -1 } else { 0 }
 }
 

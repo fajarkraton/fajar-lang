@@ -1652,8 +1652,13 @@ impl TypeChecker {
 
         if let Some(else_e) = else_branch {
             let else_ty = self.check_expr(else_e);
-            // If used as expression, both branches should match
-            if !then_ty.is_compatible(&else_ty) && !matches!(then_ty, Type::Void) {
+            // If used as expression, both branches should match.
+            // When either branch is Void, the if/else is used as a statement —
+            // no need to require matching types.
+            if !then_ty.is_compatible(&else_ty)
+                && !matches!(then_ty, Type::Void)
+                && !matches!(else_ty, Type::Void)
+            {
                 self.errors.push(SemanticError::TypeMismatch {
                     expected: then_ty.display_name(),
                     found: else_ty.display_name(),
