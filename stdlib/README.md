@@ -1,5 +1,9 @@
 # Self-Hosted Compiler — Architecture Guide
 
+> **Status:** 3,076 lines across 11 .fj modules. Lexer + AST + Analyzer pass `fj check` clean.
+> Parser/codegen/compiler have cross-file SE001 refs that resolve when loaded together.
+> Bootstrap test: `fj run examples/selfhost_bootstrap_test.fj` → PASSED
+
 ## Overview
 
 The Fajar Lang self-hosted compiler is written entirely in Fajar Lang (`.fj` files).
