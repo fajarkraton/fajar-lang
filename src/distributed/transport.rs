@@ -997,7 +997,7 @@ mod tests {
     // DQ5.3: Backpressure — bounded channel doesn't OOM
     #[tokio::test]
     async fn dq5_3_backpressure_bounded() {
-        let mut actor = Actor::new("slow", 3); // capacity 3
+        let actor = Actor::new("slow", 3); // capacity 3
         let tx = actor.mailbox_tx.clone();
 
         // Fill the channel

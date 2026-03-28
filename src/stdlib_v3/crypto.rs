@@ -1295,7 +1295,7 @@ mod tests {
 
     #[test]
     fn cq1_1_sha256_streaming_empty() {
-        let mut hasher = Sha256Hasher::new();
+        let hasher = Sha256Hasher::new();
         let result = hasher.finalize();
         assert_eq!(result.bytes, sha256(b"").bytes);
     }

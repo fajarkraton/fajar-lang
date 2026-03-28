@@ -10,6 +10,16 @@
 //! All structures are simulated in-memory for the interpreter and testing.
 //! For real hardware, the native-compiled kernel uses these algorithms
 //! with actual per-CPU data structures and atomic operations.
+//!
+//! # Known limitations
+//!
+//! - **Priority inheritance is not implemented.** When a low-priority task
+//!   holds a lock needed by a high-priority task, the low-priority task is
+//!   *not* temporarily boosted. This means priority inversion can occur in
+//!   bare-metal deployments with mixed real-time and normal workloads.
+//!   Implementing priority inheritance (or priority ceiling) for the
+//!   `TicketLock` is a prerequisite for production use in hard real-time
+//!   systems.
 
 use std::collections::VecDeque;
 use thiserror::Error;
@@ -469,19 +479,29 @@ impl CfsScheduler {
     /// The vruntime increment is scaled by the inverse of the process weight:
     /// `delta_vruntime = ran_ns * (NICE_0_WEIGHT / weight)`.
     /// Higher-weight processes accumulate vruntime slower.
-    pub fn update_vruntime(&mut self, process: &mut Process, ran_ns: u64) {
+    ///
+    /// After updating, `min_vruntime` is recomputed as the true minimum
+    /// across the current process and all processes in `queue_tasks`.
+    /// `min_vruntime` never goes backward (monotonically non-decreasing).
+    pub fn update_vruntime(&mut self, process: &mut Process, ran_ns: u64, queue_tasks: &[Process]) {
         let weight = process.weight();
         // Avoid division by zero — minimum weight is 1
         let effective_weight = if weight == 0 { 1 } else { weight };
         let delta = ran_ns * NICE_0_WEIGHT / effective_weight;
         process.vruntime = process.vruntime.saturating_add(delta);
 
-        // Update min_vruntime (never goes backward)
-        if process.vruntime > self.min_vruntime {
-            // min_vruntime advances toward the smallest vruntime
-            // In a full implementation this would scan all processes;
-            // here we use a simple heuristic.
-            self.min_vruntime = self.min_vruntime.saturating_add(delta / 2);
+        // Compute the true minimum vruntime across the current process
+        // and all Normal-policy processes in the run queue.
+        let mut true_min = process.vruntime;
+        for task in queue_tasks {
+            if task.policy == SchedPolicy::Normal && task.vruntime < true_min {
+                true_min = task.vruntime;
+            }
+        }
+
+        // min_vruntime never goes backward (monotonically non-decreasing)
+        if true_min > self.min_vruntime {
+            self.min_vruntime = true_min;
         }
     }
 
@@ -834,15 +854,22 @@ impl Default for WorkStealing {
 // Ticket Lock (Fair Spinlock)
 // ═══════════════════════════════════════════════════════════════════════
 
-/// Ticket-based fair spinlock.
+/// Ticket-based fair spinlock (**simulation only**).
 ///
 /// Guarantees FIFO ordering — threads acquire the lock in the order
 /// they requested it. Each caller takes a "ticket" (incrementing counter)
 /// and waits until the "serving" counter matches their ticket.
 ///
-/// In the simulated environment, this tracks lock state without actual
-/// spinning. On bare metal, the ticket and serving fields would be
-/// atomics with appropriate memory ordering.
+/// **Simulation note:** This is a single-threaded simulation of a ticket
+/// lock. The `lock()` method grants access immediately without spinning,
+/// because the interpreter and test harness run in a single thread. The
+/// fairness ordering (ticket numbering) is tracked correctly so that
+/// scheduling algorithms can reason about lock acquisition order, but
+/// there is no actual contention or spin-wait loop.
+///
+/// On bare metal, `next_ticket` and `now_serving` would be atomics with
+/// `Acquire`/`Release` memory ordering, and `lock()` would spin until
+/// `now_serving` matches the caller's ticket.
 #[derive(Debug, Clone)]
 pub struct TicketLock {
     /// Next ticket to be issued.
@@ -865,17 +892,25 @@ impl TicketLock {
 
     /// Acquires the lock, returning the ticket number.
     ///
-    /// In a real implementation, this would spin until `now_serving` matches
-    /// the issued ticket. In simulation, it advances immediately.
+    /// **Simulation only:** Grants the lock immediately by setting
+    /// `now_serving` to the caller's ticket. In a real kernel this would
+    /// spin-wait (`while now_serving != my_ticket {}`) until the lock
+    /// holder calls `unlock()`. The immediate grant is correct for the
+    /// single-threaded interpreter — no other thread can interleave.
     pub fn lock(&mut self) -> u64 {
         let ticket = self.next_ticket;
         self.next_ticket += 1;
-        // In simulation, immediately grant the lock
+        // Simulation: immediately grant — no spin-wait needed in
+        // single-threaded context.
         self.now_serving = ticket;
         ticket
     }
 
-    /// Releases the lock, advancing to the next ticket.
+    /// Releases the lock, advancing `now_serving` to the next ticket.
+    ///
+    /// In a real kernel, this write (with `Release` ordering) would
+    /// unblock the next spinning thread whose ticket matches the new
+    /// `now_serving` value.
     pub fn unlock(&mut self) {
         self.now_serving += 1;
     }
@@ -1127,6 +1162,15 @@ impl SchedulerMetrics {
 /// and work stealing. This is the top-level entry point for all
 /// scheduling decisions in a multicore system.
 ///
+/// # Thread safety
+///
+/// `SmpScheduler` is **not internally synchronized**. All methods take
+/// `&mut self`, so Rust's ownership rules prevent data races at compile
+/// time for single-owner use. If the scheduler must be shared across
+/// OS threads (e.g., per-CPU timer interrupt handlers), wrap it in
+/// `Arc<Mutex<SmpScheduler>>` or an equivalent lock. In the
+/// single-threaded interpreter this is unnecessary.
+///
 /// # Architecture
 ///
 /// ```text
@@ -1240,13 +1284,26 @@ impl SmpScheduler {
 
     /// Picks the next process to run on the given CPU.
     ///
-    /// Priority order:
-    /// 1. Deadline (EDF) tasks — earliest deadline first
-    /// 2. FIFO/RoundRobin tasks — highest priority first
-    /// 3. Normal tasks — CFS (lowest vruntime first)
-    /// 4. Idle tasks — only if nothing else is runnable
+    /// # Scheduling priority order
     ///
-    /// If the local queue is empty, attempts work stealing from busiest CPU.
+    /// 1. **Deadline (EDF)** -- earliest absolute deadline wins. These are
+    ///    hard real-time tasks admitted through the EDF schedulability test.
+    /// 2. **FIFO / RoundRobin** -- the first FIFO or RR task found in the
+    ///    queue is selected. FIFO tasks run until they yield; RR tasks
+    ///    share time slices within the same priority band.
+    /// 3. **Normal (CFS)** -- the task with the lowest virtual runtime is
+    ///    selected, ensuring proportional CPU sharing based on weight.
+    /// 4. **Idle** -- only runs when no other policy class has a runnable
+    ///    task. Idle tasks are guaranteed to never starve higher classes.
+    ///
+    /// Mixing FIFO with Normal tasks in the same run queue is supported:
+    /// FIFO takes precedence by **policy class**, not by numeric priority.
+    /// A FIFO task at priority 20 still runs before a Normal task at
+    /// priority 0 because the scheduler checks policy classes in the order
+    /// above, regardless of the priority field.
+    ///
+    /// If the local queue is empty after all classes are exhausted, the
+    /// scheduler attempts **work stealing** from the busiest CPU.
     pub fn schedule(&mut self, cpu_id: CpuId) -> Result<Option<Process>, SmpError> {
         self.validate_cpu(cpu_id)?;
         let idx = cpu_id.index() as usize;
@@ -1354,9 +1411,11 @@ impl SmpScheduler {
             // Simulate 1ms per tick
             let tick_ns: u64 = 1_000_000;
 
-            // Update vruntime for CFS tasks
+            // Update vruntime for CFS tasks, passing the queue so
+            // min_vruntime can be computed as the true minimum.
             if proc.policy == SchedPolicy::Normal {
-                self.cfs.update_vruntime(proc, tick_ns);
+                self.cfs
+                    .update_vruntime(proc, tick_ns, self.queues[idx].tasks());
             }
 
             // Decrement time slice
@@ -1530,6 +1589,247 @@ impl SmpScheduler {
         self.metrics.ipi_count += 1;
         Ok(())
     }
+
+    // ── CPU Hotplug (OS1.10) ──────────────────────────────────────────
+
+    /// Adds a new CPU to the scheduler at runtime (CPU hot-add).
+    ///
+    /// A fresh, empty [`RunQueue`] is created for the new CPU and a
+    /// `None` current-process slot is appended. The internal `num_cpus`
+    /// counter is incremented with saturating arithmetic to prevent
+    /// overflow. Returns the [`CpuId`] of the newly added CPU.
+    pub fn add_cpu(&mut self) -> CpuId {
+        let new_id = CpuId::new(self.num_cpus);
+        self.queues.push(RunQueue::new(new_id));
+        self.current.push(None);
+        self.num_cpus = self.num_cpus.saturating_add(1);
+        new_id
+    }
+
+    /// Removes a CPU from the scheduler at runtime (CPU hot-remove).
+    ///
+    /// All tasks in the CPU's run queue and any currently running process
+    /// on that CPU are returned to the caller as orphaned processes. The
+    /// CPU's queue and current-slot are removed so it is no longer
+    /// accessible. Returns an error if `cpu` is not a valid online CPU.
+    ///
+    /// The caller is responsible for re-enqueueing orphaned processes on
+    /// the remaining CPUs. A [`IpiMessage::Stop`] is sent to the removed
+    /// CPU before removal so that bare-metal implementations can park the
+    /// hardware thread safely.
+    pub fn remove_cpu(&mut self, cpu: CpuId) -> Result<Vec<Process>, SmpError> {
+        self.validate_cpu(cpu)?;
+        let idx = cpu.index() as usize;
+
+        // Notify the CPU to stop before we pull it out
+        self.ipi_queue.push_back((cpu, IpiMessage::Stop));
+
+        // Collect orphaned tasks: currently running + queued
+        let mut orphans: Vec<Process> = Vec::new();
+        if let Some(running) = self.current.remove(idx) {
+            orphans.push(running);
+        }
+        let removed_queue = self.queues.remove(idx);
+        orphans.extend(removed_queue.tasks);
+
+        // Rebuild CpuIds for all queues with index > removed so they
+        // stay consistent with their new position in the Vec.
+        for (new_idx, q) in self.queues.iter_mut().enumerate() {
+            q.cpu = CpuId::new(new_idx as u32);
+        }
+
+        self.num_cpus = self.num_cpus.saturating_sub(1);
+
+        Ok(orphans)
+    }
+
+    /// Returns `true` if `cpu` is a currently online CPU.
+    ///
+    /// A CPU is online if its index is within `[0, num_cpus)`.
+    pub fn is_cpu_online(&self, cpu: CpuId) -> bool {
+        cpu.index() < self.num_cpus
+    }
+
+    /// Returns a `Vec` of all currently online [`CpuId`]s.
+    pub fn online_cpus(&self) -> Vec<CpuId> {
+        (0..self.num_cpus).map(CpuId::new).collect()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NUMA Topology (OS1.7)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// NUMA distance representing local-node access latency.
+///
+/// Linux convention: local = 10, one hop = 20, two hops = 40, etc.
+pub const NUMA_LOCAL_DISTANCE: u8 = 10;
+
+/// A single NUMA node with its CPU set and local memory capacity.
+#[derive(Debug, Clone)]
+pub struct NumaNode {
+    /// Unique node identifier.
+    pub id: u32,
+    /// List of logical CPU IDs that belong to this node.
+    pub cpus: Vec<CpuId>,
+    /// Local memory capacity in megabytes.
+    pub memory_mb: u64,
+}
+
+impl NumaNode {
+    /// Creates a new NUMA node with no CPUs and no memory.
+    pub fn new(id: u32) -> Self {
+        Self {
+            id,
+            cpus: Vec::new(),
+            memory_mb: 0,
+        }
+    }
+
+    /// Creates a NUMA node with a known CPU list and memory size.
+    pub fn with_resources(id: u32, cpus: Vec<CpuId>, memory_mb: u64) -> Self {
+        Self {
+            id,
+            cpus,
+            memory_mb,
+        }
+    }
+}
+
+/// NUMA topology — nodes connected by an asymmetric distance matrix.
+///
+/// The distance matrix models relative memory-access latency between nodes.
+/// A distance of [`NUMA_LOCAL_DISTANCE`] (10) means local access. Higher
+/// values represent inter-node hops with increasing latency (20, 40, …).
+///
+/// # Example
+///
+/// A dual-socket machine where each socket has 4 CPUs:
+///
+/// ```text
+/// node 0: CPUs 0-3, 16 GB, distance to node 1 = 20
+/// node 1: CPUs 4-7, 16 GB, distance to node 0 = 20
+/// ```
+#[derive(Debug, Clone)]
+pub struct NumaTopology {
+    /// All NUMA nodes in the system.
+    nodes: Vec<NumaNode>,
+    /// Symmetric distance matrix: `distances[from][to]`.
+    ///
+    /// `distances[i][i]` is always [`NUMA_LOCAL_DISTANCE`].
+    distances: Vec<Vec<u8>>,
+}
+
+impl NumaTopology {
+    /// Creates an empty topology with no nodes.
+    pub fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+            distances: Vec::new(),
+        }
+    }
+
+    /// Adds a node to the topology.
+    ///
+    /// The distance matrix is expanded: the new node has local distance
+    /// to itself and [`NUMA_LOCAL_DISTANCE`] * 2 to all existing nodes
+    /// as a conservative default. Call [`set_distance`] to override.
+    pub fn add_node(&mut self, node: NumaNode) {
+        let old_len = self.nodes.len();
+        let new_len = old_len + 1;
+
+        // Expand each existing row with a default remote distance
+        for row in &mut self.distances {
+            row.push(NUMA_LOCAL_DISTANCE * 2);
+        }
+
+        // Add a new row for the new node
+        let mut new_row = vec![NUMA_LOCAL_DISTANCE * 2; new_len];
+        new_row[old_len] = NUMA_LOCAL_DISTANCE; // self-distance is always local
+        self.distances.push(new_row);
+
+        self.nodes.push(node);
+    }
+
+    /// Sets the distance between two nodes (both directions).
+    ///
+    /// Returns `false` if either node index is out of range.
+    pub fn set_distance(&mut self, from: u32, to: u32, dist: u8) -> bool {
+        let n = self.nodes.len();
+        let fi = from as usize;
+        let ti = to as usize;
+        if fi >= n || ti >= n {
+            return false;
+        }
+        self.distances[fi][ti] = dist;
+        self.distances[ti][fi] = dist;
+        true
+    }
+
+    /// Returns the access distance from node `from` to node `to`.
+    ///
+    /// Returns `None` if either index is out of range.
+    pub fn distance(&self, from: u32, to: u32) -> Option<u8> {
+        let n = self.nodes.len();
+        let fi = from as usize;
+        let ti = to as usize;
+        if fi >= n || ti >= n {
+            None
+        } else {
+            Some(self.distances[fi][ti])
+        }
+    }
+
+    /// Returns the NUMA node that owns the given CPU, if any.
+    pub fn node_for_cpu(&self, cpu: CpuId) -> Option<&NumaNode> {
+        self.nodes
+            .iter()
+            .find(|n| n.cpus.iter().any(|c| c.index() == cpu.index()))
+    }
+
+    /// Returns all CPUs that belong to the given NUMA node.
+    ///
+    /// Returns an empty slice if the node ID is not found.
+    pub fn cpus_on_node(&self, node_id: u32) -> &[CpuId] {
+        self.nodes
+            .iter()
+            .find(|n| n.id == node_id)
+            .map(|n| n.cpus.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Picks the best CPU for a new task, preferring the node that owns
+    /// `preferred_cpu` for locality.
+    ///
+    /// Strategy: find all CPUs on the same node as `preferred_cpu`, then
+    /// return the one provided (simplest NUMA-aware placement). If no
+    /// node contains `preferred_cpu`, returns `preferred_cpu` unchanged.
+    pub fn prefer_local(&self, preferred_cpu: CpuId) -> CpuId {
+        match self.node_for_cpu(preferred_cpu) {
+            None => preferred_cpu,
+            Some(node) => {
+                // Return the first CPU on the same node as a locality hint.
+                // Callers can iterate cpus_on_node() for a fuller search.
+                node.cpus.first().copied().unwrap_or(preferred_cpu)
+            }
+        }
+    }
+
+    /// Returns a slice of all nodes.
+    pub fn nodes(&self) -> &[NumaNode] {
+        &self.nodes
+    }
+
+    /// Returns the number of nodes.
+    pub fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+impl Default for NumaTopology {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1663,8 +1963,8 @@ mod tests {
         let mut p2 = Process::new(2, "b", SchedPolicy::Normal, Priority::new(20));
 
         // Both run for the same amount of time
-        cfs.update_vruntime(&mut p1, 1_000_000);
-        cfs.update_vruntime(&mut p2, 1_000_000);
+        cfs.update_vruntime(&mut p1, 1_000_000, &[]);
+        cfs.update_vruntime(&mut p2, 1_000_000, &[]);
 
         // Same priority → same weight → same vruntime increment
         assert_eq!(p1.vruntime, p2.vruntime);
@@ -1676,8 +1976,8 @@ mod tests {
         let mut high = Process::new(1, "high", SchedPolicy::Normal, Priority::new(0));
         let mut low = Process::new(2, "low", SchedPolicy::Normal, Priority::new(31));
 
-        cfs.update_vruntime(&mut high, 1_000_000);
-        cfs.update_vruntime(&mut low, 1_000_000);
+        cfs.update_vruntime(&mut high, 1_000_000, &[]);
+        cfs.update_vruntime(&mut low, 1_000_000, &[]);
 
         // Higher priority (lower number) = higher weight = slower vruntime growth
         assert!(high.vruntime < low.vruntime);
@@ -1689,7 +1989,7 @@ mod tests {
 
         // Advance min_vruntime
         let mut p1 = Process::new(1, "old", SchedPolicy::Normal, Priority::new(20));
-        cfs.update_vruntime(&mut p1, 10_000_000);
+        cfs.update_vruntime(&mut p1, 10_000_000, &[]);
         let min_vrt = cfs.min_vruntime();
         assert!(min_vrt > 0);
 
@@ -2130,5 +2430,144 @@ mod tests {
         assert_eq!(msgs.len(), 4);
         assert_eq!(msgs[0], IpiMessage::Reschedule);
         assert_ne!(msgs[0], IpiMessage::Stop);
+    }
+
+    // ── NUMA Topology (OS1.7) ──
+
+    #[test]
+    fn numa_local_distance() {
+        let mut topo = NumaTopology::new();
+        topo.add_node(NumaNode::with_resources(
+            0,
+            vec![CpuId::new(0), CpuId::new(1)],
+            8192,
+        ));
+        topo.add_node(NumaNode::with_resources(
+            1,
+            vec![CpuId::new(2), CpuId::new(3)],
+            8192,
+        ));
+
+        // Node self-distance must equal NUMA_LOCAL_DISTANCE (10)
+        assert_eq!(topo.distance(0, 0).unwrap(), NUMA_LOCAL_DISTANCE);
+        assert_eq!(topo.distance(1, 1).unwrap(), NUMA_LOCAL_DISTANCE);
+    }
+
+    #[test]
+    fn numa_remote_distance() {
+        let mut topo = NumaTopology::new();
+        topo.add_node(NumaNode::with_resources(0, vec![CpuId::new(0)], 4096));
+        topo.add_node(NumaNode::with_resources(1, vec![CpuId::new(1)], 4096));
+        topo.set_distance(0, 1, 20);
+
+        let remote = topo.distance(0, 1).unwrap();
+        let local = topo.distance(0, 0).unwrap();
+        assert!(
+            remote > local,
+            "remote ({remote}) must exceed local ({local})"
+        );
+        assert_eq!(remote, 20);
+    }
+
+    #[test]
+    fn numa_prefer_local_cpu() {
+        let mut topo = NumaTopology::new();
+        // Node 0 owns CPUs 0 and 1
+        topo.add_node(NumaNode::with_resources(
+            0,
+            vec![CpuId::new(0), CpuId::new(1)],
+            8192,
+        ));
+        // Node 1 owns CPUs 2 and 3
+        topo.add_node(NumaNode::with_resources(
+            1,
+            vec![CpuId::new(2), CpuId::new(3)],
+            8192,
+        ));
+
+        // prefer_local for CPU 1 should return a CPU on node 0 (CPUs 0 or 1)
+        let chosen = topo.prefer_local(CpuId::new(1));
+        let node0_cpus = topo.cpus_on_node(0);
+        assert!(
+            node0_cpus.iter().any(|c| c.index() == chosen.index()),
+            "prefer_local should return a CPU on the same node"
+        );
+    }
+
+    #[test]
+    fn numa_node_for_cpu() {
+        let mut topo = NumaTopology::new();
+        topo.add_node(NumaNode::with_resources(
+            0,
+            vec![CpuId::new(0), CpuId::new(1)],
+            4096,
+        ));
+        topo.add_node(NumaNode::with_resources(
+            1,
+            vec![CpuId::new(2), CpuId::new(3)],
+            4096,
+        ));
+
+        let node = topo.node_for_cpu(CpuId::new(2)).unwrap();
+        assert_eq!(node.id, 1);
+
+        let node = topo.node_for_cpu(CpuId::new(0)).unwrap();
+        assert_eq!(node.id, 0);
+
+        // CPU not in any node
+        assert!(topo.node_for_cpu(CpuId::new(99)).is_none());
+    }
+
+    // ── CPU Hotplug (OS1.10) ──
+
+    #[test]
+    fn hotplug_add_cpu() {
+        let mut smp = SmpScheduler::new(2);
+        assert_eq!(smp.num_cpus(), 2);
+        assert_eq!(smp.online_cpus().len(), 2);
+
+        let new_cpu = smp.add_cpu();
+        assert_eq!(new_cpu.index(), 2);
+        assert_eq!(smp.num_cpus(), 3);
+        assert_eq!(smp.online_cpus().len(), 3);
+        assert!(smp.is_cpu_online(CpuId::new(2)));
+
+        // New CPU's queue should be accessible and empty
+        let q = smp.queue(CpuId::new(2)).unwrap();
+        assert!(q.is_empty());
+    }
+
+    #[test]
+    fn hotplug_remove_cpu() {
+        let mut smp = SmpScheduler::new(3);
+
+        // Put two tasks on CPU 1
+        let p1 = Process::new(10, "orphan1", SchedPolicy::Normal, Priority::new(10));
+        let p2 = Process::new(11, "orphan2", SchedPolicy::Normal, Priority::new(10));
+        smp.enqueue(p1, CpuId::new(1)).unwrap();
+        smp.enqueue(p2, CpuId::new(1)).unwrap();
+
+        // Remove CPU 1 — should return the 2 queued processes
+        let orphans = smp.remove_cpu(CpuId::new(1)).unwrap();
+        assert_eq!(orphans.len(), 2, "both queued tasks should be orphaned");
+
+        // After removal, num_cpus shrinks and the old CPU is no longer online
+        assert_eq!(smp.num_cpus(), 2);
+        assert!(!smp.is_cpu_online(CpuId::new(2)), "index 2 no longer valid");
+
+        // Remaining CPUs keep their correct relative indices
+        assert!(smp.is_cpu_online(CpuId::new(0)));
+        assert!(smp.is_cpu_online(CpuId::new(1)));
+    }
+
+    #[test]
+    fn hotplug_remove_invalid_cpu() {
+        let mut smp = SmpScheduler::new(2);
+        let result = smp.remove_cpu(CpuId::new(5));
+        assert!(result.is_err());
+        match result {
+            Err(SmpError::InvalidCpu { cpu: 5, .. }) => {}
+            other => panic!("expected InvalidCpu, got: {:?}", other),
+        }
     }
 }

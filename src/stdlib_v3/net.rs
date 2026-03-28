@@ -2234,10 +2234,10 @@ mod tests {
 
         // Accept connections in background
         let addr_clone = addr.clone();
-        let handle = std::thread::spawn(move || {
+        let _handle = std::thread::spawn(move || {
             // Accept 2 connections
             for _ in 0..2 {
-                let (mut stream, _) = std::net::TcpListener::bind("127.0.0.1:0")
+                let (_stream, _) = std::net::TcpListener::bind("127.0.0.1:0")
                     .ok()
                     .and_then(|_| None)
                     .unwrap_or_else(|| {
@@ -2260,7 +2260,7 @@ mod tests {
             assert_eq!(pool.idle_for(&addr), 1);
         }
         // Pool exhausted test
-        let mut pool2 = ConnectionPool::new(1, 1);
+        let _pool2 = ConnectionPool::new(1, 1);
         // This won't actually exhaust because we can't pre-fill without a server,
         // but we can test the error type exists
         let err = NetError::PoolExhausted { max: 1 };
