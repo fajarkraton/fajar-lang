@@ -37,6 +37,7 @@ pub mod docgen;
 pub mod ffi_v2;
 pub mod formatter;
 pub mod gpu_codegen;
+pub mod gui;
 pub mod hw;
 pub mod interpreter;
 pub mod iot;
