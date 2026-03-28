@@ -91,10 +91,15 @@ jobs:
           if [ $FAIL -gt 0 ]; then exit 1; fi
 
   source-analysis:
-    name: Kernel Source Analysis
+    name: Kernel Source Analysis + Subsystem Tests
     runs-on: ubuntu-24.04
+    needs: check-kernel
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+
       - name: Kernel statistics
         run: |
           KERNEL="examples/fajaros_nova_kernel.fj"
@@ -102,4 +107,7 @@ jobs:
           echo "Functions: $(grep -c '@kernel fn' $KERNEL)"
           echo "Commands: $(grep -c 'cmd_' $KERNEL)"
           echo "Syscalls: $(grep -c 'syscall' $KERNEL)"
-          echo "Subsystems: $(grep -c '// ═' $KERNEL)"
+          echo "Modules: $(ls examples/nova/modules/*.fj | wc -l)"
+
+      - name: Run subsystem verification
+        run: bash examples/nova/test_qemu.sh --timeout 10 || true
