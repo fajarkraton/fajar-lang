@@ -23,6 +23,171 @@ use crate::parser::ast::{
 use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
 
+/// Simulated WebSocket connection state.
+#[derive(Debug, Clone)]
+struct WsConnection {
+    #[allow(dead_code)]
+    url: String,
+    connected: bool,
+    send_buffer: Vec<String>,
+    recv_buffer: std::collections::VecDeque<String>,
+}
+
+/// Simulated MQTT client state.
+#[derive(Debug, Clone)]
+struct MqttClientState {
+    #[allow(dead_code)]
+    broker_addr: String,
+    connected: bool,
+    subscriptions: Vec<String>,
+}
+
+/// In-memory MQTT message broker for simulation.
+#[derive(Debug, Clone, Default)]
+struct MqttBroker {
+    /// topic → list of queued messages
+    topics: std::collections::HashMap<String, Vec<String>>,
+    /// client_id → subscribed topics
+    subscriptions: std::collections::HashMap<i64, Vec<String>>,
+}
+
+impl MqttBroker {
+    fn new() -> Self {
+        Self {
+            topics: std::collections::HashMap::new(),
+            subscriptions: std::collections::HashMap::new(),
+        }
+    }
+
+    fn subscribe(&mut self, client_id: i64, topic: &str) {
+        self.subscriptions
+            .entry(client_id)
+            .or_default()
+            .push(topic.to_string());
+    }
+
+    fn publish(&mut self, topic: &str, payload: &str) {
+        self.topics
+            .entry(topic.to_string())
+            .or_default()
+            .push(payload.to_string());
+    }
+
+    fn receive(&mut self, client_id: i64) -> Option<(String, String)> {
+        let subs = self.subscriptions.get(&client_id)?;
+        for topic in subs.clone() {
+            if let Some(messages) = self.topics.get_mut(&topic) {
+                if !messages.is_empty() {
+                    let msg = messages.remove(0);
+                    return Some((topic, msg));
+                }
+            }
+        }
+        None
+    }
+
+    fn unsubscribe_all(&mut self, client_id: i64) {
+        self.subscriptions.remove(&client_id);
+    }
+}
+
+/// Simulated BLE (Bluetooth Low Energy) device.
+#[derive(Debug, Clone)]
+struct BleDevice {
+    /// Device address (e.g., "AA:BB:CC:DD:EE:FF").
+    addr: String,
+    /// Device name.
+    name: String,
+    /// Whether currently connected.
+    connected: bool,
+    /// Characteristic data: UUID → value bytes.
+    characteristics: std::collections::HashMap<String, Vec<u8>>,
+}
+
+/// Simulated BLE adapter managing scanned and connected devices.
+#[derive(Debug, Clone)]
+struct BleAdapter {
+    /// Known devices from scanning.
+    scanned: Vec<BleDevice>,
+    /// Connected devices: handle → device.
+    connected: std::collections::HashMap<i64, BleDevice>,
+    /// Next connection handle.
+    next_handle: i64,
+}
+
+impl BleAdapter {
+    fn new() -> Self {
+        Self {
+            scanned: vec![
+                BleDevice {
+                    addr: "AA:BB:CC:DD:EE:01".into(),
+                    name: "FajarSensor-1".into(),
+                    connected: false,
+                    characteristics: {
+                        let mut m = std::collections::HashMap::new();
+                        m.insert(
+                            "00002a6e-0000-1000-8000-00805f9b34fb".into(),
+                            vec![0x16, 0x09],
+                        ); // temp 23.26°C
+                        m.insert(
+                            "00002a6f-0000-1000-8000-00805f9b34fb".into(),
+                            vec![0x2C, 0x19],
+                        ); // humidity 64.6%
+                        m
+                    },
+                },
+                BleDevice {
+                    addr: "AA:BB:CC:DD:EE:02".into(),
+                    name: "FajarActuator-1".into(),
+                    connected: false,
+                    characteristics: {
+                        let mut m = std::collections::HashMap::new();
+                        m.insert("0000ff01-0000-1000-8000-00805f9b34fb".into(), vec![0x00]); // relay off
+                        m
+                    },
+                },
+            ],
+            connected: std::collections::HashMap::new(),
+            next_handle: 1,
+        }
+    }
+
+    fn scan(&self) -> Vec<(String, String)> {
+        self.scanned
+            .iter()
+            .map(|d| (d.addr.clone(), d.name.clone()))
+            .collect()
+    }
+
+    fn connect(&mut self, addr: &str) -> Option<i64> {
+        let device = self.scanned.iter().find(|d| d.addr == addr)?.clone();
+        let handle = self.next_handle;
+        self.next_handle += 1;
+        let mut dev = device;
+        dev.connected = true;
+        self.connected.insert(handle, dev);
+        Some(handle)
+    }
+
+    fn read(&self, handle: i64, uuid: &str) -> Option<Vec<u8>> {
+        let dev = self.connected.get(&handle)?;
+        dev.characteristics.get(uuid).cloned()
+    }
+
+    fn write(&mut self, handle: i64, uuid: &str, data: Vec<u8>) -> bool {
+        if let Some(dev) = self.connected.get_mut(&handle) {
+            dev.characteristics.insert(uuid.to_string(), data);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn disconnect(&mut self, handle: i64) {
+        self.connected.remove(&handle);
+    }
+}
+
 /// Default maximum recursion depth to prevent stack overflow.
 /// Default recursion depth limit.
 /// Debug builds: 64 (Rust stack is ~2MB, each eval frame is large).
@@ -221,6 +386,18 @@ pub struct Interpreter {
     db_manager: crate::stdlib_v3::database::DbManager,
     /// Active profiling session (None = profiling disabled).
     pub profile_session: Option<crate::profiler::instrument::ProfileSession>,
+    /// WebSocket connections: handle → (send_buffer, recv_buffer, connected).
+    ws_connections: std::collections::HashMap<i64, WsConnection>,
+    /// Next WebSocket handle ID.
+    next_ws_id: i64,
+    /// MQTT clients: handle → MqttClient state.
+    mqtt_clients: std::collections::HashMap<i64, MqttClientState>,
+    /// In-memory MQTT broker for simulation.
+    mqtt_broker: MqttBroker,
+    /// Next MQTT handle ID.
+    next_mqtt_id: i64,
+    /// Simulated BLE adapter for Bluetooth Low Energy operations.
+    ble_adapter: BleAdapter,
 }
 
 impl Interpreter {
@@ -258,6 +435,12 @@ impl Interpreter {
             next_task_id: 1,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
             profile_session: None,
+            ws_connections: std::collections::HashMap::new(),
+            next_ws_id: 1,
+            mqtt_clients: std::collections::HashMap::new(),
+            mqtt_broker: MqttBroker::new(),
+            next_mqtt_id: 1,
+            ble_adapter: BleAdapter::new(),
         };
         interp.register_builtins();
         interp
@@ -297,6 +480,12 @@ impl Interpreter {
             next_task_id: 1,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
             profile_session: None,
+            ws_connections: std::collections::HashMap::new(),
+            next_ws_id: 1,
+            mqtt_clients: std::collections::HashMap::new(),
+            mqtt_broker: MqttBroker::new(),
+            next_mqtt_id: 1,
+            ble_adapter: BleAdapter::new(),
         };
         interp.register_builtins();
         interp
@@ -855,6 +1044,22 @@ impl Interpreter {
             "db_begin",
             "db_commit",
             "db_rollback",
+            // WebSocket builtins
+            "ws_connect",
+            "ws_send",
+            "ws_recv",
+            "ws_close",
+            // MQTT builtins
+            "mqtt_connect",
+            "mqtt_publish",
+            "mqtt_subscribe",
+            "mqtt_recv",
+            "mqtt_disconnect",
+            "ble_scan",
+            "ble_connect",
+            "ble_read",
+            "ble_write",
+            "ble_disconnect",
         ]
     }
 
@@ -3033,5 +3238,148 @@ mod tests {
             trace.contains("greet"),
             "trace should contain function name 'greet'"
         );
+    }
+
+    // ── WebSocket / MQTT tests ──
+
+    #[test]
+    fn test_ws_connect_send_recv_close() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let ws = ws_connect("ws://localhost:8080")
+            let sent = ws_send(ws, "hello")
+            let msg = ws_recv(ws)
+            ws_close(ws)
+            msg
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        match result.unwrap() {
+            Value::Str(s) => assert_eq!(s, "hello"),
+            other => panic!("expected Str, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_mqtt_pub_sub_roundtrip() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let client = mqtt_connect("localhost")
+            mqtt_subscribe(client, "sensors/temp")
+            mqtt_publish(client, "sensors/temp", "22.5")
+            let msg = mqtt_recv(client)
+            mqtt_disconnect(client)
+            msg
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        match result.unwrap() {
+            Value::Map(m) => {
+                assert_eq!(m.get("topic").unwrap(), &Value::Str("sensors/temp".into()));
+                assert_eq!(m.get("payload").unwrap(), &Value::Str("22.5".into()));
+            }
+            other => panic!("expected Map, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_mqtt_no_message_returns_null() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let client = mqtt_connect("localhost")
+            mqtt_subscribe(client, "empty/topic")
+            let msg = mqtt_recv(client)
+            mqtt_disconnect(client)
+            msg
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert_eq!(result.unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_ws_recv_empty_returns_null() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let ws = ws_connect("ws://example.com")
+            let msg = ws_recv(ws)
+            ws_close(ws)
+            msg
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert_eq!(result.unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_ble_scan_returns_devices() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let devices = ble_scan()
+            len(devices)
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        match result.unwrap() {
+            Value::Int(n) => assert!(n >= 2, "expected at least 2 simulated devices, got {n}"),
+            other => panic!("expected Int, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_ble_connect_read_write_disconnect() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let handle = ble_connect("AA:BB:CC:DD:EE:01")
+            let data = ble_read(handle, "00002a6e-0000-1000-8000-00805f9b34fb")
+            let ok = ble_write(handle, "0000ff01-0000-1000-8000-00805f9b34fb", [1])
+            ble_disconnect(handle)
+            ok
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert_eq!(result.unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn test_ble_connect_invalid_returns_negative() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let handle = ble_connect("XX:XX:XX:XX:XX:XX")
+            handle
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(-1));
+    }
+
+    #[test]
+    fn test_ble_read_after_write_returns_new_data() {
+        let mut interp = Interpreter::new();
+        let result = interp.eval_source(
+            r#"
+            let h = ble_connect("AA:BB:CC:DD:EE:02")
+            ble_write(h, "0000ff01-0000-1000-8000-00805f9b34fb", [0x42, 0x43])
+            let data = ble_read(h, "0000ff01-0000-1000-8000-00805f9b34fb")
+            ble_disconnect(h)
+            data
+        "#,
+        );
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        match result.unwrap() {
+            Value::Array(arr) => {
+                assert_eq!(arr.len(), 2);
+                assert_eq!(arr[0], Value::Int(0x42));
+                assert_eq!(arr[1], Value::Int(0x43));
+            }
+            other => panic!("expected Array, got {:?}", other),
+        }
     }
 }

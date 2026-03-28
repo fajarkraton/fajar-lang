@@ -1625,6 +1625,52 @@ impl Interpreter {
                     return self.builtin_db_rollback(args);
                 }
 
+                // WebSocket builtins
+                if name == "ws_connect" {
+                    return self.builtin_ws_connect(args);
+                }
+                if name == "ws_send" {
+                    return self.builtin_ws_send(args);
+                }
+                if name == "ws_recv" {
+                    return self.builtin_ws_recv(args);
+                }
+                if name == "ws_close" {
+                    return self.builtin_ws_close(args);
+                }
+
+                // MQTT builtins
+                if name == "mqtt_connect" {
+                    return self.builtin_mqtt_connect(args);
+                }
+                if name == "mqtt_publish" {
+                    return self.builtin_mqtt_publish(args);
+                }
+                if name == "mqtt_subscribe" {
+                    return self.builtin_mqtt_subscribe(args);
+                }
+                if name == "mqtt_recv" {
+                    return self.builtin_mqtt_recv(args);
+                }
+                if name == "mqtt_disconnect" {
+                    return self.builtin_mqtt_disconnect(args);
+                }
+                if name == "ble_scan" {
+                    return self.builtin_ble_scan(args);
+                }
+                if name == "ble_connect" {
+                    return self.builtin_ble_connect(args);
+                }
+                if name == "ble_read" {
+                    return self.builtin_ble_read(args);
+                }
+                if name == "ble_write" {
+                    return self.builtin_ble_write(args);
+                }
+                if name == "ble_disconnect" {
+                    return self.builtin_ble_disconnect(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
@@ -5611,6 +5657,447 @@ impl Interpreter {
             Some(Value::Int(n)) => Ok(*n),
             _ => Err(RuntimeError::TypeError(format!("{fn_name}: expected i64 argument")).into()),
         }
+    }
+
+    // ── WebSocket builtins ──
+
+    /// ws_connect(url: str) -> i64
+    ///
+    /// Opens a simulated WebSocket connection. Returns a handle integer.
+    fn builtin_ws_connect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let url = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ws_connect: expected string URL".into()).into(),
+                );
+            }
+        };
+        let id = self.next_ws_id;
+        self.next_ws_id += 1;
+        self.ws_connections.insert(
+            id,
+            super::WsConnection {
+                url,
+                connected: true,
+                send_buffer: Vec::new(),
+                recv_buffer: std::collections::VecDeque::new(),
+            },
+        );
+        Ok(Value::Int(id))
+    }
+
+    /// ws_send(handle: i64, message: str) -> i64
+    ///
+    /// Sends a message over a WebSocket connection. In simulation the message
+    /// is echo'd into the recv buffer. Returns the message length.
+    fn builtin_ws_send(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => return Err(RuntimeError::TypeError("ws_send: expected int handle".into()).into()),
+        };
+        let message = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ws_send: expected string message".into()).into(),
+                );
+            }
+        };
+        let conn = self
+            .ws_connections
+            .get_mut(&handle)
+            .ok_or_else(|| RuntimeError::TypeError(format!("ws_send: invalid handle {handle}")))?;
+        if !conn.connected {
+            return Err(RuntimeError::TypeError("ws_send: connection closed".into()).into());
+        }
+        // In simulation, sent messages echo back to recv buffer.
+        conn.recv_buffer.push_back(message.clone());
+        let len = message.len() as i64;
+        conn.send_buffer.push(message);
+        Ok(Value::Int(len))
+    }
+
+    /// ws_recv(handle: i64) -> str | null
+    ///
+    /// Receives the next pending message. Returns `null` if no message is queued.
+    fn builtin_ws_recv(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => return Err(RuntimeError::TypeError("ws_recv: expected int handle".into()).into()),
+        };
+        let conn = self
+            .ws_connections
+            .get_mut(&handle)
+            .ok_or_else(|| RuntimeError::TypeError(format!("ws_recv: invalid handle {handle}")))?;
+        match conn.recv_buffer.pop_front() {
+            Some(msg) => Ok(Value::Str(msg)),
+            None => Ok(Value::Null),
+        }
+    }
+
+    /// ws_close(handle: i64) -> null
+    ///
+    /// Closes the WebSocket connection and releases the handle.
+    fn builtin_ws_close(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(RuntimeError::TypeError("ws_close: expected int handle".into()).into());
+            }
+        };
+        if let Some(conn) = self.ws_connections.get_mut(&handle) {
+            conn.connected = false;
+        }
+        self.ws_connections.remove(&handle);
+        Ok(Value::Null)
+    }
+
+    // ── MQTT builtins ──
+
+    /// mqtt_connect(broker: str) -> i64
+    ///
+    /// Connects to a simulated MQTT broker. Returns a client handle.
+    fn builtin_mqtt_connect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let broker = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "mqtt_connect: expected string broker address".into(),
+                )
+                .into());
+            }
+        };
+        let id = self.next_mqtt_id;
+        self.next_mqtt_id += 1;
+        self.mqtt_clients.insert(
+            id,
+            super::MqttClientState {
+                broker_addr: broker,
+                connected: true,
+                subscriptions: Vec::new(),
+            },
+        );
+        Ok(Value::Int(id))
+    }
+
+    /// mqtt_publish(handle: i64, topic: str, payload: str) -> null
+    ///
+    /// Publishes `payload` to `topic` on the in-memory broker.
+    fn builtin_mqtt_publish(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("mqtt_publish: expected int handle".into()).into(),
+                );
+            }
+        };
+        let topic = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("mqtt_publish: expected string topic".into()).into(),
+                );
+            }
+        };
+        let payload = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "mqtt_publish: expected string payload".into(),
+                )
+                .into());
+            }
+        };
+        let client = self.mqtt_clients.get(&handle).ok_or_else(|| {
+            RuntimeError::TypeError(format!("mqtt_publish: invalid handle {handle}"))
+        })?;
+        if !client.connected {
+            return Err(RuntimeError::TypeError("mqtt_publish: not connected".into()).into());
+        }
+        self.mqtt_broker.publish(&topic, &payload);
+        Ok(Value::Null)
+    }
+
+    /// mqtt_subscribe(handle: i64, topic: str) -> null
+    ///
+    /// Subscribes the client to `topic`. Future `mqtt_publish` calls to that
+    /// topic will be delivered via `mqtt_recv`.
+    fn builtin_mqtt_subscribe(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("mqtt_subscribe: expected int handle".into()).into(),
+                );
+            }
+        };
+        let topic = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "mqtt_subscribe: expected string topic".into(),
+                )
+                .into());
+            }
+        };
+        let client = self.mqtt_clients.get_mut(&handle).ok_or_else(|| {
+            RuntimeError::TypeError(format!("mqtt_subscribe: invalid handle {handle}"))
+        })?;
+        if !client.connected {
+            return Err(RuntimeError::TypeError("mqtt_subscribe: not connected".into()).into());
+        }
+        client.subscriptions.push(topic.clone());
+        self.mqtt_broker.subscribe(handle, &topic);
+        Ok(Value::Null)
+    }
+
+    /// mqtt_recv(handle: i64) -> Map | null
+    ///
+    /// Returns the next queued message as `{ "topic": str, "payload": str }`,
+    /// or `null` if no message is pending.
+    fn builtin_mqtt_recv(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("mqtt_recv: expected int handle".into()).into(),
+                );
+            }
+        };
+        if !self.mqtt_clients.contains_key(&handle) {
+            return Err(
+                RuntimeError::TypeError(format!("mqtt_recv: invalid handle {handle}")).into(),
+            );
+        }
+        match self.mqtt_broker.receive(handle) {
+            Some((topic, payload)) => {
+                let mut map = std::collections::HashMap::new();
+                map.insert("topic".to_string(), Value::Str(topic));
+                map.insert("payload".to_string(), Value::Str(payload));
+                Ok(Value::Map(map))
+            }
+            None => Ok(Value::Null),
+        }
+    }
+
+    /// mqtt_disconnect(handle: i64) -> null
+    ///
+    /// Disconnects the MQTT client and releases the handle.
+    fn builtin_mqtt_disconnect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("mqtt_disconnect: expected int handle".into()).into(),
+                );
+            }
+        };
+        self.mqtt_broker.unsubscribe_all(handle);
+        self.mqtt_clients.remove(&handle);
+        Ok(Value::Null)
+    }
+
+    // ── BLE builtins ──────────────────────────────────────────────
+
+    /// ble_scan() -> array of {addr, name} maps
+    fn builtin_ble_scan(&mut self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let devices = self.ble_adapter.scan();
+        let result: Vec<Value> = devices
+            .into_iter()
+            .map(|(addr, name)| {
+                let mut map = HashMap::new();
+                map.insert("addr".to_string(), Value::Str(addr));
+                map.insert("name".to_string(), Value::Str(name));
+                Value::Map(map)
+            })
+            .collect();
+        Ok(Value::Array(result))
+    }
+
+    /// ble_connect(addr: str) -> handle (i64) or -1 on failure
+    fn builtin_ble_connect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let addr = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ble_connect: expected string address".into()).into(),
+                );
+            }
+        };
+        match self.ble_adapter.connect(&addr) {
+            Some(handle) => Ok(Value::Int(handle)),
+            None => Ok(Value::Int(-1)),
+        }
+    }
+
+    /// ble_read(handle: i64, uuid: str) -> array of bytes or null
+    fn builtin_ble_read(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(RuntimeError::TypeError("ble_read: expected int handle".into()).into());
+            }
+        };
+        let uuid = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("ble_read: expected string UUID".into()).into());
+            }
+        };
+        match self.ble_adapter.read(handle, &uuid) {
+            Some(bytes) => {
+                let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
+                Ok(Value::Array(arr))
+            }
+            None => Ok(Value::Null),
+        }
+    }
+
+    /// ble_write(handle: i64, uuid: str, data: array) -> bool success
+    fn builtin_ble_write(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(RuntimeError::TypeError("ble_write: expected int handle".into()).into());
+            }
+        };
+        let uuid = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ble_write: expected string UUID".into()).into(),
+                );
+            }
+        };
+        let data = match &args[2] {
+            Value::Array(arr) => arr
+                .iter()
+                .map(|v| match v {
+                    Value::Int(b) => *b as u8,
+                    _ => 0,
+                })
+                .collect(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ble_write: expected array of bytes".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Bool(self.ble_adapter.write(handle, &uuid, data)))
+    }
+
+    /// ble_disconnect(handle: i64)
+    fn builtin_ble_disconnect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ble_disconnect: expected int handle".into()).into(),
+                );
+            }
+        };
+        self.ble_adapter.disconnect(handle);
+        Ok(Value::Null)
     }
 
     /// Extract two i64 values from args.

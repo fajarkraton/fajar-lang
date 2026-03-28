@@ -550,6 +550,16 @@ impl TypeChecker {
             ("mqtt_subscribe", vec![Type::I64, Type::Str], Type::Void),
             ("mqtt_recv", vec![Type::I64], Type::Unknown),
             ("mqtt_disconnect", vec![Type::I64], Type::Void),
+            // BLE builtins
+            ("ble_scan", vec![], Type::Unknown),
+            ("ble_connect", vec![Type::Str], Type::I64),
+            ("ble_read", vec![Type::I64, Type::Str], Type::Unknown),
+            (
+                "ble_write",
+                vec![Type::I64, Type::Str, Type::Unknown],
+                Type::Bool,
+            ),
+            ("ble_disconnect", vec![Type::I64], Type::Void),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {
