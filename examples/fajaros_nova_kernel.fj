@@ -5762,7 +5762,7 @@ const PERM_SETGID: i64 = 0x400
     }
     volatile_write_u8(data_buf + pos, 0)
     // Write to ramfs
-    ramfs_write_file("passwd", data_buf, pos)
+    ramfs_write_file_raw("passwd", data_buf, pos)
     cprint("Saved ", WHITE_ON_BLACK)
     cprint_decimal(pos, CYAN_ON_BLACK)
     cprintln(" bytes to /etc/passwd", GREEN_ON_BLACK)
