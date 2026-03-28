@@ -101,14 +101,22 @@ impl WindowConfig {
         }
     }
 
-    /// Physical width in device pixels (width * dpi_scale).
+    /// Physical width in device pixels (width * dpi_scale), saturated to u32::MAX.
     pub fn physical_width(&self) -> u32 {
-        (self.width as f32 * self.dpi_scale) as u32
+        let result = self.width as f32 * self.dpi_scale;
+        if result.is_nan() || result.is_infinite() || result < 0.0 {
+            return self.width;
+        }
+        (result as u64).min(u32::MAX as u64) as u32
     }
 
-    /// Physical height in device pixels (height * dpi_scale).
+    /// Physical height in device pixels (height * dpi_scale), saturated to u32::MAX.
     pub fn physical_height(&self) -> u32 {
-        (self.height as f32 * self.dpi_scale) as u32
+        let result = self.height as f32 * self.dpi_scale;
+        if result.is_nan() || result.is_infinite() || result < 0.0 {
+            return self.height;
+        }
+        (result as u64).min(u32::MAX as u64) as u32
     }
 }
 

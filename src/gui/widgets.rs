@@ -519,7 +519,7 @@ impl Canvas {
             if x == x1 && y == y1 {
                 break;
             }
-            let e2 = 2 * err;
+            let e2 = err.saturating_mul(2);
             if e2 >= dy {
                 if x == x1 {
                     break;
@@ -557,10 +557,10 @@ impl Canvas {
             self.set_pixel(cx - y, cy - x, color);
             x += 1;
             if d < 0 {
-                d += 2 * x + 1;
+                d = d.saturating_add(x.saturating_mul(2).saturating_add(1));
             } else {
                 y -= 1;
-                d += 2 * (x - y) + 1;
+                d = d.saturating_add((x - y).saturating_mul(2).saturating_add(1));
             }
         }
     }
