@@ -1035,6 +1035,34 @@ pub(super) fn compile_int_binop<M: Module>(
     };
 
     let result = match op {
+        BinOp::Add if cx.security_enabled => {
+            // Security: use checked addition (aborts on overflow)
+            if let Some(fn_id) = cx.functions.get("__checked_add").copied() {
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[lhs, rhs]);
+                Ok(builder.inst_results(call)[0])
+            } else {
+                Ok(builder.ins().iadd(lhs, rhs))
+            }
+        }
+        BinOp::Sub if cx.security_enabled => {
+            if let Some(fn_id) = cx.functions.get("__checked_sub").copied() {
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[lhs, rhs]);
+                Ok(builder.inst_results(call)[0])
+            } else {
+                Ok(builder.ins().isub(lhs, rhs))
+            }
+        }
+        BinOp::Mul if cx.security_enabled => {
+            if let Some(fn_id) = cx.functions.get("__checked_mul").copied() {
+                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+                let call = builder.ins().call(callee, &[lhs, rhs]);
+                Ok(builder.inst_results(call)[0])
+            } else {
+                Ok(builder.ins().imul(lhs, rhs))
+            }
+        }
         BinOp::Add => Ok(builder.ins().iadd(lhs, rhs)),
         BinOp::Sub => Ok(builder.ins().isub(lhs, rhs)),
         BinOp::Mul => Ok(builder.ins().imul(lhs, rhs)),

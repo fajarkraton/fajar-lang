@@ -2325,6 +2325,28 @@ fn cmd_build_native(
         compiler.enable_lint();
     }
 
+    // Run AST-level optimization pipeline (O1-O3/Os) before codegen.
+    // This reports optimization opportunities found; the Cranelift backend
+    // applies its own IR-level optimizations via the opt_level setting.
+    {
+        use fajar_lang::codegen::opt_passes::{OptLevel, OptPipeline};
+        let ast_opt_level = if no_std {
+            OptLevel::Os // size-optimized for bare-metal
+        } else {
+            OptLevel::O2 // default for hosted builds
+        };
+        let pipeline = OptPipeline::new(ast_opt_level);
+        let report = pipeline.run(&program);
+        if report.optimizations_applied > 0 {
+            eprintln!(
+                "[opt] {} optimizations found ({} passes, {:.1}x estimated speedup)",
+                report.optimizations_applied,
+                report.passes_run.len(),
+                report.estimated_speedup,
+            );
+        }
+    }
+
     if let Err(errors) = compiler.compile_program(&program) {
         for e in &errors {
             eprintln!("codegen error: {e}");

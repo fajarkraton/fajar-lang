@@ -6027,7 +6027,9 @@ impl Interpreter {
         let uuid = match &args[1] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("ble_read: expected string UUID".into()).into());
+                return Err(
+                    RuntimeError::TypeError("ble_read: expected string UUID".into()).into(),
+                );
             }
         };
         match self.ble_adapter.read(handle, &uuid) {
@@ -6051,7 +6053,9 @@ impl Interpreter {
         let handle = match &args[0] {
             Value::Int(h) => *h,
             _ => {
-                return Err(RuntimeError::TypeError("ble_write: expected int handle".into()).into());
+                return Err(
+                    RuntimeError::TypeError("ble_write: expected int handle".into()).into(),
+                );
             }
         };
         let uuid = match &args[1] {

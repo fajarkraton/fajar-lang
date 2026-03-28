@@ -94,8 +94,20 @@ pub(in crate::codegen::cranelift) fn compile_index<M: Module>(
 
     // Stack array index: arr[i]
     if let Some(ref name) = obj_name {
-        if let Some((slot, _len)) = cx.array_meta.get(name).copied() {
+        if let Some((slot, arr_len)) = cx.array_meta.get(name).copied() {
             let idx_val = compile_expr(builder, cx, index)?;
+
+            // Security: emit bounds check when security is enabled
+            if cx.security_enabled {
+                if let Some(check_id) = cx.functions.get("__bounds_check").copied() {
+                    let callee = cx.module.declare_func_in_func(check_id, builder.func);
+                    let len_const = builder
+                        .ins()
+                        .iconst(clif_types::default_int_type(), arr_len as i64);
+                    builder.ins().call(callee, &[idx_val, len_const]);
+                }
+            }
+
             let elem_type = cx
                 .var_types
                 .get(name)
