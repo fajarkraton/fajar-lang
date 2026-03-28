@@ -3712,7 +3712,7 @@ const TCP_DATA_BUF: i64 = 0x87F100 // 3KB for TCP send/recv data
     -1
 }
 
-@kernel fn tcp_connect(remote_ip: i64, remote_port: i64) -> i64 {
+@kernel fn tcp_connect_simple(remote_ip: i64, remote_port: i64) -> i64 {
     // TCP 3-way handshake: SYN → SYN-ACK → ACK
     let local_port: i64 = 49152 + (rdtsc() % 16384) // ephemeral port
 
@@ -5378,7 +5378,7 @@ const CURRENT_UID_ADDR: i64 = 0x652070
 }
 
 // M1.5: `login` command — "login <name> <password>"
-@kernel fn cmd_login() {
+@kernel fn cmd_login_v1() {
     let len = cmdbuf_len()
     if len <= 6 { cprintln("Usage: login <name> <pass>", YELLOW_ON_BLACK); return }
     let name_buf: i64 = 0x843E00
@@ -5455,7 +5455,7 @@ const CURRENT_UID_ADDR: i64 = 0x652070
 }
 
 // M1.8: `id` command — show uid, gid, username
-@kernel fn cmd_id() {
+@kernel fn cmd_id_v1() {
     let uid = volatile_read_u64(CURRENT_UID_ADDR)
     let entry = USER_TABLE + uid * USER_ENTRY_SIZE
     cprint("uid=", WHITE_ON_BLACK)
@@ -6094,7 +6094,7 @@ const LINK_HARDLINK: i64 = 2
 }
 
 // N1.9: `rmdir` command — remove empty directory
-@kernel fn cmd_rmdir() {
+@kernel fn cmd_rmdir_v1() {
     let len = cmdbuf_len()
     if len <= 6 { cprintln("Usage: rmdir <dir>", YELLOW_ON_BLACK); return }
     let name_buf: i64 = 0x847400
@@ -7551,7 +7551,7 @@ const GPU_RESP_BUFADDR: i64 = 0x9E5000  // response buffer (4KB)
 }
 
 // R1.9: `gpu` shell command
-@kernel fn cmd_gpu() {
+@kernel fn cmd_gpu_v1() {
     let active = volatile_read_u64(GPU_STATE + GPU_OFF_ACTIVE)
     if active == 0 {
         cprintln("No VirtIO-GPU detected", WHITE_ON_BLACK)
@@ -10580,6 +10580,19 @@ const SIG_IGN: i64 = 1   // ignore signal
         volatile_write_u64(base + SIG_OFF_HANDLERS + i * 8, SIG_DFL)
         i = i + 1
     }
+}
+
+// Signal handler get/set
+@kernel fn signal_get_handler(pid: i64, signum: i64) -> i64 {
+    if signum < 1 || signum > SIG_MAX_SLOTS { return SIG_DFL }
+    let base = sig_entry_addr(pid)
+    volatile_read_u64(base + SIG_OFF_HANDLERS + (signum - 1) * 8)
+}
+
+@kernel fn signal_set_handler(pid: i64, signum: i64, handler: i64) {
+    if signum < 1 || signum > SIG_MAX_SLOTS { return }
+    let base = sig_entry_addr(pid)
+    volatile_write_u64(base + SIG_OFF_HANDLERS + (signum - 1) * 8, handler)
 }
 
 // I1.5: Set signal as pending
@@ -17068,6 +17081,17 @@ const FS_ENTRY_SIZE: i64 = 128
     FS_BASE + 0x100 + index * FS_ENTRY_SIZE
 }
 
+// Returns the length of the name string at the given ramfs entry index.
+@kernel fn ramfs_name_len(index: i64) -> i64 {
+    let addr = ramfs_entry_addr(index)
+    let mut len: i64 = 0
+    while len < 31 {
+        if volatile_read_u8(addr + len) == 0 { return len }
+        len = len + 1
+    }
+    len
+}
+
 @kernel fn ramfs_create_entry(name: str, ftype: i64) -> i64 {
     let count = volatile_read(FS_BASE)
     if count >= FS_MAX_FILES { return -1 }
@@ -19199,7 +19223,7 @@ const PROC_OFF_NAME: i64 = 64
     }
 }
 
-@kernel fn cmd_nice() {
+@kernel fn cmd_nice_v1() {
     // nice — show/set process priority (simulated)
     cprintln("Priorities:", YELLOW_ON_BLACK)
     cprintln("  PID 0: priority 0 (kernel)", WHITE_ON_BLACK)
