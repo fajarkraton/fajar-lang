@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# List all available Fajar Lang versions from GitHub releases.
+# asdf calls this script to populate the version list.
+
+set -euo pipefail
+
+# GitHub API: list releases, extract tag names, strip leading 'v', sort by version
+releases_url="https://api.github.com/repos/fajarkraton/fajar-lang/releases"
+
+# Use GH_TOKEN or GITHUB_API_TOKEN if available to avoid rate limiting
+auth_header=""
+if [ -n "${GH_TOKEN:-}" ]; then
+    auth_header="Authorization: token ${GH_TOKEN}"
+elif [ -n "${GITHUB_API_TOKEN:-}" ]; then
+    auth_header="Authorization: token ${GITHUB_API_TOKEN}"
+fi
+
+if [ -n "$auth_header" ]; then
+    versions=$(curl --silent --fail -H "$auth_header" "$releases_url" \
+        | grep '"tag_name":' \
+        | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/' \
+        | sort -t. -k1,1n -k2,2n -k3,3n)
+else
+    versions=$(curl --silent --fail "$releases_url" \
+        | grep '"tag_name":' \
+        | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/' \
+        | sort -t. -k1,1n -k2,2n -k3,3n)
+fi
+
+# asdf expects a single line of space-separated versions
+echo "$versions" | tr '\n' ' ' | sed 's/ $//'

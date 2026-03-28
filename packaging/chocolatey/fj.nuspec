@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>fj</id>
+    <version>6.1.0</version>
+    <title>Fajar Lang</title>
+    <authors>Muhamad Fajar Putranto</authors>
+    <projectUrl>https://fajarlang.dev</projectUrl>
+    <licenseUrl>https://github.com/fajarkraton/fajar-lang/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Statically-typed systems programming language for embedded ML and OS integration</description>
+    <tags>programming-language compiler ml embedded os</tags>
+    <projectSourceUrl>https://github.com/fajarkraton/fajar-lang</projectSourceUrl>
+    <docsUrl>https://fajarlang.dev/docs</docsUrl>
+    <bugTrackerUrl>https://github.com/fajarkraton/fajar-lang/issues</bugTrackerUrl>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

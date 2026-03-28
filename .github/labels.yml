@@ -1,0 +1,51 @@
+# Fajar Lang GitHub Label Definitions
+# Apply with: gh label create --force -R fajarkraton/fajar-lang
+# Or use a label sync tool that reads this file.
+
+- name: good-first-issue
+  color: "0E8A16"
+  description: "Suitable for newcomers — clear scope, mentoring available"
+
+- name: help-wanted
+  color: "0075CA"
+  description: "Community contributions welcome — maintainer support provided"
+
+- name: bug
+  color: "D73A4A"
+  description: "Confirmed defect — incorrect behavior vs language spec"
+
+- name: enhancement
+  color: "0DCAF0"
+  description: "New feature or improvement to existing functionality"
+
+- name: documentation
+  color: "7B2D8B"
+  description: "Improvements to docs, examples, CLAUDE.md, or mdBook"
+
+- name: performance
+  color: "E68A00"
+  description: "Runtime, compile-time, or memory usage improvement"
+
+- name: security
+  color: "8B0000"
+  description: "Security vulnerability or hardening — handled via SECURITY.md process"
+
+- name: breaking-change
+  color: "B8600F"
+  description: "Requires migration — changes public API, syntax, or behavior"
+
+- name: rfc
+  color: "008B8B"
+  description: "Request for Comments — design discussion before implementation"
+
+- name: duplicate
+  color: "CCCCCC"
+  description: "Already reported or addressed by another issue"
+
+- name: wontfix
+  color: "FFFFFF"
+  description: "Intentional behavior or out of scope — documented reason required"
+
+- name: needs-triage
+  color: "FBCA04"
+  description: "New issue — needs maintainer review, labeling, and priority assignment"

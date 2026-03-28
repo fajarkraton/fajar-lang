@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+# Install a specific version of Fajar Lang.
+# asdf sets ASDF_INSTALL_TYPE, ASDF_INSTALL_VERSION, and ASDF_INSTALL_PATH.
+
+set -euo pipefail
+
+if [ "${ASDF_INSTALL_TYPE}" != "version" ]; then
+    echo "asdf-fj supports release versions only (not ref installs)." >&2
+    exit 1
+fi
+
+version="${ASDF_INSTALL_VERSION}"
+install_path="${ASDF_INSTALL_PATH}"
+
+# Detect platform and architecture
+platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
+arch="$(uname -m)"
+
+case "$platform" in
+    linux)  os="unknown-linux-gnu" ;;
+    darwin) os="apple-darwin" ;;
+    *)
+        echo "Unsupported platform: $platform" >&2
+        exit 1
+        ;;
+esac
+
+case "$arch" in
+    x86_64)  target_arch="x86_64" ;;
+    aarch64|arm64) target_arch="aarch64" ;;
+    *)
+        echo "Unsupported architecture: $arch" >&2
+        exit 1
+        ;;
+esac
+
+target="${target_arch}-${os}"
+filename="fj-${version}-${target}.tar.gz"
+download_url="https://github.com/fajarkraton/fajar-lang/releases/download/v${version}/${filename}"
+
+# Use GH_TOKEN if available
+auth_args=()
+if [ -n "${GH_TOKEN:-}" ]; then
+    auth_args=(-H "Authorization: token ${GH_TOKEN}")
+elif [ -n "${GITHUB_API_TOKEN:-}" ]; then
+    auth_args=(-H "Authorization: token ${GITHUB_API_TOKEN}")
+fi
+
+echo "Downloading Fajar Lang v${version} for ${target}..."
+
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT
+
+curl --silent --fail --location "${auth_args[@]+"${auth_args[@]}"}" \
+    -o "${tmp_dir}/${filename}" \
+    "$download_url"
+
+if [ ! -f "${tmp_dir}/${filename}" ]; then
+    echo "Failed to download ${download_url}" >&2
+    exit 1
+fi
+
+echo "Extracting to ${install_path}..."
+mkdir -p "${install_path}/bin"
+tar -xzf "${tmp_dir}/${filename}" -C "${install_path}/bin" --strip-components=1
+
+# Verify the binary exists and is executable
+if [ ! -x "${install_path}/bin/fj" ]; then
+    # The binary might be at the top level of the tarball
+    if [ -f "${install_path}/bin/fj" ]; then
+        chmod +x "${install_path}/bin/fj"
+    else
+        echo "fj binary not found after extraction." >&2
+        exit 1
+    fi
+fi
+
+echo "Fajar Lang v${version} installed successfully."

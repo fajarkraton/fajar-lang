@@ -136,9 +136,58 @@ The Fajar Lang compiler is written in Rust (~290,000 LOC) and benefits from Rust
 
 ---
 
-## Bug Bounty
+## Bug Bounty Program
 
-A formal bug bounty program is planned for a future release. In the meantime, we appreciate responsible disclosure and will credit all valid security reports in our release notes (with your permission).
+The Fajar Lang Bug Bounty Program rewards security researchers who discover and responsibly disclose vulnerabilities in the compiler, runtime, and related tooling.
+
+### Scope
+
+The following components are in scope for the bug bounty program:
+
+| Component | Examples |
+|-----------|---------|
+| **Compiler** | Lexer, parser, analyzer, type checker -- any input that causes incorrect compilation or crashes |
+| **Runtime** | Interpreter, bytecode VM -- memory safety violations, sandbox escapes |
+| **Codegen** | Cranelift and LLVM backends -- generated code that violates safety invariants |
+| **FFI boundaries** | C interop, extern functions -- any way to bypass type or memory safety through FFI |
+| **Context isolation** | `@kernel`/`@device`/`@safe` enforcement -- any way to access restricted operations from wrong context |
+
+Out of scope: documentation typos, denial-of-service via large inputs (unless disproportionate resource consumption), issues in third-party dependencies (report upstream), social engineering, and the project website.
+
+### Severity Levels and Rewards
+
+| Severity | Description | Reward |
+|----------|-------------|--------|
+| **Critical** | Memory safety violation in generated code, sandbox escape, arbitrary code execution through crafted `.fj` input | $500 |
+| **High** | Context isolation bypass (`@safe` code accessing `@kernel`-only operations), type system unsoundness allowing undefined behavior | $250 |
+| **Medium** | Compiler crash on valid input, incorrect codegen that produces wrong results (but no safety violation), borrow checker bypass | $100 |
+| **Low** | Compiler accepts invalid code without error, misleading error messages that hide real issues, minor information leaks | Recognition in release notes |
+
+Rewards are paid via GitHub Sponsors, PayPal, or bank transfer at the reporter's preference. One reward per unique vulnerability.
+
+### How to Report
+
+1. **Email:** Send a detailed report to **security@fajarlang.dev**
+2. **Include:** A minimal `.fj` program that reproduces the issue, the expected vs. actual behavior, which component is affected, and your assessment of severity
+3. **Do NOT** open a public GitHub issue for security vulnerabilities
+
+### Response SLA
+
+| Stage | Timeline |
+|-------|----------|
+| Acknowledgment of report | Within 48 hours |
+| Initial assessment and severity classification | Within 7 days |
+| Fix development (critical/high) | Within 30 days |
+| Fix development (medium/low) | Within 90 days |
+| Public disclosure | Coordinated with reporter after fix is released |
+
+### Rules
+
+- Only test against your own installations or the public playground (do not test against other users' systems)
+- Do not disclose the vulnerability publicly until a fix is released and we coordinate disclosure
+- One report per vulnerability; duplicate reports receive no reward (first reporter wins)
+- Reports must include a reproducible proof of concept
+- Researchers who follow responsible disclosure will be credited in release notes (with permission)
 
 ---
 

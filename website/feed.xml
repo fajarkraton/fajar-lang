@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Fajar Lang Blog</title>
+    <link>https://fajarlang.dev/blog</link>
+    <description>News, releases, and technical posts from the Fajar Lang project — a statically-typed systems programming language for embedded ML and OS integration.</description>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 25 Mar 2026 12:00:00 +0000</lastBuildDate>
+    <atom:link href="https://fajarlang.dev/feed.xml" rel="self" type="application/rss+xml"/>
+    <image>
+      <url>https://fajarlang.dev/branding/logo.png</url>
+      <title>Fajar Lang Blog</title>
+      <link>https://fajarlang.dev/blog</link>
+    </image>
+
+    <item>
+      <title>Fajar Lang v3.2.0 "Surya Rising" — Edge AI Meets Real Hardware</title>
+      <link>https://fajarlang.dev/blog/v32-surya-rising</link>
+      <guid isPermaLink="true">https://fajarlang.dev/blog/v32-surya-rising</guid>
+      <pubDate>Fri, 20 Mar 2026 12:00:00 +0000</pubDate>
+      <description>Fajar Lang v3.2 bridges the gap between language design and real-world hardware deployment. For the first time, Fajar Lang programs read actual sensor data from a Qualcomm QCS6490 SoC, run ML inference with real neural network weights, and demonstrate production deployment patterns — all from .fj source code. Features real hardware interaction via Linux sysfs, QNN neural network inference with 3 DLC models, multi-model ML pipelines, edge deployment patterns with systemd, and FajarOS Nova with 102 shell commands.</description>
+    </item>
+
+    <item>
+      <title>Fajar Lang on Radxa Dragon Q6A: Embedded ML Meets Real Hardware</title>
+      <link>https://fajarlang.dev/blog/v20-dawn-q6a</link>
+      <guid isPermaLink="true">https://fajarlang.dev/blog/v20-dawn-q6a</guid>
+      <pubDate>Mon, 18 Mar 2026 12:00:00 +0000</pubDate>
+      <description>v2.0 "Dawn" marks the first physical hardware deployment of Fajar Lang on the Radxa Dragon Q6A, a Qualcomm QCS6490-based edge AI single-board computer. Covers the cross-compilation pipeline from x86_64 to ARM64, Vulkan GPU compute via Adreno 643, QNN NPU inference on Hexagon 770, and GPIO hardware access — all written in Fajar Lang.</description>
+    </item>
+
+    <item>
+      <title>FajarOS Nova: An OS Written 100% in Fajar Lang, Running on x86_64</title>
+      <link>https://fajarlang.dev/blog/fajaros-nova</link>
+      <guid isPermaLink="true">https://fajarlang.dev/blog/fajaros-nova</guid>
+      <pubDate>Sat, 15 Mar 2026 12:00:00 +0000</pubDate>
+      <description>FajarOS Nova is a bare-metal operating system written entirely in Fajar Lang. Nova boots on x86_64 hardware via QEMU, features 97 shell commands, a RAM filesystem, VGA text-mode display, keyboard driver, PCI enumeration, and a preemptive scheduler — all in one language. Every line from the Multiboot2 boot sequence to the shell prompt is Fajar Lang, with no C, no assembly files, and no Rust runtime.</description>
+    </item>
+
+    <item>
+      <title>Introducing Fajar Lang: The Only Language Where OS Kernels and Neural Networks Share One Compiler</title>
+      <link>https://fajarlang.dev/blog/introducing-fajar-lang</link>
+      <guid isPermaLink="true">https://fajarlang.dev/blog/introducing-fajar-lang</guid>
+      <pubDate>Sat, 01 Mar 2026 12:00:00 +0000</pubDate>
+      <description>Fajar Lang is a statically-typed systems language for embedded AI where @kernel code can't accidentally call tensor ops and @device code can't accidentally access hardware registers — enforced at compile time. One language, one binary, one type system for flight controllers, ML inference, and mission planning. This post introduces the problem of multi-language embedded AI stacks and how compiler-enforced domain safety solves it.</description>
+    </item>
+
+  </channel>
+</rss>

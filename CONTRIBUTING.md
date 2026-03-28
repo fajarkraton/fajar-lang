@@ -330,6 +330,86 @@ All contributors are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md
 
 ---
 
+## Community Channels
+
+We want every contributor to feel connected and supported. Here is where to find us:
+
+| Channel | Purpose | Link |
+|---------|---------|------|
+| **GitHub Discussions** | Long-form questions, RFCs, show-and-tell | [github.com/fajarkraton/fajar-lang/discussions](https://github.com/fajarkraton/fajar-lang/discussions) |
+| **Discord** | Real-time chat, help, and community | [discord.gg/fajarlang](https://discord.gg/fajarlang) |
+| **Weekly Office Hours** | Live Q&A with maintainers (every Thursday 14:00 UTC) | Held on Discord in the `#office-hours` voice channel |
+
+Discord channels of note:
+- `#general` -- introductions and casual discussion
+- `#help` -- get help with Fajar Lang code or compiler issues
+- `#contributions` -- discuss open tasks, get guidance on PRs
+- `#showcase` -- share what you have built with Fajar Lang
+- `#os-dev` -- FajarOS kernel development
+- `#ml` -- embedded ML, tensor ops, model training
+
+---
+
+## Mentorship Program
+
+We run a mentorship program for contributors who want structured guidance while working on Fajar Lang. The program pairs new contributors with experienced maintainers for a focused 3-month engagement.
+
+### How it works
+
+1. **Apply** -- open a GitHub Discussion in the "Mentorship" category with:
+   - Your background (programming experience, familiarity with Rust/compilers)
+   - What area of Fajar Lang interests you (compiler, runtime, ML, OS, tooling, docs)
+   - How many hours per week you can commit (minimum 4 hours/week recommended)
+2. **Matching** -- a maintainer with expertise in your area of interest will be assigned as your mentor within 2 weeks
+3. **Kickoff** -- you and your mentor schedule a 30-minute video call to set goals for the 3 months
+4. **Work** -- your mentor will:
+   - Help you pick appropriate tasks (starting with `good-first-issue`, progressing to larger features)
+   - Review your PRs with detailed, educational feedback
+   - Hold biweekly 1-on-1 check-ins (15-30 minutes)
+   - Answer questions async on Discord
+5. **Completion** -- at the end of 3 months, you and your mentor write a short retrospective. Successful mentees are invited to mentor future contributors.
+
+### Expectations
+
+- **Mentees:** commit to regular participation, ask questions early, submit at least 2 PRs during the program
+- **Mentors:** respond within 48 hours, provide constructive and patient feedback, respect the mentee's pace
+
+The program runs on a rolling basis -- you can apply at any time.
+
+---
+
+## Contributor Recognition
+
+Every contribution to Fajar Lang matters and we make sure contributors are recognized.
+
+### How we recognize contributions
+
+| Recognition | Details |
+|-------------|---------|
+| **CHANGELOG credits** | Every contributor whose PR is merged is listed by name in the [CHANGELOG](docs/CHANGELOG.md) for the corresponding release |
+| **Monthly spotlight** | Each month, one contributor is highlighted in a blog post on [fajarlang.dev/blog](https://fajarlang.dev/blog) describing their work and impact |
+| **All-Contributors bot** | We use the [all-contributors](https://allcontributors.org/) specification to recognize all types of contributions (code, docs, tests, design, mentoring, translations) in the README |
+| **Release notes** | Major feature contributors are credited in GitHub Release notes |
+| **Security researchers** | Valid security reports are credited in release notes (with permission) per our [Bug Bounty Program](SECURITY.md#bug-bounty-program) |
+
+### Contribution types we recognize
+
+Not all contributions are code. We value and credit:
+- Bug reports with reproducible test cases
+- Documentation improvements and translations
+- Test coverage additions
+- Reviewing pull requests
+- Helping others in GitHub Discussions or Discord
+- Writing tutorials, blog posts, or conference talks about Fajar Lang
+- Design work (logos, website, diagrams)
+
+To add yourself to the contributors list, comment on your merged PR with:
+```
+@all-contributors please add @username for code, test, doc
+```
+
+---
+
 ## Architecture Overview
 
 For a detailed understanding of the codebase before making changes, see:

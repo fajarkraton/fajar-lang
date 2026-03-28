@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+# Return legacy version file names that asdf should look for
+# when determining the version to use in a project directory.
+
+echo ".fj-version"

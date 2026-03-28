@@ -358,6 +358,26 @@
     </div>
 </section>
 
+<section class="newsletter" style="padding: 4rem 2rem; max-width: 600px; margin: 0 auto; text-align: center;">
+    <h2 style="font-size: 1.8rem; margin-bottom: 0.5rem;">Stay Updated</h2>
+    <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+        Get release announcements, tutorials, and community highlights. No spam, unsubscribe anytime.
+    </p>
+    <form action="#" method="POST" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+        <input type="email" name="email" placeholder="you@example.com" required
+            style="padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border);
+                   background: var(--card-bg); color: var(--text); font-size: 1rem; min-width: 250px;">
+        <button type="submit" class="btn btn-primary" style="cursor: pointer; border: none; font-size: 1rem;">
+            Subscribe
+        </button>
+    </form>
+    <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 1rem;">
+        Privacy: your email is stored on our server only. We do not use third-party
+        email platforms or share your address with anyone. See our
+        <a href="https://fajarlang.dev/privacy.html">privacy policy</a>.
+    </p>
+</section>
+
 <footer>
     <div class="footer-links">
         <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
@@ -369,6 +389,24 @@
     <p>Fajar Lang is open source under the MIT License.</p>
     <p>Created by Fajar (TaxPrime / PrimeCore.id)</p>
 </footer>
+
+<!--
+  Analytics — Privacy-First Approach (COM1.11)
+
+  Fajar Lang does NOT use external tracking services (no Google Analytics,
+  no Facebook Pixel, no third-party cookies). All analytics are handled
+  server-side via access log analysis (e.g., GoAccess or AWStats parsing
+  nginx/Apache logs). This means:
+
+  - No JavaScript trackers are loaded in the browser.
+  - No cookies are set for analytics purposes.
+  - No personal data is sent to third parties.
+  - Visitor counts and page views are derived from anonymized server logs.
+
+  If client-side metrics are needed in the future (e.g., playground usage
+  telemetry), they will be implemented as a self-hosted solution (Plausible
+  or Umami) with full transparency and opt-out capability.
+-->
 
 </body>
 </html>
