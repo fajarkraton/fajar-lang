@@ -237,10 +237,9 @@ impl TypeChecker {
             ("pic_eoi", vec![Type::I64], Type::Void),
             ("pit_init", vec![Type::I64], Type::Void),
             ("read_timer_ticks", vec![], Type::I64),
-            // String byte access (no_std VGA support)
-            // Take i64 pointer (not str) to avoid heap string issues in no_std
-            ("str_byte_at", vec![Type::I64, Type::I64], Type::I64),
-            ("str_len", vec![Type::I64], Type::I64),
+            // String byte access — accept both str and i64 (pointer) for no_std compat
+            ("str_byte_at", vec![Type::Unknown, Type::I64], Type::I64),
+            ("str_len", vec![Type::Unknown], Type::I64),
             // Process scheduler builtins (Phase 4)
             ("proc_table_addr", vec![], Type::I64),
             ("get_current_pid", vec![], Type::I64),
@@ -281,8 +280,12 @@ impl TypeChecker {
             // Function address intrinsic (returns address of named function)
             ("fn_addr", vec![Type::Str], Type::I64),
             // Signal handlers
-            ("signal_set_handler", vec![Type::I64, Type::I64], Type::Void),
-            ("signal_get_handler", vec![Type::I64], Type::I64),
+            (
+                "signal_set_handler",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            ("signal_get_handler", vec![Type::I64, Type::I64], Type::I64),
             // RamFS helpers
             ("ramfs_name_len", vec![Type::I64], Type::I64),
             // Buffer read/write helpers (LE + BE)

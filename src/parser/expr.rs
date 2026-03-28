@@ -675,7 +675,37 @@ impl Parser {
                     stmts.push(Stmt::Item(Box::new(item)));
                 }
                 _ => {
-                    let expr = self.parse_expr(0)?;
+                    // Check if this starts a control-flow keyword — these should
+                    // be parsed in "statement mode" where the result is always
+                    // treated as a statement, preventing the Pratt parser from
+                    // consuming a following `-` as binary minus.
+                    // e.g. `while cond { ... }\n-1` should be two items:
+                    //   stmt: While(...)
+                    //   expr: UnaryNeg(1)
+                    // NOT: Binary(While(...), Sub, 1)
+                    let is_control_flow = matches!(
+                        self.peek_kind(),
+                        TokenKind::While
+                            | TokenKind::For
+                            | TokenKind::Loop
+                            | TokenKind::If
+                            | TokenKind::Match
+                    );
+
+                    let expr = if is_control_flow {
+                        // Parse just the control flow expression without
+                        // letting the Pratt parser extend it with infix ops.
+                        match self.peek_kind() {
+                            TokenKind::If => self.parse_if_expr()?,
+                            TokenKind::While => self.parse_while_expr_with_label(None)?,
+                            TokenKind::For => self.parse_for_expr_with_label(None)?,
+                            TokenKind::Loop => self.parse_loop_expr_with_label(None)?,
+                            TokenKind::Match => self.parse_match_expr()?,
+                            _ => self.parse_expr(0)?,
+                        }
+                    } else {
+                        self.parse_expr(0)?
+                    };
 
                     // Check for assignment after expression
                     if let Some(op) = token_to_assignop(self.peek_kind()) {
@@ -696,7 +726,16 @@ impl Parser {
                         continue;
                     }
 
-                    if self.eat(&TokenKind::Semi) {
+                    if is_control_flow && !self.at(&TokenKind::RBrace) {
+                        // Control flow without semicolon, not at block end →
+                        // always treat as statement, never as binary operand.
+                        let span = expr.span();
+                        self.eat_semi(); // consume optional semicolon
+                        stmts.push(Stmt::Expr {
+                            expr: Box::new(expr),
+                            span,
+                        });
+                    } else if self.eat(&TokenKind::Semi) {
                         // Expression with semicolon → statement
                         let span = expr.span();
                         stmts.push(Stmt::Expr {
