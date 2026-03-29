@@ -3887,6 +3887,56 @@ pub extern "C" fn fj_rt_checked_mul(a: i64, b: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Profiler — compiler-injected function enter/exit instrumentation
+// ═══════════════════════════════════════════════════════════════════════
+
+use std::sync::Mutex;
+
+/// Global profile session for native code instrumentation.
+/// Activated by --profile flag before compilation starts.
+static NATIVE_PROFILE: Mutex<Option<crate::profiler::instrument::ProfileSession>> =
+    Mutex::new(None);
+
+/// Initialize the native profiler. Called once before execution.
+pub fn native_profile_init() {
+    let mut guard = NATIVE_PROFILE.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = Some(crate::profiler::instrument::ProfileSession::new());
+}
+
+/// Finalize and return the Chrome trace JSON. Called after execution.
+pub fn native_profile_finish() -> Option<String> {
+    let guard = NATIVE_PROFILE.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().map(|s| s.to_trace())
+}
+
+/// Runtime: enter a function (called at the start of every compiled function).
+pub extern "C" fn fj_rt_profile_enter(name_ptr: *const u8, name_len: i64) {
+    // SAFETY: name_ptr points to a string literal in .rodata, name_len is its length.
+    let name = if name_ptr.is_null() || name_len <= 0 {
+        "<unknown>"
+    } else {
+        unsafe {
+            let slice = std::slice::from_raw_parts(name_ptr, name_len as usize);
+            std::str::from_utf8(slice).unwrap_or("<invalid>")
+        }
+    };
+    if let Ok(mut guard) = NATIVE_PROFILE.lock() {
+        if let Some(ref mut session) = *guard {
+            session.enter_fn(name, "", 0);
+        }
+    }
+}
+
+/// Runtime: exit a function (called before every return in compiled code).
+pub extern "C" fn fj_rt_profile_exit() {
+    if let Ok(mut guard) = NATIVE_PROFILE.lock() {
+        if let Some(ref mut session) = *guard {
+            session.exit_fn();
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Stack canary — compiler-injected stack protection
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -7209,6 +7259,8 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bump_alloc" => Some(fj_rt_bump_alloc as *const u8),
         "fj_rt_canary_check" => Some(fj_rt_canary_check as *const u8),
         "fj_rt_canary_generate" => Some(fj_rt_canary_generate as *const u8),
+        "fj_rt_profile_enter" => Some(fj_rt_profile_enter as *const u8),
+        "fj_rt_profile_exit" => Some(fj_rt_profile_exit as *const u8),
         "fj_rt_bump_destroy" => Some(fj_rt_bump_destroy as *const u8),
         "fj_rt_bump_new" => Some(fj_rt_bump_new as *const u8),
         "fj_rt_bump_reset" => Some(fj_rt_bump_reset as *const u8),

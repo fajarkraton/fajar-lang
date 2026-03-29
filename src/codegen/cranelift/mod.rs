@@ -176,6 +176,8 @@ pub struct CraneliftCompiler {
     lint_on_compile: bool,
     /// Dead functions to skip during codegen (set by optimizer).
     dead_functions: HashSet<String>,
+    /// When true, inject profiling instrumentation into compiled functions.
+    profiling_enabled: bool,
 }
 
 /// Coerces a return value to match the declared function return type.
@@ -499,6 +501,7 @@ impl CraneliftCompiler {
             security_enabled: false,
             lint_on_compile: false,
             dead_functions: HashSet::new(),
+            profiling_enabled: false,
         })
     }
 
@@ -529,6 +532,11 @@ impl CraneliftCompiler {
     /// Functions in this set will be skipped during codegen.
     pub fn set_dead_functions(&mut self, dead: Vec<String>) {
         self.dead_functions = dead.into_iter().collect();
+    }
+
+    /// Enables profiling instrumentation in compiled code.
+    pub fn enable_profiling(&mut self) {
+        self.profiling_enabled = true;
     }
 
     /// Declares built-in runtime functions (println, print) in the module.
@@ -4667,6 +4675,29 @@ impl CraneliftCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions
                 .insert("__canary_check".to_string(), canary_chk_id);
+
+            // Profiler runtime: enter(name_ptr, name_len) -> void, exit() -> void
+            if self.profiling_enabled {
+                // (ptr, i64) -> void
+                let mut sig_prof_enter = self.module.make_signature();
+                sig_prof_enter.params.push(AP::new(int_ty)); // name_ptr
+                sig_prof_enter.params.push(AP::new(int_ty)); // name_len
+                let prof_enter_id = self
+                    .module
+                    .declare_function("fj_rt_profile_enter", Linkage::Import, &sig_prof_enter)
+                    .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                self.functions
+                    .insert("__profile_enter".to_string(), prof_enter_id);
+
+                // () -> void
+                let sig_prof_exit = self.module.make_signature();
+                let prof_exit_id = self
+                    .module
+                    .declare_function("fj_rt_profile_exit", Linkage::Import, &sig_prof_exit)
+                    .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                self.functions
+                    .insert("__profile_exit".to_string(), prof_exit_id);
+            }
         }
 
         Ok(())
@@ -5535,6 +5566,43 @@ impl CraneliftCompiler {
                 None
             };
 
+            // Profiler prologue: emit fj_rt_profile_enter(name_ptr, name_len).
+            if self.profiling_enabled {
+                if let Some(&enter_id) = self.functions.get("__profile_enter") {
+                    let fn_name_bytes = fndef.name.as_bytes();
+                    let name_data_id = {
+                        let data_key = format!("__profname_{}", fndef.name);
+                        if let Some(&existing) = self.string_data.get(&data_key) {
+                            existing
+                        } else {
+                            let mut data_desc = cranelift_module::DataDescription::new();
+                            data_desc.define(fn_name_bytes.to_vec().into_boxed_slice());
+                            let did = self
+                                .module
+                                .declare_data(
+                                    &data_key,
+                                    cranelift_module::Linkage::Local,
+                                    false,
+                                    false,
+                                )
+                                .unwrap_or_else(|_| panic!("declare data for {data_key}"));
+                            let _ = self.module.define_data(did, &data_desc);
+                            self.string_data.insert(data_key, did);
+                            did
+                        }
+                    };
+                    let gv = self.module.declare_data_in_func(name_data_id, builder.func);
+                    let name_ptr = builder
+                        .ins()
+                        .global_value(self.module.target_config().pointer_type(), gv);
+                    let name_len = builder
+                        .ins()
+                        .iconst(clif_types::default_int_type(), fn_name_bytes.len() as i64);
+                    let callee = self.module.declare_func_in_func(enter_id, builder.func);
+                    builder.ins().call(callee, &[name_ptr, name_len]);
+                }
+            }
+
             let mut var_map: HashMap<String, Variable> = HashMap::new();
             let mut var_types: HashMap<String, cranelift_codegen::ir::Type> = HashMap::new();
             let mut string_lens = HashMap::new();
@@ -5926,6 +5994,11 @@ impl CraneliftCompiler {
                         } else {
                             result
                         };
+                        // Profiler epilogue: emit fj_rt_profile_exit() before return.
+                        if let Some(&exit_id) = cx.functions.get("__profile_exit") {
+                            let callee = cx.module.declare_func_in_func(exit_id, builder.func);
+                            builder.ins().call(callee, &[]);
+                        }
                         // Stack canary epilogue: verify canary before returning.
                         if let Some(c_var) = canary_var {
                             if let Some(&chk_id) = cx.functions.get("__canary_check") {
@@ -6540,6 +6613,8 @@ pub struct ObjectCompiler {
     lint_on_compile: bool,
     /// Dead functions to skip during codegen (set by optimizer).
     dead_functions: HashSet<String>,
+    /// When true, inject profiling instrumentation into compiled functions.
+    profiling_enabled: bool,
 }
 
 impl ObjectCompiler {
@@ -6610,6 +6685,7 @@ impl ObjectCompiler {
             security_enabled: false,
             lint_on_compile: false,
             dead_functions: HashSet::new(),
+            profiling_enabled: false,
         })
     }
 
@@ -6674,6 +6750,7 @@ impl ObjectCompiler {
             security_enabled: false,
             lint_on_compile: false,
             dead_functions: HashSet::new(),
+            profiling_enabled: false,
         })
     }
 
@@ -12764,7 +12841,7 @@ impl ObjectCompiler {
             builder.seal_block(entry_block);
 
             // Stack canary prologue: generate and store canary for corruption detection.
-            let canary_var = if self.security_enabled {
+            let _canary_var = if self.security_enabled {
                 if let (Some(&gen_id), Some(_)) = (
                     self.functions.get("__canary_generate"),
                     self.functions.get("__canary_check"),
@@ -12791,6 +12868,43 @@ impl ObjectCompiler {
             } else {
                 None
             };
+
+            // Profiler prologue: emit fj_rt_profile_enter(name_ptr, name_len).
+            if self.profiling_enabled {
+                if let Some(&enter_id) = self.functions.get("__profile_enter") {
+                    let fn_name_bytes = fndef.name.as_bytes();
+                    let name_data_id = {
+                        let data_key = format!("__profname_{}", fndef.name);
+                        if let Some(&existing) = self.string_data.get(&data_key) {
+                            existing
+                        } else {
+                            let mut data_desc = cranelift_module::DataDescription::new();
+                            data_desc.define(fn_name_bytes.to_vec().into_boxed_slice());
+                            let did = self
+                                .module
+                                .declare_data(
+                                    &data_key,
+                                    cranelift_module::Linkage::Local,
+                                    false,
+                                    false,
+                                )
+                                .unwrap_or_else(|_| panic!("declare data for {data_key}"));
+                            let _ = self.module.define_data(did, &data_desc);
+                            self.string_data.insert(data_key, did);
+                            did
+                        }
+                    };
+                    let gv = self.module.declare_data_in_func(name_data_id, builder.func);
+                    let name_ptr = builder
+                        .ins()
+                        .global_value(self.module.target_config().pointer_type(), gv);
+                    let name_len = builder
+                        .ins()
+                        .iconst(clif_types::default_int_type(), fn_name_bytes.len() as i64);
+                    let callee = self.module.declare_func_in_func(enter_id, builder.func);
+                    builder.ins().call(callee, &[name_ptr, name_len]);
+                }
+            }
 
             let mut var_map: HashMap<String, Variable> = HashMap::new();
             let mut var_types: HashMap<String, cranelift_codegen::ir::Type> = HashMap::new();
