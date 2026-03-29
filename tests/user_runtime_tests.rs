@@ -260,7 +260,10 @@ mod user_elf_structure {
     /// Returns true if the fj binary lacks native codegen (skip test).
     fn skip_if_no_native() -> bool {
         let path = fj_binary();
-        let dir = std::env::temp_dir().join("fj-native-check-user");
+        let dir = std::env::temp_dir().join(format!(
+            "fj-native-check-user-{:?}",
+            std::thread::current().id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("t.fj"), "fn main() -> i64 { 0 }\n").unwrap();

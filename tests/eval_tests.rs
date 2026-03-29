@@ -1778,7 +1778,8 @@ fn file_read_nonexistent() {
     let nonexistent = std::env::temp_dir()
         .join("fajar_nonexistent_file_xyz.txt")
         .display()
-        .to_string();
+        .to_string()
+        .replace('\\', "/");
     let src = format!(
         r#"
         fn main() -> void {{
@@ -5094,7 +5095,8 @@ fn e2e_log_to_file_writes_message() {
     let log_path = std::env::temp_dir()
         .join("fj_test_log.txt")
         .display()
-        .to_string();
+        .to_string()
+        .replace('\\', "/");
     let mut interp = Interpreter::new();
     let src = format!("let ok = log_to_file(\"{log_path}\", \"test message\")\nassert(ok == true)");
     let result = interp.eval_source(&src);
