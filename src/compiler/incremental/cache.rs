@@ -323,6 +323,77 @@ impl ArtifactCache {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Persists the cache index to disk as JSON.
+    ///
+    /// Each entry is stored as `{ key, size, compiled_at }` — the actual artifact data
+    /// is not persisted (only metadata for cache invalidation decisions on next build).
+    pub fn save_to_disk(&self) -> Result<(), IncrementalError> {
+        let cache_path = std::path::Path::new(&self.cache_dir);
+        std::fs::create_dir_all(cache_path).map_err(|e| IncrementalError::IoError {
+            message: format!("create cache dir: {e}"),
+        })?;
+        let index_path = cache_path.join("cache-index.json");
+        let entries: Vec<serde_json::Value> = self
+            .entries
+            .iter()
+            .map(|(key, artifact)| {
+                serde_json::json!({
+                    "content_hash": key.content_hash,
+                    "compiler_version": key.compiler_version,
+                    "target": key.target,
+                    "opt_level": key.opt_level,
+                    "size_bytes": artifact.size_bytes,
+                    "compiled_at": artifact.compiled_at,
+                })
+            })
+            .collect();
+        let json =
+            serde_json::to_string_pretty(&entries).map_err(|e| IncrementalError::IoError {
+                message: format!("serialize: {e}"),
+            })?;
+        std::fs::write(&index_path, json).map_err(|e| IncrementalError::IoError {
+            message: format!("write {}: {e}", index_path.display()),
+        })?;
+        Ok(())
+    }
+
+    /// Loads a previously saved cache index from disk.
+    ///
+    /// Entries are restored as metadata-only (no artifact data). A cache hit
+    /// on a restored entry means the source hash + compiler version match,
+    /// so recompilation can be skipped.
+    pub fn load_from_disk(&mut self) -> Result<usize, IncrementalError> {
+        let index_path = std::path::Path::new(&self.cache_dir).join("cache-index.json");
+        if !index_path.exists() {
+            return Ok(0);
+        }
+        let json = std::fs::read_to_string(&index_path).map_err(|e| IncrementalError::IoError {
+            message: format!("read {}: {e}", index_path.display()),
+        })?;
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_str(&json).map_err(|e| IncrementalError::IoError {
+                message: format!("deserialize: {e}"),
+            })?;
+        let mut loaded = 0;
+        for entry in entries {
+            let key = CacheKey::new(
+                entry["content_hash"].as_str().unwrap_or("").to_string(),
+                entry["compiler_version"].as_str().unwrap_or("").to_string(),
+                entry["target"].as_str().unwrap_or("").to_string(),
+                entry["opt_level"].as_str().unwrap_or("").to_string(),
+            );
+            let artifact = CachedArtifact::new(
+                key.clone(),
+                super::cache::ArtifactType::Object,
+                Vec::new(), // metadata-only, no artifact data
+                entry["compiled_at"].as_u64().unwrap_or(0),
+            );
+            let _ = self.cache_store(key, artifact);
+            loaded += 1;
+        }
+        Ok(loaded)
+    }
 }
 
 /// Collects keys of entries older than the maximum age.
