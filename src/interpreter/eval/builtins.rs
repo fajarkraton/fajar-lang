@@ -1671,6 +1671,20 @@ impl Interpreter {
                     return self.builtin_ble_disconnect(args);
                 }
 
+                // GUI builtins
+                if name == "gui_window" {
+                    return self.builtin_gui_window(args);
+                }
+                if name == "gui_label" {
+                    return self.builtin_gui_label(args);
+                }
+                if name == "gui_button" {
+                    return self.builtin_gui_button(args);
+                }
+                if name == "gui_rect" {
+                    return self.builtin_gui_rect(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
@@ -6184,6 +6198,184 @@ impl Interpreter {
             .collect();
         let v = vals?;
         Ok((v[0], v[1], v[2], v[3]))
+    }
+
+    // ── GUI builtins ──────────────────────────────────────────────
+
+    /// gui_window(title: str, width: i64, height: i64) -> null
+    ///
+    /// Configures the GUI window title and dimensions. Called before
+    /// adding widgets. The window is displayed when the program exits
+    /// and `fj gui` reads the accumulated state.
+    fn builtin_gui_window(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let title = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_window: expected string title".into()).into(),
+                );
+            }
+        };
+        let width = match &args[1] {
+            Value::Int(n) => *n as u32,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_window: expected int width".into()).into(),
+                );
+            }
+        };
+        let height = match &args[2] {
+            Value::Int(n) => *n as u32,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_window: expected int height".into()).into(),
+                );
+            }
+        };
+        self.gui_state.title = title;
+        self.gui_state.width = width;
+        self.gui_state.height = height;
+        Ok(Value::Null)
+    }
+
+    /// gui_label(text: str, x: i64, y: i64) -> null
+    ///
+    /// Adds a text label at (x, y).
+    fn builtin_gui_label(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let text = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_label: expected string text".into()).into(),
+                );
+            }
+        };
+        let x = match &args[1] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_label: expected int x".into()).into()),
+        };
+        let y = match &args[2] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_label: expected int y".into()).into()),
+        };
+        // Approximate label width from text length.
+        let w = (text.len() as u32) * 8 + 8;
+        self.gui_state.widgets.push(super::GuiWidget {
+            kind: "label".to_string(),
+            text,
+            x,
+            y,
+            w,
+            h: 20,
+            color: 0xFF_E0_E0_E0,
+        });
+        Ok(Value::Null)
+    }
+
+    /// gui_button(text: str, x: i64, y: i64, w: i64, h: i64) -> null
+    ///
+    /// Adds a button widget at (x, y) with dimensions w×h.
+    fn builtin_gui_button(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let text = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_button: expected string text".into()).into(),
+                );
+            }
+        };
+        let x = match &args[1] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_button: expected int x".into()).into()),
+        };
+        let y = match &args[2] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_button: expected int y".into()).into()),
+        };
+        let w = match &args[3] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_button: expected int w".into()).into()),
+        };
+        let h = match &args[4] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_button: expected int h".into()).into()),
+        };
+        self.gui_state.widgets.push(super::GuiWidget {
+            kind: "button".to_string(),
+            text,
+            x,
+            y,
+            w,
+            h,
+            color: 0xFF_40_80_C0,
+        });
+        Ok(Value::Null)
+    }
+
+    /// gui_rect(x: i64, y: i64, w: i64, h: i64, color: i64) -> null
+    ///
+    /// Draws a filled rectangle at (x, y) with dimensions w×h and color (0xRRGGBB).
+    fn builtin_gui_rect(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let x = match &args[0] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_rect: expected int x".into()).into()),
+        };
+        let y = match &args[1] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_rect: expected int y".into()).into()),
+        };
+        let w = match &args[2] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_rect: expected int w".into()).into()),
+        };
+        let h = match &args[3] {
+            Value::Int(n) => *n as u32,
+            _ => return Err(RuntimeError::TypeError("gui_rect: expected int h".into()).into()),
+        };
+        let color = match &args[4] {
+            Value::Int(n) => 0xFF_00_00_00 | (*n as u32 & 0x00_FF_FF_FF),
+            _ => {
+                return Err(RuntimeError::TypeError("gui_rect: expected int color".into()).into());
+            }
+        };
+        self.gui_state.widgets.push(super::GuiWidget {
+            kind: "rect".to_string(),
+            text: String::new(),
+            x,
+            y,
+            w,
+            h,
+            color,
+        });
+        Ok(Value::Null)
     }
 }
 

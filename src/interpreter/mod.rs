@@ -9,6 +9,6 @@ pub mod eval;
 pub mod ffi;
 pub mod value;
 
-pub use eval::{EvalError, Interpreter, RuntimeError};
+pub use eval::{EvalError, GuiState, GuiWidget, Interpreter, RuntimeError};
 pub use ffi::FfiManager;
 pub use value::Value;

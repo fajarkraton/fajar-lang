@@ -593,6 +593,27 @@ impl TypeChecker {
             ("mqtt_subscribe", vec![Type::I64, Type::Str], Type::Void),
             ("mqtt_recv", vec![Type::I64], Type::Unknown),
             ("mqtt_disconnect", vec![Type::I64], Type::Void),
+            // GUI builtins
+            (
+                "gui_window",
+                vec![Type::Str, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "gui_label",
+                vec![Type::Str, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "gui_button",
+                vec![Type::Str, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "gui_rect",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
             // BLE builtins
             ("ble_scan", vec![], Type::Unknown),
             ("ble_connect", vec![Type::Str], Type::I64),

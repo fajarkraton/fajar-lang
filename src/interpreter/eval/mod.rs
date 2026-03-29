@@ -23,6 +23,35 @@ use crate::parser::ast::{
 use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
 
+/// A single GUI widget created by gui_* builtins.
+#[derive(Debug, Clone)]
+pub struct GuiWidget {
+    /// Widget type: "label", "button", "rect".
+    pub kind: String,
+    /// Display text (for label/button).
+    pub text: String,
+    /// Position and size.
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    /// Fill color (0xAARRGGBB).
+    pub color: u32,
+}
+
+/// Accumulated GUI state from gui_* builtin calls.
+#[derive(Debug, Clone, Default)]
+pub struct GuiState {
+    /// Window title.
+    pub title: String,
+    /// Window width.
+    pub width: u32,
+    /// Window height.
+    pub height: u32,
+    /// Widgets to render.
+    pub widgets: Vec<GuiWidget>,
+}
+
 /// Simulated WebSocket connection state.
 #[derive(Debug, Clone)]
 struct WsConnection {
@@ -398,6 +427,8 @@ pub struct Interpreter {
     next_mqtt_id: i64,
     /// Simulated BLE adapter for Bluetooth Low Energy operations.
     ble_adapter: BleAdapter,
+    /// GUI state accumulated by gui_* builtins.
+    gui_state: GuiState,
 }
 
 impl Interpreter {
@@ -441,6 +472,7 @@ impl Interpreter {
             mqtt_broker: MqttBroker::new(),
             next_mqtt_id: 1,
             ble_adapter: BleAdapter::new(),
+            gui_state: GuiState::default(),
         };
         interp.register_builtins();
         interp
@@ -486,9 +518,15 @@ impl Interpreter {
             mqtt_broker: MqttBroker::new(),
             next_mqtt_id: 1,
             ble_adapter: BleAdapter::new(),
+            gui_state: GuiState::default(),
         };
         interp.register_builtins();
         interp
+    }
+
+    /// Takes the accumulated GUI state, leaving a default in place.
+    pub fn take_gui_state(&mut self) -> GuiState {
+        std::mem::take(&mut self.gui_state)
     }
 
     /// Enables profiling for this interpreter session.
@@ -576,6 +614,7 @@ impl Interpreter {
         all.extend(Self::x86_builtins());
         all.extend(Self::storage_net_builtins());
         all.extend(Self::display_process_builtins());
+        all.extend(Self::gui_builtins());
 
         for name in &all {
             self.env
@@ -1087,6 +1126,11 @@ impl Interpreter {
             "sys_ram_total",
             "sys_ram_free",
         ]
+    }
+
+    /// GUI widget builtins: create windows, labels, buttons, and rectangles.
+    fn gui_builtins() -> Vec<&'static str> {
+        vec!["gui_window", "gui_label", "gui_button", "gui_rect"]
     }
 
     /// Evaluates a complete program.

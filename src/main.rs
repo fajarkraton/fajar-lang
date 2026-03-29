@@ -243,6 +243,11 @@ enum Command {
         #[arg(long)]
         offline: bool,
     },
+    /// Launch a Fajar Lang program with GUI windowing (requires `gui` feature).
+    Gui {
+        /// Path to the .fj source file.
+        file: PathBuf,
+    },
     /// Display detected hardware capabilities (CPU, GPU, NPU).
     HwInfo,
     /// Output hardware profile as machine-readable JSON.
@@ -529,6 +534,7 @@ fn main_inner() -> ExitCode {
             version,
             offline,
         } => cmd_install(&package, version.as_deref(), offline),
+        Command::Gui { file } => cmd_gui(&file),
         Command::HwInfo => cmd_hw_info(),
         Command::HwJson => cmd_hw_json(),
         Command::Verify {
@@ -3859,4 +3865,149 @@ fn cmd_profile(path: &PathBuf, top: usize, format: &str) -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+/// Run a .fj program and launch a GUI window displaying the result.
+///
+/// The program is executed first, then if it defines gui_* calls, the
+/// interpreter's captured GUI state is rendered in a real OS window via
+/// `winit` + `softbuffer` (feature-gated behind `gui`).
+fn cmd_gui(path: &PathBuf) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+
+    let mut interp = Interpreter::new_capturing();
+    if let Err(e) = interp.eval_source(&source) {
+        eprintln!("error: {e}");
+        return ExitCode::from(EXIT_COMPILE);
+    }
+    if let Err(e) = interp.call_main() {
+        eprintln!("runtime error: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    // Retrieve GUI state set by gui_* builtins.
+    let gui_state = interp.take_gui_state();
+
+    if gui_state.widgets.is_empty() {
+        // No GUI widgets created — just print output.
+        for line in interp.get_output() {
+            println!("{line}");
+        }
+        println!("(no GUI widgets created — use gui_window/gui_label/gui_button in your program)");
+        return ExitCode::SUCCESS;
+    }
+
+    // Print interpreter output before launching window.
+    for line in interp.get_output() {
+        println!("{line}");
+    }
+
+    // Launch real OS window.
+    let config = fajar_lang::gui::platform::WindowConfig {
+        title: gui_state.title.clone(),
+        width: gui_state.width,
+        height: gui_state.height,
+        ..Default::default()
+    };
+
+    println!(
+        "[gui] Opening window: \"{}\" ({}x{}), {} widget(s)",
+        config.title,
+        config.width,
+        config.height,
+        gui_state.widgets.len()
+    );
+
+    fajar_lang::gui::platform::run_windowed(config, move |buf: &mut [u32], w: u32, h: u32| {
+        // Clear to background color.
+        let bg = 0xFF_2D_2D_2D_u32; // dark gray
+        for pixel in buf.iter_mut() {
+            *pixel = bg;
+        }
+
+        // Render each widget.
+        for widget in &gui_state.widgets {
+            render_gui_widget(buf, w, h, widget);
+        }
+    });
+
+    ExitCode::SUCCESS
+}
+
+/// Render a single GUI widget into the pixel buffer.
+fn render_gui_widget(
+    buf: &mut [u32],
+    w: u32,
+    _h: u32,
+    widget: &fajar_lang::interpreter::GuiWidget,
+) {
+    match widget.kind.as_str() {
+        "label" => {
+            // Draw a colored rectangle representing the label area.
+            let color = 0xFF_E0_E0_E0_u32; // light gray text area
+            fill_rect(buf, w, widget.x, widget.y, widget.w, 20, color);
+        }
+        "button" => {
+            // Draw a button rectangle with distinct color.
+            let color = 0xFF_40_80_C0_u32; // blue button
+            fill_rect(buf, w, widget.x, widget.y, widget.w, widget.h, color);
+            // Draw 1px border.
+            let border = 0xFF_20_60_A0_u32;
+            draw_rect_outline(buf, w, widget.x, widget.y, widget.w, widget.h, border);
+        }
+        "rect" => {
+            fill_rect(buf, w, widget.x, widget.y, widget.w, widget.h, widget.color);
+        }
+        _ => {
+            // Unknown widget type — draw as gray box.
+            fill_rect(
+                buf,
+                w,
+                widget.x,
+                widget.y,
+                widget.w,
+                widget.h,
+                0xFF_80_80_80,
+            );
+        }
+    }
+}
+
+fn fill_rect(buf: &mut [u32], stride: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
+    for row in y..y.saturating_add(h) {
+        for col in x..x.saturating_add(w) {
+            let idx = (row * stride + col) as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
+            }
+        }
+    }
+}
+
+fn draw_rect_outline(buf: &mut [u32], stride: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
+    // Top and bottom edges.
+    for col in x..x.saturating_add(w) {
+        let top = (y * stride + col) as usize;
+        let bot = (y.saturating_add(h.saturating_sub(1)) * stride + col) as usize;
+        if top < buf.len() {
+            buf[top] = color;
+        }
+        if bot < buf.len() {
+            buf[bot] = color;
+        }
+    }
+    // Left and right edges.
+    for row in y..y.saturating_add(h) {
+        let left = (row * stride + x) as usize;
+        let right = (row * stride + x.saturating_add(w.saturating_sub(1))) as usize;
+        if left < buf.len() {
+            buf[left] = color;
+        }
+        if right < buf.len() {
+            buf[right] = color;
+        }
+    }
 }

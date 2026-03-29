@@ -1,0 +1,52 @@
+// gui_hello.fj — Simple GUI window with labels, buttons, and colored rectangles.
+//
+// Demonstrates the gui_* builtins:
+//   gui_window(title, width, height) — configure the window
+//   gui_label(text, x, y)           — add a text label
+//   gui_button(text, x, y, w, h)    — add a button
+//   gui_rect(x, y, w, h, color)     — draw a colored rectangle
+//
+// Run: fj gui examples/gui_hello.fj
+// (Without the `gui` feature, prints widget summary only.)
+
+fn main() {
+    println("Fajar Lang GUI Demo")
+    println("===================")
+
+    // Configure window
+    gui_window("Fajar Lang - Hello GUI", 640, 480)
+    println("[gui] Window configured: 640x480")
+
+    // Background panels
+    gui_rect(0, 0, 640, 60, 0x1A1A2E)      // header bar (dark blue)
+    gui_rect(0, 60, 640, 360, 0x16213E)     // main area (navy)
+    gui_rect(0, 420, 640, 60, 0x0F3460)     // footer bar (deep blue)
+
+    // Title label
+    gui_label("Fajar Lang GUI Toolkit", 200, 20)
+
+    // Buttons
+    gui_button("Run", 50, 100, 120, 40)
+    gui_button("Build", 200, 100, 120, 40)
+    gui_button("Test", 350, 100, 120, 40)
+    gui_button("Exit", 500, 100, 120, 40)
+
+    // Info labels
+    gui_label("Status: Ready", 50, 180)
+    gui_label("Version: 7.0.0", 50, 210)
+    gui_label("Target: x86_64-linux", 50, 240)
+
+    // Color swatches
+    gui_rect(50, 300, 60, 60, 0xFF0000)     // red
+    gui_rect(130, 300, 60, 60, 0x00FF00)    // green
+    gui_rect(210, 300, 60, 60, 0x0000FF)    // blue
+    gui_rect(290, 300, 60, 60, 0xFFFF00)    // yellow
+    gui_rect(370, 300, 60, 60, 0xFF00FF)    // magenta
+    gui_rect(450, 300, 60, 60, 0x00FFFF)    // cyan
+
+    // Footer
+    gui_label("Fajar Lang (c) 2026 - Press Escape to close", 180, 440)
+
+    println("[gui] 16 widgets created")
+    println("[gui] Launch with: fj gui examples/gui_hello.fj")
+}

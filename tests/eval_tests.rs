@@ -16401,6 +16401,44 @@ fn v09_mqtt_recv_empty_returns_null() {
     assert_eq!(out, vec!["no message"]);
 }
 
+// ── Phase 9: GUI builtin tests ──
+
+#[test]
+fn v09_gui_window_and_widgets() {
+    let src = r#"
+        fn main() -> void {
+            gui_window("Test Window", 800, 600)
+            gui_label("Hello", 10, 10)
+            gui_button("Click Me", 50, 50, 120, 40)
+            gui_rect(0, 0, 200, 100, 0xFF0000)
+            println("ok")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["ok"]);
+}
+
+#[test]
+fn v09_gui_take_state() {
+    let src = r#"
+        fn main() -> void {
+            gui_window("My App", 320, 240)
+            gui_label("Label1", 10, 20)
+            gui_button("Btn", 10, 50, 80, 30)
+        }
+    "#;
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(src).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let state = interp.take_gui_state();
+    assert_eq!(state.title, "My App");
+    assert_eq!(state.width, 320);
+    assert_eq!(state.height, 240);
+    assert_eq!(state.widgets.len(), 2);
+    assert_eq!(state.widgets[0].kind, "label");
+    assert_eq!(state.widgets[1].kind, "button");
+}
+
 #[test]
 fn v09_mqtt_unsubscribed_topic_not_delivered() {
     let src = r#"
