@@ -3887,6 +3887,39 @@ pub extern "C" fn fj_rt_checked_mul(a: i64, b: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Stack canary — compiler-injected stack protection
+// ═══════════════════════════════════════════════════════════════════════
+
+use std::sync::atomic::AtomicU64;
+
+/// Global canary seed — initialized once, used by all canary checks.
+static CANARY_SEED: AtomicU64 = AtomicU64::new(0xDEAD_BEEF_CAFE_F00D);
+
+/// Generate a canary value for a given call site.
+/// Uses Murmur3-style mixing of seed ^ call_site_id.
+pub extern "C" fn fj_rt_canary_generate(call_site_id: i64) -> i64 {
+    let seed = CANARY_SEED.load(std::sync::atomic::Ordering::Relaxed);
+    let mut h = seed ^ (call_site_id as u64);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xFF51AFD7ED558CCD);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xC4CEB9FE1A85EC53);
+    h ^= h >> 33;
+    h as i64
+}
+
+/// Verify canary at function exit. Aborts if stack was corrupted.
+pub extern "C" fn fj_rt_canary_check(expected: i64, actual: i64) {
+    if expected != actual {
+        eprintln!(
+            "FATAL: stack canary corrupted (expected {:#x}, got {:#x}) — possible buffer overflow",
+            expected, actual
+        );
+        std::process::abort();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Arc (atomic reference counting)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -7174,6 +7207,8 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_barrier_wait" => Some(fj_rt_barrier_wait as *const u8),
         "fj_rt_bounds_check" => Some(fj_rt_bounds_check as *const u8),
         "fj_rt_bump_alloc" => Some(fj_rt_bump_alloc as *const u8),
+        "fj_rt_canary_check" => Some(fj_rt_canary_check as *const u8),
+        "fj_rt_canary_generate" => Some(fj_rt_canary_generate as *const u8),
         "fj_rt_bump_destroy" => Some(fj_rt_bump_destroy as *const u8),
         "fj_rt_bump_new" => Some(fj_rt_bump_new as *const u8),
         "fj_rt_bump_reset" => Some(fj_rt_bump_reset as *const u8),

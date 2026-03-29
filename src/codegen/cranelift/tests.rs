@@ -17483,3 +17483,79 @@ fn test_checked_add_no_overflow() {
     assert_eq!(fj_rt_checked_mul(6, 7), 42);
     assert_eq!(fj_rt_checked_mul(-3, 4), -12);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// P1.1: Stack Canary Tests — Verify canary generation and checking
+// ═══════════════════════════════════════════════════════════════════════
+
+/// P1.1: Canary generate returns consistent values for the same call site.
+#[test]
+fn test_canary_generate_consistent() {
+    use crate::codegen::cranelift::runtime_fns::fj_rt_canary_generate;
+    let v1 = fj_rt_canary_generate(42);
+    let v2 = fj_rt_canary_generate(42);
+    assert_eq!(v1, v2, "same call site should produce same canary");
+}
+
+/// P1.1: Different call sites produce different canary values.
+#[test]
+fn test_canary_generate_unique_per_site() {
+    use crate::codegen::cranelift::runtime_fns::fj_rt_canary_generate;
+    let v1 = fj_rt_canary_generate(1);
+    let v2 = fj_rt_canary_generate(2);
+    assert_ne!(
+        v1, v2,
+        "different call sites should produce different canaries"
+    );
+}
+
+/// P1.1: Canary check succeeds when values match.
+#[test]
+fn test_canary_check_valid() {
+    use crate::codegen::cranelift::runtime_fns::{fj_rt_canary_check, fj_rt_canary_generate};
+    let canary = fj_rt_canary_generate(100);
+    // Should not abort
+    fj_rt_canary_check(canary, canary);
+}
+
+/// P1.1: Security-enabled compilation produces valid code with canary.
+#[test]
+fn native_security_canary_function_runs() {
+    let src = r#"
+        fn add(a: i64, b: i64) -> i64 { a + b }
+        fn main() -> i64 {
+            add(10, 20)
+        }
+    "#;
+    // Compile with security enabled
+    let result = compile_and_run_with_security(src);
+    assert_eq!(result, 30);
+}
+
+/// P1.1: Security-enabled compilation with recursive function.
+#[test]
+fn native_security_canary_recursive() {
+    let src = r#"
+        fn fib(n: i64) -> i64 {
+            if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+        }
+        fn main() -> i64 {
+            fib(10)
+        }
+    "#;
+    let result = compile_and_run_with_security(src);
+    assert_eq!(result, 55);
+}
+
+/// Helper: compile and run with security enabled.
+fn compile_and_run_with_security(src: &str) -> i64 {
+    let tokens = crate::lexer::tokenize(src).expect("lex");
+    let program = crate::parser::parse(tokens).expect("parse");
+    let _ = crate::analyzer::analyze(&program);
+    let mut compiler = super::CraneliftCompiler::new().expect("compiler");
+    compiler.enable_security();
+    compiler.compile_program(&program).expect("compile");
+    let fn_ptr = compiler.get_fn_ptr("main").expect("main ptr");
+    let main_fn: fn() -> i64 = unsafe { std::mem::transmute(fn_ptr) };
+    main_fn()
+}

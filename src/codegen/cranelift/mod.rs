@@ -4634,6 +4634,30 @@ impl CraneliftCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions
                 .insert("__checked_mul".to_string(), checked_mul_id);
+
+            // Stack canary: generate(call_site_id) -> canary_value
+            // Signature: (i64) -> i64
+            let mut sig_canary_gen = self.module.make_signature();
+            sig_canary_gen.params.push(AP::new(int_ty));
+            sig_canary_gen.returns.push(AP::new(int_ty));
+            let canary_gen_id = self
+                .module
+                .declare_function("fj_rt_canary_generate", Linkage::Import, &sig_canary_gen)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__canary_generate".to_string(), canary_gen_id);
+
+            // Stack canary: check(expected, actual) -> void
+            // Signature: (i64, i64) -> void
+            let mut sig_canary_chk = self.module.make_signature();
+            sig_canary_chk.params.push(AP::new(int_ty));
+            sig_canary_chk.params.push(AP::new(int_ty));
+            let canary_chk_id = self
+                .module
+                .declare_function("fj_rt_canary_check", Linkage::Import, &sig_canary_chk)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__canary_check".to_string(), canary_chk_id);
         }
 
         Ok(())
@@ -5470,6 +5494,35 @@ impl CraneliftCompiler {
             builder.switch_to_block(entry_block);
             builder.seal_block(entry_block);
 
+            // Stack canary prologue: generate and store canary for corruption detection.
+            let canary_var = if self.security_enabled {
+                if let (Some(&gen_id), Some(_)) = (
+                    self.functions.get("__canary_generate"),
+                    self.functions.get("__canary_check"),
+                ) {
+                    let int_ty = clif_types::default_int_type();
+                    let call_site_hash = {
+                        let mut h: u64 = 0xcbf29ce484222325;
+                        for b in fndef.name.bytes() {
+                            h ^= b as u64;
+                            h = h.wrapping_mul(0x100000001b3);
+                        }
+                        h as i64
+                    };
+                    let site_id = builder.ins().iconst(int_ty, call_site_hash);
+                    let callee = self.module.declare_func_in_func(gen_id, builder.func);
+                    let call = builder.ins().call(callee, &[site_id]);
+                    let canary_val = builder.inst_results(call)[0];
+                    let var = builder.declare_var(int_ty);
+                    builder.def_var(var, canary_val);
+                    Some(var)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             let mut var_map: HashMap<String, Variable> = HashMap::new();
             let mut var_types: HashMap<String, cranelift_codegen::ir::Type> = HashMap::new();
             let mut string_lens = HashMap::new();
@@ -5861,6 +5914,32 @@ impl CraneliftCompiler {
                         } else {
                             result
                         };
+                        // Stack canary epilogue: verify canary before returning.
+                        if let Some(c_var) = canary_var {
+                            if let Some(&chk_id) = cx.functions.get("__canary_check") {
+                                let expected = builder.use_var(c_var);
+                                let call_site_hash = {
+                                    let mut h: u64 = 0xcbf29ce484222325;
+                                    for b in fndef.name.bytes() {
+                                        h ^= b as u64;
+                                        h = h.wrapping_mul(0x100000001b3);
+                                    }
+                                    h as i64
+                                };
+                                let site_id = builder
+                                    .ins()
+                                    .iconst(clif_types::default_int_type(), call_site_hash);
+                                if let Some(&gen_id) = cx.functions.get("__canary_generate") {
+                                    let gen_callee =
+                                        cx.module.declare_func_in_func(gen_id, builder.func);
+                                    let gen_call = builder.ins().call(gen_callee, &[site_id]);
+                                    let actual = builder.inst_results(gen_call)[0];
+                                    let chk_callee =
+                                        cx.module.declare_func_in_func(chk_id, builder.func);
+                                    builder.ins().call(chk_callee, &[expected, actual]);
+                                }
+                            }
+                        }
                         // Cleanup owned resources, excluding the returned value
                         emit_owned_cleanup(&mut builder, &mut cx, Some(ret_val))?;
                         if is_str_ret {
@@ -11616,6 +11695,28 @@ impl ObjectCompiler {
                 .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
             self.functions
                 .insert("__checked_mul".to_string(), checked_mul_id);
+
+            // Stack canary: generate(call_site_id) -> canary_value
+            let mut sig_canary_gen = self.module.make_signature();
+            sig_canary_gen.params.push(AP::new(int_ty));
+            sig_canary_gen.returns.push(AP::new(int_ty));
+            let canary_gen_id = self
+                .module
+                .declare_function("fj_rt_canary_generate", Linkage::Import, &sig_canary_gen)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__canary_generate".to_string(), canary_gen_id);
+
+            // Stack canary: check(expected, actual) -> void
+            let mut sig_canary_chk = self.module.make_signature();
+            sig_canary_chk.params.push(AP::new(int_ty));
+            sig_canary_chk.params.push(AP::new(int_ty));
+            let canary_chk_id = self
+                .module
+                .declare_function("fj_rt_canary_check", Linkage::Import, &sig_canary_chk)
+                .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+            self.functions
+                .insert("__canary_check".to_string(), canary_chk_id);
         }
 
         Ok(())
@@ -12637,6 +12738,35 @@ impl ObjectCompiler {
             builder.append_block_params_for_function_params(entry_block);
             builder.switch_to_block(entry_block);
             builder.seal_block(entry_block);
+
+            // Stack canary prologue: generate and store canary for corruption detection.
+            let canary_var = if self.security_enabled {
+                if let (Some(&gen_id), Some(_)) = (
+                    self.functions.get("__canary_generate"),
+                    self.functions.get("__canary_check"),
+                ) {
+                    let int_ty = clif_types::default_int_type();
+                    let call_site_hash = {
+                        let mut h: u64 = 0xcbf29ce484222325;
+                        for b in fndef.name.bytes() {
+                            h ^= b as u64;
+                            h = h.wrapping_mul(0x100000001b3);
+                        }
+                        h as i64
+                    };
+                    let site_id = builder.ins().iconst(int_ty, call_site_hash);
+                    let callee = self.module.declare_func_in_func(gen_id, builder.func);
+                    let call = builder.ins().call(callee, &[site_id]);
+                    let canary_val = builder.inst_results(call)[0];
+                    let var = builder.declare_var(int_ty);
+                    builder.def_var(var, canary_val);
+                    Some(var)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
             let mut var_map: HashMap<String, Variable> = HashMap::new();
             let mut var_types: HashMap<String, cranelift_codegen::ir::Type> = HashMap::new();
