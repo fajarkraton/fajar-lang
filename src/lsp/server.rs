@@ -18,16 +18,51 @@ struct DocumentState {
     source: String,
     /// Line start offsets (byte offset of each line start).
     line_starts: Vec<usize>,
+    /// Cached function definitions: (name, span_start, span_end).
+    /// Built from AST on open/change for scope-aware goto-definition.
+    fn_defs: Vec<(String, usize, usize)>,
+    /// Cached struct definitions: (name, span_start, span_end).
+    struct_defs: Vec<(String, usize, usize)>,
+    /// Cached variable bindings: (name, scope_depth, span_start, span_end).
+    /// Reserved for future scope-aware variable goto-definition.
+    #[allow(dead_code)]
+    var_defs: Vec<(String, u32, usize, usize)>,
 }
 
 impl DocumentState {
     fn new(source: String) -> Self {
-        let line_starts = std::iter::once(0)
+        let line_starts: Vec<usize> = std::iter::once(0)
             .chain(source.match_indices('\n').map(|(i, _)| i + 1))
             .collect();
+
+        // Build symbol index from AST (best-effort — ignore parse errors).
+        let mut fn_defs = Vec::new();
+        let mut struct_defs = Vec::new();
+        let var_defs = Vec::new();
+
+        if let Ok(tokens) = crate::lexer::tokenize(&source) {
+            if let Ok(program) = crate::parser::parse(tokens) {
+                for item in &program.items {
+                    match item {
+                        crate::parser::ast::Item::FnDef(f) => {
+                            let span = f.body.span();
+                            fn_defs.push((f.name.clone(), span.start, span.end));
+                        }
+                        crate::parser::ast::Item::StructDef(s) => {
+                            struct_defs.push((s.name.clone(), s.span.start, s.span.end));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         Self {
             source,
             line_starts,
+            fn_defs,
+            struct_defs,
+            var_defs,
         }
     }
 
@@ -310,20 +345,39 @@ impl LanguageServer for FajarLspBackend {
             return Ok(None);
         }
 
-        // Search for definition patterns: fn <name>, let <name>, struct <name>, enum <name>
-        let patterns = [
-            format!("fn {word}"),
+        // AST-based definition lookup: search cached fn/struct definitions first.
+        // This is more accurate than text search (won't match inside comments/strings).
+        for (name, span_start, _span_end) in &doc.fn_defs {
+            if name == &word {
+                let start = doc.offset_to_position(*span_start);
+                let end = doc.offset_to_position(*span_start + word.len());
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range: Range::new(start, end),
+                })));
+            }
+        }
+        for (name, span_start, _span_end) in &doc.struct_defs {
+            if name == &word {
+                let start = doc.offset_to_position(*span_start);
+                let end = doc.offset_to_position(*span_start + word.len());
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range: Range::new(start, end),
+                })));
+            }
+        }
+
+        // Fallback: text search for let/const/enum/trait definitions
+        let fallback_patterns = [
             format!("let {word}"),
             format!("let mut {word}"),
-            format!("struct {word}"),
             format!("enum {word}"),
             format!("const {word}"),
             format!("trait {word}"),
         ];
-
-        for pat in &patterns {
+        for pat in &fallback_patterns {
             if let Some(offset) = doc.source.find(pat.as_str()) {
-                // Point to the name, not the keyword
                 let name_offset = offset + pat.len() - word.len();
                 let start = doc.offset_to_position(name_offset);
                 let end = doc.offset_to_position(name_offset + word.len());
@@ -419,6 +473,40 @@ impl LanguageServer for FajarLspBackend {
                         }
                     }
                 }
+                "SE001" | "SE002" => {
+                    // UndefinedVariable/Function — suggest typo fix using lsp_v3.
+                    // Extract the undefined name from the diagnostic message.
+                    let msg = &diag.message;
+                    // Messages like "SE001: undefined variable 'foo'" or "SE002: undefined function 'bar'"
+                    if let Some(start_q) = msg.find('\'') {
+                        if let Some(end_q) = msg[start_q + 1..].find('\'') {
+                            let typo_name = &msg[start_q + 1..start_q + 1 + end_q];
+                            // Collect known names from AST cache
+                            let candidates: Vec<String> = doc
+                                .fn_defs
+                                .iter()
+                                .map(|(n, _, _)| n.clone())
+                                .chain(doc.struct_defs.iter().map(|(n, _, _)| n.clone()))
+                                .collect();
+                            if let Some(suggestion) = crate::lsp_v3::diagnostics::suggest_typo_fix(
+                                typo_name,
+                                &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                                2,
+                            ) {
+                                let edit = TextEdit::new(diag.range, suggestion.clone());
+                                let mut changes = HashMap::new();
+                                changes.insert(uri.clone(), vec![edit]);
+                                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: format!("Did you mean `{suggestion}`?"),
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: Some(vec![diag.clone()]),
+                                    edit: Some(WorkspaceEdit::new(changes)),
+                                    ..Default::default()
+                                }));
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -495,6 +583,15 @@ impl LanguageServer for FajarLspBackend {
         let uri = &params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
         let new_name = &params.new_name;
+
+        // Validate the new name using lsp_v3 refactoring rules (keyword/naming checks).
+        // Done before acquiring the lock to avoid holding MutexGuard across .await.
+        if let Err(reason) = crate::lsp_v3::refactoring::validate_rename(new_name) {
+            self.client
+                .log_message(MessageType::WARNING, format!("rename rejected: {reason}"))
+                .await;
+            return Ok(None);
+        }
 
         let docs = self.documents.lock().expect("lsp state lock");
         let doc = match docs.get(uri) {
