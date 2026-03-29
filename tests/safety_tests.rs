@@ -207,15 +207,13 @@ fn safety_saturating_mul_clamps() {
 
 #[test]
 fn safety_array_index_out_of_bounds() {
-    let err = eval("[1, 2, 3][5]").unwrap_err();
-    assert!(matches!(
-        err,
-        RuntimeError::IndexOutOfBounds {
-            index: 5,
-            length: 3,
-            ..
-        }
-    ));
+    // P2.1 compile-time bounds check: caught at analysis time (SE022).
+    let err = eval_any_error("[1, 2, 3][5]");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("out of bounds") || msg.contains("SE022"),
+        "expected OOB error, got: {msg}"
+    );
 }
 
 #[test]
@@ -227,15 +225,13 @@ fn safety_array_index_negative_wraps() {
 
 #[test]
 fn safety_array_index_empty() {
-    let err = eval("[][0]").unwrap_err();
-    assert!(matches!(
-        err,
-        RuntimeError::IndexOutOfBounds {
-            index: 0,
-            length: 0,
-            ..
-        }
-    ));
+    // P2.1 compile-time bounds check: caught at analysis time (SE022).
+    let err = eval_any_error("[][0]");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("out of bounds") || msg.contains("SE022"),
+        "expected OOB error, got: {msg}"
+    );
 }
 
 #[test]
