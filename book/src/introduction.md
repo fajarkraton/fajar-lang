@@ -49,15 +49,16 @@ fn main() {
 
 ## Current Status
 
-Fajar Lang v3.0 "Singularity" is the latest stable release:
+Fajar Lang v7.0.0 "Integrity" is the latest stable release:
 
-- **3 compiler backends** — Cranelift (JIT+AOT), LLVM (O0-O3), WebAssembly
-- **Advanced type system** — dependent types, linear types, higher-kinded types, GAT
-- **Formal verification** — `requires`/`ensures`/`invariant` with SMT solver support
-- **Full ML stack** — tensors, autograd, Transformer, diffusion models, RL agents, GPU training
-- **OS + embedded** — bare metal, RTOS (FreeRTOS/Zephyr), BSP, IoT (WiFi/BLE/MQTT/LoRaWAN)
-- **GPU codegen** — native PTX (CUDA) and SPIR-V (Vulkan) emission
-- **Structured concurrency** — nurseries, cancellation tokens, flow control
+- **~335,000 lines of Rust** — 5,563 tests, 0 clippy warnings
+- **173 example programs** — 170 pass `fj check` (3 self-hosting by design)
+- **Native codegen** — Cranelift JIT+AOT, LLVM backend, WebAssembly
+- **Full ML stack** — tensors, autograd, training, MNIST 90%+, ONNX export
+- **OS development** — FajarOS Nova (x86_64) + FajarOS Surya (ARM64)
+- **Embedded targets** — ARM64, RISC-V cross-compilation, no_std, HAL traits
+- **37 standard packages** — math, nn, hal, http, json, crypto, mqtt, db
+- **Developer tools** — LSP, VS Code extension, formatter, test framework, doc generator
 - **Distributed computing** — actor model, Raft consensus, CRDTs
 - **Production deployment** — containers, observability, runtime management, security
 - **Time-travel debugger** — record/replay, reverse stepping, flame graphs
