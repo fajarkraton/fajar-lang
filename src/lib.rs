@@ -352,6 +352,7 @@ impl FjDiagnostic {
             SemanticError::DuplicateEffectDecl { .. } => "EE004",
             SemanticError::MessageTooLarge { .. } => "IPC001",
             SemanticError::IpcTypeMismatch { .. } => "IPC002",
+            SemanticError::IndexOutOfBounds { .. } => "SE022",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

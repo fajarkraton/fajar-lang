@@ -1579,6 +1579,7 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::DuplicateEffectDecl { .. } => "EE004",
         SemanticError::MessageTooLarge { .. } => "IPC001",
         SemanticError::IpcTypeMismatch { .. } => "IPC002",
+        SemanticError::IndexOutOfBounds { .. } => "SE022",
     };
     Diagnostic {
         range,

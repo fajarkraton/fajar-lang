@@ -967,6 +967,17 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// SE022: Compile-time array index out of bounds.
+    #[error("SE022: array index {index} out of bounds (length {length})")]
+    IndexOutOfBounds {
+        /// The index value.
+        index: i64,
+        /// The array length.
+        length: u64,
+        /// Source location.
+        span: Span,
+    },
+
     /// SE019: Unused import (warning).
     #[error("SE019: unused import '{name}'")]
     UnusedImport {
@@ -1127,6 +1138,7 @@ impl SemanticError {
             | SemanticError::CannotInferType { span, .. }
             | SemanticError::TraitMethodSignatureMismatch { span, .. }
             | SemanticError::TensorShapeMismatch { span, .. }
+            | SemanticError::IndexOutOfBounds { span, .. }
             | SemanticError::UnusedImport { span, .. }
             | SemanticError::UnreachablePattern { span, .. }
             | SemanticError::LifetimeMismatch { span, .. }

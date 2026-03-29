@@ -1097,7 +1097,9 @@ impl TypeChecker {
                 }
             }
             BinOp::MatMul => {
-                // Shape checking for @ operator when both operands have tensor types
+                // Shape checking for @ operator when both operands have tensor types.
+                // Uses both the built-in Type::matmul_shape() and the tensor_verify module
+                // for richer shape error messages when dims are fully known.
                 if lt.is_tensor() && rt.is_tensor() {
                     // Skip shape check when either has unknown rank (empty dims)
                     let lt_empty = matches!(&lt, Type::Tensor { dims, .. } if dims.is_empty());
@@ -1105,6 +1107,35 @@ impl TypeChecker {
                     if lt_empty || rt_empty {
                         return Type::dynamic_tensor();
                     }
+
+                    // Enhanced: use tensor_verify for concrete shapes
+                    if let (Type::Tensor { dims: ld, .. }, Type::Tensor { dims: rd, .. }) =
+                        (&lt, &rt)
+                    {
+                        let all_concrete_l = ld.iter().all(|d| d.is_some());
+                        let all_concrete_r = rd.iter().all(|d| d.is_some());
+                        if all_concrete_l && all_concrete_r {
+                            use crate::verify::tensor_verify::{
+                                ShapeCheckStatus, SymbolicShape, verify_matmul,
+                            };
+                            let ls: Vec<usize> =
+                                ld.iter().filter_map(|d| d.map(|v| v as usize)).collect();
+                            let rs: Vec<usize> =
+                                rd.iter().filter_map(|d| d.map(|v| v as usize)).collect();
+                            let lshape = SymbolicShape::concrete(&ls);
+                            let rshape = SymbolicShape::concrete(&rs);
+                            let constraint = verify_matmul(&lshape, &rshape);
+                            if matches!(constraint.status, ShapeCheckStatus::Invalid(_)) {
+                                let op_span = Span::new(left.span().start, right.span().end);
+                                self.errors.push(SemanticError::TensorShapeMismatch {
+                                    detail: constraint.description,
+                                    span: op_span,
+                                });
+                                return Type::dynamic_tensor();
+                            }
+                        }
+                    }
+
                     match lt.matmul_shape(&rt) {
                         Some(result) => result,
                         None => {
@@ -2101,6 +2132,9 @@ impl TypeChecker {
     }
 
     /// Checks index access.
+    ///
+    /// When both the array length and index are compile-time constants,
+    /// performs a static bounds check and emits a compile error on OOB.
     fn check_index(&mut self, object: &Expr, index: &Expr, _span: Span) -> Type {
         let obj_ty = self.check_expr(object);
         let idx_ty = self.check_expr(index);
@@ -2114,10 +2148,56 @@ impl TypeChecker {
             });
         }
 
+        // Compile-time bounds check: if we know both array length and index value,
+        // check at compile time that the index is within bounds.
+        if let Type::Array(_) = &obj_ty {
+            let known_len = self.try_const_array_len(object);
+            let known_idx = self.try_const_index(index);
+            if let (Some(len), Some(idx)) = (known_len, known_idx) {
+                if idx < 0 || idx >= len as i64 {
+                    self.errors.push(SemanticError::IndexOutOfBounds {
+                        index: idx,
+                        length: len,
+                        span: index.span(),
+                    });
+                }
+            }
+        }
+
         match obj_ty {
             Type::Array(inner) => *inner,
             Type::Str => Type::Char,
             _ => Type::Unknown,
+        }
+    }
+
+    /// Try to determine the compile-time length of an array expression.
+    fn try_const_array_len(&self, expr: &Expr) -> Option<u64> {
+        match expr {
+            Expr::Array { elements, .. } => Some(elements.len() as u64),
+            Expr::ArrayRepeat { count, .. } => {
+                if let Expr::Literal {
+                    kind: LiteralKind::Int(n),
+                    ..
+                } = count.as_ref()
+                {
+                    Some(*n as u64)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Try to determine the compile-time value of an index expression.
+    fn try_const_index(&self, expr: &Expr) -> Option<i64> {
+        match expr {
+            Expr::Literal {
+                kind: LiteralKind::Int(n),
+                ..
+            } => Some(*n),
+            _ => None,
         }
     }
 
