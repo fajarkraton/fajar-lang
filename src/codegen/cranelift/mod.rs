@@ -174,6 +174,8 @@ pub struct CraneliftCompiler {
     security_enabled: bool,
     /// Run security linter before compilation.
     lint_on_compile: bool,
+    /// Dead functions to skip during codegen (set by optimizer).
+    dead_functions: HashSet<String>,
 }
 
 /// Coerces a return value to match the declared function return type.
@@ -496,6 +498,7 @@ impl CraneliftCompiler {
             interrupt_fns: Vec::new(),
             security_enabled: false,
             lint_on_compile: false,
+            dead_functions: HashSet::new(),
         })
     }
 
@@ -520,6 +523,12 @@ impl CraneliftCompiler {
     /// Enables the security linter pre-pass before compilation.
     pub fn enable_lint(&mut self) {
         self.lint_on_compile = true;
+    }
+
+    /// Sets the dead function list from the optimizer's dead function elimination pass.
+    /// Functions in this set will be skipped during codegen.
+    pub fn set_dead_functions(&mut self, dead: Vec<String>) {
+        self.dead_functions = dead.into_iter().collect();
     }
 
     /// Declares built-in runtime functions (println, print) in the module.
@@ -5135,9 +5144,12 @@ impl CraneliftCompiler {
             }
         }
 
-        // Second pass: compile function bodies (concrete + monomorphized + closures)
-        // All functions here are reachable (dead code was filtered before declarations).
+        // Second pass: compile function bodies (concrete + monomorphized + closures).
+        // Skip dead functions identified by the optimizer (if any).
         for fndef in &concrete_fns {
+            if self.dead_functions.contains(&fndef.name) {
+                continue; // dead function — optimizer says unreachable
+            }
             if let Err(e) = self.define_function(fndef) {
                 errors.push(e);
             }
@@ -6526,6 +6538,8 @@ pub struct ObjectCompiler {
     security_enabled: bool,
     /// Run security linter before compilation.
     lint_on_compile: bool,
+    /// Dead functions to skip during codegen (set by optimizer).
+    dead_functions: HashSet<String>,
 }
 
 impl ObjectCompiler {
@@ -6595,6 +6609,7 @@ impl ObjectCompiler {
             interrupt_fns: Vec::new(),
             security_enabled: false,
             lint_on_compile: false,
+            dead_functions: HashSet::new(),
         })
     }
 
@@ -6658,6 +6673,7 @@ impl ObjectCompiler {
             interrupt_fns: Vec::new(),
             security_enabled: false,
             lint_on_compile: false,
+            dead_functions: HashSet::new(),
         })
     }
 
@@ -11743,6 +11759,11 @@ impl ObjectCompiler {
         self.lint_on_compile = true;
     }
 
+    /// Sets the dead function list from the optimizer's dead function elimination pass.
+    pub fn set_dead_functions(&mut self, dead: Vec<String>) {
+        self.dead_functions = dead.into_iter().collect();
+    }
+
     /// Enables debug information generation.
     pub fn set_debug_info(&mut self, enabled: bool, source_file: Option<String>) {
         self.debug_info = enabled;
@@ -12232,9 +12253,12 @@ impl ObjectCompiler {
             }
         }
 
-        // Second pass: compile function bodies (concrete + monomorphized + closures)
-        // All functions here are reachable (dead code was filtered before declarations).
+        // Second pass: compile function bodies (concrete + monomorphized + closures).
+        // Skip dead functions identified by the optimizer (if any).
         for fndef in &concrete_fns {
+            if self.dead_functions.contains(&fndef.name) {
+                continue; // dead function — optimizer says unreachable
+            }
             if let Err(e) = self.define_function(fndef) {
                 errors.push(e);
             }

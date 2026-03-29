@@ -421,6 +421,7 @@ fn main_inner() -> ExitCode {
                         linker.as_deref(),
                         security,
                         lint,
+                        effective_opt,
                     );
                     // Update incremental cache on success
                     if incremental && r == ExitCode::SUCCESS {
@@ -1535,6 +1536,7 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
                 None,
                 false,
                 false,
+                0, // O0 for kernel builds
             );
             if result == ExitCode::SUCCESS {
                 eprintln!("  ✅ kernel → {}", output_path.display());
@@ -1579,6 +1581,7 @@ fn cmd_build_all(verbose: bool) -> ExitCode {
                 None,
                 false,
                 false,
+                0, // O0 for service builds
             );
             if result == ExitCode::SUCCESS {
                 eprintln!(
@@ -1934,6 +1937,7 @@ fn cmd_build(
     linker_override: Option<&str>,
     security: bool,
     lint: bool,
+    opt_level: u8,
 ) -> ExitCode {
     cmd_build_native(
         path,
@@ -1944,6 +1948,7 @@ fn cmd_build(
         linker_override,
         security,
         lint,
+        opt_level,
     )
 }
 
@@ -1959,6 +1964,7 @@ fn cmd_build(
     _linker_override: Option<&str>,
     _security: bool,
     _lint: bool,
+    _opt_level: u8,
 ) -> ExitCode {
     eprintln!("error: native compilation not available");
     eprintln!("hint: rebuild with `cargo build --features native`");
@@ -2070,6 +2076,7 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
                 None,
                 false,
                 false,
+                0, // default opt level for BSP builds
             );
         }
         _ => {
@@ -2228,6 +2235,7 @@ fn cmd_build_native(
     linker_override: Option<&str>,
     security: bool,
     lint: bool,
+    opt_level: u8,
 ) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
@@ -2325,15 +2333,19 @@ fn cmd_build_native(
         compiler.enable_lint();
     }
 
-    // Run AST-level optimization pipeline (O1-O3/Os) before codegen.
-    // This reports optimization opportunities found; the Cranelift backend
-    // applies its own IR-level optimizations via the opt_level setting.
+    // Run AST-level optimization pipeline before codegen.
+    // Uses CLI --opt-level (0-3), or Os for bare-metal targets.
     {
         use fajar_lang::codegen::opt_passes::{OptLevel, OptPipeline};
         let ast_opt_level = if no_std {
-            OptLevel::Os // size-optimized for bare-metal
+            OptLevel::Os
         } else {
-            OptLevel::O2 // default for hosted builds
+            match opt_level {
+                0 => OptLevel::O0,
+                1 => OptLevel::O1,
+                2 => OptLevel::O2,
+                _ => OptLevel::O3,
+            }
         };
         let pipeline = OptPipeline::new(ast_opt_level);
         let report = pipeline.run(&program);
@@ -2344,6 +2356,16 @@ fn cmd_build_native(
                 report.passes_run.len(),
                 report.estimated_speedup,
             );
+        }
+
+        // Dead function elimination: skip codegen for unreachable functions.
+        // Only at O1+ to preserve debug-ability at O0.
+        if ast_opt_level != OptLevel::O0 {
+            let dead_fns = fajar_lang::codegen::opt_passes::find_dead_functions(&program);
+            if !dead_fns.is_empty() {
+                eprintln!("[opt] {} dead functions eliminated", dead_fns.len());
+                compiler.set_dead_functions(dead_fns);
+            }
         }
     }
 
