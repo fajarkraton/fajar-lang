@@ -159,26 +159,22 @@ fn fleet_status_report(device_id: str, total_readings: i64, anomaly_count: i64, 
     f"[FLEET] {device_id} | readings={total_readings} | anomalies={anomaly_count} | power={power} | health={health} | uptime={uptime_ticks}"
 }
 
-// --- MQTT Protocol ---
+// --- MQTT Protocol (uses mqtt_* builtins — in-memory broker) ---
 
-struct MqttMessage {
-    topic: str,
-    payload: str,
-    qos: i64,
-    retain: bool,
+fn mqtt_pub(client: i64, topic: str, payload: str) {
+    mqtt_publish(client, topic, payload)
+    println("[mqtt] PUBLISH " + topic + ": " + payload)
 }
 
-fn mqtt_publish(topic: str, payload: str, qos: i64) -> MqttMessage {
-    println("[mqtt] PUBLISH " + topic + " (QoS " + to_string(qos) + "): " + payload)
-    MqttMessage { topic: topic, payload: payload, qos: qos, retain: false }
-}
-
-fn mqtt_subscribe(topic: str) {
+fn mqtt_sub(client: i64, topic: str) {
+    mqtt_subscribe(client, topic)
     println("[mqtt] SUBSCRIBE " + topic)
 }
 
-fn mqtt_connect(broker: str, client_id: str) {
+fn mqtt_init(broker: str, client_id: str) -> i64 {
+    let handle = mqtt_connect(broker)
     println("[mqtt] CONNECT to " + broker + " as " + client_id)
+    handle
 }
 
 // --- OTA Updates ---
@@ -266,10 +262,11 @@ fn main() {
     println(f"  Humidity:    scale={cal_hum.scale}, offset={cal_hum.offset}")
     println("")
 
-    // MQTT connection
-    mqtt_connect("mqtt://broker.local:1883", config.device_id)
-    mqtt_subscribe("devices/" + config.device_id + "/cmd")
-    mqtt_subscribe("devices/" + config.device_id + "/ota")
+    // MQTT connection (real builtins with in-memory broker)
+    let mqtt = mqtt_init("mqtt://broker.local:1883", config.device_id)
+    mqtt_sub(mqtt, "devices/" + config.device_id + "/cmd")
+    mqtt_sub(mqtt, "devices/" + config.device_id + "/ota")
+    mqtt_sub(mqtt, "devices/" + config.device_id + "/telemetry")
     println("")
 
     // Watchdog timer (5 second timeout)
@@ -388,9 +385,9 @@ fn main() {
         println(f"  Telemetry: {telemetry}")
         append_file(log_path, f"[TELEMETRY] tick={tick} {telemetry}\n")
 
-        // Publish telemetry via MQTT
+        // Publish telemetry via MQTT (real builtin)
         let mqtt_topic = "devices/" + config.device_id + "/telemetry"
-        let _msg = mqtt_publish(mqtt_topic, telemetry, 1)
+        mqtt_pub(mqtt, mqtt_topic, telemetry)
 
         // Kick watchdog after successful tick
         let current_ms = tick * config.read_interval_ms
@@ -425,6 +422,23 @@ fn main() {
     let report = fleet_status_report(config.device_id, total_readings, total_anomalies, power_label, num_ticks)
     println(report)
     append_file(log_path, report + "\n")
+    println("")
+
+    // === MQTT Message Verification ===
+    println("=== MQTT Message Verification ===")
+    let mut recv_count = 0
+    let mut done = false
+    while !done {
+        let msg = mqtt_recv(mqtt)
+        if msg != null {
+            recv_count = recv_count + 1
+        } else {
+            done = true
+        }
+    }
+    println(f"  Messages received from broker: {recv_count}")
+    mqtt_disconnect(mqtt)
+    println(f"  MQTT disconnected")
     println("")
 
     // === Summary ===

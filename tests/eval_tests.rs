@@ -16242,3 +16242,179 @@ fn v08_string_count_substr() {
     let out = eval_output(src);
     assert_eq!(out, vec!["3"]);
 }
+
+// ── Phase 7: WebSocket builtin tests ──
+
+#[test]
+fn v09_ws_connect_returns_handle() {
+    let src = r#"
+        fn main() -> void {
+            let ws = ws_connect("ws://localhost:8080")
+            println(ws)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1"]);
+}
+
+#[test]
+fn v09_ws_echo_roundtrip() {
+    let src = r#"
+        fn main() -> void {
+            let ws = ws_connect("ws://echo.test")
+            let sent = ws_send(ws, "Hello WebSocket")
+            println(sent)
+            let msg = ws_recv(ws)
+            println(msg)
+            ws_close(ws)
+            println("closed")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["15", "Hello WebSocket", "closed"]);
+}
+
+#[test]
+fn v09_ws_recv_empty_returns_null() {
+    let src = r#"
+        fn main() -> void {
+            let ws = ws_connect("ws://empty.test")
+            let msg = ws_recv(ws)
+            if msg == null {
+                println("no message")
+            } else {
+                println("unexpected")
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["no message"]);
+}
+
+#[test]
+fn v09_ws_multiple_messages() {
+    let src = r#"
+        fn main() -> void {
+            let ws = ws_connect("ws://multi.test")
+            ws_send(ws, "msg1")
+            ws_send(ws, "msg2")
+            ws_send(ws, "msg3")
+            println(ws_recv(ws))
+            println(ws_recv(ws))
+            println(ws_recv(ws))
+            let empty = ws_recv(ws)
+            if empty == null { println("done") }
+            ws_close(ws)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["msg1", "msg2", "msg3", "done"]);
+}
+
+#[test]
+fn v09_ws_multiple_connections() {
+    let src = r#"
+        fn main() -> void {
+            let ws1 = ws_connect("ws://a.test")
+            let ws2 = ws_connect("ws://b.test")
+            ws_send(ws1, "from-1")
+            ws_send(ws2, "from-2")
+            println(ws_recv(ws1))
+            println(ws_recv(ws2))
+            ws_close(ws1)
+            ws_close(ws2)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["from-1", "from-2"]);
+}
+
+// ── Phase 7: MQTT builtin tests ──
+
+#[test]
+fn v09_mqtt_connect_returns_handle() {
+    let src = r#"
+        fn main() -> void {
+            let client = mqtt_connect("mqtt://broker.local:1883")
+            println(client)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1"]);
+}
+
+#[test]
+fn v09_mqtt_pub_sub_roundtrip() {
+    let src = r#"
+        fn main() -> void {
+            let client = mqtt_connect("mqtt://broker.local")
+            mqtt_subscribe(client, "sensors/temp")
+            mqtt_publish(client, "sensors/temp", "23.5")
+            let msg = mqtt_recv(client)
+            if msg != null {
+                println("got message")
+            }
+            mqtt_disconnect(client)
+            println("done")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["got message", "done"]);
+}
+
+#[test]
+fn v09_mqtt_multiple_topics() {
+    let src = r#"
+        fn main() -> void {
+            let c = mqtt_connect("mqtt://broker")
+            mqtt_subscribe(c, "topic/a")
+            mqtt_subscribe(c, "topic/b")
+            mqtt_publish(c, "topic/a", "payload-a")
+            mqtt_publish(c, "topic/b", "payload-b")
+            let m1 = mqtt_recv(c)
+            let m2 = mqtt_recv(c)
+            let m3 = mqtt_recv(c)
+            if m1 != null { println("m1-ok") }
+            if m2 != null { println("m2-ok") }
+            if m3 == null { println("m3-empty") }
+            mqtt_disconnect(c)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["m1-ok", "m2-ok", "m3-empty"]);
+}
+
+#[test]
+fn v09_mqtt_recv_empty_returns_null() {
+    let src = r#"
+        fn main() -> void {
+            let c = mqtt_connect("mqtt://broker")
+            mqtt_subscribe(c, "empty/topic")
+            let msg = mqtt_recv(c)
+            if msg == null {
+                println("no message")
+            }
+            mqtt_disconnect(c)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["no message"]);
+}
+
+#[test]
+fn v09_mqtt_unsubscribed_topic_not_delivered() {
+    let src = r#"
+        fn main() -> void {
+            let c = mqtt_connect("mqtt://broker")
+            mqtt_subscribe(c, "sub/topic")
+            mqtt_publish(c, "other/topic", "should-not-receive")
+            let msg = mqtt_recv(c)
+            if msg == null {
+                println("correctly not delivered")
+            }
+            mqtt_disconnect(c)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["correctly not delivered"]);
+}

@@ -1285,9 +1285,7 @@ fn generate_semantic_tokens(source: &str) -> Vec<SemanticToken> {
         Err(_) => return Vec::new(),
     };
 
-    let mut result = Vec::new();
-    let mut prev_line: u32 = 0;
-    let mut prev_start: u32 = 0;
+    let mut absolute_tokens = Vec::new();
 
     for token in &tokens {
         let token_type = match &token.kind {
@@ -1398,27 +1396,27 @@ fn generate_semantic_tokens(source: &str) -> Vec<SemanticToken> {
             let start = token.col.saturating_sub(1);
             let length = token.span.len() as u32;
 
-            let delta_line = line - prev_line;
-            let delta_start = if delta_line == 0 {
-                start - prev_start
-            } else {
-                start
-            };
-
-            result.push(SemanticToken {
-                delta_line,
-                delta_start,
+            absolute_tokens.push(crate::lsp_v3::semantic::AbsoluteToken {
+                line,
+                start,
                 length,
                 token_type: tt,
-                token_modifiers_bitset: 0,
+                modifiers: 0,
             });
-
-            prev_line = line;
-            prev_start = start;
         }
     }
 
-    result
+    // Use lsp_v3 delta encoder for correct semantic token encoding.
+    crate::lsp_v3::semantic::encode_semantic_tokens(&absolute_tokens)
+        .into_iter()
+        .map(|t| SemanticToken {
+            delta_line: t.delta_line,
+            delta_start: t.delta_start,
+            length: t.length,
+            token_type: t.token_type,
+            token_modifiers_bitset: t.token_modifiers,
+        })
+        .collect()
 }
 
 // ── Inlay Hints ─────────────────────────────────────────────────────

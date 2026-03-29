@@ -581,7 +581,7 @@ impl TypeChecker {
             // WebSocket builtins
             ("ws_connect", vec![Type::Str], Type::I64),
             ("ws_send", vec![Type::I64, Type::Str], Type::I64),
-            ("ws_recv", vec![Type::I64], Type::Str),
+            ("ws_recv", vec![Type::I64], Type::Unknown),
             ("ws_close", vec![Type::I64], Type::Void),
             // MQTT builtins
             ("mqtt_connect", vec![Type::Str], Type::I64),

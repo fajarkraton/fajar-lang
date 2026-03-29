@@ -338,35 +338,14 @@ fn handle_delete_user(db: Database, id: i64) -> Response {
 }
 
 // =====================================================================
-// SECTION 5b: WebSocket Messages
+// SECTION 5b: WebSocket (uses ws_* builtins — in-memory echo simulation)
 // =====================================================================
-// Structured WebSocket message types for real-time communication.
-// Supports text messages and broadcast to connected clients.
+// Uses ws_connect/ws_send/ws_recv/ws_close builtins for real WebSocket
+// message passing via the interpreter's in-memory echo buffer.
 
-struct WsMessage {
-    msg_type: str,
-    payload: str,
-    client_id: i64
-}
-
-fn ws_text(client_id: i64, text: str) -> WsMessage {
-    WsMessage { msg_type: "text", payload: text, client_id: client_id }
-}
-
-fn ws_binary(client_id: i64, data: str) -> WsMessage {
-    WsMessage { msg_type: "binary", payload: data, client_id: client_id }
-}
-
-fn ws_close(client_id: i64, reason: str) -> WsMessage {
-    WsMessage { msg_type: "close", payload: reason, client_id: client_id }
-}
-
-fn ws_broadcast(msg: WsMessage) {
-    println("[ws] broadcast to client " + to_string(msg.client_id) + ": " + msg.payload)
-}
-
-fn ws_format(msg: WsMessage) -> str {
-    f"{{\"type\": \"{msg.msg_type}\", \"payload\": \"{msg.payload}\", \"client_id\": {msg.client_id}}}"
+fn ws_broadcast_msg(ws_handle: i64, text: str) {
+    let sent = ws_send(ws_handle, text)
+    println(f"[ws] broadcast ({sent} bytes): {text}")
 }
 
 // =====================================================================
@@ -505,9 +484,9 @@ fn main() {
     let is_valid = validate_token(admin_token)
     println(f"[startup] Token valid: {is_valid}")
 
-    // --- WebSocket setup ---
-    let ws_welcome = ws_text(0, "Welcome to Fajar Web Service")
-    println(f"[startup] WebSocket welcome: {ws_format(ws_welcome)}")
+    // --- WebSocket setup (real builtins) ---
+    let ws = ws_connect("ws://localhost:8080/ws")
+    println(f"[startup] WebSocket handle: {ws}")
 
     // --- Save startup log to file ---
     let log_path = "/tmp/fj_web_service.log"
@@ -613,15 +592,18 @@ fn main() {
     // --- Append summary to log ---
     append_file(log_path, "[done] 12 requests processed\n")
 
-    // --- WebSocket broadcast demo ---
+    // --- WebSocket demo (real builtins) ---
     println("")
     println("=== WebSocket Demo ===")
-    let ws_msg1 = ws_text(1, "User Alice connected")
-    ws_broadcast(ws_msg1)
-    let ws_msg2 = ws_text(2, "User Bob connected")
-    ws_broadcast(ws_msg2)
-    let ws_close_msg = ws_close(1, "session ended")
-    println(f"[ws] close: {ws_format(ws_close_msg)}")
+    ws_broadcast_msg(ws, "User Alice connected")
+    ws_broadcast_msg(ws, "User Bob connected")
+    // Receive echo'd messages back
+    let echo1 = ws_recv(ws)
+    let echo2 = ws_recv(ws)
+    println(f"[ws] echo1: {echo1}")
+    println(f"[ws] echo2: {echo2}")
+    ws_close(ws)
+    println("[ws] connection closed")
 
     // --- Token generation demo ---
     println("")
@@ -655,7 +637,7 @@ fn main() {
     println("    - File-based logging")
     println("    - SQLite database integration")
     println("    - Token-based authentication")
-    println("    - WebSocket message handling")
+    println("    - WebSocket echo via ws_* builtins")
     println("    - Containerization (Dockerfile)")
     println("============================================")
 }
