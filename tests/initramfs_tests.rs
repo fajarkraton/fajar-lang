@@ -126,10 +126,9 @@ mod native_tests {
 #[test]
 fn fj_pack_command_exists() {
     // Verify the Pack command is defined in the CLI
-    // (indirect test — just verify the binary accepts --help)
-    let output = std::process::Command::new("cargo")
-        .args(["run", "--", "pack", "--help"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    // Use pre-built binary to avoid rebuild under tarpaulin
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fj"))
+        .args(["pack", "--help"])
         .output();
     // May fail if not built, but shouldn't panic
     let _ = output;

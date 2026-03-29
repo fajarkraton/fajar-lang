@@ -1205,6 +1205,9 @@ impl HttpServer {
         stream
             .write_all(&body)
             .map_err(|e| format!("write body: {e}"))?;
+        stream.flush().map_err(|e| format!("flush: {e}"))?;
+        // Clean shutdown prevents RST on Windows (os error 10054)
+        let _ = stream.shutdown(std::net::Shutdown::Write);
         Ok(())
     }
 }
