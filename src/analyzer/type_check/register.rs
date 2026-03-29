@@ -238,6 +238,13 @@ impl TypeChecker {
             ("timer_freq", vec![], Type::I64),
             ("timer_set", vec![Type::I64], Type::Void),
             ("pit_get_ticks", vec![], Type::I64),
+            // Kernel internals used by extension files
+            ("frame_alloc_pages", vec![Type::I64], Type::I64),
+            ("frame_free_pages", vec![Type::I64, Type::I64], Type::Void),
+            ("frame_count_used", vec![], Type::I64),
+            ("ext2_inode_get_block", vec![Type::I64, Type::I64], Type::I64),
+            ("nvme_read_block", vec![Type::Unknown], Type::I64),
+            ("nvme_write_block", vec![Type::Unknown], Type::I64),
             // Database builtins (variadic — 2 or 3 args)
             ("db_open", vec![Type::Unknown], Type::I64),
             ("db_execute", vec![Type::Unknown], Type::I64),

@@ -417,7 +417,7 @@ const MULTIBOOT2_ARCH_X86: i64 = 0
     let length = volatile_read_u32(addr + 8)
     let checksum = volatile_read_u32(addr + 12)
     // Checksum verification: magic + arch + length + checksum = 0
-    if ((magic + arch + length + checksum) 0xFFFFFFFF) != 0 { return 0 }
+    if ((magic + arch + length + checksum) & 0xFFFFFFFF) != 0 { return 0 }
     1
 }
 
@@ -444,14 +444,12 @@ const MULTIBOOT2_ARCH_X86: i64 = 0
     pos
 }
 
-@kernel fn str_copy(dst: i64, src_id: i64) -> i64 {
-    // Copy constant string (simplified — would use string table in real impl)
-    // Returns number of bytes written
+@kernel fn str_copy(dst: i64, src: str) -> i64 {
+    // Copy string to memory address. Returns number of bytes written.
+    let slen = str_len(src)
     let mut i: i64 = 0
-    while i < 64 {
-        let ch = volatile_read_u8(src_id + i)
-        if ch == 0 { break }
-        volatile_write_u8(dst + i, ch)
+    while i < slen && i < 64 {
+        volatile_write_u8(dst + i, str_byte_at(src, i))
         i = i + 1
     }
     i

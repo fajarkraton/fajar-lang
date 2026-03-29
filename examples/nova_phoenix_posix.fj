@@ -797,12 +797,13 @@ const PROC_FS_BUF_SIZE: i64 = 4096
     pid
 }
 
-@kernel fn procfs_match(addr: i64, len: i64, expected_id: i64) -> i64 {
+@kernel fn procfs_match(addr: i64, len: i64, expected: str) -> i64 {
     // Compare path against expected string
+    let elen = str_len(expected)
     let mut i: i64 = 0
-    while i < len {
+    while i < len && i < elen {
         let a = volatile_read_u8(addr + i)
-        let b = volatile_read_u8(expected_id + i)
+        let b = str_byte_at(expected, i)
         if b == 0 { return if i == len { 1 } else { 0 } }
         if a != b { return 0 }
         i = i + 1
@@ -810,12 +811,11 @@ const PROC_FS_BUF_SIZE: i64 = 4096
     1
 }
 
-@kernel fn procfs_write_str(buf: i64, pos: i64, str_id: i64) -> i64 {
+@kernel fn procfs_write_str(buf: i64, pos: i64, s: str) -> i64 {
+    let slen = str_len(s)
     let mut i: i64 = 0
-    while i < 128 {
-        let ch = volatile_read_u8(str_id + i)
-        if ch == 0 { break }
-        volatile_write_u8(buf + pos + i, ch)
+    while i < slen && i < 128 {
+        volatile_write_u8(buf + pos + i, str_byte_at(s, i))
         i = i + 1
     }
     pos + i
