@@ -587,6 +587,163 @@ impl CircuitBreaker {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// P6: Real TCP-backed RPC Client
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A real RPC client that sends requests over TCP using the transport module's
+/// connection pool. Messages are length-prefixed binary frames:
+/// `[4 bytes: length][method_name\0][payload]`
+pub struct TcpRpcClient {
+    /// Transport connection pool (real TCP).
+    pool: super::transport::ConnectionPool,
+    /// Retry policy for transient failures.
+    pub retry: RetryPolicy,
+}
+
+impl TcpRpcClient {
+    /// Creates a new TCP RPC client with the given connection pool size.
+    pub fn new(max_connections_per_addr: usize) -> Self {
+        Self {
+            pool: super::transport::ConnectionPool::new(max_connections_per_addr),
+            retry: RetryPolicy::default(),
+        }
+    }
+
+    /// Sends an RPC request to `addr` and waits for a response.
+    ///
+    /// The request is serialized as: `[4-byte len][method\0][payload]`.
+    /// The response is read with the same framing.
+    pub async fn call(&self, addr: &str, method: &str, payload: &[u8]) -> Result<Vec<u8>, String> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let mut stream = self.pool.get_or_connect(addr).await?;
+
+        // Serialize: [4-byte len][method\0][payload]
+        let method_bytes = method.as_bytes();
+        let frame_len = method_bytes.len() + 1 + payload.len(); // +1 for null separator
+        let len_bytes = (frame_len as u32).to_be_bytes();
+
+        let mut frame = Vec::with_capacity(4 + frame_len);
+        frame.extend_from_slice(&len_bytes);
+        frame.extend_from_slice(method_bytes);
+        frame.push(0); // null separator
+        frame.extend_from_slice(payload);
+
+        stream
+            .write_all(&frame)
+            .await
+            .map_err(|e| format!("rpc write: {e}"))?;
+
+        // Read response: [4-byte len][response_payload]
+        let mut resp_len_buf = [0u8; 4];
+        stream
+            .read_exact(&mut resp_len_buf)
+            .await
+            .map_err(|e| format!("rpc read len: {e}"))?;
+        let resp_len = u32::from_be_bytes(resp_len_buf) as usize;
+
+        if resp_len > 16 * 1024 * 1024 {
+            return Err(format!("rpc response too large: {resp_len} bytes"));
+        }
+
+        let mut resp_buf = vec![0u8; resp_len];
+        stream
+            .read_exact(&mut resp_buf)
+            .await
+            .map_err(|e| format!("rpc read body: {e}"))?;
+
+        // Return connection to pool for reuse
+        self.pool.return_connection(addr, stream);
+
+        Ok(resp_buf)
+    }
+}
+
+/// Type alias for RPC method handlers.
+type RpcHandler = Box<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
+
+/// A simple RPC server that listens for TCP connections and dispatches
+/// method calls to registered handlers.
+pub struct TcpRpcServer {
+    /// Registered method handlers: method_name → handler fn.
+    handlers: HashMap<String, RpcHandler>,
+}
+
+impl TcpRpcServer {
+    /// Creates a new RPC server.
+    pub fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
+        }
+    }
+
+    /// Registers a handler for an RPC method.
+    pub fn register<F>(&mut self, method: &str, handler: F)
+    where
+        F: Fn(&[u8]) -> Vec<u8> + Send + Sync + 'static,
+    {
+        self.handlers.insert(method.to_string(), Box::new(handler));
+    }
+
+    /// Handles a single client connection: reads request, dispatches, writes response.
+    pub async fn handle_connection(
+        handlers: std::sync::Arc<HashMap<String, RpcHandler>>,
+        mut stream: tokio::net::TcpStream,
+    ) -> Result<(), String> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Read request: [4-byte len][method\0][payload]
+        let mut len_buf = [0u8; 4];
+        stream
+            .read_exact(&mut len_buf)
+            .await
+            .map_err(|e| format!("read len: {e}"))?;
+        let frame_len = u32::from_be_bytes(len_buf) as usize;
+
+        let mut frame = vec![0u8; frame_len];
+        stream
+            .read_exact(&mut frame)
+            .await
+            .map_err(|e| format!("read frame: {e}"))?;
+
+        // Parse: method\0payload
+        let null_pos = frame.iter().position(|&b| b == 0).unwrap_or(frame.len());
+        let method = std::str::from_utf8(&frame[..null_pos]).unwrap_or("");
+        let payload = if null_pos + 1 < frame.len() {
+            &frame[null_pos + 1..]
+        } else {
+            &[]
+        };
+
+        // Dispatch
+        let response = if let Some(handler) = handlers.get(method) {
+            handler(payload)
+        } else {
+            format!("unknown method: {method}").into_bytes()
+        };
+
+        // Write response: [4-byte len][response]
+        let resp_len = (response.len() as u32).to_be_bytes();
+        stream
+            .write_all(&resp_len)
+            .await
+            .map_err(|e| format!("write len: {e}"))?;
+        stream
+            .write_all(&response)
+            .await
+            .map_err(|e| format!("write body: {e}"))?;
+
+        Ok(())
+    }
+}
+
+impl Default for TcpRpcServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -815,5 +972,53 @@ mod tests {
     fn s9_10_streaming_mode_display() {
         assert_eq!(StreamingMode::Unary.to_string(), "Unary");
         assert_eq!(StreamingMode::Bidirectional.to_string(), "Bidirectional");
+    }
+
+    // P6: Real TCP RPC round-trip test
+    #[tokio::test]
+    async fn p6_tcp_rpc_roundtrip() {
+        use std::sync::Arc;
+
+        // Start a TCP RPC server
+        let mut server = TcpRpcServer::new();
+        server.register("echo", |payload| {
+            let mut resp = b"echo:".to_vec();
+            resp.extend_from_slice(payload);
+            resp
+        });
+        server.register("add", |payload| {
+            // Simple add: payload = "a,b", response = "sum"
+            let s = std::str::from_utf8(payload).unwrap_or("0,0");
+            let parts: Vec<i64> = s.split(',').filter_map(|p| p.parse().ok()).collect();
+            let sum: i64 = parts.iter().sum();
+            sum.to_string().into_bytes()
+        });
+
+        let handlers = Arc::new(server.handlers);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+
+        // Spawn server task (handles 2 requests then exits)
+        let handlers_clone = Arc::clone(&handlers);
+        let server_handle = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().await.unwrap();
+                let h = Arc::clone(&handlers_clone);
+                TcpRpcServer::handle_connection(h, stream).await.unwrap();
+            }
+        });
+
+        // Client: make RPC calls (new client per call since server accepts
+        // one connection per accept() — no connection reuse across accepts).
+        let client1 = TcpRpcClient::new(1);
+        let echo_resp = client1.call(&addr, "echo", b"hello").await.unwrap();
+        assert_eq!(echo_resp, b"echo:hello");
+
+        let client2 = TcpRpcClient::new(1);
+        let add_resp = client2.call(&addr, "add", b"10,20,30").await.unwrap();
+        assert_eq!(std::str::from_utf8(&add_resp).unwrap(), "60");
+
+        server_handle.await.unwrap();
     }
 }
