@@ -6634,7 +6634,7 @@ fn comptime_error_ct003_division_by_zero() {
 
 #[test]
 fn comptime_struct_field_not_found() {
-    use fajar_lang::analyzer::comptime::{ComptimeError, ComptimeEvaluator, ComptimeValue};
+    use fajar_lang::analyzer::comptime::{ComptimeEvaluator, ComptimeValue};
     let mut eval = ComptimeEvaluator::new();
     eval.set_variable(
         "P".into(),
