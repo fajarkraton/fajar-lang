@@ -1124,11 +1124,9 @@ impl SchedulerMetrics {
     ///
     /// Returns 0 if no samples have been recorded.
     pub fn avg_latency_ns(&self) -> u64 {
-        if self.latency_samples == 0 {
-            0
-        } else {
-            self.total_latency_ns / self.latency_samples
-        }
+        self.total_latency_ns
+            .checked_div(self.latency_samples)
+            .unwrap_or(0)
     }
 
     /// Records a context switch.

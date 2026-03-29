@@ -66,15 +66,21 @@ jobs:
         include:
           - feature: smt
             apt: libz3-dev
+            pip: ""
           - feature: cpp-ffi
             apt: libclang-dev
+            pip: ""
           - feature: python-ffi
             apt: python3-dev
+            pip: numpy
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt }}
+      - name: Install Python packages
+        if: matrix.pip != ''
+        run: pip install ${{ matrix.pip }}
       - name: Test with --features ${{ matrix.feature }}
         run: cargo test --lib --features ${{ matrix.feature }}
 

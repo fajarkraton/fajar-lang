@@ -444,7 +444,7 @@ impl WindowManager {
             .iter()
             .filter(|w| w.visible && !w.minimized)
             .collect();
-        sorted.sort_by(|a, b| b.z_order.cmp(&a.z_order));
+        sorted.sort_by_key(|w| std::cmp::Reverse(w.z_order));
 
         for w in sorted {
             // Include title bar and border in hit area
@@ -473,7 +473,7 @@ impl WindowManager {
             .iter()
             .filter(|w| w.visible && !w.minimized)
             .collect();
-        sorted.sort_by(|a, b| a.z_order.cmp(&b.z_order));
+        sorted.sort_by_key(|w| w.z_order);
 
         for w in sorted {
             Decoration::render(w, target);

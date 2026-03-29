@@ -1163,11 +1163,13 @@ mod tests {
     // S4.14: path_join
     #[test]
     fn s4_14_path_join() {
-        let joined = path_join("/home/fajar", "src/main.fj");
-        assert_eq!(joined, "/home/fajar/src/main.fj");
+        let joined = path_join("base", "child.fj");
+        let expected = std::path::PathBuf::from("base").join("child.fj");
+        assert_eq!(joined, expected.to_string_lossy());
     }
 
     // S4.14: path_join with absolute child replaces base
+    #[cfg(unix)]
     #[test]
     fn s4_14_path_join_absolute_child() {
         let joined = path_join("/home/fajar", "/etc/config");
@@ -1263,9 +1265,10 @@ mod tests {
 
     #[test]
     fn sq8_6_file_metadata() {
-        let meta = file_metadata("/tmp").unwrap();
-        assert!(meta.is_dir, "/tmp should be a directory");
-        assert!(!meta.is_file, "/tmp should not be a regular file");
+        let dir = std::env::temp_dir();
+        let meta = file_metadata(dir.to_str().unwrap()).unwrap();
+        assert!(meta.is_dir, "temp dir should be a directory");
+        assert!(!meta.is_file, "temp dir should not be a regular file");
     }
 
     #[test]

@@ -2883,7 +2883,7 @@ pub fn profile_function_sizes(program: &Program) -> Vec<FnSizeEntry> {
         .collect();
 
     // Sort by size descending
-    entries.sort_by(|a, b| b.estimated_bytes.cmp(&a.estimated_bytes));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.estimated_bytes));
     entries
 }
 

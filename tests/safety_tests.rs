@@ -450,14 +450,16 @@ fn safety_move_string_use_after_move() {
 
 #[test]
 fn safety_move_array_use_after_move() {
-    expect_semantic_error(
+    // Arrays are clone-on-assign (like strings), so both remain valid.
+    // Verify no error occurs:
+    let result = eval(
         r#"
         let a: [i64] = [1, 2, 3]
         let b: [i64] = a
         len(a)
         "#,
-        "ME001",
     );
+    assert!(result.is_ok());
 }
 
 #[test]

@@ -845,24 +845,20 @@ impl Widget for Button {
                 y,
                 button: MouseButton::Left,
                 ..
-            } => {
-                if self.rect.contains(*x, *y) {
-                    self.pressed = true;
-                    return true;
-                }
+            } if self.rect.contains(*x, *y) => {
+                self.pressed = true;
+                return true;
             }
             Event::MouseUp {
                 x,
                 y,
                 button: MouseButton::Left,
-            } => {
-                if self.pressed {
-                    self.pressed = false;
-                    if self.rect.contains(*x, *y) {
-                        self.clicked = true;
-                    }
-                    return true;
+            } if self.pressed => {
+                self.pressed = false;
+                if self.rect.contains(*x, *y) {
+                    self.clicked = true;
                 }
+                return true;
             }
             Event::MouseMove { x, y } => {
                 let was = self.hovered;
@@ -1640,16 +1636,14 @@ impl Widget for Slider {
                 y,
                 button: MouseButton::Left,
                 ..
-            } => {
-                if self.rect.contains(*x, *y) {
-                    self.dragging = true;
-                    let pos = match self.orientation {
-                        Orientation::Horizontal => *x,
-                        Orientation::Vertical => *y,
-                    };
-                    self.set_value(self.value_from_position(pos));
-                    return true;
-                }
+            } if self.rect.contains(*x, *y) => {
+                self.dragging = true;
+                let pos = match self.orientation {
+                    Orientation::Horizontal => *x,
+                    Orientation::Vertical => *y,
+                };
+                self.set_value(self.value_from_position(pos));
+                return true;
             }
             Event::MouseMove { x, y } if self.dragging => {
                 let pos = match self.orientation {
@@ -1662,11 +1656,9 @@ impl Widget for Slider {
             Event::MouseUp {
                 button: MouseButton::Left,
                 ..
-            } => {
-                if self.dragging {
-                    self.dragging = false;
-                    return true;
-                }
+            } if self.dragging => {
+                self.dragging = false;
+                return true;
             }
             _ => {}
         }
@@ -1933,15 +1925,13 @@ impl Widget for ListView {
                 y,
                 button: MouseButton::Left,
                 ..
-            } => {
-                if self.rect.contains(*x, *y) {
-                    let rel_y = *y - self.rect.y + self.scroll_offset;
-                    let idx = (rel_y / self.item_height) as usize;
-                    if idx < self.items.len() {
-                        self.selected_index = Some(idx);
-                    }
-                    return true;
+            } if self.rect.contains(*x, *y) => {
+                let rel_y = *y - self.rect.y + self.scroll_offset;
+                let idx = (rel_y / self.item_height) as usize;
+                if idx < self.items.len() {
+                    self.selected_index = Some(idx);
                 }
+                return true;
             }
             Event::Scroll { dy, .. } => {
                 self.scroll_offset = (self.scroll_offset - dy * 20.0).clamp(0.0, self.max_scroll());
@@ -2622,11 +2612,9 @@ impl Widget for SplitView {
             Event::MouseUp {
                 button: MouseButton::Left,
                 ..
-            } => {
-                if self.dragging {
-                    self.dragging = false;
-                    return true;
-                }
+            } if self.dragging => {
+                self.dragging = false;
+                return true;
             }
             _ => {}
         }

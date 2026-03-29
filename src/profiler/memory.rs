@@ -137,7 +137,7 @@ impl MemoryProfile {
                 total_bytes: bytes,
             })
             .collect();
-        result.sort_by(|a, b| b.total_bytes.cmp(&a.total_bytes));
+        result.sort_by_key(|r| std::cmp::Reverse(r.total_bytes));
         result
     }
 
@@ -151,7 +151,7 @@ impl MemoryProfile {
                     && (r.free_ns == 0 || r.free_ns >= self.peak_timestamp_ns())
             })
             .collect();
-        alive_at_peak.sort_by(|a, b| b.size.cmp(&a.size));
+        alive_at_peak.sort_by_key(|a| std::cmp::Reverse(a.size));
         alive_at_peak.truncate(top_n);
         alive_at_peak
     }

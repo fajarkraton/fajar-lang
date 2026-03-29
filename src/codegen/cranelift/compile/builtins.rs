@@ -1193,21 +1193,9 @@ pub(in crate::codegen::cranelift) fn compile_wrapping_builtin<M: Module>(
     // Checked ops return a tag: 1=Some (no overflow), 0=None (overflow).
     match fn_name {
         "checked_add" | "checked_sub" | "checked_mul" => {
-            // Detect overflow by checking with the runtime function
-            let rt_name = match fn_name {
-                "checked_add" => "__checked_add",
-                "checked_sub" => "__checked_sub",
-                "checked_mul" => "__checked_mul",
-                _ => unreachable!(),
-            };
-            // Use runtime if available, otherwise inline overflow detection
-            if let Some(&func_id) = cx.functions.get(rt_name) {
-                let local_callee = cx.module.declare_func_in_func(func_id, builder.func);
-                let call = builder.ins().call(local_callee, &[a, b]);
-                let results: Vec<ClifValue> = builder.inst_results(call).to_vec();
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(results[0]);
-            }
+            // Always use inline overflow detection.
+            // The runtime fj_rt_checked_* functions abort on overflow and return values,
+            // but the language-level checked_add/sub/mul must return a tag (1=Some, 0=None).
             // Inline overflow detection for checked_add/sub:
             // For add: overflow if (a > 0 && b > 0 && result < 0) || (a < 0 && b < 0 && result > 0)
             // Simpler: compute result, then check if it overflowed

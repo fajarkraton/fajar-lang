@@ -148,7 +148,7 @@ impl CallGraph {
             .iter()
             .map(|(k, v)| (k.as_str(), *v))
             .collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
         sorted.truncate(n);
         sorted
     }
@@ -663,11 +663,7 @@ impl SamplingProfiler {
         } else {
             0
         };
-        let frequency_hz = if self.interval_us > 0 {
-            (1_000_000 / self.interval_us) as u32
-        } else {
-            0
-        };
+        let frequency_hz = 1_000_000u64.checked_div(self.interval_us).unwrap_or(0) as u32;
         SamplingProfile {
             samples: self.samples,
             frequency_hz,
