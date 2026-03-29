@@ -774,3 +774,146 @@ mod tests {
         );
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// P5: Real async actors using tokio::sync::mpsc
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A thread-safe actor reference backed by tokio mpsc channels.
+///
+/// Messages sent via `send()` are delivered to the actor's task running
+/// on the tokio runtime. This provides real multi-threaded message passing.
+#[derive(Clone)]
+pub struct AsyncActorRef {
+    /// Sender half of the bounded mpsc channel.
+    tx: tokio::sync::mpsc::Sender<ActorMessage>,
+    /// Actor address.
+    pub addr: ActorAddr,
+    /// Actor name.
+    pub name: String,
+}
+
+impl AsyncActorRef {
+    /// Sends a message to the actor (async, backpressure if mailbox full).
+    pub async fn send(&self, msg: ActorMessage) -> Result<(), MailboxError> {
+        self.tx.send(msg).await.map_err(|_| MailboxError::Full {
+            capacity: self.tx.capacity(),
+        })
+    }
+
+    /// Sends a string message (convenience).
+    pub async fn send_str(&self, content: &str) -> Result<(), MailboxError> {
+        self.send(ActorMessage {
+            sender: Some(ActorAddr(0)),
+            content: content.to_string(),
+            expects_reply: false,
+        })
+        .await
+    }
+}
+
+/// Spawns an actor on the tokio runtime.
+///
+/// Returns an `AsyncActorRef` for sending messages and a `JoinHandle` for the
+/// actor's message processing loop. The actor processes messages until it
+/// receives "stop" or the sender is dropped.
+pub fn spawn_async_actor(
+    addr: ActorAddr,
+    name: &str,
+    capacity: usize,
+) -> (AsyncActorRef, tokio::task::JoinHandle<Vec<LifecycleEvent>>) {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<ActorMessage>(capacity);
+    let actor_name = name.to_string();
+
+    let handle = tokio::spawn(async move {
+        let mut events = vec![LifecycleEvent::Started];
+        let mut state: HashMap<String, String> = HashMap::new();
+
+        while let Some(msg) = rx.recv().await {
+            events.push(LifecycleEvent::MessageReceived(msg.content.clone()));
+
+            if msg.content == "stop" {
+                events.push(LifecycleEvent::Stopped);
+                break;
+            } else {
+                state.insert("last_message".into(), msg.content);
+            }
+        }
+
+        events
+    });
+
+    let actor_ref = AsyncActorRef {
+        tx,
+        addr,
+        name: actor_name,
+    };
+
+    (actor_ref, handle)
+}
+
+#[cfg(test)]
+mod async_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn p5_async_actor_send_recv() {
+        let (actor_ref, handle) = spawn_async_actor(ActorAddr(1), "test_actor", 16);
+
+        actor_ref.send_str("hello").await.unwrap();
+        actor_ref.send_str("world").await.unwrap();
+        actor_ref.send_str("stop").await.unwrap();
+
+        let events = handle.await.unwrap();
+        assert_eq!(events[0], LifecycleEvent::Started);
+        assert_eq!(events[1], LifecycleEvent::MessageReceived("hello".into()));
+        assert_eq!(events[2], LifecycleEvent::MessageReceived("world".into()));
+        assert_eq!(events[3], LifecycleEvent::MessageReceived("stop".into()));
+        assert_eq!(events[4], LifecycleEvent::Stopped);
+    }
+
+    #[tokio::test]
+    async fn p5_async_two_actors_communicate() {
+        let (actor_a, handle_a) = spawn_async_actor(ActorAddr(1), "actor_a", 16);
+        let (actor_b, handle_b) = spawn_async_actor(ActorAddr(2), "actor_b", 16);
+
+        // Send to both actors
+        actor_a.send_str("ping").await.unwrap();
+        actor_b.send_str("pong").await.unwrap();
+
+        // Stop both
+        actor_a.send_str("stop").await.unwrap();
+        actor_b.send_str("stop").await.unwrap();
+
+        let events_a = handle_a.await.unwrap();
+        let events_b = handle_b.await.unwrap();
+
+        // Both received their messages
+        assert!(
+            events_a
+                .iter()
+                .any(|e| *e == LifecycleEvent::MessageReceived("ping".into()))
+        );
+        assert!(
+            events_b
+                .iter()
+                .any(|e| *e == LifecycleEvent::MessageReceived("pong".into()))
+        );
+    }
+
+    #[tokio::test]
+    async fn p5_async_actor_drop_sender_stops() {
+        let (actor_ref, handle) = spawn_async_actor(ActorAddr(3), "dropper", 16);
+
+        actor_ref.send_str("one").await.unwrap();
+        // Drop the sender — actor loop should exit naturally
+        drop(actor_ref);
+
+        let events = handle.await.unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|e| *e == LifecycleEvent::MessageReceived("one".into()))
+        );
+    }
+}
