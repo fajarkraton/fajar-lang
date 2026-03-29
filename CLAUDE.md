@@ -157,18 +157,18 @@ Sprints:   8/8 complete
 ### Current Totals (Verified 2026-03-26)
 
 ```
-Tests:     4,849 lib + 78 property = 4,927 (0 failures)
-LOC:       ~292,000 lines of Rust (220+ files)
+Tests:     5,563 (0 failures, 0 clippy warnings)
+LOC:       ~335,688 lines of Rust (343 files)
   Real:    ~136,000 (47%) — core compiler, codegen, ML, OS, BSP, CLI, tools
   Partial:  ~18,000 (6%)  — real logic, needs external integration
   Framework: ~8,200 (3%)  — type definitions only, needs rewrite
   Support: ~130,000 (44%) — tests, examples, docs, config
-Examples:  126 .fj programs
-Packages:  7 standard (fj-math, fj-nn, fj-hal, fj-drivers, fj-http, fj-json, fj-crypto)
-Binary:    7.8 MB release build
+Examples:  173 .fj programs (170 pass `fj check`)
+Packages:  37 standard (math, nn, hal, http, json, crypto, mqtt, db, ...)
+Binary:    11 MB release build
 MSRV:      Rust 1.87
 CI:        3 GitHub Actions workflows (Linux/macOS/Windows, stable/nightly, cross)
-Release:   v6.1.0 "Illumination" (2026-03-25)
+Release:   v7.0.0 "Integrity" (2026-03-29)
 Audit:     docs/GAP_ANALYSIS_V2.md — per-module honest assessment
 ```
 
@@ -183,7 +183,7 @@ Repo:      github.com/fajarkraton/fajar-os
 ### FajarOS Nova v1.4.0 "Zenith" — x86_64 bare-metal OS (100% Fajar Lang)
 
 ```
-Kernel:    examples/fajaros_nova_kernel.fj — 20,176 lines, 757 @kernel fns
+Kernel:    examples/fajaros_nova_kernel.fj — 21,396 lines, 835 @kernel fns, 0 errors
 Commands:  240+ shell commands
 Scheduler: Preemptive multitasking (timer-driven context switch, round-robin)
 Memory:    Copy-on-Write fork (CoW page tables, refcounting, page fault handler)

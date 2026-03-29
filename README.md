@@ -5,9 +5,9 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v5.5.0](https://img.shields.io/badge/release-v5.5.0_Illumination-blue)](https://github.com/fajarkraton/fajar-lang/releases)
-[![Tests](https://img.shields.io/badge/tests-6%2C286_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-290K_Rust-informational)]()
+[![Release v7.0.0](https://img.shields.io/badge/release-v7.0.0_Integrity-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0)
+[![Tests](https://img.shields.io/badge/tests-5%2C563_passing-brightgreen)]()
+[![LOC](https://img.shields.io/badge/LOC-335K_Rust-informational)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
 
@@ -468,18 +468,18 @@ fajar-lang/
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | ~290,000 Rust across 220+ files |
-| Tests | 6,286 total (0 failures) |
-| Integration tests | 810+ |
-| Examples | 126 `.fj` programs |
-| Error codes | 78+ across 9 categories |
-| Standard packages | 7 (math, nn, hal, drivers, http, json, crypto) |
-| Built-in functions | 121 bare-metal runtime + tensor aliases |
+| Compiler LOC | 335,688 Rust across 343 files |
+| Tests | 5,563 (0 failures, 0 clippy warnings) |
+| Examples | 173 `.fj` programs (170 pass `fj check`) |
+| Error codes | 80+ across 10 categories |
+| Standard packages | 37 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
+| Built-in functions | 411 bare-metal runtime + 14 IoT builtins (ws/mqtt/ble) |
 | Codegen backends | 3 (Cranelift, LLVM, WebAssembly) |
 | Cross-compile targets | ARM64, RISC-V, x86_64, Wasm |
-| Documentation | 44+ docs + 40-page mdBook |
-| FajarOS Nova (x86_64) | 20,176 LOC, 240+ commands, 34 syscalls |
-| FajarOS Surya (ARM64) | Microkernel, verified on Radxa Dragon Q6A |
+| Security features | Bounds check, overflow check, linter (20 rules), taint analysis |
+| Documentation | 55+ docs, 14 tutorials, 26 references, 15 guides |
+| FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls, natively compiled (362 KB ELF) |
+| FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
 
 ---
@@ -488,7 +488,9 @@ fajar-lang/
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **[v5.5.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.5.0)** | **Illumination** | **Async/await patterns, declarative macros, derive patterns, advanced traits, const fn** |
+| **[v7.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0)** | **Integrity** | **Full production audit, 214→0 kernel errors, native OS compile, 14 IoT builtins, security hardening, WASM playground, benchmark suite** |
+| [v6.1.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v6.1.0) | Illumination | V8 "Dominion" 810 tasks, self-hosting, package registry, IDE, security, GUI |
+| [v5.5.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.5.0) | Illumination | Async/await patterns, declarative macros, derive patterns, advanced traits, const fn |
 | [v5.4.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.4.0) | Zenith | FajarOS Nova 20K LOC, GPU compute, ext2, TCP, init system, packages |
 | [v5.3.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.3.0) | Bastion | NVMe, FAT32, USB, VFS, network stack, multi-user, GDB stub |
 | [v5.2.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.2.0) | Nexus | fork/exec/waitpid, pipes, signals, job control, scripting |
