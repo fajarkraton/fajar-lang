@@ -792,6 +792,15 @@ fn cmd_run(path: &PathBuf) -> ExitCode {
         }
     };
 
+    // Run built-in compiler plugins (lint passes) before analysis.
+    {
+        let registry = fajar_lang::plugin::default_registry();
+        let diagnostics = registry.run_ast_phase(&source, &filename);
+        for d in &diagnostics {
+            eprintln!("[plugin/{}] {}: {}", d.plugin, d.severity, d.message);
+        }
+    }
+
     // Analyze (type check)
     if let Err(errors) = analyze(&program) {
         for e in &errors {
