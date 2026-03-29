@@ -404,7 +404,8 @@ mod build_all_e2e {
     /// Skips test if the fj binary doesn't have native codegen.
     fn skip_if_no_native() -> bool {
         let path = PathBuf::from(env!("CARGO_BIN_EXE_fj"));
-        let dir = std::env::temp_dir().join("fj-native-check");
+        let dir =
+            std::env::temp_dir().join(format!("fj-native-check-{:?}", std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("t.fj"), "fn main() -> i64 { 0 }\n").unwrap();
