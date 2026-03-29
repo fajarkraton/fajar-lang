@@ -85,7 +85,7 @@ const SVC_FAILED: i64 = 4
 // ── A4.1.3: Start / stop service ──
 
 @kernel fn svc_start(id: i64) -> i64 {
-    if !svc_deps_satisfied(id) == 1 { return -1 } // deps not ready
+    if svc_deps_satisfied(id) != 1 { return -1 } // deps not ready
     svc_set(id, SVC_OFF_STATE, SVC_STARTING)
     svc_set(id, SVC_OFF_START_TIME, pit_get_ticks())
     // In real implementation: fork() + exec() the service binary

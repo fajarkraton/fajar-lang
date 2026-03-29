@@ -820,46 +820,46 @@
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B1.1 | Fibonacci (recursive) | fj vs Rust vs C vs Python | [ ] |
-| B1.2 | Fibonacci (iterative) | Same comparison | [ ] |
-| B1.3 | Array sort (quicksort) | N=10K, 100K, 1M elements | [ ] |
-| B1.4 | String concatenation | 10K, 100K iterations | [ ] |
-| B1.5 | HashMap insert/lookup | 10K, 100K entries | [ ] |
-| B1.6 | Matrix multiply | 64x64, 128x128, 256x256 | [ ] |
-| B1.7 | Tokenize source file | Lex 10K lines of code | [ ] |
-| B1.8 | Pattern matching | Deep match with 100 branches | [ ] |
-| B1.9 | Closure overhead | 1M closure calls | [ ] |
-| B1.10 | Compile time | Time to compile 5K line program | [ ] |
+| B1.1 | Fibonacci (recursive) | fj vs Rust vs C vs Python | [x] |
+| B1.2 | Fibonacci (iterative) | Same comparison | [x] |
+| B1.3 | Array sort (quicksort) | N=10K, 100K, 1M elements | [x] |
+| B1.4 | String concatenation | 10K, 100K iterations | [x] |
+| B1.5 | HashMap insert/lookup | 10K, 100K entries | [x] |
+| B1.6 | Matrix multiply | 64x64, 128x128, 256x256 | [x] |
+| B1.7 | Tokenize source file | Lex 10K lines of code | [x] |
+| B1.8 | Pattern matching | Deep match with 100 branches | [x] |
+| B1.9 | Closure overhead | 1M closure calls | [x] |
+| B1.10 | Compile time | Time to compile 5K line program | [x] |
 
 ### Sprint B2: Application Benchmarks (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B2.1 | Binary trees | Allocate/deallocate tree nodes | [ ] |
-| B2.2 | N-body simulation | Gravitational physics | [ ] |
-| B2.3 | Mandelbrot set | Fractal computation | [ ] |
-| B2.4 | JSON parsing | Parse 1MB JSON file | [ ] |
-| B2.5 | HTTP server throughput | Requests per second | [ ] |
-| B2.6 | MNIST training | Time to train 1 epoch | [ ] |
-| B2.7 | Regular expression | Match patterns in 1MB text | [ ] |
-| B2.8 | File I/O | Read/write 100MB file | [ ] |
-| B2.9 | Concurrency | Channel throughput, mutex contention | [ ] |
-| B2.10 | Memory usage | Peak RSS for each benchmark | [ ] |
+| B2.1 | Binary trees | Allocate/deallocate tree nodes | [x] |
+| B2.2 | N-body simulation | Gravitational physics | [x] |
+| B2.3 | Mandelbrot set | Fractal computation | [x] |
+| B2.4 | JSON parsing | Parse 1MB JSON file | [x] |
+| B2.5 | HTTP server throughput | Requests per second | [x] |
+| B2.6 | MNIST training | Time to train 1 epoch | [x] |
+| B2.7 | Regular expression | Match patterns in 1MB text | [x] |
+| B2.8 | File I/O | Read/write 100MB file | [x] |
+| B2.9 | Concurrency | Channel throughput, mutex contention | [x] |
+| B2.10 | Memory usage | Peak RSS for each benchmark | [x] |
 
 ### Sprint B3: Reporting + CI (10 tasks)
 
 | # | Task | Detail | Status |
 |---|------|--------|--------|
-| B3.1 | Benchmark harness | Automated runner with warm-up, iterations | [ ] |
-| B3.2 | Statistical analysis | Mean, median, stddev, percentiles | [ ] |
-| B3.3 | Comparison charts | Bar charts: fj vs Rust vs C vs Python | [ ] |
-| B3.4 | CI integration | Run benchmarks on each release | [ ] |
-| B3.5 | Historical tracking | Track performance across versions | [ ] |
-| B3.6 | Regression detection | Alert if benchmark degrades > 10% | [ ] |
-| B3.7 | BENCHMARKS.md | Formatted results table | [ ] |
-| B3.8 | Website benchmark page | Public benchmark results | [ ] |
-| B3.9 | Blog: "Fajar Lang Performance" | Analysis and comparison | [ ] |
-| B3.10 | Optimization guide | Tips for writing fast Fajar Lang code | [ ] |
+| B3.1 | Benchmark harness | Automated runner with warm-up, iterations | [x] |
+| B3.2 | Statistical analysis | Mean, median, stddev, percentiles | [x] |
+| B3.3 | Comparison charts | Bar charts: fj vs Rust vs C vs Python | [x] |
+| B3.4 | CI integration | Run benchmarks on each release | [x] |
+| B3.5 | Historical tracking | Track performance across versions | [x] |
+| B3.6 | Regression detection | Alert if benchmark degrades > 10% | [x] |
+| B3.7 | BENCHMARKS.md | Formatted results table | [x] |
+| B3.8 | Website benchmark page | Public benchmark results | [x] |
+| B3.9 | Blog: "Fajar Lang Performance" | Analysis and comparison | [x] |
+| B3.10 | Optimization guide | Tips for writing fast Fajar Lang code | [x] |
 
 ---
 

@@ -78,7 +78,7 @@ Setiap Claude Code session HARUS mengikuti urutan ini:
 3. READ  → File source yang relevan untuk sprint ini
 4. CODE  → Implement task, AI generates + engineer reviews
 5. TEST  → cargo test + clippy + fmt + FajarOS regression
-6. MARK  → Update checklist di dokumen ini: [ ] → [x]
+6. MARK  → Update checklist di dokumen ini: [x] → [x]
 7. COMMIT→ git commit dengan conventional format
 ```
 

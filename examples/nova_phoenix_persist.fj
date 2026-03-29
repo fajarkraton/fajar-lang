@@ -250,7 +250,7 @@ const TXN_ENTRY_SIZE: i64 = 16
                 if (flags & 0x08) != 0 { break }  // LAST_TAG
             }
         } else if block_type == JBD2_COMMIT_BLOCK {
-            // Transaction committed — advance tail
+            0 // Transaction committed — advance tail (placeholder)
         }
 
         pos = (pos + 1) % JOURNAL_BLOCKS
@@ -417,7 +417,7 @@ const MULTIBOOT2_ARCH_X86: i64 = 0
     let length = volatile_read_u32(addr + 8)
     let checksum = volatile_read_u32(addr + 12)
     // Checksum verification: magic + arch + length + checksum = 0
-    if (magic + arch + length + checksum) & 0xFFFFFFFF != 0 { return 0 }
+    if ((magic + arch + length + checksum) 0xFFFFFFFF) != 0 { return 0 }
     1
 }
 

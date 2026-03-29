@@ -508,9 +508,9 @@ const RCU_GP_STATE: i64 = 0x3200000   // global grace period counter
     if old == expected { volatile_write_u32(addr, desired) }
     old
 }
-@kernel fn cprint(s: i64, attr: i64) {}
+@kernel fn cprint(s: str, attr: i64) {}
 @kernel fn cprint_decimal(n: i64, attr: i64) {}
-@kernel fn cprintln(s: i64, attr: i64) {}
+@kernel fn cprintln(s: str, attr: i64) {}
 
 // ── Entry point ──
 

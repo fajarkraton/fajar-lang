@@ -183,7 +183,7 @@ const PML4_BASE: i64 = 0x70000
                 }
 
                 // Map the page
-                mmap_map_page(fault_addr & 0xFFFFFFFFFFFFF000, frame, prot)
+                mmap_map_page(fault_addr & -4096, frame, prot)
                 return 0
             } }
         }
@@ -206,7 +206,7 @@ const PML4_BASE: i64 = 0x70000
             if start != 0 {
                 // Check overlap
                 if candidate < end { if candidate + size > start {
-                    candidate = (end + 4095) & 0xFFFFFFFFFFFFF000
+                    candidate = (end + 4095) & -4096
                     found = 0
                     break
                 } }
@@ -956,7 +956,7 @@ const SA_SIGINFO: i64 = 0x00000004
         else if signum == SIGTERM { process_kill(pid) }
         else if signum == SIGSTOP { process_stop(pid) }
         else if signum == SIGCONT { process_continue(pid) }
-        else if signum == SIGCHLD { /* ignore by default */ }
+        else if signum == SIGCHLD { 0 }
         return
     }
 

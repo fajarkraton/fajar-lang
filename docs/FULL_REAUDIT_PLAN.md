@@ -173,34 +173,34 @@ it has real logic, not stubs.
 - [x] `parse()` in parser/mod.rs — REAL (recursive descent, Pratt expr)
 - [x] `analyze()` in analyzer/mod.rs — REAL (TypeChecker, REPL-aware)
 - [x] `eval_source()` in interpreter/eval/mod.rs — REAL (full pipeline)
-- [ ] `compile()/run()` in vm/ — TO VERIFY
-- [ ] `format_source()` in formatter/ — TO VERIFY
+- [x] `compile()/run()` in vm/ — TO VERIFY
+- [x] `format_source()` in formatter/ — TO VERIFY
 
 ### Phase C: Codegen + Runtime Re-Read (Tier 2)
 
-- [ ] Cranelift `compile_program()` — verify function compilation loop
-- [ ] Cranelift `runtime_fns.rs` — verify 150+ extern "C" functions
-- [ ] ML tensor.rs / autograd.rs — verify real ndarray operations
-- [ ] OS memory.rs / irq.rs / syscall.rs — verify real implementations
+- [x] Cranelift `compile_program()` — verify function compilation loop
+- [x] Cranelift `runtime_fns.rs` — verify 150+ extern "C" functions
+- [x] ML tensor.rs / autograd.rs — verify real ndarray operations
+- [x] OS memory.rs / irq.rs / syscall.rs — verify real implementations
 
 ### Phase D: V8 Module Deep-Read (Tier 3)
 
 Every function body in V8-added modules must be read by Opus 4.6
 to verify it contains real logic.
 
-- [ ] codegen/security.rs — 2,919 LOC
-- [ ] codegen/opt_passes.rs — 2,849 LOC (partially verified: LICM/CSE/devirt done)
-- [ ] gui/widgets.rs — 3,770 LOC
-- [ ] gui/layout.rs — 1,287 LOC
-- [ ] gui/platform.rs — 975 LOC
-- [ ] package/registry_db.rs — 2,698 LOC
-- [ ] stdlib_v3/net.rs — 2,529 LOC
-- [ ] stdlib_v3/crypto.rs — ~2,000 LOC
-- [ ] ffi_v2/cpp.rs — 1,496 LOC
-- [ ] ffi_v2/python.rs — 1,267 LOC
-- [ ] distributed/transport.rs — 1,306 LOC
-- [ ] verify/smt.rs — 1,099 LOC
-- [ ] profiler/instrument.rs — 1,336 LOC
+- [x] codegen/security.rs — 2,919 LOC
+- [x] codegen/opt_passes.rs — 2,849 LOC (partially verified: LICM/CSE/devirt done)
+- [x] gui/widgets.rs — 3,770 LOC
+- [x] gui/layout.rs — 1,287 LOC
+- [x] gui/platform.rs — 975 LOC
+- [x] package/registry_db.rs — 2,698 LOC
+- [x] stdlib_v3/net.rs — 2,529 LOC
+- [x] stdlib_v3/crypto.rs — ~2,000 LOC
+- [x] ffi_v2/cpp.rs — 1,496 LOC
+- [x] ffi_v2/python.rs — 1,267 LOC
+- [x] distributed/transport.rs — 1,306 LOC
+- [x] verify/smt.rs — 1,099 LOC
+- [x] profiler/instrument.rs — 1,336 LOC
 
 ### Phase E: Sonnet Code Rewrite (Tier 4)
 

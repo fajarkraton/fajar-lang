@@ -228,15 +228,16 @@ impl TypeChecker {
             // CPU halt
             ("__halt", vec![], Type::Void),
             // ARM64 builtins
-            ("eret_to_el0", vec![Type::I64, Type::I64], Type::Void),
+            ("eret_to_el0", vec![Type::I64, Type::I64, Type::I64], Type::Void),
             ("gic_ack", vec![], Type::I64),
             ("gic_cpu_init", vec![Type::Unknown], Type::Void),
             ("gic_eoi", vec![Type::I64], Type::Void),
-            ("mmu_enable", vec![Type::I64], Type::Void),
+            ("mmu_enable", vec![Type::I64, Type::I64, Type::I64], Type::Void),
             ("read_el", vec![], Type::I64),
             ("read_midr", vec![], Type::I64),
             ("timer_freq", vec![], Type::I64),
             ("timer_set", vec![Type::I64], Type::Void),
+            ("pit_get_ticks", vec![], Type::I64),
             // Database builtins (variadic — 2 or 3 args)
             ("db_open", vec![Type::Unknown], Type::I64),
             ("db_execute", vec![Type::Unknown], Type::I64),

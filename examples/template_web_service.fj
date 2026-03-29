@@ -34,7 +34,7 @@ fn db_create_user(db: i64, name: str, email: str) -> i64 {
 
 fn db_get_users(db: i64) -> i64 {
     let rows = db_query(db, "SELECT id, name, email FROM users")
-    len(rows)
+    len(rows) as i64
 }
 
 // =====================================================================

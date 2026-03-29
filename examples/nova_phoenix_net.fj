@@ -502,7 +502,7 @@ const IPV6_GW_LO: i64 = 28
     let mac = get_mac_address()
 
     // fe80::MAC[0-2]:ff:fe:MAC[3-5]
-    volatile_write_u64(IPV6_ADDR + IPV6_ADDR_HI, 0xFE80000000000000)
+    volatile_write_u64(IPV6_ADDR + IPV6_ADDR_HI, -112589990684262400)
 
     let eui64_hi = ((mac >> 40) & 0xFF) ^ 0x02  // flip U/L bit
     let eui64 = (eui64_hi << 56) | (((mac >> 32) & 0xFF) << 48) |
