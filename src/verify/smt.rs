@@ -1,3 +1,5 @@
+// Allow unused imports that are conditionally needed by #[cfg(feature = "smt")] functions.
+#![allow(unused_imports)]
 //! SMT Solver Integration — Z3 interface, theory selection, counterexamples.
 //!
 //! Phase V2: 20 tasks covering SMT-LIB2 generation, bitvector/array/real theories,

@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 //! Python Interop — CPython embedding, PyObject conversion, NumPy bridge.
 //!
 //! Phase F2: 20 tasks covering CPython FFI, type conversion, GIL management,

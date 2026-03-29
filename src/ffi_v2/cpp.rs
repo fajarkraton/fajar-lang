@@ -1,5 +1,8 @@
 //! C++ Interop — header parsing, name mangling, class bridging, templates.
 //!
+// Allow non-upper-case constants from clang-sys crate bindings (CXType_*, CXCursor_*).
+#![allow(non_upper_case_globals)]
+//!
 //! Phase F1: 20 tasks covering libclang parsing, Itanium name mangling,
 //! class method dispatch, RAII bridging, STL conversions, exception handling.
 

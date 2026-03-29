@@ -345,7 +345,7 @@ mod user_elf_structure {
         let (dir, data) = build_user_elf("fn main() -> i64 { 1 }\n", "text-addr");
         // Find LOAD segment: program header offset at bytes 32-39
         let phoff = u64::from_le_bytes(data[32..40].try_into().unwrap()) as usize;
-        let phentsize = u16::from_le_bytes(data[54..56].try_into().unwrap()) as usize;
+        let _phentsize = u16::from_le_bytes(data[54..56].try_into().unwrap()) as usize;
         // First LOAD segment virtual address at phoff + 16
         let vaddr = u64::from_le_bytes(data[phoff + 16..phoff + 24].try_into().unwrap());
         assert_eq!(vaddr, 0x400000, ".text segment not at 0x400000");
