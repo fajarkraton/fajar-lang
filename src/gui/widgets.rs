@@ -163,6 +163,11 @@ impl Color {
         }
     }
 
+    /// Converts to `0xAARRGGBB` u32 for softbuffer pixel format.
+    pub fn to_argb_u32(&self) -> u32 {
+        (self.a as u32) << 24 | (self.r as u32) << 16 | (self.g as u32) << 8 | (self.b as u32)
+    }
+
     /// Alpha-blends `other` on top of `self` using standard "source over" compositing.
     pub fn blend(&self, other: &Color) -> Color {
         if other.a == 255 {

@@ -52,27 +52,50 @@ pub struct GuiState {
     pub widgets: Vec<GuiWidget>,
 }
 
-/// Simulated WebSocket connection state.
-#[derive(Debug, Clone)]
+/// WebSocket connection state.
+///
+/// With `--features websocket`: holds a real `tungstenite::WebSocket` socket.
+/// Without the feature: in-memory echo simulation for testing.
 struct WsConnection {
     #[allow(dead_code)]
     url: String,
     connected: bool,
+    /// Simulation buffers (used when `websocket` feature is disabled).
+    #[allow(dead_code)]
     send_buffer: Vec<String>,
+    #[allow(dead_code)]
     recv_buffer: std::collections::VecDeque<String>,
+    /// Real WebSocket socket (used when `websocket` feature is enabled).
+    #[cfg(feature = "websocket")]
+    socket:
+        Option<tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>>,
 }
 
-/// Simulated MQTT client state.
-#[derive(Debug, Clone)]
+/// Real MQTT client backed by `rumqttc` (feature-gated).
+#[cfg(feature = "mqtt")]
+struct RealMqttClient {
+    client: rumqttc::Client,
+    receiver: std::sync::mpsc::Receiver<(String, String)>,
+    _thread: Option<std::thread::JoinHandle<()>>,
+}
+
+/// MQTT client state.
+///
+/// With `--features mqtt`: holds a real `rumqttc::Client` + background connection thread.
+/// Without the feature: in-memory broker simulation for testing.
 struct MqttClientState {
     #[allow(dead_code)]
     broker_addr: String,
     connected: bool,
+    #[allow(dead_code)]
     subscriptions: Vec<String>,
+    #[cfg(feature = "mqtt")]
+    real_client: Option<RealMqttClient>,
 }
 
-/// In-memory MQTT message broker for simulation.
+/// In-memory MQTT message broker for simulation (used when `mqtt` feature is off).
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 struct MqttBroker {
     /// topic → list of queued messages
     topics: std::collections::HashMap<String, Vec<String>>,
@@ -80,6 +103,7 @@ struct MqttBroker {
     subscriptions: std::collections::HashMap<i64, Vec<String>>,
 }
 
+#[allow(dead_code)]
 impl MqttBroker {
     fn new() -> Self {
         Self {
@@ -421,7 +445,8 @@ pub struct Interpreter {
     next_ws_id: i64,
     /// MQTT clients: handle → MqttClient state.
     mqtt_clients: std::collections::HashMap<i64, MqttClientState>,
-    /// In-memory MQTT broker for simulation.
+    /// In-memory MQTT broker for simulation (unused when `mqtt` feature active).
+    #[allow(dead_code)]
     mqtt_broker: MqttBroker,
     /// Next MQTT handle ID.
     next_mqtt_id: i64,

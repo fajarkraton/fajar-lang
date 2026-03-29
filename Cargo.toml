@@ -68,6 +68,11 @@ cranelift-native = { version = "0.129.1", optional = true }
 target-lexicon = { version = "0.13.5", optional = true }
 inkwell = { version = "0.8.0", features = ["llvm18-1"], optional = true }
 
+# Real WebSocket client (feature-gated)
+tungstenite = { version = "0.26", optional = true }
+# Real MQTT client (feature-gated)
+rumqttc = { version = "0.24", optional = true }
+
 [features]
 default = []
 gpu = ["wgpu"]
@@ -88,6 +93,8 @@ cpp-ffi = ["dep:clang-sys"]
 python-ffi = ["dep:pyo3"]
 smt = ["dep:z3"]
 gui = ["dep:winit", "dep:softbuffer"]
+websocket = ["dep:tungstenite"]
+mqtt = ["dep:rumqttc"]
 playground-wasm = ["dep:wasm-bindgen"]
 wasm = []
 freertos = []

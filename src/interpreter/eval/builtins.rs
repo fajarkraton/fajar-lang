@@ -5677,7 +5677,8 @@ impl Interpreter {
 
     /// ws_connect(url: str) -> i64
     ///
-    /// Opens a simulated WebSocket connection. Returns a handle integer.
+    /// Opens a WebSocket connection. With `--features websocket`, connects via
+    /// real TCP + RFC 6455 handshake. Without the feature, uses in-memory echo.
     fn builtin_ws_connect(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -5696,22 +5697,54 @@ impl Interpreter {
         };
         let id = self.next_ws_id;
         self.next_ws_id += 1;
-        self.ws_connections.insert(
-            id,
-            super::WsConnection {
-                url,
-                connected: true,
-                send_buffer: Vec::new(),
-                recv_buffer: std::collections::VecDeque::new(),
-            },
-        );
+
+        #[cfg(feature = "websocket")]
+        {
+            match tungstenite::connect(&url) {
+                Ok((ws, _response)) => {
+                    // Set underlying TCP stream to non-blocking for ws_recv.
+                    if let tungstenite::stream::MaybeTlsStream::Plain(tcp) = ws.get_ref() {
+                        let _ = tcp.set_nonblocking(true);
+                    }
+                    self.ws_connections.insert(
+                        id,
+                        super::WsConnection {
+                            url,
+                            connected: true,
+                            send_buffer: Vec::new(),
+                            recv_buffer: std::collections::VecDeque::new(),
+                            socket: Some(ws),
+                        },
+                    );
+                }
+                Err(e) => {
+                    return Err(RuntimeError::TypeError(format!(
+                        "ws_connect: failed to connect to {url}: {e}"
+                    ))
+                    .into());
+                }
+            }
+        }
+
+        #[cfg(not(feature = "websocket"))]
+        {
+            self.ws_connections.insert(
+                id,
+                super::WsConnection {
+                    url,
+                    connected: true,
+                    send_buffer: Vec::new(),
+                    recv_buffer: std::collections::VecDeque::new(),
+                },
+            );
+        }
+
         Ok(Value::Int(id))
     }
 
     /// ws_send(handle: i64, message: str) -> i64
     ///
-    /// Sends a message over a WebSocket connection. In simulation the message
-    /// is echo'd into the recv buffer. Returns the message length.
+    /// Sends a text message over a WebSocket connection. Returns message length.
     fn builtin_ws_send(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
@@ -5739,16 +5772,29 @@ impl Interpreter {
         if !conn.connected {
             return Err(RuntimeError::TypeError("ws_send: connection closed".into()).into());
         }
-        // In simulation, sent messages echo back to recv buffer.
-        conn.recv_buffer.push_back(message.clone());
         let len = message.len() as i64;
+
+        #[cfg(feature = "websocket")]
+        {
+            if let Some(ref mut ws) = conn.socket {
+                ws.send(tungstenite::Message::Text(message.clone().into()))
+                    .map_err(|e| RuntimeError::TypeError(format!("ws_send: {e}")))?;
+            }
+        }
+
+        #[cfg(not(feature = "websocket"))]
+        {
+            // Simulation: echo message to recv buffer.
+            conn.recv_buffer.push_back(message.clone());
+        }
+
         conn.send_buffer.push(message);
         Ok(Value::Int(len))
     }
 
     /// ws_recv(handle: i64) -> str | null
     ///
-    /// Receives the next pending message. Returns `null` if no message is queued.
+    /// Receives the next pending message. Returns `null` if no message is available.
     fn builtin_ws_recv(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -5765,9 +5811,39 @@ impl Interpreter {
             .ws_connections
             .get_mut(&handle)
             .ok_or_else(|| RuntimeError::TypeError(format!("ws_recv: invalid handle {handle}")))?;
-        match conn.recv_buffer.pop_front() {
-            Some(msg) => Ok(Value::Str(msg)),
-            None => Ok(Value::Null),
+
+        #[cfg(feature = "websocket")]
+        {
+            if let Some(ref mut ws) = conn.socket {
+                match ws.read() {
+                    Ok(tungstenite::Message::Text(s)) => {
+                        return Ok(Value::Str(s.to_string()));
+                    }
+                    Ok(tungstenite::Message::Binary(b)) => {
+                        return Ok(Value::Str(String::from_utf8_lossy(&b).to_string()));
+                    }
+                    Ok(tungstenite::Message::Close(_)) => {
+                        conn.connected = false;
+                        return Ok(Value::Null);
+                    }
+                    Err(tungstenite::Error::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::WouldBlock =>
+                    {
+                        return Ok(Value::Null); // no data available yet
+                    }
+                    Err(_) => return Ok(Value::Null),
+                    _ => return Ok(Value::Null), // Ping/Pong/Frame
+                }
+            }
+            return Ok(Value::Null);
+        }
+
+        #[cfg(not(feature = "websocket"))]
+        {
+            match conn.recv_buffer.pop_front() {
+                Some(msg) => Ok(Value::Str(msg)),
+                None => Ok(Value::Null),
+            }
         }
     }
 
@@ -5790,6 +5866,12 @@ impl Interpreter {
         };
         if let Some(conn) = self.ws_connections.get_mut(&handle) {
             conn.connected = false;
+            #[cfg(feature = "websocket")]
+            {
+                if let Some(ref mut ws) = conn.socket {
+                    let _ = ws.close(None);
+                }
+            }
         }
         self.ws_connections.remove(&handle);
         Ok(Value::Null)
@@ -5797,9 +5879,23 @@ impl Interpreter {
 
     // ── MQTT builtins ──
 
+    /// Parse "mqtt://host:port" → (host, port). Defaults to port 1883.
+    #[cfg(feature = "mqtt")]
+    fn parse_mqtt_url(url: &str) -> (String, u16) {
+        let stripped = url
+            .strip_prefix("mqtt://")
+            .or_else(|| url.strip_prefix("mqtts://"))
+            .unwrap_or(url);
+        let parts: Vec<&str> = stripped.splitn(2, ':').collect();
+        let host = parts[0].to_string();
+        let port = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(1883);
+        (host, port)
+    }
+
     /// mqtt_connect(broker: str) -> i64
     ///
-    /// Connects to a simulated MQTT broker. Returns a client handle.
+    /// With `--features mqtt`: connects to a real MQTT broker via TCP.
+    /// Without the feature: in-memory broker simulation.
     fn builtin_mqtt_connect(&mut self, args: Vec<Value>) -> EvalResult {
         if args.is_empty() {
             return Err(RuntimeError::ArityMismatch {
@@ -5819,20 +5915,65 @@ impl Interpreter {
         };
         let id = self.next_mqtt_id;
         self.next_mqtt_id += 1;
-        self.mqtt_clients.insert(
-            id,
-            super::MqttClientState {
-                broker_addr: broker,
-                connected: true,
-                subscriptions: Vec::new(),
-            },
-        );
+
+        #[cfg(feature = "mqtt")]
+        {
+            let (host, port) = Self::parse_mqtt_url(&broker);
+            let mut opts = rumqttc::MqttOptions::new(format!("fj-client-{id}"), host.clone(), port);
+            opts.set_keep_alive(std::time::Duration::from_secs(30));
+
+            match rumqttc::Client::new(opts, 64) {
+                (client, connection) => {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    let thread = std::thread::spawn(move || {
+                        let mut conn = connection;
+                        for event in conn.iter() {
+                            match event {
+                                Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
+                                    let topic = p.topic.clone();
+                                    let payload = String::from_utf8_lossy(&p.payload).to_string();
+                                    if tx.send((topic, payload)).is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
+                                _ => {}
+                            }
+                        }
+                    });
+                    self.mqtt_clients.insert(
+                        id,
+                        super::MqttClientState {
+                            broker_addr: broker,
+                            connected: true,
+                            subscriptions: Vec::new(),
+                            real_client: Some(super::RealMqttClient {
+                                client,
+                                receiver: rx,
+                                _thread: Some(thread),
+                            }),
+                        },
+                    );
+                }
+            }
+        }
+
+        #[cfg(not(feature = "mqtt"))]
+        {
+            self.mqtt_clients.insert(
+                id,
+                super::MqttClientState {
+                    broker_addr: broker,
+                    connected: true,
+                    subscriptions: Vec::new(),
+                },
+            );
+        }
+
         Ok(Value::Int(id))
     }
 
     /// mqtt_publish(handle: i64, topic: str, payload: str) -> null
-    ///
-    /// Publishes `payload` to `topic` on the in-memory broker.
     fn builtin_mqtt_publish(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 3 {
             return Err(RuntimeError::ArityMismatch {
@@ -5866,20 +6007,32 @@ impl Interpreter {
                 .into());
             }
         };
-        let client = self.mqtt_clients.get(&handle).ok_or_else(|| {
+        let client = self.mqtt_clients.get_mut(&handle).ok_or_else(|| {
             RuntimeError::TypeError(format!("mqtt_publish: invalid handle {handle}"))
         })?;
         if !client.connected {
             return Err(RuntimeError::TypeError("mqtt_publish: not connected".into()).into());
         }
-        self.mqtt_broker.publish(&topic, &payload);
+
+        #[cfg(feature = "mqtt")]
+        {
+            if let Some(ref mut rc) = client.real_client {
+                rc.client
+                    .publish(&topic, rumqttc::QoS::AtLeastOnce, false, payload.as_bytes())
+                    .map_err(|e| RuntimeError::TypeError(format!("mqtt_publish: {e}")))?;
+                return Ok(Value::Null);
+            }
+        }
+
+        #[cfg(not(feature = "mqtt"))]
+        {
+            self.mqtt_broker.publish(&topic, &payload);
+        }
+
         Ok(Value::Null)
     }
 
     /// mqtt_subscribe(handle: i64, topic: str) -> null
-    ///
-    /// Subscribes the client to `topic`. Future `mqtt_publish` calls to that
-    /// topic will be delivered via `mqtt_recv`.
     fn builtin_mqtt_subscribe(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
@@ -5912,14 +6065,28 @@ impl Interpreter {
             return Err(RuntimeError::TypeError("mqtt_subscribe: not connected".into()).into());
         }
         client.subscriptions.push(topic.clone());
-        self.mqtt_broker.subscribe(handle, &topic);
+
+        #[cfg(feature = "mqtt")]
+        {
+            if let Some(ref mut rc) = client.real_client {
+                rc.client
+                    .subscribe(&topic, rumqttc::QoS::AtLeastOnce)
+                    .map_err(|e| RuntimeError::TypeError(format!("mqtt_subscribe: {e}")))?;
+                return Ok(Value::Null);
+            }
+        }
+
+        #[cfg(not(feature = "mqtt"))]
+        {
+            self.mqtt_broker.subscribe(handle, &topic);
+        }
+
         Ok(Value::Null)
     }
 
     /// mqtt_recv(handle: i64) -> Map | null
     ///
-    /// Returns the next queued message as `{ "topic": str, "payload": str }`,
-    /// or `null` if no message is pending.
+    /// Returns next message as `{ "topic": str, "payload": str }`, or null.
     fn builtin_mqtt_recv(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -5941,20 +6108,42 @@ impl Interpreter {
                 RuntimeError::TypeError(format!("mqtt_recv: invalid handle {handle}")).into(),
             );
         }
-        match self.mqtt_broker.receive(handle) {
-            Some((topic, payload)) => {
-                let mut map = std::collections::HashMap::new();
-                map.insert("topic".to_string(), Value::Str(topic));
-                map.insert("payload".to_string(), Value::Str(payload));
-                Ok(Value::Map(map))
+
+        #[cfg(feature = "mqtt")]
+        {
+            if let Some(client) = self.mqtt_clients.get_mut(&handle) {
+                if let Some(ref mut rc) = client.real_client {
+                    match rc.receiver.try_recv() {
+                        Ok((topic, payload)) => {
+                            let mut map = std::collections::HashMap::new();
+                            map.insert("topic".to_string(), Value::Str(topic));
+                            map.insert("payload".to_string(), Value::Str(payload));
+                            return Ok(Value::Map(map));
+                        }
+                        Err(_) => return Ok(Value::Null),
+                    }
+                }
             }
-            None => Ok(Value::Null),
         }
+
+        #[cfg(not(feature = "mqtt"))]
+        {
+            match self.mqtt_broker.receive(handle) {
+                Some((topic, payload)) => {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert("topic".to_string(), Value::Str(topic));
+                    map.insert("payload".to_string(), Value::Str(payload));
+                    return Ok(Value::Map(map));
+                }
+                None => return Ok(Value::Null),
+            }
+        }
+
+        #[allow(unreachable_code)]
+        Ok(Value::Null)
     }
 
     /// mqtt_disconnect(handle: i64) -> null
-    ///
-    /// Disconnects the MQTT client and releases the handle.
     fn builtin_mqtt_disconnect(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -5971,7 +6160,13 @@ impl Interpreter {
                 );
             }
         };
-        self.mqtt_broker.unsubscribe_all(handle);
+
+        #[cfg(not(feature = "mqtt"))]
+        {
+            self.mqtt_broker.unsubscribe_all(handle);
+        }
+
+        // Dropping the client + receiver causes the background thread to exit.
         self.mqtt_clients.remove(&handle);
         Ok(Value::Null)
     }

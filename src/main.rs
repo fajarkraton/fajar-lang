@@ -3921,93 +3921,106 @@ fn cmd_gui(path: &PathBuf) -> ExitCode {
         gui_state.widgets.len()
     );
 
-    fajar_lang::gui::platform::run_windowed(config, move |buf: &mut [u32], w: u32, h: u32| {
-        // Clear to background color.
-        let bg = 0xFF_2D_2D_2D_u32; // dark gray
-        for pixel in buf.iter_mut() {
-            *pixel = bg;
-        }
+    // Button state: index → (hovered, pressed).
+    let mut button_states: std::collections::HashMap<usize, (bool, bool)> =
+        std::collections::HashMap::new();
+    // Reusable canvas (allocated once, resized on demand).
+    let mut canvas: Option<fajar_lang::gui::widgets::Canvas> = None;
 
-        // Render each widget.
-        for widget in &gui_state.widgets {
-            render_gui_widget(buf, w, h, widget);
-        }
-    });
+    fajar_lang::gui::platform::run_windowed_interactive(
+        config,
+        move |buf: &mut [u32], w: u32, h: u32, events: &[fajar_lang::gui::platform::InputEvent]| {
+            use fajar_lang::gui::platform::InputEvent;
+            use fajar_lang::gui::widgets::{Canvas, Color, Rect};
+
+            // Allocate or resize canvas.
+            let c = canvas.get_or_insert_with(|| Canvas::new(w, h, Color::new(45, 45, 45)));
+            if c.width != w || c.height != h {
+                *c = Canvas::new(w, h, Color::new(45, 45, 45));
+            } else {
+                c.clear(Color::new(45, 45, 45));
+            }
+
+            // Process mouse events → update button hover/pressed state.
+            for event in events {
+                for (i, widget) in gui_state.widgets.iter().enumerate() {
+                    if widget.kind != "button" {
+                        continue;
+                    }
+                    let state = button_states.entry(i).or_insert((false, false));
+                    match event {
+                        InputEvent::MouseMove { x, y } => {
+                            state.0 = *x >= widget.x as f32
+                                && *x < (widget.x + widget.w) as f32
+                                && *y >= widget.y as f32
+                                && *y < (widget.y + widget.h) as f32;
+                        }
+                        InputEvent::MouseDown { .. } => {
+                            if state.0 {
+                                state.1 = true;
+                            }
+                        }
+                        InputEvent::MouseUp { .. } => {
+                            if state.0 && state.1 {
+                                println!("[gui] Button \"{}\" clicked", widget.text);
+                            }
+                            state.1 = false;
+                        }
+                    }
+                }
+            }
+
+            // Render each widget using Canvas (with text).
+            for (i, widget) in gui_state.widgets.iter().enumerate() {
+                let rect = Rect::new(
+                    widget.x as f32,
+                    widget.y as f32,
+                    widget.w as f32,
+                    widget.h as f32,
+                );
+                match widget.kind.as_str() {
+                    "label" => {
+                        let tx = widget.x as i32 + 2;
+                        let ty = widget.y as i32 + (widget.h as i32 - 7) / 2;
+                        c.draw_text(tx, ty, &widget.text, Color::WHITE);
+                    }
+                    "button" => {
+                        let (hovered, pressed) =
+                            button_states.get(&i).copied().unwrap_or((false, false));
+                        let bg = if pressed {
+                            Color::new(40, 80, 160)
+                        } else if hovered {
+                            Color::new(80, 140, 220)
+                        } else {
+                            Color::new(64, 128, 192)
+                        };
+                        c.fill_rect(&rect, bg);
+                        c.draw_rect(&rect, Color::new(32, 96, 160));
+                        let tx = widget.x as i32 + 4;
+                        let ty = widget.y as i32 + (widget.h as i32 - 7) / 2;
+                        c.draw_text(tx, ty, &widget.text, Color::WHITE);
+                    }
+                    "rect" => {
+                        let color = Color::with_alpha(
+                            ((widget.color >> 16) & 0xFF) as u8,
+                            ((widget.color >> 8) & 0xFF) as u8,
+                            (widget.color & 0xFF) as u8,
+                            ((widget.color >> 24) & 0xFF) as u8,
+                        );
+                        c.fill_rect(&rect, color);
+                    }
+                    _ => {
+                        c.fill_rect(&rect, Color::GRAY);
+                    }
+                }
+            }
+
+            // Copy Canvas pixels → softbuffer u32 buffer.
+            for (pixel, src) in buf.iter_mut().zip(c.pixels.iter()) {
+                *pixel = src.to_argb_u32();
+            }
+        },
+    );
 
     ExitCode::SUCCESS
-}
-
-/// Render a single GUI widget into the pixel buffer.
-fn render_gui_widget(
-    buf: &mut [u32],
-    w: u32,
-    _h: u32,
-    widget: &fajar_lang::interpreter::GuiWidget,
-) {
-    match widget.kind.as_str() {
-        "label" => {
-            // Draw a colored rectangle representing the label area.
-            let color = 0xFF_E0_E0_E0_u32; // light gray text area
-            fill_rect(buf, w, widget.x, widget.y, widget.w, 20, color);
-        }
-        "button" => {
-            // Draw a button rectangle with distinct color.
-            let color = 0xFF_40_80_C0_u32; // blue button
-            fill_rect(buf, w, widget.x, widget.y, widget.w, widget.h, color);
-            // Draw 1px border.
-            let border = 0xFF_20_60_A0_u32;
-            draw_rect_outline(buf, w, widget.x, widget.y, widget.w, widget.h, border);
-        }
-        "rect" => {
-            fill_rect(buf, w, widget.x, widget.y, widget.w, widget.h, widget.color);
-        }
-        _ => {
-            // Unknown widget type — draw as gray box.
-            fill_rect(
-                buf,
-                w,
-                widget.x,
-                widget.y,
-                widget.w,
-                widget.h,
-                0xFF_80_80_80,
-            );
-        }
-    }
-}
-
-fn fill_rect(buf: &mut [u32], stride: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
-    for row in y..y.saturating_add(h) {
-        for col in x..x.saturating_add(w) {
-            let idx = (row * stride + col) as usize;
-            if idx < buf.len() {
-                buf[idx] = color;
-            }
-        }
-    }
-}
-
-fn draw_rect_outline(buf: &mut [u32], stride: u32, x: u32, y: u32, w: u32, h: u32, color: u32) {
-    // Top and bottom edges.
-    for col in x..x.saturating_add(w) {
-        let top = (y * stride + col) as usize;
-        let bot = (y.saturating_add(h.saturating_sub(1)) * stride + col) as usize;
-        if top < buf.len() {
-            buf[top] = color;
-        }
-        if bot < buf.len() {
-            buf[bot] = color;
-        }
-    }
-    // Left and right edges.
-    for row in y..y.saturating_add(h) {
-        let left = (row * stride + x) as usize;
-        let right = (row * stride + x.saturating_add(w.saturating_sub(1))) as usize;
-        if left < buf.len() {
-            buf[left] = color;
-        }
-        if right < buf.len() {
-            buf[right] = color;
-        }
-    }
 }

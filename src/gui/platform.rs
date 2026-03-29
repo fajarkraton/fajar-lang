@@ -732,6 +732,164 @@ pub fn detect_render_backend() -> RenderBackend {
 // Winit Real Window Backend (feature-gated: --features gui)
 // ---------------------------------------------------------------------------
 
+/// Input events passed from the windowing system to the interactive render callback.
+#[derive(Debug, Clone)]
+pub enum InputEvent {
+    /// Mouse cursor moved to (x, y).
+    MouseMove { x: f32, y: f32 },
+    /// Left mouse button pressed at (x, y).
+    MouseDown { x: f32, y: f32 },
+    /// Left mouse button released at (x, y).
+    MouseUp { x: f32, y: f32 },
+}
+
+/// Opens a real OS window with interactive event handling.
+///
+/// Like `run_windowed`, but the callback also receives mouse events so widgets
+/// can respond to hover and click.
+#[cfg(feature = "gui")]
+pub fn run_windowed_interactive<F>(config: WindowConfig, mut render_fn: F)
+where
+    F: FnMut(&mut [u32], u32, u32, &[InputEvent]) + 'static,
+{
+    use winit::application::ApplicationHandler;
+    use winit::event::WindowEvent;
+    use winit::event_loop::{ActiveEventLoop, EventLoop};
+    use winit::window::{Window, WindowId as WinitWindowId};
+
+    struct App<R: FnMut(&mut [u32], u32, u32, &[InputEvent])> {
+        config: WindowConfig,
+        window: Option<std::sync::Arc<Window>>,
+        surface: Option<softbuffer::Surface<std::sync::Arc<Window>, std::sync::Arc<Window>>>,
+        render_fn: R,
+        mouse_x: f32,
+        mouse_y: f32,
+        pending_events: Vec<InputEvent>,
+    }
+
+    impl<R: FnMut(&mut [u32], u32, u32, &[InputEvent])> ApplicationHandler for App<R> {
+        fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+            if self.window.is_none() {
+                let attrs = Window::default_attributes()
+                    .with_title(&self.config.title)
+                    .with_inner_size(winit::dpi::LogicalSize::new(
+                        self.config.width,
+                        self.config.height,
+                    ))
+                    .with_resizable(self.config.resizable);
+                if let Ok(win) = event_loop.create_window(attrs) {
+                    let win = std::sync::Arc::new(win);
+                    let context = softbuffer::Context::new(win.clone()).ok();
+                    let surface =
+                        context.and_then(|ctx| softbuffer::Surface::new(ctx, win.clone()).ok());
+                    self.window = Some(win);
+                    self.surface = surface;
+                }
+            }
+        }
+
+        fn window_event(
+            &mut self,
+            event_loop: &ActiveEventLoop,
+            _id: WinitWindowId,
+            event: WindowEvent,
+        ) {
+            match event {
+                WindowEvent::CloseRequested => {
+                    event_loop.exit();
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.mouse_x = position.x as f32;
+                    self.mouse_y = position.y as f32;
+                    self.pending_events.push(InputEvent::MouseMove {
+                        x: self.mouse_x,
+                        y: self.mouse_y,
+                    });
+                    if let Some(win) = &self.window {
+                        win.request_redraw();
+                    }
+                }
+                WindowEvent::MouseInput { state, button, .. } => {
+                    if button == winit::event::MouseButton::Left {
+                        match state {
+                            winit::event::ElementState::Pressed => {
+                                self.pending_events.push(InputEvent::MouseDown {
+                                    x: self.mouse_x,
+                                    y: self.mouse_y,
+                                });
+                            }
+                            winit::event::ElementState::Released => {
+                                self.pending_events.push(InputEvent::MouseUp {
+                                    x: self.mouse_x,
+                                    y: self.mouse_y,
+                                });
+                            }
+                        }
+                    }
+                    if let Some(win) = &self.window {
+                        win.request_redraw();
+                    }
+                }
+                WindowEvent::RedrawRequested => {
+                    if let (Some(win), Some(surface)) = (&self.window, &mut self.surface) {
+                        let size = win.inner_size();
+                        let w = size.width.max(1);
+                        let h = size.height.max(1);
+                        if surface
+                            .resize(
+                                std::num::NonZeroU32::new(w)
+                                    .unwrap_or(std::num::NonZeroU32::new(1).expect("non-zero")),
+                                std::num::NonZeroU32::new(h)
+                                    .unwrap_or(std::num::NonZeroU32::new(1).expect("non-zero")),
+                            )
+                            .is_ok()
+                        {
+                            if let Ok(mut buf) = surface.buffer_mut() {
+                                let events = std::mem::take(&mut self.pending_events);
+                                (self.render_fn)(buf.as_mut(), w, h, &events);
+                                if buf.present().is_err() {
+                                    eprintln!("[gui] present failed");
+                                }
+                            }
+                        }
+                        win.request_redraw();
+                    }
+                }
+                WindowEvent::Resized(_) => {
+                    if let Some(win) = &self.window {
+                        win.request_redraw();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let event_loop = EventLoop::new().expect("failed to create event loop");
+    let mut app = App {
+        config,
+        window: None,
+        surface: None,
+        render_fn,
+        mouse_x: 0.0,
+        mouse_y: 0.0,
+        pending_events: Vec::new(),
+    };
+    if let Err(e) = event_loop.run_app(&mut app) {
+        eprintln!("[gui] event loop error: {e}");
+    }
+}
+
+/// Stub for interactive windowing when gui feature is disabled.
+#[cfg(not(feature = "gui"))]
+pub fn run_windowed_interactive<F>(_config: WindowConfig, _render_fn: F)
+where
+    F: FnMut(&mut [u32], u32, u32, &[InputEvent]) + 'static,
+{
+    eprintln!("error: GUI windowing not available");
+    eprintln!("hint: rebuild with `cargo build --features gui`");
+}
+
 /// Opens a real OS window using winit + softbuffer and runs the event loop.
 ///
 /// The `render_fn` is called each frame with a mutable pixel buffer
