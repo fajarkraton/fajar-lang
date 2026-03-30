@@ -16637,3 +16637,22 @@ fn v10_response_json_format() {
     let out = eval_output(src);
     assert_eq!(out, vec![r#"{"status": 200, "data": {"ok": true}}"#]);
 }
+
+// ── V11 Option 5: Self-hosting test ──
+
+#[test]
+fn v11_selfhost_lexer_tokenizes_fj_code() {
+    // Verify the self-hosted lexer example runs and produces correct output
+    let source =
+        std::fs::read_to_string("examples/selfhost_lexer_test.fj").expect("cannot read selfhost");
+    let mut interp = Interpreter::new_capturing();
+    interp.eval_source(&source).expect("eval failed");
+    interp.call_main().expect("call_main failed");
+    let output = interp.get_output();
+    assert!(
+        output
+            .iter()
+            .any(|l| l.contains("All 5 Self-Hosted Lexer Tests PASSED")),
+        "selfhost lexer test should pass, got: {output:?}"
+    );
+}

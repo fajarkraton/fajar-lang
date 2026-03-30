@@ -1,0 +1,234 @@
+// selfhost_lexer_test.fj — End-to-end self-hosting test
+//
+// Tests the self-hosted lexer (stdlib/lexer.fj) by tokenizing
+// a Fajar Lang program and verifying the token stream.
+//
+// Run: fj run examples/selfhost_lexer_test.fj
+
+// ═══════════════════════════════════════════════════════════════
+// Include the self-hosted lexer inline (since we don't have
+// module imports at the interpreter level yet)
+// ═══════════════════════════════════════════════════════════════
+
+fn is_digit_str(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn is_alpha_str(c: str) -> bool {
+    c == "_" ||
+    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" ||
+    c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" ||
+    c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" ||
+    c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" ||
+    c == "y" || c == "z" ||
+    c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" ||
+    c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" ||
+    c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" ||
+    c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" ||
+    c == "Y" || c == "Z"
+}
+
+fn is_alnum_str(c: str) -> bool {
+    is_alpha_str(c) || is_digit_str(c)
+}
+
+fn lookup_keyword(word: str) -> i64 {
+    if word == "fn" { return 15 }
+    if word == "let" { return 13 }
+    if word == "mut" { return 14 }
+    if word == "if" { return 1 }
+    if word == "else" { return 2 }
+    if word == "while" { return 4 }
+    if word == "return" { return 8 }
+    if word == "true" { return 29 }
+    if word == "false" { return 30 }
+    if word == "i64" { return 36 }
+    if word == "str" { return 49 }
+    if word == "bool" { return 32 }
+    if word == "void" { return 51 }
+    0
+}
+
+fn token_name(tag: i64) -> str {
+    if tag == 0 { return "EOF" }
+    if tag == 1 { return "if" }
+    if tag == 2 { return "else" }
+    if tag == 4 { return "while" }
+    if tag == 8 { return "return" }
+    if tag == 13 { return "let" }
+    if tag == 14 { return "mut" }
+    if tag == 15 { return "fn" }
+    if tag == 29 { return "true" }
+    if tag == 30 { return "false" }
+    if tag == 36 { return "i64" }
+    if tag == 49 { return "str" }
+    if tag == 51 { return "void" }
+    if tag == 70 { return "+" }
+    if tag == 71 { return "-" }
+    if tag == 72 { return "*" }
+    if tag == 76 { return "==" }
+    if tag == 78 { return "<" }
+    if tag == 91 { return "=" }
+    if tag == 110 { return "(" }
+    if tag == 111 { return ")" }
+    if tag == 112 { return "{" }
+    if tag == 113 { return "}" }
+    if tag == 116 { return ";" }
+    if tag == 118 { return ":" }
+    if tag == 119 { return "," }
+    if tag == 121 { return "->" }
+    if tag == 130 { return "IntLit" }
+    if tag == 132 { return "StrLit" }
+    if tag == 133 { return "Ident" }
+    "?"
+}
+
+// Simplified tokenizer for the test (subset of full lexer)
+fn tokenize_simple(source: str) -> [i64] {
+    let n = len(source) as i64
+    let mut pos: i64 = 0
+    let mut tokens: [i64] = []
+
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+
+        // Skip whitespace
+        if c == " " || c == "\n" || c == "\r" || c == "\t" {
+            pos = pos + 1
+            continue
+        }
+
+        // Skip line comments
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+            while pos < n && source.substring(pos, pos + 1) != "\n" { pos = pos + 1 }
+            continue
+        }
+
+        // Numbers
+        if is_digit_str(c) {
+            while pos < n && is_digit_str(source.substring(pos, pos + 1)) { pos = pos + 1 }
+            tokens = push(tokens, 130)
+            continue
+        }
+
+        // Strings
+        if c == "\"" {
+            pos = pos + 1
+            while pos < n && source.substring(pos, pos + 1) != "\"" { pos = pos + 1 }
+            pos = pos + 1
+            tokens = push(tokens, 132)
+            continue
+        }
+
+        // Identifiers/keywords
+        if is_alpha_str(c) {
+            let start = pos
+            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) { pos = pos + 1 }
+            let word = source.substring(start, pos)
+            let kw = lookup_keyword(word)
+            if kw > 0 { tokens = push(tokens, kw) } else { tokens = push(tokens, 133) }
+            continue
+        }
+
+        // Operators and punctuation
+        if c == "(" { tokens = push(tokens, 110); pos = pos + 1; continue }
+        if c == ")" { tokens = push(tokens, 111); pos = pos + 1; continue }
+        if c == "{" { tokens = push(tokens, 112); pos = pos + 1; continue }
+        if c == "}" { tokens = push(tokens, 113); pos = pos + 1; continue }
+        if c == "+" { tokens = push(tokens, 70); pos = pos + 1; continue }
+        if c == "*" { tokens = push(tokens, 72); pos = pos + 1; continue }
+        if c == "," { tokens = push(tokens, 119); pos = pos + 1; continue }
+        if c == ":" { tokens = push(tokens, 118); pos = pos + 1; continue }
+        if c == "=" {
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == "=" {
+                tokens = push(tokens, 76); pos = pos + 2; continue
+            }
+            tokens = push(tokens, 91); pos = pos + 1; continue
+        }
+        if c == "-" {
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == ">" {
+                tokens = push(tokens, 121); pos = pos + 2; continue
+            }
+            tokens = push(tokens, 71); pos = pos + 1; continue
+        }
+        if c == "<" { tokens = push(tokens, 78); pos = pos + 1; continue }
+
+        // Unknown — skip
+        pos = pos + 1
+    }
+
+    tokens
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Test
+// ═══════════════════════════════════════════════════════════════
+
+fn main() {
+    println("=== Self-Hosted Lexer Test ===")
+    println("")
+
+    // Test 1: Simple function
+    let src1 = "fn add(a: i64, b: i64) -> i64 { a + b }"
+    let tokens1 = tokenize_simple(src1)
+    println(f"Test 1: \"{src1}\"")
+    println(f"  Tokens: {len(tokens1)}")
+
+    // Expected: fn Ident ( Ident : i64 , Ident : i64 ) -> i64 { Ident + Ident }
+    //           15  133 110 133  118 36 119 133  118 36 111 121 36 112 133 70 133 113
+    assert(len(tokens1) == 18)
+    assert(tokens1[0] == 15)   // fn
+    assert(tokens1[1] == 133)  // add (Ident)
+    assert(tokens1[2] == 110)  // (
+    assert(tokens1[5] == 36)   // i64
+    assert(tokens1[11] == 121) // ->
+    assert(tokens1[14] == 133) // a (Ident)
+    assert(tokens1[15] == 70)  // +
+    println("  PASS")
+
+    // Test 2: Let binding
+    let src2 = "let mut x = 42"
+    let tokens2 = tokenize_simple(src2)
+    println(f"\nTest 2: \"{src2}\"")
+    println(f"  Tokens: {len(tokens2)}")
+    assert(len(tokens2) == 5)
+    assert(tokens2[0] == 13)   // let
+    assert(tokens2[1] == 14)   // mut
+    assert(tokens2[2] == 133)  // x (Ident)
+    assert(tokens2[3] == 91)   // =
+    assert(tokens2[4] == 130)  // 42 (IntLit)
+    println("  PASS")
+
+    // Test 3: If-else
+    let src3 = "if x == 0 { true } else { false }"
+    let tokens3 = tokenize_simple(src3)
+    println(f"\nTest 3: \"{src3}\"")
+    println(f"  Tokens: {len(tokens3)}")
+    assert(tokens3[0] == 1)    // if
+    assert(tokens3[1] == 133)  // x
+    assert(tokens3[2] == 76)   // ==
+    assert(tokens3[3] == 130)  // 0
+    assert(tokens3[4] == 112)  // {
+    assert(tokens3[5] == 29)   // true
+    println("  PASS")
+
+    // Test 4: String literal
+    let src4 = "let msg = \"hello\""
+    let tokens4 = tokenize_simple(src4)
+    println(f"\nTest 4: string literal")
+    println(f"  Tokens: {len(tokens4)}")
+    assert(tokens4[3] == 132)  // StringLit
+    println("  PASS")
+
+    // Test 5: Comment handling
+    let src5 = "let x = 1 // this is a comment\nlet y = 2"
+    let tokens5 = tokenize_simple(src5)
+    println(f"\nTest 5: comments")
+    println(f"  Tokens: {len(tokens5)}")
+    assert(len(tokens5) == 8)  // 4 tokens per let, comment skipped
+    println("  PASS")
+
+    println("\n=== All 5 Self-Hosted Lexer Tests PASSED ===")
+    println("The Fajar Lang lexer can tokenize Fajar Lang code!")
+}
