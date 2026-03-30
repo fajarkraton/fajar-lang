@@ -5,9 +5,10 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v7.0.0](https://img.shields.io/badge/release-v7.0.0_Integrity-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0)
-[![Tests](https://img.shields.io/badge/tests-5%2C563_passing-brightgreen)]()
-[![LOC](https://img.shields.io/badge/LOC-335K_Rust-informational)]()
+[![Release v9.0.1](https://img.shields.io/badge/release-v9.0.1_Ascension-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1)
+[![Tests](https://img.shields.io/badge/tests-7%2C468_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![LOC](https://img.shields.io/badge/LOC-340K_Rust-informational)]()
+[![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
 
@@ -423,8 +424,15 @@ ARM64 benchmarks on Radxa Dragon Q6A (Qualcomm QCS6490, 8-core Kryo 670):
 | `fj bench <file.fj>` | Run micro-benchmarks |
 | `fj lsp` | Start Language Server Protocol server |
 | `fj add <package>` | Add a package dependency |
+| `fj gui <file.fj>` | Launch GUI window (`--features gui`) |
+| `fj debug <file.fj>` | Start DAP debugger session |
+| `fj profile <file.fj>` | Profile function call timings |
+| `fj verify <file.fj>` | Formal verification (`--features smt`) |
 | `fj dump-tokens <file.fj>` | Inspect lexer output |
 | `fj dump-ast <file.fj>` | Inspect parser AST |
+| `fj install <package>` | Install package from registry |
+| `fj search <query>` | Search package registry |
+| `fj publish` | Publish package to registry |
 
 ---
 
@@ -435,31 +443,37 @@ fajar-lang/
   src/
     lexer/              Tokenization (82+ token kinds)
     parser/             AST (Pratt + recursive descent, macros)
-    analyzer/           Types, scope, borrow checker, effects, GAT
-    interpreter/        Tree-walking evaluator
+    analyzer/           Types, scope, borrow checker, NLL CFG
+    interpreter/        Tree-walking evaluator + async runtime (tokio bridge)
     vm/                 Bytecode compiler + VM (45 opcodes)
     codegen/
-      cranelift/        Cranelift JIT/AOT (150+ runtime functions)
-      llvm/             LLVM backend (inkwell, O0-O3 + LTO)
+      cranelift/        Cranelift JIT/AOT (150+ runtime fns, security canary)
+      llvm/             LLVM backend (inkwell, O0-O3 + LTO + PGO)
       wasm/             WebAssembly backend
     runtime/
       os/               Memory, IRQ, syscall, paging, drivers
       ml/               Tensor, autograd, layers, optimizers, GPU
-    debugger/           DAP server (breakpoints, stepping, variables)
-    lsp/                Language Server Protocol
+    gui/                Windowing (winit), widgets, layout, bitmap font
+    debugger/           DAP server (breakpoints, stepping, time-travel)
+    lsp/                LSP server (inlay hints, signature help, semantic tokens)
     formatter/          Code formatter
-    package/            Package manager, registry, signing
+    package/            Package manager, registry, signing, SBOM
+    profiler/           Function profiling (interpreter + Cranelift native)
+    distributed/        TCP RPC, clustering, tensor allreduce
+    concurrency_v2/     Async actors (tokio::spawn + mpsc)
+    stdlib_v3/          Crypto, networking, database, formats, regex
     bsp/                Board support packages (STM32, ESP32, Q6A)
-    rtos/               FreeRTOS, Zephyr, RTIC integration
-    iot/                WiFi, BLE, MQTT, LoRaWAN, OTA
+    plugin/             Compiler plugin system (AST-phase)
+    playground/         WASM playground (wasm-bindgen)
   stdlib/               Fajar Lang standard library (.fj source)
-  examples/             126 example .fj programs
+  examples/             178 example .fj programs
   tests/                Integration tests (eval, ML, OS, safety, property)
   benches/              Criterion benchmarks
-  packages/             7 standard packages
+  packages/             37 standard packages
   editors/vscode/       VS Code extension
   book/                 mdBook documentation (40+ pages)
-  docs/                 44+ reference documents
+  playground/           Browser-based playground (Monaco + WASM)
+  docs/                 55+ reference documents
 ```
 
 ---
@@ -468,19 +482,25 @@ fajar-lang/
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | 335,688 Rust across 343 files |
-| Tests | 5,563 (0 failures, 0 clippy warnings) |
-| Examples | 173 `.fj` programs (170 pass `fj check`) |
+| Compiler LOC | 339,769 Rust across 343 files |
+| Tests | 7,468 (0 failures, 0 clippy warnings, 37 test suites) |
+| Examples | 178 `.fj` programs (175 pass `fj check`) |
 | Error codes | 80+ across 10 categories |
 | Standard packages | 37 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
-| Built-in functions | 411 bare-metal runtime + 14 IoT builtins (ws/mqtt/ble) |
+| Built-in functions | 430+ (runtime, networking, async, regex, GUI, HTTP framework) |
 | Codegen backends | 3 (Cranelift, LLVM, WebAssembly) |
 | Cross-compile targets | ARM64, RISC-V, x86_64, Wasm |
-| Security features | Bounds check, overflow check, linter (20 rules), taint analysis |
+| Networking | WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), HTTP/HTTPS |
+| Async runtime | Real tokio I/O (sleep, http_get/post, spawn, join, select) |
+| GUI | winit + softbuffer, bitmap font, button interaction, flex layout |
+| HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
+| Regex | Core stdlib (match, find, replace, captures) with compiled cache |
+| Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |
 | Documentation | 55+ docs, 14 tutorials, 26 references, 15 guides |
-| FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls, natively compiled (362 KB ELF) |
+| FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls |
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
+| Production status | **100% production-ready** (all modules verified by audit) |
 
 ---
 
@@ -488,7 +508,10 @@ fajar-lang/
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **[v7.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0)** | **Integrity** | **Full production audit, 214→0 kernel errors, native OS compile, 14 IoT builtins, security hardening, WASM playground, benchmark suite** |
+| **[v9.0.1](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1)** | **Ascension** | **100% production: real BLE connect/read/write, async_spawn/join/select, HTTPS server (native-tls), 7,468 tests** |
+| [v9.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.0) | Ascension | V10 features: async/await real tokio I/O, HTTP server framework, regex stdlib, LSP enhanced, 4 real-world examples |
+| [v8.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v8.0.0) | Dominion | All gaps closed: real WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), GUI text+interaction, compiler wiring |
+| [v7.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0) | Integrity | Full production audit, 214→0 kernel errors, native OS compile, 14 IoT builtins, security hardening, WASM playground |
 | [v6.1.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v6.1.0) | Illumination | V8 "Dominion" 810 tasks, self-hosting, package registry, IDE, security, GUI |
 | [v5.5.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.5.0) | Illumination | Async/await patterns, declarative macros, derive patterns, advanced traits, const fn |
 | [v5.4.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v5.4.0) | Zenith | FajarOS Nova 20K LOC, GPU compute, ext2, TCP, init system, packages |
