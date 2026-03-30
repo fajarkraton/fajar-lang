@@ -568,8 +568,107 @@ impl<'ctx> LlvmCompiler<'ctx> {
         };
 
         let function = self.module.add_function(&fndef.name, fn_type, None);
+
+        // Apply LLVM function attributes based on Fajar annotations
+        self.apply_function_attributes(function, fndef);
+
         self.functions.insert(fndef.name.clone(), function);
         Ok(function)
+    }
+
+    /// Applies LLVM attributes to a function based on its Fajar Lang annotations.
+    ///
+    /// Supported annotations:
+    /// - `@inline` → AlwaysInline (force inlining at all opt levels)
+    /// - `@inline("never")` → NoInline (prevent inlining even at O3)
+    /// - `@cold` → Cold (mark as unlikely path, placed in .text.unlikely)
+    /// - `@noinline` → NoInline (alias for @inline("never"))
+    ///
+    /// Additionally, reference parameters get automatic attributes:
+    /// - `&mut T` params → `noalias` (no other ref to same memory)
+    /// - `&T` / `&mut T` params → `nonnull` (never null)
+    /// - `&T` params → `readonly` (does not modify pointed-to memory)
+    fn apply_function_attributes(&self, function: FunctionValue<'ctx>, fndef: &FnDef) {
+        // ── Annotation-based attributes ────────────────────────────────
+        if let Some(ref ann) = fndef.annotation {
+            match ann.name.as_str() {
+                "inline" => {
+                    if ann.param.as_deref() == Some("never")
+                        || ann.params.contains(&"never".to_string())
+                    {
+                        // @inline("never") → NoInline
+                        let attr_kind =
+                            inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+                        let attr = self.context.create_enum_attribute(attr_kind, 0);
+                        function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+                    } else {
+                        // @inline → AlwaysInline
+                        let attr_kind =
+                            inkwell::attributes::Attribute::get_named_enum_kind_id("alwaysinline");
+                        let attr = self.context.create_enum_attribute(attr_kind, 0);
+                        function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+                    }
+                }
+                "noinline" => {
+                    let attr_kind =
+                        inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+                    let attr = self.context.create_enum_attribute(attr_kind, 0);
+                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+                }
+                "cold" => {
+                    let attr_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("cold");
+                    let attr = self.context.create_enum_attribute(attr_kind, 0);
+                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+                }
+                _ => {}
+            }
+        }
+
+        // ── Parameter-based attributes ─────────────────────────────────
+        // Reference parameters get noalias/nonnull/readonly attributes
+        for (i, param) in fndef.params.iter().enumerate() {
+            let type_name = type_expr_to_string(&param.ty);
+            let param_idx = i as u32;
+            let loc = inkwell::attributes::AttributeLoc::Param(param_idx);
+
+            if type_name.starts_with("&mut ") || type_name == "RefMut" {
+                // &mut T → noalias (exclusive mutable reference)
+                let noalias_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("noalias");
+                let noalias_attr = self.context.create_enum_attribute(noalias_kind, 0);
+                function.add_attribute(loc, noalias_attr);
+
+                // &mut T → nonnull
+                let nonnull_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("nonnull");
+                let nonnull_attr = self.context.create_enum_attribute(nonnull_kind, 0);
+                function.add_attribute(loc, nonnull_attr);
+            } else if type_name.starts_with('&') || type_name == "Ref" {
+                // &T → nonnull
+                let nonnull_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("nonnull");
+                let nonnull_attr = self.context.create_enum_attribute(nonnull_kind, 0);
+                function.add_attribute(loc, nonnull_attr);
+
+                // &T → readonly (does not write through this reference)
+                let readonly_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("readonly");
+                let readonly_attr = self.context.create_enum_attribute(readonly_kind, 0);
+                function.add_attribute(loc, readonly_attr);
+            }
+        }
+
+        // ── Return value attributes ────────────────────────────────────
+        // Non-void return types that are references get nonnull
+        if let Some(ref ret_ty) = fndef.return_type {
+            let ret_name = type_expr_to_string(ret_ty);
+            if ret_name.starts_with('&') || ret_name == "Ref" || ret_name == "RefMut" {
+                let nonnull_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("nonnull");
+                let nonnull_attr = self.context.create_enum_attribute(nonnull_kind, 0);
+                function.add_attribute(inkwell::attributes::AttributeLoc::Return, nonnull_attr);
+            }
+        }
     }
 
     /// Compiles a function body to LLVM IR.
@@ -4102,5 +4201,279 @@ mod tests {
             LlvmOptLevel::Os.pass_string(),
             LlvmOptLevel::O2.pass_string()
         );
+    }
+
+    // ── V12 Sprint L2: Function Attributes Tests ────────────────────────
+
+    fn make_fndef(
+        name: &str,
+        annotation: Option<crate::parser::ast::Annotation>,
+        params: Vec<Param>,
+    ) -> FnDef {
+        FnDef {
+            is_pub: false,
+            is_const: false,
+            is_async: false,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
+            doc_comment: None,
+            annotation,
+            name: name.to_string(),
+            lifetime_params: vec![],
+            generic_params: vec![],
+            params,
+            return_type: None,
+            where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
+            body: Box::new(Expr::Block {
+                stmts: vec![],
+                expr: Some(Box::new(make_int_lit(0))),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        }
+    }
+
+    fn make_annotation(name: &str) -> crate::parser::ast::Annotation {
+        crate::parser::ast::Annotation {
+            name: name.to_string(),
+            param: None,
+            params: vec![],
+            span: dummy_span(),
+        }
+    }
+
+    fn make_annotation_with_param(name: &str, param: &str) -> crate::parser::ast::Annotation {
+        crate::parser::ast::Annotation {
+            name: name.to_string(),
+            param: Some(param.to_string()),
+            params: vec![],
+            span: dummy_span(),
+        }
+    }
+
+    #[test]
+    fn l2_inline_attribute_applied() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_inline");
+
+        let fndef = make_fndef("fast_fn", Some(make_annotation("inline")), vec![]);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("alwaysinline"),
+            "IR should contain alwaysinline attribute, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_noinline_attribute_applied() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_noinline");
+
+        let fndef = make_fndef("no_inline_fn", Some(make_annotation("noinline")), vec![]);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("noinline"),
+            "IR should contain noinline attribute, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_inline_never_attribute() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_inline_never");
+
+        let fndef = make_fndef(
+            "never_fn",
+            Some(make_annotation_with_param("inline", "never")),
+            vec![],
+        );
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("noinline"),
+            "IR should contain noinline for @inline(\"never\"), got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_cold_attribute_applied() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_cold");
+
+        let fndef = make_fndef("cold_fn", Some(make_annotation("cold")), vec![]);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("cold"),
+            "IR should contain cold attribute, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_no_annotation_no_attributes() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_none");
+
+        let fndef = make_fndef("plain_fn", None, vec![]);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            !ir.contains("alwaysinline"),
+            "plain fn should not have alwaysinline"
+        );
+        assert!(
+            !ir.contains("noinline"),
+            "plain fn should not have noinline"
+        );
+        assert!(!ir.contains(" cold"), "plain fn should not have cold");
+    }
+
+    #[test]
+    fn l2_mut_ref_param_gets_noalias() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_noalias");
+
+        let params = vec![Param {
+            name: "x".to_string(),
+            ty: TypeExpr::Simple {
+                name: "&mut i64".to_string(),
+                span: dummy_span(),
+            },
+            span: dummy_span(),
+        }];
+        let fndef = make_fndef("mut_ref_fn", None, params);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("noalias"),
+            "IR should contain noalias for &mut param, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_ref_param_gets_readonly() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_readonly");
+
+        let params = vec![Param {
+            name: "x".to_string(),
+            ty: TypeExpr::Simple {
+                name: "&i64".to_string(),
+                span: dummy_span(),
+            },
+            span: dummy_span(),
+        }];
+        let fndef = make_fndef("ref_fn", None, params);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("readonly"),
+            "IR should contain readonly for & param, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_ref_param_gets_nonnull() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_nonnull");
+
+        let params = vec![Param {
+            name: "x".to_string(),
+            ty: TypeExpr::Simple {
+                name: "&i64".to_string(),
+                span: dummy_span(),
+            },
+            span: dummy_span(),
+        }];
+        let fndef = make_fndef("ref_fn2", None, params);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("nonnull"),
+            "IR should contain nonnull for & param, got:\n{ir}"
+        );
+    }
+
+    #[test]
+    fn l2_multiple_params_different_attrs() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l2_multi");
+
+        let params = vec![
+            Param {
+                name: "a".to_string(),
+                ty: TypeExpr::Simple {
+                    name: "i64".to_string(),
+                    span: dummy_span(),
+                },
+                span: dummy_span(),
+            },
+            Param {
+                name: "b".to_string(),
+                ty: TypeExpr::Simple {
+                    name: "&i64".to_string(),
+                    span: dummy_span(),
+                },
+                span: dummy_span(),
+            },
+            Param {
+                name: "c".to_string(),
+                ty: TypeExpr::Simple {
+                    name: "&mut i64".to_string(),
+                    span: dummy_span(),
+                },
+                span: dummy_span(),
+            },
+        ];
+        let fndef = make_fndef("multi_fn", None, params);
+        compiler.declare_function(&fndef).unwrap();
+
+        let ir = compiler.print_ir();
+        // Param b (&i64) should get readonly+nonnull
+        // Param c (&mut i64) should get noalias+nonnull
+        assert!(ir.contains("noalias"), "should have noalias for &mut param");
+        assert!(ir.contains("nonnull"), "should have nonnull for ref params");
+        assert!(ir.contains("readonly"), "should have readonly for & param");
+    }
+
+    #[test]
+    fn l2_attribute_kind_ids_nonzero() {
+        // Verify LLVM knows about our attribute names
+        let always = inkwell::attributes::Attribute::get_named_enum_kind_id("alwaysinline");
+        let noinline = inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+        let cold = inkwell::attributes::Attribute::get_named_enum_kind_id("cold");
+        let noalias = inkwell::attributes::Attribute::get_named_enum_kind_id("noalias");
+        let nonnull = inkwell::attributes::Attribute::get_named_enum_kind_id("nonnull");
+        let readonly = inkwell::attributes::Attribute::get_named_enum_kind_id("readonly");
+
+        assert!(always > 0, "alwaysinline should be a known attribute");
+        assert!(noinline > 0, "noinline should be a known attribute");
+        assert!(cold > 0, "cold should be a known attribute");
+        assert!(noalias > 0, "noalias should be a known attribute");
+        assert!(nonnull > 0, "nonnull should be a known attribute");
+        assert!(readonly > 0, "readonly should be a known attribute");
     }
 }
