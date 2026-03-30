@@ -1708,6 +1708,26 @@ impl Interpreter {
                     return self.builtin_regex_captures(args);
                 }
 
+                // HTTP framework builtins (V10 P3)
+                if name == "http_server" {
+                    return self.builtin_http_server(args);
+                }
+                if name == "http_route" {
+                    return self.builtin_http_route(args);
+                }
+                if name == "http_middleware" {
+                    return self.builtin_http_middleware(args);
+                }
+                if name == "http_start" {
+                    return self.builtin_http_start(args);
+                }
+                if name == "request_json" {
+                    return self.builtin_request_json(args);
+                }
+                if name == "response_json" {
+                    return self.builtin_response_json(args);
+                }
+
                 // Async builtins (V10)
                 if name == "async_sleep" {
                     return self.builtin_async_sleep(args);
@@ -7017,6 +7037,366 @@ impl Interpreter {
         self.async_ops
             .insert(task_id, super::AsyncOperation::HttpPost(url, body));
         Ok(Value::Future { task_id })
+    }
+
+    // ── HTTP Framework builtins (V10 P3) ────────────────────────────
+
+    /// http_server(port: i64) -> i64 handle
+    fn builtin_http_server(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let port = match &args[0] {
+            Value::Int(n) => *n as u16,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_server: expected int port".into()).into(),
+                );
+            }
+        };
+        let id = self.next_http_server_id;
+        self.next_http_server_id += 1;
+        self.http_servers.insert(
+            id,
+            super::HttpFrameworkServer {
+                port,
+                routes: Vec::new(),
+                middlewares: Vec::new(),
+            },
+        );
+        Ok(Value::Int(id))
+    }
+
+    /// http_route(handle: i64, method: str, pattern: str, handler_fn: str) -> void
+    fn builtin_http_route(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_route: expected int handle".into()).into(),
+                );
+            }
+        };
+        let method = match &args[1] {
+            Value::Str(s) => s.to_uppercase(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_route: expected string method".into()).into(),
+                );
+            }
+        };
+        let pattern = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_route: expected string pattern".into()).into(),
+                );
+            }
+        };
+        let handler = match &args[3] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_route: expected string handler".into()).into(),
+                );
+            }
+        };
+        let server = self.http_servers.get_mut(&handle).ok_or_else(|| {
+            RuntimeError::TypeError(format!("http_route: invalid server handle {handle}"))
+        })?;
+        server.routes.push((method, pattern, handler));
+        Ok(Value::Null)
+    }
+
+    /// http_middleware(handle: i64, middleware_fn: str) -> void
+    fn builtin_http_middleware(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_middleware: expected int handle".into()).into(),
+                );
+            }
+        };
+        let mw = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "http_middleware: expected string name".into(),
+                )
+                .into());
+            }
+        };
+        let server = self.http_servers.get_mut(&handle).ok_or_else(|| {
+            RuntimeError::TypeError(format!("http_middleware: invalid handle {handle}"))
+        })?;
+        server.middlewares.push(mw);
+        Ok(Value::Null)
+    }
+
+    /// http_start(handle: i64, max_requests: i64) -> i64 (requests served)
+    ///
+    /// Starts the HTTP server, dispatches requests through middleware + router,
+    /// invokes handler functions defined in the .fj program.
+    fn builtin_http_start(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_start: expected int handle".into()).into(),
+                );
+            }
+        };
+        let max_requests = match &args[1] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "http_start: expected int max_requests".into(),
+                )
+                .into());
+            }
+        };
+
+        // Take server config (remove from map to avoid borrow issues).
+        let server = self.http_servers.remove(&handle).ok_or_else(|| {
+            RuntimeError::TypeError(format!("http_start: invalid handle {handle}"))
+        })?;
+
+        let addr = format!("127.0.0.1:{}", server.port);
+        let listener = std::net::TcpListener::bind(&addr)
+            .map_err(|e| RuntimeError::TypeError(format!("http_start: bind {addr}: {e}")))?;
+
+        if self.capture_output {
+            self.output
+                .push(format!("[http] Listening on {addr} (max {max_requests})"));
+        } else {
+            println!("[http] Listening on {addr} (max {max_requests} requests)");
+        }
+
+        let mut served = 0i64;
+        for stream in listener.incoming().take(max_requests) {
+            match stream {
+                Ok(mut stream) => {
+                    use std::io::{BufRead, BufReader, Write};
+                    let mut reader = BufReader::new(&stream);
+
+                    // Parse request line.
+                    let mut request_line = String::new();
+                    if reader.read_line(&mut request_line).is_err() {
+                        continue;
+                    }
+                    let parts: Vec<&str> = request_line.trim().splitn(3, ' ').collect();
+                    let (method, path) = if parts.len() >= 2 {
+                        (parts[0].to_string(), parts[1].to_string())
+                    } else {
+                        continue;
+                    };
+
+                    // Read headers + body.
+                    let mut headers = std::collections::HashMap::new();
+                    let mut content_length = 0usize;
+                    loop {
+                        let mut hdr = String::new();
+                        if reader.read_line(&mut hdr).is_err() || hdr.trim().is_empty() {
+                            break;
+                        }
+                        if let Some((k, v)) = hdr.split_once(':') {
+                            let key = k.trim().to_lowercase();
+                            let val = v.trim().to_string();
+                            if key == "content-length" {
+                                content_length = val.parse().unwrap_or(0);
+                            }
+                            headers.insert(key, val);
+                        }
+                    }
+                    let mut body = vec![0u8; content_length];
+                    if content_length > 0 {
+                        let _ = std::io::Read::read_exact(&mut reader, &mut body);
+                    }
+                    let body_str = String::from_utf8_lossy(&body).to_string();
+
+                    // Run middleware (each middleware fn gets method, path, body as args).
+                    for mw in &server.middlewares {
+                        let call = format!(
+                            "{mw}(\"{method}\", \"{path}\", \"{}\")",
+                            body_str.replace('\"', "\\\"")
+                        );
+                        let _ = self.eval_source(&call);
+                    }
+
+                    // Route matching.
+                    let mut response_body = String::new();
+                    let mut status = 404u16;
+                    let mut matched = false;
+
+                    for (route_method, pattern, handler) in &server.routes {
+                        if *route_method != method {
+                            continue;
+                        }
+                        if let Some(params) = crate::stdlib_v3::net::match_route(pattern, &path) {
+                            // Build handler call with method, path, body, params_json.
+                            let params_json = format!(
+                                "{{{}}}",
+                                params
+                                    .iter()
+                                    .map(|(k, v)| format!("\"{k}\": \"{v}\""))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                            let call = format!(
+                                "{handler}(\"{method}\", \"{path}\", \"{}\", '{params_json}')",
+                                body_str.replace('\"', "\\\"")
+                            );
+                            match self.eval_source(&call) {
+                                Ok(Value::Str(s)) => {
+                                    response_body = s;
+                                    status = 200;
+                                }
+                                Ok(Value::Int(code)) => {
+                                    status = code as u16;
+                                }
+                                Ok(other) => {
+                                    response_body = format!("{other}");
+                                    status = 200;
+                                }
+                                Err(e) => {
+                                    response_body = format!("{{\"error\": \"{e}\"}}");
+                                    status = 500;
+                                }
+                            }
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if !matched {
+                        response_body = format!("{{\"error\": \"no route: {method} {path}\"}}");
+                    }
+
+                    let status_text = match status {
+                        200 => "OK",
+                        201 => "Created",
+                        204 => "No Content",
+                        400 => "Bad Request",
+                        404 => "Not Found",
+                        500 => "Internal Server Error",
+                        _ => "Unknown",
+                    };
+                    let resp = format!(
+                        "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}",
+                        response_body.len()
+                    );
+                    let _ = stream.write_all(resp.as_bytes());
+                    served += 1;
+                }
+                Err(_) => break,
+            }
+        }
+        Ok(Value::Int(served))
+    }
+
+    /// request_json(body: str) -> Map
+    ///
+    /// Parse a JSON string into a Map value.
+    fn builtin_request_json(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let body = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("request_json: expected string".into()).into());
+            }
+        };
+        // Parse JSON string into a Map value.
+        use crate::stdlib_v3::formats::JsonValue;
+        fn json_to_value(jv: &JsonValue) -> Value {
+            match jv {
+                JsonValue::String(s) => Value::Str(s.clone()),
+                JsonValue::Number(n) => {
+                    if n.fract() == 0.0 {
+                        Value::Int(*n as i64)
+                    } else {
+                        Value::Float(*n)
+                    }
+                }
+                JsonValue::Bool(b) => Value::Bool(*b),
+                JsonValue::Null => Value::Null,
+                JsonValue::Array(arr) => Value::Array(arr.iter().map(json_to_value).collect()),
+                JsonValue::Object(entries) => {
+                    let map: HashMap<String, Value> = entries
+                        .iter()
+                        .map(|(k, v)| (k.clone(), json_to_value(v)))
+                        .collect();
+                    Value::Map(map)
+                }
+            }
+        }
+        match crate::stdlib_v3::formats::json_parse(&body) {
+            Ok(json_val) => Ok(json_to_value(&json_val)),
+            Err(_) => Ok(Value::Null),
+        }
+    }
+
+    /// response_json(status: i64, body: str) -> str
+    ///
+    /// Format a JSON response string with proper HTTP status.
+    fn builtin_response_json(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let status = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("response_json: expected int status".into()).into(),
+                );
+            }
+        };
+        let body = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("response_json: expected string body".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Str(format!(
+            "{{\"status\": {status}, \"data\": {body}}}"
+        )))
     }
 }
 

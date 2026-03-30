@@ -236,6 +236,19 @@ impl MqttBroker {
     }
 }
 
+/// An HTTP server framework instance (V10 P3).
+///
+/// Stores routes and middleware registered by .fj code. The serving loop
+/// dispatches incoming requests to the matching handler function by name.
+pub struct HttpFrameworkServer {
+    /// Listening port.
+    pub port: u16,
+    /// Registered routes: (method, pattern, handler_fn_name).
+    pub routes: Vec<(String, String, String)>,
+    /// Middleware function names, executed in order.
+    pub middlewares: Vec<String>,
+}
+
 /// A real async operation to be executed via tokio (V10).
 ///
 /// These are created by `async_sleep`, `async_http_get`, etc. and resolved
@@ -566,6 +579,10 @@ pub struct Interpreter {
     ble_adapter: BleAdapter,
     /// GUI state accumulated by gui_* builtins.
     gui_state: GuiState,
+    /// HTTP framework servers: handle → server state.
+    http_servers: HashMap<i64, HttpFrameworkServer>,
+    /// Next HTTP server handle.
+    next_http_server_id: i64,
 }
 
 impl Interpreter {
@@ -612,6 +629,8 @@ impl Interpreter {
             next_mqtt_id: 1,
             ble_adapter: BleAdapter::new(),
             gui_state: GuiState::default(),
+            http_servers: HashMap::new(),
+            next_http_server_id: 1,
         };
         interp.register_builtins();
         interp
@@ -660,6 +679,8 @@ impl Interpreter {
             next_mqtt_id: 1,
             ble_adapter: BleAdapter::new(),
             gui_state: GuiState::default(),
+            http_servers: HashMap::new(),
+            next_http_server_id: 1,
         };
         interp.register_builtins();
         interp
@@ -795,6 +816,7 @@ impl Interpreter {
         all.extend(Self::gui_builtins());
         all.extend(Self::regex_builtins());
         all.extend(Self::async_builtins());
+        all.extend(Self::http_framework_builtins());
 
         for name in &all {
             self.env
@@ -1311,6 +1333,18 @@ impl Interpreter {
     /// Async builtins for real I/O operations via tokio.
     fn async_builtins() -> Vec<&'static str> {
         vec!["async_sleep", "async_http_get", "async_http_post"]
+    }
+
+    /// HTTP framework builtins (V10 P3).
+    fn http_framework_builtins() -> Vec<&'static str> {
+        vec![
+            "http_server",
+            "http_route",
+            "http_middleware",
+            "http_start",
+            "request_json",
+            "response_json",
+        ]
     }
 
     /// Regex builtins for pattern matching.

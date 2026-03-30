@@ -673,6 +673,17 @@ impl TypeChecker {
                     inner: Box::new(Type::Str),
                 },
             ),
+            // HTTP framework builtins (V10 P3)
+            ("http_server", vec![Type::I64], Type::I64),
+            (
+                "http_route",
+                vec![Type::I64, Type::Str, Type::Str, Type::Str],
+                Type::Void,
+            ),
+            ("http_middleware", vec![Type::I64, Type::Str], Type::Void),
+            ("http_start", vec![Type::I64, Type::I64], Type::I64),
+            ("request_json", vec![Type::Str], Type::Unknown),
+            ("response_json", vec![Type::I64, Type::Str], Type::Str),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {

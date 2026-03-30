@@ -16499,7 +16499,6 @@ fn v10_regex_replace() {
 
 #[test]
 // ── V10 Phase 2: Async/Await runtime tests ──
-
 #[test]
 fn v10_async_sleep_real() {
     let src = r#"
@@ -16561,4 +16560,48 @@ fn v10_regex_captures() {
     "#;
     let out = eval_output(src);
     assert_eq!(out, vec!["3", "matched"]);
+}
+
+// ── V10 Phase 3: HTTP framework tests ──
+
+#[test]
+fn v10_http_server_create_and_route() {
+    let src = r#"
+        fn handler(method: str, path: str, body: str, params: str) -> str {
+            "hello"
+        }
+        fn main() -> void {
+            let srv = http_server(0)
+            http_route(srv, "GET", "/api/test", "handler")
+            println(f"server handle: {srv}")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["server handle: 1"]);
+}
+
+#[test]
+fn v10_request_json_parse() {
+    let src = r#"
+        fn main() -> void {
+            let data = request_json("{\"name\": \"Fajar\", \"age\": 30}")
+            if data != null {
+                println("parsed")
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["parsed"]);
+}
+
+#[test]
+fn v10_response_json_format() {
+    let src = r#"
+        fn main() -> void {
+            let resp = response_json(200, "{\"ok\": true}")
+            println(resp)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec![r#"{"status": 200, "data": {"ok": true}}"#]);
 }
