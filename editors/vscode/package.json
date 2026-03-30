@@ -1,14 +1,35 @@
 {
   "name": "fajar-lang",
   "displayName": "Fajar Lang",
-  "description": "Language support for Fajar Lang (.fj) — syntax highlighting, LSP integration, and debugging",
-  "version": "3.0.0",
+  "description": "Fajar Lang (.fj) — systems programming for embedded ML & OS. Syntax highlighting, LSP (inlay hints, signature help, goto-def), debugging (DAP), snippets. 340K LOC compiler, 7,468 tests.",
+  "version": "9.0.1",
   "publisher": "primecore",
   "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fajarkraton/fajar-lang"
+  },
+  "homepage": "https://github.com/fajarkraton/fajar-lang",
+  "bugs": {
+    "url": "https://github.com/fajarkraton/fajar-lang/issues"
+  },
+  "keywords": [
+    "fajar",
+    "fj",
+    "systems programming",
+    "embedded",
+    "machine learning",
+    "tensor",
+    "os development",
+    "compiler",
+    "cranelift",
+    "llvm"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
-  "categories": ["Programming Languages", "Debuggers"],
+  "categories": ["Programming Languages", "Debuggers", "Snippets", "Linters"],
   "activationEvents": [
     "onLanguage:fajar",
     "onDebugResolve:fajar"

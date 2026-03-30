@@ -9,6 +9,7 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 [![Tests](https://img.shields.io/badge/tests-7%2C468_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![LOC](https://img.shields.io/badge/LOC-340K_Rust-informational)]()
 [![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
+[![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
 
