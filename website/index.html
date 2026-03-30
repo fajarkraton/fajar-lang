@@ -3,7 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fajar Lang - Embedded ML + OS Integration Language</title>
+    <title>Fajar Lang - Systems Programming for Embedded ML & OS Development</title>
+    <meta name="description" content="Fajar Lang (fj) — a statically-typed systems programming language for embedded ML and OS development. 340K LOC compiler, 7,468 tests, Cranelift + LLVM backends. Made in Indonesia.">
+    <meta property="og:title" content="Fajar Lang — Embedded ML + OS in One Language">
+    <meta property="og:description" content="The only language where an OS kernel and a neural network share the same codebase, type system, and compiler.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://fajarkraton.github.io/fajar-lang/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Fajar Lang — Systems Programming Language">
+    <meta name="twitter:description" content="340K LOC, 7,468 tests, Cranelift + LLVM, async/await, WebSocket, MQTT, HTTP framework. 100% production-ready.">
     <style>
         :root {
             --primary: #1a1a2e;
@@ -252,10 +260,10 @@
     <div class="logo">fj<span>lang</span></div>
     <div class="links">
         <a href="index.html">Home</a>
+        <a href="https://fajarkraton.github.io/fajar-lang/">Docs</a>
         <a href="download.html">Download</a>
         <a href="comparison.html">Compare</a>
         <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a>
-        <a href="https://github.com/fajarkraton/fajar-lang/tree/main/book">Docs</a>
     </div>
 </nav>
 
@@ -296,10 +304,59 @@
         </div>
         <div class="feature-card">
             <h3>Performance</h3>
-            <p>Cranelift native codegen with ARM64 and RISC-V cross-compilation.
+            <p>Cranelift + LLVM native codegen with ARM64 and RISC-V cross-compilation.
                No garbage collector, no runtime overhead, deterministic execution.</p>
         </div>
+        <div class="feature-card">
+            <h3>Async/Await</h3>
+            <p>Real async I/O via tokio — async_sleep, async_http_get, async_spawn,
+               async_join, async_select. Cooperative + real concurrency.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Networking</h3>
+            <p>WebSocket (tungstenite + TLS), MQTT (rumqttc), BLE (btleplug),
+               HTTP/HTTPS server framework with router + middleware.</p>
+        </div>
+        <div class="feature-card">
+            <h3>GUI Toolkit</h3>
+            <p>Native OS windowing via winit + softbuffer. Bitmap font text rendering,
+               interactive buttons with callbacks, flex layout engine.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Developer Tools</h3>
+            <p>LSP with inlay hints + signature help, VS Code extension, formatter,
+               debugger (DAP), test framework, package manager, playground.</p>
+        </div>
     </div>
+</section>
+
+<section style="padding: 3rem 2rem; text-align: center;">
+    <h2 style="font-size: 2rem; margin-bottom: 2rem;">By the Numbers</h2>
+    <div style="display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; max-width: 900px; margin: 0 auto;">
+        <div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e94560;">340K</div>
+            <div style="color: #a0a0b0;">Lines of Rust</div>
+        </div>
+        <div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #61afef;">7,468</div>
+            <div style="color: #a0a0b0;">Tests Passing</div>
+        </div>
+        <div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #98c379;">179</div>
+            <div style="color: #a0a0b0;">Example Programs</div>
+        </div>
+        <div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e5c07b;">37</div>
+            <div style="color: #a0a0b0;">Standard Packages</div>
+        </div>
+        <div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #c678dd;">100%</div>
+            <div style="color: #a0a0b0;">Production Ready</div>
+        </div>
+    </div>
+    <p style="color: #a0a0b0; margin-top: 2rem; font-size: 0.9rem;">
+        v9.0.1 "Ascension" — Cranelift + LLVM backends, 3 platforms (Linux/macOS/Windows), all CI green
+    </p>
 </section>
 
 <section class="code-section">
@@ -386,8 +443,8 @@
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CONTRIBUTING.md">Contributing</a>
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>
     </div>
-    <p>Fajar Lang is open source under the MIT License.</p>
-    <p>Created by Fajar (TaxPrime / PrimeCore.id)</p>
+    <p>Fajar Lang is open source under the MIT License. v9.0.1 "Ascension"</p>
+    <p>Created by <a href="https://github.com/fajarkraton">Muhamad Fajar Putranto</a> (TaxPrime / PrimeCore.id) - Made in Indonesia</p>
 </footer>
 
 <!--
