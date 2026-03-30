@@ -260,6 +260,12 @@ pub enum AsyncOperation {
     HttpGet(String),
     /// HTTP POST request to the given URL with body.
     HttpPost(String, String),
+    /// Spawn: execute a function body as a concurrent task.
+    Spawn(Box<crate::parser::ast::Expr>, Rc<RefCell<Environment>>),
+    /// Join: wait for multiple futures to complete.
+    Join(Vec<u64>),
+    /// Select: wait for the first future to complete.
+    Select(Vec<u64>),
 }
 
 /// Simulated BLE (Bluetooth Low Energy) device.
@@ -724,6 +730,60 @@ impl Interpreter {
                     Ok(resp) => Ok(Value::Str(resp)),
                     Err(e) => Err(RuntimeError::TypeError(format!("async_http_post: {e}"))),
                 }
+            }
+            AsyncOperation::Spawn(body, env) => {
+                // Execute the spawned task body immediately (cooperative).
+                // True thread-level concurrency requires Arc<Mutex<>> refactor (V11).
+                let prev_env = self.env.clone();
+                self.env = env;
+                let result = self.eval_expr(&body);
+                self.env = prev_env;
+                match result {
+                    Ok(val) => Ok(val),
+                    Err(e) => Err(RuntimeError::TypeError(format!("async_spawn: {e}"))),
+                }
+            }
+            AsyncOperation::Join(task_ids) => {
+                // Execute all pending tasks and collect results.
+                let mut results = Vec::new();
+                for tid in task_ids {
+                    if let Some(op) = self.async_ops.remove(&tid) {
+                        match self.execute_async_op(op) {
+                            Ok(val) => results.push(val),
+                            Err(e) => results.push(Value::Str(format!("error: {e}"))),
+                        }
+                    } else if let Some((body, env)) = self.async_tasks.remove(&tid) {
+                        let prev_env = self.env.clone();
+                        self.env = env;
+                        match self.eval_expr(&body) {
+                            Ok(val) => results.push(val),
+                            Err(e) => results.push(Value::Str(format!("error: {e}"))),
+                        }
+                        self.env = prev_env;
+                    } else {
+                        results.push(Value::Null);
+                    }
+                }
+                Ok(Value::Array(results))
+            }
+            AsyncOperation::Select(task_ids) => {
+                // Execute tasks sequentially, return the first successful result.
+                for tid in task_ids {
+                    if let Some(op) = self.async_ops.remove(&tid) {
+                        if let Ok(val) = self.execute_async_op(op) {
+                            return Ok(val);
+                        }
+                    } else if let Some((body, env)) = self.async_tasks.remove(&tid) {
+                        let prev_env = self.env.clone();
+                        self.env = env;
+                        let result = self.eval_expr(&body);
+                        self.env = prev_env;
+                        if let Ok(val) = result {
+                            return Ok(val);
+                        }
+                    }
+                }
+                Ok(Value::Null)
             }
         }
     }
@@ -1332,7 +1392,14 @@ impl Interpreter {
 
     /// Async builtins for real I/O operations via tokio.
     fn async_builtins() -> Vec<&'static str> {
-        vec!["async_sleep", "async_http_get", "async_http_post"]
+        vec![
+            "async_sleep",
+            "async_http_get",
+            "async_http_post",
+            "async_spawn",
+            "async_join",
+            "async_select",
+        ]
     }
 
     /// HTTP framework builtins (V10 P3).
@@ -1342,6 +1409,7 @@ impl Interpreter {
             "http_route",
             "http_middleware",
             "http_start",
+            "http_start_tls",
             "request_json",
             "response_json",
         ]

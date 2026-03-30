@@ -16548,6 +16548,38 @@ fn v10_async_sleep_measures_time() {
 }
 
 #[test]
+fn v10_async_spawn_and_join() {
+    let src = r#"
+        fn compute() -> i64 { 42 }
+        fn double() -> i64 { 84 }
+        fn main() -> void {
+            let f1 = async_spawn("compute")
+            let f2 = async_spawn("double")
+            let results = async_join(f1, f2)
+            println(len(results))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["2"]);
+}
+
+#[test]
+fn v10_async_select_first() {
+    let src = r#"
+        fn fast() -> str { "fast" }
+        fn slow() -> str { "slow" }
+        fn main() -> void {
+            let f1 = async_spawn("fast")
+            let f2 = async_spawn("slow")
+            let first = async_select(f1, f2)
+            println(first)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["fast"]);
+}
+
+#[test]
 fn v10_regex_captures() {
     let src = r#"
         fn main() -> void {

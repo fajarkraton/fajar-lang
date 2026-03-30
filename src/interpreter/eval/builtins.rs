@@ -1721,6 +1721,9 @@ impl Interpreter {
                 if name == "http_start" {
                     return self.builtin_http_start(args);
                 }
+                if name == "http_start_tls" {
+                    return self.builtin_http_start_tls(args);
+                }
                 if name == "request_json" {
                     return self.builtin_request_json(args);
                 }
@@ -1737,6 +1740,15 @@ impl Interpreter {
                 }
                 if name == "async_http_post" {
                     return self.builtin_async_http_post(args);
+                }
+                if name == "async_spawn" {
+                    return self.builtin_async_spawn(args);
+                }
+                if name == "async_join" {
+                    return self.builtin_async_join(args);
+                }
+                if name == "async_select" {
+                    return self.builtin_async_select(args);
                 }
 
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
@@ -6331,9 +6343,40 @@ impl Interpreter {
                 );
             }
         };
-        match self.ble_adapter.connect(&addr) {
-            Some(handle) => Ok(Value::Int(handle)),
-            None => Ok(Value::Int(-1)),
+
+        #[cfg(feature = "ble")]
+        {
+            use btleplug::api::{Central, Manager as _, Peripheral as _};
+            use btleplug::platform::Manager;
+            let rt = self.ensure_tokio_runtime();
+            let result = rt.block_on(async {
+                let manager = Manager::new().await.map_err(|e| format!("{e}"))?;
+                let adapters = manager.adapters().await.map_err(|e| format!("{e}"))?;
+                let adapter = adapters.into_iter().next().ok_or("no adapter")?;
+                let peripherals = adapter.peripherals().await.map_err(|e| format!("{e}"))?;
+                for p in peripherals {
+                    if let Ok(Some(props)) = p.properties().await {
+                        if props.address.to_string() == addr {
+                            p.connect().await.map_err(|e| format!("{e}"))?;
+                            p.discover_services().await.map_err(|e| format!("{e}"))?;
+                            return Ok(1i64); // connected
+                        }
+                    }
+                }
+                Err("device not found".to_string())
+            });
+            return match result {
+                Ok(h) => Ok(Value::Int(h)),
+                Err(_) => Ok(Value::Int(-1)),
+            };
+        }
+
+        #[cfg(not(feature = "ble"))]
+        {
+            match self.ble_adapter.connect(&addr) {
+                Some(handle) => Ok(Value::Int(handle)),
+                None => Ok(Value::Int(-1)),
+            }
         }
     }
 
@@ -6360,12 +6403,49 @@ impl Interpreter {
                 );
             }
         };
-        match self.ble_adapter.read(handle, &uuid) {
-            Some(bytes) => {
-                let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
-                Ok(Value::Array(arr))
+
+        #[cfg(feature = "ble")]
+        {
+            use btleplug::api::{Central, Manager as _, Peripheral as _};
+            use btleplug::platform::Manager;
+            let rt = self.ensure_tokio_runtime();
+            let result = rt.block_on(async {
+                let manager = Manager::new().await.map_err(|e| format!("{e}"))?;
+                let adapters = manager.adapters().await.map_err(|e| format!("{e}"))?;
+                let adapter = adapters.into_iter().next().ok_or("no adapter")?;
+                let peripherals = adapter.peripherals().await.map_err(|e| format!("{e}"))?;
+                // Find connected peripheral and read characteristic
+                for p in peripherals {
+                    if p.is_connected().await.unwrap_or(false) {
+                        for ch in p.characteristics() {
+                            if ch.uuid.to_string() == uuid {
+                                let data = p.read(&ch).await.map_err(|e| format!("{e}"))?;
+                                return Ok(data);
+                            }
+                        }
+                    }
+                }
+                Err("characteristic not found".to_string())
+            });
+            let _ = handle; // handle used for simulation fallback
+            return match result {
+                Ok(bytes) => {
+                    let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
+                    Ok(Value::Array(arr))
+                }
+                Err(_) => Ok(Value::Null),
+            };
+        }
+
+        #[cfg(not(feature = "ble"))]
+        {
+            match self.ble_adapter.read(handle, &uuid) {
+                Some(bytes) => {
+                    let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
+                    Ok(Value::Array(arr))
+                }
+                None => Ok(Value::Null),
             }
-            None => Ok(Value::Null),
         }
     }
 
@@ -6394,7 +6474,7 @@ impl Interpreter {
                 );
             }
         };
-        let data = match &args[2] {
+        let data: Vec<u8> = match &args[2] {
             Value::Array(arr) => arr
                 .iter()
                 .map(|v| match v {
@@ -6408,7 +6488,43 @@ impl Interpreter {
                 );
             }
         };
-        Ok(Value::Bool(self.ble_adapter.write(handle, &uuid, data)))
+
+        #[cfg(feature = "ble")]
+        {
+            use btleplug::api::{Central, Manager as _, Peripheral as _, WriteType};
+            use btleplug::platform::Manager;
+            let rt = self.ensure_tokio_runtime();
+            let write_data = data.clone();
+            let result: Result<bool, String> = rt.block_on(async {
+                let manager = Manager::new().await.map_err(|e| format!("{e}"))?;
+                let adapters = manager.adapters().await.map_err(|e| format!("{e}"))?;
+                let adapter = adapters
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "no adapter".to_string())?;
+                let peripherals = adapter.peripherals().await.map_err(|e| format!("{e}"))?;
+                for p in peripherals {
+                    if p.is_connected().await.unwrap_or(false) {
+                        for ch in p.characteristics() {
+                            if ch.uuid.to_string() == uuid {
+                                p.write(&ch, &write_data, WriteType::WithResponse)
+                                    .await
+                                    .map_err(|e| format!("{e}"))?;
+                                return Ok(true);
+                            }
+                        }
+                    }
+                }
+                Ok(false)
+            });
+            let _ = handle;
+            return Ok(Value::Bool(result.unwrap_or(false)));
+        }
+
+        #[cfg(not(feature = "ble"))]
+        {
+            Ok(Value::Bool(self.ble_adapter.write(handle, &uuid, data)))
+        }
     }
 
     /// ble_disconnect(handle: i64)
@@ -6428,8 +6544,34 @@ impl Interpreter {
                 );
             }
         };
-        self.ble_adapter.disconnect(handle);
-        Ok(Value::Null)
+
+        #[cfg(feature = "ble")]
+        {
+            use btleplug::api::{Central, Manager as _, Peripheral as _};
+            use btleplug::platform::Manager;
+            let rt = self.ensure_tokio_runtime();
+            let _ = rt.block_on(async {
+                let manager = Manager::new().await.ok()?;
+                let adapters = manager.adapters().await.ok()?;
+                let adapter = adapters.into_iter().next()?;
+                let peripherals = adapter.peripherals().await.ok()?;
+                for p in peripherals {
+                    if p.is_connected().await.unwrap_or(false) {
+                        let _ = p.disconnect().await;
+                        return Some(());
+                    }
+                }
+                None
+            });
+            let _ = handle;
+            return Ok(Value::Null);
+        }
+
+        #[cfg(not(feature = "ble"))]
+        {
+            self.ble_adapter.disconnect(handle);
+            Ok(Value::Null)
+        }
     }
 
     /// Extract two i64 values from args.
@@ -7039,6 +7181,112 @@ impl Interpreter {
         Ok(Value::Future { task_id })
     }
 
+    /// async_spawn(fn_name: str) -> Future
+    ///
+    /// Spawns an async function as a task. The function is evaluated when
+    /// the returned Future is awaited (cooperative concurrency).
+    fn builtin_async_spawn(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let fn_name = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("async_spawn: expected string fn name".into()).into(),
+                );
+            }
+        };
+        // Look up the function in the environment.
+        let fn_val = self.env.borrow().lookup(&fn_name).ok_or_else(|| {
+            RuntimeError::TypeError(format!("async_spawn: function '{fn_name}' not found"))
+        })?;
+        match fn_val {
+            Value::Function(fv) => {
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+                self.async_ops.insert(
+                    task_id,
+                    super::AsyncOperation::Spawn(fv.body.clone(), fv.closure_env.clone()),
+                );
+                Ok(Value::Future { task_id })
+            }
+            _ => Err(RuntimeError::TypeError(format!(
+                "async_spawn: '{fn_name}' is not a function"
+            ))
+            .into()),
+        }
+    }
+
+    /// async_join(futures...) -> [results]
+    ///
+    /// Waits for all futures to complete and returns an array of results.
+    fn builtin_async_join(&mut self, args: Vec<Value>) -> EvalResult {
+        let mut task_ids = Vec::new();
+        for arg in &args {
+            match arg {
+                Value::Future { task_id } => task_ids.push(*task_id),
+                Value::Array(arr) => {
+                    for v in arr {
+                        if let Value::Future { task_id } = v {
+                            task_ids.push(*task_id);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if task_ids.is_empty() {
+            return Ok(Value::Array(Vec::new()));
+        }
+        let join_id = self.next_task_id;
+        self.next_task_id += 1;
+        self.async_ops
+            .insert(join_id, super::AsyncOperation::Join(task_ids));
+        // Execute immediately (join is synchronous in the interpreter).
+        if let Some(op) = self.async_ops.remove(&join_id) {
+            self.execute_async_op(op).map_err(EvalError::Runtime)
+        } else {
+            Ok(Value::Array(Vec::new()))
+        }
+    }
+
+    /// async_select(futures...) -> first result
+    ///
+    /// Returns the result of the first future to complete.
+    fn builtin_async_select(&mut self, args: Vec<Value>) -> EvalResult {
+        let mut task_ids = Vec::new();
+        for arg in &args {
+            match arg {
+                Value::Future { task_id } => task_ids.push(*task_id),
+                Value::Array(arr) => {
+                    for v in arr {
+                        if let Value::Future { task_id } = v {
+                            task_ids.push(*task_id);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if task_ids.is_empty() {
+            return Ok(Value::Null);
+        }
+        let select_id = self.next_task_id;
+        self.next_task_id += 1;
+        self.async_ops
+            .insert(select_id, super::AsyncOperation::Select(task_ids));
+        if let Some(op) = self.async_ops.remove(&select_id) {
+            self.execute_async_op(op).map_err(EvalError::Runtime)
+        } else {
+            Ok(Value::Null)
+        }
+    }
+
     // ── HTTP Framework builtins (V10 P3) ────────────────────────────
 
     /// http_server(port: i64) -> i64 handle
@@ -7318,6 +7566,165 @@ impl Interpreter {
             }
         }
         Ok(Value::Int(served))
+    }
+
+    /// http_start_tls(handle: i64, max_requests: i64, cert_path: str, key_path: str) -> i64
+    ///
+    /// Starts an HTTPS server with TLS using a PEM certificate and key.
+    /// Requires `--features https`.
+    fn builtin_http_start_tls(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let handle = match &args[0] {
+            Value::Int(h) => *h,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("http_start_tls: expected int handle".into()).into(),
+                );
+            }
+        };
+        let max_requests = match &args[1] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "http_start_tls: expected int max_requests".into(),
+                )
+                .into());
+            }
+        };
+        let cert_path = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "http_start_tls: expected string cert_path".into(),
+                )
+                .into());
+            }
+        };
+        let key_path = match &args[3] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "http_start_tls: expected string key_path".into(),
+                )
+                .into());
+            }
+        };
+
+        #[cfg(feature = "https")]
+        {
+            let server = self.http_servers.remove(&handle).ok_or_else(|| {
+                RuntimeError::TypeError(format!("http_start_tls: invalid handle {handle}"))
+            })?;
+
+            // Read certificate and key PEM files.
+            let cert_pem = std::fs::read(&cert_path)
+                .map_err(|e| RuntimeError::TypeError(format!("http_start_tls: read cert: {e}")))?;
+            let key_pem = std::fs::read(&key_path)
+                .map_err(|e| RuntimeError::TypeError(format!("http_start_tls: read key: {e}")))?;
+
+            let identity = native_tls::Identity::from_pkcs8(&cert_pem, &key_pem)
+                .map_err(|e| RuntimeError::TypeError(format!("http_start_tls: identity: {e}")))?;
+            let acceptor = native_tls::TlsAcceptor::new(identity)
+                .map_err(|e| RuntimeError::TypeError(format!("http_start_tls: acceptor: {e}")))?;
+
+            let addr = format!("127.0.0.1:{}", server.port);
+            let listener = std::net::TcpListener::bind(&addr).map_err(|e| {
+                RuntimeError::TypeError(format!("http_start_tls: bind {addr}: {e}"))
+            })?;
+
+            if self.capture_output {
+                self.output
+                    .push(format!("[https] Listening on {addr} (TLS)"));
+            } else {
+                println!("[https] Listening on {addr} (TLS, max {max_requests} requests)");
+            }
+
+            let mut served = 0i64;
+            for stream in listener.incoming().take(max_requests) {
+                match stream {
+                    Ok(tcp_stream) => {
+                        let tls_stream = match acceptor.accept(tcp_stream) {
+                            Ok(s) => s,
+                            Err(_) => continue,
+                        };
+                        use std::io::{Read as IoRead, Write};
+                        let mut tls_stream = tls_stream;
+                        // Read the full request (up to 8KB).
+                        let mut buf = vec![0u8; 8192];
+                        let n = tls_stream.read(&mut buf).unwrap_or(0);
+                        let request_str = String::from_utf8_lossy(&buf[..n]);
+                        let first_line = request_str.lines().next().unwrap_or("");
+                        let parts: Vec<&str> = first_line.splitn(3, ' ').collect();
+                        let (method, path) = if parts.len() >= 2 {
+                            (parts[0].to_string(), parts[1].to_string())
+                        } else {
+                            continue;
+                        };
+
+                        // Route matching (same as http_start).
+                        let mut response_body = String::new();
+                        let mut status = 404u16;
+                        for (route_method, pattern, handler) in &server.routes {
+                            if *route_method != method {
+                                continue;
+                            }
+                            if crate::stdlib_v3::net::match_route(pattern, &path).is_some() {
+                                let call =
+                                    format!("{handler}(\"{method}\", \"{path}\", \"\", \"{{}}\")");
+                                match self.eval_source(&call) {
+                                    Ok(Value::Str(s)) => {
+                                        response_body = s;
+                                        status = 200;
+                                    }
+                                    Ok(other) => {
+                                        response_body = format!("{other}");
+                                        status = 200;
+                                    }
+                                    Err(e) => {
+                                        response_body = format!("{{\"error\": \"{e}\"}}");
+                                        status = 500;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        if response_body.is_empty() && status == 404 {
+                            response_body = format!("{{\"error\": \"no route: {method} {path}\"}}");
+                        }
+
+                        let status_text = match status {
+                            200 => "OK",
+                            404 => "Not Found",
+                            500 => "Internal Server Error",
+                            _ => "Unknown",
+                        };
+                        let resp = format!(
+                            "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}",
+                            response_body.len()
+                        );
+                        let _ = tls_stream.write_all(resp.as_bytes());
+                        served += 1;
+                    }
+                    Err(_) => break,
+                }
+            }
+            return Ok(Value::Int(served));
+        }
+
+        #[cfg(not(feature = "https"))]
+        {
+            let _ = (handle, max_requests, cert_path, key_path);
+            Err(RuntimeError::TypeError(
+                "http_start_tls: requires --features https (native-tls)".into(),
+            )
+            .into())
+        }
     }
 
     /// request_json(body: str) -> Map

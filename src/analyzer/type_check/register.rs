@@ -673,6 +673,15 @@ impl TypeChecker {
                     inner: Box::new(Type::Str),
                 },
             ),
+            (
+                "async_spawn",
+                vec![Type::Str],
+                Type::Future {
+                    inner: Box::new(Type::Unknown),
+                },
+            ),
+            ("async_join", vec![Type::Unknown], Type::Unknown),
+            ("async_select", vec![Type::Unknown], Type::Unknown),
             // HTTP framework builtins (V10 P3)
             ("http_server", vec![Type::I64], Type::I64),
             (
@@ -682,6 +691,11 @@ impl TypeChecker {
             ),
             ("http_middleware", vec![Type::I64, Type::Str], Type::Void),
             ("http_start", vec![Type::I64, Type::I64], Type::I64),
+            (
+                "http_start_tls",
+                vec![Type::I64, Type::I64, Type::Str, Type::Str],
+                Type::I64,
+            ),
             ("request_json", vec![Type::Str], Type::Unknown),
             ("response_json", vec![Type::I64, Type::Str], Type::Str),
         ];
