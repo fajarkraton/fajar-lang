@@ -16498,6 +16498,57 @@ fn v10_regex_replace() {
 }
 
 #[test]
+// ── V10 Phase 2: Async/Await runtime tests ──
+
+#[test]
+fn v10_async_sleep_real() {
+    let src = r#"
+        fn main() -> void {
+            let start = 1
+            let fut = async_sleep(50)
+            let result = fut.await
+            println("slept")
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["slept"]);
+}
+
+#[test]
+fn v10_async_fn_cooperative() {
+    let src = r#"
+        async fn compute() -> i64 { 42 }
+        fn main() -> void {
+            let fut = compute()
+            let result = fut.await
+            println(result)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["42"]);
+}
+
+#[test]
+fn v10_async_sleep_measures_time() {
+    // Verify that async_sleep actually sleeps (takes >50ms).
+    let src = r#"
+        fn main() -> void {
+            async_sleep(100).await
+            println("done")
+        }
+    "#;
+    let start = std::time::Instant::now();
+    let out = eval_output(src);
+    let elapsed = start.elapsed();
+    assert_eq!(out, vec!["done"]);
+    assert!(
+        elapsed.as_millis() >= 80,
+        "expected sleep >= 80ms, got {}ms",
+        elapsed.as_millis()
+    );
+}
+
+#[test]
 fn v10_regex_captures() {
     let src = r#"
         fn main() -> void {

@@ -23,6 +23,90 @@ use crate::parser::ast::{
 use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
 
+/// Async HTTP GET using tokio::net::TcpStream (no external HTTP crate needed).
+async fn async_http_get_impl(url: &str) -> Result<String, String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (host, port, path) = parse_http_url(url)?;
+    let addr = format!("{host}:{port}");
+    let mut stream = tokio::net::TcpStream::connect(&addr)
+        .await
+        .map_err(|e| format!("connect {addr}: {e}"))?;
+
+    let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|e| format!("write: {e}"))?;
+
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .await
+        .map_err(|e| format!("read: {e}"))?;
+
+    // Extract body after \r\n\r\n.
+    if let Some(body_start) = response.find("\r\n\r\n") {
+        Ok(response[body_start + 4..].to_string())
+    } else {
+        Ok(response)
+    }
+}
+
+/// Async HTTP POST using tokio::net::TcpStream.
+async fn async_http_post_impl(url: &str, body: &str) -> Result<String, String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (host, port, path) = parse_http_url(url)?;
+    let addr = format!("{host}:{port}");
+    let mut stream = tokio::net::TcpStream::connect(&addr)
+        .await
+        .map_err(|e| format!("connect {addr}: {e}"))?;
+
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|e| format!("write: {e}"))?;
+
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .await
+        .map_err(|e| format!("read: {e}"))?;
+
+    if let Some(body_start) = response.find("\r\n\r\n") {
+        Ok(response[body_start + 4..].to_string())
+    } else {
+        Ok(response)
+    }
+}
+
+/// Parse "http://host:port/path" → (host, port, path).
+fn parse_http_url(url: &str) -> Result<(String, u16, String), String> {
+    let stripped = url
+        .strip_prefix("http://")
+        .ok_or_else(|| "expected http:// URL".to_string())?;
+    let (host_port, path) = if let Some(slash) = stripped.find('/') {
+        (&stripped[..slash], format!("/{}", &stripped[slash + 1..]))
+    } else {
+        (stripped, "/".to_string())
+    };
+    let (host, port) = if let Some(colon) = host_port.find(':') {
+        let h = &host_port[..colon];
+        let p = host_port[colon + 1..]
+            .parse::<u16>()
+            .map_err(|_| "invalid port".to_string())?;
+        (h.to_string(), p)
+    } else {
+        (host_port.to_string(), 80)
+    };
+    Ok((host, port, path))
+}
+
 /// A single GUI widget created by gui_* builtins.
 #[derive(Debug, Clone)]
 pub struct GuiWidget {
@@ -150,6 +234,19 @@ impl MqttBroker {
     fn unsubscribe_all(&mut self, client_id: i64) {
         self.subscriptions.remove(&client_id);
     }
+}
+
+/// A real async operation to be executed via tokio (V10).
+///
+/// These are created by `async_sleep`, `async_http_get`, etc. and resolved
+/// when `.await` is applied to the resulting `Value::Future`.
+pub enum AsyncOperation {
+    /// Sleep for the given duration.
+    Sleep(std::time::Duration),
+    /// HTTP GET request to the given URL.
+    HttpGet(String),
+    /// HTTP POST request to the given URL with body.
+    HttpPost(String, String),
 }
 
 /// Simulated BLE (Bluetooth Low Energy) device.
@@ -444,8 +541,12 @@ pub struct Interpreter {
     inference_cache: HashMap<String, String>,
     /// Async task queue: task_id → (function body expr, captured env).
     async_tasks: HashMap<u64, (Box<Expr>, Rc<RefCell<Environment>>)>,
+    /// Real async operations pending execution (V10).
+    async_ops: HashMap<u64, AsyncOperation>,
     /// Next async task ID.
     next_task_id: u64,
+    /// Lazily-initialized tokio runtime for real async I/O operations.
+    tokio_runtime: Option<tokio::runtime::Runtime>,
     /// SQLite database connection manager (TQ12.2).
     db_manager: crate::stdlib_v3::database::DbManager,
     /// Active profiling session (None = profiling disabled).
@@ -499,7 +600,9 @@ impl Interpreter {
             qnn_buffers: HashMap::new(),
             inference_cache: HashMap::new(),
             async_tasks: HashMap::new(),
+            async_ops: HashMap::new(),
             next_task_id: 1,
+            tokio_runtime: None,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
             profile_session: None,
             ws_connections: std::collections::HashMap::new(),
@@ -545,7 +648,9 @@ impl Interpreter {
             qnn_buffers: HashMap::new(),
             inference_cache: HashMap::new(),
             async_tasks: HashMap::new(),
+            async_ops: HashMap::new(),
             next_task_id: 1,
+            tokio_runtime: None,
             db_manager: crate::stdlib_v3::database::DbManager::new(),
             profile_session: None,
             ws_connections: std::collections::HashMap::new(),
@@ -563,6 +668,43 @@ impl Interpreter {
     /// Takes the accumulated GUI state, leaving a default in place.
     pub fn take_gui_state(&mut self) -> GuiState {
         std::mem::take(&mut self.gui_state)
+    }
+
+    /// Get or create the tokio runtime for real async I/O operations.
+    fn ensure_tokio_runtime(&mut self) -> &tokio::runtime::Runtime {
+        if self.tokio_runtime.is_none() {
+            self.tokio_runtime = Some(
+                tokio::runtime::Runtime::new().expect("failed to create tokio runtime for async"),
+            );
+        }
+        self.tokio_runtime.as_ref().expect("runtime just created")
+    }
+
+    /// Execute a real async operation via tokio::block_on.
+    fn execute_async_op(&mut self, op: AsyncOperation) -> Result<Value, RuntimeError> {
+        let rt = self.ensure_tokio_runtime();
+        match op {
+            AsyncOperation::Sleep(dur) => {
+                rt.block_on(async {
+                    tokio::time::sleep(dur).await;
+                });
+                Ok(Value::Null)
+            }
+            AsyncOperation::HttpGet(url) => {
+                let result = rt.block_on(async { async_http_get_impl(&url).await });
+                match result {
+                    Ok(body) => Ok(Value::Str(body)),
+                    Err(e) => Err(RuntimeError::TypeError(format!("async_http_get: {e}"))),
+                }
+            }
+            AsyncOperation::HttpPost(url, body) => {
+                let result = rt.block_on(async { async_http_post_impl(&url, &body).await });
+                match result {
+                    Ok(resp) => Ok(Value::Str(resp)),
+                    Err(e) => Err(RuntimeError::TypeError(format!("async_http_post: {e}"))),
+                }
+            }
+        }
     }
 
     /// Enables profiling for this interpreter session.
@@ -652,6 +794,7 @@ impl Interpreter {
         all.extend(Self::display_process_builtins());
         all.extend(Self::gui_builtins());
         all.extend(Self::regex_builtins());
+        all.extend(Self::async_builtins());
 
         for name in &all {
             self.env
@@ -1165,6 +1308,11 @@ impl Interpreter {
         ]
     }
 
+    /// Async builtins for real I/O operations via tokio.
+    fn async_builtins() -> Vec<&'static str> {
+        vec!["async_sleep", "async_http_get", "async_http_post"]
+    }
+
     /// Regex builtins for pattern matching.
     fn regex_builtins() -> Vec<&'static str> {
         vec![
@@ -1544,11 +1692,15 @@ impl Interpreter {
             Expr::Try { expr, .. } => self.eval_try(expr),
             Expr::Cast { expr, ty, .. } => self.eval_cast(expr, ty),
             Expr::Await { expr, .. } => {
-                // Evaluate the expression — should produce a Future value
+                // Evaluate the expression — should produce a Future value.
                 let val = self.eval_expr(expr)?;
                 match val {
                     Value::Future { task_id } => {
-                        // Execute the async task's body immediately (cooperative)
+                        // V10: Check if this is a real async operation first.
+                        if let Some(op) = self.async_ops.remove(&task_id) {
+                            return self.execute_async_op(op).map_err(EvalError::Runtime);
+                        }
+                        // Fallback: cooperative execution (user-defined async fn).
                         if let Some((body, task_env)) = self.async_tasks.remove(&task_id) {
                             let prev_env = self.env.clone();
                             self.env = task_env;
@@ -1556,11 +1708,9 @@ impl Interpreter {
                             self.env = prev_env;
                             result
                         } else {
-                            // Task already completed or doesn't exist
                             Ok(Value::Null)
                         }
                     }
-                    // If it's not a Future, just return the value (already resolved)
                     other => Ok(other),
                 }
             }

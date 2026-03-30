@@ -1708,6 +1708,17 @@ impl Interpreter {
                     return self.builtin_regex_captures(args);
                 }
 
+                // Async builtins (V10)
+                if name == "async_sleep" {
+                    return self.builtin_async_sleep(args);
+                }
+                if name == "async_http_get" {
+                    return self.builtin_async_http_get(args);
+                }
+                if name == "async_http_post" {
+                    return self.builtin_async_http_post(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
@@ -6819,19 +6830,25 @@ impl Interpreter {
         let pattern = match &args[0] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+                return Err(
+                    RuntimeError::TypeError("regex_replace: expected string".into()).into(),
+                );
             }
         };
         let text = match &args[1] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+                return Err(
+                    RuntimeError::TypeError("regex_replace: expected string".into()).into(),
+                );
             }
         };
         let repl = match &args[2] {
             Value::Str(s) => s.clone(),
             _ => {
-                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+                return Err(
+                    RuntimeError::TypeError("regex_replace: expected string".into()).into(),
+                );
             }
         };
         Ok(Value::Str(crate::stdlib_v3::formats::regex_replace(
@@ -6906,6 +6923,100 @@ impl Interpreter {
             Some(caps) => Ok(Value::Array(caps.into_iter().map(Value::Str).collect())),
             None => Ok(Value::Null),
         }
+    }
+
+    // ── Async builtins (V10) ────────────────────────────────────────
+
+    /// async_sleep(ms: i64) -> Future
+    ///
+    /// Returns a Future that, when awaited, sleeps for `ms` milliseconds
+    /// using the real tokio::time::sleep.
+    fn builtin_async_sleep(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let ms = match &args[0] {
+            Value::Int(n) => *n as u64,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "async_sleep: expected int milliseconds".into(),
+                )
+                .into());
+            }
+        };
+        let task_id = self.next_task_id;
+        self.next_task_id += 1;
+        self.async_ops.insert(
+            task_id,
+            super::AsyncOperation::Sleep(std::time::Duration::from_millis(ms)),
+        );
+        Ok(Value::Future { task_id })
+    }
+
+    /// async_http_get(url: str) -> Future
+    ///
+    /// Returns a Future that, when awaited, performs a real HTTP GET request
+    /// using tokio::net::TcpStream.
+    fn builtin_async_http_get(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: 0,
+            }
+            .into());
+        }
+        let url = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("async_http_get: expected string URL".into()).into(),
+                );
+            }
+        };
+        let task_id = self.next_task_id;
+        self.next_task_id += 1;
+        self.async_ops
+            .insert(task_id, super::AsyncOperation::HttpGet(url));
+        Ok(Value::Future { task_id })
+    }
+
+    /// async_http_post(url: str, body: str) -> Future
+    ///
+    /// Returns a Future that, when awaited, performs a real HTTP POST request.
+    fn builtin_async_http_post(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let url = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("async_http_post: expected string URL".into()).into(),
+                );
+            }
+        };
+        let body = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "async_http_post: expected string body".into(),
+                )
+                .into());
+            }
+        };
+        let task_id = self.next_task_id;
+        self.next_task_id += 1;
+        self.async_ops
+            .insert(task_id, super::AsyncOperation::HttpPost(url, body));
+        Ok(Value::Future { task_id })
     }
 }
 

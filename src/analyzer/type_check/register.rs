@@ -651,6 +651,28 @@ impl TypeChecker {
                 Type::Bool,
             ),
             ("ble_disconnect", vec![Type::I64], Type::Void),
+            // Async builtins (V10) — return Future<T>
+            (
+                "async_sleep",
+                vec![Type::I64],
+                Type::Future {
+                    inner: Box::new(Type::Void),
+                },
+            ),
+            (
+                "async_http_get",
+                vec![Type::Str],
+                Type::Future {
+                    inner: Box::new(Type::Str),
+                },
+            ),
+            (
+                "async_http_post",
+                vec![Type::Str, Type::Str],
+                Type::Future {
+                    inner: Box::new(Type::Str),
+                },
+            ),
         ];
         for (name, params, ret) in os_fns {
             self.symbols.define(Symbol {
