@@ -36,6 +36,7 @@ pub mod distributed;
 pub mod docgen;
 pub mod ffi_v2;
 pub mod formatter;
+pub mod generators_v12;
 pub mod gpu_codegen;
 pub mod gui;
 pub mod hw;
@@ -64,6 +65,7 @@ pub mod stdlib_v3;
 pub mod testing;
 pub mod verify;
 pub mod vm;
+pub mod wasi_v12;
 
 use analyzer::SemanticError;
 use interpreter::RuntimeError;
