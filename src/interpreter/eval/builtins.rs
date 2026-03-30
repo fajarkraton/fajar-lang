@@ -1688,6 +1688,26 @@ impl Interpreter {
                     return self.builtin_gui_layout(args);
                 }
 
+                // Regex builtins
+                if name == "regex_match" {
+                    return self.builtin_regex_match(args);
+                }
+                if name == "regex_find" {
+                    return self.builtin_regex_find(args);
+                }
+                if name == "regex_find_all" {
+                    return self.builtin_regex_find_all(args);
+                }
+                if name == "regex_replace" {
+                    return self.builtin_regex_replace(args);
+                }
+                if name == "regex_replace_all" {
+                    return self.builtin_regex_replace_all(args);
+                }
+                if name == "regex_captures" {
+                    return self.builtin_regex_captures(args);
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
         }
@@ -6693,6 +6713,199 @@ impl Interpreter {
             on_click: None,
         });
         Ok(Value::Null)
+    }
+
+    // ── Regex builtins ──────────────────────────────────────────────
+
+    /// regex_match(pattern: str, text: str) -> bool
+    fn builtin_regex_match(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_match: expected string pattern".into()).into(),
+                );
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_match: expected string text".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Bool(crate::stdlib_v3::formats::regex_is_match(
+            &pattern, &text,
+        )))
+    }
+
+    /// regex_find(pattern: str, text: str) -> str | null
+    fn builtin_regex_find(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_find: expected string pattern".into()).into(),
+                );
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_find: expected string text".into()).into(),
+                );
+            }
+        };
+        match crate::stdlib_v3::formats::regex_find(&pattern, &text) {
+            Some(m) => Ok(Value::Str(m)),
+            None => Ok(Value::Null),
+        }
+    }
+
+    /// regex_find_all(pattern: str, text: str) -> [str]
+    fn builtin_regex_find_all(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_find_all: expected string".into()).into(),
+                );
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_find_all: expected string".into()).into(),
+                );
+            }
+        };
+        let matches = crate::stdlib_v3::formats::regex_find_all(&pattern, &text);
+        Ok(Value::Array(matches.into_iter().map(Value::Str).collect()))
+    }
+
+    /// regex_replace(pattern: str, text: str, replacement: str) -> str
+    fn builtin_regex_replace(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+            }
+        };
+        let repl = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError("regex_replace: expected string".into()).into());
+            }
+        };
+        Ok(Value::Str(crate::stdlib_v3::formats::regex_replace(
+            &pattern, &text, &repl,
+        )))
+    }
+
+    /// regex_replace_all(pattern: str, text: str, replacement: str) -> str
+    fn builtin_regex_replace_all(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_replace_all: expected string".into()).into(),
+                );
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_replace_all: expected string".into()).into(),
+                );
+            }
+        };
+        let repl = match &args[2] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_replace_all: expected string".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Str(crate::stdlib_v3::formats::regex_replace_all(
+            &pattern, &text, &repl,
+        )))
+    }
+
+    /// regex_captures(pattern: str, text: str) -> [str] | null
+    fn builtin_regex_captures(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pattern = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_captures: expected string".into()).into(),
+                );
+            }
+        };
+        let text = match &args[1] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("regex_captures: expected string".into()).into(),
+                );
+            }
+        };
+        match crate::stdlib_v3::formats::regex_captures(&pattern, &text) {
+            Some(caps) => Ok(Value::Array(caps.into_iter().map(Value::Str).collect())),
+            None => Ok(Value::Null),
+        }
     }
 }
 

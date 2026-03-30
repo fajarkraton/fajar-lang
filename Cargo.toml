@@ -74,6 +74,8 @@ tungstenite = { version = "0.26", optional = true, features = ["native-tls"] }
 rumqttc = { version = "0.24", optional = true }
 # Real BLE client (feature-gated, requires OS Bluetooth stack)
 btleplug = { version = "0.11", optional = true }
+# Regex engine for pattern matching builtins
+regex = "1.11"
 # Required for wasm32 target (getrandom 0.2 needs js feature for wasm32-unknown-unknown)
 getrandom = { version = "0.2", optional = true }
 

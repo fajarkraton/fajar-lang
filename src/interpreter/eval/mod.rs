@@ -651,6 +651,7 @@ impl Interpreter {
         all.extend(Self::storage_net_builtins());
         all.extend(Self::display_process_builtins());
         all.extend(Self::gui_builtins());
+        all.extend(Self::regex_builtins());
 
         for name in &all {
             self.env
@@ -1161,6 +1162,18 @@ impl Interpreter {
             "sys_cpu_temp",
             "sys_ram_total",
             "sys_ram_free",
+        ]
+    }
+
+    /// Regex builtins for pattern matching.
+    fn regex_builtins() -> Vec<&'static str> {
+        vec![
+            "regex_match",
+            "regex_find",
+            "regex_find_all",
+            "regex_replace",
+            "regex_replace_all",
+            "regex_captures",
         ]
     }
 

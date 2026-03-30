@@ -889,6 +889,74 @@ pub fn detect_format(content: &str) -> &'static str {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V10: Regex — Pattern matching, search, replace, capture groups
+// ═══════════════════════════════════════════════════════════════════════
+
+use std::sync::Mutex;
+
+/// Compiled regex cache to avoid recompiling the same pattern.
+static REGEX_CACHE: std::sync::LazyLock<Mutex<std::collections::HashMap<String, regex::Regex>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+/// Get or compile a regex pattern (cached).
+fn get_regex(pattern: &str) -> Result<regex::Regex, String> {
+    let mut cache = REGEX_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(re) = cache.get(pattern) {
+        return Ok(re.clone());
+    }
+    let re = regex::Regex::new(pattern).map_err(|e| format!("invalid regex: {e}"))?;
+    cache.insert(pattern.to_string(), re.clone());
+    Ok(re)
+}
+
+/// Test if `text` matches `pattern`.
+pub fn regex_is_match(pattern: &str, text: &str) -> bool {
+    get_regex(pattern)
+        .map(|re| re.is_match(text))
+        .unwrap_or(false)
+}
+
+/// Find the first match of `pattern` in `text`. Returns the matched substring.
+pub fn regex_find(pattern: &str, text: &str) -> Option<String> {
+    get_regex(pattern)
+        .ok()?
+        .find(text)
+        .map(|m| m.as_str().to_string())
+}
+
+/// Find all non-overlapping matches of `pattern` in `text`.
+pub fn regex_find_all(pattern: &str, text: &str) -> Vec<String> {
+    get_regex(pattern)
+        .map(|re| re.find_iter(text).map(|m| m.as_str().to_string()).collect())
+        .unwrap_or_default()
+}
+
+/// Replace the first occurrence of `pattern` in `text` with `replacement`.
+pub fn regex_replace(pattern: &str, text: &str, replacement: &str) -> String {
+    get_regex(pattern)
+        .map(|re| re.replace(text, replacement).to_string())
+        .unwrap_or_else(|_| text.to_string())
+}
+
+/// Replace all occurrences of `pattern` in `text` with `replacement`.
+pub fn regex_replace_all(pattern: &str, text: &str, replacement: &str) -> String {
+    get_regex(pattern)
+        .map(|re| re.replace_all(text, replacement).to_string())
+        .unwrap_or_else(|_| text.to_string())
+}
+
+/// Capture groups from the first match. Returns the full match + all groups.
+pub fn regex_captures(pattern: &str, text: &str) -> Option<Vec<String>> {
+    let re = get_regex(pattern).ok()?;
+    let caps = re.captures(text)?;
+    Some(
+        caps.iter()
+            .map(|m| m.map(|m| m.as_str().to_string()).unwrap_or_default())
+            .collect(),
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1442,6 +1510,55 @@ names = ["alpha", "beta", "gamma"]
     #[test]
     fn fq7_9_detect_csv() {
         assert_eq!(detect_format("name,age,city\nFajar,30,Jakarta"), "csv");
+    }
+
+    // ── Regex tests ──
+
+    #[test]
+    fn regex_is_match_basic() {
+        assert!(regex_is_match(r"\d+", "abc123def"));
+        assert!(!regex_is_match(r"\d+", "abcdef"));
+    }
+
+    #[test]
+    fn regex_find_first() {
+        assert_eq!(regex_find(r"\d+", "abc123def456"), Some("123".to_string()));
+        assert_eq!(regex_find(r"\d+", "abcdef"), None);
+    }
+
+    #[test]
+    fn regex_find_all_matches() {
+        let matches = regex_find_all(r"\d+", "a1b22c333");
+        assert_eq!(matches, vec!["1", "22", "333"]);
+    }
+
+    #[test]
+    fn regex_replace_first_only() {
+        assert_eq!(regex_replace(r"\d+", "a1b22c333", "X"), "aXb22c333");
+    }
+
+    #[test]
+    fn regex_replace_all_matches() {
+        assert_eq!(regex_replace_all(r"\d+", "a1b22c333", "X"), "aXbXcX");
+    }
+
+    #[test]
+    fn regex_captures_groups() {
+        let caps = regex_captures(r"(\w+)@(\w+)\.(\w+)", "user@example.com");
+        assert_eq!(
+            caps,
+            Some(vec![
+                "user@example.com".to_string(),
+                "user".to_string(),
+                "example".to_string(),
+                "com".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn regex_captures_no_match() {
+        assert_eq!(regex_captures(r"(\d+)-(\d+)", "abcdef"), None);
     }
 
     // FQ7.10: JSON stringify roundtrip with unicode

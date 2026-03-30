@@ -16456,3 +16456,58 @@ fn v09_mqtt_unsubscribed_topic_not_delivered() {
     let out = eval_output(src);
     assert_eq!(out, vec!["correctly not delivered"]);
 }
+
+// ── V10 Phase 4: Regex builtin tests ──
+
+#[test]
+fn v10_regex_match_basic() {
+    let src = r#"
+        fn main() -> void {
+            println(regex_match("\\d+", "abc123"))
+            println(regex_match("\\d+", "abcdef"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["true", "false"]);
+}
+
+#[test]
+fn v10_regex_find_and_find_all() {
+    let src = r#"
+        fn main() -> void {
+            let first = regex_find("\\d+", "a1b22c333")
+            println(first)
+            let all = regex_find_all("\\d+", "a1b22c333")
+            println(len(all))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["1", "3"]);
+}
+
+#[test]
+fn v10_regex_replace() {
+    let src = r#"
+        fn main() -> void {
+            println(regex_replace("\\d+", "a1b22c333", "X"))
+            println(regex_replace_all("\\d+", "a1b22c333", "X"))
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["aXb22c333", "aXbXcX"]);
+}
+
+#[test]
+fn v10_regex_captures() {
+    let src = r#"
+        fn main() -> void {
+            let caps = regex_captures("(\\w+)@(\\w+)", "user@host")
+            if caps != null {
+                println(len(caps))
+                println("matched")
+            }
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out, vec!["3", "matched"]);
+}

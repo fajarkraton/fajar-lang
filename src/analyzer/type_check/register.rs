@@ -626,6 +626,21 @@ impl TypeChecker {
                 vec![Type::Str, Type::I64, Type::I64],
                 Type::Void,
             ),
+            // Regex builtins
+            ("regex_match", vec![Type::Str, Type::Str], Type::Bool),
+            ("regex_find", vec![Type::Str, Type::Str], Type::Unknown),
+            ("regex_find_all", vec![Type::Str, Type::Str], Type::Unknown),
+            (
+                "regex_replace",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "regex_replace_all",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            ("regex_captures", vec![Type::Str, Type::Str], Type::Unknown),
             // BLE builtins
             ("ble_scan", vec![], Type::Unknown),
             ("ble_connect", vec![Type::Str], Type::I64),
