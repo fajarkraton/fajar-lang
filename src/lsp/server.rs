@@ -419,6 +419,57 @@ impl LanguageServer for FajarLspBackend {
             }));
         }
 
+        // V12 I6: Function signature hover
+        if let Some(sig) = find_fn_signature(&doc.source, &word) {
+            let doc_comment = find_fn_doc_comment(&doc.source, &word).unwrap_or_default();
+            let hover_text = if doc_comment.is_empty() {
+                format!("```fajar\n{sig}\n```")
+            } else {
+                format!("{doc_comment}\n\n```fajar\n{sig}\n```")
+            };
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: hover_text,
+                }),
+                range: None,
+            }));
+        }
+
+        // V12 I6: Struct definition hover
+        if let Some(struct_info) = find_struct_definition(&doc.source, &word) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: format!("```fajar\n{struct_info}\n```"),
+                }),
+                range: None,
+            }));
+        }
+
+        // V12 I6: Variable type hover (from let binding)
+        let cursor_line = pos.line as usize;
+        if let Some(var_type) = find_variable_type(&doc.source, &word, cursor_line) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: format!("```fajar\nlet {word}: {var_type}\n```"),
+                }),
+                range: None,
+            }));
+        }
+
+        // V12 I6: Enum variant hover
+        if let Some(enum_info) = find_enum_definition(&doc.source, &word) {
+            return Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: format!("```fajar\n{enum_info}\n```"),
+                }),
+                range: None,
+            }));
+        }
+
         Ok(None)
     }
 
@@ -2809,6 +2860,109 @@ fn find_fn_signature(source: &str, name: &str) -> Option<String> {
     Some(rest[..end].trim().to_string())
 }
 
+// ── V12 I6: Enhanced Hover Helpers ──────────────────────────────────
+
+/// Finds a struct definition and returns its full definition text.
+fn find_struct_definition(source: &str, name: &str) -> Option<String> {
+    let pattern = format!("struct {name}");
+    let pos = source.find(&pattern)?;
+    let rest = &source[pos..];
+
+    // Find matching closing brace
+    let open_brace = rest.find('{')?;
+    let mut depth = 0;
+    for (i, ch) in rest[open_brace..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(rest[..open_brace + i + 1].trim().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    // Fallback: return up to end of line
+    let end = rest.find('\n').unwrap_or(rest.len());
+    Some(rest[..end].trim().to_string())
+}
+
+/// Finds the type of a variable binding at or before the cursor line.
+fn find_variable_type(source: &str, var_name: &str, up_to_line: usize) -> Option<String> {
+    for (i, line) in source.lines().enumerate() {
+        if i > up_to_line {
+            break;
+        }
+        let trimmed = line.trim();
+        // Match "let name: Type = ..." or "let mut name: Type = ..."
+        let rest = trimmed
+            .strip_prefix("let mut ")
+            .or_else(|| trimmed.strip_prefix("let "))?;
+
+        if !rest.starts_with(var_name) {
+            continue;
+        }
+        let after_name = &rest[var_name.len()..];
+        let after_name = after_name.trim_start();
+        if let Some(type_part) = after_name.strip_prefix(':') {
+            let end = type_part.find('=').unwrap_or(type_part.len());
+            let ty = type_part[..end].trim();
+            if !ty.is_empty() {
+                return Some(ty.to_string());
+            }
+        } else if let Some(rhs_part) = after_name.strip_prefix('=') {
+            // No type annotation — infer from RHS
+            return Some(infer_type_from_text(rhs_part.trim()));
+        }
+    }
+    None
+}
+
+/// Simple type inference from literal text.
+fn infer_type_from_text(text: &str) -> String {
+    let text = text.trim().trim_end_matches(['\n', '\r']);
+    if text.starts_with('"') || text.starts_with("f\"") || text.starts_with("r\"") {
+        "str".to_string()
+    } else if text == "true" || text == "false" {
+        "bool".to_string()
+    } else if text.contains('.') && text.parse::<f64>().is_ok() {
+        "f64".to_string()
+    } else if text.parse::<i64>().is_ok() {
+        "i64".to_string()
+    } else if text.starts_with('[') {
+        "Array".to_string()
+    } else if text.starts_with('(') {
+        "Tuple".to_string()
+    } else {
+        "auto".to_string()
+    }
+}
+
+/// Finds an enum definition and returns its full text.
+fn find_enum_definition(source: &str, name: &str) -> Option<String> {
+    let pattern = format!("enum {name}");
+    let pos = source.find(&pattern)?;
+    let rest = &source[pos..];
+
+    let open_brace = rest.find('{')?;
+    let mut depth = 0;
+    for (i, ch) in rest[open_brace..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(rest[..open_brace + i + 1].trim().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = rest.find('\n').unwrap_or(rest.len());
+    Some(rest[..end].trim().to_string())
+}
+
 // ── Static data ─────────────────────────────────────────────────────
 
 const KEYWORDS: &[&str] = &[
@@ -4293,5 +4447,96 @@ mod tests {
             extract_type_from_msg(msg, "found"),
             Some("Option<str>".to_string())
         );
+    }
+
+    // ── V12 Sprint I6: Hover with Type Info Tests ───────────────────────
+
+    #[test]
+    fn i6_find_struct_definition() {
+        let source = "struct Point {\n    x: f64,\n    y: f64,\n}";
+        let result = find_struct_definition(source, "Point");
+        assert!(result.is_some());
+        let def = result.unwrap();
+        assert!(def.contains("struct Point"));
+        assert!(def.contains("x: f64"));
+        assert!(def.contains("y: f64"));
+    }
+
+    #[test]
+    fn i6_find_struct_not_found() {
+        let source = "let x = 42";
+        assert!(find_struct_definition(source, "Foo").is_none());
+    }
+
+    #[test]
+    fn i6_find_variable_type_annotated() {
+        let source = "let x: i64 = 42\nlet name: str = \"hello\"";
+        assert_eq!(find_variable_type(source, "x", 10), Some("i64".to_string()));
+        assert_eq!(
+            find_variable_type(source, "name", 10),
+            Some("str".to_string())
+        );
+    }
+
+    #[test]
+    fn i6_find_variable_type_inferred() {
+        let source = "let x = 42\nlet s = \"hello\"\nlet b = true";
+        assert_eq!(find_variable_type(source, "x", 10), Some("i64".to_string()));
+        assert_eq!(find_variable_type(source, "s", 10), Some("str".to_string()));
+        assert_eq!(
+            find_variable_type(source, "b", 10),
+            Some("bool".to_string())
+        );
+    }
+
+    #[test]
+    fn i6_find_variable_type_not_found() {
+        let source = "let x = 42";
+        assert!(find_variable_type(source, "y", 10).is_none());
+    }
+
+    #[test]
+    fn i6_find_enum_definition() {
+        let source = "enum Color {\n    Red,\n    Green,\n    Blue,\n}";
+        let result = find_enum_definition(source, "Color");
+        assert!(result.is_some());
+        let def = result.unwrap();
+        assert!(def.contains("enum Color"));
+        assert!(def.contains("Red"));
+        assert!(def.contains("Blue"));
+    }
+
+    #[test]
+    fn i6_find_enum_not_found() {
+        assert!(find_enum_definition("let x = 1", "Foo").is_none());
+    }
+
+    #[test]
+    fn i6_infer_type_from_text() {
+        assert_eq!(infer_type_from_text("42"), "i64");
+        assert_eq!(infer_type_from_text("3.14"), "f64");
+        assert_eq!(infer_type_from_text("\"hello\""), "str");
+        assert_eq!(infer_type_from_text("true"), "bool");
+        assert_eq!(infer_type_from_text("false"), "bool");
+        assert_eq!(infer_type_from_text("[1, 2, 3]"), "Array");
+        assert_eq!(infer_type_from_text("(1, 2)"), "Tuple");
+        assert_eq!(infer_type_from_text("foo()"), "auto");
+    }
+
+    #[test]
+    fn i6_find_variable_type_mut() {
+        let source = "let mut counter: i64 = 0";
+        assert_eq!(
+            find_variable_type(source, "counter", 10),
+            Some("i64".to_string())
+        );
+    }
+
+    #[test]
+    fn i6_find_fn_signature_exists() {
+        let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
+        let sig = find_fn_signature(source, "add");
+        assert!(sig.is_some());
+        assert!(sig.unwrap().contains("fn add(a: i32, b: i32) -> i32"));
     }
 }
