@@ -2860,6 +2860,272 @@ fn find_fn_signature(source: &str, name: &str) -> Option<String> {
     Some(rest[..end].trim().to_string())
 }
 
+// ── V12 I7: Deep Call Hierarchy Helpers ──────────────────────────────
+
+/// Finds all functions that call the given function name.
+#[allow(dead_code)]
+fn find_callers(source: &str, fn_name: &str) -> Vec<(String, usize)> {
+    let mut callers = Vec::new();
+    let call_pattern = format!("{fn_name}(");
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Skip definition and comments
+        if trimmed.starts_with("fn ") && trimmed.contains(&format!("fn {fn_name}(")) {
+            continue;
+        }
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        if line.contains(&call_pattern) {
+            let caller = find_enclosing_function(source, line_idx);
+            if !callers.iter().any(|(n, _)| n == &caller) {
+                callers.push((caller, line_idx));
+            }
+        }
+    }
+    callers
+}
+
+/// Finds all functions called within a function body.
+#[allow(dead_code)]
+fn find_callees(source: &str, fn_name: &str) -> Vec<(String, usize)> {
+    let mut callees = Vec::new();
+    let fn_start = format!("fn {fn_name}(");
+    let mut in_body = false;
+    let mut brace_depth = 0i32;
+
+    for (line_idx, line) in source.lines().enumerate() {
+        if line.contains(&fn_start) {
+            in_body = true;
+        }
+        if in_body {
+            for ch in line.chars() {
+                if ch == '{' {
+                    brace_depth += 1;
+                }
+                if ch == '}' {
+                    brace_depth -= 1;
+                }
+            }
+
+            // Find function calls: identifier followed by (
+            let trimmed = line.trim();
+            if !trimmed.starts_with("fn ") && !trimmed.starts_with("//") {
+                let mut chars = trimmed.char_indices().peekable();
+                while let Some((i, ch)) = chars.next() {
+                    if ch.is_alphabetic() || ch == '_' {
+                        let start = i;
+                        let mut end = i + 1;
+                        while let Some(&(j, c)) = chars.peek() {
+                            if c.is_alphanumeric() || c == '_' {
+                                end = j + 1;
+                                chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(&(_, '(')) = chars.peek() {
+                            let callee_name = &trimmed[start..end];
+                            if callee_name != fn_name
+                                && !["if", "while", "for", "match", "let", "return"]
+                                    .contains(&callee_name)
+                            {
+                                if !callees.iter().any(|(n, _)| n == callee_name) {
+                                    callees.push((callee_name.to_string(), line_idx));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if brace_depth <= 0 && in_body && brace_depth != 0 {
+                break;
+            }
+            if brace_depth == 0 && in_body && line.contains('}') {
+                break;
+            }
+        }
+    }
+    callees
+}
+
+// ── V12 I8: Code Lens Enhancements ─────────────────────────────────
+
+/// Counts the number of tests in a source file.
+#[allow(dead_code)]
+fn count_tests(source: &str) -> usize {
+    source
+        .lines()
+        .filter(|l| l.trim().starts_with("@test"))
+        .count()
+}
+
+/// Counts the number of functions in a source file.
+#[allow(dead_code)]
+fn count_functions(source: &str) -> usize {
+    source
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            (t.starts_with("fn ") || t.starts_with("pub fn ") || t.starts_with("async fn "))
+                && t.contains('(')
+        })
+        .count()
+}
+
+/// Finds functions with high cyclomatic complexity (many branches).
+#[allow(dead_code)]
+fn find_complex_functions(source: &str, threshold: usize) -> Vec<(String, usize)> {
+    let mut results = Vec::new();
+    let mut current_fn: Option<String> = None;
+    let mut branch_count = 0usize;
+    let mut brace_depth = 0i32;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if (trimmed.starts_with("fn ") || trimmed.contains(" fn ")) && trimmed.contains('(') {
+            // Save previous function if complex
+            if let Some(ref name) = current_fn {
+                if branch_count >= threshold {
+                    results.push((name.clone(), branch_count));
+                }
+            }
+            // Start new function
+            let fn_name = trimmed
+                .split("fn ")
+                .last()
+                .unwrap_or("")
+                .split(['(', '<'])
+                .next()
+                .unwrap_or("")
+                .trim();
+            current_fn = Some(fn_name.to_string());
+            branch_count = 0;
+            brace_depth = 0;
+        }
+
+        if current_fn.is_some() {
+            brace_depth += trimmed.matches('{').count() as i32;
+            brace_depth -= trimmed.matches('}').count() as i32;
+
+            // Count branches
+            if trimmed.starts_with("if ") || trimmed.starts_with("} else") {
+                branch_count += 1;
+            }
+            if trimmed.starts_with("match ") {
+                branch_count += 1;
+            }
+            if trimmed.starts_with("while ") || trimmed.starts_with("for ") {
+                branch_count += 1;
+            }
+            if trimmed.contains("&&") || trimmed.contains("||") {
+                branch_count += 1;
+            }
+
+            if brace_depth <= 0 && trimmed.contains('}') {
+                if let Some(ref name) = current_fn {
+                    if branch_count >= threshold {
+                        results.push((name.clone(), branch_count));
+                    }
+                }
+                current_fn = None;
+            }
+        }
+    }
+    results
+}
+
+// ── V12 I9-I10: Performance & Debug Helpers ─────────────────────────
+
+/// Measures analysis time for a source file (in microseconds).
+#[allow(dead_code)]
+fn measure_analysis_time(source: &str) -> u64 {
+    let start = std::time::Instant::now();
+    let _ = crate::lexer::tokenize(source);
+    start.elapsed().as_micros() as u64
+}
+
+/// Estimates the complexity of a source file for performance budgeting.
+#[allow(dead_code)]
+fn estimate_file_complexity(source: &str) -> FileComplexity {
+    let line_count = source.lines().count();
+    let fn_count = count_functions(source);
+    let char_count = source.len();
+
+    FileComplexity {
+        lines: line_count,
+        functions: fn_count,
+        bytes: char_count,
+        estimated_analysis_ms: (char_count / 5000).max(1), // ~5KB per ms
+    }
+}
+
+/// File complexity metrics for performance budgeting.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct FileComplexity {
+    lines: usize,
+    functions: usize,
+    bytes: usize,
+    estimated_analysis_ms: usize,
+}
+
+/// Debug adapter protocol: breakpoint location for a source line.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct BreakpointLocation {
+    line: u32,
+    column: Option<u32>,
+    fn_name: Option<String>,
+}
+
+/// Finds valid breakpoint locations in source (function entry points + statements).
+#[allow(dead_code)]
+fn find_breakpoint_locations(source: &str) -> Vec<BreakpointLocation> {
+    let mut locations = Vec::new();
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        let line_num = line_idx as u32;
+
+        // Function definitions
+        if (trimmed.starts_with("fn ") || trimmed.contains(" fn ")) && trimmed.contains('{') {
+            let fn_name = trimmed
+                .split("fn ")
+                .last()
+                .unwrap_or("")
+                .split(['(', '<'])
+                .next()
+                .unwrap_or("")
+                .trim();
+            locations.push(BreakpointLocation {
+                line: line_num,
+                column: None,
+                fn_name: Some(fn_name.to_string()),
+            });
+        }
+        // Let bindings, return statements, and function calls
+        else if trimmed.starts_with("let ")
+            || trimmed.starts_with("return ")
+            || (trimmed.contains('(')
+                && !trimmed.starts_with("//")
+                && !trimmed.starts_with("if ")
+                && !trimmed.starts_with("while ")
+                && !trimmed.starts_with("for "))
+        {
+            locations.push(BreakpointLocation {
+                line: line_num,
+                column: None,
+                fn_name: None,
+            });
+        }
+    }
+    locations
+}
+
 // ── V12 I6: Enhanced Hover Helpers ──────────────────────────────────
 
 /// Finds a struct definition and returns its full definition text.
@@ -4538,5 +4804,151 @@ mod tests {
         let sig = find_fn_signature(source, "add");
         assert!(sig.is_some());
         assert!(sig.unwrap().contains("fn add(a: i32, b: i32) -> i32"));
+    }
+
+    // ── V12 Sprint I7: Deep Call Hierarchy Tests ────────────────────────
+
+    #[test]
+    fn i7_find_callers() {
+        let source = "fn greet() { println(\"hi\") }\nfn main() {\n    greet()\n    greet()\n}";
+        let callers = find_callers(source, "greet");
+        assert!(!callers.is_empty(), "should find callers of greet");
+        assert!(
+            callers.iter().any(|(n, _)| n == "main"),
+            "main should call greet"
+        );
+    }
+
+    #[test]
+    fn i7_find_callers_no_callers() {
+        let source = "fn foo() { 42 }\nfn bar() { 10 }";
+        let callers = find_callers(source, "foo");
+        assert!(callers.is_empty(), "foo has no callers");
+    }
+
+    #[test]
+    fn i7_find_callees() {
+        let source = "fn helper() { 1 }\nfn main() {\n    helper()\n    println(\"done\")\n}";
+        let callees = find_callees(source, "main");
+        assert!(
+            callees.iter().any(|(n, _)| n == "helper"),
+            "main calls helper"
+        );
+        assert!(
+            callees.iter().any(|(n, _)| n == "println"),
+            "main calls println"
+        );
+    }
+
+    #[test]
+    fn i7_find_callees_empty() {
+        let source = "fn noop() { 42 }";
+        let callees = find_callees(source, "noop");
+        assert!(callees.is_empty(), "noop calls nothing");
+    }
+
+    // ── V12 Sprint I8: Code Lens Tests ──────────────────────────────────
+
+    #[test]
+    fn i8_count_tests() {
+        let source = "@test\nfn test_a() {}\n@test\nfn test_b() {}";
+        assert_eq!(count_tests(source), 2);
+    }
+
+    #[test]
+    fn i8_count_functions() {
+        let source = "fn a() {}\npub fn b() {}\nasync fn c() {}";
+        assert_eq!(count_functions(source), 3);
+    }
+
+    #[test]
+    fn i8_complex_functions() {
+        let source = "fn simple() { 1 }\nfn complex() {\n    if true {\n        if false {\n            match x {\n                _ => 0\n            }\n        }\n    }\n    while true {}\n}";
+        let complex = find_complex_functions(source, 3);
+        assert!(
+            complex.iter().any(|(n, _)| n == "complex"),
+            "complex fn should be detected: {complex:?}"
+        );
+        assert!(
+            !complex.iter().any(|(n, _)| n == "simple"),
+            "simple fn should not be flagged"
+        );
+    }
+
+    // ── V12 Sprint I9: Debug Adapter Tests ──────────────────────────────
+
+    #[test]
+    fn i9_breakpoint_locations() {
+        let source = "fn main() {\n    let x = 42\n    println(x)\n    return x\n}";
+        let locations = find_breakpoint_locations(source);
+        assert!(
+            locations.len() >= 3,
+            "should find 3+ breakpoint locations, got {}",
+            locations.len()
+        );
+        // fn main, let x, println(x), return x
+        assert!(
+            locations.iter().any(|b| b.fn_name.is_some()),
+            "should have fn entry point"
+        );
+    }
+
+    #[test]
+    fn i9_breakpoint_locations_empty() {
+        let source = "// just a comment";
+        let locations = find_breakpoint_locations(source);
+        assert!(locations.is_empty());
+    }
+
+    #[test]
+    fn i9_breakpoint_fn_name() {
+        let source = "fn process() {\n    let data = 1\n}";
+        let locations = find_breakpoint_locations(source);
+        let fn_bp = locations.iter().find(|b| b.fn_name.is_some());
+        assert!(fn_bp.is_some());
+        assert_eq!(fn_bp.unwrap().fn_name.as_deref(), Some("process"));
+    }
+
+    // ── V12 Sprint I10: Performance Tests ───────────────────────────────
+
+    #[test]
+    fn i10_measure_analysis_time() {
+        let source = "let x = 42\nfn main() { x }";
+        let time = measure_analysis_time(source);
+        assert!(time < 100_000, "analysis should take <100ms, took {time}us");
+    }
+
+    #[test]
+    fn i10_file_complexity() {
+        let source = "fn a() {}\nfn b() {}\nfn c() {}\nlet x = 1\nlet y = 2";
+        let complexity = estimate_file_complexity(source);
+        assert_eq!(complexity.lines, 5);
+        assert_eq!(complexity.functions, 3);
+        assert!(complexity.bytes > 0);
+        assert!(complexity.estimated_analysis_ms > 0);
+    }
+
+    #[test]
+    fn i10_large_file_complexity() {
+        // Simulate a large file
+        let source = "fn x() { 1 }\n".repeat(1000);
+        let complexity = estimate_file_complexity(&source);
+        assert_eq!(complexity.lines, 1000);
+        assert_eq!(complexity.functions, 1000);
+        assert!(complexity.estimated_analysis_ms >= 1);
+    }
+
+    #[test]
+    fn i10_analysis_performance_10k_lines() {
+        let source = (0..10_000)
+            .map(|i| format!("let var_{i} = {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let time = measure_analysis_time(&source);
+        // 10K lines should tokenize in <500ms
+        assert!(
+            time < 500_000,
+            "10K lines should tokenize in <500ms, took {time}us"
+        );
     }
 }
