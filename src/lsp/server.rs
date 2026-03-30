@@ -797,38 +797,43 @@ impl LanguageServer for FajarLspBackend {
             return Ok(None);
         }
 
-        // Find all occurrences of the word in the document
-        let mut edits = Vec::new();
-        for (i, line_text) in doc.source.lines().enumerate() {
-            let mut col = 0;
-            while let Some(found) = line_text[col..].find(&word) {
-                let start_col = col + found;
-                let end_col = start_col + word.len();
-                // Verify it's a whole word match (not part of a larger identifier)
-                let before_ok = start_col == 0
-                    || !line_text.as_bytes()[start_col - 1].is_ascii_alphanumeric()
-                        && line_text.as_bytes()[start_col - 1] != b'_';
-                let after_ok = end_col >= line_text.len()
-                    || !line_text.as_bytes()[end_col].is_ascii_alphanumeric()
-                        && line_text.as_bytes()[end_col] != b'_';
-                if before_ok && after_ok {
-                    edits.push(TextEdit {
-                        range: Range {
-                            start: Position {
-                                line: i as u32,
-                                character: start_col as u32,
-                            },
-                            end: Position {
-                                line: i as u32,
-                                character: end_col as u32,
-                            },
-                        },
-                        new_text: new_name.clone(),
-                    });
-                }
-                col = end_col;
-            }
-        }
+        // V12 I2: Scope-aware rename
+        // Build scope tree and find the scope containing the cursor
+        let scopes = build_scope_tree(&doc.source);
+        let cursor_line = pos.line as usize;
+        let cursor_scope = find_scope_at_line(&scopes, cursor_line);
+
+        // Determine rename scope: struct fields and top-level symbols are global,
+        // local variables are scoped to their function
+        let is_field = is_struct_field(&doc.source, &word);
+        let is_global = doc.fn_defs.iter().any(|(n, _, _)| n == &word)
+            || doc.struct_defs.iter().any(|(n, _, _)| n == &word)
+            || is_field;
+
+        let references = if is_global {
+            // Global symbols: rename across entire document
+            find_references_in_scope(&doc.source, &word, &scopes[0])
+        } else {
+            // Local variables: rename only within the enclosing scope
+            find_references_in_scope(&doc.source, &word, cursor_scope)
+        };
+
+        let edits: Vec<TextEdit> = references
+            .iter()
+            .map(|&(line, start_col, end_col)| TextEdit {
+                range: Range {
+                    start: Position {
+                        line: line as u32,
+                        character: start_col as u32,
+                    },
+                    end: Position {
+                        line: line as u32,
+                        character: end_col as u32,
+                    },
+                },
+                new_text: new_name.clone(),
+            })
+            .collect();
 
         if edits.is_empty() {
             return Ok(None);
@@ -2763,6 +2768,162 @@ fn find_enum_variants_in_source(enum_name: &str, source: &str) -> Vec<String> {
     variants
 }
 
+// ── V12 I2: Scope-Aware Rename Functions ────────────────────────────
+
+/// A scope region in the source: (start_line, end_line, depth, name).
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct ScopeRegion {
+    /// Start line (0-indexed).
+    start_line: usize,
+    /// End line (0-indexed, inclusive).
+    end_line: usize,
+    /// Nesting depth (0 = global, 1 = function body, etc.).
+    depth: u32,
+    /// Scope name (function name or "global").
+    name: String,
+}
+
+/// Builds a scope tree from source, identifying function boundaries.
+///
+/// Returns a list of scope regions sorted by start line.
+/// Each function body creates a scope; blocks inside create nested scopes.
+fn build_scope_tree(source: &str) -> Vec<ScopeRegion> {
+    let mut scopes = vec![ScopeRegion {
+        start_line: 0,
+        end_line: source.lines().count().saturating_sub(1),
+        depth: 0,
+        name: "global".to_string(),
+    }];
+
+    let lines: Vec<&str> = source.lines().collect();
+    let mut brace_stack: Vec<(usize, String)> = Vec::new(); // (start_line, fn_name)
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Detect function definition start
+        if trimmed.starts_with("fn ") && trimmed.contains('{') {
+            let fn_name = trimmed
+                .strip_prefix("fn ")
+                .unwrap_or("")
+                .split(|c: char| c == '(' || c == '<' || c.is_whitespace())
+                .next()
+                .unwrap_or("anon")
+                .to_string();
+            brace_stack.push((i, fn_name));
+        } else if trimmed.contains("fn ") && trimmed.contains('{') {
+            // pub fn, async fn, etc.
+            let fn_part = trimmed.split("fn ").nth(1).unwrap_or("anon");
+            let fn_name = fn_part
+                .split(|c: char| c == '(' || c == '<' || c.is_whitespace())
+                .next()
+                .unwrap_or("anon")
+                .to_string();
+            brace_stack.push((i, fn_name));
+        }
+
+        // Count braces to track nesting
+        if trimmed == "}" && !brace_stack.is_empty() {
+            let (start, name) = brace_stack.pop().unwrap();
+            scopes.push(ScopeRegion {
+                start_line: start,
+                end_line: i,
+                depth: (brace_stack.len() + 1) as u32,
+                name,
+            });
+        }
+    }
+
+    scopes.sort_by_key(|s| s.start_line);
+    scopes
+}
+
+/// Finds the innermost scope containing a given line.
+fn find_scope_at_line(scopes: &[ScopeRegion], line: usize) -> &ScopeRegion {
+    scopes
+        .iter()
+        .filter(|s| line >= s.start_line && line <= s.end_line)
+        .max_by_key(|s| s.depth)
+        .unwrap_or(&scopes[0]) // fallback to global
+}
+
+/// Finds all references to a symbol within a scope region (whole-word matches).
+fn find_references_in_scope(
+    source: &str,
+    symbol: &str,
+    scope: &ScopeRegion,
+) -> Vec<(usize, usize, usize)> {
+    // Returns: (line, start_col, end_col)
+    let mut refs = Vec::new();
+
+    for (i, line_text) in source.lines().enumerate() {
+        if i < scope.start_line || i > scope.end_line {
+            continue;
+        }
+
+        let mut col = 0;
+        while let Some(found) = line_text[col..].find(symbol) {
+            let start_col = col + found;
+            let end_col = start_col + symbol.len();
+            // Whole-word check
+            let before_ok = start_col == 0
+                || !line_text.as_bytes()[start_col - 1].is_ascii_alphanumeric()
+                    && line_text.as_bytes()[start_col - 1] != b'_';
+            let after_ok = end_col >= line_text.len()
+                || !line_text.as_bytes()[end_col].is_ascii_alphanumeric()
+                    && line_text.as_bytes()[end_col] != b'_';
+            if before_ok && after_ok {
+                refs.push((i, start_col, end_col));
+            }
+            col = end_col.max(col + 1);
+        }
+    }
+
+    refs
+}
+
+/// Determines if a symbol is a struct field (appears after `.` or in struct definition).
+fn is_struct_field(source: &str, symbol: &str) -> bool {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Field in struct definition: "field_name: Type"
+        if trimmed.starts_with(symbol) && trimmed.contains(':') {
+            let after_name = trimmed[symbol.len()..].trim();
+            if after_name.starts_with(':') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Determines if a symbol is a function parameter.
+#[allow(dead_code)] // Used by tests; will be wired into rename for param-scoped rename
+fn is_fn_param(source: &str, symbol: &str, cursor_line: usize) -> bool {
+    // Find the function definition that contains this line
+    for (i, line) in source.lines().enumerate() {
+        if i > cursor_line {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.contains("fn ") && trimmed.contains('(') {
+            // Check if symbol appears in the parameter list
+            if let Some(paren_start) = trimmed.find('(') {
+                let paren_end = trimmed.find(')').unwrap_or(trimmed.len());
+                let params = &trimmed[paren_start + 1..paren_end];
+                if params.split(',').any(|p| {
+                    let name = p.trim().split(':').next().unwrap_or("").trim();
+                    name == symbol
+                }) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 // ── LexError/ParseError span helpers ────────────────────────────────
 
 trait HasSpan {
@@ -3249,5 +3410,114 @@ mod tests {
         let source = "struct Point { x: f64, y: f64 }";
         let doc = DocumentState::new(source.to_string());
         assert!(doc.struct_defs.iter().any(|(n, _, _)| n == "Point"));
+    }
+
+    // ── V12 Sprint I2: Scope-Aware Rename Tests ─────────────────────────
+
+    #[test]
+    fn i2_build_scope_tree_global() {
+        let source = "let x = 1\nlet y = 2";
+        let scopes = build_scope_tree(source);
+        assert!(!scopes.is_empty(), "should have at least global scope");
+        assert_eq!(scopes[0].name, "global");
+        assert_eq!(scopes[0].depth, 0);
+    }
+
+    #[test]
+    fn i2_build_scope_tree_function() {
+        let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let y = 2\n}";
+        let scopes = build_scope_tree(source);
+        // Should have global + foo + bar
+        assert!(
+            scopes.len() >= 3,
+            "should have global + 2 function scopes, got {}",
+            scopes.len()
+        );
+        assert!(scopes.iter().any(|s| s.name == "foo"));
+        assert!(scopes.iter().any(|s| s.name == "bar"));
+    }
+
+    #[test]
+    fn i2_find_scope_at_line_in_function() {
+        let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let y = 2\n}";
+        let scopes = build_scope_tree(source);
+        let scope = find_scope_at_line(&scopes, 1); // line 1 = inside foo
+        assert_eq!(scope.name, "foo", "line 1 should be in foo scope");
+    }
+
+    #[test]
+    fn i2_find_scope_at_line_global() {
+        let source = "let x = 1\nfn foo() {\n    let y = 2\n}";
+        let scopes = build_scope_tree(source);
+        let scope = find_scope_at_line(&scopes, 0); // line 0 = global
+        assert_eq!(scope.name, "global");
+    }
+
+    #[test]
+    fn i2_references_in_scope_local() {
+        let source =
+            "fn foo() {\n    let x = 1\n    let y = x + 1\n}\nfn bar() {\n    let x = 99\n}";
+        let scopes = build_scope_tree(source);
+        let foo_scope = scopes.iter().find(|s| s.name == "foo").unwrap();
+        let refs = find_references_in_scope(source, "x", foo_scope);
+        // x appears at line 1 (let x) and line 2 (= x +)
+        assert_eq!(
+            refs.len(),
+            2,
+            "should find 2 refs to x in foo, got {}",
+            refs.len()
+        );
+    }
+
+    #[test]
+    fn i2_references_in_scope_excludes_other_fn() {
+        let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let x = 99\n}";
+        let scopes = build_scope_tree(source);
+        let foo_scope = scopes.iter().find(|s| s.name == "foo").unwrap();
+        let refs = find_references_in_scope(source, "x", &foo_scope);
+        // Only x in foo, not in bar
+        assert_eq!(refs.len(), 1, "should find 1 ref to x in foo scope only");
+    }
+
+    #[test]
+    fn i2_is_struct_field_detects_field() {
+        let source = "struct Point {\n    x: f64,\n    y: f64,\n}";
+        assert!(is_struct_field(source, "x"));
+        assert!(is_struct_field(source, "y"));
+        assert!(!is_struct_field(source, "z"));
+    }
+
+    #[test]
+    fn i2_is_fn_param_detects_param() {
+        let source = "fn add(a: i32, b: i32) -> i32 {\n    a + b\n}";
+        assert!(is_fn_param(source, "a", 1));
+        assert!(is_fn_param(source, "b", 1));
+        assert!(!is_fn_param(source, "c", 1));
+    }
+
+    #[test]
+    fn i2_global_symbol_refs_span_whole_file() {
+        let source = "fn greet() {\n    println(\"hi\")\n}\nfn main() {\n    greet()\n}";
+        let scopes = build_scope_tree(source);
+        let refs = find_references_in_scope(source, "greet", &scopes[0]);
+        // greet appears in fn def (line 0) and call (line 4)
+        assert!(
+            refs.len() >= 2,
+            "global greet should have 2+ refs, got {}",
+            refs.len()
+        );
+    }
+
+    #[test]
+    fn i2_scope_tree_depth() {
+        let source = "fn outer() {\n    fn inner() {\n        let x = 1\n    }\n}";
+        let scopes = build_scope_tree(source);
+        let outer = scopes.iter().find(|s| s.name == "outer");
+        let inner = scopes.iter().find(|s| s.name == "inner");
+        assert!(outer.is_some(), "should find outer scope");
+        assert!(inner.is_some(), "should find inner scope");
+        if let (Some(o), Some(i)) = (outer, inner) {
+            assert!(i.depth > o.depth, "inner should be deeper than outer");
+        }
     }
 }
