@@ -1004,7 +1004,230 @@ impl<'ctx> LlvmCompiler<'ctx> {
         Ok(Some(self.context.i64_type().const_int(0, false).into()))
     }
 
+    // ── V12 Sprint L6: String & Array Runtime Declarations ────────────
+
+    /// Declares external runtime functions for string and array operations.
+    ///
+    /// These correspond to `extern "C"` functions in `runtime_fns.rs`:
+    /// - `fj_rt_string_concat(a_ptr, a_len, b_ptr, b_len) -> {ptr, len}`
+    /// - `fj_rt_string_len(ptr, len) -> i64`
+    /// - `fj_rt_string_eq(a_ptr, a_len, b_ptr, b_len) -> bool`
+    /// - `fj_rt_array_bounds_check(idx, len)` — panics on OOB
+    /// - `fj_rt_print_str(ptr, len)` — print string to stdout
+    fn declare_runtime_functions(&mut self) {
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let void_ty = self.context.void_type();
+        let bool_ty = self.context.bool_type();
+
+        // String type: {ptr, len}
+        let str_type = self
+            .context
+            .struct_type(&[ptr_ty.into(), i64_ty.into()], false);
+
+        // fj_rt_string_concat(a_ptr: ptr, a_len: i64, b_ptr: ptr, b_len: i64) -> {ptr, len}
+        let concat_ty = str_type.fn_type(
+            &[ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i64_ty.into()],
+            false,
+        );
+        if self.module.get_function("fj_rt_string_concat").is_none() {
+            self.module.add_function(
+                "fj_rt_string_concat",
+                concat_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_string_len(ptr: ptr, len: i64) -> i64
+        let len_ty = i64_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_string_len").is_none() {
+            self.module.add_function(
+                "fj_rt_string_len",
+                len_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_string_eq(a_ptr, a_len, b_ptr, b_len) -> bool
+        let eq_ty = bool_ty.fn_type(
+            &[ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i64_ty.into()],
+            false,
+        );
+        if self.module.get_function("fj_rt_string_eq").is_none() {
+            self.module.add_function(
+                "fj_rt_string_eq",
+                eq_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_array_bounds_check(idx: i64, len: i64) -> void (panics on OOB)
+        let bounds_ty = void_ty.fn_type(&[i64_ty.into(), i64_ty.into()], false);
+        if self
+            .module
+            .get_function("fj_rt_array_bounds_check")
+            .is_none()
+        {
+            self.module.add_function(
+                "fj_rt_array_bounds_check",
+                bounds_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_print_str(ptr: ptr, len: i64) -> void
+        let print_ty = void_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_print_str").is_none() {
+            self.module.add_function(
+                "fj_rt_print_str",
+                print_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_array_new(len: i64, elem_size: i64) -> ptr (heap-allocated array)
+        let arr_new_ty = ptr_ty.fn_type(&[i64_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_array_new").is_none() {
+            self.module.add_function(
+                "fj_rt_array_new",
+                arr_new_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_array_len(arr: ptr) -> i64
+        let arr_len_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
+        if self.module.get_function("fj_rt_array_len").is_none() {
+            self.module.add_function(
+                "fj_rt_array_len",
+                arr_len_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_array_push(arr: ptr, val: i64) -> ptr (returns potentially reallocated array)
+        let arr_push_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_array_push").is_none() {
+            self.module.add_function(
+                "fj_rt_array_push",
+                arr_push_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_map_new() -> ptr
+        let map_new_ty = ptr_ty.fn_type(&[], false);
+        if self.module.get_function("fj_rt_map_new").is_none() {
+            self.module.add_function(
+                "fj_rt_map_new",
+                map_new_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_map_insert(map: ptr, key: i64, val: i64) -> void
+        let map_insert_ty = void_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_map_insert").is_none() {
+            self.module.add_function(
+                "fj_rt_map_insert",
+                map_insert_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+
+        // fj_rt_map_get(map: ptr, key: i64) -> i64
+        let map_get_ty = i64_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
+        if self.module.get_function("fj_rt_map_get").is_none() {
+            self.module.add_function(
+                "fj_rt_map_get",
+                map_get_ty,
+                Some(inkwell::module::Linkage::External),
+            );
+        }
+    }
+
+    /// Returns the LLVM string struct type: `{ptr, i64}`.
+    #[allow(dead_code)] // Used by tests and future string operations
+    fn string_type(&self) -> inkwell::types::StructType<'ctx> {
+        self.context.struct_type(
+            &[
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        )
+    }
+
+    /// Compiles a string concatenation: `a + b` where both are strings.
+    #[allow(dead_code)] // Infrastructure for string binary ops (L7+)
+    ///
+    /// Calls `fj_rt_string_concat(a.ptr, a.len, b.ptr, b.len) -> {ptr, len}`.
+    fn compile_string_concat(
+        &mut self,
+        lhs: BasicValueEnum<'ctx>,
+        rhs: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let concat_fn = self
+            .module
+            .get_function("fj_rt_string_concat")
+            .ok_or_else(|| CodegenError::Internal("fj_rt_string_concat not declared".into()))?;
+
+        // Extract {ptr, len} from both strings
+        let a_ptr = self
+            .builder
+            .build_extract_value(lhs.into_struct_value(), 0, "a_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let a_len = self
+            .builder
+            .build_extract_value(lhs.into_struct_value(), 1, "a_len")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let b_ptr = self
+            .builder
+            .build_extract_value(rhs.into_struct_value(), 0, "b_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let b_len = self
+            .builder
+            .build_extract_value(rhs.into_struct_value(), 1, "b_len")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        let result = self
+            .builder
+            .build_call(
+                concat_fn,
+                &[a_ptr.into(), a_len.into(), b_ptr.into(), b_len.into()],
+                "concat_result",
+            )
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        match result.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(val) => Ok(val),
+            _ => Err(CodegenError::Internal("string concat returned void".into())),
+        }
+    }
+
+    /// Compiles an array bounds check before index access.
+    #[allow(dead_code)] // Infrastructure for safe array access (L7+)
+    ///
+    /// Calls `fj_rt_array_bounds_check(idx, len)` which panics on OOB.
+    fn compile_bounds_check(
+        &mut self,
+        index: inkwell::values::IntValue<'ctx>,
+        array_len: inkwell::values::IntValue<'ctx>,
+    ) -> Result<(), CodegenError> {
+        if let Some(bounds_fn) = self.module.get_function("fj_rt_array_bounds_check") {
+            self.builder
+                .build_call(bounds_fn, &[index.into(), array_len.into()], "bounds_check")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        }
+        Ok(())
+    }
+
     pub fn compile_program(&mut self, program: &Program) -> Result<(), CodegenError> {
+        // Declare runtime functions for string/array operations
+        self.declare_runtime_functions();
+
         // Pass 0: register struct and enum type definitions
         for item in &program.items {
             match item {
@@ -5903,5 +6126,242 @@ mod tests {
         let context = Context::create();
         let compiler = LlvmCompiler::new(&context, "test_l5_mono_empty");
         assert!(compiler.mono_fns.is_empty());
+    }
+
+    // ── V12 Sprint L6: String & Array Tests ─────────────────────────────
+
+    #[test]
+    fn l6_runtime_fns_declared() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_rt");
+        compiler.declare_runtime_functions();
+
+        assert!(
+            compiler
+                .module
+                .get_function("fj_rt_string_concat")
+                .is_some()
+        );
+        assert!(compiler.module.get_function("fj_rt_string_len").is_some());
+        assert!(compiler.module.get_function("fj_rt_string_eq").is_some());
+        assert!(
+            compiler
+                .module
+                .get_function("fj_rt_array_bounds_check")
+                .is_some()
+        );
+        assert!(compiler.module.get_function("fj_rt_print_str").is_some());
+        assert!(compiler.module.get_function("fj_rt_array_new").is_some());
+        assert!(compiler.module.get_function("fj_rt_array_len").is_some());
+        assert!(compiler.module.get_function("fj_rt_array_push").is_some());
+        assert!(compiler.module.get_function("fj_rt_map_new").is_some());
+        assert!(compiler.module.get_function("fj_rt_map_insert").is_some());
+        assert!(compiler.module.get_function("fj_rt_map_get").is_some());
+    }
+
+    #[test]
+    fn l6_runtime_fns_idempotent() {
+        // Calling declare_runtime_functions twice should not panic
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_idem");
+        compiler.declare_runtime_functions();
+        compiler.declare_runtime_functions(); // Should not panic or create duplicates
+        assert!(
+            compiler
+                .module
+                .get_function("fj_rt_string_concat")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn l6_string_type_is_struct() {
+        let context = Context::create();
+        let compiler = LlvmCompiler::new(&context, "test_l6_str_ty");
+        let str_ty = compiler.string_type();
+        assert_eq!(str_ty.count_fields(), 2);
+    }
+
+    #[test]
+    fn l6_string_literal_produces_struct() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_str_lit");
+
+        // Create a function context
+        let i64_type = context.i64_type();
+        let fn_type = i64_type.fn_type(&[], false);
+        let function = compiler.module.add_function("test_str", fn_type, None);
+        let entry = context.append_basic_block(function, "entry");
+        compiler.builder.position_at_end(entry);
+
+        let result = compiler.compile_literal(&LiteralKind::String("hello".to_string()));
+        assert!(result.is_ok());
+        let val = result.unwrap().unwrap();
+        assert!(
+            val.is_struct_value(),
+            "string literal should produce a struct value"
+        );
+    }
+
+    #[test]
+    fn l6_array_literal_produces_ptr() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_arr_lit");
+
+        // Create a function context
+        let i64_type = context.i64_type();
+        let fn_type = i64_type.fn_type(&[], false);
+        let function = compiler.module.add_function("test_arr", fn_type, None);
+        let entry = context.append_basic_block(function, "entry");
+        compiler.builder.position_at_end(entry);
+
+        let elements = vec![make_int_lit(1), make_int_lit(2), make_int_lit(3)];
+        let result = compiler.compile_array(&elements);
+        assert!(
+            result.is_ok(),
+            "array compilation should succeed: {result:?}"
+        );
+        assert!(result.unwrap().is_some(), "array should produce a value");
+    }
+
+    #[test]
+    fn l6_empty_array_returns_zero() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_empty_arr");
+
+        let i64_type = context.i64_type();
+        let fn_type = i64_type.fn_type(&[], false);
+        let function = compiler.module.add_function("test_empty", fn_type, None);
+        let entry = context.append_basic_block(function, "entry");
+        compiler.builder.position_at_end(entry);
+
+        let elements: Vec<Expr> = vec![];
+        let result = compiler.compile_array(&elements);
+        assert!(result.is_ok());
+        let val = result.unwrap().unwrap();
+        assert!(val.is_int_value(), "empty array should return i64(0)");
+    }
+
+    #[test]
+    fn l6_compile_program_declares_runtime() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_prog_rt");
+
+        let program = Program {
+            span: dummy_span(),
+            items: vec![Item::FnDef(FnDef {
+                is_pub: false,
+                is_const: false,
+                is_async: false,
+                is_test: false,
+                should_panic: false,
+                is_ignored: false,
+                doc_comment: None,
+                annotation: None,
+                name: "main".to_string(),
+                lifetime_params: vec![],
+                generic_params: vec![],
+                params: vec![],
+                return_type: None,
+                where_clauses: vec![],
+                requires: vec![],
+                ensures: vec![],
+                effects: vec![],
+                body: Box::new(Expr::Block {
+                    stmts: vec![],
+                    expr: Some(Box::new(make_int_lit(0))),
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            })],
+        };
+        compiler.compile_program(&program).unwrap();
+
+        // Runtime functions should be declared by compile_program
+        assert!(
+            compiler
+                .module
+                .get_function("fj_rt_string_concat")
+                .is_some()
+        );
+        assert!(
+            compiler
+                .module
+                .get_function("fj_rt_array_bounds_check")
+                .is_some()
+        );
+        assert!(compiler.module.get_function("fj_rt_map_new").is_some());
+    }
+
+    #[test]
+    fn l6_runtime_fn_signatures_correct() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_sig");
+        compiler.declare_runtime_functions();
+
+        // fj_rt_string_concat: 4 params (ptr, len, ptr, len) → struct
+        let concat = compiler.module.get_function("fj_rt_string_concat").unwrap();
+        assert_eq!(concat.count_params(), 4);
+
+        // fj_rt_array_bounds_check: 2 params (idx, len) → void
+        let bounds = compiler
+            .module
+            .get_function("fj_rt_array_bounds_check")
+            .unwrap();
+        assert_eq!(bounds.count_params(), 2);
+
+        // fj_rt_map_insert: 3 params (map, key, val) → void
+        let insert = compiler.module.get_function("fj_rt_map_insert").unwrap();
+        assert_eq!(insert.count_params(), 3);
+    }
+
+    #[test]
+    fn l6_ir_contains_runtime_declarations() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_ir");
+        compiler.declare_runtime_functions();
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("fj_rt_string_concat"),
+            "IR should contain string concat declaration"
+        );
+        assert!(
+            ir.contains("fj_rt_array_bounds_check"),
+            "IR should contain bounds check declaration"
+        );
+        assert!(
+            ir.contains("fj_rt_map_new"),
+            "IR should contain map_new declaration"
+        );
+    }
+
+    #[test]
+    fn l6_all_11_runtime_fns_in_ir() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_all");
+        compiler.declare_runtime_functions();
+
+        let ir = compiler.print_ir();
+        let expected = [
+            "fj_rt_string_concat",
+            "fj_rt_string_len",
+            "fj_rt_string_eq",
+            "fj_rt_array_bounds_check",
+            "fj_rt_print_str",
+            "fj_rt_array_new",
+            "fj_rt_array_len",
+            "fj_rt_array_push",
+            "fj_rt_map_new",
+            "fj_rt_map_insert",
+            "fj_rt_map_get",
+        ];
+        for name in &expected {
+            assert!(ir.contains(name), "IR should contain {name}");
+        }
     }
 }
