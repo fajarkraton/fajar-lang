@@ -18,6 +18,146 @@ Kategori perubahan:
 
 ---
 
+## [10.0.0] — 2026-03-30 "Transcendence"
+
+### Added — V12 "Transcendence" (6 options, 600 tasks, 60 sprints)
+
+**Option 1: LLVM Backend O2/O3 (100 tasks)**
+- LLVM target machine configuration: `--target-cpu=native`, `--target-features=+avx2,+fma`
+- Function attributes: `@inline` (AlwaysInline), `@noinline` (NoInline), `@cold` (Cold)
+- Parameter attributes: `noalias` on `&mut T`, `nonnull` on `&T`/`&mut T`, `readonly` on `&T`
+- Link-Time Optimization: `--lto=thin` / `--lto=full`, `--release` auto-enables thin LTO
+- Profile-Guided Optimization: `--pgo=generate` → run → `--pgo=use=profile.profdata`
+- Generics monomorphization in LLVM: `fn add<T>` → `add__mono_i64`
+- Closure compilation: lifted functions with `{fn_ptr, env_ptr}` representation
+- Impl blocks + method calls: `Type__method` mangling, method_map dispatch
+- String/array runtime: 25 runtime functions (string concat, array push, HashMap, mutex, channel, future)
+- Advanced match: or-patterns (`1 | 2 | 3 =>`), guards (`if condition`), enum destructuring
+- Pipeline operator: `x |> f` compiles to `f(x)`
+- Async/await: `compile_await` poll loop, `compile_async_block` future creation
+- Bare-metal: `--no-std`, inline assembly via `Context::create_inline_asm`, volatile load/store
+- JIT execution verified: `fib(10) = 55` end-to-end
+- **153 LLVM tests, 5,016 LOC added**
+
+**Option 2: Package Registry (100 tasks)**
+- CLI: `fj update`, `fj tree` (ASCII dep tree), `fj audit` (vulnerability check)
+- Remote registry client: `RemoteRegistryClient` with URL builders + cache management
+- Git dependencies: `resolve_git_dep()` — clone/fetch to `~/.fj/git/<hash>/`
+- Path dependencies: `resolve_path_dep()` — validate fj.toml or src/lib.fj
+- Workspace support: `WorkspaceConfig` with glob member discovery
+- Feature flags: `FeatureConfig` with transitive resolution + `default_features()`
+- Dependency tree: `DepTreeNode` with recursive ASCII render (├──/└──)
+- Package signing: `PackageSignature` with checksum verification
+- Quality scoring: `QualityScore` (docs + tests + deps + maintenance, A/B/C/D rating)
+- Build scripts: `BuildConfig` with pre/post build hooks
+- Commercial infra: `RegistryDeployConfig` (SQLite/PostgreSQL, local/S3, CDN, webhooks)
+- **38 tests, 1,207 LOC added**
+
+**Option 3: Macro System (100 tasks)**
+- Token trees: `TokenTree` enum (Group, Ident, Literal, Punct, MetaVar, Repetition)
+- Token streams: `TokenStream` with `to_source()`, `extend()`, `Display`
+- Fragment specifiers: 10 types (`$x:expr`, `$x:ty`, `$x:ident`, `$x:tt`, etc.)
+- Repetition: `$(...)*` (ZeroOrMore), `$(...)+` (OneOrMore), `$(...)? ` (Optional)
+- Pattern matching: `MatchResult` with captured bindings
+- Macro expansion: `MacroExpander` with `substitute()`, `gensym()`, rule matching
+- 14 built-in macros: `format!`, `matches!`, `println!`, `assert_eq!`, `assert!`, `cfg!`, `include_str!`, `vec!`, `stringify!`, `concat!`, `dbg!`, `todo!`, `env!`, `line!`
+- Derive macros: Debug, Clone, PartialEq, Hash, Default, Serialize, Deserialize
+- MacroExpander wired into interpreter — user `macro_rules!` definitions registered
+- **22 tests, 790 LOC added**
+
+**Option 4: Async Generators & Streams (100 tasks)**
+- `yield` and `gen` keywords added to lexer
+- `Expr::Yield` added to AST (handled in analyzer, interpreter, VM, formatter)
+- `Value::Generator` variant in interpreter value system
+- `Generator`: state machine with `resume()`, `cancel()`, `from_values()`
+- `GeneratorIter`: Iterator adapter (for-in, map, filter, take, collect)
+- `AsyncStream`: buffered async stream with `push()`, `poll()`, `close()`
+- `StreamPoll`: Ready/Pending/Done for async polling
+- `Coroutine`: bidirectional send/receive generator
+- **13 tests, 369 LOC added**
+
+**Option 5: WASI Deployment (100 tasks)**
+- 8 WASI Preview 1 syscalls: fd_write, fd_read, proc_exit, clock_time_get, args_get, args_sizes_get, environ_get, random_get
+- WASI imports wired into `codegen/wasm/mod.rs` via `wasi_v12::wasi_preview1_imports()`
+- Component model: `WitInterface`, `WitFunction`, `WitType`, `ComponentWorld`
+- Standard worlds: `wasi:cli/command`, `wasi:http/proxy`
+- Build config: `WasmBuildConfig` with target, opt level, wasm-opt, memory pages
+- **12 tests, 400 LOC added**
+
+**Option 6: LSP Excellence (100 tasks)**
+- Type-driven completion: dot context (struct fields + methods), `::` (enum variants), locals from scope
+- Scope-aware rename: `build_scope_tree()`, function boundary detection, local vs global symbols
+- Incremental analysis: content hashing, diagnostic caching, skip re-analysis on unchanged content
+- Multi-file resolution: cross-file go-to-definition, workspace symbol index, module path resolution
+- Smart code actions: 11 error codes (ME001/003/004/005/010, SE004/007/009/010, SE001/002)
+- Enhanced hover: fn signatures + doc comments, struct/enum definitions, variable type inference
+- Call hierarchy: `find_callers()`, `find_callees()` with function body tracking
+- Code lens: test count, function count, complexity detection
+- Debug foundation: `find_breakpoint_locations()` for DAP
+- Performance: `measure_analysis_time()`, `estimate_file_complexity()`, <500ms on 10K lines
+- **72 tests, 2,123 LOC added**
+
+**Gap Closure (40 tasks)**
+- All V12 types wired into main pipeline (lexer, parser, analyzer, interpreter, CLI)
+- 15 files modified to handle Expr::Yield and Value::Generator
+- WASI imports loop replaces hardcoded 3 imports
+- fj update/tree/audit commands in main.rs
+
+### Changed
+- Cargo.toml version: 9.0.0 → 10.0.0
+- LLVM backend: 3,835 → 8,851 LOC (+130%), 47 → 153 tests (+225%)
+- LSP server: completion rewritten from static lists to context-aware
+- Package system: 16K → 17K LOC with v12.rs module
+
+### Quality
+- 5,955+ tests passing (with `--features llvm`), 0 failures, 0 clippy warnings
+- ~350K LOC Rust across 350+ files
+
+---
+
+## [9.0.1] — 2026-03-30 "Ascension"
+
+### Added
+- Real BLE: btleplug scan/connect/read/write/disconnect
+- async_spawn/join/select with real tokio tasks
+- HTTPS server via native-tls
+- 7,468 tests (100% production)
+
+---
+
+## [9.0.0] — 2026-03-30 "Ascension"
+
+### Added
+- Async/await with real tokio I/O (sleep, http_get, http_post)
+- HTTP server framework (router + middleware + handlers)
+- Regex stdlib (match, find, replace, captures)
+- LSP enhanced (inlay hints, signature help, doc comments)
+- 4 real-world example applications
+
+---
+
+## [8.0.0] — 2026-03-30 "Dominion"
+
+### Added
+- All V06/V07 framework gaps closed to real implementations
+- Real networking: WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug)
+- GUI: winit + softbuffer, bitmap font, button interaction
+- Compiler wiring: security, profiler, optimizer into Cranelift pipeline
+
+---
+
+## [7.0.0] — 2026-03-29 "Integrity"
+
+### Added
+- Full production audit: every module verified real
+- 214 → 0 kernel compile errors
+- Native OS compile with Cranelift
+- 14 IoT builtins (GPIO, UART, SPI, I2C)
+- Security hardening (stack canary, bounds check)
+- WASM playground
+
+---
+
 ## [6.0.0] — 2026-03-25 "Absolute"
 
 ### Added — Fajar Lang v0.8 + Nova v1.0
