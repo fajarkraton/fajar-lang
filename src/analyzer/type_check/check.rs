@@ -95,6 +95,24 @@ impl TypeChecker {
                     });
                 }
             }
+            Item::StructDef(sdef) => {
+                // B5: Warn if struct has &T fields but no lifetime params
+                if sdef.lifetime_params.is_empty() {
+                    let has_ref_field = sdef
+                        .fields
+                        .iter()
+                        .any(|f| matches!(f.ty, crate::parser::ast::TypeExpr::Reference { .. }));
+                    if has_ref_field {
+                        self.errors.push(SemanticError::DanglingReference {
+                            lifetime: format!(
+                                "struct '{}' has reference fields but no lifetime parameters",
+                                sdef.name
+                            ),
+                            span: sdef.span,
+                        });
+                    }
+                }
+            }
             Item::Stmt(stmt) => {
                 self.check_stmt(stmt);
             }
@@ -139,6 +157,9 @@ impl TypeChecker {
                 used: true, // type params are always "used"
             });
         }
+
+        // Register lifetime params into environment (push/pop around fn body)
+        let saved_lt_env = self.push_lifetime_env(&fndef.lifetime_params);
 
         // Check lifetime annotations (always run — also catches undeclared lifetimes)
         self.check_lifetime_elision(fndef);
@@ -191,6 +212,11 @@ impl TypeChecker {
                 span: fndef.span,
                 hint,
             });
+        }
+
+        // ME010: Detect dangling references — returning &local_var
+        if matches!(declared_ret, Type::Ref(..) | Type::RefMut(..)) {
+            self.check_dangling_return(&fndef.body, &fndef.params, fndef.span);
         }
 
         // Validate const fn body: only allow const-evaluable operations
@@ -258,6 +284,9 @@ impl TypeChecker {
 
         // Restore outer NLL info (for nested functions)
         self.nll_info = outer_nll;
+
+        // Restore outer lifetime environment
+        self.pop_lifetime_env(saved_lt_env);
 
         self.emit_unused_warnings();
     }
@@ -419,6 +448,85 @@ impl TypeChecker {
         }
     }
 
+    /// Checks if a function body returns a reference to a local variable (dangling).
+    ///
+    /// Walks the tail expression of the body to find `&local` or `&mut local` where
+    /// `local` is not a function parameter. Such references would dangle after return.
+    fn check_dangling_return(
+        &mut self,
+        body: &Expr,
+        params: &[crate::parser::ast::Param],
+        fn_span: Span,
+    ) {
+        let param_names: std::collections::HashSet<&str> =
+            params.iter().map(|p| p.name.as_str()).collect();
+
+        // Extract tail expression from block
+        let tail = Self::extract_tail_expr(body);
+        if let Some(tail_expr) = tail {
+            self.check_dangling_expr(tail_expr, &param_names, fn_span);
+        }
+    }
+
+    /// Extracts the tail (last) expression from a block or returns the expression itself.
+    fn extract_tail_expr(expr: &Expr) -> Option<&Expr> {
+        match expr {
+            Expr::Block { expr: tail, .. } => tail.as_deref(),
+            Expr::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                // Check both branches — if either returns a dangling ref, it's bad
+                // We just return the then_branch for simplicity; check_dangling_expr
+                // is called on the full body anyway
+                Self::extract_tail_expr(then_branch)
+                    .or_else(|| else_branch.as_deref().and_then(Self::extract_tail_expr))
+            }
+            _ => Some(expr),
+        }
+    }
+
+    /// Checks a single expression for dangling references to locals.
+    fn check_dangling_expr(
+        &mut self,
+        expr: &Expr,
+        param_names: &std::collections::HashSet<&str>,
+        fn_span: Span,
+    ) {
+        match expr {
+            Expr::Unary {
+                op: UnaryOp::Ref | UnaryOp::RefMut,
+                operand,
+                ..
+            } => {
+                if let Expr::Ident { name, .. } = &**operand {
+                    if !param_names.contains(name.as_str()) {
+                        // Returning a reference to a local variable — dangling!
+                        self.errors.push(SemanticError::DanglingReference {
+                            lifetime: "local".into(),
+                            span: fn_span,
+                        });
+                    }
+                }
+            }
+            Expr::Block { expr: Some(t), .. } => {
+                self.check_dangling_expr(t, param_names, fn_span);
+            }
+            Expr::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.check_dangling_expr(then_branch, param_names, fn_span);
+                if let Some(e) = else_branch {
+                    self.check_dangling_expr(e, param_names, fn_span);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Releases borrows whose binding variable is no longer live (NLL).
     ///
     /// Called before each statement in a block. Checks all active borrow
@@ -517,7 +625,7 @@ impl TypeChecker {
                         .lookup(src_name)
                         .map(|s| s.ty.clone())
                         .unwrap_or(Type::Unknown);
-                    if !crate::analyzer::borrow_lite::is_copy_type(&src_type) {
+                    if !self.is_copy(&src_type) {
                         // ME003: cannot move while borrowed
                         if let Some(borrow_span) = self.moves.check_can_move(src_name) {
                             self.errors.push(SemanticError::MoveWhileBorrowed {
@@ -1192,7 +1300,7 @@ impl TypeChecker {
             UnaryOp::Ref => self.check_borrow_ref(operand, &ty, false),
             UnaryOp::RefMut => self.check_borrow_ref(operand, &ty, true),
             UnaryOp::Deref => match &ty {
-                Type::Ref(inner) | Type::RefMut(inner) => *inner.clone(),
+                Type::Ref(inner, _) | Type::RefMut(inner, _) => *inner.clone(),
                 Type::Unknown => Type::Unknown,
                 _ => {
                     self.errors.push(SemanticError::TypeMismatch {
@@ -1249,7 +1357,7 @@ impl TypeChecker {
                         _ => {}
                     }
                 }
-                Type::RefMut(Box::new(ty.clone()))
+                Type::RefMut(Box::new(ty.clone()), None)
             } else {
                 // Try to create immutable borrow
                 if let Err(crate::analyzer::borrow_lite::BorrowError::ImmWhileMutBorrowed {
@@ -1262,14 +1370,14 @@ impl TypeChecker {
                         borrow_span: mut_span,
                     });
                 }
-                Type::Ref(Box::new(ty.clone()))
+                Type::Ref(Box::new(ty.clone()), None)
             }
         } else {
             // Non-identifier operand (e.g., &expr) — no borrow tracking
             if is_mutable {
-                Type::RefMut(Box::new(ty.clone()))
+                Type::RefMut(Box::new(ty.clone()), None)
             } else {
-                Type::Ref(Box::new(ty.clone()))
+                Type::Ref(Box::new(ty.clone()), None)
             }
         }
     }
@@ -1348,13 +1456,36 @@ impl TypeChecker {
             false
         };
         if !is_non_consuming_builtin {
-            for (arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+            // Get callee param types to detect &T params (borrow, not move)
+            let callee_param_types: Vec<Type> = if let Expr::Ident { name, .. } = callee {
+                if let Some(sym) = self.symbols.lookup(name) {
+                    if let Type::Function { params, .. } = &sym.ty {
+                        params.clone()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            for (i, (arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
                 if let Expr::Ident {
                     name: arg_name,
                     span: arg_span,
                 } = &arg.value
                 {
-                    if !crate::analyzer::borrow_lite::is_copy_type(arg_ty) {
+                    // C5: If param type is &T or &mut T, borrow instead of move
+                    let param_is_ref = callee_param_types
+                        .get(i)
+                        .is_some_and(|pt| matches!(pt, Type::Ref(..) | Type::RefMut(..)));
+
+                    if param_is_ref {
+                        // Borrow the argument — don't move
+                        let _ = self.moves.borrow_imm(arg_name, *arg_span);
+                    } else if !self.is_copy(arg_ty) {
                         if let Some(borrow_span) = self.moves.check_can_move(arg_name) {
                             self.errors.push(SemanticError::MoveWhileBorrowed {
                                 name: arg_name.clone(),
@@ -1657,9 +1788,68 @@ impl TypeChecker {
             }
             None => Type::Void,
         };
+        // C4: Drop order validation — in strict mode, check that borrow
+        // bindings are declared AFTER their targets (reverse drop order safe).
+        if self.strict_ownership {
+            self.validate_drop_order(stmts);
+        }
+
         self.emit_unused_warnings();
         self.moves.pop_scope();
         ty
+    }
+
+    /// Validates that borrow bindings are declared after their target variables.
+    ///
+    /// In Rust's drop order, bindings are dropped in reverse declaration order.
+    /// A reference must be declared after its referent to ensure it drops first.
+    fn validate_drop_order(&mut self, stmts: &[Stmt]) {
+        // Collect (name, span, index) for let bindings
+        let mut binding_order: Vec<(&str, Span)> = Vec::new();
+        // Collect (borrow_name, target_name, span) for borrow refs
+        let mut borrow_pairs: Vec<(String, String, Span)> = Vec::new();
+
+        for stmt in stmts {
+            if let Stmt::Let {
+                name, value, span, ..
+            } = stmt
+            {
+                binding_order.push((name, *span));
+                // Check if RHS is a borrow
+                if let Expr::Unary { op, operand, .. } = &**value {
+                    if matches!(op, UnaryOp::Ref | UnaryOp::RefMut) {
+                        if let Expr::Ident {
+                            name: target_name, ..
+                        } = &**operand
+                        {
+                            borrow_pairs.push((name.clone(), target_name.clone(), *span));
+                        }
+                    }
+                }
+            }
+        }
+
+        // For each borrow pair, check that the borrow is declared after its target
+        for (borrow_name, target_name, borrow_span) in &borrow_pairs {
+            let borrow_idx = binding_order
+                .iter()
+                .position(|(n, _)| *n == borrow_name.as_str());
+            let target_idx = binding_order
+                .iter()
+                .position(|(n, _)| *n == target_name.as_str());
+            if let (Some(b_idx), Some(t_idx)) = (borrow_idx, target_idx) {
+                if b_idx < t_idx {
+                    // Borrow declared BEFORE its target — drop order violation
+                    self.errors.push(SemanticError::DanglingReference {
+                        lifetime: format!(
+                            "'{borrow_name}' borrows '{target_name}' but is declared before it \
+                             (would be dropped after its referent)"
+                        ),
+                        span: *borrow_span,
+                    });
+                }
+            }
+        }
     }
 
     /// Checks an if expression.
@@ -1786,7 +1976,7 @@ impl TypeChecker {
             span: subject_span,
         } = subject
         {
-            if !crate::analyzer::borrow_lite::is_copy_type(&subject_ty) {
+            if !self.is_copy(&subject_ty) {
                 let has_destructure = arms.iter().any(|arm| {
                     matches!(
                         arm.pattern,
@@ -2302,12 +2492,20 @@ impl TypeChecker {
                 params: params.iter().map(|t| self.resolve_type(t)).collect(),
                 ret: Box::new(self.resolve_type(return_type)),
             },
-            TypeExpr::Reference { mutable, inner, .. } => {
+            TypeExpr::Reference {
+                mutable,
+                inner,
+                lifetime,
+                ..
+            } => {
                 let inner_ty = self.resolve_type(inner);
+                let lt_id = lifetime
+                    .as_ref()
+                    .and_then(|name| self.resolve_lifetime(name));
                 if *mutable {
-                    Type::RefMut(Box::new(inner_ty))
+                    Type::RefMut(Box::new(inner_ty), lt_id)
                 } else {
-                    Type::Ref(Box::new(inner_ty))
+                    Type::Ref(Box::new(inner_ty), lt_id)
                 }
             }
             TypeExpr::Slice { element, .. } => Type::Array(Box::new(self.resolve_type(element))),
@@ -2382,10 +2580,16 @@ impl TypeChecker {
         let mut input_lifetimes = Vec::new();
         let mut has_self_ref = false;
         let mut self_lifetime: Option<String> = None;
+        // Count total reference params (including elided) for elision rule checking
+        let mut ref_param_count: usize = 0;
 
         for param in &fndef.params {
             let mut param_lifetimes = Vec::new();
             collect_lifetimes_from_type(&param.ty, &mut param_lifetimes);
+            // Count if this param is or contains a reference
+            if Self::has_elided_reference(&param.ty) || !param_lifetimes.is_empty() {
+                ref_param_count += 1;
+            }
             if param.name == "self" {
                 has_self_ref = true;
                 if let Some(lt) = param_lifetimes.first() {
@@ -2439,22 +2643,53 @@ impl TypeChecker {
             }
 
             // Elision rule 2 & 3: validate output lifetimes
-            // If there's exactly one input lifetime or &self, output can use it
+            // If there's exactly one input lifetime/ref-param or &self, output can use it
+            let has_single_input =
+                ref_param_count == 1 || (input_lifetimes.len() == 1 && ref_param_count <= 1);
             let elision_source = if has_self_ref {
-                self_lifetime.clone()
-            } else if input_lifetimes.len() == 1 {
-                Some(input_lifetimes[0].clone())
+                self_lifetime.clone().or(Some("self".to_string()))
+            } else if has_single_input {
+                input_lifetimes.first().cloned().or(Some("_".to_string()))
             } else {
                 None
             };
 
-            // If there are output lifetimes and no elision source, they must all be declared
-            if !output_lifetimes.is_empty() && elision_source.is_none() && input_lifetimes.len() > 1
-            {
-                // Multiple input lifetimes, no &self — output lifetime is ambiguous
-                // This is fine as long as all output lifetimes are explicitly declared
-                // (already checked above)
+            // Check for ambiguous elision: return type contains &T without lifetime
+            // and there are multiple ref-params with no &self.
+            if elision_source.is_none() && ref_param_count > 1 {
+                let has_elided_output_ref =
+                    Self::has_elided_reference(ret_ty) && output_lifetimes.is_empty();
+                if has_elided_output_ref {
+                    self.errors.push(SemanticError::LifetimeMismatch {
+                        expected: "explicit lifetime annotation".into(),
+                        found: "ambiguous elided lifetime in return type".into(),
+                        span: fndef.span,
+                    });
+                }
             }
+        }
+    }
+
+    /// Checks if a type expression contains a reference without an explicit lifetime.
+    fn has_elided_reference(ty: &crate::parser::ast::TypeExpr) -> bool {
+        match ty {
+            crate::parser::ast::TypeExpr::Reference { lifetime: None, .. } => true,
+            crate::parser::ast::TypeExpr::Reference {
+                lifetime: Some(_),
+                inner,
+                ..
+            } => Self::has_elided_reference(inner),
+            crate::parser::ast::TypeExpr::Generic { args, .. } => {
+                args.iter().any(Self::has_elided_reference)
+            }
+            crate::parser::ast::TypeExpr::Tuple { elements, .. } => {
+                elements.iter().any(Self::has_elided_reference)
+            }
+            crate::parser::ast::TypeExpr::Array { element, .. }
+            | crate::parser::ast::TypeExpr::Slice { element, .. } => {
+                Self::has_elided_reference(element)
+            }
+            _ => false,
         }
     }
 }

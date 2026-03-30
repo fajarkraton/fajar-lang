@@ -46,6 +46,20 @@ pub fn analyze(program: &Program) -> Result<(), Vec<SemanticError>> {
 ///
 /// Used by the REPL and `eval_source()` to inform the analyzer about
 /// names that were defined in previous evaluation rounds.
+/// Analyzes a parsed program with strict ownership checking.
+///
+/// In strict mode, String/Array/Struct/Tensor are Move types — assigning or
+/// passing them transfers ownership. Use-after-move (ME001) and move-while-borrowed
+/// (ME003) errors fire for non-Copy types.
+pub fn analyze_strict(program: &Program) -> Result<(), Vec<SemanticError>> {
+    let mut checker = TypeChecker::new_strict();
+    checker.analyze(program)
+}
+
+/// Analyzes a parsed program with additional pre-defined symbol names.
+///
+/// Used by the REPL and `eval_source()` to inform the analyzer about
+/// names that were defined in previous evaluation rounds.
 pub fn analyze_with_known(
     program: &Program,
     known_names: &[String],

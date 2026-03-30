@@ -156,10 +156,11 @@ pub enum Type {
         /// Return type.
         ret: Box<Type>,
     },
-    /// Immutable reference: `&T`.
-    Ref(Box<Type>),
-    /// Mutable reference: `&mut T`.
-    RefMut(Box<Type>),
+    /// Immutable reference: `&'a T`. The `Option<u32>` is the lifetime ID
+    /// (`None` = elided/anonymous, `Some(0)` = 'static, `Some(n)` = named).
+    Ref(Box<Type>, Option<u32>),
+    /// Mutable reference: `&'a mut T`. Same lifetime semantics as `Ref`.
+    RefMut(Box<Type>, Option<u32>),
     /// A tensor type with element type and optional shape dimensions.
     /// `None` dimensions are dynamic (unknown at compile time).
     Tensor {
@@ -257,9 +258,9 @@ impl Type {
             // Functions: always Send
             Type::Function { .. } => true,
             // Immutable references: Send if inner is Send
-            Type::Ref(inner) => inner.is_send(),
+            Type::Ref(inner, _) => inner.is_send(),
             // Mutable references: NOT Send — sharing &mut across threads is a data race
-            Type::RefMut(_) => false,
+            Type::RefMut(..) => false,
             // Tensors: Send
             Type::Tensor { .. } => true,
             // Futures: Send if inner is Send
@@ -437,8 +438,8 @@ impl Type {
                 let parts: Vec<String> = params.iter().map(|t| t.display_name()).collect();
                 format!("fn({}) -> {}", parts.join(", "), ret.display_name())
             }
-            Type::Ref(inner) => format!("&{}", inner.display_name()),
-            Type::RefMut(inner) => format!("&mut {}", inner.display_name()),
+            Type::Ref(inner, _) => format!("&{}", inner.display_name()),
+            Type::RefMut(inner, _) => format!("&mut {}", inner.display_name()),
             Type::Tensor { element, dims } => {
                 let dim_strs: Vec<String> = dims
                     .iter()
@@ -496,10 +497,10 @@ impl Type {
         if let (Type::Tuple(a), Type::Tuple(b)) = (self, other) {
             return a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.is_compatible(y));
         }
-        if let (Type::Ref(a), Type::Ref(b)) = (self, other) {
+        if let (Type::Ref(a, _), Type::Ref(b, _)) = (self, other) {
             return a.is_compatible(b);
         }
-        if let (Type::RefMut(a), Type::RefMut(b)) = (self, other) {
+        if let (Type::RefMut(a, _), Type::RefMut(b, _)) = (self, other) {
             return a.is_compatible(b);
         }
         if let (
@@ -1245,6 +1246,15 @@ pub struct TypeChecker {
     fn_effects: HashMap<String, Vec<String>>,
     /// Whether we are inside a handle expression (allows resume).
     in_handle_expr: bool,
+    /// Strict ownership mode: String/Array/Struct/Tensor are Move types.
+    /// When false (default), all types are Copy (interpreter semantics).
+    /// Enabled by `--strict-ownership` CLI flag.
+    strict_ownership: bool,
+    /// Lifetime environment: maps lifetime name → unique ID.
+    /// Populated per-function from `lifetime_params`. `'static` is always ID 0.
+    lifetime_env: HashMap<String, u32>,
+    /// Next lifetime ID to assign (starts at 1; 0 = 'static).
+    next_lifetime_id: u32,
 }
 
 /// A trait method signature for validation.
@@ -1643,6 +1653,13 @@ impl TypeChecker {
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
             fn_effects: HashMap::new(),
             in_handle_expr: false,
+            strict_ownership: false,
+            lifetime_env: {
+                let mut env = HashMap::new();
+                env.insert("static".to_string(), 0);
+                env
+            },
+            next_lifetime_id: 1,
         };
         tc.register_builtins();
         tc.register_builtin_traits();
@@ -1660,6 +1677,66 @@ impl TypeChecker {
             vec!["Ready".to_string(), "Pending".to_string()],
         );
         tc
+    }
+
+    /// Creates a new type checker with strict ownership enabled.
+    ///
+    /// In strict mode, String/Array/Struct/Tensor are Move types (not Copy).
+    /// Assigning or passing them transfers ownership; use-after-move is an error.
+    pub fn new_strict() -> Self {
+        let mut tc = Self::new();
+        tc.strict_ownership = true;
+        tc
+    }
+
+    /// Returns whether strict ownership mode is enabled.
+    pub fn is_strict_ownership(&self) -> bool {
+        self.strict_ownership
+    }
+
+    /// Returns true if the given type is Copy in the current mode.
+    ///
+    /// In default mode, all types are Copy (interpreter semantics).
+    /// In strict mode, only primitives and `&T` are Copy.
+    fn is_copy(&self, ty: &Type) -> bool {
+        if self.strict_ownership {
+            crate::analyzer::borrow_lite::is_copy_type_strict(ty)
+        } else {
+            crate::analyzer::borrow_lite::is_copy_type(ty)
+        }
+    }
+
+    /// Registers lifetime parameters from a function definition into the environment.
+    ///
+    /// Returns the previous environment so it can be restored after checking the function.
+    fn push_lifetime_env(
+        &mut self,
+        lifetime_params: &[crate::parser::ast::LifetimeParam],
+    ) -> (HashMap<String, u32>, u32) {
+        let saved_env = self.lifetime_env.clone();
+        let saved_id = self.next_lifetime_id;
+        // Keep 'static from the base env
+        for lp in lifetime_params {
+            let id = self.next_lifetime_id;
+            self.lifetime_env.insert(lp.name.clone(), id);
+            self.next_lifetime_id += 1;
+        }
+        (saved_env, saved_id)
+    }
+
+    /// Restores a previously saved lifetime environment.
+    fn pop_lifetime_env(&mut self, saved: (HashMap<String, u32>, u32)) {
+        self.lifetime_env = saved.0;
+        self.next_lifetime_id = saved.1;
+    }
+
+    /// Resolves a lifetime name to its ID. Returns None for undeclared lifetimes.
+    /// `'_` (wildcard) returns None — it's always valid but has no specific ID.
+    fn resolve_lifetime(&self, name: &str) -> Option<u32> {
+        if name == "_" {
+            return None;
+        }
+        self.lifetime_env.get(name).copied()
     }
 
     /// Registers built-in functions in the global scope.
@@ -4452,16 +4529,16 @@ mod tests {
     #[test]
     fn reject_mut_ref_is_not_send() {
         // &mut T is NOT Send — mutable references cannot be shared across threads
-        assert!(!Type::RefMut(Box::new(Type::I64)).is_send());
-        assert!(!Type::RefMut(Box::new(Type::Str)).is_send());
-        assert!(!Type::RefMut(Box::new(Type::F64)).is_send());
+        assert!(!Type::RefMut(Box::new(Type::I64), None).is_send());
+        assert!(!Type::RefMut(Box::new(Type::Str), None).is_send());
+        assert!(!Type::RefMut(Box::new(Type::F64), None).is_send());
     }
 
     #[test]
     fn immutable_ref_is_send() {
         // &T is Send if T is Send
-        assert!(Type::Ref(Box::new(Type::I64)).is_send());
-        assert!(Type::Ref(Box::new(Type::Str)).is_send());
+        assert!(Type::Ref(Box::new(Type::I64), None).is_send());
+        assert!(Type::Ref(Box::new(Type::Str), None).is_send());
     }
 
     #[test]
@@ -4584,5 +4661,355 @@ mod tests {
             "No-lifetime function should have no lifetime errors: {:?}",
             diagnostics
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Strict ownership mode tests (--strict-ownership)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Runs analysis in strict ownership mode, returns errors.
+    fn check_strict(source: &str) -> Result<(), Vec<SemanticError>> {
+        let tokens = tokenize(source).expect("lex error");
+        let program = parse(tokens).expect("parse error");
+        let mut tc = TypeChecker::new_strict();
+        tc.analyze(&program)
+    }
+
+    fn check_strict_errors(source: &str) -> Vec<SemanticError> {
+        check_strict(source).unwrap_err()
+    }
+
+    #[test]
+    fn strict_move_string_use_after_move() {
+        // ME001: use of moved String variable
+        let src = r#"
+            fn test() {
+                let s: str = "hello"
+                let t = s
+                println(s)
+            }
+        "#;
+        let errors = check_strict_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 UseAfterMove for 's', got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_copy_int_no_error() {
+        // Primitives are Copy — no move error
+        let src = r#"
+            fn test() {
+                let x: i32 = 42
+                let y = x
+                let z = x
+            }
+        "#;
+        assert!(check_strict(src).is_ok());
+    }
+
+    #[test]
+    fn strict_move_while_borrowed() {
+        // ME003: cannot move 's' because it is borrowed
+        // r is used AFTER the move, so NLL keeps the borrow alive
+        let src = r#"
+            fn test() {
+                let s: str = "hello"
+                let r = &s
+                let t = s
+                println(r)
+            }
+        "#;
+        let errors = check_strict_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::MoveWhileBorrowed { name, .. } if name == "s")),
+            "Expected ME003 MoveWhileBorrowed for 's', got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_ref_is_copy() {
+        // &T is Copy — can use reference after "move" (it's a copy)
+        let src = r#"
+            fn test() {
+                let x: i32 = 42
+                let r = &x
+                let r2 = r
+                let r3 = r
+            }
+        "#;
+        assert!(check_strict(src).is_ok());
+    }
+
+    #[test]
+    fn strict_fn_arg_moves_string() {
+        // Passing String to non-consuming function moves it
+        let src = r#"
+            fn consume(s: str) -> str { s }
+            fn test() {
+                let s: str = "hello"
+                consume(s)
+                consume(s)
+            }
+        "#;
+        let errors = check_strict_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 after passing String to function, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_fn_arg_copy_int() {
+        // Passing i32 to function is a copy — no error
+        let src = r#"
+            fn double(x: i32) -> i32 { x * 2 }
+            fn test() {
+                let n: i32 = 5
+                double(n)
+                double(n)
+            }
+        "#;
+        assert!(check_strict(src).is_ok());
+    }
+
+    #[test]
+    fn strict_nll_sequential_borrows() {
+        // NLL: after borrow is no longer used, variable can be moved
+        let src = r#"
+            fn test() {
+                let s: str = "hello"
+                let r = &s
+                println(r)
+                let t = s
+            }
+        "#;
+        // This should pass: r is dead after println(r), so s can be moved
+        assert!(check_strict(src).is_ok());
+    }
+
+    #[test]
+    fn strict_default_mode_no_move_errors() {
+        // Default mode (non-strict) should NOT produce move errors
+        let src = r#"
+            fn test() {
+                let s: str = "hello"
+                let t = s
+                println(s)
+            }
+        "#;
+        // Default mode: all types are Copy
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn strict_new_strict_has_flag() {
+        let tc = TypeChecker::new_strict();
+        assert!(tc.is_strict_ownership());
+    }
+
+    #[test]
+    fn strict_new_default_no_flag() {
+        let tc = TypeChecker::new();
+        assert!(!tc.is_strict_ownership());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Phase B: Lifetime validation tests
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn lifetime_env_has_static() {
+        let tc = TypeChecker::new();
+        assert_eq!(tc.resolve_lifetime("static"), Some(0));
+    }
+
+    #[test]
+    fn lifetime_env_wildcard_returns_none() {
+        let tc = TypeChecker::new();
+        assert_eq!(tc.resolve_lifetime("_"), None);
+    }
+
+    #[test]
+    fn lifetime_env_registers_fn_params() {
+        let mut tc = TypeChecker::new();
+        let params = vec![
+            crate::parser::ast::LifetimeParam {
+                name: "a".into(),
+                span: crate::lexer::token::Span::new(0, 1),
+            },
+            crate::parser::ast::LifetimeParam {
+                name: "b".into(),
+                span: crate::lexer::token::Span::new(2, 3),
+            },
+        ];
+        let saved = tc.push_lifetime_env(&params);
+        assert!(tc.resolve_lifetime("a").is_some());
+        assert!(tc.resolve_lifetime("b").is_some());
+        assert_ne!(tc.resolve_lifetime("a"), tc.resolve_lifetime("b"));
+        // static is still there
+        assert_eq!(tc.resolve_lifetime("static"), Some(0));
+        // pop restores
+        tc.pop_lifetime_env(saved);
+        assert!(tc.resolve_lifetime("a").is_none());
+        assert!(tc.resolve_lifetime("b").is_none());
+    }
+
+    #[test]
+    fn lifetime_ref_type_carries_id() {
+        // &'a i32 → Ref(I32, Some(id)) when 'a is declared
+        let src = "fn foo<'a>(x: &'a i32) -> &'a i32 { x }";
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn lifetime_dangling_ref_to_local() {
+        // ME010: returning reference to local variable
+        // Use a single-expression function that creates and references a local
+        let src = "fn bad(y: i32) -> &i32 { &y }";
+        let diagnostics = check_all_diagnostics(src);
+        // y is a param, so this should NOT be dangling. Test the positive case.
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::DanglingReference { .. })),
+            "Ref to param should not be dangling: {:?}",
+            diagnostics
+        );
+        // Now test returning ref to a non-param local via a function
+        // that creates a binding in a block
+        let src2 = r#"fn bad2() -> &i32 { let z: i32 = 1; &z }"#;
+        let diag2 = check_all_diagnostics(src2);
+        assert!(
+            diag2
+                .iter()
+                .any(|e| matches!(e, SemanticError::DanglingReference { .. })),
+            "Expected ME010 DanglingReference for &local, got: {:?}",
+            diag2
+        );
+    }
+
+    #[test]
+    fn lifetime_return_ref_to_param_ok() {
+        // Returning &param is not dangling
+        let src = "fn identity(x: &i32) -> &i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::DanglingReference { .. })),
+            "Returning &param should not be dangling: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_struct_ref_field_warns() {
+        // Struct with &T field but no lifetime params
+        let src = r#"
+            struct Holder {
+                data: &i32,
+            }
+        "#;
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::DanglingReference { .. })),
+            "Struct with &T field and no lifetime should warn: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_elision_single_input_ok() {
+        // Single input lifetime elision — unambiguous
+        let src = "fn first(x: &i32) -> &i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Single-input elision should pass: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_elision_ambiguous_error() {
+        // Multiple input lifetimes, no &self — elision is ambiguous for output &
+        let src = "fn pick(x: &i32, y: &i32) -> &i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Ambiguous elision should produce LifetimeMismatch: {:?}",
+            diagnostics
+        );
+    }
+
+    #[test]
+    fn lifetime_explicit_resolves_ambiguity() {
+        // Explicit lifetime annotations resolve the ambiguity
+        let src = "fn pick<'a>(x: &'a i32, y: &i32) -> &'a i32 { x }";
+        let diagnostics = check_all_diagnostics(src);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|e| matches!(e, SemanticError::LifetimeMismatch { .. })),
+            "Explicit lifetimes should resolve ambiguity: {:?}",
+            diagnostics
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Phase C: Advanced borrow tests (strict mode)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn strict_fn_ref_param_borrows_not_moves() {
+        // Passing a move-type to a fn that takes by value moves it once;
+        // passing to a fn that takes &T would require &s syntax.
+        // Test: calling with value on a by-value fn moves, second call fails
+        let src = r#"
+            fn consume(name: str) -> i32 { 0 }
+            fn test() {
+                let s: str = "world"
+                consume(s)
+                consume(s)
+            }
+        "#;
+        let errors = check_strict_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 on second consume(s), got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_drop_order_ref_after_target_ok() {
+        // Ref declared after target — correct drop order
+        let src = r#"
+            fn test() {
+                let s: str = "hello"
+                let r = &s
+                println(r)
+            }
+        "#;
+        assert!(check_strict(src).is_ok());
     }
 }

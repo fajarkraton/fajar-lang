@@ -55,8 +55,8 @@ impl Substitution {
                 params: params.iter().map(|t| self.apply(t)).collect(),
                 ret: Box::new(self.apply(ret)),
             },
-            Type::Ref(inner) => Type::Ref(Box::new(self.apply(inner))),
-            Type::RefMut(inner) => Type::RefMut(Box::new(self.apply(inner))),
+            Type::Ref(inner, lt) => Type::Ref(Box::new(self.apply(inner)), *lt),
+            Type::RefMut(inner, lt) => Type::RefMut(Box::new(self.apply(inner)), *lt),
             // All other types are concrete — return as-is
             _ => ty.clone(),
         }
@@ -164,8 +164,8 @@ pub fn unify(t1: &Type, t2: &Type, subst: &mut Substitution) -> Result<(), Box<U
         }
 
         // References — unify inner types
-        (Type::Ref(a), Type::Ref(b)) => unify(a, b, subst),
-        (Type::RefMut(a), Type::RefMut(b)) => unify(a, b, subst),
+        (Type::Ref(a, _), Type::Ref(b, _)) => unify(a, b, subst),
+        (Type::RefMut(a, _), Type::RefMut(b, _)) => unify(a, b, subst),
 
         // Everything else — mismatch
         _ => Err(Box::new(UnifyError::Mismatch {
@@ -230,7 +230,7 @@ pub enum InferError {
 fn occurs_in(name: &str, ty: &Type) -> bool {
     match ty {
         Type::TypeVar(n) => n == name,
-        Type::Array(inner) | Type::Ref(inner) | Type::RefMut(inner) => occurs_in(name, inner),
+        Type::Array(inner) | Type::Ref(inner, _) | Type::RefMut(inner, _) => occurs_in(name, inner),
         Type::Tuple(elems) => elems.iter().any(|t| occurs_in(name, t)),
         Type::Function { params, ret } => {
             params.iter().any(|t| occurs_in(name, t)) || occurs_in(name, ret)
@@ -243,7 +243,7 @@ fn occurs_in(name: &str, ty: &Type) -> bool {
 pub fn has_type_vars(ty: &Type) -> bool {
     match ty {
         Type::TypeVar(_) => true,
-        Type::Array(inner) | Type::Ref(inner) | Type::RefMut(inner) => has_type_vars(inner),
+        Type::Array(inner) | Type::Ref(inner, _) | Type::RefMut(inner, _) => has_type_vars(inner),
         Type::Tuple(elems) => elems.iter().any(has_type_vars),
         Type::Function { params, ret } => params.iter().any(has_type_vars) || has_type_vars(ret),
         _ => false,
@@ -271,7 +271,7 @@ fn collect_type_vars_from(ty: &Type, names: &mut Vec<String>) {
         Type::TypeVar(n) if !names.contains(n) => {
             names.push(n.clone());
         }
-        Type::Array(inner) | Type::Ref(inner) | Type::RefMut(inner) => {
+        Type::Array(inner) | Type::Ref(inner, _) | Type::RefMut(inner, _) => {
             collect_type_vars_from(inner, names);
         }
         Type::Tuple(elems) => {

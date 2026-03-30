@@ -1800,9 +1800,9 @@ impl TypeChecker {
                         match &p.ty {
                             crate::parser::ast::TypeExpr::Reference { mutable, .. } => {
                                 if *mutable {
-                                    Type::RefMut(Box::new(struct_ty))
+                                    Type::RefMut(Box::new(struct_ty), None)
                                 } else {
-                                    Type::Ref(Box::new(struct_ty))
+                                    Type::Ref(Box::new(struct_ty), None)
                                 }
                             }
                             _ => struct_ty,

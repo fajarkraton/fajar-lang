@@ -41,6 +41,13 @@ pub enum BorrowState {
         /// Span of the mutable borrow.
         span: Span,
     },
+    /// Two-phase mutable borrow: reserved but not yet activated.
+    /// Shared reads are still allowed in this state.
+    /// Activates on first mutable use, becoming MutBorrowed.
+    Reserved {
+        /// Span of the reserved mutable borrow.
+        span: Span,
+    },
 }
 
 /// Borrow conflict errors returned from borrow operations.
@@ -68,6 +75,40 @@ pub enum MoveError {
         /// Where it was moved.
         move_span: Span,
     },
+}
+
+/// A borrow path — either a whole variable or a specific field.
+///
+/// Used for disjoint borrow tracking: `&mut s.x` and `&mut s.y` can
+/// coexist because they borrow different fields (single level only).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BorrowPath {
+    /// Borrow of the whole variable.
+    Var(String),
+    /// Borrow of a specific field: `(var_name, field_name)`.
+    Field(String, String),
+}
+
+impl BorrowPath {
+    /// Returns the variable name this path refers to.
+    pub fn var_name(&self) -> &str {
+        match self {
+            BorrowPath::Var(name) | BorrowPath::Field(name, _) => name,
+        }
+    }
+
+    /// Returns true if two borrow paths conflict (overlap).
+    ///
+    /// Two field paths conflict if they refer to the same field.
+    /// A whole-var path conflicts with any path on that variable.
+    pub fn conflicts_with(&self, other: &BorrowPath) -> bool {
+        match (self, other) {
+            (BorrowPath::Var(a), BorrowPath::Var(b)) => a == b,
+            (BorrowPath::Var(a), BorrowPath::Field(b, _))
+            | (BorrowPath::Field(b, _), BorrowPath::Var(a)) => a == b,
+            (BorrowPath::Field(a, fa), BorrowPath::Field(b, fb)) => a == b && fa == fb,
+        }
+    }
 }
 
 /// Tracks variable ownership and borrow states within scoped regions.
@@ -151,6 +192,8 @@ impl MoveTracker {
             BorrowState::MutBorrowed { span: mut_span } => {
                 Err(BorrowError::ImmWhileMutBorrowed { mut_span })
             }
+            // Two-phase Reserved: shared reads are allowed
+            BorrowState::Reserved { .. } => Ok(()),
             BorrowState::ImmBorrowed { count, first_span } => {
                 self.set_borrow_state(
                     name,
@@ -184,8 +227,110 @@ impl MoveTracker {
             BorrowState::ImmBorrowed { first_span, .. } => Err(BorrowError::MutWhileImmBorrowed {
                 imm_span: first_span,
             }),
-            BorrowState::Unborrowed => {
+            // Reserved two-phase can be upgraded to full MutBorrowed
+            BorrowState::Reserved { .. } | BorrowState::Unborrowed => {
                 self.set_borrow_state(name, BorrowState::MutBorrowed { span });
+                Ok(())
+            }
+        }
+    }
+
+    /// Creates a two-phase mutable borrow (Reserved state).
+    ///
+    /// In Reserved state, shared reads (`&T`) of the same variable are still
+    /// allowed. The borrow activates (becomes exclusive) on the first mutable use.
+    /// This enables patterns like `v.push(v.len())`.
+    pub fn borrow_mut_two_phase(&mut self, name: &str, span: Span) -> Result<(), BorrowError> {
+        let state = self.get_borrow_state(name);
+        match state {
+            BorrowState::MutBorrowed { span: existing } => Err(BorrowError::DoubleMutBorrow {
+                existing_span: existing,
+            }),
+            // Reserved borrows can coexist (both waiting to activate)
+            BorrowState::Reserved { .. } | BorrowState::Unborrowed => {
+                self.set_borrow_state(name, BorrowState::Reserved { span });
+                Ok(())
+            }
+            // Immutable borrows OK — two-phase allows shared reads
+            BorrowState::ImmBorrowed { .. } => {
+                self.set_borrow_state(name, BorrowState::Reserved { span });
+                Ok(())
+            }
+        }
+    }
+
+    /// Activates a two-phase borrow, transitioning Reserved → MutBorrowed.
+    ///
+    /// Called when the reserved borrow is first used mutably.
+    pub fn activate_two_phase(&mut self, name: &str) {
+        let state = self.get_borrow_state(name);
+        if let BorrowState::Reserved { span } = state {
+            self.set_borrow_state(name, BorrowState::MutBorrowed { span });
+        }
+    }
+
+    /// Creates a reborrow: `&T` from a `&mut T` binding.
+    ///
+    /// The mutable borrow is suspended (downgraded to Reserved) while the
+    /// immutable reborrow is active. When the reborrow is released, the
+    /// mutable borrow resumes.
+    pub fn reborrow_imm(&mut self, name: &str, span: Span) -> Result<(), BorrowError> {
+        let state = self.get_borrow_state(name);
+        match state {
+            BorrowState::MutBorrowed { span: orig_span } => {
+                // Downgrade to Reserved (suspends mut exclusivity)
+                self.set_borrow_state(name, BorrowState::Reserved { span: orig_span });
+                Ok(())
+            }
+            BorrowState::Reserved { .. } => {
+                // Already in two-phase — shared reads OK
+                Ok(())
+            }
+            _ => {
+                // Not mutably borrowed — just do a regular imm borrow
+                self.borrow_imm(name, span)
+            }
+        }
+    }
+
+    /// Creates a mutable borrow of a specific field.
+    ///
+    /// Disjoint fields can be mutably borrowed simultaneously.
+    /// `&mut s.x` and `&mut s.y` are OK; `&mut s.x` and `&mut s.x` conflict.
+    pub fn borrow_field_mut(
+        &mut self,
+        var: &str,
+        field: &str,
+        span: Span,
+    ) -> Result<(), BorrowError> {
+        let path = BorrowPath::Field(var.to_string(), field.to_string());
+        // Check for whole-var borrow conflict
+        let state = self.get_borrow_state(var);
+        match state {
+            BorrowState::MutBorrowed { span: existing } => {
+                return Err(BorrowError::DoubleMutBorrow {
+                    existing_span: existing,
+                });
+            }
+            BorrowState::ImmBorrowed { first_span, .. } => {
+                return Err(BorrowError::MutWhileImmBorrowed {
+                    imm_span: first_span,
+                });
+            }
+            _ => {}
+        }
+        // Check field-level conflicts
+        let field_key = format!("{}.{}", path.var_name(), field);
+        let field_state = self.get_borrow_state(&field_key);
+        match field_state {
+            BorrowState::MutBorrowed { span: existing } => Err(BorrowError::DoubleMutBorrow {
+                existing_span: existing,
+            }),
+            BorrowState::ImmBorrowed { first_span, .. } => Err(BorrowError::MutWhileImmBorrowed {
+                imm_span: first_span,
+            }),
+            _ => {
+                self.set_borrow_state(&field_key, BorrowState::MutBorrowed { span });
                 Ok(())
             }
         }
@@ -204,7 +349,7 @@ impl MoveTracker {
         let state = self.get_borrow_state(name);
         match state {
             BorrowState::ImmBorrowed { first_span, .. } => Some(first_span),
-            BorrowState::MutBorrowed { span } => Some(span),
+            BorrowState::MutBorrowed { span } | BorrowState::Reserved { span } => Some(span),
             BorrowState::Unborrowed => None,
         }
     }
@@ -273,7 +418,11 @@ impl MoveTracker {
         for scope in self.borrows.iter_mut().rev() {
             if let Some(state) = scope.get(target) {
                 let new_state = match state {
-                    BorrowState::MutBorrowed { .. } if is_mutable => BorrowState::Unborrowed,
+                    BorrowState::MutBorrowed { .. } | BorrowState::Reserved { .. }
+                        if is_mutable =>
+                    {
+                        BorrowState::Unborrowed
+                    }
                     BorrowState::ImmBorrowed { count, first_span } if !is_mutable => {
                         if *count <= 1 {
                             BorrowState::Unborrowed
@@ -331,6 +480,63 @@ pub fn is_copy_type(_ty: &Type) -> bool {
     true
 }
 
+/// Returns true if a type is Copy under strict ownership rules.
+///
+/// Copy types: integers, floats, bool, char, void, never, unsuffixed literals,
+/// immutable references (`&T`).
+///
+/// Move types: String, Array, Tuple (with move fields), Struct, Enum, Tensor,
+/// Function, mutable references (`&mut T`), Future, DynTrait.
+///
+/// Used when `--strict-ownership` is enabled.
+pub fn is_copy_type_strict(ty: &Type) -> bool {
+    match ty {
+        // Primitives: always Copy
+        Type::Void
+        | Type::Never
+        | Type::I8
+        | Type::I16
+        | Type::I32
+        | Type::I64
+        | Type::I128
+        | Type::U8
+        | Type::U16
+        | Type::U32
+        | Type::U64
+        | Type::U128
+        | Type::ISize
+        | Type::USize
+        | Type::F16
+        | Type::Bf16
+        | Type::F32
+        | Type::F64
+        | Type::IntLiteral
+        | Type::FloatLiteral
+        | Type::Bool
+        | Type::Char => true,
+
+        // Immutable references are Copy (shared access)
+        Type::Ref(..) => true,
+
+        // Move types: heap-allocated or resource-owning
+        Type::Str
+        | Type::Array(_)
+        | Type::Struct { .. }
+        | Type::Enum { .. }
+        | Type::Tensor { .. }
+        | Type::Function { .. }
+        | Type::RefMut(..)
+        | Type::Future { .. }
+        | Type::DynTrait(_) => false,
+
+        // Tuples: Copy only if all elements are Copy
+        Type::Tuple(elems) => elems.iter().all(is_copy_type_strict),
+
+        // Unknown/Named/TypeVar: assume Copy (error recovery / generics)
+        Type::Unknown | Type::Named(_) | Type::TypeVar(_) => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,12 +559,12 @@ mod tests {
         assert!(is_copy_type(&Type::Str));
         assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
         assert!(is_copy_type(&Type::Tuple(vec![Type::Str])));
-        assert!(is_copy_type(&Type::RefMut(Box::new(Type::I32))));
+        assert!(is_copy_type(&Type::RefMut(Box::new(Type::I32), None)));
         assert!(is_copy_type(&Type::Struct {
             name: "Point".into(),
             fields: std::collections::HashMap::new()
         }));
-        assert!(is_copy_type(&Type::Ref(Box::new(Type::Str))));
+        assert!(is_copy_type(&Type::Ref(Box::new(Type::Str), None)));
     }
 
     #[test]
@@ -659,7 +865,7 @@ mod tests {
         // Str is Copy (Rc<String> in interpreter)
         assert!(is_copy_type(&Type::Str));
         // References are Copy
-        assert!(is_copy_type(&Type::Ref(Box::new(Type::I64))));
+        assert!(is_copy_type(&Type::Ref(Box::new(Type::I64), None)));
         // Struct: Copy (interpreter uses Rc-based value semantics)
         assert!(is_copy_type(&Type::Struct {
             name: "Point".into(),
@@ -734,5 +940,221 @@ mod tests {
         }
         // Still moved
         assert!(tracker.check_use("x").is_some());
+    }
+
+    // ── is_copy_type_strict tests ─────────────────────────────────────
+
+    #[test]
+    fn strict_primitives_are_copy() {
+        assert!(is_copy_type_strict(&Type::I8));
+        assert!(is_copy_type_strict(&Type::I16));
+        assert!(is_copy_type_strict(&Type::I32));
+        assert!(is_copy_type_strict(&Type::I64));
+        assert!(is_copy_type_strict(&Type::I128));
+        assert!(is_copy_type_strict(&Type::U8));
+        assert!(is_copy_type_strict(&Type::U16));
+        assert!(is_copy_type_strict(&Type::U32));
+        assert!(is_copy_type_strict(&Type::U64));
+        assert!(is_copy_type_strict(&Type::U128));
+        assert!(is_copy_type_strict(&Type::ISize));
+        assert!(is_copy_type_strict(&Type::USize));
+        assert!(is_copy_type_strict(&Type::F16));
+        assert!(is_copy_type_strict(&Type::Bf16));
+        assert!(is_copy_type_strict(&Type::F32));
+        assert!(is_copy_type_strict(&Type::F64));
+        assert!(is_copy_type_strict(&Type::Bool));
+        assert!(is_copy_type_strict(&Type::Char));
+        assert!(is_copy_type_strict(&Type::Void));
+        assert!(is_copy_type_strict(&Type::Never));
+        assert!(is_copy_type_strict(&Type::IntLiteral));
+        assert!(is_copy_type_strict(&Type::FloatLiteral));
+    }
+
+    #[test]
+    fn strict_ref_is_copy() {
+        assert!(is_copy_type_strict(&Type::Ref(Box::new(Type::I32), None)));
+        assert!(is_copy_type_strict(&Type::Ref(Box::new(Type::Str), None)));
+    }
+
+    #[test]
+    fn strict_str_is_move() {
+        assert!(!is_copy_type_strict(&Type::Str));
+    }
+
+    #[test]
+    fn strict_array_is_move() {
+        assert!(!is_copy_type_strict(&Type::Array(Box::new(Type::I32))));
+    }
+
+    #[test]
+    fn strict_struct_is_move() {
+        assert!(!is_copy_type_strict(&Type::Struct {
+            name: "Point".into(),
+            fields: std::collections::HashMap::new(),
+        }));
+    }
+
+    #[test]
+    fn strict_enum_is_move() {
+        assert!(!is_copy_type_strict(&Type::Enum {
+            name: "Option".into(),
+        }));
+    }
+
+    #[test]
+    fn strict_ref_mut_is_move() {
+        assert!(!is_copy_type_strict(&Type::RefMut(
+            Box::new(Type::I32),
+            None
+        )));
+    }
+
+    #[test]
+    fn strict_tensor_is_move() {
+        assert!(!is_copy_type_strict(&Type::Tensor {
+            element: Box::new(Type::F32),
+            dims: vec![Some(3), Some(4)],
+        }));
+    }
+
+    #[test]
+    fn strict_tuple_copy_if_all_copy() {
+        // All copy elements → copy
+        assert!(is_copy_type_strict(&Type::Tuple(vec![
+            Type::I32,
+            Type::Bool,
+            Type::F64,
+        ])));
+        // One move element → move
+        assert!(!is_copy_type_strict(&Type::Tuple(vec![
+            Type::I32,
+            Type::Str,
+        ])));
+    }
+
+    #[test]
+    fn strict_function_is_move() {
+        assert!(!is_copy_type_strict(&Type::Function {
+            params: vec![Type::I32],
+            ret: Box::new(Type::I32),
+        }));
+    }
+
+    #[test]
+    fn strict_future_is_move() {
+        assert!(!is_copy_type_strict(&Type::Future {
+            inner: Box::new(Type::I32),
+        }));
+    }
+
+    #[test]
+    fn strict_unknown_is_copy() {
+        assert!(is_copy_type_strict(&Type::Unknown));
+        assert!(is_copy_type_strict(&Type::Named("T".into())));
+        assert!(is_copy_type_strict(&Type::TypeVar("T".into())));
+    }
+
+    // ── Two-phase borrow tests ────────────────────────────────────────
+
+    #[test]
+    fn two_phase_reserved_allows_imm_borrow() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("v", Span::new(0, 1));
+        tracker.borrow_mut_two_phase("v", Span::new(5, 6)).unwrap();
+        // Reserved: shared reads allowed
+        assert!(tracker.borrow_imm("v", Span::new(10, 11)).is_ok());
+    }
+
+    #[test]
+    fn two_phase_activated_blocks_imm() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("v", Span::new(0, 1));
+        tracker.borrow_mut_two_phase("v", Span::new(5, 6)).unwrap();
+        tracker.activate_two_phase("v");
+        // Activated: shared reads blocked
+        assert!(tracker.borrow_imm("v", Span::new(10, 11)).is_err());
+    }
+
+    #[test]
+    fn two_phase_conflicts_with_full_mut() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("v", Span::new(0, 1));
+        tracker.borrow_mut("v", Span::new(5, 6)).unwrap();
+        // Full mut + two-phase = conflict
+        assert!(
+            tracker
+                .borrow_mut_two_phase("v", Span::new(10, 11))
+                .is_err()
+        );
+    }
+
+    // ── Reborrow tests ────────────────────────────────────────────────
+
+    #[test]
+    fn reborrow_imm_from_mut_succeeds() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("x", Span::new(0, 1));
+        tracker.borrow_mut("x", Span::new(5, 6)).unwrap();
+        // Reborrow: &*x where x: &mut — downgrades to reserved
+        assert!(tracker.reborrow_imm("x", Span::new(10, 11)).is_ok());
+        // Now in Reserved state — imm borrows should work
+        assert!(tracker.borrow_imm("x", Span::new(15, 16)).is_ok());
+    }
+
+    // ── Field-level borrow tests ──────────────────────────────────────
+
+    #[test]
+    fn disjoint_field_borrows_allowed() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("s", Span::new(0, 1));
+        // &mut s.x
+        assert!(tracker.borrow_field_mut("s", "x", Span::new(5, 6)).is_ok());
+        // &mut s.y — different field, OK
+        assert!(
+            tracker
+                .borrow_field_mut("s", "y", Span::new(10, 11))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn same_field_borrow_conflicts() {
+        let mut tracker = MoveTracker::new();
+        tracker.declare("s", Span::new(0, 1));
+        tracker.borrow_field_mut("s", "x", Span::new(5, 6)).unwrap();
+        // &mut s.x again — same field, conflict
+        assert!(
+            tracker
+                .borrow_field_mut("s", "x", Span::new(10, 11))
+                .is_err()
+        );
+    }
+
+    // ── BorrowPath tests ──────────────────────────────────────────────
+
+    #[test]
+    fn borrow_path_var_conflicts() {
+        let a = BorrowPath::Var("x".into());
+        let b = BorrowPath::Var("x".into());
+        let c = BorrowPath::Var("y".into());
+        assert!(a.conflicts_with(&b));
+        assert!(!a.conflicts_with(&c));
+    }
+
+    #[test]
+    fn borrow_path_field_disjoint() {
+        let a = BorrowPath::Field("s".into(), "x".into());
+        let b = BorrowPath::Field("s".into(), "y".into());
+        let c = BorrowPath::Field("s".into(), "x".into());
+        assert!(!a.conflicts_with(&b)); // different fields
+        assert!(a.conflicts_with(&c)); // same field
+    }
+
+    #[test]
+    fn borrow_path_var_field_conflict() {
+        let whole = BorrowPath::Var("s".into());
+        let field = BorrowPath::Field("s".into(), "x".into());
+        assert!(whole.conflicts_with(&field));
+        assert!(field.conflicts_with(&whole));
     }
 }

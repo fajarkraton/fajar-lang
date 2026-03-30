@@ -54,6 +54,9 @@ enum Command {
         /// Output file for the profile trace (Chrome JSON format).
         #[arg(long, default_value = "fj-profile.json")]
         profile_output: Option<String>,
+        /// Enable strict ownership: String/Array/Struct are Move types (use-after-move errors).
+        #[arg(long)]
+        strict_ownership: bool,
     },
     /// Start an interactive REPL.
     Repl,
@@ -64,6 +67,9 @@ enum Command {
         /// Show cross-context call graph (which @safe/@kernel/@device functions call each other).
         #[arg(long)]
         call_graph: bool,
+        /// Enable strict ownership: String/Array/Struct are Move types (use-after-move errors).
+        #[arg(long)]
+        strict_ownership: bool,
     },
     /// Show lexer token output for a file.
     DumpTokens {
@@ -301,6 +307,7 @@ fn main_inner() -> ExitCode {
             llvm,
             profile,
             profile_output,
+            strict_ownership,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -321,13 +328,23 @@ fn main_inner() -> ExitCode {
             } else if profile {
                 let out = profile_output.unwrap_or_else(|| "fj-profile.json".to_string());
                 cmd_run_profile(&path, &out)
+            } else if strict_ownership {
+                cmd_run_strict(&path)
             } else {
                 cmd_run(&path)
             }
         }
         Command::Repl => cmd_repl(),
-        Command::Check { file, call_graph } => {
-            let result = cmd_check(&file);
+        Command::Check {
+            file,
+            call_graph,
+            strict_ownership,
+        } => {
+            let result = if strict_ownership {
+                cmd_check_strict(&file)
+            } else {
+                cmd_check(&file)
+            };
             if call_graph {
                 cmd_call_graph(&file);
             }
@@ -1161,6 +1178,103 @@ fn cmd_check(path: &PathBuf) -> ExitCode {
             ExitCode::from(EXIT_COMPILE)
         }
     }
+}
+
+/// Checks a file with strict ownership mode enabled.
+fn cmd_check_strict(path: &PathBuf) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    match fajar_lang::analyzer::analyze_strict(&program) {
+        Ok(()) => {
+            println!(
+                "OK: {} — no errors found (strict ownership)",
+                path.display()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+            }
+            ExitCode::from(EXIT_COMPILE)
+        }
+    }
+}
+
+/// Runs a file with strict ownership analysis.
+fn cmd_run_strict(path: &PathBuf) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    // Strict ownership analysis
+    if let Err(errors) = fajar_lang::analyzer::analyze_strict(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    // Interpret (Value::clone still copies at runtime, but analyzer caught ownership errors)
+    let mut interp = Interpreter::new();
+    if let Some(parent) = path.parent() {
+        interp.set_source_dir(parent.to_path_buf());
+    }
+    if let Err(e) = interp.eval_program(&program) {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+    if let Err(e) = interp.call_main() {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+    ExitCode::SUCCESS
 }
 
 /// Dumps lexer tokens for a file.
