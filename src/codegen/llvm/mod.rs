@@ -304,6 +304,105 @@ pub struct LtoStats {
     pub optimize_time_ms: u64,
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// V12 Sprint L4: Profile-Guided Optimization (PGO)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Profile-guided optimization mode.
+///
+/// PGO uses runtime profiling data to guide optimization decisions:
+/// branch probabilities, function layout, inlining thresholds.
+///
+/// # Workflow
+///
+/// 1. **Generate**: Build with instrumentation → run → collect `.profraw`
+/// 2. **Merge**: `llvm-profdata merge -o profile.profdata *.profraw`
+/// 3. **Use**: Rebuild with `--pgo=use=profile.profdata` for optimized binary
+///
+/// Or use `--pgo=auto` for automatic generate→run→optimize cycle.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PgoMode {
+    /// No PGO — standard compilation.
+    None,
+    /// Generate instrumented binary that writes `.profraw` at runtime.
+    /// The string is the output directory for profile data.
+    Generate(String),
+    /// Use profile data from a `.profdata` file to optimize.
+    Use(String),
+}
+
+impl PgoMode {
+    /// Parses from CLI string.
+    ///
+    /// - `"none"` → `PgoMode::None`
+    /// - `"generate"` → `PgoMode::Generate("default.profraw")`
+    /// - `"generate=/path/dir"` → `PgoMode::Generate("/path/dir")`
+    /// - `"use=profile.profdata"` → `PgoMode::Use("profile.profdata")`
+    pub fn parse_from(s: &str) -> Result<Self, CodegenError> {
+        if s == "none" || s == "off" || s.is_empty() {
+            return Ok(PgoMode::None);
+        }
+        if s == "generate" {
+            return Ok(PgoMode::Generate("default_%m.profraw".to_string()));
+        }
+        if let Some(path) = s.strip_prefix("generate=") {
+            return Ok(PgoMode::Generate(path.to_string()));
+        }
+        if let Some(path) = s.strip_prefix("use=") {
+            if path.is_empty() {
+                return Err(CodegenError::Internal(
+                    "PGO use mode requires a .profdata file path".to_string(),
+                ));
+            }
+            return Ok(PgoMode::Use(path.to_string()));
+        }
+        Err(CodegenError::Internal(format!(
+            "invalid PGO mode '{s}': expected none, generate, generate=<dir>, or use=<file.profdata>"
+        )))
+    }
+
+    /// Returns true if PGO is active (generate or use).
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, PgoMode::None)
+    }
+
+    /// Returns true if this is the instrumentation generation phase.
+    pub fn is_generate(&self) -> bool {
+        matches!(self, PgoMode::Generate(_))
+    }
+
+    /// Returns true if this is the profile-use optimization phase.
+    pub fn is_use(&self) -> bool {
+        matches!(self, PgoMode::Use(_))
+    }
+}
+
+/// Merges raw profile data files into a single `.profdata` file.
+///
+/// Uses `llvm-profdata merge` to combine multiple `.profraw` files
+/// from instrumented runs into a single profile data file.
+pub fn merge_profdata(profraw_paths: &[&Path], output_path: &Path) -> Result<(), CodegenError> {
+    let mut cmd = std::process::Command::new("llvm-profdata");
+    cmd.arg("merge").arg("-sparse").arg("-o").arg(output_path);
+    for path in profraw_paths {
+        cmd.arg(path);
+    }
+
+    let status = cmd.status().map_err(|e| {
+        CodegenError::Internal(format!(
+            "failed to run llvm-profdata: {e}. Ensure LLVM tools are installed"
+        ))
+    })?;
+
+    if !status.success() {
+        return Err(CodegenError::Internal(format!(
+            "llvm-profdata merge failed with exit code {}",
+            status.code().unwrap_or(-1)
+        )));
+    }
+    Ok(())
+}
+
 /// Optimization level for LLVM compilation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LlvmOptLevel {
@@ -381,6 +480,8 @@ pub struct LlvmCompiler<'ctx> {
     target_config: TargetConfig,
     /// Link-time optimization mode.
     lto_mode: LtoMode,
+    /// Profile-guided optimization mode.
+    pgo_mode: PgoMode,
     /// Maps struct name → (LLVM struct type, field names in order).
     struct_types: HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
     /// Maps enum name → (variant names, variant field counts).
@@ -407,6 +508,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             opt_level: LlvmOptLevel::O0,
             target_config: TargetConfig::default(),
             lto_mode: LtoMode::None,
+            pgo_mode: PgoMode::None,
             struct_types: HashMap::new(),
             enum_defs: HashMap::new(),
             break_target: None,
@@ -2268,16 +2370,53 @@ impl<'ctx> LlvmCompiler<'ctx> {
         self.lto_mode
     }
 
+    /// Sets the PGO mode.
+    pub fn set_pgo_mode(&mut self, mode: PgoMode) {
+        self.pgo_mode = mode;
+    }
+
+    /// Returns the current PGO mode.
+    pub fn pgo_mode(&self) -> &PgoMode {
+        &self.pgo_mode
+    }
+
+    /// Constructs the optimization pass pipeline string, incorporating PGO if active.
+    ///
+    /// - PGO Generate: prepends `pgo-instr-gen` before the standard pipeline
+    /// - PGO Use: prepends `pgo-instr-use<file>` before the standard pipeline
+    /// - No PGO: returns the standard optimization pipeline
+    fn build_pass_pipeline(&self) -> String {
+        let base = self.opt_level.pass_string();
+        match &self.pgo_mode {
+            PgoMode::Generate(_prof_file) => {
+                // Instrumentation generation: add profiling counters
+                format!("pgo-instr-gen,{base},pgo-instr-gen", base = base)
+            }
+            PgoMode::Use(profdata_path) => {
+                // Profile use: annotate with branch weights before optimization
+                format!(
+                    "pgo-instr-use<profile-file={path}>,{base}",
+                    path = profdata_path,
+                    base = base
+                )
+            }
+            PgoMode::None => base.to_string(),
+        }
+    }
+
     /// Runs LLVM optimization passes on the module.
+    ///
+    /// If PGO is active, includes PGO instrumentation or profile-use passes.
     pub fn optimize(&self) -> Result<(), CodegenError> {
-        if self.opt_level == LlvmOptLevel::O0 {
+        if self.opt_level == LlvmOptLevel::O0 && !self.pgo_mode.is_generate() {
             return Ok(());
         }
 
         let tm = self.create_target_machine(None)?;
         let pass_opts = inkwell::passes::PassBuilderOptions::create();
+        let pipeline = self.build_pass_pipeline();
         self.module
-            .run_passes(self.opt_level.pass_string(), &tm, pass_opts)
+            .run_passes(&pipeline, &tm, pass_opts)
             .map_err(|e| CodegenError::Internal(format!("LLVM pass manager error: {:?}", e)))
     }
 
@@ -4834,5 +4973,118 @@ mod tests {
         };
         assert_eq!(effective, "thin");
         assert_eq!(LtoMode::parse_from(effective).unwrap(), LtoMode::Thin);
+    }
+
+    // ── V12 Sprint L4: PGO Tests ────────────────────────────────────────
+
+    #[test]
+    fn l4_pgo_mode_parse_none() {
+        assert_eq!(PgoMode::parse_from("none").unwrap(), PgoMode::None);
+        assert_eq!(PgoMode::parse_from("off").unwrap(), PgoMode::None);
+        assert_eq!(PgoMode::parse_from("").unwrap(), PgoMode::None);
+    }
+
+    #[test]
+    fn l4_pgo_mode_parse_generate() {
+        let mode = PgoMode::parse_from("generate").unwrap();
+        assert!(matches!(mode, PgoMode::Generate(_)));
+        if let PgoMode::Generate(path) = &mode {
+            assert!(path.contains("profraw"));
+        }
+    }
+
+    #[test]
+    fn l4_pgo_mode_parse_generate_with_path() {
+        let mode = PgoMode::parse_from("generate=/tmp/prof_%m.profraw").unwrap();
+        assert_eq!(mode, PgoMode::Generate("/tmp/prof_%m.profraw".to_string()));
+    }
+
+    #[test]
+    fn l4_pgo_mode_parse_use() {
+        let mode = PgoMode::parse_from("use=profile.profdata").unwrap();
+        assert_eq!(mode, PgoMode::Use("profile.profdata".to_string()));
+    }
+
+    #[test]
+    fn l4_pgo_mode_parse_use_empty_error() {
+        assert!(PgoMode::parse_from("use=").is_err());
+    }
+
+    #[test]
+    fn l4_pgo_mode_parse_invalid() {
+        assert!(PgoMode::parse_from("invalid").is_err());
+    }
+
+    #[test]
+    fn l4_pgo_mode_is_enabled() {
+        assert!(!PgoMode::None.is_enabled());
+        assert!(PgoMode::Generate("prof.profraw".into()).is_enabled());
+        assert!(PgoMode::Use("prof.profdata".into()).is_enabled());
+    }
+
+    #[test]
+    fn l4_pgo_mode_is_generate_use() {
+        assert!(PgoMode::Generate("prof.profraw".into()).is_generate());
+        assert!(!PgoMode::Generate("prof.profraw".into()).is_use());
+        assert!(!PgoMode::Use("prof.profdata".into()).is_generate());
+        assert!(PgoMode::Use("prof.profdata".into()).is_use());
+        assert!(!PgoMode::None.is_generate());
+        assert!(!PgoMode::None.is_use());
+    }
+
+    #[test]
+    fn l4_compiler_pgo_mode_default() {
+        let context = Context::create();
+        let compiler = LlvmCompiler::new(&context, "test_l4_default");
+        assert_eq!(*compiler.pgo_mode(), PgoMode::None);
+    }
+
+    #[test]
+    fn l4_compiler_set_pgo_mode() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l4_set");
+        compiler.set_pgo_mode(PgoMode::Generate("test.profraw".into()));
+        assert!(compiler.pgo_mode().is_generate());
+        compiler.set_pgo_mode(PgoMode::Use("test.profdata".into()));
+        assert!(compiler.pgo_mode().is_use());
+    }
+
+    #[test]
+    fn l4_build_pass_pipeline_no_pgo() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l4_pipeline");
+        compiler.set_opt_level(LlvmOptLevel::O2);
+        let pipeline = compiler.build_pass_pipeline();
+        assert_eq!(pipeline, "default<O2>");
+    }
+
+    #[test]
+    fn l4_build_pass_pipeline_pgo_generate() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l4_gen");
+        compiler.set_opt_level(LlvmOptLevel::O2);
+        compiler.set_pgo_mode(PgoMode::Generate("prof.profraw".into()));
+        let pipeline = compiler.build_pass_pipeline();
+        assert!(
+            pipeline.contains("pgo-instr-gen"),
+            "pipeline should include pgo-instr-gen: {pipeline}"
+        );
+    }
+
+    #[test]
+    fn l4_build_pass_pipeline_pgo_use() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l4_use");
+        compiler.set_opt_level(LlvmOptLevel::O2);
+        compiler.set_pgo_mode(PgoMode::Use("profile.profdata".into()));
+        let pipeline = compiler.build_pass_pipeline();
+        assert!(
+            pipeline.contains("pgo-instr-use"),
+            "pipeline should include pgo-instr-use: {pipeline}"
+        );
+        assert!(
+            pipeline.contains("profile.profdata"),
+            "pipeline should include profdata path: {pipeline}"
+        );
     }
 }

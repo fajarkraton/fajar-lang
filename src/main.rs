@@ -148,6 +148,9 @@ enum Command {
         /// Link-time optimization: none, thin, or full. --release defaults to thin.
         #[arg(long, default_value = "none")]
         lto: String,
+        /// Profile-guided optimization: none, generate, generate=<dir>, use=<file.profdata>.
+        #[arg(long, default_value = "none")]
+        pgo: String,
         /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
         #[arg(long)]
         board: Option<String>,
@@ -386,6 +389,7 @@ fn main_inner() -> ExitCode {
             reloc,
             code_model,
             lto,
+            pgo,
             board,
             linker,
             verbose,
@@ -451,6 +455,7 @@ fn main_inner() -> ExitCode {
                     &reloc,
                     &code_model,
                     &effective_lto,
+                    &pgo,
                     verbose,
                 )
             } else {
@@ -2274,6 +2279,7 @@ fn cmd_build_llvm(
     reloc: &str,
     code_model: &str,
     lto: &str,
+    pgo: &str,
     verbose: bool,
 ) -> ExitCode {
     let source = match read_source(path) {
@@ -2384,6 +2390,19 @@ fn cmd_build_llvm(
     };
     compiler.set_lto_mode(lto_mode);
 
+    // Configure PGO
+    let pgo_mode = match fajar_lang::codegen::llvm::PgoMode::parse_from(pgo) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+    if verbose && pgo_mode.is_enabled() {
+        eprintln!("[verbose] PGO mode: {:?}", pgo_mode);
+    }
+    compiler.set_pgo_mode(pgo_mode.clone());
+
     if let Err(e) = compiler.compile_program(&program) {
         eprintln!("codegen error: {e}");
         return ExitCode::from(EXIT_COMPILE);
@@ -2433,6 +2452,11 @@ fn cmd_build_llvm(
     let mut link_cmd = std::process::Command::new("cc");
     link_cmd.arg(&obj_path).arg("-o").arg(&bin_path).arg("-lm");
 
+    // PGO linker flags: instrumented builds need the profiling runtime
+    if pgo_mode.is_generate() {
+        link_cmd.arg("-fprofile-generate");
+    }
+
     // LTO linker flags
     if lto_mode.is_enabled() {
         // Use -flto for clang/gcc to process bitcode
@@ -2463,11 +2487,18 @@ fn cmd_build_llvm(
     } else {
         String::new()
     };
+    let pgo_suffix = if pgo_mode.is_generate() {
+        ", PGO=generate".to_string()
+    } else if pgo_mode.is_use() {
+        ", PGO=use".to_string()
+    } else {
+        String::new()
+    };
 
     match status {
         Ok(s) if s.success() => {
             println!(
-                "Built: {} (LLVM O{opt_level}{lto_suffix})",
+                "Built: {} (LLVM O{opt_level}{lto_suffix}{pgo_suffix})",
                 bin_path.display()
             );
             ExitCode::SUCCESS
@@ -2489,6 +2520,7 @@ fn cmd_build_llvm(
 
 /// Stub when llvm feature is not enabled.
 #[cfg(not(feature = "llvm"))]
+#[allow(clippy::too_many_arguments)]
 fn cmd_build_llvm(
     _path: &PathBuf,
     _output: Option<&std::path::Path>,
@@ -2498,6 +2530,7 @@ fn cmd_build_llvm(
     _reloc: &str,
     _code_model: &str,
     _lto: &str,
+    _pgo: &str,
     _verbose: bool,
 ) -> ExitCode {
     eprintln!("error: LLVM backend not available");
