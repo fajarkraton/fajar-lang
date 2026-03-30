@@ -62,9 +62,23 @@ jobs:
           name: fj-${{ matrix.target }}
           path: fj-v*.*
 
+  # Verify LLVM backend on Linux before release
+  llvm-check:
+    name: LLVM Backend Verification
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install LLVM 18
+        run: sudo apt-get update && sudo apt-get install -y llvm-18-dev libpolly-18-dev libzstd-dev
+      - name: Test LLVM backend (153 tests)
+        run: cargo test --lib --features llvm -- codegen::llvm
+      - name: Clippy LLVM backend
+        run: cargo clippy --features llvm -- -D warnings
+
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, llvm-check]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v5

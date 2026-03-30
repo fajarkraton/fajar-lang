@@ -56,7 +56,7 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
         run: cargo bench --no-run
 
-  # Feature-gated tests: SMT (Z3), C++ FFI (libclang), Python FFI (pyo3)
+  # Feature-gated tests: LLVM, SMT (Z3), C++ FFI (libclang), Python FFI (pyo3)
   features:
     name: Feature Tests (${{ matrix.feature }})
     runs-on: ubuntu-24.04
@@ -64,6 +64,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - feature: llvm
+            apt: llvm-18-dev libpolly-18-dev libzstd-dev
+            pip: ""
           - feature: smt
             apt: libz3-dev
             pip: ""
@@ -83,6 +86,8 @@ jobs:
         run: pip install ${{ matrix.pip }}
       - name: Test with --features ${{ matrix.feature }}
         run: cargo test --lib --features ${{ matrix.feature }}
+      - name: Clippy with --features ${{ matrix.feature }}
+        run: cargo clippy --features ${{ matrix.feature }} -- -D warnings
 
   coverage:
     name: Code Coverage
