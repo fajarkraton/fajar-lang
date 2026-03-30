@@ -1,0 +1,100 @@
+// ml_inference_api.fj — ML Inference API Demo
+//
+// Demonstrates combining ML tensor operations with HTTP server:
+//   - Tensor creation and matrix operations
+//   - Simple inference pipeline
+//   - Health check endpoint
+//   - Async sleep for simulated latency
+//
+// Run: fj run examples/ml_inference_api.fj
+
+// ── Model Layer ──
+
+fn load_model() {
+    println("[model] Loading weights...")
+    // Create weight tensors
+    let w1 = zeros(3, 4)
+    let w2 = zeros(4, 2)
+    println(f"[model] Layer 1: 3x4 weights")
+    println(f"[model] Layer 2: 4x2 weights")
+    println("[model] Model ready (2 layers)")
+}
+
+fn predict(input_data: str) -> str {
+    // Parse input features
+    let features = input_data.split(",")
+    let num_features = len(features)
+
+    // Create input tensor and run inference
+    let x = zeros(1, num_features)
+    let w = randn(num_features, 2)
+    let logits = matmul(x, w)
+    let _probs = softmax(logits)
+
+    // Get prediction
+    let pred_class = if num_features > 2 { 1 } else { 0 }
+    let confidence = 0.85 + to_float(num_features) * 0.01
+
+    f"{{\"class\": {pred_class}, \"confidence\": {confidence}, \"features\": {num_features}}}"
+}
+
+// ── API Layer ──
+
+fn simulate_request(endpoint: str, method: str, body: str) -> str {
+    println(f"\n--- {method} {endpoint} ---")
+    if endpoint == "/health" {
+        let response = "{\"status\": \"healthy\", \"model\": \"loaded\", \"version\": \"8.0.0\"}"
+        println(f"  Response: {response}")
+        response
+    } else if endpoint == "/predict" {
+        println(f"  Input: {body}")
+        let result = predict(body)
+        println(f"  Prediction: {result}")
+        result
+    } else if endpoint == "/metrics" {
+        let metrics = "{\"requests\": 42, \"avg_latency_ms\": 12.5, \"accuracy\": 0.94}"
+        println(f"  Metrics: {metrics}")
+        metrics
+    } else {
+        let err = f"{{\"error\": \"unknown endpoint: {endpoint}\"}}"
+        println(f"  Error: {err}")
+        err
+    }
+}
+
+// ── Main ──
+
+fn main() {
+    println("=== ML Inference API ===")
+    println("")
+
+    // Load model
+    load_model()
+    println("")
+
+    // Simulate API requests
+    println("=== Serving Requests ===")
+
+    // 1. Health check
+    simulate_request("/health", "GET", "")
+
+    // 2. Inference requests with different feature counts
+    simulate_request("/predict", "POST", "0.5,0.3,0.8")
+    simulate_request("/predict", "POST", "1.0,0.0")
+    simulate_request("/predict", "POST", "0.1,0.9,0.5,0.7")
+
+    // 3. Metrics
+    simulate_request("/metrics", "GET", "")
+
+    // 4. Unknown endpoint
+    simulate_request("/unknown", "GET", "")
+
+    // Async sleep demo (simulated inference latency)
+    println("\n--- Async Inference Demo ---")
+    println("Running async inference with 100ms latency...")
+    async_sleep(100).await
+    println("Async inference complete.")
+
+    println("\n=== ML Inference API Demo Complete ===")
+    println("In production, use http_server() + http_route() to serve real HTTP requests.")
+}

@@ -1,0 +1,72 @@
+// websocket_chat.fj — WebSocket Chat Demo
+//
+// Demonstrates real WebSocket communication using ws_* builtins:
+//   - Connect to echo server
+//   - Send/receive messages
+//   - Multi-user simulation
+//
+// With --features websocket: connects to real WebSocket server
+// Without feature: uses in-memory echo simulation
+//
+// Run: fj run examples/websocket_chat.fj
+// (For real networking: websocat -s 9234 & fj run --features websocket examples/websocket_chat.fj)
+
+fn simulate_user(name: str, ws: i64) {
+    // Send a message
+    let msg = f"[{name}] Hello everyone!"
+    let sent = ws_send(ws, msg)
+    println(f"  {name} sent {sent} bytes")
+
+    // In echo mode, receive our own message back
+    let echo = ws_recv(ws)
+    if echo != null {
+        println(f"  {name} received: {echo}")
+    }
+}
+
+fn main() {
+    println("=== WebSocket Chat Demo ===")
+    println("")
+
+    // Connect 3 users to the chat server
+    let ws1 = ws_connect("ws://localhost:9234/chat")
+    let ws2 = ws_connect("ws://localhost:9234/chat")
+    let ws3 = ws_connect("ws://localhost:9234/chat")
+    println(f"Connected 3 users (handles: {ws1}, {ws2}, {ws3})")
+    println("")
+
+    // Each user sends a message
+    println("--- Round 1: Greetings ---")
+    simulate_user("Alice", ws1)
+    simulate_user("Bob", ws2)
+    simulate_user("Charlie", ws3)
+    println("")
+
+    // Second round of messages
+    println("--- Round 2: Discussion ---")
+    ws_send(ws1, "[Alice] How's the Fajar Lang project going?")
+    ws_send(ws2, "[Bob] Great! v8.0.0 just shipped with async/await!")
+    ws_send(ws3, "[Charlie] And real WebSocket support too!")
+
+    // Read all echoed messages
+    println("--- Messages in buffer ---")
+    let mut done = false
+    let mut count = 0
+    while !done {
+        let msg1 = ws_recv(ws1)
+        let msg2 = ws_recv(ws2)
+        let msg3 = ws_recv(ws3)
+        if msg1 != null { println(f"  ws1: {msg1}"); count = count + 1 }
+        if msg2 != null { println(f"  ws2: {msg2}"); count = count + 1 }
+        if msg3 != null { println(f"  ws3: {msg3}"); count = count + 1 }
+        if msg1 == null && msg2 == null && msg3 == null { done = true }
+    }
+    println(f"\nTotal messages exchanged: {count}")
+
+    // Cleanup
+    ws_close(ws1)
+    ws_close(ws2)
+    ws_close(ws3)
+    println("All connections closed.")
+    println("=== Chat Demo Complete ===")
+}

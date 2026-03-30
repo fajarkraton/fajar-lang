@@ -1,0 +1,133 @@
+// iot_mqtt_pipeline.fj — IoT Sensor Data Pipeline
+//
+// Demonstrates real MQTT + regex + SQLite integration:
+//   - MQTT pub/sub for sensor telemetry
+//   - Regex validation of sensor data format
+//   - SQLite storage for processed readings
+//   - Anomaly detection with threshold alerts
+//
+// With --features mqtt: connects to real Mosquitto broker
+// Without feature: uses in-memory broker simulation
+//
+// Run: fj run examples/iot_mqtt_pipeline.fj
+
+const TEMP_HIGH: f64 = 40.0
+const TEMP_LOW: f64 = -10.0
+const NUM_READINGS: i64 = 6
+
+fn validate_sensor_data(payload: str) -> bool {
+    // Validate format: "sensor_id:value" using regex
+    regex_match("^\\w+:[\\-]?\\d+\\.?\\d*$", payload)
+}
+
+fn parse_sensor_value(payload: str) -> f64 {
+    let parts = payload.split(":")
+    if len(parts) >= 2 {
+        to_float(parts[1])
+    } else {
+        0.0
+    }
+}
+
+fn check_anomaly(sensor_id: str, value: f64) -> str {
+    if value > TEMP_HIGH {
+        f"ALERT: {sensor_id} = {value}C exceeds {TEMP_HIGH}C!"
+    } else if value < TEMP_LOW {
+        f"ALERT: {sensor_id} = {value}C below {TEMP_LOW}C!"
+    } else {
+        f"OK: {sensor_id} = {value}C (normal)"
+    }
+}
+
+fn main() {
+    println("=== IoT MQTT Sensor Pipeline ===")
+    println("")
+
+    // Initialize SQLite for persistent storage
+    let db = db_open(":memory:")
+    db_execute(db, "CREATE TABLE readings (id INTEGER PRIMARY KEY, sensor TEXT, value REAL, status TEXT)")
+    println("[db] Storage initialized")
+
+    // Connect to MQTT broker
+    let client = mqtt_connect("mqtt://127.0.0.1:1883")
+    mqtt_subscribe(client, "sensors/temperature")
+    mqtt_subscribe(client, "sensors/humidity")
+    println("[mqtt] Connected and subscribed")
+    println("")
+
+    // Simulate sensor data publishing
+    let sensor_data = [
+        "temp_01:23.5",
+        "temp_02:45.1",
+        "temp_03:-15.0",
+        "humidity_01:65.2",
+        "temp_04:38.7",
+        "invalid-data"
+    ]
+
+    println("--- Publishing Sensor Data ---")
+    let mut i = 0
+    while i < NUM_READINGS {
+        let payload = sensor_data[i]
+        let topic = if i < 5 { "sensors/temperature" } else { "sensors/humidity" }
+        mqtt_publish(client, topic, payload)
+        println(f"  Published: {topic} -> {payload}")
+        i = i + 1
+    }
+    println("")
+
+    // Process received messages
+    println("--- Processing Pipeline ---")
+    let mut processed = 0
+    let mut anomalies = 0
+    let mut done = false
+
+    while !done {
+        let msg = mqtt_recv(client)
+        if msg == null {
+            done = true
+        } else {
+            let payload = to_string(msg)
+
+            // Extract payload from map representation
+            let parts = payload.split("payload: ")
+            if len(parts) >= 2 {
+                let data = parts[1].split(",")[0].trim()
+                let clean = data.replace("}", "").trim()
+
+                // Validate with regex
+                if validate_sensor_data(clean) {
+                    let sensor_parts = clean.split(":")
+                    let sensor_id = sensor_parts[0]
+                    let value = parse_sensor_value(clean)
+                    let status = check_anomaly(sensor_id, value)
+                    println(f"  {status}")
+
+                    // Store in database
+                    let status_label = if value > TEMP_HIGH || value < TEMP_LOW { "anomaly" } else { "normal" }
+                    db_execute(db, f"INSERT INTO readings (sensor, value, status) VALUES ('{sensor_id}', {value}, '{status_label}')")
+                    processed = processed + 1
+
+                    if value > TEMP_HIGH || value < TEMP_LOW {
+                        anomalies = anomalies + 1
+                    }
+                } else {
+                    println(f"  SKIP: invalid format -> {clean}")
+                }
+            }
+        }
+    }
+    println("")
+
+    // Summary
+    println("=== Pipeline Summary ===")
+    println(f"  Readings processed: {processed}")
+    println(f"  Anomalies detected: {anomalies}")
+    let rows = db_query(db, "SELECT COUNT(*) FROM readings")
+    println(f"  Database rows: {len(rows)}")
+
+    // Cleanup
+    mqtt_disconnect(client)
+    println("")
+    println("Pipeline complete.")
+}
