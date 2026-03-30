@@ -98,6 +98,11 @@
 
 - [Your First ML Model on Bare Metal](./tutorials/embedded-ml.md)
 - [Write a Kernel Module](./tutorials/os-development.md)
+- [Build a REST API in 5 Minutes](./tutorials/rest-api.md)
+- [Real-Time IoT Dashboard](./tutorials/iot-dashboard.md)
+- [ML Image Classifier](./tutorials/ml-classifier.md)
+- [Async Web Scraper](./tutorials/async-scraper.md)
+- [GUI Calculator App](./tutorials/gui-calculator.md)
 
 # Tools
 

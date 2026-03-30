@@ -1,0 +1,61 @@
+// tutorial_calculator.fj — GUI Calculator (Tutorial companion)
+//
+// Run: cargo run --features gui -- gui examples/tutorial_calculator.fj
+
+fn on_btn_1() { println("[calc] 1") }
+fn on_btn_2() { println("[calc] 2") }
+fn on_btn_3() { println("[calc] 3") }
+fn on_btn_4() { println("[calc] 4") }
+fn on_btn_5() { println("[calc] 5") }
+fn on_btn_6() { println("[calc] 6") }
+fn on_btn_7() { println("[calc] 7") }
+fn on_btn_8() { println("[calc] 8") }
+fn on_btn_9() { println("[calc] 9") }
+fn on_btn_0() { println("[calc] 0") }
+fn on_btn_add() { println("[calc] +") }
+fn on_btn_sub() { println("[calc] -") }
+fn on_btn_mul() { println("[calc] *") }
+fn on_btn_div() { println("[calc] /") }
+fn on_btn_eq() { println("[calc] =") }
+fn on_btn_clear() { println("[calc] C") }
+
+fn main() {
+    gui_window("Fajar Calculator", 320, 420)
+
+    // Display area
+    gui_rect(0, 0, 320, 70, 0x1A1A2E)
+    gui_label("0", 20, 25)
+
+    // Button grid (4 columns x 4 rows)
+    let w = 70
+    let h = 50
+    let gap = 5
+    let x0 = 10
+    let y0 = 80
+
+    // Row 1
+    gui_button("7", x0, y0, w, h, "on_btn_7")
+    gui_button("8", x0 + 75, y0, w, h, "on_btn_8")
+    gui_button("9", x0 + 150, y0, w, h, "on_btn_9")
+    gui_button("/", x0 + 225, y0, w, h, "on_btn_div")
+
+    // Row 2
+    gui_button("4", x0, y0 + 55, w, h, "on_btn_4")
+    gui_button("5", x0 + 75, y0 + 55, w, h, "on_btn_5")
+    gui_button("6", x0 + 150, y0 + 55, w, h, "on_btn_6")
+    gui_button("*", x0 + 225, y0 + 55, w, h, "on_btn_mul")
+
+    // Row 3
+    gui_button("1", x0, y0 + 110, w, h, "on_btn_1")
+    gui_button("2", x0 + 75, y0 + 110, w, h, "on_btn_2")
+    gui_button("3", x0 + 150, y0 + 110, w, h, "on_btn_3")
+    gui_button("-", x0 + 225, y0 + 110, w, h, "on_btn_sub")
+
+    // Row 4
+    gui_button("C", x0, y0 + 165, w, h, "on_btn_clear")
+    gui_button("0", x0 + 75, y0 + 165, w, h, "on_btn_0")
+    gui_button("=", x0 + 150, y0 + 165, w, h, "on_btn_eq")
+    gui_button("+", x0 + 225, y0 + 165, w, h, "on_btn_add")
+
+    println("[calc] Calculator ready — 18 widgets")
+}
