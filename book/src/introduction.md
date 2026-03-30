@@ -68,3 +68,21 @@ Fajar Lang v9.0.1 "Ascension" is the latest stable release — **100% production
 - **Security** — stack canary in Cranelift, bounds check, overflow check, linter, taint analysis
 - **Profiling** — function-level profiling in interpreter + Cranelift native code
 - **Time-travel debugger** — record/replay, reverse stepping, flame graphs
+
+## About the Author
+
+**Muhamad Fajar Putranto, SE., SH., MH.** — serial entrepreneur with 28+ years of professional experience spanning taxation, technology, and innovation.
+
+| Year | Milestone |
+|------|-----------|
+| 1996 | Started career at Indonesia's Directorate General of Taxes (DJP) |
+| ~2008 | Founded **IndoFace** — Indonesian social network with **180,000+ members**. One of Indonesia's pioneering homegrown social platforms |
+| 2012 | Co-founded **TaxPrime** — Indonesia's largest independent tax consulting firm (240+ professionals). Collaborating firm of Andersen Global and member of PrimeGlobal |
+| 2012 | Founded **PrimeCore.id** — Global Business Solutions. Strategic business development, ESG & sustainability advisory, legal restructuring |
+| 2021-2024 | **ITR World Tax "Highly Regarded"** — Tax Controversy Leader, 4 consecutive years |
+| 2023 | Founded **InkubatorX** — ecosystem company (digital economy, renewable energy, nano technology) |
+| 2023 | **Wakil Ketua Dewan Pembina ACEXI** — Vice Chair, Carbon Emission Expert Association of Indonesia |
+| 2025 | Elected **Ketua Umum IKANAS STAN** 2025-2028 — leading ~80,000 alumni |
+| 2026 | Created **Fajar Lang** — systems programming language for embedded ML & OS development |
+
+> *"From tax auditor to social network founder, from global business advisory to carbon emission governance, to programming language creator — the journey of building things that matter."*
