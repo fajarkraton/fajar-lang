@@ -1,0 +1,303 @@
+// selfhost_parser_test.fj — End-to-end self-hosted parser test
+//
+// Tokenizes a Fajar Lang program with the self-hosted lexer,
+// then parses it with the self-hosted parser, verifying the
+// correct number of top-level items are found.
+//
+// Run: fj run examples/selfhost_parser_test.fj
+
+// ═══════════════════════════════════════════════════════════════
+// Minimal lexer (inline — same as selfhost_lexer_test.fj)
+// ═══════════════════════════════════════════════════════════════
+
+fn is_digit(c: str) -> bool {
+    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+}
+
+fn is_alpha(c: str) -> bool {
+    c == "_" ||
+    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" ||
+    c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" ||
+    c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" ||
+    c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" ||
+    c == "y" || c == "z" ||
+    c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" ||
+    c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" ||
+    c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" ||
+    c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" ||
+    c == "Y" || c == "Z"
+}
+
+fn is_alnum(c: str) -> bool { is_alpha(c) || is_digit(c) }
+
+fn kw(word: str) -> i64 {
+    if word == "fn" { 15 } else if word == "let" { 13 } else if word == "mut" { 14 }
+    else if word == "if" { 1 } else if word == "else" { 2 } else if word == "while" { 4 }
+    else if word == "return" { 8 } else if word == "true" { 29 } else if word == "false" { 30 }
+    else if word == "struct" { 16 } else if word == "enum" { 17 }
+    else if word == "i64" { 36 } else if word == "str" { 49 } else if word == "bool" { 32 }
+    else if word == "void" { 51 } else if word == "for" { 5 } else if word == "in" { 7 }
+    else if word == "match" { 3 } else if word == "const" { 22 }
+    else { 0 }
+}
+
+fn tokenize(source: str) -> [i64] {
+    let n = len(source) as i64
+    let mut pos: i64 = 0
+    let mut tokens: [i64] = []
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+        if c == " " || c == "\n" || c == "\r" || c == "\t" { pos = pos + 1; continue }
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+            while pos < n && source.substring(pos, pos + 1) != "\n" { pos = pos + 1 }
+            continue
+        }
+        if is_digit(c) {
+            while pos < n && is_digit(source.substring(pos, pos + 1)) { pos = pos + 1 }
+            if pos < n && source.substring(pos, pos + 1) == "." {
+                pos = pos + 1
+                while pos < n && is_digit(source.substring(pos, pos + 1)) { pos = pos + 1 }
+                tokens = push(tokens, 131); continue
+            }
+            tokens = push(tokens, 130); continue
+        }
+        if c == "\"" {
+            pos = pos + 1
+            while pos < n && source.substring(pos, pos + 1) != "\"" { pos = pos + 1 }
+            pos = pos + 1; tokens = push(tokens, 132); continue
+        }
+        if is_alpha(c) {
+            let start = pos
+            while pos < n && is_alnum(source.substring(pos, pos + 1)) { pos = pos + 1 }
+            let word = source.substring(start, pos)
+            let k = kw(word)
+            if k > 0 { tokens = push(tokens, k) } else { tokens = push(tokens, 133) }
+            continue
+        }
+        if c == "(" { tokens = push(tokens, 110); pos = pos + 1; continue }
+        if c == ")" { tokens = push(tokens, 111); pos = pos + 1; continue }
+        if c == "{" { tokens = push(tokens, 112); pos = pos + 1; continue }
+        if c == "}" { tokens = push(tokens, 113); pos = pos + 1; continue }
+        if c == "[" { tokens = push(tokens, 114); pos = pos + 1; continue }
+        if c == "]" { tokens = push(tokens, 115); pos = pos + 1; continue }
+        if c == ";" { tokens = push(tokens, 116); pos = pos + 1; continue }
+        if c == "," { tokens = push(tokens, 119); pos = pos + 1; continue }
+        if c == "." { tokens = push(tokens, 120); pos = pos + 1; continue }
+        if c == "+" { tokens = push(tokens, 70); pos = pos + 1; continue }
+        if c == "*" { tokens = push(tokens, 72); pos = pos + 1; continue }
+        if c == "%" { tokens = push(tokens, 74); pos = pos + 1; continue }
+        if c == "!" { tokens = push(tokens, 84); pos = pos + 1; continue }
+        if c == ":" {
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == ":" {
+                tokens = push(tokens, 117); pos = pos + 2; continue
+            }
+            tokens = push(tokens, 118); pos = pos + 1; continue
+        }
+        if c == "=" {
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == "=" {
+                tokens = push(tokens, 76); pos = pos + 2; continue
+            }
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == ">" {
+                tokens = push(tokens, 122); pos = pos + 2; continue
+            }
+            tokens = push(tokens, 91); pos = pos + 1; continue
+        }
+        if c == "-" {
+            if pos + 1 < n && source.substring(pos + 1, pos + 2) == ">" {
+                tokens = push(tokens, 121); pos = pos + 2; continue
+            }
+            tokens = push(tokens, 71); pos = pos + 1; continue
+        }
+        if c == "<" { tokens = push(tokens, 78); pos = pos + 1; continue }
+        if c == ">" { tokens = push(tokens, 79); pos = pos + 1; continue }
+        if c == "&" { tokens = push(tokens, 85); pos = pos + 1; continue }
+        if c == "|" { tokens = push(tokens, 86); pos = pos + 1; continue }
+        pos = pos + 1
+    }
+    tokens
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Minimal parser (inline — subset of stdlib/parser.fj)
+// ═══════════════════════════════════════════════════════════════
+
+fn peek(tokens: [i64], pos: i64) -> i64 {
+    if pos >= len(tokens) as i64 { 0 } else { tokens[pos] }
+}
+
+fn skip_semi(tokens: [i64], pos: i64) -> i64 {
+    if peek(tokens, pos) == 116 { pos + 1 } else { pos }
+}
+
+fn parse_type(tokens: [i64], pos: i64) -> i64 {
+    let kind = peek(tokens, pos)
+    if kind >= 32 && kind <= 52 { return pos + 1 }
+    if kind == 133 { return pos + 1 }
+    if kind == 114 { // [
+        let mut p = pos + 1
+        p = parse_type(tokens, p)
+        if peek(tokens, p) == 115 { p = p + 1 }
+        return p
+    }
+    pos + 1
+}
+
+fn parse_expr(tokens: [i64], pos: i64) -> i64 {
+    let kind = peek(tokens, pos)
+    let mut p = pos
+    // Primary
+    if kind == 130 || kind == 131 || kind == 132 || kind == 29 || kind == 30 {
+        p = p + 1
+    } else if kind == 133 {
+        p = p + 1
+        if peek(tokens, p) == 110 { // function call
+            p = p + 1
+            while peek(tokens, p) != 111 && peek(tokens, p) != 0 {
+                p = parse_expr(tokens, p)
+                if peek(tokens, p) == 119 { p = p + 1 }
+            }
+            if peek(tokens, p) == 111 { p = p + 1 }
+        }
+    } else if kind == 110 { // ( expr )
+        p = p + 1
+        p = parse_expr(tokens, p)
+        if peek(tokens, p) == 111 { p = p + 1 }
+    } else if kind == 112 { // block { ... }
+        p = parse_block(tokens, p)
+    } else {
+        p = p + 1
+    }
+    // Binary operators
+    let op = peek(tokens, p)
+    if op >= 70 && op <= 91 {
+        p = p + 1
+        p = parse_expr(tokens, p)
+    }
+    p
+}
+
+fn parse_block(tokens: [i64], pos: i64) -> i64 {
+    let mut p = pos + 1 // skip {
+    while peek(tokens, p) != 113 && peek(tokens, p) != 0 {
+        p = parse_stmt(tokens, p)
+    }
+    if peek(tokens, p) == 113 { p = p + 1 }
+    p
+}
+
+fn parse_stmt(tokens: [i64], pos: i64) -> i64 {
+    let kind = peek(tokens, pos)
+    if kind == 13 || kind == 22 { // let / const
+        let mut p = pos + 1
+        if peek(tokens, p) == 14 { p = p + 1 } // mut
+        p = p + 1 // name
+        if peek(tokens, p) == 118 { p = p + 1; p = parse_type(tokens, p) } // : type
+        if peek(tokens, p) == 91 { p = p + 1; p = parse_expr(tokens, p) } // = expr
+        return skip_semi(tokens, p)
+    }
+    if kind == 8 { // return
+        let mut p = pos + 1
+        if peek(tokens, p) != 116 && peek(tokens, p) != 113 { p = parse_expr(tokens, p) }
+        return skip_semi(tokens, p)
+    }
+    if kind == 1 { // if
+        let mut p = pos + 1
+        p = parse_expr(tokens, p)
+        p = parse_block(tokens, p)
+        if peek(tokens, p) == 2 { // else
+            p = p + 1
+            if peek(tokens, p) == 1 { p = parse_stmt(tokens, p) } else { p = parse_block(tokens, p) }
+        }
+        return p
+    }
+    if kind == 4 { // while
+        let mut p = pos + 1
+        p = parse_expr(tokens, p)
+        return parse_block(tokens, p)
+    }
+    if kind == 15 { // fn
+        let mut p = pos + 1 // skip fn
+        p = p + 1 // name
+        p = p + 1 // (
+        while peek(tokens, p) != 111 && peek(tokens, p) != 0 {
+            p = p + 1 // param name
+            if peek(tokens, p) == 118 { p = p + 1; p = parse_type(tokens, p) }
+            if peek(tokens, p) == 119 { p = p + 1 }
+        }
+        if peek(tokens, p) == 111 { p = p + 1 }
+        if peek(tokens, p) == 121 { p = p + 1; p = parse_type(tokens, p) } // -> type
+        return parse_block(tokens, p)
+    }
+    if kind == 16 { // struct
+        let mut p = pos + 1 + 1 // skip struct + name
+        return parse_block(tokens, p)
+    }
+    // Expression statement
+    let p = parse_expr(tokens, pos)
+    skip_semi(tokens, p)
+}
+
+fn parse_program(tokens: [i64]) -> i64 {
+    let total = len(tokens) as i64
+    let mut pos: i64 = 0
+    let mut items = 0
+    while pos < total {
+        let new_pos = parse_stmt(tokens, pos)
+        if new_pos <= pos { pos = pos + 1 } else { pos = new_pos }
+        items = items + 1
+    }
+    items
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════
+
+fn main() {
+    println("=== Self-Hosted Parser Test ===")
+    println("")
+
+    // Test 1: Single function
+    let src1 = "fn add(a: i64, b: i64) -> i64 { a + b }"
+    let tok1 = tokenize(src1)
+    let items1 = parse_program(tok1)
+    println(f"Test 1: fn definition -> {items1} items")
+    assert(items1 == 1)
+    println("  PASS")
+
+    // Test 2: Multiple statements
+    let src2 = "let x = 42\nlet y = x + 1\nprintln(y)"
+    let tok2 = tokenize(src2)
+    let items2 = parse_program(tok2)
+    println(f"Test 2: 3 statements -> {items2} items")
+    assert(items2 == 3)
+    println("  PASS")
+
+    // Test 3: Function with if-else
+    let src3 = "fn max(a: i64, b: i64) -> i64 { if a > b { a } else { b } }"
+    let tok3 = tokenize(src3)
+    let items3 = parse_program(tok3)
+    println(f"Test 3: fn with if-else -> {items3} items")
+    assert(items3 == 1)
+    println("  PASS")
+
+    // Test 4: Full program (2 functions + main)
+    let src4 = "fn fib(n: i64) -> i64 { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }\nfn main() { println(fib(10)) }"
+    let tok4 = tokenize(src4)
+    let items4 = parse_program(tok4)
+    println(f"Test 4: full program -> {items4} items")
+    assert(items4 == 2)
+    println("  PASS")
+
+    // Test 5: Struct + let + while
+    let src5 = "struct Point { x: i64 }\nlet mut i = 0\nwhile i < 10 { i = i + 1 }"
+    let tok5 = tokenize(src5)
+    let items5 = parse_program(tok5)
+    println(f"Test 5: struct + let + while -> {items5} items")
+    assert(items5 == 3)
+    println("  PASS")
+
+    println("\n=== All 5 Self-Hosted Parser Tests PASSED ===")
+    println("Fajar Lang can parse Fajar Lang code!")
+}

@@ -482,17 +482,17 @@ fajar-lang/
 
 ## Performance Benchmarks
 
-Fibonacci(20) x 1000 iterations — Intel i9-14900HX, Ubuntu 25.10:
+Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
-| Language | Time | vs C |
-|----------|------|------|
-| Rust (rustc -O) | <1 ms | ~10x faster (inlined) |
-| C (gcc -O2) | 9 ms | 1.0x baseline |
-| Go 1.24 | 51 ms | 5.7x slower |
-| **Fajar Lang** (interpreter) | 26.6 s | Scripting mode |
-| Python 3.13 | 386 ms | 43x slower |
+| Language | Backend | Time | vs C |
+|----------|---------|------|------|
+| C | gcc -O2 | 0.020s | 1.0x |
+| Go | 1.24 | 0.056s | 2.8x |
+| **Fajar Lang** | **Cranelift JIT** | **0.240s** | **12x** |
+| Python | CPython 3.13 | 0.533s | 27x |
+| Fajar Lang | Interpreter | 34.7s | Scripting mode |
 
-> **For production performance:** Use `fj run --native` (Cranelift JIT) or `fj build --backend llvm --opt-level 2` for native-speed execution comparable to C/Rust. The interpreter is designed for development, scripting, and REPL workflows.
+> **Cranelift JIT is faster than Python and within reach of Go.** For maximum performance, use `fj build --backend llvm --opt-level 2` for AOT-compiled binaries comparable to C/Rust.
 >
 > Full results: [`benches/baselines/RESULTS.md`](benches/baselines/RESULTS.md)
 

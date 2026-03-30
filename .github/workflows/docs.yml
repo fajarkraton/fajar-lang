@@ -51,18 +51,20 @@ jobs:
 
       - name: Merge outputs
         run: |
-          mkdir -p _site
-          # mdBook docs at /docs/
-          cp -r book/book/* _site/
-          # API docs at /api/
-          cp -r target/doc _site/api
-          # Playground at /playground/
-          cp -r playground _site/playground 2>/dev/null || true
-          # Website landing pages at root
-          cp website/index.html _site/website.html 2>/dev/null || true
+          mkdir -p _site/docs _site/api _site/playground
+          # Website landing page as homepage (root)
+          cp website/index.html _site/index.html 2>/dev/null || true
           cp website/comparison.html _site/comparison.html 2>/dev/null || true
           cp website/download.html _site/download.html 2>/dev/null || true
+          cp website/robots.txt _site/robots.txt 2>/dev/null || true
+          cp website/sitemap.xml _site/sitemap.xml 2>/dev/null || true
           cp -r website/branding _site/branding 2>/dev/null || true
+          # mdBook docs at /docs/
+          cp -r book/book/* _site/docs/
+          # API docs at /api/
+          cp -r target/doc/* _site/api/ 2>/dev/null || true
+          # Playground at /playground/
+          cp -r playground/* _site/playground/ 2>/dev/null || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -2,10 +2,30 @@
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#1a1a2e"/>
-      <stop offset="100%" style="stop-color:#16213e"/>
+      <stop offset="100%" style="stop-color:#0f3460"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e94560"/>
+      <stop offset="100%" style="stop-color:#c73e54"/>
     </linearGradient>
   </defs>
-  <rect width="128" height="128" rx="20" fill="url(#bg)"/>
-  <text x="64" y="78" font-family="monospace" font-size="64" font-weight="bold" fill="#4080c0" text-anchor="middle">fj</text>
-  <text x="64" y="108" font-family="sans-serif" font-size="14" fill="#808080" text-anchor="middle">Fajar Lang</text>
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+  <!-- Decorative circuit lines -->
+  <line x1="10" y1="20" x2="30" y2="20" stroke="#2a2a4a" stroke-width="2"/>
+  <line x1="98" y1="108" x2="118" y2="108" stroke="#2a2a4a" stroke-width="2"/>
+  <circle cx="30" cy="20" r="3" fill="#2a2a4a"/>
+  <circle cx="98" cy="108" r="3" fill="#2a2a4a"/>
+  <!-- Main text -->
+  <text x="64" y="72" font-family="'Courier New', monospace" font-size="52" font-weight="bold" fill="url(#accent)" text-anchor="middle">fj</text>
+  <!-- Subtitle -->
+  <text x="64" y="100" font-family="'Segoe UI', sans-serif" font-size="12" fill="#a0a0b0" text-anchor="middle" letter-spacing="3">FAJAR LANG</text>
+  <!-- Tensor symbol (small grid) -->
+  <rect x="14" y="90" width="8" height="8" rx="1" fill="none" stroke="#4080c0" stroke-width="1.5"/>
+  <rect x="24" y="90" width="8" height="8" rx="1" fill="none" stroke="#4080c0" stroke-width="1.5"/>
+  <rect x="14" y="100" width="8" height="8" rx="1" fill="none" stroke="#4080c0" stroke-width="1.5"/>
+  <rect x="24" y="100" width="8" height="8" rx="1" fill="none" stroke="#4080c0" stroke-width="1.5"/>
+  <!-- Gear symbol (OS) -->
+  <circle cx="112" cy="28" r="8" fill="none" stroke="#4080c0" stroke-width="1.5"/>
+  <circle cx="112" cy="28" r="3" fill="#4080c0"/>
 </svg>
