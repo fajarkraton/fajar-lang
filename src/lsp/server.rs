@@ -100,6 +100,20 @@ impl FajarLspBackend {
         }
     }
 
+    // ── V12 I1: Completion Helpers (delegate to free functions) ────────
+
+    fn extract_locals_from_source(&self, source: &str, up_to_line: usize) -> Vec<(String, String)> {
+        extract_locals(source, up_to_line)
+    }
+
+    fn find_struct_fields_for_var(&self, _var_name: &str, source: &str) -> Vec<(String, String)> {
+        find_struct_fields(source)
+    }
+
+    fn find_enum_variants(&self, enum_name: &str, source: &str) -> Vec<String> {
+        find_enum_variants_in_source(enum_name, source)
+    }
+
     /// Runs the full analysis pipeline and publishes diagnostics.
     async fn publish_diagnostics(&self, uri: Url) {
         // Collect diagnostics synchronously under the lock, then publish async after dropping it.
@@ -281,45 +295,212 @@ impl LanguageServer for FajarLspBackend {
         Ok(None)
     }
 
-    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let mut items = Vec::new();
+        let uri = params.text_document_position.text_document.uri.clone();
+        let pos = params.text_document_position.position;
 
-        // Keywords
+        // V12 I1: Context-aware completion
+        let docs = self.documents.lock().unwrap();
+        let trigger_char = params
+            .context
+            .as_ref()
+            .and_then(|c| c.trigger_character.as_deref());
+
+        if let Some(doc) = docs.get(&uri) {
+            let line_idx = pos.line as usize;
+            let col = pos.character as usize;
+            let lines: Vec<&str> = doc.source.lines().collect();
+
+            if let Some(current_line) = lines.get(line_idx) {
+                let before_cursor = if col <= current_line.len() {
+                    &current_line[..col]
+                } else {
+                    current_line
+                };
+
+                // ── Dot completion: struct fields & methods ─────────
+                if trigger_char == Some(".") || before_cursor.ends_with('.') {
+                    // Extract the receiver name before the dot
+                    let trimmed = before_cursor.trim_end_matches('.');
+                    let receiver = trimmed
+                        .rsplit(|c: char| !c.is_alphanumeric() && c != '_')
+                        .next()
+                        .unwrap_or("");
+
+                    if !receiver.is_empty() {
+                        // Find struct type of receiver in source
+                        let struct_fields = self.find_struct_fields_for_var(receiver, &doc.source);
+                        for (fname, ftype) in &struct_fields {
+                            items.push(CompletionItem {
+                                label: fname.clone(),
+                                kind: Some(CompletionItemKind::FIELD),
+                                detail: Some(ftype.clone()),
+                                sort_text: Some(format!("0_{fname}")),
+                                ..Default::default()
+                            });
+                        }
+
+                        // Add common methods for the type
+                        for method in COMMON_METHODS {
+                            items.push(CompletionItem {
+                                label: method.to_string(),
+                                kind: Some(CompletionItemKind::METHOD),
+                                detail: Some("method".into()),
+                                sort_text: Some(format!("1_{method}")),
+                                ..Default::default()
+                            });
+                        }
+                    }
+
+                    // For dot completion, skip keywords/types
+                    drop(docs);
+                    return Ok(Some(CompletionResponse::Array(items)));
+                }
+
+                // ── Double-colon completion: enum variants ──────────
+                if trigger_char == Some(":") || before_cursor.ends_with("::") {
+                    let before_colons = before_cursor.trim_end_matches(':');
+                    let type_name = before_colons
+                        .rsplit(|c: char| !c.is_alphanumeric() && c != '_')
+                        .next()
+                        .unwrap_or("");
+
+                    if !type_name.is_empty() {
+                        // Standard enum constructors
+                        let variant_items = match type_name {
+                            "Option" => {
+                                vec![("Some", "Option::Some(value)"), ("None", "Option::None")]
+                            }
+                            "Result" => {
+                                vec![("Ok", "Result::Ok(value)"), ("Err", "Result::Err(error)")]
+                            }
+                            _ => vec![],
+                        };
+                        for (vname, vdetail) in variant_items {
+                            items.push(CompletionItem {
+                                label: vname.to_string(),
+                                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                                detail: Some(vdetail.to_string()),
+                                sort_text: Some(format!("0_{vname}")),
+                                ..Default::default()
+                            });
+                        }
+
+                        // Find user-defined enum variants from source
+                        let variants = self.find_enum_variants(type_name, &doc.source);
+                        for vname in &variants {
+                            items.push(CompletionItem {
+                                label: vname.clone(),
+                                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                                detail: Some(format!("{type_name}::{vname}")),
+                                sort_text: Some(format!("0_{vname}")),
+                                ..Default::default()
+                            });
+                        }
+                    }
+
+                    drop(docs);
+                    return Ok(Some(CompletionResponse::Array(items)));
+                }
+
+                // ── Local variables from current scope ──────────────
+                let locals = self.extract_locals_from_source(&doc.source, line_idx);
+                for (name, ty) in &locals {
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(CompletionItemKind::VARIABLE),
+                        detail: Some(ty.clone()),
+                        sort_text: Some(format!("0_{name}")),
+                        ..Default::default()
+                    });
+                }
+
+                // ── Function names from document ────────────────────
+                for (name, _, _) in &doc.fn_defs {
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some("fn".into()),
+                        sort_text: Some(format!("1_{name}")),
+                        ..Default::default()
+                    });
+                }
+
+                // ── Struct names from document ──────────────────────
+                for (name, _, _) in &doc.struct_defs {
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(CompletionItemKind::STRUCT),
+                        detail: Some("struct".into()),
+                        sort_text: Some(format!("1_{name}")),
+                        ..Default::default()
+                    });
+                }
+
+                // ── Snippet completions ─────────────────────────────
+                let context_lines: Vec<&str> = lines
+                    .iter()
+                    .skip(line_idx.saturating_sub(5))
+                    .take(10)
+                    .copied()
+                    .collect();
+                let cursor_ctx = crate::lsp_v2::completion::analyze_expected_type(
+                    current_line,
+                    col,
+                    &context_lines,
+                );
+
+                if cursor_ctx.in_match_arm {
+                    items.push(CompletionItem {
+                        label: "_ => ".to_string(),
+                        kind: Some(CompletionItemKind::SNIPPET),
+                        detail: Some("wildcard match arm".into()),
+                        sort_text: Some("0__".into()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+        drop(docs);
+
+        // ── Fallback: keywords, builtins, types, annotations ────
         for kw in KEYWORDS {
             items.push(CompletionItem {
                 label: kw.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
                 detail: Some("keyword".into()),
+                sort_text: Some(format!("3_{kw}")),
                 ..Default::default()
             });
         }
 
-        // Built-in functions
         for (name, sig) in BUILTINS {
             items.push(CompletionItem {
                 label: name.to_string(),
                 kind: Some(CompletionItemKind::FUNCTION),
                 detail: Some(sig.to_string()),
+                sort_text: Some(format!("2_{name}")),
                 ..Default::default()
             });
         }
 
-        // Types
         for ty in TYPES {
             items.push(CompletionItem {
                 label: ty.to_string(),
                 kind: Some(CompletionItemKind::TYPE_PARAMETER),
                 detail: Some("type".into()),
+                sort_text: Some(format!("3_{ty}")),
                 ..Default::default()
             });
         }
 
-        // Annotations
         for ann in ANNOTATIONS {
             items.push(CompletionItem {
                 label: ann.to_string(),
                 kind: Some(CompletionItemKind::SNIPPET),
                 detail: Some("context annotation".into()),
+                sort_text: Some(format!("4_{ann}")),
                 ..Default::default()
             });
         }
@@ -2473,6 +2654,115 @@ const TYPES: &[&str] = &[
 
 const ANNOTATIONS: &[&str] = &["@kernel", "@device", "@safe", "@unsafe", "@ffi"];
 
+/// Common methods suggested for dot-completion on any type.
+const COMMON_METHODS: &[&str] = &[
+    "len",
+    "is_empty",
+    "to_string",
+    "clone",
+    "contains",
+    "push",
+    "pop",
+    "iter",
+    "map",
+    "filter",
+    "collect",
+    "unwrap",
+    "expect",
+    "is_some",
+    "is_none",
+    "is_ok",
+    "is_err",
+];
+
+// ── V12 I1: Completion Helper Functions ─────────────────────────────
+
+/// Extracts local variable bindings from source up to a given line.
+fn extract_locals(source: &str, up_to_line: usize) -> Vec<(String, String)> {
+    let mut locals = Vec::new();
+    for (i, line) in source.lines().enumerate() {
+        if i > up_to_line {
+            break;
+        }
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("let ") {
+            let rest = rest.trim_start_matches("mut ");
+            let name_end = rest
+                .find(|c: char| c == ':' || c == '=' || c.is_whitespace())
+                .unwrap_or(rest.len());
+            let name = rest[..name_end].trim().to_string();
+            if name.is_empty() || name.starts_with('{') {
+                continue;
+            }
+            let ty = if let Some(colon_pos) = rest.find(':') {
+                let after = &rest[colon_pos + 1..];
+                let end = after.find('=').unwrap_or(after.len());
+                after[..end].trim().to_string()
+            } else {
+                "auto".to_string()
+            };
+            locals.push((name, ty));
+        }
+    }
+    locals
+}
+
+/// Finds struct field names and types from all struct defs in source.
+fn find_struct_fields(source: &str) -> Vec<(String, String)> {
+    let mut fields = Vec::new();
+    let mut in_struct = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("struct ") && trimmed.contains('{') {
+            in_struct = true;
+            continue;
+        }
+        if in_struct {
+            if trimmed == "}" {
+                in_struct = false;
+                continue;
+            }
+            if let Some(colon) = trimmed.find(':') {
+                let fname = trimmed[..colon].trim().to_string();
+                let ftype = trimmed[colon + 1..]
+                    .trim()
+                    .trim_end_matches(',')
+                    .trim()
+                    .to_string();
+                if !fname.is_empty() && !fname.starts_with("//") {
+                    fields.push((fname, ftype));
+                }
+            }
+        }
+    }
+    fields
+}
+
+/// Finds enum variant names for a given enum type from source.
+fn find_enum_variants_in_source(enum_name: &str, source: &str) -> Vec<String> {
+    let mut variants = Vec::new();
+    let mut in_enum = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("enum ") && trimmed.contains(enum_name) && trimmed.contains('{') {
+            in_enum = true;
+            continue;
+        }
+        if in_enum {
+            if trimmed == "}" {
+                break;
+            }
+            let variant = trimmed.split(['(', ',', '{']).next().unwrap_or("").trim();
+            if !variant.is_empty() && !variant.starts_with("//") {
+                variants.push(variant.to_string());
+            }
+        }
+    }
+    variants
+}
+
 // ── LexError/ParseError span helpers ────────────────────────────────
 
 trait HasSpan {
@@ -2875,5 +3165,89 @@ mod tests {
     fn v10_fn_doc_comment_missing() {
         let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
         assert!(find_fn_doc_comment(source, "add").is_none());
+    }
+
+    // ── V12 Sprint I1: Type-Driven Completion Tests ─────────────────────
+
+    #[test]
+    fn i1_extract_locals_basic() {
+        let source = "let x: i64 = 42\nlet mut y = 10\nlet z: str = \"hello\"";
+        let locals = extract_locals(source, 10);
+        assert!(locals.iter().any(|(n, _)| n == "x"), "should find x");
+        assert!(locals.iter().any(|(n, _)| n == "y"), "should find y");
+        assert!(locals.iter().any(|(n, _)| n == "z"), "should find z");
+    }
+
+    #[test]
+    fn i1_extract_locals_with_types() {
+        let source = "let x: i64 = 42\nlet name: str = \"test\"";
+        let locals = extract_locals(source, 10);
+        let x = locals.iter().find(|(n, _)| n == "x");
+        assert!(x.is_some());
+        assert_eq!(x.unwrap().1, "i64");
+        let name = locals.iter().find(|(n, _)| n == "name");
+        assert!(name.is_some());
+        assert_eq!(name.unwrap().1, "str");
+    }
+
+    #[test]
+    fn i1_extract_locals_up_to_line() {
+        let source = "let a = 1\nlet b = 2\nlet c = 3\nlet d = 4";
+        let locals = extract_locals(source, 1);
+        assert!(locals.iter().any(|(n, _)| n == "a"));
+        assert!(locals.iter().any(|(n, _)| n == "b"));
+        assert!(!locals.iter().any(|(n, _)| n == "c"));
+        assert!(!locals.iter().any(|(n, _)| n == "d"));
+    }
+
+    #[test]
+    fn i1_find_struct_fields() {
+        let source = "struct Point {\n    x: f64,\n    y: f64,\n}";
+        let fields = find_struct_fields(source);
+        assert_eq!(fields.len(), 2);
+        assert!(fields.iter().any(|(n, t)| n == "x" && t == "f64"));
+        assert!(fields.iter().any(|(n, t)| n == "y" && t == "f64"));
+    }
+
+    #[test]
+    fn i1_find_enum_variants() {
+        let source = "enum Color {\n    Red,\n    Green,\n    Blue,\n}";
+        let variants = find_enum_variants_in_source("Color", source);
+        assert_eq!(variants.len(), 3);
+        assert!(variants.contains(&"Red".to_string()));
+        assert!(variants.contains(&"Green".to_string()));
+        assert!(variants.contains(&"Blue".to_string()));
+    }
+
+    #[test]
+    fn i1_find_enum_variants_with_fields() {
+        let source = "enum Shape {\n    Circle(f64),\n    Rect(f64, f64),\n}";
+        let variants = find_enum_variants_in_source("Shape", source);
+        assert_eq!(variants.len(), 2);
+        assert!(variants.contains(&"Circle".to_string()));
+        assert!(variants.contains(&"Rect".to_string()));
+    }
+
+    #[test]
+    fn i1_common_methods_not_empty() {
+        assert!(!COMMON_METHODS.is_empty());
+        assert!(COMMON_METHODS.contains(&"len"));
+        assert!(COMMON_METHODS.contains(&"clone"));
+        assert!(COMMON_METHODS.contains(&"unwrap"));
+    }
+
+    #[test]
+    fn i1_document_state_caches_fn_defs() {
+        let source = "fn add(a: i32, b: i32) -> i32 { a + b }\nfn main() { add(1, 2) }";
+        let doc = DocumentState::new(source.to_string());
+        assert!(doc.fn_defs.iter().any(|(n, _, _)| n == "add"));
+        assert!(doc.fn_defs.iter().any(|(n, _, _)| n == "main"));
+    }
+
+    #[test]
+    fn i1_document_state_caches_struct_defs() {
+        let source = "struct Point { x: f64, y: f64 }";
+        let doc = DocumentState::new(source.to_string());
+        assert!(doc.struct_defs.iter().any(|(n, _, _)| n == "Point"));
     }
 }
