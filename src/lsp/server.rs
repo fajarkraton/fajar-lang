@@ -100,6 +100,20 @@ impl DocumentState {
     }
 }
 
+/// V12 I4: A symbol visible across the workspace.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct WorkspaceSymbolEntry {
+    /// Symbol name.
+    name: String,
+    /// Symbol kind: "fn", "struct", "enum", "trait", "const".
+    kind: String,
+    /// URI of the document containing this symbol.
+    uri: Url,
+    /// Byte offset of the definition in the source.
+    span_start: usize,
+}
+
 /// The Fajar Lang LSP backend.
 struct FajarLspBackend {
     client: Client,
@@ -112,6 +126,78 @@ impl FajarLspBackend {
             client,
             documents: Mutex::new(HashMap::new()),
         }
+    }
+
+    // ── V12 I4: Cross-File Symbol Resolution ──────────────────────────
+
+    /// Builds a workspace-wide symbol index from all open documents.
+    #[allow(dead_code)] // Used by workspace symbol handler (future I5+)
+    fn build_workspace_index(&self) -> Vec<WorkspaceSymbolEntry> {
+        let docs = self.documents.lock().expect("lsp state lock");
+        let mut index = Vec::new();
+
+        for (uri, doc) in docs.iter() {
+            for (name, span_start, _) in &doc.fn_defs {
+                index.push(WorkspaceSymbolEntry {
+                    name: name.clone(),
+                    kind: "fn".to_string(),
+                    uri: uri.clone(),
+                    span_start: *span_start,
+                });
+            }
+            for (name, span_start, _) in &doc.struct_defs {
+                index.push(WorkspaceSymbolEntry {
+                    name: name.clone(),
+                    kind: "struct".to_string(),
+                    uri: uri.clone(),
+                    span_start: *span_start,
+                });
+            }
+            // Also extract enums, traits, consts from source
+            for (name, kind, start) in extract_top_level_symbols(&doc.source) {
+                if !index.iter().any(|s| s.name == name && s.uri == *uri) {
+                    index.push(WorkspaceSymbolEntry {
+                        name,
+                        kind,
+                        uri: uri.clone(),
+                        span_start: start,
+                    });
+                }
+            }
+        }
+
+        index
+    }
+
+    /// Finds a symbol definition across all open documents.
+    ///
+    /// Returns the location if found in any document other than the exclude URI.
+    fn find_cross_file_definition(&self, symbol: &str, exclude_uri: &Url) -> Option<(Url, usize)> {
+        let docs = self.documents.lock().expect("lsp state lock");
+        for (uri, doc) in docs.iter() {
+            if uri == exclude_uri {
+                continue;
+            }
+            // Search fn_defs
+            for (name, span_start, _) in &doc.fn_defs {
+                if name == symbol {
+                    return Some((uri.clone(), *span_start));
+                }
+            }
+            // Search struct_defs
+            for (name, span_start, _) in &doc.struct_defs {
+                if name == symbol {
+                    return Some((uri.clone(), *span_start));
+                }
+            }
+            // Search top-level symbols in source
+            for (name, _, start) in extract_top_level_symbols(&doc.source) {
+                if name == symbol {
+                    return Some((uri.clone(), start));
+                }
+            }
+        }
+        None
     }
 
     // ── V12 I1: Completion Helpers (delegate to free functions) ────────
@@ -605,6 +691,26 @@ impl LanguageServer for FajarLspBackend {
                 let end = doc.offset_to_position(name_offset + word.len());
                 return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                     uri: uri.clone(),
+                    range: Range::new(start, end),
+                })));
+            }
+        }
+
+        // V12 I4: Cross-file definition search
+        // Look for the symbol in other open documents
+        let search_uri = uri.clone();
+        let search_word = word.clone();
+        drop(docs); // release lock before cross-file search
+
+        if let Some((def_uri, def_offset)) =
+            self.find_cross_file_definition(&search_word, &search_uri)
+        {
+            let docs = self.documents.lock().expect("lsp state lock");
+            if let Some(def_doc) = docs.get(&def_uri) {
+                let start = def_doc.offset_to_position(def_offset);
+                let end = def_doc.offset_to_position(def_offset + search_word.len());
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: def_uri,
                     range: Range::new(start, end),
                 })));
             }
@@ -2721,6 +2827,122 @@ const COMMON_METHODS: &[&str] = &[
     "is_err",
 ];
 
+// ── V12 I4: Multi-File Symbol Resolution Helpers ────────────────────
+
+/// Extracts top-level symbol definitions from source text.
+///
+/// Returns `(name, kind, byte_offset)` for each `enum`, `trait`, `const`, `type` definition.
+/// fn/struct are handled separately via DocumentState caching.
+fn extract_top_level_symbols(source: &str) -> Vec<(String, String, usize)> {
+    let mut symbols = Vec::new();
+    let mut offset = 0;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        let (prefix, kind) = if let Some(rest) = trimmed.strip_prefix("enum ") {
+            (rest, "enum")
+        } else if let Some(rest) = trimmed.strip_prefix("trait ") {
+            (rest, "trait")
+        } else if let Some(rest) = trimmed.strip_prefix("const ") {
+            (rest, "const")
+        } else if let Some(rest) = trimmed.strip_prefix("type ") {
+            (rest, "type")
+        } else if let Some(rest) = trimmed.strip_prefix("pub enum ") {
+            (rest, "enum")
+        } else if let Some(rest) = trimmed.strip_prefix("pub trait ") {
+            (rest, "trait")
+        } else if let Some(rest) = trimmed.strip_prefix("pub const ") {
+            (rest, "const")
+        } else {
+            offset += line.len() + 1;
+            continue;
+        };
+
+        let name = prefix
+            .split(|c: char| c == '{' || c == '(' || c == '<' || c == ':' || c.is_whitespace())
+            .next()
+            .unwrap_or("")
+            .trim();
+
+        if !name.is_empty() {
+            // Find the byte offset of the name in the line
+            let name_offset = line.find(name).map(|p| offset + p).unwrap_or(offset);
+            symbols.push((name.to_string(), kind.to_string(), name_offset));
+        }
+
+        offset += line.len() + 1;
+    }
+
+    symbols
+}
+
+/// Resolves a module path to a file path.
+///
+/// `use math::sin` → looks for `math.fj` or `math/mod.fj` relative to the workspace root.
+#[allow(dead_code)] // Infrastructure for use-statement resolution (I5+)
+fn resolve_module_path(
+    module_name: &str,
+    workspace_root: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    // Try module_name.fj
+    let direct = workspace_root.join(format!("{module_name}.fj"));
+    if direct.exists() {
+        return Some(direct);
+    }
+
+    // Try module_name/mod.fj
+    let mod_file = workspace_root.join(module_name).join("mod.fj");
+    if mod_file.exists() {
+        return Some(mod_file);
+    }
+
+    // Try src/module_name.fj
+    let src_direct = workspace_root.join("src").join(format!("{module_name}.fj"));
+    if src_direct.exists() {
+        return Some(src_direct);
+    }
+
+    // Try stdlib/module_name.fj
+    let stdlib = workspace_root
+        .join("stdlib")
+        .join(format!("{module_name}.fj"));
+    if stdlib.exists() {
+        return Some(stdlib);
+    }
+
+    None
+}
+
+/// Scans a directory for all .fj files (non-recursive, depth 1).
+#[allow(dead_code)] // Infrastructure for workspace indexing (I5+)
+fn scan_workspace_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+
+    // Scan root
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "fj") {
+                files.push(path);
+            }
+        }
+    }
+
+    // Scan src/ subdirectory
+    let src_dir = root.join("src");
+    if let Ok(entries) = std::fs::read_dir(&src_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "fj") {
+                files.push(path);
+            }
+        }
+    }
+
+    files
+}
+
 // ── V12 I3: Incremental Analysis Helpers ────────────────────────────
 
 /// Fast content hash for change detection (FNV-1a inspired).
@@ -3741,5 +3963,114 @@ mod tests {
         let affected = affected_functions(source, 0, 5);
         assert!(affected.contains(&"foo".to_string()));
         assert!(affected.contains(&"bar".to_string()));
+    }
+
+    // ── V12 Sprint I4: Multi-File Symbol Resolution Tests ───────────────
+
+    #[test]
+    fn i4_extract_top_level_symbols_enum() {
+        let source = "enum Color {\n    Red,\n    Green,\n}\nconst MAX: i64 = 100";
+        let symbols = extract_top_level_symbols(source);
+        assert!(
+            symbols.iter().any(|(n, k, _)| n == "Color" && k == "enum"),
+            "should find Color enum: {symbols:?}"
+        );
+        assert!(
+            symbols.iter().any(|(n, k, _)| n == "MAX" && k == "const"),
+            "should find MAX const: {symbols:?}"
+        );
+    }
+
+    #[test]
+    fn i4_extract_top_level_symbols_trait() {
+        let source = "trait Display {\n    fn fmt() -> str\n}";
+        let symbols = extract_top_level_symbols(source);
+        assert!(
+            symbols
+                .iter()
+                .any(|(n, k, _)| n == "Display" && k == "trait"),
+            "should find Display trait: {symbols:?}"
+        );
+    }
+
+    #[test]
+    fn i4_extract_top_level_symbols_pub() {
+        let source = "pub enum Status { Active, Inactive }\npub const VERSION: i64 = 1";
+        let symbols = extract_top_level_symbols(source);
+        assert!(symbols.iter().any(|(n, _, _)| n == "Status"));
+        assert!(symbols.iter().any(|(n, _, _)| n == "VERSION"));
+    }
+
+    #[test]
+    fn i4_extract_top_level_symbols_offset() {
+        let source = "enum Foo {\n    A,\n}";
+        let symbols = extract_top_level_symbols(source);
+        let foo = symbols.iter().find(|(n, _, _)| n == "Foo");
+        assert!(foo.is_some());
+        let (_, _, offset) = foo.unwrap();
+        // "Foo" starts at position 5 (after "enum ")
+        assert_eq!(*offset, 5, "Foo should be at offset 5");
+    }
+
+    #[test]
+    fn i4_resolve_module_path_not_found() {
+        let root = std::path::Path::new("/nonexistent/path");
+        assert!(resolve_module_path("math", root).is_none());
+    }
+
+    #[test]
+    fn i4_scan_workspace_finds_fj_files() {
+        // Use current project's examples/ directory which has .fj files
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        if root.exists() {
+            let files = scan_workspace_files(&root);
+            assert!(
+                !files.is_empty(),
+                "should find .fj files in examples/ directory"
+            );
+            assert!(
+                files
+                    .iter()
+                    .all(|f| f.extension().is_some_and(|e| e == "fj")),
+                "all files should be .fj"
+            );
+        }
+    }
+
+    #[test]
+    fn i4_workspace_symbol_entry_fields() {
+        let entry = WorkspaceSymbolEntry {
+            name: "add".to_string(),
+            kind: "fn".to_string(),
+            uri: Url::parse("file:///test.fj").unwrap(),
+            span_start: 0,
+        };
+        assert_eq!(entry.name, "add");
+        assert_eq!(entry.kind, "fn");
+    }
+
+    #[test]
+    fn i4_extract_top_level_ignores_fn_struct() {
+        // fn and struct are handled by DocumentState, not extract_top_level_symbols
+        let source = "fn foo() {}\nstruct Bar {}";
+        let symbols = extract_top_level_symbols(source);
+        assert!(
+            !symbols.iter().any(|(n, _, _)| n == "foo"),
+            "fn should not be in top-level symbols"
+        );
+        assert!(
+            !symbols.iter().any(|(n, _, _)| n == "Bar"),
+            "struct should not be in top-level symbols"
+        );
+    }
+
+    #[test]
+    fn i4_extract_top_level_type_alias() {
+        let source = "type Result = i64";
+        let symbols = extract_top_level_symbols(source);
+        assert!(
+            symbols.iter().any(|(n, k, _)| n == "Result" && k == "type"),
+            "should find type alias: {symbols:?}"
+        );
     }
 }
