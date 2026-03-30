@@ -364,7 +364,7 @@ impl FjDiagnostic {
             code: Some(code.into()),
             severity,
             span: Some(e.span()),
-            help: None,
+            help: e.hint(),
             source_code: miette::NamedSource::new(filename, source.to_string()),
         }
     }

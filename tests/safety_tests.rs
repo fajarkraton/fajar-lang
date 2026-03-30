@@ -34,6 +34,30 @@ fn expect_semantic_error(source: &str, error_code: &str) {
     );
 }
 
+/// Helper: check that source produces a strict-mode semantic error containing the code.
+fn expect_strict_error(source: &str, error_code: &str) {
+    let tokens = fajar_lang::lexer::tokenize(source).expect("lex failed");
+    let program = fajar_lang::parser::parse(tokens).expect("parse failed");
+    let errors = fajar_lang::analyzer::analyze_strict(&program).unwrap_err();
+    let found = errors.iter().any(|e| format!("{e}").contains(error_code));
+    assert!(
+        found,
+        "expected strict error containing '{error_code}', got: {errors:?}"
+    );
+}
+
+/// Helper: check that source passes strict-mode analysis without errors.
+fn expect_strict_ok(source: &str) {
+    let tokens = fajar_lang::lexer::tokenize(source).expect("lex failed");
+    let program = fajar_lang::parser::parse(tokens).expect("parse failed");
+    let result = fajar_lang::analyzer::analyze_strict(&program);
+    assert!(
+        result.is_ok(),
+        "expected strict analysis to pass, got errors: {:?}",
+        result.unwrap_err()
+    );
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Integer Overflow Safety (RE009)
 // ════════════════════════════════════════════════════════════════════════
@@ -843,5 +867,299 @@ fn safety_tensor_creation_valid() {
     assert!(
         result.is_ok(),
         "tensor creation with valid shapes should succeed"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Strict Ownership — Phase D Integration Tests (20 tests)
+// ════════════════════════════════════════════════════════════════════════
+
+// ── ME001: Use After Move ──────────────────────────────────────────────
+
+#[test]
+fn strict_me001_string_use_after_move() {
+    expect_strict_error(
+        r#"
+        let s: str = "hello"
+        let t: str = s
+        println(s)
+        "#,
+        "ME001",
+    );
+}
+
+#[test]
+fn strict_me001_array_use_after_move() {
+    expect_strict_error(
+        r#"
+        let a = [1, 2, 3]
+        let b = a
+        len(a)
+        "#,
+        "ME001",
+    );
+}
+
+#[test]
+fn strict_me001_struct_use_after_move() {
+    expect_strict_error(
+        r#"
+        struct Point { x: f64, y: f64 }
+        let p = Point { x: 1.0, y: 2.0 }
+        let q = p
+        println(p)
+        "#,
+        "ME001",
+    );
+}
+
+#[test]
+fn strict_me001_move_in_function_call() {
+    expect_strict_error(
+        r#"
+        fn consume(s: str) -> str { s }
+        let s: str = "hello"
+        consume(s)
+        println(s)
+        "#,
+        "ME001",
+    );
+}
+
+// ── ME003: Move While Borrowed ─────────────────────────────────────────
+
+#[test]
+fn strict_me003_move_while_immutably_borrowed() {
+    expect_strict_error(
+        r#"
+        let s: str = "hello"
+        let r = &s
+        let t: str = s
+        "#,
+        "ME003",
+    );
+}
+
+#[test]
+fn strict_me003_move_while_mutably_borrowed() {
+    expect_strict_error(
+        r#"
+        let mut s: str = "hello"
+        let r = &mut s
+        let t: str = s
+        "#,
+        "ME003",
+    );
+}
+
+// ── ME004: Mutable Borrow Conflict ─────────────────────────────────────
+
+#[test]
+fn strict_me004_double_mut_borrow() {
+    expect_strict_error(
+        r#"
+        let mut x: i64 = 42
+        let r1 = &mut x
+        let r2 = &mut x
+        "#,
+        "ME004",
+    );
+}
+
+#[test]
+fn strict_me004_mut_borrow_while_imm_borrowed() {
+    expect_strict_error(
+        r#"
+        let mut x: i64 = 42
+        let r1 = &x
+        let r2 = &mut x
+        "#,
+        "ME004",
+    );
+}
+
+// ── ME005: Immutable Borrow Conflict ───────────────────────────────────
+
+#[test]
+fn strict_me005_imm_borrow_while_mut_borrowed() {
+    expect_strict_error(
+        r#"
+        let mut x: i64 = 42
+        let r1 = &mut x
+        let r2 = &x
+        "#,
+        "ME005",
+    );
+}
+
+// ── ME010: Dangling Reference ──────────────────────────────────────────
+
+#[test]
+fn strict_me010_return_ref_to_local() {
+    // Single-line block so &z is parsed as the tail expression
+    expect_strict_error(r#"fn dangling() -> &i32 { let z: i32 = 1; &z }"#, "ME010");
+}
+
+// ── Copy Types: No Move Errors ─────────────────────────────────────────
+
+#[test]
+fn strict_copy_int_no_move() {
+    expect_strict_ok(
+        r#"
+        let x: i64 = 42
+        let y: i64 = x
+        let z: i64 = x + y
+        "#,
+    );
+}
+
+#[test]
+fn strict_copy_bool_no_move() {
+    expect_strict_ok(
+        r#"
+        let a: bool = true
+        let b: bool = a
+        let c: bool = a
+        "#,
+    );
+}
+
+#[test]
+fn strict_copy_float_no_move() {
+    expect_strict_ok(
+        r#"
+        let x: f64 = 3.14
+        let y: f64 = x
+        let z: f64 = x + y
+        "#,
+    );
+}
+
+#[test]
+fn strict_copy_ref_no_move() {
+    // References themselves are Copy
+    expect_strict_ok(
+        r#"
+        let x: i64 = 42
+        let r1 = &x
+        let r2 = r1
+        "#,
+    );
+}
+
+// ── Multiple Immutable Borrows OK ──────────────────────────────────────
+
+#[test]
+fn strict_multiple_imm_borrows_ok() {
+    expect_strict_ok(
+        r#"
+        let x: i64 = 42
+        let r1 = &x
+        let r2 = &x
+        let r3 = &x
+        "#,
+    );
+}
+
+// ── Sequential Borrows (NLL) ───────────────────────────────────────────
+
+#[test]
+fn strict_nll_reborrow_after_release() {
+    // After NLL releases immutable borrows, we can take new immutable borrows
+    expect_strict_ok(
+        r#"
+        let x: i64 = 42
+        let r1 = &x
+        let r2 = &x
+        "#,
+    );
+}
+
+// ── Error Hint Content ─────────────────────────────────────────────────
+
+#[test]
+fn strict_me001_error_has_hint() {
+    let tokens = fajar_lang::lexer::tokenize(
+        r#"
+        let s: str = "hello"
+        let t: str = s
+        println(s)
+        "#,
+    )
+    .expect("lex");
+    let program = fajar_lang::parser::parse(tokens).expect("parse");
+    let errors = fajar_lang::analyzer::analyze_strict(&program).unwrap_err();
+    let me001 = errors.iter().find(|e| format!("{e}").contains("ME001"));
+    assert!(me001.is_some(), "expected ME001 error");
+    let hint = me001.unwrap().hint();
+    assert!(hint.is_some(), "ME001 should have a hint");
+    assert!(
+        hint.unwrap().contains("clone"),
+        "hint should suggest cloning"
+    );
+}
+
+#[test]
+fn strict_me003_error_has_hint() {
+    let tokens = fajar_lang::lexer::tokenize(
+        r#"
+        let s: str = "hello"
+        let r = &s
+        let t: str = s
+        "#,
+    )
+    .expect("lex");
+    let program = fajar_lang::parser::parse(tokens).expect("parse");
+    let errors = fajar_lang::analyzer::analyze_strict(&program).unwrap_err();
+    let me003 = errors.iter().find(|e| format!("{e}").contains("ME003"));
+    assert!(me003.is_some(), "expected ME003 error");
+    let hint = me003.unwrap().hint();
+    assert!(hint.is_some(), "ME003 should have a hint");
+    assert!(
+        hint.unwrap().contains("borrow"),
+        "hint should mention borrow"
+    );
+}
+
+#[test]
+fn strict_me001_error_has_secondary_span() {
+    let tokens = fajar_lang::lexer::tokenize(
+        r#"
+        let s: str = "hello"
+        let t: str = s
+        println(s)
+        "#,
+    )
+    .expect("lex");
+    let program = fajar_lang::parser::parse(tokens).expect("parse");
+    let errors = fajar_lang::analyzer::analyze_strict(&program).unwrap_err();
+    let me001 = errors.iter().find(|e| format!("{e}").contains("ME001"));
+    assert!(me001.is_some(), "expected ME001 error");
+    let secondary = me001.unwrap().secondary_span();
+    assert!(secondary.is_some(), "ME001 should have secondary span");
+    let (_, label) = secondary.unwrap();
+    assert_eq!(label, "value moved here");
+}
+
+// ── Error Message Contains Byte Offset ─────────────────────────────────
+
+#[test]
+fn strict_me001_message_has_move_location() {
+    let tokens = fajar_lang::lexer::tokenize(
+        r#"
+        let s: str = "hello"
+        let t: str = s
+        println(s)
+        "#,
+    )
+    .expect("lex");
+    let program = fajar_lang::parser::parse(tokens).expect("parse");
+    let errors = fajar_lang::analyzer::analyze_strict(&program).unwrap_err();
+    let me001 = errors.iter().find(|e| format!("{e}").contains("ME001"));
+    assert!(me001.is_some(), "expected ME001 error");
+    let msg = format!("{}", me001.unwrap());
+    assert!(
+        msg.contains("moved at byte"),
+        "error message should include move location, got: {msg}"
     );
 }

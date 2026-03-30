@@ -53,30 +53,30 @@ Fajar Lang's borrow checker is 80% real but has critical gaps: NLL computed but 
 
 ---
 
-## Phase D (Week 4): Error Messages + 50 Tests + Docs — 970 LOC, 50 tests
+## Phase D (Week 4): Error Messages + 50 Tests + Docs — COMPLETE
 
-| # | Task | File | LOC | Verify |
+| # | Task | File | LOC | Status |
 |---|------|------|-----|--------|
-| D1 | Enhance ME001-ME010 errors with suggestion hints | `type_check/mod.rs` Display impls | 100 | "consider cloning" hint in output |
-| D2 | NLL-aware error spans (show last-use position) | `check.rs` | 40 | Error shows "borrow used until line X" |
-| D3 | 20 end-to-end safety_tests.rs integration tests | `tests/safety_tests.rs` | 400 | Full pipeline: parse→analyze→verify |
-| D4 | 10 edge-case unit tests (branch moves, loops, closures) | `type_check/mod.rs` tests | 200 | Conditional moves, async borrows |
-| D5 | 10 borrow_lite/cfg unit tests | `borrow_lite.rs`, `cfg.rs` tests | 150 | MoveTracker + NllInfo internals |
-| D6 | Module documentation + design doc | `borrow_lite.rs`, `cfg.rs` doc comments | 80 | Accurate doc comments |
+| D1 | `hint()` method on SemanticError for ME001-ME010 | `type_check/mod.rs` | 70 | [x] DONE |
+| D2 | `secondary_span()` + NLL byte offsets in error messages | `type_check/mod.rs`, `lib.rs` | 50 | [x] DONE |
+| D3 | 20 end-to-end safety_tests.rs integration tests | `tests/safety_tests.rs` | 350 | [x] DONE |
+| D4 | 10 edge-case unit tests (branches, match, hints, spans) | `type_check/mod.rs` tests | 220 | [x] DONE |
+| D5 | 5 borrow_lite + 5 cfg unit tests | `borrow_lite.rs`, `cfg.rs` tests | 180 | [x] DONE |
+| D6 | Module documentation (borrow_lite + cfg module docs) | `borrow_lite.rs`, `cfg.rs` | 40 | [x] DONE |
 
-**Deps:** D1-D2 need Phase A-C; D3-D5 need Phase A-C; D6 independent
+**All Phase D tasks complete.**
 
 ---
 
 ## Summary
 
-| Phase | Week | LOC | Tests | Outcome |
-|-------|------|-----|-------|---------|
-| A | 1 | 375 | 10 | Real move errors fire, NLL integrated |
-| B | 2 | 530 | 10 | Dangling ref detection, lifetime elision |
-| C | 3 | 630 | 10 | Two-phase, reborrow, field borrows |
-| D | 4 | 970 | 50 | Rust-quality errors, 80 total tests |
-| **Total** | **4 weeks** | **2,505** | **80** | **Production borrow checker** |
+| Phase | Week | LOC | Tests | Outcome | Status |
+|-------|------|-----|-------|---------|--------|
+| A | 1 | 375 | 22 | Real move errors fire, NLL integrated | ✅ DONE |
+| B | 2 | 530 | 10 | Dangling ref detection, lifetime elision | ✅ DONE |
+| C | 3 | 630 | 12 | Two-phase, reborrow, field borrows | ✅ DONE |
+| D | 4 | 910 | 40 | Error hints, NLL spans, 40 new tests, docs | ✅ DONE |
+| **Total** | **4 weeks** | **2,445** | **84** | **Production borrow checker** | **✅ ALL COMPLETE** |
 
 ## Risk Mitigation
 

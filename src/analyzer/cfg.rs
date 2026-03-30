@@ -1,19 +1,37 @@
 //! Non-Lexical Lifetime (NLL) analysis for borrow checking.
 //!
 //! Computes variable liveness information so borrows end at their
-//! last use point rather than at scope boundaries.
+//! last use point rather than at scope boundaries. This is the key
+//! mechanism that allows sequential borrows without artificial scope tricks.
 //!
 //! # Algorithm
 //!
-//! 1. Pre-pass: walk the function body AST and record every variable use
+//! 1. **Pre-pass**: Walk the function body AST and record every variable use
 //!    with its source position (Span).
-//! 2. For loops: extend variable uses inside the loop body to the loop's
+//! 2. **Loop extension**: Extend variable uses inside loop bodies to the loop's
 //!    end position (conservative — variables used in a loop are live for
 //!    the whole loop).
-//! 3. Result: for each variable, the maximum source position where it's used.
+//! 3. **Closure capture**: Variable uses inside closures count at the closure's
+//!    source position, extending liveness through the closure.
+//! 4. **Result**: For each variable, the maximum source position where it's used.
 //!
-//! During type checking, before each statement, borrows whose binding
-//! variable's last use position is before the current statement are released.
+//! # Integration with Type Checker
+//!
+//! During type checking (`check.rs`), before each statement, borrows whose
+//! binding variable's `last_use` position is before the current statement's
+//! span are released via `MoveTracker::release_borrow()`. This enables:
+//!
+//! ```text
+//! let r1 = &x       // immutable borrow created
+//! println(r1)        // last use of r1 at this position
+//! let r2 = &mut x    // OK: NLL released r1's borrow before this point
+//! ```
+//!
+//! # Phase D Enhancements
+//!
+//! Error messages now include byte offsets from NLL analysis (e.g., "moved at
+//! byte 42"), and `secondary_span()` on ME errors points to the original
+//! borrow/move site for two-label diagnostic rendering.
 
 use std::collections::{HashMap, HashSet};
 
@@ -643,5 +661,109 @@ mod tests {
         let nll = NllInfo::analyze(&body);
         // x is used inside closure — counts as a use at the closure's position
         assert_eq!(nll.last_use("x"), Some(26));
+    }
+
+    // ── Phase D: Additional cfg unit tests (D5) ─────────────────────────
+
+    #[test]
+    fn nll_multiple_variables_independent() {
+        // let a = 1       (pos 0-10)
+        // let b = 2       (pos 15-25)
+        // let c = a       (pos 30-40, uses a at 35-36)
+        // let d = b       (pos 45-55, uses b at 50-51)
+        let body = block(
+            vec![
+                let_stmt("a", int_lit(1, 5, 6), 0, 10),
+                let_stmt("b", int_lit(2, 20, 21), 15, 25),
+                let_stmt("c", ident("a", 35, 36), 30, 40),
+                let_stmt("d", ident("b", 50, 51), 45, 55),
+            ],
+            None,
+            0,
+            60,
+        );
+        let nll = NllInfo::analyze(&body);
+        assert_eq!(nll.last_use("a"), Some(36));
+        assert_eq!(nll.last_use("b"), Some(51));
+        // c and d are never used after declaration
+        assert_eq!(nll.last_use("c"), None);
+        assert_eq!(nll.last_use("d"), None);
+    }
+
+    #[test]
+    fn nll_is_live_at_boundary() {
+        // let x = 1       (pos 0-10)
+        // use x           (pos 15-20)
+        let body = block(
+            vec![
+                let_stmt("x", int_lit(1, 5, 6), 0, 10),
+                expr_stmt(ident("x", 15, 20), 15, 20),
+            ],
+            None,
+            0,
+            25,
+        );
+        let nll = NllInfo::analyze(&body);
+        assert_eq!(nll.last_use("x"), Some(20));
+        // Live before and at last use
+        assert!(nll.is_live_at("x", 10));
+        assert!(nll.is_live_at("x", 20));
+        // Dead after last use
+        assert!(!nll.is_live_at("x", 21));
+    }
+
+    #[test]
+    fn nll_no_uses_returns_none() {
+        // let x = 1 — never used afterward
+        let body = block(vec![let_stmt("x", int_lit(1, 5, 6), 0, 10)], None, 0, 15);
+        let nll = NllInfo::analyze(&body);
+        assert_eq!(nll.last_use("x"), None);
+        // is_live_at returns false for a variable that's never used
+        assert!(!nll.is_live_at("x", 5));
+    }
+
+    #[test]
+    fn nll_variable_used_in_both_if_branches() {
+        // if cond { use x } else { use x }
+        // x's last use should be the max of both branches
+        let body = block(
+            vec![
+                let_stmt("x", int_lit(1, 5, 6), 0, 10),
+                expr_stmt(
+                    Expr::If {
+                        condition: Box::new(ident("cond", 15, 19)),
+                        then_branch: Box::new(block(
+                            vec![expr_stmt(ident("x", 25, 26), 25, 27)],
+                            None,
+                            20,
+                            30,
+                        )),
+                        else_branch: Some(Box::new(block(
+                            vec![expr_stmt(ident("x", 40, 41), 40, 42)],
+                            None,
+                            35,
+                            45,
+                        ))),
+                        span: Span::new(15, 45),
+                    },
+                    15,
+                    45,
+                ),
+            ],
+            None,
+            0,
+            50,
+        );
+        let nll = NllInfo::analyze(&body);
+        // x is used at both 26 and 41 — last_use returns max
+        assert_eq!(nll.last_use("x"), Some(41));
+    }
+
+    #[test]
+    fn nll_empty_block() {
+        let body = block(vec![], None, 0, 5);
+        let nll = NllInfo::analyze(&body);
+        assert_eq!(nll.last_use("anything"), None);
+        assert!(!nll.is_live_at("anything", 0));
     }
 }

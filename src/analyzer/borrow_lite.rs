@@ -4,11 +4,33 @@
 //! Copy types (integers, floats, booleans, char) are implicitly copied on assignment.
 //! Move types (String, Array, Struct with non-Copy fields) transfer ownership.
 //!
-//! Borrow rules (scope-based, simpler than Rust NLL):
+//! # Borrow Rules
+//!
 //! - Multiple `&T` (immutable borrows) are allowed simultaneously.
 //! - Only one `&mut T` (mutable borrow) at a time, exclusive of all others.
 //! - Cannot move a variable while it has active borrows.
 //! - Borrows expire at the end of the scope where the borrow binding lives.
+//!
+//! # Advanced Features (V11 Option 6)
+//!
+//! - **Two-phase borrows**: `borrow_mut_two_phase()` creates a Reserved state that
+//!   allows shared reads until the first mutable use. Enables `v.push(v.len())`.
+//! - **Reborrowing**: `reborrow_imm()` downgrades a `&mut T` to Reserved, allowing
+//!   temporary shared access via `&*r`.
+//! - **Field-level borrows**: `BorrowPath::Field` tracks disjoint field borrows,
+//!   allowing `&mut s.x` and `&mut s.y` simultaneously.
+//! - **Drop order validation**: In strict mode, references must be dropped before
+//!   their referents (reverse declaration order).
+//! - **Strict ownership mode**: Enabled by `--strict-ownership` flag. In strict mode,
+//!   `is_copy_type_strict()` treats String/Array/Struct as Move types, making
+//!   ME001/ME003 errors fire for non-Copy types.
+//!
+//! # Error Diagnostics (Phase D)
+//!
+//! All ME errors include:
+//! - `hint()`: Actionable suggestion (e.g., "consider cloning the value")
+//! - `secondary_span()`: Location of the original move/borrow for two-label diagnostics
+//! - NLL-aware byte offsets in error messages for precise location reporting
 
 use std::collections::HashMap;
 
@@ -1156,5 +1178,75 @@ mod tests {
         let field = BorrowPath::Field("s".into(), "x".into());
         assert!(whole.conflicts_with(&field));
         assert!(field.conflicts_with(&whole));
+    }
+
+    // ── Phase D: Additional borrow_lite unit tests (D5) ─────────────────
+
+    #[test]
+    fn two_phase_then_activate_blocks_imm_borrow() {
+        // Reserved → activate → MutBorrowed → imm borrow fails
+        let mut tracker = MoveTracker::new();
+        let span = Span::new(0, 5);
+        tracker.declare("v", span);
+        assert!(tracker.borrow_mut_two_phase("v", span).is_ok());
+        tracker.activate_two_phase("v");
+        // Now fully mut-borrowed — imm borrow should fail
+        let result = tracker.borrow_imm("v", Span::new(10, 15));
+        assert!(matches!(
+            result,
+            Err(BorrowError::ImmWhileMutBorrowed { .. })
+        ));
+    }
+
+    #[test]
+    fn reborrow_imm_from_mut_then_restore() {
+        // borrow_mut → reborrow_imm suspends → activate restores
+        let mut tracker = MoveTracker::new();
+        let span = Span::new(0, 5);
+        tracker.declare("x", span);
+        assert!(tracker.borrow_mut("x", span).is_ok());
+        // Reborrow: downgrades to Reserved
+        assert!(tracker.reborrow_imm("x", Span::new(10, 15)).is_ok());
+        // In Reserved state, another imm borrow should succeed
+        assert!(tracker.borrow_imm("x", Span::new(20, 25)).is_ok());
+    }
+
+    #[test]
+    fn d5_check_can_move_returns_exact_borrow_span() {
+        // check_can_move returns the exact borrow span
+        let mut tracker = MoveTracker::new();
+        let decl = Span::new(0, 5);
+        let borrow = Span::new(10, 15);
+        tracker.declare("s", decl);
+        assert!(tracker.borrow_imm("s", borrow).is_ok());
+        let result = tracker.check_can_move("s");
+        assert_eq!(result, Some(borrow));
+    }
+
+    #[test]
+    fn d5_moved_variable_not_redeclared() {
+        // After move, variable stays moved even if checked multiple times
+        let mut tracker = MoveTracker::new();
+        tracker.declare("s", Span::new(0, 5));
+        tracker.mark_moved("s", Span::new(10, 15));
+        assert!(tracker.check_use("s").is_some());
+        assert!(tracker.check_use("s").is_some()); // still moved
+    }
+
+    #[test]
+    fn scope_pop_releases_borrow_ref() {
+        // When a scope is popped, borrow refs held by that scope are released
+        let mut tracker = MoveTracker::new();
+        let decl = Span::new(0, 5);
+        tracker.declare("x", decl);
+        // Push inner scope and borrow there
+        tracker.push_scope();
+        assert!(tracker.borrow_imm("x", Span::new(10, 15)).is_ok());
+        tracker.register_borrow_ref("r", "x", false);
+        tracker.pop_scope();
+        // After pop, the borrow held by r is released
+        // A new mutable borrow should now succeed
+        let result = tracker.borrow_mut("x", Span::new(20, 25));
+        assert!(result.is_ok());
     }
 }

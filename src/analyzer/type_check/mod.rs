@@ -864,7 +864,10 @@ pub enum SemanticError {
     },
 
     /// ME001: Use after move.
-    #[error("ME001: use of moved variable '{name}'")]
+    #[error(
+        "ME001: use of moved variable '{name}' (moved at byte {move_start})",
+        move_start = move_span.start
+    )]
     UseAfterMove {
         /// Variable name.
         name: String,
@@ -875,7 +878,10 @@ pub enum SemanticError {
     },
 
     /// ME003: Cannot move while borrowed.
-    #[error("ME003: cannot move '{name}' because it is borrowed")]
+    #[error(
+        "ME003: cannot move '{name}' because it is borrowed (borrow at byte {borrow_start})",
+        borrow_start = borrow_span.start
+    )]
     MoveWhileBorrowed {
         /// Variable name.
         name: String,
@@ -886,7 +892,10 @@ pub enum SemanticError {
     },
 
     /// ME004: Cannot borrow mutably while already borrowed.
-    #[error("ME004: cannot borrow '{name}' as mutable because it is also borrowed")]
+    #[error(
+        "ME004: cannot borrow '{name}' as mutable because it is also borrowed (borrow at byte {borrow_start})",
+        borrow_start = borrow_span.start
+    )]
     MutBorrowConflict {
         /// Variable name.
         name: String,
@@ -897,7 +906,10 @@ pub enum SemanticError {
     },
 
     /// ME005: Cannot borrow immutably while mutably borrowed.
-    #[error("ME005: cannot borrow '{name}' as immutable because it is mutably borrowed")]
+    #[error(
+        "ME005: cannot borrow '{name}' as immutable because it is mutably borrowed (mutable borrow at byte {borrow_start})",
+        borrow_start = borrow_span.start
+    )]
     ImmBorrowConflict {
         /// Variable name.
         name: String,
@@ -1168,6 +1180,74 @@ impl SemanticError {
                 | SemanticError::UnusedImport { .. }
                 | SemanticError::UnreachablePattern { .. }
         )
+    }
+
+    /// Returns a suggestion hint for this error, if applicable.
+    ///
+    /// Hints guide the user toward fixing ownership/borrow errors with
+    /// actionable suggestions (e.g., "consider cloning the value").
+    pub fn hint(&self) -> Option<String> {
+        match self {
+            SemanticError::UseAfterMove {
+                name, move_span, ..
+            } => Some(format!(
+                "help: `{name}` was moved at byte offset {}. Consider cloning: `let copy = {name}.clone()` before the move, or use a reference instead",
+                move_span.start
+            )),
+            SemanticError::MoveWhileBorrowed {
+                name, borrow_span, ..
+            } => Some(format!(
+                "help: `{name}` is borrowed (from byte offset {}). Ensure the borrow is no longer used before moving, or clone the value",
+                borrow_span.start
+            )),
+            SemanticError::MutBorrowConflict {
+                name, borrow_span, ..
+            } => Some(format!(
+                "help: `{name}` is already borrowed (from byte offset {}). Only one mutable borrow, or multiple immutable borrows, are allowed at a time. Consider narrowing the borrow scope",
+                borrow_span.start
+            )),
+            SemanticError::ImmBorrowConflict {
+                name, borrow_span, ..
+            } => Some(format!(
+                "help: `{name}` is mutably borrowed (from byte offset {}). Cannot create an immutable borrow while a mutable borrow is active. Consider reordering operations",
+                borrow_span.start
+            )),
+            SemanticError::DanglingReference { lifetime, .. } => Some(format!(
+                "help: reference with lifetime '{lifetime}' would outlive the data it points to. Return an owned value instead of a reference, or ensure the referent lives long enough"
+            )),
+            SemanticError::LifetimeConflict { name, .. } => Some(format!(
+                "help: lifetime '{name}' conflicts with another in scope. Use distinct lifetime names for independent references"
+            )),
+            SemanticError::LifetimeMismatch {
+                expected, found, ..
+            } => Some(format!(
+                "help: expected lifetime '{expected} but found '{found}. Ensure the reference's lifetime matches the required bound"
+            )),
+            SemanticError::LinearNotConsumed { name, .. } => Some(format!(
+                "help: linear resource `{name}` must be consumed (moved or explicitly dropped) before it goes out of scope"
+            )),
+            _ => None,
+        }
+    }
+
+    /// Returns the secondary span for this error (e.g., the move/borrow origin).
+    ///
+    /// Used by diagnostic renderers to show "previously moved here" or
+    /// "borrow created here" labels.
+    pub fn secondary_span(&self) -> Option<(Span, &'static str)> {
+        match self {
+            SemanticError::UseAfterMove { move_span, .. } => Some((*move_span, "value moved here")),
+            SemanticError::MoveWhileBorrowed { borrow_span, .. } => {
+                Some((*borrow_span, "borrow created here"))
+            }
+            SemanticError::MutBorrowConflict { borrow_span, .. } => {
+                Some((*borrow_span, "previous borrow here"))
+            }
+            SemanticError::ImmBorrowConflict { borrow_span, .. } => {
+                Some((*borrow_span, "mutable borrow here"))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -5011,5 +5091,234 @@ mod tests {
             }
         "#;
         assert!(check_strict(src).is_ok());
+    }
+
+    // ── Phase D: Edge-case unit tests (D4) ──────────────────────────────
+
+    #[test]
+    fn strict_move_in_if_branch_both_sides() {
+        // Moving in both branches — use after if should error
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                if true {
+                    let a = s
+                } else {
+                    let b = s
+                }
+                println(s)
+            }
+            "#,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 after conditional move, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_move_then_use_in_match() {
+        // Move a non-Copy value then use it in a match — ME001
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                let t = s
+                match s {
+                    _ => println("done")
+                }
+            }
+            "#,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 for use-after-move in match, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_borrow_across_reassignment() {
+        // Immutable borrow then reassign the variable — borrow should conflict
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let mut x: i64 = 1
+                let r = &x
+                x = 2
+                println(r)
+            }
+            "#,
+        );
+        // Reassigning x while r holds a borrow should produce an error
+        assert!(
+            !errors.is_empty(),
+            "Expected borrow-related error on reassign while borrowed, got none"
+        );
+    }
+
+    #[test]
+    fn strict_copy_type_in_loop_ok() {
+        // Copy types in loops should NOT produce move errors
+        assert!(
+            check_strict(
+                r#"
+            fn test() {
+                let x: i64 = 42
+                let mut sum: i64 = 0
+                let mut i: i64 = 0
+                while i < 3 {
+                    sum = sum + x
+                    i = i + 1
+                }
+            }
+            "#
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn strict_multiple_moves_same_var() {
+        // Moving same variable twice should produce ME001 on second move
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                let a = s
+                let b = s
+            }
+            "#,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { name, .. } if name == "s")),
+            "Expected ME001 on second move, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn strict_nested_function_isolation() {
+        // Inner function's local moves shouldn't affect outer scope
+        assert!(
+            check_strict(
+                r#"
+            fn outer() {
+                let x: i64 = 10
+                fn inner() {
+                    let s: str = "hi"
+                    let t = s
+                }
+                println(x)
+            }
+            "#
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn strict_hint_on_me001() {
+        // Verify hint() returns non-None for UseAfterMove
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                let t = s
+                println(s)
+            }
+            "#,
+        );
+        let me001 = errors
+            .iter()
+            .find(|e| matches!(e, SemanticError::UseAfterMove { .. }));
+        assert!(me001.is_some(), "Expected ME001");
+        let hint = me001.unwrap().hint();
+        assert!(hint.is_some(), "ME001 should have a hint");
+        assert!(
+            hint.unwrap().contains("clone"),
+            "Hint should suggest cloning"
+        );
+    }
+
+    #[test]
+    fn strict_hint_on_me004() {
+        // Verify hint() returns non-None for MutBorrowConflict
+        // r1 is used AFTER r2, so NLL keeps the borrow live → ME004
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let mut x: i64 = 42
+                let r1 = &x
+                let r2 = &mut x
+                println(r1)
+            }
+            "#,
+        );
+        let me004 = errors
+            .iter()
+            .find(|e| matches!(e, SemanticError::MutBorrowConflict { .. }));
+        assert!(me004.is_some(), "Expected ME004");
+        let hint = me004.unwrap().hint();
+        assert!(hint.is_some(), "ME004 should have a hint");
+        assert!(
+            hint.unwrap().contains("borrow"),
+            "Hint should mention borrow scope"
+        );
+    }
+
+    #[test]
+    fn strict_secondary_span_on_me003() {
+        // Verify secondary_span() returns borrow location for MoveWhileBorrowed
+        // r is used AFTER the move, so NLL keeps the borrow live → ME003
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                let r = &s
+                let t = s
+                println(r)
+            }
+            "#,
+        );
+        let me003 = errors
+            .iter()
+            .find(|e| matches!(e, SemanticError::MoveWhileBorrowed { .. }));
+        assert!(me003.is_some(), "Expected ME003");
+        let secondary = me003.unwrap().secondary_span();
+        assert!(secondary.is_some(), "ME003 should have secondary span");
+        let (_, label) = secondary.unwrap();
+        assert_eq!(label, "borrow created here");
+    }
+
+    #[test]
+    fn strict_error_message_contains_byte_offset() {
+        // ME001 error message should include "moved at byte" info
+        let errors = check_strict_errors(
+            r#"
+            fn test() {
+                let s: str = "hello"
+                let t = s
+                println(s)
+            }
+            "#,
+        );
+        let me001 = errors
+            .iter()
+            .find(|e| matches!(e, SemanticError::UseAfterMove { .. }));
+        assert!(me001.is_some(), "Expected ME001");
+        let msg = format!("{}", me001.unwrap());
+        assert!(
+            msg.contains("moved at byte"),
+            "Error message should contain 'moved at byte', got: {msg}"
+        );
     }
 }
