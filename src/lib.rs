@@ -47,6 +47,7 @@ pub mod lsp;
 pub mod lsp_v2;
 pub mod lsp_v3;
 pub mod macros;
+pub mod macros_v12;
 pub mod ml_advanced;
 pub mod package;
 pub mod package_v2;
