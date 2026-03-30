@@ -981,6 +981,14 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// V12: Yield expression — `yield value` in a generator function.
+    Yield {
+        /// Value to yield (None for `yield` without value).
+        value: Option<Box<Expr>>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 /// A single arm in a handle expression.
@@ -1082,7 +1090,8 @@ impl Expr {
             | Expr::HandleEffect { span, .. }
             | Expr::ResumeExpr { span, .. }
             | Expr::Comptime { span, .. }
-            | Expr::MacroInvocation { span, .. } => *span,
+            | Expr::MacroInvocation { span, .. }
+            | Expr::Yield { span, .. } => *span,
         }
     }
 }

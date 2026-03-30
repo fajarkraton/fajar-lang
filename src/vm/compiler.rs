@@ -579,6 +579,9 @@ impl Compiler {
             Expr::MacroInvocation { .. } => {
                 // Macro invocations should be expanded before compilation.
             }
+            Expr::Yield { .. } => {
+                // Yield is not supported in VM mode.
+            }
         }
     }
 

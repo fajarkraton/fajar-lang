@@ -807,6 +807,13 @@ impl<'src> Formatter<'src> {
                 }
                 self.push(")");
             }
+            Expr::Yield { value, .. } => {
+                self.push("yield");
+                if let Some(v) = value {
+                    self.push(" ");
+                    self.format_expr(v);
+                }
+            }
         }
     }
 

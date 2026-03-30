@@ -634,6 +634,7 @@ impl FactGenerator {
             }
             Expr::MacroInvocation { .. } => {}
             Expr::Literal { .. } | Expr::Path { .. } => {}
+            Expr::Yield { .. } => {}
         }
     }
 

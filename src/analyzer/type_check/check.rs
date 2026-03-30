@@ -1014,6 +1014,12 @@ impl TypeChecker {
             }
             Expr::Comptime { body, .. } => self.check_expr(body),
             Expr::MacroInvocation { .. } => Type::Unknown,
+            Expr::Yield { value, .. } => {
+                if let Some(v) = value {
+                    self.check_expr(v);
+                }
+                Type::Void
+            }
         }
     }
 

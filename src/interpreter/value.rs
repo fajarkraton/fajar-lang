@@ -228,6 +228,15 @@ pub enum Value {
         /// Unique task ID for the executor.
         task_id: u64,
     },
+    /// V12: A generator value that yields values via resume().
+    Generator {
+        /// Generator name.
+        name: String,
+        /// Pre-computed values to yield.
+        values: Vec<Value>,
+        /// Current position in the value sequence.
+        position: usize,
+    },
     /// A trait object with dynamic dispatch via vtable.
     TraitObject {
         /// The trait name this object conforms to.
@@ -310,6 +319,7 @@ impl PartialEq for Value {
             ) => t1 == t2 && c1 == c2,
             // Futures are equal if same task ID
             (Value::Future { task_id: a }, Value::Future { task_id: b }) => a == b,
+            (Value::Generator { name: a, .. }, Value::Generator { name: b, .. }) => a == b,
             // Functions, optimizers, layers are never equal (no structural comparison)
             (Value::Function(_), Value::Function(_)) => false,
             (Value::Optimizer(_), Value::Optimizer(_)) => false,
@@ -394,6 +404,13 @@ impl fmt::Display for Value {
             },
             Value::Iterator(_) => write!(f, "<iterator>"),
             Value::Future { task_id } => write!(f, "<future:{task_id}>"),
+            Value::Generator {
+                name,
+                values,
+                position,
+            } => {
+                write!(f, "<generator:{name} [{position}/{}]>", values.len())
+            }
             Value::TraitObject {
                 trait_name,
                 concrete_type,
@@ -442,6 +459,7 @@ impl Value {
             Value::Layer(_) => "layer",
             Value::Iterator(_) => "iterator",
             Value::Future { .. } => "future",
+            Value::Generator { .. } => "generator",
             Value::TraitObject { .. } => "trait_object",
         }
     }

@@ -281,6 +281,7 @@ impl UseCollector {
                 self.visit_expr(body);
             }
             Expr::MacroInvocation { .. } => {}
+            Expr::Yield { .. } => {}
         }
     }
 

@@ -168,6 +168,89 @@ pub fn eval_builtin_macro(name: &str, args: &[Value]) -> Result<Value, String> {
                 Err("env! requires a string argument".to_string())
             }
         }
+        // V12 Gap Closure: format!, matches!, println!, assert_eq!, cfg!
+        "format" => {
+            // format!("template {}", value) → formatted string
+            if args.is_empty() {
+                return Ok(Value::Str(String::new()));
+            }
+            let template = format!("{}", args[0]);
+            let mut result = template.clone();
+            for arg in args.iter().skip(1) {
+                if let Some(pos) = result.find("{}") {
+                    result.replace_range(pos..pos + 2, &format!("{arg}"));
+                }
+            }
+            Ok(Value::Str(result))
+        }
+        "println" => {
+            // println!("template {}", value) → print + newline
+            if args.is_empty() {
+                println!();
+                return Ok(Value::Null);
+            }
+            let template = format!("{}", args[0]);
+            let mut result = template.clone();
+            for arg in args.iter().skip(1) {
+                if let Some(pos) = result.find("{}") {
+                    result.replace_range(pos..pos + 2, &format!("{arg}"));
+                }
+            }
+            println!("{result}");
+            Ok(Value::Null)
+        }
+        "matches" => {
+            // matches!(expr, pattern) → bool
+            if args.len() < 2 {
+                return Err("matches! requires 2 arguments".to_string());
+            }
+            Ok(Value::Bool(args[0] == args[1]))
+        }
+        "assert_eq" => {
+            // assert_eq!(left, right) → panics if not equal
+            if args.len() < 2 {
+                return Err("assert_eq! requires 2 arguments".to_string());
+            }
+            if args[0] == args[1] {
+                Ok(Value::Null)
+            } else {
+                Err(format!(
+                    "assertion failed: `left == right`\n  left: {}\n right: {}",
+                    args[0], args[1]
+                ))
+            }
+        }
+        "assert" => {
+            // assert!(condition) → panics if false
+            if let Some(Value::Bool(true)) = args.first() {
+                Ok(Value::Null)
+            } else {
+                let msg = args
+                    .get(1)
+                    .map_or("assertion failed".to_string(), |v| format!("{v}"));
+                Err(msg)
+            }
+        }
+        "cfg" => {
+            // cfg!(feature = "name") → bool (simplified: always true for "std")
+            if let Some(Value::Str(s)) = args.first() {
+                let enabled = s.contains("std") || s.contains("default");
+                Ok(Value::Bool(enabled))
+            } else {
+                Ok(Value::Bool(false))
+            }
+        }
+        "include_str" => {
+            // include_str!("file.txt") → file contents as string
+            if let Some(Value::Str(path)) = args.first() {
+                match std::fs::read_to_string(path) {
+                    Ok(contents) => Ok(Value::Str(contents)),
+                    Err(e) => Err(format!("include_str!: cannot read '{path}': {e}")),
+                }
+            } else {
+                Err("include_str! requires a string path argument".to_string())
+            }
+        }
         "line" => Ok(Value::Int(0)), // placeholder — would need source location
         "file" => Ok(Value::Str("unknown".to_string())),
         "column" => Ok(Value::Int(0)),

@@ -1090,6 +1090,7 @@ fn format_value(v: &Value) -> String {
             concrete_type,
             ..
         } => format!("<dyn {trait_name} ({concrete_type})>"),
+        Value::Generator { name, .. } => format!("<generator {name}>"),
     }
 }
 

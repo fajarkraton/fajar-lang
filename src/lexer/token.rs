@@ -108,6 +108,10 @@ pub enum TokenKind {
     Async,
     /// `await`
     Await,
+    /// `yield` — V12 generator yield point
+    Yield,
+    /// `gen` — V12 generator function modifier
+    Gen,
 
     // ── Declaration Keywords ───────────────────────────────────────────
     /// `let`
@@ -463,6 +467,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Break => write!(f, "break"),
             TokenKind::Continue => write!(f, "continue"),
             TokenKind::Async => write!(f, "async"),
+            TokenKind::Yield => write!(f, "yield"),
+            TokenKind::Gen => write!(f, "gen"),
             TokenKind::Await => write!(f, "await"),
             TokenKind::Let => write!(f, "let"),
             TokenKind::Mut => write!(f, "mut"),
@@ -646,6 +652,8 @@ pub static KEYWORDS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::new(
     m.insert("continue", TokenKind::Continue);
     m.insert("async", TokenKind::Async);
     m.insert("await", TokenKind::Await);
+    m.insert("yield", TokenKind::Yield);
+    m.insert("gen", TokenKind::Gen);
     // Declarations
     m.insert("let", TokenKind::Let);
     m.insert("mut", TokenKind::Mut);

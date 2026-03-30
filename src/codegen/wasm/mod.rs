@@ -1318,24 +1318,31 @@ impl WasmCompiler {
 
     /// Registers standard WASI imports (fd_write, proc_exit, etc.).
     fn register_wasi_imports(&mut self) -> Result<(), WasmError> {
-        // fd_write(fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
-        let fd_write_type = WasmFuncType::new(
-            vec![WasmType::I32, WasmType::I32, WasmType::I32, WasmType::I32],
-            vec![WasmType::I32],
-        );
-        self.add_import("wasi_snapshot_preview1", "fd_write", fd_write_type)?;
-
-        // proc_exit(code: i32)
-        let proc_exit_type = WasmFuncType::new(vec![WasmType::I32], vec![]);
-        self.add_import("wasi_snapshot_preview1", "proc_exit", proc_exit_type)?;
-
-        // clock_time_get(id: i32, precision: i64, time: i32) -> i32
-        let clock_type = WasmFuncType::new(
-            vec![WasmType::I32, WasmType::I64, WasmType::I32],
-            vec![WasmType::I32],
-        );
-        self.add_import("wasi_snapshot_preview1", "clock_time_get", clock_type)?;
-
+        // V12 Gap Closure: Use wasi_v12 import specifications instead of hardcoded
+        for import in crate::wasi_v12::wasi_preview1_imports() {
+            let params: Vec<WasmType> = import
+                .params
+                .iter()
+                .map(|t| match t {
+                    crate::wasi_v12::WasmType::I32 => WasmType::I32,
+                    crate::wasi_v12::WasmType::I64 => WasmType::I64,
+                    crate::wasi_v12::WasmType::F32 => WasmType::F32,
+                    crate::wasi_v12::WasmType::F64 => WasmType::F64,
+                })
+                .collect();
+            let results: Vec<WasmType> = import
+                .result
+                .iter()
+                .map(|t| match t {
+                    crate::wasi_v12::WasmType::I32 => WasmType::I32,
+                    crate::wasi_v12::WasmType::I64 => WasmType::I64,
+                    crate::wasi_v12::WasmType::F32 => WasmType::F32,
+                    crate::wasi_v12::WasmType::F64 => WasmType::F64,
+                })
+                .collect();
+            let func_type = WasmFuncType::new(params, results);
+            self.add_import(&import.module, &import.name, func_type)?;
+        }
         Ok(())
     }
 
