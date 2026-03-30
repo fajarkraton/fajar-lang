@@ -145,6 +145,9 @@ enum Command {
         /// Code model: default, small, medium, large, kernel.
         #[arg(long, name = "code-model", default_value = "default")]
         code_model: String,
+        /// Link-time optimization: none, thin, or full. --release defaults to thin.
+        #[arg(long, default_value = "none")]
+        lto: String,
         /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
         #[arg(long)]
         board: Option<String>,
@@ -382,6 +385,7 @@ fn main_inner() -> ExitCode {
             target_features,
             reloc,
             code_model,
+            lto,
             board,
             linker,
             verbose,
@@ -432,6 +436,12 @@ fn main_inner() -> ExitCode {
                         if release { " [release mode]" } else { "" }
                     );
                 }
+                // --release with no explicit --lto defaults to thin LTO
+                let effective_lto = if release && lto == "none" {
+                    "thin".to_string()
+                } else {
+                    lto.clone()
+                };
                 cmd_build_llvm(
                     &path,
                     output.as_deref(),
@@ -440,6 +450,8 @@ fn main_inner() -> ExitCode {
                     &target_features,
                     &reloc,
                     &code_model,
+                    &effective_lto,
+                    verbose,
                 )
             } else {
                 let start = std::time::Instant::now();
@@ -2252,6 +2264,7 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
 
 /// Builds a Fajar Lang program to a native object/binary via LLVM backend.
 #[cfg(feature = "llvm")]
+#[allow(clippy::too_many_arguments)]
 fn cmd_build_llvm(
     path: &PathBuf,
     output: Option<&std::path::Path>,
@@ -2260,6 +2273,8 @@ fn cmd_build_llvm(
     target_features: &str,
     reloc: &str,
     code_model: &str,
+    lto: &str,
+    verbose: bool,
 ) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
@@ -2359,23 +2374,56 @@ fn cmd_build_llvm(
     }
     compiler.set_target_config(target_config);
 
+    // Configure LTO
+    let lto_mode = match fajar_lang::codegen::llvm::LtoMode::parse_from(lto) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+    compiler.set_lto_mode(lto_mode);
+
     if let Err(e) = compiler.compile_program(&program) {
         eprintln!("codegen error: {e}");
         return ExitCode::from(EXIT_COMPILE);
     }
 
-    // Optimize
-    if let Err(e) = compiler.optimize() {
+    // Optimize (LTO-aware if enabled)
+    if lto_mode.is_enabled() {
+        if verbose {
+            eprintln!("[verbose] LTO mode: {:?} (pre-link optimization)", lto_mode);
+        }
+        if let Err(e) = compiler.optimize_for_lto() {
+            eprintln!("error: LLVM LTO optimization failed: {e}");
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    } else if let Err(e) = compiler.optimize() {
         eprintln!("error: LLVM optimization failed: {e}");
         return ExitCode::from(EXIT_COMPILE);
     }
 
-    // Emit object file
-    let obj_path = path.with_extension("o");
-    if let Err(e) = compiler.emit_object(&obj_path) {
-        eprintln!("error: {e}");
-        return ExitCode::from(EXIT_COMPILE);
-    }
+    // Emit object file (or bitcode for LTO)
+    let obj_path = if lto_mode.is_enabled() {
+        let bc_path = path.with_extension("bc");
+        if !compiler.emit_bitcode(&bc_path) {
+            eprintln!("error: failed to emit LLVM bitcode for LTO");
+            return ExitCode::from(EXIT_COMPILE);
+        }
+        if verbose {
+            if let Ok(meta) = std::fs::metadata(&bc_path) {
+                eprintln!("[verbose] Bitcode: {} bytes", meta.len());
+            }
+        }
+        bc_path
+    } else {
+        let obj_path = path.with_extension("o");
+        if let Err(e) = compiler.emit_object(&obj_path) {
+            eprintln!("error: {e}");
+            return ExitCode::from(EXIT_COMPILE);
+        }
+        obj_path
+    };
 
     // Link to binary
     let bin_path = output
@@ -2384,6 +2432,22 @@ fn cmd_build_llvm(
 
     let mut link_cmd = std::process::Command::new("cc");
     link_cmd.arg(&obj_path).arg("-o").arg(&bin_path).arg("-lm");
+
+    // LTO linker flags
+    if lto_mode.is_enabled() {
+        // Use -flto for clang/gcc to process bitcode
+        let lto_flag = match lto_mode {
+            fajar_lang::codegen::llvm::LtoMode::Thin => "-flto=thin",
+            fajar_lang::codegen::llvm::LtoMode::Full => "-flto",
+            fajar_lang::codegen::llvm::LtoMode::None => "",
+        };
+        if !lto_flag.is_empty() {
+            link_cmd.arg(lto_flag);
+        }
+        // Prefer lld for LTO (faster and better LTO support)
+        link_cmd.arg("-fuse-ld=lld");
+    }
+
     if cfg!(target_os = "macos") {
         link_cmd.arg("-Wl,-dead_strip");
     } else {
@@ -2391,12 +2455,21 @@ fn cmd_build_llvm(
     }
     let status = link_cmd.status();
 
-    // Clean up object file
+    // Clean up intermediate file
     let _ = std::fs::remove_file(&obj_path);
+
+    let lto_suffix = if lto_mode.is_enabled() {
+        format!(", LTO={lto}")
+    } else {
+        String::new()
+    };
 
     match status {
         Ok(s) if s.success() => {
-            println!("Built: {} (LLVM O{opt_level})", bin_path.display());
+            println!(
+                "Built: {} (LLVM O{opt_level}{lto_suffix})",
+                bin_path.display()
+            );
             ExitCode::SUCCESS
         }
         Ok(s) => {
@@ -2424,6 +2497,8 @@ fn cmd_build_llvm(
     _target_features: &str,
     _reloc: &str,
     _code_model: &str,
+    _lto: &str,
+    _verbose: bool,
 ) -> ExitCode {
     eprintln!("error: LLVM backend not available");
     eprintln!("hint: rebuild with `cargo build --features llvm`");
