@@ -4675,7 +4675,7 @@ mod tests {
         // Verify SE007 produces "Add mut" action
         let source = "let x = 42\nx = 10";
         let doc = DocumentState::new(source.to_string());
-        let diags = collect_diagnostics(source, &doc);
+        let _diags = collect_diagnostics(source, &doc);
         // SE007 should be present if analyzer detects immutable assignment
         // (depends on whether analyzer catches this for top-level code)
         // At minimum, verify the code action infrastructure exists
