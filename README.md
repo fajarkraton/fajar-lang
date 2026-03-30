@@ -5,9 +5,9 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v9.0.1](https://img.shields.io/badge/release-v9.0.1_Ascension-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1)
-[![Tests](https://img.shields.io/badge/tests-7%2C468_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![LOC](https://img.shields.io/badge/LOC-340K_Rust-informational)]()
+[![Release v10.0.0](https://img.shields.io/badge/release-v10.0.0_Transcendence-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v10.0.0)
+[![Tests](https://img.shields.io/badge/tests-5%2C955+_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![LOC](https://img.shields.io/badge/LOC-350K_Rust-informational)]()
 [![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -108,6 +108,12 @@ fj run --native hello.fj
 # LLVM JIT (requires llvm-18-dev, full optimizations)
 fj run --llvm hello.fj
 
+# LLVM AOT with O3 + LTO (production builds)
+fj build --backend llvm --opt-level 3 --lto=thin hello.fj
+
+# LLVM with PGO (maximum performance)
+fj build --backend llvm --pgo=generate hello.fj && ./hello && fj build --backend llvm --pgo=use=default.profdata hello.fj
+
 # Bytecode VM
 fj run --vm hello.fj
 ```
@@ -148,20 +154,23 @@ fj repl
 - **Generics and traits** — monomorphized generics, trait objects (`dyn Trait`), GAT, async traits
 - **Pattern matching** — exhaustive `match` on enums, structs, tuples with `Option<T>` / `Result<T,E>`
 - **Algebraic effects** — structured side-effect control with handlers and delimited continuations
-- **Macro system** — `macro_rules!`, `#[derive(...)]`, `#[cfg(...)]`, attribute macros
+- **Macro system** — `macro_rules!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `#[derive(...)]`, token tree expansion engine
+- **Generators** — `yield` keyword, `gen fn`, `GeneratorIter` (for-in compatible), `AsyncStream`, coroutines
 - **Pipeline operator** — `x |> f |> g` for clean functional data flow
 - **String interpolation** — `f"Hello {name}, result is {1 + 2}"`
 - **Compile-time evaluation** — `const fn`, `comptime {}` blocks, tensor shape verification
-- **Async/await** — work-stealing executor, async traits, streams, channels
+- **Async/await** — real tokio I/O, async traits, streams, channels, spawn/join/select
 
 ### Compilation
 
-- **3 backends** — Cranelift (JIT + AOT), LLVM (O0-O3 + LTO), WebAssembly
-- **Cross-compilation** — ARM64, RISC-V, x86_64, Wasm, bare-metal targets
-- **Incremental compilation** — file-level dependency graph, artifact caching
-- **Profile-guided optimization (PGO)** — instrument, collect, optimize
-- **SIMD** — auto-vectorization + manual intrinsics (SSE/AVX/NEON/SVE/RVV)
-- **Security hardening** — stack canaries, CFI, address sanitizer simulation
+- **3 backends** — Cranelift (JIT + AOT), LLVM (O0-O3 + LTO + PGO), WebAssembly (WASI P1/P2)
+- **LLVM O2/O3** — production-grade optimizations: target-specific CPU codegen (`--target-cpu=native`), function attributes (inline/noinline/cold), noalias/nonnull/readonly on refs
+- **Link-Time Optimization (LTO)** — thin/full LTO via `--lto=thin`, cross-module inlining, dead code elimination, `--release` auto-enables thin LTO
+- **Profile-Guided Optimization (PGO)** — `--pgo=generate` → run → `--pgo=use=profile.profdata`, branch weight optimization
+- **Cross-compilation** — ARM64, RISC-V, x86_64, Wasm, bare-metal targets with `--reloc`, `--code-model`, `--target-features`
+- **WASI deployment** — 8 WASI Preview 1 syscalls, component model (WIT interfaces), `wasi:cli/command` + `wasi:http/proxy` worlds
+- **Incremental compilation** — file-level dependency graph, content hashing, artifact caching
+- **Security hardening** — stack canaries, CFI, bounds checking, address sanitizer simulation
 
 ### ML Runtime
 
@@ -186,12 +195,12 @@ fj repl
 ### Tooling
 
 - **REPL** — multi-line editing, `:type` inspection, `:help`, analyzer-aware
-- **LSP** — diagnostics, completion, hover, rename, inlay hints, workspace symbols
+- **LSP** — type-driven completion (dot/:: context-aware), scope-aware rename, incremental analysis, cross-file go-to-definition, smart code actions (11 error codes), enhanced hover (fn signatures + struct defs + variable types), call hierarchy, 18 features total
 - **DAP debugger** — breakpoints, stepping, variables, watch expressions, VS Code integration
 - **Formatter** — `fj fmt` with configurable style
 - **Test framework** — `@test`, `@should_panic`, `@ignore`, `fj test`
 - **Doc generation** — `///` doc comments, `fj doc` HTML output
-- **Package manager** — `fj.toml`, registry, `fj add`, package signing, SBOM
+- **Package manager** — `fj.toml`, registry, `fj add/update/tree/audit`, git/path deps, workspaces, feature flags, package signing, SBOM
 - **VS Code extension** — syntax highlighting, snippets, LSP client
 
 ---
@@ -502,25 +511,30 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | 339,769 Rust across 343 files |
-| Tests | 7,468 (0 failures, 0 clippy warnings, 37 test suites) |
+| Compiler LOC | ~350,000 Rust across 350+ files |
+| Tests | 5,955+ (0 failures, 0 clippy warnings, incl. 153 LLVM backend tests) |
 | Examples | 178 `.fj` programs (175 pass `fj check`) |
 | Error codes | 80+ across 10 categories |
-| Standard packages | 37 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
-| Built-in functions | 430+ (runtime, networking, async, regex, GUI, HTTP framework) |
-| Codegen backends | 3 (Cranelift, LLVM, WebAssembly) |
-| Cross-compile targets | ARM64, RISC-V, x86_64, Wasm |
+| Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
+| Built-in macros | 14 (`vec!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `dbg!`, `todo!`, `env!`, `stringify!`, `concat!`, `assert!`, `include_str!`, `line!`) |
+| Codegen backends | 3 (Cranelift JIT/AOT, LLVM O0-O3+LTO+PGO, WebAssembly+WASI) |
+| LLVM optimizations | O0-O3, Os, Oz, thin/full LTO, PGO generate/use, native CPU targeting |
+| Cross-compile targets | ARM64, RISC-V, x86_64, Wasm, bare-metal (no_std) |
+| Package manager | `fj add/update/tree/audit/publish/install`, git/path deps, workspaces, features |
 | Networking | WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), HTTP/HTTPS |
 | Async runtime | Real tokio I/O (sleep, http_get/post, spawn, join, select) |
+| Generators | `yield` keyword, `gen fn`, `GeneratorIter`, `AsyncStream`, `Coroutine` |
+| LSP features | 18 (type-driven completion, scope-aware rename, incremental analysis, cross-file, 11 code actions) |
+| Macro system | Token trees, pattern matching (`$x:expr`), repetition (`$()*`), expansion, derive (7 traits) |
+| WASI | 8 Preview 1 syscalls, component model (WIT), `wasi:cli/command` + `wasi:http/proxy` worlds |
 | GUI | winit + softbuffer, bitmap font, button interaction, flex layout |
 | HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
-| Regex | Core stdlib (match, find, replace, captures) with compiled cache |
 | Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |
 | Documentation | 55+ docs, 14 tutorials, 26 references, 15 guides |
 | FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls |
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
-| Production status | **100% production-ready** (all modules verified by audit) |
+| Production status | **100% production-ready** (V12 "Transcendence" — all 6 options verified) |
 
 ---
 
@@ -528,7 +542,8 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **[v9.0.1](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1)** | **Ascension** | **100% production: real BLE connect/read/write, async_spawn/join/select, HTTPS server (native-tls), 7,468 tests** |
+| **v10.0.0** | **Transcendence** | **V12: LLVM O2/O3+LTO+PGO, macro system (token trees + expansion), generators (yield/gen fn/streams), WASI P1/P2, package ecosystem (git/path deps, workspaces, fj update/tree/audit), LSP excellence (type-driven completion, scope-aware rename, incremental analysis, 11 code actions)** |
+| [v9.0.1](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1) | Ascension | 100% production: real BLE connect/read/write, async_spawn/join/select, HTTPS server (native-tls), 7,468 tests |
 | [v9.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.0) | Ascension | V10 features: async/await real tokio I/O, HTTP server framework, regex stdlib, LSP enhanced, 4 real-world examples |
 | [v8.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v8.0.0) | Dominion | All gaps closed: real WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), GUI text+interaction, compiler wiring |
 | [v7.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v7.0.0) | Integrity | Full production audit, 214→0 kernel errors, native OS compile, 14 IoT builtins, security hardening, WASM playground |
