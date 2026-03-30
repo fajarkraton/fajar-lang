@@ -49,17 +49,22 @@ fn main() {
 
 ## Current Status
 
-Fajar Lang v7.0.0 "Integrity" is the latest stable release:
+Fajar Lang v9.0.1 "Ascension" is the latest stable release — **100% production-ready**:
 
-- **~335,000 lines of Rust** — 5,563 tests, 0 clippy warnings
-- **173 example programs** — 170 pass `fj check` (3 self-hosting by design)
-- **Native codegen** — Cranelift JIT+AOT, LLVM backend, WebAssembly
+- **~340,000 lines of Rust** — 7,468 tests, 0 clippy warnings, 37 test suites
+- **178 example programs** — 175 pass `fj check` (3 self-hosting by design)
+- **Native codegen** — Cranelift JIT+AOT, LLVM backend (O0-O3), WebAssembly
 - **Full ML stack** — tensors, autograd, training, MNIST 90%+, ONNX export
+- **Async/Await** — real tokio I/O (sleep, http_get/post, spawn, join, select)
+- **Networking** — WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), HTTP/HTTPS
+- **HTTP framework** — router + middleware + handler dispatch + HTTPS (native-tls)
+- **Regex** — core stdlib (match, find, replace, captures) with compiled cache
+- **GUI** — winit windowing, bitmap font text, button hover/click, flex layout
 - **OS development** — FajarOS Nova (x86_64) + FajarOS Surya (ARM64)
 - **Embedded targets** — ARM64, RISC-V cross-compilation, no_std, HAL traits
 - **37 standard packages** — math, nn, hal, http, json, crypto, mqtt, db
-- **Developer tools** — LSP, VS Code extension, formatter, test framework, doc generator
-- **Distributed computing** — actor model, Raft consensus, CRDTs
-- **Production deployment** — containers, observability, runtime management, security
+- **Developer tools** — LSP (inlay hints, signature help), VS Code extension, formatter, test framework, doc generator
+- **Distributed computing** — real TCP RPC, async actors (tokio), clustering
+- **Security** — stack canary in Cranelift, bounds check, overflow check, linter, taint analysis
+- **Profiling** — function-level profiling in interpreter + Cranelift native code
 - **Time-travel debugger** — record/replay, reverse stepping, flame graphs
-- **5,144 tests**, 49 examples, ~230K lines of Rust
