@@ -548,31 +548,43 @@ impl LanguageServer for FajarLspBackend {
             return Ok(None);
         }
 
+        // Compute active parameter: count commas before cursor in current call.
+        let active_param = count_active_parameter(before_cursor);
+
         // Look up the builtin signature
         if let Some((_, sig)) = BUILTINS.iter().find(|(n, _)| *n == fn_name) {
+            let params = parse_params_from_sig(sig);
             return Ok(Some(SignatureHelp {
                 signatures: vec![SignatureInformation {
                     label: sig.to_string(),
                     documentation: None,
-                    parameters: None,
-                    active_parameter: None,
+                    parameters: Some(params),
+                    active_parameter: Some(active_param),
                 }],
                 active_signature: Some(0),
-                active_parameter: None,
+                active_parameter: Some(active_param),
             }));
         }
 
         // Search for user-defined function signatures
         if let Some(sig) = find_fn_signature(&doc.source, &fn_name) {
+            let params = parse_params_from_sig(&sig);
+            // Try to find doc comment above the function.
+            let doc_comment = find_fn_doc_comment(&doc.source, &fn_name);
             return Ok(Some(SignatureHelp {
                 signatures: vec![SignatureInformation {
                     label: sig,
-                    documentation: None,
-                    parameters: None,
-                    active_parameter: None,
+                    documentation: doc_comment.map(|d| {
+                        Documentation::MarkupContent(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: d,
+                        })
+                    }),
+                    parameters: Some(params),
+                    active_parameter: Some(active_param),
                 }],
                 active_signature: Some(0),
-                active_parameter: None,
+                active_parameter: Some(active_param),
             }));
         }
 
@@ -1422,24 +1434,74 @@ fn generate_semantic_tokens(source: &str) -> Vec<SemanticToken> {
 // ── Inlay Hints ─────────────────────────────────────────────────────
 
 /// Generates inlay hints for type annotations on let bindings.
-fn generate_inlay_hints(source: &str, _doc: &DocumentState) -> Vec<InlayHint> {
+fn generate_inlay_hints(source: &str, doc: &DocumentState) -> Vec<InlayHint> {
     let mut hints = Vec::new();
+
+    // Build a map of known function signatures for type inference.
+    let mut fn_return_types: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let mut fn_params: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    // Collect user-defined function signatures from AST.
+    if let Ok(tokens) = crate::lexer::tokenize(source) {
+        if let Ok(program) = crate::parser::parse(tokens) {
+            for item in &program.items {
+                if let crate::parser::ast::Item::FnDef(f) = item {
+                    if let Some(ref ret) = f.return_type {
+                        fn_return_types.insert(f.name.clone(), format!("{ret:?}"));
+                    }
+                    let param_names: Vec<String> =
+                        f.params.iter().map(|p| p.name.clone()).collect();
+                    fn_params.insert(f.name.clone(), param_names);
+                }
+            }
+        }
+    }
+    // Add builtin return types.
+    for (name, sig) in BUILTINS {
+        if let Some(ret_start) = sig.rfind("-> ") {
+            let ret_type = sig[ret_start + 3..].trim().to_string();
+            fn_return_types.insert(name.to_string(), ret_type);
+        }
+        // Extract param names from builtin signature.
+        if let Some(paren_start) = sig.find('(') {
+            if let Some(paren_end) = sig.find(')') {
+                let params_str = &sig[paren_start + 1..paren_end];
+                let param_names: Vec<String> = params_str
+                    .split(',')
+                    .filter_map(|p| {
+                        let p = p.trim();
+                        if p.is_empty() {
+                            return None;
+                        }
+                        Some(p.split(':').next().unwrap_or(p).trim().to_string())
+                    })
+                    .collect();
+                fn_params.insert(name.to_string(), param_names);
+            }
+        }
+    }
+
+    // Known struct names from cached definitions.
+    let struct_names: std::collections::HashSet<&str> =
+        doc.struct_defs.iter().map(|(n, _, _)| n.as_str()).collect();
 
     for (line_idx, line) in source.lines().enumerate() {
         let trimmed = line.trim();
-        // Pattern: `let name = value` without explicit type annotation
+
+        // ── Type hints on `let name = value` ──
         if let Some(rest) = trimmed.strip_prefix("let ") {
             let rest = rest
                 .trim_start_matches("mut ")
                 .trim_start_matches("linear ");
-            // Check if there's no `:` before `=` (no type annotation)
             if let Some(eq_pos) = rest.find('=') {
-                let before_eq = &rest[..eq_pos].trim();
+                let before_eq = rest[..eq_pos].trim();
                 if !before_eq.contains(':') {
                     let name = before_eq.trim();
                     let after_eq = rest[eq_pos + 1..].trim();
-                    if let Some(inferred) = infer_type_hint(after_eq) {
-                        // Position: after the variable name
+                    if let Some(inferred) =
+                        infer_type_hint_enhanced(after_eq, &fn_return_types, &struct_names)
+                    {
                         let col = line.find(name).unwrap_or(0) + name.len();
                         hints.push(InlayHint {
                             position: Position {
@@ -1458,27 +1520,159 @@ fn generate_inlay_hints(source: &str, _doc: &DocumentState) -> Vec<InlayHint> {
                 }
             }
         }
+
+        // ── Parameter name hints on function calls ──
+        // Match patterns like `fn_name(arg1, arg2, ...)`
+        for (fn_name, params) in &fn_params {
+            if params.is_empty() {
+                continue;
+            }
+            // Find all occurrences of `fn_name(` in this line.
+            let pattern = format!("{fn_name}(");
+            let mut search_from = 0;
+            while let Some(call_pos) = line[search_from..].find(&pattern) {
+                let abs_pos = search_from + call_pos;
+                let args_start = abs_pos + pattern.len();
+                // Find matching closing paren (respecting nesting).
+                if let Some(args_str) = extract_args_str(line, args_start) {
+                    let args: Vec<&str> = split_top_level_commas(&args_str);
+                    let mut col_offset = args_start;
+                    for (i, arg) in args.iter().enumerate() {
+                        if i >= params.len() {
+                            break;
+                        }
+                        let arg_trimmed = arg.trim();
+                        // Don't add hint if the arg already looks like `name: value`.
+                        if arg_trimmed.contains(':') {
+                            col_offset += arg.len() + 1; // +1 for comma
+                            continue;
+                        }
+                        // Skip simple literals that are self-documenting.
+                        if arg_trimmed.is_empty() {
+                            col_offset += arg.len() + 1;
+                            continue;
+                        }
+                        let hint_col = col_offset + arg.len() - arg.trim_start().len();
+                        hints.push(InlayHint {
+                            position: Position {
+                                line: line_idx as u32,
+                                character: hint_col as u32,
+                            },
+                            label: InlayHintLabel::String(format!("{}:", params[i])),
+                            kind: Some(InlayHintKind::PARAMETER),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: None,
+                            padding_right: Some(true),
+                            data: None,
+                        });
+                        col_offset += arg.len() + 1;
+                    }
+                }
+                search_from = abs_pos + 1;
+            }
+        }
     }
 
     hints
 }
 
-/// Simple type inference for inlay hints.
-fn infer_type_hint(expr: &str) -> Option<&'static str> {
+/// Enhanced type inference using function return types and struct names.
+fn infer_type_hint_enhanced(
+    expr: &str,
+    fn_returns: &std::collections::HashMap<String, String>,
+    struct_names: &std::collections::HashSet<&str>,
+) -> Option<String> {
     let expr = expr.trim();
+    // Literal types.
     if expr.starts_with('"') || expr.starts_with("f\"") {
-        Some("str")
-    } else if expr == "true" || expr == "false" {
-        Some("bool")
-    } else if expr.contains('.') && expr.chars().all(|c| c.is_ascii_digit() || c == '.') {
-        Some("f64")
-    } else if expr.chars().all(|c| c.is_ascii_digit() || c == '-') && !expr.is_empty() {
-        Some("i64")
-    } else if expr.starts_with('[') || expr.starts_with("vec![") {
-        Some("Array")
+        return Some("str".to_string());
+    }
+    if expr == "true" || expr == "false" {
+        return Some("bool".to_string());
+    }
+    if expr.contains('.')
+        && expr
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '.' || c == '-')
+    {
+        return Some("f64".to_string());
+    }
+    if expr.chars().all(|c| c.is_ascii_digit() || c == '-') && !expr.is_empty() {
+        return Some("i64".to_string());
+    }
+    if expr.starts_with('[') {
+        return Some("Array".to_string());
+    }
+    // Function call: `fn_name(...)` → look up return type.
+    if let Some(paren) = expr.find('(') {
+        let call_name = expr[..paren].trim();
+        if let Some(ret) = fn_returns.get(call_name) {
+            return Some(ret.clone());
+        }
+    }
+    // Struct literal: `StructName { ... }`.
+    if let Some(brace) = expr.find('{') {
+        let struct_name = expr[..brace].trim();
+        if struct_names.contains(struct_name) {
+            return Some(struct_name.to_string());
+        }
+    }
+    // Known constructors.
+    if expr.starts_with("Some(") {
+        return Some("Option".to_string());
+    }
+    if expr.starts_with("Ok(") || expr.starts_with("Err(") {
+        return Some("Result".to_string());
+    }
+    if expr.starts_with("None") {
+        return Some("Option".to_string());
+    }
+    None
+}
+
+/// Extract the arguments string from a function call (handles nested parens).
+fn extract_args_str(line: &str, start: usize) -> Option<String> {
+    let bytes = line.as_bytes();
+    let mut depth = 1;
+    let mut end = start;
+    while end < bytes.len() && depth > 0 {
+        match bytes[end] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        if depth > 0 {
+            end += 1;
+        }
+    }
+    if depth == 0 {
+        Some(line[start..end].to_string())
     } else {
         None
     }
+}
+
+/// Split a string by commas, respecting parenthesized sub-expressions.
+fn split_top_level_commas(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if start < s.len() {
+        parts.push(&s[start..]);
+    }
+    parts
 }
 
 // ── References ──────────────────────────────────────────────────────
@@ -2080,6 +2274,81 @@ fn extract_fn_name_before_paren(text: &str) -> String {
     trimmed[name_start..].to_string()
 }
 
+/// Parse parameter information from a function signature string.
+///
+/// Given `fn add(a: i32, b: i32) -> i32`, returns ParameterInformation for each param.
+fn parse_params_from_sig(sig: &str) -> Vec<ParameterInformation> {
+    let paren_start = match sig.find('(') {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
+    let paren_end = match sig.find(')') {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
+    let params_str = &sig[paren_start + 1..paren_end];
+    if params_str.trim().is_empty() {
+        return Vec::new();
+    }
+    params_str
+        .split(',')
+        .map(|p| {
+            let label = p.trim().to_string();
+            ParameterInformation {
+                label: ParameterLabel::Simple(label),
+                documentation: None,
+            }
+        })
+        .collect()
+}
+
+/// Count the active parameter index by counting commas before cursor.
+/// Respects parenthesis nesting.
+fn count_active_parameter(text: &str) -> u32 {
+    let mut depth = 0;
+    let mut commas = 0u32;
+    // Find the last unmatched '(' and count commas after it.
+    for c in text.chars().rev() {
+        match c {
+            ')' => depth += 1,
+            '(' => {
+                if depth == 0 {
+                    break; // found the opening paren of our call
+                }
+                depth -= 1;
+            }
+            ',' if depth == 0 => commas += 1,
+            _ => {}
+        }
+    }
+    commas
+}
+
+/// Find `///` doc comments above a function definition.
+fn find_fn_doc_comment(source: &str, name: &str) -> Option<String> {
+    let pattern = format!("fn {name}(");
+    let fn_pos = source.find(&pattern)?;
+    // Walk backward from fn_pos to collect `///` lines.
+    let before = &source[..fn_pos];
+    let lines: Vec<&str> = before.lines().collect();
+    let mut doc_lines = Vec::new();
+    for line in lines.iter().rev() {
+        let trimmed = line.trim();
+        if let Some(comment) = trimmed.strip_prefix("///") {
+            doc_lines.push(comment.trim_start().to_string());
+        } else if trimmed.is_empty() {
+            continue; // skip blank lines
+        } else {
+            break; // hit non-doc-comment code
+        }
+    }
+    if doc_lines.is_empty() {
+        return None;
+    }
+    doc_lines.reverse();
+    Some(doc_lines.join("\n"))
+}
+
 /// Finds a function signature in the source code by name.
 fn find_fn_signature(source: &str, name: &str) -> Option<String> {
     let pattern = format!("fn {name}(");
@@ -2132,6 +2401,69 @@ const BUILTINS: &[(&str, &str)] = &[
     ("dbg", "fn dbg(value: any) -> any"),
     ("push", "fn push(arr: Array, value: any) -> void"),
     ("pop", "fn pop(arr: Array) -> any"),
+    // Regex builtins (V10)
+    (
+        "regex_match",
+        "fn regex_match(pattern: str, text: str) -> bool",
+    ),
+    (
+        "regex_find",
+        "fn regex_find(pattern: str, text: str) -> str | null",
+    ),
+    (
+        "regex_find_all",
+        "fn regex_find_all(pattern: str, text: str) -> [str]",
+    ),
+    (
+        "regex_replace",
+        "fn regex_replace(pattern: str, text: str, replacement: str) -> str",
+    ),
+    (
+        "regex_replace_all",
+        "fn regex_replace_all(pattern: str, text: str, replacement: str) -> str",
+    ),
+    (
+        "regex_captures",
+        "fn regex_captures(pattern: str, text: str) -> [str] | null",
+    ),
+    // WebSocket builtins
+    ("ws_connect", "fn ws_connect(url: str) -> i64"),
+    ("ws_send", "fn ws_send(handle: i64, message: str) -> i64"),
+    ("ws_recv", "fn ws_recv(handle: i64) -> str | null"),
+    ("ws_close", "fn ws_close(handle: i64) -> void"),
+    // MQTT builtins
+    ("mqtt_connect", "fn mqtt_connect(broker: str) -> i64"),
+    (
+        "mqtt_publish",
+        "fn mqtt_publish(handle: i64, topic: str, payload: str) -> void",
+    ),
+    (
+        "mqtt_subscribe",
+        "fn mqtt_subscribe(handle: i64, topic: str) -> void",
+    ),
+    ("mqtt_recv", "fn mqtt_recv(handle: i64) -> map | null"),
+    ("mqtt_disconnect", "fn mqtt_disconnect(handle: i64) -> void"),
+    // GUI builtins
+    (
+        "gui_window",
+        "fn gui_window(title: str, width: i64, height: i64) -> void",
+    ),
+    (
+        "gui_label",
+        "fn gui_label(text: str, x: i64, y: i64) -> void",
+    ),
+    (
+        "gui_button",
+        "fn gui_button(text: str, x: i64, y: i64, w: i64, h: i64, on_click: str) -> void",
+    ),
+    (
+        "gui_rect",
+        "fn gui_rect(x: i64, y: i64, w: i64, h: i64, color: i64) -> void",
+    ),
+    (
+        "gui_layout",
+        "fn gui_layout(mode: str, gap: i64, padding: i64) -> void",
+    ),
 ];
 
 const TYPES: &[&str] = &[
@@ -2440,5 +2772,108 @@ mod tests {
                 .is_some_and(|c| c.title.contains("reference"))),
             "main() should not get references lens"
         );
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V10 P1: Enhanced inlay hints + signature help
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn v10_inlay_hint_type_from_literal() {
+        let source = "let x = 42\nlet y = \"hello\"\nlet z = true";
+        let doc = DocumentState::new(source.to_string());
+        let hints = generate_inlay_hints(source, &doc);
+        let type_hints: Vec<_> = hints
+            .iter()
+            .filter(|h| h.kind == Some(InlayHintKind::TYPE))
+            .collect();
+        assert!(
+            type_hints.len() >= 3,
+            "expected 3 type hints, got {}",
+            type_hints.len()
+        );
+    }
+
+    #[test]
+    fn v10_inlay_hint_fn_call_return_type() {
+        let source = "fn square(n: i64) -> i64 { n * n }\nlet x = square(5)";
+        let doc = DocumentState::new(source.to_string());
+        let hints = generate_inlay_hints(source, &doc);
+        let type_hints: Vec<_> = hints
+            .iter()
+            .filter(|h| h.kind == Some(InlayHintKind::TYPE))
+            .collect();
+        assert!(
+            !type_hints.is_empty(),
+            "expected type hint for square() return"
+        );
+    }
+
+    #[test]
+    fn v10_inlay_hint_no_hint_with_explicit_type() {
+        let source = "let x: i32 = 42";
+        let doc = DocumentState::new(source.to_string());
+        let hints = generate_inlay_hints(source, &doc);
+        let type_hints: Vec<_> = hints
+            .iter()
+            .filter(|h| h.kind == Some(InlayHintKind::TYPE))
+            .collect();
+        assert!(
+            type_hints.is_empty(),
+            "should not show hint when type is explicit"
+        );
+    }
+
+    #[test]
+    fn v10_inlay_hint_struct_literal() {
+        let source = "struct Point { x: f64, y: f64 }\nlet p = Point { x: 1.0, y: 2.0 }";
+        let doc = DocumentState::new(source.to_string());
+        let hints = generate_inlay_hints(source, &doc);
+        let type_hints: Vec<_> = hints
+            .iter()
+            .filter(|h| h.kind == Some(InlayHintKind::TYPE))
+            .collect();
+        assert!(
+            type_hints
+                .iter()
+                .any(|h| format!("{:?}", h.label).contains("Point")),
+            "expected Point type hint"
+        );
+    }
+
+    #[test]
+    fn v10_signature_help_parse_params() {
+        let params = parse_params_from_sig("fn add(a: i32, b: i32) -> i32");
+        assert_eq!(params.len(), 2);
+        assert!(matches!(&params[0].label, ParameterLabel::Simple(s) if s == "a: i32"));
+        assert!(matches!(&params[1].label, ParameterLabel::Simple(s) if s == "b: i32"));
+    }
+
+    #[test]
+    fn v10_signature_help_active_param() {
+        assert_eq!(count_active_parameter("add(1, "), 1);
+        assert_eq!(count_active_parameter("add("), 0);
+        assert_eq!(count_active_parameter("add(1, 2, "), 2);
+    }
+
+    #[test]
+    fn v10_signature_help_nested_calls() {
+        // inner call: count commas in inner context
+        assert_eq!(count_active_parameter("outer(inner(1, 2), "), 1);
+    }
+
+    #[test]
+    fn v10_fn_doc_comment() {
+        let source =
+            "/// Adds two numbers.\n/// Returns the sum.\nfn add(a: i32, b: i32) -> i32 { a + b }";
+        let doc = find_fn_doc_comment(source, "add");
+        assert!(doc.is_some());
+        assert!(doc.unwrap().contains("Adds two numbers"));
+    }
+
+    #[test]
+    fn v10_fn_doc_comment_missing() {
+        let source = "fn add(a: i32, b: i32) -> i32 { a + b }";
+        assert!(find_fn_doc_comment(source, "add").is_none());
     }
 }
