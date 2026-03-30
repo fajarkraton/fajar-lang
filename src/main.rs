@@ -34,6 +34,7 @@ struct Cli {
 
 /// Available subcommands.
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Command {
     /// Execute a Fajar Lang program (or run from fj.toml if no file given).
     Run {
@@ -129,9 +130,21 @@ enum Command {
         /// Backend: "cranelift" (default) or "llvm".
         #[arg(long, default_value = "cranelift")]
         backend: String,
-        /// LLVM optimization level (0-3). Only used with --backend llvm.
+        /// LLVM optimization level (0-3, s, z). Only used with --backend llvm.
         #[arg(long, name = "opt-level", default_value = "0")]
-        opt_level: u8,
+        opt_level: String,
+        /// Target CPU for LLVM codegen (e.g., "native", "skylake", "cortex-a76", "generic").
+        #[arg(long, name = "target-cpu", default_value = "generic")]
+        target_cpu: String,
+        /// Target CPU features for LLVM (e.g., "+avx2,+fma,-sse4a").
+        #[arg(long, name = "target-features", default_value = "")]
+        target_features: String,
+        /// Relocation model: default, static, pic, dynamic-no-pic.
+        #[arg(long, default_value = "default")]
+        reloc: String,
+        /// Code model: default, small, medium, large, kernel.
+        #[arg(long, name = "code-model", default_value = "default")]
+        code_model: String,
         /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
         #[arg(long)]
         board: Option<String>,
@@ -365,6 +378,10 @@ fn main_inner() -> ExitCode {
             linker_script,
             backend,
             opt_level,
+            target_cpu,
+            target_features,
+            reloc,
+            code_model,
             board,
             linker,
             verbose,
@@ -402,10 +419,10 @@ fn main_inner() -> ExitCode {
             }
             // --release flag: auto-select LLVM with O2
             let effective_backend = if release { "llvm" } else { &backend };
-            let effective_opt = if release && opt_level == 0 {
-                2
+            let effective_opt = if release && opt_level == "0" {
+                "2".to_string()
             } else {
-                opt_level
+                opt_level.clone()
             };
 
             if effective_backend == "llvm" {
@@ -415,7 +432,15 @@ fn main_inner() -> ExitCode {
                         if release { " [release mode]" } else { "" }
                     );
                 }
-                cmd_build_llvm(&path, output.as_deref(), effective_opt)
+                cmd_build_llvm(
+                    &path,
+                    output.as_deref(),
+                    &effective_opt,
+                    &target_cpu,
+                    &target_features,
+                    &reloc,
+                    &code_model,
+                )
             } else {
                 let start = std::time::Instant::now();
 
@@ -434,6 +459,7 @@ fn main_inner() -> ExitCode {
                     }
                     ExitCode::SUCCESS
                 } else {
+                    let cranelift_opt: u8 = effective_opt.parse().unwrap_or(0);
                     let r = cmd_build(
                         &path,
                         &target,
@@ -443,7 +469,7 @@ fn main_inner() -> ExitCode {
                         linker.as_deref(),
                         security,
                         lint,
-                        effective_opt,
+                        cranelift_opt,
                     );
                     // Update incremental cache on success
                     if incremental && r == ExitCode::SUCCESS {
@@ -2226,7 +2252,15 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
 
 /// Builds a Fajar Lang program to a native object/binary via LLVM backend.
 #[cfg(feature = "llvm")]
-fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u8) -> ExitCode {
+fn cmd_build_llvm(
+    path: &PathBuf,
+    output: Option<&std::path::Path>,
+    opt_level: &str,
+    target_cpu: &str,
+    target_features: &str,
+    reloc: &str,
+    code_model: &str,
+) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
         Err(code) => return code,
@@ -2282,12 +2316,48 @@ fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u
 
     // Set optimization level
     let level = match opt_level {
-        0 => fajar_lang::codegen::llvm::LlvmOptLevel::O0,
-        1 => fajar_lang::codegen::llvm::LlvmOptLevel::O1,
-        2 => fajar_lang::codegen::llvm::LlvmOptLevel::O2,
-        _ => fajar_lang::codegen::llvm::LlvmOptLevel::O3,
+        "0" => fajar_lang::codegen::llvm::LlvmOptLevel::O0,
+        "1" => fajar_lang::codegen::llvm::LlvmOptLevel::O1,
+        "2" => fajar_lang::codegen::llvm::LlvmOptLevel::O2,
+        "3" => fajar_lang::codegen::llvm::LlvmOptLevel::O3,
+        "s" | "Os" => fajar_lang::codegen::llvm::LlvmOptLevel::Os,
+        "z" | "Oz" => fajar_lang::codegen::llvm::LlvmOptLevel::Oz,
+        _ => {
+            eprintln!(
+                "error: invalid optimization level '{opt_level}': expected 0, 1, 2, 3, s, or z"
+            );
+            return ExitCode::from(EXIT_USAGE);
+        }
     };
     compiler.set_opt_level(level);
+
+    // Configure target (V12 Sprint L1)
+    let reloc_mode = match fajar_lang::codegen::llvm::LlvmRelocMode::parse_from(reloc) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+    let cm = match fajar_lang::codegen::llvm::LlvmCodeModel::parse_from(code_model) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+    let target_config = fajar_lang::codegen::llvm::TargetConfig {
+        triple: None,
+        cpu: target_cpu.to_string(),
+        features: target_features.to_string(),
+        reloc: reloc_mode,
+        code_model: cm,
+    };
+    if let Err(e) = target_config.validate() {
+        eprintln!("error: {e}");
+        return ExitCode::from(EXIT_USAGE);
+    }
+    compiler.set_target_config(target_config);
 
     if let Err(e) = compiler.compile_program(&program) {
         eprintln!("codegen error: {e}");
@@ -2326,7 +2396,7 @@ fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u
 
     match status {
         Ok(s) if s.success() => {
-            println!("Built: {} (LLVM O{})", bin_path.display(), opt_level);
+            println!("Built: {} (LLVM O{opt_level})", bin_path.display());
             ExitCode::SUCCESS
         }
         Ok(s) => {
@@ -2346,7 +2416,15 @@ fn cmd_build_llvm(path: &PathBuf, output: Option<&std::path::Path>, opt_level: u
 
 /// Stub when llvm feature is not enabled.
 #[cfg(not(feature = "llvm"))]
-fn cmd_build_llvm(_path: &PathBuf, _output: Option<&std::path::Path>, _opt_level: u8) -> ExitCode {
+fn cmd_build_llvm(
+    _path: &PathBuf,
+    _output: Option<&std::path::Path>,
+    _opt_level: &str,
+    _target_cpu: &str,
+    _target_features: &str,
+    _reloc: &str,
+    _code_model: &str,
+) -> ExitCode {
     eprintln!("error: LLVM backend not available");
     eprintln!("hint: rebuild with `cargo build --features llvm`");
     ExitCode::from(EXIT_COMPILE)

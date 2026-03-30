@@ -16,6 +16,15 @@
 //!     ▼
 //! JIT execution (LLVM ExecutionEngine) or AOT (.o file)
 //! ```
+//!
+//! # V12 Target Configuration
+//!
+//! The LLVM backend supports fine-grained target control via `TargetConfig`:
+//! - `--target-cpu=native` detects host CPU (e.g., skylake, znver3)
+//! - `--target-features=+avx2,+fma` enables specific ISA extensions
+//! - `--reloc=pic` for position-independent code (shared libraries)
+//! - `--code-model=small|medium|large|kernel` for address range
+//! - Optimization levels O0-O3, Os (size), Oz (aggressive size)
 
 pub mod types;
 
@@ -40,6 +49,205 @@ use crate::parser::ast::{
 };
 
 use self::types::{fj_type_to_llvm, fj_type_to_metadata};
+
+// ═══════════════════════════════════════════════════════════════════════
+// V12 Sprint L1: Target Configuration
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Relocation model for code generation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LlvmRelocMode {
+    /// Default relocation model for the target.
+    Default,
+    /// Static relocation (no PIC). Best for executables.
+    Static,
+    /// Position-independent code. Required for shared libraries.
+    Pic,
+    /// Dynamic, no PIC. Rarely used.
+    DynamicNoPic,
+}
+
+impl LlvmRelocMode {
+    /// Converts to inkwell RelocMode.
+    fn to_inkwell(self) -> RelocMode {
+        match self {
+            LlvmRelocMode::Default => RelocMode::Default,
+            LlvmRelocMode::Static => RelocMode::Static,
+            LlvmRelocMode::Pic => RelocMode::PIC,
+            LlvmRelocMode::DynamicNoPic => RelocMode::DynamicNoPic,
+        }
+    }
+
+    /// Parses from string (CLI argument).
+    pub fn parse_from(s: &str) -> Result<Self, CodegenError> {
+        match s {
+            "default" => Ok(LlvmRelocMode::Default),
+            "static" => Ok(LlvmRelocMode::Static),
+            "pic" => Ok(LlvmRelocMode::Pic),
+            "dynamic-no-pic" => Ok(LlvmRelocMode::DynamicNoPic),
+            _ => Err(CodegenError::Internal(format!(
+                "invalid relocation mode '{s}': expected default, static, pic, or dynamic-no-pic"
+            ))),
+        }
+    }
+}
+
+/// Code model for address range constraints.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LlvmCodeModel {
+    /// Default code model for the target.
+    Default,
+    /// Small code model: code + data < 2GB. Fastest, most common.
+    Small,
+    /// Medium code model: code < 2GB, data unlimited.
+    Medium,
+    /// Large code model: no assumptions. Required for very large binaries.
+    Large,
+    /// Kernel code model: code in upper 2GB of address space.
+    Kernel,
+}
+
+impl LlvmCodeModel {
+    /// Converts to inkwell CodeModel.
+    fn to_inkwell(self) -> CodeModel {
+        match self {
+            LlvmCodeModel::Default => CodeModel::Default,
+            LlvmCodeModel::Small => CodeModel::Small,
+            LlvmCodeModel::Medium => CodeModel::Medium,
+            LlvmCodeModel::Large => CodeModel::Large,
+            LlvmCodeModel::Kernel => CodeModel::Kernel,
+        }
+    }
+
+    /// Parses from string (CLI argument).
+    pub fn parse_from(s: &str) -> Result<Self, CodegenError> {
+        match s {
+            "default" => Ok(LlvmCodeModel::Default),
+            "small" => Ok(LlvmCodeModel::Small),
+            "medium" => Ok(LlvmCodeModel::Medium),
+            "large" => Ok(LlvmCodeModel::Large),
+            "kernel" => Ok(LlvmCodeModel::Kernel),
+            _ => Err(CodegenError::Internal(format!(
+                "invalid code model '{s}': expected default, small, medium, large, or kernel"
+            ))),
+        }
+    }
+}
+
+/// Complete target configuration for LLVM code generation.
+///
+/// Controls CPU selection, ISA features, relocation model, and code model.
+/// Use `TargetConfig::default()` for host-native settings, or configure
+/// via CLI flags for cross-compilation.
+#[derive(Debug, Clone)]
+pub struct TargetConfig {
+    /// Target triple (e.g., "x86_64-unknown-linux-gnu"). None = host default.
+    pub triple: Option<String>,
+    /// CPU name (e.g., "native", "skylake", "cortex-a76"). "generic" = no specialization.
+    pub cpu: String,
+    /// CPU features string (e.g., "+avx2,+fma,-sse4a"). Empty = default for CPU.
+    pub features: String,
+    /// Relocation model.
+    pub reloc: LlvmRelocMode,
+    /// Code model.
+    pub code_model: LlvmCodeModel,
+}
+
+impl Default for TargetConfig {
+    fn default() -> Self {
+        Self {
+            triple: None,
+            cpu: "generic".to_string(),
+            features: String::new(),
+            reloc: LlvmRelocMode::Default,
+            code_model: LlvmCodeModel::Default,
+        }
+    }
+}
+
+impl TargetConfig {
+    /// Creates a config targeting the host CPU with auto-detected features.
+    ///
+    /// Uses LLVM's host CPU detection to select the best CPU model and
+    /// enable all available ISA extensions (AVX2, FMA, SSE4, etc.).
+    pub fn native() -> Self {
+        let cpu = TargetMachine::get_host_cpu_name().to_string();
+        let features = TargetMachine::get_host_cpu_features().to_string();
+        Self {
+            triple: None,
+            cpu,
+            features,
+            reloc: LlvmRelocMode::Default,
+            code_model: LlvmCodeModel::Default,
+        }
+    }
+
+    /// Returns the CPU name, resolving "native" to the actual host CPU.
+    pub fn effective_cpu(&self) -> String {
+        if self.cpu == "native" {
+            TargetMachine::get_host_cpu_name().to_string()
+        } else {
+            self.cpu.clone()
+        }
+    }
+
+    /// Returns the features string, resolving "native" to host features.
+    pub fn effective_features(&self) -> String {
+        if self.cpu == "native" && self.features.is_empty() {
+            TargetMachine::get_host_cpu_features().to_string()
+        } else {
+            self.features.clone()
+        }
+    }
+
+    /// Validates the target triple format.
+    pub fn validate(&self) -> Result<(), CodegenError> {
+        if let Some(ref triple) = self.triple {
+            // Basic format check: at least arch-vendor-os
+            let parts: Vec<&str> = triple.split('-').collect();
+            if parts.len() < 2 {
+                return Err(CodegenError::Internal(format!(
+                    "invalid target triple '{triple}': expected format arch-vendor-os[-env]"
+                )));
+            }
+            let valid_arches = [
+                "x86_64",
+                "aarch64",
+                "arm",
+                "armv7",
+                "riscv64",
+                "riscv32",
+                "wasm32",
+                "wasm64",
+                "i686",
+                "i386",
+                "mips",
+                "mips64",
+                "powerpc",
+                "powerpc64",
+                "s390x",
+                "thumbv7em",
+            ];
+            if !valid_arches.contains(&parts[0]) {
+                return Err(CodegenError::Internal(format!(
+                    "unsupported architecture '{}' in target triple '{triple}'",
+                    parts[0]
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Returns the host CPU name as detected by LLVM.
+pub fn detect_host_cpu() -> String {
+    TargetMachine::get_host_cpu_name().to_string()
+}
+
+/// Returns the host CPU features as detected by LLVM.
+pub fn detect_host_features() -> String {
+    TargetMachine::get_host_cpu_features().to_string()
+}
 
 /// Optimization level for LLVM compilation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -101,6 +309,8 @@ pub struct LlvmCompiler<'ctx> {
     var_types: HashMap<String, BasicTypeEnum<'ctx>>,
     /// Optimization level.
     opt_level: LlvmOptLevel,
+    /// Target configuration (CPU, features, reloc, code model).
+    target_config: TargetConfig,
     /// Maps struct name → (LLVM struct type, field names in order).
     struct_types: HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
     /// Maps enum name → (variant names, variant field counts).
@@ -125,6 +335,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             variables: HashMap::new(),
             var_types: HashMap::new(),
             opt_level: LlvmOptLevel::O0,
+            target_config: TargetConfig::default(),
             struct_types: HashMap::new(),
             enum_defs: HashMap::new(),
             break_target: None,
@@ -135,6 +346,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
     /// Sets the optimization level for compilation.
     pub fn set_opt_level(&mut self, level: LlvmOptLevel) {
         self.opt_level = level;
+    }
+
+    /// Sets the target configuration (CPU, features, reloc, code model).
+    pub fn set_target_config(&mut self, config: TargetConfig) {
+        self.target_config = config;
+    }
+
+    /// Returns the current target configuration.
+    pub fn target_config(&self) -> &TargetConfig {
+        &self.target_config
     }
 
     /// Initializes native target for JIT/AOT compilation.
@@ -152,12 +373,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
         Target::initialize_arm(&InitializationConfig::default());
     }
 
-    /// Creates a TargetMachine for the host or a specified target triple.
+    /// Creates a TargetMachine using the current target configuration.
+    ///
+    /// The `triple_override` parameter, if provided, overrides `target_config.triple`.
+    /// This is used by `optimize()` and `emit_*()` methods that need the host triple
+    /// for JIT but respect `target_config` for cross-compilation.
     pub fn create_target_machine(
         &self,
-        triple: Option<&str>,
+        triple_override: Option<&str>,
     ) -> Result<TargetMachine, CodegenError> {
-        let target_triple = match triple {
+        let target_triple = match triple_override.or(self.target_config.triple.as_deref()) {
             Some(t) => TargetTriple::create(t),
             None => TargetMachine::get_default_triple(),
         };
@@ -165,20 +390,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
         let target = Target::from_triple(&target_triple)
             .map_err(|e| CodegenError::Internal(format!("invalid target triple: {e}")))?;
 
-        let cpu = "generic";
-        let features = "";
+        let cpu = self.target_config.effective_cpu();
+        let features = self.target_config.effective_features();
 
         target
             .create_target_machine(
                 &target_triple,
-                cpu,
-                features,
+                &cpu,
+                &features,
                 self.opt_level.to_inkwell(),
-                RelocMode::Default,
-                CodeModel::Default,
+                self.target_config.reloc.to_inkwell(),
+                self.target_config.code_model.to_inkwell(),
             )
             .ok_or_else(|| {
-                CodegenError::Internal("failed to create LLVM target machine".to_string())
+                CodegenError::Internal(format!(
+                    "failed to create LLVM target machine for cpu='{}', features='{}'",
+                    cpu, features
+                ))
             })
     }
 
@@ -2421,6 +2649,7 @@ mod tests {
     fn make_let_stmt(name: &str, value: Expr) -> Stmt {
         Stmt::Let {
             mutable: true,
+            linear: false,
             name: name.to_string(),
             ty: None,
             value: Box::new(value),
@@ -2595,6 +2824,7 @@ mod tests {
                     condition: Box::new(make_binop(make_ident("i"), BinOp::Eq, make_int_lit(42))),
                     then_branch: Box::new(Expr::Block {
                         stmts: vec![Stmt::Break {
+                            label: None,
                             value: Some(Box::new(make_ident("i"))),
                             span: dummy_span(),
                         }],
@@ -3247,6 +3477,7 @@ mod tests {
         let body = Expr::Block {
             stmts: vec![Stmt::Let {
                 mutable: false,
+                linear: false,
                 name: "p".to_string(),
                 ty: None,
                 value: Box::new(Expr::StructInit {
@@ -3331,6 +3562,7 @@ mod tests {
         let body = Expr::Block {
             stmts: vec![Stmt::Let {
                 mutable: false,
+                linear: false,
                 name: "p".to_string(),
                 ty: None,
                 value: Box::new(Expr::StructInit {
@@ -3457,6 +3689,7 @@ mod tests {
         let body = Expr::Block {
             stmts: vec![Stmt::Let {
                 mutable: false,
+                linear: false,
                 name: "v".to_string(),
                 ty: None,
                 value: Box::new(Expr::StructInit {
@@ -3604,6 +3837,7 @@ mod tests {
         let body = Expr::Block {
             stmts: vec![Stmt::Let {
                 mutable: false,
+                linear: false,
                 name: "s".to_string(),
                 ty: None,
                 value: Box::new(Expr::StructInit {
@@ -3709,5 +3943,164 @@ mod tests {
         let size = std::fs::metadata(path).unwrap().len();
         assert!(size > 0, "aarch64 object file should not be empty");
         let _ = std::fs::remove_file(path);
+    }
+
+    // ── V12 Sprint L1: Target Configuration Tests ───────────────────────
+
+    #[test]
+    fn l1_target_config_default() {
+        let config = TargetConfig::default();
+        assert_eq!(config.cpu, "generic");
+        assert_eq!(config.features, "");
+        assert_eq!(config.reloc, LlvmRelocMode::Default);
+        assert_eq!(config.code_model, LlvmCodeModel::Default);
+        assert!(config.triple.is_none());
+    }
+
+    #[test]
+    fn l1_target_config_native_detects_cpu() {
+        LlvmCompiler::init_native_target().unwrap();
+        let config = TargetConfig::native();
+        // Native CPU should not be empty or "generic"
+        assert!(!config.cpu.is_empty());
+        assert_ne!(config.cpu, "generic");
+        // Native features should contain at least some extensions
+        // (on x86_64, typically +sse, +sse2, etc.)
+        assert!(!config.features.is_empty());
+    }
+
+    #[test]
+    fn l1_detect_host_cpu_not_empty() {
+        LlvmCompiler::init_native_target().unwrap();
+        let cpu = detect_host_cpu();
+        assert!(!cpu.is_empty(), "host CPU name should not be empty");
+    }
+
+    #[test]
+    fn l1_detect_host_features_not_empty() {
+        LlvmCompiler::init_native_target().unwrap();
+        let features = detect_host_features();
+        assert!(
+            !features.is_empty(),
+            "host CPU features should not be empty"
+        );
+    }
+
+    #[test]
+    fn l1_effective_cpu_resolves_native() {
+        LlvmCompiler::init_native_target().unwrap();
+        let config = TargetConfig {
+            cpu: "native".to_string(),
+            ..TargetConfig::default()
+        };
+        let effective = config.effective_cpu();
+        assert_ne!(effective, "native", "should resolve to actual CPU name");
+        assert!(!effective.is_empty());
+    }
+
+    #[test]
+    fn l1_effective_cpu_passes_through_specific() {
+        let config = TargetConfig {
+            cpu: "skylake".to_string(),
+            ..TargetConfig::default()
+        };
+        assert_eq!(config.effective_cpu(), "skylake");
+    }
+
+    #[test]
+    fn l1_reloc_mode_from_str() {
+        assert_eq!(
+            LlvmRelocMode::parse_from("static").unwrap(),
+            LlvmRelocMode::Static
+        );
+        assert_eq!(
+            LlvmRelocMode::parse_from("pic").unwrap(),
+            LlvmRelocMode::Pic
+        );
+        assert_eq!(
+            LlvmRelocMode::parse_from("default").unwrap(),
+            LlvmRelocMode::Default
+        );
+        assert_eq!(
+            LlvmRelocMode::parse_from("dynamic-no-pic").unwrap(),
+            LlvmRelocMode::DynamicNoPic
+        );
+        assert!(LlvmRelocMode::parse_from("invalid").is_err());
+    }
+
+    #[test]
+    fn l1_code_model_from_str() {
+        assert_eq!(
+            LlvmCodeModel::parse_from("small").unwrap(),
+            LlvmCodeModel::Small
+        );
+        assert_eq!(
+            LlvmCodeModel::parse_from("medium").unwrap(),
+            LlvmCodeModel::Medium
+        );
+        assert_eq!(
+            LlvmCodeModel::parse_from("large").unwrap(),
+            LlvmCodeModel::Large
+        );
+        assert_eq!(
+            LlvmCodeModel::parse_from("kernel").unwrap(),
+            LlvmCodeModel::Kernel
+        );
+        assert_eq!(
+            LlvmCodeModel::parse_from("default").unwrap(),
+            LlvmCodeModel::Default
+        );
+        assert!(LlvmCodeModel::parse_from("xxx").is_err());
+    }
+
+    #[test]
+    fn l1_target_config_validation() {
+        // Valid triple
+        let config = TargetConfig {
+            triple: Some("x86_64-unknown-linux-gnu".to_string()),
+            ..TargetConfig::default()
+        };
+        assert!(config.validate().is_ok());
+
+        // Valid ARM64 triple
+        let config2 = TargetConfig {
+            triple: Some("aarch64-unknown-none".to_string()),
+            ..TargetConfig::default()
+        };
+        assert!(config2.validate().is_ok());
+
+        // Invalid arch
+        let config3 = TargetConfig {
+            triple: Some("badarch-unknown-linux".to_string()),
+            ..TargetConfig::default()
+        };
+        assert!(config3.validate().is_err());
+
+        // No triple = OK (uses host default)
+        assert!(TargetConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn l1_create_target_machine_with_config() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l1");
+        compiler.set_target_config(TargetConfig::native());
+        let tm = compiler.create_target_machine(None);
+        assert!(
+            tm.is_ok(),
+            "native target machine should be created: {tm:?}"
+        );
+    }
+
+    #[test]
+    fn l1_opt_level_os_oz_pass_strings() {
+        // Os and Oz should produce distinct pass strings
+        assert_eq!(LlvmOptLevel::Os.pass_string(), "default<Os>");
+        assert_eq!(LlvmOptLevel::Oz.pass_string(), "default<Oz>");
+        assert_ne!(
+            LlvmOptLevel::Os.pass_string(),
+            LlvmOptLevel::O2.pass_string()
+        );
     }
 }
