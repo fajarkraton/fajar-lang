@@ -643,33 +643,8 @@ impl PlatformInfo {
             "Unknown"
         };
 
-        // When gui feature is enabled, query real monitor info via winit.
-        #[cfg(feature = "gui")]
-        {
-            if let Ok(event_loop) = winit::event_loop::EventLoop::new() {
-                let monitors: Vec<_> = event_loop.available_monitors().collect();
-                let display_count = monitors.len().max(1) as u32;
-                let primary = monitors.first().map(|m| {
-                    let size = m.size();
-                    MonitorInfo {
-                        width: size.width,
-                        height: size.height,
-                        refresh_rate: m
-                            .current_video_mode()
-                            .map(|v| v.refresh_rate_millihertz().unwrap_or(60_000) / 1000)
-                            .unwrap_or(60),
-                    }
-                });
-                return Self {
-                    os_name: os_name.to_string(),
-                    os_version: String::new(),
-                    display_count,
-                    primary_monitor: primary,
-                };
-            }
-        }
-
-        // Fallback: reasonable defaults when gui feature not available.
+        // Reasonable defaults (winit 0.30 removed available_monitors from
+        // EventLoop; monitor info is only accessible inside resumed()).
         Self {
             os_name: os_name.to_string(),
             os_version: String::new(),
@@ -748,7 +723,7 @@ pub enum InputEvent {
 /// Like `run_windowed`, but the callback also receives mouse events so widgets
 /// can respond to hover and click.
 #[cfg(feature = "gui")]
-pub fn run_windowed_interactive<F>(config: WindowConfig, mut render_fn: F)
+pub fn run_windowed_interactive<F>(config: WindowConfig, render_fn: F)
 where
     F: FnMut(&mut [u32], u32, u32, &[InputEvent]) + 'static,
 {
@@ -781,7 +756,7 @@ where
                     let win = std::sync::Arc::new(win);
                     let context = softbuffer::Context::new(win.clone()).ok();
                     let surface =
-                        context.and_then(|ctx| softbuffer::Surface::new(ctx, win.clone()).ok());
+                        context.and_then(|ctx| softbuffer::Surface::new(&ctx, win.clone()).ok());
                     self.window = Some(win);
                     self.surface = surface;
                 }
@@ -865,7 +840,22 @@ where
         }
     }
 
-    let event_loop = EventLoop::new().expect("failed to create event loop");
+    // Use any_thread because main.rs spawns a large-stack thread.
+    #[cfg(target_os = "linux")]
+    use winit::platform::x11::EventLoopBuilderExtX11;
+    let event_loop = {
+        #[cfg(target_os = "linux")]
+        {
+            EventLoop::builder()
+                .with_any_thread(true)
+                .build()
+                .expect("failed to create event loop")
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            EventLoop::new().expect("failed to create event loop")
+        }
+    };
     let mut app = App {
         config,
         window: None,
@@ -901,7 +891,7 @@ where
 /// Only available with `--features gui`. Without the feature, this function
 /// prints an error and returns immediately.
 #[cfg(feature = "gui")]
-pub fn run_windowed<F>(config: WindowConfig, mut render_fn: F)
+pub fn run_windowed<F>(config: WindowConfig, render_fn: F)
 where
     F: FnMut(&mut [u32], u32, u32) + 'static,
 {
@@ -931,7 +921,7 @@ where
                     let win = std::sync::Arc::new(win);
                     let context = softbuffer::Context::new(win.clone()).ok();
                     let surface =
-                        context.and_then(|ctx| softbuffer::Surface::new(ctx, win.clone()).ok());
+                        context.and_then(|ctx| softbuffer::Surface::new(&ctx, win.clone()).ok());
                     self.window = Some(win);
                     self.surface = surface;
                 }
@@ -982,7 +972,22 @@ where
         }
     }
 
-    let event_loop = EventLoop::new().expect("failed to create event loop");
+    // Use any_thread because main.rs spawns a large-stack thread.
+    #[cfg(target_os = "linux")]
+    use winit::platform::x11::EventLoopBuilderExtX11;
+    let event_loop = {
+        #[cfg(target_os = "linux")]
+        {
+            EventLoop::builder()
+                .with_any_thread(true)
+                .build()
+                .expect("failed to create event loop")
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            EventLoop::new().expect("failed to create event loop")
+        }
+    };
     let mut app = App {
         config,
         window: None,
