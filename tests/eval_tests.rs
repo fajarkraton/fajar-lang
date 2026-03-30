@@ -16497,8 +16497,8 @@ fn v10_regex_replace() {
     assert_eq!(out, vec!["aXb22c333", "aXbXcX"]);
 }
 
-#[test]
 // ── V10 Phase 2: Async/Await runtime tests ──
+
 #[test]
 fn v10_async_sleep_real() {
     let src = r#"
