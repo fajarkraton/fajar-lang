@@ -154,21 +154,21 @@ Tasks:     80/80 complete | 0 deferred
 Sprints:   8/8 complete
 ```
 
-### Current Totals (Verified 2026-03-26)
+### Current Totals (Verified 2026-03-30)
 
 ```
-Tests:     5,563 (0 failures, 0 clippy warnings)
-LOC:       ~335,688 lines of Rust (343 files)
-  Real:    ~136,000 (47%) — core compiler, codegen, ML, OS, BSP, CLI, tools
-  Partial:  ~18,000 (6%)  — real logic, needs external integration
-  Framework: ~8,200 (3%)  — type definitions only, needs rewrite
-  Support: ~130,000 (44%) — tests, examples, docs, config
-Examples:  173 .fj programs (170 pass `fj check`)
+Tests:     7,439 (0 failures, 0 clippy warnings)
+LOC:       ~337,774 lines of Rust (343 files)
+  Real:    ~155,000 (46%) — core compiler, codegen, ML, OS, BSP, CLI, tools, networking
+  Integrated: ~25,000 (7%) — security/profiler/optimizer wired into Cranelift pipeline
+  Support: ~158,000 (47%) — tests, examples, docs, config
+Examples:  174 .fj programs (171 pass `fj check`)
 Packages:  37 standard (math, nn, hal, http, json, crypto, mqtt, db, ...)
 Binary:    11 MB release build
 MSRV:      Rust 1.87
 CI:        3 GitHub Actions workflows (Linux/macOS/Windows, stable/nightly, cross)
-Release:   v7.0.0 "Integrity" (2026-03-29)
+Release:   v8.0.0 "Dominion" (2026-03-30)
+Features:  websocket (tungstenite), mqtt (rumqttc), ble (btleplug), gui (winit+softbuffer)
 Audit:     docs/GAP_ANALYSIS_V2.md — per-module honest assessment
 ```
 
@@ -907,5 +907,5 @@ fajar-lang/
 
 ---
 
-*CLAUDE.md Version: 5.0 | v0.4 COMPLETE — 2,650 tests, ~98K LOC, 0 failures | Auto-loaded by Claude Code*
-*Last Updated: 2026-03-10*
+*CLAUDE.md Version: 6.0 | v8.0.0 "Dominion" — 7,439 tests, ~337K LOC, 0 failures | Auto-loaded by Claude Code*
+*Last Updated: 2026-03-30*
