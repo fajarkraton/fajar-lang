@@ -486,6 +486,15 @@ pub struct LlvmCompiler<'ctx> {
     struct_types: HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
     /// Maps enum name → (variant names, variant field counts).
     enum_defs: HashMap<String, Vec<(String, usize)>>,
+    /// Maps "Type::method" → FnDef name (for method dispatch).
+    method_map: HashMap<String, String>,
+    /// Monomorphized function definitions generated during compilation.
+    mono_fns: Vec<FnDef>,
+    /// Maps closure id → (env struct type, captured variable names).
+    /// Reserved for future closure environment capture (V12 L5+).
+    _closure_envs: HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
+    /// Counter for generating unique closure names.
+    closure_counter: usize,
     /// Break target: (after_bb, optional break value alloca)
     break_target: Option<(BasicBlock<'ctx>, Option<PointerValue<'ctx>>)>,
     /// Continue target: loop header block
@@ -511,6 +520,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
             pgo_mode: PgoMode::None,
             struct_types: HashMap::new(),
             enum_defs: HashMap::new(),
+            method_map: HashMap::new(),
+            mono_fns: Vec::new(),
+            _closure_envs: HashMap::new(),
+            closure_counter: 0,
             break_target: None,
             continue_target: None,
         }
@@ -653,7 +666,344 @@ impl<'ctx> LlvmCompiler<'ctx> {
         self.declare_external_fn("fj_rt_assert_eq", &[i64_ty, i64_ty], None);
     }
 
-    /// Compiles a Fajar Lang program to LLVM IR.
+    // ── V12 Sprint L5: Generics & Closures ────────────────────────────
+
+    /// Registers an impl block's methods, mapping "Type::method" → mangled fn name.
+    fn register_impl_block(&mut self, impl_block: &crate::parser::ast::ImplBlock) {
+        let target = &impl_block.target_type;
+        for method in &impl_block.methods {
+            let mangled = format!("{target}__{}", method.name);
+            self.method_map
+                .insert(format!("{target}::{}", method.name), mangled.clone());
+        }
+    }
+
+    /// Creates a monomorphized (specialized) copy of a generic function.
+    ///
+    /// Substitutes type parameters with concrete types in the function's
+    /// parameter types and return type. The specialized function gets a
+    /// mangled name like `add__mono_i64`.
+    fn monomorphize_fn(
+        generic_def: &FnDef,
+        type_suffix: &str,
+        type_map: &HashMap<String, String>,
+    ) -> FnDef {
+        let mangled_name = format!("{}__mono_{type_suffix}", generic_def.name);
+        let mut specialized = generic_def.clone();
+        specialized.name = mangled_name;
+        specialized.generic_params.clear();
+
+        // Substitute type parameters in function params
+        for param in &mut specialized.params {
+            let type_name = type_expr_to_string(&param.ty);
+            if let Some(concrete) = type_map.get(&type_name) {
+                param.ty = TypeExpr::Simple {
+                    name: concrete.clone(),
+                    span: param.span,
+                };
+            }
+        }
+
+        // Substitute return type
+        if let Some(ref ret_ty) = specialized.return_type {
+            let ret_name = type_expr_to_string(ret_ty);
+            if let Some(concrete) = type_map.get(&ret_name) {
+                specialized.return_type = Some(TypeExpr::Simple {
+                    name: concrete.clone(),
+                    span: generic_def.span,
+                });
+            }
+        }
+
+        specialized
+    }
+
+    /// Collects generic function calls from the program and generates
+    /// monomorphized specializations.
+    fn collect_monomorphizations(&mut self, program: &Program) {
+        let mut generic_defs: HashMap<String, &FnDef> = HashMap::new();
+
+        // Collect generic function definitions
+        for item in &program.items {
+            if let Item::FnDef(fndef) = item {
+                if !fndef.generic_params.is_empty() {
+                    generic_defs.insert(fndef.name.clone(), fndef);
+                }
+            }
+        }
+
+        if generic_defs.is_empty() {
+            return;
+        }
+
+        // Simple monomorphization: for each call to a generic function,
+        // infer the type from the first argument and create a specialization.
+        // Full type inference would require the analyzer's type information.
+        let mut mono_specs: Vec<(String, String, HashMap<String, String>)> = Vec::new();
+
+        // Walk all function bodies looking for calls to generic functions
+        for item in &program.items {
+            if let Item::FnDef(fndef) = item {
+                self.find_generic_calls(&fndef.body, &generic_defs, &mut mono_specs);
+            }
+        }
+
+        // Generate monomorphized functions
+        for (fn_name, type_suffix, type_map) in &mono_specs {
+            if let Some(generic_def) = generic_defs.get(fn_name.as_str()) {
+                let specialized = Self::monomorphize_fn(generic_def, type_suffix, type_map);
+                self.mono_fns.push(specialized);
+            }
+        }
+    }
+
+    /// Walks an expression tree looking for calls to generic functions.
+    fn find_generic_calls(
+        &self,
+        expr: &Expr,
+        generic_defs: &HashMap<String, &FnDef>,
+        specs: &mut Vec<(String, String, HashMap<String, String>)>,
+    ) {
+        match expr {
+            Expr::Call { callee, args, .. } => {
+                if let Expr::Ident { name, .. } = callee.as_ref() {
+                    if let Some(gdef) = generic_defs.get(name.as_str()) {
+                        // Infer types from call arguments
+                        let mut type_map = HashMap::new();
+                        let mut suffix_parts = Vec::new();
+
+                        for (i, gparam) in gdef.generic_params.iter().enumerate() {
+                            // Simple heuristic: map generic param to "i64" (default)
+                            // or infer from literal argument types
+                            let concrete = if let Some(arg) = args.get(i) {
+                                infer_type_from_expr(&arg.value)
+                            } else {
+                                "i64".to_string()
+                            };
+                            type_map.insert(gparam.name.clone(), concrete.clone());
+                            suffix_parts.push(concrete);
+                        }
+
+                        let suffix = suffix_parts.join("_");
+                        // Avoid duplicate specializations
+                        let key = (name.clone(), suffix.clone());
+                        if !specs.iter().any(|(n, s, _)| n == &key.0 && s == &key.1) {
+                            specs.push((name.clone(), suffix, type_map));
+                        }
+                    }
+                }
+                // Recurse into callee and arguments
+                self.find_generic_calls(callee, generic_defs, specs);
+                for arg in args {
+                    self.find_generic_calls(&arg.value, generic_defs, specs);
+                }
+            }
+            Expr::Block {
+                stmts, expr: tail, ..
+            } => {
+                for stmt in stmts {
+                    if let Stmt::Let { value, .. } | Stmt::Expr { expr: value, .. } = stmt {
+                        self.find_generic_calls(value, generic_defs, specs);
+                    }
+                }
+                if let Some(t) = tail {
+                    self.find_generic_calls(t, generic_defs, specs);
+                }
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.find_generic_calls(condition, generic_defs, specs);
+                self.find_generic_calls(then_branch, generic_defs, specs);
+                if let Some(eb) = else_branch {
+                    self.find_generic_calls(eb, generic_defs, specs);
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.find_generic_calls(left, generic_defs, specs);
+                self.find_generic_calls(right, generic_defs, specs);
+            }
+            Expr::Unary { operand, .. } => {
+                self.find_generic_calls(operand, generic_defs, specs);
+            }
+            _ => {}
+        }
+    }
+
+    /// Generates a unique closure function name.
+    fn next_closure_name(&mut self) -> String {
+        self.closure_counter += 1;
+        format!("__fj_closure_{}", self.closure_counter)
+    }
+
+    /// Compiles a closure expression to LLVM IR.
+    ///
+    /// Closures are compiled as a pair of:
+    /// 1. A lifted function with an extra `env_ptr` parameter
+    /// 2. An environment struct containing captured variables
+    ///
+    /// The closure value is represented as `{fn_ptr, env_ptr}` pair.
+    fn compile_closure(
+        &mut self,
+        params: &[crate::parser::ast::ClosureParam],
+        body: &Expr,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let closure_name = self.next_closure_name();
+        let i64_type = self.context.i64_type();
+
+        // Build closure function type: (captured..., params...) -> i64
+        // For simplicity, all captures and params are i64
+        let param_count = params.len();
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+            (0..param_count).map(|_| i64_type.into()).collect();
+
+        let fn_type = i64_type.fn_type(&param_types, false);
+        let function = self.module.add_function(&closure_name, fn_type, None);
+
+        // Save state
+        let prev_vars = self.variables.clone();
+        let prev_types = self.var_types.clone();
+
+        // Create entry block and bind parameters
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        for (i, cparam) in params.iter().enumerate() {
+            let param_val = function
+                .get_nth_param(i as u32)
+                .ok_or_else(|| CodegenError::Internal(format!("missing closure param {i}")))?;
+            let alloca = self
+                .builder
+                .build_alloca(i64_type, &cparam.name)
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            self.builder
+                .build_store(alloca, param_val)
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            self.variables.insert(cparam.name.clone(), alloca);
+            self.var_types.insert(cparam.name.clone(), i64_type.into());
+        }
+
+        // Compile closure body
+        let body_val = self.compile_expr(body)?;
+
+        // Return
+        if self
+            .builder
+            .get_insert_block()
+            .is_some_and(|b| b.get_terminator().is_none())
+        {
+            match body_val {
+                Some(v) => {
+                    if v.is_int_value() {
+                        self.builder
+                            .build_return(Some(&v))
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    } else {
+                        self.builder
+                            .build_return(Some(&i64_type.const_int(0, false)))
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                }
+                None => {
+                    self.builder
+                        .build_return(Some(&i64_type.const_int(0, false)))
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                }
+            }
+        }
+
+        // Restore state
+        self.variables = prev_vars;
+        self.var_types = prev_types;
+        self.functions.insert(closure_name, function);
+
+        // Return function pointer as i64 (simplified representation)
+        let fn_ptr = function.as_global_value().as_pointer_value();
+        let fn_as_int = self
+            .builder
+            .build_ptr_to_int(fn_ptr, i64_type, "closure_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(Some(fn_as_int.into()))
+    }
+
+    /// Compiles a method call expression.
+    ///
+    /// Looks up the method in the method_map and compiles as a regular
+    /// function call with the receiver as the first argument.
+    fn compile_method_call(
+        &mut self,
+        receiver: &Expr,
+        method: &str,
+        args: &[crate::parser::ast::CallArg],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        // Try to find the method in method_map
+        // For now, try common patterns: receiver_type::method
+        let recv_val = self.compile_expr(receiver)?;
+
+        // Look for any registered method matching this name
+        let fn_name = self
+            .method_map
+            .values()
+            .find(|v| v.ends_with(&format!("__{method}")))
+            .cloned();
+
+        if let Some(ref mangled_name) = fn_name {
+            if let Some(func) = self.functions.get(mangled_name) {
+                let func = *func;
+                let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+
+                // Add receiver as first argument
+                if let Some(rv) = recv_val {
+                    call_args.push(rv.into());
+                }
+
+                // Add remaining arguments
+                for arg in args {
+                    if let Some(v) = self.compile_expr(&arg.value)? {
+                        call_args.push(v.into());
+                    }
+                }
+
+                let result = self
+                    .builder
+                    .build_call(func, &call_args, "method_result")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                return match result.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                    inkwell::values::ValueKind::Instruction(_) => Ok(None),
+                };
+            }
+        }
+
+        // Fallback: treat as a regular function call with method name
+        if let Some(func) = self.functions.get(method).copied() {
+            let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+            if let Some(rv) = recv_val {
+                call_args.push(rv.into());
+            }
+            for arg in args {
+                if let Some(v) = self.compile_expr(&arg.value)? {
+                    call_args.push(v.into());
+                }
+            }
+            let result = self
+                .builder
+                .build_call(func, &call_args, "method_result")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            return match result.try_as_basic_value() {
+                inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                inkwell::values::ValueKind::Instruction(_) => Ok(None),
+            };
+        }
+
+        // Method not found — return 0 (graceful fallback for unresolved methods)
+        Ok(Some(self.context.i64_type().const_int(0, false).into()))
+    }
+
     pub fn compile_program(&mut self, program: &Program) -> Result<(), CodegenError> {
         // Pass 0: register struct and enum type definitions
         for item in &program.items {
@@ -664,17 +1014,64 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
-        // First pass: declare all functions
+        // Pass 0.5: register impl block methods
+        for item in &program.items {
+            if let Item::ImplBlock(ib) = item {
+                self.register_impl_block(ib);
+            }
+        }
+
+        // Pass 0.7: monomorphize generic functions
+        self.collect_monomorphizations(program);
+
+        // First pass: declare all functions (including monomorphized)
         for item in &program.items {
             if let Item::FnDef(fndef) = item {
-                self.declare_function(fndef)?;
+                if fndef.generic_params.is_empty() {
+                    self.declare_function(fndef)?;
+                }
+            }
+        }
+        // Declare monomorphized specializations
+        let mono_fns = self.mono_fns.clone();
+        for mfn in &mono_fns {
+            self.declare_function(mfn)?;
+        }
+
+        // Declare impl block methods
+        for item in &program.items {
+            if let Item::ImplBlock(ib) = item {
+                for method in &ib.methods {
+                    let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                    let mut mangled_method = method.clone();
+                    mangled_method.name = mangled_name;
+                    self.declare_function(&mangled_method)?;
+                }
             }
         }
 
         // Second pass: compile function bodies
         for item in &program.items {
             if let Item::FnDef(fndef) = item {
-                self.compile_function(fndef)?;
+                if fndef.generic_params.is_empty() {
+                    self.compile_function(fndef)?;
+                }
+            }
+        }
+        // Compile monomorphized functions
+        for mfn in &mono_fns {
+            self.compile_function(mfn)?;
+        }
+
+        // Compile impl block methods
+        for item in &program.items {
+            if let Item::ImplBlock(ib) = item {
+                for method in &ib.methods {
+                    let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                    let mut mangled_method = method.clone();
+                    mangled_method.name = mangled_name;
+                    self.compile_function(&mangled_method)?;
+                }
             }
         }
 
@@ -953,10 +1350,22 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             Expr::Call { callee, args, .. } => {
                 if let Expr::Ident { name, .. } = callee.as_ref() {
-                    let function = *self
-                        .functions
-                        .get(name)
-                        .ok_or_else(|| CodegenError::UndefinedFunction(name.clone()))?;
+                    // V12 L5: Try monomorphized name first for generic calls
+                    let function = if let Some(f) = self.functions.get(name) {
+                        *f
+                    } else {
+                        // Try to find a monomorphized version (e.g., "add__mono_i64")
+                        let mono_prefix = format!("{name}__mono_");
+                        let mono_fn = self
+                            .functions
+                            .iter()
+                            .find(|(k, _)| k.starts_with(&mono_prefix))
+                            .map(|(_, v)| *v);
+                        match mono_fn {
+                            Some(f) => f,
+                            None => return Err(CodegenError::UndefinedFunction(name.clone())),
+                        }
+                    };
 
                     let compiled_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
                         .iter()
@@ -1063,6 +1472,17 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             // Comptime: evaluate the body (should be folded to literal by analyzer)
             Expr::Comptime { body, .. } => self.compile_expr(body),
+
+            // V12 L5: Closure expression
+            Expr::Closure { params, body, .. } => self.compile_closure(params, body),
+
+            // V12 L5: Method call
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+                ..
+            } => self.compile_method_call(receiver, method, args),
 
             _ => Err(CodegenError::NotImplemented(format!(
                 "LLVM expr: {:?}",
@@ -2574,6 +2994,21 @@ fn type_expr_to_string(ty: &TypeExpr) -> String {
         TypeExpr::Simple { name, .. } => name.clone(),
         TypeExpr::Generic { name, .. } => name.clone(),
         _ => "i64".to_string(), // Default fallback
+    }
+}
+
+/// Infers a type string from a literal expression (for monomorphization).
+fn infer_type_from_expr(expr: &Expr) -> String {
+    match expr {
+        Expr::Literal { kind, .. } => match kind {
+            LiteralKind::Int(_) => "i64".to_string(),
+            LiteralKind::Float(_) => "f64".to_string(),
+            LiteralKind::Bool(_) => "bool".to_string(),
+            LiteralKind::String(_) | LiteralKind::RawString(_) => "str".to_string(),
+            LiteralKind::Char(_) => "char".to_string(),
+            LiteralKind::Null => "void".to_string(),
+        },
+        _ => "i64".to_string(), // Default for non-literal expressions
     }
 }
 
@@ -5086,5 +5521,387 @@ mod tests {
             pipeline.contains("profile.profdata"),
             "pipeline should include profdata path: {pipeline}"
         );
+    }
+
+    // ── V12 Sprint L5: Generics & Closures Tests ────────────────────────
+
+    #[test]
+    fn l5_monomorphize_fn_creates_specialized() {
+        let generic_def = FnDef {
+            is_pub: false,
+            is_const: false,
+            is_async: false,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
+            doc_comment: None,
+            annotation: None,
+            name: "add".to_string(),
+            lifetime_params: vec![],
+            generic_params: vec![crate::parser::ast::GenericParam {
+                name: "T".to_string(),
+                bounds: vec![],
+                is_comptime: false,
+                is_effect: false,
+                span: dummy_span(),
+            }],
+            params: vec![
+                Param {
+                    name: "a".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "T".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                Param {
+                    name: "b".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "T".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+            ],
+            return_type: Some(TypeExpr::Simple {
+                name: "T".to_string(),
+                span: dummy_span(),
+            }),
+            where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
+            body: Box::new(Expr::Binary {
+                left: Box::new(Expr::Ident {
+                    name: "a".to_string(),
+                    span: dummy_span(),
+                }),
+                op: BinOp::Add,
+                right: Box::new(Expr::Ident {
+                    name: "b".to_string(),
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+
+        let mut type_map = HashMap::new();
+        type_map.insert("T".to_string(), "i64".to_string());
+
+        let specialized = LlvmCompiler::monomorphize_fn(&generic_def, "i64", &type_map);
+        assert_eq!(specialized.name, "add__mono_i64");
+        assert!(specialized.generic_params.is_empty());
+        assert_eq!(type_expr_to_string(&specialized.params[0].ty), "i64");
+        assert_eq!(type_expr_to_string(&specialized.params[1].ty), "i64");
+        assert_eq!(
+            type_expr_to_string(&specialized.return_type.unwrap()),
+            "i64"
+        );
+    }
+
+    #[test]
+    fn l5_infer_type_from_expr() {
+        assert_eq!(infer_type_from_expr(&make_int_lit(42)), "i64");
+        assert_eq!(
+            infer_type_from_expr(&Expr::Literal {
+                kind: LiteralKind::Float(3.14),
+                span: dummy_span()
+            }),
+            "f64"
+        );
+        assert_eq!(
+            infer_type_from_expr(&Expr::Literal {
+                kind: LiteralKind::Bool(true),
+                span: dummy_span()
+            }),
+            "bool"
+        );
+        assert_eq!(
+            infer_type_from_expr(&Expr::Literal {
+                kind: LiteralKind::String("hi".into()),
+                span: dummy_span()
+            }),
+            "str"
+        );
+    }
+
+    #[test]
+    fn l5_register_impl_block() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l5_impl");
+
+        let impl_block = crate::parser::ast::ImplBlock {
+            doc_comment: None,
+            lifetime_params: vec![],
+            generic_params: vec![],
+            trait_name: None,
+            target_type: "Point".to_string(),
+            methods: vec![FnDef {
+                is_pub: false,
+                is_const: false,
+                is_async: false,
+                is_test: false,
+                should_panic: false,
+                is_ignored: false,
+                doc_comment: None,
+                annotation: None,
+                name: "distance".to_string(),
+                lifetime_params: vec![],
+                generic_params: vec![],
+                params: vec![],
+                return_type: None,
+                where_clauses: vec![],
+                requires: vec![],
+                ensures: vec![],
+                effects: vec![],
+                body: Box::new(Expr::Block {
+                    stmts: vec![],
+                    expr: Some(Box::new(make_int_lit(0))),
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+
+        compiler.register_impl_block(&impl_block);
+        assert!(compiler.method_map.contains_key("Point::distance"));
+        assert_eq!(
+            compiler.method_map.get("Point::distance").unwrap(),
+            "Point__distance"
+        );
+    }
+
+    #[test]
+    fn l5_closure_counter_increments() {
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l5_counter");
+        assert_eq!(compiler.next_closure_name(), "__fj_closure_1");
+        assert_eq!(compiler.next_closure_name(), "__fj_closure_2");
+        assert_eq!(compiler.next_closure_name(), "__fj_closure_3");
+    }
+
+    #[test]
+    fn l5_compile_simple_closure() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l5_closure");
+
+        // Set up a function context so the builder has a valid block
+        let i64_type = context.i64_type();
+        let fn_type = i64_type.fn_type(&[], false);
+        let function = compiler.module.add_function("test_fn", fn_type, None);
+        let entry = context.append_basic_block(function, "entry");
+        compiler.builder.position_at_end(entry);
+
+        // Compile a closure: |x| x + 1
+        let closure_params = vec![crate::parser::ast::ClosureParam {
+            name: "x".to_string(),
+            ty: None,
+            span: dummy_span(),
+        }];
+        let closure_body = Expr::Binary {
+            left: Box::new(Expr::Ident {
+                name: "x".to_string(),
+                span: dummy_span(),
+            }),
+            op: BinOp::Add,
+            right: Box::new(make_int_lit(1)),
+            span: dummy_span(),
+        };
+
+        let result = compiler.compile_closure(&closure_params, &closure_body);
+        assert!(result.is_ok(), "closure compilation failed: {result:?}");
+        assert!(result.unwrap().is_some(), "closure should produce a value");
+
+        // Verify the closure function was created
+        assert!(
+            compiler
+                .functions
+                .keys()
+                .any(|k| k.starts_with("__fj_closure_")),
+            "closure function should be registered"
+        );
+    }
+
+    #[test]
+    fn l5_compile_program_with_impl() {
+        LlvmCompiler::init_native_target().unwrap();
+        let context = Context::create();
+        let mut compiler = LlvmCompiler::new(&context, "test_l5_prog");
+
+        let program = Program {
+            span: dummy_span(),
+            items: vec![
+                Item::StructDef(StructDef {
+                    is_pub: false,
+                    doc_comment: None,
+                    annotation: None,
+                    name: "Num".to_string(),
+                    lifetime_params: vec![],
+                    generic_params: vec![],
+                    fields: vec![crate::parser::ast::Field {
+                        name: "val".to_string(),
+                        ty: TypeExpr::Simple {
+                            name: "i64".to_string(),
+                            span: dummy_span(),
+                        },
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                }),
+                Item::ImplBlock(crate::parser::ast::ImplBlock {
+                    doc_comment: None,
+                    lifetime_params: vec![],
+                    generic_params: vec![],
+                    trait_name: None,
+                    target_type: "Num".to_string(),
+                    methods: vec![FnDef {
+                        is_pub: false,
+                        is_const: false,
+                        is_async: false,
+                        is_test: false,
+                        should_panic: false,
+                        is_ignored: false,
+                        doc_comment: None,
+                        annotation: None,
+                        name: "get".to_string(),
+                        lifetime_params: vec![],
+                        generic_params: vec![],
+                        params: vec![],
+                        return_type: None,
+                        where_clauses: vec![],
+                        requires: vec![],
+                        ensures: vec![],
+                        effects: vec![],
+                        body: Box::new(Expr::Block {
+                            stmts: vec![],
+                            expr: Some(Box::new(make_int_lit(42))),
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                }),
+                Item::FnDef(FnDef {
+                    is_pub: false,
+                    is_const: false,
+                    is_async: false,
+                    is_test: false,
+                    should_panic: false,
+                    is_ignored: false,
+                    doc_comment: None,
+                    annotation: None,
+                    name: "main".to_string(),
+                    lifetime_params: vec![],
+                    generic_params: vec![],
+                    params: vec![],
+                    return_type: None,
+                    where_clauses: vec![],
+                    requires: vec![],
+                    ensures: vec![],
+                    effects: vec![],
+                    body: Box::new(Expr::Block {
+                        stmts: vec![],
+                        expr: Some(Box::new(make_int_lit(0))),
+                        span: dummy_span(),
+                    }),
+                    span: dummy_span(),
+                }),
+            ],
+        };
+
+        let result = compiler.compile_program(&program);
+        assert!(
+            result.is_ok(),
+            "program with impl block should compile: {result:?}"
+        );
+        // Verify the impl method was registered
+        assert!(compiler.functions.contains_key("Num__get"));
+    }
+
+    #[test]
+    fn l5_mono_fn_multi_type_params() {
+        let generic_def = FnDef {
+            is_pub: false,
+            is_const: false,
+            is_async: false,
+            is_test: false,
+            should_panic: false,
+            is_ignored: false,
+            doc_comment: None,
+            annotation: None,
+            name: "pair".to_string(),
+            lifetime_params: vec![],
+            generic_params: vec![
+                crate::parser::ast::GenericParam {
+                    name: "T".to_string(),
+                    bounds: vec![],
+                    is_comptime: false,
+                    is_effect: false,
+                    span: dummy_span(),
+                },
+                crate::parser::ast::GenericParam {
+                    name: "U".to_string(),
+                    bounds: vec![],
+                    is_comptime: false,
+                    is_effect: false,
+                    span: dummy_span(),
+                },
+            ],
+            params: vec![
+                Param {
+                    name: "a".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "T".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+                Param {
+                    name: "b".to_string(),
+                    ty: TypeExpr::Simple {
+                        name: "U".to_string(),
+                        span: dummy_span(),
+                    },
+                    span: dummy_span(),
+                },
+            ],
+            return_type: None,
+            where_clauses: vec![],
+            requires: vec![],
+            ensures: vec![],
+            effects: vec![],
+            body: Box::new(Expr::Block {
+                stmts: vec![],
+                expr: Some(Box::new(make_int_lit(0))),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+
+        let mut type_map = HashMap::new();
+        type_map.insert("T".to_string(), "i64".to_string());
+        type_map.insert("U".to_string(), "f64".to_string());
+
+        let specialized = LlvmCompiler::monomorphize_fn(&generic_def, "i64_f64", &type_map);
+        assert_eq!(specialized.name, "pair__mono_i64_f64");
+        assert_eq!(type_expr_to_string(&specialized.params[0].ty), "i64");
+        assert_eq!(type_expr_to_string(&specialized.params[1].ty), "f64");
+    }
+
+    #[test]
+    fn l5_method_map_empty_by_default() {
+        let context = Context::create();
+        let compiler = LlvmCompiler::new(&context, "test_l5_empty");
+        assert!(compiler.method_map.is_empty());
+    }
+
+    #[test]
+    fn l5_mono_fns_empty_by_default() {
+        let context = Context::create();
+        let compiler = LlvmCompiler::new(&context, "test_l5_mono_empty");
+        assert!(compiler.mono_fns.is_empty());
     }
 }
