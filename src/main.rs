@@ -3889,7 +3889,46 @@ fn cmd_gui(path: &PathBuf) -> ExitCode {
     }
 
     // Retrieve GUI state set by gui_* builtins.
-    let gui_state = interp.take_gui_state();
+    let mut gui_state = interp.take_gui_state();
+
+    // Apply flex layout if gui_layout() was called.
+    if gui_state.layout_mode == "row" || gui_state.layout_mode == "column" {
+        use fajar_lang::gui::layout::{FlexDirection, FlexLayout, LayoutBox, Size};
+
+        let direction = if gui_state.layout_mode == "row" {
+            FlexDirection::Row
+        } else {
+            FlexDirection::Column
+        };
+        let layout = FlexLayout {
+            direction,
+            gap: gui_state.layout_gap as f32,
+            padding: fajar_lang::gui::layout::Padding::uniform(gui_state.layout_padding as f32),
+            ..Default::default()
+        };
+        let children: Vec<LayoutBox> = gui_state
+            .widgets
+            .iter()
+            .map(|w| LayoutBox {
+                preferred_width: Size::Fixed(w.w as f32),
+                preferred_height: Size::Fixed(w.h as f32),
+                ..Default::default()
+            })
+            .collect();
+        let container = fajar_lang::gui::layout::Rect::new(
+            0.0,
+            0.0,
+            gui_state.width as f32,
+            gui_state.height as f32,
+        );
+        let rects = layout.compute(&children, container);
+        for (widget, rect) in gui_state.widgets.iter_mut().zip(rects.iter()) {
+            widget.x = rect.x as u32;
+            widget.y = rect.y as u32;
+            widget.w = rect.width as u32;
+            widget.h = rect.height as u32;
+        }
+    }
 
     if gui_state.widgets.is_empty() {
         // No GUI widgets created — just print output.
@@ -3926,6 +3965,8 @@ fn cmd_gui(path: &PathBuf) -> ExitCode {
         std::collections::HashMap::new();
     // Reusable canvas (allocated once, resized on demand).
     let mut canvas: Option<fajar_lang::gui::widgets::Canvas> = None;
+    // Keep interpreter alive for callback invocation.
+    let mut interp = interp;
 
     fajar_lang::gui::platform::run_windowed_interactive(
         config,
@@ -3962,7 +4003,15 @@ fn cmd_gui(path: &PathBuf) -> ExitCode {
                         }
                         InputEvent::MouseUp { .. } => {
                             if state.0 && state.1 {
-                                println!("[gui] Button \"{}\" clicked", widget.text);
+                                // Invoke callback function if defined.
+                                if let Some(ref cb) = widget.on_click {
+                                    let call = format!("{cb}()");
+                                    if let Err(e) = interp.eval_source(&call) {
+                                        eprintln!("[gui] callback {cb}() error: {e}");
+                                    }
+                                } else {
+                                    println!("[gui] Button \"{}\" clicked", widget.text);
+                                }
                             }
                             state.1 = false;
                         }

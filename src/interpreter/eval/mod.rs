@@ -37,6 +37,8 @@ pub struct GuiWidget {
     pub h: u32,
     /// Fill color (0xAARRGGBB).
     pub color: u32,
+    /// Optional callback function name invoked on button click.
+    pub on_click: Option<String>,
 }
 
 /// Accumulated GUI state from gui_* builtin calls.
@@ -50,6 +52,12 @@ pub struct GuiState {
     pub height: u32,
     /// Widgets to render.
     pub widgets: Vec<GuiWidget>,
+    /// Layout mode: "none" (manual xy), "row" (horizontal flex), "column" (vertical flex).
+    pub layout_mode: String,
+    /// Gap between flex-layout items in pixels.
+    pub layout_gap: u32,
+    /// Padding inside the flex container.
+    pub layout_padding: u32,
 }
 
 /// WebSocket connection state.
@@ -146,6 +154,7 @@ impl MqttBroker {
 
 /// Simulated BLE (Bluetooth Low Energy) device.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct BleDevice {
     /// Device address (e.g., "AA:BB:CC:DD:EE:FF").
     addr: String,
@@ -159,6 +168,7 @@ struct BleDevice {
 
 /// Simulated BLE adapter managing scanned and connected devices.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct BleAdapter {
     /// Known devices from scanning.
     scanned: Vec<BleDevice>,
@@ -168,6 +178,7 @@ struct BleAdapter {
     next_handle: i64,
 }
 
+#[allow(dead_code)]
 impl BleAdapter {
     fn new() -> Self {
         Self {
@@ -1155,7 +1166,13 @@ impl Interpreter {
 
     /// GUI widget builtins: create windows, labels, buttons, and rectangles.
     fn gui_builtins() -> Vec<&'static str> {
-        vec!["gui_window", "gui_label", "gui_button", "gui_rect"]
+        vec![
+            "gui_window",
+            "gui_label",
+            "gui_button",
+            "gui_rect",
+            "gui_layout",
+        ]
     }
 
     /// Evaluates a complete program.

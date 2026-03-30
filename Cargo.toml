@@ -69,9 +69,13 @@ target-lexicon = { version = "0.13.5", optional = true }
 inkwell = { version = "0.8.0", features = ["llvm18-1"], optional = true }
 
 # Real WebSocket client (feature-gated)
-tungstenite = { version = "0.26", optional = true }
+tungstenite = { version = "0.26", optional = true, features = ["native-tls"] }
 # Real MQTT client (feature-gated)
 rumqttc = { version = "0.24", optional = true }
+# Real BLE client (feature-gated, requires OS Bluetooth stack)
+btleplug = { version = "0.11", optional = true }
+# Required for wasm32 target (getrandom 0.2 needs js feature for wasm32-unknown-unknown)
+getrandom = { version = "0.2", optional = true }
 
 [features]
 default = []
@@ -95,7 +99,8 @@ smt = ["dep:z3"]
 gui = ["dep:winit", "dep:softbuffer"]
 websocket = ["dep:tungstenite"]
 mqtt = ["dep:rumqttc"]
-playground-wasm = ["dep:wasm-bindgen"]
+ble = ["dep:btleplug"]
+playground-wasm = ["dep:wasm-bindgen", "getrandom/js"]
 wasm = []
 freertos = []
 zephyr = []

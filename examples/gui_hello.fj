@@ -9,6 +9,12 @@
 // Run: fj gui examples/gui_hello.fj
 // (Without the `gui` feature, prints widget summary only.)
 
+// Callback functions invoked when buttons are clicked.
+fn on_run() { println("[callback] Run pressed — compiling...") }
+fn on_build() { println("[callback] Build pressed — building release binary...") }
+fn on_test() { println("[callback] Test pressed — running 7,439 tests...") }
+fn on_exit() { println("[callback] Exit pressed — goodbye!") }
+
 fn main() {
     println("Fajar Lang GUI Demo")
     println("===================")
@@ -25,11 +31,11 @@ fn main() {
     // Title label
     gui_label("Fajar Lang GUI Toolkit", 200, 20)
 
-    // Buttons
-    gui_button("Run", 50, 100, 120, 40)
-    gui_button("Build", 200, 100, 120, 40)
-    gui_button("Test", 350, 100, 120, 40)
-    gui_button("Exit", 500, 100, 120, 40)
+    // Buttons with callback functions (6th arg = callback name)
+    gui_button("Run", 50, 100, 120, 40, "on_run")
+    gui_button("Build", 200, 100, 120, 40, "on_build")
+    gui_button("Test", 350, 100, 120, 40, "on_test")
+    gui_button("Exit", 500, 100, 120, 40, "on_exit")
 
     // Info labels
     gui_label("Status: Ready", 50, 180)

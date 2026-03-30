@@ -16409,7 +16409,7 @@ fn v09_gui_window_and_widgets() {
         fn main() -> void {
             gui_window("Test Window", 800, 600)
             gui_label("Hello", 10, 10)
-            gui_button("Click Me", 50, 50, 120, 40)
+            gui_button("Click Me", 50, 50, 120, 40, "")
             gui_rect(0, 0, 200, 100, 0xFF0000)
             println("ok")
         }
@@ -16424,7 +16424,7 @@ fn v09_gui_take_state() {
         fn main() -> void {
             gui_window("My App", 320, 240)
             gui_label("Label1", 10, 20)
-            gui_button("Btn", 10, 50, 80, 30)
+            gui_button("Btn", 10, 50, 80, 30, "")
         }
     "#;
     let mut interp = Interpreter::new_capturing();

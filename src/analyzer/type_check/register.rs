@@ -606,12 +606,24 @@ impl TypeChecker {
             ),
             (
                 "gui_button",
-                vec![Type::Str, Type::I64, Type::I64, Type::I64, Type::I64],
+                vec![
+                    Type::Str,
+                    Type::I64,
+                    Type::I64,
+                    Type::I64,
+                    Type::I64,
+                    Type::Str,
+                ],
                 Type::Void,
             ),
             (
                 "gui_rect",
                 vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Void,
+            ),
+            (
+                "gui_layout",
+                vec![Type::Str, Type::I64, Type::I64],
                 Type::Void,
             ),
             // BLE builtins

@@ -1684,6 +1684,9 @@ impl Interpreter {
                 if name == "gui_rect" {
                     return self.builtin_gui_rect(args);
                 }
+                if name == "gui_layout" {
+                    return self.builtin_gui_layout(args);
+                }
 
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
             }
@@ -5703,8 +5706,14 @@ impl Interpreter {
             match tungstenite::connect(&url) {
                 Ok((ws, _response)) => {
                     // Set underlying TCP stream to non-blocking for ws_recv.
-                    if let tungstenite::stream::MaybeTlsStream::Plain(tcp) = ws.get_ref() {
-                        let _ = tcp.set_nonblocking(true);
+                    match ws.get_ref() {
+                        tungstenite::stream::MaybeTlsStream::Plain(tcp) => {
+                            let _ = tcp.set_nonblocking(true);
+                        }
+                        tungstenite::stream::MaybeTlsStream::NativeTls(tls) => {
+                            let _ = tls.get_ref().set_nonblocking(true);
+                        }
+                        _ => {}
                     }
                     self.ws_connections.insert(
                         id,
@@ -6182,17 +6191,76 @@ impl Interpreter {
             }
             .into());
         }
-        let devices = self.ble_adapter.scan();
-        let result: Vec<Value> = devices
-            .into_iter()
-            .map(|(addr, name)| {
-                let mut map = HashMap::new();
-                map.insert("addr".to_string(), Value::Str(addr));
-                map.insert("name".to_string(), Value::Str(name));
-                Value::Map(map)
-            })
-            .collect();
-        Ok(Value::Array(result))
+
+        #[cfg(feature = "ble")]
+        {
+            use btleplug::api::{Central, Manager as _, Peripheral as _, ScanFilter};
+            use btleplug::platform::Manager;
+
+            let rt = tokio::runtime::Runtime::new()
+                .map_err(|e| RuntimeError::TypeError(format!("ble_scan: runtime error: {e}")))?;
+            let devices = rt.block_on(async {
+                let manager = Manager::new().await.map_err(|e| format!("ble_scan: {e}"))?;
+                let adapters = manager
+                    .adapters()
+                    .await
+                    .map_err(|e| format!("ble_scan: {e}"))?;
+                let adapter = adapters
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "ble_scan: no Bluetooth adapter found".to_string())?;
+                adapter
+                    .start_scan(ScanFilter::default())
+                    .await
+                    .map_err(|e| format!("ble_scan: {e}"))?;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let peripherals = adapter
+                    .peripherals()
+                    .await
+                    .map_err(|e| format!("ble_scan: {e}"))?;
+                let mut result = Vec::new();
+                for p in peripherals {
+                    if let Ok(Some(props)) = p.properties().await {
+                        let addr = props.address.to_string();
+                        let name = props.local_name.unwrap_or_else(|| "Unknown".to_string());
+                        result.push((addr, name));
+                    }
+                }
+                Ok::<Vec<(String, String)>, String>(result)
+            });
+            match devices {
+                Ok(devs) => {
+                    let result: Vec<Value> = devs
+                        .into_iter()
+                        .map(|(addr, name)| {
+                            let mut map = HashMap::new();
+                            map.insert("addr".to_string(), Value::Str(addr));
+                            map.insert("name".to_string(), Value::Str(name));
+                            Value::Map(map)
+                        })
+                        .collect();
+                    return Ok(Value::Array(result));
+                }
+                Err(e) => {
+                    return Err(RuntimeError::TypeError(e).into());
+                }
+            }
+        }
+
+        #[cfg(not(feature = "ble"))]
+        {
+            let devices = self.ble_adapter.scan();
+            let result: Vec<Value> = devices
+                .into_iter()
+                .map(|(addr, name)| {
+                    let mut map = HashMap::new();
+                    map.insert("addr".to_string(), Value::Str(addr));
+                    map.insert("name".to_string(), Value::Str(name));
+                    Value::Map(map)
+                })
+                .collect();
+            Ok(Value::Array(result))
+        }
     }
 
     /// ble_connect(addr: str) -> handle (i64) or -1 on failure
@@ -6477,17 +6545,20 @@ impl Interpreter {
             w,
             h: 20,
             color: 0xFF_E0_E0_E0,
+            on_click: None,
         });
         Ok(Value::Null)
     }
 
-    /// gui_button(text: str, x: i64, y: i64, w: i64, h: i64) -> null
+    /// gui_button(text: str, x: i64, y: i64, w: i64, h: i64, on_click: str) -> null
     ///
     /// Adds a button widget at (x, y) with dimensions w×h.
+    /// The `on_click` argument is a function name invoked when the button is clicked
+    /// (pass `""` for no callback).
     fn builtin_gui_button(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() < 5 {
             return Err(RuntimeError::ArityMismatch {
-                expected: 5,
+                expected: 6,
                 got: args.len(),
             }
             .into());
@@ -6516,6 +6587,15 @@ impl Interpreter {
             Value::Int(n) => *n as u32,
             _ => return Err(RuntimeError::TypeError("gui_button: expected int h".into()).into()),
         };
+        // 6th arg: callback function name ("" = no callback).
+        let on_click = if args.len() > 5 {
+            match &args[5] {
+                Value::Str(s) if !s.is_empty() => Some(s.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
         self.gui_state.widgets.push(super::GuiWidget {
             kind: "button".to_string(),
             text,
@@ -6524,7 +6604,48 @@ impl Interpreter {
             w,
             h,
             color: 0xFF_40_80_C0,
+            on_click,
         });
+        Ok(Value::Null)
+    }
+
+    /// gui_layout(mode: str, gap: i64, padding: i64) -> null
+    ///
+    /// Sets the layout mode for the GUI window.
+    /// Modes: "row" (horizontal flex), "column" (vertical flex), "none" (manual).
+    fn builtin_gui_layout(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let mode = match &args[0] {
+            Value::Str(s) => s.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_layout: expected string mode".into()).into(),
+                );
+            }
+        };
+        let gap = match &args[1] {
+            Value::Int(n) => *n as u32,
+            _ => {
+                return Err(RuntimeError::TypeError("gui_layout: expected int gap".into()).into());
+            }
+        };
+        let padding = match &args[2] {
+            Value::Int(n) => *n as u32,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gui_layout: expected int padding".into()).into(),
+                );
+            }
+        };
+        self.gui_state.layout_mode = mode;
+        self.gui_state.layout_gap = gap;
+        self.gui_state.layout_padding = padding;
         Ok(Value::Null)
     }
 
@@ -6569,6 +6690,7 @@ impl Interpreter {
             w,
             h,
             color,
+            on_click: None,
         });
         Ok(Value::Null)
     }
