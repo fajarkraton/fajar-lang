@@ -18,6 +18,7 @@ pub mod resolver;
 pub mod sbom;
 pub mod server;
 pub mod signing;
+pub mod v12;
 pub mod verification;
 
 pub use manifest::{ProjectConfig, find_project_root};
