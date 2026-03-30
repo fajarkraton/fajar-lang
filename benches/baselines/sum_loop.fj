@@ -1,0 +1,16 @@
+// Fajar Lang baseline: sum 1..10000 x 10000 iterations
+fn main() {
+    let mut total: i64 = 0
+    let mut iter = 0
+    while iter < 10000 {
+        let mut sum: i64 = 0
+        let mut i: i64 = 0
+        while i < 10000 {
+            sum = sum + i
+            i = i + 1
+        }
+        total = sum
+        iter = iter + 1
+    }
+    println(f"sum(0..10000) = {total}")
+}

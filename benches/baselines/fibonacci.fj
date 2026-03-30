@@ -1,0 +1,14 @@
+// Fajar Lang baseline: fibonacci(20) x 1000 iterations
+fn fib(n: i64) -> i64 {
+    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn main() {
+    let mut result: i64 = 0
+    let mut i = 0
+    while i < 1000 {
+        result = fib(20)
+        i = i + 1
+    }
+    println(f"fib(20) = {result}")
+}

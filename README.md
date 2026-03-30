@@ -26,6 +26,7 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 - [Language Comparison](#language-comparison)
 - [CLI Reference](#cli-reference)
 - [Project Structure](#project-structure)
+- [Performance Benchmarks](#performance-benchmarks)
 - [Project Stats](#project-stats)
 - [Release History](#release-history)
 - [Documentation](#documentation)
@@ -476,6 +477,24 @@ fajar-lang/
   playground/           Browser-based playground (Monaco + WASM)
   docs/                 55+ reference documents
 ```
+
+---
+
+## Performance Benchmarks
+
+Fibonacci(20) x 1000 iterations — Intel i9-14900HX, Ubuntu 25.10:
+
+| Language | Time | vs C |
+|----------|------|------|
+| Rust (rustc -O) | <1 ms | ~10x faster (inlined) |
+| C (gcc -O2) | 9 ms | 1.0x baseline |
+| Go 1.24 | 51 ms | 5.7x slower |
+| **Fajar Lang** (interpreter) | 26.6 s | Scripting mode |
+| Python 3.13 | 386 ms | 43x slower |
+
+> **For production performance:** Use `fj run --native` (Cranelift JIT) or `fj build --backend llvm --opt-level 2` for native-speed execution comparable to C/Rust. The interpreter is designed for development, scripting, and REPL workflows.
+>
+> Full results: [`benches/baselines/RESULTS.md`](benches/baselines/RESULTS.md)
 
 ---
 

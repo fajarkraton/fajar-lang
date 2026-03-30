@@ -1,0 +1,35 @@
+// Fajar Lang baseline: bubble sort 1000 elements x 10 iterations
+fn main() {
+    let mut iter = 0
+    while iter < 10 {
+        // Create array in descending order
+        let mut arr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        let n = 50
+        let mut k = 0
+        while k < n {
+            arr[k] = n - k
+            k = k + 1
+        }
+
+        // Bubble sort
+        let mut i = 0
+        while i < n - 1 {
+            let mut j = 0
+            while j < n - i - 1 {
+                if arr[j] > arr[j + 1] {
+                    let tmp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = tmp
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        iter = iter + 1
+    }
+    println("sorted")
+}
