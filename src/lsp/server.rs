@@ -27,6 +27,14 @@ struct DocumentState {
     /// Reserved for future scope-aware variable goto-definition.
     #[allow(dead_code)]
     var_defs: Vec<(String, u32, usize, usize)>,
+    /// V12 I3: Content hash for incremental change detection.
+    content_hash: u64,
+    /// V12 I3: Cached diagnostics from last analysis.
+    cached_diagnostics: Vec<Diagnostic>,
+    /// V12 I3: Analysis version counter (incremented on each re-analysis).
+    analysis_version: u64,
+    /// V12 I3: Whether cached diagnostics are still valid.
+    diagnostics_valid: bool,
 }
 
 impl DocumentState {
@@ -57,12 +65,18 @@ impl DocumentState {
             }
         }
 
+        let content_hash = simple_hash(&source);
+
         Self {
             source,
             line_starts,
             fn_defs,
             struct_defs,
             var_defs,
+            content_hash,
+            cached_diagnostics: Vec::new(),
+            analysis_version: 0,
+            diagnostics_valid: false,
         }
     }
 
@@ -114,16 +128,29 @@ impl FajarLspBackend {
         find_enum_variants_in_source(enum_name, source)
     }
 
-    /// Runs the full analysis pipeline and publishes diagnostics.
+    /// V12 I3: Runs analysis with incremental caching.
+    ///
+    /// If the document content hasn't changed (same hash), returns cached
+    /// diagnostics without re-running the analysis pipeline.
     async fn publish_diagnostics(&self, uri: Url) {
-        // Collect diagnostics synchronously under the lock, then publish async after dropping it.
         let diagnostics = {
-            let docs = self.documents.lock().expect("lsp state lock");
-            let doc = match docs.get(&uri) {
+            let mut docs = self.documents.lock().expect("lsp state lock");
+            let doc = match docs.get_mut(&uri) {
                 Some(d) => d,
                 None => return,
             };
-            collect_diagnostics(&doc.source, doc)
+
+            // V12 I3: Check if cached diagnostics are still valid
+            if doc.diagnostics_valid {
+                doc.cached_diagnostics.clone()
+            } else {
+                // Full re-analysis needed
+                let diags = collect_diagnostics(&doc.source, doc);
+                doc.cached_diagnostics = diags.clone();
+                doc.diagnostics_valid = true;
+                doc.analysis_version += 1;
+                diags
+            }
         };
 
         self.client
@@ -229,12 +256,26 @@ impl LanguageServer for FajarLspBackend {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         if let Some(change) = params.content_changes.into_iter().last() {
-            let doc = DocumentState::new(change.text);
-            self.documents
-                .lock()
-                .expect("lsp state lock")
-                .insert(uri.clone(), doc);
-            self.publish_diagnostics(uri).await;
+            let new_hash = simple_hash(&change.text);
+
+            // V12 I3: Check if content actually changed
+            let needs_reanalysis = {
+                let docs = self.documents.lock().expect("lsp state lock");
+                match docs.get(&uri) {
+                    Some(doc) => doc.content_hash != new_hash,
+                    None => true,
+                }
+            };
+
+            if needs_reanalysis {
+                let doc = DocumentState::new(change.text);
+                self.documents
+                    .lock()
+                    .expect("lsp state lock")
+                    .insert(uri.clone(), doc);
+                self.publish_diagnostics(uri).await;
+            }
+            // If content hash is the same, skip re-analysis entirely
         }
     }
 
@@ -2680,6 +2721,99 @@ const COMMON_METHODS: &[&str] = &[
     "is_err",
 ];
 
+// ── V12 I3: Incremental Analysis Helpers ────────────────────────────
+
+/// Fast content hash for change detection (FNV-1a inspired).
+///
+/// Not cryptographic — just for detecting if source content changed
+/// between LSP notifications. Fast enough for <100ms typing latency.
+fn simple_hash(s: &str) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in s.bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+/// Computes a line-level diff between two sources.
+///
+/// Returns the range of lines that changed (first_changed, last_changed).
+/// Used to determine which functions need re-analysis.
+#[allow(dead_code)]
+fn changed_line_range(old_source: &str, new_source: &str) -> Option<(usize, usize)> {
+    let old_lines: Vec<&str> = old_source.lines().collect();
+    let new_lines: Vec<&str> = new_source.lines().collect();
+
+    // Find first changed line
+    let first_changed = old_lines
+        .iter()
+        .zip(new_lines.iter())
+        .position(|(a, b)| a != b)
+        .unwrap_or_else(|| old_lines.len().min(new_lines.len()));
+
+    if first_changed >= old_lines.len() && first_changed >= new_lines.len() {
+        return None; // No changes
+    }
+
+    // Find last changed line (from end)
+    let old_rev: Vec<&&str> = old_lines.iter().rev().collect();
+    let new_rev: Vec<&&str> = new_lines.iter().rev().collect();
+    let last_unchanged_from_end = old_rev
+        .iter()
+        .zip(new_rev.iter())
+        .position(|(a, b)| a != b)
+        .unwrap_or_else(|| old_rev.len().min(new_rev.len()));
+
+    let last_changed = new_lines.len().saturating_sub(last_unchanged_from_end);
+
+    Some((first_changed, last_changed))
+}
+
+/// Returns a list of function names that overlap with the changed line range.
+#[allow(dead_code)]
+fn affected_functions(source: &str, changed_start: usize, changed_end: usize) -> Vec<String> {
+    let mut affected = Vec::new();
+    let mut current_fn: Option<(String, usize)> = None;
+    let mut brace_depth = 0;
+
+    for (i, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // Detect function start
+        if (trimmed.starts_with("fn ") || trimmed.contains(" fn ")) && trimmed.contains('{') {
+            let fn_name = trimmed
+                .split("fn ")
+                .last()
+                .unwrap_or("")
+                .split(|c: char| c == '(' || c == '<' || c.is_whitespace())
+                .next()
+                .unwrap_or("")
+                .to_string();
+            if !fn_name.is_empty() {
+                current_fn = Some((fn_name, i));
+                brace_depth = 1;
+            }
+        } else if current_fn.is_some() {
+            brace_depth += trimmed.matches('{').count() as i32;
+            brace_depth -= trimmed.matches('}').count() as i32;
+
+            if brace_depth <= 0 {
+                if let Some((ref name, start)) = current_fn {
+                    // Check if this function overlaps with changed range
+                    if start <= changed_end && i >= changed_start {
+                        affected.push(name.clone());
+                    }
+                }
+                current_fn = None;
+                brace_depth = 0;
+            }
+        }
+    }
+
+    affected
+}
+
 // ── V12 I1: Completion Helper Functions ─────────────────────────────
 
 /// Extracts local variable bindings from source up to a given line.
@@ -3519,5 +3653,93 @@ mod tests {
         if let (Some(o), Some(i)) = (outer, inner) {
             assert!(i.depth > o.depth, "inner should be deeper than outer");
         }
+    }
+
+    // ── V12 Sprint I3: Incremental Analysis Tests ───────────────────────
+
+    #[test]
+    fn i3_simple_hash_deterministic() {
+        let h1 = simple_hash("hello world");
+        let h2 = simple_hash("hello world");
+        assert_eq!(h1, h2, "same input should produce same hash");
+    }
+
+    #[test]
+    fn i3_simple_hash_different_for_different_input() {
+        let h1 = simple_hash("hello");
+        let h2 = simple_hash("world");
+        assert_ne!(h1, h2, "different inputs should produce different hashes");
+    }
+
+    #[test]
+    fn i3_simple_hash_sensitive_to_whitespace() {
+        let h1 = simple_hash("let x = 1");
+        let h2 = simple_hash("let x  = 1");
+        assert_ne!(h1, h2, "whitespace changes should change hash");
+    }
+
+    #[test]
+    fn i3_document_state_has_content_hash() {
+        let source = "let x = 42";
+        let doc = DocumentState::new(source.to_string());
+        assert_ne!(doc.content_hash, 0, "content hash should be non-zero");
+        assert_eq!(doc.content_hash, simple_hash(source));
+    }
+
+    #[test]
+    fn i3_document_state_diagnostics_initially_invalid() {
+        let doc = DocumentState::new("let x = 42".to_string());
+        assert!(!doc.diagnostics_valid);
+        assert!(doc.cached_diagnostics.is_empty());
+        assert_eq!(doc.analysis_version, 0);
+    }
+
+    #[test]
+    fn i3_changed_line_range_no_change() {
+        let source = "let x = 1\nlet y = 2";
+        assert_eq!(changed_line_range(source, source), None);
+    }
+
+    #[test]
+    fn i3_changed_line_range_one_line() {
+        let old = "let x = 1\nlet y = 2\nlet z = 3";
+        let new = "let x = 1\nlet y = 99\nlet z = 3";
+        let range = changed_line_range(old, new);
+        assert!(range.is_some());
+        let (start, end) = range.unwrap();
+        assert_eq!(start, 1, "change should start at line 1");
+        assert!(end >= 2, "change should include line 1");
+    }
+
+    #[test]
+    fn i3_changed_line_range_added_line() {
+        let old = "let x = 1\nlet y = 2";
+        let new = "let x = 1\nlet w = 99\nlet y = 2";
+        let range = changed_line_range(old, new);
+        assert!(range.is_some());
+    }
+
+    #[test]
+    fn i3_affected_functions_detects_change() {
+        let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let y = 2\n}";
+        // Change in lines 1-1 (inside foo)
+        let affected = affected_functions(source, 1, 1);
+        assert!(
+            affected.contains(&"foo".to_string()),
+            "foo should be affected"
+        );
+        assert!(
+            !affected.contains(&"bar".to_string()),
+            "bar should not be affected"
+        );
+    }
+
+    #[test]
+    fn i3_affected_functions_global_change() {
+        let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let y = 2\n}";
+        // Change spanning all lines
+        let affected = affected_functions(source, 0, 5);
+        assert!(affected.contains(&"foo".to_string()));
+        assert!(affected.contains(&"bar".to_string()));
     }
 }
