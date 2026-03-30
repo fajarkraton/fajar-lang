@@ -458,6 +458,275 @@ pub fn classify_update(current: &str, latest: &str) -> UpdateKind {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// P6: PubGrub Resolver Integration Types
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Resolution result from the PubGrub solver.
+#[derive(Debug, Clone)]
+pub struct ResolutionResult {
+    /// Resolved packages: name → version.
+    pub packages: HashMap<String, String>,
+    /// Resolution time in milliseconds.
+    pub resolve_time_ms: u64,
+    /// Whether the resolution required backtracking.
+    pub backtracked: bool,
+}
+
+/// Resolution conflict — two packages require incompatible versions.
+#[derive(Debug, Clone)]
+pub struct ResolutionConflict {
+    /// Package with the conflict.
+    pub package: String,
+    /// First requirement (from which dependent).
+    pub req_a: (String, String),
+    /// Second requirement (from which dependent).
+    pub req_b: (String, String),
+}
+
+impl fmt::Display for ResolutionConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "conflict for '{}': {} requires {}, but {} requires {}",
+            self.package, self.req_a.0, self.req_a.1, self.req_b.0, self.req_b.1
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// P7: Package Signing & Verification
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Package signature for integrity verification.
+#[derive(Debug, Clone)]
+pub struct PackageSignature {
+    /// Signing algorithm (e.g., "ed25519").
+    pub algorithm: String,
+    /// Hex-encoded public key.
+    pub public_key: String,
+    /// Hex-encoded signature bytes.
+    pub signature: String,
+    /// SHA-256 checksum of the package tarball.
+    pub checksum: String,
+}
+
+impl PackageSignature {
+    /// Creates a signature placeholder (actual signing requires crypto keys).
+    pub fn new_unsigned(checksum: &str) -> Self {
+        Self {
+            algorithm: "sha256".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+            checksum: checksum.to_string(),
+        }
+    }
+
+    /// Checks if the signature is present (not just a checksum).
+    pub fn is_signed(&self) -> bool {
+        !self.signature.is_empty() && !self.public_key.is_empty()
+    }
+
+    /// Verifies the checksum matches the expected value.
+    pub fn verify_checksum(&self, expected: &str) -> bool {
+        self.checksum == expected
+    }
+}
+
+/// Signing key pair for package publishing.
+#[derive(Debug, Clone)]
+pub struct SigningKeyPair {
+    /// Hex-encoded public key.
+    pub public_key: String,
+    /// Hex-encoded private key (stored securely).
+    pub private_key: String,
+    /// Key generation timestamp.
+    pub created_at: String,
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// P8: Documentation & Publishing
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Package documentation metadata.
+#[derive(Debug, Clone)]
+pub struct PackageDoc {
+    /// Package name.
+    pub name: String,
+    /// Version.
+    pub version: String,
+    /// README content (markdown).
+    pub readme: Option<String>,
+    /// Number of documented public items.
+    pub documented_items: usize,
+    /// Total public items.
+    pub total_items: usize,
+}
+
+impl PackageDoc {
+    /// Documentation coverage percentage.
+    pub fn coverage_pct(&self) -> f64 {
+        if self.total_items == 0 {
+            100.0
+        } else {
+            (self.documented_items as f64 / self.total_items as f64) * 100.0
+        }
+    }
+}
+
+/// Package quality score (0-100).
+#[derive(Debug, Clone)]
+pub struct QualityScore {
+    /// Documentation coverage (0-25).
+    pub docs_score: u32,
+    /// Test coverage (0-25).
+    pub tests_score: u32,
+    /// Dependency health (0-25).
+    pub deps_score: u32,
+    /// Age & maintenance (0-25).
+    pub maintenance_score: u32,
+}
+
+impl QualityScore {
+    /// Total score (0-100).
+    pub fn total(&self) -> u32 {
+        self.docs_score + self.tests_score + self.deps_score + self.maintenance_score
+    }
+
+    /// Rating: A (80+), B (60+), C (40+), D (<40).
+    pub fn rating(&self) -> char {
+        match self.total() {
+            80..=100 => 'A',
+            60..=79 => 'B',
+            40..=59 => 'C',
+            _ => 'D',
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// P9: Build Scripts & Hooks
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Build script configuration from `[build]` section in fj.toml.
+#[derive(Debug, Clone, Default)]
+pub struct BuildConfig {
+    /// Build script path (e.g., "build.fj").
+    pub script: Option<String>,
+    /// Pre-build hook command.
+    pub pre_build: Option<String>,
+    /// Post-build hook command.
+    pub post_build: Option<String>,
+    /// Environment variables to set during build.
+    pub env: HashMap<String, String>,
+}
+
+impl BuildConfig {
+    /// Whether any build hooks are configured.
+    pub fn has_hooks(&self) -> bool {
+        self.script.is_some() || self.pre_build.is_some() || self.post_build.is_some()
+    }
+
+    /// Runs the pre-build hook if configured.
+    pub fn run_pre_build(&self) -> Result<(), String> {
+        if let Some(ref cmd) = self.pre_build {
+            run_shell_command(cmd).map_err(|e| format!("pre-build hook failed: {e}"))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Runs the post-build hook if configured.
+    pub fn run_post_build(&self) -> Result<(), String> {
+        if let Some(ref cmd) = self.post_build {
+            run_shell_command(cmd).map_err(|e| format!("post-build hook failed: {e}"))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Runs a shell command and returns success/failure.
+fn run_shell_command(cmd: &str) -> Result<(), String> {
+    let status = std::process::Command::new("sh")
+        .args(["-c", cmd])
+        .status()
+        .map_err(|e| format!("cannot execute: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("exit code {}", status.code().unwrap_or(-1)))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// P10: Commercial Registry Infrastructure
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Registry deployment configuration.
+#[derive(Debug, Clone)]
+pub struct RegistryDeployConfig {
+    /// Database backend: "sqlite", "postgresql".
+    pub database: String,
+    /// Storage backend: "local", "s3".
+    pub storage: String,
+    /// CDN URL for package downloads (optional).
+    pub cdn_url: Option<String>,
+    /// Whether to enable webhooks.
+    pub webhooks: bool,
+    /// Whether to enable organization support.
+    pub organizations: bool,
+    /// Maximum package size in bytes.
+    pub max_package_size: u64,
+}
+
+impl Default for RegistryDeployConfig {
+    fn default() -> Self {
+        Self {
+            database: "sqlite".to_string(),
+            storage: "local".to_string(),
+            cdn_url: None,
+            webhooks: false,
+            organizations: false,
+            max_package_size: 50 * 1024 * 1024, // 50 MB
+        }
+    }
+}
+
+impl RegistryDeployConfig {
+    /// Creates a production config with PostgreSQL + S3.
+    pub fn production() -> Self {
+        Self {
+            database: "postgresql".to_string(),
+            storage: "s3".to_string(),
+            cdn_url: Some("https://cdn.fajarlang.dev".to_string()),
+            webhooks: true,
+            organizations: true,
+            max_package_size: 100 * 1024 * 1024, // 100 MB
+        }
+    }
+
+    /// Whether this is a production deployment.
+    pub fn is_production(&self) -> bool {
+        self.database == "postgresql" && self.storage == "s3"
+    }
+}
+
+/// Webhook event for registry notifications.
+#[derive(Debug, Clone)]
+pub struct WebhookEvent {
+    /// Event type: "publish", "yank", "unyank", "owner_add".
+    pub event_type: String,
+    /// Package name.
+    pub package: String,
+    /// Version (if applicable).
+    pub version: Option<String>,
+    /// Timestamp (ISO 8601).
+    pub timestamp: String,
+    /// Webhook target URL.
+    pub target_url: String,
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -741,5 +1010,197 @@ mod tests {
         assert_eq!(format!("{}", UpdateKind::Patch), "patch");
         assert_eq!(format!("{}", UpdateKind::Minor), "minor");
         assert_eq!(format!("{}", UpdateKind::Major), "major");
+    }
+
+    // ── P6: PubGrub Resolver Tests ──────────────────────────────────────
+
+    #[test]
+    fn p6_resolution_result() {
+        let mut packages = HashMap::new();
+        packages.insert("fj-math".into(), "1.2.0".into());
+        let result = ResolutionResult {
+            packages,
+            resolve_time_ms: 5,
+            backtracked: false,
+        };
+        assert_eq!(result.packages.len(), 1);
+        assert!(!result.backtracked);
+    }
+
+    #[test]
+    fn p6_resolution_conflict_display() {
+        let conflict = ResolutionConflict {
+            package: "fj-math".into(),
+            req_a: ("fj-nn".into(), "^1.0".into()),
+            req_b: ("fj-plot".into(), "^2.0".into()),
+        };
+        let msg = format!("{conflict}");
+        assert!(msg.contains("fj-math"));
+        assert!(msg.contains("fj-nn"));
+        assert!(msg.contains("fj-plot"));
+    }
+
+    // ── P7: Package Signing Tests ───────────────────────────────────────
+
+    #[test]
+    fn p7_unsigned_signature() {
+        let sig = PackageSignature::new_unsigned("abc123");
+        assert!(!sig.is_signed());
+        assert_eq!(sig.checksum, "abc123");
+        assert!(sig.verify_checksum("abc123"));
+        assert!(!sig.verify_checksum("wrong"));
+    }
+
+    #[test]
+    fn p7_signed_signature() {
+        let sig = PackageSignature {
+            algorithm: "ed25519".into(),
+            public_key: "pubkey_hex".into(),
+            signature: "sig_hex".into(),
+            checksum: "abc".into(),
+        };
+        assert!(sig.is_signed());
+    }
+
+    #[test]
+    fn p7_signing_keypair() {
+        let kp = SigningKeyPair {
+            public_key: "pub".into(),
+            private_key: "priv".into(),
+            created_at: "2026-03-30".into(),
+        };
+        assert!(!kp.public_key.is_empty());
+    }
+
+    // ── P8: Documentation Tests ─────────────────────────────────────────
+
+    #[test]
+    fn p8_doc_coverage() {
+        let doc = PackageDoc {
+            name: "fj-math".into(),
+            version: "1.0.0".into(),
+            readme: Some("# fj-math".into()),
+            documented_items: 8,
+            total_items: 10,
+        };
+        assert!((doc.coverage_pct() - 80.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn p8_doc_coverage_empty() {
+        let doc = PackageDoc {
+            name: "empty".into(),
+            version: "0.1.0".into(),
+            readme: None,
+            documented_items: 0,
+            total_items: 0,
+        };
+        assert!((doc.coverage_pct() - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn p8_quality_score() {
+        let score = QualityScore {
+            docs_score: 20,
+            tests_score: 22,
+            deps_score: 18,
+            maintenance_score: 25,
+        };
+        assert_eq!(score.total(), 85);
+        assert_eq!(score.rating(), 'A');
+    }
+
+    #[test]
+    fn p8_quality_rating() {
+        assert_eq!(
+            (QualityScore {
+                docs_score: 25,
+                tests_score: 25,
+                deps_score: 25,
+                maintenance_score: 25
+            })
+            .rating(),
+            'A'
+        );
+        assert_eq!(
+            (QualityScore {
+                docs_score: 15,
+                tests_score: 15,
+                deps_score: 15,
+                maintenance_score: 15
+            })
+            .rating(),
+            'B'
+        );
+        assert_eq!(
+            (QualityScore {
+                docs_score: 5,
+                tests_score: 5,
+                deps_score: 5,
+                maintenance_score: 5
+            })
+            .rating(),
+            'D'
+        );
+    }
+
+    // ── P9: Build Scripts Tests ─────────────────────────────────────────
+
+    #[test]
+    fn p9_build_config_default() {
+        let config = BuildConfig::default();
+        assert!(!config.has_hooks());
+        assert!(config.script.is_none());
+    }
+
+    #[test]
+    fn p9_build_config_with_hooks() {
+        let config = BuildConfig {
+            script: Some("build.fj".into()),
+            pre_build: Some("echo pre".into()),
+            post_build: Some("echo post".into()),
+            env: HashMap::new(),
+        };
+        assert!(config.has_hooks());
+    }
+
+    #[test]
+    fn p9_run_pre_build_none() {
+        let config = BuildConfig::default();
+        assert!(config.run_pre_build().is_ok());
+    }
+
+    // ── P10: Commercial Infrastructure Tests ────────────────────────────
+
+    #[test]
+    fn p10_deploy_config_default() {
+        let config = RegistryDeployConfig::default();
+        assert_eq!(config.database, "sqlite");
+        assert_eq!(config.storage, "local");
+        assert!(!config.is_production());
+        assert_eq!(config.max_package_size, 50 * 1024 * 1024);
+    }
+
+    #[test]
+    fn p10_deploy_config_production() {
+        let config = RegistryDeployConfig::production();
+        assert_eq!(config.database, "postgresql");
+        assert_eq!(config.storage, "s3");
+        assert!(config.is_production());
+        assert!(config.webhooks);
+        assert!(config.organizations);
+    }
+
+    #[test]
+    fn p10_webhook_event() {
+        let event = WebhookEvent {
+            event_type: "publish".into(),
+            package: "fj-math".into(),
+            version: Some("1.2.0".into()),
+            timestamp: "2026-03-30T12:00:00Z".into(),
+            target_url: "https://hooks.example.com/fj".into(),
+        };
+        assert_eq!(event.event_type, "publish");
+        assert!(event.version.is_some());
     }
 }
