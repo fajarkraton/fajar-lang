@@ -22,6 +22,7 @@ pub mod lsp_incr;
 pub mod parallel;
 pub mod pipeline;
 pub mod rebuild_bench;
+pub mod workspace;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

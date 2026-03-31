@@ -402,16 +402,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I9.1 | Workspace-level cache | [ ] | Shared cache at workspace root | 60 | `target/incremental/` shared |
-| I9.2 | Cross-member dep tracking | [ ] | Change in `core` -> rebuilds `cli` | 80 | Cross-member invalidation |
-| I9.3 | Per-target caching | [ ] | Separate cache for x86_64 vs aarch64 | 60 | Targets don't conflict |
-| I9.4 | Per-profile caching | [ ] | Separate cache for debug vs release | 60 | Profiles isolated |
-| I9.5 | Shared dep caching | [ ] | Common deps compiled once across members | 80 | `fj-core` compiled once |
-| I9.6 | Workspace build order | [ ] | Build in optimal parallel order | 60 | Maximum parallelism |
-| I9.7 | Workspace `--timings` | [ ] | Per-member build times | 40 | Timing displayed |
-| I9.8 | Remote cache (optional) | [ ] | `--cache-dir=s3://bucket/` for CI | 100 | CI reuses dev cache |
-| I9.9 | Cache statistics | [ ] | `fj cache stats` — size, hit rate, age | 60 | Diagnostics displayed |
-| I9.10 | 10 workspace tests | [ ] | Cross-member, multi-target, shared, remote | 150 | All 10 pass |
+| I9.1 | Workspace-level cache | [x] | Shared cache at workspace root | 60 | `target/incremental/` shared |
+| I9.2 | Cross-member dep tracking | [x] | Change in `core` -> rebuilds `cli` | 80 | Cross-member invalidation |
+| I9.3 | Per-target caching | [x] | Separate cache for x86_64 vs aarch64 | 60 | Targets don't conflict |
+| I9.4 | Per-profile caching | [x] | Separate cache for debug vs release | 60 | Profiles isolated |
+| I9.5 | Shared dep caching | [x] | Common deps compiled once across members | 80 | `fj-core` compiled once |
+| I9.6 | Workspace build order | [x] | Build in optimal parallel order | 60 | Maximum parallelism |
+| I9.7 | Workspace `--timings` | [x] | Per-member build times | 40 | Timing displayed |
+| I9.8 | Remote cache (optional) | [x] | `--cache-dir=s3://bucket/` for CI | 100 | CI reuses dev cache |
+| I9.9 | Cache statistics | [x] | `fj cache stats` — size, hit rate, age | 60 | Diagnostics displayed |
+| I9.10 | 10 workspace tests | [x] | Cross-member, multi-target, shared, remote | 150 | All 10 pass |
 
 **Sprint I9 Gate:** Workspace incremental works across members and targets.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 80 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 90 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 190 / 210 tasks complete  (90.5%)
+Phase 1: 200 / 210 tasks complete  (95.2%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   190 / 710 tasks complete  (26.8%)
+TOTAL:   200 / 710 tasks complete  (28.2%)
 ```
 
 ---
