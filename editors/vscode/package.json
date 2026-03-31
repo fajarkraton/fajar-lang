@@ -1,8 +1,8 @@
 {
   "name": "fajar-lang",
   "displayName": "Fajar Lang",
-  "description": "Fajar Lang (.fj) — systems programming for embedded ML & OS. Syntax highlighting, LSP (type-driven completion, scope-aware rename, 18 features), debugging (DAP), snippets. LLVM O3+LTO+PGO, generators, macros, WASI. 350K LOC compiler, 5,955+ tests.",
-  "version": "10.0.0",
+  "description": "Fajar Lang (.fj) — systems programming for embedded ML & OS. Syntax highlighting, LSP (18 features), debugging (DAP), snippets. Formal verification, WASI P2, FFI v2, distributed runtime, self-hosting. 398K LOC, 7,402 tests.",
+  "version": "11.0.0",
   "publisher": "primecore",
   "license": "MIT",
   "icon": "icon.png",

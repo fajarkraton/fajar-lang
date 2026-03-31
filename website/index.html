@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fajar Lang - Systems Programming for Embedded ML & OS Development</title>
-    <meta name="description" content="Fajar Lang (fj) — a statically-typed systems programming language for embedded ML and OS development. 350K LOC compiler, 5,955+ tests, Cranelift + LLVM backends. Made in Indonesia.">
+    <meta name="description" content="Fajar Lang (fj) — a statically-typed systems programming language for embedded ML and OS development. 398K LOC compiler, 7,402 tests, formal verification, distributed runtime, self-hosting. Made in Indonesia.">
     <meta property="og:title" content="Fajar Lang — Embedded ML + OS in One Language">
-    <meta property="og:description" content="The only language where an OS kernel and a neural network share the same codebase, type system, and compiler.">
+    <meta property="og:description" content="The only language where an OS kernel and a neural network share the same codebase, type system, and compiler — with formal verification and distributed runtime.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://fajarkraton.github.io/fajar-lang/">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Fajar Lang — Systems Programming Language">
-    <meta name="twitter:description" content="350K LOC, 5,955+ tests, LLVM O3+LTO+PGO, generators, macros, WASI, async/await. 100% production.">
+    <meta name="twitter:description" content="398K LOC, 7,402 tests, LLVM O3, WASI P2, FFI v2 (C++/Python/Rust), SMT verification, distributed ML. 100% production.">
     <style>
         :root {
             --primary: #1a1a2e;
@@ -318,13 +318,33 @@
                HTTP/HTTPS server framework with router + middleware.</p>
         </div>
         <div class="feature-card">
-            <h3>GUI Toolkit</h3>
-            <p>Native OS windowing via winit + softbuffer. Bitmap font text rendering,
-               interactive buttons with callbacks, flex layout engine.</p>
+            <h3>Formal Verification</h3>
+            <p>SMT-backed safety proofs for @kernel and @device code. Symbolic execution,
+               property annotations, DO-178C/ISO 26262 certification support.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Distributed Runtime</h3>
+            <p>Raft consensus, service discovery, data-parallel ML training, ring-allreduce.
+               Deploy across clusters with fault tolerance and mTLS security.</p>
+        </div>
+        <div class="feature-card">
+            <h3>WASI P2 Components</h3>
+            <p>Full WebAssembly Component Model — WIT parser, canonical ABI, HTTP client/server,
+               filesystem, sockets. Deploy to wasmtime, Spin, or any WASI runtime.</p>
+        </div>
+        <div class="feature-card">
+            <h3>FFI v2 (C++/Python/Rust)</h3>
+            <p>Call C++ templates and STL, Python async and NumPy/PyTorch, Rust traits and futures
+               — all with automatic binding generation via <code>fj bindgen</code>.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Self-Hosting Compiler</h3>
+            <p>The compiler can compile itself. Tree AST, Pratt parser, HM type inference,
+               46-opcode bytecode codegen, Stage 2 bootstrap verified.</p>
         </div>
         <div class="feature-card">
             <h3>Developer Tools</h3>
-            <p>LSP with inlay hints + signature help, VS Code extension, formatter,
+            <p>LSP with 18 features, VS Code extension, formatter,
                debugger (DAP), test framework, package manager, playground.</p>
         </div>
     </div>
@@ -334,20 +354,20 @@
     <h2 style="font-size: 2rem; margin-bottom: 2rem;">By the Numbers</h2>
     <div style="display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; max-width: 900px; margin: 0 auto;">
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #e94560;">350K</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e94560;">398K</div>
             <div style="color: #a0a0b0;">Lines of Rust</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #61afef;">5,955+</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #61afef;">7,402</div>
             <div style="color: #a0a0b0;">Tests Passing</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #98c379;">179</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #98c379;">216</div>
             <div style="color: #a0a0b0;">Example Programs</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #e5c07b;">37</div>
-            <div style="color: #a0a0b0;">Standard Packages</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e5c07b;">418</div>
+            <div style="color: #a0a0b0;">Source Files</div>
         </div>
         <div>
             <div style="font-size: 2.5rem; font-weight: 700; color: #c678dd;">100%</div>
@@ -355,7 +375,7 @@
         </div>
     </div>
     <p style="color: #a0a0b0; margin-top: 2rem; font-size: 0.9rem;">
-        v10.0.0 "Transcendence" — LLVM O3+LTO+PGO, generators, macros, WASI, LSP 18 features, 3 platforms
+        v11.0.0 "Beyond" — Formal verification, distributed runtime, WASI P2, FFI v2, self-hosting compiler
     </p>
 </section>
 
@@ -443,7 +463,7 @@
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CONTRIBUTING.md">Contributing</a>
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>
     </div>
-    <p>Fajar Lang is open source under the MIT License. v10.0.0 "Transcendence"</p>
+    <p>Fajar Lang is open source under the MIT License. v11.0.0 "Beyond"</p>
     <p>Created by <a href="https://github.com/fajarkraton">Muhamad Fajar Putranto</a> (TaxPrime / PrimeCore.id) - Made in Indonesia</p>
 </footer>
 
