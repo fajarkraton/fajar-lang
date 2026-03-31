@@ -19,6 +19,7 @@ pub mod integration;
 pub mod ir_cache;
 pub mod parallel;
 pub mod pipeline;
+pub mod rebuild_bench;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

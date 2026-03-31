@@ -351,16 +351,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I6.1 | Cold build benchmark | [ ] | Full build from scratch on 10K LOC project | 30 | Baseline recorded |
-| I6.2 | Warm build (no change) | [ ] | Build with no changes (all cache hits) | 20 | < 100ms for 10K LOC |
-| I6.3 | Single-file change | [ ] | Change one file in 10K LOC project | 20 | < 500ms rebuild |
-| I6.4 | Signature change | [ ] | Change function signature (cascading) | 20 | < 2s rebuild |
-| I6.5 | Type change | [ ] | Change struct field (moderate cascade) | 20 | < 1s rebuild |
-| I6.6 | New file added | [ ] | Add new file to project | 20 | < 1s rebuild |
-| I6.7 | File deleted | [ ] | Remove file from project | 20 | < 500ms rebuild |
-| I6.8 | 10 files changed | [ ] | Batch change of 10 files | 20 | < 3s rebuild |
-| I6.9 | Parallel speedup | [ ] | Compare 1 vs 4 vs 8 threads on 50K LOC | 30 | 4x speedup with 8 threads |
-| I6.10 | Document benchmarks | [ ] | `docs/INCREMENTAL_BENCHMARKS.md` | 100 | Table with all measurements |
+| I6.1 | Cold build benchmark | [x] | Full build from scratch on 10K LOC project | 30 | Baseline recorded |
+| I6.2 | Warm build (no change) | [x] | Build with no changes (all cache hits) | 20 | < 100ms for 10K LOC |
+| I6.3 | Single-file change | [x] | Change one file in 10K LOC project | 20 | < 500ms rebuild |
+| I6.4 | Signature change | [x] | Change function signature (cascading) | 20 | < 2s rebuild |
+| I6.5 | Type change | [x] | Change struct field (moderate cascade) | 20 | < 1s rebuild |
+| I6.6 | New file added | [x] | Add new file to project | 20 | < 1s rebuild |
+| I6.7 | File deleted | [x] | Remove file from project | 20 | < 500ms rebuild |
+| I6.8 | 10 files changed | [x] | Batch change of 10 files | 20 | < 3s rebuild |
+| I6.9 | Parallel speedup | [x] | Compare 1 vs 4 vs 8 threads on 50K LOC | 30 | 4x speedup with 8 threads |
+| I6.10 | Document benchmarks | [x] | `docs/INCREMENTAL_BENCHMARKS.md` | 100 | Table with all measurements |
 
 **Sprint I6 Gate:** All benchmarks documented with reproducible methodology.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 50 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 60 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 160 / 210 tasks complete  (76.2%)
+Phase 1: 170 / 210 tasks complete  (81.0%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   160 / 710 tasks complete  (22.5%)
+TOTAL:   170 / 710 tasks complete  (23.9%)
 ```
 
 ---
