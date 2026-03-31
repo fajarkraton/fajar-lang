@@ -9,6 +9,7 @@
 //! - `wit_types` — WIT-to-Fajar type mapping and type system
 
 pub mod component;
+pub mod filesystem;
 pub mod wit_lexer;
 pub mod wit_parser;
 pub mod wit_types;

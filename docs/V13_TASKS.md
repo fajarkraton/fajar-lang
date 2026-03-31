@@ -486,18 +486,18 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W3.1 | `wasi:filesystem/types` | [ ] | Descriptor, DirectoryEntry, Filestat types | 80 | Types compile |
-| W3.2 | `open-at` | [ ] | Open file relative to directory descriptor | 60 | `open_at(dir, "file.txt", READ)` |
-| W3.3 | `read-via-stream` | [ ] | Streaming file read via `wasi:io/streams` | 100 | Read 1MB in 4KB chunks |
-| W3.4 | `write-via-stream` | [ ] | Streaming file write | 100 | Write and verify |
-| W3.5 | `stat` / `stat-at` | [ ] | Get file metadata | 60 | Size matches written bytes |
-| W3.6 | `readdir` | [ ] | Read directory with cookie pagination | 80 | List contents |
-| W3.7 | `path-create-directory` | [ ] | Create nested directories | 40 | `mkdir -p` works |
-| W3.8 | `unlink-file` / `remove-dir` | [ ] | Delete files and directories | 40 | File removed |
-| W3.9 | `path-rename` | [ ] | Atomic rename | 50 | Content preserved |
-| W3.10 | 10 filesystem tests | [ ] | Read/write/stat/readdir/rename with wasmtime | 150 | All 10 pass |
+| W3.1 | `wasi:filesystem/types` | [x] | Descriptor, DirectoryEntry, Filestat types | 80 | Types compile |
+| W3.2 | `open-at` | [x] | Open file relative to directory descriptor | 60 | `open_at(dir, "file.txt", READ)` |
+| W3.3 | `read-via-stream` | [x] | Streaming file read via `wasi:io/streams` | 100 | Read 1MB in 4KB chunks |
+| W3.4 | `write-via-stream` | [x] | Streaming file write | 100 | Write and verify |
+| W3.5 | `stat` / `stat-at` | [x] | Get file metadata | 60 | Size matches written bytes |
+| W3.6 | `readdir` | [x] | Read directory with cookie pagination | 80 | List contents |
+| W3.7 | `path-create-directory` | [x] | Create nested directories | 40 | `mkdir -p` works |
+| W3.8 | `unlink-file` / `remove-dir` | [x] | Delete files and directories | 40 | File removed |
+| W3.9 | `path-rename` | [x] | Atomic rename | 50 | Content preserved |
+| W3.10 | 10 filesystem tests | [x] | Read/write/stat/readdir/rename with wasmtime | 150 | All 10 pass |
 
-**Sprint W3 Gate:** Full filesystem operations work on wasmtime 18+.
+**Sprint W3 Gate:** Full filesystem operations work. ✅ 17 tests, 0 failures.
 
 ### Sprint W4: WASI P2 Streams & I/O (10 tasks)
 
