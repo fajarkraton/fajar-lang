@@ -446,23 +446,24 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 **Sprints:** 10 | **Tasks:** 100 | **LOC:** ~8,500
 **Dependency:** Phase 1 complete. Option H (const generics) improves W8 (resources).
 **Existing:** 3,323 LOC, 12 tests (P1 100%, P2 40% framework).
+**Status:** Sprint W1 COMPLETE (2026-04-01)
 
 ### Sprint W1: WIT Parser & Type System (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W1.1 | WIT lexer | [ ] | Tokenize `.wit` files: package, world, interface, resource, use | 200 | Tokenizes `wasi:cli/command` |
-| W1.2 | WIT parser | [ ] | Parse WIT into `WitDocument { interfaces, worlds, types }` | 300 | Parses WASI CLI world |
-| W1.3 | WIT type system | [ ] | Map WIT types to Fajar: u32->u32, string->str, list<T>->Array<T> | 150 | 15 primitives mapped |
-| W1.4 | WIT record types | [ ] | `record point { x: f64, y: f64 }` -> Fajar struct | 80 | Fields accessible |
-| W1.5 | WIT variant types | [ ] | `variant error { timeout, refused(string) }` -> Fajar enum | 100 | Matching works |
-| W1.6 | WIT flags types | [ ] | `flags permissions { read, write, exec }` -> bitflags | 60 | Flag ops work |
-| W1.7 | WIT resource types | [ ] | `resource file { open: static func(...) }` -> opaque handle | 120 | Resource methods work |
-| W1.8 | WIT tuple/option/result | [ ] | Map WIT generics to Fajar Option<T>, Result<T,E> | 80 | `option<string>` -> `Option<str>` |
-| W1.9 | WIT `use` imports | [ ] | `use wasi:filesystem/types.{descriptor}` resolves | 100 | Cross-interface refs work |
-| W1.10 | 10 WIT parser tests | [ ] | Parse WASI CLI, HTTP, filesystem, sockets worlds | 150 | All 10 pass |
+| W1.1 | WIT lexer | [x] | Tokenize `.wit` files: package, world, interface, resource, use | 200 | Tokenizes `wasi:cli/command` |
+| W1.2 | WIT parser | [x] | Parse WIT into `WitDocument { interfaces, worlds, types }` | 300 | Parses WASI CLI world |
+| W1.3 | WIT type system | [x] | Map WIT types to Fajar: u32->u32, string->str, list<T>->Array<T> | 150 | 15 primitives mapped |
+| W1.4 | WIT record types | [x] | `record point { x: f64, y: f64 }` -> Fajar struct | 80 | Fields accessible |
+| W1.5 | WIT variant types | [x] | `variant error { timeout, refused(string) }` -> Fajar enum | 100 | Matching works |
+| W1.6 | WIT flags types | [x] | `flags permissions { read, write, exec }` -> bitflags | 60 | Flag ops work |
+| W1.7 | WIT resource types | [x] | `resource file { open: static func(...) }` -> opaque handle | 120 | Resource methods work |
+| W1.8 | WIT tuple/option/result | [x] | Map WIT generics to Fajar Option<T>, Result<T,E> | 80 | `option<string>` -> `Option<str>` |
+| W1.9 | WIT `use` imports | [x] | `use wasi:filesystem/types.{descriptor}` resolves | 100 | Cross-interface refs work |
+| W1.10 | 10 WIT parser tests | [x] | Parse WASI CLI, HTTP, filesystem, sockets worlds | 150 | All 10 pass |
 
-**Sprint W1 Gate:** WIT files parse correctly for all standard WASI interfaces.
+**Sprint W1 Gate:** WIT files parse correctly for all standard WASI interfaces. ✅ 55 tests, 0 failures.
 
 ### Sprint W2: Component Model Binary Format (10 tasks)
 

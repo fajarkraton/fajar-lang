@@ -76,6 +76,7 @@ pub mod stdlib_v3;
 pub mod testing;
 pub mod verify;
 pub mod vm;
+pub mod wasi_p2;
 pub mod wasi_v12;
 
 use analyzer::SemanticError;

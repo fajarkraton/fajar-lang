@@ -363,14 +363,25 @@ comptime { fact(12) }
 
     #[test]
     fn k10_4_recursion_depth_50() {
-        // Each recursive call uses ~5 eval_expr nesting levels,
-        // so depth 50 = ~250 nesting (under 256 limit)
-        assert!(test_recursive_depth(50));
+        // Spawn with explicit 8MB stack to handle deep eval_expr recursion in debug mode.
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| test_recursive_depth(50))
+            .expect("thread spawn")
+            .join()
+            .expect("thread join");
+        assert!(result);
     }
 
     #[test]
     fn k10_4_recursion_depth_30() {
-        assert!(test_recursive_depth(30));
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| test_recursive_depth(30))
+            .expect("thread spawn")
+            .join()
+            .expect("thread join");
+        assert!(result);
     }
 
     // ── K10.5: Numeric type coverage ──
@@ -443,7 +454,13 @@ comptime { fact(12) }
 
     #[test]
     fn k10_10_full_validation_report() {
-        let report = run_full_validation();
+        // Needs large stack because run_full_validation calls test_recursive_depth(50)
+        let report = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(run_full_validation)
+            .expect("thread spawn")
+            .join()
+            .expect("thread join");
         assert!(report.simple_eval_correct, "simple eval failed");
         assert!(report.const_vs_runtime_match, "const vs runtime mismatch");
         assert!(report.large_lut_correct, "large LUT incorrect");

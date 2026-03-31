@@ -2631,9 +2631,18 @@ mod tests {
 
     #[test]
     fn eval_stack_overflow() {
-        let src = "fn inf(n: i64) -> i64 { inf(n) }\ninf(0)";
-        let err = eval(src).unwrap_err();
-        assert!(matches!(err, RuntimeError::StackOverflow { .. }));
+        // Run in a thread with larger stack to ensure the interpreter's depth check
+        // catches the overflow before the Rust stack itself overflows in debug mode.
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let src = "fn inf(n: i64) -> i64 { inf(n) }\ninf(0)";
+                eval(src).unwrap_err()
+            })
+            .expect("thread spawn")
+            .join()
+            .expect("thread join");
+        assert!(matches!(result, RuntimeError::StackOverflow { .. }));
     }
 
     // ── Match ──
