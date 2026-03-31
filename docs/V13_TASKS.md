@@ -283,16 +283,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I2.1 | Function-level tracking | [ ] | Track which functions changed, not just files | 120 | Change one fn -> only dependents recompile |
-| I2.2 | Type-level tracking | [ ] | Track struct/enum definition changes | 100 | Change struct field -> dependents recompile |
-| I2.3 | Import graph construction | [ ] | Build use/mod import edges between modules | 80 | Import graph matches actual deps |
-| I2.4 | Signature vs body change | [ ] | Signature change -> recompile callers; body-only -> skip | 80 | Body-only change is fastest path |
-| I2.5 | Trait impl tracking | [ ] | Track which trait impls changed | 80 | New trait impl -> monomorphization invalidated |
-| I2.6 | Constant propagation tracking | [ ] | Track const value changes | 50 | `const X = 5` -> `6` triggers recompile |
-| I2.7 | Macro expansion tracking | [ ] | Track macro input -> output mapping | 80 | Macro change -> expansion sites recompile |
-| I2.8 | Cross-module type inference | [ ] | Track inferred types depending on other modules | 60 | Type change in A -> B reanalyzed |
-| I2.9 | Dep graph visualization | [ ] | `fj build --dep-graph` outputs DOT format | 50 | `dot -Tsvg` renders graph |
-| I2.10 | 10 dependency tests | [ ] | Function, type, signature, trait, const, macro | 150 | All 10 pass |
+| I2.1 | Function-level tracking | [x] | Track which functions changed, not just files | 120 | Change one fn -> only dependents recompile |
+| I2.2 | Type-level tracking | [x] | Track struct/enum definition changes | 100 | Change struct field -> dependents recompile |
+| I2.3 | Import graph construction | [x] | Build use/mod import edges between modules | 80 | Import graph matches actual deps |
+| I2.4 | Signature vs body change | [x] | Signature change -> recompile callers; body-only -> skip | 80 | Body-only change is fastest path |
+| I2.5 | Trait impl tracking | [x] | Track which trait impls changed | 80 | New trait impl -> monomorphization invalidated |
+| I2.6 | Constant propagation tracking | [x] | Track const value changes | 50 | `const X = 5` -> `6` triggers recompile |
+| I2.7 | Macro expansion tracking | [x] | Track macro input -> output mapping | 80 | Macro change -> expansion sites recompile |
+| I2.8 | Cross-module type inference | [x] | Track inferred types depending on other modules | 60 | Type change in A -> B reanalyzed |
+| I2.9 | Dep graph visualization | [x] | `fj build --dep-graph` outputs DOT format | 50 | `dot -Tsvg` renders graph |
+| I2.10 | 10 dependency tests | [x] | Function, type, signature, trait, const, macro | 150 | All 10 pass |
 
 **Sprint I2 Gate:** Fine-grained tracking detects minimal recompilation set.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 10 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 20 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 120 / 210 tasks complete  (57.1%)
+Phase 1: 130 / 210 tasks complete  (61.9%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   120 / 710 tasks complete  (16.9%)
+TOTAL:   130 / 710 tasks complete  (18.3%)
 ```
 
 ---
