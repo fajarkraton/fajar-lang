@@ -334,16 +334,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I5.1 | Wire into `fj build` | [ ] | Default incremental for `fj build` | 40 | Incremental by default |
-| I5.2 | `--no-incremental` flag | [ ] | Disable for clean builds | 10 | Full rebuild on flag |
-| I5.3 | Wire into `fj check` | [ ] | Incremental type checking | 40 | Faster on second run |
-| I5.4 | Wire into `fj test` | [ ] | Only recompile changed test targets | 40 | Faster when 1 file changed |
-| I5.5 | Wire into `fj run` | [ ] | Incremental build before run | 20 | Only changed modules rebuilt |
-| I5.6 | Wire into LSP | [ ] | LSP uses incremental analysis | 80 | < 200ms after edit |
-| I5.7 | Wire into `fj watch` | [ ] | File watcher triggers incremental rebuild | 40 | Save -> rebuild < 1s |
-| I5.8 | Workspace incremental | [ ] | Incremental across workspace members | 60 | Only affected members rebuild |
-| I5.9 | `fj build --timings` | [ ] | Time per phase (parse/analyze/codegen/link) | 60 | Timing breakdown displayed |
-| I5.10 | 10 pipeline tests | [ ] | build, check, test, run, watch, LSP, workspace | 150 | All 10 pass |
+| I5.1 | Wire into `fj build` | [x] | Default incremental for `fj build` | 40 | Incremental by default |
+| I5.2 | `--no-incremental` flag | [x] | Disable for clean builds | 10 | Full rebuild on flag |
+| I5.3 | Wire into `fj check` | [x] | Incremental type checking | 40 | Faster on second run |
+| I5.4 | Wire into `fj test` | [x] | Only recompile changed test targets | 40 | Faster when 1 file changed |
+| I5.5 | Wire into `fj run` | [x] | Incremental build before run | 20 | Only changed modules rebuilt |
+| I5.6 | Wire into LSP | [x] | LSP uses incremental analysis | 80 | < 200ms after edit |
+| I5.7 | Wire into `fj watch` | [x] | File watcher triggers incremental rebuild | 40 | Save -> rebuild < 1s |
+| I5.8 | Workspace incremental | [x] | Incremental across workspace members | 60 | Only affected members rebuild |
+| I5.9 | `fj build --timings` | [x] | Time per phase (parse/analyze/codegen/link) | 60 | Timing breakdown displayed |
+| I5.10 | 10 pipeline tests | [x] | build, check, test, run, watch, LSP, workspace | 150 | All 10 pass |
 
 **Sprint I5 Gate:** All CLI commands use incremental compilation by default.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 40 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 50 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 150 / 210 tasks complete  (71.4%)
+Phase 1: 160 / 210 tasks complete  (76.2%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   150 / 710 tasks complete  (21.1%)
+TOTAL:   160 / 710 tasks complete  (22.5%)
 ```
 
 ---

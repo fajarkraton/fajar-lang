@@ -15,6 +15,7 @@ pub mod bench;
 pub mod cache;
 pub mod disk;
 pub mod fine_grained;
+pub mod integration;
 pub mod ir_cache;
 pub mod parallel;
 pub mod pipeline;
