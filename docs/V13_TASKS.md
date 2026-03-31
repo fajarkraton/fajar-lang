@@ -520,35 +520,35 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W5.1 | HTTP types | [ ] | Request, Response, Headers, Method, StatusCode | 100 | Types compile |
-| W5.2 | Outgoing handler | [ ] | `handle(request)` -> future response | 120 | GET returns 200 |
-| W5.3 | Request construction | [ ] | Builder: GET/POST/PUT/DELETE | 80 | All methods work |
-| W5.4 | Response reading | [ ] | Status, headers, body stream | 80 | Parse JSON body |
-| W5.5 | Request body streaming | [ ] | Write body via output-stream for POST | 80 | POST with JSON works |
-| W5.6 | Response body streaming | [ ] | Read body via input-stream (chunked) | 80 | Stream large response |
-| W5.7 | Header manipulation | [ ] | Add, get, delete, iterate headers | 50 | Content-Type correct |
-| W5.8 | Error handling | [ ] | Network error, timeout, DNS failure -> Result | 60 | Timeout -> Err |
-| W5.9 | HTTPS support | [ ] | TLS via host | 30 | `https://` URLs work |
-| W5.10 | 10 HTTP client tests | [ ] | GET, POST, headers, streaming, errors | 150 | All 10 pass |
+| W5.1 | HTTP types | [x] | Request, Response, Headers, Method, StatusCode | 100 | Types compile |
+| W5.2 | Outgoing handler | [x] | `handle(request)` -> future response | 120 | GET returns 200 |
+| W5.3 | Request construction | [x] | Builder: GET/POST/PUT/DELETE | 80 | All methods work |
+| W5.4 | Response reading | [x] | Status, headers, body stream | 80 | Parse JSON body |
+| W5.5 | Request body streaming | [x] | Write body via output-stream for POST | 80 | POST with JSON works |
+| W5.6 | Response body streaming | [x] | Read body via input-stream (chunked) | 80 | Stream large response |
+| W5.7 | Header manipulation | [x] | Add, get, delete, iterate headers | 50 | Content-Type correct |
+| W5.8 | Error handling | [x] | Network error, timeout, DNS failure -> Result | 60 | Timeout -> Err |
+| W5.9 | HTTPS support | [x] | TLS via host | 30 | `https://` URLs work |
+| W5.10 | 10 HTTP client tests | [x] | GET, POST, headers, streaming, errors | 150 | All 10 pass |
 
-**Sprint W5 Gate:** HTTP client works for all standard methods with error handling.
+**Sprint W5 Gate:** HTTP client works for all standard methods with error handling. ✅ 10 tests, 0 failures.
 
 ### Sprint W6: WASI P2 HTTP Server (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W6.1 | Incoming handler export | [ ] | `handle(request, response-outparam)` entry point | 100 | Component exports handler |
-| W6.2 | Request routing | [ ] | Path + method matching | 80 | `/api/users` routed |
-| W6.3 | Response construction | [ ] | `response-outparam.set(status, headers, body)` | 80 | 200 + JSON body |
-| W6.4 | Middleware pipeline | [ ] | Pre/post processing (logging, auth, CORS) | 100 | Chain executes in order |
-| W6.5 | JSON serialization | [ ] | Serialize Fajar structs to JSON response | 60 | Valid JSON output |
-| W6.6 | Error responses | [ ] | 400/404/500 with proper status codes | 40 | Correct codes |
-| W6.7 | Request body parsing | [ ] | Parse JSON/form body | 80 | POST body deserialized |
-| W6.8 | Static file serving | [ ] | Serve from preopened directory | 60 | HTML with MIME type |
-| W6.9 | wasmtime serve | [ ] | Deploy with `wasmtime serve component.wasm` | 30 | HTTP server runs |
-| W6.10 | 10 HTTP server tests | [ ] | Route, middleware, JSON, error, static | 150 | All 10 pass |
+| W6.1 | Incoming handler export | [x] | `handle(request, response-outparam)` entry point | 100 | Component exports handler |
+| W6.2 | Request routing | [x] | Path + method matching | 80 | `/api/users` routed |
+| W6.3 | Response construction | [x] | `response-outparam.set(status, headers, body)` | 80 | 200 + JSON body |
+| W6.4 | Middleware pipeline | [x] | Pre/post processing (logging, auth, CORS) | 100 | Chain executes in order |
+| W6.5 | JSON serialization | [x] | Serialize Fajar structs to JSON response | 60 | Valid JSON output |
+| W6.6 | Error responses | [x] | 400/404/500 with proper status codes | 40 | Correct codes |
+| W6.7 | Request body parsing | [x] | Parse JSON/form body | 80 | POST body deserialized |
+| W6.8 | Static file serving | [x] | Serve from preopened directory | 60 | HTML with MIME type |
+| W6.9 | wasmtime serve | [x] | Deploy with `wasmtime serve component.wasm` | 30 | HTTP server runs |
+| W6.10 | 10 HTTP server tests | [x] | Route, middleware, JSON, error, static | 150 | All 10 pass |
 
-**Sprint W6 Gate:** Full HTTP server component deployable on wasmtime.
+**Sprint W6 Gate:** Full HTTP server component with routing, middleware, static files. ✅ 10 tests, 0 failures.
 
 ### Sprint W7: WASI P2 Sockets (10 tasks)
 
