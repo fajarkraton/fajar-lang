@@ -626,108 +626,109 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 **Sprints:** 10 | **Tasks:** 100 | **LOC:** ~8,000
 **Dependency:** Phase 1 complete. Option C (incremental) speeds up iteration.
 **Existing:** 3,149 LOC, 69 tests (libclang C++, PyO3 Python, basic Rust bridge).
+**Status:** Sprints E1-E6 COMPLETE (2026-04-01)
 
 ### Sprint E1: C++ Template Support (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E1.1 | Template class detection | [ ] | Detect `template<class T>` via libclang | 80 | `std::vector<T>` detected |
-| E1.2 | Template instantiation | [ ] | Generate bindings for `vector<int>` | 120 | `vector_i32` usable |
-| E1.3 | Nested templates | [ ] | `map<string, vector<int>>` | 80 | Nested types correct |
-| E1.4 | Template methods | [ ] | `.push_back()`, `.at()` etc. | 80 | Method calls work |
-| E1.5 | SFINAE/concepts | [ ] | Handle conditional template methods | 60 | Only valid methods exposed |
-| E1.6 | Template aliases | [ ] | `using Vec = vector<int>` | 40 | Aliases map correctly |
-| E1.7 | Variadic templates | [ ] | `template<typename... Args>` basic | 60 | `tuple<int, float, string>` |
-| E1.8 | Partial specialization | [ ] | `vector<bool>` uses bool specialization | 60 | Specializations handled |
-| E1.9 | Default template args | [ ] | `template<class T = int>` | 40 | Defaults applied |
-| E1.10 | 10 template tests | [ ] | Vector, map, nested, methods, variadic | 150 | All 10 pass with g++ |
+| E1.1 | Template class detection | [x] | Detect `template<class T>` via libclang | 80 | `std::vector<T>` detected |
+| E1.2 | Template instantiation | [x] | Generate bindings for `vector<int>` | 120 | `vector_i32` usable |
+| E1.3 | Nested templates | [x] | `map<string, vector<int>>` | 80 | Nested types correct |
+| E1.4 | Template methods | [x] | `.push_back()`, `.at()` etc. | 80 | Method calls work |
+| E1.5 | SFINAE/concepts | [x] | Handle conditional template methods | 60 | Only valid methods exposed |
+| E1.6 | Template aliases | [x] | `using Vec = vector<int>` | 40 | Aliases map correctly |
+| E1.7 | Variadic templates | [x] | `template<typename... Args>` basic | 60 | `tuple<int, float, string>` |
+| E1.8 | Partial specialization | [x] | `vector<bool>` uses bool specialization | 60 | Specializations handled |
+| E1.9 | Default template args | [x] | `template<class T = int>` | 40 | Defaults applied |
+| E1.10 | 10 template tests | [x] | Vector, map, nested, methods, variadic | 150 | All 10 pass with g++ |
 
-**Sprint E1 Gate:** C++ templates compile and link, methods callable from Fajar.
+**Sprint E1 Gate:** C++ templates compile and link, methods callable from Fajar. ✅ 28 tests, 0 failures.
 
 ### Sprint E2: C++ Smart Pointer & RAII Bridge (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E2.1 | `unique_ptr<T>` | [ ] | Map to Fajar ownership (move-only) | 80 | Owned Widget works |
-| E2.2 | `shared_ptr<T>` | [ ] | Map to Fajar `Rc<T>` | 80 | Ref count tracks |
-| E2.3 | `weak_ptr<T>` | [ ] | Map to Fajar `Weak<T>` | 60 | Weak ref works |
-| E2.4 | RAII bridge | [ ] | C++ destructor called on Fajar drop | 80 | No resource leaks |
-| E2.5 | Move semantics | [ ] | `std::move()` mapped to Fajar moves | 60 | Object moved, not copied |
-| E2.6 | Copy semantics | [ ] | Copy constructor for copyable types | 50 | Deep copy works |
-| E2.7 | Custom deleters | [ ] | `unique_ptr<T, Deleter>` | 40 | Custom cleanup runs |
-| E2.8 | Ref-qualified methods | [ ] | `&` vs `&&` overload selection | 40 | Correct overload |
-| E2.9 | Exception safety | [ ] | C++ exception -> Fajar `Err(msg)` | 80 | Exceptions caught |
-| E2.10 | 10 smart pointer tests | [ ] | unique, shared, weak, RAII, move, exception | 150 | All 10 pass |
+| E2.1 | `unique_ptr<T>` | [x] | Map to Fajar ownership (move-only) | 80 | Owned Widget works |
+| E2.2 | `shared_ptr<T>` | [x] | Map to Fajar `Rc<T>` | 80 | Ref count tracks |
+| E2.3 | `weak_ptr<T>` | [x] | Map to Fajar `Weak<T>` | 60 | Weak ref works |
+| E2.4 | RAII bridge | [x] | C++ destructor called on Fajar drop | 80 | No resource leaks |
+| E2.5 | Move semantics | [x] | `std::move()` mapped to Fajar moves | 60 | Object moved, not copied |
+| E2.6 | Copy semantics | [x] | Copy constructor for copyable types | 50 | Deep copy works |
+| E2.7 | Custom deleters | [x] | `unique_ptr<T, Deleter>` | 40 | Custom cleanup runs |
+| E2.8 | Ref-qualified methods | [x] | `&` vs `&&` overload selection | 40 | Correct overload |
+| E2.9 | Exception safety | [x] | C++ exception -> Fajar `Err(msg)` | 80 | Exceptions caught |
+| E2.10 | 10 smart pointer tests | [x] | unique, shared, weak, RAII, move, exception | 150 | All 10 pass |
 
-**Sprint E2 Gate:** C++ smart pointers and RAII fully bridged.
+**Sprint E2 Gate:** C++ smart pointers and RAII fully bridged. ✅ 24 tests, 0 failures.
 
 ### Sprint E3: C++ STL Container Bridge (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E3.1 | `std::string` <-> `str` | [ ] | Zero-copy where possible | 80 | Round-trip preserves |
-| E3.2 | `vector<T>` <-> `Array<T>` | [ ] | Automatic element conversion | 80 | `[1,2,3]` round-trips |
-| E3.3 | `map<K,V>` <-> `HashMap` | [ ] | Key-value conversion | 80 | Entries preserved |
-| E3.4 | `set<T>` <-> `HashSet<T>` | [ ] | Unique elements | 60 | Set ops work |
-| E3.5 | `optional<T>` <-> `Option<T>` | [ ] | None/Some mapping | 40 | `nullopt` -> `None` |
-| E3.6 | `variant<T...>` <-> enum | [ ] | Tagged union conversion | 80 | Variant -> enum |
-| E3.7 | `tuple<T...>` <-> tuple | [ ] | Positional access | 60 | Elements accessible |
-| E3.8 | `array<T,N>` <-> `[T; N]` | [ ] | Fixed-size conversion | 40 | Size preserved |
-| E3.9 | `span<T>` <-> slice | [ ] | No-copy view | 60 | View works |
-| E3.10 | 10 STL container tests | [ ] | String, vector, map, optional, variant | 150 | All 10 pass |
+| E3.1 | `std::string` <-> `str` | [x] | Zero-copy where possible | 80 | Round-trip preserves |
+| E3.2 | `vector<T>` <-> `Array<T>` | [x] | Automatic element conversion | 80 | `[1,2,3]` round-trips |
+| E3.3 | `map<K,V>` <-> `HashMap` | [x] | Key-value conversion | 80 | Entries preserved |
+| E3.4 | `set<T>` <-> `HashSet<T>` | [x] | Unique elements | 60 | Set ops work |
+| E3.5 | `optional<T>` <-> `Option<T>` | [x] | None/Some mapping | 40 | `nullopt` -> `None` |
+| E3.6 | `variant<T...>` <-> enum | [x] | Tagged union conversion | 80 | Variant -> enum |
+| E3.7 | `tuple<T...>` <-> tuple | [x] | Positional access | 60 | Elements accessible |
+| E3.8 | `array<T,N>` <-> `[T; N]` | [x] | Fixed-size conversion | 40 | Size preserved |
+| E3.9 | `span<T>` <-> slice | [x] | No-copy view | 60 | View works |
+| E3.10 | 10 STL container tests | [x] | String, vector, map, optional, variant | 150 | All 10 pass |
 
-**Sprint E3 Gate:** All major STL containers bridge seamlessly.
+**Sprint E3 Gate:** All major STL containers bridge seamlessly. ✅ 27 tests, 0 failures.
 
 ### Sprint E4: Python Async Interop (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E4.1 | Python coroutine calling | [ ] | Call `async def` from Fajar | 120 | `await py_async_fn()` |
-| E4.2 | asyncio event loop bridge | [ ] | Python asyncio + Fajar tokio coexist | 100 | Both loops run |
-| E4.3 | Fajar async -> Python | [ ] | Expose Fajar async fn as Python awaitable | 100 | Python `await fj_fn()` |
-| E4.4 | Async generator bridge | [ ] | Python `async for` consumes Fajar gen | 80 | Async iteration |
-| E4.5 | GIL management | [ ] | Release GIL during Fajar computation | 60 | Python not blocked |
-| E4.6 | Exception -> error | [ ] | `asyncio.TimeoutError` -> `Err(Timeout)` | 50 | Propagated |
-| E4.7 | Cancellation | [ ] | Cancel Python coroutine from Fajar | 50 | CancelledError raised |
-| E4.8 | Timeout support | [ ] | Set timeout for Python async calls | 40 | Timeout triggers cancel |
-| E4.9 | Connection pooling | [ ] | Share HTTP/DB connections | 60 | Single pool |
-| E4.10 | 10 async Python tests | [ ] | Coroutine, event loop, gen, GIL, cancel | 150 | All 10 pass |
+| E4.1 | Python coroutine calling | [x] | Call `async def` from Fajar | 120 | `await py_async_fn()` |
+| E4.2 | asyncio event loop bridge | [x] | Python asyncio + Fajar tokio coexist | 100 | Both loops run |
+| E4.3 | Fajar async -> Python | [x] | Expose Fajar async fn as Python awaitable | 100 | Python `await fj_fn()` |
+| E4.4 | Async generator bridge | [x] | Python `async for` consumes Fajar gen | 80 | Async iteration |
+| E4.5 | GIL management | [x] | Release GIL during Fajar computation | 60 | Python not blocked |
+| E4.6 | Exception -> error | [x] | `asyncio.TimeoutError` -> `Err(Timeout)` | 50 | Propagated |
+| E4.7 | Cancellation | [x] | Cancel Python coroutine from Fajar | 50 | CancelledError raised |
+| E4.8 | Timeout support | [x] | Set timeout for Python async calls | 40 | Timeout triggers cancel |
+| E4.9 | Connection pooling | [x] | Share HTTP/DB connections | 60 | Single pool |
+| E4.10 | 10 async Python tests | [x] | Coroutine, event loop, gen, GIL, cancel | 150 | All 10 pass |
 
-**Sprint E4 Gate:** Python async fully interoperable with Fajar async.
+**Sprint E4 Gate:** Python async fully interoperable with Fajar async. ✅ 32 tests, 0 failures.
 
 ### Sprint E5: Python NumPy/PyTorch Bridge (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E5.1 | Zero-copy NumPy -> Tensor | [ ] | Share memory, no copy for compatible dtypes | 100 | Memory shared |
-| E5.2 | Zero-copy Tensor -> NumPy | [ ] | Export Fajar Tensor as numpy view | 80 | Python reads data |
-| E5.3 | PyTorch tensor bridge | [ ] | `torch.Tensor` <-> Fajar Tensor | 100 | GPU tensors stay on GPU |
-| E5.4 | dtype mapping | [ ] | All numpy dtypes to Fajar types | 60 | 12 dtypes supported |
-| E5.5 | Shape/stride handling | [ ] | Non-contiguous views preserved | 60 | Transposed views work |
-| E5.6 | PyTorch model loading | [ ] | Load `.pt` model via Python bridge | 80 | Pre-trained runs |
-| E5.7 | Mixed training | [ ] | Train in Fajar, eval in PyTorch (or vice versa) | 100 | Weights shared |
-| E5.8 | ONNX export | [ ] | `fj_model.export_onnx()` via Python | 60 | Valid ONNX produced |
-| E5.9 | Batch processing | [ ] | Auto numpy/tensor conversion for batches | 60 | Pipeline works |
-| E5.10 | 10 NumPy/PyTorch tests | [ ] | Zero-copy, dtype, model, mixed, ONNX | 150 | All 10 pass |
+| E5.1 | Zero-copy NumPy -> Tensor | [x] | Share memory, no copy for compatible dtypes | 100 | Memory shared |
+| E5.2 | Zero-copy Tensor -> NumPy | [x] | Export Fajar Tensor as numpy view | 80 | Python reads data |
+| E5.3 | PyTorch tensor bridge | [x] | `torch.Tensor` <-> Fajar Tensor | 100 | GPU tensors stay on GPU |
+| E5.4 | dtype mapping | [x] | All numpy dtypes to Fajar types | 60 | 12 dtypes supported |
+| E5.5 | Shape/stride handling | [x] | Non-contiguous views preserved | 60 | Transposed views work |
+| E5.6 | PyTorch model loading | [x] | Load `.pt` model via Python bridge | 80 | Pre-trained runs |
+| E5.7 | Mixed training | [x] | Train in Fajar, eval in PyTorch (or vice versa) | 100 | Weights shared |
+| E5.8 | ONNX export | [x] | `fj_model.export_onnx()` via Python | 60 | Valid ONNX produced |
+| E5.9 | Batch processing | [x] | Auto numpy/tensor conversion for batches | 60 | Pipeline works |
+| E5.10 | 10 NumPy/PyTorch tests | [x] | Zero-copy, dtype, model, mixed, ONNX | 150 | All 10 pass |
 
-**Sprint E5 Gate:** NumPy + PyTorch zero-copy interop, model loading works.
+**Sprint E5 Gate:** NumPy + PyTorch zero-copy interop, model loading works. ✅ 30 tests, 0 failures.
 
 ### Sprint E6: Rust Trait Object Marshalling (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| E6.1 | Rust trait -> Fajar trait | [ ] | Import Rust trait definition | 80 | `trait Display` imported |
-| E6.2 | Fajar impl for Rust struct | [ ] | Fajar implements trait Rust calls | 100 | Cross-boundary dispatch |
-| E6.3 | `dyn Trait` across FFI | [ ] | Pass trait objects between languages | 100 | vtable works |
-| E6.4 | Generic function bridge | [ ] | Call Rust generic fn with Fajar types | 80 | Monomorphization at FFI |
-| E6.5 | Lifetime handling | [ ] | Map Rust lifetimes to Fajar borrows | 80 | No dangling refs |
-| E6.6 | Error type bridge | [ ] | `Result<T, E>` seamless conversion | 50 | Errors readable |
-| E6.7 | Iterator bridge | [ ] | Rust iterators in Fajar for-in | 60 | `for x in rust_iter()` |
-| E6.8 | Closure bridge | [ ] | Pass Fajar closures to Rust HOFs | 80 | `sort_by(|a, b| ...)` |
-| E6.9 | Async bridge | [ ] | Rust futures -> Fajar async/await | 80 | `await rust_fn()` |
-| E6.10 | 10 Rust bridge tests | [ ] | Traits, dyn, generics, lifetimes, closures | 150 | All 10 pass |
+| E6.1 | Rust trait -> Fajar trait | [x] | Import Rust trait definition | 80 | `trait Display` imported |
+| E6.2 | Fajar impl for Rust struct | [x] | Fajar implements trait Rust calls | 100 | Cross-boundary dispatch |
+| E6.3 | `dyn Trait` across FFI | [x] | Pass trait objects between languages | 100 | vtable works |
+| E6.4 | Generic function bridge | [x] | Call Rust generic fn with Fajar types | 80 | Monomorphization at FFI |
+| E6.5 | Lifetime handling | [x] | Map Rust lifetimes to Fajar borrows | 80 | No dangling refs |
+| E6.6 | Error type bridge | [x] | `Result<T, E>` seamless conversion | 50 | Errors readable |
+| E6.7 | Iterator bridge | [x] | Rust iterators in Fajar for-in | 60 | `for x in rust_iter()` |
+| E6.8 | Closure bridge | [x] | Pass Fajar closures to Rust HOFs | 80 | `sort_by(|a, b| ...)` |
+| E6.9 | Async bridge | [x] | Rust futures -> Fajar async/await | 80 | `await rust_fn()` |
+| E6.10 | 10 Rust bridge tests | [x] | Traits, dyn, generics, lifetimes, closures | 150 | All 10 pass |
 
-**Sprint E6 Gate:** Full bidirectional Rust interop with trait objects.
+**Sprint E6 Gate:** Full bidirectional Rust interop with trait objects. ✅ 18 tests, 0 failures.
 
 ### Sprint E7: Automatic Binding Generator (10 tasks)
 
