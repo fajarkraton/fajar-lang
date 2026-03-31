@@ -206,16 +206,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K8.1 | `[T; N]` fixed array type | [ ] | First-class fixed-size array with const generic | 80 | `[i32; 3]` distinct from `[i32; 4]` |
-| K8.2 | Matrix type | [ ] | `struct Matrix<T, const R: usize, const C: usize>` | 60 | `Matrix<f64, 3, 3>` is a type |
-| K8.3 | Const generic functions | [ ] | `fn dot<const N: usize>(a: [f64; N], b: [f64; N]) -> f64` | 60 | Dimension-checked dot product |
-| K8.4 | Const generic methods | [ ] | `impl<const N: usize> [T; N] { fn len() -> usize { N } }` | 60 | Methods on const generic types |
-| K8.5 | Const generic trait impl | [ ] | `impl<const N: usize> Display for [T; N]` | 60 | Display for all array sizes |
-| K8.6 | Const arithmetic in types | [ ] | `fn concat<...>(x: [T; A], y: [T; B]) -> [T; A + B]` | 80 | Return type computed from consts |
-| K8.7 | Dependent type verification | [ ] | Verify `A + B` doesn't overflow usize | 40 | Overflow -> compile error |
-| K8.8 | Const generic enum | [ ] | `enum SmallVec<T, const N: usize> { Inline([T; N]), Heap(Vec<T>) }` | 60 | Enum with inline buffer |
-| K8.9 | Default const values | [ ] | `struct Buffer<T, const N: usize = 1024>` | 40 | Default const parameter |
-| K8.10 | 10 type system tests | [ ] | Array, matrix, functions, methods, arithmetic | 150 | All 10 pass |
+| K8.1 | `[T; N]` fixed array type | [x] | First-class fixed-size array with const generic | 80 | `[i32; 3]` distinct from `[i32; 4]` |
+| K8.2 | Matrix type | [x] | `struct Matrix<T, const R: usize, const C: usize>` | 60 | `Matrix<f64, 3, 3>` is a type |
+| K8.3 | Const generic functions | [x] | `fn dot<const N: usize>(a: [f64; N], b: [f64; N]) -> f64` | 60 | Dimension-checked dot product |
+| K8.4 | Const generic methods | [x] | `impl<const N: usize> [T; N] { fn len() -> usize { N } }` | 60 | Methods on const generic types |
+| K8.5 | Const generic trait impl | [x] | `impl<const N: usize> Display for [T; N]` | 60 | Display for all array sizes |
+| K8.6 | Const arithmetic in types | [x] | `fn concat<...>(x: [T; A], y: [T; B]) -> [T; A + B]` | 80 | Return type computed from consts |
+| K8.7 | Dependent type verification | [x] | Verify `A + B` doesn't overflow usize | 40 | Overflow -> compile error |
+| K8.8 | Const generic enum | [x] | `enum SmallVec<T, const N: usize> { Inline([T; N]), Heap(Vec<T>) }` | 60 | Enum with inline buffer |
+| K8.9 | Default const values | [x] | `struct Buffer<T, const N: usize = 1024>` | 40 | Default const parameter |
+| K8.10 | 10 type system tests | [x] | Array, matrix, functions, methods, arithmetic | 150 | All 10 pass |
 
 **Sprint K8 Gate:** Const generics fully integrated into type system and codegen.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 70 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 80 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  80 / 210 tasks complete  (38.1%)
+Phase 1:  90 / 210 tasks complete  (42.9%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    80 / 710 tasks complete  (11.3%)
+TOTAL:    90 / 710 tasks complete  (12.7%)
 ```
 
 ---

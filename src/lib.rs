@@ -29,6 +29,7 @@ pub mod bsp;
 pub mod codegen;
 pub mod compiler;
 pub mod const_alloc;
+pub mod const_generic_types;
 pub mod const_generics;
 pub mod const_macros;
 pub mod const_reflect;
