@@ -458,8 +458,8 @@ impl Parser {
         while !self.at(&TokenKind::Gt) && !self.at_eof() {
             let start = self.peek().span.start;
 
-            // Check for `comptime` modifier: `comptime N: i64`
-            let is_comptime = self.eat(&TokenKind::Comptime);
+            // Check for `comptime` or `const` modifier: `const N: usize` or `comptime N: i64`
+            let is_comptime = self.eat(&TokenKind::Comptime) || self.eat(&TokenKind::Const);
 
             // Check for effect variable: identifier followed by `: Effect`
             // e.g., `fn map<E: Effect>(...)` or just `<E>` in effect position
@@ -467,16 +467,25 @@ impl Parser {
 
             let mut bounds = Vec::new();
             let mut is_effect = false;
+            let mut const_type: Option<String> = None;
+
             if self.eat(&TokenKind::Colon) {
-                // Check if bound is "Effect" — marks as effect variable
-                if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "Effect") {
-                    is_effect = true;
-                }
-                loop {
-                    let bound = self.parse_trait_bound()?;
-                    bounds.push(bound);
-                    if !self.eat(&TokenKind::Plus) {
-                        break;
+                if is_comptime {
+                    // For const generic params, parse a type name (not a trait bound).
+                    // `const N: usize` — usize is a keyword, not an identifier.
+                    let type_name = self.parse_const_param_type()?;
+                    const_type = Some(type_name);
+                } else {
+                    // Check if bound is "Effect" — marks as effect variable
+                    if matches!(self.peek_kind(), TokenKind::Ident(s) if s == "Effect") {
+                        is_effect = true;
+                    }
+                    loop {
+                        let bound = self.parse_trait_bound()?;
+                        bounds.push(bound);
+                        if !self.eat(&TokenKind::Plus) {
+                            break;
+                        }
                     }
                 }
             }
@@ -487,6 +496,7 @@ impl Parser {
                 bounds,
                 is_comptime,
                 is_effect,
+                const_type,
                 span: Span::new(start, end),
             });
 
@@ -497,6 +507,40 @@ impl Parser {
 
         self.expect(&TokenKind::Gt)?;
         Ok((lifetime_params, generic_params))
+    }
+
+    /// Parses the type annotation of a const generic parameter.
+    ///
+    /// Handles keyword types like `usize`, `i32`, `bool` that are not identifiers.
+    /// `const N: usize` → returns `"usize"`.
+    fn parse_const_param_type(&mut self) -> Result<String, ParseError> {
+        let kind = self.peek_kind().clone();
+        let type_name = match kind {
+            TokenKind::Usize => { self.advance(); "usize".to_string() }
+            TokenKind::Isize => { self.advance(); "isize".to_string() }
+            TokenKind::I8 => { self.advance(); "i8".to_string() }
+            TokenKind::I16 => { self.advance(); "i16".to_string() }
+            TokenKind::I32 => { self.advance(); "i32".to_string() }
+            TokenKind::I64 => { self.advance(); "i64".to_string() }
+            TokenKind::I128 => { self.advance(); "i128".to_string() }
+            TokenKind::U8 => { self.advance(); "u8".to_string() }
+            TokenKind::U16 => { self.advance(); "u16".to_string() }
+            TokenKind::U32 => { self.advance(); "u32".to_string() }
+            TokenKind::U64 => { self.advance(); "u64".to_string() }
+            TokenKind::U128 => { self.advance(); "u128".to_string() }
+            TokenKind::BoolType => { self.advance(); "bool".to_string() }
+            TokenKind::Ident(name) => { let n = name.clone(); self.advance(); n }
+            _ => {
+                let tok = self.peek().clone();
+                return Err(ParseError::ExpectedIdentifier {
+                    found: format!("{}", tok.kind),
+                    line: tok.line,
+                    col: tok.col,
+                    span: tok.span,
+                });
+            }
+        };
+        Ok(type_name)
     }
 
     /// Parses a trait bound: `TraitName<TypeArgs>`.

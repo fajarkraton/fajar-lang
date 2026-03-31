@@ -87,16 +87,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K1.1 | Const parameter syntax | [ ] | `fn zeros<const N: usize>() -> [f64; N]` parsed | 80 | Parser handles const generics |
-| K1.2 | Const param in type system | [ ] | `N` usable as type-level integer, `[T; N]` has type `Array<T, N>` | 100 | Type system resolves const params |
-| K1.3 | Const param monomorphization | [ ] | Instantiate `zeros<3>()` -> concrete function | 80 | Monomorphized function correct |
-| K1.4 | Const expressions in types | [ ] | `[T; N + 1]`, `[T; N * 2]` in type positions | 60 | Arithmetic in type expressions |
-| K1.5 | Const parameter bounds | [ ] | `where N > 0` compile-time constraint | 60 | `zeros<0>()` -> compile error |
-| K1.6 | Const parameter inference | [ ] | Infer N from context: `let arr: [i32; 3] = zeros()` | 60 | N inferred as 3 |
-| K1.7 | Const param in struct | [ ] | `struct Matrix<const R: usize, const C: usize>` | 60 | Struct parameterized by const |
-| K1.8 | Const param in enum | [ ] | `enum SmallVec<T, const N: usize>` | 40 | Enum with inline storage |
-| K1.9 | Const param in impl | [ ] | `impl<const N: usize> Matrix<N, N> { fn identity() }` | 50 | Impl blocks with const params |
-| K1.10 | 10 const generic tests | [ ] | Parse, monomorphize, infer, struct, enum, impl | 150 | All 10 pass |
+| K1.1 | Const parameter syntax | [x] | `fn zeros<const N: usize>() -> [f64; N]` parsed | 80 | Parser handles const generics |
+| K1.2 | Const param in type system | [x] | `N` usable as type-level integer, `[T; N]` has type `Array<T, N>` | 100 | Type system resolves const params |
+| K1.3 | Const param monomorphization | [x] | Instantiate `zeros<3>()` -> concrete function | 80 | Monomorphized function correct |
+| K1.4 | Const expressions in types | [x] | `[T; N + 1]`, `[T; N * 2]` in type positions | 60 | Arithmetic in type expressions |
+| K1.5 | Const parameter bounds | [x] | `where N > 0` compile-time constraint | 60 | `zeros<0>()` -> compile error |
+| K1.6 | Const parameter inference | [x] | Infer N from context: `let arr: [i32; 3] = zeros()` | 60 | N inferred as 3 |
+| K1.7 | Const param in struct | [x] | `struct Matrix<const R: usize, const C: usize>` | 60 | Struct parameterized by const |
+| K1.8 | Const param in enum | [x] | `enum SmallVec<T, const N: usize>` | 40 | Enum with inline storage |
+| K1.9 | Const param in impl | [x] | `impl<const N: usize> Matrix<N, N> { fn identity() }` | 50 | Impl blocks with const params |
+| K1.10 | 10 const generic tests | [x] | Parse, monomorphize, infer, struct, enum, impl | 150 | All 10 pass |
 
 **Sprint K1 Gate:** `cargo test --lib` passes with all new const generic tests green.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 0 | 100 | PENDING |
+| **H: Const Fn** | K1-K10 | 10 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  10 / 210 tasks complete  ( 4.8%)
+Phase 1:  20 / 210 tasks complete  ( 9.5%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    10 / 710 tasks complete  ( 1.4%)
+TOTAL:    20 / 710 tasks complete  ( 2.8%)
 ```
 
 ---

@@ -266,7 +266,7 @@ pub struct Param {
     pub span: Span,
 }
 
-/// A generic type parameter: `T: Bound1 + Bound2`.
+/// A generic type parameter: `T: Bound1 + Bound2` or `const N: usize`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericParam {
     /// Type parameter name.
@@ -278,6 +278,9 @@ pub struct GenericParam {
     /// Whether this is an effect variable (generic over effects).
     /// `fn map<E: Effect>(f: fn(A)->B with E) with E`
     pub is_effect: bool,
+    /// For const generic parameters, the type name (e.g., `"usize"`, `"i32"`).
+    /// Set when `is_comptime` is true and a `: type` annotation is provided.
+    pub const_type: Option<String>,
     /// Source span.
     pub span: Span,
 }

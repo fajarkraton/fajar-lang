@@ -6572,6 +6572,7 @@ mod tests {
                 bounds: vec![],
                 is_comptime: false,
                 is_effect: false,
+                const_type: None,
                 span: dummy_span(),
             }],
             params: vec![
@@ -6869,6 +6870,7 @@ mod tests {
                     bounds: vec![],
                     is_comptime: false,
                     is_effect: false,
+                    const_type: None,
                     span: dummy_span(),
                 },
                 crate::parser::ast::GenericParam {
@@ -6876,6 +6878,7 @@ mod tests {
                     bounds: vec![],
                     is_comptime: false,
                     is_effect: false,
+                    const_type: None,
                     span: dummy_span(),
                 },
             ],
