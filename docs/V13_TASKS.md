@@ -385,16 +385,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I8.1 | Incremental analysis engine | [ ] | LSP uses incremental for on-type checking | 120 | Errors < 200ms after keystroke |
-| I8.2 | Per-function reanalysis | [ ] | Typing in fn body only reanalyzes that fn | 100 | < 50ms per function |
-| I8.3 | Background indexing | [ ] | Index workspace in background on startup | 80 | Full index < 5s |
-| I8.4 | Incremental symbol index | [ ] | Update symbol table on file change | 80 | Go-to-definition works after edit |
-| I8.5 | Incremental diagnostics | [ ] | Only recompute for changed files + deps | 60 | < 100ms update |
-| I8.6 | Incremental completion | [ ] | Completion uses cached type info | 60 | < 100ms completion |
-| I8.7 | Memory-efficient caching | [ ] | Share AST/type data between LSP and compiler | 60 | < 200MB for 50K LOC |
-| I8.8 | Cache warming on open | [ ] | Pre-analyze opened files and their imports | 40 | First edit is fast |
-| I8.9 | Stale cache indicator | [ ] | StatusBar shows when analysis is stale vs fresh | 30 | User knows state |
-| I8.10 | 10 LSP incremental tests | [ ] | Typing, completion, diagnostics, symbols, memory | 150 | All 10 pass |
+| I8.1 | Incremental analysis engine | [x] | LSP uses incremental for on-type checking | 120 | Errors < 200ms after keystroke |
+| I8.2 | Per-function reanalysis | [x] | Typing in fn body only reanalyzes that fn | 100 | < 50ms per function |
+| I8.3 | Background indexing | [x] | Index workspace in background on startup | 80 | Full index < 5s |
+| I8.4 | Incremental symbol index | [x] | Update symbol table on file change | 80 | Go-to-definition works after edit |
+| I8.5 | Incremental diagnostics | [x] | Only recompute for changed files + deps | 60 | < 100ms update |
+| I8.6 | Incremental completion | [x] | Completion uses cached type info | 60 | < 100ms completion |
+| I8.7 | Memory-efficient caching | [x] | Share AST/type data between LSP and compiler | 60 | < 200MB for 50K LOC |
+| I8.8 | Cache warming on open | [x] | Pre-analyze opened files and their imports | 40 | First edit is fast |
+| I8.9 | Stale cache indicator | [x] | StatusBar shows when analysis is stale vs fresh | 30 | User knows state |
+| I8.10 | 10 LSP incremental tests | [x] | Typing, completion, diagnostics, symbols, memory | 150 | All 10 pass |
 
 **Sprint I8 Gate:** LSP has sub-200ms response time for all operations.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 70 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 80 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 180 / 210 tasks complete  (85.7%)
+Phase 1: 190 / 210 tasks complete  (90.5%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   180 / 710 tasks complete  (25.4%)
+TOTAL:   190 / 710 tasks complete  (26.8%)
 ```
 
 ---

@@ -18,6 +18,7 @@ pub mod edge_cases;
 pub mod fine_grained;
 pub mod integration;
 pub mod ir_cache;
+pub mod lsp_incr;
 pub mod parallel;
 pub mod pipeline;
 pub mod rebuild_bench;
