@@ -14,6 +14,7 @@
 pub mod bench;
 pub mod cache;
 pub mod disk;
+pub mod edge_cases;
 pub mod fine_grained;
 pub mod integration;
 pub mod ir_cache;

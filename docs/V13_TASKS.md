@@ -368,16 +368,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I7.1 | Parse error recovery | [ ] | Partially parsed file still caches others | 60 | Error in A doesn't invalidate B |
-| I7.2 | Type error recovery | [ ] | Type errors don't prevent caching valid modules | 60 | Valid modules cached |
-| I7.3 | Interrupted build recovery | [ ] | Resume after Ctrl+C without corruption | 60 | Build completes on retry |
-| I7.4 | Clock skew handling | [ ] | Content hash (not mtime) is source of truth | 40 | No false invalidation |
-| I7.5 | Symlink handling | [ ] | Follow symlinks, cache by real path | 40 | Symlinked files tracked |
-| I7.6 | Case sensitivity | [ ] | Handle case-insensitive FS (macOS/Windows) | 40 | No duplicate entries |
-| I7.7 | Unicode paths | [ ] | Handle Unicode file paths in cache keys | 30 | `src/module.fj` cached correctly |
-| I7.8 | Large file handling | [ ] | Efficient hashing for files > 1MB | 30 | 10MB file hashed < 10ms |
-| I7.9 | Circular dep detection | [ ] | Detect and report circular module deps | 60 | Clear error message |
-| I7.10 | 10 edge case tests | [ ] | Parse error, interrupt, clock, symlink, circular | 150 | All 10 pass |
+| I7.1 | Parse error recovery | [x] | Partially parsed file still caches others | 60 | Error in A doesn't invalidate B |
+| I7.2 | Type error recovery | [x] | Type errors don't prevent caching valid modules | 60 | Valid modules cached |
+| I7.3 | Interrupted build recovery | [x] | Resume after Ctrl+C without corruption | 60 | Build completes on retry |
+| I7.4 | Clock skew handling | [x] | Content hash (not mtime) is source of truth | 40 | No false invalidation |
+| I7.5 | Symlink handling | [x] | Follow symlinks, cache by real path | 40 | Symlinked files tracked |
+| I7.6 | Case sensitivity | [x] | Handle case-insensitive FS (macOS/Windows) | 40 | No duplicate entries |
+| I7.7 | Unicode paths | [x] | Handle Unicode file paths in cache keys | 30 | `src/module.fj` cached correctly |
+| I7.8 | Large file handling | [x] | Efficient hashing for files > 1MB | 30 | 10MB file hashed < 10ms |
+| I7.9 | Circular dep detection | [x] | Detect and report circular module deps | 60 | Clear error message |
+| I7.10 | 10 edge case tests | [x] | Parse error, interrupt, clock, symlink, circular | 150 | All 10 pass |
 
 **Sprint I7 Gate:** Incremental compilation is robust against all edge cases.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 60 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 70 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 170 / 210 tasks complete  (81.0%)
+Phase 1: 180 / 210 tasks complete  (85.7%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   170 / 710 tasks complete  (23.9%)
+TOTAL:   180 / 710 tasks complete  (25.4%)
 ```
 
 ---
