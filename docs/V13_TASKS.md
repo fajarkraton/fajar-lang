@@ -172,16 +172,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K6.1 | `const_eval!()` macro | [ ] | Evaluate expression at compile time in macro | 60 | `const_eval!(1 + 2)` -> `3` |
-| K6.2 | `static_assert!()` | [ ] | Compile-time assertion | 40 | `static_assert!(size_of::<T>() <= 64)` |
-| K6.3 | `include_str!()` | [ ] | Include file contents as const string | 40 | File embedded at compile time |
-| K6.4 | `include_bytes!()` | [ ] | Include file as const byte array | 40 | Binary data embedded |
-| K6.5 | `env!()` | [ ] | Read environment variable at compile time | 30 | `env!("VERSION")` -> build-time value |
-| K6.6 | `concat!()` | [ ] | Concatenate const strings | 30 | `concat!("v", env!("VERSION"))` |
-| K6.7 | `cfg!()` enhancement | [ ] | `cfg!(target_os = "linux")` as const bool | 30 | Conditional compilation |
-| K6.8 | `option_env!()` | [ ] | Optional env var as `Option<str>` | 30 | Missing var -> `None` |
-| K6.9 | `compile_error!()` | [ ] | User-defined compile error | 20 | Custom error at compile time |
-| K6.10 | 10 macro const tests | [ ] | eval, assert, include, env, cfg, compile_error | 150 | All 10 pass |
+| K6.1 | `const_eval!()` macro | [x] | Evaluate expression at compile time in macro | 60 | `const_eval!(1 + 2)` -> `3` |
+| K6.2 | `static_assert!()` | [x] | Compile-time assertion | 40 | `static_assert!(size_of::<T>() <= 64)` |
+| K6.3 | `include_str!()` | [x] | Include file contents as const string | 40 | File embedded at compile time |
+| K6.4 | `include_bytes!()` | [x] | Include file as const byte array | 40 | Binary data embedded |
+| K6.5 | `env!()` | [x] | Read environment variable at compile time | 30 | `env!("VERSION")` -> build-time value |
+| K6.6 | `concat!()` | [x] | Concatenate const strings | 30 | `concat!("v", env!("VERSION"))` |
+| K6.7 | `cfg!()` enhancement | [x] | `cfg!(target_os = "linux")` as const bool | 30 | Conditional compilation |
+| K6.8 | `option_env!()` | [x] | Optional env var as `Option<str>` | 30 | Missing var -> `None` |
+| K6.9 | `compile_error!()` | [x] | User-defined compile error | 20 | Custom error at compile time |
+| K6.10 | 10 macro const tests | [x] | eval, assert, include, env, cfg, compile_error | 150 | All 10 pass |
 
 **Sprint K6 Gate:** All const macros work, integrated with V12 macro system.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 50 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 60 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  60 / 210 tasks complete  (28.6%)
+Phase 1:  70 / 210 tasks complete  (33.3%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    60 / 710 tasks complete  ( 8.5%)
+TOTAL:    70 / 710 tasks complete  ( 9.9%)
 ```
 
 ---
