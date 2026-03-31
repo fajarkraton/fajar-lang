@@ -289,6 +289,8 @@ impl ConstValidationReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::const_alloc::{ConstAllocRegistry, TargetInfo};
+    use crate::const_pipeline::ConstContext;
 
     // ── K10.1: Const eval time benchmark ──
 

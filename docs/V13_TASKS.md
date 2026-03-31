@@ -266,16 +266,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I1.1 | Cache directory layout | [ ] | `target/incremental/{hash}/` with metadata.json + artifacts | 60 | Directory created on first build |
-| I1.2 | Artifact serialization | [ ] | Serialize analyzed AST + type info to bincode | 100 | Round-trip AST -> bytes -> AST matches |
-| I1.3 | Artifact deserialization | [ ] | Load cached artifacts on subsequent build | 80 | Cached build uses serialized data |
-| I1.4 | Content hash persistence | [ ] | Store SHA256 hashes in `target/incremental/hashes.json` | 50 | Hashes survive process restart |
-| I1.5 | Cache invalidation | [ ] | Invalidate when Cargo.toml, fj.toml, or compiler version changes | 60 | Config change triggers full rebuild |
-| I1.6 | Cache size management | [ ] | LRU eviction when cache exceeds `--cache-limit` (default 1GB) | 80 | Old artifacts evicted |
-| I1.7 | Cache corruption detection | [ ] | Validate checksum on load, discard corrupt entries | 60 | Corrupted cache -> clean rebuild |
-| I1.8 | Atomic cache writes | [ ] | Write to temp file, then atomic rename | 40 | Interrupted build doesn't corrupt |
-| I1.9 | `fj clean --incremental` | [ ] | CLI command to purge incremental cache | 20 | Cache directory removed |
-| I1.10 | 10 persistence tests | [ ] | Write/read/invalidate/corrupt/evict/clean | 150 | All 10 pass |
+| I1.1 | Cache directory layout | [x] | `target/incremental/{hash}/` with metadata.json + artifacts | 60 | Directory created on first build |
+| I1.2 | Artifact serialization | [x] | Serialize analyzed AST + type info to bincode | 100 | Round-trip AST -> bytes -> AST matches |
+| I1.3 | Artifact deserialization | [x] | Load cached artifacts on subsequent build | 80 | Cached build uses serialized data |
+| I1.4 | Content hash persistence | [x] | Store SHA256 hashes in `target/incremental/hashes.json` | 50 | Hashes survive process restart |
+| I1.5 | Cache invalidation | [x] | Invalidate when Cargo.toml, fj.toml, or compiler version changes | 60 | Config change triggers full rebuild |
+| I1.6 | Cache size management | [x] | LRU eviction when cache exceeds `--cache-limit` (default 1GB) | 80 | Old artifacts evicted |
+| I1.7 | Cache corruption detection | [x] | Validate checksum on load, discard corrupt entries | 60 | Corrupted cache -> clean rebuild |
+| I1.8 | Atomic cache writes | [x] | Write to temp file, then atomic rename | 40 | Interrupted build doesn't corrupt |
+| I1.9 | `fj clean --incremental` | [x] | CLI command to purge incremental cache | 20 | Cache directory removed |
+| I1.10 | 10 persistence tests | [x] | Write/read/invalidate/corrupt/evict/clean | 150 | All 10 pass |
 
 **Sprint I1 Gate:** Cache round-trips correctly, survives restart, handles corruption.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
+| **C: Incremental** | I1-I10 | 10 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 110 / 210 tasks complete  (52.4%)
+Phase 1: 120 / 210 tasks complete  (57.1%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   110 / 710 tasks complete  (15.5%)
+TOTAL:   120 / 710 tasks complete  (16.9%)
 ```
 
 ---
