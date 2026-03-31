@@ -317,16 +317,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I4.1 | Module-level parallelism | [ ] | Compile independent modules on separate threads | 120 | 4 modules -> 4 threads |
-| I4.2 | Thread pool config | [ ] | `--jobs=N` or `FJ_JOBS` env var (default = CPU count) | 40 | `fj build --jobs=8` works |
-| I4.3 | Topological scheduling | [ ] | Compile in dependency order, parallelize within levels | 80 | Level 0 first, then level 1 |
-| I4.4 | Work stealing scheduler | [ ] | Idle threads steal work from busy threads | 100 | All cores utilized |
-| I4.5 | Thread-safe diagnostics | [ ] | Collect errors from all threads without data races | 60 | All errors reported |
-| I4.6 | Parallel analysis | [ ] | Type checker on independent modules concurrently | 80 | Analysis parallelized |
-| I4.7 | Parallel codegen | [ ] | Cranelift/LLVM on independent functions | 80 | Codegen parallelized |
-| I4.8 | Progress reporting | [ ] | `[1/50] Compiling module_a...` progress bar | 40 | Real-time progress |
-| I4.9 | Deadlock prevention | [ ] | Detect and break circular compilation deps | 60 | No deadlocks |
-| I4.10 | 10 parallel tests | [ ] | 2/4/8 threads, scheduling, progress, deadlock | 150 | All 10 pass |
+| I4.1 | Module-level parallelism | [x] | Compile independent modules on separate threads | 120 | 4 modules -> 4 threads |
+| I4.2 | Thread pool config | [x] | `--jobs=N` or `FJ_JOBS` env var (default = CPU count) | 40 | `fj build --jobs=8` works |
+| I4.3 | Topological scheduling | [x] | Compile in dependency order, parallelize within levels | 80 | Level 0 first, then level 1 |
+| I4.4 | Work stealing scheduler | [x] | Idle threads steal work from busy threads | 100 | All cores utilized |
+| I4.5 | Thread-safe diagnostics | [x] | Collect errors from all threads without data races | 60 | All errors reported |
+| I4.6 | Parallel analysis | [x] | Type checker on independent modules concurrently | 80 | Analysis parallelized |
+| I4.7 | Parallel codegen | [x] | Cranelift/LLVM on independent functions | 80 | Codegen parallelized |
+| I4.8 | Progress reporting | [x] | `[1/50] Compiling module_a...` progress bar | 40 | Real-time progress |
+| I4.9 | Deadlock prevention | [x] | Detect and break circular compilation deps | 60 | No deadlocks |
+| I4.10 | 10 parallel tests | [x] | 2/4/8 threads, scheduling, progress, deadlock | 150 | All 10 pass |
 
 **Sprint I4 Gate:** Parallel builds work with rayon/crossbeam, no data races.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 30 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 40 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 140 / 210 tasks complete  (66.7%)
+Phase 1: 150 / 210 tasks complete  (71.4%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   140 / 710 tasks complete  (19.7%)
+TOTAL:   150 / 710 tasks complete  (21.1%)
 ```
 
 ---

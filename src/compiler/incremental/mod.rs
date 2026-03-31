@@ -16,6 +16,7 @@ pub mod cache;
 pub mod disk;
 pub mod fine_grained;
 pub mod ir_cache;
+pub mod parallel;
 pub mod pipeline;
 
 use std::collections::{HashMap, HashSet, VecDeque};
