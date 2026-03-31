@@ -1,0 +1,49 @@
+// FFI v2 — NumPy Data Analysis from Fajar Lang
+//
+// Zero-copy tensor sharing between Fajar and Python/NumPy
+// Build: fj build --ffi python examples/ffi_numpy.fj
+
+@ffi("python")
+extern fn np_loadtxt(path: str) -> Tensor
+
+@ffi("python")
+extern fn np_mean(arr: Tensor, axis: i32) -> Tensor
+
+@ffi("python")
+extern fn np_std(arr: Tensor, axis: i32) -> Tensor
+
+@ffi("python")
+extern fn np_corrcoef(x: Tensor, y: Tensor) -> Tensor
+
+@ffi("python")
+extern fn sklearn_linear_regression_fit(x: Tensor, y: Tensor) -> LinearModel
+
+@ffi("python")
+extern fn sklearn_predict(model: LinearModel, x: Tensor) -> Tensor
+
+fn main() -> void {
+    println("Loading dataset...")
+    let data = np_loadtxt("data/housing.csv")
+
+    let features = data[:, 0..12]   // First 12 columns
+    let prices = data[:, 12]        // Last column (target)
+
+    println(f"Dataset: {features.shape[0]} samples, {features.shape[1]} features")
+
+    // Statistics (computed in NumPy, zero-copy)
+    let means = np_mean(features, 0)
+    let stds = np_std(features, 0)
+    println(f"Feature means: {means}")
+    println(f"Feature stds: {stds}")
+
+    // Correlation with price
+    let corr = np_corrcoef(features[:, 5], prices)
+    println(f"Rooms-Price correlation: {corr[0, 1]:.3}")
+
+    // Train linear regression (via scikit-learn)
+    let model = sklearn_linear_regression_fit(features, prices)
+    let predictions = sklearn_predict(model, features[0..5])
+    println(f"Predictions for first 5: {predictions}")
+
+    println("Analysis complete!")
+}

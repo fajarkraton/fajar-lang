@@ -36,7 +36,7 @@
       "patterns": [
         {
           "name": "storage.modifier.annotation.fajar",
-          "match": "@(kernel|device|safe|unsafe|ffi)\\b"
+          "match": "@(kernel|device|safe|unsafe|ffi|test|should_panic|ignore|distributed|requires|ensures|invariant|assert|gpu)\\b"
         }
       ]
     },
@@ -100,7 +100,7 @@
         },
         {
           "name": "keyword.declaration.fajar",
-          "match": "\\b(let|mut|fn|struct|enum|impl|trait|type|const)\\b"
+          "match": "\\b(let|mut|fn|struct|enum|impl|trait|type|const|gen|yield|async|await|comptime|where)\\b"
         },
         {
           "name": "keyword.other.fajar",

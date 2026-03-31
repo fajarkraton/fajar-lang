@@ -1,0 +1,47 @@
+// FFI v2 — OpenCV Face Detection from Fajar Lang
+//
+// Prerequisites: OpenCV 4.x installed, `pkg-config opencv4` works
+// Build: fj build --ffi opencv examples/ffi_opencv.fj
+
+@ffi("c++")
+extern fn cv_imread(path: str) -> Mat
+
+@ffi("c++")
+extern fn cv_cvtColor(src: Mat, code: i32) -> Mat
+
+@ffi("c++")
+extern fn cv_CascadeClassifier_load(path: str) -> CascadeClassifier
+
+@ffi("c++")
+extern fn cv_detectMultiScale(classifier: CascadeClassifier, img: Mat) -> Array<Rect>
+
+@ffi("c++")
+extern fn cv_rectangle(img: Mat, rect: Rect, color: Scalar, thickness: i32) -> void
+
+@ffi("c++")
+extern fn cv_imwrite(path: str, img: Mat) -> bool
+
+const COLOR_BGR2GRAY: i32 = 6
+
+fn main() -> void {
+    println("Loading image...")
+    let img = cv_imread("photo.jpg")
+
+    println("Converting to grayscale...")
+    let gray = cv_cvtColor(img, COLOR_BGR2GRAY)
+
+    println("Loading face detector...")
+    let detector = cv_CascadeClassifier_load("haarcascade_frontalface_default.xml")
+
+    println("Detecting faces...")
+    let faces = cv_detectMultiScale(detector, gray)
+
+    println(f"Found {len(faces)} face(s)")
+
+    for face in faces {
+        cv_rectangle(img, face, Scalar(0, 255, 0), 2)
+    }
+
+    cv_imwrite("result.jpg", img)
+    println("Result saved to result.jpg")
+}

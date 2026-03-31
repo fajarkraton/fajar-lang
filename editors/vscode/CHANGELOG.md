@@ -1,5 +1,21 @@
 # Changelog
 
+## [11.0.0] - 2026-04-01
+
+### Added — V13 "Beyond"
+- Syntax: `async`, `await`, `comptime`, `where`, `gen`, `yield` keyword highlighting
+- Syntax: `@distributed`, `@requires`, `@ensures`, `@invariant`, `@assert`, `@gpu` annotations
+- Snippets: `constfn` (const function), `constgen` (const generic), `comptime` (comptime block)
+- Snippets: `genfn` (generator), `asyncfn` (async function)
+- Snippets: `wasi` (WASI P2 component), `fficpp` (C++ FFI), `ffipy` (Python FFI)
+- Snippets: `@requires`, `@ensures` (formal verification), `@distributed` (distributed task)
+
+### Changed
+- Version aligned with Fajar Lang v11.0.0 "Beyond"
+- Description updated to reflect 398K LOC, 7,402 tests, formal verification, WASI P2, FFI v2
+
+---
+
 ## [10.0.0] - 2026-03-30
 
 ### Added — V12 "Transcendence"

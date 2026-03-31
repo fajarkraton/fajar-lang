@@ -1,0 +1,32 @@
+// WASI P2 HTTP Server — Deploy to wasmtime, Spin, or any WASI runtime
+//
+// Build:   fj build --target wasm32-wasi-p2
+// Run:     wasmtime serve output.wasm
+// Deploy:  spin deploy
+
+use wasi::http::{Request, Response, Router}
+
+fn main() -> void {
+    let router = Router::new()
+
+    router.get("/", fn(req: Request) -> Response {
+        Response::ok("Welcome to Fajar Lang WASI P2 Server!")
+    })
+
+    router.get("/api/health", fn(req: Request) -> Response {
+        Response::json(200, "{\"status\": \"ok\", \"version\": \"11.0.0\"}")
+    })
+
+    router.post("/api/echo", fn(req: Request) -> Response {
+        let body = req.body_text()
+        Response::json(200, f"{{\"echo\": \"{body}\"}}")
+    })
+
+    router.get("/api/time", fn(req: Request) -> Response {
+        let now = wasi::clocks::monotonic_now()
+        Response::json(200, f"{{\"timestamp_ns\": {now}}}")
+    })
+
+    println(f"Server listening with {router.route_count()} routes")
+    router.serve()
+}

@@ -1,0 +1,73 @@
+// Distributed MNIST Training — Data-parallel across 4 workers
+//
+// Run: fj run --cluster examples/distributed_mnist.fj
+// Config: [cluster] section in fj.toml
+
+use nn::{Dense, relu, softmax, cross_entropy, SGD}
+use distributed::{data_parallel, allreduce, checkpoint}
+
+struct MnistModel {
+    fc1: Dense,
+    fc2: Dense,
+}
+
+fn build_model() -> MnistModel {
+    MnistModel {
+        fc1: Dense(784, 128),
+        fc2: Dense(128, 10),
+    }
+}
+
+fn forward(model: MnistModel, x: Tensor) -> Tensor {
+    x |> model.fc1.forward |> relu |> model.fc2.forward |> softmax
+}
+
+@distributed
+fn train_epoch(model: MnistModel, data: Tensor, labels: Tensor, lr: f64) -> f64 {
+    let batch_size = 64
+    let num_batches = len(data) / batch_size
+    let mut total_loss: f64 = 0.0
+    let optimizer = SGD(lr)
+
+    for i in 0..num_batches {
+        let batch_x = data[i * batch_size..(i + 1) * batch_size]
+        let batch_y = labels[i * batch_size..(i + 1) * batch_size]
+
+        let pred = forward(model, batch_x)
+        let loss_val = cross_entropy(pred, batch_y)
+
+        loss_val.backward()
+
+        // Synchronize gradients across all workers
+        allreduce(model.fc1.grad(), "average")
+        allreduce(model.fc2.grad(), "average")
+
+        optimizer.step(model)
+        optimizer.zero_grad(model)
+
+        total_loss = total_loss + loss_val.item()
+    }
+
+    total_loss / num_batches as f64
+}
+
+fn main() -> void {
+    let model = build_model()
+    let (train_data, train_labels) = load_mnist("data/mnist")
+
+    let num_workers = cluster_size()
+    let lr = 0.01 * num_workers as f64  // Linear LR scaling
+
+    println(f"Training MNIST on {num_workers} workers, lr={lr}")
+
+    for epoch in 0..10 {
+        let loss = train_epoch(model, train_data, train_labels, lr)
+        println(f"Epoch {epoch}: loss = {loss:.4}")
+
+        if epoch % 5 == 0 {
+            checkpoint::save(model, f"checkpoint_epoch_{epoch}.pt")
+        }
+    }
+
+    println("Training complete!")
+}

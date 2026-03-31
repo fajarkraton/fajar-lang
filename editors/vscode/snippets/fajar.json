@@ -363,5 +363,100 @@
       "}"
     ],
     "description": "External FFI function declaration"
+  },
+  "Const Function": {
+    "prefix": "constfn",
+    "body": [
+      "const fn ${1:name}(${2:params}) -> ${3:type} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Compile-time evaluable function"
+  },
+  "Const Generic": {
+    "prefix": "constgen",
+    "body": [
+      "fn ${1:name}<const ${2:N}: ${3:usize}>(${4:params}) -> ${5:type} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Function with const generic parameter"
+  },
+  "Comptime Block": {
+    "prefix": "comptime",
+    "body": [
+      "comptime {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Compile-time evaluation block"
+  },
+  "Generator Function": {
+    "prefix": "genfn",
+    "body": [
+      "gen fn ${1:name}(${2:params}) -> ${3:type} {",
+      "    yield ${0}",
+      "}"
+    ],
+    "description": "Generator function with yield"
+  },
+  "Async Function": {
+    "prefix": "asyncfn",
+    "body": [
+      "async fn ${1:name}(${2:params}) -> ${3:type} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Async function"
+  },
+  "WASI Component": {
+    "prefix": "wasi",
+    "body": [
+      "// WASI P2 component",
+      "@safe fn main() -> void {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "WASI P2 component entry point"
+  },
+  "FFI Extern C++": {
+    "prefix": "fficpp",
+    "body": [
+      "@ffi(\"c++\")",
+      "extern fn ${1:name}(${2:params}) -> ${3:type}",
+      "",
+      "// Usage: ${1:name}(${0})"
+    ],
+    "description": "C++ FFI function import"
+  },
+  "FFI Extern Python": {
+    "prefix": "ffipy",
+    "body": [
+      "@ffi(\"python\")",
+      "extern fn ${1:name}(${2:params}) -> ${3:type}",
+      "",
+      "// Usage: ${1:name}(${0})"
+    ],
+    "description": "Python FFI function import"
+  },
+  "Verify Requires": {
+    "prefix": "@requires",
+    "body": "@requires(${1:condition})",
+    "description": "Precondition annotation for formal verification"
+  },
+  "Verify Ensures": {
+    "prefix": "@ensures",
+    "body": "@ensures(${1:condition})",
+    "description": "Postcondition annotation for formal verification"
+  },
+  "Distributed Function": {
+    "prefix": "@distributed",
+    "body": [
+      "@distributed",
+      "fn ${1:name}(${2:params}) -> ${3:type} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Distributed task function"
   }
 }

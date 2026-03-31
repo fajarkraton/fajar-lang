@@ -1,0 +1,57 @@
+// Formally Verified Kernel Module — SMT-backed safety proofs
+//
+// Run verification: fj verify examples/verified_kernel.fj
+// All @requires/@ensures annotations checked at compile time
+
+@requires(size > 0)
+@ensures(result != null)
+@kernel fn safe_alloc(size: usize) -> ptr {
+    let page = page_alloc(align_up(size, 4096))
+    mem_set(page, 0, size)
+    page
+}
+
+@requires(addr != null)
+@kernel fn safe_free(addr: ptr, size: usize) -> void {
+    mem_set(addr, 0, size)
+    page_free(addr)
+}
+
+@requires(len(buf) >= count)
+@ensures(result >= 0)
+@kernel fn safe_read(fd: i32, buf: &mut [u8], count: usize) -> i64 {
+    if count == 0 { return 0 }
+    syscall_read(fd, buf, count)
+}
+
+@invariant(lock_count >= 0)
+@kernel fn scheduler_tick() -> void {
+    let mut lock_count: i32 = 0
+
+    irq_disable()
+    lock_count = lock_count + 1
+
+    let current = get_current_task()
+    let next = select_next_task()
+
+    if next != current {
+        context_switch(current, next)
+    }
+
+    lock_count = lock_count - 1
+    irq_enable()
+}
+
+// Type state: File must be Closed -> Open -> Closed
+@typestate(File: Closed -> Open -> Closed)
+struct File {
+    fd: i32,
+    state: FileState,
+}
+
+@kernel fn main() -> void {
+    let buf = safe_alloc(4096)
+    let bytes = safe_read(0, buf, 1024)
+    println(f"Read {bytes} bytes from stdin")
+    safe_free(buf, 4096)
+}
