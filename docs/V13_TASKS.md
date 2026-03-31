@@ -155,16 +155,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K5.1 | `type_name::<T>()` | [ ] | Return type name as const string | 40 | `type_name::<i32>()` -> `"i32"` |
-| K5.2 | `size_of::<T>()` | [ ] | Return byte size at compile time | 40 | `size_of::<i64>()` -> `8` |
-| K5.3 | `align_of::<T>()` | [ ] | Return alignment at compile time | 30 | `align_of::<f64>()` -> `8` |
-| K5.4 | `field_count::<T>()` | [ ] | Return struct field count | 40 | `field_count::<Point>()` -> `2` |
-| K5.5 | `field_names::<T>()` | [ ] | Return field names as const array | 60 | `["x", "y"]` |
-| K5.6 | `field_types::<T>()` | [ ] | Return field type names | 60 | `["f64", "f64"]` |
-| K5.7 | `variant_count::<T>()` | [ ] | Return enum variant count | 40 | `variant_count::<Option<i32>>()` -> `2` |
-| K5.8 | `variant_names::<T>()` | [ ] | Return variant names | 40 | `["Some", "None"]` |
-| K5.9 | `has_trait::<T, Trait>()` | [ ] | Check if type implements trait at compile time | 60 | `has_trait::<i32, Display>()` -> `true` |
-| K5.10 | 10 reflection tests | [ ] | Type name, size, align, fields, variants, traits | 150 | All 10 pass |
+| K5.1 | `type_name::<T>()` | [x] | Return type name as const string | 40 | `type_name::<i32>()` -> `"i32"` |
+| K5.2 | `size_of::<T>()` | [x] | Return byte size at compile time | 40 | `size_of::<i64>()` -> `8` |
+| K5.3 | `align_of::<T>()` | [x] | Return alignment at compile time | 30 | `align_of::<f64>()` -> `8` |
+| K5.4 | `field_count::<T>()` | [x] | Return struct field count | 40 | `field_count::<Point>()` -> `2` |
+| K5.5 | `field_names::<T>()` | [x] | Return field names as const array | 60 | `["x", "y"]` |
+| K5.6 | `field_types::<T>()` | [x] | Return field type names | 60 | `["f64", "f64"]` |
+| K5.7 | `variant_count::<T>()` | [x] | Return enum variant count | 40 | `variant_count::<Option<i32>>()` -> `2` |
+| K5.8 | `variant_names::<T>()` | [x] | Return variant names | 40 | `["Some", "None"]` |
+| K5.9 | `has_trait::<T, Trait>()` | [x] | Check if type implements trait at compile time | 60 | `has_trait::<i32, Display>()` -> `true` |
+| K5.10 | 10 reflection tests | [x] | Type name, size, align, fields, variants, traits | 150 | All 10 pass |
 
 **Sprint K5 Gate:** All reflection intrinsics work in const context.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 40 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 50 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  50 / 210 tasks complete  (23.8%)
+Phase 1:  60 / 210 tasks complete  (28.6%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    50 / 710 tasks complete  ( 7.0%)
+TOTAL:    60 / 710 tasks complete  ( 8.5%)
 ```
 
 ---

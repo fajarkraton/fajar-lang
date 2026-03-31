@@ -30,6 +30,7 @@ pub mod codegen;
 pub mod compiler;
 pub mod const_alloc;
 pub mod const_generics;
+pub mod const_reflect;
 pub mod const_traits;
 pub mod concurrency_v2;
 pub mod debugger;
