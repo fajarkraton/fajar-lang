@@ -223,16 +223,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K9.1 | Analyzer integration | [ ] | Const evaluation runs during semantic analysis | 60 | Const errors at check time |
-| K9.2 | Cranelift integration | [ ] | Const values emitted as immediates in IR | 40 | `const X = 42` -> `iconst.i64 42` |
-| K9.3 | LLVM integration | [ ] | Const values as LLVM constants | 40 | `const X` -> LLVM `i64 42` |
-| K9.4 | VM integration | [ ] | Const values precomputed in bytecode constant pool | 40 | VM loads const from pool |
-| K9.5 | LSP integration | [ ] | Const values shown in hover | 30 | Hover on `const X` shows value |
-| K9.6 | LSP completion | [ ] | Suggest const fns in const context | 30 | Completion filters non-const fns |
-| K9.7 | Error messages | [ ] | "cannot call non-const fn in const context" | 40 | Clear error messages |
-| K9.8 | REPL support | [ ] | `comptime { ... }` evaluates in REPL | 20 | REPL shows const results |
-| K9.9 | Documentation | [ ] | `book/const_evaluation.md` guide | 200 | Const generics + const fn guide |
-| K9.10 | 10 integration tests | [ ] | Analyzer, Cranelift, LLVM, VM, LSP, REPL | 150 | All 10 pass |
+| K9.1 | Analyzer integration | [x] | Const evaluation runs during semantic analysis | 60 | Const errors at check time |
+| K9.2 | Cranelift integration | [x] | Const values emitted as immediates in IR | 40 | `const X = 42` -> `iconst.i64 42` |
+| K9.3 | LLVM integration | [x] | Const values as LLVM constants | 40 | `const X` -> LLVM `i64 42` |
+| K9.4 | VM integration | [x] | Const values precomputed in bytecode constant pool | 40 | VM loads const from pool |
+| K9.5 | LSP integration | [x] | Const values shown in hover | 30 | Hover on `const X` shows value |
+| K9.6 | LSP completion | [x] | Suggest const fns in const context | 30 | Completion filters non-const fns |
+| K9.7 | Error messages | [x] | "cannot call non-const fn in const context" | 40 | Clear error messages |
+| K9.8 | REPL support | [x] | `comptime { ... }` evaluates in REPL | 20 | REPL shows const results |
+| K9.9 | Documentation | [x] | `book/const_evaluation.md` guide | 200 | Const generics + const fn guide |
+| K9.10 | 10 integration tests | [x] | Analyzer, Cranelift, LLVM, VM, LSP, REPL | 150 | All 10 pass |
 
 **Sprint K9 Gate:** Const evaluation works across all backends (interpreter, VM, Cranelift, LLVM).
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 80 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 90 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  90 / 210 tasks complete  (42.9%)
+Phase 1: 100 / 210 tasks complete  (47.6%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    90 / 710 tasks complete  (12.7%)
+TOTAL:   100 / 710 tasks complete  (14.1%)
 ```
 
 ---

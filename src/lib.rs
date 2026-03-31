@@ -32,6 +32,7 @@ pub mod const_alloc;
 pub mod const_generic_types;
 pub mod const_generics;
 pub mod const_macros;
+pub mod const_pipeline;
 pub mod const_reflect;
 pub mod const_stdlib;
 pub mod const_traits;
