@@ -1739,19 +1739,29 @@ fn security_division_by_zero() {
 
 #[test]
 fn security_stack_overflow() {
-    let src = r#"
-        fn infinite() -> i64 {
-            infinite()
-        }
-        fn main() -> void {
-            println(infinite())
-        }
-    "#;
-    let mut interp = Interpreter::new_capturing();
-    interp.eval_source(src).unwrap();
-    let result = interp.call_main();
+    // Run in thread with larger stack so the interpreter's depth check
+    // catches the overflow before the Rust stack itself overflows in debug.
+    // Value is not Send, so we only send the bool result back.
+    let is_err = std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| {
+            let src = r#"
+                fn infinite() -> i64 {
+                    infinite()
+                }
+                fn main() -> void {
+                    println(infinite())
+                }
+            "#;
+            let mut interp = Interpreter::new_capturing();
+            interp.eval_source(src).unwrap();
+            interp.call_main().is_err()
+        })
+        .expect("thread spawn")
+        .join()
+        .expect("thread join");
     assert!(
-        result.is_err(),
+        is_err,
         "infinite recursion should produce stack overflow"
     );
 }
