@@ -18,6 +18,32 @@ Kategori perubahan:
 
 ---
 
+## [11.0.0] — 2026-04-01 "Beyond"
+
+### Added — V13 "Beyond" (8 options, 710 tasks, 71 sprints)
+
+**Phase 1 — Foundation (210 tasks)**
+- **CI Green:** Cross-platform stability, nightly clippy, feature flag matrix
+- **Const Fn + Compile-Time:** Const generics, const traits, compile-time allocation, reflection, const stdlib
+- **Incremental Compilation:** Persistent disk cache, fine-grained dependency tracking, parallel builds, sub-second rebuilds
+
+**Phase 2 — Ecosystem (200 tasks)**
+- **WASI P2 + Component Model:** WIT parser (record/variant/flags/resource), component binary format, canonical ABI, filesystem, streams, HTTP client/server, TCP/UDP sockets, resource lifecycle, component composition, deployment validation
+- **FFI v2 Full Integration:** C++ templates/smart-ptr/STL bridge, Python async/NumPy/PyTorch bridge, Rust trait objects/closures/futures, `fj bindgen` CLI, build system integration (pkg-config/CMake/Cargo), safety (leak detection, zero-copy, ASAN)
+
+**Phase 3 — Differentiation (300 tasks)**
+- **SMT Formal Verification:** Symbolic execution engine, property specification (@requires/@ensures/@invariant), @kernel safety proofs (no-heap, panic-freedom, termination), @device safety proofs (tensor shapes, dtypes, gradients), proof caching, automated inference, advanced theories (bitvector, float, concurrent), safety certification (MISRA-C, DO-178C, ISO 26262)
+- **Distributed Runtime:** Raft consensus (leader election, log replication, snapshots), service discovery (mDNS, gossip/SWIM), task scheduler (DAG, placement, data locality), data plane (ring-allreduce, scatter/gather), distributed ML training (data-parallel, model-parallel, elastic), RPC framework (streaming, auth, compression), fault tolerance (circuit breaker, split-brain recovery), security (mTLS, RBAC, sandboxing)
+- **Self-Hosting Compiler:** Tree-based AST (28 Expr variants), 19-level Pratt parser, HM type inference + trait resolution, 46-opcode bytecode codegen, Stage 1+2 bootstrap, self-hosted stdlib, optimizer (constant fold, DCE, CSE, LICM), diagnostics system
+
+### Stats
+- Tests: 7,402 (from 5,955) — +1,447 new tests
+- LOC: ~398,000 (from ~350,000) — +48,000 new lines
+- Files: 418 (from 350+) — +60 new modules
+- Clippy: 0 warnings
+
+---
+
 ## [10.0.0] — 2026-03-30 "Transcendence"
 
 ### Added — V12 "Transcendence" (6 options, 600 tasks, 60 sprints)

@@ -1,9 +1,9 @@
 [package]
 name = "fajar-lang"
-version = "10.0.0"
+version = "11.0.0"
 edition = "2024"
 rust-version = "1.87"
-description = "Fajar Lang — Systems programming language for embedded ML + OS integration. LLVM O3/LTO/PGO, macro system, generators, WASI, 5800+ tests."
+description = "Fajar Lang — Systems programming language for embedded ML + OS integration. Formal verification, distributed runtime, self-hosting compiler, WASI P2, FFI v2, 7400+ tests."
 license = "MIT"
 
 [[bin]]
