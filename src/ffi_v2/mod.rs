@@ -11,3 +11,7 @@ pub mod python_async;
 pub mod python_numpy;
 pub mod rust_bridge;
 pub mod rust_traits;
+pub mod bindgen;
+pub mod build_system;
+pub mod safety;
+pub mod docs;
