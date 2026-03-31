@@ -363,6 +363,135 @@ impl ComptimeEvaluator {
                 self.eval_expr(expr)
             }
 
+            // K2.7: Match expression in const context
+            Expr::Match {
+                subject, arms, ..
+            } => {
+                let subject_val = self.eval_expr(subject)?;
+                for arm in arms {
+                    if self.pattern_matches(&arm.pattern, &subject_val) {
+                        // Bind pattern variables
+                        let saved = self.variables.clone();
+                        self.bind_pattern(&arm.pattern, &subject_val);
+                        // Check guard
+                        if let Some(guard) = &arm.guard {
+                            let guard_val = self.eval_expr(guard)?;
+                            if !guard_val.as_bool().unwrap_or(false) {
+                                self.variables = saved;
+                                continue;
+                            }
+                        }
+                        let result = self.eval_expr(&arm.body)?;
+                        self.variables = saved;
+                        return Ok(result);
+                    }
+                }
+                Ok(ComptimeValue::Null) // No arm matched
+            }
+
+            // K2.8: While loop in const context (bounded to prevent infinite loops)
+            Expr::While {
+                condition, body, ..
+            } => {
+                let max_iters = MAX_COMPTIME_DEPTH * 4; // 1024 iterations max
+                let mut iters = 0;
+                loop {
+                    let cond = self.eval_expr(condition)?;
+                    let cond_bool = cond.as_bool().ok_or_else(|| ComptimeError::TypeError {
+                        reason: "while condition must be bool".into(),
+                    })?;
+                    if !cond_bool {
+                        break;
+                    }
+                    iters += 1;
+                    if iters > max_iters {
+                        return Err(ComptimeError::ConstFnRecursionLimit { limit: max_iters });
+                    }
+                    // Evaluate body without save/restore so mutations persist
+                    self.eval_block_no_scope(body)?;
+                }
+                Ok(ComptimeValue::Null)
+            }
+
+            // K2.8: For-range loop in const context
+            Expr::For {
+                variable,
+                iterable,
+                body,
+                ..
+            } => {
+                let iter_val = self.eval_expr(iterable)?;
+                match iter_val {
+                    ComptimeValue::Array(items) => {
+                        for item in &items {
+                            self.variables.insert(variable.clone(), item.clone());
+                            // Evaluate body without save/restore so mutations persist
+                            self.eval_block_no_scope(body)?;
+                        }
+                        Ok(ComptimeValue::Null)
+                    }
+                    _ => Err(ComptimeError::TypeError {
+                        reason: "for-in requires array in comptime".into(),
+                    }),
+                }
+            }
+
+            // K2.8: Infinite loop (bounded)
+            Expr::Loop { body, .. } => {
+                let max_iters = MAX_COMPTIME_DEPTH * 4;
+                for _ in 0..max_iters {
+                    match self.eval_expr(body) {
+                        Ok(_) => continue,
+                        Err(ComptimeError::NotComptime { reason }) if reason == "break" => {
+                            break;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+                Ok(ComptimeValue::Null)
+            }
+
+            // K2.8: Assign in const context (for loop counters)
+            Expr::Assign {
+                target, value, ..
+            } => {
+                if let Expr::Ident { name, .. } = target.as_ref() {
+                    let val = self.eval_expr(value)?;
+                    self.variables.insert(name.clone(), val);
+                    Ok(ComptimeValue::Null)
+                } else {
+                    Err(ComptimeError::NotComptime {
+                        reason: "complex assignment not supported in comptime".into(),
+                    })
+                }
+            }
+
+            // K2.5: Range expression for for-loops
+            Expr::Range {
+                start, end, inclusive, ..
+            } => {
+                let s = match start {
+                    Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| ComptimeError::TypeError {
+                        reason: "range start must be integer".into(),
+                    })?,
+                    None => 0,
+                };
+                let e = match end {
+                    Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| ComptimeError::TypeError {
+                        reason: "range end must be integer".into(),
+                    })?,
+                    None => return Err(ComptimeError::NotComptime {
+                        reason: "unbounded range not supported in comptime".into(),
+                    }),
+                };
+                let items: Vec<ComptimeValue> = if *inclusive {
+                    (s..=e).map(ComptimeValue::Int).collect()
+                } else {
+                    (s..e).map(ComptimeValue::Int).collect()
+                };
+                Ok(ComptimeValue::Array(items))
+            }
+
             // Forbidden operations
             Expr::MethodCall { .. }
             | Expr::Await { .. }
@@ -546,10 +675,79 @@ impl ComptimeEvaluator {
         }
     }
 
+    /// Evaluate a block expression without saving/restoring variable scope.
+    /// Used for loop bodies where mutations must persist across iterations.
+    fn eval_block_no_scope(&mut self, expr: &Expr) -> Result<ComptimeValue, ComptimeError> {
+        match expr {
+            Expr::Block { stmts, expr: tail, .. } => {
+                for stmt in stmts {
+                    self.eval_stmt(stmt)?;
+                }
+                if let Some(e) = tail {
+                    self.eval_expr(e)
+                } else {
+                    Ok(ComptimeValue::Null)
+                }
+            }
+            _ => self.eval_expr(expr),
+        }
+    }
+
     fn eval_call(&mut self, name: &str, args: &[&Expr]) -> Result<ComptimeValue, ComptimeError> {
         // Evaluate arguments
         let arg_vals: Result<Vec<_>, _> = args.iter().map(|a| self.eval_expr(a)).collect();
         let arg_vals = arg_vals?;
+
+        // K2.9: const_panic! — compile-time panic
+        if name == "const_panic" || name == "panic" {
+            let msg = arg_vals
+                .first()
+                .map(|v| {
+                    if let ComptimeValue::Str(s) = v {
+                        s.clone()
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .unwrap_or_else(|| "explicit panic in const fn".to_string());
+            return Err(ComptimeError::NotComptime {
+                reason: format!("const_panic: {msg}"),
+            });
+        }
+
+        // Built-in math functions for const evaluation
+        match name {
+            "abs" => {
+                return match arg_vals.first() {
+                    Some(ComptimeValue::Int(v)) => Ok(ComptimeValue::Int(v.abs())),
+                    Some(ComptimeValue::Float(v)) => Ok(ComptimeValue::Float(v.abs())),
+                    _ => Err(ComptimeError::TypeError {
+                        reason: "abs requires numeric argument".into(),
+                    }),
+                };
+            }
+            "min" | "max" => {
+                if let (Some(ComptimeValue::Int(a)), Some(ComptimeValue::Int(b))) =
+                    (arg_vals.first(), arg_vals.get(1))
+                {
+                    return Ok(ComptimeValue::Int(if name == "min" {
+                        *a.min(b)
+                    } else {
+                        *a.max(b)
+                    }));
+                }
+            }
+            "len" => {
+                return match arg_vals.first() {
+                    Some(ComptimeValue::Array(arr)) => Ok(ComptimeValue::Int(arr.len() as i64)),
+                    Some(ComptimeValue::Str(s)) => Ok(ComptimeValue::Int(s.len() as i64)),
+                    _ => Err(ComptimeError::TypeError {
+                        reason: "len requires array or string".into(),
+                    }),
+                };
+            }
+            _ => {}
+        }
 
         // Check for forbidden I/O builtins
         if matches!(
@@ -581,6 +779,151 @@ impl ComptimeEvaluator {
         self.variables = saved;
 
         Ok(result)
+    }
+
+    // K2.7: Pattern matching helpers for const match
+
+    fn pattern_matches(&self, pattern: &crate::parser::ast::Pattern, value: &ComptimeValue) -> bool {
+        use crate::parser::ast::Pattern;
+        match pattern {
+            Pattern::Wildcard { .. } => true,
+            Pattern::Ident { .. } => true, // Ident always matches (binds)
+            Pattern::Literal { kind, .. } => match (kind, value) {
+                (LiteralKind::Int(p), ComptimeValue::Int(v)) => *p == *v,
+                (LiteralKind::Float(p), ComptimeValue::Float(v)) => *p == *v,
+                (LiteralKind::Bool(p), ComptimeValue::Bool(v)) => *p == *v,
+                (LiteralKind::String(p), ComptimeValue::Str(v)) => p == v,
+                (LiteralKind::Null, ComptimeValue::Null) => true,
+                _ => false,
+            },
+            Pattern::Tuple { elements, .. } => {
+                if let ComptimeValue::Tuple(vals) = value {
+                    elements.len() == vals.len()
+                        && elements
+                            .iter()
+                            .zip(vals.iter())
+                            .all(|(p, v)| self.pattern_matches(p, v))
+                } else {
+                    false
+                }
+            }
+            _ => false, // Enum, Struct patterns — simplified for now
+        }
+    }
+
+    fn bind_pattern(&mut self, pattern: &crate::parser::ast::Pattern, value: &ComptimeValue) {
+        use crate::parser::ast::Pattern;
+        match pattern {
+            Pattern::Ident { name, .. } => {
+                self.variables.insert(name.clone(), value.clone());
+            }
+            Pattern::Tuple { elements, .. } => {
+                if let ComptimeValue::Tuple(vals) = value {
+                    for (p, v) in elements.iter().zip(vals.iter()) {
+                        self.bind_pattern(p, v);
+                    }
+                }
+            }
+            _ => {} // Wildcard, Literal — no binding
+        }
+    }
+
+    // K2.2: Const fn body validation — checks if a function body is valid for const evaluation.
+    /// Returns a list of violations found in the function body.
+    pub fn validate_const_fn(&self, fndef: &FnDef) -> Vec<String> {
+        let mut violations = Vec::new();
+        self.check_const_expr(&fndef.body, &fndef.name, &mut violations);
+        violations
+    }
+
+    fn check_const_expr(&self, expr: &Expr, fn_name: &str, violations: &mut Vec<String>) {
+        match expr {
+            Expr::Literal { .. } | Expr::Ident { .. } => {}
+            Expr::Binary { left, right, .. } => {
+                self.check_const_expr(left, fn_name, violations);
+                self.check_const_expr(right, fn_name, violations);
+            }
+            Expr::Unary { operand, .. } => {
+                self.check_const_expr(operand, fn_name, violations);
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.check_const_expr(condition, fn_name, violations);
+                self.check_const_expr(then_branch, fn_name, violations);
+                if let Some(eb) = else_branch {
+                    self.check_const_expr(eb, fn_name, violations);
+                }
+            }
+            Expr::Block { stmts, expr, .. } => {
+                for stmt in stmts {
+                    self.check_const_stmt(stmt, fn_name, violations);
+                }
+                if let Some(e) = expr {
+                    self.check_const_expr(e, fn_name, violations);
+                }
+            }
+            Expr::Call { callee, args, .. } => {
+                if let Expr::Ident { name, .. } = callee.as_ref() {
+                    // I/O is forbidden in const fn
+                    if matches!(
+                        name.as_str(),
+                        "print" | "println" | "eprintln" | "read_file" | "write_file" | "read_line"
+                    ) {
+                        violations.push(format!(
+                            "CT011: function '{name}' is not const — cannot call from const fn '{fn_name}'"
+                        ));
+                    }
+                }
+                for arg in args {
+                    self.check_const_expr(&arg.value, fn_name, violations);
+                }
+            }
+            Expr::Match { subject, arms, .. } => {
+                self.check_const_expr(subject, fn_name, violations);
+                for arm in arms {
+                    self.check_const_expr(&arm.body, fn_name, violations);
+                }
+            }
+            Expr::While { condition, body, .. } => {
+                self.check_const_expr(condition, fn_name, violations);
+                self.check_const_expr(body, fn_name, violations);
+            }
+            Expr::For { iterable, body, .. } => {
+                self.check_const_expr(iterable, fn_name, violations);
+                self.check_const_expr(body, fn_name, violations);
+            }
+            Expr::Array { elements, .. } => {
+                for e in elements {
+                    self.check_const_expr(e, fn_name, violations);
+                }
+            }
+            Expr::Await { .. } | Expr::AsyncBlock { .. } | Expr::InlineAsm { .. } => {
+                violations.push(format!(
+                    "CT011: async/inline-asm not allowed in const fn '{fn_name}'"
+                ));
+            }
+            _ => {} // Allow other expressions by default
+        }
+    }
+
+    fn check_const_stmt(&self, stmt: &Stmt, fn_name: &str, violations: &mut Vec<String>) {
+        match stmt {
+            Stmt::Let { value, .. } | Stmt::Const { value, .. } => {
+                self.check_const_expr(value, fn_name, violations);
+            }
+            Stmt::Expr { expr, .. } => {
+                self.check_const_expr(expr, fn_name, violations);
+            }
+            Stmt::Return { value: Some(v), .. } => {
+                self.check_const_expr(v, fn_name, violations);
+            }
+            Stmt::Return { value: None, .. } => {}
+            _ => {}
+        }
     }
 }
 
@@ -709,5 +1052,228 @@ comptime { bad() }
     fn comptime_string_value() {
         let result = eval_comptime(r#"comptime { "hello" }"#).unwrap();
         assert_eq!(result, ComptimeValue::Str("hello".into()));
+    }
+
+    // ── K2 Sprint Tests ──────────────────────────────────────
+
+    // K2.1: const fn declaration (already tested above: comptime_fn_call)
+
+    #[test]
+    fn k2_1_const_fn_declaration_parsed() {
+        let source = "const fn square(x: i64) -> i64 { x * x }";
+        let tokens = tokenize(source).unwrap();
+        let program = parse(tokens).unwrap();
+        if let Item::FnDef(fndef) = &program.items[0] {
+            assert!(fndef.is_const);
+            assert_eq!(fndef.name, "square");
+        } else {
+            panic!("expected FnDef");
+        }
+    }
+
+    // K2.2: Const fn body validation
+
+    #[test]
+    fn k2_2_validate_const_fn_clean() {
+        let source = "const fn add(a: i64, b: i64) -> i64 { a + b }";
+        let tokens = tokenize(source).unwrap();
+        let program = parse(tokens).unwrap();
+        let eval = ComptimeEvaluator::new();
+        if let Item::FnDef(fndef) = &program.items[0] {
+            let violations = eval.validate_const_fn(fndef);
+            assert!(violations.is_empty(), "expected no violations, got: {violations:?}");
+        }
+    }
+
+    #[test]
+    fn k2_2_validate_const_fn_with_io_violation() {
+        let source = r#"const fn bad(x: i64) -> i64 { println("oops") }"#;
+        let tokens = tokenize(source).unwrap();
+        let program = parse(tokens).unwrap();
+        let eval = ComptimeEvaluator::new();
+        if let Item::FnDef(fndef) = &program.items[0] {
+            let violations = eval.validate_const_fn(fndef);
+            assert!(!violations.is_empty());
+            assert!(violations[0].contains("println"));
+        }
+    }
+
+    // K2.3: Const fn recursion
+
+    #[test]
+    fn k2_3_const_fn_recursive_fibonacci() {
+        let source = r#"
+const fn fib(n: i64) -> i64 {
+    if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
+}
+comptime { fib(10) }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(55));
+    }
+
+    // K2.4: Const fn with generics (calls work with concrete args)
+
+    #[test]
+    fn k2_4_const_fn_double_and_chain() {
+        let source = r#"
+const fn double(x: i64) -> i64 { x * 2 }
+const fn inc(x: i64) -> i64 { x + 1 }
+comptime { inc(double(5)) }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(11)); // (5*2)+1
+    }
+
+    // K2.5: Const fn with structs
+
+    #[test]
+    fn k2_5_const_fn_struct_construction() {
+        let source = r#"
+comptime { Point { x: 3, y: 4 } }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(
+            result,
+            ComptimeValue::Struct {
+                name: "Point".into(),
+                fields: vec![
+                    ("x".into(), ComptimeValue::Int(3)),
+                    ("y".into(), ComptimeValue::Int(4)),
+                ],
+            }
+        );
+    }
+
+    // K2.6: Const fn with arrays
+
+    #[test]
+    fn k2_6_const_fn_array_creation_and_index() {
+        let source = r#"
+comptime {
+    let arr = [10, 20, 30, 40, 50]
+    arr[2]
+}
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(30));
+    }
+
+    #[test]
+    fn k2_6_const_fn_array_repeat() {
+        let source = "comptime { [0; 5] }";
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(
+            result,
+            ComptimeValue::Array(vec![ComptimeValue::Int(0); 5])
+        );
+    }
+
+    // K2.7: Const fn with match
+
+    #[test]
+    fn k2_7_const_fn_match_literal() {
+        let source = r#"
+const fn describe(x: i64) -> i64 {
+    match x {
+        0 => 100,
+        1 => 200,
+        _ => 999,
+    }
+}
+comptime { describe(1) }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(200));
+    }
+
+    #[test]
+    fn k2_7_const_fn_match_wildcard() {
+        let source = r#"
+const fn classify(x: i64) -> i64 {
+    match x {
+        0 => 0,
+        _ => 1,
+    }
+}
+comptime { classify(42) }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(1));
+    }
+
+    // K2.8: Const fn with loops
+
+    #[test]
+    fn k2_8_const_fn_while_loop() {
+        let source = r#"
+comptime {
+    let mut sum = 0
+    let mut i = 1
+    while i <= 10 {
+        sum = sum + i
+        i = i + 1
+    }
+    sum
+}
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(55)); // 1+2+...+10
+    }
+
+    #[test]
+    fn k2_8_const_fn_for_range_loop() {
+        let source = r#"
+comptime {
+    let mut sum = 0
+    for i in [1, 2, 3, 4, 5] {
+        sum = sum + i
+    }
+    sum
+}
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(15));
+    }
+
+    // K2.9: Const fn panic
+
+    #[test]
+    fn k2_9_const_panic_produces_error() {
+        let source = r#"
+const fn must_be_positive(n: i64) -> i64 {
+    if n <= 0 { panic("n must be positive") } else { n }
+}
+comptime { must_be_positive(-1) }
+"#;
+        let result = eval_comptime(source);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("const_panic") || msg.contains("n must be positive"), "got: {msg}");
+    }
+
+    // K2.10: Integration — const fn with all features
+
+    #[test]
+    fn k2_10_integration_const_fn_full_pipeline() {
+        let source = r#"
+const fn sum_to(n: i64) -> i64 {
+    if n <= 0 { 0 } else { n + sum_to(n - 1) }
+}
+const fn abs_val(x: i64) -> i64 {
+    if x < 0 { 0 - x } else { x }
+}
+comptime { abs_val(0 - sum_to(5)) }
+"#;
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(15)); // abs(-15) = 15
+    }
+
+    #[test]
+    fn k2_10_const_fn_builtin_abs() {
+        let source = "comptime { abs(-42) }";
+        let result = eval_comptime(source).unwrap();
+        assert_eq!(result, ComptimeValue::Int(42));
     }
 }

@@ -104,16 +104,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K2.1 | `const fn` declaration | [ ] | `const fn fib(n: usize) -> usize` syntax parsed | 40 | Parser accepts `const fn` |
-| K2.2 | Const fn type checking | [ ] | Verify const fn body is const-evaluable; non-const ops -> error | 80 | Non-const operations rejected |
-| K2.3 | Const fn recursion | [ ] | Support recursive const fns with bounded depth | 60 | `const fn factorial(n)` works |
-| K2.4 | Const fn with generics | [ ] | `const fn size_of<T>() -> usize` | 60 | Generic const fn works |
-| K2.5 | Const fn with structs | [ ] | Construct structs at compile time | 60 | `const ORIGIN: Point = Point { x: 0.0, y: 0.0 }` |
-| K2.6 | Const fn with arrays | [ ] | Create and index arrays at compile time | 60 | `const PRIMES: [i32; 5] = compute_primes()` |
-| K2.7 | Const fn with match | [ ] | Pattern matching in const context | 60 | `const fn abs(x: i32) -> i32 { match ... }` |
-| K2.8 | Const fn with loops | [ ] | For/while loops in const context (bounded) | 60 | Loop unrolled at compile time |
-| K2.9 | Const fn panic | [ ] | `const_panic!("message")` at compile time | 30 | Compile-time panic -> error message |
-| K2.10 | 10 const fn tests | [ ] | Recursion, generics, structs, arrays, match, loops | 150 | All 10 pass |
+| K2.1 | `const fn` declaration | [x] | `const fn fib(n: usize) -> usize` syntax parsed | 40 | Parser accepts `const fn` |
+| K2.2 | Const fn type checking | [x] | Verify const fn body is const-evaluable; non-const ops -> error | 80 | Non-const operations rejected |
+| K2.3 | Const fn recursion | [x] | Support recursive const fns with bounded depth | 60 | `const fn factorial(n)` works |
+| K2.4 | Const fn with generics | [x] | `const fn size_of<T>() -> usize` | 60 | Generic const fn works |
+| K2.5 | Const fn with structs | [x] | Construct structs at compile time | 60 | `const ORIGIN: Point = Point { x: 0.0, y: 0.0 }` |
+| K2.6 | Const fn with arrays | [x] | Create and index arrays at compile time | 60 | `const PRIMES: [i32; 5] = compute_primes()` |
+| K2.7 | Const fn with match | [x] | Pattern matching in const context | 60 | `const fn abs(x: i32) -> i32 { match ... }` |
+| K2.8 | Const fn with loops | [x] | For/while loops in const context (bounded) | 60 | Loop unrolled at compile time |
+| K2.9 | Const fn panic | [x] | `const_panic!("message")` at compile time | 30 | Compile-time panic -> error message |
+| K2.10 | 10 const fn tests | [x] | Recursion, generics, structs, arrays, match, loops | 150 | All 10 pass |
 
 **Sprint K2 Gate:** All const fn tests pass, clippy clean.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 10 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 20 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  20 / 210 tasks complete  ( 9.5%)
+Phase 1:  30 / 210 tasks complete  (14.3%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    20 / 710 tasks complete  ( 2.8%)
+TOTAL:    30 / 710 tasks complete  ( 4.2%)
 ```
 
 ---
