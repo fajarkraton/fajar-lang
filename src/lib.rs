@@ -50,6 +50,7 @@ pub mod formatter;
 pub mod generators_v12;
 pub mod gpu_codegen;
 pub mod gui;
+pub mod hardening;
 pub mod hw;
 pub mod interpreter;
 pub mod iot;
