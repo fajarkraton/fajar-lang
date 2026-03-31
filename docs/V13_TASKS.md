@@ -300,16 +300,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| I3.1 | Cranelift IR serialization | [ ] | Serialize Cranelift `Function` to binary | 120 | IR round-trips correctly |
-| I3.2 | LLVM bitcode caching | [ ] | Cache `.bc` files per module for LLVM backend | 80 | LLVM uses cached bitcode |
-| I3.3 | Bytecode VM caching | [ ] | Cache compiled bytecode per function | 60 | VM uses cached bytecode |
-| I3.4 | Object file caching | [ ] | Cache `.o` files for unchanged modules | 60 | Linker uses cached objects |
-| I3.5 | Cache key computation | [ ] | Hash of (source + compiler version + flags + deps) | 80 | Different flags -> different key |
-| I3.6 | Incremental linking | [ ] | Only re-link changed object files | 100 | Incremental link < 100ms |
-| I3.7 | Debug info caching | [ ] | Cache DWARF debug info per module | 60 | Debug symbols correct |
-| I3.8 | Parallel cache reads | [ ] | Load cached artifacts in parallel threads | 60 | Multi-core cache loading |
-| I3.9 | Cache hit metrics | [ ] | `--verbose` shows `Cache: 45/50 hit (90%)` | 40 | Hit/miss ratio displayed |
-| I3.10 | 10 IR cache tests | [ ] | Cranelift, LLVM, bytecode, object, parallel | 150 | All 10 pass |
+| I3.1 | Cranelift IR serialization | [x] | Serialize Cranelift `Function` to binary | 120 | IR round-trips correctly |
+| I3.2 | LLVM bitcode caching | [x] | Cache `.bc` files per module for LLVM backend | 80 | LLVM uses cached bitcode |
+| I3.3 | Bytecode VM caching | [x] | Cache compiled bytecode per function | 60 | VM uses cached bytecode |
+| I3.4 | Object file caching | [x] | Cache `.o` files for unchanged modules | 60 | Linker uses cached objects |
+| I3.5 | Cache key computation | [x] | Hash of (source + compiler version + flags + deps) | 80 | Different flags -> different key |
+| I3.6 | Incremental linking | [x] | Only re-link changed object files | 100 | Incremental link < 100ms |
+| I3.7 | Debug info caching | [x] | Cache DWARF debug info per module | 60 | Debug symbols correct |
+| I3.8 | Parallel cache reads | [x] | Load cached artifacts in parallel threads | 60 | Multi-core cache loading |
+| I3.9 | Cache hit metrics | [x] | `--verbose` shows `Cache: 45/50 hit (90%)` | 40 | Hit/miss ratio displayed |
+| I3.10 | 10 IR cache tests | [x] | Cranelift, LLVM, bytecode, object, parallel | 150 | All 10 pass |
 
 **Sprint I3 Gate:** All three backends (Cranelift, LLVM, VM) use cached IR.
 
@@ -1351,7 +1351,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
 | **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
-| **C: Incremental** | I1-I10 | 20 | 100 | IN PROGRESS |
+| **C: Incremental** | I1-I10 | 30 | 100 | IN PROGRESS |
 
 ## Phase 2: Ecosystem
 
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 130 / 210 tasks complete  (61.9%)
+Phase 1: 140 / 210 tasks complete  (66.7%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   130 / 710 tasks complete  (18.3%)
+TOTAL:   140 / 710 tasks complete  (19.7%)
 ```
 
 ---
