@@ -469,18 +469,18 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W2.1 | Component section emitter | [ ] | Emit `component` section (custom section 0x0d) | 100 | `wasm-tools validate` accepts |
-| W2.2 | Component type encoding | [ ] | Encode WIT types in canonical ABI format | 150 | Types round-trip |
-| W2.3 | Import section | [ ] | Emit `(import "wasi:filesystem/types")` | 80 | wasmtime resolves imports |
-| W2.4 | Export section | [ ] | Emit `(export "run")` for command world | 60 | wasmtime calls export |
-| W2.5 | Canonical ABI lifting | [ ] | Lower Fajar values to linear memory (strings->ptr+len) | 200 | String passed correctly |
-| W2.6 | Canonical ABI lowering | [ ] | Lift host values back to Fajar values | 200 | Host return readable |
-| W2.7 | Memory allocation protocol | [ ] | `cabi_realloc` export for host-allocated memory | 80 | Host allocates in guest |
-| W2.8 | Post-return cleanup | [ ] | `cabi_post_*` exports for freeing returned values | 60 | No memory leaks |
-| W2.9 | Component validation | [ ] | Validate against WIT spec before output | 100 | Invalid -> error |
-| W2.10 | 10 binary format tests | [ ] | Validate with `wasm-tools component validate` | 150 | All 10 pass |
+| W2.1 | Component section emitter | [x] | Emit `component` section (custom section 0x0d) | 100 | `wasm-tools validate` accepts |
+| W2.2 | Component type encoding | [x] | Encode WIT types in canonical ABI format | 150 | Types round-trip |
+| W2.3 | Import section | [x] | Emit `(import "wasi:filesystem/types")` | 80 | wasmtime resolves imports |
+| W2.4 | Export section | [x] | Emit `(export "run")` for command world | 60 | wasmtime calls export |
+| W2.5 | Canonical ABI lifting | [x] | Lower Fajar values to linear memory (strings->ptr+len) | 200 | String passed correctly |
+| W2.6 | Canonical ABI lowering | [x] | Lift host values back to Fajar values | 200 | Host return readable |
+| W2.7 | Memory allocation protocol | [x] | `cabi_realloc` export for host-allocated memory | 80 | Host allocates in guest |
+| W2.8 | Post-return cleanup | [x] | `cabi_post_*` exports for freeing returned values | 60 | No memory leaks |
+| W2.9 | Component validation | [x] | Validate against WIT spec before output | 100 | Invalid -> error |
+| W2.10 | 10 binary format tests | [x] | Validate with `wasm-tools component validate` | 150 | All 10 pass |
 
-**Sprint W2 Gate:** Valid component binaries produced, pass wasm-tools validation.
+**Sprint W2 Gate:** Valid component binaries produced, pass wasm-tools validation. ✅ 23 tests, 0 failures.
 
 ### Sprint W3: WASI P2 Filesystem (10 tasks)
 
