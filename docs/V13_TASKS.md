@@ -121,16 +121,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K3.1 | `const trait` definition | [ ] | `const trait ConstAdd { const fn add(self, other: Self) -> Self }` | 60 | Trait parsed |
-| K3.2 | `const impl` | [ ] | `const impl ConstAdd for i32 { const fn add... }` | 60 | Impl parsed and checked |
-| K3.3 | Const trait bounds | [ ] | `fn sum<T: const ConstAdd>(arr: [T; N])` | 60 | Bound enforced at call site |
-| K3.4 | Const trait method dispatch | [ ] | Call const trait method at compile time | 80 | Static dispatch in const context |
-| K3.5 | Built-in const traits | [ ] | `const ConstEq`, `const ConstOrd`, `const ConstDefault` | 60 | Built-in types implement const traits |
-| K3.6 | Derive const traits | [ ] | `#[derive(ConstEq, ConstDefault)]` for user types | 60 | Derived implementations work |
-| K3.7 | Const trait objects | [ ] | `&dyn const ConstAdd` for compile-time polymorphism | 80 | Const vtable dispatch |
-| K3.8 | Const where clauses | [ ] | `where T: const Add + const Mul` compound bounds | 40 | Multiple const bounds |
-| K3.9 | Const associated types | [ ] | `const type Output;` in const traits | 50 | Associated type resolved at compile time |
-| K3.10 | 10 const trait tests | [ ] | Definition, impl, bounds, dispatch, derive | 150 | All 10 pass |
+| K3.1 | `const trait` definition | [x] | `const trait ConstAdd { const fn add(self, other: Self) -> Self }` | 60 | Trait parsed |
+| K3.2 | `const impl` | [x] | `const impl ConstAdd for i32 { const fn add... }` | 60 | Impl parsed and checked |
+| K3.3 | Const trait bounds | [x] | `fn sum<T: const ConstAdd>(arr: [T; N])` | 60 | Bound enforced at call site |
+| K3.4 | Const trait method dispatch | [x] | Call const trait method at compile time | 80 | Static dispatch in const context |
+| K3.5 | Built-in const traits | [x] | `const ConstEq`, `const ConstOrd`, `const ConstDefault` | 60 | Built-in types implement const traits |
+| K3.6 | Derive const traits | [x] | `#[derive(ConstEq, ConstDefault)]` for user types | 60 | Derived implementations work |
+| K3.7 | Const trait objects | [x] | `&dyn const ConstAdd` for compile-time polymorphism | 80 | Const vtable dispatch |
+| K3.8 | Const where clauses | [x] | `where T: const Add + const Mul` compound bounds | 40 | Multiple const bounds |
+| K3.9 | Const associated types | [x] | `const type Output;` in const traits | 50 | Associated type resolved at compile time |
+| K3.10 | 10 const trait tests | [x] | Definition, impl, bounds, dispatch, derive | 150 | All 10 pass |
 
 **Sprint K3 Gate:** Const trait system end-to-end, all tests pass.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 20 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 30 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  30 / 210 tasks complete  (14.3%)
+Phase 1:  40 / 210 tasks complete  (19.0%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    30 / 710 tasks complete  ( 4.2%)
+TOTAL:    40 / 710 tasks complete  ( 5.6%)
 ```
 
 ---

@@ -29,6 +29,7 @@ pub mod bsp;
 pub mod codegen;
 pub mod compiler;
 pub mod const_generics;
+pub mod const_traits;
 pub mod concurrency_v2;
 pub mod debugger;
 pub mod debugger_v2;
