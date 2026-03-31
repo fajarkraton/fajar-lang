@@ -89,8 +89,7 @@ impl Headers {
 
     /// Adds a header.
     pub fn add(&mut self, name: &str, value: &str) {
-        self.entries
-            .push((name.to_lowercase(), value.to_string()));
+        self.entries.push((name.to_lowercase(), value.to_string()));
     }
 
     /// Gets the first value for a header name.
@@ -110,9 +109,7 @@ impl Headers {
 
     /// Iterates over all headers.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.entries
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
+        self.entries.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     /// Number of headers.
@@ -525,10 +522,15 @@ mod tests {
     #[test]
     fn w5_5_post_with_json_body() {
         let mut client = HttpClient::new();
-        client.mock("http://api.test/create", Response::json(StatusCode::CREATED, r#"{"id":1}"#));
+        client.mock(
+            "http://api.test/create",
+            Response::json(StatusCode::CREATED, r#"{"id":1}"#),
+        );
 
         let body = r#"{"name":"test"}"#.as_bytes().to_vec();
-        let resp = client.handle(Request::post("http://api.test/create", body)).unwrap();
+        let resp = client
+            .handle(Request::post("http://api.test/create", body))
+            .unwrap();
         assert_eq!(resp.status, StatusCode::CREATED);
     }
 
@@ -543,7 +545,9 @@ mod tests {
             Response::new(StatusCode::OK, large_body.as_bytes().to_vec()),
         );
 
-        let resp = client.handle(Request::get("http://api.test/large")).unwrap();
+        let resp = client
+            .handle(Request::get("http://api.test/large"))
+            .unwrap();
         assert_eq!(resp.body.len(), 100_000);
     }
 
@@ -582,7 +586,9 @@ mod tests {
         let mut client = HttpClient::new();
         client.mock("https://secure.test/api", Response::ok("secure"));
 
-        let resp = client.handle(Request::get("https://secure.test/api")).unwrap();
+        let resp = client
+            .handle(Request::get("https://secure.test/api"))
+            .unwrap();
         assert_eq!(resp.status, StatusCode::OK);
     }
 
@@ -595,7 +601,9 @@ mod tests {
         client.mock("http://a.test/2", Response::ok("b"));
 
         client.handle(Request::get("http://a.test/1")).unwrap();
-        client.handle(Request::post("http://a.test/2", b"body".to_vec())).unwrap();
+        client
+            .handle(Request::post("http://a.test/2", b"body".to_vec()))
+            .unwrap();
 
         assert_eq!(client.request_history().len(), 2);
         assert_eq!(client.request_history()[0].method, Method::Get);
@@ -619,8 +627,16 @@ mod tests {
     #[test]
     fn w6_2_path_method_routing() {
         let mut router = HttpRouter::new();
-        router.route(Method::Get, "/api/users", Box::new(|_| Response::json(StatusCode::OK, "[]")));
-        router.route(Method::Post, "/api/users", Box::new(|_| Response::json(StatusCode::CREATED, r#"{"id":1}"#)));
+        router.route(
+            Method::Get,
+            "/api/users",
+            Box::new(|_| Response::json(StatusCode::OK, "[]")),
+        );
+        router.route(
+            Method::Post,
+            "/api/users",
+            Box::new(|_| Response::json(StatusCode::CREATED, r#"{"id":1}"#)),
+        );
 
         let get_resp = router.handle(Request::get("/api/users"));
         assert_eq!(get_resp.status, StatusCode::OK);
@@ -695,11 +711,15 @@ mod tests {
     #[test]
     fn w6_7_post_body_deserialized() {
         let mut router = HttpRouter::new();
-        router.route(Method::Post, "/data", Box::new(|req: &Request| {
-            let body = req.body.as_deref().unwrap_or(b"");
-            let text = String::from_utf8_lossy(body);
-            Response::ok(&format!("got: {text}"))
-        }));
+        router.route(
+            Method::Post,
+            "/data",
+            Box::new(|req: &Request| {
+                let body = req.body.as_deref().unwrap_or(b"");
+                let text = String::from_utf8_lossy(body);
+                Response::ok(&format!("got: {text}"))
+            }),
+        );
 
         let resp = router.handle(Request::post("/data", b"hello".to_vec()));
         assert_eq!(resp.body_text().unwrap(), "got: hello");
@@ -736,12 +756,16 @@ mod tests {
         }));
 
         router.route(Method::Get, "/health", Box::new(|_| Response::ok("ok")));
-        router.route(Method::Get, "/api/users", Box::new(|_| {
-            Response::json(StatusCode::OK, r#"[{"id":1}]"#)
-        }));
-        router.route(Method::Post, "/api/users", Box::new(|_| {
-            Response::json(StatusCode::CREATED, r#"{"id":2}"#)
-        }));
+        router.route(
+            Method::Get,
+            "/api/users",
+            Box::new(|_| Response::json(StatusCode::OK, r#"[{"id":1}]"#)),
+        );
+        router.route(
+            Method::Post,
+            "/api/users",
+            Box::new(|_| Response::json(StatusCode::CREATED, r#"{"id":2}"#)),
+        );
 
         assert_eq!(router.route_count(), 3);
 

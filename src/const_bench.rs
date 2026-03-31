@@ -31,9 +31,8 @@ pub fn measure_const_eval(source: &str) -> (ComptimeValue, std::time::Duration) 
     let result = {
         let mut last = ComptimeValue::Null;
         for item in &program.items {
-            if let crate::parser::ast::Item::Stmt(crate::parser::ast::Stmt::Expr {
-                expr, ..
-            }) = item
+            if let crate::parser::ast::Item::Stmt(crate::parser::ast::Stmt::Expr { expr, .. }) =
+                item
             {
                 last = eval.eval_expr(expr).unwrap_or(ComptimeValue::Null);
             }
@@ -62,10 +61,7 @@ pub struct ConstBenchReport {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Compare const-evaluated result with runtime-computed result.
-pub fn validate_const_vs_runtime(
-    const_val: &ComptimeValue,
-    runtime_val: &ComptimeValue,
-) -> bool {
+pub fn validate_const_vs_runtime(const_val: &ComptimeValue, runtime_val: &ComptimeValue) -> bool {
     const_val == runtime_val
 }
 
@@ -99,8 +95,7 @@ comptime {{ countdown({max_depth}) }}
     eval.collect_functions(&program);
 
     for item in &program.items {
-        if let crate::parser::ast::Item::Stmt(crate::parser::ast::Stmt::Expr { expr, .. }) = item
-        {
+        if let crate::parser::ast::Item::Stmt(crate::parser::ast::Stmt::Expr { expr, .. }) = item {
             match eval.eval_expr(expr) {
                 Ok(ComptimeValue::Int(n)) => return n == max_depth as i64,
                 _ => return false,
@@ -116,8 +111,8 @@ comptime {{ countdown({max_depth}) }}
 
 /// All 15 numeric types that can be const generic parameters.
 pub const NUMERIC_TYPES: &[&str] = &[
-    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
-    "f32", "f64", "bool",
+    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32",
+    "f64", "bool",
 ];
 
 /// Verify all numeric types work as const generic parameters.
@@ -127,11 +122,7 @@ pub fn verify_numeric_const_params() -> Vec<(String, bool)> {
         .map(|ty| {
             let source = format!("fn test<const N: {ty}>(x: i64) -> i64 {{ x }}");
             let tokens = crate::lexer::tokenize(&source);
-            let ok = tokens.is_ok()
-                && tokens
-                    .unwrap()
-                    .iter()
-                    .any(|t| format!("{}", t.kind) == *ty);
+            let ok = tokens.is_ok() && tokens.unwrap().iter().any(|t| format!("{}", t.kind) == *ty);
             (ty.to_string(), ok)
         })
         .collect()
@@ -229,12 +220,12 @@ pub fn run_full_validation() -> ConstValidationReport {
 
     // K10.8: Matrix example
     let matrices = const_matrix_example();
-    report.matrix_example_ok = matrices.len() == 3
-        && matrices[2].to_string() == "Matrix<f64, 3, 2>";
+    report.matrix_example_ok =
+        matrices.len() == 3 && matrices[2].to_string() == "Matrix<f64, 3, 2>";
 
     // Module counts
     report.const_modules = 8; // const_generics, const_traits, const_alloc, const_reflect,
-                               // const_macros, const_stdlib, const_generic_types, const_pipeline
+    // const_macros, const_stdlib, const_generic_types, const_pipeline
 
     report
 }

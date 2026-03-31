@@ -46,10 +46,7 @@ pub enum FajarType {
     /// A Fajar enum by name
     Enum(String),
     /// Bitflags type (stored as u32/u64)
-    Flags {
-        name: String,
-        members: Vec<String>,
-    },
+    Flags { name: String, members: Vec<String> },
     /// Resource handle (opaque u32 index)
     ResourceHandle(String),
     /// `void` (no return)
@@ -175,9 +172,7 @@ impl WitTypeMapper {
                 name: wit_to_pascal_case(&td.name),
                 members: members.clone(),
             },
-            WitTypeDefKind::Resource(_) => {
-                FajarType::ResourceHandle(wit_to_pascal_case(&td.name))
-            }
+            WitTypeDefKind::Resource(_) => FajarType::ResourceHandle(wit_to_pascal_case(&td.name)),
             WitTypeDefKind::Alias(target) => self.map_type_ref(target),
         };
 
@@ -539,14 +534,8 @@ interface geo {
 
     #[test]
     fn w1_6_flags_union_and_intersection() {
-        let mut a = FlagSet::new(
-            "Perm",
-            vec!["read".into(), "write".into(), "exec".into()],
-        );
-        let mut b = FlagSet::new(
-            "Perm",
-            vec!["read".into(), "write".into(), "exec".into()],
-        );
+        let mut a = FlagSet::new("Perm", vec!["read".into(), "write".into(), "exec".into()]);
+        let mut b = FlagSet::new("Perm", vec!["read".into(), "write".into(), "exec".into()]);
         a.set("read");
         a.set("exec");
         b.set("read");
@@ -749,9 +738,18 @@ interface types {
         mapper.register_document(&doc);
 
         // Check all types were registered
-        assert_eq!(mapper.get_type("request").unwrap(), &FajarType::Struct("Request".into()));
-        assert_eq!(mapper.get_type("response").unwrap(), &FajarType::Struct("Response".into()));
-        assert_eq!(mapper.get_type("error").unwrap(), &FajarType::Enum("Error".into()));
+        assert_eq!(
+            mapper.get_type("request").unwrap(),
+            &FajarType::Struct("Request".into())
+        );
+        assert_eq!(
+            mapper.get_type("response").unwrap(),
+            &FajarType::Struct("Response".into())
+        );
+        assert_eq!(
+            mapper.get_type("error").unwrap(),
+            &FajarType::Enum("Error".into())
+        );
         if let Some(FajarType::Flags { name, members }) = mapper.get_type("method-filter") {
             assert_eq!(name, "MethodFilter");
             assert_eq!(members.len(), 4);

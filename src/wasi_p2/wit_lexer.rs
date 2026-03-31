@@ -81,8 +81,8 @@ pub enum WitTokenKind {
     Slash,
     At,
     Equals,
-    Arrow,      // ->
-    Star,       // *
+    Arrow, // ->
+    Star,  // *
 
     // ── Delimiters ──
     LBrace,
@@ -186,7 +186,11 @@ pub struct WitLexError {
 
 impl fmt::Display for WitLexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WIT lex error at offset {}: {}", self.offset, self.message)
+        write!(
+            f,
+            "WIT lex error at offset {}: {}",
+            self.offset, self.message
+        )
     }
 }
 
@@ -275,7 +279,8 @@ impl<'src> WitLexer<'src> {
                     }
                     self.pos += 1;
                 }
-                let content = String::from_utf8_lossy(&self.source[content_start..self.pos]).to_string();
+                let content =
+                    String::from_utf8_lossy(&self.source[content_start..self.pos]).to_string();
                 let kind = if is_doc {
                     WitTokenKind::DocComment(content)
                 } else {
@@ -321,7 +326,11 @@ impl<'src> WitLexer<'src> {
                     }
                 }
                 let text = String::from_utf8_lossy(&self.source[ident_start..self.pos]).to_string();
-                Ok(WitToken::new(WitTokenKind::Ident(text), start, self.pos - start))
+                Ok(WitToken::new(
+                    WitTokenKind::Ident(text),
+                    start,
+                    self.pos - start,
+                ))
             }
 
             // ── Identifiers & keywords ──
@@ -433,7 +442,11 @@ impl<'src> WitLexer<'src> {
                         }
                     }
                     let ver = String::from_utf8_lossy(&self.source[start..self.pos]).to_string();
-                    return Ok(WitToken::new(WitTokenKind::SemVer(ver), start, self.pos - start));
+                    return Ok(WitToken::new(
+                        WitTokenKind::SemVer(ver),
+                        start,
+                        self.pos - start,
+                    ));
                 }
             }
             // Not a semver, restore position
@@ -442,7 +455,11 @@ impl<'src> WitLexer<'src> {
 
         let text = std::str::from_utf8(&self.source[start..self.pos]).unwrap_or("0");
         let n = text.parse::<u64>().unwrap_or(0);
-        Ok(WitToken::new(WitTokenKind::Integer(n), start, self.pos - start))
+        Ok(WitToken::new(
+            WitTokenKind::Integer(n),
+            start,
+            self.pos - start,
+        ))
     }
 }
 
@@ -558,7 +575,11 @@ world command {
         assert!(tokens.iter().any(|t| t.kind == WitTokenKind::World));
         assert!(tokens.iter().any(|t| t.kind == WitTokenKind::Import));
         assert!(tokens.iter().any(|t| t.kind == WitTokenKind::Export));
-        assert!(tokens.iter().any(|t| matches!(&t.kind, WitTokenKind::Ident(s) if s == "command")));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, WitTokenKind::Ident(s) if s == "command"))
+        );
     }
 
     #[test]
@@ -567,6 +588,9 @@ world command {
         let tokens = tokenize_wit(src).unwrap();
         assert_eq!(tokens[0].kind, WitTokenKind::Ident("input-stream".into()));
         assert_eq!(tokens[1].kind, WitTokenKind::Ident("output-stream".into()));
-        assert_eq!(tokens[2].kind, WitTokenKind::Ident("monotonic-clock".into()));
+        assert_eq!(
+            tokens[2].kind,
+            WitTokenKind::Ident("monotonic-clock".into())
+        );
     }
 }

@@ -554,35 +554,35 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W7.1 | TCP types | [ ] | TcpSocket, IpAddress, Network resource | 80 | Types compile |
-| W7.2 | TCP connect | [ ] | `start-connect` -> `finish-connect` | 100 | Connect to remote |
-| W7.3 | TCP listen & accept | [ ] | `start-listen`, `accept` | 100 | Accept connections |
-| W7.4 | TCP streams | [ ] | Get input/output streams from socket | 60 | Echo server works |
-| W7.5 | UDP | [ ] | Datagram send/receive | 100 | UDP echo works |
-| W7.6 | DNS lookup | [ ] | Hostname -> IP addresses | 80 | `resolve("example.com")` |
-| W7.7 | Socket options | [ ] | `SO_REUSEADDR`, `TCP_NODELAY`, timeouts | 60 | Options affect behavior |
-| W7.8 | Non-blocking I/O | [ ] | Pollable sockets for async | 80 | Poll multiple sockets |
-| W7.9 | Socket errors | [ ] | Connection refused, timeout, reset -> Result | 40 | Errors propagated |
-| W7.10 | 10 socket tests | [ ] | TCP, UDP, DNS, poll | 150 | All 10 pass |
+| W7.1 | TCP types | [x] | TcpSocket, IpAddress, Network resource | 80 | Types compile |
+| W7.2 | TCP connect | [x] | `start-connect` -> `finish-connect` | 100 | Connect to remote |
+| W7.3 | TCP listen & accept | [x] | `start-listen`, `accept` | 100 | Accept connections |
+| W7.4 | TCP streams | [x] | Get input/output streams from socket | 60 | Echo server works |
+| W7.5 | UDP | [x] | Datagram send/receive | 100 | UDP echo works |
+| W7.6 | DNS lookup | [x] | Hostname -> IP addresses | 80 | `resolve("example.com")` |
+| W7.7 | Socket options | [x] | `SO_REUSEADDR`, `TCP_NODELAY`, timeouts | 60 | Options affect behavior |
+| W7.8 | Non-blocking I/O | [x] | Pollable sockets for async | 80 | Poll multiple sockets |
+| W7.9 | Socket errors | [x] | Connection refused, timeout, reset -> Result | 40 | Errors propagated |
+| W7.10 | 10 socket tests | [x] | TCP, UDP, DNS, poll | 150 | All 10 pass |
 
-**Sprint W7 Gate:** TCP + UDP + DNS fully functional on wasmtime.
+**Sprint W7 Gate:** TCP + UDP + DNS fully functional. ✅ 26 tests, 0 failures.
 
 ### Sprint W8: Resource Lifecycle & Ownership (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W8.1 | Resource handle table | [ ] | Guest-side handle->index table | 100 | Handles allocated/freed |
-| W8.2 | Resource drop protocol | [ ] | `resource.drop(handle)` -> host cleanup | 60 | Resources freed |
-| W8.3 | Resource borrow semantics | [ ] | Borrowed handles can't outlive owner | 80 | Borrow checker enforces |
-| W8.4 | Own vs borrow in WIT | [ ] | `own<file>` vs `borrow<file>` in signatures | 80 | Ownership correct |
-| W8.5 | Resource constructor | [ ] | `[constructor]file(path)` -> `resource.new()` | 60 | Constructor creates handle |
-| W8.6 | Resource methods | [ ] | `[method]file.read(len)` dispatch | 60 | Method calls work |
-| W8.7 | Resource static methods | [ ] | `[static]file.open(path)` | 50 | Factory methods work |
-| W8.8 | Nested resources | [ ] | Resource containing other resources | 80 | Correct drop order |
-| W8.9 | Resource in collections | [ ] | `list<own<file>>` in returns | 60 | Handles in arrays |
-| W8.10 | 10 resource tests | [ ] | Create, borrow, drop, nested, collection | 150 | All 10 pass, no leaks |
+| W8.1 | Resource handle table | [x] | Guest-side handle->index table | 100 | Handles allocated/freed |
+| W8.2 | Resource drop protocol | [x] | `resource.drop(handle)` -> host cleanup | 60 | Resources freed |
+| W8.3 | Resource borrow semantics | [x] | Borrowed handles can't outlive owner | 80 | Borrow checker enforces |
+| W8.4 | Own vs borrow in WIT | [x] | `own<file>` vs `borrow<file>` in signatures | 80 | Ownership correct |
+| W8.5 | Resource constructor | [x] | `[constructor]file(path)` -> `resource.new()` | 60 | Constructor creates handle |
+| W8.6 | Resource methods | [x] | `[method]file.read(len)` dispatch | 60 | Method calls work |
+| W8.7 | Resource static methods | [x] | `[static]file.open(path)` | 50 | Factory methods work |
+| W8.8 | Nested resources | [x] | Resource containing other resources | 80 | Correct drop order |
+| W8.9 | Resource in collections | [x] | `list<own<file>>` in returns | 60 | Handles in arrays |
+| W8.10 | 10 resource tests | [x] | Create, borrow, drop, nested, collection | 150 | All 10 pass, no leaks |
 
-**Sprint W8 Gate:** Resource lifecycle fully managed, no leaks.
+**Sprint W8 Gate:** Resource lifecycle fully managed, no leaks. ✅ 25 tests, 0 failures.
 
 ### Sprint W9: Component Composition & Linking (10 tasks)
 

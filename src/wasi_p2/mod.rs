@@ -7,10 +7,13 @@
 //! - `wit_lexer` — Tokenizer for `.wit` files
 //! - `wit_parser` — Recursive-descent parser producing `WitDocument`
 //! - `wit_types` — WIT-to-Fajar type mapping and type system
+//! - `resources` — Resource lifecycle, handle table, own/borrow semantics
 
 pub mod component;
 pub mod filesystem;
 pub mod http;
+pub mod resources;
+pub mod sockets;
 pub mod streams;
 pub mod wit_lexer;
 pub mod wit_parser;

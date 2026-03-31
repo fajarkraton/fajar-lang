@@ -293,7 +293,10 @@ impl WasiFilesystem {
 
                 // Add to parent directory
                 let (parent_idx, name) = self.resolve_parent_and_name(dir_idx, path)?;
-                if let FsNode::Directory { ref mut entries, .. } = self.nodes[parent_idx] {
+                if let FsNode::Directory {
+                    ref mut entries, ..
+                } = self.nodes[parent_idx]
+                {
                     entries.insert(name, node_idx);
                 }
 
@@ -348,11 +351,7 @@ impl WasiFilesystem {
         let (node_idx, cursor) = *self.descriptors.get(&fd).ok_or(FsError::BadDescriptor)?;
         let ts = self.tick();
         match &mut self.nodes[node_idx] {
-            FsNode::File {
-                data,
-                modified,
-                ..
-            } => {
+            FsNode::File { data, modified, .. } => {
                 let start = cursor as usize;
                 // Extend if necessary
                 if start + bytes.len() > data.len() {
@@ -442,11 +441,7 @@ impl WasiFilesystem {
     // ── W3.7: path-create-directory ──
 
     /// Creates a directory (and parents if needed).
-    pub fn create_directory_at(
-        &mut self,
-        dir_fd: Descriptor,
-        path: &str,
-    ) -> Result<(), FsError> {
+    pub fn create_directory_at(&mut self, dir_fd: Descriptor, path: &str) -> Result<(), FsError> {
         let dir_idx = self.resolve_node(dir_fd)?;
 
         let mut current = dir_idx;
@@ -465,7 +460,10 @@ impl WasiFilesystem {
                         entries: HashMap::new(),
                         created: ts,
                     });
-                    if let FsNode::Directory { ref mut entries, .. } = self.nodes[current] {
+                    if let FsNode::Directory {
+                        ref mut entries, ..
+                    } = self.nodes[current]
+                    {
                         entries.insert(component.to_string(), new_idx);
                     }
                     current = new_idx;
@@ -479,11 +477,7 @@ impl WasiFilesystem {
     // ── W3.8: unlink-file / remove-directory ──
 
     /// Unlinks a file at the given path.
-    pub fn unlink_file_at(
-        &mut self,
-        dir_fd: Descriptor,
-        path: &str,
-    ) -> Result<(), FsError> {
+    pub fn unlink_file_at(&mut self, dir_fd: Descriptor, path: &str) -> Result<(), FsError> {
         let dir_idx = self.resolve_node(dir_fd)?;
         let (parent_idx, name) = self.resolve_parent_and_name(dir_idx, path)?;
 
@@ -498,18 +492,17 @@ impl WasiFilesystem {
         }
 
         // Remove from parent
-        if let FsNode::Directory { ref mut entries, .. } = self.nodes[parent_idx] {
+        if let FsNode::Directory {
+            ref mut entries, ..
+        } = self.nodes[parent_idx]
+        {
             entries.remove(&name);
         }
         Ok(())
     }
 
     /// Removes an empty directory at the given path.
-    pub fn remove_directory_at(
-        &mut self,
-        dir_fd: Descriptor,
-        path: &str,
-    ) -> Result<(), FsError> {
+    pub fn remove_directory_at(&mut self, dir_fd: Descriptor, path: &str) -> Result<(), FsError> {
         let dir_idx = self.resolve_node(dir_fd)?;
         let (parent_idx, name) = self.resolve_parent_and_name(dir_idx, path)?;
 
@@ -517,7 +510,10 @@ impl WasiFilesystem {
         if let FsNode::Directory { ref entries, .. } = self.nodes[parent_idx] {
             let &child_idx = entries.get(&name).ok_or(FsError::NoEntry)?;
             match &self.nodes[child_idx] {
-                FsNode::Directory { entries: child_entries, .. } => {
+                FsNode::Directory {
+                    entries: child_entries,
+                    ..
+                } => {
                     if !child_entries.is_empty() {
                         return Err(FsError::NotEmpty);
                     }
@@ -528,7 +524,10 @@ impl WasiFilesystem {
             return Err(FsError::NotDir);
         }
 
-        if let FsNode::Directory { ref mut entries, .. } = self.nodes[parent_idx] {
+        if let FsNode::Directory {
+            ref mut entries, ..
+        } = self.nodes[parent_idx]
+        {
             entries.remove(&name);
         }
         Ok(())
@@ -558,12 +557,18 @@ impl WasiFilesystem {
         };
 
         // Remove from old parent
-        if let FsNode::Directory { ref mut entries, .. } = self.nodes[old_parent] {
+        if let FsNode::Directory {
+            ref mut entries, ..
+        } = self.nodes[old_parent]
+        {
             entries.remove(&old_name);
         }
 
         // Add to new parent
-        if let FsNode::Directory { ref mut entries, .. } = self.nodes[new_parent] {
+        if let FsNode::Directory {
+            ref mut entries, ..
+        } = self.nodes[new_parent]
+        {
             entries.insert(new_name, node_idx);
         } else {
             return Err(FsError::NotDir);
@@ -626,24 +631,48 @@ mod tests {
     #[test]
     fn w3_2_open_create_file() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "file.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "file.txt", flags, DescriptorFlags::default())
+            .unwrap();
         assert!(fd >= 3);
     }
 
     #[test]
     fn w3_2_open_existing_file() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let _fd1 = fs.open_at(root, "file.txt", flags, DescriptorFlags::default()).unwrap();
-        let fd2 = fs.open_at(root, "file.txt", OpenFlags::default(), DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let _fd1 = fs
+            .open_at(root, "file.txt", flags, DescriptorFlags::default())
+            .unwrap();
+        let fd2 = fs
+            .open_at(
+                root,
+                "file.txt",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap();
         assert!(fd2 > 0);
     }
 
     #[test]
     fn w3_2_open_nonexistent_fails() {
         let (mut fs, root) = setup();
-        let err = fs.open_at(root, "missing.txt", OpenFlags::default(), DescriptorFlags::default()).unwrap_err();
+        let err = fs
+            .open_at(
+                root,
+                "missing.txt",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap_err();
         assert_eq!(err, FsError::NoEntry);
     }
 
@@ -652,8 +681,13 @@ mod tests {
     #[test]
     fn w3_3_read_file_in_chunks() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "data.bin", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "data.bin", flags, DescriptorFlags::default())
+            .unwrap();
 
         // Write 1MB of data
         let data: Vec<u8> = (0..1024 * 1024).map(|i| (i % 256) as u8).collect();
@@ -661,7 +695,14 @@ mod tests {
 
         // Close and reopen to reset cursor
         fs.close(fd).unwrap();
-        let fd2 = fs.open_at(root, "data.bin", OpenFlags::default(), DescriptorFlags::default()).unwrap();
+        let fd2 = fs
+            .open_at(
+                root,
+                "data.bin",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap();
 
         // Read in 4KB chunks
         let mut read_data = Vec::new();
@@ -681,14 +722,26 @@ mod tests {
     #[test]
     fn w3_4_write_and_verify() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "hello.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "hello.txt", flags, DescriptorFlags::default())
+            .unwrap();
         let written = fs.write(fd, b"Hello, WASI!").unwrap();
         assert_eq!(written, 12);
 
         // Reset cursor and read back
         fs.close(fd).unwrap();
-        let fd2 = fs.open_at(root, "hello.txt", OpenFlags::default(), DescriptorFlags::default()).unwrap();
+        let fd2 = fs
+            .open_at(
+                root,
+                "hello.txt",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap();
         let data = fs.read(fd2, 100).unwrap();
         assert_eq!(data, b"Hello, WASI!");
     }
@@ -698,8 +751,13 @@ mod tests {
     #[test]
     fn w3_5_stat_file() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "test.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "test.txt", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd, b"hello world").unwrap();
 
         let stat = fs.stat(fd).unwrap();
@@ -711,8 +769,13 @@ mod tests {
     #[test]
     fn w3_5_stat_at_path() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "data.bin", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "data.bin", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd, &vec![0u8; 1024]).unwrap();
 
         let stat = fs.stat_at(root, "data.bin").unwrap();
@@ -724,9 +787,14 @@ mod tests {
     #[test]
     fn w3_6_readdir_lists_entries() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        fs.open_at(root, "a.txt", flags, DescriptorFlags::default()).unwrap();
-        fs.open_at(root, "b.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        fs.open_at(root, "a.txt", flags, DescriptorFlags::default())
+            .unwrap();
+        fs.open_at(root, "b.txt", flags, DescriptorFlags::default())
+            .unwrap();
         fs.create_directory_at(root, "subdir").unwrap();
 
         let entries = fs.readdir(root).unwrap();
@@ -750,7 +818,17 @@ mod tests {
         assert_eq!(entries[0].name, "a");
 
         // Open 'a' and check 'b' exists
-        let a_fd = fs.open_at(root, "a", OpenFlags { directory: true, ..Default::default() }, DescriptorFlags::default()).unwrap();
+        let a_fd = fs
+            .open_at(
+                root,
+                "a",
+                OpenFlags {
+                    directory: true,
+                    ..Default::default()
+                },
+                DescriptorFlags::default(),
+            )
+            .unwrap();
         let a_entries = fs.readdir(a_fd).unwrap();
         assert_eq!(a_entries.len(), 1);
         assert_eq!(a_entries[0].name, "b");
@@ -761,8 +839,12 @@ mod tests {
     #[test]
     fn w3_8_unlink_file() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        fs.open_at(root, "to_delete.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        fs.open_at(root, "to_delete.txt", flags, DescriptorFlags::default())
+            .unwrap();
         assert_eq!(fs.readdir(root).unwrap().len(), 1);
 
         fs.unlink_file_at(root, "to_delete.txt").unwrap();
@@ -785,9 +867,23 @@ mod tests {
     fn w3_8_remove_nonempty_fails() {
         let (mut fs, root) = setup();
         fs.create_directory_at(root, "nonempty").unwrap();
-        let dir_fd = fs.open_at(root, "nonempty", OpenFlags { directory: true, ..Default::default() }, DescriptorFlags::default()).unwrap();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        fs.open_at(dir_fd, "child.txt", flags, DescriptorFlags::default()).unwrap();
+        let dir_fd = fs
+            .open_at(
+                root,
+                "nonempty",
+                OpenFlags {
+                    directory: true,
+                    ..Default::default()
+                },
+                DescriptorFlags::default(),
+            )
+            .unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        fs.open_at(dir_fd, "child.txt", flags, DescriptorFlags::default())
+            .unwrap();
 
         let err = fs.remove_directory_at(root, "nonempty").unwrap_err();
         assert_eq!(err, FsError::NotEmpty);
@@ -798,8 +894,13 @@ mod tests {
     #[test]
     fn w3_9_rename_preserves_content() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "old.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "old.txt", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd, b"content here").unwrap();
 
         fs.rename_at(root, "old.txt", root, "new.txt").unwrap();
@@ -808,7 +909,14 @@ mod tests {
         assert!(fs.stat_at(root, "old.txt").is_err());
 
         // New name has same content
-        let new_fd = fs.open_at(root, "new.txt", OpenFlags::default(), DescriptorFlags::default()).unwrap();
+        let new_fd = fs
+            .open_at(
+                root,
+                "new.txt",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap();
         let data = fs.read(new_fd, 100).unwrap();
         assert_eq!(data, b"content here");
     }
@@ -824,13 +932,40 @@ mod tests {
         fs.create_directory_at(root, "src/lib").unwrap();
 
         // Create files
-        let src_fd = fs.open_at(root, "src", OpenFlags { directory: true, ..Default::default() }, DescriptorFlags::default()).unwrap();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(src_fd, "main.fj", flags, DescriptorFlags::default()).unwrap();
+        let src_fd = fs
+            .open_at(
+                root,
+                "src",
+                OpenFlags {
+                    directory: true,
+                    ..Default::default()
+                },
+                DescriptorFlags::default(),
+            )
+            .unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(src_fd, "main.fj", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd, b"fn main() { println(\"hello\") }").unwrap();
 
-        let lib_fd = fs.open_at(src_fd, "lib", OpenFlags { directory: true, ..Default::default() }, DescriptorFlags::default()).unwrap();
-        let fd2 = fs.open_at(lib_fd, "utils.fj", flags, DescriptorFlags::default()).unwrap();
+        let lib_fd = fs
+            .open_at(
+                src_fd,
+                "lib",
+                OpenFlags {
+                    directory: true,
+                    ..Default::default()
+                },
+                DescriptorFlags::default(),
+            )
+            .unwrap();
+        let fd2 = fs
+            .open_at(lib_fd, "utils.fj", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd2, b"pub fn helper() -> i32 { 42 }").unwrap();
 
         // Verify stat
@@ -852,8 +987,13 @@ mod tests {
     #[test]
     fn w3_10_descriptor_close_and_reopen() {
         let (mut fs, root) = setup();
-        let flags = OpenFlags { create: true, ..Default::default() };
-        let fd = fs.open_at(root, "test.txt", flags, DescriptorFlags::default()).unwrap();
+        let flags = OpenFlags {
+            create: true,
+            ..Default::default()
+        };
+        let fd = fs
+            .open_at(root, "test.txt", flags, DescriptorFlags::default())
+            .unwrap();
         fs.write(fd, b"hello").unwrap();
         fs.close(fd).unwrap();
 
@@ -861,7 +1001,14 @@ mod tests {
         assert!(fs.read(fd, 10).is_err());
 
         // But reopening works
-        let fd2 = fs.open_at(root, "test.txt", OpenFlags::default(), DescriptorFlags::default()).unwrap();
+        let fd2 = fs
+            .open_at(
+                root,
+                "test.txt",
+                OpenFlags::default(),
+                DescriptorFlags::default(),
+            )
+            .unwrap();
         let data = fs.read(fd2, 10).unwrap();
         assert_eq!(data, b"hello");
     }

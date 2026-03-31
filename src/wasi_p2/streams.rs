@@ -477,7 +477,10 @@ impl WasiRandom {
     /// Returns a random u64.
     pub fn get_random_u64(&mut self) -> u64 {
         // LCG parameters (same as glibc)
-        self.state = self.state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        self.state = self
+            .state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
         self.state
     }
 
@@ -700,7 +703,12 @@ mod tests {
         assert_eq!(data, b"hello");
 
         // Write to output
-        table.output_streams.get_mut(&oh).unwrap().write(b"world").unwrap();
+        table
+            .output_streams
+            .get_mut(&oh)
+            .unwrap()
+            .write(b"world")
+            .unwrap();
         table.output_streams.get_mut(&oh).unwrap().flush().unwrap();
         assert_eq!(table.output_streams[&oh].flushed_data(), b"world");
     }
