@@ -11864,8 +11864,8 @@ fn n2_inode_generation() {
         fn gen_after_delete_recreate(old_gen: i64) -> i64 { old_gen + 1 }
         fn is_stale(handle_gen: i64, current_gen: i64) -> bool { handle_gen != current_gen }
         fn main() -> void {
-            let gen = gen_after_delete_recreate(0)
-            println(gen)
+            let generation = gen_after_delete_recreate(0)
+            println(generation)
             println(is_stale(0, 1))
             println(is_stale(1, 1))
         }

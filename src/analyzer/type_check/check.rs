@@ -95,22 +95,20 @@ impl TypeChecker {
                     });
                 }
             }
-            Item::StructDef(sdef) => {
+            Item::StructDef(sdef) if sdef.lifetime_params.is_empty() => {
                 // B5: Warn if struct has &T fields but no lifetime params
-                if sdef.lifetime_params.is_empty() {
-                    let has_ref_field = sdef
-                        .fields
-                        .iter()
-                        .any(|f| matches!(f.ty, crate::parser::ast::TypeExpr::Reference { .. }));
-                    if has_ref_field {
-                        self.errors.push(SemanticError::DanglingReference {
-                            lifetime: format!(
-                                "struct '{}' has reference fields but no lifetime parameters",
-                                sdef.name
-                            ),
-                            span: sdef.span,
-                        });
-                    }
+                let has_ref_field = sdef
+                    .fields
+                    .iter()
+                    .any(|f| matches!(f.ty, crate::parser::ast::TypeExpr::Reference { .. }));
+                if has_ref_field {
+                    self.errors.push(SemanticError::DanglingReference {
+                        lifetime: format!(
+                            "struct '{}' has reference fields but no lifetime parameters",
+                            sdef.name
+                        ),
+                        span: sdef.span,
+                    });
                 }
             }
             Item::Stmt(stmt) => {

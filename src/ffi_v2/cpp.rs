@@ -456,7 +456,7 @@ pub fn parse_header(header_path: &str, include_dirs: &[&str]) -> Result<Vec<CppD
     // Load libclang dynamically
     if let Err(e) = clang_sys::load() {
         // Already loaded is OK
-        let msg = format!("{e}");
+        let msg = e.to_string();
         if !msg.contains("already") {
             return Err(format!("failed to load libclang: {e}"));
         }

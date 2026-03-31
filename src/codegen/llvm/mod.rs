@@ -6992,7 +6992,7 @@ mod tests {
     fn l6_string_literal_produces_struct() {
         LlvmCompiler::init_native_target().unwrap();
         let context = Context::create();
-        let mut compiler = LlvmCompiler::new(&context, "test_l6_str_lit");
+        let compiler = LlvmCompiler::new(&context, "test_l6_str_lit");
 
         // Create a function context
         let i64_type = context.i64_type();
