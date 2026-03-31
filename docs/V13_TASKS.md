@@ -189,16 +189,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K7.1 | Const math functions | [ ] | `const fn abs`, `min`, `max`, `clamp` | 60 | Math at compile time |
-| K7.2 | Const string operations | [ ] | `const fn str_len`, `str_eq` | 40 | String ops at compile time |
-| K7.3 | Const array operations | [ ] | `const fn array_len`, `array_get` | 40 | Array ops at compile time |
-| K7.4 | Const Option methods | [ ] | `const fn unwrap_or`, `is_some`, `map` | 40 | Option at compile time |
-| K7.5 | Const Result methods | [ ] | `const fn unwrap_or`, `is_ok`, `map` | 40 | Result at compile time |
-| K7.6 | Const hash functions | [ ] | `const fn hash_str`, `hash_bytes` | 60 | Hashing at compile time |
-| K7.7 | Const formatting | [ ] | `const fn format_int`, `format_float` | 60 | Number -> string at compile time |
-| K7.8 | Const bit manipulation | [ ] | `const fn count_ones`, `leading_zeros` | 40 | Bit ops at compile time |
-| K7.9 | Const conversion | [ ] | `const fn i32_to_i64`, `f64_to_f32` | 30 | Type conversion at compile time |
-| K7.10 | 10 const stdlib tests | [ ] | Math, string, array, option, hash, format, bits | 150 | All 10 pass |
+| K7.1 | Const math functions | [x] | `const fn abs`, `min`, `max`, `clamp` | 60 | Math at compile time |
+| K7.2 | Const string operations | [x] | `const fn str_len`, `str_eq` | 40 | String ops at compile time |
+| K7.3 | Const array operations | [x] | `const fn array_len`, `array_get` | 40 | Array ops at compile time |
+| K7.4 | Const Option methods | [x] | `const fn unwrap_or`, `is_some`, `map` | 40 | Option at compile time |
+| K7.5 | Const Result methods | [x] | `const fn unwrap_or`, `is_ok`, `map` | 40 | Result at compile time |
+| K7.6 | Const hash functions | [x] | `const fn hash_str`, `hash_bytes` | 60 | Hashing at compile time |
+| K7.7 | Const formatting | [x] | `const fn format_int`, `format_float` | 60 | Number -> string at compile time |
+| K7.8 | Const bit manipulation | [x] | `const fn count_ones`, `leading_zeros` | 40 | Bit ops at compile time |
+| K7.9 | Const conversion | [x] | `const fn i32_to_i64`, `f64_to_f32` | 30 | Type conversion at compile time |
+| K7.10 | 10 const stdlib tests | [x] | Math, string, array, option, hash, format, bits | 150 | All 10 pass |
 
 **Sprint K7 Gate:** Const stdlib functions usable in `const` and `comptime` contexts.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 60 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 70 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  70 / 210 tasks complete  (33.3%)
+Phase 1:  80 / 210 tasks complete  (38.1%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    70 / 710 tasks complete  ( 9.9%)
+TOTAL:    80 / 710 tasks complete  (11.3%)
 ```
 
 ---

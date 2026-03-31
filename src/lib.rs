@@ -32,6 +32,7 @@ pub mod const_alloc;
 pub mod const_generics;
 pub mod const_macros;
 pub mod const_reflect;
+pub mod const_stdlib;
 pub mod const_traits;
 pub mod concurrency_v2;
 pub mod debugger;
