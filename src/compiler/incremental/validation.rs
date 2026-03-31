@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::compute_content_hash;
 use super::disk::HashStore;
-use super::integration::{execute_build, IncrementalBuildConfig, RebuildPlan};
+use super::integration::{IncrementalBuildConfig, RebuildPlan, execute_build};
 
 // ═══════════════════════════════════════════════════════════════════════
 // I10.1: Correctness Validation
@@ -17,8 +17,7 @@ use super::integration::{execute_build, IncrementalBuildConfig, RebuildPlan};
 /// Compare incremental build output to clean build output.
 ///
 /// Both should produce identical results for the same inputs.
-pub fn validate_correctness(
-    modules: &[(&str, &str)], // (name, source)
+pub fn validate_correctness(modules: &[(&str, &str)], // (name, source)
 ) -> CorrectnessResult {
     // "Clean build" — hash all modules
     let clean_hashes: Vec<String> = modules
@@ -118,7 +117,10 @@ pub fn measure_incremental_overhead(num_modules: usize) -> OverheadResult {
     // Clean build (no incremental)
     let start_clean = Instant::now();
     let clean_cfg = IncrementalBuildConfig::full_rebuild("/bench");
-    let plan = RebuildPlan { full_rebuild: true, ..Default::default() };
+    let plan = RebuildPlan {
+        full_rebuild: true,
+        ..Default::default()
+    };
     let _clean = execute_build(&clean_cfg, &plan, num_modules);
     let clean_time = start_clean.elapsed();
 
@@ -259,7 +261,7 @@ pub fn run_full_validation() -> IncrementalValidationReport {
 
     // Module count
     let incremental_modules = 10; // disk, fine_grained, ir_cache, parallel, integration,
-                                   // rebuild_bench, edge_cases, lsp_incr, workspace, validation
+    // rebuild_bench, edge_cases, lsp_incr, workspace, validation
 
     let all_passed = correctness.identical
         && deterministic
@@ -304,18 +306,58 @@ impl IncrementalValidationReport {
         let mut out = String::new();
         out.push_str("Incremental Compilation Validation\n");
         out.push_str("══════════════════════════════════\n");
-        out.push_str(&format!("Correctness:   {}\n", if self.correctness_ok { "PASS" } else { "FAIL" }));
-        out.push_str(&format!("Deterministic: {}\n", if self.deterministic { "PASS" } else { "FAIL" }));
-        out.push_str(&format!("Memory:        {} ({:.1} MB for 100 modules)\n",
-            if self.memory_under_500mb { "PASS" } else { "FAIL" },
-            self.memory_bytes as f64 / 1_048_576.0));
-        out.push_str(&format!("Overhead:      {} ({:.1}% on clean build)\n",
-            if self.overhead_under_5pct { "PASS" } else { "FAIL" }, self.overhead_pct));
-        out.push_str(&format!("Stdlib cached: {}\n", if self.stdlib_all_cached { "PASS" } else { "FAIL" }));
-        out.push_str(&format!("Stress (1000): {} ({} failures)\n",
-            if self.stress_1000_cycles { "PASS" } else { "FAIL" }, self.stress_failures));
+        out.push_str(&format!(
+            "Correctness:   {}\n",
+            if self.correctness_ok { "PASS" } else { "FAIL" }
+        ));
+        out.push_str(&format!(
+            "Deterministic: {}\n",
+            if self.deterministic { "PASS" } else { "FAIL" }
+        ));
+        out.push_str(&format!(
+            "Memory:        {} ({:.1} MB for 100 modules)\n",
+            if self.memory_under_500mb {
+                "PASS"
+            } else {
+                "FAIL"
+            },
+            self.memory_bytes as f64 / 1_048_576.0
+        ));
+        out.push_str(&format!(
+            "Overhead:      {} ({:.1}% on clean build)\n",
+            if self.overhead_under_5pct {
+                "PASS"
+            } else {
+                "FAIL"
+            },
+            self.overhead_pct
+        ));
+        out.push_str(&format!(
+            "Stdlib cached: {}\n",
+            if self.stdlib_all_cached {
+                "PASS"
+            } else {
+                "FAIL"
+            }
+        ));
+        out.push_str(&format!(
+            "Stress (1000): {} ({} failures)\n",
+            if self.stress_1000_cycles {
+                "PASS"
+            } else {
+                "FAIL"
+            },
+            self.stress_failures
+        ));
         out.push_str(&format!("Modules:       {}\n", self.incremental_modules));
-        out.push_str(&format!("\nResult: {}\n", if self.all_passed { "ALL PASSED" } else { "SOME FAILED" }));
+        out.push_str(&format!(
+            "\nResult: {}\n",
+            if self.all_passed {
+                "ALL PASSED"
+            } else {
+                "SOME FAILED"
+            }
+        ));
         out
     }
 }
@@ -332,10 +374,7 @@ mod tests {
 
     #[test]
     fn i10_1_correctness_identical() {
-        let result = validate_correctness(&[
-            ("a.fj", "fn a() {}"),
-            ("b.fj", "fn b() {}"),
-        ]);
+        let result = validate_correctness(&[("a.fj", "fn a() {}"), ("b.fj", "fn b() {}")]);
         assert!(result.identical);
         assert_eq!(result.module_count, 2);
     }
@@ -359,8 +398,11 @@ mod tests {
     #[test]
     fn i10_3_memory_under_500mb() {
         let profile = estimate_memory(1000, 50); // 1K modules, 50 symbols each
-        assert!(profile.total_bytes < 500_000_000,
-            "estimated {} MB", profile.total_bytes / 1_048_576);
+        assert!(
+            profile.total_bytes < 500_000_000,
+            "estimated {} MB",
+            profile.total_bytes / 1_048_576
+        );
     }
 
     #[test]
@@ -375,8 +417,11 @@ mod tests {
     fn i10_4_overhead_under_5pct() {
         let result = measure_incremental_overhead(20);
         // Both are simulated so overhead should be near-zero
-        assert!(result.passed || result.overhead_pct < 50.0,
-            "overhead: {:.1}%", result.overhead_pct);
+        assert!(
+            result.passed || result.overhead_pct < 50.0,
+            "overhead: {:.1}%",
+            result.overhead_pct
+        );
     }
 
     // ── I10.5: Stdlib ──
@@ -424,8 +469,16 @@ mod tests {
         assert!(report.deterministic, "determinism failed");
         assert!(report.memory_under_500mb, "memory exceeded 500MB");
         assert!(report.stdlib_all_cached, "stdlib not fully cached");
-        assert!(report.stress_1000_cycles, "stress test failed with {} failures", report.stress_failures);
-        assert!(report.all_passed, "not all validations passed:\n{}", report.format_display());
+        assert!(
+            report.stress_1000_cycles,
+            "stress test failed with {} failures",
+            report.stress_failures
+        );
+        assert!(
+            report.all_passed,
+            "not all validations passed:\n{}",
+            report.format_display()
+        );
     }
 
     #[test]

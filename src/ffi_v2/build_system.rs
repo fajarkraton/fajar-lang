@@ -133,7 +133,6 @@ pub struct FfiConfig {
     pub custom_steps: Vec<CustomBuildStep>,
 }
 
-
 /// A pkg-config entry in the [ffi] section.
 #[derive(Debug, Clone)]
 pub struct PkgConfigEntry {
@@ -545,9 +544,7 @@ impl PythonVenv {
 
         let interpreter = format!("{venv_path}{sep}{bin_dir}{sep}python3");
         let pip = format!("{venv_path}{sep}{bin_dir}{sep}pip");
-        let site_packages = format!(
-            "{venv_path}{sep}lib{sep}python3.11{sep}site-packages"
-        );
+        let site_packages = format!("{venv_path}{sep}lib{sep}python3.11{sep}site-packages");
 
         Ok(Self {
             root: venv_path.to_string(),
@@ -566,11 +563,7 @@ impl PythonVenv {
     }
 
     /// Simulates installing a package via pip.
-    pub fn install_package(
-        &mut self,
-        name: &str,
-        version: &str,
-    ) -> Result<(), BuildError> {
+    pub fn install_package(&mut self, name: &str, version: &str) -> Result<(), BuildError> {
         if !self.valid {
             return Err(BuildError::PythonVenvInvalid {
                 path: self.root.clone(),
@@ -695,10 +688,8 @@ impl CmakeBuild {
         }
         self.completed_phases.push(CmakePhase::Build);
         // Simulate producing a library artifact.
-        self.artifacts.push(format!(
-            "{}/lib/libproject.a",
-            self.install_prefix
-        ));
+        self.artifacts
+            .push(format!("{}/lib/libproject.a", self.install_prefix));
         Ok(())
     }
 
@@ -1161,14 +1152,8 @@ impl CrossTarget {
             format!("target/{}", self.triple),
         );
         if !self.sysroot.is_empty() {
-            env.insert(
-                "CMAKE_SYSROOT".to_string(),
-                self.sysroot.clone(),
-            );
-            env.insert(
-                "PKG_CONFIG_SYSROOT_DIR".to_string(),
-                self.sysroot.clone(),
-            );
+            env.insert("CMAKE_SYSROOT".to_string(), self.sysroot.clone());
+            env.insert("PKG_CONFIG_SYSROOT_DIR".to_string(), self.sysroot.clone());
         }
         env
     }
@@ -1180,19 +1165,10 @@ impl CrossTarget {
             "CMAKE_SYSTEM_NAME".to_string(),
             self.system_name().to_string(),
         );
-        defines.insert(
-            "CMAKE_C_COMPILER".to_string(),
-            self.cc.clone(),
-        );
-        defines.insert(
-            "CMAKE_CXX_COMPILER".to_string(),
-            self.cxx.clone(),
-        );
+        defines.insert("CMAKE_C_COMPILER".to_string(), self.cc.clone());
+        defines.insert("CMAKE_CXX_COMPILER".to_string(), self.cxx.clone());
         if !self.sysroot.is_empty() {
-            defines.insert(
-                "CMAKE_SYSROOT".to_string(),
-                self.sysroot.clone(),
-            );
+            defines.insert("CMAKE_SYSROOT".to_string(), self.sysroot.clone());
         }
         defines
     }
@@ -1398,9 +1374,7 @@ impl CiConfig {
         }
 
         // If cmake entries exist, ensure cmake is installed.
-        if !config.cmake.is_empty()
-            && !ci.system_packages.contains(&"cmake".to_string())
-        {
+        if !config.cmake.is_empty() && !ci.system_packages.contains(&"cmake".to_string()) {
             ci.system_packages.push("cmake".to_string());
         }
 
@@ -1422,7 +1396,9 @@ impl CiConfig {
     pub fn generate_github_actions_yaml(&self) -> String {
         let mut yaml = String::new();
         yaml.push_str("name: FFI Build\n\n");
-        yaml.push_str("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\n");
+        yaml.push_str(
+            "on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n\n",
+        );
 
         yaml.push_str("jobs:\n  build:\n");
         yaml.push_str("    runs-on: ");
@@ -1569,10 +1545,7 @@ pub enum BuildStep {
         lib_type: CargoLibType,
     },
     /// Set up a Python virtual environment.
-    PythonVenv {
-        path: String,
-        packages: Vec<String>,
-    },
+    PythonVenv { path: String, packages: Vec<String> },
     /// Run a custom build command.
     Custom {
         name: String,
@@ -1678,9 +1651,7 @@ impl FfiBuildPlan {
         let cross_target = config.cross.as_ref().map(|c| {
             let prefix = c.toolchain.as_deref().unwrap_or("");
             CrossTarget::from_triple(&c.target, c.sysroot.as_deref().unwrap_or(""), prefix)
-                .unwrap_or_else(|_| {
-                    CrossTarget::from_known(KnownTarget::X86_64LinuxGnu, "")
-                })
+                .unwrap_or_else(|_| CrossTarget::from_known(KnownTarget::X86_64LinuxGnu, ""))
         });
 
         // Merge static flags from config.
@@ -1776,18 +1747,16 @@ impl FfiBuildPlan {
                         Err(e) => self.errors.push(e),
                     }
                 }
-                BuildStep::PythonVenv { path, packages } => {
-                    match PythonVenv::locate(path) {
-                        Ok(mut venv) => {
-                            for pkg in packages {
-                                let _ = venv.install_package(pkg, "latest");
-                            }
-                            self.flags.merge(&venv.linker_flags());
-                            self.completed += 1;
+                BuildStep::PythonVenv { path, packages } => match PythonVenv::locate(path) {
+                    Ok(mut venv) => {
+                        for pkg in packages {
+                            let _ = venv.install_package(pkg, "latest");
                         }
-                        Err(e) => self.errors.push(e),
+                        self.flags.merge(&venv.linker_flags());
+                        self.completed += 1;
                     }
-                }
+                    Err(e) => self.errors.push(e),
+                },
                 BuildStep::Custom { name, .. } => {
                     // Custom steps are always "successful" in simulation.
                     let _ = name;
@@ -2071,10 +2040,7 @@ lib_paths = ["/usr/lib"]
 
     #[test]
     fn e8_7_cross_target_from_known() {
-        let ct = CrossTarget::from_known(
-            KnownTarget::Aarch64LinuxGnu,
-            "/usr/aarch64-linux-gnu",
-        );
+        let ct = CrossTarget::from_known(KnownTarget::Aarch64LinuxGnu, "/usr/aarch64-linux-gnu");
         assert_eq!(ct.triple, "aarch64-unknown-linux-gnu");
         assert_eq!(ct.toolchain_prefix, "aarch64-linux-gnu-");
         assert_eq!(ct.cc, "aarch64-linux-gnu-gcc");
@@ -2083,10 +2049,7 @@ lib_paths = ["/usr/lib"]
 
     #[test]
     fn e8_7_cross_target_build_env() {
-        let ct = CrossTarget::from_known(
-            KnownTarget::Riscv64LinuxGnu,
-            "/opt/sysroot",
-        );
+        let ct = CrossTarget::from_known(KnownTarget::Riscv64LinuxGnu, "/opt/sysroot");
         let env = ct.build_env();
         assert_eq!(env.get("CC").unwrap(), "riscv64-linux-gnu-gcc");
         assert!(env.get("CMAKE_SYSROOT").unwrap().contains("sysroot"));
@@ -2094,14 +2057,16 @@ lib_paths = ["/usr/lib"]
 
     #[test]
     fn e8_7_cross_target_cmake_defines() {
-        let ct = CrossTarget::from_known(
-            KnownTarget::Armv7LinuxGnueabihf,
-            "/arm-sysroot",
-        );
+        let ct = CrossTarget::from_known(KnownTarget::Armv7LinuxGnueabihf, "/arm-sysroot");
         let defines = ct.cmake_defines();
         assert_eq!(defines.get("CMAKE_SYSTEM_NAME").unwrap(), "Linux");
         assert!(defines.get("CMAKE_C_COMPILER").unwrap().contains("gcc"));
-        assert!(defines.get("CMAKE_SYSROOT").unwrap().contains("arm-sysroot"));
+        assert!(
+            defines
+                .get("CMAKE_SYSROOT")
+                .unwrap()
+                .contains("arm-sysroot")
+        );
     }
 
     #[test]
@@ -2331,10 +2296,7 @@ lib_paths = ["/usr/lib"]
     #[test]
     fn e8_10_error_display() {
         let err = BuildError::PackageNotFound("libfoo".into());
-        assert_eq!(
-            format!("{err}"),
-            "pkg-config: package 'libfoo' not found"
-        );
+        assert_eq!(format!("{err}"), "pkg-config: package 'libfoo' not found");
 
         let err2 = BuildError::CmakeFailed {
             phase: CmakePhase::Build,

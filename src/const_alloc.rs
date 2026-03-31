@@ -99,11 +99,7 @@ impl ConstAllocation {
 }
 
 /// Serializes a `ComptimeValue` into a `ConstAllocation`.
-pub fn serialize_const(
-    name: &str,
-    value: &ComptimeValue,
-    target: &TargetInfo,
-) -> ConstAllocation {
+pub fn serialize_const(name: &str, value: &ComptimeValue, target: &TargetInfo) -> ConstAllocation {
     let mut bytes = Vec::new();
     let type_desc = serialize_value(value, target, &mut bytes);
     let align = alignment_for(value, target);
@@ -210,20 +206,16 @@ fn alignment_for(value: &ComptimeValue, target: &TargetInfo) -> usize {
                 1
             }
         }
-        ComptimeValue::Struct { fields, .. } => {
-            fields
-                .iter()
-                .map(|(_, v)| alignment_for(v, target))
-                .max()
-                .unwrap_or(1)
-        }
-        ComptimeValue::Tuple(items) => {
-            items
-                .iter()
-                .map(|v| alignment_for(v, target))
-                .max()
-                .unwrap_or(1)
-        }
+        ComptimeValue::Struct { fields, .. } => fields
+            .iter()
+            .map(|(_, v)| alignment_for(v, target))
+            .max()
+            .unwrap_or(1),
+        ComptimeValue::Tuple(items) => items
+            .iter()
+            .map(|v| alignment_for(v, target))
+            .max()
+            .unwrap_or(1),
         ComptimeValue::Null => 1,
     }
 }
@@ -553,9 +545,18 @@ mod tests {
         let map = ConstHashMap::new(
             "COLOR_MAP",
             vec![
-                (ComptimeValue::Str("red".into()), ComptimeValue::Int(0xFF0000)),
-                (ComptimeValue::Str("green".into()), ComptimeValue::Int(0x00FF00)),
-                (ComptimeValue::Str("blue".into()), ComptimeValue::Int(0x0000FF)),
+                (
+                    ComptimeValue::Str("red".into()),
+                    ComptimeValue::Int(0xFF0000),
+                ),
+                (
+                    ComptimeValue::Str("green".into()),
+                    ComptimeValue::Int(0x00FF00),
+                ),
+                (
+                    ComptimeValue::Str("blue".into()),
+                    ComptimeValue::Int(0x0000FF),
+                ),
             ],
         );
 
@@ -577,7 +578,10 @@ mod tests {
             "STATUS_CODES",
             vec![
                 (ComptimeValue::Int(200), ComptimeValue::Str("OK".into())),
-                (ComptimeValue::Int(404), ComptimeValue::Str("Not Found".into())),
+                (
+                    ComptimeValue::Int(404),
+                    ComptimeValue::Str("Not Found".into()),
+                ),
             ],
         );
 

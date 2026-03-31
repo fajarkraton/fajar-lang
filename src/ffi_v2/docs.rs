@@ -77,7 +77,10 @@ impl Tutorial {
 
     /// Returns the total number of code examples across all sections.
     pub fn code_example_count(&self) -> usize {
-        self.sections.iter().filter(|s| s.code_example.is_some()).count()
+        self.sections
+            .iter()
+            .filter(|s| s.code_example.is_some())
+            .count()
     }
 
     /// Renders the tutorial as a Markdown string.
@@ -551,9 +554,18 @@ impl ApiReference {
 
         // C++ interop
         for (name, summary) in [
-            ("CppFunction", "Represents a C++ extern function declaration"),
-            ("CppUniquePtr", "Wraps a C++ unique_ptr with Fajar ownership"),
-            ("CppSharedPtr", "Wraps a C++ shared_ptr with reference counting"),
+            (
+                "CppFunction",
+                "Represents a C++ extern function declaration",
+            ),
+            (
+                "CppUniquePtr",
+                "Wraps a C++ unique_ptr with Fajar ownership",
+            ),
+            (
+                "CppSharedPtr",
+                "Wraps a C++ shared_ptr with reference counting",
+            ),
             ("CppVector", "Bridge for std::vector<T>"),
             ("CppMap", "Bridge for std::map<K,V>"),
             ("CppTemplate", "Instantiates a C++ function/class template"),
@@ -585,8 +597,14 @@ impl ApiReference {
         // Rust interop
         for (name, summary) in [
             ("RustBridge", "Core Rust FFI bridge with ABI handling"),
-            ("RustTraitProxy", "Proxies dyn Trait calls across the boundary"),
-            ("RustIterator", "Wraps a Rust iterator for Fajar for-in loops"),
+            (
+                "RustTraitProxy",
+                "Proxies dyn Trait calls across the boundary",
+            ),
+            (
+                "RustIterator",
+                "Wraps a Rust iterator for Fajar for-in loops",
+            ),
             ("RustErrorMapper", "Maps Rust error types to Fajar Result"),
             ("RustFuture", "Bridges a Rust Future for Fajar async/await"),
         ] {
@@ -602,8 +620,14 @@ impl ApiReference {
         for (name, summary) in [
             ("BoundaryValidator", "Validates types at the FFI boundary"),
             ("LeakDetector", "Tracks FFI allocations and detects leaks"),
-            ("ThreadSafetyChecker", "Detects GIL and lock-order violations"),
-            ("AlignmentChecker", "Verifies pointer alignment requirements"),
+            (
+                "ThreadSafetyChecker",
+                "Detects GIL and lock-order violations",
+            ),
+            (
+                "AlignmentChecker",
+                "Verifies pointer alignment requirements",
+            ),
             ("ZeroCopyVerifier", "Confirms zero-copy data transfers"),
             ("SanitizerConfig", "Configures ASAN/MSAN/TSAN integration"),
         ] {
@@ -979,14 +1003,8 @@ impl FfiAuditReport {
 impl fmt::Display for FfiAuditReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "# {}\n", self.title)?;
-        writeln!(
-            f,
-            "| Module | Sprint | Status | Tasks | Tests | Notes |"
-        )?;
-        writeln!(
-            f,
-            "|--------|--------|--------|-------|-------|-------|"
-        )?;
+        writeln!(f, "| Module | Sprint | Status | Tasks | Tests | Notes |")?;
+        writeln!(f, "|--------|--------|--------|-------|-------|-------|")?;
         for m in &self.modules {
             writeln!(
                 f,

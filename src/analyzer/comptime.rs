@@ -364,9 +364,7 @@ impl ComptimeEvaluator {
             }
 
             // K2.7: Match expression in const context
-            Expr::Match {
-                subject, arms, ..
-            } => {
+            Expr::Match { subject, arms, .. } => {
                 let subject_val = self.eval_expr(subject)?;
                 for arm in arms {
                     if self.pattern_matches(&arm.pattern, &subject_val) {
@@ -452,9 +450,7 @@ impl ComptimeEvaluator {
             }
 
             // K2.8: Assign in const context (for loop counters)
-            Expr::Assign {
-                target, value, ..
-            } => {
+            Expr::Assign { target, value, .. } => {
                 if let Expr::Ident { name, .. } = target.as_ref() {
                     let val = self.eval_expr(value)?;
                     self.variables.insert(name.clone(), val);
@@ -468,22 +464,33 @@ impl ComptimeEvaluator {
 
             // K2.5: Range expression for for-loops
             Expr::Range {
-                start, end, inclusive, ..
+                start,
+                end,
+                inclusive,
+                ..
             } => {
-                let s = match start {
-                    Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| ComptimeError::TypeError {
-                        reason: "range start must be integer".into(),
-                    })?,
-                    None => 0,
-                };
-                let e = match end {
-                    Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| ComptimeError::TypeError {
-                        reason: "range end must be integer".into(),
-                    })?,
-                    None => return Err(ComptimeError::NotComptime {
-                        reason: "unbounded range not supported in comptime".into(),
-                    }),
-                };
+                let s =
+                    match start {
+                        Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| {
+                            ComptimeError::TypeError {
+                                reason: "range start must be integer".into(),
+                            }
+                        })?,
+                        None => 0,
+                    };
+                let e =
+                    match end {
+                        Some(expr) => self.eval_expr(expr)?.as_int().ok_or_else(|| {
+                            ComptimeError::TypeError {
+                                reason: "range end must be integer".into(),
+                            }
+                        })?,
+                        None => {
+                            return Err(ComptimeError::NotComptime {
+                                reason: "unbounded range not supported in comptime".into(),
+                            });
+                        }
+                    };
                 let items: Vec<ComptimeValue> = if *inclusive {
                     (s..=e).map(ComptimeValue::Int).collect()
                 } else {
@@ -679,7 +686,9 @@ impl ComptimeEvaluator {
     /// Used for loop bodies where mutations must persist across iterations.
     fn eval_block_no_scope(&mut self, expr: &Expr) -> Result<ComptimeValue, ComptimeError> {
         match expr {
-            Expr::Block { stmts, expr: tail, .. } => {
+            Expr::Block {
+                stmts, expr: tail, ..
+            } => {
                 for stmt in stmts {
                     self.eval_stmt(stmt)?;
                 }
@@ -783,7 +792,11 @@ impl ComptimeEvaluator {
 
     // K2.7: Pattern matching helpers for const match
 
-    fn pattern_matches(&self, pattern: &crate::parser::ast::Pattern, value: &ComptimeValue) -> bool {
+    fn pattern_matches(
+        &self,
+        pattern: &crate::parser::ast::Pattern,
+        value: &ComptimeValue,
+    ) -> bool {
         use crate::parser::ast::Pattern;
         match pattern {
             Pattern::Wildcard { .. } => true,
@@ -888,7 +901,9 @@ impl ComptimeEvaluator {
                     self.check_const_expr(&arm.body, fn_name, violations);
                 }
             }
-            Expr::While { condition, body, .. } => {
+            Expr::While {
+                condition, body, ..
+            } => {
                 self.check_const_expr(condition, fn_name, violations);
                 self.check_const_expr(body, fn_name, violations);
             }
@@ -1081,7 +1096,10 @@ comptime { bad() }
         let eval = ComptimeEvaluator::new();
         if let Item::FnDef(fndef) = &program.items[0] {
             let violations = eval.validate_const_fn(fndef);
-            assert!(violations.is_empty(), "expected no violations, got: {violations:?}");
+            assert!(
+                violations.is_empty(),
+                "expected no violations, got: {violations:?}"
+            );
         }
     }
 
@@ -1163,10 +1181,7 @@ comptime {
     fn k2_6_const_fn_array_repeat() {
         let source = "comptime { [0; 5] }";
         let result = eval_comptime(source).unwrap();
-        assert_eq!(
-            result,
-            ComptimeValue::Array(vec![ComptimeValue::Int(0); 5])
-        );
+        assert_eq!(result, ComptimeValue::Array(vec![ComptimeValue::Int(0); 5]));
     }
 
     // K2.7: Const fn with match
@@ -1250,7 +1265,10 @@ comptime { must_be_positive(-1) }
         assert!(result.is_err());
         let err = result.unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("const_panic") || msg.contains("n must be positive"), "got: {msg}");
+        assert!(
+            msg.contains("const_panic") || msg.contains("n must be positive"),
+            "got: {msg}"
+        );
     }
 
     // K2.10: Integration — const fn with all features

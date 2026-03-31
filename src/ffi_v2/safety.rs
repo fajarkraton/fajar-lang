@@ -89,12 +89,12 @@ impl fmt::Display for FfiSafetyError {
                 ptr,
                 size,
                 type_name,
-            } => write!(
-                f,
-                "memory leak: 0x{ptr:x} ({size} bytes, type {type_name})"
-            ),
+            } => write!(f, "memory leak: 0x{ptr:x} ({size} bytes, type {type_name})"),
             Self::GilViolation { thread, holder } => {
-                write!(f, "GIL violation: thread '{thread}' called while '{holder}' holds GIL")
+                write!(
+                    f,
+                    "GIL violation: thread '{thread}' called while '{holder}' holds GIL"
+                )
             }
             Self::LockOrderViolation { held, requested } => {
                 write!(
@@ -110,10 +110,9 @@ impl fmt::Display for FfiSafetyError {
                 f,
                 "alignment violation at 0x{address:x}: required {required}, actual {actual}"
             ),
-            Self::ZeroCopyAddressMismatch { before, after } => write!(
-                f,
-                "zero-copy address mismatch: 0x{before:x} != 0x{after:x}"
-            ),
+            Self::ZeroCopyAddressMismatch { before, after } => {
+                write!(f, "zero-copy address mismatch: 0x{before:x} != 0x{after:x}")
+            }
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }
@@ -223,11 +222,7 @@ impl BoundaryValidator {
     }
 
     /// Registers an FFI function signature.
-    pub fn register(
-        &mut self,
-        name: impl Into<String>,
-        param_types: Vec<BoundaryType>,
-    ) {
+    pub fn register(&mut self, name: impl Into<String>, param_types: Vec<BoundaryType>) {
         self.signatures.insert(name.into(), param_types);
     }
 
@@ -239,7 +234,11 @@ impl BoundaryValidator {
     ) -> Result<(), Vec<FfiSafetyError>> {
         let sig = match self.signatures.get(name) {
             Some(s) => s,
-            None => return Err(vec![FfiSafetyError::Other(format!("unknown FFI function: {name}"))]),
+            None => {
+                return Err(vec![FfiSafetyError::Other(format!(
+                    "unknown FFI function: {name}"
+                ))]);
+            }
         };
 
         let mut errors = Vec::new();
@@ -337,7 +336,12 @@ impl fmt::Display for LeakReport {
         if self.is_clean() {
             return write!(f, "No leaks detected.");
         }
-        writeln!(f, "LEAK REPORT: {} allocation(s), {} bytes total", self.leaked.len(), self.total_bytes)?;
+        writeln!(
+            f,
+            "LEAK REPORT: {} allocation(s), {} bytes total",
+            self.leaked.len(),
+            self.total_bytes
+        )?;
         for alloc in &self.leaked {
             writeln!(
                 f,
@@ -718,8 +722,7 @@ impl BatchCallOptimizer {
             };
         }
 
-        let total =
-            self.batch_fixed_overhead_ns + self.batch_per_item_ns * count as u64;
+        let total = self.batch_fixed_overhead_ns + self.batch_per_item_ns * count as u64;
         let per_call = total / count as u64;
 
         BatchResult {
@@ -736,8 +739,7 @@ impl BatchCallOptimizer {
             return 1.0;
         }
         let individual = self.single_call_overhead_ns * n as u64;
-        let batched =
-            self.batch_fixed_overhead_ns + self.batch_per_item_ns * n as u64;
+        let batched = self.batch_fixed_overhead_ns + self.batch_per_item_ns * n as u64;
         individual as f64 / batched as f64
     }
 }
@@ -1043,12 +1045,7 @@ impl EndiannessConverter {
     }
 
     /// Swaps a buffer of 2-byte values from `source` endianness to `target`.
-    pub fn swap_u16_buffer(
-        &self,
-        buf: &mut [u8],
-        source: Endianness,
-        target: Endianness,
-    ) {
+    pub fn swap_u16_buffer(&self, buf: &mut [u8], source: Endianness, target: Endianness) {
         if source == target || buf.len() < 2 {
             return;
         }
@@ -1220,10 +1217,7 @@ mod tests {
         let mut v = BoundaryValidator::new();
         v.register("add", vec![BoundaryType::Int, BoundaryType::Int]);
 
-        let result = v.validate_call(
-            "add",
-            &[BoundaryValue::Int(1), BoundaryValue::Int(2)],
-        );
+        let result = v.validate_call("add", &[BoundaryValue::Int(1), BoundaryValue::Int(2)]);
         assert!(result.is_ok());
     }
 
@@ -1250,7 +1244,11 @@ mod tests {
         let result = v.validate_call("deref", &[BoundaryValue::Pointer(0)]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| matches!(e, FfiSafetyError::NullPointer { .. })));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, FfiSafetyError::NullPointer { .. }))
+        );
     }
 
     #[test]
@@ -1440,8 +1438,16 @@ mod tests {
     #[test]
     fn e9_6_zero_copy_same_address() {
         let mut zc = ZeroCopyVerifier::new();
-        let before = FfiBuffer { address: 0xDEAD, size: 1024, owner: "fajar".into() };
-        let after = FfiBuffer { address: 0xDEAD, size: 1024, owner: "c++".into() };
+        let before = FfiBuffer {
+            address: 0xDEAD,
+            size: 1024,
+            owner: "fajar".into(),
+        };
+        let after = FfiBuffer {
+            address: 0xDEAD,
+            size: 1024,
+            owner: "c++".into(),
+        };
         assert!(zc.verify("tensor_transfer", &before, &after).is_ok());
         assert_eq!(zc.zero_copy_count(), 1);
         assert_eq!(zc.copy_count(), 0);
@@ -1450,10 +1456,21 @@ mod tests {
     #[test]
     fn e9_6_zero_copy_address_mismatch() {
         let mut zc = ZeroCopyVerifier::new();
-        let before = FfiBuffer { address: 0x1000, size: 64, owner: "fajar".into() };
-        let after = FfiBuffer { address: 0x2000, size: 64, owner: "python".into() };
+        let before = FfiBuffer {
+            address: 0x1000,
+            size: 64,
+            owner: "fajar".into(),
+        };
+        let after = FfiBuffer {
+            address: 0x2000,
+            size: 64,
+            owner: "python".into(),
+        };
         let err = zc.verify("bad_transfer", &before, &after).unwrap_err();
-        assert!(matches!(err, FfiSafetyError::ZeroCopyAddressMismatch { .. }));
+        assert!(matches!(
+            err,
+            FfiSafetyError::ZeroCopyAddressMismatch { .. }
+        ));
         assert_eq!(zc.copy_count(), 1);
     }
 
@@ -1473,7 +1490,14 @@ mod tests {
         let checker = AlignmentChecker::new();
         // 0x1003 has alignment 1 (odd address), i32 requires 4.
         let err = checker.check("i32", 0x1003).unwrap_err();
-        assert!(matches!(err, FfiSafetyError::AlignmentViolation { required: 4, actual: 1, .. }));
+        assert!(matches!(
+            err,
+            FfiSafetyError::AlignmentViolation {
+                required: 4,
+                actual: 1,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -1547,8 +1571,16 @@ mod tests {
         assert!(config.is_enabled(Sanitizer::Tsan));
         assert!(!config.is_enabled(Sanitizer::Msan));
         assert_eq!(config.compiler_flags.len(), 2);
-        assert!(config.compiler_flags.contains(&"-fsanitize=address".to_string()));
-        assert!(config.compiler_flags.contains(&"-fsanitize=thread".to_string()));
+        assert!(
+            config
+                .compiler_flags
+                .contains(&"-fsanitize=address".to_string())
+        );
+        assert!(
+            config
+                .compiler_flags
+                .contains(&"-fsanitize=thread".to_string())
+        );
     }
 
     #[test]
@@ -1599,7 +1631,9 @@ mod tests {
         };
         assert!(format!("{e1}").contains("expected i64"));
 
-        let e2 = FfiSafetyError::NullPointer { param: "buf".into() };
+        let e2 = FfiSafetyError::NullPointer {
+            param: "buf".into(),
+        };
         assert!(format!("{e2}").contains("null pointer"));
 
         let e3 = FfiSafetyError::MemoryLeak {
@@ -1633,11 +1667,23 @@ mod tests {
     #[test]
     fn e9_10_boundary_value_runtime_type() {
         assert_eq!(BoundaryValue::Int(1).runtime_type(), BoundaryType::Int);
-        assert_eq!(BoundaryValue::Float(1.0).runtime_type(), BoundaryType::Float);
-        assert_eq!(BoundaryValue::Str("hi".into()).runtime_type(), BoundaryType::Str);
+        assert_eq!(
+            BoundaryValue::Float(1.0).runtime_type(),
+            BoundaryType::Float
+        );
+        assert_eq!(
+            BoundaryValue::Str("hi".into()).runtime_type(),
+            BoundaryType::Str
+        );
         assert_eq!(BoundaryValue::Bool(true).runtime_type(), BoundaryType::Bool);
-        assert_eq!(BoundaryValue::Pointer(0x10).runtime_type(), BoundaryType::Pointer);
+        assert_eq!(
+            BoundaryValue::Pointer(0x10).runtime_type(),
+            BoundaryType::Pointer
+        );
         let arr = BoundaryValue::Array(vec![BoundaryValue::Int(1)]);
-        assert_eq!(arr.runtime_type(), BoundaryType::Array(Box::new(BoundaryType::Int)));
+        assert_eq!(
+            arr.runtime_type(),
+            BoundaryType::Array(Box::new(BoundaryType::Int))
+        );
     }
 }

@@ -255,22 +255,15 @@ pub fn estimated_hash_time_us(size_bytes: usize) -> u64 {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Detect circular dependencies and report a clear error message.
-pub fn detect_and_report_circular(
-    deps: &HashMap<String, Vec<String>>,
-) -> Option<String> {
+pub fn detect_and_report_circular(deps: &HashMap<String, Vec<String>>) -> Option<String> {
     let mut visited = HashSet::new();
     let mut in_stack = HashSet::new();
     let mut path = Vec::new();
 
     for node in deps.keys() {
         if !visited.contains(node) {
-            if let Some(cycle) =
-                find_cycle(node, deps, &mut visited, &mut in_stack, &mut path)
-            {
-                return Some(format!(
-                    "circular dependency: {}",
-                    cycle.join(" -> ")
-                ));
+            if let Some(cycle) = find_cycle(node, deps, &mut visited, &mut in_stack, &mut path) {
+                return Some(format!("circular dependency: {}", cycle.join(" -> ")));
             }
         }
     }
@@ -520,22 +513,37 @@ mod tests {
         // Simulate: 3 modules, one has parse error, one interrupted
         let compile_results = vec![
             ModuleCompileResult {
-                path: "core.fj".into(), parse_ok: true, type_check_ok: true,
-                codegen_ok: true, errors: vec![],
+                path: "core.fj".into(),
+                parse_ok: true,
+                type_check_ok: true,
+                codegen_ok: true,
+                errors: vec![],
             },
             ModuleCompileResult {
-                path: "broken.fj".into(), parse_ok: false, type_check_ok: false,
-                codegen_ok: false, errors: vec!["parse error line 5".into()],
+                path: "broken.fj".into(),
+                parse_ok: false,
+                type_check_ok: false,
+                codegen_ok: false,
+                errors: vec!["parse error line 5".into()],
             },
             ModuleCompileResult {
-                path: "partial.fj".into(), parse_ok: true, type_check_ok: true,
-                codegen_ok: false, errors: vec!["codegen interrupted".into()],
+                path: "partial.fj".into(),
+                parse_ok: true,
+                type_check_ok: true,
+                codegen_ok: false,
+                errors: vec!["codegen interrupted".into()],
             },
         ];
 
         // Only core.fj is fully cacheable
-        assert_eq!(cacheable_modules(&compile_results), vec!["core.fj", "partial.fj"]);
-        assert_eq!(type_cacheable_modules(&compile_results), vec!["core.fj", "partial.fj"]);
+        assert_eq!(
+            cacheable_modules(&compile_results),
+            vec!["core.fj", "partial.fj"]
+        );
+        assert_eq!(
+            type_cacheable_modules(&compile_results),
+            vec!["core.fj", "partial.fj"]
+        );
 
         // Build state after interruption
         let state = BuildState {

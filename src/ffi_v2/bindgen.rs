@@ -279,10 +279,7 @@ impl CHeaderParser {
         if prev.starts_with("//") {
             Some(prev.trim_start_matches("//").trim().to_string())
         } else if prev.starts_with("/*") && prev.ends_with("*/") {
-            let inner = prev
-                .trim_start_matches("/*")
-                .trim_end_matches("*/")
-                .trim();
+            let inner = prev.trim_start_matches("/*").trim_end_matches("*/").trim();
             Some(inner.to_string())
         } else {
             None
@@ -865,10 +862,7 @@ impl PythonStubParser {
                 .collect();
             (n, bases)
         } else {
-            let n = after_class
-                .trim_end_matches(':')
-                .trim()
-                .to_string();
+            let n = after_class.trim_end_matches(':').trim().to_string();
             (n, Vec::new())
         };
 
@@ -898,7 +892,8 @@ impl PythonStubParser {
                 }
             }
             // Field annotation: `name: type`
-            else if trimmed.contains(':') && !trimmed.starts_with('#') && !trimmed.contains("...") {
+            else if trimmed.contains(':') && !trimmed.starts_with('#') && !trimmed.contains("...")
+            {
                 let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
                 if parts.len() == 2 {
                     fields.push(ForeignField {
@@ -1071,11 +1066,7 @@ impl RustCrateParser {
 
         let return_type = if let Some(arrow_pos) = line.find("->") {
             let after = line[arrow_pos + 2..].trim();
-            let ret = after
-                .split(['{', ';'])
-                .next()
-                .unwrap_or("")
-                .trim();
+            let ret = after.split(['{', ';']).next().unwrap_or("").trim();
             if ret.is_empty() || ret == "()" {
                 None
             } else {
@@ -1524,9 +1515,9 @@ impl ChangeDetector {
             self.current_hashes.get(path),
         ) {
             (Some(prev), Some(curr)) => prev != curr,
-            (None, Some(_)) => true,  // New file.
-            (Some(_), None) => true,  // Deleted or not yet recorded.
-            (None, None) => true,     // Unknown — assume changed.
+            (None, Some(_)) => true, // New file.
+            (Some(_), None) => true, // Deleted or not yet recorded.
+            (None, None) => true,    // Unknown — assume changed.
         }
     }
 
@@ -1745,7 +1736,10 @@ impl BindingGenerator {
                     };
                 }
             } else {
-                code.push_str(&format!("@ffi\nextern fn {}({}){}\n", fj_name, params_str, ret_str));
+                code.push_str(&format!(
+                    "@ffi\nextern fn {}({}){}\n",
+                    fj_name, params_str, ret_str
+                ));
             }
 
             GeneratedBinding {
@@ -2117,10 +2111,7 @@ mod tests {
         let header = "enum Color {\n    RED,\n    GREEN = 2,\n    BLUE\n};\n";
         let items = CHeaderParser::new().parse(header);
         assert_eq!(items.len(), 1);
-        if let ForeignItem::Enum {
-            name, variants, ..
-        } = &items[0]
-        {
+        if let ForeignItem::Enum { name, variants, .. } = &items[0] {
             assert_eq!(name, "Color");
             assert_eq!(variants.len(), 3);
             assert_eq!(variants[0].name, "RED");
@@ -2152,7 +2143,8 @@ mod tests {
 
     #[test]
     fn e7_3_parse_cpp_class() {
-        let header = "class Widget : public Base {\npublic:\n    int width;\n    void draw(int x);\n};\n";
+        let header =
+            "class Widget : public Base {\npublic:\n    int width;\n    void draw(int x);\n};\n";
         let items = CppHeaderParser::new().parse(header);
         assert!(!items.is_empty());
         if let ForeignItem::Class {
@@ -2210,7 +2202,8 @@ mod tests {
 
     #[test]
     fn e7_4_parse_python_class() {
-        let stub = "class Vector(Base):\n    x: float\n    y: float\n    def length(self) -> float: ...\n";
+        let stub =
+            "class Vector(Base):\n    x: float\n    y: float\n    def length(self) -> float: ...\n";
         let items = PythonStubParser::new().parse(stub);
         assert_eq!(items.len(), 1);
         if let ForeignItem::Class {
@@ -2322,7 +2315,11 @@ mod tests {
 
         let generator = BindingGenerator::new(BindgenLanguage::C, None);
         let result = generator.generate(&items);
-        assert!(result.bindings[0].fajar_source.contains("/// Compute the sum."));
+        assert!(
+            result.bindings[0]
+                .fajar_source
+                .contains("/// Compute the sum.")
+        );
         assert_eq!(result.stats.docs_preserved, 1);
     }
 
@@ -2463,8 +2460,7 @@ class Calculator:\n\
     fn e7_10_skip_pattern_filters_items() {
         let source = "int __internal_fn(void);\nint public_fn(int x);\n";
         let toml = BindgenToml::new().skip("__*");
-        let config =
-            BindgenConfig::new("lib.h", BindgenLanguage::C, "lib.fj").with_config(toml);
+        let config = BindgenConfig::new("lib.h", BindgenLanguage::C, "lib.fj").with_config(toml);
         let result = run_bindgen(&config, source);
 
         assert_eq!(result.stats.functions, 1);

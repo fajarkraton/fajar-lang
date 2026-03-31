@@ -11,8 +11,8 @@ use std::any::Any;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Global ID generator for tracking pointer identity across moves.
 static NEXT_PTR_ID: AtomicUsize = AtomicUsize::new(1);
@@ -61,11 +61,7 @@ impl UniquePtr {
     }
 
     /// Create a `UniquePtr` with a custom deleter (E2.7).
-    pub fn with_deleter<T: Any + 'static>(
-        value: T,
-        type_name: &str,
-        deleter: Deleter,
-    ) -> Self {
+    pub fn with_deleter<T: Any + 'static>(value: T, type_name: &str, deleter: Deleter) -> Self {
         Self {
             inner: Some(Box::new(value)),
             type_name: type_name.to_string(),
@@ -860,8 +856,7 @@ pub fn select_overload<'a>(
     name: &str,
     is_rvalue: bool,
 ) -> Option<&'a RefQualifiedMethod> {
-    let candidates: Vec<&RefQualifiedMethod> =
-        methods.iter().filter(|m| m.name == name).collect();
+    let candidates: Vec<&RefQualifiedMethod> = methods.iter().filter(|m| m.name == name).collect();
 
     if candidates.is_empty() {
         return None;
@@ -1299,10 +1294,7 @@ mod tests {
         let exc = CppException::with_backtrace(
             "std::out_of_range",
             "index 5 out of bounds",
-            vec![
-                "vector::at(size_t)".to_string(),
-                "main()".to_string(),
-            ],
+            vec!["vector::at(size_t)".to_string(), "main()".to_string()],
         );
         let display = format!("{exc}");
         assert!(display.contains("std::out_of_range"));

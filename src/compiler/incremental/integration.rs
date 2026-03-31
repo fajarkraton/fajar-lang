@@ -132,13 +132,31 @@ impl BuildTimings {
         let mut out = String::new();
         out.push_str("Phase           Time\n");
         out.push_str("──────────────  ──────────\n");
-        out.push_str(&format!("Change detect   {:>10}\n", format_duration(self.change_detection)));
-        out.push_str(&format!("Parse           {:>10}\n", format_duration(self.parse)));
-        out.push_str(&format!("Analyze         {:>10}\n", format_duration(self.analyze)));
-        out.push_str(&format!("Codegen         {:>10}\n", format_duration(self.codegen)));
-        out.push_str(&format!("Link            {:>10}\n", format_duration(self.link)));
+        out.push_str(&format!(
+            "Change detect   {:>10}\n",
+            format_duration(self.change_detection)
+        ));
+        out.push_str(&format!(
+            "Parse           {:>10}\n",
+            format_duration(self.parse)
+        ));
+        out.push_str(&format!(
+            "Analyze         {:>10}\n",
+            format_duration(self.analyze)
+        ));
+        out.push_str(&format!(
+            "Codegen         {:>10}\n",
+            format_duration(self.codegen)
+        ));
+        out.push_str(&format!(
+            "Link            {:>10}\n",
+            format_duration(self.link)
+        ));
         out.push_str("──────────────  ──────────\n");
-        out.push_str(&format!("Total           {:>10}\n", format_duration(self.total)));
+        out.push_str(&format!(
+            "Total           {:>10}\n",
+            format_duration(self.total)
+        ));
         out.push_str(&format!(
             "\nModules: {} recompiled, {} cached\n",
             self.modules_recompiled, self.modules_cached
@@ -461,9 +479,18 @@ mod tests {
         current.insert("lib.fj".to_string(), "unchanged_hash".to_string());
 
         let events = vec![
-            FileChangeEvent { path: "main.fj".into(), kind: FileChangeKind::Modified },
-            FileChangeEvent { path: "lib.fj".into(), kind: FileChangeKind::Modified },
-            FileChangeEvent { path: "new.fj".into(), kind: FileChangeKind::Created },
+            FileChangeEvent {
+                path: "main.fj".into(),
+                kind: FileChangeKind::Modified,
+            },
+            FileChangeEvent {
+                path: "lib.fj".into(),
+                kind: FileChangeKind::Modified,
+            },
+            FileChangeEvent {
+                path: "new.fj".into(),
+                kind: FileChangeKind::Created,
+            },
         ];
 
         let plan = plan_rebuild(&events, &hash_store, &current);
@@ -485,16 +512,36 @@ mod tests {
     #[test]
     fn i5_8_workspace_rebuild_transitive() {
         let members = vec![
-            WorkspaceMember { name: "core".into(), root: "core/".into(), member_deps: vec![], changed: true },
-            WorkspaceMember { name: "lib".into(), root: "lib/".into(), member_deps: vec!["core".into()], changed: false },
-            WorkspaceMember { name: "app".into(), root: "app/".into(), member_deps: vec!["lib".into()], changed: false },
-            WorkspaceMember { name: "tools".into(), root: "tools/".into(), member_deps: vec![], changed: false },
+            WorkspaceMember {
+                name: "core".into(),
+                root: "core/".into(),
+                member_deps: vec![],
+                changed: true,
+            },
+            WorkspaceMember {
+                name: "lib".into(),
+                root: "lib/".into(),
+                member_deps: vec!["core".into()],
+                changed: false,
+            },
+            WorkspaceMember {
+                name: "app".into(),
+                root: "app/".into(),
+                member_deps: vec!["lib".into()],
+                changed: false,
+            },
+            WorkspaceMember {
+                name: "tools".into(),
+                root: "tools/".into(),
+                member_deps: vec![],
+                changed: false,
+            },
         ];
 
         let rebuild = workspace_rebuild_set(&members);
         assert!(rebuild.contains(&"core".to_string())); // directly changed
-        assert!(rebuild.contains(&"lib".to_string()));  // depends on core
-        assert!(rebuild.contains(&"app".to_string()));  // depends on lib
+        assert!(rebuild.contains(&"lib".to_string())); // depends on core
+        assert!(rebuild.contains(&"app".to_string())); // depends on lib
         assert!(!rebuild.contains(&"tools".to_string())); // independent, not changed
     }
 

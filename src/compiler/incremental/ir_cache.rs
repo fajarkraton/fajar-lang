@@ -419,7 +419,11 @@ mod tests {
     fn i3_4_object_file_cache() {
         let mut store = IrCacheStore::new();
         let key = make_key("fn main() {}", "x86_64", "O2");
-        let ir = make_ir(key.clone(), BackendKind::Object, vec![0x7F, 0x45, 0x4C, 0x46]); // ELF magic
+        let ir = make_ir(
+            key.clone(),
+            BackendKind::Object,
+            vec![0x7F, 0x45, 0x4C, 0x46],
+        ); // ELF magic
 
         store.store(ir);
         let objects = store.object_files();

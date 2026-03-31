@@ -18,8 +18,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::cache::{ArtifactType, CachedArtifact};
 use super::IncrementalError;
+use super::cache::{ArtifactType, CachedArtifact};
 
 /// Default cache size limit: 1 GB.
 const DEFAULT_CACHE_LIMIT: usize = 1_073_741_824;
@@ -50,7 +50,9 @@ impl DiskCacheConfig {
     /// Creates a default config for the given project root.
     pub fn new(project_root: &str) -> Self {
         Self {
-            cache_dir: PathBuf::from(project_root).join("target").join("incremental"),
+            cache_dir: PathBuf::from(project_root)
+                .join("target")
+                .join("incremental"),
             size_limit: DEFAULT_CACHE_LIMIT,
             compiler_version: env!("CARGO_PKG_VERSION").to_string(),
             target: "x86_64".to_string(),
@@ -140,7 +142,7 @@ impl SerializedArtifact {
             _ => {
                 return Err(IncrementalError::CacheCorruption {
                     message: format!("unknown artifact type: {}", bytes[4]),
-                })
+                });
             }
         };
 
@@ -340,8 +342,7 @@ impl CacheEvictor {
             entry.1 = size;
             entry.2 = timestamp;
         } else {
-            self.entries
-                .push((key_hash.to_string(), size, timestamp));
+            self.entries.push((key_hash.to_string(), size, timestamp));
         }
     }
 
@@ -388,7 +389,12 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), IncrementalError> {
         message: format!("write to {}: {}", temp_path.display(), e),
     })?;
     std::fs::rename(&temp_path, path).map_err(|e| IncrementalError::IoError {
-        message: format!("rename {} -> {}: {}", temp_path.display(), path.display(), e),
+        message: format!(
+            "rename {} -> {}: {}",
+            temp_path.display(),
+            path.display(),
+            e
+        ),
     })?;
     Ok(())
 }
@@ -449,8 +455,16 @@ mod tests {
     fn i1_1_config_paths() {
         let cfg = DiskCacheConfig::new("/project");
         assert_eq!(cfg.cache_dir, PathBuf::from("/project/target/incremental"));
-        assert_eq!(cfg.artifacts_dir(), PathBuf::from("/project/target/incremental/artifacts"));
-        assert!(cfg.metadata_path().to_str().unwrap().ends_with("metadata.json"));
+        assert_eq!(
+            cfg.artifacts_dir(),
+            PathBuf::from("/project/target/incremental/artifacts")
+        );
+        assert!(
+            cfg.metadata_path()
+                .to_str()
+                .unwrap()
+                .ends_with("metadata.json")
+        );
         assert!(cfg.hashes_path().to_str().unwrap().ends_with("hashes.json"));
     }
 
@@ -459,7 +473,12 @@ mod tests {
     #[test]
     fn i1_2_serialize_deserialize_artifact() {
         let artifact = CachedArtifact::new(
-            CacheKey::new("abc123".into(), "10.0.0".into(), "x86_64".into(), "O2".into()),
+            CacheKey::new(
+                "abc123".into(),
+                "10.0.0".into(),
+                "x86_64".into(),
+                "O2".into(),
+            ),
             ArtifactType::TypedAst,
             vec![1, 2, 3, 4, 5],
             1000,
@@ -494,7 +513,10 @@ mod tests {
 
     #[test]
     fn i1_3_bad_magic_detected() {
-        let bytes = vec![0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let bytes = vec![
+            0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0,
+        ];
         let result = SerializedArtifact::from_bytes(&bytes);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("magic"));
@@ -510,8 +532,14 @@ mod tests {
 
         let json = store.to_json();
         let restored = HashStore::from_json(&json).unwrap();
-        assert_eq!(restored.hashes.get("src/main.fj"), Some(&"aabbcc".to_string()));
-        assert_eq!(restored.hashes.get("src/lib.fj"), Some(&"112233".to_string()));
+        assert_eq!(
+            restored.hashes.get("src/main.fj"),
+            Some(&"aabbcc".to_string())
+        );
+        assert_eq!(
+            restored.hashes.get("src/lib.fj"),
+            Some(&"112233".to_string())
+        );
     }
 
     #[test]
@@ -520,8 +548,8 @@ mod tests {
         store.update("a.fj", "hash1");
 
         assert!(!store.has_changed("a.fj", "hash1")); // same hash
-        assert!(store.has_changed("a.fj", "hash2"));  // different hash
-        assert!(store.has_changed("b.fj", "hash1"));  // new file
+        assert!(store.has_changed("a.fj", "hash2")); // different hash
+        assert!(store.has_changed("b.fj", "hash1")); // new file
     }
 
     // ── I1.5: Cache invalidation ──
@@ -619,7 +647,12 @@ mod tests {
     #[test]
     fn i1_10_full_cache_workflow() {
         // Create artifact
-        let key = CacheKey::new("hash1".into(), "10.0.0".into(), "x86_64".into(), "O0".into());
+        let key = CacheKey::new(
+            "hash1".into(),
+            "10.0.0".into(),
+            "x86_64".into(),
+            "O0".into(),
+        );
         let artifact = CachedArtifact::new(key, ArtifactType::TypedAst, vec![42; 100], 1000);
 
         // Serialize

@@ -34,9 +34,7 @@ pub fn const_abs(val: &ComptimeValue) -> Option<ComptimeValue> {
 pub fn const_min(a: &ComptimeValue, b: &ComptimeValue) -> Option<ComptimeValue> {
     match (a, b) {
         (ComptimeValue::Int(x), ComptimeValue::Int(y)) => Some(ComptimeValue::Int(*x.min(y))),
-        (ComptimeValue::Float(x), ComptimeValue::Float(y)) => {
-            Some(ComptimeValue::Float(x.min(*y)))
-        }
+        (ComptimeValue::Float(x), ComptimeValue::Float(y)) => Some(ComptimeValue::Float(x.min(*y))),
         _ => None,
     }
 }
@@ -45,9 +43,7 @@ pub fn const_min(a: &ComptimeValue, b: &ComptimeValue) -> Option<ComptimeValue> 
 pub fn const_max(a: &ComptimeValue, b: &ComptimeValue) -> Option<ComptimeValue> {
     match (a, b) {
         (ComptimeValue::Int(x), ComptimeValue::Int(y)) => Some(ComptimeValue::Int(*x.max(y))),
-        (ComptimeValue::Float(x), ComptimeValue::Float(y)) => {
-            Some(ComptimeValue::Float(x.max(*y)))
-        }
+        (ComptimeValue::Float(x), ComptimeValue::Float(y)) => Some(ComptimeValue::Float(x.max(*y))),
         _ => None,
     }
 }
@@ -110,7 +106,10 @@ pub fn const_str_eq(a: &ComptimeValue, b: &ComptimeValue) -> Option<ComptimeValu
 }
 
 /// Compile-time `str_contains`.
-pub fn const_str_contains(haystack: &ComptimeValue, needle: &ComptimeValue) -> Option<ComptimeValue> {
+pub fn const_str_contains(
+    haystack: &ComptimeValue,
+    needle: &ComptimeValue,
+) -> Option<ComptimeValue> {
     match (haystack, needle) {
         (ComptimeValue::Str(h), ComptimeValue::Str(n)) => {
             Some(ComptimeValue::Bool(h.contains(n.as_str())))
@@ -144,9 +143,7 @@ pub fn const_array_len(val: &ComptimeValue) -> Option<ComptimeValue> {
 /// Compile-time `array_get` (safe indexing).
 pub fn const_array_get(arr: &ComptimeValue, idx: &ComptimeValue) -> Option<ComptimeValue> {
     match (arr, idx) {
-        (ComptimeValue::Array(a), ComptimeValue::Int(i)) => {
-            a.get(*i as usize).cloned()
-        }
+        (ComptimeValue::Array(a), ComptimeValue::Int(i)) => a.get(*i as usize).cloned(),
         _ => None,
     }
 }
@@ -381,14 +378,33 @@ pub fn eval_const_stdlib(name: &str, args: &[ComptimeValue]) -> Option<ComptimeV
 /// Returns the list of all known const stdlib function names.
 pub fn known_const_stdlib_functions() -> &'static [&'static str] {
     &[
-        "abs", "min", "max", "clamp", "pow",
-        "str_len", "str_eq", "str_contains", "str_starts_with",
-        "array_len", "len", "array_get", "array_push",
-        "unwrap_or", "is_some", "is_none", "is_ok",
-        "hash_str", "hash_bytes",
-        "format_int", "format_float", "to_string",
-        "count_ones", "leading_zeros", "trailing_zeros",
-        "int_to_float", "float_to_int",
+        "abs",
+        "min",
+        "max",
+        "clamp",
+        "pow",
+        "str_len",
+        "str_eq",
+        "str_contains",
+        "str_starts_with",
+        "array_len",
+        "len",
+        "array_get",
+        "array_push",
+        "unwrap_or",
+        "is_some",
+        "is_none",
+        "is_ok",
+        "hash_str",
+        "hash_bytes",
+        "format_int",
+        "format_float",
+        "to_string",
+        "count_ones",
+        "leading_zeros",
+        "trailing_zeros",
+        "int_to_float",
+        "float_to_int",
     ]
 }
 
@@ -404,9 +420,18 @@ mod tests {
 
     #[test]
     fn k7_1_abs() {
-        assert_eq!(const_abs(&ComptimeValue::Int(-5)), Some(ComptimeValue::Int(5)));
-        assert_eq!(const_abs(&ComptimeValue::Int(5)), Some(ComptimeValue::Int(5)));
-        assert_eq!(const_abs(&ComptimeValue::Float(-3.14)), Some(ComptimeValue::Float(3.14)));
+        assert_eq!(
+            const_abs(&ComptimeValue::Int(-5)),
+            Some(ComptimeValue::Int(5))
+        );
+        assert_eq!(
+            const_abs(&ComptimeValue::Int(5)),
+            Some(ComptimeValue::Int(5))
+        );
+        assert_eq!(
+            const_abs(&ComptimeValue::Float(-3.14)),
+            Some(ComptimeValue::Float(3.14))
+        );
     }
 
     #[test]
@@ -492,7 +517,10 @@ mod tests {
             ComptimeValue::Int(20),
             ComptimeValue::Int(30),
         ]);
-        assert_eq!(const_array_get(&arr, &ComptimeValue::Int(1)), Some(ComptimeValue::Int(20)));
+        assert_eq!(
+            const_array_get(&arr, &ComptimeValue::Int(1)),
+            Some(ComptimeValue::Int(20))
+        );
         assert_eq!(const_array_get(&arr, &ComptimeValue::Int(5)), None);
     }
 
@@ -502,7 +530,10 @@ mod tests {
         let result = const_array_push(&arr, &ComptimeValue::Int(2));
         assert_eq!(
             result,
-            Some(ComptimeValue::Array(vec![ComptimeValue::Int(1), ComptimeValue::Int(2)]))
+            Some(ComptimeValue::Array(vec![
+                ComptimeValue::Int(1),
+                ComptimeValue::Int(2)
+            ]))
         );
     }
 
@@ -522,17 +553,32 @@ mod tests {
 
     #[test]
     fn k7_4_is_some_is_none() {
-        assert_eq!(const_is_some(&ComptimeValue::Int(42)), ComptimeValue::Bool(true));
-        assert_eq!(const_is_some(&ComptimeValue::Null), ComptimeValue::Bool(false));
-        assert_eq!(const_is_none(&ComptimeValue::Null), ComptimeValue::Bool(true));
+        assert_eq!(
+            const_is_some(&ComptimeValue::Int(42)),
+            ComptimeValue::Bool(true)
+        );
+        assert_eq!(
+            const_is_some(&ComptimeValue::Null),
+            ComptimeValue::Bool(false)
+        );
+        assert_eq!(
+            const_is_none(&ComptimeValue::Null),
+            ComptimeValue::Bool(true)
+        );
     }
 
     // ── K7.5: Const Result ──
 
     #[test]
     fn k7_5_is_ok() {
-        assert_eq!(const_is_ok(&ComptimeValue::Int(1)), ComptimeValue::Bool(true));
-        assert_eq!(const_is_ok(&ComptimeValue::Null), ComptimeValue::Bool(false));
+        assert_eq!(
+            const_is_ok(&ComptimeValue::Int(1)),
+            ComptimeValue::Bool(true)
+        );
+        assert_eq!(
+            const_is_ok(&ComptimeValue::Null),
+            ComptimeValue::Bool(false)
+        );
     }
 
     // ── K7.6: Const hash ──
@@ -548,10 +594,7 @@ mod tests {
 
     #[test]
     fn k7_6_hash_bytes() {
-        let arr = ComptimeValue::Array(vec![
-            ComptimeValue::Int(0xDE),
-            ComptimeValue::Int(0xAD),
-        ]);
+        let arr = ComptimeValue::Array(vec![ComptimeValue::Int(0xDE), ComptimeValue::Int(0xAD)]);
         let h = const_hash_bytes(&arr);
         assert!(h.is_some());
     }
@@ -580,21 +623,42 @@ mod tests {
 
     #[test]
     fn k7_8_count_ones() {
-        assert_eq!(const_count_ones(&ComptimeValue::Int(0b1010_1010)), Some(ComptimeValue::Int(4)));
-        assert_eq!(const_count_ones(&ComptimeValue::Int(0)), Some(ComptimeValue::Int(0)));
-        assert_eq!(const_count_ones(&ComptimeValue::Int(-1)), Some(ComptimeValue::Int(64))); // all bits set
+        assert_eq!(
+            const_count_ones(&ComptimeValue::Int(0b1010_1010)),
+            Some(ComptimeValue::Int(4))
+        );
+        assert_eq!(
+            const_count_ones(&ComptimeValue::Int(0)),
+            Some(ComptimeValue::Int(0))
+        );
+        assert_eq!(
+            const_count_ones(&ComptimeValue::Int(-1)),
+            Some(ComptimeValue::Int(64))
+        ); // all bits set
     }
 
     #[test]
     fn k7_8_leading_zeros() {
-        assert_eq!(const_leading_zeros(&ComptimeValue::Int(1)), Some(ComptimeValue::Int(63)));
-        assert_eq!(const_leading_zeros(&ComptimeValue::Int(0)), Some(ComptimeValue::Int(64)));
+        assert_eq!(
+            const_leading_zeros(&ComptimeValue::Int(1)),
+            Some(ComptimeValue::Int(63))
+        );
+        assert_eq!(
+            const_leading_zeros(&ComptimeValue::Int(0)),
+            Some(ComptimeValue::Int(64))
+        );
     }
 
     #[test]
     fn k7_8_trailing_zeros() {
-        assert_eq!(const_trailing_zeros(&ComptimeValue::Int(8)), Some(ComptimeValue::Int(3))); // 0b1000
-        assert_eq!(const_trailing_zeros(&ComptimeValue::Int(1)), Some(ComptimeValue::Int(0)));
+        assert_eq!(
+            const_trailing_zeros(&ComptimeValue::Int(8)),
+            Some(ComptimeValue::Int(3))
+        ); // 0b1000
+        assert_eq!(
+            const_trailing_zeros(&ComptimeValue::Int(1)),
+            Some(ComptimeValue::Int(0))
+        );
     }
 
     // ── K7.9: Const conversion ──

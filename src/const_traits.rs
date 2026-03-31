@@ -322,13 +322,20 @@ impl ConstTraitRegistry {
         });
 
         // Register built-in impls for numeric types
-        let numeric_types = ["i8", "i16", "i32", "i64", "i128", "isize",
-                             "u8", "u16", "u32", "u64", "u128", "usize",
-                             "f32", "f64"];
+        let numeric_types = [
+            "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+            "f32", "f64",
+        ];
 
         for ty in &numeric_types {
             // All numeric types implement ConstEq, ConstOrd, ConstDefault, ConstAdd, ConstMul
-            for trait_name in &["ConstEq", "ConstOrd", "ConstDefault", "ConstAdd", "ConstMul"] {
+            for trait_name in &[
+                "ConstEq",
+                "ConstOrd",
+                "ConstDefault",
+                "ConstAdd",
+                "ConstMul",
+            ] {
                 self.register_impl(ConstImplDef {
                     trait_name: trait_name.to_string(),
                     target_type: ty.to_string(),

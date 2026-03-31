@@ -92,11 +92,7 @@ impl ConstContext {
     }
 
     /// K9.7: Evaluate a const expression (dispatches to evaluator + stdlib + macros).
-    pub fn eval_const_call(
-        &mut self,
-        name: &str,
-        args: &[ComptimeValue],
-    ) -> Option<ComptimeValue> {
+    pub fn eval_const_call(&mut self, name: &str, args: &[ComptimeValue]) -> Option<ComptimeValue> {
         // Try const stdlib first
         if let Some(result) = const_stdlib::eval_const_stdlib(name, args) {
             return Some(result);

@@ -516,20 +516,63 @@ impl Parser {
     fn parse_const_param_type(&mut self) -> Result<String, ParseError> {
         let kind = self.peek_kind().clone();
         let type_name = match kind {
-            TokenKind::Usize => { self.advance(); "usize".to_string() }
-            TokenKind::Isize => { self.advance(); "isize".to_string() }
-            TokenKind::I8 => { self.advance(); "i8".to_string() }
-            TokenKind::I16 => { self.advance(); "i16".to_string() }
-            TokenKind::I32 => { self.advance(); "i32".to_string() }
-            TokenKind::I64 => { self.advance(); "i64".to_string() }
-            TokenKind::I128 => { self.advance(); "i128".to_string() }
-            TokenKind::U8 => { self.advance(); "u8".to_string() }
-            TokenKind::U16 => { self.advance(); "u16".to_string() }
-            TokenKind::U32 => { self.advance(); "u32".to_string() }
-            TokenKind::U64 => { self.advance(); "u64".to_string() }
-            TokenKind::U128 => { self.advance(); "u128".to_string() }
-            TokenKind::BoolType => { self.advance(); "bool".to_string() }
-            TokenKind::Ident(name) => { let n = name.clone(); self.advance(); n }
+            TokenKind::Usize => {
+                self.advance();
+                "usize".to_string()
+            }
+            TokenKind::Isize => {
+                self.advance();
+                "isize".to_string()
+            }
+            TokenKind::I8 => {
+                self.advance();
+                "i8".to_string()
+            }
+            TokenKind::I16 => {
+                self.advance();
+                "i16".to_string()
+            }
+            TokenKind::I32 => {
+                self.advance();
+                "i32".to_string()
+            }
+            TokenKind::I64 => {
+                self.advance();
+                "i64".to_string()
+            }
+            TokenKind::I128 => {
+                self.advance();
+                "i128".to_string()
+            }
+            TokenKind::U8 => {
+                self.advance();
+                "u8".to_string()
+            }
+            TokenKind::U16 => {
+                self.advance();
+                "u16".to_string()
+            }
+            TokenKind::U32 => {
+                self.advance();
+                "u32".to_string()
+            }
+            TokenKind::U64 => {
+                self.advance();
+                "u64".to_string()
+            }
+            TokenKind::U128 => {
+                self.advance();
+                "u128".to_string()
+            }
+            TokenKind::BoolType => {
+                self.advance();
+                "bool".to_string()
+            }
+            TokenKind::Ident(name) => {
+                let n = name.clone();
+                self.advance();
+                n
+            }
             _ => {
                 let tok = self.peek().clone();
                 return Err(ParseError::ExpectedIdentifier {

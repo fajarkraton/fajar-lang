@@ -183,10 +183,7 @@ impl ConstMacroEvaluator {
     }
 
     // K6.2: static_assert!(condition [, "message"])
-    fn eval_static_assert(
-        &self,
-        args: &[ComptimeValue],
-    ) -> Result<ComptimeValue, ConstMacroError> {
+    fn eval_static_assert(&self, args: &[ComptimeValue]) -> Result<ComptimeValue, ConstMacroError> {
         let cond = args.first().ok_or(ConstMacroError::InvalidArgs {
             reason: "static_assert! requires a condition".into(),
         })?;
@@ -197,7 +194,7 @@ impl ConstMacroEvaluator {
             _ => {
                 return Err(ConstMacroError::InvalidArgs {
                     reason: "static_assert! condition must be bool or int".into(),
-                })
+                });
             }
         };
 
@@ -246,7 +243,10 @@ impl ConstMacroEvaluator {
 
         match std::fs::read(&full_path) {
             Ok(bytes) => {
-                let arr = bytes.iter().map(|b| ComptimeValue::Int(*b as i64)).collect();
+                let arr = bytes
+                    .iter()
+                    .map(|b| ComptimeValue::Int(*b as i64))
+                    .collect();
                 Ok(ComptimeValue::Array(arr))
             }
             Err(e) => {
@@ -324,10 +324,7 @@ impl ConstMacroEvaluator {
     }
 
     // K6.9: compile_error!("message")
-    fn eval_compile_error(
-        &self,
-        args: &[ComptimeValue],
-    ) -> Result<ComptimeValue, ConstMacroError> {
+    fn eval_compile_error(&self, args: &[ComptimeValue]) -> Result<ComptimeValue, ConstMacroError> {
         let msg = args
             .first()
             .and_then(|v| {
@@ -428,7 +425,10 @@ mod tests {
         std::fs::write(&path, "hello from file").unwrap();
 
         let ev = ConstMacroEvaluator::new(dir.to_str().unwrap());
-        let result = ev.eval("include_str", &[ComptimeValue::Str("fj_test_include.txt".into())]);
+        let result = ev.eval(
+            "include_str",
+            &[ComptimeValue::Str("fj_test_include.txt".into())],
+        );
         assert_eq!(
             result,
             Some(Ok(ComptimeValue::Str("hello from file".into())))
@@ -440,7 +440,10 @@ mod tests {
     #[test]
     fn k6_3_include_str_file_not_found() {
         let ev = evaluator();
-        let result = ev.eval("include_str", &[ComptimeValue::Str("nonexistent.txt".into())]);
+        let result = ev.eval(
+            "include_str",
+            &[ComptimeValue::Str("nonexistent.txt".into())],
+        );
         let err = result.unwrap().unwrap_err();
         assert!(matches!(err, ConstMacroError::FileNotFound { .. }));
     }
@@ -454,7 +457,10 @@ mod tests {
         std::fs::write(&path, &[0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
 
         let ev = ConstMacroEvaluator::new(dir.to_str().unwrap());
-        let result = ev.eval("include_bytes", &[ComptimeValue::Str("fj_test_bytes.bin".into())]);
+        let result = ev.eval(
+            "include_bytes",
+            &[ComptimeValue::Str("fj_test_bytes.bin".into())],
+        );
         assert_eq!(
             result,
             Some(Ok(ComptimeValue::Array(vec![

@@ -39,17 +39,11 @@ pub enum TypeMetaKind {
     /// A primitive type (i8-i128, u8-u128, f32, f64, bool, char, str).
     Primitive,
     /// A struct with named fields.
-    Struct {
-        fields: Vec<FieldMeta>,
-    },
+    Struct { fields: Vec<FieldMeta> },
     /// An enum with named variants.
-    Enum {
-        variants: Vec<VariantMeta>,
-    },
+    Enum { variants: Vec<VariantMeta> },
     /// A tuple type.
-    Tuple {
-        elements: Vec<String>,
-    },
+    Tuple { elements: Vec<String> },
     /// An array type.
     Array {
         elem_type: String,
@@ -114,12 +108,22 @@ impl TypeMetaRegistry {
 
     fn register_builtins(&mut self) {
         let primitives = [
-            ("i8", 1, 1), ("i16", 2, 2), ("i32", 4, 4), ("i64", 8, 8), ("i128", 16, 16),
+            ("i8", 1, 1),
+            ("i16", 2, 2),
+            ("i32", 4, 4),
+            ("i64", 8, 8),
+            ("i128", 16, 16),
             ("isize", 8, 8),
-            ("u8", 1, 1), ("u16", 2, 2), ("u32", 4, 4), ("u64", 8, 8), ("u128", 16, 16),
+            ("u8", 1, 1),
+            ("u16", 2, 2),
+            ("u32", 4, 4),
+            ("u64", 8, 8),
+            ("u128", 16, 16),
             ("usize", 8, 8),
-            ("f32", 4, 4), ("f64", 8, 8),
-            ("bool", 1, 1), ("char", 4, 4),
+            ("f32", 4, 4),
+            ("f64", 8, 8),
+            ("bool", 1, 1),
+            ("char", 4, 4),
         ];
         for (name, size, align) in &primitives {
             self.register(TypeMeta {
@@ -138,10 +142,19 @@ impl TypeMetaRegistry {
         });
 
         // Register standard trait impls for primitives
-        let numeric = ["i8", "i16", "i32", "i64", "i128", "isize",
-                       "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64"];
+        let numeric = [
+            "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+            "f32", "f64",
+        ];
         for ty in &numeric {
-            for tr in &["Display", "Debug", "Clone", "Copy", "PartialEq", "PartialOrd"] {
+            for tr in &[
+                "Display",
+                "Debug",
+                "Clone",
+                "Copy",
+                "PartialEq",
+                "PartialOrd",
+            ] {
                 self.register_trait_impl(ty, tr);
             }
         }
@@ -155,11 +168,7 @@ impl TypeMetaRegistry {
     }
 
     /// Register a struct type from field names and types.
-    pub fn register_struct(
-        &mut self,
-        name: &str,
-        fields: &[(&str, &str)],
-    ) {
+    pub fn register_struct(&mut self, name: &str, fields: &[(&str, &str)]) {
         let mut offset = 0;
         let mut field_metas = Vec::new();
         let mut max_align = 1;
@@ -196,11 +205,7 @@ impl TypeMetaRegistry {
     }
 
     /// Register an enum type from variant names and optional payloads.
-    pub fn register_enum(
-        &mut self,
-        name: &str,
-        variants: &[(&str, Option<&str>)],
-    ) {
+    pub fn register_enum(&mut self, name: &str, variants: &[(&str, Option<&str>)]) {
         let variant_metas: Vec<VariantMeta> = variants
             .iter()
             .enumerate()

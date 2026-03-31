@@ -159,7 +159,7 @@ pub fn functions_needing_reanalysis(
                 .filter(|f| {
                     match old_map.get(f.name.as_str()) {
                         Some(&old_hash) => old_hash != f.body_hash, // Body changed
-                        None => true, // New function
+                        None => true,                               // New function
                     }
                 })
                 .map(|f| f.name.clone())
@@ -255,7 +255,11 @@ impl SymbolIndex {
     pub fn add_definition(&mut self, name: &str, file: &str, line: usize, col: usize) {
         self.definitions.insert(
             name.to_string(),
-            SymbolLocation { file: file.into(), line, col },
+            SymbolLocation {
+                file: file.into(),
+                line,
+                col,
+            },
         );
     }
 
@@ -264,7 +268,11 @@ impl SymbolIndex {
         self.references
             .entry(name.to_string())
             .or_default()
-            .push(SymbolLocation { file: file.into(), line, col });
+            .push(SymbolLocation {
+                file: file.into(),
+                line,
+                col,
+            });
     }
 
     /// Look up a definition.
@@ -274,7 +282,10 @@ impl SymbolIndex {
 
     /// Find all references.
     pub fn find_references(&self, name: &str) -> &[SymbolLocation] {
-        self.references.get(name).map(|v| v.as_slice()).unwrap_or(&[])
+        self.references
+            .get(name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Remove all symbols from a file (for incremental update).
@@ -315,10 +326,7 @@ pub enum IncrCompletionKind {
 }
 
 /// Generate completions from the symbol index.
-pub fn completions_from_index(
-    prefix: &str,
-    index: &SymbolIndex,
-) -> Vec<IncrCompletion> {
+pub fn completions_from_index(prefix: &str, index: &SymbolIndex) -> Vec<IncrCompletion> {
     let lower_prefix = prefix.to_lowercase();
     index
         .definitions
@@ -472,24 +480,36 @@ mod tests {
             "a.fj".into(),
             vec![
                 FunctionAnalysis {
-                    name: "foo".into(), body_hash: "h1".into(),
-                    ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
+                    name: "foo".into(),
+                    body_hash: "h1".into(),
+                    ok: true,
+                    diagnostics: vec![],
+                    resolved_types: HashMap::new(),
                 },
                 FunctionAnalysis {
-                    name: "bar".into(), body_hash: "h2".into(),
-                    ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
+                    name: "bar".into(),
+                    body_hash: "h2".into(),
+                    ok: true,
+                    diagnostics: vec![],
+                    resolved_types: HashMap::new(),
                 },
             ],
         );
 
         let new_fns = vec![
             FunctionAnalysis {
-                name: "foo".into(), body_hash: "h1".into(), // unchanged
-                ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
+                name: "foo".into(),
+                body_hash: "h1".into(), // unchanged
+                ok: true,
+                diagnostics: vec![],
+                resolved_types: HashMap::new(),
             },
             FunctionAnalysis {
-                name: "bar".into(), body_hash: "h3".into(), // changed!
-                ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
+                name: "bar".into(),
+                body_hash: "h3".into(), // changed!
+                ok: true,
+                diagnostics: vec![],
+                resolved_types: HashMap::new(),
             },
         ];
 
@@ -545,12 +565,16 @@ mod tests {
     #[test]
     fn i8_5_diagnostics_update() {
         let mut state = LspAnalysisState::new();
-        state.update_diagnostics("main.fj", vec![
-            LspDiagnostic {
-                file: "main.fj".into(), line: 5, col: 10,
-                severity: LspSeverity::Error, message: "type mismatch".into(),
-            },
-        ]);
+        state.update_diagnostics(
+            "main.fj",
+            vec![LspDiagnostic {
+                file: "main.fj".into(),
+                line: 5,
+                col: 10,
+                severity: LspSeverity::Error,
+                message: "type mismatch".into(),
+            }],
+        );
 
         let diags = state.get_diagnostics("main.fj");
         assert_eq!(diags.len(), 1);
@@ -579,7 +603,7 @@ mod tests {
     #[test]
     fn i8_7_memory_stats() {
         let stats = LspMemoryStats {
-            ast_bytes: 50_000_000,      // 50MB
+            ast_bytes: 50_000_000,       // 50MB
             type_info_bytes: 30_000_000, // 30MB
             index_bytes: 10_000_000,     // 10MB
             diag_bytes: 1_000_000,       // 1MB
@@ -594,8 +618,17 @@ mod tests {
     #[test]
     fn i8_8_warm_on_open() {
         let mut imports = HashMap::new();
-        imports.insert("main.fj".into(), ["lib.fj", "utils.fj"].iter().map(|s| s.to_string()).collect());
-        imports.insert("test.fj".into(), ["main.fj"].iter().map(|s| s.to_string()).collect());
+        imports.insert(
+            "main.fj".into(),
+            ["lib.fj", "utils.fj"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        );
+        imports.insert(
+            "test.fj".into(),
+            ["main.fj"].iter().map(|s| s.to_string()).collect(),
+        );
 
         let to_warm = files_to_warm("main.fj", &imports);
         assert!(to_warm.contains(&"lib.fj".to_string()));
@@ -609,7 +642,9 @@ mod tests {
     fn i8_9_status_fresh() {
         let mut state = LspAnalysisState::new();
         state.workspace_indexed = true;
-        state.analyzed_hashes.insert("main.fj".into(), "hash".into());
+        state
+            .analyzed_hashes
+            .insert("main.fj".into(), "hash".into());
 
         let status = current_status(&state, &["main.fj".into()], 0);
         assert_eq!(status, AnalysisStatus::Fresh);
@@ -642,12 +677,16 @@ mod tests {
 
         // 2. Analyze → mark done
         state.mark_analyzed("main.fj", "fn main() { hello() }");
-        state.function_analyses.insert("main.fj".into(), vec![
-            FunctionAnalysis {
-                name: "main".into(), body_hash: "h1".into(),
-                ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
-            },
-        ]);
+        state.function_analyses.insert(
+            "main.fj".into(),
+            vec![FunctionAnalysis {
+                name: "main".into(),
+                body_hash: "h1".into(),
+                ok: true,
+                diagnostics: vec![],
+                resolved_types: HashMap::new(),
+            }],
+        );
 
         // 3. Index symbols
         state.symbol_index.add_definition("main", "main.fj", 1, 0);
@@ -665,8 +704,11 @@ mod tests {
 
         // 6. Per-function check
         let new_fns = vec![FunctionAnalysis {
-            name: "main".into(), body_hash: "h2".into(),
-            ok: true, diagnostics: vec![], resolved_types: HashMap::new(),
+            name: "main".into(),
+            body_hash: "h2".into(),
+            ok: true,
+            diagnostics: vec![],
+            resolved_types: HashMap::new(),
         }];
         let to_reanalyze = functions_needing_reanalysis("main.fj", &new_fns, &state);
         assert_eq!(to_reanalyze, vec!["main"]);

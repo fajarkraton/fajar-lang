@@ -1610,8 +1610,14 @@ mod tests {
     #[test]
     fn e5_torch_device_parsing() {
         assert_eq!(TorchDevice::parse_device("cpu"), Some(TorchDevice::Cpu));
-        assert_eq!(TorchDevice::parse_device("cuda:0"), Some(TorchDevice::Cuda(0)));
-        assert_eq!(TorchDevice::parse_device("cuda"), Some(TorchDevice::Cuda(0)));
+        assert_eq!(
+            TorchDevice::parse_device("cuda:0"),
+            Some(TorchDevice::Cuda(0))
+        );
+        assert_eq!(
+            TorchDevice::parse_device("cuda"),
+            Some(TorchDevice::Cuda(0))
+        );
         assert_eq!(TorchDevice::parse_device("mps"), Some(TorchDevice::Mps));
         assert_eq!(TorchDevice::parse_device("tpu"), None);
         assert!(TorchDevice::Cuda(0).is_cuda());

@@ -99,15 +99,9 @@ impl ConstSize {
 impl ConstSizeExpr {
     fn evaluate(&self, env: &HashMap<String, u64>) -> Option<u64> {
         match self {
-            ConstSizeExpr::Add(a, b) => {
-                Some(a.evaluate(env)?.saturating_add(b.evaluate(env)?))
-            }
-            ConstSizeExpr::Mul(a, b) => {
-                Some(a.evaluate(env)?.saturating_mul(b.evaluate(env)?))
-            }
-            ConstSizeExpr::Sub(a, b) => {
-                Some(a.evaluate(env)?.saturating_sub(b.evaluate(env)?))
-            }
+            ConstSizeExpr::Add(a, b) => Some(a.evaluate(env)?.saturating_add(b.evaluate(env)?)),
+            ConstSizeExpr::Mul(a, b) => Some(a.evaluate(env)?.saturating_mul(b.evaluate(env)?)),
+            ConstSizeExpr::Sub(a, b) => Some(a.evaluate(env)?.saturating_sub(b.evaluate(env)?)),
         }
     }
 
@@ -127,15 +121,9 @@ impl ConstSizeExpr {
 
     fn to_nat(&self) -> NatValue {
         match self {
-            ConstSizeExpr::Add(a, b) => {
-                NatValue::Add(Box::new(a.to_nat()), Box::new(b.to_nat()))
-            }
-            ConstSizeExpr::Mul(a, b) => {
-                NatValue::Mul(Box::new(a.to_nat()), Box::new(b.to_nat()))
-            }
-            ConstSizeExpr::Sub(a, b) => {
-                NatValue::Sub(Box::new(a.to_nat()), Box::new(b.to_nat()))
-            }
+            ConstSizeExpr::Add(a, b) => NatValue::Add(Box::new(a.to_nat()), Box::new(b.to_nat())),
+            ConstSizeExpr::Mul(a, b) => NatValue::Mul(Box::new(a.to_nat()), Box::new(b.to_nat())),
+            ConstSizeExpr::Sub(a, b) => NatValue::Sub(Box::new(a.to_nat()), Box::new(b.to_nat())),
         }
     }
 }
@@ -145,16 +133,24 @@ impl std::fmt::Display for ConstType {
         match self {
             ConstType::Named(n) => write!(f, "{n}"),
             ConstType::Array { elem, size } => write!(f, "[{elem}; {size}]"),
-            ConstType::Generic { base, type_args, const_args } => {
+            ConstType::Generic {
+                base,
+                type_args,
+                const_args,
+            } => {
                 write!(f, "{base}<")?;
                 let mut first = true;
                 for ta in type_args {
-                    if !first { write!(f, ", ")?; }
+                    if !first {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{ta}")?;
                     first = false;
                 }
                 for ca in const_args {
-                    if !first { write!(f, ", ")?; }
+                    if !first {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{ca}")?;
                     first = false;
                 }
@@ -163,7 +159,9 @@ impl std::fmt::Display for ConstType {
             ConstType::Tuple(elems) => {
                 write!(f, "(")?;
                 for (i, e) in elems.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{e}")?;
                 }
                 write!(f, ")")
@@ -243,7 +241,11 @@ impl ConstGenericFn {
     }
 
     /// Specialize return type with concrete args.
-    pub fn specialize_return(&self, type_args: &HashMap<String, String>, const_args: &HashMap<String, u64>) -> ConstType {
+    pub fn specialize_return(
+        &self,
+        type_args: &HashMap<String, String>,
+        const_args: &HashMap<String, u64>,
+    ) -> ConstType {
         specialize_type(&self.return_type, type_args, const_args)
     }
 }
@@ -301,14 +303,24 @@ pub fn specialize_type(
             elem: Box::new(specialize_type(elem, type_args, const_args)),
             size: size.substitute(const_args),
         },
-        ConstType::Generic { base, type_args: ta, const_args: ca } => ConstType::Generic {
+        ConstType::Generic {
+            base,
+            type_args: ta,
+            const_args: ca,
+        } => ConstType::Generic {
             base: base.clone(),
-            type_args: ta.iter().map(|t| specialize_type(t, type_args, const_args)).collect(),
+            type_args: ta
+                .iter()
+                .map(|t| specialize_type(t, type_args, const_args))
+                .collect(),
             const_args: ca.iter().map(|c| c.substitute(const_args)).collect(),
         },
-        ConstType::Tuple(elems) => {
-            ConstType::Tuple(elems.iter().map(|e| specialize_type(e, type_args, const_args)).collect())
-        }
+        ConstType::Tuple(elems) => ConstType::Tuple(
+            elems
+                .iter()
+                .map(|e| specialize_type(e, type_args, const_args))
+                .collect(),
+        ),
         ConstType::Ref(inner) => {
             ConstType::Ref(Box::new(specialize_type(inner, type_args, const_args)))
         }
@@ -367,7 +379,10 @@ pub fn resolve_with_defaults(
             .flatten()
             .or(param.default)
             .ok_or_else(|| {
-                format!("const parameter '{}' has no value and no default", param.name)
+                format!(
+                    "const parameter '{}' has no value and no default",
+                    param.name
+                )
             })?;
         result.push(val);
     }
@@ -595,8 +610,14 @@ mod tests {
     #[test]
     fn k8_9_default_const_values() {
         let params = vec![
-            ConstParamWithDefault { name: "N".into(), default: Some(1024) },
-            ConstParamWithDefault { name: "M".into(), default: None },
+            ConstParamWithDefault {
+                name: "N".into(),
+                default: Some(1024),
+            },
+            ConstParamWithDefault {
+                name: "M".into(),
+                default: None,
+            },
         ];
 
         // All explicit
@@ -635,10 +656,7 @@ mod tests {
         let ty = ConstType::Generic {
             base: "Matrix".into(),
             type_args: vec![ConstType::Named("T".into())],
-            const_args: vec![
-                ConstSize::Param("R".into()),
-                ConstSize::Param("C".into()),
-            ],
+            const_args: vec![ConstSize::Param("R".into()), ConstSize::Param("C".into())],
         };
 
         let mut ta = HashMap::new();

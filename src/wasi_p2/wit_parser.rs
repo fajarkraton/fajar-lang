@@ -340,7 +340,11 @@ pub struct WitParseError {
 
 impl fmt::Display for WitParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WIT parse error at offset {}: {}", self.offset, self.message)
+        write!(
+            f,
+            "WIT parse error at offset {}: {}",
+            self.offset, self.message
+        )
     }
 }
 
@@ -503,10 +507,7 @@ impl WitParser {
 
     // ── Interface ──
 
-    fn parse_interface(
-        &mut self,
-        doc: Option<String>,
-    ) -> Result<WitInterfaceDef, WitParseError> {
+    fn parse_interface(&mut self, doc: Option<String>) -> Result<WitInterfaceDef, WitParseError> {
         self.expect(&WitTokenKind::Interface)?;
         let name = self.expect_ident()?;
         self.expect(&WitTokenKind::LBrace)?;
@@ -544,7 +545,9 @@ impl WitParser {
                     items.push(WitInterfaceItem::Func(self.parse_func_item(item_doc)?));
                 }
                 WitTokenKind::Constructor => {
-                    items.push(WitInterfaceItem::Func(self.parse_constructor_func(item_doc)?));
+                    items.push(WitInterfaceItem::Func(
+                        self.parse_constructor_func(item_doc)?,
+                    ));
                 }
                 WitTokenKind::Eof => {
                     return Err(WitParseError {
@@ -561,19 +564,12 @@ impl WitParser {
             }
         }
 
-        Ok(WitInterfaceDef {
-            name,
-            doc,
-            items,
-        })
+        Ok(WitInterfaceDef { name, doc, items })
     }
 
     // ── World ──
 
-    fn parse_world(
-        &mut self,
-        doc: Option<String>,
-    ) -> Result<WitWorldDef, WitParseError> {
+    fn parse_world(&mut self, doc: Option<String>) -> Result<WitWorldDef, WitParseError> {
         self.expect(&WitTokenKind::World)?;
         let name = self.expect_ident()?;
         self.expect(&WitTokenKind::LBrace)?;
@@ -631,11 +627,7 @@ impl WitParser {
             }
         }
 
-        Ok(WitWorldDef {
-            name,
-            doc,
-            items,
-        })
+        Ok(WitWorldDef { name, doc, items })
     }
 
     fn parse_world_import(&mut self) -> Result<WitWorldImport, WitParseError> {
@@ -997,10 +989,7 @@ impl WitParser {
         let func = self.parse_func_body(name, doc)?;
         self.expect(&WitTokenKind::Semicolon)?;
 
-        Ok(WitFuncDef {
-            is_static,
-            ..func
-        })
+        Ok(WitFuncDef { is_static, ..func })
     }
 
     /// Parse constructor func: `constructor(params);`
@@ -1070,19 +1059,58 @@ impl WitParser {
     fn parse_type_ref(&mut self) -> Result<WitTypeRef, WitParseError> {
         match self.peek().clone() {
             // ── Primitives ──
-            WitTokenKind::U8 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::U8)) }
-            WitTokenKind::U16 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::U16)) }
-            WitTokenKind::U32 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::U32)) }
-            WitTokenKind::U64 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::U64)) }
-            WitTokenKind::S8 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::S8)) }
-            WitTokenKind::S16 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::S16)) }
-            WitTokenKind::S32 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::S32)) }
-            WitTokenKind::S64 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::S64)) }
-            WitTokenKind::F32 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::F32)) }
-            WitTokenKind::F64 => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::F64)) }
-            WitTokenKind::Bool => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::Bool)) }
-            WitTokenKind::Char => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::Char)) }
-            WitTokenKind::StringKw => { self.advance(); Ok(WitTypeRef::Primitive(WitPrimitive::String_)) }
+            WitTokenKind::U8 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::U8))
+            }
+            WitTokenKind::U16 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::U16))
+            }
+            WitTokenKind::U32 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::U32))
+            }
+            WitTokenKind::U64 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::U64))
+            }
+            WitTokenKind::S8 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::S8))
+            }
+            WitTokenKind::S16 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::S16))
+            }
+            WitTokenKind::S32 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::S32))
+            }
+            WitTokenKind::S64 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::S64))
+            }
+            WitTokenKind::F32 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::F32))
+            }
+            WitTokenKind::F64 => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::F64))
+            }
+            WitTokenKind::Bool => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::Bool))
+            }
+            WitTokenKind::Char => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::Char))
+            }
+            WitTokenKind::StringKw => {
+                self.advance();
+                Ok(WitTypeRef::Primitive(WitPrimitive::String_))
+            }
 
             // ── Generic built-ins ──
             WitTokenKind::List => {
@@ -1103,7 +1131,10 @@ impl WitParser {
                 self.advance();
                 // result can be bare, or have type args
                 if self.peek() != &WitTokenKind::LAngle {
-                    return Ok(WitTypeRef::Result { ok: None, err: None });
+                    return Ok(WitTypeRef::Result {
+                        ok: None,
+                        err: None,
+                    });
                 }
                 self.advance(); // <
                 // Could be `_` for no ok type
@@ -1376,10 +1407,7 @@ interface errors {
                     Some(WitTypeRef::Primitive(WitPrimitive::String_))
                 );
                 assert_eq!(cases[2].name, "other");
-                assert_eq!(
-                    cases[2].ty,
-                    Some(WitTypeRef::Primitive(WitPrimitive::U32))
-                );
+                assert_eq!(cases[2].ty, Some(WitTypeRef::Primitive(WitPrimitive::U32)));
             } else {
                 panic!("expected Variant");
             }
@@ -1547,7 +1575,13 @@ interface test {
 "#;
         let doc = parse_wit(src).unwrap();
         if let WitInterfaceItem::Func(f) = &doc.interfaces[0].items[0] {
-            assert_eq!(f.result, Some(WitTypeRef::Result { ok: None, err: None }));
+            assert_eq!(
+                f.result,
+                Some(WitTypeRef::Result {
+                    ok: None,
+                    err: None
+                })
+            );
         }
     }
 
@@ -1562,7 +1596,11 @@ interface test {
         if let WitInterfaceItem::Func(f) = &doc.interfaces[0].items[0] {
             if let Some(WitTypeRef::Tuple(items)) = &f.result {
                 assert_eq!(items.len(), 3);
-                assert!(items.iter().all(|t| *t == WitTypeRef::Primitive(WitPrimitive::F64)));
+                assert!(
+                    items
+                        .iter()
+                        .all(|t| *t == WitTypeRef::Primitive(WitPrimitive::F64))
+                );
             } else {
                 panic!("expected tuple");
             }

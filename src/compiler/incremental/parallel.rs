@@ -377,7 +377,12 @@ impl ProgressReporter {
     /// Format progress line: `[3/10] Compiling module_a...`
     pub fn format_line(&self) -> String {
         let current = self.active.first().map(|s| s.as_str()).unwrap_or("...");
-        format!("[{}/{}] Compiling {}...", self.completed + 1, self.total, current)
+        format!(
+            "[{}/{}] Compiling {}...",
+            self.completed + 1,
+            self.total,
+            current
+        )
     }
 
     /// Progress as percentage.
@@ -407,7 +412,9 @@ pub fn detect_cycle(units: &[CompileUnit]) -> Option<Vec<String>> {
     let deps_map: HashMap<String, Vec<String>> = units
         .iter()
         .map(|u| {
-            let filtered_deps: Vec<String> = u.deps.iter()
+            let filtered_deps: Vec<String> = u
+                .deps
+                .iter()
                 .filter(|d| all_names.contains(d.as_str()))
                 .cloned()
                 .collect();
@@ -421,7 +428,8 @@ pub fn detect_cycle(units: &[CompileUnit]) -> Option<Vec<String>> {
 
     for name in all_names {
         if !visited.contains(&name) {
-            if let Some(cycle) = dfs_cycle(&name, &deps_map, &mut visited, &mut in_stack, &mut path) {
+            if let Some(cycle) = dfs_cycle(&name, &deps_map, &mut visited, &mut in_stack, &mut path)
+            {
                 return Some(cycle);
             }
         }
@@ -490,7 +498,10 @@ pub fn compile_parallel(
 ) -> Result<ParallelResult, String> {
     // I4.9: Check for cycles
     if let Some(cycle) = detect_cycle(units) {
-        return Err(format!("deadlock: circular dependency: {}", cycle.join(" -> ")));
+        return Err(format!(
+            "deadlock: circular dependency: {}",
+            cycle.join(" -> ")
+        ));
     }
 
     // I4.3: Compute topological levels
@@ -532,19 +543,51 @@ mod tests {
 
     fn units_linear() -> Vec<CompileUnit> {
         vec![
-            CompileUnit { name: "core".into(), deps: vec![], cost: 100 },
-            CompileUnit { name: "lib".into(), deps: vec!["core".into()], cost: 200 },
-            CompileUnit { name: "main".into(), deps: vec!["lib".into()], cost: 50 },
+            CompileUnit {
+                name: "core".into(),
+                deps: vec![],
+                cost: 100,
+            },
+            CompileUnit {
+                name: "lib".into(),
+                deps: vec!["core".into()],
+                cost: 200,
+            },
+            CompileUnit {
+                name: "main".into(),
+                deps: vec!["lib".into()],
+                cost: 50,
+            },
         ]
     }
 
     fn units_parallel() -> Vec<CompileUnit> {
         vec![
-            CompileUnit { name: "core".into(), deps: vec![], cost: 100 },
-            CompileUnit { name: "a".into(), deps: vec!["core".into()], cost: 100 },
-            CompileUnit { name: "b".into(), deps: vec!["core".into()], cost: 100 },
-            CompileUnit { name: "c".into(), deps: vec!["core".into()], cost: 100 },
-            CompileUnit { name: "main".into(), deps: vec!["a".into(), "b".into(), "c".into()], cost: 50 },
+            CompileUnit {
+                name: "core".into(),
+                deps: vec![],
+                cost: 100,
+            },
+            CompileUnit {
+                name: "a".into(),
+                deps: vec!["core".into()],
+                cost: 100,
+            },
+            CompileUnit {
+                name: "b".into(),
+                deps: vec!["core".into()],
+                cost: 100,
+            },
+            CompileUnit {
+                name: "c".into(),
+                deps: vec!["core".into()],
+                cost: 100,
+            },
+            CompileUnit {
+                name: "main".into(),
+                deps: vec!["a".into(), "b".into(), "c".into()],
+                cost: 50,
+            },
         ]
     }
 
@@ -589,9 +632,9 @@ mod tests {
     #[test]
     fn i4_4_work_queue_steal() {
         let mut q = WorkQueue::new(vec!["a".into(), "b".into(), "c".into()]);
-        assert_eq!(q.take(), Some("a".into()));    // front
-        assert_eq!(q.steal(), Some("c".into()));   // back (steal)
-        assert_eq!(q.take(), Some("b".into()));    // remaining
+        assert_eq!(q.take(), Some("a".into())); // front
+        assert_eq!(q.steal(), Some("c".into())); // back (steal)
+        assert_eq!(q.take(), Some("b".into())); // remaining
         assert_eq!(q.take(), None);
     }
 
@@ -682,9 +725,21 @@ mod tests {
     #[test]
     fn i4_9_cycle_detected() {
         let cyclic = vec![
-            CompileUnit { name: "a".into(), deps: vec!["b".into()], cost: 10 },
-            CompileUnit { name: "b".into(), deps: vec!["c".into()], cost: 10 },
-            CompileUnit { name: "c".into(), deps: vec!["a".into()], cost: 10 },
+            CompileUnit {
+                name: "a".into(),
+                deps: vec!["b".into()],
+                cost: 10,
+            },
+            CompileUnit {
+                name: "b".into(),
+                deps: vec!["c".into()],
+                cost: 10,
+            },
+            CompileUnit {
+                name: "c".into(),
+                deps: vec!["a".into()],
+                cost: 10,
+            },
         ];
         let cycle = detect_cycle(&cyclic);
         assert!(cycle.is_some());
@@ -695,8 +750,16 @@ mod tests {
     #[test]
     fn i4_9_compile_rejects_cycle() {
         let cyclic = vec![
-            CompileUnit { name: "x".into(), deps: vec!["y".into()], cost: 10 },
-            CompileUnit { name: "y".into(), deps: vec!["x".into()], cost: 10 },
+            CompileUnit {
+                name: "x".into(),
+                deps: vec!["y".into()],
+                cost: 10,
+            },
+            CompileUnit {
+                name: "y".into(),
+                deps: vec!["x".into()],
+                cost: 10,
+            },
         ];
         let result = compile_parallel(&cyclic, &ParallelConfig::with_threads(2));
         assert!(result.is_err());
@@ -708,11 +771,31 @@ mod tests {
     #[test]
     fn i4_10_full_parallel_pipeline() {
         let units = vec![
-            CompileUnit { name: "std".into(), deps: vec![], cost: 500 },
-            CompileUnit { name: "math".into(), deps: vec!["std".into()], cost: 200 },
-            CompileUnit { name: "io".into(), deps: vec!["std".into()], cost: 300 },
-            CompileUnit { name: "net".into(), deps: vec!["std".into(), "io".into()], cost: 400 },
-            CompileUnit { name: "app".into(), deps: vec!["math".into(), "net".into()], cost: 100 },
+            CompileUnit {
+                name: "std".into(),
+                deps: vec![],
+                cost: 500,
+            },
+            CompileUnit {
+                name: "math".into(),
+                deps: vec!["std".into()],
+                cost: 200,
+            },
+            CompileUnit {
+                name: "io".into(),
+                deps: vec!["std".into()],
+                cost: 300,
+            },
+            CompileUnit {
+                name: "net".into(),
+                deps: vec!["std".into(), "io".into()],
+                cost: 400,
+            },
+            CompileUnit {
+                name: "app".into(),
+                deps: vec!["math".into(), "net".into()],
+                cost: 100,
+            },
         ];
 
         let config = ParallelConfig::with_threads(4);

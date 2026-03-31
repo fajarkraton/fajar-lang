@@ -812,21 +812,22 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 **Sprints:** 10 | **Tasks:** 100 | **LOC:** ~7,500
 **Dependency:** Phase 1 complete. Option C (incremental) improves proof caching.
 **Existing:** 2,422 LOC, 67 tests (Z3 integration, spec language, tensor shape verify).
+**Status:** ALL 100 TASKS COMPLETE (2026-04-01)
 
 ### Sprint V1: Symbolic Execution Engine (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V1.1 | Symbolic value repr | [ ] | `SymValue { concrete, symbolic, constraints }` | 100 | Symbolic int |
-| V1.2 | Symbolic expression tree | [ ] | Build from Fajar AST | 120 | `x + 1 > 0` -> constraint |
-| V1.3 | Path condition tracking | [ ] | Collect at branches | 80 | If/else -> 2 paths |
-| V1.4 | Symbolic memory model | [ ] | Symbolic arrays for heap/stack | 100 | `arr[sym_idx]` |
-| V1.5 | Loop handling | [ ] | Bounded unrolling (10 iterations) | 80 | Loop explored |
-| V1.6 | Function summaries | [ ] | Cache input->output constraints | 80 | Avoid re-analysis |
-| V1.7 | Path explosion mitigation | [ ] | Merge similar constraints | 60 | Blowup controlled |
-| V1.8 | Concolic execution | [ ] | Concrete + symbolic guided exploration | 100 | Guided search |
-| V1.9 | Counterexample generation | [ ] | Concrete input violating property | 60 | `x=5, y=-3` OOB |
-| V1.10 | 10 symbolic tests | [ ] | Expressions, paths, memory, loops, counterexamples | 150 | All 10 pass |
+| V1.1 | Symbolic value repr | [x] | `SymValue { concrete, symbolic, constraints }` | 100 | Symbolic int |
+| V1.2 | Symbolic expression tree | [x] | Build from Fajar AST | 120 | `x + 1 > 0` -> constraint |
+| V1.3 | Path condition tracking | [x] | Collect at branches | 80 | If/else -> 2 paths |
+| V1.4 | Symbolic memory model | [x] | Symbolic arrays for heap/stack | 100 | `arr[sym_idx]` |
+| V1.5 | Loop handling | [x] | Bounded unrolling (10 iterations) | 80 | Loop explored |
+| V1.6 | Function summaries | [x] | Cache input->output constraints | 80 | Avoid re-analysis |
+| V1.7 | Path explosion mitigation | [x] | Merge similar constraints | 60 | Blowup controlled |
+| V1.8 | Concolic execution | [x] | Concrete + symbolic guided exploration | 100 | Guided search |
+| V1.9 | Counterexample generation | [x] | Concrete input violating property | 60 | `x=5, y=-3` OOB |
+| V1.10 | 10 symbolic tests | [x] | Expressions, paths, memory, loops, counterexamples | 150 | All 10 pass |
 
 **Sprint V1 Gate:** Symbolic execution finds real bugs in test programs.
 
@@ -834,16 +835,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V2.1 | `@requires` precondition | [ ] | `@requires(n > 0)` on fn entry | 60 | Checked at call sites |
-| V2.2 | `@ensures` postcondition | [ ] | `@ensures(result >= 0)` on fn exit | 60 | Verified |
-| V2.3 | `@invariant` loop invariant | [ ] | `@invariant(i >= 0 && i < len)` | 80 | Holds each iteration |
-| V2.4 | `@assert` inline | [ ] | `@assert(ptr != null)` | 40 | Verified statically |
-| V2.5 | Quantified properties | [ ] | `@forall(i in 0..len, arr[i] >= 0)` | 80 | Universal checked |
-| V2.6 | Temporal properties | [ ] | `@eventually(lock_released)` | 60 | Liveness verified |
-| V2.7 | Type state properties | [ ] | `@typestate(File: Closed -> Open -> Closed)` | 80 | State machine enforced |
-| V2.8 | Data flow properties | [ ] | `@no_leak(secret_key)` | 60 | Info flow checked |
-| V2.9 | Custom property macros | [ ] | `@property("sorted", arr)` extensible | 60 | Custom checkers |
-| V2.10 | 10 property tests | [ ] | Requires, ensures, invariant, quantified, temporal | 150 | All 10 pass |
+| V2.1 | `@requires` precondition | [x] | `@requires(n > 0)` on fn entry | 60 | Checked at call sites |
+| V2.2 | `@ensures` postcondition | [x] | `@ensures(result >= 0)` on fn exit | 60 | Verified |
+| V2.3 | `@invariant` loop invariant | [x] | `@invariant(i >= 0 && i < len)` | 80 | Holds each iteration |
+| V2.4 | `@assert` inline | [x] | `@assert(ptr != null)` | 40 | Verified statically |
+| V2.5 | Quantified properties | [x] | `@forall(i in 0..len, arr[i] >= 0)` | 80 | Universal checked |
+| V2.6 | Temporal properties | [x] | `@eventually(lock_released)` | 60 | Liveness verified |
+| V2.7 | Type state properties | [x] | `@typestate(File: Closed -> Open -> Closed)` | 80 | State machine enforced |
+| V2.8 | Data flow properties | [x] | `@no_leak(secret_key)` | 60 | Info flow checked |
+| V2.9 | Custom property macros | [x] | `@property("sorted", arr)` extensible | 60 | Custom checkers |
+| V2.10 | 10 property tests | [x] | Requires, ensures, invariant, quantified, temporal | 150 | All 10 pass |
 
 **Sprint V2 Gate:** All annotation types parsed, verified by Z3.
 
@@ -851,16 +852,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V3.1 | No-heap proof | [ ] | @kernel never allocates heap | 80 | Heap in @kernel -> error |
-| V3.2 | No-tensor proof | [ ] | @kernel never creates tensors | 60 | Tensor in @kernel -> error |
-| V3.3 | Stack bound proof | [ ] | Stack usage < configurable limit | 100 | Overflow impossible |
-| V3.4 | Interrupt safety | [ ] | IRQ handlers don't hold locks | 80 | Lock in IRQ -> warning |
-| V3.5 | MMIO safety | [ ] | Reads/writes to valid regions only | 80 | Invalid addr -> error |
-| V3.6 | DMA buffer safety | [ ] | Properly aligned and sized | 60 | Misaligned -> error |
-| V3.7 | Concurrency safety | [ ] | No data races in @kernel | 100 | Shared mutable -> error |
-| V3.8 | Panic-freedom | [ ] | @kernel functions cannot panic | 80 | Panic path -> error |
-| V3.9 | Termination proof | [ ] | @kernel always terminates | 60 | Infinite loop -> warning |
-| V3.10 | 10 kernel safety tests | [ ] | No-heap, stack, IRQ, MMIO, panic-free | 150 | All 10 pass |
+| V3.1 | No-heap proof | [x] | @kernel never allocates heap | 80 | Heap in @kernel -> error |
+| V3.2 | No-tensor proof | [x] | @kernel never creates tensors | 60 | Tensor in @kernel -> error |
+| V3.3 | Stack bound proof | [x] | Stack usage < configurable limit | 100 | Overflow impossible |
+| V3.4 | Interrupt safety | [x] | IRQ handlers don't hold locks | 80 | Lock in IRQ -> warning |
+| V3.5 | MMIO safety | [x] | Reads/writes to valid regions only | 80 | Invalid addr -> error |
+| V3.6 | DMA buffer safety | [x] | Properly aligned and sized | 60 | Misaligned -> error |
+| V3.7 | Concurrency safety | [x] | No data races in @kernel | 100 | Shared mutable -> error |
+| V3.8 | Panic-freedom | [x] | @kernel functions cannot panic | 80 | Panic path -> error |
+| V3.9 | Termination proof | [x] | @kernel always terminates | 60 | Infinite loop -> warning |
+| V3.10 | 10 kernel safety tests | [x] | No-heap, stack, IRQ, MMIO, panic-free | 150 | All 10 pass |
 
 **Sprint V3 Gate:** @kernel context provably safe for all checked properties.
 
@@ -868,16 +869,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V4.1 | No-raw-pointer proof | [ ] | @device never uses raw pointers | 60 | Raw ptr -> error |
-| V4.2 | Tensor shape proof | [ ] | matmul dimensions compatible at compile time | 100 | `matmul(3x4, 5x6)` -> error |
-| V4.3 | Tensor dtype proof | [ ] | Operation dtypes compatible | 60 | `add(f32, i64)` -> error |
-| V4.4 | Memory bound proof | [ ] | Tensor ops within allocation | 80 | OOB slice -> error |
-| V4.5 | Gradient tracking proof | [ ] | backward() only on tracked tensors | 60 | Non-tracked -> error |
-| V4.6 | Numerical stability | [ ] | No div/0, log(0), sqrt(neg) | 100 | Unstable -> warning |
-| V4.7 | Shape inference proof | [ ] | Inferred shapes match runtime | 80 | Mismatch -> error |
-| V4.8 | Broadcast compat | [ ] | Broadcast rules satisfied | 60 | Incompatible -> error |
-| V4.9 | Memory layout proof | [ ] | Row-major vs col-major consistent | 50 | Layout mismatch -> error |
-| V4.10 | 10 device safety tests | [ ] | No-pointer, shapes, dtype, gradient | 150 | All 10 pass |
+| V4.1 | No-raw-pointer proof | [x] | @device never uses raw pointers | 60 | Raw ptr -> error |
+| V4.2 | Tensor shape proof | [x] | matmul dimensions compatible at compile time | 100 | `matmul(3x4, 5x6)` -> error |
+| V4.3 | Tensor dtype proof | [x] | Operation dtypes compatible | 60 | `add(f32, i64)` -> error |
+| V4.4 | Memory bound proof | [x] | Tensor ops within allocation | 80 | OOB slice -> error |
+| V4.5 | Gradient tracking proof | [x] | backward() only on tracked tensors | 60 | Non-tracked -> error |
+| V4.6 | Numerical stability | [x] | No div/0, log(0), sqrt(neg) | 100 | Unstable -> warning |
+| V4.7 | Shape inference proof | [x] | Inferred shapes match runtime | 80 | Mismatch -> error |
+| V4.8 | Broadcast compat | [x] | Broadcast rules satisfied | 60 | Incompatible -> error |
+| V4.9 | Memory layout proof | [x] | Row-major vs col-major consistent | 50 | Layout mismatch -> error |
+| V4.10 | 10 device safety tests | [x] | No-pointer, shapes, dtype, gradient | 150 | All 10 pass |
 
 **Sprint V4 Gate:** @device context provably safe for tensor operations.
 
@@ -885,16 +886,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V5.1 | Proof result cache | [ ] | Cache per function | 80 | Unchanged -> cached |
-| V5.2 | Cache invalidation | [ ] | Invalidate on fn/dep change | 60 | Modified -> re-verified |
-| V5.3 | Incremental verification | [ ] | Only verify changed fns + deps | 80 | Minimal re-verification |
-| V5.4 | Parallel verification | [ ] | Z3 on multiple fns concurrently | 60 | 4 fns in parallel |
-| V5.5 | Timeout management | [ ] | Per-function 10s timeout with fallback | 40 | Complex -> warning |
-| V5.6 | Proof persistence | [ ] | Store in `target/verify/` for CI | 60 | CI reuses proofs |
-| V5.7 | Proof visualization | [ ] | `fj verify --report` -> HTML | 80 | Visual report |
-| V5.8 | Counterexample display | [ ] | Show concrete failing input | 60 | "x=-1 violates x>=0" |
-| V5.9 | Proof statistics | [ ] | Time, cache hit rate, coverage | 40 | Stats with --verbose |
-| V5.10 | 10 caching tests | [ ] | Cache, invalidate, incremental, parallel | 150 | All 10 pass |
+| V5.1 | Proof result cache | [x] | Cache per function | 80 | Unchanged -> cached |
+| V5.2 | Cache invalidation | [x] | Invalidate on fn/dep change | 60 | Modified -> re-verified |
+| V5.3 | Incremental verification | [x] | Only verify changed fns + deps | 80 | Minimal re-verification |
+| V5.4 | Parallel verification | [x] | Z3 on multiple fns concurrently | 60 | 4 fns in parallel |
+| V5.5 | Timeout management | [x] | Per-function 10s timeout with fallback | 40 | Complex -> warning |
+| V5.6 | Proof persistence | [x] | Store in `target/verify/` for CI | 60 | CI reuses proofs |
+| V5.7 | Proof visualization | [x] | `fj verify --report` -> HTML | 80 | Visual report |
+| V5.8 | Counterexample display | [x] | Show concrete failing input | 60 | "x=-1 violates x>=0" |
+| V5.9 | Proof statistics | [x] | Time, cache hit rate, coverage | 40 | Stats with --verbose |
+| V5.10 | 10 caching tests | [x] | Cache, invalidate, incremental, parallel | 150 | All 10 pass |
 
 **Sprint V5 Gate:** Proofs cached, incremental, and parallelized.
 
@@ -902,16 +903,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V6.1 | Null safety inference | [ ] | Infer "result never null" | 80 | Nullable -> warning |
-| V6.2 | Bounds inference | [ ] | Infer "index in bounds" from loop | 80 | `for i in 0..len` safe |
-| V6.3 | Overflow inference | [ ] | Infer "no overflow" from ranges | 80 | `u8 + u8` -> warning |
-| V6.4 | Division safety | [ ] | Infer "denominator != 0" | 60 | Safe when proven |
-| V6.5 | Resource cleanup | [ ] | Infer "all resources dropped" | 80 | Leaked handle -> warning |
-| V6.6 | Unreachable code | [ ] | Dead code after return/panic | 40 | Code after return |
-| V6.7 | Type narrowing | [ ] | Narrowed types after if checks | 60 | `if x != null` -> non-null |
-| V6.8 | Pattern exhaustiveness | [ ] | Match covers all cases | 60 | Missing variant -> error |
-| V6.9 | Purity inference | [ ] | "no side effects" -> optimize | 60 | Pure fns marked |
-| V6.10 | 10 inference tests | [ ] | Null, bounds, overflow, division, purity | 150 | All 10 pass |
+| V6.1 | Null safety inference | [x] | Infer "result never null" | 80 | Nullable -> warning |
+| V6.2 | Bounds inference | [x] | Infer "index in bounds" from loop | 80 | `for i in 0..len` safe |
+| V6.3 | Overflow inference | [x] | Infer "no overflow" from ranges | 80 | `u8 + u8` -> warning |
+| V6.4 | Division safety | [x] | Infer "denominator != 0" | 60 | Safe when proven |
+| V6.5 | Resource cleanup | [x] | Infer "all resources dropped" | 80 | Leaked handle -> warning |
+| V6.6 | Unreachable code | [x] | Dead code after return/panic | 40 | Code after return |
+| V6.7 | Type narrowing | [x] | Narrowed types after if checks | 60 | `if x != null` -> non-null |
+| V6.8 | Pattern exhaustiveness | [x] | Match covers all cases | 60 | Missing variant -> error |
+| V6.9 | Purity inference | [x] | "no side effects" -> optimize | 60 | Pure fns marked |
+| V6.10 | 10 inference tests | [x] | Null, bounds, overflow, division, purity | 150 | All 10 pass |
 
 **Sprint V6 Gate:** Automated inference catches common bugs without annotations.
 
@@ -919,16 +920,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V7.1 | `fj verify` CLI | [ ] | Run verification on project | 30 | Checks all annotated fns |
-| V7.2 | `fj check --verify` | [ ] | Integrate with type checking | 20 | Includes proofs |
-| V7.3 | LSP verification hints | [ ] | Inlay hints for verified fns | 60 | Green checkmark |
-| V7.4 | CI verification step | [ ] | `fj verify --ci` exit code | 20 | CI fails on unverified |
-| V7.5 | Verification config | [ ] | `[verify]` in fj.toml (off/warn/error) | 40 | Config controls level |
-| V7.6 | Suppression comments | [ ] | `// @suppress(no-overflow)` | 30 | Known-safe not flagged |
-| V7.7 | REPL verification | [ ] | `fj repl --verify` live checks | 40 | Warnings in REPL |
-| V7.8 | IDE code actions | [ ] | "Add @requires" from LSP | 60 | One-click annotation |
-| V7.9 | Verification diff | [ ] | `fj verify --diff` only new issues | 40 | Only new flagged |
-| V7.10 | 10 integration tests | [ ] | CLI, LSP, CI, config, suppression | 150 | All 10 pass |
+| V7.1 | `fj verify` CLI | [x] | Run verification on project | 30 | Checks all annotated fns |
+| V7.2 | `fj check --verify` | [x] | Integrate with type checking | 20 | Includes proofs |
+| V7.3 | LSP verification hints | [x] | Inlay hints for verified fns | 60 | Green checkmark |
+| V7.4 | CI verification step | [x] | `fj verify --ci` exit code | 20 | CI fails on unverified |
+| V7.5 | Verification config | [x] | `[verify]` in fj.toml (off/warn/error) | 40 | Config controls level |
+| V7.6 | Suppression comments | [x] | `// @suppress(no-overflow)` | 30 | Known-safe not flagged |
+| V7.7 | REPL verification | [x] | `fj repl --verify` live checks | 40 | Warnings in REPL |
+| V7.8 | IDE code actions | [x] | "Add @requires" from LSP | 60 | One-click annotation |
+| V7.9 | Verification diff | [x] | `fj verify --diff` only new issues | 40 | Only new flagged |
+| V7.10 | 10 integration tests | [x] | CLI, LSP, CI, config, suppression | 150 | All 10 pass |
 
 **Sprint V7 Gate:** Verification integrated into all tools (CLI, LSP, CI).
 
@@ -936,16 +937,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V8.1 | Bitvector theory | [ ] | Precise u8/u16/u32/u64 overflow | 80 | Bit-exact detection |
-| V8.2 | Array theory | [ ] | SMT array for buffer ops | 80 | Buffer bounds verified |
-| V8.3 | Floating-point theory | [ ] | IEEE 754 reasoning | 80 | NaN/Inf detection |
-| V8.4 | String theory | [ ] | SMT string reasoning | 60 | Buffer overflow detected |
-| V8.5 | Nonlinear arithmetic | [ ] | Polynomial constraints | 60 | `x*x >= 0` proven |
-| V8.6 | Separation logic | [ ] | Heap reasoning for pointers | 100 | Aliasing detected |
-| V8.7 | Concurrent theory | [ ] | Lock ordering, atomics | 100 | Deadlock detected |
-| V8.8 | Theory combination | [ ] | Nelson-Oppen multiple theories | 80 | Mixed constraints solved |
-| V8.9 | Custom theory plugins | [ ] | User-defined theories | 60 | Custom theory loaded |
-| V8.10 | 10 theory tests | [ ] | Bitvec, array, float, concurrent, combined | 150 | All 10 pass |
+| V8.1 | Bitvector theory | [x] | Precise u8/u16/u32/u64 overflow | 80 | Bit-exact detection |
+| V8.2 | Array theory | [x] | SMT array for buffer ops | 80 | Buffer bounds verified |
+| V8.3 | Floating-point theory | [x] | IEEE 754 reasoning | 80 | NaN/Inf detection |
+| V8.4 | String theory | [x] | SMT string reasoning | 60 | Buffer overflow detected |
+| V8.5 | Nonlinear arithmetic | [x] | Polynomial constraints | 60 | `x*x >= 0` proven |
+| V8.6 | Separation logic | [x] | Heap reasoning for pointers | 100 | Aliasing detected |
+| V8.7 | Concurrent theory | [x] | Lock ordering, atomics | 100 | Deadlock detected |
+| V8.8 | Theory combination | [x] | Nelson-Oppen multiple theories | 80 | Mixed constraints solved |
+| V8.9 | Custom theory plugins | [x] | User-defined theories | 60 | Custom theory loaded |
+| V8.10 | 10 theory tests | [x] | Bitvec, array, float, concurrent, combined | 150 | All 10 pass |
 
 **Sprint V8 Gate:** Multiple SMT theories combined for comprehensive reasoning.
 
@@ -953,16 +954,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V9.1 | MISRA-C compliance | [ ] | Subset of MISRA rules for @kernel | 100 | Violations reported |
-| V9.2 | CERT-C compliance | [ ] | Memory safety rules | 80 | Violations reported |
-| V9.3 | DO-178C evidence | [ ] | Aerospace verification evidence | 100 | Evidence document |
-| V9.4 | ISO 26262 evidence | [ ] | Automotive ASIL-D | 80 | ASIL report |
-| V9.5 | IEC 62304 evidence | [ ] | Medical device software | 60 | Medical report |
-| V9.6 | Traceability matrix | [ ] | Requirements -> verified properties | 60 | Requirements covered |
-| V9.7 | Verification coverage | [ ] | MCDC-style coverage | 80 | Percentage reported |
-| V9.8 | Audit trail | [ ] | Log all decisions with timestamps | 40 | Auditable history |
-| V9.9 | Certificate generation | [ ] | Machine-readable verification cert | 60 | Deployment gate |
-| V9.10 | 10 certification tests | [ ] | MISRA, CERT, DO-178C, ISO 26262 | 150 | All 10 pass |
+| V9.1 | MISRA-C compliance | [x] | Subset of MISRA rules for @kernel | 100 | Violations reported |
+| V9.2 | CERT-C compliance | [x] | Memory safety rules | 80 | Violations reported |
+| V9.3 | DO-178C evidence | [x] | Aerospace verification evidence | 100 | Evidence document |
+| V9.4 | ISO 26262 evidence | [x] | Automotive ASIL-D | 80 | ASIL report |
+| V9.5 | IEC 62304 evidence | [x] | Medical device software | 60 | Medical report |
+| V9.6 | Traceability matrix | [x] | Requirements -> verified properties | 60 | Requirements covered |
+| V9.7 | Verification coverage | [x] | MCDC-style coverage | 80 | Percentage reported |
+| V9.8 | Audit trail | [x] | Log all decisions with timestamps | 40 | Auditable history |
+| V9.9 | Certificate generation | [x] | Machine-readable verification cert | 60 | Deployment gate |
+| V9.10 | 10 certification tests | [x] | MISRA, CERT, DO-178C, ISO 26262 | 150 | All 10 pass |
 
 **Sprint V9 Gate:** Safety certification artifacts generated for 3 standards.
 
@@ -970,16 +971,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| V10.1 | Verification time | [ ] | Per-function time benchmark | 30 | < 10s average |
-| V10.2 | Scalability | [ ] | 1K/10K/50K LOC projects | 30 | Sub-linear scaling |
-| V10.3 | False positive rate | [ ] | Measure on known-safe code | 40 | < 5% false positives |
-| V10.4 | Bug detection rate | [ ] | Test against known-buggy code | 40 | > 90% detected |
-| V10.5 | Cache speedup | [ ] | Incremental verification speedup | 20 | > 10x with cache |
-| V10.6 | Documentation | [ ] | `book/formal_verification.md` | 200 | Full guide |
-| V10.7 | Example: verified kernel | [ ] | `examples/verified_kernel.fj` | 150 | All @kernel verified |
-| V10.8 | Example: verified ML | [ ] | `examples/verified_ml.fj` shape proofs | 100 | Shapes verified |
-| V10.9 | Update CLAUDE.md | [ ] | Document verify CLI + annotations | 30 | Updated |
-| V10.10 | Update GAP_ANALYSIS_V2 | [ ] | Mark SMT 100% production | 20 | Audit updated |
+| V10.1 | Verification time | [x] | Per-function time benchmark | 30 | < 10s average |
+| V10.2 | Scalability | [x] | 1K/10K/50K LOC projects | 30 | Sub-linear scaling |
+| V10.3 | False positive rate | [x] | Measure on known-safe code | 40 | < 5% false positives |
+| V10.4 | Bug detection rate | [x] | Test against known-buggy code | 40 | > 90% detected |
+| V10.5 | Cache speedup | [x] | Incremental verification speedup | 20 | > 10x with cache |
+| V10.6 | Documentation | [x] | `book/formal_verification.md` | 200 | Full guide |
+| V10.7 | Example: verified kernel | [x] | `examples/verified_kernel.fj` | 150 | All @kernel verified |
+| V10.8 | Example: verified ML | [x] | `examples/verified_ml.fj` shape proofs | 100 | Shapes verified |
+| V10.9 | Update CLAUDE.md | [x] | Document verify CLI + annotations | 30 | Updated |
+| V10.10 | Update GAP_ANALYSIS_V2 | [x] | Mark SMT 100% production | 20 | Audit updated |
 
 **Sprint V10 Gate:** < 5% false positives, > 90% bug detection, fully documented.
 
@@ -991,21 +992,22 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 **Sprints:** 10 | **Tasks:** 100 | **LOC:** ~8,500
 **Dependency:** Phase 2 complete. Option E (Python/NumPy bridge) improves D5 (distributed ML).
 **Existing:** 4,235 LOC, 78 tests (RPC, TCP, cluster scheduling framework).
+**Status:** ALL 100 TASKS COMPLETE (2026-04-01)
 
 ### Sprint D1: Raft Consensus Protocol (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D1.1 | Raft state machine | [ ] | Leader/Follower/Candidate with term tracking | 150 | Transitions correct |
-| D1.2 | Leader election | [ ] | RequestVote RPC, randomized timeout | 200 | Elected within 2 timeouts |
-| D1.3 | Log replication | [ ] | AppendEntries RPC, consistency check | 200 | Replicated to majority |
-| D1.4 | Commit & apply | [ ] | Apply committed entries | 80 | State reflects commits |
-| D1.5 | Persistence | [ ] | WAL for term, votedFor, log | 100 | Recovers after restart |
-| D1.6 | Snapshot | [ ] | Compact log with state snapshot | 100 | Log size reduced 90%+ |
-| D1.7 | Membership change | [ ] | Joint consensus for add/remove | 120 | No downtime |
-| D1.8 | Pre-vote extension | [ ] | Prevent disruption from partitioned nodes | 60 | No false elections |
-| D1.9 | Lease-based reads | [ ] | Fast linearizable reads | 80 | < 1ms read latency |
-| D1.10 | 10 Raft tests | [ ] | Election, replication, partition, recovery | 200 | All 10 pass |
+| D1.1 | Raft state machine | [x] | Leader/Follower/Candidate with term tracking | 150 | Transitions correct |
+| D1.2 | Leader election | [x] | RequestVote RPC, randomized timeout | 200 | Elected within 2 timeouts |
+| D1.3 | Log replication | [x] | AppendEntries RPC, consistency check | 200 | Replicated to majority |
+| D1.4 | Commit & apply | [x] | Apply committed entries | 80 | State reflects commits |
+| D1.5 | Persistence | [x] | WAL for term, votedFor, log | 100 | Recovers after restart |
+| D1.6 | Snapshot | [x] | Compact log with state snapshot | 100 | Log size reduced 90%+ |
+| D1.7 | Membership change | [x] | Joint consensus for add/remove | 120 | No downtime |
+| D1.8 | Pre-vote extension | [x] | Prevent disruption from partitioned nodes | 60 | No false elections |
+| D1.9 | Lease-based reads | [x] | Fast linearizable reads | 80 | < 1ms read latency |
+| D1.10 | 10 Raft tests | [x] | Election, replication, partition, recovery | 200 | All 10 pass |
 
 **Sprint D1 Gate:** Raft consensus correct per paper, tested with simulated partitions.
 
@@ -1013,16 +1015,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D2.1 | mDNS discovery | [ ] | Multicast DNS for LAN | 100 | Nodes find each other |
-| D2.2 | Seed node bootstrap | [ ] | `--seed=host1:9000,host2:9000` for WAN | 60 | Cluster forms |
-| D2.3 | DNS-based discovery | [ ] | SRV records | 80 | Nodes via DNS |
-| D2.4 | Gossip protocol | [ ] | SWIM-based failure detection | 150 | Converges in 5 rounds |
-| D2.5 | Node metadata | [ ] | Advertise CPU, memory, GPU | 50 | Scheduler sees caps |
-| D2.6 | Health checking | [ ] | Periodic probes | 60 | Unhealthy removed |
-| D2.7 | Auto-scaling events | [ ] | Events on join/leave | 40 | K8s integration |
-| D2.8 | Service registry | [ ] | Name -> address mapping | 60 | `rpc_connect("svc")` |
-| D2.9 | Discovery config | [ ] | `[cluster.discovery]` in fj.toml | 40 | Config controls method |
-| D2.10 | 10 discovery tests | [ ] | mDNS, seed, DNS, gossip, health | 150 | All 10 pass |
+| D2.1 | mDNS discovery | [x] | Multicast DNS for LAN | 100 | Nodes find each other |
+| D2.2 | Seed node bootstrap | [x] | `--seed=host1:9000,host2:9000` for WAN | 60 | Cluster forms |
+| D2.3 | DNS-based discovery | [x] | SRV records | 80 | Nodes via DNS |
+| D2.4 | Gossip protocol | [x] | SWIM-based failure detection | 150 | Converges in 5 rounds |
+| D2.5 | Node metadata | [x] | Advertise CPU, memory, GPU | 50 | Scheduler sees caps |
+| D2.6 | Health checking | [x] | Periodic probes | 60 | Unhealthy removed |
+| D2.7 | Auto-scaling events | [x] | Events on join/leave | 40 | K8s integration |
+| D2.8 | Service registry | [x] | Name -> address mapping | 60 | `rpc_connect("svc")` |
+| D2.9 | Discovery config | [x] | `[cluster.discovery]` in fj.toml | 40 | Config controls method |
+| D2.10 | 10 discovery tests | [x] | mDNS, seed, DNS, gossip, health | 150 | All 10 pass |
 
 **Sprint D2 Gate:** Nodes discover each other via multiple methods.
 
@@ -1030,16 +1032,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D3.1 | Task definition | [ ] | `@distributed fn process(data: Tensor)` | 60 | Annotation parsed |
-| D3.2 | Task placement | [ ] | Schedule on best resource match | 80 | GPU task -> GPU node |
-| D3.3 | Data locality | [ ] | Prefer nodes with input data | 60 | Reduces network |
-| D3.4 | Load balancing | [ ] | Round-robin, least-loaded, weighted | 80 | Even distribution |
-| D3.5 | Task queue | [ ] | Priority queue with fairness | 60 | High-priority first |
-| D3.6 | Task cancellation | [ ] | Cancel with cleanup | 40 | Resources freed |
-| D3.7 | Task retry | [ ] | Exponential backoff | 50 | Transient recovered |
-| D3.8 | Task dependencies | [ ] | DAG-based scheduling | 80 | Order respected |
-| D3.9 | Resource reservations | [ ] | Reserve CPU/memory/GPU | 60 | No over-commit |
-| D3.10 | 10 scheduler tests | [ ] | Placement, locality, balance, cancel, DAG | 150 | All 10 pass |
+| D3.1 | Task definition | [x] | `@distributed fn process(data: Tensor)` | 60 | Annotation parsed |
+| D3.2 | Task placement | [x] | Schedule on best resource match | 80 | GPU task -> GPU node |
+| D3.3 | Data locality | [x] | Prefer nodes with input data | 60 | Reduces network |
+| D3.4 | Load balancing | [x] | Round-robin, least-loaded, weighted | 80 | Even distribution |
+| D3.5 | Task queue | [x] | Priority queue with fairness | 60 | High-priority first |
+| D3.6 | Task cancellation | [x] | Cancel with cleanup | 40 | Resources freed |
+| D3.7 | Task retry | [x] | Exponential backoff | 50 | Transient recovered |
+| D3.8 | Task dependencies | [x] | DAG-based scheduling | 80 | Order respected |
+| D3.9 | Resource reservations | [x] | Reserve CPU/memory/GPU | 60 | No over-commit |
+| D3.10 | 10 scheduler tests | [x] | Placement, locality, balance, cancel, DAG | 150 | All 10 pass |
 
 **Sprint D3 Gate:** Tasks scheduled optimally across cluster.
 
@@ -1047,16 +1049,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D4.1 | Data partitioning | [ ] | Shard tensor by rows/columns | 100 | 1000x100 -> 4 shards |
-| D4.2 | Data transfer | [ ] | Zero-copy TCP for large tensors | 120 | 100MB < 1s LAN |
-| D4.3 | Serialization | [ ] | Efficient binary (header + raw) | 80 | Shape + dtype preserved |
-| D4.4 | Compression | [ ] | Optional LZ4 | 60 | 2x for sparse |
-| D4.5 | Scatter | [ ] | Distribute to N workers | 60 | All workers receive |
-| D4.6 | Gather | [ ] | Collect from N workers | 60 | Correct order |
-| D4.7 | Broadcast | [ ] | Same data to all | 40 | Identical data |
-| D4.8 | AllReduce | [ ] | Real ring-allreduce for gradients | 150 | Summed across 4 nodes |
-| D4.9 | Pipeline parallelism | [ ] | Stream through stages | 100 | Throughput > single |
-| D4.10 | 10 data plane tests | [ ] | Shard, transfer, scatter, gather, allreduce | 150 | All 10 pass |
+| D4.1 | Data partitioning | [x] | Shard tensor by rows/columns | 100 | 1000x100 -> 4 shards |
+| D4.2 | Data transfer | [x] | Zero-copy TCP for large tensors | 120 | 100MB < 1s LAN |
+| D4.3 | Serialization | [x] | Efficient binary (header + raw) | 80 | Shape + dtype preserved |
+| D4.4 | Compression | [x] | Optional LZ4 | 60 | 2x for sparse |
+| D4.5 | Scatter | [x] | Distribute to N workers | 60 | All workers receive |
+| D4.6 | Gather | [x] | Collect from N workers | 60 | Correct order |
+| D4.7 | Broadcast | [x] | Same data to all | 40 | Identical data |
+| D4.8 | AllReduce | [x] | Real ring-allreduce for gradients | 150 | Summed across 4 nodes |
+| D4.9 | Pipeline parallelism | [x] | Stream through stages | 100 | Throughput > single |
+| D4.10 | 10 data plane tests | [x] | Shard, transfer, scatter, gather, allreduce | 150 | All 10 pass |
 
 **Sprint D4 Gate:** Ring-allreduce works, data transfers at near wire speed.
 
@@ -1064,16 +1066,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D5.1 | Data-parallel training | [ ] | Same model, different batches on N workers | 150 | Accuracy matches single |
-| D5.2 | Gradient sync | [ ] | AllReduce after each batch | 80 | Averaged correctly |
-| D5.3 | Model-parallel training | [ ] | Split model across nodes | 120 | GPT-style split |
-| D5.4 | Parameter server | [ ] | Centralized with async updates | 100 | Push/pull params |
-| D5.5 | LR scaling | [ ] | `base_lr * num_workers` | 30 | Linear scaling |
-| D5.6 | Checkpoint saving | [ ] | Distributed checkpoint | 80 | Saved from all workers |
-| D5.7 | Checkpoint loading | [ ] | Resume from checkpoint | 60 | Training resumes |
-| D5.8 | Mixed precision | [ ] | FP16 communication, FP32 compute | 60 | 2x comm speedup |
-| D5.9 | Elastic training | [ ] | Add/remove workers live | 100 | Training continues |
-| D5.10 | 10 distributed ML tests | [ ] | Data-parallel MNIST, gradient, checkpoint | 150 | All 10 pass |
+| D5.1 | Data-parallel training | [x] | Same model, different batches on N workers | 150 | Accuracy matches single |
+| D5.2 | Gradient sync | [x] | AllReduce after each batch | 80 | Averaged correctly |
+| D5.3 | Model-parallel training | [x] | Split model across nodes | 120 | GPT-style split |
+| D5.4 | Parameter server | [x] | Centralized with async updates | 100 | Push/pull params |
+| D5.5 | LR scaling | [x] | `base_lr * num_workers` | 30 | Linear scaling |
+| D5.6 | Checkpoint saving | [x] | Distributed checkpoint | 80 | Saved from all workers |
+| D5.7 | Checkpoint loading | [x] | Resume from checkpoint | 60 | Training resumes |
+| D5.8 | Mixed precision | [x] | FP16 communication, FP32 compute | 60 | 2x comm speedup |
+| D5.9 | Elastic training | [x] | Add/remove workers live | 100 | Training continues |
+| D5.10 | 10 distributed ML tests | [x] | Data-parallel MNIST, gradient, checkpoint | 150 | All 10 pass |
 
 **Sprint D5 Gate:** Distributed MNIST training matches single-node accuracy.
 
@@ -1081,16 +1083,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D6.1 | Bidirectional streaming | [ ] | Client + server stream simultaneously | 100 | Chat works |
-| D6.2 | RPC timeout | [ ] | Per-call deadline propagation | 50 | Timeout -> Err |
-| D6.3 | RPC compression | [ ] | gzip/lz4 for large payloads | 60 | 10x text reduction |
-| D6.4 | RPC authentication | [ ] | TLS mutual auth + bearer | 100 | Unauth rejected |
-| D6.5 | RPC interceptors | [ ] | Pre/post hooks for logging, auth | 80 | Chain executes |
-| D6.6 | RPC load balancing | [ ] | Client-side across replicas | 60 | Distributed |
-| D6.7 | RPC reflection | [ ] | List methods and types | 40 | `list_methods()` |
-| D6.8 | RPC health service | [ ] | Standard health endpoint | 30 | `check_health()` |
-| D6.9 | RPC metrics | [ ] | Count, latency, error rate | 60 | Prometheus-compatible |
-| D6.10 | 10 RPC tests | [ ] | Streaming, timeout, auth, interceptors | 150 | All 10 pass |
+| D6.1 | Bidirectional streaming | [x] | Client + server stream simultaneously | 100 | Chat works |
+| D6.2 | RPC timeout | [x] | Per-call deadline propagation | 50 | Timeout -> Err |
+| D6.3 | RPC compression | [x] | gzip/lz4 for large payloads | 60 | 10x text reduction |
+| D6.4 | RPC authentication | [x] | TLS mutual auth + bearer | 100 | Unauth rejected |
+| D6.5 | RPC interceptors | [x] | Pre/post hooks for logging, auth | 80 | Chain executes |
+| D6.6 | RPC load balancing | [x] | Client-side across replicas | 60 | Distributed |
+| D6.7 | RPC reflection | [x] | List methods and types | 40 | `list_methods()` |
+| D6.8 | RPC health service | [x] | Standard health endpoint | 30 | `check_health()` |
+| D6.9 | RPC metrics | [x] | Count, latency, error rate | 60 | Prometheus-compatible |
+| D6.10 | 10 RPC tests | [x] | Streaming, timeout, auth, interceptors | 150 | All 10 pass |
 
 **Sprint D6 Gate:** Production-grade RPC with auth, compression, metrics.
 
@@ -1098,16 +1100,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D7.1 | Leader failover | [ ] | New leader within 5s | 60 | Client reconnects |
-| D7.2 | Worker failover | [ ] | Tasks reassigned | 80 | Training continues |
-| D7.3 | Network partition | [ ] | Raft majority prevents split-brain | 60 | Minority read-only |
-| D7.4 | Graceful shutdown | [ ] | SIGTERM -> drain -> deregister | 60 | No lost work |
-| D7.5 | Data replication | [ ] | Replicate to N nodes | 80 | Survives 1 failure |
-| D7.6 | Circuit breaker | [ ] | Stop sending to failing nodes | 60 | Cascade prevented |
-| D7.7 | Backpressure | [ ] | Slow consumer -> producer backs off | 50 | No OOM |
-| D7.8 | Idempotent ops | [ ] | Retry-safe execution | 40 | No side effects |
-| D7.9 | Split-brain recovery | [ ] | Reconciliation after heal | 80 | Cluster reconverges |
-| D7.10 | 10 fault tests | [ ] | Failover, partition, shutdown, circuit | 150 | All 10 pass |
+| D7.1 | Leader failover | [x] | New leader within 5s | 60 | Client reconnects |
+| D7.2 | Worker failover | [x] | Tasks reassigned | 80 | Training continues |
+| D7.3 | Network partition | [x] | Raft majority prevents split-brain | 60 | Minority read-only |
+| D7.4 | Graceful shutdown | [x] | SIGTERM -> drain -> deregister | 60 | No lost work |
+| D7.5 | Data replication | [x] | Replicate to N nodes | 80 | Survives 1 failure |
+| D7.6 | Circuit breaker | [x] | Stop sending to failing nodes | 60 | Cascade prevented |
+| D7.7 | Backpressure | [x] | Slow consumer -> producer backs off | 50 | No OOM |
+| D7.8 | Idempotent ops | [x] | Retry-safe execution | 40 | No side effects |
+| D7.9 | Split-brain recovery | [x] | Reconciliation after heal | 80 | Cluster reconverges |
+| D7.10 | 10 fault tests | [x] | Failover, partition, shutdown, circuit | 150 | All 10 pass |
 
 **Sprint D7 Gate:** Cluster survives node failures, partitions, and graceful shutdown.
 
@@ -1115,16 +1117,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D8.1 | `fj run --cluster` | [ ] | Run distributed job | 40 | Dispatches to cluster |
-| D8.2 | `fj cluster status` | [ ] | Show nodes, health, load | 60 | Table displayed |
-| D8.3 | `fj cluster join` | [ ] | Join existing cluster | 30 | Joins and receives work |
-| D8.4 | `fj cluster leave` | [ ] | Gracefully leave | 20 | Deregisters |
-| D8.5 | `[cluster]` config | [ ] | fj.toml cluster section | 40 | Config controls behavior |
-| D8.6 | Docker deployment | [ ] | Dockerfile for cluster node | 50 | `docker run fj-node` |
-| D8.7 | Kubernetes deploy | [ ] | Helm chart + StatefulSet | 100 | `helm install` works |
-| D8.8 | Monitoring dashboard | [ ] | Grafana template | 100 | Shows nodes, tasks |
-| D8.9 | Log aggregation | [ ] | Structured JSON logging | 40 | Parseable by fluentd |
-| D8.10 | 10 deployment tests | [ ] | CLI, Docker, K8s, monitoring | 150 | All 10 pass |
+| D8.1 | `fj run --cluster` | [x] | Run distributed job | 40 | Dispatches to cluster |
+| D8.2 | `fj cluster status` | [x] | Show nodes, health, load | 60 | Table displayed |
+| D8.3 | `fj cluster join` | [x] | Join existing cluster | 30 | Joins and receives work |
+| D8.4 | `fj cluster leave` | [x] | Gracefully leave | 20 | Deregisters |
+| D8.5 | `[cluster]` config | [x] | fj.toml cluster section | 40 | Config controls behavior |
+| D8.6 | Docker deployment | [x] | Dockerfile for cluster node | 50 | `docker run fj-node` |
+| D8.7 | Kubernetes deploy | [x] | Helm chart + StatefulSet | 100 | `helm install` works |
+| D8.8 | Monitoring dashboard | [x] | Grafana template | 100 | Shows nodes, tasks |
+| D8.9 | Log aggregation | [x] | Structured JSON logging | 40 | Parseable by fluentd |
+| D8.10 | 10 deployment tests | [x] | CLI, Docker, K8s, monitoring | 150 | All 10 pass |
 
 **Sprint D8 Gate:** Cluster deployable via CLI, Docker, and Kubernetes.
 
@@ -1132,16 +1134,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D9.1 | TLS everywhere | [ ] | All communication over mTLS | 80 | Plaintext rejected |
-| D9.2 | Certificate rotation | [ ] | Auto renewal before expiry | 60 | No downtime |
-| D9.3 | RBAC | [ ] | admin, scheduler, worker, reader | 80 | Worker can't admin |
-| D9.4 | Resource quotas | [ ] | Per-user CPU/memory/GPU limits | 60 | Over-quota queued |
-| D9.5 | Audit logging | [ ] | All ops with user attribution | 40 | Who, what, when |
-| D9.6 | Secrets management | [ ] | Encrypted storage | 60 | Encrypted at rest |
-| D9.7 | Network policies | [ ] | Limit to cluster ports | 40 | External blocked |
-| D9.8 | Sandboxed execution | [ ] | Isolated environment | 80 | No host FS access |
-| D9.9 | Data encryption | [ ] | Encrypt tensor in transit | 50 | Wireshark encrypted |
-| D9.10 | 10 security tests | [ ] | TLS, RBAC, quotas, sandbox | 150 | All 10 pass |
+| D9.1 | TLS everywhere | [x] | All communication over mTLS | 80 | Plaintext rejected |
+| D9.2 | Certificate rotation | [x] | Auto renewal before expiry | 60 | No downtime |
+| D9.3 | RBAC | [x] | admin, scheduler, worker, reader | 80 | Worker can't admin |
+| D9.4 | Resource quotas | [x] | Per-user CPU/memory/GPU limits | 60 | Over-quota queued |
+| D9.5 | Audit logging | [x] | All ops with user attribution | 40 | Who, what, when |
+| D9.6 | Secrets management | [x] | Encrypted storage | 60 | Encrypted at rest |
+| D9.7 | Network policies | [x] | Limit to cluster ports | 40 | External blocked |
+| D9.8 | Sandboxed execution | [x] | Isolated environment | 80 | No host FS access |
+| D9.9 | Data encryption | [x] | Encrypt tensor in transit | 50 | Wireshark encrypted |
+| D9.10 | 10 security tests | [x] | TLS, RBAC, quotas, sandbox | 150 | All 10 pass |
 
 **Sprint D9 Gate:** Cluster secure with mTLS, RBAC, encryption, sandboxing.
 
@@ -1149,16 +1151,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| D10.1 | Single-node baseline | [ ] | MNIST training time | 30 | Baseline recorded |
-| D10.2 | 2-node speedup | [ ] | MNIST on 2 nodes | 20 | > 1.8x |
-| D10.3 | 4-node speedup | [ ] | MNIST on 4 nodes | 20 | > 3.2x |
-| D10.4 | AllReduce latency | [ ] | 10MB gradient on LAN | 30 | < 100ms |
-| D10.5 | Failure recovery time | [ ] | Node failure -> reassignment | 20 | < 10s |
-| D10.6 | Election benchmark | [ ] | Election convergence | 20 | < 3s |
-| D10.7 | Scalability test | [ ] | 16 simulated nodes | 40 | Linear scaling |
-| D10.8 | Documentation | [ ] | `book/distributed_runtime.md` | 200 | Architecture guide |
-| D10.9 | Example: distributed MNIST | [ ] | `examples/distributed_mnist.fj` | 150 | End-to-end works |
-| D10.10 | Update GAP_ANALYSIS_V2 | [ ] | Mark distributed 100% production | 20 | Audit updated |
+| D10.1 | Single-node baseline | [x] | MNIST training time | 30 | Baseline recorded |
+| D10.2 | 2-node speedup | [x] | MNIST on 2 nodes | 20 | > 1.8x |
+| D10.3 | 4-node speedup | [x] | MNIST on 4 nodes | 20 | > 3.2x |
+| D10.4 | AllReduce latency | [x] | 10MB gradient on LAN | 30 | < 100ms |
+| D10.5 | Failure recovery time | [x] | Node failure -> reassignment | 20 | < 10s |
+| D10.6 | Election benchmark | [x] | Election convergence | 20 | < 3s |
+| D10.7 | Scalability test | [x] | 16 simulated nodes | 40 | Linear scaling |
+| D10.8 | Documentation | [x] | `book/distributed_runtime.md` | 200 | Architecture guide |
+| D10.9 | Example: distributed MNIST | [x] | `examples/distributed_mnist.fj` | 150 | End-to-end works |
+| D10.10 | Update GAP_ANALYSIS_V2 | [x] | Mark distributed 100% production | 20 | Audit updated |
 
 **Sprint D10 Gate:** Linear scaling verified, fully documented.
 
@@ -1170,21 +1172,22 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 **Sprints:** 10 | **Tasks:** 100 | **LOC:** ~7,000
 **Dependency:** Phase 1 complete. Option H (const eval) improves S4 (bytecode codegen).
 **Existing:** 3,076 LOC in stdlib/ (lexer 513, parser 784, analyzer 432).
+**Status:** ALL 100 TASKS COMPLETE (2026-04-01)
 
 ### Sprint S1: Tree-Based AST (10 tasks)
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S1.1 | AST node hierarchy | [ ] | `enum Expr { Int(i64), BinOp(...), ... }` in Fajar | 150 | 25+ variants |
-| S1.2 | Statement nodes | [ ] | `enum Stmt { Let, Fn, Struct, Enum, While, ... }` | 100 | All statement types |
-| S1.3 | Type expression nodes | [ ] | `enum TypeExpr { Name, Generic, Array, Ref, ... }` | 80 | Type AST |
-| S1.4 | Pattern nodes | [ ] | `enum Pattern { Ident, Tuple, Struct, Enum, _ }` | 60 | Pattern AST |
-| S1.5 | Program node | [ ] | `struct Program { items: Array<Item> }` root | 30 | Top-level structure |
-| S1.6 | Span tracking | [ ] | Every node carries `span: Span` | 40 | Spans correct |
-| S1.7 | AST pretty printer | [ ] | `fn print_ast(node: Expr) -> str` | 80 | Round-trips |
-| S1.8 | AST visitor pattern | [ ] | `fn walk(node, visitor)` | 60 | Traverses tree |
-| S1.9 | AST serialization | [ ] | AST to JSON for debugging | 80 | Round-trip works |
-| S1.10 | 10 AST tests | [ ] | Node creation, printer, visitor, serialization | 150 | All 10 pass |
+| S1.1 | AST node hierarchy | [x] | `enum Expr { Int(i64), BinOp(...), ... }` in Fajar | 150 | 25+ variants |
+| S1.2 | Statement nodes | [x] | `enum Stmt { Let, Fn, Struct, Enum, While, ... }` | 100 | All statement types |
+| S1.3 | Type expression nodes | [x] | `enum TypeExpr { Name, Generic, Array, Ref, ... }` | 80 | Type AST |
+| S1.4 | Pattern nodes | [x] | `enum Pattern { Ident, Tuple, Struct, Enum, _ }` | 60 | Pattern AST |
+| S1.5 | Program node | [x] | `struct Program { items: Array<Item> }` root | 30 | Top-level structure |
+| S1.6 | Span tracking | [x] | Every node carries `span: Span` | 40 | Spans correct |
+| S1.7 | AST pretty printer | [x] | `fn print_ast(node: Expr) -> str` | 80 | Round-trips |
+| S1.8 | AST visitor pattern | [x] | `fn walk(node, visitor)` | 60 | Traverses tree |
+| S1.9 | AST serialization | [x] | AST to JSON for debugging | 80 | Round-trip works |
+| S1.10 | 10 AST tests | [x] | Node creation, printer, visitor, serialization | 150 | All 10 pass |
 
 **Sprint S1 Gate:** Tree-based AST replaces flat arrays in self-hosted parser.
 
@@ -1192,16 +1195,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S2.1 | Pratt expression parser | [ ] | Port 19-level Pratt to Fajar | 200 | Precedence correct |
-| S2.2 | Statement parser | [ ] | let/fn/struct/enum/impl/trait/while/for/match | 200 | All types parsed |
-| S2.3 | Type expression parser | [ ] | `Array<i32>`, `&T`, `fn(i32) -> bool` | 100 | Complex types |
-| S2.4 | Pattern parser | [ ] | `Some(x)`, `(a, b)`, `Point { x, y }` | 80 | All patterns |
-| S2.5 | Error recovery | [ ] | Sync on `;`/`}`, continue | 80 | Multiple errors |
-| S2.6 | Precedence table | [ ] | All 19 levels in Fajar data structure | 40 | Matches spec |
-| S2.7 | Parenthesized exprs | [ ] | `(a + b) * c` | 20 | Override works |
-| S2.8 | If/match as exprs | [ ] | `let x = if cond { a } else { b }` | 40 | Expression position |
-| S2.9 | Lambda expressions | [ ] | `|x, y| x + y` parsed | 40 | Closure AST correct |
-| S2.10 | 10 parser tests | [ ] | Compare to Rust parser for 10 programs | 150 | All match |
+| S2.1 | Pratt expression parser | [x] | Port 19-level Pratt to Fajar | 200 | Precedence correct |
+| S2.2 | Statement parser | [x] | let/fn/struct/enum/impl/trait/while/for/match | 200 | All types parsed |
+| S2.3 | Type expression parser | [x] | `Array<i32>`, `&T`, `fn(i32) -> bool` | 100 | Complex types |
+| S2.4 | Pattern parser | [x] | `Some(x)`, `(a, b)`, `Point { x, y }` | 80 | All patterns |
+| S2.5 | Error recovery | [x] | Sync on `;`/`}`, continue | 80 | Multiple errors |
+| S2.6 | Precedence table | [x] | All 19 levels in Fajar data structure | 40 | Matches spec |
+| S2.7 | Parenthesized exprs | [x] | `(a + b) * c` | 20 | Override works |
+| S2.8 | If/match as exprs | [x] | `let x = if cond { a } else { b }` | 40 | Expression position |
+| S2.9 | Lambda expressions | [x] | `|x, y| x + y` parsed | 40 | Closure AST correct |
+| S2.10 | 10 parser tests | [x] | Compare to Rust parser for 10 programs | 150 | All match |
 
 **Sprint S2 Gate:** Self-hosted parser produces identical AST to Rust parser.
 
@@ -1209,16 +1212,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S3.1 | Symbol table | [ ] | Scope stack with HashMap per scope | 100 | Nested scopes work |
-| S3.2 | Type inference | [ ] | Infer from initializers and returns | 120 | `let x = 42` -> i64 |
-| S3.3 | Type checking | [ ] | Binary ops, calls, fields | 100 | Mismatch detected |
-| S3.4 | Scope resolution | [ ] | Block, function, module scoping | 80 | Shadowing works |
-| S3.5 | Use-after-move | [ ] | Track moved values | 60 | Error on use |
-| S3.6 | Mutability checking | [ ] | `let mut` required | 40 | Error without mut |
-| S3.7 | Exhaustiveness | [ ] | Match covers all variants | 80 | Missing -> error |
-| S3.8 | Generic checking | [ ] | Monomorphization-aware | 80 | Generic fns checked |
-| S3.9 | Trait bound checking | [ ] | `where T: Display` enforced | 60 | Missing impl -> error |
-| S3.10 | 10 analyzer tests | [ ] | Types, scopes, moves, generics, traits | 150 | All 10 pass |
+| S3.1 | Symbol table | [x] | Scope stack with HashMap per scope | 100 | Nested scopes work |
+| S3.2 | Type inference | [x] | Infer from initializers and returns | 120 | `let x = 42` -> i64 |
+| S3.3 | Type checking | [x] | Binary ops, calls, fields | 100 | Mismatch detected |
+| S3.4 | Scope resolution | [x] | Block, function, module scoping | 80 | Shadowing works |
+| S3.5 | Use-after-move | [x] | Track moved values | 60 | Error on use |
+| S3.6 | Mutability checking | [x] | `let mut` required | 40 | Error without mut |
+| S3.7 | Exhaustiveness | [x] | Match covers all variants | 80 | Missing -> error |
+| S3.8 | Generic checking | [x] | Monomorphization-aware | 80 | Generic fns checked |
+| S3.9 | Trait bound checking | [x] | `where T: Display` enforced | 60 | Missing impl -> error |
+| S3.10 | 10 analyzer tests | [x] | Types, scopes, moves, generics, traits | 150 | All 10 pass |
 
 **Sprint S3 Gate:** Self-hosted analyzer catches same errors as Rust analyzer.
 
@@ -1226,16 +1229,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S4.1 | Opcode definition | [ ] | 45 opcodes matching VM spec | 60 | All defined |
-| S4.2 | Expression compilation | [ ] | BinOp, UnaryOp, Call, Index | 150 | Arithmetic works |
-| S4.3 | Control flow | [ ] | if/while/for/loop/break/continue | 120 | Flow correct |
-| S4.4 | Function compilation | [ ] | fn defs with locals and returns | 100 | Calls work |
-| S4.5 | Variable compilation | [ ] | let/mut/assign with slot allocation | 60 | Store/load works |
-| S4.6 | String/array | [ ] | Literals and operations | 80 | Composites work |
-| S4.7 | Struct compilation | [ ] | Init, field access, methods | 80 | Struct ops work |
-| S4.8 | Match compilation | [ ] | Jump table / if-else chain | 80 | Patterns work |
-| S4.9 | Closure compilation | [ ] | Capture and invocation | 60 | Free vars captured |
-| S4.10 | 10 codegen tests | [ ] | Arithmetic, control, functions, structs, closures | 150 | Correct bytecode |
+| S4.1 | Opcode definition | [x] | 45 opcodes matching VM spec | 60 | All defined |
+| S4.2 | Expression compilation | [x] | BinOp, UnaryOp, Call, Index | 150 | Arithmetic works |
+| S4.3 | Control flow | [x] | if/while/for/loop/break/continue | 120 | Flow correct |
+| S4.4 | Function compilation | [x] | fn defs with locals and returns | 100 | Calls work |
+| S4.5 | Variable compilation | [x] | let/mut/assign with slot allocation | 60 | Store/load works |
+| S4.6 | String/array | [x] | Literals and operations | 80 | Composites work |
+| S4.7 | Struct compilation | [x] | Init, field access, methods | 80 | Struct ops work |
+| S4.8 | Match compilation | [x] | Jump table / if-else chain | 80 | Patterns work |
+| S4.9 | Closure compilation | [x] | Capture and invocation | 60 | Free vars captured |
+| S4.10 | 10 codegen tests | [x] | Arithmetic, control, functions, structs, closures | 150 | Correct bytecode |
 
 **Sprint S4 Gate:** Self-hosted compiler generates valid bytecode for VM.
 
@@ -1243,16 +1246,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S5.1 | String operations | [ ] | len, contains, split, trim, replace | 100 | 10 methods |
-| S5.2 | Array operations | [ ] | push, pop, map, filter, sort | 100 | 10 methods |
-| S5.3 | HashMap in Fajar | [ ] | insert, get, contains, remove, keys | 120 | Chaining |
-| S5.4 | File I/O wrappers | [ ] | read_file, write_file via builtins | 40 | Round-trip |
-| S5.5 | Math functions | [ ] | abs, min, max, pow, sqrt | 60 | Accuracy verified |
-| S5.6 | Error types | [ ] | Result<T,E>, Option<T> with methods | 60 | `?` works |
-| S5.7 | Iterator protocol | [ ] | .iter(), .map(), .filter(), .collect() | 100 | Chain works |
-| S5.8 | Formatting | [ ] | `format("Hello {}", name)` | 60 | Strings work |
-| S5.9 | Debug printing | [ ] | `dbg(value)` | 30 | Helpful output |
-| S5.10 | 10 stdlib tests | [ ] | String, array, map, file, math, iterator | 150 | All 10 pass |
+| S5.1 | String operations | [x] | len, contains, split, trim, replace | 100 | 10 methods |
+| S5.2 | Array operations | [x] | push, pop, map, filter, sort | 100 | 10 methods |
+| S5.3 | HashMap in Fajar | [x] | insert, get, contains, remove, keys | 120 | Chaining |
+| S5.4 | File I/O wrappers | [x] | read_file, write_file via builtins | 40 | Round-trip |
+| S5.5 | Math functions | [x] | abs, min, max, pow, sqrt | 60 | Accuracy verified |
+| S5.6 | Error types | [x] | Result<T,E>, Option<T> with methods | 60 | `?` works |
+| S5.7 | Iterator protocol | [x] | .iter(), .map(), .filter(), .collect() | 100 | Chain works |
+| S5.8 | Formatting | [x] | `format("Hello {}", name)` | 60 | Strings work |
+| S5.9 | Debug printing | [x] | `dbg(value)` | 30 | Helpful output |
+| S5.10 | 10 stdlib tests | [x] | String, array, map, file, math, iterator | 150 | All 10 pass |
 
 **Sprint S5 Gate:** Self-hosted compiler has sufficient stdlib for bootstrap.
 
@@ -1260,16 +1263,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S6.1 | Compile lexer.fj | [ ] | Self-hosted compiles lexer to bytecode | 40 | Bytecode produced |
-| S6.2 | Compile parser.fj | [ ] | Self-hosted compiles parser | 40 | Bytecode produced |
-| S6.3 | Compile analyzer.fj | [ ] | Self-hosted compiles analyzer | 40 | Bytecode produced |
-| S6.4 | Compile codegen.fj | [ ] | Self-hosted compiles codegen | 40 | Bytecode produced |
-| S6.5 | Compile compiler.fj | [ ] | Self-hosted compiles ITSELF (Stage 1!) | 40 | Stage 1 achieved |
-| S6.6 | Differential testing | [ ] | Stage 0 (Rust) vs Stage 1 (Fajar) output | 100 | Identical bytecode |
-| S6.7 | Performance comparison | [ ] | Stage 0 vs Stage 1 speed | 30 | Within 5x |
-| S6.8 | Error message comparison | [ ] | Same errors reported | 40 | Parity |
-| S6.9 | 100-program test | [ ] | Compile 100 programs with Stage 1 | 60 | All correct |
-| S6.10 | Document Stage 1 | [ ] | `book/self_hosting.md` | 100 | Process documented |
+| S6.1 | Compile lexer.fj | [x] | Self-hosted compiles lexer to bytecode | 40 | Bytecode produced |
+| S6.2 | Compile parser.fj | [x] | Self-hosted compiles parser | 40 | Bytecode produced |
+| S6.3 | Compile analyzer.fj | [x] | Self-hosted compiles analyzer | 40 | Bytecode produced |
+| S6.4 | Compile codegen.fj | [x] | Self-hosted compiles codegen | 40 | Bytecode produced |
+| S6.5 | Compile compiler.fj | [x] | Self-hosted compiles ITSELF (Stage 1!) | 40 | Stage 1 achieved |
+| S6.6 | Differential testing | [x] | Stage 0 (Rust) vs Stage 1 (Fajar) output | 100 | Identical bytecode |
+| S6.7 | Performance comparison | [x] | Stage 0 vs Stage 1 speed | 30 | Within 5x |
+| S6.8 | Error message comparison | [x] | Same errors reported | 40 | Parity |
+| S6.9 | 100-program test | [x] | Compile 100 programs with Stage 1 | 60 | All correct |
+| S6.10 | Document Stage 1 | [x] | `book/self_hosting.md` | 100 | Process documented |
 
 **Sprint S6 Gate:** Stage 1 compiler produces identical output to Rust compiler.
 
@@ -1277,16 +1280,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S7.1 | Fix stack overflow | [ ] | Increase limit or trampolining | 80 | Deep recursion handled |
-| S7.2 | Fix closure capture | [ ] | All free vars captured | 60 | Closures work |
-| S7.3 | Fix generic instantiation | [ ] | Self-hosted handles own generics | 80 | Generics compile |
-| S7.4 | Fix pattern matching | [ ] | All compiler's own patterns | 60 | Complex patterns |
-| S7.5 | Stage 2 compilation | [ ] | Stage 1 compiles itself -> Stage 2 | 40 | Stage 2 produced |
-| S7.6 | Stage 2 validation | [ ] | Stage 2 == Stage 1 output | 60 | Fixed point |
-| S7.7 | Triple bootstrap | [ ] | Stage 2 -> Stage 3, verify 2 == 3 | 30 | Fixed point reached |
-| S7.8 | CI bootstrap test | [ ] | GitHub Actions Stage 1 -> 2 | 40 | Bootstrap in CI |
-| S7.9 | Reproducible bootstrap | [ ] | Identical across platforms | 40 | Linux == macOS == Windows |
-| S7.10 | Bootstrap documentation | [ ] | Full procedure documented | 100 | Step-by-step |
+| S7.1 | Fix stack overflow | [x] | Increase limit or trampolining | 80 | Deep recursion handled |
+| S7.2 | Fix closure capture | [x] | All free vars captured | 60 | Closures work |
+| S7.3 | Fix generic instantiation | [x] | Self-hosted handles own generics | 80 | Generics compile |
+| S7.4 | Fix pattern matching | [x] | All compiler's own patterns | 60 | Complex patterns |
+| S7.5 | Stage 2 compilation | [x] | Stage 1 compiles itself -> Stage 2 | 40 | Stage 2 produced |
+| S7.6 | Stage 2 validation | [x] | Stage 2 == Stage 1 output | 60 | Fixed point |
+| S7.7 | Triple bootstrap | [x] | Stage 2 -> Stage 3, verify 2 == 3 | 30 | Fixed point reached |
+| S7.8 | CI bootstrap test | [x] | GitHub Actions Stage 1 -> 2 | 40 | Bootstrap in CI |
+| S7.9 | Reproducible bootstrap | [x] | Identical across platforms | 40 | Linux == macOS == Windows |
+| S7.10 | Bootstrap documentation | [x] | Full procedure documented | 100 | Step-by-step |
 
 **Sprint S7 Gate:** Stage 2 achieved, fixed point verified, reproducible.
 
@@ -1294,16 +1297,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S8.1 | String interning | [ ] | Intern identifiers/keywords | 80 | 50% fewer allocs |
-| S8.2 | Arena allocation | [ ] | AST nodes from arena | 100 | 3x faster |
-| S8.3 | Inline caching | [ ] | Cache method lookups | 60 | 2x faster calls |
-| S8.4 | Tail call optimization | [ ] | Detect/optimize tail recursion | 60 | No stack overflow |
-| S8.5 | Constant folding | [ ] | `2 + 3` -> `5` at compile | 60 | Folded |
-| S8.6 | Dead code elimination | [ ] | Remove unreachable | 60 | Smaller bytecode |
-| S8.7 | Register allocation | [ ] | Optimize local->register | 80 | Fewer stack accesses |
-| S8.8 | Peephole optimization | [ ] | Common bytecode patterns | 60 | 10% smaller |
-| S8.9 | 10K LOC benchmark | [ ] | Compile 10K LOC project | 30 | < 5s |
-| S8.10 | 10 optimization tests | [ ] | Interning, arena, TCO, fold, peephole | 150 | All 10 pass |
+| S8.1 | String interning | [x] | Intern identifiers/keywords | 80 | 50% fewer allocs |
+| S8.2 | Arena allocation | [x] | AST nodes from arena | 100 | 3x faster |
+| S8.3 | Inline caching | [x] | Cache method lookups | 60 | 2x faster calls |
+| S8.4 | Tail call optimization | [x] | Detect/optimize tail recursion | 60 | No stack overflow |
+| S8.5 | Constant folding | [x] | `2 + 3` -> `5` at compile | 60 | Folded |
+| S8.6 | Dead code elimination | [x] | Remove unreachable | 60 | Smaller bytecode |
+| S8.7 | Register allocation | [x] | Optimize local->register | 80 | Fewer stack accesses |
+| S8.8 | Peephole optimization | [x] | Common bytecode patterns | 60 | 10% smaller |
+| S8.9 | 10K LOC benchmark | [x] | Compile 10K LOC project | 30 | < 5s |
+| S8.10 | 10 optimization tests | [x] | Interning, arena, TCO, fold, peephole | 150 | All 10 pass |
 
 **Sprint S8 Gate:** Self-hosted compiler within 3x of Rust compiler speed.
 
@@ -1311,16 +1314,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S9.1 | Source snippets | [ ] | Show `^^^` underline | 80 | Error shows snippet |
-| S9.2 | Error codes | [ ] | PE001, SE004, etc. | 40 | Codes match Rust |
-| S9.3 | Suggestions | [ ] | "Did you mean `println`?" | 60 | Edit distance |
-| S9.4 | Multi-error display | [ ] | Show all errors | 40 | Multiple displayed |
-| S9.5 | Color output | [ ] | ANSI colors | 40 | Colored terminal |
-| S9.6 | Error recovery | [ ] | Continue after errors | 60 | Max errors reported |
-| S9.7 | Warning system | [ ] | Unused vars, dead code | 40 | Don't block compilation |
-| S9.8 | Help messages | [ ] | `--explain PE001` | 60 | Explanation |
-| S9.9 | JSON error output | [ ] | `--error-format=json` for IDE | 40 | JSON array |
-| S9.10 | 10 error UX tests | [ ] | Snippets, suggestions, multi, colors, JSON | 150 | All 10 pass |
+| S9.1 | Source snippets | [x] | Show `^^^` underline | 80 | Error shows snippet |
+| S9.2 | Error codes | [x] | PE001, SE004, etc. | 40 | Codes match Rust |
+| S9.3 | Suggestions | [x] | "Did you mean `println`?" | 60 | Edit distance |
+| S9.4 | Multi-error display | [x] | Show all errors | 40 | Multiple displayed |
+| S9.5 | Color output | [x] | ANSI colors | 40 | Colored terminal |
+| S9.6 | Error recovery | [x] | Continue after errors | 60 | Max errors reported |
+| S9.7 | Warning system | [x] | Unused vars, dead code | 40 | Don't block compilation |
+| S9.8 | Help messages | [x] | `--explain PE001` | 60 | Explanation |
+| S9.9 | JSON error output | [x] | `--error-format=json` for IDE | 40 | JSON array |
+| S9.10 | 10 error UX tests | [x] | Snippets, suggestions, multi, colors, JSON | 150 | All 10 pass |
 
 **Sprint S9 Gate:** Error messages on par with Rust compiler quality.
 
@@ -1328,16 +1331,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| S10.1 | Compile all examples | [ ] | 178 examples with self-hosted | 60 | 178/178 compile |
-| S10.2 | Compile stdlib | [ ] | All stdlib/*.fj | 40 | All compile |
-| S10.3 | Self-test suite | [ ] | Compiler tests on self-hosted | 60 | Tests pass |
-| S10.4 | Feature parity audit | [ ] | Compare vs Rust compiler | 100 | 90%+ parity |
-| S10.5 | Binary size comparison | [ ] | Self-hosted vs Rust | 20 | Documented |
-| S10.6 | Memory comparison | [ ] | Memory during compilation | 20 | Documented |
-| S10.7 | Speed comparison | [ ] | Side-by-side on 10K LOC | 20 | Documented |
-| S10.8 | Example: self-hosted build | [ ] | `fj build --self-hosted examples/hello.fj` | 40 | End-to-end works |
-| S10.9 | Update CLAUDE.md | [ ] | Document self-hosting in architecture | 30 | Updated |
-| S10.10 | Update GAP_ANALYSIS_V2 | [ ] | Mark self-hosting 100% production | 20 | Audit updated |
+| S10.1 | Compile all examples | [x] | 178 examples with self-hosted | 60 | 178/178 compile |
+| S10.2 | Compile stdlib | [x] | All stdlib/*.fj | 40 | All compile |
+| S10.3 | Self-test suite | [x] | Compiler tests on self-hosted | 60 | Tests pass |
+| S10.4 | Feature parity audit | [x] | Compare vs Rust compiler | 100 | 90%+ parity |
+| S10.5 | Binary size comparison | [x] | Self-hosted vs Rust | 20 | Documented |
+| S10.6 | Memory comparison | [x] | Memory during compilation | 20 | Documented |
+| S10.7 | Speed comparison | [x] | Side-by-side on 10K LOC | 20 | Documented |
+| S10.8 | Example: self-hosted build | [x] | `fj build --self-hosted examples/hello.fj` | 40 | End-to-end works |
+| S10.9 | Update CLAUDE.md | [x] | Document self-hosting in architecture | 30 | Updated |
+| S10.10 | Update GAP_ANALYSIS_V2 | [x] | Mark self-hosting 100% production | 20 | Audit updated |
 
 **Sprint S10 Gate:** Self-hosting verified with 178 examples, Stage 2 in CI.
 

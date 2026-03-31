@@ -34,22 +34,46 @@ pub struct SymbolId {
 
 impl SymbolId {
     pub fn function(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Function }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Function,
+        }
     }
     pub fn r#struct(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Struct }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Struct,
+        }
     }
     pub fn r#enum(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Enum }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Enum,
+        }
     }
     pub fn r#trait(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Trait }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Trait,
+        }
     }
     pub fn r#const(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Const }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Const,
+        }
     }
     pub fn r#macro(file: &str, name: &str) -> Self {
-        Self { file: file.into(), name: name.into(), kind: SymbolKind::Macro }
+        Self {
+            file: file.into(),
+            name: name.into(),
+            kind: SymbolKind::Macro,
+        }
     }
 
     /// Qualified name: `file::name`.
@@ -204,13 +228,7 @@ impl FineGrainedGraph {
     }
 
     /// I2.2: Register a type (struct/enum) symbol.
-    pub fn add_type(
-        &mut self,
-        file: &str,
-        name: &str,
-        kind: SymbolKind,
-        definition: &str,
-    ) {
+    pub fn add_type(&mut self, file: &str, name: &str, kind: SymbolKind, definition: &str) {
         let id = SymbolId {
             file: file.into(),
             name: name.into(),
@@ -486,7 +504,13 @@ mod tests {
     #[test]
     fn i2_1_function_dependency_tracking() {
         let mut g = FineGrainedGraph::new();
-        g.add_function("main.fj", "main", "fn main()", "print(hello())", &["hello", "print"]);
+        g.add_function(
+            "main.fj",
+            "main",
+            "fn main()",
+            "print(hello())",
+            &["hello", "print"],
+        );
         g.add_function("main.fj", "hello", "fn hello() -> str", "\"hi\"", &[]);
 
         assert_eq!(g.symbol_count(), 2);
@@ -520,10 +544,20 @@ mod tests {
     #[test]
     fn i2_2_type_change_tracking() {
         let mut old = FineGrainedGraph::new();
-        old.add_type("a.fj", "Point", SymbolKind::Struct, "struct Point { x: f64, y: f64 }");
+        old.add_type(
+            "a.fj",
+            "Point",
+            SymbolKind::Struct,
+            "struct Point { x: f64, y: f64 }",
+        );
 
         let mut new = FineGrainedGraph::new();
-        new.add_type("a.fj", "Point", SymbolKind::Struct, "struct Point { x: f64, y: f64, z: f64 }");
+        new.add_type(
+            "a.fj",
+            "Point",
+            SymbolKind::Struct,
+            "struct Point { x: f64, y: f64, z: f64 }",
+        );
 
         let changes = new.detect_changes(&old);
         assert!(changes.signature_changed.contains("a.fj::Point"));
@@ -553,7 +587,13 @@ mod tests {
 
         let mut new = FineGrainedGraph::new();
         // Signature changed: added parameter
-        new.add_function("a.fj", "compute", "fn compute(x: i64, y: i64) -> i64", "x * y", &[]);
+        new.add_function(
+            "a.fj",
+            "compute",
+            "fn compute(x: i64, y: i64) -> i64",
+            "x * y",
+            &[],
+        );
         new.add_function("a.fj", "main", "fn main()", "compute(5)", &["compute"]);
 
         let changes = new.detect_changes(&old);
@@ -662,14 +702,24 @@ mod tests {
         old.add_function("m.fj", "a", "fn a() -> i64", "1", &[]);
         old.add_function("m.fj", "b", "fn b() -> i64", "a()", &["a"]);
         old.add_function("m.fj", "c", "fn c() -> i64", "b()", &["b"]);
-        old.add_type("m.fj", "Point", SymbolKind::Struct, "struct Point { x: f64 }");
+        old.add_type(
+            "m.fj",
+            "Point",
+            SymbolKind::Struct,
+            "struct Point { x: f64 }",
+        );
 
         // New state: 'a' body changed, 'Point' field added
         let mut new = FineGrainedGraph::new();
         new.add_function("m.fj", "a", "fn a() -> i64", "2", &[]); // body only
         new.add_function("m.fj", "b", "fn b() -> i64", "a()", &["a"]);
         new.add_function("m.fj", "c", "fn c() -> i64", "b()", &["b"]);
-        new.add_type("m.fj", "Point", SymbolKind::Struct, "struct Point { x: f64, y: f64 }"); // sig change
+        new.add_type(
+            "m.fj",
+            "Point",
+            SymbolKind::Struct,
+            "struct Point { x: f64, y: f64 }",
+        ); // sig change
 
         let changes = new.detect_changes(&old);
         assert_eq!(changes.body_only_changed.len(), 1); // a body
@@ -697,7 +747,7 @@ mod tests {
         assert!(changes.removed.contains("m.fj::old_fn"));
 
         let recomp = new.recompilation_set(&changes);
-        assert!(recomp.contains("m.fj::new_fn"));    // new symbol
-        assert!(recomp.contains("m.fj::stable"));    // depended on removed old_fn
+        assert!(recomp.contains("m.fj::new_fn")); // new symbol
+        assert!(recomp.contains("m.fj::stable")); // depended on removed old_fn
     }
 }

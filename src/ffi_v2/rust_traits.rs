@@ -802,12 +802,7 @@ impl RustIterator {
 
     /// Maps a function over the remaining items, producing a new iterator.
     pub fn map_values(&mut self, func: impl Fn(&FfiValue) -> FfiValue) -> RustIterator {
-        let mapped: Vec<FfiValue> = self
-            .items
-            .iter()
-            .skip(self.position)
-            .map(func)
-            .collect();
+        let mapped: Vec<FfiValue> = self.items.iter().skip(self.position).map(func).collect();
         RustIterator::new(format!("{}.map", self.name), self.item_type.clone(), mapped)
     }
 

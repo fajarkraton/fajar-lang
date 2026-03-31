@@ -18,8 +18,8 @@
 use std::time::{Duration, Instant};
 
 use super::fine_grained::{FineGrainedGraph, SymbolKind};
-use super::integration::{execute_build, IncrementalBuildConfig, RebuildPlan};
-use super::parallel::{topological_levels, CompileUnit};
+use super::integration::{IncrementalBuildConfig, RebuildPlan, execute_build};
+use super::parallel::{CompileUnit, topological_levels};
 
 // ═══════════════════════════════════════════════════════════════════════
 // Benchmark Infrastructure
@@ -133,7 +133,10 @@ fn generate_fine_graph(num_modules: usize, fns_per_module: usize) -> FineGrained
 pub fn bench_cold_build(num_modules: usize) -> BenchResult {
     let start = Instant::now();
     let cfg = IncrementalBuildConfig::full_rebuild("/bench");
-    let plan = RebuildPlan { full_rebuild: true, ..Default::default() };
+    let plan = RebuildPlan {
+        full_rebuild: true,
+        ..Default::default()
+    };
     let result = execute_build(&cfg, &plan, num_modules);
     let duration = start.elapsed();
 
@@ -194,7 +197,13 @@ pub fn bench_signature_change(num_modules: usize) -> BenchResult {
     let graph = generate_fine_graph(num_modules, 5);
     let mut old = generate_fine_graph(num_modules, 5);
     // Change fn_0 signature in mod_0
-    old.add_function("mod_0.fj", "fn_0", "fn fn_0(x: i64, y: i64) -> i64", "0", &[]);
+    old.add_function(
+        "mod_0.fj",
+        "fn_0",
+        "fn fn_0(x: i64, y: i64) -> i64",
+        "0",
+        &[],
+    );
 
     let changes = graph.detect_changes(&old);
     let recomp = graph.recompilation_set(&changes);
@@ -216,10 +225,20 @@ pub fn bench_type_change(num_modules: usize) -> BenchResult {
     let start = Instant::now();
 
     let mut old = FineGrainedGraph::new();
-    old.add_type("types.fj", "Config", SymbolKind::Struct, "struct Config { a: i64 }");
+    old.add_type(
+        "types.fj",
+        "Config",
+        SymbolKind::Struct,
+        "struct Config { a: i64 }",
+    );
 
     let mut new = FineGrainedGraph::new();
-    new.add_type("types.fj", "Config", SymbolKind::Struct, "struct Config { a: i64, b: i64 }");
+    new.add_type(
+        "types.fj",
+        "Config",
+        SymbolKind::Struct,
+        "struct Config { a: i64, b: i64 }",
+    );
 
     let changes = new.detect_changes(&old);
     let duration = start.elapsed();
@@ -495,7 +514,11 @@ mod tests {
     #[test]
     fn i6_10_full_benchmark_report() {
         let report = run_all_benchmarks(20);
-        assert!(report.all_passed(), "failed benchmarks:\n{}", report.format_table());
+        assert!(
+            report.all_passed(),
+            "failed benchmarks:\n{}",
+            report.format_table()
+        );
         assert_eq!(report.total, 9);
 
         let table = report.format_table();

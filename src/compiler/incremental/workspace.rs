@@ -130,7 +130,11 @@ impl CachePartition {
         } else {
             compute_content_hash(&self.features.join(","))
         };
-        let suffix = if feat_hash.len() >= 8 { &feat_hash[..8] } else { &feat_hash };
+        let suffix = if feat_hash.len() >= 8 {
+            &feat_hash[..8]
+        } else {
+            &feat_hash
+        };
         format!("{}-{}-{}", self.target, self.profile, suffix)
     }
 }
@@ -214,7 +218,10 @@ pub fn workspace_build_order(workspace: &Workspace) -> Vec<Vec<String>> {
         for dep in &config.member_deps {
             if workspace.members.contains_key(dep) {
                 *in_degree.entry(name.clone()).or_insert(0) += 1;
-                dependents.entry(dep.clone()).or_default().push(name.clone());
+                dependents
+                    .entry(dep.clone())
+                    .or_default()
+                    .push(name.clone());
             }
         }
     }
@@ -368,8 +375,11 @@ impl WorkspaceCacheStats {
     /// Format for `fj cache stats` output.
     pub fn format_display(&self) -> String {
         let mut out = String::new();
-        out.push_str(&format!("Cache size:    {} bytes ({:.1} MB)\n",
-            self.total_bytes, self.total_bytes as f64 / 1_048_576.0));
+        out.push_str(&format!(
+            "Cache size:    {} bytes ({:.1} MB)\n",
+            self.total_bytes,
+            self.total_bytes as f64 / 1_048_576.0
+        ));
         out.push_str(&format!("Entries:       {}\n", self.total_entries));
         out.push_str(&format!("Partitions:    {}\n", self.partition_count));
         out.push_str(&format!("Hit rate:      {:.1}%\n", self.hit_rate_pct));
@@ -381,7 +391,9 @@ impl WorkspaceCacheStats {
             for (name, stats) in members {
                 out.push_str(&format!(
                     "  {}: {} entries, {:.1} MB\n",
-                    name, stats.entries, stats.bytes as f64 / 1_048_576.0
+                    name,
+                    stats.entries,
+                    stats.bytes as f64 / 1_048_576.0
                 ));
             }
         }
@@ -401,20 +413,28 @@ mod tests {
     fn sample_workspace() -> Workspace {
         let mut ws = Workspace::new("/project");
         ws.add_member(WorkspaceMemberConfig {
-            name: "core".into(), path: "core/".into(),
-            member_deps: vec![], external_deps: vec!["serde".into(), "log".into()],
+            name: "core".into(),
+            path: "core/".into(),
+            member_deps: vec![],
+            external_deps: vec!["serde".into(), "log".into()],
         });
         ws.add_member(WorkspaceMemberConfig {
-            name: "lib".into(), path: "lib/".into(),
-            member_deps: vec!["core".into()], external_deps: vec!["serde".into()],
+            name: "lib".into(),
+            path: "lib/".into(),
+            member_deps: vec!["core".into()],
+            external_deps: vec!["serde".into()],
         });
         ws.add_member(WorkspaceMemberConfig {
-            name: "cli".into(), path: "cli/".into(),
-            member_deps: vec!["lib".into(), "core".into()], external_deps: vec!["clap".into(), "log".into()],
+            name: "cli".into(),
+            path: "cli/".into(),
+            member_deps: vec!["lib".into(), "core".into()],
+            external_deps: vec!["clap".into(), "log".into()],
         });
         ws.add_member(WorkspaceMemberConfig {
-            name: "tests".into(), path: "tests/".into(),
-            member_deps: vec!["lib".into()], external_deps: vec![],
+            name: "tests".into(),
+            path: "tests/".into(),
+            member_deps: vec!["lib".into()],
+            external_deps: vec![],
         });
         ws
     }
@@ -436,8 +456,8 @@ mod tests {
         let ws = sample_workspace();
         let rebuild = cross_member_invalidation(&ws, &["core".into()]);
         assert!(rebuild.contains("core"));
-        assert!(rebuild.contains("lib"));  // depends on core
-        assert!(rebuild.contains("cli"));  // depends on lib + core
+        assert!(rebuild.contains("lib")); // depends on core
+        assert!(rebuild.contains("cli")); // depends on lib + core
         assert!(rebuild.contains("tests")); // depends on lib
     }
 
@@ -487,8 +507,8 @@ mod tests {
         let ws = sample_workspace();
         let shared = find_shared_deps(&ws);
         assert!(shared.contains(&"serde".to_string())); // used by core + lib
-        assert!(shared.contains(&"log".to_string()));   // used by core + cli
-        assert!(!shared.contains(&"clap".to_string()));  // only cli
+        assert!(shared.contains(&"log".to_string())); // used by core + cli
+        assert!(!shared.contains(&"clap".to_string())); // only cli
     }
 
     // ── I9.6: Workspace build order ──
@@ -512,9 +532,24 @@ mod tests {
     #[test]
     fn i9_7_format_timings() {
         let timings = vec![
-            MemberTiming { name: "core".into(), duration: Duration::from_millis(500), modules_compiled: 10, cached: false },
-            MemberTiming { name: "lib".into(), duration: Duration::from_millis(200), modules_compiled: 5, cached: false },
-            MemberTiming { name: "cli".into(), duration: Duration::from_millis(50), modules_compiled: 0, cached: true },
+            MemberTiming {
+                name: "core".into(),
+                duration: Duration::from_millis(500),
+                modules_compiled: 10,
+                cached: false,
+            },
+            MemberTiming {
+                name: "lib".into(),
+                duration: Duration::from_millis(200),
+                modules_compiled: 5,
+                cached: false,
+            },
+            MemberTiming {
+                name: "cli".into(),
+                duration: Duration::from_millis(50),
+                modules_compiled: 0,
+                cached: true,
+            },
         ];
         let table = format_workspace_timings(&timings);
         assert!(table.contains("core"));
@@ -551,9 +586,15 @@ mod tests {
             newest_age_secs: 60,
             member_stats: HashMap::new(),
         };
-        stats.member_stats.insert("core".into(), MemberCacheStats {
-            entries: 50, bytes: 10_000_000, hit_count: 40, miss_count: 10,
-        });
+        stats.member_stats.insert(
+            "core".into(),
+            MemberCacheStats {
+                entries: 50,
+                bytes: 10_000_000,
+                hit_count: 40,
+                miss_count: 10,
+            },
+        );
 
         let display = stats.format_display();
         assert!(display.contains("50.0 MB"));

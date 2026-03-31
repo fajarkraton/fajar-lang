@@ -84,11 +84,7 @@ pub fn type_param_names(params: &[GenericParam]) -> Vec<String> {
 /// `zeros<3>()` with base name "zeros" and const_args = [3]
 /// produces MonoKey { name: "zeros", type_args: [], const_args: [3] }
 /// which mangles to "zeros_N3".
-pub fn build_mono_key(
-    base_name: &str,
-    type_args: &[String],
-    const_args: &[u64],
-) -> MonoKey {
+pub fn build_mono_key(base_name: &str, type_args: &[String], const_args: &[u64]) -> MonoKey {
     MonoKey {
         name: base_name.to_string(),
         type_args: type_args.to_vec(),
@@ -158,10 +154,7 @@ pub fn eval_nat(nat: &NatValue, env: &HashMap<String, u64>) -> Option<u64> {
 /// Checks a set of const generic constraints against concrete values.
 ///
 /// Returns a list of violated constraints as error strings.
-pub fn check_constraints(
-    constraints: &[NatConstraint],
-    env: &HashMap<String, u64>,
-) -> Vec<String> {
+pub fn check_constraints(constraints: &[NatConstraint], env: &HashMap<String, u64>) -> Vec<String> {
     let mut errors = Vec::new();
     for c in constraints {
         if let Err(e) = c.check(env) {
@@ -597,10 +590,7 @@ mod tests {
         assert!(!edef.generic_params[0].is_comptime); // T
         assert!(edef.generic_params[1].is_comptime); // const N
         assert_eq!(edef.generic_params[1].name, "N");
-        assert_eq!(
-            edef.generic_params[1].const_type,
-            Some("usize".to_string())
-        );
+        assert_eq!(edef.generic_params[1].const_type, Some("usize".to_string()));
     }
 
     // ── K1.9: Const params in impl blocks ──

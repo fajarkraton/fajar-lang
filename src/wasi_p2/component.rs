@@ -11,8 +11,7 @@
 //! - Component validation against WIT spec
 
 use super::wit_parser::{
-    WitFuncDef, WitPrimitive, WitTypeRef, WitWorldDef,
-    WitWorldExport, WitWorldImport, WitWorldItem,
+    WitFuncDef, WitPrimitive, WitTypeRef, WitWorldDef, WitWorldExport, WitWorldImport, WitWorldItem,
 };
 use std::fmt;
 
@@ -138,7 +137,9 @@ impl fmt::Display for ComponentValType {
             Self::Tuple(items) => {
                 write!(f, "tuple<")?;
                 for (i, item) in items.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{item}")?;
                 }
                 write!(f, ">")
@@ -146,7 +147,9 @@ impl fmt::Display for ComponentValType {
             Self::Record(fields) => {
                 write!(f, "record {{ ")?;
                 for (i, (name, ty)) in fields.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{name}: {ty}")?;
                 }
                 write!(f, " }}")
@@ -154,7 +157,9 @@ impl fmt::Display for ComponentValType {
             Self::Variant(cases) => {
                 write!(f, "variant {{ ")?;
                 for (i, (name, ty)) in cases.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{name}")?;
                     if let Some(t) = ty {
                         write!(f, "({t})")?;
@@ -165,7 +170,9 @@ impl fmt::Display for ComponentValType {
             Self::Flags(flags) => {
                 write!(f, "flags {{ ")?;
                 for (i, flag) in flags.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{flag}")?;
                 }
                 write!(f, " }}")
@@ -228,7 +235,8 @@ impl ComponentBuilder {
     /// Adds a type section entry.
     pub fn add_type(&mut self, kind: ComponentTypeKind) -> u32 {
         let index = self.type_sections.len() as u32;
-        self.type_sections.push(ComponentTypeSection { index, kind });
+        self.type_sections
+            .push(ComponentTypeSection { index, kind });
         index
     }
 
@@ -386,9 +394,7 @@ pub fn wit_type_to_component(ty: &WitTypeRef) -> ComponentValType {
             WitPrimitive::Char => ComponentValType::Char,
             WitPrimitive::String_ => ComponentValType::String_,
         },
-        WitTypeRef::List(inner) => {
-            ComponentValType::List(Box::new(wit_type_to_component(inner)))
-        }
+        WitTypeRef::List(inner) => ComponentValType::List(Box::new(wit_type_to_component(inner))),
         WitTypeRef::Option(inner) => {
             ComponentValType::Option_(Box::new(wit_type_to_component(inner)))
         }
@@ -492,11 +498,20 @@ pub enum CanonicalValue {
     /// Record: flattened fields.
     Record(Vec<CanonicalValue>),
     /// Variant: discriminant + optional payload.
-    Variant { discriminant: u32, payload: Option<Box<CanonicalValue>> },
+    Variant {
+        discriminant: u32,
+        payload: Option<Box<CanonicalValue>>,
+    },
     /// Option: 0 = None, 1 = Some(value).
-    Option_ { is_some: bool, value: Option<Box<CanonicalValue>> },
+    Option_ {
+        is_some: bool,
+        value: Option<Box<CanonicalValue>>,
+    },
     /// Result: 0 = Ok(value), 1 = Err(value).
-    Result_ { is_ok: bool, value: Option<Box<CanonicalValue>> },
+    Result_ {
+        is_ok: bool,
+        value: Option<Box<CanonicalValue>>,
+    },
     /// Tuple: flattened elements.
     Tuple(Vec<CanonicalValue>),
 }
@@ -574,8 +589,7 @@ impl LinearMemory {
         let bytes = self.read_bytes(offset, 8);
         if bytes.len() == 8 {
             u64::from_le_bytes([
-                bytes[0], bytes[1], bytes[2], bytes[3],
-                bytes[4], bytes[5], bytes[6], bytes[7],
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
             ])
         } else {
             0
@@ -648,9 +662,7 @@ pub fn lift_list_u8(mem: &LinearMemory, ptr: u32, len: u32) -> Vec<u8> {
 
 /// W2.6: Lift a u32 list from linear memory.
 pub fn lift_list_u32(mem: &LinearMemory, ptr: u32, len: u32) -> Vec<u32> {
-    (0..len)
-        .map(|i| mem.read_u32(ptr + i * 4))
-        .collect()
+    (0..len).map(|i| mem.read_u32(ptr + i * 4)).collect()
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -660,7 +672,13 @@ pub fn lift_list_u32(mem: &LinearMemory, ptr: u32, len: u32) -> Vec<u32> {
 /// Simulates the `cabi_realloc` export for host-allocated memory.
 ///
 /// Signature: `cabi_realloc(old_ptr: i32, old_size: i32, align: i32, new_size: i32) -> i32`
-pub fn cabi_realloc(mem: &mut LinearMemory, _old_ptr: u32, _old_size: u32, align: u32, new_size: u32) -> u32 {
+pub fn cabi_realloc(
+    mem: &mut LinearMemory,
+    _old_ptr: u32,
+    _old_size: u32,
+    align: u32,
+    new_size: u32,
+) -> u32 {
     // Simple bump allocator — doesn't reuse old memory
     mem.alloc(new_size, align)
 }
@@ -716,7 +734,9 @@ impl fmt::Display for ComponentValidationError {
 }
 
 /// Validates a component binary.
-pub fn validate_component(bytes: &[u8]) -> Result<ComponentValidationReport, ComponentValidationError> {
+pub fn validate_component(
+    bytes: &[u8],
+) -> Result<ComponentValidationReport, ComponentValidationError> {
     let mut report = ComponentValidationReport::default();
 
     // Check magic bytes
@@ -909,11 +929,17 @@ fn encode_val_type(out: &mut Vec<u8>, ty: &ComponentValType) {
         ComponentValType::Result_ { ok, err } => {
             out.push(0x6E);
             match ok {
-                Some(t) => { out.push(0x01); encode_val_type(out, t); }
+                Some(t) => {
+                    out.push(0x01);
+                    encode_val_type(out, t);
+                }
                 None => out.push(0x00),
             }
             match err {
-                Some(t) => { out.push(0x01); encode_val_type(out, t); }
+                Some(t) => {
+                    out.push(0x01);
+                    encode_val_type(out, t);
+                }
                 None => out.push(0x00),
             }
         }
@@ -938,7 +964,10 @@ fn encode_val_type(out: &mut Vec<u8>, ty: &ComponentValType) {
             for (name, ty) in cases {
                 encode_string(out, name);
                 match ty {
-                    Some(t) => { out.push(0x01); encode_val_type(out, t); }
+                    Some(t) => {
+                        out.push(0x01);
+                        encode_val_type(out, t);
+                    }
                     None => out.push(0x00),
                 }
             }
@@ -989,7 +1018,7 @@ fn read_leb128(bytes: &[u8]) -> (u32, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wasi_p2::wit_parser::{parse_wit, WitParam};
+    use crate::wasi_p2::wit_parser::{WitParam, parse_wit};
 
     // ── W2.1: Component section emitter ──
 
@@ -1049,7 +1078,10 @@ mod tests {
         for ty in &types {
             let mut bytes = Vec::new();
             encode_val_type(&mut bytes, ty);
-            assert!(!bytes.is_empty(), "encoded type should be non-empty: {ty:?}");
+            assert!(
+                !bytes.is_empty(),
+                "encoded type should be non-empty: {ty:?}"
+            );
         }
     }
 
@@ -1075,7 +1107,10 @@ mod tests {
         let ft = ComponentFuncType {
             name: "run".into(),
             params: Vec::new(),
-            result: Some(ComponentValType::Result_ { ok: None, err: None }),
+            result: Some(ComponentValType::Result_ {
+                ok: None,
+                err: None,
+            }),
         };
         let idx = builder.add_type(ComponentTypeKind::Func(ft));
         builder.add_export("run", ExportKind::Func, idx);
@@ -1324,12 +1359,10 @@ world command {
         let func = WitFuncDef {
             name: "handle".into(),
             doc: None,
-            params: vec![
-                WitParam {
-                    name: "req".into(),
-                    ty: WitTypeRef::Named("request".into()),
-                },
-            ],
+            params: vec![WitParam {
+                name: "req".into(),
+                ty: WitTypeRef::Named("request".into()),
+            }],
             result: Some(WitTypeRef::Result {
                 ok: Some(Box::new(WitTypeRef::Named("response".into()))),
                 err: Some(Box::new(WitTypeRef::Primitive(WitPrimitive::String_))),
