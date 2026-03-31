@@ -1205,8 +1205,10 @@ pub struct WasmCompiler {
     /// Number of parameters in the current function (params come before locals).
     current_param_count: u32,
     /// Stack allocator for linear memory.
+    #[allow(dead_code)]
     stack_alloc: WasmStackAllocator,
     /// Heap allocator for linear memory.
+    #[allow(dead_code)]
     heap_alloc: WasmHeapAllocator,
     /// Data section offset (next available byte for string literals).
     data_offset: u32,

@@ -92,13 +92,26 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-24.04
+    env:
+      RUST_MIN_STACK: "8388608"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-coverage-
       - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --locked
       - name: Generate coverage
-        run: cargo tarpaulin --out xml --output-dir coverage/
+        run: cargo tarpaulin --out xml --output-dir coverage/ --skip-clean --timeout 300
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

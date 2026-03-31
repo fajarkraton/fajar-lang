@@ -582,6 +582,7 @@ pub struct Interpreter {
     /// Next MQTT handle ID.
     next_mqtt_id: i64,
     /// Simulated BLE adapter for Bluetooth Low Energy operations.
+    #[allow(dead_code)]
     ble_adapter: BleAdapter,
     /// GUI state accumulated by gui_* builtins.
     gui_state: GuiState,

@@ -6338,12 +6338,12 @@ const FS_DISK_FULL_THRESHOLD: i64 = 90 // refuse writes at 90% full
 
 @kernel fn inode_inc_gen(inode: i64) {
     if inode >= 0 && inode < 64 {
-        let gen = inode_get_gen(inode) + 1
+        let generation = inode_get_gen(inode) + 1
         let addr = INODE_GEN_TABLE + inode * 4
-        volatile_write_u8(addr, gen & 0xFF)
-        volatile_write_u8(addr + 1, (gen >> 8) & 0xFF)
-        volatile_write_u8(addr + 2, (gen >> 16) & 0xFF)
-        volatile_write_u8(addr + 3, (gen >> 24) & 0xFF)
+        volatile_write_u8(addr, generation & 0xFF)
+        volatile_write_u8(addr + 1, (generation >> 8) & 0xFF)
+        volatile_write_u8(addr + 2, (generation >> 16) & 0xFF)
+        volatile_write_u8(addr + 3, (generation >> 24) & 0xFF)
     }
 }
 

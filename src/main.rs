@@ -1,4 +1,6 @@
-// Edition 2024: collapsible_if lint expanded scope
+// Nightly clippy allow-list — lints that differ between stable and nightly.
+// TODO: remove each allow when the lint stabilizes and code is updated.
+// - collapsible_if: Edition 2024 expanded scope (nightly 2025-03+)
 #![allow(clippy::collapsible_if)]
 
 //! Fajar Lang CLI entry point.
