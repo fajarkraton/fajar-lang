@@ -8,8 +8,11 @@
 //! - `wit_parser` — Recursive-descent parser producing `WitDocument`
 //! - `wit_types` — WIT-to-Fajar type mapping and type system
 //! - `resources` — Resource lifecycle, handle table, own/borrow semantics
+//! - `deployment` — Validation, benchmarks, conformance, and deployment tooling (W10)
 
 pub mod component;
+pub mod composition;
+pub mod deployment;
 pub mod filesystem;
 pub mod http;
 pub mod resources;
