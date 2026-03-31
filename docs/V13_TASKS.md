@@ -503,18 +503,18 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| W4.1 | Input stream | [ ] | Blocking and pollable read | 100 | Read stdin line by line |
-| W4.2 | Output stream | [ ] | Blocking and pollable write | 100 | Write to stdout with flush |
-| W4.3 | Poll | [ ] | `poll-one`, `poll-many` from pollable | 120 | First-ready returns |
-| W4.4 | Stream splice | [ ] | Zero-copy pipe input->output | 80 | Pipe stdin to file |
-| W4.5 | Async streams | [ ] | `subscribe()` -> pollable for non-blocking I/O | 100 | Non-blocking read |
-| W4.6 | Error handling | [ ] | `stream-error` with last-operation-failed | 60 | EOF/permission errors |
-| W4.7 | Monotonic clock | [ ] | `now()`, `resolution()`, `subscribe-duration()` | 60 | Timestamps correct |
-| W4.8 | Wall clock | [ ] | `now()` -> `datetime { seconds, nanoseconds }` | 40 | Within 1s of host |
-| W4.9 | Random | [ ] | `get-random-bytes(len)`, `get-random-u64()` | 40 | Non-zero bytes |
-| W4.10 | 10 stream tests | [ ] | Read/write, poll, clocks, random | 150 | All 10 pass |
+| W4.1 | Input stream | [x] | Blocking and pollable read | 100 | Read stdin line by line |
+| W4.2 | Output stream | [x] | Blocking and pollable write | 100 | Write to stdout with flush |
+| W4.3 | Poll | [x] | `poll-one`, `poll-many` from pollable | 120 | First-ready returns |
+| W4.4 | Stream splice | [x] | Zero-copy pipe input->output | 80 | Pipe stdin to file |
+| W4.5 | Async streams | [x] | `subscribe()` -> pollable for non-blocking I/O | 100 | Non-blocking read |
+| W4.6 | Error handling | [x] | `stream-error` with last-operation-failed | 60 | EOF/permission errors |
+| W4.7 | Monotonic clock | [x] | `now()`, `resolution()`, `subscribe-duration()` | 60 | Timestamps correct |
+| W4.8 | Wall clock | [x] | `now()` -> `datetime { seconds, nanoseconds }` | 40 | Within 1s of host |
+| W4.9 | Random | [x] | `get-random-bytes(len)`, `get-random-u64()` | 40 | Non-zero bytes |
+| W4.10 | 10 stream tests | [x] | Read/write, poll, clocks, random | 150 | All 10 pass |
 
-**Sprint W4 Gate:** Streaming I/O, clocks, and random work end-to-end.
+**Sprint W4 Gate:** Streaming I/O, clocks, and random work end-to-end. ✅ 16 tests, 0 failures.
 
 ### Sprint W5: WASI P2 HTTP Client (10 tasks)
 

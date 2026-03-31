@@ -10,6 +10,7 @@
 
 pub mod component;
 pub mod filesystem;
+pub mod streams;
 pub mod wit_lexer;
 pub mod wit_parser;
 pub mod wit_types;
