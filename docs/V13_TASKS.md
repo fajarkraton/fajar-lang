@@ -240,16 +240,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K10.1 | Const eval time benchmark | [ ] | Measure compile-time cost of const evaluation | 30 | < 1% compilation overhead |
-| K10.2 | Const vs runtime comparison | [ ] | Compare const-evaluated vs runtime-computed results | 30 | Identical results |
-| K10.3 | Large const data | [ ] | 1MB lookup table generated at compile time | 40 | Table correct, in .rodata |
-| K10.4 | Recursive const depth | [ ] | Test 256-level recursive const fn | 20 | No stack overflow |
-| K10.5 | Const generics coverage | [ ] | All 15 numeric types as const parameters | 30 | `u8` through `u128` work |
-| K10.6 | Example: const physics | [ ] | `examples/const_physics.fj` — compile-time unit checking | 100 | Units checked at compile time |
-| K10.7 | Example: const LUT | [ ] | `examples/const_lut.fj` — lookup table generation | 80 | LUT embedded in binary |
-| K10.8 | Example: const matrix | [ ] | `examples/const_matrix.fj` — dimension-checked ops | 80 | Matrix operations type-safe |
-| K10.9 | Update CLAUDE.md | [ ] | Document const features in language reference | 30 | CLAUDE.md reflects const features |
-| K10.10 | Update GAP_ANALYSIS_V2 | [ ] | Mark const fn as 100% production | 20 | Audit reflects real status |
+| K10.1 | Const eval time benchmark | [x] | Measure compile-time cost of const evaluation | 30 | < 1% compilation overhead |
+| K10.2 | Const vs runtime comparison | [x] | Compare const-evaluated vs runtime-computed results | 30 | Identical results |
+| K10.3 | Large const data | [x] | 1MB lookup table generated at compile time | 40 | Table correct, in .rodata |
+| K10.4 | Recursive const depth | [x] | Test 256-level recursive const fn | 20 | No stack overflow |
+| K10.5 | Const generics coverage | [x] | All 15 numeric types as const parameters | 30 | `u8` through `u128` work |
+| K10.6 | Example: const physics | [x] | `examples/const_physics.fj` — compile-time unit checking | 100 | Units checked at compile time |
+| K10.7 | Example: const LUT | [x] | `examples/const_lut.fj` — lookup table generation | 80 | LUT embedded in binary |
+| K10.8 | Example: const matrix | [x] | `examples/const_matrix.fj` — dimension-checked ops | 80 | Matrix operations type-safe |
+| K10.9 | Update CLAUDE.md | [x] | Document const features in language reference | 30 | CLAUDE.md reflects const features |
+| K10.10 | Update GAP_ANALYSIS_V2 | [x] | Mark const fn as 100% production | 20 | Audit reflects real status |
 
 **Sprint K10 Gate:** All benchmarks documented, 3 examples pass, docs updated.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 90 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 100 | 100 | COMPLETE |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1: 100 / 210 tasks complete  (47.6%)
+Phase 1: 110 / 210 tasks complete  (52.4%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:   100 / 710 tasks complete  (14.1%)
+TOTAL:   110 / 710 tasks complete  (15.5%)
 ```
 
 ---
