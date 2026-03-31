@@ -18,15 +18,19 @@
 //! bare-metal binaries.
 
 pub mod aarch64;
+pub mod ai_kernel;
 pub mod bus;
 pub mod compositor;
 pub mod display;
+pub mod distributed_kernel;
 pub mod dma;
 pub mod gdt;
+pub mod hal_v2;
 pub mod hardware_ci;
 pub mod idt;
 pub mod intrinsics;
 pub mod irq;
+pub mod kernel_opt;
 pub mod keyboard;
 pub mod memory;
 pub mod net_stack;
@@ -40,6 +44,7 @@ pub mod shell;
 pub mod smp;
 pub mod syscall;
 pub mod timer;
+pub mod verified_kernel;
 pub mod vfs;
 pub mod vga;
 pub mod virtio;

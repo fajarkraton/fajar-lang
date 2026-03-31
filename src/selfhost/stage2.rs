@@ -180,7 +180,10 @@ impl Stage2Compiler {
         let codegen_result = self.simulate_codegen();
         phases.push(codegen_result);
 
-        let success = self.diagnostics.iter().all(|d| d.severity != DiagSeverity::Error);
+        let success = self
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != DiagSeverity::Error);
 
         CompileOutput {
             stage: self.stage,
@@ -195,9 +198,13 @@ impl Stage2Compiler {
 
     /// Simulates lexing phase.
     fn simulate_lex(&mut self) -> PhaseResult {
-        let total_tokens: usize = self.sources.values().map(|s| {
-            s.split_whitespace().count() + s.matches(|c: char| c.is_ascii_punctuation()).count()
-        }).sum();
+        let total_tokens: usize = self
+            .sources
+            .values()
+            .map(|s| {
+                s.split_whitespace().count() + s.matches(|c: char| c.is_ascii_punctuation()).count()
+            })
+            .sum();
 
         PhaseResult {
             name: "lex".into(),
@@ -209,9 +216,15 @@ impl Stage2Compiler {
 
     /// Simulates parsing phase.
     fn simulate_parse(&mut self) -> PhaseResult {
-        let total_stmts: usize = self.sources.values().map(|s| {
-            s.lines().filter(|l| !l.trim().is_empty() && !l.trim().starts_with("//")).count()
-        }).sum();
+        let total_stmts: usize = self
+            .sources
+            .values()
+            .map(|s| {
+                s.lines()
+                    .filter(|l| !l.trim().is_empty() && !l.trim().starts_with("//"))
+                    .count()
+            })
+            .sum();
 
         PhaseResult {
             name: "parse".into(),
@@ -223,9 +236,11 @@ impl Stage2Compiler {
 
     /// Simulates analysis phase.
     fn simulate_analyze(&mut self) -> PhaseResult {
-        let total_fns: usize = self.sources.values().map(|s| {
-            s.lines().filter(|l| l.trim().starts_with("fn ")).count()
-        }).sum();
+        let total_fns: usize = self
+            .sources
+            .values()
+            .map(|s| s.lines().filter(|l| l.trim().starts_with("fn ")).count())
+            .sum();
 
         // Check for stack overflow in recursive functions
         if self.flags.max_stack_depth < 64 {
@@ -292,12 +307,18 @@ impl Stage2Compiler {
 
     /// Returns error count.
     pub fn error_count(&self) -> usize {
-        self.diagnostics.iter().filter(|d| d.severity == DiagSeverity::Error).count()
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagSeverity::Error)
+            .count()
     }
 
     /// Returns warning count.
     pub fn warning_count(&self) -> usize {
-        self.diagnostics.iter().filter(|d| d.severity == DiagSeverity::Warning).count()
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagSeverity::Warning)
+            .count()
     }
 }
 
@@ -408,7 +429,9 @@ impl fmt::Display for StageVerification {
             write!(
                 f,
                 "{} == {}: IDENTICAL (hash={})",
-                self.stage_a, self.stage_b, &self.hash_a[..12]
+                self.stage_a,
+                self.stage_b,
+                &self.hash_a[..12]
             )
         } else {
             write!(
@@ -498,12 +521,7 @@ pub struct StagePerfComparison {
 
 impl StagePerfComparison {
     /// Creates a performance comparison.
-    pub fn compare(
-        benchmark: &str,
-        stage0: Duration,
-        stage2: Duration,
-        max_ratio: f64,
-    ) -> Self {
+    pub fn compare(benchmark: &str, stage0: Duration, stage2: Duration, max_ratio: f64) -> Self {
         let ratio = stage2.as_secs_f64() / stage0.as_secs_f64().max(0.001);
         Self {
             benchmark: benchmark.into(),
@@ -601,7 +619,11 @@ impl fmt::Display for FeatureCheck {
         let s0 = if self.stage0_support { "YES" } else { "NO" };
         let s2 = if self.stage2_support { "YES" } else { "NO" };
         let status = if self.has_parity() { "PARITY" } else { "GAP" };
-        write!(f, "{}: stage0={}, stage2={} [{}]", self.feature, s0, s2, status)
+        write!(
+            f,
+            "{}: stage0={}, stage2={} [{}]",
+            self.feature, s0, s2, status
+        )
     }
 }
 
@@ -650,21 +672,81 @@ impl fmt::Display for FeatureParityAudit {
 /// Standard feature set for parity checking.
 pub fn standard_feature_checks() -> Vec<FeatureCheck> {
     vec![
-        FeatureCheck { feature: "integer_arithmetic".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "float_arithmetic".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "string_operations".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "control_flow".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "functions".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "structs".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "enums".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "generics".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "pattern_matching".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "closures".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "traits".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "iterators".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "error_handling".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "modules".into(), stage0_support: true, stage2_support: true },
-        FeatureCheck { feature: "async_await".into(), stage0_support: true, stage2_support: true },
+        FeatureCheck {
+            feature: "integer_arithmetic".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "float_arithmetic".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "string_operations".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "control_flow".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "functions".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "structs".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "enums".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "generics".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "pattern_matching".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "closures".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "traits".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "iterators".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "error_handling".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "modules".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
+        FeatureCheck {
+            feature: "async_await".into(),
+            stage0_support: true,
+            stage2_support: true,
+        },
     ]
 }
 
@@ -891,8 +973,18 @@ mod tests {
     #[test]
     fn s8_7_perf_report() {
         let comparisons = vec![
-            StagePerfComparison::compare("lex", Duration::from_millis(10), Duration::from_millis(20), 5.0),
-            StagePerfComparison::compare("parse", Duration::from_millis(20), Duration::from_millis(40), 5.0),
+            StagePerfComparison::compare(
+                "lex",
+                Duration::from_millis(10),
+                Duration::from_millis(20),
+                5.0,
+            ),
+            StagePerfComparison::compare(
+                "parse",
+                Duration::from_millis(20),
+                Duration::from_millis(40),
+                5.0,
+            ),
         ];
         let report = PerfReport::from_comparisons(comparisons);
         assert!(report.all_acceptable);

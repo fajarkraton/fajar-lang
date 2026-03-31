@@ -103,7 +103,8 @@ impl SmtTheoryEngine {
             self.active_theories.push(TheoryKind::Concurrent);
         }
         if features.has_function_calls {
-            self.active_theories.push(TheoryKind::UninterpretedFunctions);
+            self.active_theories
+                .push(TheoryKind::UninterpretedFunctions);
         }
     }
 
@@ -201,14 +202,38 @@ impl BvSort {
     /// Creates a sort for a Fajar Lang integer type.
     pub fn from_type_name(type_name: &str) -> Option<Self> {
         match type_name {
-            "i8" => Some(Self { width: 8, signed: true }),
-            "i16" => Some(Self { width: 16, signed: true }),
-            "i32" => Some(Self { width: 32, signed: true }),
-            "i64" => Some(Self { width: 64, signed: true }),
-            "u8" => Some(Self { width: 8, signed: false }),
-            "u16" => Some(Self { width: 16, signed: false }),
-            "u32" => Some(Self { width: 32, signed: false }),
-            "u64" => Some(Self { width: 64, signed: false }),
+            "i8" => Some(Self {
+                width: 8,
+                signed: true,
+            }),
+            "i16" => Some(Self {
+                width: 16,
+                signed: true,
+            }),
+            "i32" => Some(Self {
+                width: 32,
+                signed: true,
+            }),
+            "i64" => Some(Self {
+                width: 64,
+                signed: true,
+            }),
+            "u8" => Some(Self {
+                width: 8,
+                signed: false,
+            }),
+            "u16" => Some(Self {
+                width: 16,
+                signed: false,
+            }),
+            "u32" => Some(Self {
+                width: 32,
+                signed: false,
+            }),
+            "u64" => Some(Self {
+                width: 64,
+                signed: false,
+            }),
             _ => None,
         }
     }
@@ -441,7 +466,7 @@ impl StringConstraint {
             Self::Prefix(s, pre) => format!("(str.prefixof \"{pre}\" {s})"),
             Self::Suffix(s, suf) => format!("(str.suffixof \"{suf}\" {s})"),
             Self::Equal(a, b) => format!("(= {a} {b})"),
-            Self::Regex(s, regex) => format!("(str.in_re {s} (re.from_str \"{regex}\"))" ),
+            Self::Regex(s, regex) => format!("(str.in_re {s} (re.from_str \"{regex}\"))"),
             Self::Concat(a, b, result) => format!("(= (str.++ {a} {b}) {result})"),
         }
     }
@@ -587,7 +612,11 @@ pub enum ConcurrentConstraint {
     /// Deadlock freedom: no circular lock dependency.
     DeadlockFree(Vec<String>),
     /// Channel send-receive ordering.
-    ChannelOrder { channel: String, send_id: u64, recv_id: u64 },
+    ChannelOrder {
+        channel: String,
+        send_id: u64,
+        recv_id: u64,
+    },
 }
 
 impl ConcurrentConstraint {
@@ -599,13 +628,20 @@ impl ConcurrentConstraint {
                 format!("no data race on {variable} (protected by {mutex})")
             }
             Self::HappensBefore(a, b) => format!("{a} happens-before {b}"),
-            Self::AtomicRMW { variable, operation } => {
+            Self::AtomicRMW {
+                variable,
+                operation,
+            } => {
                 format!("atomic {operation} on {variable}")
             }
             Self::DeadlockFree(locks) => {
                 format!("no deadlock among: {}", locks.join(", "))
             }
-            Self::ChannelOrder { channel, send_id, recv_id } => {
+            Self::ChannelOrder {
+                channel,
+                send_id,
+                recv_id,
+            } => {
                 format!("channel {channel}: send#{send_id} -> recv#{recv_id}")
             }
         }
@@ -614,9 +650,7 @@ impl ConcurrentConstraint {
 
 /// Detects potential deadlocks from a lock ordering graph.
 /// Returns pairs of locks that form cycles.
-pub fn detect_deadlock_cycles(
-    lock_orders: &[(String, String)],
-) -> Vec<(String, String)> {
+pub fn detect_deadlock_cycles(lock_orders: &[(String, String)]) -> Vec<(String, String)> {
     // Simple cycle detection via adjacency and DFS.
     let mut adj: HashMap<String, Vec<String>> = HashMap::new();
     for (a, b) in lock_orders {
@@ -843,7 +877,10 @@ mod tests {
     fn v8_1_engine_options() {
         let mut engine = SmtTheoryEngine::new();
         engine.set_option("random_seed", "42");
-        assert_eq!(engine.options.get("random_seed").map(|s| s.as_str()), Some("42"));
+        assert_eq!(
+            engine.options.get("random_seed").map(|s| s.as_str()),
+            Some("42")
+        );
     }
 
     #[test]
@@ -869,12 +906,18 @@ mod tests {
 
     #[test]
     fn v8_2_bv_overflow_check() {
-        let sort = BvSort { width: 32, signed: true };
+        let sort = BvSort {
+            width: 32,
+            signed: true,
+        };
         let check = sort.add_overflow_check("a", "b");
         assert!(check.contains("bvadd"));
         assert!(check.contains("bvsgt"));
 
-        let usort = BvSort { width: 8, signed: false };
+        let usort = BvSort {
+            width: 8,
+            signed: false,
+        };
         let ucheck = usort.add_overflow_check("x", "y");
         assert!(ucheck.contains("bvult"));
     }
@@ -1038,7 +1081,10 @@ mod tests {
         theory.add_function("(declare-fun has-perm (User Permission) Bool)");
         theory.add_axiom("(forall ((u User)) (has-perm u read))");
 
-        assert_eq!(format!("{theory}"), "Theory(permissions, 1 sorts, 1 fns, 1 axioms)");
+        assert_eq!(
+            format!("{theory}"),
+            "Theory(permissions, 1 sorts, 1 fns, 1 axioms)"
+        );
 
         let preamble = theory.to_smtlib2_preamble();
         assert!(preamble.contains("Custom theory: permissions"));
@@ -1060,11 +1106,17 @@ mod tests {
         let mut theory_vars = HashMap::new();
         theory_vars.insert(
             TheoryKind::LinearArithmetic,
-            vec![("x".to_string(), "Int".to_string()), ("y".to_string(), "Int".to_string())],
+            vec![
+                ("x".to_string(), "Int".to_string()),
+                ("y".to_string(), "Int".to_string()),
+            ],
         );
         theory_vars.insert(
             TheoryKind::Array,
-            vec![("x".to_string(), "Int".to_string()), ("arr".to_string(), "(Array Int Int)".to_string())],
+            vec![
+                ("x".to_string(), "Int".to_string()),
+                ("arr".to_string(), "(Array Int Int)".to_string()),
+            ],
         );
 
         let shared = find_shared_variables(&theory_vars);
@@ -1091,7 +1143,10 @@ mod tests {
 
     #[test]
     fn v8_combination_strategy_display() {
-        assert_eq!(format!("{}", CombinationStrategy::NelsonOppen), "Nelson-Oppen");
+        assert_eq!(
+            format!("{}", CombinationStrategy::NelsonOppen),
+            "Nelson-Oppen"
+        );
         assert_eq!(format!("{}", CombinationStrategy::Shostak), "Shostak");
         assert_eq!(format!("{}", CombinationStrategy::Delayed), "Delayed");
     }

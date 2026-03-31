@@ -146,8 +146,10 @@ impl MisraComplianceResult {
     /// Returns true if all mandatory/required rules pass.
     pub fn is_compliant(&self) -> bool {
         !self.violations.iter().any(|v| {
-            matches!(v.category, MisraCategory::Mandatory | MisraCategory::Required)
-                && !v.has_deviation
+            matches!(
+                v.category,
+                MisraCategory::Mandatory | MisraCategory::Required
+            ) && !v.has_deviation
         })
     }
 }
@@ -456,7 +458,12 @@ pub fn generate_do178c_evidence(
     evidence.push(Do178cEvidence {
         objective_id: "A-5.5".to_string(),
         description: "Source code review".to_string(),
-        applicable_dals: vec![DalLevel::DalA, DalLevel::DalB, DalLevel::DalC, DalLevel::DalD],
+        applicable_dals: vec![
+            DalLevel::DalA,
+            DalLevel::DalB,
+            DalLevel::DalC,
+            DalLevel::DalD,
+        ],
         evidence: if has_code_review {
             vec!["Code review completed and documented".to_string()]
         } else {
@@ -1058,9 +1065,11 @@ mod tests {
     fn v9_3_cert_c_all_compliant() {
         let results = check_cert_c(true, true, true, true);
         assert_eq!(results.len(), 4);
-        assert!(results
-            .iter()
-            .all(|r| r.status == ComplianceStatus::Compliant));
+        assert!(
+            results
+                .iter()
+                .all(|r| r.status == ComplianceStatus::Compliant)
+        );
     }
 
     #[test]
@@ -1223,7 +1232,10 @@ mod tests {
 
     #[test]
     fn v9_9_audit_action_display() {
-        assert_eq!(format!("{}", AuditAction::VerificationStarted), "VERIFY_START");
+        assert_eq!(
+            format!("{}", AuditAction::VerificationStarted),
+            "VERIFY_START"
+        );
         assert_eq!(
             format!("{}", AuditAction::CertificateGenerated),
             "CERT_GENERATE"

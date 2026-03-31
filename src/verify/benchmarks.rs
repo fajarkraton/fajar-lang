@@ -30,7 +30,13 @@ pub struct TimingMeasurement {
 
 impl TimingMeasurement {
     /// Creates a timing measurement from total time and VC count.
-    pub fn new(name: &str, vc_count: u64, total_ms: f64, peak_memory_mb: f64, solver: &str) -> Self {
+    pub fn new(
+        name: &str,
+        vc_count: u64,
+        total_ms: f64,
+        peak_memory_mb: f64,
+        solver: &str,
+    ) -> Self {
         let per_vc_ms = if vc_count > 0 {
             total_ms / vc_count as f64
         } else {
@@ -297,11 +303,7 @@ impl fmt::Display for BugDetectionAnalysis {
         writeln!(f, "  Known bugs:     {}", self.known_bugs)?;
         writeln!(f, "  Detected:       {}", self.detected_bugs)?;
         writeln!(f, "  Missed:         {}", self.missed_bugs)?;
-        writeln!(
-            f,
-            "  Detection rate: {:.1}%",
-            self.detection_rate() * 100.0
-        )?;
+        writeln!(f, "  Detection rate: {:.1}%", self.detection_rate() * 100.0)?;
         if !self.by_category.is_empty() {
             writeln!(f, "  By category:")?;
             let mut cats: Vec<_> = self.by_category.iter().collect();
@@ -446,10 +448,7 @@ impl BenchmarkSuite {
             .cache_performance
             .as_ref()
             .is_none_or(|cp| cp.is_effective());
-        let scalability_ok = self
-            .scalability
-            .as_ref()
-            .is_none_or(|s| s.within_budget);
+        let scalability_ok = self.scalability.as_ref().is_none_or(|s| s.within_budget);
         fp_ok && bug_ok && cache_ok && scalability_ok
     }
 }

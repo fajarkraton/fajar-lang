@@ -178,7 +178,13 @@ impl BinarySizeInfo {
 
 impl fmt::Display for BinarySizeInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {} ({} bytes)", self.label, self.human_size(), self.total_bytes)
+        write!(
+            f,
+            "{}: {} ({} bytes)",
+            self.label,
+            self.human_size(),
+            self.total_bytes
+        )
     }
 }
 
@@ -224,12 +230,7 @@ impl fmt::Display for SizeComparison {
         write!(
             f,
             "{} vs {}: {} vs {} ({:.2}x, {sign}{} bytes)",
-            self.label_a,
-            self.label_b,
-            self.size_a,
-            self.size_b,
-            self.ratio,
-            self.diff_bytes
+            self.label_a, self.label_b, self.size_a, self.size_b, self.ratio, self.diff_bytes
         )
     }
 }
@@ -337,7 +338,11 @@ pub struct BootstrapTiming {
 impl BootstrapTiming {
     /// Returns the total bootstrap time.
     pub fn total(&self) -> Duration {
-        self.stage0_build + self.stage1_build + self.stage2_build + self.verification + self.test_suite
+        self.stage0_build
+            + self.stage1_build
+            + self.stage2_build
+            + self.verification
+            + self.test_suite
     }
 
     /// Returns the ratio of Stage 2 to Stage 0 build time.
@@ -537,7 +542,10 @@ impl SelfHostAuditReport {
         // Bootstrap timing
         if let Some(timing) = &self.bootstrap_timing {
             lines.push(format!("Bootstrap total: {:?}", timing.total()));
-            lines.push(format!("Stage2/Stage0 ratio: {:.2}x", timing.stage2_ratio()));
+            lines.push(format!(
+                "Stage2/Stage0 ratio: {:.2}x",
+                timing.stage2_ratio()
+            ));
         }
 
         lines.join("\n")
@@ -640,7 +648,12 @@ mod tests {
     // S10.1 — Compile Time Benchmarks
     #[test]
     fn s10_1_bench_measurement() {
-        let m = BenchMeasurement::new("lex_3000_tokens", CompilePhase::Lex, Duration::from_micros(120), 3000);
+        let m = BenchMeasurement::new(
+            "lex_3000_tokens",
+            CompilePhase::Lex,
+            Duration::from_micros(120),
+            3000,
+        );
         assert!(m.throughput > 0.0);
         assert!(m.to_string().contains("lex"));
         assert!(m.to_string().contains("3000"));
@@ -649,8 +662,18 @@ mod tests {
     #[test]
     fn s10_1_bench_suite() {
         let mut suite = BenchSuite::new();
-        suite.add(BenchMeasurement::new("lex", CompilePhase::Lex, Duration::from_micros(100), 1000));
-        suite.add(BenchMeasurement::new("parse", CompilePhase::Parse, Duration::from_micros(200), 500));
+        suite.add(BenchMeasurement::new(
+            "lex",
+            CompilePhase::Lex,
+            Duration::from_micros(100),
+            1000,
+        ));
+        suite.add(BenchMeasurement::new(
+            "parse",
+            CompilePhase::Parse,
+            Duration::from_micros(200),
+            500,
+        ));
         assert_eq!(suite.count(), 2);
         assert_eq!(suite.total_duration(), Duration::from_micros(300));
         assert!(suite.avg_throughput(CompilePhase::Lex) > 0.0);
@@ -870,8 +893,18 @@ mod tests {
     #[test]
     fn s10_10_bench_suite_display() {
         let mut suite = BenchSuite::new();
-        suite.add(BenchMeasurement::new("lex_hello", CompilePhase::Lex, Duration::from_micros(50), 100));
-        suite.add(BenchMeasurement::new("parse_hello", CompilePhase::Parse, Duration::from_micros(100), 50));
+        suite.add(BenchMeasurement::new(
+            "lex_hello",
+            CompilePhase::Lex,
+            Duration::from_micros(50),
+            100,
+        ));
+        suite.add(BenchMeasurement::new(
+            "parse_hello",
+            CompilePhase::Parse,
+            Duration::from_micros(100),
+            50,
+        ));
         let display = suite.to_string();
         assert!(display.contains("Compile Benchmarks"));
         assert!(display.contains("lex_hello"));

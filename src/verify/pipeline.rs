@@ -660,10 +660,7 @@ pub struct VerificationDiff {
 impl VerificationDiff {
     /// Computes the diff between two sets of VC results.
     /// Each map: VC name -> was it proven (true) or failed (false).
-    pub fn compute(
-        before: &HashMap<String, bool>,
-        after: &HashMap<String, bool>,
-    ) -> Self {
+    pub fn compute(before: &HashMap<String, bool>, after: &HashMap<String, bool>) -> Self {
         let mut regressions = Vec::new();
         let mut improvements = Vec::new();
         let mut new_vcs = Vec::new();

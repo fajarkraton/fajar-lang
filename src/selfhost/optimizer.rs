@@ -344,9 +344,12 @@ impl OptimizationPass for StrengthReduction {
                             Some(OptIr::Copy(dest.clone(), rhs.clone()))
                         }
                         // x * 2 -> x << 1 (shift is cheaper)
-                        (BinOpKind::Mul, _, Some(2)) => {
-                            Some(OptIr::BinOp(dest.clone(), lhs.clone(), BinOpKind::Add, lhs.clone()))
-                        }
+                        (BinOpKind::Mul, _, Some(2)) => Some(OptIr::BinOp(
+                            dest.clone(),
+                            lhs.clone(),
+                            BinOpKind::Add,
+                            lhs.clone(),
+                        )),
                         // x / 1 -> copy x
                         (BinOpKind::Div, _, Some(1)) => {
                             Some(OptIr::Copy(dest.clone(), lhs.clone()))
@@ -403,8 +406,13 @@ impl OptimizationPass for CommonSubexprElimination {
                         // Also record commutative version
                         if matches!(
                             op,
-                            BinOpKind::Add | BinOpKind::Mul | BinOpKind::Eq | BinOpKind::Ne
-                                | BinOpKind::And | BinOpKind::Or | BinOpKind::Xor
+                            BinOpKind::Add
+                                | BinOpKind::Mul
+                                | BinOpKind::Eq
+                                | BinOpKind::Ne
+                                | BinOpKind::And
+                                | BinOpKind::Or
+                                | BinOpKind::Xor
                         ) {
                             let comm_key = (rhs.clone(), *op, lhs.clone());
                             known.insert(comm_key, dest.clone());
@@ -880,7 +888,11 @@ mod tests {
         let (result, changes) = ConstantFolding.apply(&instrs);
         assert!(changes > 0);
         // "c" should be a constant 7
-        assert!(result.iter().any(|i| matches!(i, OptIr::Const(name, 7) if name == "c")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Const(name, 7) if name == "c"))
+        );
     }
 
     #[test]
@@ -892,7 +904,11 @@ mod tests {
         ];
         let (result, changes) = ConstantFolding.apply(&instrs);
         assert_eq!(changes, 1);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Const(name, 1) if name == "c")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Const(name, 1) if name == "c"))
+        );
     }
 
     // S7.3 — Dead Code Elimination
@@ -931,7 +947,11 @@ mod tests {
         ];
         let (result, changes) = StrengthReduction.apply(&instrs);
         assert!(changes > 0);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Const(name, 0) if name == "r")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Const(name, 0) if name == "r"))
+        );
     }
 
     #[test]
@@ -942,7 +962,11 @@ mod tests {
         ];
         let (result, changes) = StrengthReduction.apply(&instrs);
         assert_eq!(changes, 1);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Copy(d, s) if d == "r" && s == "x")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Copy(d, s) if d == "r" && s == "x"))
+        );
     }
 
     #[test]
@@ -953,7 +977,11 @@ mod tests {
         ];
         let (result, changes) = StrengthReduction.apply(&instrs);
         assert_eq!(changes, 1);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Copy(d, s) if d == "r" && s == "x")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Copy(d, s) if d == "r" && s == "x"))
+        );
     }
 
     // S7.5 — Common Subexpression Elimination
@@ -966,7 +994,11 @@ mod tests {
         ];
         let (result, changes) = CommonSubexprElimination.apply(&instrs);
         assert_eq!(changes, 1);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Copy(d, s) if d == "t2" && s == "t1")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Copy(d, s) if d == "t2" && s == "t1"))
+        );
     }
 
     #[test]
@@ -977,7 +1009,11 @@ mod tests {
         ];
         let (result, changes) = CommonSubexprElimination.apply(&instrs);
         assert_eq!(changes, 1);
-        assert!(result.iter().any(|i| matches!(i, OptIr::Copy(d, s) if d == "t2" && s == "t1")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Copy(d, s) if d == "t2" && s == "t1"))
+        );
     }
 
     // S7.6 — Loop-Invariant Code Motion
@@ -1006,12 +1042,17 @@ mod tests {
         // The BinOp should be hoisted before the label
         assert!(changes > 0);
         // Verify the BinOp comes before the Label in the output
-        let binop_idx = result.iter().position(|i| {
-            matches!(i, OptIr::BinOp(d, _, BinOpKind::Add, _) if d == "t")
-        });
-        let label_idx = result.iter().position(|i| matches!(i, OptIr::Label(l) if l == "loop"));
+        let binop_idx = result
+            .iter()
+            .position(|i| matches!(i, OptIr::BinOp(d, _, BinOpKind::Add, _) if d == "t"));
+        let label_idx = result
+            .iter()
+            .position(|i| matches!(i, OptIr::Label(l) if l == "loop"));
         if let (Some(bi), Some(li)) = (binop_idx, label_idx) {
-            assert!(bi < li, "hoisted instruction should come before loop header");
+            assert!(
+                bi < li,
+                "hoisted instruction should come before loop header"
+            );
         }
     }
 
@@ -1066,7 +1107,11 @@ mod tests {
         ];
         let (result, _changes) = RegisterCoalescing.apply(&instrs);
         // "c" should resolve to "a" through the chain
-        assert!(result.iter().any(|i| matches!(i, OptIr::Return(Some(v)) if v == "a")));
+        assert!(
+            result
+                .iter()
+                .any(|i| matches!(i, OptIr::Return(Some(v)) if v == "a"))
+        );
     }
 
     // S7.9 — Pipeline

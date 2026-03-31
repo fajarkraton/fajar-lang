@@ -48,10 +48,7 @@ impl fmt::Display for FjValue {
                 write!(f, "[{}]", items.join(", "))
             }
             FjValue::Map(map) => {
-                let items: Vec<String> = map
-                    .iter()
-                    .map(|(k, v)| format!("{k}: {v}"))
-                    .collect();
+                let items: Vec<String> = map.iter().map(|(k, v)| format!("{k}: {v}")).collect();
                 write!(f, "{{{}}}", items.join(", "))
             }
             FjValue::Option(Some(v)) => write!(f, "Some({v})"),
@@ -193,12 +190,10 @@ pub fn fj_array_sort(arr: &FjValue) -> FjValue {
     match arr {
         FjValue::Array(items) => {
             let mut sorted = items.clone();
-            sorted.sort_by(|a, b| {
-                match (a, b) {
-                    (FjValue::Int(x), FjValue::Int(y)) => x.cmp(y),
-                    (FjValue::Str(x), FjValue::Str(y)) => x.cmp(y),
-                    _ => std::cmp::Ordering::Equal,
-                }
+            sorted.sort_by(|a, b| match (a, b) {
+                (FjValue::Int(x), FjValue::Int(y)) => x.cmp(y),
+                (FjValue::Str(x), FjValue::Str(y)) => x.cmp(y),
+                _ => std::cmp::Ordering::Equal,
             });
             FjValue::Array(sorted)
         }
@@ -242,12 +237,10 @@ pub fn fj_map_insert(map: &FjValue, key: &str, val: FjValue) -> FjValue {
 /// Gets a value from a HashMap by key. Returns Option.
 pub fn fj_map_get(map: &FjValue, key: &str) -> FjValue {
     match map {
-        FjValue::Map(entries) => {
-            match entries.get(key) {
-                Some(v) => fj_some(v.clone()),
-                None => fj_none(),
-            }
-        }
+        FjValue::Map(entries) => match entries.get(key) {
+            Some(v) => fj_some(v.clone()),
+            None => fj_none(),
+        },
         _ => fj_none(),
     }
 }
@@ -276,10 +269,7 @@ pub fn fj_map_remove(map: &FjValue, key: &str) -> FjValue {
 pub fn fj_map_keys(map: &FjValue) -> FjValue {
     match map {
         FjValue::Map(entries) => {
-            let mut keys: Vec<FjValue> = entries
-                .keys()
-                .map(|k| FjValue::Str(k.clone()))
-                .collect();
+            let mut keys: Vec<FjValue> = entries.keys().map(|k| FjValue::Str(k.clone())).collect();
             keys.sort_by(|a, b| {
                 if let (FjValue::Str(x), FjValue::Str(y)) = (a, b) {
                     x.cmp(y)
@@ -865,7 +855,10 @@ mod tests {
     #[test]
     fn s6_3_array_get_sort() {
         let arr = FjValue::Array(vec![FjValue::Int(3), FjValue::Int(1), FjValue::Int(2)]);
-        assert_eq!(fj_unwrap_or(&fj_array_get(&arr, 0), FjValue::Null), FjValue::Int(3));
+        assert_eq!(
+            fj_unwrap_or(&fj_array_get(&arr, 0), FjValue::Null),
+            FjValue::Int(3)
+        );
         assert!(fj_is_none(&fj_array_get(&arr, 10)));
 
         let sorted = fj_array_sort(&arr);
@@ -895,7 +888,10 @@ mod tests {
         assert_eq!(fj_map_len(&map), 1);
 
         let val = fj_map_get(&map, "name");
-        assert_eq!(fj_unwrap_or(&val, FjValue::Null), FjValue::Str("Fajar".into()));
+        assert_eq!(
+            fj_unwrap_or(&val, FjValue::Null),
+            FjValue::Str("Fajar".into())
+        );
 
         let map = fj_map_remove(&map, "name");
         assert!(!fj_map_contains(&map, "name"));
@@ -1039,8 +1035,14 @@ mod tests {
         let arr = FjValue::Array(vec![FjValue::Int(1), FjValue::Int(2), FjValue::Int(3)]);
         let mut iter = FjIterator::from_array(&arr);
         assert_eq!(iter.count(), 3);
-        assert_eq!(fj_unwrap_or(&iter.next_item(), FjValue::Null), FjValue::Int(1));
-        assert_eq!(fj_unwrap_or(&iter.next_item(), FjValue::Null), FjValue::Int(2));
+        assert_eq!(
+            fj_unwrap_or(&iter.next_item(), FjValue::Null),
+            FjValue::Int(1)
+        );
+        assert_eq!(
+            fj_unwrap_or(&iter.next_item(), FjValue::Null),
+            FjValue::Int(2)
+        );
         assert_eq!(iter.count(), 1);
     }
 
@@ -1128,19 +1130,31 @@ mod tests {
     // S6.10 — Formatting / Debug / Registry
     #[test]
     fn s6_10_format_template() {
-        let result = fj_format("Hello, {}! You are {} years old.", &[
-            FjValue::Str("Fajar".into()),
-            FjValue::Int(30),
-        ]);
-        assert_eq!(result, FjValue::Str("Hello, Fajar! You are 30 years old.".into()));
+        let result = fj_format(
+            "Hello, {}! You are {} years old.",
+            &[FjValue::Str("Fajar".into()), FjValue::Int(30)],
+        );
+        assert_eq!(
+            result,
+            FjValue::Str("Hello, Fajar! You are 30 years old.".into())
+        );
     }
 
     #[test]
     fn s6_10_type_of() {
         assert_eq!(fj_type_of(&FjValue::Int(42)), FjValue::Str("i64".into()));
-        assert_eq!(fj_type_of(&FjValue::Bool(true)), FjValue::Str("bool".into()));
-        assert_eq!(fj_type_of(&FjValue::Str("hi".into())), FjValue::Str("str".into()));
-        assert_eq!(fj_type_of(&FjValue::Array(vec![])), FjValue::Str("Array".into()));
+        assert_eq!(
+            fj_type_of(&FjValue::Bool(true)),
+            FjValue::Str("bool".into())
+        );
+        assert_eq!(
+            fj_type_of(&FjValue::Str("hi".into())),
+            FjValue::Str("str".into())
+        );
+        assert_eq!(
+            fj_type_of(&FjValue::Array(vec![])),
+            FjValue::Str("Array".into())
+        );
     }
 
     #[test]

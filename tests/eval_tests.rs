@@ -1760,10 +1760,7 @@ fn security_stack_overflow() {
         .expect("thread spawn")
         .join()
         .expect("thread join");
-    assert!(
-        is_err,
-        "infinite recursion should produce stack overflow"
-    );
+    assert!(is_err, "infinite recursion should produce stack overflow");
 }
 
 #[test]

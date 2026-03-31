@@ -77,7 +77,11 @@ impl fmt::Display for InferredPropertyKind {
 
 impl fmt::Display for InferredProperty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let status = if self.verified { "verified" } else { "inferred" };
+        let status = if self.verified {
+            "verified"
+        } else {
+            "inferred"
+        };
         write!(
             f,
             "[{status}] {}:{} in {}: {} ({}, confidence={:.0}%)",
@@ -315,7 +319,12 @@ pub fn infer_overflow(
 ) -> InferredProperty {
     let (type_min, type_max) = int_type.range();
 
-    let can_overflow = match (lhs_bounds.min, lhs_bounds.max, rhs_bounds.min, rhs_bounds.max) {
+    let can_overflow = match (
+        lhs_bounds.min,
+        lhs_bounds.max,
+        rhs_bounds.min,
+        rhs_bounds.max,
+    ) {
         (Some(a_min), Some(a_max), Some(b_min), Some(b_max)) => {
             let (result_min, result_max) = match op {
                 ArithOp::Add => (a_min as i128 + b_min as i128, a_max as i128 + b_max as i128),
@@ -680,10 +689,7 @@ pub fn infer_purity(
             format!("fn {function_name} is pure (no side effects)")
         } else {
             let effects: Vec<String> = side_effects.iter().map(|e| format!("{e}")).collect();
-            format!(
-                "fn {function_name} is impure: {}",
-                effects.join(", ")
-            )
+            format!("fn {function_name} is impure: {}", effects.join(", "))
         },
         file: file.to_string(),
         line,
@@ -917,7 +923,10 @@ mod tests {
 
     #[test]
     fn v6_1_inferred_property_kind_display() {
-        assert_eq!(format!("{}", InferredPropertyKind::NullSafety), "null-safety");
+        assert_eq!(
+            format!("{}", InferredPropertyKind::NullSafety),
+            "null-safety"
+        );
         assert_eq!(
             format!("{}", InferredPropertyKind::BoundsCheck),
             "bounds-check"
@@ -934,10 +943,7 @@ mod tests {
             format!("{}", InferredPropertyKind::ResourceCleanup),
             "resource-cleanup"
         );
-        assert_eq!(
-            format!("{}", InferredPropertyKind::Purity),
-            "purity"
-        );
+        assert_eq!(format!("{}", InferredPropertyKind::Purity), "purity");
     }
 
     #[test]
@@ -1093,12 +1099,7 @@ mod tests {
 
     #[test]
     fn v6_7_unreachable_after_return() {
-        let prop = infer_unreachable(
-            UnreachableReason::AfterReturn,
-            "main.fj",
-            15,
-            "process",
-        );
+        let prop = infer_unreachable(UnreachableReason::AfterReturn, "main.fj", 15, "process");
         assert!((prop.confidence - 1.0).abs() < f64::EPSILON);
         assert!(prop.description.contains("after return"));
     }
@@ -1125,7 +1126,10 @@ mod tests {
         };
         let prop = infer_type_narrowing(&event, "narrow.fj", 30, "handle");
         assert_eq!(prop.kind, InferredPropertyKind::TypeNarrowing);
-        assert!(prop.description.contains("narrowed from Option<i32> to i32"));
+        assert!(
+            prop.description
+                .contains("narrowed from Option<i32> to i32")
+        );
     }
 
     #[test]
@@ -1170,7 +1174,10 @@ mod tests {
 
     #[test]
     fn v6_10_purity_impure_function() {
-        let effects = vec![SideEffect::IoWrite, SideEffect::GlobalMutation("counter".to_string())];
+        let effects = vec![
+            SideEffect::IoWrite,
+            SideEffect::GlobalMutation("counter".to_string()),
+        ];
         let prop = infer_purity("log", &effects, "io.fj", 5);
         assert!(prop.description.contains("impure"));
         assert!(prop.description.contains("I/O write"));
@@ -1223,7 +1230,12 @@ mod tests {
         engine.add_property(prop2);
 
         assert_eq!(engine.total_count(), 2);
-        assert_eq!(engine.properties_by_kind(InferredPropertyKind::NullSafety).len(), 1);
+        assert_eq!(
+            engine
+                .properties_by_kind(InferredPropertyKind::NullSafety)
+                .len(),
+            1
+        );
         assert_eq!(engine.properties_for_file("a.fj").len(), 1);
         assert_eq!(engine.properties_for_function("bar").len(), 1);
     }
@@ -1366,7 +1378,10 @@ mod tests {
             "condition 'x > 100' is always false"
         );
         assert_eq!(
-            format!("{}", UnreachableReason::ImpossiblePattern("Foo::Bar".to_string())),
+            format!(
+                "{}",
+                UnreachableReason::ImpossiblePattern("Foo::Bar".to_string())
+            ),
             "pattern 'Foo::Bar' is impossible"
         );
     }

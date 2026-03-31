@@ -40,7 +40,13 @@ impl SourceSpan {
     }
 
     /// Creates a multi-line span.
-    pub fn multi_line(file: &str, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> Self {
+    pub fn multi_line(
+        file: &str,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> Self {
         Self {
             file: file.into(),
             line: start_line,
@@ -60,7 +66,11 @@ impl SourceSpan {
 impl fmt::Display for SourceSpan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_multiline() {
-            write!(f, "{}:{}:{}-{}:{}", self.file, self.line, self.col, self.end_line, self.end_col)
+            write!(
+                f,
+                "{}:{}:{}-{}:{}",
+                self.file, self.line, self.col, self.end_line, self.end_col
+            )
         } else {
             write!(f, "{}:{}:{}", self.file, self.line, self.col)
         }
@@ -90,11 +100,7 @@ pub fn render_snippet(source: &str, span: &SourceSpan) -> String {
 
     // Underline
     let col_offset = if span.col > 0 { span.col - 1 } else { 0 };
-    let underline_len = if span.len > 0 {
-        span.len
-    } else {
-        1
-    };
+    let underline_len = if span.len > 0 { span.len } else { 1 };
     let spaces = " ".repeat(col_offset);
     let carets = "^".repeat(underline_len);
     output.push(format!("{:>gutter_width$} | {spaces}{carets}", ""));
@@ -104,7 +110,10 @@ pub fn render_snippet(source: &str, span: &SourceSpan) -> String {
         for extra_line in (span.line + 1)..=span.end_line.min(lines.len()) {
             let extra_idx = extra_line - 1;
             if extra_idx < lines.len() {
-                output.push(format!("{:>gutter_width$} | {}", extra_line, lines[extra_idx]));
+                output.push(format!(
+                    "{:>gutter_width$} | {}",
+                    extra_line, lines[extra_idx]
+                ));
             }
         }
     }
@@ -175,7 +184,9 @@ impl ErrorCatalog {
         catalog.register(ErrorCodeEntry {
             code: "SE004".into(),
             short: "type mismatch".into(),
-            explanation: "The types of two values do not match where they are expected to be the same.".into(),
+            explanation:
+                "The types of two values do not match where they are expected to be the same."
+                    .into(),
             category: "semantic".into(),
         });
         catalog.register(ErrorCodeEntry {
@@ -187,7 +198,8 @@ impl ErrorCatalog {
         catalog.register(ErrorCodeEntry {
             code: "PE001".into(),
             short: "unexpected token".into(),
-            explanation: "The parser encountered a token that does not fit the expected grammar.".into(),
+            explanation: "The parser encountered a token that does not fit the expected grammar."
+                .into(),
             category: "parse".into(),
         });
         catalog.register(ErrorCodeEntry {
@@ -199,7 +211,8 @@ impl ErrorCatalog {
         catalog.register(ErrorCodeEntry {
             code: "DE001".into(),
             short: "raw pointer in @device".into(),
-            explanation: "Raw pointer operations are forbidden in @device context for safety.".into(),
+            explanation: "Raw pointer operations are forbidden in @device context for safety."
+                .into(),
             category: "device".into(),
         });
         catalog.register(ErrorCodeEntry {
@@ -211,7 +224,9 @@ impl ErrorCatalog {
         catalog.register(ErrorCodeEntry {
             code: "LE001".into(),
             short: "invalid character".into(),
-            explanation: "The lexer encountered a character that is not valid in Fajar Lang source code.".into(),
+            explanation:
+                "The lexer encountered a character that is not valid in Fajar Lang source code."
+                    .into(),
             category: "lex".into(),
         });
         catalog
@@ -277,7 +292,11 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
 
     for i in 1..=a_len {
         for j in 1..=b_len {
-            let cost = if a_bytes[i - 1] == b_bytes[j - 1] { 0 } else { 1 };
+            let cost = if a_bytes[i - 1] == b_bytes[j - 1] {
+                0
+            } else {
+                1
+            };
             dp[i][j] = (dp[i - 1][j] + 1)
                 .min(dp[i][j - 1] + 1)
                 .min(dp[i - 1][j - 1] + cost);
@@ -288,7 +307,11 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// Finds the closest match to `name` from a list of candidates.
-pub fn closest_match<'a>(name: &str, candidates: &[&'a str], max_distance: usize) -> Option<&'a str> {
+pub fn closest_match<'a>(
+    name: &str,
+    candidates: &[&'a str],
+    max_distance: usize,
+) -> Option<&'a str> {
     let mut best: Option<(&str, usize)> = None;
     for &candidate in candidates {
         let dist = edit_distance(name, candidate);
@@ -492,11 +515,7 @@ pub fn render_colored(diag: &Diagnostic) -> String {
 
     // Location
     if let Some(span) = &diag.span {
-        parts.push(format!(
-            "  {} {}",
-            colorize("-->", AnsiColor::Cyan),
-            span
-        ));
+        parts.push(format!("  {} {}", colorize("-->", AnsiColor::Cyan), span));
     }
 
     // Suggestions in green
@@ -510,10 +529,7 @@ pub fn render_colored(diag: &Diagnostic) -> String {
 
     // Notes in blue
     for note in &diag.notes {
-        parts.push(format!(
-            "  {}: {note}",
-            colorize("note", AnsiColor::Blue)
-        ));
+        parts.push(format!("  {}: {note}", colorize("note", AnsiColor::Blue)));
     }
 
     parts.join("\n")
@@ -654,12 +670,20 @@ pub fn render_json(diagnostics: &[Diagnostic]) -> String {
             String::new()
         };
 
-        let suggestions_json: Vec<String> = diag.suggestions.iter().map(|s| {
-            format!(r#"{{"message":"{}","replacement":{}}}"#,
-                escape_json(&s.message),
-                s.replacement.as_ref().map(|r| format!("\"{}\"", escape_json(r))).unwrap_or_else(|| "null".into())
-            )
-        }).collect();
+        let suggestions_json: Vec<String> = diag
+            .suggestions
+            .iter()
+            .map(|s| {
+                format!(
+                    r#"{{"message":"{}","replacement":{}}}"#,
+                    escape_json(&s.message),
+                    s.replacement
+                        .as_ref()
+                        .map(|r| format!("\"{}\"", escape_json(r)))
+                        .unwrap_or_else(|| "null".into())
+                )
+            })
+            .collect();
 
         entries.push(format!(
             r#"{{"severity":"{}","code":"{}","message":"{}"{},
@@ -670,7 +694,11 @@ pub fn render_json(diagnostics: &[Diagnostic]) -> String {
             escape_json(&diag.message),
             span_json,
             suggestions_json.join(","),
-            diag.notes.iter().map(|n| format!("\"{}\"", escape_json(n))).collect::<Vec<_>>().join(",")
+            diag.notes
+                .iter()
+                .map(|n| format!("\"{}\"", escape_json(n)))
+                .collect::<Vec<_>>()
+                .join(",")
         ));
     }
 
@@ -787,8 +815,8 @@ mod tests {
 
     #[test]
     fn s9_4_diagnostic_warning() {
-        let diag = Diagnostic::warning("SE009", "unused variable: `x`")
-            .with_suggestion(Suggestion {
+        let diag =
+            Diagnostic::warning("SE009", "unused variable: `x`").with_suggestion(Suggestion {
                 message: "prefix with `_` to suppress".into(),
                 replacement: Some("_x".into()),
                 span: None,
