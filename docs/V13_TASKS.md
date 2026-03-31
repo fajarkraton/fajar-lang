@@ -138,16 +138,16 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 
 | # | Task | Status | Detail | LOC | Verify |
 |---|------|--------|--------|-----|--------|
-| K4.1 | Const array allocation | [ ] | `const ARR: [i32; 1000] = fill(0)` -> .rodata | 60 | Large const array in binary |
-| K4.2 | Const string allocation | [ ] | `const GREETING: str = format("Hello {}", NAME)` | 60 | String in .rodata |
-| K4.3 | Const struct allocation | [ ] | `const CONFIG: Config = Config { ... }` | 40 | Struct in .rodata |
-| K4.4 | Const HashMap | [ ] | `const MAP: HashMap<str, i32> = build_map()` precomputed | 100 | Map stored as static |
-| K4.5 | Const slice | [ ] | `const SLICE: &[i32] = &[1, 2, 3]` | 40 | Slice points to .rodata |
-| K4.6 | Static promotion | [ ] | Promote const expressions to static storage | 60 | Temporary const -> static lifetime |
-| K4.7 | Const allocator | [ ] | Arena allocator for compile-time computations | 80 | No runtime allocation for const data |
-| K4.8 | Const size verification | [ ] | Verify const allocation fits in target memory; >1MB -> warning | 40 | Warning on large const data |
-| K4.9 | Cross-compilation const | [ ] | Const evaluation respects target pointer size | 40 | Const correct for ARM64 target |
-| K4.10 | 10 allocation tests | [ ] | Array, string, struct, map, slice, promotion | 150 | All 10 pass |
+| K4.1 | Const array allocation | [x] | `const ARR: [i32; 1000] = fill(0)` -> .rodata | 60 | Large const array in binary |
+| K4.2 | Const string allocation | [x] | `const GREETING: str = format("Hello {}", NAME)` | 60 | String in .rodata |
+| K4.3 | Const struct allocation | [x] | `const CONFIG: Config = Config { ... }` | 40 | Struct in .rodata |
+| K4.4 | Const HashMap | [x] | `const MAP: HashMap<str, i32> = build_map()` precomputed | 100 | Map stored as static |
+| K4.5 | Const slice | [x] | `const SLICE: &[i32] = &[1, 2, 3]` | 40 | Slice points to .rodata |
+| K4.6 | Static promotion | [x] | Promote const expressions to static storage | 60 | Temporary const -> static lifetime |
+| K4.7 | Const allocator | [x] | Arena allocator for compile-time computations | 80 | No runtime allocation for const data |
+| K4.8 | Const size verification | [x] | Verify const allocation fits in target memory; >1MB -> warning | 40 | Warning on large const data |
+| K4.9 | Cross-compilation const | [x] | Const evaluation respects target pointer size | 40 | Const correct for ARM64 target |
+| K4.10 | 10 allocation tests | [x] | Array, string, struct, map, slice, promotion | 150 | All 10 pass |
 
 **Sprint K4 Gate:** Compile-time allocation works with Cranelift + LLVM backends.
 
@@ -1350,7 +1350,7 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 | Option | Sprint | Tasks Done | Total | Status |
 |--------|--------|-----------|-------|--------|
 | **A: CI Green** | A1 | 10 | 10 | COMPLETE |
-| **H: Const Fn** | K1-K10 | 30 | 100 | IN PROGRESS |
+| **H: Const Fn** | K1-K10 | 40 | 100 | IN PROGRESS |
 | **C: Incremental** | I1-I10 | 0 | 100 | PENDING |
 
 ## Phase 2: Ecosystem
@@ -1371,11 +1371,11 @@ If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
 ### Grand Total
 
 ```
-Phase 1:  40 / 210 tasks complete  (19.0%)
+Phase 1:  50 / 210 tasks complete  (23.8%)
 Phase 2:   0 / 200 tasks complete  ( 0.0%)
 Phase 3:   0 / 300 tasks complete  ( 0.0%)
 ─────────────────────────────────────────
-TOTAL:    40 / 710 tasks complete  ( 5.6%)
+TOTAL:    50 / 710 tasks complete  ( 7.0%)
 ```
 
 ---
