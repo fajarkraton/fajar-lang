@@ -28,7 +28,7 @@ impl TypeChecker {
                 "len",
                 Type::Function {
                     params: vec![Type::Unknown],
-                    ret: Box::new(Type::USize),
+                    ret: Box::new(Type::I64),
                 },
             ),
             (

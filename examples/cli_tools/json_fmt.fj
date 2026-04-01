@@ -1,0 +1,84 @@
+// V16 I3.2: JSON Pretty Printer
+// Formats compact JSON into indented output.
+// Uses split("") to iterate characters as single-char strings.
+
+fn make_indent(level: i64) -> str {
+    let mut result = ""
+    let mut i: i64 = 0
+    while i < level {
+        result = result + "  "
+        i = i + 1
+    }
+    result
+}
+
+// Simple approach: process character by character using split
+fn format_json(input: str) -> str {
+    let mut out = ""
+    let mut depth: i64 = 0
+    let mut in_str = false
+    let mut escape = false
+    let chars = input.split("")
+
+    for c in chars {
+        if len(c) == 0 {
+            continue
+        }
+
+        if escape {
+            out = out + c
+            escape = false
+            continue
+        }
+
+        if c == "\\" {
+            out = out + c
+            if in_str {
+                escape = true
+            }
+            continue
+        }
+
+        if c == "\"" {
+            in_str = !in_str
+            out = out + c
+            continue
+        }
+
+        if in_str {
+            out = out + c
+            continue
+        }
+
+        if c == "{" {
+            depth = depth + 1
+            out = out + "{\n" + make_indent(depth)
+        } else if c == "}" {
+            depth = depth - 1
+            out = out + "\n" + make_indent(depth) + "}"
+        } else if c == "[" {
+            depth = depth + 1
+            out = out + "[\n" + make_indent(depth)
+        } else if c == "]" {
+            depth = depth - 1
+            out = out + "\n" + make_indent(depth) + "]"
+        } else if c == "," {
+            out = out + ",\n" + make_indent(depth)
+        } else if c == ":" {
+            out = out + ": "
+        } else if c == " " {
+            // skip whitespace outside strings
+        } else {
+            out = out + c
+        }
+    }
+    out
+}
+
+let input = "{\"name\":\"Fajar\",\"age\":30,\"langs\":[\"fj\",\"rs\"]}"
+let result = format_json(input)
+println(result)
+println("---")
+assert(result.contains("\"name\": \"Fajar\""))
+assert(result.contains("\"age\": 30"))
+println("PASS: json_fmt")

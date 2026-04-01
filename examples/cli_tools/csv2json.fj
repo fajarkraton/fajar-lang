@@ -1,0 +1,60 @@
+// V16 I3.3: CSV to JSON Converter
+// Reads CSV text (first row = headers), outputs JSON array of objects.
+
+fn csv_to_json(csv_text: str) -> str {
+    let lines = csv_text.split("\n")
+    if len(lines) < 2 {
+        return "[]"
+    }
+
+    let headers = lines[0].split(",")
+    let num_cols = len(headers)
+    let mut json = "[\n"
+
+    let mut row_idx: i64 = 1
+    let num_lines = len(lines)
+    while row_idx < num_lines {
+        let line = lines[row_idx].trim()
+        if len(line) == 0 {
+            row_idx = row_idx + 1
+            continue
+        }
+
+        let values = line.split(",")
+        json = json + "  {"
+
+        let mut col: i64 = 0
+        while col < num_cols {
+            let header = headers[col].trim()
+            let value = if col < len(values) {
+                values[col].trim()
+            } else {
+                ""
+            }
+            json = json + "\"" + header + "\": \"" + value + "\""
+            if col < num_cols - 1 {
+                json = json + ", "
+            }
+            col = col + 1
+        }
+
+        json = json + "}"
+        if row_idx < num_lines - 1 {
+            json = json + ","
+        }
+        json = json + "\n"
+        row_idx = row_idx + 1
+    }
+
+    json + "]"
+}
+
+// Test with sample CSV
+let csv = "name,age,city\nFajar,30,Jakarta\nRust,9,Mozilla\nGo,12,Google"
+let json = csv_to_json(csv)
+println(json)
+
+assert(json.contains("\"name\": \"Fajar\""))
+assert(json.contains("\"city\": \"Jakarta\""))
+assert(json.contains("\"age\": \"9\""))
+println("PASS: csv2json")

@@ -2578,12 +2578,12 @@ impl TypeChecker {
 
         match (&obj_ty, method) {
             // String methods
-            (Type::Str, "len") => Type::USize,
+            (Type::Str, "len") => Type::I64,
             (Type::Str, "contains" | "starts_with" | "ends_with" | "is_empty") => Type::Bool,
             (
                 Type::Str,
-                "trim" | "trim_start" | "trim_end" | "to_uppercase" | "to_lowercase" | "replace"
-                | "rev" | "repeat",
+                "trim" | "trim_start" | "trim_end" | "to_uppercase" | "to_lowercase" | "to_upper"
+                | "to_lower" | "replace" | "rev" | "repeat",
             ) => Type::Str,
             (Type::Str, "split") => Type::Array(Box::new(Type::Str)),
             (Type::Str, "bytes") => Type::Array(Box::new(Type::I64)),
@@ -2593,12 +2593,15 @@ impl TypeChecker {
             (Type::Str, "parse_float") => Type::Unknown, // returns Result
             (Type::Str, "substring" | "char_at") => Type::Str,
             // Array methods
-            (Type::Array(_), "len") => Type::USize,
+            (Type::Array(_), "len") => Type::I64,
             (Type::Array(inner), "push") => Type::Array(inner.clone()),
             (Type::Array(_), "is_empty") => Type::Bool,
             (Type::Array(_), "contains") => Type::Bool,
             (Type::Array(_), "first" | "last") => Type::Unknown, // returns Option
-            (Type::Array(_), "pop") => Type::Unknown,            // returns Option
+            (Type::Array(_), "pop") => Type::Unknown,            // returns last element
+            (Type::Array(inner), "insert") => Type::Array(inner.clone()),
+            (Type::Array(inner), "remove") => Type::Array(inner.clone()),
+            (Type::Array(_), "index_of") => Type::I64,
             (Type::Array(_), "reverse") => obj_ty.clone(),
             (Type::Array(_), "join") => Type::Str,
             // Map methods
