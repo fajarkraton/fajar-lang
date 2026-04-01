@@ -63,6 +63,16 @@ pub use syscall::{SyscallError, SyscallTable};
 pub use timer::{TimerController, TimerError};
 pub use vga::VgaBuffer;
 
+// Re-export RTOS integration (FreeRTOS, Zephyr, real-time analysis).
+pub use crate::rtos;
+
+/// Returns the number of RTOS backends available (FreeRTOS + Zephyr).
+pub fn rtos_backend_count() -> usize {
+    // FreeRTOS and Zephyr are the two supported RTOS backends.
+    // ArduinoCompat is a compatibility layer, not a separate backend.
+    2
+}
+
 /// Combined OS runtime state.
 ///
 /// Holds all OS subsystems that the interpreter uses when executing

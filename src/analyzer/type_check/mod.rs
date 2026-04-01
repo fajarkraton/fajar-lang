@@ -12,6 +12,9 @@ mod register;
 
 use std::collections::HashMap;
 
+use crate::const_generics;
+use crate::const_traits;
+use crate::dependent;
 use crate::lexer::token::Span;
 use crate::parser::ast::Program;
 
@@ -1335,6 +1338,11 @@ pub struct TypeChecker {
     lifetime_env: HashMap<String, u32>,
     /// Next lifetime ID to assign (starts at 1; 0 = 'static).
     next_lifetime_id: u32,
+    /// Const trait registry for compile-time trait bound checking.
+    #[allow(dead_code)]
+    const_trait_registry: const_traits::ConstTraitRegistry,
+    /// Dependent type shape checker for tensor/array shape verification.
+    dep_shape_env: HashMap<String, dependent::nat::NatValue>,
 }
 
 /// A trait method signature for validation.
@@ -1740,6 +1748,8 @@ impl TypeChecker {
                 env
             },
             next_lifetime_id: 1,
+            const_trait_registry: const_traits::ConstTraitRegistry::new(),
+            dep_shape_env: HashMap::new(),
         };
         tc.register_builtins();
         tc.register_builtin_traits();
@@ -1825,6 +1835,24 @@ impl TypeChecker {
     /// Returns `Ok(())` if no hard errors, or `Err(errors)` with all collected errors.
     /// Warnings (SE009, SE010) are included in errors but do not cause failure on their own.
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<SemanticError>> {
+        // Pre-pass: classify const generic parameters and register const trait impls.
+        for item in &program.items {
+            if let crate::parser::ast::Item::FnDef(fndef) = item {
+                for gp in &fndef.generic_params {
+                    if gp.is_comptime {
+                        let kind = const_generics::classify_param(gp);
+                        // Track const param in the dependent shape environment
+                        if let const_generics::ParamKind::Const { .. } = kind {
+                            self.dep_shape_env.insert(
+                                gp.name.clone(),
+                                dependent::nat::NatValue::Param(gp.name.clone()),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // First pass: register all top-level function and type definitions
         for item in &program.items {
             self.register_item(item);

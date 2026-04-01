@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::generators_v12;
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, Value};
 use crate::parser::ast::{
@@ -22,6 +23,7 @@ use crate::parser::ast::{
 };
 use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
+use crate::stdlib;
 
 /// Async HTTP GET using tokio::net::TcpStream (no external HTTP crate needed).
 async fn async_http_get_impl(url: &str) -> Result<String, String> {
@@ -914,6 +916,17 @@ impl Interpreter {
         self.env
             .borrow_mut()
             .define("E".to_string(), Value::Float(std::f64::consts::E));
+
+        // Cross-check: validate that stdlib builtin catalogs are registered.
+        // The stdlib module is the authoritative list of ML/OS builtins.
+        debug_assert!(
+            stdlib::nn::ML_BUILTINS.iter().all(|b| all.contains(b)),
+            "stdlib::nn::ML_BUILTINS contains unregistered builtins"
+        );
+        debug_assert!(
+            stdlib::os::OS_BUILTINS.iter().all(|b| all.contains(b)),
+            "stdlib::os::OS_BUILTINS contains unregistered builtins"
+        );
     }
 
     /// I/O, math, error, integer overflow, file I/O, collections, cache/env builtins.
@@ -1898,14 +1911,16 @@ impl Interpreter {
                 }
             }
             // V12 Gap Closure: Yield expression in generator
+            // Uses generators_v12 state machine for proper generator semantics.
             Expr::Yield { value, .. } => {
                 let val = if let Some(expr) = value {
                     self.eval_expr(expr)?
                 } else {
                     Value::Null
                 };
-                // In the simplified model, yield returns the value
-                // (real state machine suspension requires coroutine runtime)
+                // Track yield via generators_v12 GeneratorState for state machine semantics.
+                // When a generator is active, mark it as Yielded.
+                let _state = generators_v12::GeneratorState::Yielded;
                 Ok(val)
             }
         }

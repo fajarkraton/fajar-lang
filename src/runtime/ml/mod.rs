@@ -36,3 +36,11 @@ pub mod transformer;
 pub use autograd::{Tape, TensorId};
 pub use ops as tensor_ops;
 pub use tensor::{TensorError, TensorValue};
+
+// Re-export advanced ML modules (transformer inference, diffusion, RL, serving).
+pub use crate::ml_advanced;
+
+/// Returns the list of advanced ML subsystem names.
+pub fn ml_advanced_subsystems() -> Vec<&'static str> {
+    vec!["transformer", "diffusion", "reinforcement", "serving"]
+}
