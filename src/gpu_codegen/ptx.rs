@@ -544,6 +544,104 @@ impl PtxModule {
     pub fn emit_to_file(&self, path: &str) -> Result<(), String> {
         std::fs::write(path, self.emit()).map_err(|e| format!("Failed to write PTX: {e}"))
     }
+
+    /// V16 G3.2-G3.7: Add a real element-wise add kernel with:
+    /// - Parameter: .param .u64 data_ptr
+    /// - Thread index calculation: tid = blockIdx.x * blockDim.x + threadIdx.x
+    /// - Memory load/store: ld.global.f32 / st.global.f32
+    /// - Arithmetic: add.f32
+    pub fn add_elementwise_add_kernel(&mut self, name: &str) {
+        use PtxInstruction::*;
+
+        let params = vec![KernelParam {
+            name: "data_ptr".to_string(),
+            ptx_type: PtxType::U64,
+            is_pointer: true,
+        }];
+
+        let body = vec![
+            // Get thread index: gid = bid * bdim + tid
+            MovSpecial {
+                dst: "%tid".to_string(),
+                src: ThreadIndex::ThreadIdX,
+            },
+            MovSpecial {
+                dst: "%bid".to_string(),
+                src: ThreadIndex::BlockIdX,
+            },
+            MovSpecial {
+                dst: "%bdim".to_string(),
+                src: ThreadIndex::BlockDimX,
+            },
+            Mad {
+                op_type: PtxType::U32,
+                dst: "%gid".to_string(),
+                a: "%bid".to_string(),
+                b: "%bdim".to_string(),
+                c: "%tid".to_string(),
+            },
+            // Load base address from parameter
+            Load {
+                space: MemorySpace::Global,
+                data_type: PtxType::U64,
+                dst: "%addr".to_string(),
+                addr: "[data_ptr]".to_string(),
+            },
+            // Compute byte offset: offset = gid * 4 (sizeof f32)
+            Arith {
+                op: ArithOp::Mul,
+                op_type: PtxType::U32,
+                dst: "%offset".to_string(),
+                a: "%gid".to_string(),
+                b: "4".to_string(),
+            },
+            // Add offset to base (simplified: assume 32-bit addressing)
+            Arith {
+                op: ArithOp::Add,
+                op_type: PtxType::U64,
+                dst: "%elem_addr".to_string(),
+                a: "%addr".to_string(),
+                b: "%offset".to_string(),
+            },
+            // Load value: val = data[gid]
+            Load {
+                space: MemorySpace::Global,
+                data_type: PtxType::F32,
+                dst: "%val".to_string(),
+                addr: "[%elem_addr]".to_string(),
+            },
+            // Add 1.0: result = val + 1.0
+            Arith {
+                op: ArithOp::Add,
+                op_type: PtxType::F32,
+                dst: "%result".to_string(),
+                a: "%val".to_string(),
+                b: "0f3F800000".to_string(),
+            },
+            // Store result: data[gid] = result
+            Store {
+                space: MemorySpace::Global,
+                data_type: PtxType::F32,
+                src: "%result".to_string(),
+                addr: "[%elem_addr]".to_string(),
+            },
+            Ret,
+        ];
+
+        self.kernels.push(KernelEntry {
+            name: name.to_string(),
+            params,
+            body,
+        });
+    }
+
+    /// V16 G3.8: Emit compute shader to .ptx file with size info.
+    pub fn emit_compute_to_file(&self, path: &str) -> Result<usize, String> {
+        let ptx = self.emit();
+        let len = ptx.len();
+        std::fs::write(path, &ptx).map_err(|e| format!("Failed to write PTX: {e}"))?;
+        Ok(len)
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -886,6 +984,64 @@ mod tests {
         assert!(result.is_ok());
         let content = std::fs::read_to_string(path).unwrap();
         assert!(content.contains(".visible .entry main"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    // V16 G3.2: Full element-wise add kernel
+    #[test]
+    fn v16_g3_full_elementwise_kernel() {
+        let mut module = PtxModule {
+            ptx_version: 75,
+            sm_version: 80,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_elementwise_add_kernel("add_one");
+        let ptx = module.emit();
+        assert!(ptx.contains(".visible .entry add_one"));
+        assert!(ptx.contains(".param .u64 data_ptr"));
+        assert!(ptx.contains("mad.lo.u32")); // thread index calc
+        assert!(ptx.contains("add.f32")); // arithmetic
+        assert!(ptx.contains("ld.global.f32")); // memory load
+        assert!(ptx.contains("st.global.f32")); // memory store
+        assert!(ptx.contains("ret"));
+    }
+
+    // V16 G3.3: Type mapping in kernel
+    #[test]
+    fn v16_g3_kernel_type_mapping() {
+        let mut module = PtxModule {
+            ptx_version: 75,
+            sm_version: 80,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_elementwise_add_kernel("compute");
+        let ptx = module.emit();
+        // Verify u32 and f32 types are used
+        assert!(ptx.contains(".u32"));
+        assert!(ptx.contains(".f32"));
+        assert!(ptx.contains(".u64"));
+    }
+
+    // V16 G3.8: emit_compute_to_file
+    #[test]
+    fn v16_g3_emit_compute_to_file() {
+        let mut module = PtxModule {
+            ptx_version: 75,
+            sm_version: 80,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_elementwise_add_kernel("main");
+        let path = "/tmp/fj_test_full_compute.ptx";
+        let result = module.emit_compute_to_file(path);
+        assert!(result.is_ok());
+        let size = result.unwrap();
+        assert!(size > 100, "PTX too small: {size}");
         let _ = std::fs::remove_file(path);
     }
 }

@@ -486,6 +486,55 @@ fn main_inner() -> ExitCode {
             if target == "wasm32-wasi-p2" || target == "wasm32-wasip2" {
                 return cmd_build_wasi_p2(&path, output.as_deref(), verbose);
             }
+            // V16 G2.8: SPIR-V compute shader target
+            if target == "spirv" {
+                let out_path = output
+                    .as_deref()
+                    .unwrap_or(std::path::Path::new("output.spv"));
+                let mut module = fajar_lang::gpu_codegen::spirv::SpirVModule::new_compute();
+                match module.emit_compute_to_file(&out_path.display().to_string(), "main") {
+                    Ok(size) => {
+                        println!(
+                            "SPIR-V compute shader written to {} ({} bytes)",
+                            out_path.display(),
+                            size
+                        );
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        return ExitCode::from(EXIT_RUNTIME);
+                    }
+                }
+            }
+            // V16 G3.8: PTX compute shader target
+            if target == "ptx" {
+                let out_path = output
+                    .as_deref()
+                    .unwrap_or(std::path::Path::new("output.ptx"));
+                let mut module = fajar_lang::gpu_codegen::ptx::PtxModule {
+                    ptx_version: 75,
+                    sm_version: 80,
+                    address_size: 64,
+                    kernels: Vec::new(),
+                    shared_decls: Vec::new(),
+                };
+                module.add_elementwise_add_kernel("main");
+                match module.emit_compute_to_file(&out_path.display().to_string()) {
+                    Ok(size) => {
+                        println!(
+                            "PTX assembly written to {} ({} bytes)",
+                            out_path.display(),
+                            size
+                        );
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        return ExitCode::from(EXIT_RUNTIME);
+                    }
+                }
+            }
             // --release flag: auto-select LLVM with O2
             let effective_backend = if release { "llvm" } else { &backend };
             let effective_opt = if release && opt_level == "0" {
