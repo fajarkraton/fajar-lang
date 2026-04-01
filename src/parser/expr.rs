@@ -916,6 +916,60 @@ impl Parser {
     fn parse_while_expr_with_label(&mut self, label: Option<String>) -> Result<Expr, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::While)?;
+
+        // V16: `while let Pattern = expr { body }`
+        // Desugars to: loop { match expr { Pattern => { body }, _ => { break } } }
+        if self.at(&TokenKind::Let) {
+            self.advance(); // eat `let`
+            let pattern = self.parse_pattern()?;
+            self.expect(&TokenKind::Eq)?;
+            let subject = Box::new(self.parse_expr(0)?);
+            let body = Box::new(self.parse_block_expr()?);
+            let end = body.span().end;
+
+            let match_expr = Expr::Match {
+                subject,
+                arms: vec![
+                    crate::parser::ast::MatchArm {
+                        pattern,
+                        guard: None,
+                        body,
+                        span: Span::new(start, end),
+                    },
+                    crate::parser::ast::MatchArm {
+                        pattern: crate::parser::ast::Pattern::Wildcard {
+                            span: Span::new(end, end),
+                        },
+                        guard: None,
+                        body: Box::new(Expr::Block {
+                            stmts: vec![crate::parser::ast::Stmt::Break {
+                                value: None,
+                                label: None,
+                                span: Span::new(end, end),
+                            }],
+                            expr: None,
+                            span: Span::new(end, end),
+                        }),
+                        span: Span::new(end, end),
+                    },
+                ],
+                span: Span::new(start, end),
+            };
+
+            return Ok(Expr::Loop {
+                label,
+                body: Box::new(Expr::Block {
+                    stmts: vec![crate::parser::ast::Stmt::Expr {
+                        expr: Box::new(match_expr),
+                        span: Span::new(start, end),
+                    }],
+                    expr: None,
+                    span: Span::new(start, end),
+                }),
+                span: Span::new(start, end),
+            });
+        }
+
         let condition = Box::new(self.parse_expr(0)?);
         let body = Box::new(self.parse_block_expr()?);
         let end = body.span().end;
