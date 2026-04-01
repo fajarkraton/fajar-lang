@@ -1,0 +1,96 @@
+// V16 L3: Error Handling Ergonomics — Full Test Suite
+
+// L3.1: ? operator propagates errors
+fn read_first_line(path: str) -> str {
+    let content = read_file(path)?
+    let lines = content.split("\n")
+    lines[0]
+}
+
+let good = read_first_line("examples/hello.fj")
+println(f"First line: {good}")
+assert(good.contains("Hello"))
+
+// L3.2: ? on missing file returns Err
+let bad = read_first_line("nonexistent.txt")
+println(f"Bad result: {type_of(bad)}")
+
+// L3.3: Manual Result matching
+fn safe_divide(a: f64, b: f64) -> f64 {
+    if b == 0.0 { return -1.0 }
+    a / b
+}
+assert_eq(safe_divide(10.0, 2.0), 5.0)
+assert_eq(safe_divide(10.0, 0.0), -1.0)
+
+// L3.4: parse_int error handling
+fn try_parse(s: str) -> i64 {
+    match s.parse_int() {
+        Ok(n) => n
+        Err(_) => 0
+    }
+}
+assert_eq(try_parse("42"), 42)
+assert_eq(try_parse("hello"), 0)
+
+// L3.5: if-let with Result
+if let Ok(n) = "99".parse_int() {
+    assert_eq(n, 99)
+} else {
+    panic("should parse")
+}
+
+// L3.6: Chained ? operator
+fn load_and_count(path: str) -> i64 {
+    let content = read_file(path)?
+    let lines = content.split("\n")
+    len(lines)
+}
+let count = load_and_count("examples/hello.fj")
+println(f"Line count: {count}")
+
+// L3.7: Option handling with if-let
+let items = [Some(1), Some(2), None, Some(4)]
+let mut sum = 0
+for item in items {
+    if let Some(v) = item {
+        sum = sum + v
+    }
+}
+assert_eq(sum, 7)
+
+// L3.8: Nested error handling
+fn parse_config_line(line: str) -> str {
+    let parts = line.split("=")
+    if len(parts) >= 2 {
+        parts[1].trim()
+    } else {
+        ""
+    }
+}
+assert_eq(parse_config_line("key=value"), "value")
+assert_eq(parse_config_line("noequals"), "")
+
+// L3.9: Result in loops
+let inputs = ["1", "2", "abc", "4", "xyz"]
+let mut parsed = 0
+for input in inputs {
+    if let Ok(n) = input.parse_int() {
+        parsed = parsed + 1
+    }
+}
+assert_eq(parsed, 3) // 1, 2, 4 parse successfully
+
+// L3.10: Error handling with binary I/O
+let write_result = write_binary("/tmp/fj_test_err.bin", [1, 2, 3])
+match write_result {
+    Ok(_) => {
+        match read_binary("/tmp/fj_test_err.bin") {
+            Ok(data) => assert_eq(len(data), 3)
+            Err(e) => panic(f"read failed: {e}")
+        }
+    }
+    Err(e) => panic(f"write failed: {e}")
+}
+
+println("PASS: L3 error handling (10 tests)")

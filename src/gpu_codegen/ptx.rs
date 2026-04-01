@@ -530,6 +530,20 @@ impl PtxModule {
         }
         out
     }
+
+    /// V16 G3: Create a minimal compute kernel that does nothing (ret).
+    pub fn add_minimal_kernel(&mut self, name: &str) {
+        self.kernels.push(KernelEntry {
+            name: name.to_string(),
+            params: Vec::new(),
+            body: vec![PtxInstruction::Ret],
+        });
+    }
+
+    /// V16 G3: Emit PTX assembly to file.
+    pub fn emit_to_file(&self, path: &str) -> Result<(), String> {
+        std::fs::write(path, self.emit()).map_err(|e| format!("Failed to write PTX: {e}"))
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -838,5 +852,40 @@ mod tests {
         assert_eq!(cfg.grid_y, 32);
         assert_eq!(cfg.block_x, 16);
         assert_eq!(cfg.block_y, 16);
+    }
+
+    #[test]
+    fn v16_g3_ptx_minimal_kernel() {
+        let mut module = PtxModule {
+            ptx_version: 75,
+            sm_version: 80,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_minimal_kernel("compute_main");
+        let ptx = module.emit();
+        assert!(ptx.contains(".version 7.5"));
+        assert!(ptx.contains(".target sm_80"));
+        assert!(ptx.contains(".visible .entry compute_main"));
+        assert!(ptx.contains("ret"));
+    }
+
+    #[test]
+    fn v16_g3_ptx_emit_to_file() {
+        let mut module = PtxModule {
+            ptx_version: 75,
+            sm_version: 80,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_minimal_kernel("main");
+        let path = "/tmp/fj_test_compute.ptx";
+        let result = module.emit_to_file(path);
+        assert!(result.is_ok());
+        let content = std::fs::read_to_string(path).unwrap();
+        assert!(content.contains(".visible .entry main"));
+        let _ = std::fs::remove_file(path);
     }
 }

@@ -67,6 +67,105 @@ impl SpirVModule {
         ]
     }
 
+    /// V16 G2: Emit a complete SPIR-V binary for a minimal compute shader.
+    /// Generates a valid SPIR-V module with:
+    /// - OpCapability Shader
+    /// - OpMemoryModel Logical GLSL450
+    /// - OpEntryPoint GLCompute "main"
+    /// - OpExecutionMode LocalSize(1,1,1)
+    /// - void main() { return }
+    pub fn emit_minimal_compute(&mut self, entry_name: &str) -> Vec<u8> {
+        let mut words: Vec<u32> = Vec::new();
+
+        // Allocate IDs
+        let id_void = self.alloc_id(); // %1
+        let id_void_fn = self.alloc_id(); // %2
+        let id_main = self.alloc_id(); // %3
+        let id_label = self.alloc_id(); // %4
+
+        // Header
+        words.push(SPIRV_MAGIC);
+        words.push(SPIRV_VERSION_1_5);
+        words.push(0x464A0001); // Generator: "FJ" + version 1
+        words.push(self.bound);
+        words.push(0); // Schema
+
+        // OpCapability Shader (17 | 2<<16 = 0x00020011)
+        words.push(0x00020011);
+        words.push(1); // Shader capability
+
+        // OpMemoryModel Logical GLSL450 (14 | 3<<16)
+        words.push(0x0003000E);
+        words.push(0); // Logical
+        words.push(1); // GLSL450
+
+        // OpEntryPoint GLCompute %main "main" (15 | (3+name_words)<<16)
+        let name_bytes = entry_name.as_bytes();
+        let name_word_count = (name_bytes.len() + 4) / 4; // +1 null +3 round up
+        let ep_word_count = 3 + name_word_count;
+        words.push(0x0000000F | ((ep_word_count as u32) << 16));
+        words.push(5); // GLCompute
+        words.push(id_main);
+        // Encode name as word-aligned null-terminated string
+        let mut name_words = vec![0u32; name_word_count];
+        for (i, &b) in name_bytes.iter().enumerate() {
+            let word_idx = i / 4;
+            let byte_idx = i % 4;
+            name_words[word_idx] |= (b as u32) << (byte_idx * 8);
+        }
+        words.extend_from_slice(&name_words);
+
+        // OpExecutionMode %main LocalSize 1 1 1 (16 | 6<<16)
+        words.push(0x00060010);
+        words.push(id_main);
+        words.push(17); // LocalSize
+        words.push(1);
+        words.push(1);
+        words.push(1);
+
+        // OpTypeVoid %void (19 | 2<<16)
+        words.push(0x00020013);
+        words.push(id_void);
+
+        // OpTypeFunction %void_fn %void (33 | 3<<16)
+        words.push(0x00030021);
+        words.push(id_void_fn);
+        words.push(id_void);
+
+        // OpFunction %void %main None %void_fn (54 | 5<<16)
+        words.push(0x00050036);
+        words.push(id_void);
+        words.push(id_main);
+        words.push(0); // None
+        words.push(id_void_fn);
+
+        // OpLabel %label (248 | 2<<16)
+        words.push(0x000200F8);
+        words.push(id_label);
+
+        // OpReturn (253 | 1<<16)
+        words.push(0x000100FD);
+
+        // OpFunctionEnd (56 | 1<<16)
+        words.push(0x00010038);
+
+        // Fix bound
+        words[3] = self.bound;
+
+        // Convert to bytes (little-endian)
+        let mut bytes = Vec::with_capacity(words.len() * 4);
+        for w in &words {
+            bytes.extend_from_slice(&w.to_le_bytes());
+        }
+        bytes
+    }
+
+    /// V16 G2: Emit SPIR-V binary to file.
+    pub fn emit_to_file(&mut self, path: &str, entry_name: &str) -> Result<(), String> {
+        let bytes = self.emit_minimal_compute(entry_name);
+        std::fs::write(path, &bytes).map_err(|e| format!("Failed to write SPIR-V: {e}"))
+    }
+
     /// Validates the module structure.
     pub fn validate(&self) -> Vec<ValidationError> {
         let mut errors = Vec::new();
@@ -773,5 +872,36 @@ mod tests {
         assert_eq!(GpuBackend::Ptx.to_string(), "ptx");
         assert_eq!(GpuBackend::SpirV.to_string(), "spirv");
         assert_eq!(GpuBackend::Auto.to_string(), "auto");
+    }
+
+    // V16 G2: SPIR-V binary emission
+    #[test]
+    fn v16_g2_spirv_emit_minimal_compute() {
+        let mut module = SpirVModule::new_compute();
+        let bytes = module.emit_minimal_compute("main");
+        // SPIR-V magic number (little-endian)
+        assert_eq!(bytes[0], 0x03);
+        assert_eq!(bytes[1], 0x02);
+        assert_eq!(bytes[2], 0x23);
+        assert_eq!(bytes[3], 0x07);
+        // Must be non-empty
+        assert!(
+            bytes.len() > 20,
+            "SPIR-V binary too small: {} bytes",
+            bytes.len()
+        );
+    }
+
+    #[test]
+    fn v16_g2_spirv_emit_to_file() {
+        let mut module = SpirVModule::new_compute();
+        let path = "/tmp/fj_test_compute.spv";
+        let result = module.emit_to_file(path, "main");
+        assert!(result.is_ok(), "emit_to_file failed: {:?}", result.err());
+        // Verify file exists and has correct magic
+        let bytes = std::fs::read(path).unwrap();
+        assert!(bytes.len() > 20);
+        assert_eq!(bytes[0..4], [0x03, 0x02, 0x23, 0x07]);
+        let _ = std::fs::remove_file(path);
     }
 }
