@@ -1123,10 +1123,17 @@ impl TypeChecker {
         // Autograd builtins
         let autograd_fns: Vec<(&str, Vec<Type>, Type)> = vec![
             ("tensor_backward", vec![dyn_t.clone()], Type::Void),
+            ("backward", vec![dyn_t.clone()], Type::Void),
             ("tensor_grad", vec![dyn_t.clone()], dyn_t.clone()),
+            ("grad", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_requires_grad", vec![dyn_t.clone()], Type::Bool),
             (
                 "tensor_set_requires_grad",
+                vec![dyn_t.clone(), Type::Bool],
+                dyn_t.clone(),
+            ),
+            (
+                "set_requires_grad",
                 vec![dyn_t.clone(), Type::Bool],
                 dyn_t.clone(),
             ),
@@ -1155,13 +1162,21 @@ impl TypeChecker {
                 vec![Type::Unknown, Type::Unknown],
                 Type::Unknown,
             ),
+            ("SGD", vec![Type::Unknown, Type::Unknown], Type::Unknown),
             ("optimizer_adam", vec![Type::F64], Type::Unknown),
+            ("Adam", vec![Type::F64], Type::Unknown),
             (
                 "optimizer_step",
                 vec![Type::Unknown, Type::Unknown],
                 dyn_t.clone(),
             ),
+            (
+                "optim_step",
+                vec![Type::Unknown, Type::Unknown],
+                dyn_t.clone(),
+            ),
             ("optimizer_zero_grad", vec![Type::Unknown], dyn_t.clone()),
+            ("zero_grad", vec![Type::Unknown], dyn_t.clone()),
         ];
         for (name, params, ret) in optim_fns {
             self.symbols.define(Symbol {
@@ -1197,11 +1212,23 @@ impl TypeChecker {
         // Layer builtins
         let layer_fns: Vec<(&str, Vec<Type>, Type)> = vec![
             ("layer_dense", vec![Type::I64, Type::I64], Type::Unknown),
+            ("Dense", vec![Type::I64, Type::I64], Type::Unknown),
+            (
+                "layer_conv2d",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Unknown,
+            ),
+            (
+                "Conv2d",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::Unknown,
+            ),
             (
                 "layer_forward",
                 vec![Type::Unknown, Type::Unknown],
                 Type::Unknown,
             ),
+            ("forward", vec![Type::Unknown, Type::Unknown], Type::Unknown),
             ("layer_params", vec![Type::Unknown], Type::Unknown),
         ];
         for (name, params, ret) in layer_fns {

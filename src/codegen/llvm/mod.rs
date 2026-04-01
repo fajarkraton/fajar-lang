@@ -44,8 +44,8 @@ use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
-    BinOp, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program, Stmt, StructDef,
-    TypeExpr, UnaryOp,
+    BinOp, CallArg, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program, Stmt,
+    StructDef, TypeExpr, UnaryOp,
 };
 
 use self::types::{fj_type_to_llvm, fj_type_to_metadata};
@@ -632,6 +632,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
             return *existing;
         }
 
+        // Check if already declared in the module (e.g. by declare_runtime_functions)
+        // but not yet in self.functions. Reuse the existing declaration.
+        if let Some(existing) = self.module.get_function(name) {
+            self.functions.insert(name.to_string(), existing);
+            return existing;
+        }
+
         let meta_params: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
             param_types.iter().map(|t| (*t).into()).collect();
 
@@ -648,16 +655,35 @@ impl<'ctx> LlvmCompiler<'ctx> {
     /// Registers standard runtime function declarations (`fj_rt_*`).
     pub fn register_runtime_functions(&mut self) {
         let i64_ty: BasicTypeEnum<'ctx> = self.context.i64_type().into();
+        let f64_ty: BasicTypeEnum<'ctx> = self.context.f64_type().into();
         let ptr_ty: BasicTypeEnum<'ctx> = self
             .context
             .ptr_type(inkwell::AddressSpace::default())
             .into();
 
-        // Print functions
-        self.declare_external_fn("fj_rt_print_int", &[i64_ty], None);
-        self.declare_external_fn("fj_rt_print_str", &[ptr_ty, i64_ty], None);
+        // Print functions — println (with newline)
         self.declare_external_fn("fj_rt_println_int", &[i64_ty], None);
         self.declare_external_fn("fj_rt_println_str", &[ptr_ty, i64_ty], None);
+        self.declare_external_fn("fj_rt_println_f64", &[f64_ty], None);
+        self.declare_external_fn("fj_rt_println_bool", &[i64_ty], None);
+
+        // Print functions — print (without newline)
+        self.declare_external_fn("fj_rt_print_int", &[i64_ty], None);
+        self.declare_external_fn("fj_rt_print_str", &[ptr_ty, i64_ty], None);
+        self.declare_external_fn("fj_rt_print_f64", &[f64_ty], None);
+        self.declare_external_fn("fj_rt_print_bool", &[i64_ty], None);
+
+        // Eprintln functions (stderr with newline)
+        self.declare_external_fn("fj_rt_eprintln_int", &[i64_ty], None);
+        self.declare_external_fn("fj_rt_eprintln_str", &[ptr_ty, i64_ty], None);
+        self.declare_external_fn("fj_rt_eprintln_f64", &[f64_ty], None);
+        self.declare_external_fn("fj_rt_eprintln_bool", &[i64_ty], None);
+
+        // Eprint functions (stderr without newline)
+        self.declare_external_fn("fj_rt_eprint_int", &[i64_ty], None);
+        self.declare_external_fn("fj_rt_eprint_str", &[ptr_ty, i64_ty], None);
+        self.declare_external_fn("fj_rt_eprint_f64", &[f64_ty], None);
+        self.declare_external_fn("fj_rt_eprint_bool", &[i64_ty], None);
 
         // String functions
         self.declare_external_fn("fj_rt_str_len", &[ptr_ty, i64_ty], Some(i64_ty));
@@ -670,6 +696,389 @@ impl<'ctx> LlvmCompiler<'ctx> {
         // Assert functions
         self.declare_external_fn("fj_rt_assert", &[i64_ty], None);
         self.declare_external_fn("fj_rt_assert_eq", &[i64_ty, i64_ty], None);
+    }
+
+    // ── Builtin function dispatch ─────────────────────────────────────
+
+    /// Returns true if `name` is a known builtin that should be dispatched
+    /// to an `fj_rt_*` external function rather than looked up as a user fn.
+    fn is_builtin_fn(name: &str) -> bool {
+        matches!(
+            name,
+            "println"
+                | "print"
+                | "eprintln"
+                | "eprint"
+                | "dbg"
+                | "assert"
+                | "assert_eq"
+                | "len"
+                | "type_of"
+        )
+    }
+
+    /// Compiles a call to a builtin function.
+    ///
+    /// Returns `Ok(Some(val))` if the builtin was handled, `Ok(None)` inside
+    /// an outer `Option` (`Ok(None)` at the outer level) if `name` is not a
+    /// builtin. This lets the caller fall through to user-defined fn lookup.
+    ///
+    /// Mirrors Cranelift's `compile_print_builtin` in `builtins.rs`.
+    fn compile_builtin_call(
+        &mut self,
+        name: &str,
+        args: &[CallArg],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        if !Self::is_builtin_fn(name) {
+            return Ok(None);
+        }
+
+        let zero = self.context.i64_type().const_int(0, false);
+
+        match name {
+            // ── println / print / eprintln / eprint ───────────────
+            "println" | "print" | "eprintln" | "eprint" => {
+                let is_ln = name == "println" || name == "eprintln";
+                let is_err = name == "eprintln" || name == "eprint";
+
+                if args.is_empty() {
+                    // No args: println() prints an empty newline.
+                    // For print/eprint with no args, this is a no-op — return 0.
+                    if is_ln {
+                        let rt_fn = if is_err {
+                            "fj_rt_eprintln_str"
+                        } else {
+                            "fj_rt_println_str"
+                        };
+                        let function = *self.functions.get(rt_fn).ok_or_else(|| {
+                            CodegenError::Internal(format!("{rt_fn} not declared"))
+                        })?;
+                        let empty_ptr = self
+                            .context
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .const_null();
+                        let empty_len = self.context.i64_type().const_int(0, false);
+                        self.builder
+                            .build_call(
+                                function,
+                                &[empty_ptr.into(), empty_len.into()],
+                                "println_empty",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    return Ok(Some(zero.into()));
+                }
+
+                // Infer argument type to choose the right fj_rt_* variant.
+                let arg_expr = &args[0].value;
+                let inferred = infer_type_from_expr(arg_expr);
+
+                // Also check var_types for identifiers.
+                let is_string = inferred == "str"
+                    || matches!(arg_expr, Expr::Ident { name: vname, .. }
+                        if self.var_types.get(vname).is_some_and(|t| t.is_struct_type()));
+
+                let val = self
+                    .compile_expr(arg_expr)?
+                    .ok_or_else(|| CodegenError::Internal("print arg produced no value".into()))?;
+
+                if is_string || val.is_struct_value() {
+                    // String: {ptr, len} struct — extract fields and call str variant.
+                    let struct_val = val.into_struct_value();
+                    let ptr = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "str_ptr")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let len = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "str_len")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let rt_fn = if is_err {
+                        if is_ln {
+                            "fj_rt_eprintln_str"
+                        } else {
+                            "fj_rt_eprint_str"
+                        }
+                    } else if is_ln {
+                        "fj_rt_println_str"
+                    } else {
+                        "fj_rt_print_str"
+                    };
+                    let function = *self
+                        .functions
+                        .get(rt_fn)
+                        .ok_or_else(|| CodegenError::Internal(format!("{rt_fn} not declared")))?;
+                    self.builder
+                        .build_call(function, &[ptr.into(), len.into()], "print_str_call")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                } else if inferred == "f64" || val.is_float_value() {
+                    // Float: call f64 variant.
+                    let rt_fn = if is_err {
+                        if is_ln {
+                            "fj_rt_eprintln_f64"
+                        } else {
+                            "fj_rt_eprint_f64"
+                        }
+                    } else if is_ln {
+                        "fj_rt_println_f64"
+                    } else {
+                        "fj_rt_print_f64"
+                    };
+                    let function = *self
+                        .functions
+                        .get(rt_fn)
+                        .ok_or_else(|| CodegenError::Internal(format!("{rt_fn} not declared")))?;
+                    self.builder
+                        .build_call(function, &[val.into()], "print_f64_call")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                } else if inferred == "bool" {
+                    // Bool: pass as i64 (0 or 1).
+                    let rt_fn = if is_err {
+                        if is_ln {
+                            "fj_rt_eprintln_bool"
+                        } else {
+                            "fj_rt_eprint_bool"
+                        }
+                    } else if is_ln {
+                        "fj_rt_println_bool"
+                    } else {
+                        "fj_rt_print_bool"
+                    };
+                    let function = *self
+                        .functions
+                        .get(rt_fn)
+                        .ok_or_else(|| CodegenError::Internal(format!("{rt_fn} not declared")))?;
+                    // Bool may be i1; extend to i64 for the runtime ABI.
+                    let int_val = if val.is_int_value()
+                        && val.into_int_value().get_type().get_bit_width() == 1
+                    {
+                        self.builder
+                            .build_int_z_extend(
+                                val.into_int_value(),
+                                self.context.i64_type(),
+                                "bool_ext",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?
+                            .into()
+                    } else {
+                        val
+                    };
+                    self.builder
+                        .build_call(function, &[int_val.into()], "print_bool_call")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                } else {
+                    // Default: integer (i64).
+                    let rt_fn = if is_err {
+                        if is_ln {
+                            "fj_rt_eprintln_int"
+                        } else {
+                            "fj_rt_eprint_int"
+                        }
+                    } else if is_ln {
+                        "fj_rt_println_int"
+                    } else {
+                        "fj_rt_print_int"
+                    };
+                    let function = *self
+                        .functions
+                        .get(rt_fn)
+                        .ok_or_else(|| CodegenError::Internal(format!("{rt_fn} not declared")))?;
+                    self.builder
+                        .build_call(function, &[val.into()], "print_int_call")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                }
+
+                Ok(Some(zero.into()))
+            }
+
+            // ── assert(condition) ─────────────────────────────────
+            "assert" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "assert() requires 1 argument".into(),
+                    ));
+                }
+                let val = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal("assert arg produced no value".into()))?;
+                // Extend bool (i1) to i64 if needed.
+                let int_val =
+                    if val.is_int_value() && val.into_int_value().get_type().get_bit_width() == 1 {
+                        self.builder
+                            .build_int_z_extend(
+                                val.into_int_value(),
+                                self.context.i64_type(),
+                                "assert_ext",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?
+                            .into()
+                    } else {
+                        val
+                    };
+                let function = *self
+                    .functions
+                    .get("fj_rt_assert")
+                    .ok_or_else(|| CodegenError::Internal("fj_rt_assert not declared".into()))?;
+                self.builder
+                    .build_call(function, &[int_val.into()], "assert_call")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(zero.into()))
+            }
+
+            // ── assert_eq(a, b) ───────────────────────────────────
+            "assert_eq" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "assert_eq() requires 2 arguments".into(),
+                    ));
+                }
+                let lhs = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal("assert_eq LHS produced no value".into())
+                })?;
+                let rhs = self.compile_expr(&args[1].value)?.ok_or_else(|| {
+                    CodegenError::Internal("assert_eq RHS produced no value".into())
+                })?;
+                let function = *self
+                    .functions
+                    .get("fj_rt_assert_eq")
+                    .ok_or_else(|| CodegenError::Internal("fj_rt_assert_eq not declared".into()))?;
+                self.builder
+                    .build_call(function, &[lhs.into(), rhs.into()], "assert_eq_call")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(zero.into()))
+            }
+
+            // ── len(value) ────────────────────────────────────────
+            "len" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal("len() requires 1 argument".into()));
+                }
+                let arg_expr = &args[0].value;
+                let inferred = infer_type_from_expr(arg_expr);
+                let val = self
+                    .compile_expr(arg_expr)?
+                    .ok_or_else(|| CodegenError::Internal("len arg produced no value".into()))?;
+
+                if inferred == "str" || val.is_struct_value() {
+                    // String {ptr, len}: extract len field.
+                    let struct_val = val.into_struct_value();
+                    let ptr = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "len_ptr")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let len = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "len_val")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let function = *self.functions.get("fj_rt_str_len").ok_or_else(|| {
+                        CodegenError::Internal("fj_rt_str_len not declared".into())
+                    })?;
+                    let result = self
+                        .builder
+                        .build_call(function, &[ptr.into(), len.into()], "str_len_call")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    match result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
+                        inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+                    }
+                } else {
+                    // For non-string types, return 0 as fallback.
+                    Ok(Some(zero.into()))
+                }
+            }
+
+            // ── type_of(value) ────────────────────────────────────
+            "type_of" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "type_of() requires 1 argument".into(),
+                    ));
+                }
+                // Evaluate the arg (for side effects), then return a string
+                // constant with the inferred type name.
+                let arg_expr = &args[0].value;
+                let type_name = infer_type_from_expr(arg_expr);
+                let _ = self.compile_expr(arg_expr)?;
+
+                // Build a string constant for the type name.
+                let str_val = self.context.const_string(type_name.as_bytes(), false);
+                let global = self.module.add_global(
+                    str_val.get_type(),
+                    Some(inkwell::AddressSpace::default()),
+                    "type_name_str",
+                );
+                global.set_initializer(&str_val);
+                global.set_constant(true);
+
+                let ptr = global.as_pointer_value();
+                let len = self
+                    .context
+                    .i64_type()
+                    .const_int(type_name.len() as u64, false);
+
+                let str_type = self.string_type();
+                let mut str_struct = str_type.get_undef();
+                str_struct = self
+                    .builder
+                    .build_insert_value(str_struct, ptr, 0, "typeof_ptr")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                    .into_struct_value();
+                str_struct = self
+                    .builder
+                    .build_insert_value(str_struct, len, 1, "typeof_len")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                    .into_struct_value();
+
+                Ok(Some(str_struct.into()))
+            }
+
+            // ── dbg(value) — prints and returns the value ─────────
+            "dbg" => {
+                if args.is_empty() {
+                    return Ok(Some(zero.into()));
+                }
+                // dbg() is like println() but returns the value.
+                let arg_expr = &args[0].value;
+                let inferred = infer_type_from_expr(arg_expr);
+                let val = self
+                    .compile_expr(arg_expr)?
+                    .ok_or_else(|| CodegenError::Internal("dbg arg produced no value".into()))?;
+
+                // Print using println variant (dbg prints to stderr in Rust,
+                // but in Fajar Lang it uses the println path for simplicity).
+                if inferred == "str" || val.is_struct_value() {
+                    let struct_val = val.into_struct_value();
+                    let ptr = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "dbg_ptr")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let len = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "dbg_len")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    if let Some(f) = self.functions.get("fj_rt_println_str") {
+                        self.builder
+                            .build_call(*f, &[ptr.into(), len.into()], "dbg_str")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                } else if inferred == "f64" || val.is_float_value() {
+                    if let Some(f) = self.functions.get("fj_rt_println_f64") {
+                        self.builder
+                            .build_call(*f, &[val.into()], "dbg_f64")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                } else if let Some(f) = self.functions.get("fj_rt_println_int") {
+                    self.builder
+                        .build_call(*f, &[val.into()], "dbg_int")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                }
+
+                // dbg returns its argument.
+                Ok(Some(val))
+            }
+
+            _ => Ok(None),
+        }
     }
 
     // ── V12 Sprint L5: Generics & Closures ────────────────────────────
@@ -1549,6 +1958,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
             self.declare_runtime_functions();
         }
 
+        // Register builtin runtime functions (println, print, assert, etc.)
+        // into self.functions so compile_builtin_call can look them up.
+        self.register_runtime_functions();
+
         // Pass 0: register struct and enum type definitions
         for item in &program.items {
             match item {
@@ -1894,6 +2307,12 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             Expr::Call { callee, args, .. } => {
                 if let Expr::Ident { name, .. } = callee.as_ref() {
+                    // Check for builtin functions before user-defined lookup.
+                    // This mirrors the Cranelift backend's builtins.rs dispatch.
+                    if let Some(result) = self.compile_builtin_call(name, args)? {
+                        return Ok(Some(result));
+                    }
+
                     // V12 L5: Try monomorphized name first for generic calls
                     let function = if let Some(f) = self.functions.get(name) {
                         *f

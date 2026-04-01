@@ -444,7 +444,7 @@ impl Interpreter {
             "tensor_bce_loss" => self.builtin_tensor_loss(args, "bce"),
             "tensor_l1_loss" => self.builtin_tensor_loss(args, "l1"),
             // ── Autograd builtins ──
-            "tensor_backward" => {
+            "tensor_backward" | "backward" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -473,7 +473,7 @@ impl Interpreter {
                     ),
                 }
             }
-            "tensor_grad" => {
+            "tensor_grad" | "grad" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -519,7 +519,7 @@ impl Interpreter {
                     .into()),
                 }
             }
-            "tensor_set_requires_grad" => {
+            "tensor_set_requires_grad" | "set_requires_grad" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -571,7 +571,7 @@ impl Interpreter {
                 Ok(Value::Null)
             }
             // ── Optimizer builtins ──
-            "optimizer_sgd" => {
+            "optimizer_sgd" | "SGD" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -603,7 +603,7 @@ impl Interpreter {
                     crate::runtime::ml::optim::SGD::new(lr, momentum),
                 )))
             }
-            "optimizer_adam" => {
+            "optimizer_adam" | "Adam" => {
                 if args.is_empty() {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -625,7 +625,7 @@ impl Interpreter {
                     crate::runtime::ml::optim::Adam::new(lr),
                 )))
             }
-            "optimizer_step" => {
+            "optimizer_step" | "optim_step" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -670,7 +670,7 @@ impl Interpreter {
                     },
                 )?))
             }
-            "optimizer_zero_grad" => {
+            "optimizer_zero_grad" | "zero_grad" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -799,7 +799,7 @@ impl Interpreter {
                 }
             }
             // ── Layer builtins ──
-            "layer_dense" => {
+            "layer_dense" | "Dense" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -829,7 +829,32 @@ impl Interpreter {
                     crate::runtime::ml::layers::Dense::new(in_f, out_f),
                 ))))
             }
-            "layer_forward" => {
+            "layer_conv2d" | "Conv2d" => {
+                if args.len() != 5 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 5,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let extract_usize = |idx: usize, name: &str| -> Result<usize, EvalError> {
+                    match &args[idx] {
+                        Value::Int(n) => Ok(*n as usize),
+                        _ => Err(
+                            RuntimeError::TypeError(format!("Conv2d: {name} must be int")).into(),
+                        ),
+                    }
+                };
+                let in_ch = extract_usize(0, "in_channels")?;
+                let out_ch = extract_usize(1, "out_channels")?;
+                let kernel = extract_usize(2, "kernel_size")?;
+                let stride = extract_usize(3, "stride")?;
+                let padding = extract_usize(4, "padding")?;
+                Ok(Value::Layer(Box::new(LayerValue::Conv2d(
+                    crate::runtime::ml::layers::Conv2d::new(in_ch, out_ch, kernel, stride, padding),
+                ))))
+            }
+            "layer_forward" | "forward" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -862,6 +887,12 @@ impl Interpreter {
                             .map_err(|e| RuntimeError::TypeError(format!("forward failed: {e}")))?;
                         Ok(Value::Tensor(output))
                     }
+                    LayerValue::Conv2d(conv) => {
+                        let output = conv
+                            .forward(input)
+                            .map_err(|e| RuntimeError::TypeError(format!("forward failed: {e}")))?;
+                        Ok(Value::Tensor(output))
+                    }
                 }
             }
             "layer_params" => {
@@ -880,6 +911,13 @@ impl Interpreter {
                                 .into_iter()
                                 .map(|p| Value::Tensor(p.clone()))
                                 .collect();
+                            Ok(Value::Array(params))
+                        }
+                        LayerValue::Conv2d(conv) => {
+                            let params: Vec<Value> = vec![
+                                Value::Tensor(conv.weight.clone()),
+                                Value::Tensor(conv.bias.clone()),
+                            ];
                             Ok(Value::Array(params))
                         }
                     },
