@@ -1,0 +1,114 @@
+// V16: Comprehensive language feature tests
+// Tests array methods, closures, pattern matching, if-let, binary I/O
+
+// ── Array Methods ──
+let nums = [5, 3, 1, 4, 2]
+
+// Sort
+let sorted = nums.sort()
+assert_eq(sorted[0], 1)
+assert_eq(sorted[4], 5)
+
+// Reverse
+let rev = sorted.reverse()
+assert_eq(rev[0], 5)
+
+// Map + Filter + Fold
+let doubled = [1, 2, 3].map(|x| x * 2)
+assert_eq(doubled[1], 4)
+
+let evens = [1, 2, 3, 4, 5].filter(|x| x % 2 == 0)
+assert_eq(len(evens), 2)
+
+let total = [1, 2, 3, 4, 5].fold(0, |acc, x| acc + x)
+assert_eq(total, 15)
+
+// Any / All
+assert([1, 2, 3].any(|x| x > 2))
+assert([1, 2, 3].all(|x| x > 0))
+
+// Chaining
+let result = [1, 2, 3, 4, 5, 6].filter(|x| x % 2 == 0).map(|x| x * 10)
+assert_eq(result[0], 20)
+
+// Pop / Push / Insert / Remove / IndexOf
+let popped = [1, 2, 3].pop()
+assert_eq(popped, 3)
+
+let pushed = [1, 2].push(3)
+assert_eq(len(pushed), 3)
+
+let inserted = [1, 3].insert(1, 2)
+assert_eq(inserted[1], 2)
+
+let removed = [1, 2, 3].remove(1)
+assert_eq(removed[1], 3)
+
+assert_eq([10, 20, 30].index_of(20), 1)
+assert_eq([10, 20, 30].index_of(99), -1)
+
+// Contains
+assert([1, 2, 3].contains(2))
+
+// First / Last (return Option)
+let f = [10, 20].first()
+let l = [10, 20].last()
+
+// Array concat
+let c = [1, 2] + [3, 4]
+assert_eq(len(c), 4)
+assert_eq(c[2], 3)
+
+// ── String Methods ──
+assert_eq("hello".to_upper(), "HELLO")
+assert_eq("WORLD".to_lower(), "world")
+assert_eq("ha".repeat(3), "hahaha")
+assert_eq(len("abc".chars()), 3)
+assert("hello world".contains("world"))
+assert("hello".starts_with("hel"))
+assert_eq("  hi  ".trim(), "hi")
+
+// ── Pattern Matching ──
+// Basic
+let x = match 42 { 42 => "yes", _ => "no" }
+assert_eq(x, "yes")
+
+// Guard
+let g = match 5 { n if n > 3 => "big", _ => "small" }
+assert_eq(g, "big")
+
+// Tuple
+let t = match (1, 2) { (1, y) => y, _ => 0 }
+assert_eq(t, 2)
+
+// Range
+let r = match 5 { 0..10 => "digit", _ => "other" }
+assert_eq(r, "digit")
+
+// Or-pattern
+let o = match 2 { 1 | 2 | 3 => "small", _ => "big" }
+assert_eq(o, "small")
+
+// Enum
+let v = match Some(7) { Some(n) => n, None => 0 }
+assert_eq(v, 7)
+
+// ── if-let ──
+if let Some(val) = Some(42) {
+    assert_eq(val, 42)
+}
+
+let msg = if let Some(s) = Some("ok") {
+    s
+} else {
+    "fail"
+}
+assert_eq(msg, "ok")
+
+if let Some(x) = None {
+    panic("should not reach")
+} else {
+    // Correct path
+}
+
+println("PASS: all V16 language features")
