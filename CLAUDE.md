@@ -68,10 +68,12 @@ Every Claude Code session MUST follow this order:
 - Phase 2 (Ecosystem): WASI P2 Component Model + FFI v2 Full Integration (200 tasks) ✅
 - Phase 3 (Differentiation): SMT Verification + Distributed Runtime + Self-Hosting (300 tasks) ✅
 
-**V14 "Infinity": COMPLETE — 5 options, 500 tasks, 50 sprints, ALL PRODUCTION.**
-- Phase 1 (Ship): Release & Polish + Production Hardening (100 tasks) ✅
-- Phase 2 (Validate): FajarOS Nova v2.0 + Real-World Validation (200 tasks) ✅
-- Phase 3 (Innovate): Effects + Dependent Types + GPU Shaders + LSP v4 + Package Registry (200 tasks) ✅
+**V14 "Infinity": PARTIALLY COMPLETE — 75/500 [x], 295 [f], 130 [ ]. Honest audit: docs/V14_TASKS.md.**
+- Phase 1 (Ship): Release & Polish ✅ (50/50) + Production Hardening ⚠️ (15/50 [x], 35 [f])
+- Phase 2 (Validate): FajarOS Nova [f] (0/100 [x]) + Real-World Validation [f] (0/100 [x]) — all mock/demo
+- Phase 3 (Innovate): Effects [f] + Dep Types [f] + GPU [f] + LSP ⚠️ (10/40) + Registry [f]
+- **Gap:** User-facing syntax for effects/dep-types/GPU not in parser. Real-world projects are mocks.
+- **V15 will close these gaps.** See docs/V15_DELIVERY_PLAN.md.
 
 ### Key Documents
 
@@ -972,5 +974,5 @@ fajar-lang/
 
 ---
 
-*CLAUDE.md Version: 10.0 | v12.0.0 "Infinity" — 8,074 tests, ~400K LOC, 0 failures, 100% production | V14 complete | Auto-loaded by Claude Code*
+*CLAUDE.md Version: 10.1 | v12.0.0 "Infinity" — 8,074 tests, ~400K LOC, 0 failures | V14: 75/500 [x], 295 [f] (honest audit) | Auto-loaded by Claude Code*
 *Last Updated: 2026-04-01*

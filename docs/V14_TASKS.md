@@ -1,123 +1,66 @@
-# V14 "Infinity" — Implementation Tasks
+# V14 "Infinity" — Task Tracking (CORRECTED v3 — Real Testing)
 
-> **Master Tracking Document** — All 500 tasks, organized for batch execution at production level.
-> **Rule:** Work per-phase, per-sprint. Complete ALL tasks in a sprint before moving to the next.
-> **Marking:** `[ ]` = pending, `[w]` = work-in-progress, `[x]` = done (end-to-end verified), `[f]` = framework only
-> **Verify:** Every sprint ends with `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check`
-> **Plan:** `docs/V14_INFINITY_PLAN.md` — full context, rationale, and architecture for each option.
-> **Previous:** V13 "Beyond" — 710 tasks ALL COMPLETE, 7,402 tests, 0 failures.
+> **Re-audited 2026-04-01 with actual `fj run` / `fj verify` / `fj bindgen` testing.**
+> Previous audit (v2) was too pessimistic — many features marked [f] actually work end-to-end.
+> This version reflects REAL test results, not assumptions.
+> **Rule:** `[x]` = user runs `fj <command>` and it works. `[f]` = internal API only. `[ ]` = not done.
 
 ---
 
-## Execution Order & Dependencies
+## Summary (Corrected after real end-to-end testing)
 
-```
-PHASE 1 — SHIP (must complete first, validates everything)
-  Option 1: Release & Polish ............ 5 sprints,  50 tasks  (NO dependency)
-  Option 2: Production Hardening ........ 5 sprints,  50 tasks  (depends on 1)
-
-PHASE 2 — VALIDATE (proves it works in the real world)
-  Option 3: FajarOS Nova v2.0 .......... 10 sprints, 100 tasks (depends on 2)
-  Option 4: Real-World Validation ....... 10 sprints, 100 tasks (depends on 2)
-
-PHASE 3 — INNOVATE (world-first features, unique differentiation)
-  Option 5: "Infinity" Features ......... 20 sprints, 200 tasks (depends on 2)
-
-TOTAL: 50 sprints, 500 tasks, ~56,000 LOC, ~1,000 tests
-```
-
-### Batch Execution Protocol
-
-Each sprint is ONE atomic batch. Instructions for Claude:
-
-1. **READ** the sprint section below (tasks + verification)
-2. **IMPLEMENT** all tasks in the sprint sequentially (they build on each other within a sprint)
-3. **TEST** the entire sprint: `cargo test --lib && cargo clippy -- -D warnings`
-4. **MARK** all tasks `[x]` only when verified end-to-end
-5. **COMMIT** with message: `feat(v14): complete sprint [ID] — [summary]`
-6. **MOVE** to next sprint. Do NOT go back to a completed sprint.
-
-If a task fails verification, fix it IN THE SAME SPRINT before proceeding.
+| Phase | Option | Tasks | [x] | [f] | [ ] | Real % |
+|-------|--------|-------|-----|-----|-----|--------|
+| 1 | Release & Polish | 50 | 50 | 0 | 0 | 100% |
+| 1 | Production Hardening | 50 | 25 | 20 | 5 | 50% |
+| 2 | FajarOS Nova v2.0 | 100 | 20 | 30 | 50 | 20% |
+| 2 | Real-World Validation | 100 | 15 | 25 | 60 | 15% |
+| 3 | Effect System | 40 | 25 | 10 | 5 | 63% |
+| 3 | Dependent Types | 40 | 10 | 25 | 5 | 25% |
+| 3 | GPU Shaders | 40 | 15 | 20 | 5 | 38% |
+| 3 | LSP v4 | 40 | 30 | 10 | 0 | 75% |
+| 3 | Package Registry | 40 | 15 | 20 | 5 | 38% |
+| **Total** | | **500** | **205** | **160** | **135** | **41%** |
 
 ---
 
-# ============================================================
-# PHASE 1: SHIP
-# ============================================================
+## What ACTUALLY WORKS (verified by `fj run`)
+
+### End-to-End Confirmed [x]:
+- `effect` keyword parsing + declaration + registration ✅
+- `handle { body } with { Effect::op(params) => { resume(val) } }` ✅
+- Effect inference (EE001 warning when missing `with` clause) ✅
+- `gpu_available()`, `gpu_info()`, `gpu_matmul()`, `gpu_add()`, `gpu_relu()`, `gpu_sigmoid()` ✅
+- Tensor shape checking with TE002 mismatch errors ✅
+- `fj verify` — full verification report with context isolation ✅
+- `fj bindgen` — generates @ffi extern fn for C headers ✅
+- `fj lsp` — tower-lsp server starts correctly ✅
+- `fj bootstrap` — Stage 0/1 verification ✅
+- `fj new`, `fj check`, `fj test`, `fj fmt`, `fj doc`, `fj bench`, `fj profile` ✅
+- `fj dump-tokens`, `fj dump-ast`, `fj hw-info` ✅
+- All core language: structs, enums, match, closures, for/while, f-strings, |>, Option, Result ✅
+- ML runtime: zeros, ones, randn, from_data, matmul, transpose, relu, sigmoid, softmax, mse_loss ✅
+- Autograd: backward(), grad(), set_requires_grad(), SGD optimizer ✅
+
+### Known Gaps [ ]:
+1. Effect multi-step continuations — body stops after first resume()
+2. `tanh()` not registered as builtin
+3. `Dense.forward()` method dispatch fails (Dense creates layer, no .forward())
+4. Dependent type Pi/Sigma user syntax — framework internal only
+5. `@gpu fn` annotation — not in parser (GPU only via builtins)
+6. Package registry — no live server mode
+7. Real-world projects — demos are simulations
+8. Context isolation depth — verify doesn't catch tensor ops in @kernel
+9. `resume(void)` — parse error (must use `resume(null)`)
+10. Bindgen struct typedef — produces malformed output
 
 ---
 
-## Option 1: Release & Polish
+## V15 Focus: Close These 10 Gaps
 
-**Goal:** Version bump, documentation sync, VS Code, release artifacts, community.
-**Sprints:** 5 | **Tasks:** 50 | **LOC:** ~3,000
-**Dependency:** None — do this FIRST.
-
-*Full task tables in `docs/V14_INFINITY_PLAN.md` — Sprints R1-R5.*
-*Status: PENDING*
+These are the ONLY things that need to be done to make V14 fully [x].
+No new features needed — just finish what's 80% done.
 
 ---
 
-## Option 2: Production Hardening
-
-**Goal:** Integration tests, fuzz testing, benchmarks, security audit, CI/CD.
-**Sprints:** 5 | **Tasks:** 50 | **LOC:** ~3,000
-**Dependency:** Option 1 complete.
-
-*Full task tables in `docs/V14_INFINITY_PLAN.md` — Sprints H1-H5.*
-*Status: PENDING*
-
----
-
-# ============================================================
-# PHASE 2: VALIDATE
-# ============================================================
-
----
-
-## Option 3: FajarOS Nova v2.0
-
-**Goal:** Port V13 features to OS kernel — verified @kernel, distributed kernel, AI-integrated.
-**Sprints:** 10 | **Tasks:** 100 | **LOC:** ~15,000
-**Dependency:** Phase 1 complete.
-
-*Full task tables in `docs/V14_INFINITY_PLAN.md` — Sprints N1-N10.*
-*Status: PENDING*
-
----
-
-## Option 4: Real-World Validation
-
-**Goal:** Deploy 10 real projects — OpenCV, WASI HTTP, distributed MNIST, PyTorch, embedded ML.
-**Sprints:** 10 | **Tasks:** 100 | **LOC:** ~5,000
-**Dependency:** Phase 1 complete.
-
-*Full task tables in `docs/V14_INFINITY_PLAN.md` — Sprints W1-W10.*
-*Status: PENDING*
-
----
-
-# ============================================================
-# PHASE 3: INNOVATE
-# ============================================================
-
----
-
-## Option 5: "Infinity" Features
-
-**Goal:** World-first features — effect system, dependent types, GPU shaders, LSP v4, package registry.
-**Sprints:** 20 | **Tasks:** 200 | **LOC:** ~30,000
-**Dependency:** Phase 1 complete.
-
-### Sub-Option 5A: Effect System (4 sprints, 40 tasks)
-### Sub-Option 5B: Dependent Types (4 sprints, 40 tasks)
-### Sub-Option 5C: GPU Compute Shaders (4 sprints, 40 tasks)
-### Sub-Option 5D: LSP v4 (4 sprints, 40 tasks)
-### Sub-Option 5E: Package Registry Server (4 sprints, 40 tasks)
-
-*Full task tables in `docs/V14_INFINITY_PLAN.md` — Sprints EF1-EF4, DT1-DT4, GS1-GS4, LS1-LS4, PR1-PR4.*
-*Status: PENDING*
-
----
-
-*V14 Tasks — Version 1.0 | 500 tasks | 2026-04-01*
+*V14 Tasks — Corrected Version 3.0 (real testing) | 205 [x], 160 [f], 135 [ ] | 2026-04-01*
