@@ -94,6 +94,27 @@ impl TypeChecker {
                         span: ed.span,
                     });
                 }
+                // V14: Register each effect operation as a known function symbol.
+                // E.g., `Console::log` becomes a known function in scope so
+                // the semantic analyzer doesn't reject it as undefined.
+                for op in &ed.operations {
+                    let qualified = format!("{}::{}", ed.name, op.name);
+                    let ret_ty = op.return_type.as_ref()
+                        .map(|t| self.resolve_type(t))
+                        .unwrap_or(Type::Void);
+                    let param_types: Vec<Type> = op.params.iter()
+                        .map(|(_, ty)| self.resolve_type(ty))
+                        .collect();
+                    self.symbols.define(crate::analyzer::scope::Symbol::new(
+                        qualified,
+                        Type::Function {
+                            params: param_types,
+                            ret: Box::new(ret_ty),
+                        },
+                        false,
+                        ed.span,
+                    ));
+                }
             }
             Item::StructDef(sdef) if sdef.lifetime_params.is_empty() => {
                 // B5: Warn if struct has &T fields but no lifetime params
@@ -134,6 +155,12 @@ impl TypeChecker {
             _ => crate::analyzer::scope::ScopeKind::Function,
         };
         self.symbols.push_scope_kind(scope_kind);
+
+        // V14: Set up effect inference tracking for this function.
+        let outer_fn_name = self.current_fn_name.take();
+        let outer_inferred_effects = std::mem::take(&mut self.current_fn_inferred_effects);
+        self.current_fn_name = Some(fndef.name.clone());
+        self.current_fn_inferred_effects.clear();
 
         // Register generic type parameters as TypeVar in scope.
         // This allows `T` to be resolved as a type variable in parameter and return positions.
@@ -279,6 +306,27 @@ impl TypeChecker {
             self.fn_effects
                 .insert(fndef.name.clone(), fndef.effects.clone());
         }
+
+        // V14: Effect inference — warn if function body performs effects not
+        // declared in its `with` clause. Skip for main/test/anonymous functions
+        // and when there are no inferred effects.
+        if !self.current_fn_inferred_effects.is_empty() && !fndef.name.is_empty() {
+            let declared: std::collections::BTreeSet<String> =
+                fndef.effects.iter().cloned().collect();
+            for inferred_effect in &self.current_fn_inferred_effects {
+                if !declared.contains(inferred_effect) {
+                    self.errors.push(SemanticError::UndeclaredEffect {
+                        function: fndef.name.clone(),
+                        effect: inferred_effect.clone(),
+                        span: fndef.span,
+                    });
+                }
+            }
+        }
+
+        // Restore outer effect inference state.
+        self.current_fn_name = outer_fn_name;
+        self.current_fn_inferred_effects = outer_inferred_effects;
 
         // Restore outer NLL info (for nested functions)
         self.nll_info = outer_nll;
@@ -988,7 +1036,18 @@ impl TypeChecker {
             Expr::HandleEffect { body, handlers, .. } => {
                 let old_in_handle = self.in_handle_expr;
                 self.in_handle_expr = true;
+
+                // V14: Track which effects are handled by this block so
+                // effect inference doesn't flag them as undeclared.
+                let outer_handled = self.handled_effects_in_scope.clone();
+                for arm in handlers {
+                    self.handled_effects_in_scope.insert(arm.effect_name.clone());
+                }
+
                 let body_type = self.check_expr(body);
+
+                // Restore outer handled effects scope.
+                self.handled_effects_in_scope = outer_handled;
                 // Check each handler arm
                 for arm in handlers {
                     // Validate effect exists
@@ -998,7 +1057,18 @@ impl TypeChecker {
                             span: arm.span,
                         });
                     }
+                    // V14: Push scope for handler arm params so they're visible in body.
+                    self.symbols.push_scope();
+                    for pname in &arm.param_names {
+                        self.symbols.define(crate::analyzer::scope::Symbol::new(
+                            pname.clone(),
+                            Type::Unknown,
+                            false,
+                            arm.span,
+                        ));
+                    }
                     self.check_expr(&arm.body);
+                    let _ = self.symbols.pop_scope_unused();
                 }
                 self.in_handle_expr = old_in_handle;
                 body_type
@@ -1396,6 +1466,15 @@ impl TypeChecker {
         if let Expr::Path { segments, .. } = callee {
             if let Some(last) = segments.last() {
                 self.check_context_call(last, span);
+            }
+            // V14: Effect inference — if call target is Effect::op, track it.
+            if segments.len() == 2 {
+                let effect_name = &segments[0];
+                if self.effect_registry.lookup(effect_name).is_some()
+                    && !self.handled_effects_in_scope.contains(effect_name)
+                {
+                    self.current_fn_inferred_effects.insert(effect_name.clone());
+                }
             }
         }
 

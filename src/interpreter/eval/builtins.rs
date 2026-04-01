@@ -1793,7 +1793,61 @@ impl Interpreter {
                     return self.builtin_async_select(args);
                 }
 
+                // V14: Check if this is an effect operation (prefixed with __effect__).
+                if let Some(effect_op) = name.strip_prefix("__effect__") {
+                    if let Some((effect_name, op_name)) = effect_op.split_once("::") {
+                        if self.effect_handler_depth > 0 {
+                            // Inside a handle block — raise the effect for handler dispatch.
+                            return Err(ControlFlow::EffectPerformed {
+                                effect: effect_name.to_string(),
+                                op: op_name.to_string(),
+                                args,
+                            }
+                            .into());
+                        }
+                        // Outside any handle block — execute with default behavior.
+                        // Default: IO effects print/read, others return Null.
+                        return self.default_effect_handler(effect_name, op_name, args);
+                    }
+                }
+
                 Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
+            }
+        }
+    }
+
+    /// V14: Default effect handler for unhandled effect operations.
+    ///
+    /// When an effect operation is called outside any `handle` block,
+    /// built-in effects get default behavior (e.g., IO prints to stdout).
+    /// User-defined effects without a handler return Null.
+    fn default_effect_handler(
+        &mut self,
+        effect: &str,
+        op: &str,
+        args: Vec<Value>,
+    ) -> EvalResult {
+        match (effect, op) {
+            ("IO", "print") => {
+                let text = args.first().map(|v| v.to_string()).unwrap_or_default();
+                if self.capture_output {
+                    self.output.push(text);
+                } else {
+                    print!("{text}");
+                }
+                Ok(Value::Null)
+            }
+            ("IO", "read") => {
+                // Default: return empty string (non-interactive).
+                Ok(Value::Str(String::new()))
+            }
+            ("Panic", "panic") => {
+                let msg = args.first().map(|v| v.to_string()).unwrap_or_default();
+                Err(RuntimeError::Unsupported(format!("panic: {msg}")).into())
+            }
+            _ => {
+                // User-defined effects without handlers return Null.
+                Ok(Value::Null)
             }
         }
     }

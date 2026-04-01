@@ -1329,6 +1329,12 @@ pub struct TypeChecker {
     fn_effects: HashMap<String, Vec<String>>,
     /// Whether we are inside a handle expression (allows resume).
     in_handle_expr: bool,
+    /// V14: Current function name being checked (for effect inference).
+    current_fn_name: Option<String>,
+    /// V14: Effects inferred from the current function body.
+    current_fn_inferred_effects: std::collections::BTreeSet<String>,
+    /// V14: Effects handled by enclosing handle blocks (don't require `with`).
+    handled_effects_in_scope: std::collections::BTreeSet<String>,
     /// Strict ownership mode: String/Array/Struct/Tensor are Move types.
     /// When false (default), all types are Copy (interpreter semantics).
     /// Enabled by `--strict-ownership` CLI flag.
@@ -1741,6 +1747,9 @@ impl TypeChecker {
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
             fn_effects: HashMap::new(),
             in_handle_expr: false,
+            current_fn_name: None,
+            current_fn_inferred_effects: std::collections::BTreeSet::new(),
+            handled_effects_in_scope: std::collections::BTreeSet::new(),
             strict_ownership: false,
             lifetime_env: {
                 let mut env = HashMap::new();
