@@ -1018,6 +1018,12 @@ impl Interpreter {
             "read_binary",
             "write_binary",
             "file_exists",
+            // GPU builtins
+            "thread_idx",
+            "block_idx",
+            "block_dim",
+            "grid_dim",
+            "gpu_sync",
             // Collections
             "map_new",
             "map_insert",

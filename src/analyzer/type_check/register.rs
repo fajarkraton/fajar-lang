@@ -1098,6 +1098,12 @@ impl TypeChecker {
                 vec![Type::Str, Type::Unknown],
                 Type::Unknown,
             ),
+            // GPU builtins
+            ("thread_idx", vec![Type::I64], Type::I64),
+            ("block_idx", vec![], Type::I64),
+            ("block_dim", vec![Type::I64], Type::I64),
+            ("grid_dim", vec![], Type::I64),
+            ("gpu_sync", vec![], Type::Void),
             ("file_exists", vec![Type::Str], Type::Bool),
         ];
         for (name, params, ret) in io_fns {

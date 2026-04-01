@@ -1091,6 +1091,31 @@ impl Interpreter {
                     .into()),
                 }
             }
+            // V16 G1.8: GPU thread indexing builtins (mock values in interpreter)
+            "thread_idx" => {
+                let _dim = args
+                    .first()
+                    .and_then(|v| match v {
+                        Value::Int(n) => Some(*n),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                // In interpreter mode, return 0 (mock single-thread)
+                Ok(Value::Int(0))
+            }
+            "block_idx" => Ok(Value::Int(0)),
+            "block_dim" => {
+                let _dim = args
+                    .first()
+                    .and_then(|v| match v {
+                        Value::Int(n) => Some(*n),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                Ok(Value::Int(1)) // mock: 1 thread per block
+            }
+            "grid_dim" => Ok(Value::Int(1)),
+            "gpu_sync" => Ok(Value::Null), // barrier sync (no-op in interpreter)
             // V16: Binary file I/O — read/write raw bytes as [i64] arrays
             "read_binary" => {
                 if args.len() != 1 {
