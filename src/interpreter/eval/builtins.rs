@@ -398,11 +398,11 @@ impl Interpreter {
             "tensor_zeros" | "zeros" => self.builtin_tensor_zeros(args),
             "tensor_ones" | "ones" => self.builtin_tensor_ones(args),
             "tensor_randn" | "tensor_rand" | "randn" => self.builtin_tensor_randn(args),
-            "tensor_eye" => self.builtin_tensor_eye(args),
+            "tensor_eye" | "eye" => self.builtin_tensor_eye(args),
             "tensor_full" => self.builtin_tensor_full(args),
             "tensor_from_data" | "from_data" => self.builtin_tensor_from_data(args),
-            "tensor_shape" => self.builtin_tensor_shape(args),
-            "tensor_reshape" => self.builtin_tensor_reshape(args),
+            "tensor_shape" | "shape" => self.builtin_tensor_shape(args),
+            "tensor_reshape" | "reshape" => self.builtin_tensor_reshape(args),
             "tensor_numel" => self.builtin_tensor_numel(args),
             "tensor_add" => self.builtin_tensor_binop(args, "add"),
             "tensor_sub" => self.builtin_tensor_binop(args, "sub"),
@@ -443,6 +443,8 @@ impl Interpreter {
             }
             "tensor_bce_loss" => self.builtin_tensor_loss(args, "bce"),
             "tensor_l1_loss" => self.builtin_tensor_loss(args, "l1"),
+            // Quantization
+            "quantize_int8" => self.builtin_quantize_int8(args),
             // ── Autograd builtins ──
             "tensor_backward" | "backward" => {
                 if args.len() != 1 {
@@ -3519,6 +3521,10 @@ impl Interpreter {
 
     /// `tensor_from_data([d1, d2, ...], [dim1, dim2, ...])` → Tensor
     fn builtin_tensor_from_data(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() == 1 {
+            // Single arg: nested array → auto-detect shape
+            return self.tensor_from_nested_array(&args[0]);
+        }
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
                 expected: 2,
@@ -3549,6 +3555,48 @@ impl Interpreter {
         match TensorValue::from_data(data, &shape) {
             Ok(t) => Ok(Value::Tensor(t)),
             Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
+        }
+    }
+
+    /// Recursively flattens a nested array and infers its shape.
+    fn tensor_from_nested_array(&self, val: &Value) -> EvalResult {
+        let mut data = Vec::new();
+        let mut shape = Vec::new();
+        Self::flatten_nested(val, &mut data, &mut shape, 0)?;
+        match TensorValue::from_data(data, &shape) {
+            Ok(t) => Ok(Value::Tensor(t)),
+            Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
+        }
+    }
+
+    /// Recursively flattens a Value (nested arrays) into flat f64 data + shape.
+    fn flatten_nested(
+        val: &Value,
+        data: &mut Vec<f64>,
+        shape: &mut Vec<usize>,
+        depth: usize,
+    ) -> Result<(), EvalError> {
+        match val {
+            Value::Float(f) => {
+                data.push(*f);
+                Ok(())
+            }
+            Value::Int(i) => {
+                data.push(*i as f64);
+                Ok(())
+            }
+            Value::Array(arr) => {
+                if depth >= shape.len() {
+                    shape.push(arr.len());
+                }
+                for item in arr {
+                    Self::flatten_nested(item, data, shape, depth + 1)?;
+                }
+                Ok(())
+            }
+            _ => Err(
+                RuntimeError::TypeError("from_data: expected nested numeric array".into()).into(),
+            ),
         }
     }
 
@@ -4183,6 +4231,26 @@ impl Interpreter {
             }
             _ => Err(
                 RuntimeError::TypeError(format!("tensor_{op}_loss: expected two tensors")).into(),
+            ),
+        }
+    }
+
+    /// `quantize_int8(tensor) -> Tensor` — Quantize a tensor to INT8 and dequantize back.
+    fn builtin_quantize_int8(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => {
+                let qt = crate::runtime::ml::quantize::QuantizedTensor::quantize(t);
+                Ok(Value::Tensor(qt.dequantize()))
+            }
+            _ => Err(
+                RuntimeError::TypeError("quantize_int8: expected a Tensor argument".into()).into(),
             ),
         }
     }

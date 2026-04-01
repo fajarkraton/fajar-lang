@@ -1652,6 +1652,19 @@ impl TypeChecker {
             "tensor_row",
             "tensor_normalize",
             "tensor_scale",
+            // Short aliases (match interpreter builtins.rs)
+            "eye",
+            "from_data",
+            "shape",
+            "reshape",
+            "matmul",
+            "transpose",
+            "flatten",
+            "relu",
+            "sigmoid",
+            "softmax",
+            "mse_loss",
+            "quantize_int8",
         ]
         .iter()
         .map(|s| s.to_string())

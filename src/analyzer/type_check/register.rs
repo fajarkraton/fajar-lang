@@ -725,16 +725,24 @@ impl TypeChecker {
             ("randn", vec![Type::Unknown], dyn_t.clone()),
             ("tensor_rand", vec![Type::Unknown], dyn_t.clone()),
             ("tensor_eye", vec![Type::I64], dyn_t.clone()),
+            ("eye", vec![Type::I64], dyn_t.clone()),
             ("tensor_full", vec![Type::Unknown, Type::F64], dyn_t.clone()),
             (
                 "tensor_from_data",
                 vec![Type::Unknown, Type::Unknown],
                 dyn_t.clone(),
             ),
+            ("from_data", vec![Type::Unknown], dyn_t.clone()),
             // Shape query
             ("tensor_shape", vec![dyn_t.clone()], Type::Unknown), // returns array
+            ("shape", vec![dyn_t.clone()], Type::Unknown),
             (
                 "tensor_reshape",
+                vec![dyn_t.clone(), Type::Unknown],
+                dyn_t.clone(),
+            ),
+            (
+                "reshape",
                 vec![dyn_t.clone(), Type::Unknown],
                 dyn_t.clone(),
             ),
@@ -766,14 +774,23 @@ impl TypeChecker {
                 vec![dyn_t.clone(), dyn_t.clone()],
                 dyn_t.clone(),
             ),
+            (
+                "matmul",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
             ("tensor_transpose", vec![dyn_t.clone()], dyn_t.clone()),
+            ("transpose", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_sum", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_mean", vec![dyn_t.clone()], dyn_t.clone()),
             // Activation functions → return dynamic tensor (same shape as input)
             ("tensor_relu", vec![dyn_t.clone()], dyn_t.clone()),
+            ("relu", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_sigmoid", vec![dyn_t.clone()], dyn_t.clone()),
+            ("sigmoid", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_tanh", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_softmax", vec![dyn_t.clone()], dyn_t.clone()),
+            ("softmax", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_gelu", vec![dyn_t.clone()], dyn_t.clone()),
             (
                 "tensor_leaky_relu",
@@ -783,6 +800,11 @@ impl TypeChecker {
             // Loss functions → return dynamic tensor
             (
                 "tensor_mse_loss",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            (
+                "mse_loss",
                 vec![dyn_t.clone(), dyn_t.clone()],
                 dyn_t.clone(),
             ),
@@ -798,6 +820,7 @@ impl TypeChecker {
             ),
             // Shape manipulation → return dynamic tensor
             ("tensor_flatten", vec![dyn_t.clone()], dyn_t.clone()),
+            ("flatten", vec![dyn_t.clone()], dyn_t.clone()),
             (
                 "tensor_squeeze",
                 vec![dyn_t.clone(), Type::I64],
@@ -869,11 +892,7 @@ impl TypeChecker {
             ("softmax", vec![dyn_t.clone()], dyn_t.clone()),
             ("gelu", vec![dyn_t.clone()], dyn_t.clone()),
             ("argmax", vec![dyn_t.clone()], Type::I64),
-            (
-                "from_data",
-                vec![Type::Unknown, Type::I64, Type::I64],
-                dyn_t.clone(),
-            ),
+            ("from_data", vec![Type::Unknown], dyn_t.clone()),
             ("transpose", vec![dyn_t.clone()], dyn_t.clone()),
             ("reshape", vec![dyn_t.clone(), Type::Unknown], dyn_t.clone()),
             ("flatten", vec![dyn_t.clone()], dyn_t.clone()),
@@ -1208,6 +1227,18 @@ impl TypeChecker {
                 used: false,
             });
         }
+
+        // Quantization builtins
+        self.symbols.define(Symbol {
+            name: "quantize_int8".to_string(),
+            ty: Type::Function {
+                params: vec![dyn_t.clone()],
+                ret: Box::new(dyn_t.clone()),
+            },
+            mutable: false,
+            span: Span::new(0, 0),
+            used: false,
+        });
 
         // Layer builtins
         let layer_fns: Vec<(&str, Vec<Type>, Type)> = vec![
