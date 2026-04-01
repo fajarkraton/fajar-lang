@@ -226,6 +226,11 @@ impl SymbolTable {
         self.scopes.iter().rev().any(|s| s.kind == ScopeKind::Npu)
     }
 
+    /// V16: Returns `true` if currently inside a `@gpu` scope.
+    pub fn is_inside_gpu(&self) -> bool {
+        self.scopes.iter().rev().any(|s| s.kind == ScopeKind::Gpu)
+    }
+
     /// Returns `true` if currently inside a `@safe` scope.
     /// Functions annotated with @safe or implicitly safe (no annotation).
     pub fn is_inside_safe(&self) -> bool {

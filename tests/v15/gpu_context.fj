@@ -1,0 +1,27 @@
+// V16 G1: @gpu context rules test
+
+// @gpu allows math operations
+@gpu fn gpu_math(x: f64) -> f64 {
+    sin(x) + cos(x) * sqrt(x)
+}
+
+let result = gpu_math(1.0)
+println(f"gpu_math(1.0) = {result}")
+
+// @gpu allows tensor operations
+@gpu fn gpu_tensor() -> f64 {
+    let t = zeros(2, 2)
+    1.0
+}
+
+let t_result = gpu_tensor()
+assert_eq(t_result, 1.0)
+
+// @gpu allows basic arithmetic
+@gpu fn gpu_arith(a: i64, b: i64) -> i64 {
+    a * b + a - b
+}
+
+assert_eq(gpu_arith(3, 4), 11)
+
+println("PASS: @gpu context rules")

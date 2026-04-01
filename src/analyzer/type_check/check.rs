@@ -1812,6 +1812,31 @@ impl TypeChecker {
             }
         }
 
+        // V16 G1: @gpu context restrictions
+        let in_gpu = self.symbols.is_inside_gpu();
+        if in_gpu {
+            // @gpu cannot use OS builtins (no raw pointers, no syscalls)
+            if self.os_builtins.contains(callee_name) {
+                self.errors.push(SemanticError::RawPointerInDevice { span });
+            }
+            // @gpu cannot use heap-allocating builtins (no heap on GPU)
+            if self.heap_builtins.contains(callee_name) {
+                self.errors.push(SemanticError::HeapAllocInKernel { span });
+            }
+            // @gpu cannot use file I/O
+            if matches!(
+                callee_name,
+                "read_file"
+                    | "write_file"
+                    | "read_binary"
+                    | "write_binary"
+                    | "append_file"
+                    | "file_exists"
+            ) {
+                self.errors.push(SemanticError::HeapAllocInKernel { span });
+            }
+        }
+
         if in_device {
             // @device cannot call @kernel functions
             if self.kernel_fns.contains(callee_name) {
