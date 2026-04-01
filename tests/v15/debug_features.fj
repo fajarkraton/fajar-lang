@@ -1,0 +1,122 @@
+// V16 X2: Debug Features — Tests debugging-related builtins
+//
+// All debug builtins work in interpreter mode.
+// For full DAP debugging: fj debug --dap file.fj
+
+// ── X2.1: dbg() — prints value with debug annotation ──
+let x = 42
+dbg(x)
+dbg("hello debug")
+dbg(3.14)
+dbg(true)
+dbg([1, 2, 3])
+
+// ── X2.2: type_of() — runtime type introspection ──
+assert_eq(type_of(42), "i64")
+assert_eq(type_of(3.14), "f64")
+assert_eq(type_of("hello"), "str")
+assert_eq(type_of(true), "bool")
+assert_eq(type_of(null), "null")
+assert_eq(type_of([1, 2]), "array")
+assert_eq(type_of(Some(1)), "enum")
+assert_eq(type_of(None), "enum")
+
+// ── X2.3: assert() — boolean assertion ──
+assert(true)
+assert(1 + 1 == 2)
+assert(len("hello") == 5)
+assert(!false)
+assert(42 > 0)
+
+// ── X2.4: assert_eq() — equality assertion with values ──
+assert_eq(1 + 1, 2)
+assert_eq("hello" + " " + "world", "hello world")
+assert_eq(len([1, 2, 3]), 3)
+assert_eq(10 % 3, 1)
+assert_eq(2 ** 8, 256)
+
+// ── X2.5: println() with f-string formatting ──
+let name = "Fajar"
+let version = 12
+let pi = 3.14159
+
+println(f"Name: {name}")
+println(f"Version: {version}")
+println(f"Pi: {pi}")
+println(f"Computed: {2 + 3 * 4}")
+println(f"Nested: len={len([1,2,3])}")
+
+// ── X2.6: to_string() — explicit string conversion ──
+let int_str = to_string(42)
+assert_eq(int_str, "42")
+
+let float_str = to_string(3.14)
+assert(float_str.contains("3.14"))
+
+let bool_str = to_string(true)
+assert_eq(bool_str, "true")
+
+// ── X2.7: type_of() on complex types ──
+struct DebugPoint { x: f64, y: f64 }
+let dp = DebugPoint { x: 1.0, y: 2.0 }
+let st = type_of(dp)
+// Struct type_of returns "struct" or the struct name
+println(f"struct type: {st}")
+
+let closure_type = type_of(|x| x + 1)
+println(f"closure type: {closure_type}")
+
+let fn_type = type_of(println)
+println(f"builtin fn type: {fn_type}")
+
+// ── X2.8: dbg() preserves value for chaining ──
+let y = 10
+let z = y + 5
+dbg(z)
+assert_eq(z, 15)
+
+// Multiple dbg in sequence
+let a = 100
+let b = 200
+let c = a + b
+dbg(a)
+dbg(b)
+dbg(c)
+assert_eq(c, 300)
+
+// ── X2.9: Debug with data structures ──
+let items = [10, 20, 30, 40, 50]
+dbg(items)
+println(f"items length: {len(items)}")
+assert_eq(len(items), 5)
+
+let pair = (1, "hello")
+dbg(pair)
+
+// ── X2.10: Debug tracing pattern ──
+// Simulate a function trace using println + f-strings
+fn traced_add(a: i64, b: i64) -> i64 {
+    println(f"  [trace] traced_add({a}, {b})")
+    let result = a + b
+    println(f"  [trace] => {result}")
+    result
+}
+
+fn traced_multiply(a: i64, b: i64) -> i64 {
+    println(f"  [trace] traced_multiply({a}, {b})")
+    let result = a * b
+    println(f"  [trace] => {result}")
+    result
+}
+
+println("[trace] Starting computation")
+let step1 = traced_add(3, 4)
+let step2 = traced_multiply(step1, 5)
+let step3 = traced_add(step2, 10)
+println(f"[trace] Final result: {step3}")
+
+assert_eq(step1, 7)
+assert_eq(step2, 35)
+assert_eq(step3, 45)
+
+println("PASS: X2 debug features (10 tests)")

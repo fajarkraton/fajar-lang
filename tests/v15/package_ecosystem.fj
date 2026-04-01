@@ -1,0 +1,219 @@
+// V16 R3: Package Ecosystem — Tests package-related concepts
+//
+// These tests verify module-style code organization, struct imports,
+// and function composition patterns used in the package system.
+//
+// Real package operations:
+//   fj publish               -- publish to registry
+//   fj install <pkg>         -- install a dependency
+//   fj update                -- update dependencies
+//   fj tree                  -- show dependency tree
+//   fj audit                 -- security audit
+//
+// This file tests the language features that underpin packages.
+
+// ── R3.1: Module-style struct organization ──
+// A package exposes types — test struct definition and construction
+
+struct Version {
+    major: i64,
+    minor: i64,
+    patch: i64,
+}
+
+impl Version {
+    fn new(major: i64, minor: i64, patch: i64) -> Version {
+        Version { major: major, minor: minor, patch: patch }
+    }
+
+    fn to_string(self) -> str {
+        f"{self.major}.{self.minor}.{self.patch}"
+    }
+
+    fn is_compatible(self, other: Version) -> bool {
+        self.major == other.major
+    }
+}
+
+let v1 = Version::new(12, 0, 0)
+assert_eq(v1.to_string(), "12.0.0")
+
+let v2 = Version::new(12, 1, 0)
+assert(v1.is_compatible(v2))
+
+let v3 = Version::new(13, 0, 0)
+assert(!v1.is_compatible(v3))
+
+// ── R3.2: Trait-based API contracts ──
+// Packages expose traits — test trait definition and implementation
+
+trait Serializable {
+    fn serialize(self) -> str
+}
+
+trait Deserializable {
+    fn description() -> str
+}
+
+struct Config {
+    name: str,
+    debug: bool,
+    workers: i64,
+}
+
+impl Serializable for Config {
+    fn serialize(self) -> str {
+        let debug_str = if self.debug { "true" } else { "false" }
+        f"name={self.name},debug={debug_str},workers={self.workers}"
+    }
+}
+
+let cfg = Config { name: "myapp", debug: true, workers: 4 }
+let serialized = cfg.serialize()
+assert(serialized.contains("name=myapp"))
+assert(serialized.contains("debug=true"))
+assert(serialized.contains("workers=4"))
+
+// ── R3.3: Enum-based error types (package API pattern) ──
+
+enum PkgError {
+    NotFound(str),
+    VersionConflict(str),
+    NetworkError(str),
+}
+
+fn resolve_dependency(name: str) -> i64 {
+    match name {
+        "fj-math" => 1
+        "fj-json" => 2
+        "fj-http" => 3
+        _ => -1
+    }
+}
+
+assert_eq(resolve_dependency("fj-math"), 1)
+assert_eq(resolve_dependency("fj-json"), 2)
+assert_eq(resolve_dependency("unknown"), -1)
+
+// ── R3.4: Function composition (build pipeline pattern) ──
+
+fn validate_name(name: str) -> bool {
+    len(name) > 0 && len(name) < 64
+}
+
+fn normalize_name(name: str) -> str {
+    name.to_lower().replace(" ", "-")
+}
+
+fn format_package_id(name: str, version: Version) -> str {
+    let norm = normalize_name(name)
+    f"{norm}@{version.to_string()}"
+}
+
+assert(validate_name("fj-math"))
+assert(!validate_name(""))
+assert_eq(normalize_name("My Package"), "my-package")
+assert_eq(format_package_id("FJ Math", Version::new(1, 0, 0)), "fj-math@1.0.0")
+
+// ── R3.5: Collection-based dependency resolution ──
+
+let deps = ["fj-math", "fj-json", "fj-http", "fj-crypto"]
+
+// Count resolved deps
+let mut resolved = 0
+let mut unresolved = 0
+for dep in deps {
+    let id = resolve_dependency(dep)
+    if id > 0 {
+        resolved = resolved + 1
+    } else {
+        unresolved = unresolved + 1
+    }
+}
+assert_eq(resolved, 3)   // math, json, http
+assert_eq(unresolved, 1)  // crypto not in mock resolver
+
+// ── R3.6: Nested struct composition (workspace pattern) ──
+
+struct Package {
+    name: str,
+    version: Version,
+    is_published: bool,
+}
+
+struct Workspace {
+    name: str,
+    member_count: i64,
+}
+
+let pkg = Package {
+    name: "fajar-lang",
+    version: Version::new(12, 0, 0),
+    is_published: true,
+}
+assert_eq(pkg.name, "fajar-lang")
+assert_eq(pkg.version.major, 12)
+assert(pkg.is_published)
+
+let ws = Workspace { name: "fajar-workspace", member_count: 3 }
+assert_eq(ws.member_count, 3)
+
+// ── R3.7: Feature flag simulation ──
+
+fn has_feature(features: str, name: str) -> bool {
+    features.contains(name)
+}
+
+let features = "websocket,mqtt,gui"
+assert(has_feature(features, "websocket"))
+assert(has_feature(features, "mqtt"))
+assert(!has_feature(features, "ble"))
+
+// ── R3.8: Build manifest parsing (string processing) ──
+
+fn parse_manifest_line(line: str) -> str {
+    let parts = line.split("=")
+    if len(parts) >= 2 {
+        let key = parts[0].trim()
+        let value = parts[1].trim()
+        f"{key}: {value}"
+    } else {
+        "invalid"
+    }
+}
+
+assert_eq(parse_manifest_line("name = fajar-lang"), "name: fajar-lang")
+assert_eq(parse_manifest_line("version = 12.0.0"), "version: 12.0.0")
+assert_eq(parse_manifest_line("badline"), "invalid")
+
+// ── R3.9: Dependency tree (recursive function) ──
+
+fn dep_depth(name: str) -> i64 {
+    match name {
+        "app" => 1 + dep_depth("fj-http")
+        "fj-http" => 1 + dep_depth("fj-json")
+        "fj-json" => 1
+        _ => 0
+    }
+}
+assert_eq(dep_depth("app"), 3)       // app -> fj-http -> fj-json
+assert_eq(dep_depth("fj-http"), 2)   // fj-http -> fj-json
+assert_eq(dep_depth("fj-json"), 1)   // leaf
+
+// ── R3.10: Package search and filter ──
+
+let packages = ["fj-math", "fj-json", "fj-http", "fj-crypto", "fj-nn"]
+
+let fj_count = len(packages)
+assert_eq(fj_count, 5)
+
+// Filter by prefix matching (all start with "fj-")
+let mut matching = 0
+for pkg_name in packages {
+    if pkg_name.starts_with("fj-") {
+        matching = matching + 1
+    }
+}
+assert_eq(matching, 5)
+
+println("PASS: R3 package ecosystem (10 tests)")

@@ -1,0 +1,425 @@
+// V16 X3: Self-Documenting Feature Showcase
+//
+// This file demonstrates ALL major Fajar Lang features in one program.
+// It serves as both a test and a living reference for the language.
+// Each section is labeled and verified with assertions.
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 1: Variables and Types
+// ═══════════════════════════════════════════════════════════
+
+// Immutable bindings
+let integer: i64 = 42
+let floating: f64 = 3.14
+let text: str = "hello"
+let flag: bool = true
+let _nothing = null
+
+assert_eq(integer, 42)
+assert_eq(floating, 3.14)
+assert_eq(text, "hello")
+assert_eq(flag, true)
+
+// Mutable bindings
+let mut counter = 0
+counter = counter + 1
+assert_eq(counter, 1)
+
+// Constants
+const MAX_SIZE: i64 = 1024
+assert_eq(MAX_SIZE, 1024)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 2: Functions
+// ═══════════════════════════════════════════════════════════
+
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+assert_eq(add(3, 4), 7)
+
+// Recursive function
+fn factorial(n: i64) -> i64 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+assert_eq(factorial(5), 120)
+
+// Function returning expression
+fn max_val(a: i64, b: i64) -> i64 {
+    if a > b { a } else { b }
+}
+assert_eq(max_val(10, 20), 20)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 3: Structs and Implementations
+// ═══════════════════════════════════════════════════════════
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn new(x: f64, y: f64) -> Point {
+        Point { x: x, y: y }
+    }
+
+    fn distance_to(self, other: Point) -> f64 {
+        let dx = other.x - self.x
+        let dy = other.y - self.y
+        sqrt(dx * dx + dy * dy)
+    }
+
+    fn translate(self, dx: f64, dy: f64) -> Point {
+        Point { x: self.x + dx, y: self.y + dy }
+    }
+}
+
+let origin = Point::new(0.0, 0.0)
+let target = Point::new(3.0, 4.0)
+let dist = origin.distance_to(target)
+assert(abs(dist - 5.0) < 0.001)
+
+let moved = origin.translate(1.0, 2.0)
+assert_eq(moved.x, 1.0)
+assert_eq(moved.y, 2.0)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 4: Enums and Pattern Matching
+// ═══════════════════════════════════════════════════════════
+
+enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+    Triangle,
+}
+
+fn shape_name(s: Shape) -> str {
+    match s {
+        Shape::Circle(_) => "circle"
+        Shape::Rectangle(_, _) => "rectangle"
+        Shape::Triangle => "triangle"
+    }
+}
+
+assert_eq(shape_name(Shape::Circle(5.0)), "circle")
+assert_eq(shape_name(Shape::Rectangle(3.0, 4.0)), "rectangle")
+assert_eq(shape_name(Shape::Triangle), "triangle")
+
+// Match with guards
+let score = 85
+let grade = match score {
+    s if s >= 90 => "A"
+    s if s >= 80 => "B"
+    s if s >= 70 => "C"
+    _ => "F"
+}
+assert_eq(grade, "B")
+
+// Match with or-patterns
+let day = 6
+let kind = match day {
+    1 | 2 | 3 | 4 | 5 => "weekday"
+    6 | 7 => "weekend"
+    _ => "invalid"
+}
+assert_eq(kind, "weekend")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5: Traits
+// ═══════════════════════════════════════════════════════════
+
+trait Describable {
+    fn describe(self) -> str
+}
+
+struct Dog {
+    name: str,
+    breed: str,
+}
+
+struct Cat {
+    name: str,
+    indoor: bool,
+}
+
+impl Describable for Dog {
+    fn describe(self) -> str {
+        f"{self.name} the {self.breed}"
+    }
+}
+
+impl Describable for Cat {
+    fn describe(self) -> str {
+        let loc = if self.indoor { "indoor" } else { "outdoor" }
+        f"{self.name} the {loc} cat"
+    }
+}
+
+let d = Dog { name: "Rex", breed: "Shepherd" }
+let c = Cat { name: "Mimi", indoor: true }
+assert_eq(d.describe(), "Rex the Shepherd")
+assert_eq(c.describe(), "Mimi the indoor cat")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6: Closures and Higher-Order Functions
+// ═══════════════════════════════════════════════════════════
+
+// Basic closures
+let square = |x| x * x
+assert_eq(square(5), 25)
+
+// Closure with capture
+let multiplier = 3
+let triple = |x| x * multiplier
+assert_eq(triple(10), 30)
+
+// Higher-order: map, filter, fold
+let nums = [1, 2, 3, 4, 5]
+let doubled = nums.map(|x| x * 2)
+assert_eq(doubled[2], 6)
+
+let evens = nums.filter(|x| x % 2 == 0)
+assert_eq(len(evens), 2)
+
+let sum = nums.fold(0, |acc, x| acc + x)
+assert_eq(sum, 15)
+
+// any / all
+assert(nums.any(|x| x > 4))
+assert(nums.all(|x| x > 0))
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 7: if-let and while-let
+// ═══════════════════════════════════════════════════════════
+
+// if-let with Option
+let maybe = Some(99)
+if let Some(v) = maybe {
+    assert_eq(v, 99)
+} else {
+    panic("should be Some")
+}
+
+// if-let as expression
+let extracted = if let Some(v) = Some("hello") {
+    v
+} else {
+    "default"
+}
+assert_eq(extracted, "hello")
+
+// if-let with None
+let empty = None
+let fallback = if let Some(v) = empty {
+    "found"
+} else {
+    "missing"
+}
+assert_eq(fallback, "missing")
+
+// while-let
+let options = [Some(10), Some(20), Some(30), None]
+let mut wl_sum = 0
+let mut wl_idx = 0
+while let Some(v) = options[wl_idx] {
+    wl_sum = wl_sum + v
+    wl_idx = wl_idx + 1
+}
+assert_eq(wl_sum, 60)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 8: Effects (Algebraic Effect System)
+// ═══════════════════════════════════════════════════════════
+
+effect Logger {
+    fn log(msg: str) -> str
+}
+
+let log_result = handle {
+    Logger::log("test message")
+} with {
+    Logger::log(msg) => { resume(f"[LOG] {msg}") }
+}
+assert_eq(log_result, "[LOG] test message")
+
+// Effect with computation
+effect Config {
+    fn get_value(key: str) -> str
+}
+
+let cfg_result = handle {
+    let host = Config::get_value("host")
+    let port = Config::get_value("port")
+    f"{host}:{port}"
+} with {
+    Config::get_value(key) => {
+        match key {
+            "host" => resume("localhost")
+            "port" => resume("8080")
+            _ => resume("unknown")
+        }
+    }
+}
+assert_eq(cfg_result, "localhost:8080")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 9: @gpu Context Annotation
+// ═══════════════════════════════════════════════════════════
+
+@gpu fn gpu_vector_length(x: f64, y: f64, z: f64) -> f64 {
+    sqrt(x * x + y * y + z * z)
+}
+
+let vec_len = gpu_vector_length(1.0, 2.0, 2.0)
+assert(abs(vec_len - 3.0) < 0.001)
+
+@gpu fn gpu_dot_product(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    ax * bx + ay * by
+}
+assert_eq(gpu_dot_product(1.0, 0.0, 0.0, 1.0), 0.0)
+assert_eq(gpu_dot_product(2.0, 3.0, 4.0, 5.0), 23.0)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 10: Control Flow
+// ═══════════════════════════════════════════════════════════
+
+// For-in with arrays
+let mut for_sum = 0
+for item in [10, 20, 30] {
+    for_sum = for_sum + item
+}
+assert_eq(for_sum, 60)
+
+// For-in with ranges
+let mut range_sum = 0
+for i in 0..5 {
+    range_sum = range_sum + i
+}
+assert_eq(range_sum, 10)
+
+// While loop
+let mut w = 0
+let mut w_count = 0
+while w < 100 {
+    w = w + 7
+    w_count = w_count + 1
+}
+assert_eq(w_count, 15)
+
+// Loop with break
+let mut loop_val = 0
+let break_result = loop {
+    loop_val = loop_val + 1
+    if loop_val == 10 {
+        break loop_val
+    }
+}
+assert_eq(break_result, 10)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 11: Arrays
+// ═══════════════════════════════════════════════════════════
+
+let arr = [5, 3, 1, 4, 2]
+
+// Sort and reverse
+let sorted = arr.sort()
+assert_eq(sorted[0], 1)
+assert_eq(sorted[4], 5)
+
+let rev = sorted.reverse()
+assert_eq(rev[0], 5)
+
+// Push, pop, insert, remove
+let pushed = [1, 2].push(3)
+assert_eq(len(pushed), 3)
+
+let popped = [1, 2, 3].pop()
+assert_eq(popped, 3)
+
+let inserted = [1, 3].insert(1, 2)
+assert_eq(inserted[1], 2)
+
+let removed = [1, 2, 3].remove(1)
+assert_eq(removed[0], 1)
+assert_eq(removed[1], 3)
+
+// Concat
+let combined = [1, 2] + [3, 4]
+assert_eq(len(combined), 4)
+
+// Contains, index_of
+assert([1, 2, 3].contains(2))
+assert_eq([10, 20, 30].index_of(20), 1)
+assert_eq([10, 20, 30].index_of(99), -1)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 12: File I/O and Error Handling
+// ═══════════════════════════════════════════════════════════
+
+// Write and read
+write_file("/tmp/fj_doc_test.txt", "documentation test")
+let file_content = read_file("/tmp/fj_doc_test.txt")?
+assert_eq(file_content, "documentation test")
+
+// File existence
+assert(file_exists("/tmp/fj_doc_test.txt"))
+assert(!file_exists("/tmp/fj_doc_nonexistent.txt"))
+
+// Error handling with Result
+fn safe_parse(s: str) -> i64 {
+    match s.parse_int() {
+        Ok(n) => n
+        Err(_) => -1
+    }
+}
+assert_eq(safe_parse("42"), 42)
+assert_eq(safe_parse("bad"), -1)
+
+// ? operator propagation
+fn read_first_word(path: str) -> str {
+    let content = read_file(path)?
+    let words = content.split(" ")
+    words[0]
+}
+let first = read_first_word("/tmp/fj_doc_test.txt")
+assert_eq(first, "documentation")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 13: String Operations
+// ═══════════════════════════════════════════════════════════
+
+assert_eq("hello".to_upper(), "HELLO")
+assert_eq("WORLD".to_lower(), "world")
+assert_eq("  spaces  ".trim(), "spaces")
+assert_eq("ha".repeat(3), "hahaha")
+assert_eq("a,b,c".split(",")[1], "b")
+assert_eq("hello world".replace("world", "fajar"), "hello fajar")
+assert("prefix_test".starts_with("prefix"))
+assert("test_suffix".contains("suffix"))
+assert_eq(len("abc".chars()), 3)
+
+// F-string interpolation
+let lang = "Fajar Lang"
+let ver = 12
+assert_eq(f"{lang} v{ver}", "Fajar Lang v12")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 14: Debug Introspection
+// ═══════════════════════════════════════════════════════════
+
+assert_eq(type_of(42), "i64")
+assert_eq(type_of(3.14), "f64")
+assert_eq(type_of("hi"), "str")
+assert_eq(type_of(true), "bool")
+assert_eq(type_of([1]), "array")
+
+dbg(42)
+dbg("introspection works")
+
+// ═══════════════════════════════════════════════════════════
+// FINAL: All 14 sections pass
+// ═══════════════════════════════════════════════════════════
+
+println("PASS: X3 documentation showcase (14 sections, all features verified)")

@@ -1,0 +1,129 @@
+// V16 R2: WASM Deployment — WASI-related feature tests
+//
+// These tests exercise file I/O and data processing features that
+// map to WASI syscalls when compiled to wasm32-wasi.
+//
+// In interpreter mode, these use the host OS directly.
+// For real WASM deployment:
+//   fj build --target wasm32-wasi my_app.fj
+//   wasmtime my_app.wasm
+//
+// WASI P1 syscalls tested (interpreter equivalents):
+//   fd_write  -> write_file / println
+//   fd_read   -> read_file
+//   path_open -> file_exists
+
+// ── R2.1: File write + read round-trip ──
+write_file("/tmp/fj_wasi_r2_test.txt", "WASI round-trip test data")
+let content = read_file("/tmp/fj_wasi_r2_test.txt")?
+assert_eq(content, "WASI round-trip test data")
+
+// ── R2.2: File existence check ──
+assert(file_exists("/tmp/fj_wasi_r2_test.txt"))
+assert(!file_exists("/tmp/fj_wasi_no_such_file_xyz.txt"))
+
+// ── R2.3: Append to file ──
+write_file("/tmp/fj_wasi_r2_append.txt", "line1\n")
+append_file("/tmp/fj_wasi_r2_append.txt", "line2\n")
+append_file("/tmp/fj_wasi_r2_append.txt", "line3\n")
+let appended = read_file("/tmp/fj_wasi_r2_append.txt")?
+assert(appended.contains("line1"))
+assert(appended.contains("line2"))
+assert(appended.contains("line3"))
+
+// ── R2.4: Read file lines and process ──
+write_file("/tmp/fj_wasi_r2_csv.txt", "alice,95\nbob,82\ncharlie,91")
+let csv_content = read_file("/tmp/fj_wasi_r2_csv.txt")?
+let lines = csv_content.split("\n")
+assert_eq(len(lines), 3)
+
+// Parse each line
+let mut total_score = 0
+for line in lines {
+    let parts = line.split(",")
+    if len(parts) == 2 {
+        if let Ok(score) = parts[1].parse_int() {
+            total_score = total_score + score
+        }
+    }
+}
+assert_eq(total_score, 268)
+
+// ── R2.5: Command-line-style text processing pipeline ──
+// Simulates a filter: read lines, keep those with score > 85
+write_file("/tmp/fj_wasi_r2_filter.txt", "alice,95\nbob,82\ncharlie,91\ndave,78")
+let raw = read_file("/tmp/fj_wasi_r2_filter.txt")?
+let all_lines = raw.split("\n")
+
+let mut high_scorers = 0
+for line in all_lines {
+    let parts = line.split(",")
+    if len(parts) == 2 {
+        if let Ok(score) = parts[1].parse_int() {
+            if score > 85 {
+                high_scorers = high_scorers + 1
+            }
+        }
+    }
+}
+assert_eq(high_scorers, 2) // alice (95) and charlie (91)
+
+// ── R2.6: Binary-style data via text encoding ──
+// Write numeric data as text, read back and verify
+let mut data_str = ""
+for i in 0..5 {
+    if i > 0 {
+        data_str = data_str + ","
+    }
+    data_str = data_str + to_string(i * 10)
+}
+write_file("/tmp/fj_wasi_r2_data.txt", data_str)
+let readback = read_file("/tmp/fj_wasi_r2_data.txt")?
+assert_eq(readback, "0,10,20,30,40")
+
+// ── R2.7: Error handling for missing files ──
+let missing = read_file("/tmp/fj_wasi_no_exist_abc.txt")
+match missing {
+    Ok(_) => panic("should not find missing file")
+    Err(_) => {} // expected: file not found
+}
+
+// ── R2.8: Multi-file coordination ──
+// Write index, then data files, then read index to find data
+write_file("/tmp/fj_wasi_r2_index.txt", "data_a\ndata_b")
+write_file("/tmp/fj_wasi_r2_data_a.txt", "100")
+write_file("/tmp/fj_wasi_r2_data_b.txt", "200")
+
+let index = read_file("/tmp/fj_wasi_r2_index.txt")?
+let entries = index.split("\n")
+let mut file_sum = 0
+for entry in entries {
+    let path = "/tmp/fj_wasi_r2_" + entry + ".txt"
+    let val_str = read_file(path)?
+    if let Ok(val) = val_str.parse_int() {
+        file_sum = file_sum + val
+    }
+}
+assert_eq(file_sum, 300)
+
+// ── R2.9: Stdout output (maps to fd_write on WASI) ──
+println("WASI stdout test: integers and strings")
+println(f"Computed total: {total_score}")
+println(f"High scorers: {high_scorers}")
+
+// ── R2.10: String processing (pure computation, WASM-safe) ──
+fn process_record(record: str) -> str {
+    let parts = record.split(":")
+    if len(parts) >= 2 {
+        let key = parts[0].trim()
+        let value = parts[1].trim()
+        f"{key} = {value}"
+    } else {
+        "invalid"
+    }
+}
+assert_eq(process_record("name : Fajar"), "name = Fajar")
+assert_eq(process_record("version : 12"), "version = 12")
+assert_eq(process_record("novalue"), "invalid")
+
+println("PASS: R2 WASM deployment (10 tests)")
