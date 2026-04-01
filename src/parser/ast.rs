@@ -1536,6 +1536,26 @@ pub enum Pattern {
         /// Source span.
         span: Span,
     },
+
+    /// V16 L2.6: Array pattern: `[first, second, ..rest]`.
+    Array {
+        /// Element patterns.
+        elements: Vec<Pattern>,
+        /// Optional rest binding name (after `..`).
+        rest: Option<String>,
+        /// Source span.
+        span: Span,
+    },
+
+    /// V16 L2.7: Binding pattern: `name @ pattern`.
+    Binding {
+        /// Bound variable name.
+        name: String,
+        /// Inner pattern to match.
+        pattern: Box<Pattern>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 impl Pattern {
@@ -1549,7 +1569,9 @@ impl Pattern {
             | Pattern::Struct { span, .. }
             | Pattern::Or { span, .. }
             | Pattern::Enum { span, .. }
-            | Pattern::Range { span, .. } => *span,
+            | Pattern::Range { span, .. }
+            | Pattern::Array { span, .. }
+            | Pattern::Binding { span, .. } => *span,
         }
     }
 }
@@ -1741,6 +1763,25 @@ impl fmt::Display for Pattern {
                     write!(f, "{p}")?;
                 }
                 Ok(())
+            }
+            Pattern::Array { elements, rest, .. } => {
+                write!(f, "[")?;
+                for (i, p) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                if let Some(rest_name) = rest {
+                    if !elements.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "..{rest_name}")?;
+                }
+                write!(f, "]")
+            }
+            Pattern::Binding { name, pattern, .. } => {
+                write!(f, "{name} @ {pattern}")
             }
         }
     }

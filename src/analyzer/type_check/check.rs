@@ -2320,6 +2320,40 @@ impl TypeChecker {
                     self.check_pattern(p);
                 }
             }
+            Pattern::Array {
+                elements,
+                rest,
+                span,
+                ..
+            } => {
+                for p in elements {
+                    self.check_pattern(p);
+                }
+                if let Some(rest_name) = rest {
+                    self.symbols.define(Symbol {
+                        name: rest_name.clone(),
+                        ty: Type::Unknown,
+                        mutable: false,
+                        span: *span,
+                        used: false,
+                    });
+                }
+            }
+            Pattern::Binding {
+                name,
+                pattern,
+                span,
+                ..
+            } => {
+                self.symbols.define(Symbol {
+                    name: name.clone(),
+                    ty: Type::Unknown,
+                    mutable: false,
+                    span: *span,
+                    used: false,
+                });
+                self.check_pattern(pattern);
+            }
         }
     }
 

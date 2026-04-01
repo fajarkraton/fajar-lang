@@ -1118,6 +1118,28 @@ impl<'src> Formatter<'src> {
                     self.format_pattern(p);
                 }
             }
+            Pattern::Array { elements, rest, .. } => {
+                self.push("[");
+                for (i, p) in elements.iter().enumerate() {
+                    if i > 0 {
+                        self.push(", ");
+                    }
+                    self.format_pattern(p);
+                }
+                if let Some(rest_name) = rest {
+                    if !elements.is_empty() {
+                        self.push(", ");
+                    }
+                    self.push("..");
+                    self.push(rest_name);
+                }
+                self.push("]");
+            }
+            Pattern::Binding { name, pattern, .. } => {
+                self.push(name);
+                self.push(" @ ");
+                self.format_pattern(pattern);
+            }
         }
     }
 }

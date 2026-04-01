@@ -5048,6 +5048,39 @@ impl Interpreter {
                 }
                 None
             }
+            // V16 L2.6: Array destructuring
+            Pattern::Array { elements, rest, .. } => {
+                if let Value::Array(vals) = value {
+                    if rest.is_some() {
+                        // With rest: need at least `elements.len()` items
+                        if vals.len() < elements.len() {
+                            return None;
+                        }
+                    } else if vals.len() != elements.len() {
+                        return None;
+                    }
+                    let mut bindings = HashMap::new();
+                    for (i, pat) in elements.iter().enumerate() {
+                        let sub = self.match_pattern(pat, &vals[i])?;
+                        bindings.extend(sub);
+                    }
+                    if let Some(rest_name) = rest {
+                        let rest_vals: Vec<Value> =
+                            vals.iter().skip(elements.len()).cloned().collect();
+                        bindings.insert(rest_name.clone(), Value::Array(rest_vals));
+                    }
+                    Some(bindings)
+                } else {
+                    None
+                }
+            }
+            // V16 L2.7: Binding pattern — `name @ pattern`
+            Pattern::Binding { name, pattern, .. } => {
+                let sub = self.match_pattern(pattern, value)?;
+                let mut bindings = sub;
+                bindings.insert(name.clone(), value.clone());
+                Some(bindings)
+            }
         }
     }
 

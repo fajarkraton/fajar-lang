@@ -345,6 +345,14 @@ impl UseCollector {
                     self.visit_pattern(p);
                 }
             }
+            Pattern::Array { elements, .. } => {
+                for p in elements {
+                    self.visit_pattern(p);
+                }
+            }
+            Pattern::Binding { pattern, .. } => {
+                self.visit_pattern(pattern);
+            }
         }
     }
 }

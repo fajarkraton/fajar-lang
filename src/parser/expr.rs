@@ -1825,6 +1825,18 @@ impl Parser {
                     });
                 }
 
+                // V16 L2.7: Check for @ binding: `name @ pattern`
+                if self.at(&TokenKind::At) {
+                    self.advance(); // eat @
+                    let inner = self.parse_pattern()?;
+                    let end = inner.span().end;
+                    return Ok(Pattern::Binding {
+                        name,
+                        pattern: Box::new(inner),
+                        span: Span::new(token.span.start, end),
+                    });
+                }
+
                 Ok(Pattern::Ident {
                     name,
                     span: token.span,
@@ -1907,6 +1919,35 @@ impl Parser {
                 let end_tok = self.expect(&TokenKind::RParen)?;
                 Ok(Pattern::Tuple {
                     elements,
+                    span: Span::new(token.span.start, end_tok.span.end),
+                })
+            }
+
+            // V16 L2.6: Array pattern: [first, second, ..rest]
+            TokenKind::LBracket => {
+                self.advance();
+                let mut elements = Vec::new();
+                let mut rest = None;
+                while !self.at(&TokenKind::RBracket) && !self.at_eof() {
+                    // Check for ..rest
+                    if self.at(&TokenKind::DotDot) {
+                        self.advance();
+                        if let TokenKind::Ident(name) = self.peek_kind().clone() {
+                            rest = Some(name);
+                            self.advance();
+                        }
+                        break;
+                    }
+                    elements.push(self.parse_pattern()?);
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                let end_tok = self.peek().clone();
+                self.expect(&TokenKind::RBracket)?;
+                Ok(Pattern::Array {
+                    elements,
+                    rest,
                     span: Span::new(token.span.start, end_tok.span.end),
                 })
             }
