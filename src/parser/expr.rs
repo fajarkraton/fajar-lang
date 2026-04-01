@@ -662,6 +662,7 @@ impl Parser {
                 TokenKind::Let
                 | TokenKind::Const
                 | TokenKind::Return
+                | TokenKind::Yield
                 | TokenKind::Break
                 | TokenKind::Continue => {
                     stmts.push(self.parse_stmt()?);

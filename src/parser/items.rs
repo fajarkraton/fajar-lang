@@ -1067,6 +1067,7 @@ impl Parser {
             TokenKind::Let => self.parse_let_stmt(),
             TokenKind::Const => self.parse_const_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
+            TokenKind::Yield => self.parse_yield_expr_stmt(),
             TokenKind::Break => self.parse_break_stmt(),
             TokenKind::Continue => self.parse_continue_stmt(),
             _ => {
@@ -1252,6 +1253,32 @@ impl Parser {
 
         Ok(Stmt::Return {
             value,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parses a yield expression as a statement: `yield expr`.
+    fn parse_yield_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.peek().span.start;
+        self.expect(&TokenKind::Yield)?;
+
+        let value = if !self.at(&TokenKind::Semi) && !self.at(&TokenKind::RBrace) && !self.at_eof()
+        {
+            Some(Box::new(self.parse_expr(0)?))
+        } else {
+            None
+        };
+
+        let end = value
+            .as_ref()
+            .map_or(self.prev_span().end, |v| v.span().end);
+        self.eat_semi();
+
+        Ok(Stmt::Expr {
+            expr: Box::new(Expr::Yield {
+                value,
+                span: Span::new(start, end),
+            }),
             span: Span::new(start, end),
         })
     }
