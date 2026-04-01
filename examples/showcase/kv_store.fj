@@ -1,0 +1,95 @@
+// Fajar Lang Showcase: Key-Value Store with Persistence
+// Demonstrates: HashMap, file I/O, error handling, if-let, string parsing.
+
+// ── KV Store Operations ──
+fn kv_new() -> map {
+    map_new()
+}
+
+fn kv_set(store: map, key: str, value: str) -> map {
+    map_insert(store, key, value)
+}
+
+fn kv_get(store: map, key: str) -> str {
+    if let Some(val) = store.get(key) {
+        val
+    } else {
+        ""
+    }
+}
+
+fn kv_delete(store: map, key: str) -> map {
+    store.remove(key)
+}
+
+fn kv_serialize(store: map) -> str {
+    let keys = store.keys()
+    let mut lines = []
+    for k in keys {
+        if let Some(v) = store.get(k) {
+            lines = lines + [f"{k}={v}"]
+        }
+    }
+    lines.join("\n")
+}
+
+fn kv_save(store: map, path: str) -> bool {
+    let data = kv_serialize(store)
+    match write_file(path, data) {
+        Ok(_) => true
+        Err(_) => false
+    }
+}
+
+fn kv_load(path: str) -> map {
+    let mut store = kv_new()
+    match read_file(path) {
+        Ok(content) => {
+            let lines = content.split("\n")
+            for line in lines {
+                let trimmed = line.trim()
+                if len(trimmed) > 0 {
+                    let parts = trimmed.split("=")
+                    if len(parts) >= 2 {
+                        store = kv_set(store, parts[0], parts[1])
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    store
+}
+
+// ── Test ──
+let mut db = kv_new()
+db = kv_set(db, "name", "Fajar Lang")
+db = kv_set(db, "version", "12.2.0")
+db = kv_set(db, "author", "Fajar")
+db = kv_set(db, "tests", "8092")
+
+// Read
+assert_eq(kv_get(db, "name"), "Fajar Lang")
+assert_eq(kv_get(db, "version"), "12.2.0")
+assert_eq(kv_get(db, "missing"), "")
+
+// Update
+db = kv_set(db, "version", "12.3.0")
+assert_eq(kv_get(db, "version"), "12.3.0")
+
+// Delete
+db = kv_delete(db, "tests")
+assert_eq(kv_get(db, "tests"), "")
+
+// Serialize
+let serialized = kv_serialize(db)
+println(f"Serialized:\n{serialized}")
+
+// Save + Load round-trip
+kv_save(db, "/tmp/fajar_kv_test.db")
+let loaded = kv_load("/tmp/fajar_kv_test.db")
+assert_eq(kv_get(loaded, "name"), "Fajar Lang")
+assert_eq(kv_get(loaded, "author"), "Fajar")
+
+println(f"\nKeys: {loaded.keys()}")
+println("PASS: key-value store")
