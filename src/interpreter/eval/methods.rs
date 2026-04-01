@@ -853,7 +853,7 @@ impl Interpreter {
             // Map methods
             (Value::Map(m), "len") => Ok(Value::Int(m.len() as i64)),
             (Value::Map(m), "is_empty") => Ok(Value::Bool(m.is_empty())),
-            (Value::Map(m), "contains_key") => {
+            (Value::Map(m), "contains_key" | "contains") => {
                 if let Some(Value::Str(k)) = arg_vals.first() {
                     Ok(Value::Bool(m.contains_key(k)))
                 } else {

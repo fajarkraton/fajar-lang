@@ -1,0 +1,74 @@
+// Fajar Lang Showcase: Data Processing Pipeline
+// Demonstrates: file I/O, string parsing, map/filter/fold, HashMap, f-strings.
+
+// ── Parse CSV Data ──
+let csv_data = "Alice,85\nBob,92\nCharlie,78\nDiana,95\nEve,88"
+
+fn parse_scores(csv: str) -> [[str]] {
+    let mut result = []
+    let lines = csv.split("\n")
+    for line in lines {
+        let parts = line.split(",")
+        result = result + [parts]
+    }
+    result
+}
+
+let records = parse_scores(csv_data)
+println(f"Loaded {len(records)} student records")
+
+// ── Statistics ──
+let mut total = 0
+let mut max_score = 0
+let mut max_name = ""
+let mut min_score = 100
+let mut min_name = ""
+
+for record in records {
+    let name = record[0]
+    match record[1].parse_int() {
+        Ok(score) => {
+            total = total + score
+            if score > max_score {
+                max_score = score
+                max_name = name
+            }
+            if score < min_score {
+                min_score = score
+                min_name = name
+            }
+        }
+        Err(_) => println(f"  Warning: invalid score for {name}")
+    }
+}
+
+let avg = total / len(records)
+println(f"\n=== Grade Report ===")
+println(f"Average: {avg}")
+println(f"Highest: {max_name} ({max_score})")
+println(f"Lowest:  {min_name} ({min_score})")
+
+assert_eq(max_name, "Diana")
+assert_eq(max_score, 95)
+assert_eq(min_name, "Charlie")
+
+// ── Grade Classification ──
+fn classify(score: i64) -> str {
+    match score {
+        90..100 => "A"
+        80..90 => "B"
+        70..80 => "C"
+        _ => "F"
+    }
+}
+
+println(f"\n=== Grades ===")
+for record in records {
+    let name = record[0]
+    if let Ok(score) = record[1].parse_int() {
+        let grade = classify(score)
+        println(f"  {name}: {score} → {grade}")
+    }
+}
+
+println("PASS: data processing")

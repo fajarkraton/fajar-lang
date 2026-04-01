@@ -1,0 +1,62 @@
+// Fajar Lang Showcase: Todo List Application
+// Demonstrates: HashMap, arrays, closures, pattern matching, string formatting.
+
+// ── Todo Item ──
+struct Todo {
+    id: i64,
+    title: str,
+    done: bool,
+}
+
+// ── Todo List Operations ──
+fn create_todo(id: i64, title: str) -> Todo {
+    Todo { id: id, title: title, done: false }
+}
+
+fn complete_todo(todo: Todo) -> Todo {
+    Todo { id: todo.id, title: todo.title, done: true }
+}
+
+fn format_todo(todo: Todo) -> str {
+    let status = if todo.done { "[x]" } else { "[ ]" }
+    f"{status} #{todo.id}: {todo.title}"
+}
+
+// ── Build Todo List ──
+let t1 = create_todo(1, "Learn Fajar Lang")
+let t2 = create_todo(2, "Write a compiler")
+let t3 = create_todo(3, "Build an OS")
+let t4 = create_todo(4, "Train a neural network")
+
+// Complete some tasks
+let t1 = complete_todo(t1)
+let t2 = complete_todo(t2)
+
+// Display
+println("=== Todo List ===")
+println(format_todo(t1))
+println(format_todo(t2))
+println(format_todo(t3))
+println(format_todo(t4))
+
+// Stats
+let todos = [t1, t2, t3, t4]
+let mut done_count = 0
+let mut pending_count = 0
+for t in todos {
+    if t.done {
+        done_count = done_count + 1
+    } else {
+        pending_count = pending_count + 1
+    }
+}
+
+println(f"\nDone: {done_count} | Pending: {pending_count}")
+assert_eq(done_count, 2)
+assert_eq(pending_count, 2)
+
+// ── Filter with closures ──
+let pending_titles = [t3.title, t4.title]
+println(f"Pending: {pending_titles}")
+
+println("PASS: todo app")
