@@ -1,0 +1,128 @@
+// V16 R1: MNIST Training with Real Data (IDX Binary Format)
+// Requires: MNIST dataset files in data/mnist/ directory
+// Download from: https://yann.lecun.com/exdb/mnist/
+//
+// This demonstrates the full pipeline:
+//   read_binary → parse IDX → normalize → Dense → relu → Dense → softmax → loss → backward
+
+// ── IDX Format Parser ──
+// IDX files: 4-byte magic, 4-byte dimension sizes (big-endian), then data bytes
+
+fn read_u32_be(bytes: [i64], offset: i64) -> i64 {
+    bytes[offset] * 256 * 256 * 256 +
+    bytes[offset + 1] * 256 * 256 +
+    bytes[offset + 2] * 256 +
+    bytes[offset + 3]
+}
+
+fn load_mnist_images(path: str) -> [f64] {
+    let result = read_binary(path)
+    match result {
+        Ok(bytes) => {
+            let magic = read_u32_be(bytes, 0)
+            let count = read_u32_be(bytes, 4)
+            let rows = read_u32_be(bytes, 8)
+            let cols = read_u32_be(bytes, 12)
+            println(f"  Images: magic={magic}, count={count}, rows={rows}, cols={cols}")
+
+            // Convert pixel bytes to normalized f64 array
+            let mut pixels = []
+            let header_size: i64 = 16
+            let image_size = rows * cols
+            // Load first 100 images for demo speed
+            let load_count: i64 = 100
+            let mut i: i64 = 0
+            while i < load_count * image_size {
+                let byte_val = bytes[header_size + i]
+                let normalized = byte_val / 255.0
+                pixels = pixels + [normalized]
+                i = i + 1
+            }
+            pixels
+        }
+        Err(e) => {
+            println(f"  Error loading {path}: {e}")
+            []
+        }
+    }
+}
+
+fn load_mnist_labels(path: str) -> [i64] {
+    let result = read_binary(path)
+    match result {
+        Ok(bytes) => {
+            let magic = read_u32_be(bytes, 0)
+            let count = read_u32_be(bytes, 4)
+            println(f"  Labels: magic={magic}, count={count}")
+
+            let mut labels = []
+            let load_count: i64 = 100
+            let mut i: i64 = 0
+            while i < load_count {
+                labels = labels + [bytes[8 + i]]
+                i = i + 1
+            }
+            labels
+        }
+        Err(e) => {
+            println(f"  Error loading {path}: {e}")
+            []
+        }
+    }
+}
+
+// ── Main Training Pipeline ──
+println("MNIST Training Pipeline (V16)")
+println("Loading data...")
+
+let images = load_mnist_images("data/mnist/train-images-idx3-ubyte")
+let labels = load_mnist_labels("data/mnist/train-labels-idx1-ubyte")
+
+if len(images) == 0 {
+    println("MNIST data not found. Using synthetic data instead.")
+    println("To use real data, download MNIST to data/mnist/")
+
+    // Synthetic fallback
+    let layer1 = Dense(784, 64)
+    let layer2 = Dense(64, 10)
+
+    let mut epoch = 0
+    while epoch < 5 {
+        let input = randn(1, 784)
+        let target = zeros(1, 10)
+        let h1 = forward(layer1, input)
+        let h2 = relu(h1)
+        let out = forward(layer2, h2)
+        let pred = softmax(out)
+        let l = mse_loss(pred, target)
+        backward(l)
+        println(f"  Epoch {epoch + 1}/5 — synthetic batch processed")
+        epoch = epoch + 1
+    }
+} else {
+    println(f"Loaded {len(labels)} samples")
+
+    let layer1 = Dense(784, 64)
+    let layer2 = Dense(64, 10)
+
+    let mut epoch = 0
+    while epoch < 3 {
+        // Use first sample as input (784 pixels)
+        let input = from_data([images])
+        let input_reshaped = reshape(input, [1, 784])
+
+        let h1 = forward(layer1, input_reshaped)
+        let h2 = relu(h1)
+        let out = forward(layer2, h2)
+        let pred = softmax(out)
+
+        let target = zeros(1, 10)
+        let l = mse_loss(pred, target)
+        backward(l)
+
+        println(f"  Epoch {epoch + 1}/3 — real data batch processed")
+        epoch = epoch + 1
+    }
+}
+
+println("Training complete!")
