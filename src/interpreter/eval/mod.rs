@@ -5625,4 +5625,760 @@ let y = x", 0, 4, "foo").unwrap();
         assert_eq!(sym.name, "main");
         assert_eq!(sym.line, 0);
     }
+
+    // ===================================================================
+    // Sub-Option 5C — GPU Compute Shaders (GS1-GS4)
+    // ===================================================================
+
+    // Sprint GS1: SPIR-V Module & Shader Syntax
+
+    #[test]
+    fn gs1_1_spirv_module_creation() {
+        use crate::gpu_codegen::spirv::SpirVModule;
+        let module = SpirVModule::new_compute();
+        assert_eq!(module.version, 0x0001_0500); // SPIR-V 1.5
+        assert!(!module.capabilities.is_empty());
+    }
+
+    #[test]
+    fn gs1_2_spirv_alloc_id() {
+        use crate::gpu_codegen::spirv::SpirVModule;
+        let mut module = SpirVModule::new_compute();
+        let id1 = module.alloc_id();
+        let id2 = module.alloc_id();
+        assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn gs1_3_spirv_emit_words_header() {
+        use crate::gpu_codegen::spirv::SpirVModule;
+        let module = SpirVModule::new_compute();
+        let words = module.emit_words();
+        assert_eq!(words.len(), 5);
+        assert_eq!(words[0], 0x0723_0203); // SPIR-V magic
+    }
+
+    #[test]
+    fn gs1_4_spirv_validate_empty_entry() {
+        use crate::gpu_codegen::spirv::SpirVModule;
+        let module = SpirVModule::new_compute();
+        let errors = module.validate();
+        // No entry points → should have validation error
+        assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn gs1_5_spirv_type_mapping() {
+        use crate::gpu_codegen::spirv::{map_fj_type, SpirVTypeDesc};
+        assert_eq!(map_fj_type("f32"), Some(SpirVTypeDesc::Float(32)));
+        assert_eq!(map_fj_type("i32"), Some(SpirVTypeDesc::Int(32, true)));
+        assert_eq!(map_fj_type("bool"), Some(SpirVTypeDesc::Bool));
+        assert_eq!(map_fj_type("unknown"), None);
+    }
+
+    #[test]
+    fn gs1_6_spirv_capability_values() {
+        use crate::gpu_codegen::spirv::Capability;
+        assert_eq!(Capability::Shader.value(), 1);
+        assert_eq!(Capability::Float16.value(), 9);
+        assert_eq!(Capability::Float64.value(), 10);
+    }
+
+    #[test]
+    fn gs1_7_spirv_execution_model() {
+        use crate::gpu_codegen::spirv::ExecutionModel;
+        let model = ExecutionModel::GLCompute;
+        assert_eq!(model, ExecutionModel::GLCompute);
+        assert_ne!(model, ExecutionModel::Vertex);
+    }
+
+    #[test]
+    fn gs1_8_spirv_storage_class_values() {
+        use crate::gpu_codegen::spirv::StorageClass;
+        assert_eq!(StorageClass::StorageBuffer.value(), 12);
+        assert_eq!(StorageClass::Workgroup.value(), 4);
+        assert_eq!(StorageClass::Input.value(), 1);
+    }
+
+    #[test]
+    fn gs1_9_spirv_entry_point_struct() {
+        use crate::gpu_codegen::spirv::{EntryPoint, ExecutionModel};
+        let ep = EntryPoint {
+            execution_model: ExecutionModel::GLCompute,
+            function_id: 1,
+            name: "main".into(),
+            interface_ids: vec![2, 3],
+            local_size: [256, 1, 1],
+        };
+        assert_eq!(ep.name, "main");
+        assert_eq!(ep.local_size[0], 256);
+    }
+
+    #[test]
+    fn gs1_10_spirv_validate_with_entry() {
+        use crate::gpu_codegen::spirv::{SpirVModule, EntryPoint, ExecutionModel};
+        let mut module = SpirVModule::new_compute();
+        let fn_id = module.alloc_id();
+        module.entry_points.push(EntryPoint {
+            execution_model: ExecutionModel::GLCompute,
+            function_id: fn_id,
+            name: "main".into(),
+            interface_ids: vec![],
+            local_size: [64, 1, 1],
+        });
+        let errors = module.validate();
+        assert!(errors.is_empty(), "valid module: {errors:?}");
+    }
+
+    // Sprint GS2: SPIR-V Backend (Vulkan Compute)
+
+    #[test]
+    fn gs2_1_create_ssbo() {
+        use crate::gpu_codegen::spirv::{create_ssbo, StorageClass};
+        let ssbo = create_ssbo(10, 5, 0, 0);
+        assert_eq!(ssbo.id, 10);
+        assert_eq!(ssbo.storage_class, StorageClass::StorageBuffer);
+        assert_eq!(ssbo.binding, Some(0));
+    }
+
+    #[test]
+    fn gs2_2_create_workgroup_var() {
+        use crate::gpu_codegen::spirv::{create_workgroup_var, StorageClass};
+        let wg = create_workgroup_var(20, 8);
+        assert_eq!(wg.storage_class, StorageClass::Workgroup);
+        assert!(wg.binding.is_none());
+    }
+
+    #[test]
+    fn gs2_3_vulkan_dispatch_1d() {
+        use crate::gpu_codegen::spirv::compute_dispatch_1d;
+        let dispatch = compute_dispatch_1d(1024, 256);
+        assert_eq!(dispatch.group_count_x, 4);
+        assert_eq!(dispatch.group_count_y, 1);
+        assert_eq!(dispatch.group_count_z, 1);
+    }
+
+    #[test]
+    fn gs2_4_vulkan_dispatch_2d() {
+        use crate::gpu_codegen::spirv::compute_dispatch_2d;
+        let dispatch = compute_dispatch_2d(512, 256, 16, 16);
+        assert_eq!(dispatch.group_count_x, 32);
+        assert_eq!(dispatch.group_count_y, 16);
+    }
+
+    #[test]
+    fn gs2_5_vulkan_dispatch_rounding() {
+        use crate::gpu_codegen::spirv::compute_dispatch_1d;
+        // 1000 elements / 256 = 3.9 → rounds up to 4
+        let dispatch = compute_dispatch_1d(1000, 256);
+        assert_eq!(dispatch.group_count_x, 4);
+    }
+
+    #[test]
+    fn gs2_6_barrier_scope_values() {
+        use crate::gpu_codegen::spirv::BarrierScope;
+        assert_eq!(BarrierScope::Workgroup.value(), 2);
+        assert_eq!(BarrierScope::Device.value(), 1);
+        assert_eq!(BarrierScope::Subgroup.value(), 3);
+    }
+
+    #[test]
+    fn gs2_7_memory_semantics_values() {
+        use crate::gpu_codegen::spirv::MemorySemantics;
+        let acq = MemorySemantics::AcquireWorkgroup.value();
+        let rel = MemorySemantics::ReleaseWorkgroup.value();
+        assert_ne!(acq, rel);
+        assert!(acq > 0);
+    }
+
+    #[test]
+    fn gs2_8_backend_parse() {
+        use crate::gpu_codegen::spirv::{parse_backend, GpuBackend};
+        assert_eq!(parse_backend("ptx"), Some(GpuBackend::Ptx));
+        assert_eq!(parse_backend("spirv"), Some(GpuBackend::SpirV));
+        assert_eq!(parse_backend("auto"), Some(GpuBackend::Auto));
+        assert_eq!(parse_backend("metal"), None);
+    }
+
+    #[test]
+    fn gs2_9_backend_resolve_nvidia() {
+        use crate::gpu_codegen::spirv::{resolve_backend, GpuBackend};
+        let resolved = resolve_backend(GpuBackend::Auto, "NVIDIA GeForce RTX 4090");
+        assert_eq!(resolved, GpuBackend::Ptx);
+    }
+
+    #[test]
+    fn gs2_10_backend_resolve_amd() {
+        use crate::gpu_codegen::spirv::{resolve_backend, GpuBackend};
+        let resolved = resolve_backend(GpuBackend::Auto, "AMD Radeon RX 7900");
+        assert_eq!(resolved, GpuBackend::SpirV);
+    }
+
+    // Sprint GS3: PTX Backend (CUDA)
+
+    #[test]
+    fn gs3_1_ptx_type_mapping() {
+        use crate::gpu_codegen::ptx::{map_type, PtxType};
+        assert_eq!(map_type("f32"), Some(PtxType::F32));
+        assert_eq!(map_type("f64"), Some(PtxType::F64));
+        assert_eq!(map_type("i32"), Some(PtxType::S32));
+        assert_eq!(map_type("u8"), Some(PtxType::U8));
+    }
+
+    #[test]
+    fn gs3_2_kernel_entry_emit() {
+        use crate::gpu_codegen::ptx::{KernelEntry, KernelParam, PtxType};
+        let kernel = KernelEntry {
+            name: "vecadd".into(),
+            params: vec![
+                KernelParam { name: "a".into(), ptx_type: PtxType::F32, is_pointer: true },
+                KernelParam { name: "b".into(), ptx_type: PtxType::F32, is_pointer: true },
+            ],
+            body: vec![],
+        };
+        let ptx = kernel.emit();
+        assert!(ptx.contains("vecadd"));
+        assert!(ptx.contains(".entry"));
+    }
+
+    #[test]
+    fn gs3_3_grid_config_1d() {
+        use crate::gpu_codegen::ptx::compute_grid_1d;
+        let grid = compute_grid_1d(1024, 256);
+        assert_eq!(grid.total_threads(), 1024);
+    }
+
+    #[test]
+    fn gs3_4_grid_config_2d() {
+        use crate::gpu_codegen::ptx::compute_grid_2d;
+        let grid = compute_grid_2d(512, 256, 16);
+        assert_eq!(grid.total_threads(), 512 * 256);
+    }
+
+    #[test]
+    fn gs3_5_ptx_thread_index() {
+        use crate::gpu_codegen::ptx::{emit_thread_index, ThreadIndex, PtxInstruction};
+        let instr = emit_thread_index("%tid_x", ThreadIndex::ThreadIdX);
+        match instr {
+            PtxInstruction::MovSpecial { .. } => {} // expected
+            _ => panic!("expected MovSpecial instruction"),
+        }
+    }
+
+    #[test]
+    fn gs3_6_ptx_global_thread_id() {
+        use crate::gpu_codegen::ptx::emit_global_thread_id;
+        let instrs = emit_global_thread_id("%gtid", "%tid", "%ctaid", "%ntid");
+        assert!(!instrs.is_empty()); // mad (multiply-add)
+    }
+
+    #[test]
+    fn gs3_7_ptx_type_display() {
+        use crate::gpu_codegen::ptx::PtxType;
+        assert_eq!(format!("{}", PtxType::F32), ".f32");
+        assert_eq!(format!("{}", PtxType::S32), ".s32");
+    }
+
+    #[test]
+    fn gs3_8_kernel_param_display() {
+        use crate::gpu_codegen::ptx::{KernelParam, PtxType};
+        let param = KernelParam { name: "data".into(), ptx_type: PtxType::F64, is_pointer: true };
+        let s = format!("{param}");
+        assert!(s.contains("data"));
+    }
+
+    #[test]
+    fn gs3_9_shared_decl_fields() {
+        use crate::gpu_codegen::ptx::{SharedDecl, PtxType};
+        let shared = SharedDecl {
+            name: "smem".into(),
+            elem_type: PtxType::F32,
+            count: 256,
+        };
+        assert_eq!(shared.name, "smem");
+        assert_eq!(shared.count, 256);
+    }
+
+    #[test]
+    fn gs3_10_memory_space_variants() {
+        use crate::gpu_codegen::ptx::MemorySpace;
+        let spaces = [
+            MemorySpace::Global,
+            MemorySpace::Shared,
+            MemorySpace::Local,
+            MemorySpace::Constant,
+        ];
+        assert_eq!(spaces.len(), 4);
+    }
+
+    // Sprint GS4: Auto-Dispatch & Fusion
+
+    #[test]
+    fn gs4_1_fusion_graph_creation() {
+        use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
+        let ops = vec![
+            GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 1024 },
+            GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![0], output_elements: 1024 },
+        ];
+        let graph = FusionGraph::new(ops);
+        assert_eq!(graph.ops.len(), 2);
+    }
+
+    #[test]
+    fn gs4_2_fusion_analysis() {
+        use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
+        let ops = vec![
+            GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 1024 },
+            GpuOp { id: 1, kind: OpKind::ElementWiseBinary, inputs: vec![0], output_elements: 1024 },
+        ];
+        let mut graph = FusionGraph::new(ops);
+        graph.analyze();
+        assert!(graph.num_fusions() >= 1);
+    }
+
+    #[test]
+    fn gs4_3_can_fuse_elementwise() {
+        use crate::gpu_codegen::fusion::{can_fuse, GpuOp, OpKind};
+        let producer = GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 512 };
+        let consumer = GpuOp { id: 1, kind: OpKind::ElementWiseBinary, inputs: vec![0], output_elements: 512 };
+        assert!(can_fuse(&producer, &consumer));
+    }
+
+    #[test]
+    fn gs4_4_cannot_fuse_matmul_reduction() {
+        use crate::gpu_codegen::fusion::{can_fuse, GpuOp, OpKind};
+        let producer = GpuOp { id: 0, kind: OpKind::Matmul, inputs: vec![], output_elements: 1024 };
+        let consumer = GpuOp { id: 1, kind: OpKind::Reduction, inputs: vec![0], output_elements: 1 };
+        assert!(!can_fuse(&producer, &consumer));
+    }
+
+    #[test]
+    fn gs4_5_op_kind_display() {
+        use crate::gpu_codegen::fusion::OpKind;
+        assert_eq!(format!("{}", OpKind::Matmul), "Matmul");
+        assert_eq!(format!("{}", OpKind::Softmax), "Softmax");
+    }
+
+    #[test]
+    fn gs4_6_device_allocator_creation() {
+        use crate::gpu_codegen::gpu_memory::DeviceAllocator;
+        let alloc = DeviceAllocator::new(0, 1024 * 1024, 4 * 1024 * 1024);
+        let stats = alloc.stats();
+        assert_eq!(stats.used_bytes, 0);
+    }
+
+    #[test]
+    fn gs4_7_device_allocator_alloc_free() {
+        use crate::gpu_codegen::gpu_memory::DeviceAllocator;
+        let mut alloc = DeviceAllocator::new(0, 1024 * 1024, 4 * 1024 * 1024);
+        let a = alloc.allocate(4096).unwrap();
+        assert_eq!(a.size, 4096);
+        assert!(a.in_use);
+        let stats = alloc.stats();
+        assert_eq!(stats.used_bytes, 4096);
+        alloc.free(a.id).unwrap();
+        let stats2 = alloc.stats();
+        assert_eq!(stats2.used_bytes, 0);
+    }
+
+    #[test]
+    fn gs4_8_device_allocator_oom() {
+        use crate::gpu_codegen::gpu_memory::{DeviceAllocator, AllocError};
+        let mut alloc = DeviceAllocator::new(0, 1024, 1024);
+        let result = alloc.allocate(2048);
+        assert!(matches!(result, Err(AllocError::OutOfMemory { .. })));
+    }
+
+    #[test]
+    fn gs4_9_gpu_backend_display() {
+        use crate::gpu_codegen::spirv::GpuBackend;
+        assert_eq!(format!("{}", GpuBackend::Ptx), "ptx");
+        assert_eq!(format!("{}", GpuBackend::SpirV), "spirv");
+        assert_eq!(format!("{}", GpuBackend::Auto), "auto");
+    }
+
+    #[test]
+    fn gs4_10_spirv_type_ids() {
+        use crate::gpu_codegen::spirv::SpirVType;
+        let void = SpirVType::Void { id: 1 };
+        let int = SpirVType::Int { id: 2, width: 32, signed: true };
+        let float = SpirVType::Float { id: 3, width: 32 };
+        assert_eq!(void.id(), 1);
+        assert_eq!(int.id(), 2);
+        assert_eq!(float.id(), 3);
+    }
+
+    // ===================================================================
+    // Sub-Option 5E — Package Registry (PR1-PR4)
+    // ===================================================================
+
+    // Sprint PR1: Registry Core (publish, search, resolve)
+
+    #[test]
+    fn pr1_1_registry_creation() {
+        use crate::package::registry::Registry;
+        let reg = Registry::new();
+        assert_eq!(reg.package_count(), 0);
+    }
+
+    #[test]
+    fn pr1_2_publish_and_lookup() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("math", SemVer::new(1, 0, 0), "Math library");
+        assert_eq!(reg.package_count(), 1);
+        let pkg = reg.lookup("math").unwrap();
+        assert_eq!(pkg.name, "math");
+    }
+
+    #[test]
+    fn pr1_3_publish_multiple_versions() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("http", SemVer::new(1, 0, 0), "HTTP client");
+        reg.publish("http", SemVer::new(1, 1, 0), "HTTP client");
+        reg.publish("http", SemVer::new(2, 0, 0), "HTTP client v2");
+        let latest = reg.latest_version("http").unwrap();
+        assert_eq!(*latest, SemVer::new(2, 0, 0));
+    }
+
+    #[test]
+    fn pr1_4_search_packages() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("json-parser", SemVer::new(1, 0, 0), "JSON parser");
+        reg.publish("json-schema", SemVer::new(0, 5, 0), "JSON schema validator");
+        reg.publish("http-client", SemVer::new(1, 0, 0), "HTTP client");
+        let results = reg.search("json");
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn pr1_5_version_constraint_parse() {
+        use crate::package::registry::{VersionConstraint, SemVer};
+        let c = VersionConstraint::parse("^1.2.3").unwrap();
+        assert!(c.matches(&SemVer::new(1, 3, 0)));
+        assert!(!c.matches(&SemVer::new(2, 0, 0)));
+    }
+
+    #[test]
+    fn pr1_6_version_resolve() {
+        use crate::package::registry::{Registry, SemVer, VersionConstraint};
+        let mut reg = Registry::new();
+        reg.publish("crypto", SemVer::new(1, 0, 0), "Crypto lib");
+        reg.publish("crypto", SemVer::new(1, 2, 0), "Crypto lib");
+        reg.publish("crypto", SemVer::new(2, 0, 0), "Crypto lib v2");
+        let constraint = VersionConstraint::parse("^1.0.0").unwrap();
+        let resolved = reg.resolve("crypto", &constraint).unwrap();
+        assert_eq!(resolved, SemVer::new(1, 2, 0));
+    }
+
+    #[test]
+    fn pr1_7_semver_parse() {
+        use crate::package::registry::SemVer;
+        let v = SemVer::parse("3.14.1").unwrap();
+        assert_eq!(v, SemVer::new(3, 14, 1));
+        assert!(SemVer::parse("not.a.version").is_err());
+    }
+
+    #[test]
+    fn pr1_8_list_all_packages() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("aaa", SemVer::new(1, 0, 0), "First");
+        reg.publish("zzz", SemVer::new(1, 0, 0), "Last");
+        let all = reg.list_all();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn pr1_9_package_names() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("alpha", SemVer::new(1, 0, 0), "A");
+        reg.publish("beta", SemVer::new(1, 0, 0), "B");
+        let names = reg.package_names();
+        assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn pr1_10_yank_version() {
+        use crate::package::registry::{Registry, SemVer};
+        let mut reg = Registry::new();
+        reg.publish("vuln-pkg", SemVer::new(1, 0, 0), "Vulnerable");
+        let v = SemVer::new(1, 0, 0);
+        assert!(!reg.is_yanked("vuln-pkg", &v));
+        reg.yank("vuln-pkg", &v).unwrap();
+        assert!(reg.is_yanked("vuln-pkg", &v));
+    }
+
+    // Sprint PR2: API & Metadata
+
+    #[test]
+    fn pr2_1_api_response_ok() {
+        use crate::package::server::{ApiResponse, StatusCode};
+        let resp = ApiResponse::ok(r#"{"status":"ok"}"#);
+        assert_eq!(resp.status, StatusCode::OK);
+    }
+
+    #[test]
+    fn pr2_2_api_response_error() {
+        use crate::package::server::{ApiResponse, StatusCode};
+        let resp = ApiResponse::error(StatusCode::NOT_FOUND, "not found");
+        assert_eq!(resp.status, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn pr2_3_api_response_created() {
+        use crate::package::server::{ApiResponse, StatusCode};
+        let resp = ApiResponse::created(r#"{"published":true}"#);
+        assert_eq!(resp.status, StatusCode::CREATED);
+    }
+
+    #[test]
+    fn pr2_4_auth_token_creation() {
+        use crate::package::registry::AuthToken;
+        let token = AuthToken::new("test-token-123");
+        let _ = token; // verifies construction
+    }
+
+    #[test]
+    fn pr2_5_auth_token_scoped() {
+        use crate::package::registry::AuthToken;
+        let token = AuthToken::scoped("test-token-456", "my-package");
+        let _ = token;
+    }
+
+    #[test]
+    fn pr2_6_token_validation() {
+        use crate::package::registry::{Registry, SemVer, AuthToken};
+        let mut reg = Registry::new();
+        reg.publish("my-pkg", SemVer::new(1, 0, 0), "My package");
+        reg.add_token(AuthToken::new("secret-key"));
+        assert!(reg.validate_token("secret-key", None));
+        assert!(!reg.validate_token("wrong-key", None));
+    }
+
+    #[test]
+    fn pr2_7_scoped_token_validation() {
+        use crate::package::registry::{Registry, SemVer, AuthToken};
+        let mut reg = Registry::new();
+        reg.publish("my-pkg", SemVer::new(1, 0, 0), "My package");
+        reg.add_token(AuthToken::scoped("pkg-key", "my-pkg"));
+        assert!(reg.validate_token("pkg-key", Some("my-pkg")));
+        assert!(!reg.validate_token("pkg-key", Some("other-pkg")));
+    }
+
+    #[test]
+    fn pr2_8_publish_with_metadata() {
+        use crate::package::registry::{Registry, SemVer};
+        use std::collections::HashMap;
+        let mut reg = Registry::new();
+        let mut deps = HashMap::new();
+        deps.insert("serde".into(), "^1.0.0".into());
+        reg.publish_with_meta("my-app", SemVer::new(0, 1, 0), "My app", deps, "sha256abc");
+        let pkg = reg.lookup("my-app").unwrap();
+        assert_eq!(pkg.name, "my-app");
+    }
+
+    #[test]
+    fn pr2_9_version_constraint_wildcard() {
+        use crate::package::registry::{VersionConstraint, SemVer};
+        let c = VersionConstraint::parse("*").unwrap();
+        assert!(c.matches(&SemVer::new(1, 0, 0)));
+        assert!(c.matches(&SemVer::new(99, 99, 99)));
+    }
+
+    #[test]
+    fn pr2_10_version_constraint_tilde() {
+        use crate::package::registry::{VersionConstraint, SemVer};
+        let c = VersionConstraint::parse("~1.2.0").unwrap();
+        assert!(c.matches(&SemVer::new(1, 2, 5)));
+        assert!(!c.matches(&SemVer::new(1, 3, 0)));
+    }
+
+    // Sprint PR3: Signing & Bundles
+
+    #[test]
+    fn pr3_1_oidc_authenticate() {
+        use crate::package::signing::oidc_authenticate;
+        let token = oidc_authenticate("github").unwrap();
+        assert!(!token.identity.is_empty());
+    }
+
+    #[test]
+    fn pr3_2_request_certificate() {
+        use crate::package::signing::{oidc_authenticate, request_certificate};
+        let oidc = oidc_authenticate("github").unwrap();
+        let cert = request_certificate(&oidc).unwrap();
+        assert!(cert.pem.contains("CERTIFICATE"));
+    }
+
+    #[test]
+    fn pr3_3_sign_package() {
+        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package};
+        let oidc = oidc_authenticate("github").unwrap();
+        let cert = request_certificate(&oidc).unwrap();
+        let sig = sign_package("sha256:deadbeef", &cert).unwrap();
+        assert!(!sig.bytes.is_empty());
+    }
+
+    #[test]
+    fn pr3_4_rekor_submit() {
+        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package, submit_to_rekor};
+        let oidc = oidc_authenticate("github").unwrap();
+        let cert = request_certificate(&oidc).unwrap();
+        let sig = sign_package("sha256:abcdef", &cert).unwrap();
+        let entry = submit_to_rekor(&sig, &cert, "sha256:abcdef").unwrap();
+        assert!(entry.log_index > 0);
+    }
+
+    #[test]
+    fn pr3_5_signature_bundle_roundtrip() {
+        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package, submit_to_rekor, FjSignatureBundle};
+        let oidc = oidc_authenticate("github").unwrap();
+        let cert = request_certificate(&oidc).unwrap();
+        let sig = sign_package("sha256:112233", &cert).unwrap();
+        let rekor = submit_to_rekor(&sig, &cert, "sha256:112233").unwrap();
+        let bundle = FjSignatureBundle::new(&cert, &sig, &rekor);
+        let json = bundle.to_json();
+        let restored = FjSignatureBundle::from_json(&json).unwrap();
+        assert!(!restored.signature.is_empty());
+    }
+
+    #[test]
+    fn pr3_6_signing_config_default() {
+        use crate::package::signing::SigningConfig;
+        let config = SigningConfig::default();
+        assert!(!config.fulcio_url.is_empty());
+        assert!(!config.rekor_url.is_empty());
+    }
+
+    #[test]
+    fn pr3_7_sbom_document_creation() {
+        use crate::package::sbom::{SbomDocument, SbomFormat};
+        let doc = SbomDocument::new(SbomFormat::CycloneDx);
+        assert!(doc.packages.is_empty());
+    }
+
+    #[test]
+    fn pr3_8_sbom_add_package() {
+        use crate::package::sbom::{SbomDocument, SbomFormat, SbomPackage};
+        let mut doc = SbomDocument::new(SbomFormat::Spdx);
+        doc.add_package(SbomPackage::new("serde", "1.0.0", "sha256:abc", Some("MIT".into())));
+        assert_eq!(doc.packages.len(), 1);
+    }
+
+    #[test]
+    fn pr3_9_generate_sbom() {
+        use crate::package::sbom::{generate_sbom, SbomFormat, DepInfo};
+        let deps = vec![
+            DepInfo { name: "serde".into(), version: "1.0.0".into(), sha256: "abc".into(), license: Some("MIT".into()), dev_only: false },
+        ];
+        let json = generate_sbom("test-project", &deps, SbomFormat::CycloneDx).unwrap();
+        assert!(json.contains("test-project"));
+    }
+
+    #[test]
+    fn pr3_10_sbom_format_variants() {
+        use crate::package::sbom::SbomFormat;
+        let formats = [SbomFormat::CycloneDx, SbomFormat::Spdx];
+        assert_eq!(formats.len(), 2);
+    }
+
+    // Sprint PR4: Security & Audit
+
+    #[test]
+    fn pr4_1_advisory_database_creation() {
+        use crate::package::audit::AdvisoryDatabase;
+        let db = AdvisoryDatabase::new();
+        let findings = db.check("any-package", "1.0.0");
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn pr4_2_advisory_from_json() {
+        use crate::package::audit::AdvisoryDatabase;
+        let json = r#"{"advisories":[{"id":"FJ-2026-001","package":"vuln-lib","severity":"critical","description":"RCE in parser","min_version":"1.0.0","max_version":"1.2.0","patched_version":"1.2.1"}]}"#;
+        let db = AdvisoryDatabase::from_json(json).unwrap();
+        let hits = db.check("vuln-lib", "1.1.0");
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn pr4_3_version_range_affects() {
+        use crate::package::audit::VersionRange;
+        let range = VersionRange::new(Some("1.0.0".into()), Some("2.0.0".into()));
+        assert!(range.affects("1.5.0"));
+        assert!(!range.affects("2.1.0"));
+    }
+
+    #[test]
+    fn pr4_4_audit_dependencies() {
+        use crate::package::audit::{AdvisoryDatabase, audit_dependencies};
+        let json = r#"{"advisories":[{"id":"FJ-2026-002","package":"bad-pkg","severity":"high","description":"Denial of service","min_version":"0.1.0","max_version":"0.9.0","patched_version":"1.0.0"}]}"#;
+        let db = AdvisoryDatabase::from_json(json).unwrap();
+        let deps = vec![("bad-pkg".into(), "0.5.0".into())];
+        let report = audit_dependencies(&deps, &db);
+        assert!(report.has_critical_or_high());
+    }
+
+    #[test]
+    fn pr4_5_audit_clean() {
+        use crate::package::audit::{AdvisoryDatabase, audit_dependencies};
+        let db = AdvisoryDatabase::new();
+        let deps = vec![("safe-pkg".into(), "1.0.0".into())];
+        let report = audit_dependencies(&deps, &db);
+        assert!(!report.has_critical_or_high());
+        assert_eq!(report.finding_count(), 0);
+    }
+
+    #[test]
+    fn pr4_6_severity_variants() {
+        use crate::package::audit::Severity;
+        let severities = [
+            Severity::Critical,
+            Severity::High,
+            Severity::Medium,
+            Severity::Low,
+        ];
+        assert_eq!(severities.len(), 4);
+    }
+
+    #[test]
+    fn pr4_7_severity_color_code() {
+        use crate::package::audit::Severity;
+        let code = Severity::Critical.color_code();
+        assert!(!code.is_empty());
+    }
+
+    #[test]
+    fn pr4_8_version_range_unbounded() {
+        use crate::package::audit::VersionRange;
+        let range = VersionRange::new(None, None);
+        assert!(range.affects("1.0.0"));
+        assert!(range.affects("999.0.0"));
+    }
+
+    #[test]
+    fn pr4_9_advisory_not_affected() {
+        use crate::package::audit::AdvisoryDatabase;
+        let json = r#"{"advisories":[{"id":"FJ-2026-003","package":"lib-x","severity":"low","description":"Bug","min_version":"1.0.0","max_version":"1.5.0","patched_version":"1.5.1"}]}"#;
+        let db = AdvisoryDatabase::from_json(json).unwrap();
+        let hits = db.check("lib-x", "2.0.0");
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn pr4_10_audit_report_count() {
+        use crate::package::audit::{AdvisoryDatabase, audit_dependencies};
+        let json = r#"{"advisories":[
+            {"id":"FJ-001","package":"a","severity":"low","description":"Bug A","min_version":"1.0.0","max_version":"2.0.0","patched_version":"2.0.1"},
+            {"id":"FJ-002","package":"b","severity":"medium","description":"Bug B","min_version":"0.1.0","max_version":"0.9.0","patched_version":"1.0.0"}
+        ]}"#;
+        let db = AdvisoryDatabase::from_json(json).unwrap();
+        let deps = vec![("a".into(), "1.5.0".into()), ("b".into(), "0.5.0".into())];
+        let report = audit_dependencies(&deps, &db);
+        assert_eq!(report.finding_count(), 2);
+    }
 }
