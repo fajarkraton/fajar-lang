@@ -1091,6 +1091,108 @@ impl Interpreter {
                     .into()),
                 }
             }
+            // V16 R1: MNIST data loader — loads IDX binary format directly into tensors
+            "mnist_load_images" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "mnist_load_images: path must be string".into(),
+                        )
+                        .into());
+                    }
+                };
+                let count = match &args[1] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "mnist_load_images: count must be int".into(),
+                        )
+                        .into());
+                    }
+                };
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        if bytes.len() < 16 {
+                            return Err(RuntimeError::TypeError("Invalid IDX file".into()).into());
+                        }
+                        let n_images =
+                            u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+                        let rows =
+                            u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+                        let cols = u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]])
+                            as usize;
+                        let load_n = count.min(n_images);
+                        let img_size = rows * cols;
+                        let mut data = ndarray::Array2::<f64>::zeros((load_n, img_size));
+                        for i in 0..load_n {
+                            for j in 0..img_size {
+                                data[[i, j]] = bytes[16 + i * img_size + j] as f64 / 255.0;
+                            }
+                        }
+                        Ok(Value::Tensor(
+                            crate::runtime::ml::tensor::TensorValue::from_ndarray(data.into_dyn()),
+                        ))
+                    }
+                    Err(e) => Ok(Value::Enum {
+                        variant: "Err".into(),
+                        data: Some(Box::new(Value::Str(e.to_string()))),
+                    }),
+                }
+            }
+            "mnist_load_labels" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let path = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "mnist_load_labels: path must be string".into(),
+                        )
+                        .into());
+                    }
+                };
+                let count = match &args[1] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "mnist_load_labels: count must be int".into(),
+                        )
+                        .into());
+                    }
+                };
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        if bytes.len() < 8 {
+                            return Err(RuntimeError::TypeError("Invalid IDX file".into()).into());
+                        }
+                        let n_labels =
+                            u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+                        let load_n = count.min(n_labels);
+                        let mut labels = Vec::with_capacity(load_n);
+                        for i in 0..load_n {
+                            labels.push(Value::Int(bytes[8 + i] as i64));
+                        }
+                        Ok(Value::Array(labels))
+                    }
+                    Err(e) => Ok(Value::Enum {
+                        variant: "Err".into(),
+                        data: Some(Box::new(Value::Str(e.to_string()))),
+                    }),
+                }
+            }
             // V16 G1.8: GPU thread indexing builtins (mock values in interpreter)
             "thread_idx" => {
                 let _dim = args

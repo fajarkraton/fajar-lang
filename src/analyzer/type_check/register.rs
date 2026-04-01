@@ -1098,6 +1098,17 @@ impl TypeChecker {
                 vec![Type::Str, Type::Unknown],
                 Type::Unknown,
             ),
+            // MNIST builtins
+            (
+                "mnist_load_images",
+                vec![Type::Str, Type::I64],
+                Type::Unknown,
+            ),
+            (
+                "mnist_load_labels",
+                vec![Type::Str, Type::I64],
+                Type::Unknown,
+            ),
             // GPU builtins
             ("thread_idx", vec![Type::I64], Type::I64),
             ("block_idx", vec![], Type::I64),

@@ -1018,6 +1018,9 @@ impl Interpreter {
             "read_binary",
             "write_binary",
             "file_exists",
+            // MNIST builtins
+            "mnist_load_images",
+            "mnist_load_labels",
             // GPU builtins
             "thread_idx",
             "block_idx",
