@@ -1,0 +1,66 @@
+// Fajar Lang Showcase: Algebraic Effects
+// Demonstrates: effect declaration, handle/with, resume, multi-step, nested.
+
+// ── Effect: Logging ──
+effect Logger {
+    fn log(msg: str) -> void
+    fn level() -> str
+}
+
+// ── Effect: Configuration ──
+effect Config {
+    fn get(key: str) -> str
+}
+
+// ── Function using effects ──
+fn setup_app() -> str with Logger, Config {
+    Logger::log("Starting application...")
+    let db_host = Config::get("db_host")
+    let db_port = Config::get("db_port")
+    Logger::log(f"Connecting to {db_host}:{db_port}")
+    f"{db_host}:{db_port}"
+}
+
+// ── Handler: intercepts effects and provides implementations ──
+let mut log_count = 0
+let connection = handle {
+    setup_app()
+} with {
+    Logger::log(msg) => {
+        println(f"  [LOG] {msg}")
+        resume()
+    }
+    Config::get(key) => {
+        if key == "db_host" {
+            resume("localhost")
+        } else {
+            resume("5432")
+        }
+    }
+}
+
+println(f"Connection string: {connection}")
+assert_eq(connection, "localhost:5432")
+
+// ── Nested Handlers ──
+effect Auth {
+    fn current_user() -> str
+}
+
+let greeting = handle {
+    handle {
+        let user = Auth::current_user()
+        Logger::log(f"Hello, {user}!")
+        f"Welcome, {user}"
+    } with {
+        Auth::current_user() => { resume("Fajar") }
+    }
+} with {
+    Logger::log(msg) => {
+        println(f"  [NESTED LOG] {msg}")
+        resume()
+    }
+}
+
+assert_eq(greeting, "Welcome, Fajar")
+println("PASS: algebraic effects")

@@ -1,0 +1,51 @@
+// Fajar Lang Showcase: Functional Programming
+// Demonstrates: closures, map/filter/fold, pipeline, higher-order functions.
+
+// ── Closures & Higher-Order Functions ──
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }
+fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {
+    |x| f(g(x))
+}
+
+let double = |x| x * 2
+let inc = |x| x + 1
+
+assert_eq(apply(double, 5), 10)
+assert_eq(apply(inc, 5), 6)
+
+// Compose: double(inc(x))
+let double_after_inc = compose(double, inc)
+assert_eq(apply(double_after_inc, 5), 12)
+
+// ── Pipeline Operator ──
+let result = 10
+    |> |x| x * 2
+    |> |x| x + 5
+    |> |x| x / 5
+assert_eq(result, 5)
+
+// ── Array Functional Methods ──
+let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Sum of squares of even numbers
+let sum_even_sq = data
+    .filter(|x| x % 2 == 0)
+    .map(|x| x * x)
+    .fold(0, |acc, x| acc + x)
+println(f"Sum of squares of evens: {sum_even_sq}")
+assert_eq(sum_even_sq, 220)  // 4+16+36+64+100
+
+// Any / All
+assert(data.any(|x| x > 9))
+assert(data.all(|x| x > 0))
+assert(!data.all(|x| x > 5))
+
+// Find
+let first_gt_5 = data.find(|x| x > 5)
+println(f"First > 5: {first_gt_5}")
+
+// Enumerate + filter
+let indexed = ["a", "b", "c", "d"].enumerate()
+println(f"Enumerated: {indexed}")
+
+println("PASS: functional programming")

@@ -1,0 +1,50 @@
+// Fajar Lang Showcase: ML Pipeline
+// Demonstrates: tensor ops, layers, forward pass, loss, backprop, pipeline.
+
+// ── Tensor Operations ──
+let a = from_data([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+let b = from_data([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]])
+let c = matmul(a, b)
+println(f"Matrix multiply (2x3 * 3x2): {shape(c)}")
+
+// Activation functions
+let x = from_data([[-2.0, -1.0, 0.0, 1.0, 2.0]])
+let r = relu(x)
+println(f"ReLU({x}): {r}")
+
+let s = sigmoid(from_data([[0.0]]))
+println(f"Sigmoid(0) = {s}")
+
+let t = tanh(from_data([[0.0, 1.0]]))
+println(f"Tanh: {t}")
+
+// ── Neural Network ──
+let layer1 = Dense(10, 5)
+let layer2 = Dense(5, 3)
+
+// Forward pass using pipeline style
+let input = randn(1, 10)
+let h1 = layer1.forward(input)
+let h2 = relu(h1)
+let output = layer2.forward(h2)
+let pred = softmax(output)
+println(f"Prediction shape: {shape(pred)}")
+
+// Loss + Backward
+let target = zeros(1, 3)
+let l = mse_loss(pred, target)
+println(f"Loss computed")
+backward(l)
+println(f"Backprop complete")
+
+// ── Tensor Utilities ──
+let eye3 = eye(3)
+println(f"Identity 3x3: {shape(eye3)}")
+
+let w = xavier(4, 3)
+println(f"Xavier init: {shape(w)}")
+
+let cat = concat(zeros(2, 3), ones(2, 3), 0)
+println(f"Concat: {shape(cat)}")
+
+println("PASS: ML pipeline showcase")

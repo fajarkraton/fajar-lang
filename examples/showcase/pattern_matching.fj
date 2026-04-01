@@ -1,0 +1,74 @@
+// Fajar Lang Showcase: Pattern Matching
+// Demonstrates: match, guards, enums, if-let, while-let, structs, ranges.
+
+// ── Basic Match ──
+fn describe(n: i64) -> str {
+    match n {
+        0 => "zero"
+        1 | 2 | 3 => "small"
+        4..10 => "medium"
+        n if n < 0 => "negative"
+        _ => "large"
+    }
+}
+
+assert_eq(describe(0), "zero")
+assert_eq(describe(2), "small")
+assert_eq(describe(7), "medium")
+assert_eq(describe(-5), "negative")
+assert_eq(describe(100), "large")
+
+// ── Enum Match ──
+fn unwrap_or(opt: Option, default: i64) -> i64 {
+    match opt {
+        Some(v) => v
+        None => default
+    }
+}
+
+assert_eq(unwrap_or(Some(42), 0), 42)
+assert_eq(unwrap_or(None, -1), -1)
+
+// ── Struct Pattern ──
+struct Point { x: f64, y: f64 }
+
+fn classify_point(p: Point) -> str {
+    match p {
+        Point { x: 0.0, y: 0.0 } => "origin"
+        Point { x: 0.0, y } => f"y-axis at {y}"
+        Point { x, y: 0.0 } => f"x-axis at {x}"
+        _ => "general"
+    }
+}
+
+assert_eq(classify_point(Point { x: 0.0, y: 0.0 }), "origin")
+assert_eq(classify_point(Point { x: 0.0, y: 5.0 }), "y-axis at 5")
+
+// ── Tuple Match ──
+let pair = (true, 42)
+let msg = match pair {
+    (true, n) => f"yes: {n}"
+    _ => "no"
+}
+assert_eq(msg, "yes: 42")
+
+// ── if-let ──
+let opt = Some("hello")
+if let Some(s) = opt {
+    assert_eq(s, "hello")
+}
+
+let result = if let Some(v) = Some(10) { v * 2 } else { 0 }
+assert_eq(result, 20)
+
+// ── while-let ──
+let items = [Some(1), Some(2), Some(3), None]
+let mut sum = 0
+let mut i = 0
+while let Some(v) = items[i] {
+    sum = sum + v
+    i = i + 1
+}
+assert_eq(sum, 6)
+
+println("PASS: pattern matching showcase")
