@@ -1,0 +1,17 @@
+// V15 B1.10 Test 4: Nested handle expressions
+effect Ask {
+    fn name() -> str
+}
+
+let result = handle {
+    handle {
+        Ask::name()
+    } with {
+        Ask::name() => { resume("inner") }
+    }
+} with {
+    Ask::name() => { resume("outer") }
+}
+// Inner handler should catch it first
+assert_eq(result, "inner")
+println("PASS: effect_nested")

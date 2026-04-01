@@ -1,0 +1,23 @@
+// V15 I3.4: File Search (grep-like)
+// Searches for a pattern in a file and prints matching lines.
+
+let filename = "examples/hello.fj"
+let pattern = "fn"
+let result = read_file(filename)
+
+match result {
+    Ok(content) => {
+        let lines = content.split("\n")
+        let mut matches = 0
+        let mut line_num = 1
+        for line in lines {
+            if line.contains(pattern) {
+                println(f"{line_num}: {line}")
+                matches = matches + 1
+            }
+            line_num = line_num + 1
+        }
+        println(f"\n{matches} matches found for '{pattern}' in {filename}")
+    }
+    Err(e) => println(f"Error reading {filename}: {e}")
+}

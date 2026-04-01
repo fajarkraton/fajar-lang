@@ -1,0 +1,13 @@
+// V15 B1.10 Test 8: Handler computes resume value from parameters
+effect Math {
+    fn double(x: i32) -> i32
+}
+
+let result = handle {
+    let a = Math::double(21)
+    a
+} with {
+    Math::double(x) => { resume(x * 2) }
+}
+assert_eq(result, 42)
+println("PASS: effect_computed_resume")

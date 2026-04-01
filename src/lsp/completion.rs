@@ -269,6 +269,8 @@ fn default_keywords() -> Vec<CompletionCandidate> {
     let kws = [
         "fn", "let", "mut", "if", "else", "while", "for", "in", "return", "struct", "enum", "impl",
         "trait", "match", "const", "use", "mod", "pub", "break", "continue", "loop",
+        // V15 B3.6: Effect system keywords
+        "effect", "handle", "with", "resume",
     ];
     kws.iter()
         .map(|kw| candidate(kw, CompletionKind::Keyword, kw))

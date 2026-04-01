@@ -517,6 +517,11 @@ impl std::error::Error for EvalError {}
 ///
 /// Evaluates a parsed AST (`Program`) and produces runtime `Value`s.
 /// Uses an environment chain (`Rc<RefCell<Environment>>`) for scoping.
+/// V15: A single level in the effect replay stack.
+/// `(cache_entries, current_index)` where each cache entry is
+/// `(effect_name, op_name, resume_value)`.
+type EffectReplayLevel = (Vec<(String, String, Value)>, usize);
+
 pub struct Interpreter {
     /// The global environment.
     env: Rc<RefCell<Environment>>,
@@ -609,6 +614,11 @@ pub struct Interpreter {
     /// V14: Effect handler stack depth — tracks active `handle` blocks.
     /// Each entry: (effect_name, op_name) → handler_index for quick lookup.
     effect_handler_depth: usize,
+    /// V15: Stack of effect replay caches — one entry per active `handle` expression.
+    /// Each entry is `(cache, index)` where `cache` holds tagged resume values and `index`
+    /// tracks consumption during replay. When an effect fires, the dispatch walks the stack
+    /// from innermost to outermost looking for a cached entry that matches the effect identity.
+    effect_replay_stack: Vec<EffectReplayLevel>,
 }
 
 impl Interpreter {
@@ -660,6 +670,7 @@ impl Interpreter {
             macro_expander: crate::macros_v12::MacroExpander::new(),
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
             effect_handler_depth: 0,
+            effect_replay_stack: Vec::new(),
         };
         interp.register_builtins();
         interp
@@ -713,6 +724,7 @@ impl Interpreter {
             macro_expander: crate::macros_v12::MacroExpander::new(),
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
             effect_handler_depth: 0,
+            effect_replay_stack: Vec::new(),
         };
         interp.register_builtins();
         interp
@@ -1085,11 +1097,14 @@ impl Interpreter {
             "matmul",
             "relu",
             "sigmoid",
+            "tanh",
             "softmax",
             "gelu",
+            "leaky_relu",
             "argmax",
             "transpose",
             "flatten",
+            "concat",
             "xavier",
             "from_data",
             "shape",
@@ -1097,6 +1112,8 @@ impl Interpreter {
             "eye",
             "mse_loss",
             "cross_entropy_loss",
+            "cross_entropy",
+            "accuracy",
             "quantize_int8",
             // Autograd
             "tensor_backward",
@@ -1719,9 +1736,10 @@ impl Interpreter {
                 // by the nearest enclosing `handle` expression.
                 for op in &ed.operations {
                     let qualified = format!("{}::{}", ed.name, op.name);
-                    self.env
-                        .borrow_mut()
-                        .define(qualified, Value::BuiltinFn(format!("__effect__{}::{}", ed.name, op.name)));
+                    self.env.borrow_mut().define(
+                        qualified,
+                        Value::BuiltinFn(format!("__effect__{}::{}", ed.name, op.name)),
+                    );
                 }
                 Ok(Value::Null)
             }
@@ -1933,56 +1951,95 @@ impl Interpreter {
                 Ok(Value::Str(result))
             }
             Expr::HandleEffect { body, handlers, .. } => {
-                // V14: Algebraic effect handling (shallow handler model).
+                // V15: Multi-step continuation via replay with stack-based caching.
                 //
-                // Evaluates `body`. If an effect operation is raised:
-                // 1. Find the matching handler arm by (effect_name, op_name)
-                // 2. Bind effect op args to handler param names in a new scope
-                // 3. Evaluate the handler body
-                // 4. Handler's result = result of the entire handle expression
+                // Each `handle` expression pushes a replay cache onto a shared stack.
+                // When an effect fires, the dispatch walks the stack from innermost to
+                // outermost looking for a cached resume value. This correctly handles
+                // nested `handle` expressions where an inner handle may not match and
+                // the effect propagates to an outer handle.
                 //
-                // If handler calls `resume(val)`, `val` is the handler's result.
-                // If no handler matches, the effect propagates to the outer handler.
-                // If body completes without performing effects, its result is returned.
-                self.effect_handler_depth += 1;
-                let result = self.eval_expr(body);
-                self.effect_handler_depth -= 1;
+                // Algorithm:
+                // 1. Push a new empty cache for this handle level.
+                // 2. Evaluate body. On EffectPerformed:
+                //    a. If handler matches: run handler, cache resume value, replay body.
+                //    b. If no handler: pop cache, re-raise to outer handle.
+                // 3. On body completion: pop cache, return result.
 
-                match result {
-                    Err(EvalError::Control(ref cf))
-                        if matches!(**cf, ControlFlow::EffectPerformed { .. }) =>
-                    {
-                        let (effect, op, args) = match *cf.clone() {
-                            ControlFlow::EffectPerformed { effect, op, args } => {
-                                (effect, op, args)
-                            }
-                            _ => unreachable!(),
-                        };
-                        // Find matching handler arm.
-                        let handler = handlers
-                            .iter()
-                            .find(|h| h.effect_name == effect && h.op_name == op);
-                        if let Some(arm) = handler {
-                            // Bind parameters in a new scope.
-                            let prev_env = self.env.clone();
-                            let handler_env = Rc::new(RefCell::new(
-                                Environment::new_with_parent(Rc::clone(&self.env)),
-                            ));
-                            self.env = handler_env;
-                            for (i, pname) in arm.param_names.iter().enumerate() {
-                                let val = args.get(i).cloned().unwrap_or(Value::Null);
-                                self.env.borrow_mut().define(pname.clone(), val);
-                            }
-                            let handler_result = self.eval_expr(&arm.body);
-                            self.env = prev_env;
-                            handler_result
-                        } else {
-                            // No handler found — re-raise the effect to outer handler.
-                            result
-                        }
+                self.effect_replay_stack.push((Vec::new(), 0));
+                let stack_level = self.effect_replay_stack.len() - 1;
+
+                let max_replays = 1000;
+                let mut replay_count = 0;
+
+                let final_result = loop {
+                    replay_count += 1;
+                    if replay_count > max_replays {
+                        break Err(RuntimeError::Unsupported(
+                            "effect handler exceeded maximum replay count (possible infinite effect loop)".into(),
+                        ).into());
                     }
-                    other => other,
-                }
+
+                    // Reset replay index for this level (keep cache entries).
+                    self.effect_replay_stack[stack_level].1 = 0;
+
+                    self.effect_handler_depth += 1;
+                    let result = self.eval_expr(body);
+                    self.effect_handler_depth -= 1;
+
+                    match result {
+                        Err(EvalError::Control(ref cf))
+                            if matches!(**cf, ControlFlow::EffectPerformed { .. }) =>
+                        {
+                            let (effect, op, args) = match *cf.clone() {
+                                ControlFlow::EffectPerformed { effect, op, args } => {
+                                    (effect, op, args)
+                                }
+                                _ => unreachable!(),
+                            };
+                            // Find matching handler arm.
+                            let handler = handlers
+                                .iter()
+                                .find(|h| h.effect_name == effect && h.op_name == op);
+                            if let Some(arm) = handler {
+                                // Bind parameters in a new scope.
+                                let prev_env = self.env.clone();
+                                let handler_env = Rc::new(RefCell::new(
+                                    Environment::new_with_parent(Rc::clone(&self.env)),
+                                ));
+                                self.env = handler_env;
+                                for (i, pname) in arm.param_names.iter().enumerate() {
+                                    let val = args.get(i).cloned().unwrap_or(Value::Null);
+                                    self.env.borrow_mut().define(pname.clone(), val);
+                                }
+                                let handler_result = self.eval_expr(&arm.body);
+                                self.env = prev_env;
+
+                                match handler_result {
+                                    Ok(resume_val) => {
+                                        // Cache the resume value tagged with effect identity.
+                                        self.effect_replay_stack[stack_level].0.push((
+                                            effect.clone(),
+                                            op.clone(),
+                                            resume_val,
+                                        ));
+                                        continue;
+                                    }
+                                    Err(e) => break Err(e),
+                                }
+                            } else {
+                                // No handler found — re-raise to outer handler.
+                                break result;
+                            }
+                        }
+                        other => break other,
+                    }
+                };
+
+                // Pop this handle's cache.
+                self.effect_replay_stack.pop();
+
+                final_result
             }
             Expr::ResumeExpr { value, .. } => {
                 // V14: Resume evaluates its argument and returns it as the
@@ -3923,7 +3980,11 @@ mod tests {
             x
             "#,
         );
-        assert!(result.is_ok(), "effect declaration should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "effect declaration should succeed: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Int(42));
     }
 
@@ -3940,7 +4001,11 @@ mod tests {
             type_of(f)
             "#,
         );
-        assert!(result.is_ok(), "effect op lookup should work: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "effect op lookup should work: {:?}",
+            result.err()
+        );
         // Should be a BuiltinFn
         match result.unwrap() {
             Value::Str(s) => assert!(s.contains("builtin") || s.contains("function"), "got: {s}"),
@@ -3961,7 +4026,11 @@ mod tests {
             result
             "#,
         );
-        assert!(result.is_ok(), "default handler should work: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "default handler should work: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Null);
     }
 
@@ -3981,7 +4050,11 @@ mod tests {
             result
             "#,
         );
-        assert!(result.is_ok(), "handle should intercept effect: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "handle should intercept effect: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Str("Fajar".into()));
     }
 
@@ -4003,10 +4076,15 @@ mod tests {
             result
             "#,
         );
-        assert!(result.is_ok(), "handle with params should work: {:?}", result.err());
-        // The handle intercepts Logger::log, handler returns msg = "hello world",
-        // which becomes the result of the handle expression.
-        assert_eq!(result.unwrap(), Value::Str("hello world".into()));
+        assert!(
+            result.is_ok(),
+            "handle with params should work: {:?}",
+            result.err()
+        );
+        // V15: With multi-step continuations, the handler's resume value ("hello world")
+        // is cached and the body continues. The body's final expression (42) is the
+        // result of the handle expression.
+        assert_eq!(result.unwrap(), Value::Int(42));
     }
 
     #[test]
@@ -4096,7 +4174,11 @@ mod tests {
             result
             "#,
         );
-        assert!(result.is_ok(), "multiple ops should work: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "multiple ops should work: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Str("user input".into()));
     }
 
@@ -4153,7 +4235,11 @@ mod tests {
             result
             "#,
         );
-        assert!(result.is_ok(), "outer catches unhandled: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "outer catches unhandled: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Str("outer caught it".into()));
     }
 
@@ -4371,7 +4457,11 @@ mod tests {
             greet()
             "#,
         );
-        assert!(result.is_ok(), "declared effect should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "declared effect should pass: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -4393,7 +4483,11 @@ mod tests {
             greet()
             "#,
         );
-        assert!(result.is_ok(), "handled effect no warning: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "handled effect no warning: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), Value::Str("Fajar".into()));
     }
 
@@ -4546,6 +4640,244 @@ mod tests {
     }
 
     // ===================================================================
+    // V15 Sprint B1 — Multi-step Continuations
+    // ===================================================================
+
+    #[test]
+    fn v15_b1_1_multi_step_two_effects() {
+        // Body with 2 effect calls — both must execute.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Console {
+                fn log(msg: str) -> void
+            }
+            let result = handle {
+                Console::log("hello")
+                Console::log("world")
+                42
+            } with {
+                Console::log(msg) => { resume(null) }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "multi-step 2 effects: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Int(42));
+    }
+
+    #[test]
+    fn v15_b1_2_multi_step_three_effects() {
+        // Body with 3 sequential effect calls — all must execute.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Counter {
+                fn next() -> i32
+            }
+            let mut n = 0
+            let result = handle {
+                let a = Counter::next()
+                let b = Counter::next()
+                let c = Counter::next()
+                a + b + c
+            } with {
+                Counter::next() => { resume(10) }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "multi-step 3 effects: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Int(30));
+    }
+
+    #[test]
+    fn v15_b1_3_resume_return_value() {
+        // resume(42) makes the effect call site return 42.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect AppState {
+                fn get() -> i32
+            }
+            let x = handle {
+                AppState::get()
+            } with {
+                AppState::get() => { resume(42) }
+            }
+            x
+            "#,
+        );
+        assert!(result.is_ok(), "resume return value: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Int(42));
+    }
+
+    #[test]
+    fn v15_b1_3b_resume_value_used_in_body() {
+        // Resume value is used in subsequent computation in the body.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect AppState {
+                fn get() -> i32
+            }
+            let result = handle {
+                let x = AppState::get()
+                x * 2 + 1
+            } with {
+                AppState::get() => { resume(21) }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "resume value in body: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Int(43));
+    }
+
+    #[test]
+    fn v15_b1_4_multi_effect_types_in_handler() {
+        // Handle block with handlers for two different effects, body uses both.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            effect Config {
+                fn get(key: str) -> str
+            }
+            let result = handle {
+                Logger::log("starting")
+                let host = Config::get("host")
+                Logger::log("done")
+                host
+            } with {
+                Logger::log(msg) => { resume(null) }
+                Config::get(key) => { resume("localhost") }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "multi-effect types: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Str("localhost".into()));
+    }
+
+    #[test]
+    fn v15_b1_5_resume_no_arg() {
+        // resume() is alias for resume(null).
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            let result = handle {
+                Logger::log("hello")
+                Logger::log("world")
+                "done"
+            } with {
+                Logger::log(msg) => { resume() }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "resume no-arg: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Str("done".into()));
+    }
+
+    #[test]
+    fn v15_b1_6_handler_scope_isolation() {
+        // Handler params must not leak to outer scope.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            let msg = "outer"
+            handle {
+                Logger::log("inner")
+            } with {
+                Logger::log(msg) => { resume(null) }
+            }
+            msg
+            "#,
+        );
+        assert!(result.is_ok(), "handler scope: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Str("outer".into()));
+    }
+
+    #[test]
+    fn v15_b1_7_nested_handle_multi_step() {
+        // Nested handle with multi-step: inner catches A, outer catches B.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Ask {
+                fn name() -> str
+            }
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            let result = handle {
+                handle {
+                    let n = Ask::name()
+                    Logger::log(n)
+                    n
+                } with {
+                    Ask::name() => { resume("Fajar") }
+                }
+            } with {
+                Logger::log(msg) => { resume(null) }
+            }
+            result
+            "#,
+        );
+        assert!(result.is_ok(), "nested multi-step: {:?}", result.err());
+        assert_eq!(result.unwrap(), Value::Str("Fajar".into()));
+    }
+
+    #[test]
+    fn v15_b1_8_resume_type_mismatch() {
+        // resume("hello") when effect returns i32 should produce SE004.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Counter {
+                fn next() -> i32
+            }
+            handle {
+                Counter::next()
+            } with {
+                Counter::next() => { resume("wrong type") }
+            }
+            "#,
+        );
+        // Should produce a type mismatch error from analyzer.
+        assert!(result.is_err(), "should detect type mismatch in resume");
+    }
+
+    #[test]
+    fn v15_b1_9_effect_arity_mismatch() {
+        // Handler with wrong number of params should produce SE005.
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            handle {
+                Logger::log("hello")
+            } with {
+                Logger::log() => { resume(null) }
+            }
+            "#,
+        );
+        // Should produce argument count mismatch error.
+        assert!(result.is_err(), "should detect arity mismatch in handler");
+    }
+
+    // ===================================================================
     // Sprint EF4 — Effect Polymorphism
     // ===================================================================
 
@@ -4590,12 +4922,8 @@ mod tests {
         let mut trait_effects = EffectSet::empty();
         trait_effects.insert("IO".to_string());
         trait_effects.insert("Alloc".to_string());
-        let trait_method = EffectTraitMethod::new(
-            "process",
-            vec!["str".into()],
-            "void",
-            trait_effects,
-        );
+        let trait_method =
+            EffectTraitMethod::new("process", vec!["str".into()], "void", trait_effects);
 
         // Impl with subset — OK.
         let mut impl_effects = EffectSet::empty();
@@ -4631,8 +4959,7 @@ mod tests {
     #[test]
     fn ef4_5_effect_erasure_hints() {
         use crate::analyzer::effects::{
-            EffectSet, EffectHandler, HandlerScopeStack,
-            EffectErasureHint, compute_erasure_hints,
+            EffectErasureHint, EffectHandler, EffectSet, HandlerScopeStack, compute_erasure_hints,
         };
 
         let mut stack = HandlerScopeStack::new();
@@ -4645,14 +4972,20 @@ mod tests {
 
         let hints = compute_erasure_hints(&effects, &stack);
         // IO should be erasable (handler at immediate scope).
-        assert!(matches!(hints.get("IO"), Some(EffectErasureHint::FullErase)));
+        assert!(matches!(
+            hints.get("IO"),
+            Some(EffectErasureHint::FullErase)
+        ));
         // Panic has no handler — not erasable.
-        assert!(matches!(hints.get("Panic"), Some(EffectErasureHint::NoErase)));
+        assert!(matches!(
+            hints.get("Panic"),
+            Some(EffectErasureHint::NoErase)
+        ));
     }
 
     #[test]
     fn ef4_6_effect_closure_tracking() {
-        use crate::analyzer::effects::{EffectSet, EffectClosure};
+        use crate::analyzer::effects::{EffectClosure, EffectSet};
         let mut effects = EffectSet::empty();
         effects.insert("IO".to_string());
         let closure = EffectClosure::new(
@@ -4664,12 +4997,7 @@ mod tests {
         assert!(!closure.is_pure());
         assert_eq!(closure.captures.len(), 1);
 
-        let pure_closure = EffectClosure::new(
-            EffectSet::empty(),
-            vec![],
-            "i32",
-            vec![],
-        );
+        let pure_closure = EffectClosure::new(EffectSet::empty(), vec![], "i32", vec![]);
         assert!(pure_closure.is_pure());
     }
 
@@ -4697,7 +5025,9 @@ mod tests {
 
     #[test]
     fn ef4_8_builtin_handlers() {
-        use crate::analyzer::effects::{builtin_io_handler, builtin_alloc_handler, builtin_exception_handler};
+        use crate::analyzer::effects::{
+            builtin_alloc_handler, builtin_exception_handler, builtin_io_handler,
+        };
         let io = builtin_io_handler();
         assert_eq!(io.handler_count(), 2);
         assert!(io.find_handler("print").is_some());
@@ -4712,7 +5042,9 @@ mod tests {
 
     #[test]
     fn ef4_9_context_forbidden_effects() {
-        use crate::analyzer::effects::{ContextAnnotation, forbidden_effects, allowed_effects, EffectKind};
+        use crate::analyzer::effects::{
+            ContextAnnotation, EffectKind, allowed_effects, forbidden_effects,
+        };
         let kernel_forbidden = forbidden_effects(ContextAnnotation::Kernel);
         assert!(kernel_forbidden.contains(&EffectKind::Alloc));
         assert!(kernel_forbidden.contains(&EffectKind::Tensor));
@@ -4805,7 +5137,10 @@ mod tests {
             Box::new(NatValue::Literal(3)),
             Box::new(NatValue::Literal(7)),
         );
-        assert_eq!(product.evaluate(&std::collections::HashMap::new()), Some(21));
+        assert_eq!(
+            product.evaluate(&std::collections::HashMap::new()),
+            Some(21)
+        );
     }
 
     #[test]
@@ -4840,10 +5175,13 @@ mod tests {
         use crate::dependent::nat::NatValue;
         assert!(NatValue::Literal(5).is_concrete());
         assert!(!NatValue::Param("N".into()).is_concrete());
-        assert!(!NatValue::Add(
-            Box::new(NatValue::Param("N".into())),
-            Box::new(NatValue::Literal(1)),
-        ).is_concrete());
+        assert!(
+            !NatValue::Add(
+                Box::new(NatValue::Param("N".into())),
+                Box::new(NatValue::Literal(1)),
+            )
+            .is_concrete()
+        );
     }
 
     #[test]
@@ -4888,8 +5226,14 @@ mod tests {
     fn dt2_2_dep_array_concat() {
         use crate::dependent::arrays::{DepArray, concat_type};
         use crate::dependent::nat::NatValue;
-        let a = DepArray { element_ty: "i32".into(), len: NatValue::Literal(3) };
-        let b = DepArray { element_ty: "i32".into(), len: NatValue::Literal(5) };
+        let a = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(3),
+        };
+        let b = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(5),
+        };
         let result = concat_type(&a, &b);
         assert!(result.is_ok());
         let c = result.unwrap();
@@ -4898,9 +5242,12 @@ mod tests {
 
     #[test]
     fn dt2_3_dep_array_bounds_check() {
-        use crate::dependent::arrays::{DepArray, check_bounds, BoundsCheckResult};
+        use crate::dependent::arrays::{BoundsCheckResult, DepArray, check_bounds};
         use crate::dependent::nat::NatValue;
-        let arr = DepArray { element_ty: "i32".into(), len: NatValue::Literal(5) };
+        let arr = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(5),
+        };
         let env = std::collections::HashMap::new();
 
         let result = check_bounds(&arr.len, &NatValue::Literal(3), &env);
@@ -4914,10 +5261,19 @@ mod tests {
     fn dt2_4_dep_array_split() {
         use crate::dependent::arrays::{DepArray, split_at_types};
         use crate::dependent::nat::NatValue;
-        let arr = DepArray { element_ty: "i32".into(), len: NatValue::Literal(10) };
+        let arr = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(10),
+        };
         let (left, right) = split_at_types(&arr, &NatValue::Literal(4));
-        assert_eq!(left.len.evaluate(&std::collections::HashMap::new()), Some(4));
-        assert_eq!(right.len.evaluate(&std::collections::HashMap::new()), Some(6));
+        assert_eq!(
+            left.len.evaluate(&std::collections::HashMap::new()),
+            Some(4)
+        );
+        assert_eq!(
+            right.len.evaluate(&std::collections::HashMap::new()),
+            Some(6)
+        );
     }
 
     #[test]
@@ -4932,8 +5288,14 @@ mod tests {
     fn dt2_6_dep_array_type_mismatch() {
         use crate::dependent::arrays::{DepArray, concat_type};
         use crate::dependent::nat::NatValue;
-        let a = DepArray { element_ty: "i32".into(), len: NatValue::Literal(3) };
-        let b = DepArray { element_ty: "f64".into(), len: NatValue::Literal(5) };
+        let a = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(3),
+        };
+        let b = DepArray {
+            element_ty: "f64".into(),
+            len: NatValue::Literal(5),
+        };
         let concat = concat_type(&a, &b);
         assert!(concat.is_err());
     }
@@ -4942,10 +5304,16 @@ mod tests {
     fn dt2_7_dep_array_parametric_length() {
         use crate::dependent::arrays::DepArray;
         use crate::dependent::nat::NatValue;
-        let arr = DepArray { element_ty: "i32".into(), len: NatValue::Literal(5) };
+        let arr = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(5),
+        };
         assert!(arr.len.is_concrete());
 
-        let dynamic = DepArray { element_ty: "i32".into(), len: NatValue::Param("N".into()) };
+        let dynamic = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Param("N".into()),
+        };
         assert!(!dynamic.len.is_concrete());
     }
 
@@ -4953,7 +5321,10 @@ mod tests {
     fn dt2_8_dep_array_parametric() {
         use crate::dependent::arrays::DepArray;
         use crate::dependent::nat::NatValue;
-        let arr = DepArray { element_ty: "T".into(), len: NatValue::Param("N".into()) };
+        let arr = DepArray {
+            element_ty: "T".into(),
+            len: NatValue::Param("N".into()),
+        };
         let params = arr.len.free_params();
         assert!(params.iter().any(|p| p == "N"));
     }
@@ -4962,7 +5333,10 @@ mod tests {
     fn dt2_9_dep_array_display() {
         use crate::dependent::arrays::DepArray;
         use crate::dependent::nat::NatValue;
-        let arr = DepArray { element_ty: "i32".into(), len: NatValue::Literal(5) };
+        let arr = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Literal(5),
+        };
         let s = format!("{arr}");
         assert!(s.contains("i32") && s.contains("5"));
     }
@@ -4971,8 +5345,14 @@ mod tests {
     fn dt2_10_dep_array_length_propagation() {
         use crate::dependent::arrays::{DepArray, concat_type};
         use crate::dependent::nat::NatValue;
-        let a = DepArray { element_ty: "i32".into(), len: NatValue::Param("N".into()) };
-        let b = DepArray { element_ty: "i32".into(), len: NatValue::Param("M".into()) };
+        let a = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Param("N".into()),
+        };
+        let b = DepArray {
+            element_ty: "i32".into(),
+            len: NatValue::Param("M".into()),
+        };
         let c = concat_type(&a, &b).unwrap();
         let params = c.len.free_params();
         assert!(params.iter().any(|p| p == "N"));
@@ -5025,8 +5405,8 @@ mod tests {
 
     #[test]
     fn dt3_5_reshape_validation() {
-        use crate::dependent::tensor_shapes::{DepTensor, check_reshape};
         use crate::dependent::nat::NatValue;
+        use crate::dependent::tensor_shapes::{DepTensor, check_reshape};
         let t = DepTensor::matrix("f32", 3, 4);
         let env = std::collections::HashMap::new();
         let result = check_reshape(&t, &[NatValue::Literal(2), NatValue::Literal(6)], &env);
@@ -5046,8 +5426,8 @@ mod tests {
 
     #[test]
     fn dt3_7_tensor_broadcast() {
-        use crate::dependent::tensor_shapes::{DepTensor, check_broadcast, BroadcastResult};
         use crate::dependent::nat::NatValue;
+        use crate::dependent::tensor_shapes::{BroadcastResult, DepTensor, check_broadcast};
         let a = DepTensor {
             element_ty: "f32".into(),
             dims: vec![NatValue::Literal(3), NatValue::Literal(1)],
@@ -5107,7 +5487,10 @@ mod tests {
     #[test]
     fn dt4_2_nat_pattern_range() {
         use crate::dependent::patterns::{NatPattern, nat_pattern_matches};
-        let pat = NatPattern::Range { start: 1, end_inclusive: 10 };
+        let pat = NatPattern::Range {
+            start: 1,
+            end_inclusive: 10,
+        };
         assert!(nat_pattern_matches(&pat, 1));
         assert!(nat_pattern_matches(&pat, 10));
         assert!(!nat_pattern_matches(&pat, 0));
@@ -5124,11 +5507,10 @@ mod tests {
 
     #[test]
     fn dt4_4_exhaustiveness_check() {
-        use crate::dependent::patterns::{NatPattern, check_nat_exhaustiveness, ExhaustivenessResult};
-        let patterns = vec![
-            NatPattern::Literal(0),
-            NatPattern::Wildcard,
-        ];
+        use crate::dependent::patterns::{
+            ExhaustivenessResult, NatPattern, check_nat_exhaustiveness,
+        };
+        let patterns = vec![NatPattern::Literal(0), NatPattern::Wildcard];
         assert!(matches!(
             check_nat_exhaustiveness(&patterns, None),
             ExhaustivenessResult::Exhaustive
@@ -5143,8 +5525,8 @@ mod tests {
 
     #[test]
     fn dt4_5_proof_witness() {
+        use crate::dependent::nat::{NatConstraint, NatValue};
         use crate::dependent::patterns::prove_constraint;
-        use crate::dependent::nat::{NatValue, NatConstraint};
         let constraint = NatConstraint::LessThan(NatValue::Literal(3), 5);
         let env = std::collections::HashMap::new();
         let witness = prove_constraint(&constraint, &env);
@@ -5153,8 +5535,8 @@ mod tests {
 
     #[test]
     fn dt4_6_safe_index_result() {
-        use crate::dependent::patterns::{SafeIndexResult, check_safe_index};
         use crate::dependent::nat::NatValue;
+        use crate::dependent::patterns::{SafeIndexResult, check_safe_index};
         let env = std::collections::HashMap::new();
 
         let safe = check_safe_index(&NatValue::Literal(5), &NatValue::Literal(3), &env);
@@ -5169,8 +5551,8 @@ mod tests {
 
     #[test]
     fn dt4_7_nat_condition() {
-        use crate::dependent::patterns::{NatCondition, eval_nat_condition};
         use crate::dependent::nat::NatValue;
+        use crate::dependent::patterns::{NatCondition, eval_nat_condition};
         let env = std::collections::HashMap::new();
 
         let is_zero = NatCondition::IsZero(NatValue::Literal(0));
@@ -5185,10 +5567,10 @@ mod tests {
 
     #[test]
     fn dt4_8_where_clause_checking() {
+        use crate::dependent::nat::{NatConstraint, NatValue};
         use crate::dependent::patterns::WhereClause;
-        use crate::dependent::nat::{NatValue, NatConstraint};
-        let clause = WhereClause::empty()
-            .with(NatConstraint::GreaterThan(NatValue::Param("N".into()), 0));
+        let clause =
+            WhereClause::empty().with(NatConstraint::GreaterThan(NatValue::Param("N".into()), 0));
         let mut env = std::collections::HashMap::new();
         env.insert("N".to_string(), 5u64);
         assert!(clause.check_all(&env).is_ok());
@@ -5251,8 +5633,20 @@ mod tests {
     fn ls1_3_semantic_token_encoding() {
         use crate::lsp_v3::semantic::{AbsoluteToken, SemanticTokenType, encode_semantic_tokens};
         let tokens = vec![
-            AbsoluteToken { line: 0, start: 0, length: 3, token_type: SemanticTokenType::Keyword.index(), modifiers: 0 },
-            AbsoluteToken { line: 0, start: 4, length: 1, token_type: SemanticTokenType::Variable.index(), modifiers: 0 },
+            AbsoluteToken {
+                line: 0,
+                start: 0,
+                length: 3,
+                token_type: SemanticTokenType::Keyword.index(),
+                modifiers: 0,
+            },
+            AbsoluteToken {
+                line: 0,
+                start: 4,
+                length: 1,
+                token_type: SemanticTokenType::Variable.index(),
+                modifiers: 0,
+            },
         ];
         let encoded = encode_semantic_tokens(&tokens);
         assert_eq!(encoded.len(), 2);
@@ -5265,8 +5659,20 @@ mod tests {
     fn ls1_4_semantic_token_multiline() {
         use crate::lsp_v3::semantic::{AbsoluteToken, SemanticTokenType, encode_semantic_tokens};
         let tokens = vec![
-            AbsoluteToken { line: 0, start: 0, length: 2, token_type: SemanticTokenType::Keyword.index(), modifiers: 0 },
-            AbsoluteToken { line: 2, start: 5, length: 3, token_type: SemanticTokenType::Function.index(), modifiers: 0 },
+            AbsoluteToken {
+                line: 0,
+                start: 0,
+                length: 2,
+                token_type: SemanticTokenType::Keyword.index(),
+                modifiers: 0,
+            },
+            AbsoluteToken {
+                line: 2,
+                start: 5,
+                length: 3,
+                token_type: SemanticTokenType::Function.index(),
+                modifiers: 0,
+            },
         ];
         let encoded = encode_semantic_tokens(&tokens);
         assert_eq!(encoded[1].delta_line, 2);
@@ -5330,7 +5736,7 @@ mod tests {
 
     #[test]
     fn ls1_10_semantic_token_delta() {
-        use crate::lsp_v3::semantic::{SemanticToken};
+        use crate::lsp_v3::semantic::SemanticToken;
         let tok = SemanticToken {
             delta_line: 1,
             delta_start: 5,
@@ -5358,7 +5764,11 @@ mod tests {
         let provider = InlayHintProvider::new();
         let hints = provider.compute_inlay_hints("let x = 42");
         assert!(!hints.is_empty());
-        assert!(hints[0].label.contains("i64") || hints[0].label.contains("i32") || hints[0].label.contains("int"));
+        assert!(
+            hints[0].label.contains("i64")
+                || hints[0].label.contains("i32")
+                || hints[0].label.contains("int")
+        );
     }
 
     #[test]
@@ -5449,7 +5859,7 @@ mod tests {
 
     #[test]
     fn ls3_3_keyword_completions() {
-        use crate::lsp::completion::{CompletionProvider, CompletionTrigger, CompletionKind};
+        use crate::lsp::completion::{CompletionKind, CompletionProvider, CompletionTrigger};
         let provider = CompletionProvider::new();
         let result = provider.complete_at("", 0, 0, CompletionTrigger::Default);
         let has_keywords = result.iter().any(|c| c.kind == CompletionKind::Keyword);
@@ -5458,7 +5868,7 @@ mod tests {
 
     #[test]
     fn ls3_4_builtin_completions() {
-        use crate::lsp::completion::{CompletionProvider, CompletionTrigger, CompletionKind};
+        use crate::lsp::completion::{CompletionKind, CompletionProvider, CompletionTrigger};
         let provider = CompletionProvider::new();
         let result = provider.complete_at("", 0, 0, CompletionTrigger::Default);
         let has_builtins = result.iter().any(|c| c.kind == CompletionKind::Builtin);
@@ -5585,8 +5995,14 @@ mod tests {
     fn ls4_6_find_references() {
         use crate::lsp::completion::RenameProvider;
         let provider = RenameProvider::new();
-        let refs = provider.find_all_references("let x = 1
-let y = x + 1", 0, 4).unwrap();
+        let refs = provider
+            .find_all_references(
+                "let x = 1
+let y = x + 1",
+                0,
+                4,
+            )
+            .unwrap();
         assert!(refs.len() >= 2); // definition + usage
     }
 
@@ -5594,8 +6010,15 @@ let y = x + 1", 0, 4).unwrap();
     fn ls4_7_rename_symbol() {
         use crate::lsp::completion::RenameProvider;
         let provider = RenameProvider::new();
-        let edits = provider.rename_symbol("let x = 1
-let y = x", 0, 4, "foo").unwrap();
+        let edits = provider
+            .rename_symbol(
+                "let x = 1
+let y = x",
+                0,
+                4,
+                "foo",
+            )
+            .unwrap();
         assert!(!edits.is_empty());
     }
 
@@ -5611,7 +6034,9 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn ls4_9_lsp_error_variants() {
         use crate::lsp::completion::LspError;
-        let err = LspError::ParseFailed { message: "test".into() };
+        let err = LspError::ParseFailed {
+            message: "test".into(),
+        };
         let msg = format!("{err}");
         assert!(msg.contains("test"));
     }
@@ -5673,7 +6098,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs1_5_spirv_type_mapping() {
-        use crate::gpu_codegen::spirv::{map_fj_type, SpirVTypeDesc};
+        use crate::gpu_codegen::spirv::{SpirVTypeDesc, map_fj_type};
         assert_eq!(map_fj_type("f32"), Some(SpirVTypeDesc::Float(32)));
         assert_eq!(map_fj_type("i32"), Some(SpirVTypeDesc::Int(32, true)));
         assert_eq!(map_fj_type("bool"), Some(SpirVTypeDesc::Bool));
@@ -5720,7 +6145,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs1_10_spirv_validate_with_entry() {
-        use crate::gpu_codegen::spirv::{SpirVModule, EntryPoint, ExecutionModel};
+        use crate::gpu_codegen::spirv::{EntryPoint, ExecutionModel, SpirVModule};
         let mut module = SpirVModule::new_compute();
         let fn_id = module.alloc_id();
         module.entry_points.push(EntryPoint {
@@ -5738,7 +6163,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs2_1_create_ssbo() {
-        use crate::gpu_codegen::spirv::{create_ssbo, StorageClass};
+        use crate::gpu_codegen::spirv::{StorageClass, create_ssbo};
         let ssbo = create_ssbo(10, 5, 0, 0);
         assert_eq!(ssbo.id, 10);
         assert_eq!(ssbo.storage_class, StorageClass::StorageBuffer);
@@ -5747,7 +6172,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs2_2_create_workgroup_var() {
-        use crate::gpu_codegen::spirv::{create_workgroup_var, StorageClass};
+        use crate::gpu_codegen::spirv::{StorageClass, create_workgroup_var};
         let wg = create_workgroup_var(20, 8);
         assert_eq!(wg.storage_class, StorageClass::Workgroup);
         assert!(wg.binding.is_none());
@@ -5797,7 +6222,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs2_8_backend_parse() {
-        use crate::gpu_codegen::spirv::{parse_backend, GpuBackend};
+        use crate::gpu_codegen::spirv::{GpuBackend, parse_backend};
         assert_eq!(parse_backend("ptx"), Some(GpuBackend::Ptx));
         assert_eq!(parse_backend("spirv"), Some(GpuBackend::SpirV));
         assert_eq!(parse_backend("auto"), Some(GpuBackend::Auto));
@@ -5806,14 +6231,14 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs2_9_backend_resolve_nvidia() {
-        use crate::gpu_codegen::spirv::{resolve_backend, GpuBackend};
+        use crate::gpu_codegen::spirv::{GpuBackend, resolve_backend};
         let resolved = resolve_backend(GpuBackend::Auto, "NVIDIA GeForce RTX 4090");
         assert_eq!(resolved, GpuBackend::Ptx);
     }
 
     #[test]
     fn gs2_10_backend_resolve_amd() {
-        use crate::gpu_codegen::spirv::{resolve_backend, GpuBackend};
+        use crate::gpu_codegen::spirv::{GpuBackend, resolve_backend};
         let resolved = resolve_backend(GpuBackend::Auto, "AMD Radeon RX 7900");
         assert_eq!(resolved, GpuBackend::SpirV);
     }
@@ -5822,7 +6247,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs3_1_ptx_type_mapping() {
-        use crate::gpu_codegen::ptx::{map_type, PtxType};
+        use crate::gpu_codegen::ptx::{PtxType, map_type};
         assert_eq!(map_type("f32"), Some(PtxType::F32));
         assert_eq!(map_type("f64"), Some(PtxType::F64));
         assert_eq!(map_type("i32"), Some(PtxType::S32));
@@ -5835,8 +6260,16 @@ let y = x", 0, 4, "foo").unwrap();
         let kernel = KernelEntry {
             name: "vecadd".into(),
             params: vec![
-                KernelParam { name: "a".into(), ptx_type: PtxType::F32, is_pointer: true },
-                KernelParam { name: "b".into(), ptx_type: PtxType::F32, is_pointer: true },
+                KernelParam {
+                    name: "a".into(),
+                    ptx_type: PtxType::F32,
+                    is_pointer: true,
+                },
+                KernelParam {
+                    name: "b".into(),
+                    ptx_type: PtxType::F32,
+                    is_pointer: true,
+                },
             ],
             body: vec![],
         };
@@ -5861,7 +6294,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs3_5_ptx_thread_index() {
-        use crate::gpu_codegen::ptx::{emit_thread_index, ThreadIndex, PtxInstruction};
+        use crate::gpu_codegen::ptx::{PtxInstruction, ThreadIndex, emit_thread_index};
         let instr = emit_thread_index("%tid_x", ThreadIndex::ThreadIdX);
         match instr {
             PtxInstruction::MovSpecial { .. } => {} // expected
@@ -5886,14 +6319,18 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn gs3_8_kernel_param_display() {
         use crate::gpu_codegen::ptx::{KernelParam, PtxType};
-        let param = KernelParam { name: "data".into(), ptx_type: PtxType::F64, is_pointer: true };
+        let param = KernelParam {
+            name: "data".into(),
+            ptx_type: PtxType::F64,
+            is_pointer: true,
+        };
         let s = format!("{param}");
         assert!(s.contains("data"));
     }
 
     #[test]
     fn gs3_9_shared_decl_fields() {
-        use crate::gpu_codegen::ptx::{SharedDecl, PtxType};
+        use crate::gpu_codegen::ptx::{PtxType, SharedDecl};
         let shared = SharedDecl {
             name: "smem".into(),
             elem_type: PtxType::F32,
@@ -5921,8 +6358,18 @@ let y = x", 0, 4, "foo").unwrap();
     fn gs4_1_fusion_graph_creation() {
         use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
         let ops = vec![
-            GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 1024 },
-            GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![0], output_elements: 1024 },
+            GpuOp {
+                id: 0,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![],
+                output_elements: 1024,
+            },
+            GpuOp {
+                id: 1,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![0],
+                output_elements: 1024,
+            },
         ];
         let graph = FusionGraph::new(ops);
         assert_eq!(graph.ops.len(), 2);
@@ -5932,8 +6379,18 @@ let y = x", 0, 4, "foo").unwrap();
     fn gs4_2_fusion_analysis() {
         use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
         let ops = vec![
-            GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 1024 },
-            GpuOp { id: 1, kind: OpKind::ElementWiseBinary, inputs: vec![0], output_elements: 1024 },
+            GpuOp {
+                id: 0,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![],
+                output_elements: 1024,
+            },
+            GpuOp {
+                id: 1,
+                kind: OpKind::ElementWiseBinary,
+                inputs: vec![0],
+                output_elements: 1024,
+            },
         ];
         let mut graph = FusionGraph::new(ops);
         graph.analyze();
@@ -5942,17 +6399,37 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs4_3_can_fuse_elementwise() {
-        use crate::gpu_codegen::fusion::{can_fuse, GpuOp, OpKind};
-        let producer = GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 512 };
-        let consumer = GpuOp { id: 1, kind: OpKind::ElementWiseBinary, inputs: vec![0], output_elements: 512 };
+        use crate::gpu_codegen::fusion::{GpuOp, OpKind, can_fuse};
+        let producer = GpuOp {
+            id: 0,
+            kind: OpKind::ElementWiseUnary,
+            inputs: vec![],
+            output_elements: 512,
+        };
+        let consumer = GpuOp {
+            id: 1,
+            kind: OpKind::ElementWiseBinary,
+            inputs: vec![0],
+            output_elements: 512,
+        };
         assert!(can_fuse(&producer, &consumer));
     }
 
     #[test]
     fn gs4_4_cannot_fuse_matmul_reduction() {
-        use crate::gpu_codegen::fusion::{can_fuse, GpuOp, OpKind};
-        let producer = GpuOp { id: 0, kind: OpKind::Matmul, inputs: vec![], output_elements: 1024 };
-        let consumer = GpuOp { id: 1, kind: OpKind::Reduction, inputs: vec![0], output_elements: 1 };
+        use crate::gpu_codegen::fusion::{GpuOp, OpKind, can_fuse};
+        let producer = GpuOp {
+            id: 0,
+            kind: OpKind::Matmul,
+            inputs: vec![],
+            output_elements: 1024,
+        };
+        let consumer = GpuOp {
+            id: 1,
+            kind: OpKind::Reduction,
+            inputs: vec![0],
+            output_elements: 1,
+        };
         assert!(!can_fuse(&producer, &consumer));
     }
 
@@ -5987,7 +6464,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn gs4_8_device_allocator_oom() {
-        use crate::gpu_codegen::gpu_memory::{DeviceAllocator, AllocError};
+        use crate::gpu_codegen::gpu_memory::{AllocError, DeviceAllocator};
         let mut alloc = DeviceAllocator::new(0, 1024, 1024);
         let result = alloc.allocate(2048);
         assert!(matches!(result, Err(AllocError::OutOfMemory { .. })));
@@ -6005,7 +6482,11 @@ let y = x", 0, 4, "foo").unwrap();
     fn gs4_10_spirv_type_ids() {
         use crate::gpu_codegen::spirv::SpirVType;
         let void = SpirVType::Void { id: 1 };
-        let int = SpirVType::Int { id: 2, width: 32, signed: true };
+        let int = SpirVType::Int {
+            id: 2,
+            width: 32,
+            signed: true,
+        };
         let float = SpirVType::Float { id: 3, width: 32 };
         assert_eq!(void.id(), 1);
         assert_eq!(int.id(), 2);
@@ -6059,7 +6540,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr1_5_version_constraint_parse() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("^1.2.3").unwrap();
         assert!(c.matches(&SemVer::new(1, 3, 0)));
         assert!(!c.matches(&SemVer::new(2, 0, 0)));
@@ -6155,7 +6636,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr2_6_token_validation() {
-        use crate::package::registry::{Registry, SemVer, AuthToken};
+        use crate::package::registry::{AuthToken, Registry, SemVer};
         let mut reg = Registry::new();
         reg.publish("my-pkg", SemVer::new(1, 0, 0), "My package");
         reg.add_token(AuthToken::new("secret-key"));
@@ -6165,7 +6646,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr2_7_scoped_token_validation() {
-        use crate::package::registry::{Registry, SemVer, AuthToken};
+        use crate::package::registry::{AuthToken, Registry, SemVer};
         let mut reg = Registry::new();
         reg.publish("my-pkg", SemVer::new(1, 0, 0), "My package");
         reg.add_token(AuthToken::scoped("pkg-key", "my-pkg"));
@@ -6187,7 +6668,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr2_9_version_constraint_wildcard() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("*").unwrap();
         assert!(c.matches(&SemVer::new(1, 0, 0)));
         assert!(c.matches(&SemVer::new(99, 99, 99)));
@@ -6195,7 +6676,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr2_10_version_constraint_tilde() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("~1.2.0").unwrap();
         assert!(c.matches(&SemVer::new(1, 2, 5)));
         assert!(!c.matches(&SemVer::new(1, 3, 0)));
@@ -6229,7 +6710,9 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr3_4_rekor_submit() {
-        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package, submit_to_rekor};
+        use crate::package::signing::{
+            oidc_authenticate, request_certificate, sign_package, submit_to_rekor,
+        };
         let oidc = oidc_authenticate("github").unwrap();
         let cert = request_certificate(&oidc).unwrap();
         let sig = sign_package("sha256:abcdef", &cert).unwrap();
@@ -6239,7 +6722,10 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn pr3_5_signature_bundle_roundtrip() {
-        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package, submit_to_rekor, FjSignatureBundle};
+        use crate::package::signing::{
+            FjSignatureBundle, oidc_authenticate, request_certificate, sign_package,
+            submit_to_rekor,
+        };
         let oidc = oidc_authenticate("github").unwrap();
         let cert = request_certificate(&oidc).unwrap();
         let sig = sign_package("sha256:112233", &cert).unwrap();
@@ -6269,16 +6755,25 @@ let y = x", 0, 4, "foo").unwrap();
     fn pr3_8_sbom_add_package() {
         use crate::package::sbom::{SbomDocument, SbomFormat, SbomPackage};
         let mut doc = SbomDocument::new(SbomFormat::Spdx);
-        doc.add_package(SbomPackage::new("serde", "1.0.0", "sha256:abc", Some("MIT".into())));
+        doc.add_package(SbomPackage::new(
+            "serde",
+            "1.0.0",
+            "sha256:abc",
+            Some("MIT".into()),
+        ));
         assert_eq!(doc.packages.len(), 1);
     }
 
     #[test]
     fn pr3_9_generate_sbom() {
-        use crate::package::sbom::{generate_sbom, SbomFormat, DepInfo};
-        let deps = vec![
-            DepInfo { name: "serde".into(), version: "1.0.0".into(), sha256: "abc".into(), license: Some("MIT".into()), dev_only: false },
-        ];
+        use crate::package::sbom::{DepInfo, SbomFormat, generate_sbom};
+        let deps = vec![DepInfo {
+            name: "serde".into(),
+            version: "1.0.0".into(),
+            sha256: "abc".into(),
+            license: Some("MIT".into()),
+            dev_only: false,
+        }];
         let json = generate_sbom("test-project", &deps, SbomFormat::CycloneDx).unwrap();
         assert!(json.contains("test-project"));
     }
@@ -6571,7 +7066,10 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn n3_1_raft_node_creation() {
         use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4)]);
+        let node = RaftNode::new(
+            RaftNodeId(1),
+            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4)],
+        );
         assert_eq!(node.cluster_size(), 4); // self + 3 peers
         assert_eq!(node.quorum(), 3);
     }
@@ -6650,7 +7148,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n3_7_failure_detector() {
-        use crate::distributed::cluster::{FailureDetector, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
         use std::time::Duration;
         let mut fd = FailureDetector::new(Duration::from_millis(5000));
         fd.heartbeat(ClusterNodeId(1), 1000);
@@ -6662,7 +7160,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n3_8_work_queue() {
-        use crate::distributed::cluster::{WorkQueue, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
         let mut q = WorkQueue::new(ClusterNodeId(1));
         q.push(100);
         q.push(200);
@@ -6674,7 +7172,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n3_9_work_queue_empty() {
-        use crate::distributed::cluster::{WorkQueue, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
         let mut q = WorkQueue::new(ClusterNodeId(1));
         assert!(q.is_empty());
         assert_eq!(q.pop(), None);
@@ -6688,7 +7186,10 @@ let y = x", 0, 4, "foo").unwrap();
         let n3 = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3)]);
         assert_eq!(n3.quorum(), 2);
         // 5-node cluster: quorum = 3
-        let n5 = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)]);
+        let n5 = RaftNode::new(
+            RaftNodeId(1),
+            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)],
+        );
         assert_eq!(n5.quorum(), 3);
     }
 
@@ -6718,7 +7219,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n4_4_dispatch_decision_cpu() {
-        use crate::accelerator::dispatch::{decide_dispatch, DeviceSet, WorkloadDescriptor};
+        use crate::accelerator::dispatch::{DeviceSet, WorkloadDescriptor, decide_dispatch};
         let workload = WorkloadDescriptor {
             op_type: "add".into(),
             input_elements: 100,
@@ -6736,8 +7237,18 @@ let y = x", 0, 4, "foo").unwrap();
     fn n4_5_fusion_graph_matmul() {
         use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
         let ops = vec![
-            GpuOp { id: 0, kind: OpKind::Matmul, inputs: vec![], output_elements: 1024 },
-            GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![0], output_elements: 1024 },
+            GpuOp {
+                id: 0,
+                kind: OpKind::Matmul,
+                inputs: vec![],
+                output_elements: 1024,
+            },
+            GpuOp {
+                id: 1,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![0],
+                output_elements: 1024,
+            },
         ];
         let mut graph = FusionGraph::new(ops);
         graph.analyze();
@@ -6759,7 +7270,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n4_7_spirv_compute_module() {
-        use crate::gpu_codegen::spirv::{SpirVModule, EntryPoint, ExecutionModel, SpirVType};
+        use crate::gpu_codegen::spirv::{EntryPoint, ExecutionModel, SpirVModule, SpirVType};
         let mut m = SpirVModule::new_compute();
         let void_id = m.alloc_id();
         m.types.push(SpirVType::Void { id: void_id });
@@ -6780,9 +7291,21 @@ let y = x", 0, 4, "foo").unwrap();
         let kernel = KernelEntry {
             name: "predict_duration".into(),
             params: vec![
-                KernelParam { name: "features".into(), ptx_type: PtxType::F32, is_pointer: true },
-                KernelParam { name: "weights".into(), ptx_type: PtxType::F32, is_pointer: true },
-                KernelParam { name: "output".into(), ptx_type: PtxType::F32, is_pointer: true },
+                KernelParam {
+                    name: "features".into(),
+                    ptx_type: PtxType::F32,
+                    is_pointer: true,
+                },
+                KernelParam {
+                    name: "weights".into(),
+                    ptx_type: PtxType::F32,
+                    is_pointer: true,
+                },
+                KernelParam {
+                    name: "output".into(),
+                    ptx_type: PtxType::F32,
+                    is_pointer: true,
+                },
             ],
             body: vec![],
         };
@@ -6800,7 +7323,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n4_10_do178c_evidence() {
-        use crate::verify::certification::{generate_do178c_evidence, DalLevel};
+        use crate::verify::certification::{DalLevel, generate_do178c_evidence};
         let evidence = generate_do178c_evidence(DalLevel::DalC, true, false, true, 0.95);
         assert!(!evidence.is_empty());
     }
@@ -6843,7 +7366,10 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn n5_4_raft_five_node() {
         use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)]);
+        let node = RaftNode::new(
+            RaftNodeId(1),
+            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)],
+        );
         assert_eq!(node.cluster_size(), 5);
         assert_eq!(node.quorum(), 3);
     }
@@ -6867,7 +7393,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n5_6_failure_detector_healthy() {
-        use crate::distributed::cluster::{FailureDetector, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
         use std::time::Duration;
         let mut fd = FailureDetector::new(Duration::from_millis(10000));
         fd.heartbeat(ClusterNodeId(1), 5000);
@@ -6877,7 +7403,11 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn n5_7_spirv_type_vector() {
         use crate::gpu_codegen::spirv::SpirVType;
-        let vec4 = SpirVType::Vector { id: 10, component_id: 5, count: 4 };
+        let vec4 = SpirVType::Vector {
+            id: 10,
+            component_id: 5,
+            count: 4,
+        };
         assert_eq!(vec4.id(), 10);
     }
 
@@ -6910,7 +7440,9 @@ let y = x", 0, 4, "foo").unwrap();
         use crate::runtime::os::syscall::SyscallTable;
         let mut table = SyscallTable::new();
         for i in 0..34 {
-            table.define(i, format!("sys_{i}"), (i % 4 + 1) as usize).unwrap();
+            table
+                .define(i, format!("sys_{i}"), (i % 4 + 1) as usize)
+                .unwrap();
         }
         assert_eq!(table.syscall_count(), 34);
     }
@@ -6921,12 +7453,18 @@ let y = x", 0, 4, "foo").unwrap();
         use std::collections::HashMap;
         let mut reg = DiscoveryRegistry::new();
         reg.register(ServiceInstance {
-            service_name: "tcp".into(), instance_id: "tcp-1".into(),
-            address: "10.0.0.1:80".into(), healthy: true, tags: HashMap::new(),
+            service_name: "tcp".into(),
+            instance_id: "tcp-1".into(),
+            address: "10.0.0.1:80".into(),
+            healthy: true,
+            tags: HashMap::new(),
         });
         reg.register(ServiceInstance {
-            service_name: "tcp".into(), instance_id: "tcp-2".into(),
-            address: "10.0.0.2:80".into(), healthy: false, tags: HashMap::new(),
+            service_name: "tcp".into(),
+            instance_id: "tcp-2".into(),
+            address: "10.0.0.2:80".into(),
+            healthy: false,
+            tags: HashMap::new(),
         });
         assert_eq!(reg.all_instances("tcp").len(), 2);
         assert_eq!(reg.resolve("tcp").len(), 1); // only healthy
@@ -6934,9 +7472,11 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n6_3_work_queue_ordering() {
-        use crate::distributed::cluster::{WorkQueue, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
         let mut q = WorkQueue::new(ClusterNodeId(1));
-        for i in 0..5 { q.push(i); }
+        for i in 0..5 {
+            q.push(i);
+        }
         assert_eq!(q.pop(), Some(0)); // FIFO
         assert_eq!(q.steal(), Some(4)); // LIFO steal
     }
@@ -6958,14 +7498,14 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n6_6_spirv_backend_explicit() {
-        use crate::gpu_codegen::spirv::{resolve_backend, GpuBackend};
+        use crate::gpu_codegen::spirv::{GpuBackend, resolve_backend};
         let r = resolve_backend(GpuBackend::SpirV, "NVIDIA");
         assert_eq!(r, GpuBackend::SpirV); // explicit overrides auto
     }
 
     #[test]
     fn n6_7_ptx_type_all() {
-        use crate::gpu_codegen::ptx::{map_type, PtxType};
+        use crate::gpu_codegen::ptx::{PtxType, map_type};
         assert_eq!(map_type("u32"), Some(PtxType::U32));
         assert_eq!(map_type("u64"), Some(PtxType::U64));
         assert_eq!(map_type("f16"), Some(PtxType::F16));
@@ -6973,9 +7513,19 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n6_8_fusion_no_fuse_independent() {
-        use crate::gpu_codegen::fusion::{can_fuse, GpuOp, OpKind};
-        let a = GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 100 };
-        let b = GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 100 };
+        use crate::gpu_codegen::fusion::{GpuOp, OpKind, can_fuse};
+        let a = GpuOp {
+            id: 0,
+            kind: OpKind::ElementWiseUnary,
+            inputs: vec![],
+            output_elements: 100,
+        };
+        let b = GpuOp {
+            id: 1,
+            kind: OpKind::ElementWiseUnary,
+            inputs: vec![],
+            output_elements: 100,
+        };
         assert!(!can_fuse(&a, &b)); // b doesn't depend on a
     }
 
@@ -7000,7 +7550,8 @@ let y = x", 0, 4, "foo").unwrap();
     fn n7_1_component_instance_creation() {
         use crate::wasi_p2::composition::ComponentInstance;
         use std::collections::HashMap;
-        let inst = ComponentInstance::new("userland-lib", vec![0x00, 0x61, 0x73, 0x6D], HashMap::new());
+        let inst =
+            ComponentInstance::new("userland-lib", vec![0x00, 0x61, 0x73, 0x6D], HashMap::new());
         assert_eq!(inst.name(), "userland-lib");
         assert!(!inst.has_executed());
     }
@@ -7026,7 +7577,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n7_4_component_linker() {
-        use crate::wasi_p2::composition::{ComponentLinker, ComponentInstance};
+        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
         use std::collections::HashMap;
         let mut linker = ComponentLinker::new();
         linker.register(ComponentInstance::new("app", vec![], HashMap::new()));
@@ -7035,8 +7586,8 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n7_5_component_exports() {
-        use crate::wasi_p2::composition::{ComponentInstance, ExportDef};
         use crate::wasi_p2::component::ExportKind;
+        use crate::wasi_p2::composition::{ComponentInstance, ExportDef};
         use std::collections::HashMap;
         let mut inst = ComponentInstance::new("libm", vec![], HashMap::new());
         inst.add_export(ExportDef {
@@ -7057,7 +7608,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n7_7_ffi_demangle_name() {
-        use crate::ffi_v2::cpp::{mangle_name, demangle_name};
+        use crate::ffi_v2::cpp::{demangle_name, mangle_name};
         let mangled = mangle_name(&[], "hello", &[]);
         let demangled = demangle_name(&mangled);
         assert!(demangled.contains("hello"));
@@ -7106,7 +7657,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n8_3_spirv_variable_ssbo() {
-        use crate::gpu_codegen::spirv::{create_ssbo, StorageClass};
+        use crate::gpu_codegen::spirv::{StorageClass, create_ssbo};
         let v1 = create_ssbo(1, 2, 0, 0);
         let v2 = create_ssbo(3, 4, 1, 0);
         assert_eq!(v1.storage_class, v2.storage_class);
@@ -7128,8 +7679,11 @@ let y = x", 0, 4, "foo").unwrap();
         let mut tags = HashMap::new();
         tags.insert("version".into(), "2.0".into());
         reg.register(ServiceInstance {
-            service_name: "gui".into(), instance_id: "gui-1".into(),
-            address: "10.0.0.1:3000".into(), healthy: true, tags,
+            service_name: "gui".into(),
+            instance_id: "gui-1".into(),
+            address: "10.0.0.1:3000".into(),
+            healthy: true,
+            tags,
         });
         let instances = reg.resolve("gui");
         assert_eq!(instances[0].tags.get("version").unwrap(), "2.0");
@@ -7137,9 +7691,11 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n8_6_work_queue_steal_all() {
-        use crate::distributed::cluster::{WorkQueue, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
         let mut q = WorkQueue::new(ClusterNodeId(1));
-        q.push(1); q.push(2); q.push(3);
+        q.push(1);
+        q.push(2);
+        q.push(3);
         let stolen: Vec<_> = std::iter::from_fn(|| q.steal()).collect();
         assert_eq!(stolen, vec![3, 2, 1]);
         assert!(q.is_empty());
@@ -7180,9 +7736,24 @@ let y = x", 0, 4, "foo").unwrap();
     fn n8_10_fusion_total_ops() {
         use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
         let ops = vec![
-            GpuOp { id: 0, kind: OpKind::ElementWiseUnary, inputs: vec![], output_elements: 100 },
-            GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![0], output_elements: 100 },
-            GpuOp { id: 2, kind: OpKind::ElementWiseBinary, inputs: vec![1], output_elements: 100 },
+            GpuOp {
+                id: 0,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![],
+                output_elements: 100,
+            },
+            GpuOp {
+                id: 1,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![0],
+                output_elements: 100,
+            },
+            GpuOp {
+                id: 2,
+                kind: OpKind::ElementWiseBinary,
+                inputs: vec![1],
+                output_elements: 100,
+            },
         ];
         let mut graph = FusionGraph::new(ops);
         graph.analyze();
@@ -7218,7 +7789,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n9_4_version_constraint_exact() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("1.5.0").unwrap();
         assert!(c.matches(&SemVer::new(1, 5, 0)));
         assert!(!c.matches(&SemVer::new(1, 5, 1)));
@@ -7234,7 +7805,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n9_6_component_linker_imports() {
-        use crate::wasi_p2::composition::{ComponentLinker, ComponentInstance};
+        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
         use std::collections::HashMap;
         let mut imports = HashMap::new();
         imports.insert("wasi:io/streams".into(), "wasi-io".into());
@@ -7247,10 +7818,14 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n9_7_sbom_spdx() {
-        use crate::package::sbom::{generate_sbom, SbomFormat, DepInfo};
-        let deps = vec![
-            DepInfo { name: "core".into(), version: "1.0.0".into(), sha256: "abc".into(), license: Some("MIT".into()), dev_only: false },
-        ];
+        use crate::package::sbom::{DepInfo, SbomFormat, generate_sbom};
+        let deps = vec![DepInfo {
+            name: "core".into(),
+            version: "1.0.0".into(),
+            sha256: "abc".into(),
+            license: Some("MIT".into()),
+            dev_only: false,
+        }];
         let spdx = generate_sbom("fajaros", &deps, SbomFormat::Spdx).unwrap();
         assert!(spdx.contains("fajaros"));
     }
@@ -7266,7 +7841,10 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n9_9_signing_full_flow() {
-        use crate::package::signing::{oidc_authenticate, request_certificate, sign_package, submit_to_rekor, FjSignatureBundle};
+        use crate::package::signing::{
+            FjSignatureBundle, oidc_authenticate, request_certificate, sign_package,
+            submit_to_rekor,
+        };
         let oidc = oidc_authenticate("github").unwrap();
         let cert = request_certificate(&oidc).unwrap();
         let sig = sign_package("sha256:pkg-hash", &cert).unwrap();
@@ -7278,7 +7856,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n9_10_version_constraint_gte() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse(">=2.0.0").unwrap();
         assert!(c.matches(&SemVer::new(2, 0, 0)));
         assert!(c.matches(&SemVer::new(3, 0, 0)));
@@ -7289,7 +7867,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n10_1_iso26262_evidence() {
-        use crate::verify::certification::{generate_iso26262_evidence, AsilLevel};
+        use crate::verify::certification::{AsilLevel, generate_iso26262_evidence};
         let evidence = generate_iso26262_evidence(AsilLevel::AsilD, true, true, true, true);
         assert!(!evidence.is_empty());
     }
@@ -7302,12 +7880,24 @@ let y = x", 0, 4, "foo").unwrap();
         let fn_type_id = m.alloc_id();
         let fn_id = m.alloc_id();
         m.types.push(SpirVType::Void { id: void_id });
-        m.types.push(SpirVType::Function { id: fn_type_id, return_type_id: void_id, param_type_ids: vec![] });
-        m.functions.push(SpirVFunction { id: fn_id, return_type_id: void_id, function_type_id: fn_type_id, param_ids: vec![], blocks: vec![] });
+        m.types.push(SpirVType::Function {
+            id: fn_type_id,
+            return_type_id: void_id,
+            param_type_ids: vec![],
+        });
+        m.functions.push(SpirVFunction {
+            id: fn_id,
+            return_type_id: void_id,
+            function_type_id: fn_type_id,
+            param_ids: vec![],
+            blocks: vec![],
+        });
         m.entry_points.push(EntryPoint {
             execution_model: ExecutionModel::GLCompute,
-            function_id: fn_id, name: "release_kernel".into(),
-            interface_ids: vec![], local_size: [256, 1, 1],
+            function_id: fn_id,
+            name: "release_kernel".into(),
+            interface_ids: vec![],
+            local_size: [256, 1, 1],
         });
         assert!(m.validate().is_empty());
         let words = m.emit_words();
@@ -7336,7 +7926,13 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn n10_5_discovery_mode_variants() {
         use crate::distributed::discovery::DiscoveryMode;
-        let modes = [DiscoveryMode::Mdns, DiscoveryMode::Seed, DiscoveryMode::Dns, DiscoveryMode::Gossip, DiscoveryMode::Static];
+        let modes = [
+            DiscoveryMode::Mdns,
+            DiscoveryMode::Seed,
+            DiscoveryMode::Dns,
+            DiscoveryMode::Gossip,
+            DiscoveryMode::Static,
+        ];
         assert_eq!(modes.len(), 5);
     }
 
@@ -7351,7 +7947,7 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn n10_7_ffi_generate_class() {
-        use crate::ffi_v2::cpp::{generate_class_binding, CppClass};
+        use crate::ffi_v2::cpp::{CppClass, generate_class_binding};
         let class = CppClass {
             name: "Widget".into(),
             namespace: vec![],
@@ -7409,20 +8005,26 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn w1_1_ffi_bindgen_config() {
         use crate::ffi_v2::bindgen::BindgenConfig;
-        let config = BindgenConfig::new("opencv2/core.hpp", crate::ffi_v2::bindgen::BindgenLanguage::Cpp, "bindings.fj");
+        let config = BindgenConfig::new(
+            "opencv2/core.hpp",
+            crate::ffi_v2::bindgen::BindgenLanguage::Cpp,
+            "bindings.fj",
+        );
         assert_eq!(config.source_path, "opencv2/core.hpp");
     }
 
     #[test]
     fn w1_2_cpp_mangle_with_namespace() {
-        use crate::ffi_v2::cpp::{mangle_name, CppType};
+        use crate::ffi_v2::cpp::{CppType, mangle_name};
         let mangled = mangle_name(&["cv".into()], "imread", &[CppType::String]);
         assert!(!mangled.is_empty());
     }
 
     #[test]
     fn w1_3_cpp_class_binding() {
-        use crate::ffi_v2::cpp::{generate_class_binding, CppClass, CppFunction, CppType, CppIntSize};
+        use crate::ffi_v2::cpp::{
+            CppClass, CppFunction, CppIntSize, CppType, generate_class_binding,
+        };
         let class = CppClass {
             name: "Mat".into(),
             namespace: vec![],
@@ -7454,13 +8056,16 @@ let y = x", 0, 4, "foo").unwrap();
     #[test]
     fn w1_4_cpp_demangle() {
         use crate::ffi_v2::cpp::demangle_name;
-        let result = demangle_name("_ZN2cv6imreadERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEi");
+        let result =
+            demangle_name("_ZN2cv6imreadERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEi");
         assert!(result.contains("imread") || result.contains("unknown"));
     }
 
     #[test]
     fn w1_5_ffi_fajar_bindings() {
-        use crate::ffi_v2::cpp::{generate_fajar_bindings, CppDecl, CppFunction, CppParam, CppType, CppIntSize};
+        use crate::ffi_v2::cpp::{
+            CppDecl, CppFunction, CppIntSize, CppParam, CppType, generate_fajar_bindings,
+        };
         let decls = vec![CppDecl::Function(CppFunction {
             name: "detect_faces".into(),
             namespace: vec![],
@@ -7482,14 +8087,14 @@ let y = x", 0, 4, "foo").unwrap();
 
     #[test]
     fn w1_6_spirv_type_f16() {
-        use crate::gpu_codegen::spirv::{map_fj_type, SpirVTypeDesc};
+        use crate::gpu_codegen::spirv::{SpirVTypeDesc, map_fj_type};
         assert_eq!(map_fj_type("f16"), Some(SpirVTypeDesc::Float(16)));
         assert_eq!(map_fj_type("u8"), Some(SpirVTypeDesc::Int(8, false)));
     }
 
     #[test]
     fn w1_7_ptx_f16_type() {
-        use crate::gpu_codegen::ptx::{map_type, PtxType};
+        use crate::gpu_codegen::ptx::{PtxType, map_type};
         assert_eq!(map_type("f16"), Some(PtxType::F16));
         assert_eq!(map_type("bool"), Some(PtxType::Pred));
     }
@@ -7498,7 +8103,11 @@ let y = x", 0, 4, "foo").unwrap();
     fn w1_8_registry_publish_multiple() {
         use crate::package::registry::{Registry, SemVer};
         let mut reg = Registry::new();
-        reg.publish("opencv-fj", SemVer::new(0, 1, 0), "OpenCV bindings for Fajar");
+        reg.publish(
+            "opencv-fj",
+            SemVer::new(0, 1, 0),
+            "OpenCV bindings for Fajar",
+        );
         reg.publish("opencv-fj", SemVer::new(0, 2, 0), "OpenCV bindings v0.2");
         let latest = reg.latest_version("opencv-fj").unwrap();
         assert_eq!(*latest, SemVer::new(0, 2, 0));
@@ -7548,21 +8157,25 @@ world http-server {
 
     #[test]
     fn w2_2_component_linker_link() {
-        use crate::wasi_p2::composition::{ComponentLinker, ComponentInstance, ExportDef};
         use crate::wasi_p2::component::ExportKind;
+        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker, ExportDef};
         use std::collections::HashMap;
         let mut linker = ComponentLinker::new();
         let mut provider = ComponentInstance::new("wasi-io", vec![], HashMap::new());
         provider.add_export(ExportDef {
-            name: "wasi:io/streams".into(), kind: ExportKind::Instance,
-            params: vec![], result: None,
+            name: "wasi:io/streams".into(),
+            kind: ExportKind::Instance,
+            params: vec![],
+            result: None,
         });
         let mut imports = HashMap::new();
         imports.insert("wasi:io/streams".into(), "wasi-io".into());
         let app = ComponentInstance::new("http-app", vec![], imports);
         linker.register(provider);
         linker.register(app);
-        linker.link("wasi-io", "wasi:io/streams", "http-app", "wasi:io/streams").unwrap();
+        linker
+            .link("wasi-io", "wasi:io/streams", "http-app", "wasi:io/streams")
+            .unwrap();
         let unresolved = linker.check_all_imports();
         assert!(unresolved.is_empty()); // all imports satisfied
     }
@@ -7579,16 +8192,20 @@ world http-server {
     #[test]
     fn w2_4_interpreter_http_route() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let status = 200
-status"#);
+        let result = interp.eval_source(
+            r#"let status = 200
+status"#,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn w2_5_json_parse_eval() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let data = "{\"key\": \"value\"}"
-len(data)"#);
+        let result = interp.eval_source(
+            r#"let data = "{\"key\": \"value\"}"
+len(data)"#,
+        );
         assert!(result.is_ok());
     }
 
@@ -7603,7 +8220,7 @@ len(data)"#);
 
     #[test]
     fn w2_7_version_constraint_lt() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("<2.0.0").unwrap();
         assert!(c.matches(&SemVer::new(1, 9, 9)));
         assert!(!c.matches(&SemVer::new(2, 0, 0)));
@@ -7646,23 +8263,28 @@ len(data)"#);
     #[test]
     fn w3_2_interpreter_tensor_matmul() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let a = ones(2, 3)\nlet b = ones(3, 4)\nlet c = matmul(a, b)\nshape(c)");
+        let result = interp
+            .eval_source("let a = ones(2, 3)\nlet b = ones(3, 4)\nlet c = matmul(a, b)\nshape(c)");
         assert!(result.is_ok());
     }
 
     #[test]
     fn w3_3_interpreter_dense_layer() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let layer = Dense(4, 2)\nlet x = ones(1, 4)\nlet y = forward(layer, x)\nshape(y)");
+        let result = interp.eval_source(
+            "let layer = Dense(4, 2)\nlet x = ones(1, 4)\nlet y = forward(layer, x)\nshape(y)",
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn w3_4_work_queue_parallel() {
-        use crate::distributed::cluster::{WorkQueue, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
         let mut queues: Vec<WorkQueue> = (0..4).map(|i| WorkQueue::new(ClusterNodeId(i))).collect();
         for (i, q) in queues.iter_mut().enumerate() {
-            for j in 0..10 { q.push((i * 10 + j) as u64); }
+            for j in 0..10 {
+                q.push((i * 10 + j) as u64);
+            }
         }
         let total: usize = queues.iter().map(|q| q.len()).sum();
         assert_eq!(total, 40);
@@ -7670,10 +8292,12 @@ len(data)"#);
 
     #[test]
     fn w3_5_failure_detector_multi_node() {
-        use crate::distributed::cluster::{FailureDetector, ClusterNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
         use std::time::Duration;
         let mut fd = FailureDetector::new(Duration::from_millis(3000));
-        for i in 0..4 { fd.heartbeat(ClusterNodeId(i), 1000); }
+        for i in 0..4 {
+            fd.heartbeat(ClusterNodeId(i), 1000);
+        }
         assert_eq!(fd.check(2000).len(), 0); // all healthy
         assert_eq!(fd.check(5000).len(), 4); // all failed
     }
@@ -7681,7 +8305,17 @@ len(data)"#);
     #[test]
     fn w3_6_raft_cluster_sizes() {
         use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let n7 = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5), RaftNodeId(6), RaftNodeId(7)]);
+        let n7 = RaftNode::new(
+            RaftNodeId(1),
+            vec![
+                RaftNodeId(2),
+                RaftNodeId(3),
+                RaftNodeId(4),
+                RaftNodeId(5),
+                RaftNodeId(6),
+                RaftNodeId(7),
+            ],
+        );
         assert_eq!(n7.cluster_size(), 7);
         assert_eq!(n7.quorum(), 4);
     }
@@ -7697,10 +8331,30 @@ len(data)"#);
     fn w3_8_fusion_chain() {
         use crate::gpu_codegen::fusion::{FusionGraph, GpuOp, OpKind};
         let ops = vec![
-            GpuOp { id: 0, kind: OpKind::Matmul, inputs: vec![], output_elements: 3584 },
-            GpuOp { id: 1, kind: OpKind::ElementWiseUnary, inputs: vec![0], output_elements: 3584 }, // relu
-            GpuOp { id: 2, kind: OpKind::Matmul, inputs: vec![1], output_elements: 280 },
-            GpuOp { id: 3, kind: OpKind::Softmax, inputs: vec![2], output_elements: 280 },
+            GpuOp {
+                id: 0,
+                kind: OpKind::Matmul,
+                inputs: vec![],
+                output_elements: 3584,
+            },
+            GpuOp {
+                id: 1,
+                kind: OpKind::ElementWiseUnary,
+                inputs: vec![0],
+                output_elements: 3584,
+            }, // relu
+            GpuOp {
+                id: 2,
+                kind: OpKind::Matmul,
+                inputs: vec![1],
+                output_elements: 280,
+            },
+            GpuOp {
+                id: 3,
+                kind: OpKind::Softmax,
+                inputs: vec![2],
+                output_elements: 280,
+            },
         ];
         let mut graph = FusionGraph::new(ops);
         graph.analyze();
@@ -7721,7 +8375,8 @@ len(data)"#);
     #[test]
     fn w3_10_interpreter_relu() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let t = from_data([[1.0, -2.0], [3.0, -4.0]])\nlet r = relu(t)\nr");
+        let result =
+            interp.eval_source("let t = from_data([[1.0, -2.0], [3.0, -4.0]])\nlet r = relu(t)\nr");
         assert!(result.is_ok());
     }
 
@@ -7729,22 +8384,29 @@ len(data)"#);
 
     #[test]
     fn w4_1_ffi_python_types() {
-        use crate::ffi_v2::cpp::{CppType, CppIntSize};
-        let types = [CppType::Int(CppIntSize::I32), CppType::Float, CppType::Double, CppType::Void];
+        use crate::ffi_v2::cpp::{CppIntSize, CppType};
+        let types = [
+            CppType::Int(CppIntSize::I32),
+            CppType::Float,
+            CppType::Double,
+            CppType::Void,
+        ];
         assert_eq!(types.len(), 4);
     }
 
     #[test]
     fn w4_2_interpreter_softmax() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let t = from_data([[1.0, 2.0, 3.0]])\nlet s = softmax(t)\ns");
+        let result =
+            interp.eval_source("let t = from_data([[1.0, 2.0, 3.0]])\nlet s = softmax(t)\ns");
         assert!(result.is_ok());
     }
 
     #[test]
     fn w4_3_interpreter_sigmoid() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let t = from_data([[0.0, 1.0, -1.0]])\nlet s = sigmoid(t)\ns");
+        let result =
+            interp.eval_source("let t = from_data([[0.0, 1.0, -1.0]])\nlet s = sigmoid(t)\ns");
         assert!(result.is_ok());
     }
 
@@ -7764,15 +8426,41 @@ len(data)"#);
 
     #[test]
     fn w4_6_ffi_class_with_methods() {
-        use crate::ffi_v2::cpp::{generate_class_binding, CppClass, CppFunction, CppParam, CppType};
+        use crate::ffi_v2::cpp::{
+            CppClass, CppFunction, CppParam, CppType, generate_class_binding,
+        };
         let class = CppClass {
             name: "TorchModel".into(),
             namespace: vec![],
             bases: vec![],
             fields: vec![],
             methods: vec![
-                CppFunction { name: "forward".into(), namespace: vec![], return_type: CppType::Pointer(Box::new(CppType::Float)), params: vec![CppParam { name: "input".into(), param_type: CppType::Pointer(Box::new(CppType::Float)), has_default: false }], is_const: false, is_static: false, is_virtual: true, is_noexcept: false, template_params: vec![] },
-                CppFunction { name: "eval".into(), namespace: vec![], return_type: CppType::Void, params: vec![], is_const: false, is_static: false, is_virtual: false, is_noexcept: false, template_params: vec![] },
+                CppFunction {
+                    name: "forward".into(),
+                    namespace: vec![],
+                    return_type: CppType::Pointer(Box::new(CppType::Float)),
+                    params: vec![CppParam {
+                        name: "input".into(),
+                        param_type: CppType::Pointer(Box::new(CppType::Float)),
+                        has_default: false,
+                    }],
+                    is_const: false,
+                    is_static: false,
+                    is_virtual: true,
+                    is_noexcept: false,
+                    template_params: vec![],
+                },
+                CppFunction {
+                    name: "eval".into(),
+                    namespace: vec![],
+                    return_type: CppType::Void,
+                    params: vec![],
+                    is_const: false,
+                    is_static: false,
+                    is_virtual: false,
+                    is_noexcept: false,
+                    template_params: vec![],
+                },
             ],
             constructors: vec![],
             has_destructor: true,
@@ -7787,7 +8475,7 @@ len(data)"#);
 
     #[test]
     fn w4_7_spirv_type_u64() {
-        use crate::gpu_codegen::spirv::{map_fj_type, SpirVTypeDesc};
+        use crate::gpu_codegen::spirv::{SpirVTypeDesc, map_fj_type};
         assert_eq!(map_fj_type("u64"), Some(SpirVTypeDesc::Int(64, false)));
         assert_eq!(map_fj_type("i64"), Some(SpirVTypeDesc::Int(64, true)));
     }
@@ -7795,13 +8483,19 @@ len(data)"#);
     #[test]
     fn w4_8_ptx_arith_ops() {
         use crate::gpu_codegen::ptx::ArithOp;
-        let ops = [ArithOp::Add, ArithOp::Sub, ArithOp::Mul, ArithOp::Div, ArithOp::Rem];
+        let ops = [
+            ArithOp::Add,
+            ArithOp::Sub,
+            ArithOp::Mul,
+            ArithOp::Div,
+            ArithOp::Rem,
+        ];
         assert_eq!(ops.len(), 5);
     }
 
     #[test]
     fn w4_9_version_constraint_caret_zero() {
-        use crate::package::registry::{VersionConstraint, SemVer};
+        use crate::package::registry::{SemVer, VersionConstraint};
         let c = VersionConstraint::parse("^0.5.0").unwrap();
         assert!(c.matches(&SemVer::new(0, 5, 3)));
     }
@@ -7818,7 +8512,8 @@ len(data)"#);
     #[test]
     fn w5_1_interpreter_quantize() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let t = from_data([[1.0, 2.0, 3.0]])\nlet q = quantize_int8(t)\nq");
+        let result =
+            interp.eval_source("let t = from_data([[1.0, 2.0, 3.0]])\nlet q = quantize_int8(t)\nq");
         assert!(result.is_ok());
     }
 
@@ -7844,9 +8539,21 @@ len(data)"#);
         let kernel = KernelEntry {
             name: "quantized_matmul".into(),
             params: vec![
-                KernelParam { name: "a".into(), ptx_type: PtxType::U8, is_pointer: true },
-                KernelParam { name: "b".into(), ptx_type: PtxType::U8, is_pointer: true },
-                KernelParam { name: "c".into(), ptx_type: PtxType::S32, is_pointer: true },
+                KernelParam {
+                    name: "a".into(),
+                    ptx_type: PtxType::U8,
+                    is_pointer: true,
+                },
+                KernelParam {
+                    name: "b".into(),
+                    ptx_type: PtxType::U8,
+                    is_pointer: true,
+                },
+                KernelParam {
+                    name: "c".into(),
+                    ptx_type: PtxType::S32,
+                    is_pointer: true,
+                },
             ],
             body: vec![],
         };
@@ -7856,10 +8563,14 @@ len(data)"#);
 
     #[test]
     fn w5_5_dispatch_small_workload() {
-        use crate::accelerator::dispatch::{decide_dispatch, DeviceSet, WorkloadDescriptor};
+        use crate::accelerator::dispatch::{DeviceSet, WorkloadDescriptor, decide_dispatch};
         let workload = WorkloadDescriptor {
-            op_type: "relu".into(), input_elements: 10, dtype: "f32".into(),
-            batch_size: 1, estimated_flops: 10, estimated_bytes: 40,
+            op_type: "relu".into(),
+            input_elements: 10,
+            dtype: "f32".into(),
+            batch_size: 1,
+            estimated_flops: 10,
+            estimated_bytes: 40,
             preference: crate::accelerator::infer::InferPreference::Auto,
         };
         let decision = decide_dispatch(&workload, &DeviceSet::cpu_only());
@@ -7888,8 +8599,11 @@ len(data)"#);
         tags.insert("arch".into(), "aarch64".into());
         tags.insert("board".into(), "dragon-q6a".into());
         reg.register(ServiceInstance {
-            service_name: "ml-inference".into(), instance_id: "dragon-1".into(),
-            address: "192.168.1.100:8080".into(), healthy: true, tags,
+            service_name: "ml-inference".into(),
+            instance_id: "dragon-1".into(),
+            address: "192.168.1.100:8080".into(),
+            healthy: true,
+            tags,
         });
         let inst = reg.resolve("ml-inference");
         assert_eq!(inst[0].tags.get("board").unwrap(), "dragon-q6a");
@@ -7914,17 +8628,21 @@ len(data)"#);
     #[test]
     fn w6_1_interpreter_json_roundtrip() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let s = "{\"x\":1}"
-len(s)"#);
+        let result = interp.eval_source(
+            r#"let s = "{\"x\":1}"
+len(s)"#,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn w6_2_interpreter_string_ops() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let s = "hello world"
+        let result = interp.eval_source(
+            r#"let s = "hello world"
 let parts = s.split(" ")
-len(parts)"#);
+len(parts)"#,
+        );
         assert!(result.is_ok());
     }
 
@@ -7938,15 +8656,17 @@ len(parts)"#);
     #[test]
     fn w6_4_interpreter_map_create() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let mut m = map_new()
+        let result = interp.eval_source(
+            r#"let mut m = map_new()
 m = map_insert(m, "key", "value")
-map_get(m, "key")"#);
+map_get(m, "key")"#,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn w6_5_ffi_mangle_params() {
-        use crate::ffi_v2::cpp::{mangle_name, CppType};
+        use crate::ffi_v2::cpp::{CppType, mangle_name};
         let m = mangle_name(&["serde".into()], "to_json", &[CppType::String]);
         assert!(!m.is_empty());
     }
@@ -7954,7 +8674,8 @@ map_get(m, "key")"#);
     #[test]
     fn w6_6_wit_parse_types() {
         use crate::wasi_p2::wit_parser::parse_wit;
-        let wit = "package test:json@1.0.0;\ninterface parser {\n  type json-value = list<u8>;\n}\n";
+        let wit =
+            "package test:json@1.0.0;\ninterface parser {\n  type json-value = list<u8>;\n}\n";
         let doc = parse_wit(wit);
         assert!(doc.is_ok());
     }
@@ -7981,8 +8702,10 @@ map_get(m, "key")"#);
     #[test]
     fn w6_9_interpreter_parse_int() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let r = "123".parse_int()
-r"#);
+        let result = interp.eval_source(
+            r#"let r = "123".parse_int()
+r"#,
+        );
         assert!(result.is_ok());
     }
 
@@ -8018,7 +8741,7 @@ r"#);
 
     #[test]
     fn w7_4_component_linker_multiple() {
-        use crate::wasi_p2::composition::{ComponentLinker, ComponentInstance};
+        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
         use std::collections::HashMap;
         let mut linker = ComponentLinker::new();
         linker.register(ComponentInstance::new("a", vec![], HashMap::new()));
@@ -8032,8 +8755,20 @@ r"#);
         use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
         use std::collections::HashMap;
         let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance { service_name: "ws".into(), instance_id: "ws-1".into(), address: "10.0.0.1:8080".into(), healthy: true, tags: HashMap::new() });
-        reg.register(ServiceInstance { service_name: "http".into(), instance_id: "http-1".into(), address: "10.0.0.2:80".into(), healthy: true, tags: HashMap::new() });
+        reg.register(ServiceInstance {
+            service_name: "ws".into(),
+            instance_id: "ws-1".into(),
+            address: "10.0.0.1:8080".into(),
+            healthy: true,
+            tags: HashMap::new(),
+        });
+        reg.register(ServiceInstance {
+            service_name: "http".into(),
+            instance_id: "http-1".into(),
+            address: "10.0.0.2:80".into(),
+            healthy: true,
+            tags: HashMap::new(),
+        });
         assert_eq!(reg.resolve("ws").len(), 1);
         assert_eq!(reg.resolve("http").len(), 1);
     }
@@ -8041,7 +8776,11 @@ r"#);
     #[test]
     fn w7_6_spirv_memory_model() {
         use crate::gpu_codegen::spirv::MemoryModel;
-        let models = [MemoryModel::Glsl450Logical, MemoryModel::Glsl450Physical32, MemoryModel::Glsl450Physical64];
+        let models = [
+            MemoryModel::Glsl450Logical,
+            MemoryModel::Glsl450Physical32,
+            MemoryModel::Glsl450Physical64,
+        ];
         assert_eq!(models.len(), 3);
     }
 
@@ -8062,7 +8801,8 @@ r"#);
     #[test]
     fn w7_9_interpreter_struct() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("struct Msg { text: str }\nlet m = Msg { text: \"hello\" }\nm.text");
+        let result =
+            interp.eval_source("struct Msg { text: str }\nlet m = Msg { text: \"hello\" }\nm.text");
         assert!(result.is_ok());
     }
 
@@ -8106,9 +8846,11 @@ r"#);
     #[test]
     fn w8_5_interpreter_string_format() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let name = "Fajar"
+        let result = interp.eval_source(
+            r#"let name = "Fajar"
 let msg = f"Hello {name}"
-msg"#);
+msg"#,
+        );
         assert!(result.is_ok());
     }
 
@@ -8173,17 +8915,21 @@ msg"#);
     #[test]
     fn w9_4_interpreter_result_err() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let r = Err("connection failed")
-r"#);
+        let result = interp.eval_source(
+            r#"let r = Err("connection failed")
+r"#,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn w9_5_interpreter_hashmap() {
         let mut interp = Interpreter::new();
-        let result = interp.eval_source(r#"let mut db = map_new()
+        let result = interp.eval_source(
+            r#"let mut db = map_new()
 db = map_insert(db, "users", "table")
-map_get(db, "users")"#);
+map_get(db, "users")"#,
+        );
         assert!(result.is_ok());
     }
 
@@ -8192,7 +8938,11 @@ map_get(db, "users")"#);
         use crate::package::registry::{Registry, SemVer};
         let mut reg = Registry::new();
         for i in 0..20 {
-            reg.publish(&format!("pkg-{i}"), SemVer::new(1, 0, 0), &format!("Package {i}"));
+            reg.publish(
+                &format!("pkg-{i}"),
+                SemVer::new(1, 0, 0),
+                &format!("Package {i}"),
+            );
         }
         assert_eq!(reg.package_count(), 20);
         assert_eq!(reg.list_all().len(), 20);
@@ -8276,26 +9026,33 @@ method_str(Method::Post)
 
     #[test]
     fn w10_3_component_full_stack() {
-        use crate::wasi_p2::composition::{ComponentLinker, ComponentInstance, ExportDef};
         use crate::wasi_p2::component::ExportKind;
+        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker, ExportDef};
         use std::collections::HashMap;
         let mut linker = ComponentLinker::new();
         // Backend component
         let mut backend = ComponentInstance::new("backend", vec![], HashMap::new());
-        backend.add_export(ExportDef { name: "api/handler".into(), kind: ExportKind::Func, params: vec!["request".into()], result: Some("response".into()) });
+        backend.add_export(ExportDef {
+            name: "api/handler".into(),
+            kind: ExportKind::Func,
+            params: vec!["request".into()],
+            result: Some("response".into()),
+        });
         // Frontend component
         let mut frontend_imports = HashMap::new();
         frontend_imports.insert("api/handler".into(), "backend".into());
         let frontend = ComponentInstance::new("frontend", vec![], frontend_imports);
         linker.register(backend);
         linker.register(frontend);
-        linker.link("backend", "api/handler", "frontend", "api/handler").unwrap();
+        linker
+            .link("backend", "api/handler", "frontend", "api/handler")
+            .unwrap();
         assert!(linker.check_all_imports().is_empty());
     }
 
     #[test]
     fn w10_4_registry_full_workflow() {
-        use crate::package::registry::{Registry, SemVer, VersionConstraint, AuthToken};
+        use crate::package::registry::{AuthToken, Registry, SemVer, VersionConstraint};
         let mut reg = Registry::new();
         reg.add_token(AuthToken::new("deploy-key"));
         reg.publish("web-app", SemVer::new(1, 0, 0), "Full-stack web app");
@@ -8309,11 +9066,29 @@ method_str(Method::Post)
 
     #[test]
     fn w10_5_sbom_full_project() {
-        use crate::package::sbom::{generate_sbom, SbomFormat, DepInfo};
+        use crate::package::sbom::{DepInfo, SbomFormat, generate_sbom};
         let deps = vec![
-            DepInfo { name: "http-fj".into(), version: "1.0.0".into(), sha256: "aaa".into(), license: Some("MIT".into()), dev_only: false },
-            DepInfo { name: "db-fj".into(), version: "0.5.0".into(), sha256: "bbb".into(), license: Some("Apache-2.0".into()), dev_only: false },
-            DepInfo { name: "test-fj".into(), version: "1.0.0".into(), sha256: "ccc".into(), license: Some("MIT".into()), dev_only: true },
+            DepInfo {
+                name: "http-fj".into(),
+                version: "1.0.0".into(),
+                sha256: "aaa".into(),
+                license: Some("MIT".into()),
+                dev_only: false,
+            },
+            DepInfo {
+                name: "db-fj".into(),
+                version: "0.5.0".into(),
+                sha256: "bbb".into(),
+                license: Some("Apache-2.0".into()),
+                dev_only: false,
+            },
+            DepInfo {
+                name: "test-fj".into(),
+                version: "1.0.0".into(),
+                sha256: "ccc".into(),
+                license: Some("MIT".into()),
+                dev_only: true,
+            },
         ];
         let sbom = generate_sbom("fullstack-app", &deps, SbomFormat::CycloneDx).unwrap();
         assert!(sbom.contains("fullstack-app"));
@@ -8335,7 +9110,9 @@ results
 
     #[test]
     fn w10_7_smt_all_proofs() {
-        use crate::verify::smt::{prove_non_negative, prove_array_bounds, prove_matmul_shapes, prove_no_i32_overflow};
+        use crate::verify::smt::{
+            prove_array_bounds, prove_matmul_shapes, prove_no_i32_overflow, prove_non_negative,
+        };
         assert!(prove_non_negative("x", "x >= 0").is_proven());
         assert!(prove_array_bounds("i >= 0 && i < 100", 100).is_proven());
         assert!(prove_matmul_shapes(10, 20, 20, 30).is_proven());
@@ -8344,14 +9121,20 @@ results
 
     #[test]
     fn w10_8_distributed_full() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
+        use crate::distributed::cluster::{ClusterNodeId, FailureDetector, WorkQueue};
         use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use crate::distributed::cluster::{FailureDetector, WorkQueue, ClusterNodeId};
+        use crate::distributed::raft::{RaftNode, RaftNodeId};
         use std::collections::HashMap;
         use std::time::Duration;
         let _node = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3)]);
         let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance { service_name: "app".into(), instance_id: "app-1".into(), address: "10.0.0.1:80".into(), healthy: true, tags: HashMap::new() });
+        reg.register(ServiceInstance {
+            service_name: "app".into(),
+            instance_id: "app-1".into(),
+            address: "10.0.0.1:80".into(),
+            healthy: true,
+            tags: HashMap::new(),
+        });
         let mut fd = FailureDetector::new(Duration::from_millis(5000));
         fd.heartbeat(ClusterNodeId(1), 1000);
         let mut q = WorkQueue::new(ClusterNodeId(1));
@@ -8388,5 +9171,108 @@ r1 + r2
 "#;
         let result = interp.eval_source(code);
         assert!(result.is_ok());
+    }
+
+    // ===================================================================
+    // V15 Sprint B2 — ML Runtime Fixes
+    // ===================================================================
+
+    #[test]
+    fn v15_b2_1_tanh_shorthand() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let t = from_data([[0.0, 1.0]])
+            let r = tanh(t)
+            r
+            "#,
+        );
+        assert!(result.is_ok(), "tanh shorthand: {:?}", result.err());
+    }
+
+    #[test]
+    fn v15_b2_2_leaky_relu_shorthand() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let t = from_data([[-1.0, 1.0]])
+            let r = leaky_relu(t)
+            r
+            "#,
+        );
+        assert!(result.is_ok(), "leaky_relu shorthand: {:?}", result.err());
+    }
+
+    #[test]
+    fn v15_b2_4_dense_forward_method() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let l = Dense(4, 2)
+            let input = ones(1, 4)
+            let out = l.forward(input)
+            out
+            "#,
+        );
+        assert!(result.is_ok(), "Dense.forward(): {:?}", result.err());
+        match result.unwrap() {
+            Value::Tensor(t) => {
+                assert_eq!(t.data().ndim(), 2, "output should be 2D");
+                assert_eq!(t.data().shape()[1], 2, "output features should be 2");
+            }
+            other => panic!("expected Tensor, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn v15_b2_5_conv2d_forward_method() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let c = Conv2d(1, 8, 3, 1, 0)
+            let input = ones(1, 1, 8, 8)
+            let out = c.forward(input)
+            out
+            "#,
+        );
+        assert!(result.is_ok(), "Conv2d.forward(): {:?}", result.err());
+    }
+
+    #[test]
+    fn v15_b2_7_concat_builtin() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let a = zeros(2, 3)
+            let b = ones(2, 3)
+            let c = concat(a, b, 0)
+            c
+            "#,
+        );
+        assert!(result.is_ok(), "concat: {:?}", result.err());
+        match result.unwrap() {
+            Value::Tensor(t) => {
+                assert_eq!(
+                    t.data().shape(),
+                    &[4, 3],
+                    "concatenated shape should be [4,3]"
+                );
+            }
+            other => panic!("expected Tensor, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn v15_b2_8_cross_entropy_shorthand() {
+        let mut interp = Interpreter::new_capturing();
+        let result = interp.eval_source(
+            r#"
+            let pred = softmax(from_data([[1.0, 2.0, 3.0]]))
+            let target = from_data([[0.0, 0.0, 1.0]])
+            let ce = cross_entropy(pred, target)
+            ce
+            "#,
+        );
+        assert!(result.is_ok(), "cross_entropy: {:?}", result.err());
     }
 }

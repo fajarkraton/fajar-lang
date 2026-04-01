@@ -1,0 +1,19 @@
+// V15 B1.10 Test 6: Multiple effect types in a single handler
+effect Logger {
+    fn log(msg: str) -> void
+}
+effect Config {
+    fn get(key: str) -> str
+}
+
+let result = handle {
+    Logger::log("starting")
+    let db = Config::get("database")
+    Logger::log("connected to " + db)
+    db
+} with {
+    Logger::log(msg) => { resume() }
+    Config::get(key) => { resume("postgres") }
+}
+assert_eq(result, "postgres")
+println("PASS: effect_multi_type")

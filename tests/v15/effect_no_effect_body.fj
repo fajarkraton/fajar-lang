@@ -1,0 +1,12 @@
+// V15 B1.10 Test 9: Body completes without any effect — handle returns body value
+effect Ask {
+    fn name() -> str
+}
+
+let result = handle {
+    42
+} with {
+    Ask::name() => { resume("unused") }
+}
+assert_eq(result, 42)
+println("PASS: effect_no_effect_body")

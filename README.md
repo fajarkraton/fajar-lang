@@ -5,8 +5,8 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v12.0.0](https://img.shields.io/badge/release-v12.0.0_Infinity-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v12.0.0)
-[![Tests](https://img.shields.io/badge/tests-8%2C074_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Release v12.1.0](https://img.shields.io/badge/release-v12.1.0_Delivery-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v12.1.0)
+[![Tests](https://img.shields.io/badge/tests-8%2C092_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![LOC](https://img.shields.io/badge/LOC-400K_Rust-informational)]()
 [![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
@@ -512,8 +512,8 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | Metric | Value |
 |--------|-------|
 | Compiler LOC | ~400,000 Rust across 420+ files |
-| Tests | 8,074 (0 failures, 0 clippy warnings) |
-| Examples | 216 `.fj` programs |
+| Tests | 8,092 (0 failures, 0 clippy warnings) |
+| Examples | 240+ `.fj` programs |
 | Error codes | 80+ across 10 categories |
 | Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
 | Built-in macros | 14 (`vec!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `dbg!`, `todo!`, `env!`, `stringify!`, `concat!`, `assert!`, `include_str!`, `line!`) |
@@ -547,6 +547,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
+| **v12.1.0** | **Delivery** | **V15: Multi-step effect continuations (replay-with-cache), resume() no-arg, effect type/arity checking, ML shorthand builtins (tanh/concat/accuracy), .forward() method dispatch, bindgen typedef struct fix, `fj run --check-only`, `fj registry-init`, LSP effect keywords, 22+ new .fj examples. 8,092 tests.** |
 | **v12.0.0** | **Infinity** | **V14: Algebraic effects + handlers, dependent types (Pi/Sigma/refinement), GPU compute shaders (SPIR-V/PTX/fusion), LSP v4 (semantic tokens, inlay hints, completions), package registry (Sigstore signing, SBOM, audit). 8,074 tests, all CLI-integrated.** |
 | **v11.0.0** | **Beyond** | **V13: Const generics, incremental compilation, WASI P2 component model, FFI v2 (C++/Python/Rust), SMT verification (DO-178C), distributed runtime (Raft), self-hosting compiler** |
 | **v10.0.0** | **Transcendence** | **V12: LLVM O2/O3+LTO+PGO, macro system, generators (yield/gen fn/streams), WASI P1, package ecosystem, LSP excellence** |
@@ -594,7 +595,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full gu
 # Build
 cargo build
 
-# Test (8,074 tests)
+# Test (8,092 tests)
 cargo test --features native
 
 # Lint

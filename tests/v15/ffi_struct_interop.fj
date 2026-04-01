@@ -1,0 +1,21 @@
+// V15 I2.5: Struct interop — demonstrates struct data passing
+// In real FFI, this struct layout would match a C struct.
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+fn distance(p1: Point, p2: Point) -> f64 {
+    let dx = p2.x - p1.x
+    let dy = p2.y - p1.y
+    sqrt(dx * dx + dy * dy)
+}
+
+let origin = Point { x: 0.0, y: 0.0 }
+let target = Point { x: 3.0, y: 4.0 }
+let dist = distance(origin, target)
+
+println(f"Distance: {dist}")
+assert(abs(dist - 5.0) < 0.001)
+println("PASS: ffi_struct_interop")

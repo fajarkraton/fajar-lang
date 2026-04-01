@@ -1,0 +1,12 @@
+// V15 B1.10 Test 1: Basic effect declaration and handling
+effect Greeter {
+    fn greet(name: str) -> str
+}
+
+let result = handle {
+    Greeter::greet("World")
+} with {
+    Greeter::greet(name) => { resume("Hello, " + name + "!") }
+}
+assert_eq(result, "Hello, World!")
+println("PASS: effect_basic")

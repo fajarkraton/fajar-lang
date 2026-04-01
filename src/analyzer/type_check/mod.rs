@@ -1329,6 +1329,9 @@ pub struct TypeChecker {
     fn_effects: HashMap<String, Vec<String>>,
     /// Whether we are inside a handle expression (allows resume).
     in_handle_expr: bool,
+    /// V15: Expected return type for `resume(val)` in the current handler arm.
+    /// Set when checking a handler arm body, based on the effect op's declared return type.
+    current_handler_resume_type: Option<Type>,
     /// V14: Current function name being checked (for effect inference).
     current_fn_name: Option<String>,
     /// V14: Effects inferred from the current function body.
@@ -1760,6 +1763,7 @@ impl TypeChecker {
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
             fn_effects: HashMap::new(),
             in_handle_expr: false,
+            current_handler_resume_type: None,
             current_fn_name: None,
             current_fn_inferred_effects: std::collections::BTreeSet::new(),
             handled_effects_in_scope: std::collections::BTreeSet::new(),

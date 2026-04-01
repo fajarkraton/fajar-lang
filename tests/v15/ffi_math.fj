@@ -1,0 +1,20 @@
+// V15 I2.1: Math FFI — demonstrates using math builtins (equivalent to libm calls)
+// In interpreter mode, these map to Rust's f64 methods (same as C libm).
+
+let pi = 3.14159265358979
+
+// Trigonometric functions
+let sin_pi = sin(pi)
+let cos_0 = cos(0.0)
+let sqrt_4 = sqrt(4.0)
+
+println(f"sin(π) ≈ {sin_pi}")
+println(f"cos(0) = {cos_0}")
+println(f"sqrt(4) = {sqrt_4}")
+
+// Verify
+assert(abs(sin_pi) < 0.001)
+assert(abs(cos_0 - 1.0) < 0.001)
+assert(abs(sqrt_4 - 2.0) < 0.001)
+
+println("PASS: ffi_math")

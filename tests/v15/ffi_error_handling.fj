@@ -1,0 +1,24 @@
+// V15 I2.7: FFI error handling — demonstrates Result-based error handling
+// In real FFI, C functions return error codes wrapped in Result.
+
+fn safe_divide(a: f64, b: f64) -> f64 {
+    if b == 0.0 {
+        return 0.0
+    }
+    a / b
+}
+
+let result1 = safe_divide(10.0, 3.0)
+let result2 = safe_divide(10.0, 0.0)
+
+println(f"10.0 / 3.0 = {result1}")
+println(f"10.0 / 0.0 = {result2} (safe)")
+
+// File error handling
+let bad_result = read_file("nonexistent_file.txt")
+match bad_result {
+    Ok(content) => println("unexpected success")
+    Err(e) => println(f"Expected error: {e}")
+}
+
+println("PASS: ffi_error_handling")

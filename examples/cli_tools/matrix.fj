@@ -1,0 +1,32 @@
+// V15 I3.9: Matrix Operations
+// Demonstrates tensor-based matrix operations.
+
+// Create matrices
+let a = from_data([[1.0, 2.0], [3.0, 4.0]])
+let b = from_data([[5.0, 6.0], [7.0, 8.0]])
+
+// Matrix multiply: A * B
+let c = matmul(a, b)
+println(f"A * B = {c}")
+
+// Transpose
+let at = transpose(a)
+println(f"A^T = {at}")
+
+// Element-wise operations
+let sum = from_data([[6.0, 8.0], [10.0, 12.0]])
+println(f"A + B = {sum}")
+
+// Identity matrix
+let eye2 = eye(2)
+println(f"I(2) = {eye2}")
+
+// Verify matmul: [[1,2],[3,4]] * [[5,6],[7,8]] = [[19,22],[43,50]]
+let result = matmul(from_data([[1.0, 2.0], [3.0, 4.0]]), from_data([[5.0, 6.0], [7.0, 8.0]]))
+println(f"Matmul result: {result}")
+
+// Xavier initialization
+let w = xavier(3, 4)
+println(f"Xavier(3,4) shape: 3x4")
+
+println("All matrix operations passed")

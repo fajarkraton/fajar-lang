@@ -1,0 +1,20 @@
+// V15 B1.10 Test 3: Resume returns a value to the call site
+effect Config {
+    fn get(key: str) -> str
+}
+
+let result = handle {
+    let host = Config::get("host")
+    let port = Config::get("port")
+    host + ":" + port
+} with {
+    Config::get(key) => {
+        if key == "host" {
+            resume("localhost")
+        } else {
+            resume("8080")
+        }
+    }
+}
+assert_eq(result, "localhost:8080")
+println("PASS: effect_resume_value")

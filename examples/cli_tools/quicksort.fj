@@ -1,0 +1,30 @@
+// V15 I3.7: Sorting Implementation (Bubble Sort)
+
+let mut arr = [5, 3, 8, 1, 2, 9, 4, 7, 6]
+println(f"Input:  {arr}")
+
+// Bubble sort using for-in range
+let n: i64 = 9
+let mut pass: i64 = 0
+while pass < n {
+    let mut i: i64 = 0
+    let limit: i64 = n - pass - 1
+    while i < limit {
+        if arr[i] > arr[i + 1] {
+            let tmp = arr[i]
+            arr[i] = arr[i + 1]
+            arr[i + 1] = tmp
+        }
+        i = i + 1
+    }
+    pass = pass + 1
+}
+
+println(f"Sorted: {arr}")
+
+// Verify
+assert_eq(arr[0], 1)
+assert_eq(arr[1], 2)
+assert_eq(arr[2], 3)
+assert_eq(arr[8], 9)
+println("Sort verification passed")

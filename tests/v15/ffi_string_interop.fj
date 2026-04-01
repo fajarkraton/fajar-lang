@@ -1,0 +1,21 @@
+// V15 I2.4: String interop — demonstrates string operations
+// In a real FFI scenario, these would cross the C boundary.
+
+let fj_string = "Hello from Fajar Lang"
+let length = len(fj_string)
+
+// String to parts and back
+let parts = fj_string.split(" ")
+assert_eq(len(parts), 4)
+
+// Contains check (equivalent to strstr in C)
+assert(fj_string.contains("Fajar"))
+
+// Replace (equivalent to string manipulation in C)
+let modified = fj_string.replace("Fajar Lang", "C")
+assert_eq(modified, "Hello from C")
+
+println(f"Original: {fj_string}")
+println(f"Modified: {modified}")
+println(f"Length: {length}")
+println("PASS: ffi_string_interop")

@@ -2546,6 +2546,17 @@ fn keyword_info(word: &str) -> Option<String> {
         "@safe" => "**@safe** — Safe context (default): no hardware, no raw pointer",
         "@unsafe" => "**@unsafe** — Unsafe context: full access to all features",
         "@ffi" => "**@ffi** — Foreign function interface annotation",
+        // V15 B3.6: Effect system keywords
+        "effect" => {
+            "**effect** — Declare an algebraic effect\n```fajar\neffect Logger { fn log(msg: str) -> void }\n```"
+        }
+        "handle" => {
+            "**handle** — Handle block for intercepting effects\n```fajar\nhandle { body } with { Effect::op(x) => { resume(val) } }\n```"
+        }
+        "with" => "**with** — Introduces handler arms after a handle block",
+        "resume" => {
+            "**resume** — Resume a continuation in an effect handler\n```fajar\nresume(42)  // or resume() for void\n```"
+        }
         _ => return None,
     };
     Some(info.to_string())
@@ -3234,7 +3245,8 @@ fn find_enum_definition(source: &str, name: &str) -> Option<String> {
 const KEYWORDS: &[&str] = &[
     "let", "mut", "fn", "if", "else", "while", "for", "in", "match", "return", "break", "continue",
     "struct", "enum", "impl", "trait", "type", "const", "use", "mod", "pub", "extern", "as",
-    "loop", "true", "false", "null",
+    "loop", "true", "false", "null", // V15 B3.7: Effect system keywords
+    "effect", "handle", "with", "resume",
 ];
 
 const BUILTINS: &[(&str, &str)] = &[

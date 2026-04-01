@@ -1,0 +1,14 @@
+// V15 B1.10 Test 10: Handler variables don't leak to outer scope
+effect Logger {
+    fn log(msg: str) -> void
+}
+
+let msg = "outer"
+handle {
+    Logger::log("inner value")
+} with {
+    Logger::log(msg) => { resume() }
+}
+// msg in outer scope should still be "outer"
+assert_eq(msg, "outer")
+println("PASS: effect_scope_isolation")

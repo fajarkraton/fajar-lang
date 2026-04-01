@@ -228,6 +228,16 @@ impl CHeaderParser {
             // Collect preceding doc comment.
             let doc = self.extract_c_doc(&lines, i);
 
+            // Typedef struct: `typedef struct { ... } Name;` — parse as a struct.
+            if line.starts_with("typedef struct") && line.contains('{') {
+                let block = self.collect_block(&lines, i);
+                if let Some(item) = self.parse_c_typedef_struct(&block, &doc) {
+                    items.push(item);
+                }
+                i += block.lines().count().max(1);
+                continue;
+            }
+
             // Typedef.
             if line.starts_with("typedef ") {
                 if let Some(item) = self.parse_c_typedef(line, &doc) {
@@ -334,6 +344,49 @@ impl CHeaderParser {
         Some(ForeignItem::TypeAlias {
             name: parts[0].to_string(),
             target: parts[1].to_string(),
+            doc: doc.clone(),
+        })
+    }
+
+    /// V15 B3.1: Parse a `typedef struct { ... } Name;` block as a named struct.
+    fn parse_c_typedef_struct(&self, block: &str, doc: &Option<String>) -> Option<ForeignItem> {
+        // Find the closing `} Name;` to extract the typedef name.
+        let last_line = block.lines().last()?.trim();
+        let name = last_line
+            .trim_end_matches(';')
+            .trim_end_matches('}')
+            .trim()
+            .split('}')
+            .next_back()?
+            .trim()
+            .to_string();
+        if name.is_empty() {
+            return None;
+        }
+        // Parse fields from the block body (between { and }).
+        let mut fields = Vec::new();
+        for line in block.lines() {
+            let line = line.trim().trim_end_matches(';').trim();
+            if line.is_empty()
+                || line.starts_with("typedef")
+                || line.starts_with('{')
+                || line.starts_with('}')
+                || line.contains('{')
+                || line.contains('}')
+            {
+                continue;
+            }
+            let parts: Vec<&str> = line.rsplitn(2, ' ').collect();
+            if parts.len() == 2 {
+                fields.push(ForeignField {
+                    name: parts[0].to_string(),
+                    field_type: parts[1].to_string(),
+                });
+            }
+        }
+        Some(ForeignItem::Struct {
+            name,
+            fields,
             doc: doc.clone(),
         })
     }
@@ -2514,5 +2567,37 @@ class Calculator:\n\
         };
         assert_eq!(item2.name(), "Bar");
         assert!(item2.doc().is_none());
+    }
+
+    #[test]
+    fn v15_b3_1_typedef_struct_parsed_as_struct() {
+        let parser = CHeaderParser::new();
+        let header = "typedef struct {\n    int x;\n    float y;\n} Point;";
+        let items = parser.parse(header);
+        assert_eq!(items.len(), 1, "should parse 1 item");
+        match &items[0] {
+            ForeignItem::Struct { name, fields, .. } => {
+                assert_eq!(name, "Point");
+                assert_eq!(fields.len(), 2);
+                assert_eq!(fields[0].name, "x");
+                assert_eq!(fields[1].name, "y");
+            }
+            other => panic!("expected Struct, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn v15_b3_1_typedef_struct_generates_valid_fj() {
+        let parser = CHeaderParser::new();
+        let header = "typedef struct {\n    int x;\n    float y;\n} Point;";
+        let items = parser.parse(header);
+        let bg = BindingGenerator::new(BindgenLanguage::C, None);
+        let result = bg.generate(&items);
+        let code = bg.emit(&result);
+        assert!(
+            code.contains("struct Point {"),
+            "should produce valid struct: {code}"
+        );
+        assert!(code.contains("x: i32"), "should have x field: {code}");
     }
 }

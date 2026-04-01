@@ -1,0 +1,20 @@
+// V15 I3.6: Fibonacci Benchmark
+
+fn fib(n: i64) -> i64 {
+    if n <= 1 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    }
+}
+
+let n = 25
+let result = fib(n)
+println(f"fib({n}) = {result}")
+
+// Verify correctness
+assert_eq(fib(0), 0)
+assert_eq(fib(1), 1)
+assert_eq(fib(10), 55)
+assert_eq(fib(20), 6765)
+println("All fibonacci assertions passed")

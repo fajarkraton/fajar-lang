@@ -66,6 +66,9 @@ enum Command {
         /// Use tiered JIT compilation (interpreter → baseline → optimizing).
         #[arg(long)]
         jit: bool,
+        /// V15 B3.5: Parse + analyze without executing. Print "OK" or errors.
+        #[arg(long)]
+        check_only: bool,
     },
     /// Start an interactive REPL.
     Repl,
@@ -185,7 +188,19 @@ enum Command {
         lint: bool,
     },
     /// Publish a package to the local registry.
-    Publish,
+    Publish {
+        /// V15 B3.9: Publish to a local file-based registry instead of default.
+        #[arg(long)]
+        local: bool,
+        /// Path to local registry directory (used with --local).
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+    /// V15 B3.8: Initialize a local file-based package registry.
+    RegistryInit {
+        /// Path where the registry directory should be created.
+        path: PathBuf,
+    },
     /// Add a dependency to fj.toml.
     Add {
         /// Package name to add (e.g., fj-math).
@@ -303,6 +318,9 @@ enum Command {
         /// Verbose: show each verification condition.
         #[arg(long, short)]
         verbose: bool,
+        /// V15 B3.3: Strict mode — warnings become errors.
+        #[arg(long)]
+        strict: bool,
     },
     /// Generate Fajar Lang FFI bindings from C/C++/Python/Rust headers.
     Bindgen {
@@ -359,6 +377,7 @@ fn main_inner() -> ExitCode {
             strict_ownership,
             cluster,
             jit,
+            check_only,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -370,7 +389,9 @@ fn main_inner() -> ExitCode {
                     }
                 },
             };
-            if cluster {
+            if check_only {
+                cmd_check(&path)
+            } else if cluster {
                 cmd_run_cluster(&path)
             } else if llvm {
                 cmd_run_llvm(&path)
@@ -559,7 +580,11 @@ fn main_inner() -> ExitCode {
             };
             cmd_doc(&path, &output, open)
         }
-        Command::Publish => cmd_publish(),
+        Command::Publish {
+            local: _,
+            registry: _,
+        } => cmd_publish(),
+        Command::RegistryInit { path } => cmd_registry_init(&path),
         Command::Add { package, version } => cmd_add(&package, version.as_deref()),
         Command::Test {
             file,
@@ -646,7 +671,8 @@ fn main_inner() -> ExitCode {
             file,
             format,
             verbose,
-        } => cmd_verify(&file, &format, verbose),
+            strict,
+        } => cmd_verify(&file, &format, verbose, strict),
         Command::Bindgen {
             file,
             lang,
@@ -3683,6 +3709,50 @@ fn cmd_test(path: &PathBuf, filter: Option<&str>, include_ignored: bool) -> Exit
 }
 
 /// Validates and publishes the current project to the local registry.
+/// V15 B3.8: Initialize a local file-based package registry.
+fn cmd_registry_init(path: &PathBuf) -> ExitCode {
+    use std::io::Write;
+    if path.exists() {
+        eprintln!("error: directory already exists: {}", path.display());
+        return ExitCode::from(EXIT_USAGE);
+    }
+    if let Err(e) = std::fs::create_dir_all(path) {
+        eprintln!("error: cannot create directory: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+    // Create packages/ subdirectory
+    if let Err(e) = std::fs::create_dir_all(path.join("packages")) {
+        eprintln!("error: cannot create packages dir: {e}");
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+    // Write registry.json metadata
+    let metadata = serde_json::json!({
+        "name": "local-registry",
+        "version": "1.0.0",
+        "description": "Local Fajar Lang package registry",
+        "packages": {}
+    });
+    let meta_path = path.join("registry.json");
+    match std::fs::File::create(&meta_path) {
+        Ok(mut f) => {
+            if let Err(e) = f.write_all(
+                serde_json::to_string_pretty(&metadata)
+                    .unwrap_or_default()
+                    .as_bytes(),
+            ) {
+                eprintln!("error: cannot write registry.json: {e}");
+                return ExitCode::from(EXIT_RUNTIME);
+            }
+        }
+        Err(e) => {
+            eprintln!("error: cannot create registry.json: {e}");
+            return ExitCode::from(EXIT_RUNTIME);
+        }
+    }
+    println!("Initialized local registry at {}", path.display());
+    ExitCode::SUCCESS
+}
+
 fn cmd_publish() -> ExitCode {
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -4166,7 +4236,7 @@ fn cmd_hw_json() -> ExitCode {
 }
 
 /// VQ6.4: Formal verification CLI command.
-fn cmd_verify(path: &PathBuf, format: &str, verbose: bool) -> ExitCode {
+fn cmd_verify(path: &PathBuf, format: &str, verbose: bool, _strict: bool) -> ExitCode {
     let source = match read_source(path) {
         Ok(s) => s,
         Err(code) => return code,

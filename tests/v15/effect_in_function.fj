@@ -1,0 +1,16 @@
+// V15 B1.10 Test 7: Effect called from inside a function
+effect Config {
+    fn get(key: str) -> str
+}
+
+fn read_config(key: str) -> str with Config {
+    Config::get(key)
+}
+
+let result = handle {
+    read_config("host")
+} with {
+    Config::get(key) => { resume("localhost") }
+}
+assert_eq(result, "localhost")
+println("PASS: effect_in_function")

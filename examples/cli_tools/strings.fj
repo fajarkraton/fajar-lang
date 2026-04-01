@@ -1,0 +1,34 @@
+// V15 I3.8: String Manipulation Tool
+
+let text = "  Hello, Fajar Lang!  "
+
+// Trim
+let trimmed = text.trim()
+println(f"Trimmed: '{trimmed}'")
+assert_eq(trimmed, "Hello, Fajar Lang!")
+
+// Split
+let words = trimmed.split(" ")
+println(f"Word count: {len(words)}")
+assert_eq(len(words), 3)
+
+// Contains
+assert(trimmed.contains("Fajar"))
+
+// Replace
+let replaced = trimmed.replace("Fajar", "Amazing")
+println(f"Replaced: '{replaced}'")
+assert(replaced.contains("Amazing"))
+
+// Starts with
+assert(trimmed.starts_with("Hello"))
+
+// String concatenation
+let greeting = "Hello" + ", " + "World!"
+assert_eq(greeting, "Hello, World!")
+
+// Length
+assert_eq(len("abc"), 3)
+assert_eq(len(""), 0)
+
+println("All string operations passed")

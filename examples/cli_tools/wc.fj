@@ -1,0 +1,27 @@
+// V15 I3.1: Word Count Tool
+// Counts lines, words, and characters in a file.
+
+let filename = "examples/hello.fj"
+let result = read_file(filename)
+
+match result {
+    Ok(content) => {
+        let lines = content.split("\n")
+        let line_count = len(lines)
+        let char_count = len(content)
+        let mut word_count = 0
+
+        for line in lines {
+            let trimmed = line.trim()
+            if len(trimmed) > 0 {
+                let words = trimmed.split(" ")
+                for w in words {
+                    word_count = word_count + 1
+                }
+            }
+        }
+
+        println(f"  {line_count} lines, {word_count} words, {char_count} chars — {filename}")
+    }
+    Err(e) => println(f"Error reading {filename}: {e}")
+}

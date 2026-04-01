@@ -1,0 +1,19 @@
+// V15 B1.10 Test 5: Nested handle — inner doesn't match, outer catches
+effect Ask {
+    fn name() -> str
+}
+effect Db {
+    fn query(sql: str) -> str
+}
+
+let result = handle {
+    handle {
+        Ask::name()
+    } with {
+        Db::query(sql) => { resume("db result") }
+    }
+} with {
+    Ask::name() => { resume("caught by outer") }
+}
+assert_eq(result, "caught by outer")
+println("PASS: effect_nested_propagate")

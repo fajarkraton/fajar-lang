@@ -78,12 +78,27 @@ impl TypeChecker {
                     .operations
                     .iter()
                     .map(|op| {
-                        crate::analyzer::effects::EffectOp::new(
-                            op.name.clone(),
-                            op.params.iter().map(|(_, _)| "any".to_string()).collect(),
+                        let param_type_names: Vec<String> = op
+                            .params
+                            .iter()
+                            .map(|(_, ty)| match ty {
+                                crate::parser::ast::TypeExpr::Simple { name, .. } => name.clone(),
+                                other => format!("{other:?}"),
+                            })
+                            .collect();
+                        let ret_type_name =
                             op.return_type
                                 .as_ref()
-                                .map_or("void".to_string(), |_| "any".to_string()),
+                                .map_or("void".to_string(), |t| match t {
+                                    crate::parser::ast::TypeExpr::Simple { name, .. } => {
+                                        name.clone()
+                                    }
+                                    other => format!("{other:?}"),
+                                });
+                        crate::analyzer::effects::EffectOp::new(
+                            op.name.clone(),
+                            param_type_names,
+                            ret_type_name,
                         )
                     })
                     .collect();
@@ -99,10 +114,14 @@ impl TypeChecker {
                 // the semantic analyzer doesn't reject it as undefined.
                 for op in &ed.operations {
                     let qualified = format!("{}::{}", ed.name, op.name);
-                    let ret_ty = op.return_type.as_ref()
+                    let ret_ty = op
+                        .return_type
+                        .as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(Type::Void);
-                    let param_types: Vec<Type> = op.params.iter()
+                    let param_types: Vec<Type> = op
+                        .params
+                        .iter()
                         .map(|(_, ty)| self.resolve_type(ty))
                         .collect();
                     self.symbols.define(crate::analyzer::scope::Symbol::new(
@@ -1041,7 +1060,8 @@ impl TypeChecker {
                 // effect inference doesn't flag them as undeclared.
                 let outer_handled = self.handled_effects_in_scope.clone();
                 for arm in handlers {
-                    self.handled_effects_in_scope.insert(arm.effect_name.clone());
+                    self.handled_effects_in_scope
+                        .insert(arm.effect_name.clone());
                 }
 
                 let body_type = self.check_expr(body);
@@ -1050,8 +1070,28 @@ impl TypeChecker {
                 self.handled_effects_in_scope = outer_handled;
                 // Check each handler arm
                 for arm in handlers {
-                    // Validate effect exists
-                    if self.effect_registry.lookup(&arm.effect_name).is_none() {
+                    // Validate effect exists and look up op return type for resume checking.
+                    let mut op_return_type = None;
+                    if let Some(decl) = self.effect_registry.lookup(&arm.effect_name) {
+                        if let Some(op) = decl.find_op(&arm.op_name) {
+                            // V15 B1.8: Track expected resume type from effect op declaration.
+                            op_return_type = Some(op.return_type.clone());
+                            // V15 B1.9: Check arity — handler param count must match op param count.
+                            if arm.param_names.len() != op.param_types.len() {
+                                self.errors.push(SemanticError::ArgumentCountMismatch {
+                                    expected: op.param_types.len(),
+                                    found: arm.param_names.len(),
+                                    span: arm.span,
+                                    hint: Some(format!(
+                                        "effect op {}::{} takes {} parameter(s)",
+                                        arm.effect_name,
+                                        arm.op_name,
+                                        op.param_types.len()
+                                    )),
+                                });
+                            }
+                        }
+                    } else {
                         self.errors.push(SemanticError::UnknownEffect {
                             name: arm.effect_name.clone(),
                             span: arm.span,
@@ -1067,7 +1107,22 @@ impl TypeChecker {
                             arm.span,
                         ));
                     }
+                    // V15: Set expected resume type for this handler arm.
+                    let prev_resume_type = self.current_handler_resume_type.take();
+                    if let Some(ref rt) = op_return_type {
+                        self.current_handler_resume_type = match rt.as_str() {
+                            "void" => Some(Type::Void),
+                            "i32" => Some(Type::I32),
+                            "i64" => Some(Type::I64),
+                            "f32" => Some(Type::F32),
+                            "f64" => Some(Type::F64),
+                            "str" => Some(Type::Str),
+                            "bool" => Some(Type::Bool),
+                            _ => None, // Unknown/complex types — skip check
+                        };
+                    }
                     self.check_expr(&arm.body);
+                    self.current_handler_resume_type = prev_resume_type;
                     let _ = self.symbols.pop_scope_unused();
                 }
                 self.in_handle_expr = old_in_handle;
@@ -1078,7 +1133,32 @@ impl TypeChecker {
                     self.errors
                         .push(SemanticError::ResumeOutsideHandler { span: *span });
                 }
-                self.check_expr(value)
+                let val_type = self.check_expr(value);
+                // V15 B1.8: Check resume value type matches effect op return type.
+                if let Some(ref expected) = self.current_handler_resume_type {
+                    // Allow compatible types: IntLiteral ↔ integer, FloatLiteral ↔ float.
+                    let types_compatible = val_type == *expected
+                        || val_type == Type::Void  // null is compatible with any type
+                        || (val_type == Type::IntLiteral && matches!(expected,
+                            Type::I8 | Type::I16 | Type::I32 | Type::I64 | Type::I128 |
+                            Type::U8 | Type::U16 | Type::U32 | Type::U64 | Type::U128 |
+                            Type::ISize | Type::USize | Type::IntLiteral))
+                        || (val_type == Type::FloatLiteral && matches!(expected,
+                            Type::F32 | Type::F64 | Type::FloatLiteral));
+                    if val_type != Type::Unknown
+                        && *expected != Type::Unknown
+                        && *expected != Type::Void
+                        && !types_compatible
+                    {
+                        self.errors.push(SemanticError::TypeMismatch {
+                            expected: format!("{expected:?}"),
+                            found: format!("{val_type:?}"),
+                            span: *span,
+                            hint: Some("resume value type must match effect op return type".into()),
+                        });
+                    }
+                }
+                val_type
             }
             Expr::Comptime { body, .. } => self.check_expr(body),
             Expr::MacroInvocation { .. } => Type::Unknown,

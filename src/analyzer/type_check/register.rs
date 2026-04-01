@@ -741,11 +741,7 @@ impl TypeChecker {
                 vec![dyn_t.clone(), Type::Unknown],
                 dyn_t.clone(),
             ),
-            (
-                "reshape",
-                vec![dyn_t.clone(), Type::Unknown],
-                dyn_t.clone(),
-            ),
+            ("reshape", vec![dyn_t.clone(), Type::Unknown], dyn_t.clone()),
             ("tensor_numel", vec![dyn_t.clone()], Type::I64),
             // Tensor arithmetic → return dynamic tensor
             (
@@ -774,11 +770,7 @@ impl TypeChecker {
                 vec![dyn_t.clone(), dyn_t.clone()],
                 dyn_t.clone(),
             ),
-            (
-                "matmul",
-                vec![dyn_t.clone(), dyn_t.clone()],
-                dyn_t.clone(),
-            ),
+            ("matmul", vec![dyn_t.clone(), dyn_t.clone()], dyn_t.clone()),
             ("tensor_transpose", vec![dyn_t.clone()], dyn_t.clone()),
             ("transpose", vec![dyn_t.clone()], dyn_t.clone()),
             ("tensor_sum", vec![dyn_t.clone()], dyn_t.clone()),
@@ -891,6 +883,7 @@ impl TypeChecker {
             ("tanh", vec![dyn_t.clone()], dyn_t.clone()),
             ("softmax", vec![dyn_t.clone()], dyn_t.clone()),
             ("gelu", vec![dyn_t.clone()], dyn_t.clone()),
+            ("leaky_relu", vec![dyn_t.clone()], dyn_t.clone()),
             ("argmax", vec![dyn_t.clone()], Type::I64),
             ("from_data", vec![Type::Unknown], dyn_t.clone()),
             ("transpose", vec![dyn_t.clone()], dyn_t.clone()),
@@ -911,6 +904,17 @@ impl TypeChecker {
                 vec![dyn_t.clone(), dyn_t.clone()],
                 dyn_t.clone(),
             ),
+            (
+                "cross_entropy",
+                vec![dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            (
+                "concat",
+                vec![dyn_t.clone(), dyn_t.clone(), Type::I64],
+                dyn_t.clone(),
+            ),
+            ("accuracy", vec![Type::Unknown, Type::Unknown], Type::F64),
         ];
         for (name, params, ret) in ml_fns {
             self.symbols.define(Symbol {

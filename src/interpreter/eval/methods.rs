@@ -6,7 +6,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::interpreter::value::{IteratorValue, Value};
+use crate::interpreter::value::{IteratorValue, LayerValue, Value};
 use crate::parser::ast::{CallArg, Expr};
 use crate::runtime::ml::tensor_ops;
 
@@ -62,6 +62,39 @@ impl Interpreter {
             return Err(
                 RuntimeError::TypeError(format!("no method '{method}' on trait object")).into(),
             );
+        }
+
+        // V15 B2.4-B2.5: Layer method dispatch — layer.forward(input)
+        if let Value::Layer(ref layer) = obj {
+            if method == "forward" {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let input = match &arg_vals[0] {
+                    Value::Tensor(t) => t,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "forward: argument must be a tensor".into(),
+                        )
+                        .into());
+                    }
+                };
+                return match layer.as_ref() {
+                    LayerValue::Dense(dense) => dense
+                        .forward(input)
+                        .map(Value::Tensor)
+                        .map_err(|e| RuntimeError::TypeError(format!("forward: {e}")).into()),
+                    LayerValue::Conv2d(conv) => conv
+                        .forward(input)
+                        .map(Value::Tensor)
+                        .map_err(|e| RuntimeError::TypeError(format!("forward: {e}")).into()),
+                };
+            }
+            return Err(RuntimeError::TypeError(format!("no method '{method}' on Layer")).into());
         }
 
         // Iterator methods on collections: .iter()

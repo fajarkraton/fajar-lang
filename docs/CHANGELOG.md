@@ -18,6 +18,45 @@ Kategori perubahan:
 
 ---
 
+## [12.1.0] — 2026-04-01 "Delivery"
+
+### Fixed — V15 "Delivery" (30 bug fixes, 120 total tasks)
+
+**Effect System (Sprint B1 — 10 tasks)**
+- Multi-step continuations: handle body can now perform multiple effect operations (replay-with-cache architecture)
+- Stack-based replay with identity-tagged cache entries for correct nested handle behavior
+- `resume()` no-arg alias (equivalent to `resume(null)`)
+- Effect return type checking: `resume(val)` type validated against effect op declaration (SE004)
+- Handler arity checking: param count validated against effect op params (SE005)
+- Effect ops registered with actual type names (not "any")
+
+**ML Runtime (Sprint B2 — 10 tasks)**
+- `tanh`, `leaky_relu`, `concat`, `cross_entropy`, `accuracy` shorthand builtins registered
+- `.forward()` method dispatch on `Value::Layer` (Dense and Conv2d)
+- Conv2d accepts 3-5 args (stride/padding optional, default 1/0)
+- `builtin_tensor_concat` for tensor concatenation along axis
+
+**Toolchain (Sprint B3 — 10 tasks)**
+- `typedef struct { ... } Name;` correctly parsed by bindgen as named struct
+- `fj run --check-only` flag (parse + analyze without execution)
+- `fj verify --strict` flag
+- `fj registry-init <path>` creates local file-based registry
+- LSP: effect/handle/with/resume keyword completion and semantic tokens
+
+### Added
+- 10 effect test programs in `tests/v15/effect_*.fj`
+- 4 FFI interop test programs in `tests/v15/ffi_*.fj`
+- 6 CLI tools in `examples/cli_tools/` (wc, search, fib, sort, strings, matrix)
+- `examples/mnist_training.fj` — ML training pipeline demo
+- V15 baseline benchmarks in `docs/BENCHMARKS.md`
+
+### Stats
+- Tests: 8,092 (was 8,074) — 18 new Rust tests + 20 new .fj programs
+- Clippy: 0 warnings
+- LOC: ~400K
+
+---
+
 ## [11.0.0] — 2026-04-01 "Beyond"
 
 ### Added — V13 "Beyond" (8 options, 710 tasks, 71 sprints)

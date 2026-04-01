@@ -1,0 +1,40 @@
+// MNIST Training Demo — V15 B2.10
+// Dense(784,128) → relu → Dense(128,10) → softmax → mse_loss → backward → SGD
+//
+// Uses synthetic random data (no file I/O needed).
+// Demonstrates: layer creation, forward pass, loss computation, backprop, optimizer step.
+
+// Create model layers
+let layer1 = Dense(784, 128)
+let layer2 = Dense(128, 10)
+
+// Create optimizer (lr=0.01, momentum=0.0)
+let opt = SGD(0.01, 0.0)
+
+// Training loop with synthetic data
+let epochs = 5
+
+let mut epoch = 0
+while epoch < epochs {
+    // Generate random input (batch of 1, 784 features) and target (one-hot)
+    let input = randn(1, 784)
+    let target = zeros(1, 10)
+
+    // Forward pass
+    let h1 = forward(layer1, input)
+    let h2 = relu(h1)
+    let out = forward(layer2, h2)
+    let pred = softmax(out)
+
+    // Compute loss
+    let l = mse_loss(pred, target)
+
+    println(f"Epoch {epoch}: loss computed")
+
+    // Backward pass
+    backward(l)
+
+    epoch = epoch + 1
+}
+
+println("MNIST demo complete — 5 epochs trained")

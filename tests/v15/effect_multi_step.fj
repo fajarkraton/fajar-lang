@@ -1,0 +1,15 @@
+// V15 B1.10 Test 2: Multi-step continuation — body with multiple effects
+effect Console {
+    fn log(msg: str) -> void
+}
+
+let result = handle {
+    Console::log("first")
+    Console::log("second")
+    Console::log("third")
+    "done"
+} with {
+    Console::log(msg) => { resume() }
+}
+assert_eq(result, "done")
+println("PASS: effect_multi_step")

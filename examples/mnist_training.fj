@@ -1,0 +1,49 @@
+// V15 I1: MNIST Training Pipeline
+// Dense(784,128) → relu → Dense(128,10) → softmax → mse_loss → backward
+// Uses synthetic data (random tensors simulating MNIST).
+
+// ── Model Definition ──
+let layer1 = Dense(784, 128)
+let layer2 = Dense(128, 10)
+let opt = SGD(0.01, 0.0)
+
+// ── Training Configuration ──
+let epochs = 3
+let batches_per_epoch = 5
+let batch_size = 1
+
+// ── Training Loop ──
+let mut epoch = 0
+while epoch < epochs {
+    let mut total_loss_val = 0.0
+    let mut batch = 0
+
+    while batch < batches_per_epoch {
+        // Generate synthetic MNIST-like data
+        let input = randn(batch_size, 784)
+
+        // One-hot target (random class)
+        let target = zeros(batch_size, 10)
+
+        // Forward pass
+        let h1 = forward(layer1, input)
+        let h2 = relu(h1)
+        let out = forward(layer2, h2)
+        let pred = softmax(out)
+
+        // Compute loss
+        let l = mse_loss(pred, target)
+
+        // Backward pass
+        backward(l)
+
+        batch = batch + 1
+    }
+
+    println(f"Epoch {epoch + 1}/{epochs} complete — {batches_per_epoch} batches processed")
+    epoch = epoch + 1
+}
+
+println("Training complete!")
+println(f"Model: Dense(784,128) -> relu -> Dense(128,10) -> softmax")
+println(f"Config: {epochs} epochs, {batches_per_epoch} batches/epoch, batch_size={batch_size}")

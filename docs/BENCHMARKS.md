@@ -117,3 +117,19 @@ fj run --profile examples/mnist.fj
 ---
 
 *Benchmarks Version: 3.0 | Updated: 2026-03-12 (v3.0 — all backends, GPU, cross-compilation)*
+
+---
+
+## V15 Baseline Measurements (Interpreter Mode)
+
+> System: x86_64 Linux 6.17, Intel i9-14900HX, Rust 1.87 | Date: 2026-04-01
+
+| Benchmark | Result | Notes |
+|-----------|--------|-------|
+| Cold startup (`fj run hello.fj`) | ~158ms | Includes Rust runtime init |
+| fib(25) — naive recursion | ~0.5s | 75,025 calls |
+| fib(30) — naive recursion | ~11s | 832,040 calls (tree-walking) |
+| matmul(64×64) | ~200ms | ndarray backend |
+| MNIST training (3×5 batches) | ~1s | Dense(784,128)→relu→Dense(128,10) |
+| Effect handle (10 ops) | <1ms | Replay-with-cache |
+| Cargo test suite (8,092 tests) | ~1.0s | 0 failures, 0 clippy warnings |

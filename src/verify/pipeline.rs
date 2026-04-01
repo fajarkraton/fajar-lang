@@ -141,6 +141,8 @@ pub struct VerifyCommand {
     pub certify: Option<String>,
     /// Show SMT-LIB2 output for debugging.
     pub show_smt: bool,
+    /// V15 B3.3: Strict mode — warnings become errors, return non-zero exit code.
+    pub strict: bool,
 }
 
 impl Default for VerifyCommand {
@@ -154,6 +156,7 @@ impl Default for VerifyCommand {
             auto_infer: true,
             certify: None,
             show_smt: false,
+            strict: false,
         }
     }
 }

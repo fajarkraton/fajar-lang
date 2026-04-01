@@ -412,6 +412,7 @@ impl Interpreter {
             "tensor_matmul" | "matmul" => self.builtin_tensor_matmul(args),
             "tensor_transpose" | "transpose" => self.builtin_tensor_transpose(args),
             "tensor_flatten" | "flatten" => self.builtin_tensor_unary(args, "flatten"),
+            "tensor_concat" | "concat" => self.builtin_tensor_concat(args),
             "tensor_squeeze" => self.builtin_tensor_squeeze(args),
             "tensor_unsqueeze" => self.builtin_tensor_unsqueeze(args),
             "tensor_sum" => self.builtin_tensor_reduce(args, "sum"),
@@ -432,13 +433,13 @@ impl Interpreter {
             // Activation functions
             "tensor_relu" | "relu" => self.builtin_tensor_activation(args, "relu"),
             "tensor_sigmoid" | "sigmoid" => self.builtin_tensor_activation(args, "sigmoid"),
-            "tensor_tanh" => self.builtin_tensor_activation(args, "tanh"),
+            "tensor_tanh" | "tanh" => self.builtin_tensor_activation(args, "tanh"),
             "tensor_softmax" | "softmax" => self.builtin_tensor_activation(args, "softmax"),
             "tensor_gelu" | "gelu" => self.builtin_tensor_activation(args, "gelu"),
-            "tensor_leaky_relu" => self.builtin_tensor_leaky_relu(args),
+            "tensor_leaky_relu" | "leaky_relu" => self.builtin_tensor_leaky_relu(args),
             // Loss functions
             "tensor_mse_loss" | "mse_loss" => self.builtin_tensor_loss(args, "mse"),
-            "tensor_cross_entropy" | "cross_entropy_loss" => {
+            "tensor_cross_entropy" | "cross_entropy_loss" | "cross_entropy" => {
                 self.builtin_tensor_loss(args, "cross_entropy")
             }
             "tensor_bce_loss" => self.builtin_tensor_loss(args, "bce"),
@@ -832,9 +833,9 @@ impl Interpreter {
                 ))))
             }
             "layer_conv2d" | "Conv2d" => {
-                if args.len() != 5 {
+                if args.len() < 3 || args.len() > 5 {
                     return Err(RuntimeError::ArityMismatch {
-                        expected: 5,
+                        expected: 3, // minimum: in_channels, out_channels, kernel_size
                         got: args.len(),
                     }
                     .into());
@@ -850,8 +851,16 @@ impl Interpreter {
                 let in_ch = extract_usize(0, "in_channels")?;
                 let out_ch = extract_usize(1, "out_channels")?;
                 let kernel = extract_usize(2, "kernel_size")?;
-                let stride = extract_usize(3, "stride")?;
-                let padding = extract_usize(4, "padding")?;
+                let stride = if args.len() > 3 {
+                    extract_usize(3, "stride")?
+                } else {
+                    1
+                };
+                let padding = if args.len() > 4 {
+                    extract_usize(4, "padding")?
+                } else {
+                    0
+                };
                 Ok(Value::Layer(Box::new(LayerValue::Conv2d(
                     crate::runtime::ml::layers::Conv2d::new(in_ch, out_ch, kernel, stride, padding),
                 ))))
@@ -929,7 +938,7 @@ impl Interpreter {
                 }
             }
             // Metrics builtins
-            "metric_accuracy" => {
+            "metric_accuracy" | "accuracy" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1799,7 +1808,23 @@ impl Interpreter {
                 if let Some(effect_op) = name.strip_prefix("__effect__") {
                     if let Some((effect_name, op_name)) = effect_op.split_once("::") {
                         if self.effect_handler_depth > 0 {
-                            // Inside a handle block — raise the effect for handler dispatch.
+                            // V15: Check replay stack — walk from innermost to outermost
+                            // handle, looking for a cached resume value that matches
+                            // this effect's identity. This correctly handles nested
+                            // handle expressions where different handles catch different
+                            // effects.
+                            for level in (0..self.effect_replay_stack.len()).rev() {
+                                let (ref cache, ref mut idx) = self.effect_replay_stack[level];
+                                if *idx < cache.len() {
+                                    let (ref eff, ref op, ref val) = cache[*idx];
+                                    if eff == effect_name && op == op_name {
+                                        let v = val.clone();
+                                        self.effect_replay_stack[level].1 += 1;
+                                        return Ok(v);
+                                    }
+                                }
+                            }
+                            // Not cached at any level — raise the effect.
                             return Err(ControlFlow::EffectPerformed {
                                 effect: effect_name.to_string(),
                                 op: op_name.to_string(),
@@ -1823,12 +1848,7 @@ impl Interpreter {
     /// When an effect operation is called outside any `handle` block,
     /// built-in effects get default behavior (e.g., IO prints to stdout).
     /// User-defined effects without a handler return Null.
-    fn default_effect_handler(
-        &mut self,
-        effect: &str,
-        op: &str,
-        args: Vec<Value>,
-    ) -> EvalResult {
+    fn default_effect_handler(&mut self, effect: &str, op: &str, args: Vec<Value>) -> EvalResult {
         match (effect, op) {
             ("IO", "print") => {
                 let text = args.first().map(|v| v.to_string()).unwrap_or_default();
@@ -3876,6 +3896,44 @@ impl Interpreter {
                 RuntimeError::TypeError("tensor_unsqueeze: expected (tensor, int)".into()).into(),
             ),
         }
+    }
+
+    /// V15 B2.7: `concat(t1, t2, axis)` — concatenate tensors along axis.
+    fn builtin_tensor_concat(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let axis = match &args[2] {
+            Value::Int(a) => *a as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("concat: third arg must be axis (int)".into()).into(),
+                );
+            }
+        };
+        let t1 = match &args[0] {
+            Value::Tensor(t) => t,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("concat: first arg must be a tensor".into()).into(),
+                );
+            }
+        };
+        let t2 = match &args[1] {
+            Value::Tensor(t) => t,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("concat: second arg must be a tensor".into()).into(),
+                );
+            }
+        };
+        tensor_ops::concat(&[t1.clone(), t2.clone()], axis)
+            .map(Value::Tensor)
+            .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
     }
 
     /// `tensor_arange(start, end, step)` — range tensor.

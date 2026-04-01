@@ -471,10 +471,18 @@ impl Parser {
             });
         }
 
-        // Contextual keyword: `resume(value)`
+        // Contextual keyword: `resume(value)` or `resume()` (no-arg alias for resume(null)).
         if name == "resume" && self.at(&TokenKind::LParen) {
             self.advance(); // eat `(`
-            let value = self.parse_expr(0)?;
+            let value = if self.at(&TokenKind::RParen) {
+                // resume() — no argument, equivalent to resume(null).
+                Expr::Literal {
+                    kind: crate::parser::ast::LiteralKind::Null,
+                    span: Span::new(self.peek().span.start, self.peek().span.start),
+                }
+            } else {
+                self.parse_expr(0)?
+            };
             let end = self.peek().span.end;
             self.expect(&TokenKind::RParen)?;
             return Ok(Expr::ResumeExpr {
