@@ -686,6 +686,7 @@ impl Parser {
             TokenKind::AtKernel
             | TokenKind::AtDevice
             | TokenKind::AtNpu
+            | TokenKind::AtGpu
             | TokenKind::AtSafe
             | TokenKind::AtUnsafe
             | TokenKind::AtFfi
@@ -726,6 +727,7 @@ impl Parser {
                         ("device", cap_param)
                     }
                     TokenKind::AtNpu => ("npu", None),
+                    TokenKind::AtGpu => ("gpu", None),
                     TokenKind::AtSafe => ("safe", None),
                     TokenKind::AtUnsafe => ("unsafe", None),
                     TokenKind::AtFfi => ("ffi", None),

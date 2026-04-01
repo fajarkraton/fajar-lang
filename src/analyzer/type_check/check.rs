@@ -168,6 +168,7 @@ impl TypeChecker {
                 crate::analyzer::scope::ScopeKind::Device
             }
             Some(ann) if ann.name == "npu" => crate::analyzer::scope::ScopeKind::Npu,
+            Some(ann) if ann.name == "gpu" => crate::analyzer::scope::ScopeKind::Gpu,
             Some(ann) if ann.name == "unsafe" => crate::analyzer::scope::ScopeKind::Unsafe,
             Some(ann) if ann.name == "safe" => crate::analyzer::scope::ScopeKind::Safe,
             _ if fndef.is_async => crate::analyzer::scope::ScopeKind::AsyncFn,
@@ -1239,6 +1240,14 @@ impl TypeChecker {
                 // String concatenation with +
                 if op == BinOp::Add && lt == Type::Str && rt == Type::Str {
                     return Type::Str;
+                }
+                // V16: Array concatenation with +
+                if op == BinOp::Add {
+                    if let (Type::Array(a), Type::Array(b)) = (&lt, &rt) {
+                        if a == b || **a == Type::Unknown || **b == Type::Unknown {
+                            return lt;
+                        }
+                    }
                 }
                 // Tensor elementwise ops: shape check when both have known dims
                 if lt.is_tensor() && rt.is_tensor() {

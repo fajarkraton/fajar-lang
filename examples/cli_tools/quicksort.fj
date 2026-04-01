@@ -1,30 +1,35 @@
-// V15 I3.7: Sorting Implementation (Bubble Sort)
+// V16: Quicksort Implementation
+// Now works with array + operator for concatenation.
 
-let mut arr = [5, 3, 8, 1, 2, 9, 4, 7, 6]
-println(f"Input:  {arr}")
-
-// Bubble sort using for-in range
-let n: i64 = 9
-let mut pass: i64 = 0
-while pass < n {
-    let mut i: i64 = 0
-    let limit: i64 = n - pass - 1
-    while i < limit {
-        if arr[i] > arr[i + 1] {
-            let tmp = arr[i]
-            arr[i] = arr[i + 1]
-            arr[i + 1] = tmp
-        }
-        i = i + 1
+fn quicksort(arr: [i64]) -> [i64] {
+    if len(arr) <= 1 {
+        return arr
     }
-    pass = pass + 1
+
+    let pivot = arr[0]
+    let mut less = []
+    let mut equal = []
+    let mut greater = []
+
+    for val in arr {
+        if val < pivot {
+            less = less + [val]
+        } else if val == pivot {
+            equal = equal + [val]
+        } else {
+            greater = greater + [val]
+        }
+    }
+
+    quicksort(less) + equal + quicksort(greater)
 }
 
-println(f"Sorted: {arr}")
+let unsorted = [5, 3, 8, 1, 2, 9, 4, 7, 6]
+let sorted = quicksort(unsorted)
+println(f"Input:  {unsorted}")
+println(f"Sorted: {sorted}")
 
-// Verify
-assert_eq(arr[0], 1)
-assert_eq(arr[1], 2)
-assert_eq(arr[2], 3)
-assert_eq(arr[8], 9)
-println("Sort verification passed")
+assert_eq(sorted[0], 1)
+assert_eq(sorted[4], 5)
+assert_eq(sorted[8], 9)
+println("Quicksort verification passed")

@@ -254,6 +254,8 @@ pub enum TokenKind {
     AtDevice,
     /// `@npu`
     AtNpu,
+    /// V16: `@gpu` — GPU compute context (SPIR-V/PTX codegen).
+    AtGpu,
     /// `@safe`
     AtSafe,
     /// `@unsafe`
@@ -538,6 +540,7 @@ impl fmt::Display for TokenKind {
             TokenKind::AtKernel => write!(f, "@kernel"),
             TokenKind::AtDevice => write!(f, "@device"),
             TokenKind::AtNpu => write!(f, "@npu"),
+            TokenKind::AtGpu => write!(f, "@gpu"),
             TokenKind::AtSafe => write!(f, "@safe"),
             TokenKind::AtUnsafe => write!(f, "@unsafe"),
             TokenKind::AtFfi => write!(f, "@ffi"),
@@ -732,6 +735,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("kernel", TokenKind::AtKernel);
     m.insert("device", TokenKind::AtDevice);
     m.insert("npu", TokenKind::AtNpu);
+    m.insert("gpu", TokenKind::AtGpu);
     m.insert("safe", TokenKind::AtSafe);
     m.insert("unsafe", TokenKind::AtUnsafe);
     m.insert("ffi", TokenKind::AtFfi);

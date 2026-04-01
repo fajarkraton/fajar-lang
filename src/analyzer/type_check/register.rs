@@ -1092,6 +1092,12 @@ impl TypeChecker {
             ("read_file", vec![Type::Str], Type::Unknown),
             ("write_file", vec![Type::Str, Type::Str], Type::Unknown),
             ("append_file", vec![Type::Str, Type::Str], Type::Unknown),
+            ("read_binary", vec![Type::Str], Type::Unknown),
+            (
+                "write_binary",
+                vec![Type::Str, Type::Unknown],
+                Type::Unknown,
+            ),
             ("file_exists", vec![Type::Str], Type::Bool),
         ];
         for (name, params, ret) in io_fns {

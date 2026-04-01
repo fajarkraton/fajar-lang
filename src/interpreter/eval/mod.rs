@@ -1015,6 +1015,8 @@ impl Interpreter {
             "read_file",
             "write_file",
             "append_file",
+            "read_binary",
+            "write_binary",
             "file_exists",
             // Collections
             "map_new",
@@ -2149,6 +2151,12 @@ impl Interpreter {
             },
             (Value::Int(offset), Value::Pointer(addr)) if op == BinOp::Add => {
                 Ok(Value::Pointer(addr.wrapping_add(*offset as u64)))
+            }
+            // V16: Array concatenation with +
+            (Value::Array(a), Value::Array(b)) if op == BinOp::Add => {
+                let mut result = a.clone();
+                result.extend(b.iter().cloned());
+                Ok(Value::Array(result))
             }
             (Value::Bool(_), Value::Bool(_)) => self.eval_comparison(&lv, op, &rv),
             _ => self.eval_comparison(&lv, op, &rv),

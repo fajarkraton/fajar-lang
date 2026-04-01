@@ -28,6 +28,8 @@ pub enum ScopeKind {
     Device,
     /// `@npu` annotated function scope.
     Npu,
+    /// V16: `@gpu` annotated function scope — GPU compute (SPIR-V/PTX).
+    Gpu,
     /// `@unsafe` annotated block/function scope.
     Unsafe,
     /// `@safe` annotated function scope (explicit user-space safety).

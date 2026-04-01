@@ -1091,6 +1091,70 @@ impl Interpreter {
                     .into()),
                 }
             }
+            // V16: Binary file I/O — read/write raw bytes as [i64] arrays
+            "read_binary" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match &args[0] {
+                    Value::Str(path) => match std::fs::read(path) {
+                        Ok(bytes) => {
+                            let arr: Vec<Value> =
+                                bytes.iter().map(|b| Value::Int(*b as i64)).collect();
+                            Ok(Value::Enum {
+                                variant: "Ok".into(),
+                                data: Some(Box::new(Value::Array(arr))),
+                            })
+                        }
+                        Err(e) => Ok(Value::Enum {
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str(e.to_string()))),
+                        }),
+                    },
+                    _ => Err(RuntimeError::TypeError(
+                        "read_binary(path: str) -> Result<[i64], str>".into(),
+                    )
+                    .into()),
+                }
+            }
+            "write_binary" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Str(path), Value::Array(bytes)) => {
+                        let data: Vec<u8> = bytes
+                            .iter()
+                            .map(|v| match v {
+                                Value::Int(n) => *n as u8,
+                                _ => 0,
+                            })
+                            .collect();
+                        match std::fs::write(path, &data) {
+                            Ok(()) => Ok(Value::Enum {
+                                variant: "Ok".into(),
+                                data: Some(Box::new(Value::Null)),
+                            }),
+                            Err(e) => Ok(Value::Enum {
+                                variant: "Err".into(),
+                                data: Some(Box::new(Value::Str(e.to_string()))),
+                            }),
+                        }
+                    }
+                    _ => Err(RuntimeError::TypeError(
+                        "write_binary(path: str, bytes: [i64])".into(),
+                    )
+                    .into()),
+                }
+            }
             "file_exists" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {

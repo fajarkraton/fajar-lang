@@ -2546,6 +2546,7 @@ fn keyword_info(word: &str) -> Option<String> {
         "@safe" => "**@safe** — Safe context (default): no hardware, no raw pointer",
         "@unsafe" => "**@unsafe** — Unsafe context: full access to all features",
         "@ffi" => "**@ffi** — Foreign function interface annotation",
+        "@gpu" => "**@gpu** — GPU compute context: SPIR-V/PTX codegen for parallel compute kernels",
         // V15 B3.6: Effect system keywords
         "effect" => {
             "**effect** — Declare an algebraic effect\n```fajar\neffect Logger { fn log(msg: str) -> void }\n```"
