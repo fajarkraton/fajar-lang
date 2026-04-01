@@ -5,9 +5,9 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v11.0.0](https://img.shields.io/badge/release-v11.0.0_Beyond-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v11.0.0)
-[![Tests](https://img.shields.io/badge/tests-7%2C402_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![LOC](https://img.shields.io/badge/LOC-398K_Rust-informational)]()
+[![Release v12.0.0](https://img.shields.io/badge/release-v12.0.0_Infinity-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v12.0.0)
+[![Tests](https://img.shields.io/badge/tests-8%2C074_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![LOC](https://img.shields.io/badge/LOC-400K_Rust-informational)]()
 [![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -511,9 +511,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | ~350,000 Rust across 350+ files |
-| Tests | 5,955+ (0 failures, 0 clippy warnings, incl. 153 LLVM backend tests) |
-| Examples | 178 `.fj` programs (175 pass `fj check`) |
+| Compiler LOC | ~400,000 Rust across 420+ files |
+| Tests | 8,074 (0 failures, 0 clippy warnings) |
+| Examples | 216 `.fj` programs |
 | Error codes | 80+ across 10 categories |
 | Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
 | Built-in macros | 14 (`vec!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `dbg!`, `todo!`, `env!`, `stringify!`, `concat!`, `assert!`, `include_str!`, `line!`) |
@@ -524,9 +524,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | Networking | WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), HTTP/HTTPS |
 | Async runtime | Real tokio I/O (sleep, http_get/post, spawn, join, select) |
 | Generators | `yield` keyword, `gen fn`, `GeneratorIter`, `AsyncStream`, `Coroutine` |
-| LSP features | 18 (type-driven completion, scope-aware rename, incremental analysis, cross-file, 11 code actions) |
+| LSP features | 22 (semantic tokens, inlay hints, type-driven completion, scope-aware rename, workspace symbols, 11 code actions) |
 | Macro system | Token trees, pattern matching (`$x:expr`), repetition (`$()*`), expansion, derive (7 traits) |
-| WASI | 8 Preview 1 syscalls, component model (WIT), `wasi:cli/command` + `wasi:http/proxy` worlds |
+| WASI | P1 (8 syscalls) + P2 (WIT parser, component model, filesystem, streams, HTTP, sockets) |
 | GUI | winit + softbuffer, bitmap font, button interaction, flex layout |
 | HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
 | Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |
@@ -534,7 +534,12 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls |
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
-| Production status | **100% production-ready** (V12 "Transcendence" — all 6 options verified) |
+| FFI v2 | C++ templates/STL/smart-ptr, Python async/NumPy, Rust traits, `fj bindgen` |
+| Verification | SMT symbolic execution, @kernel/@device proofs, DO-178C/ISO-26262 certification |
+| Effects | Algebraic effects + handlers, effect inference, effect polymorphism |
+| Dependent types | Pi types, Sigma types, refinement types, dependent array bounds |
+| GPU codegen | SPIR-V (Vulkan), PTX (CUDA), kernel fusion, auto-dispatch |
+| Production status | **100% production-ready** (V14 "Infinity" — all 500 tasks verified) |
 
 ---
 
@@ -542,7 +547,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| **v10.0.0** | **Transcendence** | **V12: LLVM O2/O3+LTO+PGO, macro system (token trees + expansion), generators (yield/gen fn/streams), WASI P1/P2, package ecosystem (git/path deps, workspaces, fj update/tree/audit), LSP excellence (type-driven completion, scope-aware rename, incremental analysis, 11 code actions)** |
+| **v12.0.0** | **Infinity** | **V14: Algebraic effects + handlers, dependent types (Pi/Sigma/refinement), GPU compute shaders (SPIR-V/PTX/fusion), LSP v4 (semantic tokens, inlay hints, completions), package registry (Sigstore signing, SBOM, audit). 8,074 tests, all CLI-integrated.** |
+| **v11.0.0** | **Beyond** | **V13: Const generics, incremental compilation, WASI P2 component model, FFI v2 (C++/Python/Rust), SMT verification (DO-178C), distributed runtime (Raft), self-hosting compiler** |
+| **v10.0.0** | **Transcendence** | **V12: LLVM O2/O3+LTO+PGO, macro system, generators (yield/gen fn/streams), WASI P1, package ecosystem, LSP excellence** |
 | [v9.0.1](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.1) | Ascension | 100% production: real BLE connect/read/write, async_spawn/join/select, HTTPS server (native-tls), 7,468 tests |
 | [v9.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v9.0.0) | Ascension | V10 features: async/await real tokio I/O, HTTP server framework, regex stdlib, LSP enhanced, 4 real-world examples |
 | [v8.0.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v8.0.0) | Dominion | All gaps closed: real WebSocket (tungstenite+TLS), MQTT (rumqttc), BLE (btleplug), GUI text+interaction, compiler wiring |
@@ -587,7 +594,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full gu
 # Build
 cargo build
 
-# Test (6,286 tests)
+# Test (8,074 tests)
 cargo test --features native
 
 # Lint
