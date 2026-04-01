@@ -7,13 +7,26 @@
 
 ---
 
-## Pre-Sprint: Quick Wins (COMPLETE)
+## Completed Features (v12.2.0)
 
 | # | Task | Status | Detail | Verify |
 |---|------|--------|--------|--------|
-| Q1 | Array concat with `+` | [x] | Analyzer: added Array + Array case in check.rs. Interpreter: added Array + Array in eval_binary | `[1,2] + [3,4]` = `[1,2,3,4]` ✅ |
-| Q2 | Binary file I/O | [x] | `read_binary(path)` → Result<[i64], str>. `write_binary(path, bytes)` → Result | Round-trip verified ✅ |
-| Q3 | @gpu annotation | [x] | Lexer: AtGpu token. Parser: recognized in annotations. Analyzer: ScopeKind::Gpu. LSP: keyword info | `@gpu fn compute()` parses + runs ✅ |
+| Q1 | Array concat `+` | [x] | Analyzer + interpreter: `[1,2] + [3,4]` = `[1,2,3,4]` | ✅ |
+| Q2 | Binary file I/O | [x] | `read_binary(path)` / `write_binary(path, bytes)` | ✅ |
+| Q3 | `@gpu` annotation | [x] | Lexer → Parser → Analyzer → LSP full pipeline | ✅ |
+| G1.1 | `@gpu` context rules | [x] | Blocks file I/O, raw ptrs, heap. Allows math + tensors | ✅ |
+| L1.1 | `arr.pop()` | [x] | Remove and return last element | ✅ |
+| L1.2 | `arr.insert(idx, val)` | [x] | Insert element at index | ✅ |
+| L1.3 | `arr.remove(idx)` | [x] | Remove element at index | ✅ |
+| L1.4 | `arr.index_of(val)` | [x] | Find first occurrence, -1 if not found | ✅ |
+| L1.5 | `str.to_upper()` / `to_lower()` | [x] | Shorthand aliases for to_uppercase/to_lowercase | ✅ |
+| L1.6 | `len()` returns `i64` | [x] | Fixed usize/i64 friction — #1 pain point | ✅ |
+| L2.1 | `if let` expression | [x] | Desugars to match, works as expression | ✅ |
+| L2.2 | `while let` expression | [x] | Desugars to loop+match, auto-break on mismatch | ✅ |
+| I3.2 | JSON pretty-printer | [x] | `json_fmt.fj` — char-level formatting with indent | ✅ |
+| I3.3 | CSV to JSON converter | [x] | `csv2json.fj` — headers → object keys | ✅ |
+| I3.5 | Expression calculator | [x] | `calc.fj` — two-pass eval with precedence | ✅ |
+| R1.1 | MNIST IDX binary loader | [x] | `mnist_real.fj` — parses IDX format headers | ✅ |
 
 ---
 
