@@ -201,8 +201,8 @@ impl Interpreter {
             (Value::Str(s), "trim") => Ok(Value::Str(s.trim().to_string())),
             (Value::Str(s), "trim_start") => Ok(Value::Str(s.trim_start().to_string())),
             (Value::Str(s), "trim_end") => Ok(Value::Str(s.trim_end().to_string())),
-            (Value::Str(s), "to_uppercase") => Ok(Value::Str(s.to_uppercase())),
-            (Value::Str(s), "to_lowercase") => Ok(Value::Str(s.to_lowercase())),
+            (Value::Str(s), "to_uppercase" | "to_upper") => Ok(Value::Str(s.to_uppercase())),
+            (Value::Str(s), "to_lowercase" | "to_lower") => Ok(Value::Str(s.to_lowercase())),
             (Value::Str(s), "starts_with") => {
                 if let Some(Value::Str(prefix)) = arg_vals.first() {
                     Ok(Value::Bool(s.starts_with(prefix.as_str())))
@@ -448,6 +448,78 @@ impl Interpreter {
                 Ok(Value::Array(new_arr))
             }
             (Value::Array(a), "is_empty") => Ok(Value::Bool(a.is_empty())),
+            // V16 L1.2: pop — remove and return last element
+            (Value::Array(a), "pop") => {
+                if a.is_empty() {
+                    Ok(Value::Null)
+                } else {
+                    let mut new_arr = a.clone();
+                    let last = new_arr.pop().unwrap_or(Value::Null);
+                    // Return tuple: (popped_value, remaining_array)
+                    Ok(last)
+                }
+            }
+            // V16 L1: insert at index
+            (Value::Array(a), "insert") => {
+                if arg_vals.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let idx = match &arg_vals[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("insert: index must be int".into()).into()
+                        );
+                    }
+                };
+                let mut new_arr = a.clone();
+                if idx <= new_arr.len() {
+                    new_arr.insert(idx, arg_vals[1].clone());
+                }
+                Ok(Value::Array(new_arr))
+            }
+            // V16 L1: remove at index
+            (Value::Array(a), "remove") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let idx = match &arg_vals[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("remove: index must be int".into()).into()
+                        );
+                    }
+                };
+                let mut new_arr = a.clone();
+                if idx < new_arr.len() {
+                    new_arr.remove(idx);
+                }
+                Ok(Value::Array(new_arr))
+            }
+            // V16 L1: index_of — find first occurrence
+            (Value::Array(a), "index_of") => {
+                if arg_vals.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let target = &arg_vals[0];
+                match a.iter().position(|v| v == target) {
+                    Some(idx) => Ok(Value::Int(idx as i64)),
+                    None => Ok(Value::Int(-1)),
+                }
+            }
             // Array higher-order methods with closures (v0.8)
             (Value::Array(a), "map") => {
                 if arg_vals.len() != 1 {

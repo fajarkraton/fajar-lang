@@ -1,0 +1,34 @@
+// V16 L2.9: if-let expression tests
+
+// Basic if-let with Some
+let opt = Some(42)
+if let Some(x) = opt {
+    assert_eq(x, 42)
+} else {
+    panic("should not reach")
+}
+
+// if-let with None → else branch
+let empty = None
+if let Some(x) = empty {
+    panic("should not reach")
+} else {
+    println("None handled correctly")
+}
+
+// if-let as expression
+let opt2 = Some("hello")
+let msg = if let Some(s) = opt2 {
+    f"Found: {s}"
+} else {
+    "empty"
+}
+assert_eq(msg, "Found: hello")
+
+// if-let with Result
+let result = Ok(100)
+if let Ok(val) = result {
+    assert_eq(val, 100)
+}
+
+println("PASS: if-let patterns")

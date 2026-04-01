@@ -779,6 +779,54 @@ impl Parser {
         let start = self.peek().span.start;
         self.expect(&TokenKind::If)?;
 
+        // V16 L2.9: `if let Pattern = expr { then } else { else }`
+        // Desugars to: match expr { Pattern => then, _ => else }
+        if self.at(&TokenKind::Let) {
+            self.advance(); // eat `let`
+            let pattern = self.parse_pattern()?;
+            self.expect(&TokenKind::Eq)?;
+            let subject = Box::new(self.parse_expr(0)?);
+            let then_branch = Box::new(self.parse_block_expr()?);
+
+            let else_branch = if self.eat(&TokenKind::Else) {
+                Some(Box::new(self.parse_block_expr()?))
+            } else {
+                None
+            };
+
+            let end = else_branch
+                .as_ref()
+                .map_or(then_branch.span().end, |e| e.span().end);
+
+            // Build match arms: Pattern => then, _ => else
+            let mut arms = vec![crate::parser::ast::MatchArm {
+                pattern,
+                guard: None,
+                body: then_branch,
+                span: Span::new(start, end),
+            }];
+            let else_body = else_branch.unwrap_or_else(|| {
+                Box::new(Expr::Literal {
+                    kind: crate::parser::ast::LiteralKind::Null,
+                    span: Span::new(end, end),
+                })
+            });
+            arms.push(crate::parser::ast::MatchArm {
+                pattern: crate::parser::ast::Pattern::Wildcard {
+                    span: Span::new(end, end),
+                },
+                guard: None,
+                body: else_body,
+                span: Span::new(end, end),
+            });
+
+            return Ok(Expr::Match {
+                subject,
+                arms,
+                span: Span::new(start, end),
+            });
+        }
+
         let condition = Box::new(self.parse_expr(0)?);
         let then_branch = Box::new(self.parse_block_expr()?);
 
