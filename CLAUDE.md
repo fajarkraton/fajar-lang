@@ -95,192 +95,34 @@ Every Claude Code session MUST follow this order:
 
 ## 3. Current Status
 
-### v1.0 — COMPLETE
+### Core Compiler (v1.0-v0.5): ALL COMPLETE
+- v1.0: 506 tasks (lexer, parser, analyzer, Cranelift, ML runtime) ✅
+- v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
+- v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
+
+### Current Totals (v12.5.0, 2026-04-02)
 
 ```
-Month 1: FOUNDATION    — Analyzer + Cranelift JIT/AOT               ✅ COMPLETE
-Month 2: TYPE SYSTEM   — Generics + Traits + FFI (C interop)        ✅ COMPLETE
-Month 3: SAFETY        — Move semantics + NLL borrow checker        ✅ COMPLETE
-Month 4: ML RUNTIME    — Autograd + Conv2d/Attention + INT8 quant   ✅ COMPLETE
-Month 5: EMBEDDED      — ARM64/RISC-V cross-compile + no_std + HAL  ✅ COMPLETE
-Month 6: PRODUCTION    — Docs + package ecosystem + release          ✅ COMPLETE
-
-Tasks:     506 complete | 49 deferred to v0.2 | 0 remaining
-Tests:     1,430 default + 133 native codegen = 1,563 total (v1.0 baseline)
-LOC:       ~45,000 lines of Rust (v1.0 baseline)
-Examples:  15 .fj programs | Benchmarks: 12 criterion
-Sprints:   24/26 complete (S11 tensor shapes + S23 self-hosting → v0.2)
-Note:      Current totals higher — see v0.3/v0.4 status below
+Tests:     8,475 (0 failures, 0 clippy warnings)
+LOC:       ~486,000 lines of Rust (442 files)
+Examples:  216+ .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
+CI:        6 GitHub Actions workflows (check, features, fuzz, audit, benchmarks, coverage, nightly)
+Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
 ```
 
-### Sprint Progress (All 26)
+### V14 Status (494/500 [x] — 99%)
+- Options 1-2 (Release + Hardening): **100/100 ✅**
+- Effects: **40/40 ✅** (composition, row var, `fj run --effect-stats`)
+- Dependent Types: **40/40 ✅** (refinement `{ x: i32 | x > 0 }`, Pi, Sigma in parser)
+- GPU: **40/40 ✅** (AST-driven SPIR-V/PTX/Metal/HLSL, `@gpu(workgroup=N)`)
+- LSP: **40/40 ✅** (predictive completions, code_lens_resolve, inline_value)
+- Package Registry: **40/40 ✅** (async tokio, HMAC-SHA256, rate limiting, search ranking)
+- FajarOS Nova: 97/100 [x] (138 real tests — 3 [f] need QEMU/hardware)
+- Validation: 97/100 [x] (97 real tests — 3 [f] need external C FFI)
 
-| Month | Sprints | Status |
-|-------|---------|--------|
-| 1 — Foundation | S1: Pipeline, CI/CD, modules; S2: Cranelift JIT; S3: control flow; S4: strings, arrays, CLI | ✅ |
-| 2 — Type System | S5: generics/mono; S6: traits; S7: FFI/C interop; S8: type inference, enums | ✅ |
-| 3 — Safety | S9: move semantics; S10: borrow checker (NLL); S12: overflow/null/bounds; S13: safety audit | ✅ |
-| 4 — ML Runtime | S14: autograd/tape; S15: Conv2d/attention/embedding; S16: training/MNIST; S17: INT8 quantization | ✅ |
-| 5 — Embedded | S18: cross-compile ARM64/RISC-V; S19: no_std/bare-metal; S20: HAL traits; S21: drone pipeline; S22: testing | ✅ |
-| 6 — Production | S24: mdBook docs; S25: package ecosystem; S26: release workflows | ✅ |
-| Deferred | S11: tensor shape safety (needs dependent types); S23: self-hosting (needs codegen maturity) | → v0.2 |
-
-### v0.2 — COMPLETE
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| A | Codegen type system | ✅ COMPLETE |
-| B | Advanced types | ✅ COMPLETE |
-| E | Parity/correctness | ✅ COMPLETE |
-| F | Production polish | ✅ COMPLETE |
-| C | Self-hosting | ✅ Moved to v0.3, COMPLETE |
-| D | Dead code elim | ✅ Moved to v0.3, COMPLETE |
-
-### v0.3 "Dominion" — COMPLETE
-
-```
-Concurrency:   Threads, channels, mutexes, atomics, async/await     ✅ COMPLETE
-Low-level:     Inline asm, volatile I/O, allocators, bare metal     ✅ COMPLETE
-GPU:           CUDA + Vulkan backends, SIMD vector types             ✅ COMPLETE
-ML Native:     Tensor ops, autograd, training, MNIST 90%+, ONNX     ✅ COMPLETE
-Self-hosting:  Lexer + parser in .fj, bootstrap verified             ✅ COMPLETE
-Optimization:  Dead fn elim, LICM, CSE, inlining                    ✅ COMPLETE
-Tooling:       40-page mdBook, 7 packages, VS Code extension        ✅ COMPLETE
-
-Tasks:     739/739 complete | 0 deferred
-Sprints:   52/52 complete
-```
-
-### v0.4 "Sovereignty" — COMPLETE
-
-```
-Generic enums: Option<T>, Result<T,E> with typed payloads            ✅ COMPLETE
-RAII/Drop:     Scope-level cleanup, Drop trait, MutexGuard           ✅ COMPLETE
-Future/Poll:   Formal generic enum types, async return checking      ✅ COMPLETE
-Lazy async:    State machines, waker, round-robin executor           ✅ COMPLETE
-
-Tasks:     40/40 complete | 0 deferred
-Sprints:   6/6 complete
-```
-
-### v0.5 "Ascendancy" — COMPLETE
-
-```
-Test Framework:    @test/@should_panic/@ignore + fj test CLI          ✅ COMPLETE
-Doc Generation:    /// doc comments + fj doc HTML generation          ✅ COMPLETE
-Trait Objects:     dyn Trait, vtable dispatch, object safety          ✅ COMPLETE
-Iterators:         .iter()/.map()/.filter()/.collect() protocol       ✅ COMPLETE
-String Interp:     f"Hello {name}" with expression evaluation         ✅ COMPLETE
-Error Recovery:    Multi-error parser, suggestions, type hints        ✅ COMPLETE
-Developer Tools:   fj watch, fj bench, REPL multi-line, LSP rename   ✅ COMPLETE
-
-Tasks:     80/80 complete | 0 deferred
-Sprints:   8/8 complete
-```
-
-### Current Totals (Verified 2026-04-01)
-
-```
-Tests:     8,092 (0 failures, 0 clippy warnings)
-LOC:       ~400,000 lines of Rust (420+ files)
-  Production: ~252,000 (63%) — all modules production-ready
-  Support:    ~148,000 (37%) — tests, examples, docs, config
-Examples:  216 .fj programs
-Packages:  39 standard (math, nn, hal, http, json, crypto, mqtt, db, ...)
-Binary:    13 MB release build
-MSRV:      Rust 1.87
-CI:        3 GitHub Actions workflows (Linux/macOS/Windows, stable/nightly, cross)
-Release:   v12.1.0 "Delivery" (2026-04-01) — V15 complete, effect system fixed, ML runtime enhanced
-Production Status: ALL modules production-ready + CLI-integrated (V14 verified)
-
-Feature Flags:
-  websocket  — real tungstenite client (ws:// + wss:// TLS)
-  mqtt       — real rumqttc client + background thread
-  ble        — real btleplug scan/connect/read/write
-  gui        — real winit + softbuffer + bitmap font + button interaction
-  https      — real native-tls HTTPS server
-  native     — Cranelift JIT/AOT native codegen
-  llvm       — LLVM backend O0-O3 + LTO (thin/full) + PGO (generate/use)
-
-V10 Features (built into default):
-  async/await    — real tokio I/O (sleep, http_get, http_post, spawn, join, select)
-  regex          — regex crate with compiled cache (match, find, replace, captures)
-  http framework — router + middleware + handler dispatch + request/response JSON
-  lsp enhanced   — type-driven completion, scope-aware rename, incremental analysis, 18 features
-
-V12 Features (built into default):
-  llvm o2/o3     — target CPU, LTO, PGO, function attributes, bare-metal
-  macros         — format!, matches!, println!, assert_eq!, cfg!, token tree expansion
-  generators     — yield keyword, gen fn, GeneratorIter, AsyncStream, coroutines
-  wasi p1        — 8 WASI P1 syscalls wired into wasm compiler, component model
-  packages       — fj update/tree/audit, git/path deps, workspaces, feature flags
-  lsp v12        — 11 code actions, cross-file symbols, incremental caching, call hierarchy
-
-V13 Features (built into default):
-  const generics — const fn, const traits, compile-time allocation, reflection
-  incremental    — persistent disk cache, fine-grained deps, parallel compilation
-  wasi p2        — WIT parser, component model, filesystem, streams, HTTP, sockets
-  ffi v2         — C++ templates/STL/smart-ptr, Python async/NumPy, Rust traits, bindgen
-  smt verify     — symbolic execution, @kernel/@device proofs, certification (DO-178C)
-  distributed    — Raft consensus, service discovery, data-parallel ML, fault tolerance
-  self-hosting   — tree AST, Pratt parser, HM type inference, Stage 2 bootstrap
-
-V14 Features (built into default):
-  effects        — algebraic effects, handlers, effect inference, polymorphism
-  dep types      — Pi types, Sigma types, refinement types, dependent arrays
-  gpu shaders    — SPIR-V/PTX codegen, kernel fusion, device memory, auto-dispatch
-  lsp v4         — semantic tokens, inlay hints, completion, workspace symbols
-  pkg registry   — publish/search/resolve, signing (Sigstore), SBOM, audit
-
-V15 Features (built into default):
-  effects v2     — multi-step continuations (replay-with-cache), resume() no-arg, nested handles
-  effect checks  — return type checking (SE004), arity checking (SE005) in handlers
-  ml shorthands  — tanh, leaky_relu, concat, cross_entropy, accuracy builtin aliases
-  layer methods  — Dense.forward(input), Conv2d.forward(input) method dispatch
-  bindgen fix    — typedef struct { ... } Name; parsed correctly
-  cli enhance    — fj run --check-only, fj verify --strict, fj registry-init
-  lsp effects    — effect/handle/with/resume keyword completion + semantic tokens
-```
-
-### FajarOS v3.0 "Surya" — OS written 100% in Fajar Lang (ARM64)
-
-```
-Features:  MMU, EL0 user space, 10 syscalls, IPC, preemptive scheduler, 65+ shell commands
-Hardware:  Verified on Radxa Dragon Q6A (QCS6490) — JIT, GPIO, QNN CPU+GPU inference
-Repo:      github.com/fajarkraton/fajar-os
-```
-
-### FajarOS Nova v1.4.0 "Zenith" — x86_64 bare-metal OS (100% Fajar Lang)
-
-```
-Kernel:    examples/fajaros_nova_kernel.fj — 21,396 lines, 835 @kernel fns, 0 errors
-Commands:  240+ shell commands
-Scheduler: Preemptive multitasking (timer-driven context switch, round-robin)
-Memory:    Copy-on-Write fork (CoW page tables, refcounting, page fault handler)
-RING 3:    5 user programs (hello/goodbye/fajar/counter/fibonacci)
-SYSCALL:   34 syscalls via table dispatch (EXIT through GPU_DISPATCH)
-Storage:   NVMe + FAT32 + ext2 + USB + ramdisk + journaling (WAL + fsck)
-VFS:       / (ramfs), /dev, /proc, /mnt + hierarchical dirs + symlinks + hardlinks
-Network:   TCP state machine (RFC 793) + UDP + HTTP server + socket API + echo server
-GPU:       VirtIO-GPU driver (framebuffer 320×200) + compute dispatch (matmul, vecadd)
-Users:     Multi-user (16 accounts), login/logout, passwd, chmod/chown, rwxrwxrwx
-Services:  Init system (16 services), runlevels, syslogd, crond, auto-restart
-Packages:  pkg install/remove/list/search/update/upgrade (5 std packages)
-SMP:       AP trampoline, INIT-SIPI-SIPI, per-CPU
-ELF:       ELF64 parser, PT_LOAD loader, exec from FAT32/ramfs with argv
-Process:   fork(CoW)/exec/waitpid, signals, job control, session timeout
-Pipes:     Circular 4KB buffer, refcounting, EOF, shell | operator
-Shell:     Pipes, > >> < redirect, $VAR, scripts, if/for/while, test -f/-d
-Debug:     GDB remote stub (RSP, breakpoints, watchpoints, thread query, memory map)
-Modular:   fajaros-x86 repo — 112 .fj files, concatenation build
-Test:      QEMU + KVM verified (boot, NVMe, USB, virtio-net, SMP, Ring 3)
-Target:    Intel Core i9-14900HX (Lenovo Legion Pro)
-Compiler:  x86_64-user target for Ring 3 ELF compilation
-```
-
-> **Task lists:** `docs/V05_PLAN.md` (v0.5), `docs/V03_TASKS.md` (v0.3), `docs/V04_PLAN.md` (v0.4), `docs/V1_TASKS.md` (v1.0)
-> **Implementation plans:** `docs/V03_IMPLEMENTATION_PLAN.md`, `docs/V1_IMPLEMENTATION_PLAN.md`
-> **OS plans:** `docs/V30_PLAN.md`, `docs/COMPILER_ENHANCEMENT_PLAN.md`, `docs/NEXT_STEPS_PLAN.md`
+### FajarOS (two platforms)
+- **FajarOS v3.0 "Surya"** (ARM64): MMU, EL0, IPC, 65+ commands. Verified on Radxa Dragon Q6A.
+- **FajarOS Nova v1.4.0 "Zenith"** (x86_64): 21K lines, 240+ commands, CoW fork, TCP/IP, GPU, SMP, GDB stub. QEMU verified.
 
 ---
 
@@ -400,29 +242,8 @@ Literals:     true false null
 Annotations:  @kernel @device @safe @unsafe @ffi
 ```
 
-### 5.2 Operator Precedence (lowest -> highest, 19 levels)
-
-| Level | Name | Operators | Assoc |
-|-------|------|-----------|-------|
-| 1 | Assignment | `= += -= *= /= %= &= \|= ^= <<= >>=` | Right |
-| 2 | Pipeline | `\|>` | Left |
-| 3 | Logical OR | `\|\|` | Left |
-| 4 | Logical AND | `&&` | Left |
-| 5 | Bitwise OR | `\|` | Left |
-| 6 | Bitwise XOR | `^` | Left |
-| 7 | Bitwise AND | `&` | Left |
-| 8 | Equality | `== !=` | Left |
-| 9 | Comparison | `< > <= >=` | Left |
-| 10 | Range | `.. ..=` | None |
-| 11 | Bit Shift | `<< >>` | Left |
-| 12 | Addition | `+ -` | Left |
-| 13 | Multiply | `* / % @` | Left |
-| 14 | Power | `**` | Right |
-| 15 | Type Cast | `as` | Left |
-| 16 | Unary | `! - ~ & &mut` | Right |
-| 17 | Try | `?` | Postfix |
-| 18 | Postfix | `. () [] .method()` | Left |
-| 19 | Primary | Literals, idents | - |
+### 5.2 Operator Precedence
+19 levels (lowest→highest): Assignment → Pipeline(`|>`) → Logic(`||`,`&&`) → Bitwise → Equality → Comparison → Range → Shift → Add → Mul → Power(`**`) → Cast(`as`) → Unary → Try(`?`) → Postfix(`.`,`()`,`[]`) → Primary. Full table: `docs/GRAMMAR_REFERENCE.md`.
 
 ### 5.3 Context Annotations (Unique Feature)
 
@@ -609,19 +430,7 @@ Key errors:
 
 ## 9. Testing Strategy
 
-### 9.1 Current Test Suite (2,650 tests)
-
-| Category | Location | Count | Description |
-|----------|----------|-------|-------------|
-| Unit + Native | `#[cfg(test)] mod tests` | 2,267 | Per-function tests (incl ~700 native codegen with `--features native`) |
-| Integration | `tests/eval_tests.rs` | 181 | Full pipeline (lex -> parse -> analyze -> eval) |
-| ML | `tests/ml_tests.rs` | 39 | Tensor ops, autograd, optimizers, layers |
-| OS | `tests/os_tests.rs` | 16 | Memory, IRQ, syscall, port I/O |
-| Autograd | `tests/autograd_tests.rs` | 13 | Numerical gradient checks |
-| Property | `tests/property_tests.rs` | 33 | proptest invariants |
-| Safety | `tests/safety_tests.rs` | 76 | Move, borrow, overflow, bounds, type errors |
-| Cross | `tests/cross_compile_tests.rs` | 9 | ARM64 + RISC-V cross-compilation |
-| Doc | `src/**/*.rs` | 8 | Doctest examples |
+### 9.1 Test Suite: 8,195+ tests (lib + integration + fuzz harness)
 
 ### 9.2 Test Naming Convention
 
@@ -778,23 +587,7 @@ pretty_assertions = "1.4"
 
 ## 15. Key Design Decisions
 
-| # | Decision | Rationale | Status |
-|---|----------|-----------|--------|
-| 1 | Tree-walking interpreter | Simplest path to working v0.1 | DONE |
-| 2 | Bytecode VM (45 opcodes) | Faster than tree-walk | DONE |
-| 3 | Cranelift for native codegen | Lighter than LLVM, good embedded support | DONE (S2) |
-| 4 | ndarray for tensors | Mature, SIMD via BLAS | DONE |
-| 5 | Collect-all errors | Show all errors at once like Rust | DONE |
-| 6 | `Rc<RefCell<>>` for env | Closures need shared mutable parent scope | DONE |
-| 7 | miette for errors | Beautiful Rust-style error output | DONE |
-| 8 | Pratt parser for exprs | Elegant precedence handling (19 levels) | DONE |
-| 9 | Monomorphization for generics | Static dispatch, no vtables, embedded-friendly | DONE (S5) |
-| 10 | NLL-like borrow checker | Simpler than Rust (no lifetime annotations) | DONE (S10) |
-| 11 | INT8 quantization | Embedded inference without FPU | DONE (S17) |
-| 12 | Analyzer in eval_source | Catch errors before execution, REPL-aware | DONE (S1.1) |
-| 13 | pub visibility enforcement | Module privacy with backward compat (legacy = all public) | DONE (S1.4) |
-| 14 | Contextual keywords | OS/ML keywords usable as identifiers in params/exprs | DONE |
-| 15 | Trait body-less methods | Signature-only methods in traits (empty block default) | DONE (S20) |
+Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (production). Tensors: ndarray. Errors: collect-all + miette display. Env: `Rc<RefCell<>>` for closures. Parser: Pratt (19 levels). Generics: monomorphization. Borrow: NLL-like without lifetimes. Full table: see git history.
 
 ---
 
@@ -844,105 +637,18 @@ cargo build --features gui                      # GUI windowing (winit)
 ## 17. Repository Structure
 
 ```
-fajar-lang/
-+-- CLAUDE.md                 <- YOU ARE HERE (Master reference)
-+-- Cargo.toml
-+-- Cargo.lock
-|
-+-- docs/                     <- 44 documents
-|   +-- V04_PLAN.md               <- v0.4 "Sovereignty" (6 sprints, COMPLETE)
-|   +-- V03_TASKS.md              <- v0.3 task checkboxes (739 tasks, ALL COMPLETE)
-|   +-- V03_IMPLEMENTATION_PLAN.md <- v0.3 plan (52 sprints, 12 months)
-|   +-- V03_WORKFLOW.md           <- v0.3 sprint workflow
-|   +-- V03_SKILLS.md             <- v0.3 implementation patterns
-|   +-- V1_IMPLEMENTATION_PLAN.md <- v1.0 plan (26 sprints, COMPLETE)
-|   +-- V1_TASKS.md              <- v1.0 task checkboxes (506 tasks, COMPLETE)
-|   +-- V1_RULES.md              <- Coding rules (production grade, still applies)
-|   +-- V1_WORKFLOW.md           <- TDD workflow
-|   +-- V1_SKILLS.md             <- Cranelift, monomorphization patterns
-|   +-- FAJAR_LANG_SPEC.md       <- Language spec & grammar (AUTHORITATIVE)
-|   +-- ARCHITECTURE.md          <- System design & contracts
-|   +-- GRAMMAR_REFERENCE.md     <- Formal EBNF grammar
-|   +-- ERROR_CODES.md           <- 71 error codes across 9 categories
-|   +-- STDLIB_SPEC.md           <- Standard library API
-|   +-- SECURITY.md              <- Security model
-|   +-- CHANGELOG.md             <- Version history (v0.3.0, v0.4.0)
-|   +-- GAP_ANALYSIS.md          <- Cross-doc conflict audit
-|   +-- ROADMAP_V1.1.md          <- Future roadmap (GPU, LLVM, etc.)
-|   +-- (and more...)
-|
-+-- src/                      <- ~98,000 LOC across 97 .rs files
-|   +-- lib.rs                <- Module decls + FjError + FjDiagnostic
-|   +-- main.rs               <- CLI entry point (clap: run, repl, check, build, fmt, lsp, new)
-|   +-- lexer/
-|   |   +-- mod.rs            <- pub fn tokenize()
-|   |   +-- token.rs          <- Token, TokenKind (82+ kinds), Span
-|   |   +-- cursor.rs         <- Cursor struct (peek, advance, is_eof)
-|   +-- parser/
-|   |   +-- mod.rs            <- pub fn parse() (4,520 LOC)
-|   |   +-- ast.rs            <- Expr (25+ variants), Stmt, Item, TypeExpr, Pattern
-|   |   +-- pratt.rs          <- Pratt expression parser (19 precedence levels)
-|   +-- analyzer/
-|   |   +-- mod.rs            <- pub fn analyze(), analyze_with_known()
-|   |   +-- type_check.rs     <- TypeChecker (6,616 LOC — types, scope, context, NLL)
-|   |   +-- scope.rs          <- SymbolTable, Scope, ScopeKind
-|   |   +-- cfg.rs            <- NLL control flow analysis
-|   |   +-- borrow_lite.rs    <- Ownership/move/borrow analysis
-|   +-- interpreter/
-|   |   +-- mod.rs            <- Interpreter struct
-|   |   +-- env.rs            <- Environment (scope chain, Rc<RefCell<>>)
-|   |   +-- eval.rs           <- eval_expr, eval_stmt, eval_source (5,737 LOC)
-|   |   +-- value.rs          <- Value enum (17 variants)
-|   |   +-- ffi.rs            <- C interop
-|   +-- vm/
-|   |   +-- compiler.rs       <- AST -> Bytecode compiler
-|   |   +-- engine.rs         <- Bytecode VM (45 opcodes)
-|   +-- codegen/              <- Cranelift native backend (~40K LOC)
-|   |   +-- cranelift/
-|   |   |   +-- mod.rs        <- CraneliftCompiler + ObjectCompiler (10,242 LOC)
-|   |   |   +-- tests.rs      <- ~700 native codegen tests (14,991 LOC)
-|   |   |   +-- runtime_fns.rs <- 150+ extern "C" fj_rt_* functions (7,115 LOC)
-|   |   |   +-- context.rs    <- CodegenCtx (56 fields)
-|   |   |   +-- closures.rs   <- Free var analysis
-|   |   |   +-- generics.rs   <- Monomorphization
-|   |   |   +-- compile/
-|   |   |       +-- mod.rs    <- Core expr/stmt/call + builtins (6,113 LOC)
-|   |   |       +-- expr.rs   <- Expression compilation
-|   |   |       +-- control.rs <- if/while/loop/for/match
-|   |   |       +-- stmt.rs   <- Statement compilation
-|   |   |       +-- builtins.rs <- Math, assert, file builtins
-|   |   |       +-- arrays.rs <- Array operations
-|   |   |       +-- strings.rs <- String operations
-|   |   |       +-- structs.rs <- Struct operations
-|   |   +-- types.rs          <- Type -> Cranelift mapping
-|   |   +-- abi.rs            <- ABI handling
-|   |   +-- linker.rs         <- Linker script generation
-|   |   +-- analysis.rs       <- Dead code elimination
-|   +-- runtime/
-|   |   +-- os/               <- 20+ files: memory, IRQ, syscall, paging, GDT/IDT, serial, VGA
-|   |   +-- ml/               <- tensor, autograd, ops, optim, layers, metrics, quantize, ONNX
-|   +-- formatter/            <- fj fmt (AST-based pretty-printing)
-|   +-- lsp/                  <- Language Server Protocol (tower-lsp)
-|   +-- package/              <- fj.toml, fj new, fj build, registry
-|   +-- stdlib/               <- Rust-side stdlib bindings
-|
-+-- stdlib/                   <- Fajar Lang stdlib (.fj: core, nn, os, hal, drivers, lexer)
-+-- packages/                 <- 7 standard packages (fj-math/nn/hal/drivers/http/json/crypto)
-+-- tests/
-|   +-- eval_tests.rs         <- 181 integration tests
-|   +-- ml_tests.rs           <- 39 ML tests
-|   +-- os_tests.rs           <- 16 OS tests
-|   +-- autograd_tests.rs     <- 13 autograd gradient checks
-|   +-- property_tests.rs     <- 33 proptest invariants
-|   +-- safety_tests.rs       <- 76 safety tests (move/borrow/overflow/bounds)
-|   +-- cross_compile_tests.rs <- 9 ARM64/RISC-V cross-compilation tests
-+-- examples/                 <- 24 example .fj programs
-+-- editors/vscode/           <- VS Code extension (syntax, snippets, LSP)
-+-- book/                     <- mdBook documentation (40+ pages)
-+-- benches/
-    +-- interpreter_bench.rs  <- Interpreter benchmarks
-    +-- embedded_bench.rs     <- Embedded benchmarks
-    +-- concurrency_bench.rs  <- Concurrency benchmarks (native)
+src/
+  main.rs (CLI, 5.4K LOC) | lib.rs (module decls)
+  lexer/ (tokenize) | parser/ (parse, ast, pratt) | analyzer/ (type_check, scope, effects)
+  interpreter/ (eval, env, value) | vm/ (bytecode compiler+engine)
+  codegen/ (cranelift/, llvm/, types, abi, linker, analysis)
+  runtime/os/ (memory, IRQ, syscall) | runtime/ml/ (tensor, autograd, ops, layers)
+  gpu_codegen/ (spirv, ptx, metal, hlsl, fusion, gpu_memory)
+  dependent/ (nat, arrays, tensor_shapes, patterns) | verify/ (smt, pipeline, properties)
+  lsp/ (server, completion, advanced) | package/ (registry, server, signing, sbom)
+  distributed/ | wasi_p2/ | ffi_v2/ | formatter/ | selfhost/
+docs/ (44 documents) | tests/ | examples/ (216+ .fj) | fuzz/ (8 targets)
+editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 ```
 
 ---
@@ -985,5 +691,5 @@ fajar-lang/
 
 ---
 
-*CLAUDE.md Version: 10.2 | v12.1.0 "Delivery" — 8,092 tests, ~400K LOC, 0 failures | V15: 30/30 Option 1 [x], 16/30 Option 2 [x] | Auto-loaded by Claude Code*
-*Last Updated: 2026-04-01*
+*CLAUDE.md Version: 11.0 | v12.6.0 "Infinity" — 8,475 tests, ~486K LOC, 0 failures | V14: 494/500 [x] (99%) | Auto-loaded by Claude Code*
+*Last Updated: 2026-04-02*
