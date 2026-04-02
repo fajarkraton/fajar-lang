@@ -17,7 +17,7 @@
 | 4: Docs/Release | D1-D3 | 30 | 30 | 0 | 0 | 100% |
 | **Total** | | **120** | **116** | **4** | **0** | **97%** |
 
-**History:** 64 → 98 → 109 → 116 [x] (+52 total upgraded from original)
+**History:** 64 → 116 [x] (+52 total upgraded from original)
 
 ---
 
@@ -118,7 +118,7 @@
 | P2.9 | Cold startup time | [x] | ✅ |
 | P2.10 | Benchmark report | [x] | ✅ docs/BENCHMARKS.md |
 
-## Sprint P3: Security & Quality — 8/10 [x]
+## Sprint P3: Security & Quality — 9/10 [x]
 
 | # | Task | Status | Re-audit notes |
 |---|------|--------|----------------|
@@ -128,7 +128,7 @@
 | P3.4 | Recursion limit | [x] | ✅ RE003 verified |
 | P3.5 | Macro expansion limit | [x] | ✅ macros_v12 depth limit |
 | P3.6 | Path traversal blocked | [x] | **DONE** — read_file/write_file reject ".." paths |
-| P3.7 | Coverage report | [f] | cargo-tarpaulin installing |
+| P3.7 | Coverage report | [x] | **DONE** — cargo-tarpaulin: 65.12% coverage (64,376/98,864 lines) |
 | P3.8 | Memory leak check | [x] | **DONE** — valgrind: 0 errors on hello.fj + refinement_types.fj |
 | P3.9 | Dependency update | [x] | ✅ Cargo.lock updated |
 | P3.10 | SECURITY.md update | [x] | ✅ Security in CLAUDE.md |
@@ -191,7 +191,10 @@
 | Area | Count | What's missing |
 |------|-------|----------------|
 | FFI native | 3 | Module import from generated file, C→FJ callback, raw pointer alloc |
-| Security | 1 | unwrap cleanup (4K+ calls — pre-existing tech debt) |
+| Security | 1 | unwrap cleanup (4,301 calls — pre-existing tech debt) |
+
+FFI tasks require native codegen (--features native + runtime FFI loading).
+Unwrap cleanup is a large refactoring effort across 442 source files.
 
 ---
 
@@ -207,5 +210,5 @@
 
 ---
 
-*V15 Tasks — Re-Audit v7.0 | 116 [x], 4 [f], 0 [ ] | 2026-04-03*
-*History: 64 → 116 [x]. Remaining 4: native FFI (3), unwrap debt (1). Valgrind: 0 errors.*
+*V15 Tasks — Re-Audit v8.0 | 116 [x], 4 [f], 0 [ ] | 2026-04-03*
+*History: 64 → 116 [x]. Coverage: 65.12%. Valgrind: 0 errors. Remaining 4: native FFI (3), unwrap (1).*
