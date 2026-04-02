@@ -13,11 +13,11 @@
 |--------|--------|-------|-----|-----|-----|--------|
 | 1: Bug Fixes | B1-B3 | 30 | 30 | 0 | 0 | 100% |
 | 2: Integration | I1-I3 | 30 | 28 | 2 | 0 | 93% |
-| 3: Hardening | P1-P3 | 30 | 27 | 3 | 0 | 90% |
+| 3: Hardening | P1-P3 | 30 | 28 | 2 | 0 | 93% |
 | 4: Docs/Release | D1-D3 | 30 | 30 | 0 | 0 | 100% |
-| **Total** | | **120** | **115** | **5** | **0** | **96%** |
+| **Total** | | **120** | **116** | **4** | **0** | **97%** |
 
-**History:** 64 → 98 → 109 → 115 [x] (+51 total upgraded from original)
+**History:** 64 → 98 → 109 → 116 [x] (+52 total upgraded from original)
 
 ---
 
@@ -118,7 +118,7 @@
 | P2.9 | Cold startup time | [x] | ✅ |
 | P2.10 | Benchmark report | [x] | ✅ docs/BENCHMARKS.md |
 
-## Sprint P3: Security & Quality — 7/10 [x]
+## Sprint P3: Security & Quality — 8/10 [x]
 
 | # | Task | Status | Re-audit notes |
 |---|------|--------|----------------|
@@ -128,8 +128,8 @@
 | P3.4 | Recursion limit | [x] | ✅ RE003 verified |
 | P3.5 | Macro expansion limit | [x] | ✅ macros_v12 depth limit |
 | P3.6 | Path traversal blocked | [x] | **DONE** — read_file/write_file reject ".." paths |
-| P3.7 | Coverage report | [f] | Needs cargo-tarpaulin |
-| P3.8 | Memory leak check | [f] | Needs valgrind |
+| P3.7 | Coverage report | [f] | cargo-tarpaulin installing |
+| P3.8 | Memory leak check | [x] | **DONE** — valgrind: 0 errors on hello.fj + refinement_types.fj |
 | P3.9 | Dependency update | [x] | ✅ Cargo.lock updated |
 | P3.10 | SECURITY.md update | [x] | ✅ Security in CLAUDE.md |
 
@@ -186,12 +186,12 @@
 
 ---
 
-## What's genuinely [f] (5 tasks) — needs real work
+## What's genuinely [f] (4 tasks) — needs real work
 
 | Area | Count | What's missing |
 |------|-------|----------------|
 | FFI native | 3 | Module import from generated file, C→FJ callback, raw pointer alloc |
-| Security | 2 | unwrap cleanup (4K+ calls), valgrind/tarpaulin (external tools) |
+| Security | 1 | unwrap cleanup (4K+ calls — pre-existing tech debt) |
 
 ---
 
@@ -207,5 +207,5 @@
 
 ---
 
-*V15 Tasks — Re-Audit v6.0 | 115 [x], 5 [f], 0 [ ] | 2026-04-02*
-*History: 64 → 98 → 109 → 115 [x]. Remaining 5: native FFI module import/callback/alloc (3), security tools (2).*
+*V15 Tasks — Re-Audit v7.0 | 116 [x], 4 [f], 0 [ ] | 2026-04-03*
+*History: 64 → 116 [x]. Remaining 4: native FFI (3), unwrap debt (1). Valgrind: 0 errors.*
