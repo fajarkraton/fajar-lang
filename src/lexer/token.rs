@@ -925,4 +925,131 @@ mod tests {
     fn token_kind_display_ident() {
         assert_eq!(format!("{}", TokenKind::Ident("foo".into())), "foo");
     }
+
+    /// Comprehensive Display coverage — every TokenKind variant must render.
+    #[test]
+    fn token_kind_display_all_keywords() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::If, "if"), (TokenKind::Else, "else"), (TokenKind::Match, "match"),
+            (TokenKind::While, "while"), (TokenKind::For, "for"), (TokenKind::Loop, "loop"),
+            (TokenKind::In, "in"), (TokenKind::Break, "break"), (TokenKind::Continue, "continue"),
+            (TokenKind::Async, "async"), (TokenKind::Yield, "yield"), (TokenKind::Gen, "gen"),
+            (TokenKind::Await, "await"), (TokenKind::Mut, "mut"), (TokenKind::Linear, "linear"),
+            (TokenKind::Struct, "struct"), (TokenKind::Enum, "enum"), (TokenKind::Union, "union"),
+            (TokenKind::Impl, "impl"), (TokenKind::Trait, "trait"), (TokenKind::Type, "type"),
+            (TokenKind::Const, "const"), (TokenKind::Static, "static"), (TokenKind::Dyn, "dyn"),
+            (TokenKind::Comptime, "comptime"), (TokenKind::Effect, "effect"),
+            (TokenKind::Handle, "handle"), (TokenKind::Resume, "resume"),
+            (TokenKind::Use, "use"), (TokenKind::Mod, "mod"), (TokenKind::Pub, "pub"),
+            (TokenKind::Extern, "extern"), (TokenKind::As, "as"), (TokenKind::Where, "where"),
+            (TokenKind::True, "true"), (TokenKind::False, "false"), (TokenKind::Null, "null"),
+            (TokenKind::Service, "service"), (TokenKind::Protocol, "protocol"),
+            (TokenKind::Implements, "implements"), (TokenKind::Never, "never"),
+            (TokenKind::Void, "void"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_all_types() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::StrType, "str"), (TokenKind::CharType, "char"),
+            (TokenKind::F16Type, "f16"), (TokenKind::Bf16Type, "bf16"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_all_os_ml_keywords() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::Tensor, "tensor"), (TokenKind::Grad, "grad"),
+            (TokenKind::Loss, "loss"), (TokenKind::Ptr, "ptr"),
+            (TokenKind::Addr, "addr"), (TokenKind::Page, "page"),
+            (TokenKind::Region, "region"), (TokenKind::Irq, "irq"),
+            (TokenKind::Syscall, "syscall"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_all_operators() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::Minus, "-"), (TokenKind::Star, "*"), (TokenKind::Slash, "/"),
+            (TokenKind::Percent, "%"), (TokenKind::Amp, "&"), (TokenKind::Pipe, "|"),
+            (TokenKind::Caret, "^"), (TokenKind::Tilde, "~"), (TokenKind::Bang, "!"),
+            (TokenKind::AmpAmp, "&&"), (TokenKind::PipePipe, "||"),
+            (TokenKind::EqEq, "=="), (TokenKind::BangEq, "!="),
+            (TokenKind::LtEq, "<="), (TokenKind::GtEq, ">="),
+            (TokenKind::Gt, ">"), (TokenKind::LtLt, "<<"), (TokenKind::GtGt, ">>"),
+            (TokenKind::PlusEq, "+="), (TokenKind::MinusEq, "-="),
+            (TokenKind::StarEq, "*="), (TokenKind::SlashEq, "/="),
+            (TokenKind::PercentEq, "%="), (TokenKind::AmpEq, "&="),
+            (TokenKind::PipeEq, "|="), (TokenKind::CaretEq, "^="),
+            (TokenKind::LtLtEq, "<<="), (TokenKind::GtGtEq, ">>="),
+            (TokenKind::Question, "?"), (TokenKind::Dollar, "$"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_all_delimiters() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::LParen, "("), (TokenKind::LBracket, "["),
+            (TokenKind::RBrace, "}"), (TokenKind::RBracket, "]"),
+            (TokenKind::Comma, ","), (TokenKind::Semi, ";"),
+            (TokenKind::Dot, "."), (TokenKind::DotDot, ".."),
+            (TokenKind::DotDotEq, "..="), (TokenKind::ColonColon, "::"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_all_annotations() {
+        let cases: Vec<(TokenKind, &str)> = vec![
+            (TokenKind::At, "@"), (TokenKind::AtKernel, "@kernel"),
+            (TokenKind::AtDevice, "@device"), (TokenKind::AtSafe, "@safe"),
+            (TokenKind::AtUnsafe, "@unsafe"), (TokenKind::AtFfi, "@ffi"),
+            (TokenKind::AtTest, "@test"), (TokenKind::AtShouldPanic, "@should_panic"),
+            (TokenKind::AtIgnore, "@ignore"), (TokenKind::AtDerive, "@derive"),
+            (TokenKind::AtPure, "@pure"), (TokenKind::AtNpu, "@npu"),
+            (TokenKind::AtGpu, "@gpu"), (TokenKind::AtEntry, "@entry"),
+            (TokenKind::AtPanicHandler, "@panic_handler"),
+            (TokenKind::AtNoStd, "@no_std"), (TokenKind::AtReprC, "@repr_c"),
+            (TokenKind::AtReprPacked, "@repr_packed"),
+            (TokenKind::AtSimd, "@simd"), (TokenKind::AtSection, "@section"),
+            (TokenKind::AtInterrupt, "@interrupt"), (TokenKind::AtMessage, "@message"),
+            (TokenKind::AtShared, "@shared"), (TokenKind::AtRequires, "@requires"),
+            (TokenKind::AtEnsures, "@ensures"), (TokenKind::AtInvariant, "@invariant"),
+            (TokenKind::AtInfer, "@infer"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(format!("{kind}"), expected, "Display for {kind:?}");
+        }
+    }
+
+    #[test]
+    fn token_kind_display_special_literals() {
+        assert!(!format!("{}", TokenKind::FStringLit(vec![FStringPart::Literal("hello".into())])).is_empty());
+        assert!(!format!("{}", TokenKind::RawStringLit("raw".into())).is_empty());
+        assert!(!format!("{}", TokenKind::DocComment("doc".into())).is_empty());
+    }
+
+    #[test]
+    fn span_merge() {
+        let a = Span::new(0, 5);
+        let b = Span::new(3, 10);
+        let merged = a.merge(b);
+        assert_eq!(merged.start, 0);
+        assert_eq!(merged.end, 10);
+    }
 }
