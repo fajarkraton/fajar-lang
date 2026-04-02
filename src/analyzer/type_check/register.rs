@@ -2204,6 +2204,34 @@ impl TypeChecker {
     /// Registers use declarations by aliasing qualified names to short names.
     fn register_use_decl(&mut self, use_decl: &UseDecl) {
         let path = &use_decl.path;
+
+        // V15 I2.3: File-based module import.
+        // If `use <name>` with single segment, try to find <name>.fj and register its symbols.
+        if path.len() == 1 && matches!(use_decl.kind, UseKind::Simple) {
+            let mod_name = &path[0];
+            // Try to find the file relative to CWD or common locations
+            let candidates = [
+                std::path::PathBuf::from(format!("{mod_name}.fj")),
+                std::path::PathBuf::from(format!("src/{mod_name}.fj")),
+                std::path::PathBuf::from(format!("lib/{mod_name}.fj")),
+            ];
+            for candidate in &candidates {
+                if candidate.exists() {
+                    if let Ok(source) = std::fs::read_to_string(candidate) {
+                        if let Ok(tokens) = crate::lexer::tokenize(&source) {
+                            if let Ok(program) = crate::parser::parse(tokens) {
+                                // Register all function definitions from the imported file
+                                for item in &program.items {
+                                    self.register_item(item);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
         match &use_decl.kind {
             UseKind::Simple => {
                 if path.len() >= 2 {

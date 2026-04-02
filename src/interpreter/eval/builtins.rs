@@ -6109,6 +6109,28 @@ impl Interpreter {
     pub(super) fn eval_use_decl(&mut self, use_decl: &UseDecl) -> EvalResult {
         let path = &use_decl.path;
 
+        // V15 I2.3: File-based module loading.
+        // If the module isn't already loaded, try to find and load <name>.fj
+        // from the source directory.
+        if !path.is_empty() {
+            let mod_name = &path[0];
+            if !self.modules.contains_key(mod_name) {
+                if let Some(ref source_dir) = self.source_dir.clone() {
+                    let fj_path = source_dir.join(format!("{mod_name}.fj"));
+                    if fj_path.exists() {
+                        if let Ok(source) = std::fs::read_to_string(&fj_path) {
+                            if let Ok(tokens) = crate::lexer::tokenize(&source) {
+                                if let Ok(program) = crate::parser::parse(tokens) {
+                                    // Evaluate the module file to define its functions
+                                    let _ = self.eval_program(&program);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         match &use_decl.kind {
             UseKind::Simple => {
                 // `use math::square` — import the last segment
