@@ -1,0 +1,28 @@
+// GPU Compute Shaders — write @gpu functions, compile to SPIR-V/PTX/Metal/HLSL.
+//
+// Usage:
+//   fj build examples/gpu_compute.fj --target spirv -o output.spv
+//   fj build examples/gpu_compute.fj --target metal -o output.metal
+//   fj build examples/gpu_compute.fj --target hlsl -o output.hlsl
+//   fj build examples/gpu_compute.fj --target ptx -o output.ptx
+//
+// The @gpu annotation marks functions for GPU compilation.
+// Parameters become buffer bindings, body becomes the kernel.
+
+@gpu fn vector_add(a: f32, b: f32, result: f32) {
+    let result = a + b
+}
+
+@gpu fn vector_mul(x: f32, y: f32, out: f32) {
+    let out = x * y
+}
+
+// Custom workgroup size: @gpu(workgroup=256)
+@gpu(workgroup=256) fn fast_add(a: f32, b: f32, c: f32) {
+    let c = a + b
+}
+
+fn main() {
+    println("GPU compute shader examples")
+    println("Compile with: fj build examples/gpu_compute.fj --target metal")
+}

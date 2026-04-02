@@ -1,0 +1,40 @@
+// Effect Composition — combine multiple effects into one.
+//
+// Fajar Lang supports algebraic effects with composition:
+//   effect Combined = Effect1 + Effect2
+//
+// The composed effect merges all operations from its components.
+
+effect Logger {
+    fn log(msg: str) -> void
+}
+
+effect Counter {
+    fn count() -> i64
+}
+
+// Compose Logger + Counter into a single effect
+effect Telemetry = Logger + Counter
+
+fn process_data() with Telemetry {
+    Telemetry::log("starting processing")
+    let n = Telemetry::count()
+    Telemetry::log("done")
+}
+
+fn main() {
+    let mut call_count = 0
+
+    handle { process_data() } with {
+        Logger::log(msg) => {
+            println(f"[LOG] {msg}")
+            resume(null)
+        }
+        Counter::count() => {
+            call_count = call_count + 1
+            resume(call_count)
+        }
+    }
+
+    println(f"Total effect calls tracked: {call_count}")
+}

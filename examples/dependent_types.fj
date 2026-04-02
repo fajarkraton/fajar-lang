@@ -1,0 +1,41 @@
+// Dependent Types — Pi and Sigma types in Fajar Lang.
+//
+// Pi type:   Pi(n: usize) -> ReturnType
+//   A function type where the return type depends on a parameter.
+//
+// Sigma type: Sigma(n: usize, Type)
+//   A dependent pair where the second type depends on the first value.
+
+// Pi type: return type depends on parameter
+fn make_vector(n: i64) -> Pi(size: usize) -> i64 {
+    n
+}
+
+// Sigma type: a length-indexed pair
+fn sized_data() -> Sigma(n: usize, i64) {
+    (10, 42)
+}
+
+// Refinement + Pi combined
+fn positive_vector(n: { size: i64 | size > 0 }) -> i64 {
+    n * 2
+}
+
+fn main() {
+    println("Dependent Types in Fajar Lang")
+    println("==============================")
+
+    // Pi type usage
+    let v = make_vector(5)
+    println(f"Vector result: {v}")
+
+    // Sigma type usage
+    let pair = sized_data()
+    println(f"Sized pair: {pair}")
+
+    // Refinement with positive constraint
+    let result = positive_vector(10)
+    println(f"Positive vector: {result}")
+
+    println("All dependent type examples passed!")
+}

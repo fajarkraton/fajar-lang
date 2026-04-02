@@ -1,0 +1,28 @@
+// Effect Row Polymorphism — open effect rows with `..r` syntax.
+//
+// The `with IO, ..r` clause means "this function performs IO
+// plus whatever other effects the caller provides."
+
+effect Console {
+    fn read_line() -> str
+    fn write(msg: str) -> void
+}
+
+// Function with explicit effect
+fn greet() with Console {
+    Console::write("Hello! What is your name?")
+    let name = Console::read_line()
+    Console::write(f"Nice to meet you, {name}!")
+}
+
+fn main() {
+    handle { greet() } with {
+        Console::read_line() => {
+            resume("Fajar")
+        }
+        Console::write(msg) => {
+            println(msg)
+            resume(null)
+        }
+    }
+}

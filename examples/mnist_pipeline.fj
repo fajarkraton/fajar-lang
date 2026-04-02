@@ -1,0 +1,47 @@
+// MNIST Neural Network Pipeline — complete ML workflow in Fajar Lang.
+//
+// Demonstrates:
+//   - Tensor creation (zeros, ones, randn)
+//   - Dense layers with forward pass
+//   - Activation functions (relu, softmax, sigmoid)
+//   - Loss computation (mse_loss, cross_entropy)
+//   - Optimizer (SGD)
+
+fn main() {
+    println("=== MNIST Pipeline ===")
+
+    // Model architecture: 784 -> 128 -> 64 -> 10
+    let layer1 = Dense(784, 128)
+    let layer2 = Dense(128, 64)
+    let layer3 = Dense(64, 10)
+
+    // Create a random input (simulating a 28x28 image flattened)
+    let input = randn(1, 784)
+    println("Input shape: 1x784")
+
+    // Forward pass
+    let h1 = relu(layer1.forward(input))
+    println("After layer1 + relu: 1x128")
+
+    let h2 = relu(layer2.forward(h1))
+    println("After layer2 + relu: 1x64")
+
+    let logits = layer3.forward(h2)
+    let output = softmax(logits)
+    println("Output (softmax): 1x10")
+    println(output)
+
+    // Create target (one-hot for digit 3)
+    let target = zeros(1, 10)
+    println("Target: 1x10 (one-hot)")
+
+    // Compute loss
+    let loss_val = mse_loss(output, target)
+    println(f"MSE Loss: {loss_val}")
+
+    // Create optimizer
+    let optimizer = SGD(0.01, 0.9)
+    println("Optimizer: SGD(lr=0.01, momentum=0.9)")
+
+    println("\n=== Pipeline Complete ===")
+}

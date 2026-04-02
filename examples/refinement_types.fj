@@ -1,0 +1,35 @@
+// Refinement Types — types with runtime-checked predicates.
+//
+// Syntax: { variable: BaseType | predicate }
+//
+// The predicate is checked at runtime when a value is bound.
+// If the predicate fails, a runtime error is raised.
+
+fn main() {
+    // Positive integer — must be > 0
+    let age: { n: i64 | n > 0 } = 25
+    println(f"Age: {age}")
+
+    // Bounded value — must be in range
+    let percentage: { n: i64 | n >= 0 } = 85
+    println(f"Score: {percentage}%")
+
+    // Refinement in function parameter
+    let result = safe_divide(100, 4)
+    println(f"100 / 4 = {result}")
+
+    // Temperature must be above absolute zero
+    let temp: { t: f64 | t > -273.15 } = 20.0
+    println(f"Temperature: {temp} C")
+
+    println("All refinement checks passed!")
+}
+
+fn safe_divide(a: i64, b: { n: i64 | n > 0 }) -> i64 {
+    a / b
+}
+
+// Uncomment to see runtime error:
+// fn will_fail() {
+//     let bad: { n: i64 | n > 0 } = -5  // RE002: refinement type violation
+// }

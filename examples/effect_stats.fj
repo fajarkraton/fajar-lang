@@ -1,0 +1,36 @@
+// Effect Statistics — track effect usage at runtime.
+//
+// Run with: fj run --effect-stats examples/effect_stats.fj
+//
+// After execution, prints:
+//   - Total effect operations invoked
+//   - Resume count
+//   - Max handler nesting depth
+//   - Per-operation call counts
+
+effect Database {
+    fn query(sql: str) -> str
+    fn insert(table: str, data: str) -> bool
+}
+
+fn process_users() with Database {
+    let users = Database::query("SELECT * FROM users")
+    Database::insert("logs", "processed users")
+    let admins = Database::query("SELECT * FROM users WHERE role='admin'")
+    Database::insert("logs", "processed admins")
+}
+
+fn main() {
+    handle { process_users() } with {
+        Database::query(sql) => {
+            println(f"[DB] Query: {sql}")
+            resume("result_data")
+        }
+        Database::insert(table, data) => {
+            println(f"[DB] Insert into {table}: {data}")
+            resume(true)
+        }
+    }
+
+    println("Done! Run with --effect-stats to see usage statistics.")
+}

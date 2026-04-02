@@ -1,0 +1,75 @@
+// Kernel OS Patterns — @kernel context for systems programming.
+//
+// Fajar Lang enforces context isolation:
+//   @kernel — OS primitives, no heap, no tensor
+//   @device — Tensor ops, no raw pointer
+//   @safe   — Default, no hardware access
+//   @unsafe — Full access
+
+// Memory management
+@kernel fn page_alloc(count: i64) -> i64 {
+    count * 4096
+}
+
+@kernel fn page_free(addr: i64) -> bool {
+    addr > 0
+}
+
+// Interrupt handling
+@kernel fn handle_timer_irq() -> i64 {
+    let ticks = 1
+    ticks
+}
+
+@kernel fn handle_keyboard_irq(scancode: i64) -> str {
+    if scancode == 28 { "ENTER" }
+    else { if scancode == 1 { "ESC" }
+    else { "KEY" } }
+}
+
+// Syscall dispatch
+@kernel fn syscall_dispatch(num: i64, arg1: i64) -> i64 {
+    if num == 1 { arg1 }          // SYS_EXIT
+    else { if num == 4 { 0 }      // SYS_WRITE
+    else { -1 } }                  // ENOSYS
+}
+
+// Process management
+struct PCB {
+    pid: i64,
+    state: str,
+    priority: i64
+}
+
+@kernel fn schedule(current: PCB, ready: [PCB]) -> i64 {
+    // Simple priority scheduler
+    let mut best_pid = current.pid
+    let mut best_prio = current.priority
+    for proc in ready {
+        if proc.priority < best_prio {
+            best_pid = proc.pid
+            best_prio = proc.priority
+        }
+    }
+    best_pid
+}
+
+// Cross-context bridge
+@device fn gpu_inference(data: f64) -> f64 {
+    data * 2.0
+}
+
+fn main() {
+    // Kernel operations
+    let mem = page_alloc(4)
+    println(f"Allocated {mem} bytes")
+
+    let key = handle_keyboard_irq(28)
+    println(f"Key pressed: {key}")
+
+    let result = syscall_dispatch(1, 42)
+    println(f"Syscall result: {result}")
+
+    // Verify with fj verify --verbose for boot analysis
+    println("\nRun: fj verify examples/kernel_os.fj --verbose")
+}
