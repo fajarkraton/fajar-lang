@@ -256,6 +256,7 @@ fn build_closure_info(
         requires: vec![],
         ensures: vec![],
         effects: Vec::new(),
+        effect_row_var: None,
         body: Box::new(body.clone()),
         span: *span,
     };

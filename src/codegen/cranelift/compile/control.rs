@@ -772,6 +772,10 @@ pub(in crate::codegen::cranelift) fn compile_match<M: Module>(
                     .ins()
                     .brif(in_range, body_block, &[], next_test, &[]);
             }
+            Pattern::Array { .. } | Pattern::Binding { .. } => {
+                // Array/Binding patterns: treat as wildcard for native codegen
+                builder.ins().jump(body_block, &[]);
+            }
             Pattern::Or { patterns, .. } => {
                 // Or-pattern: try each alternative, jump to body if any matches
                 for (pi, sub_pat) in patterns.iter().enumerate() {
