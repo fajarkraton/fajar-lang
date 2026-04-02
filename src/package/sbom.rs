@@ -660,4 +660,62 @@ mod tests {
         assert_eq!(format!("{}", SbomFormat::CycloneDx), "CycloneDX 1.6");
         assert_eq!(format!("{}", SbomFormat::Spdx), "SPDX 2.3");
     }
+
+    // ── V14 H4.9: SBOM from Cargo.lock parsing ────────────────
+
+    #[test]
+    fn v14_h4_9_sbom_from_cargo_lock_parse() {
+        // Simulate parsing a Cargo.lock [[package]] block into DepInfo
+        let lock_snippet = r#"
+[[package]]
+name = "serde"
+version = "1.0.210"
+checksum = "abc123def456"
+
+[[package]]
+name = "tokio"
+version = "1.40.0"
+checksum = "def789ghi012"
+"#;
+        let deps: Vec<DepInfo> = lock_snippet
+            .split("[[package]]")
+            .skip(1)
+            .filter_map(|block| {
+                let name = block
+                    .lines()
+                    .find(|l| l.starts_with("name"))?
+                    .split('"')
+                    .nth(1)?
+                    .to_string();
+                let version = block
+                    .lines()
+                    .find(|l| l.starts_with("version"))?
+                    .split('"')
+                    .nth(1)?
+                    .to_string();
+                let checksum = block
+                    .lines()
+                    .find(|l| l.starts_with("checksum"))
+                    .and_then(|l| l.split('"').nth(1))
+                    .unwrap_or("")
+                    .to_string();
+                Some(DepInfo {
+                    name,
+                    version,
+                    sha256: checksum,
+                    license: None,
+                    dev_only: false,
+                })
+            })
+            .collect();
+
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].name, "serde");
+        assert_eq!(deps[1].name, "tokio");
+
+        let json = generate_sbom("fajar-lang", &deps, SbomFormat::CycloneDx).unwrap();
+        assert!(json.contains("serde"));
+        assert!(json.contains("tokio"));
+        assert!(json.contains("CycloneDX"));
+    }
 }

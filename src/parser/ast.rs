@@ -74,6 +74,8 @@ pub enum Item {
     GlobalAsm(GlobalAsm),
     /// Effect declaration: `effect Console { fn log(msg: str) -> void }`
     EffectDecl(EffectDeclItem),
+    /// Effect composition: `effect Combined = IO + State`
+    EffectComposition(EffectCompositionItem),
     /// Macro rules definition: `macro_rules! name { pattern => { template } }`
     MacroRulesDef(MacroRulesItem),
     /// A statement at the top level (for REPL / scripts).
@@ -158,6 +160,23 @@ pub struct EffectDeclItem {
     pub span: Span,
 }
 
+/// Effect composition item.
+///
+/// ```text
+/// effect Combined = IO + State
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct EffectCompositionItem {
+    /// Whether the composition is declared `pub`.
+    pub is_pub: bool,
+    /// Composed effect name (e.g., `"Combined"`).
+    pub name: String,
+    /// Component effect names (e.g., `["IO", "State"]`).
+    pub components: Vec<String>,
+    /// Source span.
+    pub span: Span,
+}
+
 /// Function definition.
 ///
 /// ```text
@@ -199,6 +218,8 @@ pub struct FnDef {
     pub ensures: Vec<Box<Expr>>,
     /// Effect annotations: `with IO, Alloc` — effects this function may perform.
     pub effects: Vec<String>,
+    /// Optional effect row variable for row polymorphism: `with IO, ..r`.
+    pub effect_row_var: Option<String>,
     /// Function body.
     pub body: Box<Expr>,
     /// Source span.
@@ -1437,6 +1458,42 @@ pub enum TypeExpr {
         /// Source span.
         span: Span,
     },
+
+    /// A Pi (dependent function) type: `Pi(n: usize) -> [f64; n]`.
+    Pi {
+        /// Parameter name.
+        param_name: String,
+        /// Parameter type.
+        param_type: Box<TypeExpr>,
+        /// Return type (may reference param_name).
+        return_type: Box<TypeExpr>,
+        /// Source span.
+        span: Span,
+    },
+
+    /// A Sigma (dependent pair) type: `Sigma(n: usize, [f64; n])`.
+    Sigma {
+        /// First element name.
+        fst_name: String,
+        /// First element type.
+        fst_type: Box<TypeExpr>,
+        /// Second element type (may reference fst_name).
+        snd_type: Box<TypeExpr>,
+        /// Source span.
+        span: Span,
+    },
+
+    /// A refinement type: `{ x: i32 | x > 0 }`.
+    Refinement {
+        /// Bound variable name.
+        var_name: String,
+        /// Base type.
+        base_type: Box<TypeExpr>,
+        /// Predicate expression (AST expression evaluated as constraint).
+        predicate: Box<Expr>,
+        /// Source span.
+        span: Span,
+    },
 }
 
 impl TypeExpr {
@@ -1453,7 +1510,10 @@ impl TypeExpr {
             | TypeExpr::Slice { span, .. }
             | TypeExpr::Fn { span, .. }
             | TypeExpr::Path { span, .. }
-            | TypeExpr::DynTrait { span, .. } => *span,
+            | TypeExpr::DynTrait { span, .. }
+            | TypeExpr::Pi { span, .. }
+            | TypeExpr::Sigma { span, .. }
+            | TypeExpr::Refinement { span, .. } => *span,
         }
     }
 }
@@ -1688,6 +1748,30 @@ impl fmt::Display for TypeExpr {
             }
             TypeExpr::DynTrait { trait_name, .. } => {
                 write!(f, "dyn {trait_name}")
+            }
+            TypeExpr::Pi {
+                param_name,
+                param_type,
+                return_type,
+                ..
+            } => {
+                write!(f, "Pi({param_name}: {param_type}) -> {return_type}")
+            }
+            TypeExpr::Sigma {
+                fst_name,
+                fst_type,
+                snd_type,
+                ..
+            } => {
+                write!(f, "Sigma({fst_name}: {fst_type}, {snd_type})")
+            }
+            TypeExpr::Refinement {
+                var_name,
+                base_type,
+                predicate,
+                ..
+            } => {
+                write!(f, "{{ {var_name}: {base_type} | {predicate:?} }}")
             }
         }
     }
@@ -2245,6 +2329,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: Vec::new(),
+            effect_row_var: None,
             body: Box::new(Expr::Block {
                 stmts: vec![],
                 expr: None,

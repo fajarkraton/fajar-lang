@@ -333,6 +333,45 @@ impl InductiveProof {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V14 DT3: Propositional Equality — Proof Terms
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 DT3: Proof term for propositional equality.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProofTerm {
+    /// Reflexivity: a == a
+    Refl(String),
+    /// Symmetry: if a == b then b == a
+    Sym(Box<ProofTerm>),
+    /// Transitivity: if a == b and b == c then a == c
+    Trans(Box<ProofTerm>, Box<ProofTerm>),
+    /// Congruence: if a == b then f(a) == f(b)
+    Cong(String, Box<ProofTerm>),
+}
+
+impl ProofTerm {
+    /// Verify that a proof term is well-formed.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            ProofTerm::Refl(_) => true,
+            ProofTerm::Sym(inner) => inner.is_valid(),
+            ProofTerm::Trans(p1, p2) => p1.is_valid() && p2.is_valid(),
+            ProofTerm::Cong(_, inner) => inner.is_valid(),
+        }
+    }
+
+    /// Depth of the proof tree.
+    pub fn depth(&self) -> usize {
+        match self {
+            ProofTerm::Refl(_) => 1,
+            ProofTerm::Sym(inner) => 1 + inner.depth(),
+            ProofTerm::Trans(p1, p2) => 1 + p1.depth().max(p2.depth()),
+            ProofTerm::Cong(_, inner) => 1 + inner.depth(),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // S4.9: Dependent Return Types
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -652,5 +691,165 @@ mod tests {
         };
         // No env — condition cannot be evaluated.
         assert_eq!(resolve_dep_branch(&branch, &HashMap::new()), None);
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V14 DT3: Propositional Equality — Proof Terms
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn v14_dt3_3_proof_refl() {
+        let proof = ProofTerm::Refl("x".into());
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 1);
+    }
+
+    #[test]
+    fn v14_dt3_4_proof_sym() {
+        let proof = ProofTerm::Sym(Box::new(ProofTerm::Refl("x".into())));
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 2);
+    }
+
+    #[test]
+    fn v14_dt3_5_proof_trans() {
+        let proof = ProofTerm::Trans(
+            Box::new(ProofTerm::Refl("a".into())),
+            Box::new(ProofTerm::Refl("b".into())),
+        );
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 2);
+    }
+
+    #[test]
+    fn v14_dt3_6_proof_cong() {
+        let proof = ProofTerm::Cong("f".into(), Box::new(ProofTerm::Refl("x".into())));
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 2);
+    }
+
+    #[test]
+    fn v14_dt3_7_proof_complex() {
+        // Trans(Sym(Refl(a)), Cong(f, Refl(b))) — depth 3
+        let proof = ProofTerm::Trans(
+            Box::new(ProofTerm::Sym(Box::new(ProofTerm::Refl("a".into())))),
+            Box::new(ProofTerm::Cong(
+                "f".into(),
+                Box::new(ProofTerm::Refl("b".into())),
+            )),
+        );
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 3);
+    }
+
+    #[test]
+    fn v14_dt3_8_proof_deep_nesting() {
+        let mut proof = ProofTerm::Refl("x".into());
+        for _ in 0..5 {
+            proof = ProofTerm::Sym(Box::new(proof));
+        }
+        assert!(proof.is_valid());
+        assert_eq!(proof.depth(), 6);
+    }
+
+    #[test]
+    fn v14_dt3_9_proof_equality() {
+        let p1 = ProofTerm::Refl("x".into());
+        let p2 = ProofTerm::Refl("x".into());
+        assert_eq!(p1, p2);
+        let p3 = ProofTerm::Refl("y".into());
+        assert_ne!(p1, p3);
+    }
+
+    #[test]
+    fn v14_dt3_10_proof_term_all_variants() {
+        let refl = ProofTerm::Refl("a".into());
+        let sym = ProofTerm::Sym(Box::new(refl.clone()));
+        let trans = ProofTerm::Trans(Box::new(refl.clone()), Box::new(refl.clone()));
+        let cong = ProofTerm::Cong("f".into(), Box::new(refl));
+        assert!(sym.is_valid());
+        assert!(trans.is_valid());
+        assert!(cong.is_valid());
+    }
+
+    #[test]
+    fn v14_dt6_proof_term_depth() {
+        let refl = ProofTerm::Refl("x".into());
+        assert_eq!(refl.depth(), 1);
+        let sym = ProofTerm::Sym(Box::new(refl.clone()));
+        assert_eq!(sym.depth(), 2);
+        let trans = ProofTerm::Trans(Box::new(sym.clone()), Box::new(refl.clone()));
+        assert_eq!(trans.depth(), 3);
+    }
+
+    #[test]
+    fn v14_dt6_dep_fn_signature_resolve() {
+        let sig = DepFnSignature {
+            name: "zeros".into(),
+            const_params: vec![("N".into(), "usize".into())],
+            where_clause: WhereClause::empty(),
+            return_type: "Vector<f64, N>".into(),
+        };
+        let result = resolve_dep_return_type(&sig, &[10]).unwrap();
+        assert_eq!(result, "Vector<f64, 10>");
+    }
+
+    #[test]
+    fn v14_dt6_dep_fn_multiple_params() {
+        let sig = DepFnSignature {
+            name: "matrix".into(),
+            const_params: vec![
+                ("ROWS".into(), "usize".into()),
+                ("COLS".into(), "usize".into()),
+            ],
+            where_clause: WhereClause::empty(),
+            return_type: "Mat<f64, ROWS, COLS>".into(),
+        };
+        let result = resolve_dep_return_type(&sig, &[3, 4]).unwrap();
+        assert_eq!(result, "Mat<f64, 3, 4>");
+    }
+
+    #[test]
+    fn v14_dt6_nat_pattern_matching() {
+        assert!(nat_pattern_matches(&NatPattern::Literal(5), 5));
+        assert!(!nat_pattern_matches(&NatPattern::Literal(5), 6));
+        assert!(nat_pattern_matches(&NatPattern::Wildcard, 999));
+        assert!(nat_pattern_matches(&NatPattern::Binding("n".into()), 42));
+        assert!(nat_pattern_matches(
+            &NatPattern::Range { start: 1, end_inclusive: 10 },
+            5,
+        ));
+        assert!(!nat_pattern_matches(
+            &NatPattern::Range { start: 1, end_inclusive: 10 },
+            11,
+        ));
+    }
+
+    #[test]
+    fn v14_dt6_nat_match_arm() {
+        let arms = vec![
+            NatMatchArm { pattern: NatPattern::Literal(0), result_type: "Empty".into() },
+            NatMatchArm { pattern: NatPattern::Literal(1), result_type: "Single".into() },
+            NatMatchArm { pattern: NatPattern::Wildcard, result_type: "Array".into() },
+        ];
+        let val = 1u64;
+        let matched = arms.iter().find(|a| nat_pattern_matches(&a.pattern, val));
+        assert_eq!(matched.unwrap().result_type, "Single");
+    }
+
+    #[test]
+    fn v14_dt6_where_clause_check() {
+        use super::super::nat::{NatConstraint, NatValue};
+        let wc = WhereClause {
+            constraints: vec![NatConstraint::GreaterThan(
+                NatValue::Param("N".into()),
+                0,
+            )],
+        };
+        let mut env = HashMap::new();
+        env.insert("N".to_string(), 5);
+        assert!(wc.check_all(&env).is_ok());
+        env.insert("N".to_string(), 0);
+        assert!(wc.check_all(&env).is_err());
     }
 }

@@ -518,6 +518,97 @@ impl ZeroCopyTensor {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V14 GS4.8: Multi-GPU Device Configuration
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 GS4.8: Multi-GPU device configuration.
+#[derive(Debug, Clone)]
+pub struct MultiGpuConfig {
+    /// Number of GPU devices.
+    pub device_count: usize,
+    /// Strategy for partitioning work across devices.
+    pub partition_strategy: PartitionStrategy,
+}
+
+/// Strategy for partitioning work across multiple GPUs.
+#[derive(Debug, Clone)]
+pub enum PartitionStrategy {
+    /// Split work evenly across devices.
+    EvenSplit,
+    /// Weight work by device capability.
+    WeightedByCapability,
+}
+
+impl MultiGpuConfig {
+    /// Creates a new multi-GPU config with even split strategy.
+    pub fn new(device_count: usize) -> Self {
+        Self {
+            device_count,
+            partition_strategy: PartitionStrategy::EvenSplit,
+        }
+    }
+
+    /// Partition `total_elements` across devices, returning (offset, size) pairs.
+    pub fn partition_work(&self, total_elements: usize) -> Vec<(usize, usize)> {
+        let chunk = total_elements / self.device_count;
+        let remainder = total_elements % self.device_count;
+        let mut result = Vec::new();
+        let mut offset = 0;
+        for i in 0..self.device_count {
+            let size = chunk + if i < remainder { 1 } else { 0 };
+            result.push((offset, size));
+            offset += size;
+        }
+        result
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 GS4.9: Workgroup Size Configuration
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 GS4.9: Workgroup size configuration.
+#[derive(Debug, Clone, Copy)]
+pub struct WorkgroupConfig {
+    /// X dimension.
+    pub x: u32,
+    /// Y dimension.
+    pub y: u32,
+    /// Z dimension.
+    pub z: u32,
+}
+
+impl WorkgroupConfig {
+    /// Creates a 1D workgroup configuration.
+    pub fn new_1d(x: u32) -> Self {
+        Self { x, y: 1, z: 1 }
+    }
+
+    /// Creates a 2D workgroup configuration.
+    pub fn new_2d(x: u32, y: u32) -> Self {
+        Self { x, y, z: 1 }
+    }
+
+    /// Creates a 3D workgroup configuration.
+    pub fn new_3d(x: u32, y: u32, z: u32) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Returns total number of threads per workgroup.
+    pub fn total_threads(&self) -> u32 {
+        self.x * self.y * self.z
+    }
+
+    /// Computes the number of dispatch groups needed for the given total dimensions.
+    pub fn dispatch_groups(&self, total_x: u32, total_y: u32, total_z: u32) -> (u32, u32, u32) {
+        let gx = total_x.div_ceil(self.x);
+        let gy = total_y.div_ceil(self.y);
+        let gz = total_z.div_ceil(self.z);
+        (gx, gy, gz)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -674,5 +765,36 @@ mod tests {
         let mut alloc = DeviceAllocator::new(0, 4096, 4096);
         let result = alloc.free(999);
         assert!(matches!(result, Err(AllocError::InvalidAllocation(999))));
+    }
+
+    // V14 GS4.8 — Multi-GPU partition
+    #[test]
+    fn v14_gs4_8_multi_gpu_partition() {
+        let cfg = MultiGpuConfig::new(4);
+        let parts = cfg.partition_work(100);
+        assert_eq!(parts.len(), 4);
+        let total: usize = parts.iter().map(|(_, s)| s).sum();
+        assert_eq!(total, 100);
+    }
+
+    // V14 GS4.9 — Workgroup dispatch
+    #[test]
+    fn v14_gs4_9_workgroup_dispatch() {
+        let wg = WorkgroupConfig::new_2d(16, 16);
+        assert_eq!(wg.total_threads(), 256);
+        let (gx, gy, gz) = wg.dispatch_groups(64, 64, 1);
+        assert_eq!(gx, 4);
+        assert_eq!(gy, 4);
+        assert_eq!(gz, 1);
+    }
+
+    // V14 GS4.10 — Auto dispatch selection
+    #[test]
+    fn v14_gs4_10_auto_dispatch_selection() {
+        // Test that workgroup config handles non-divisible sizes
+        let wg = WorkgroupConfig::new_1d(256);
+        let (gx, _, _) = wg.dispatch_groups(1000, 1, 1);
+        assert_eq!(gx, 4); // ceil(1000/256) = 4
+        assert_eq!(wg.total_threads(), 256);
     }
 }

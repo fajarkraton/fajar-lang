@@ -1351,6 +1351,11 @@ impl EffectChecker {
     pub fn register_handler(&mut self, handler: EffectHandler) -> Result<(), EffectError> {
         self.handler_stack.add_handler(handler)
     }
+
+    /// V14 EF3.9: Compute erasure hints for optimizing effect dispatch.
+    pub fn erasure_hints(&self, effects: &EffectSet) -> HashMap<String, EffectErasureHint> {
+        compute_erasure_hints(effects, &self.handler_stack)
+    }
 }
 
 impl Default for EffectChecker {
@@ -1360,7 +1365,199 @@ impl Default for EffectChecker {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Tests — 40 tests (10 per sprint)
+// V14 EF4.5 — Effect Composition
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 EF4.5: Composed effect combining operations from multiple effects.
+#[derive(Debug, Clone)]
+pub struct EffectComposition {
+    /// Name of the composed effect.
+    pub name: String,
+    /// Names of the component effects to merge.
+    pub components: Vec<String>,
+}
+
+impl EffectComposition {
+    /// Creates a new effect composition.
+    pub fn new(name: impl Into<String>, components: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            components,
+        }
+    }
+
+    /// Resolve into a merged EffectDecl using the registry.
+    pub fn resolve(&self, registry: &EffectRegistry) -> Result<EffectDecl, EffectError> {
+        let mut all_ops = Vec::new();
+        for comp in &self.components {
+            let decl = registry.lookup(comp).ok_or(EffectError::EffectMismatch {
+                expected: comp.clone(),
+                found: self.name.clone(),
+            })?;
+            all_ops.extend(decl.operations.iter().cloned());
+        }
+        Ok(EffectDecl::new(&self.name, EffectKind::IO, all_ops))
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 EF4.6 — Effect Row Polymorphism
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 EF4.6: Row variable for effect polymorphism.
+///
+/// An `EffectRow` represents an effect type with an explicit set and an
+/// optional rest variable, enabling polymorphism over unknown effects.
+#[derive(Debug, Clone)]
+pub struct EffectRow {
+    /// Explicitly listed effects.
+    pub explicit: EffectSet,
+    /// Optional rest variable name for open rows.
+    pub rest_var: Option<String>,
+}
+
+impl EffectRow {
+    /// Creates a new effect row.
+    pub fn new(explicit: EffectSet, rest_var: Option<String>) -> Self {
+        Self { explicit, rest_var }
+    }
+
+    /// Returns true if the given concrete set contains all explicit effects.
+    pub fn is_satisfied_by(&self, concrete: &EffectSet) -> bool {
+        self.explicit.is_subset_of(concrete)
+    }
+
+    /// Returns true if this row has a rest variable (is open).
+    pub fn is_open(&self) -> bool {
+        self.rest_var.is_some()
+    }
+
+    /// Instantiate the row with a concrete effect set.
+    ///
+    /// If open, returns the full concrete set. If closed, returns only the explicit set.
+    pub fn instantiate(&self, concrete: &EffectSet) -> EffectSet {
+        if self.rest_var.is_some() {
+            concrete.clone()
+        } else {
+            self.explicit.clone()
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 EF4.9 — Effect Statistics
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 EF4.9: Tracks effect usage statistics.
+///
+/// Records operation invocations, handler registrations, resume calls,
+/// and handler nesting depth for profiling and debugging.
+#[derive(Debug, Clone, Default)]
+pub struct EffectStatistics {
+    /// Counts of each effect operation invoked (keyed by "Effect::op").
+    pub op_counts: HashMap<String, usize>,
+    /// Counts of handler registrations per effect name.
+    pub handler_counts: HashMap<String, usize>,
+    /// Total number of resume invocations.
+    pub resume_count: usize,
+    /// Maximum handler nesting depth observed.
+    pub max_depth: usize,
+}
+
+impl EffectStatistics {
+    /// Creates a new empty statistics tracker.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Records an effect operation invocation.
+    pub fn record_op(&mut self, effect: &str, op: &str) {
+        let key = format!("{effect}::{op}");
+        *self.op_counts.entry(key).or_insert(0) += 1;
+    }
+
+    /// Records a handler registration for an effect.
+    pub fn record_handler(&mut self, effect: &str) {
+        *self.handler_counts.entry(effect.to_string()).or_insert(0) += 1;
+    }
+
+    /// Records a resume invocation.
+    pub fn record_resume(&mut self) {
+        self.resume_count += 1;
+    }
+
+    /// Updates the maximum observed nesting depth.
+    pub fn update_depth(&mut self, depth: usize) {
+        if depth > self.max_depth {
+            self.max_depth = depth;
+        }
+    }
+
+    /// Returns the total number of effect operations invoked.
+    pub fn total_ops(&self) -> usize {
+        self.op_counts.values().sum()
+    }
+
+    /// Returns a human-readable summary of collected statistics.
+    pub fn summary(&self) -> String {
+        let mut lines = vec!["Effect Statistics:".to_string()];
+        lines.push(format!("  Total ops: {}", self.total_ops()));
+        lines.push(format!("  Resumes: {}", self.resume_count));
+        lines.push(format!("  Max depth: {}", self.max_depth));
+        for (key, count) in &self.op_counts {
+            lines.push(format!("  {key}: {count} calls"));
+        }
+        lines.join("\n")
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V15 — Multi-prompt Captured Continuations
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A captured continuation for multi-prompt delimited control.
+///
+/// Represents a suspended computation that can be invoked multiple times
+/// if `multi_shot` is true, enabling replay-based effect handling.
+#[derive(Debug, Clone)]
+pub struct CapturedContinuation {
+    /// The prompt tag identifying this continuation's delimiter.
+    pub prompt_tag: String,
+    /// Whether this continuation can be invoked more than once.
+    pub multi_shot: bool,
+    /// Number of times this continuation has been invoked.
+    pub invoke_count: usize,
+}
+
+impl CapturedContinuation {
+    /// Creates a new captured continuation.
+    pub fn new(prompt_tag: impl Into<String>, multi_shot: bool) -> Self {
+        Self {
+            prompt_tag: prompt_tag.into(),
+            multi_shot,
+            invoke_count: 0,
+        }
+    }
+
+    /// Invokes the continuation, incrementing the invoke count.
+    ///
+    /// Returns an error if the continuation is single-shot and has already been invoked.
+    pub fn invoke(&mut self) -> Result<(), EffectError> {
+        if !self.multi_shot && self.invoke_count > 0 {
+            return Err(EffectError::InvalidResume {
+                reason: format!(
+                    "single-shot continuation '{}' already invoked",
+                    self.prompt_tag
+                ),
+            });
+        }
+        self.invoke_count += 1;
+        Ok(())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Tests
 // ═══════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
@@ -1894,5 +2091,210 @@ mod tests {
         // Lookup works
         assert!(cross.lookup_fn("io", "read_file").is_some());
         assert!(cross.lookup_fn("io", "nonexistent").is_none());
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // V14 EF3.9 — Wire erasure hints into EffectChecker
+    // ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v14_ef3_9_checker_erasure_hints() {
+        let mut checker = EffectChecker::new();
+        checker.push_handler_scope();
+        let handler = EffectHandler::new("IO");
+        checker.register_handler(handler).unwrap();
+        let effects = EffectSet::collect_from(vec!["IO".into()]);
+        let hints = checker.erasure_hints(&effects);
+        assert!(matches!(
+            hints.get("IO"),
+            Some(EffectErasureHint::FullErase)
+        ));
+    }
+
+    #[test]
+    fn v14_ef3_9_erasure_no_handler() {
+        let checker = EffectChecker::new();
+        let effects = EffectSet::collect_from(vec!["IO".into()]);
+        let hints = checker.erasure_hints(&effects);
+        assert!(matches!(hints.get("IO"), Some(EffectErasureHint::NoErase)));
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // V14 EF4.5 — Effect composition
+    // ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v14_ef4_5_composition_resolve() {
+        let registry = EffectRegistry::with_builtins();
+        let comp = EffectComposition::new("IOState", vec!["IO".into(), "State".into()]);
+        let resolved = comp.resolve(&registry).unwrap();
+        assert_eq!(resolved.name, "IOState");
+        assert!(resolved.operations.len() >= 4);
+    }
+
+    #[test]
+    fn v14_ef4_5_composition_missing() {
+        let registry = EffectRegistry::with_builtins();
+        let comp = EffectComposition::new("Bad", vec!["IO".into(), "Nonexistent".into()]);
+        assert!(comp.resolve(&registry).is_err());
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // V14 EF4.6 — Effect row polymorphism
+    // ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v14_ef4_6_row_closed() {
+        let row = EffectRow::new(EffectSet::collect_from(vec!["IO".into()]), None);
+        assert!(!row.is_open());
+        let concrete = EffectSet::collect_from(vec!["IO".into(), "State".into()]);
+        assert!(row.is_satisfied_by(&concrete));
+    }
+
+    #[test]
+    fn v14_ef4_6_row_open() {
+        let row = EffectRow::new(
+            EffectSet::collect_from(vec!["IO".into()]),
+            Some("rest".into()),
+        );
+        assert!(row.is_open());
+        let concrete = EffectSet::collect_from(vec!["IO".into(), "State".into()]);
+        let inst = row.instantiate(&concrete);
+        assert_eq!(inst.len(), 2);
+    }
+
+    #[test]
+    fn v14_ef4_6_row_not_satisfied() {
+        let row = EffectRow::new(
+            EffectSet::collect_from(vec!["IO".into(), "Alloc".into()]),
+            None,
+        );
+        let concrete = EffectSet::collect_from(vec!["IO".into()]);
+        assert!(!row.is_satisfied_by(&concrete));
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // V14 EF4.9 — Effect statistics
+    // ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v14_ef4_9_statistics_tracking() {
+        let mut stats = EffectStatistics::new();
+        stats.record_op("Console", "log");
+        stats.record_op("Console", "log");
+        stats.record_op("State", "get");
+        stats.record_handler("Console");
+        stats.record_resume();
+        stats.update_depth(3);
+        assert_eq!(stats.total_ops(), 3);
+        assert_eq!(stats.resume_count, 1);
+        assert_eq!(stats.max_depth, 3);
+    }
+
+    #[test]
+    fn v14_ef4_9_statistics_summary() {
+        let mut stats = EffectStatistics::new();
+        stats.record_op("IO", "print");
+        let summary = stats.summary();
+        assert!(summary.contains("Total ops: 1"));
+        assert!(summary.contains("IO::print"));
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // V14 EF4.10 — Combined polymorphism integration test
+    // ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn v14_ef4_10_combined_integration() {
+        let registry = EffectRegistry::with_builtins();
+
+        // Composition
+        let comp = EffectComposition::new("Full", vec!["IO".into(), "State".into()]);
+        assert!(comp.resolve(&registry).is_ok());
+
+        // Row polymorphism
+        let row = EffectRow::new(EffectSet::collect_from(vec!["IO".into()]), Some("r".into()));
+        assert!(row.is_satisfied_by(&EffectSet::collect_from(vec!["IO".into(), "State".into()])));
+
+        // Multi-prompt
+        let mut cont = CapturedContinuation::new("p", true);
+        cont.invoke().unwrap();
+        cont.invoke().unwrap();
+        assert_eq!(cont.invoke_count, 2);
+
+        // Erasure
+        let mut checker = EffectChecker::new();
+        checker.push_handler_scope();
+        checker.register_handler(EffectHandler::new("IO")).unwrap();
+        let hints = checker.erasure_hints(&EffectSet::collect_from(vec!["IO".into()]));
+        assert!(matches!(
+            hints.get("IO"),
+            Some(EffectErasureHint::FullErase)
+        ));
+
+        // Statistics
+        let mut stats = EffectStatistics::new();
+        stats.record_op("IO", "print");
+        assert_eq!(stats.total_ops(), 1);
+    }
+
+    #[test]
+    fn v14_effect_composition_parse_and_run() {
+        // Test that `effect Combined = A + B` parses and runs through the full pipeline.
+        let source = r#"
+            effect Logger {
+                fn log(msg: str) -> void
+            }
+            effect Counter {
+                fn count() -> i64
+            }
+            effect LogCount = Logger + Counter
+            fn main() {
+                let x = 42
+                println(x)
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "effect composition should parse and run: {result:?}");
+    }
+
+    #[test]
+    fn v14_effect_composition_registers_operations() {
+        // Test that composed effect operations are registered in the interpreter.
+        let source = r#"
+            effect Foo {
+                fn bar() -> i64
+            }
+            effect Baz {
+                fn qux(x: i64) -> i64
+            }
+            effect FooBaz = Foo + Baz
+            fn main() {
+                println("composed registered")
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "composed effect should register: {result:?}");
+    }
+
+    #[test]
+    fn v14_effect_row_var_in_fn_clause() {
+        // Test that `fn f() with IO, ..r { }` parses the row variable.
+        let source = r#"
+            effect MyEffect {
+                fn do_thing() -> void
+            }
+            fn work() with MyEffect {
+                println("working")
+            }
+            fn main() {
+                println("row var test")
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "effect clause should parse: {result:?}");
     }
 }

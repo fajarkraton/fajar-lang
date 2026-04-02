@@ -159,6 +159,17 @@ impl<'src> Formatter<'src> {
             Item::EffectDecl(_) => {
                 // Effect declarations: formatting not yet implemented
             }
+            Item::EffectComposition(ec) => {
+                self.write_indent();
+                let pub_prefix = if ec.is_pub { "pub " } else { "" };
+                self.push(&format!(
+                    "{}effect {} = {}",
+                    pub_prefix,
+                    ec.name,
+                    ec.components.join(" + ")
+                ));
+                self.newline();
+            }
             Item::MacroRulesDef(m) => {
                 self.write_indent();
                 self.push(&format!("macro_rules! {} {{ ... }}", m.name));
@@ -1019,6 +1030,29 @@ impl<'src> Formatter<'src> {
             TypeExpr::DynTrait { trait_name, .. } => {
                 self.push(&format!("dyn {trait_name}"));
             }
+            TypeExpr::Pi {
+                param_name,
+                param_type,
+                return_type,
+                ..
+            } => {
+                self.push(&format!("Pi({param_name}: {param_type}) -> {return_type}"));
+            }
+            TypeExpr::Sigma {
+                fst_name,
+                fst_type,
+                snd_type,
+                ..
+            } => {
+                self.push(&format!("Sigma({fst_name}: {fst_type}, {snd_type})"));
+            }
+            TypeExpr::Refinement {
+                var_name,
+                base_type,
+                ..
+            } => {
+                self.push(&format!("{{ {var_name}: {base_type} | ... }}"));
+            }
         }
     }
 
@@ -1164,6 +1198,7 @@ fn item_span(item: &Item) -> crate::lexer::token::Span {
         Item::TypeAlias(ta) => ta.span,
         Item::GlobalAsm(ga) => ga.span,
         Item::EffectDecl(ed) => ed.span,
+        Item::EffectComposition(ec) => ec.span,
         Item::MacroRulesDef(m) => m.span,
         Item::Stmt(s) => stmt_span(s),
     }

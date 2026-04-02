@@ -148,6 +148,7 @@ impl Compiler {
             | Item::TypeAlias(_)
             | Item::GlobalAsm(_)
             | Item::EffectDecl(_)
+            | Item::EffectComposition(_)
             | Item::MacroRulesDef(_) => {
                 // Module/use/trait/extern/type-alias/global_asm/effect/macros handled by pre-processing
             }

@@ -1616,10 +1616,65 @@ impl Parser {
                 })
             }
 
+            // Refinement type: { x: i32 | x > 0 }
+            TokenKind::LBrace => {
+                let start = token.span.start;
+                self.advance(); // eat `{`
+                let (var_name, _) = self.expect_ident()?;
+                self.expect(&TokenKind::Colon)?;
+                let base_type = self.parse_type_expr()?;
+                self.expect(&TokenKind::Pipe)?;
+                let predicate = self.parse_expr(0)?;
+                let end = self.peek().span.end;
+                self.expect(&TokenKind::RBrace)?;
+                Ok(TypeExpr::Refinement {
+                    var_name,
+                    base_type: Box::new(base_type),
+                    predicate: Box::new(predicate),
+                    span: Span::new(start, end),
+                })
+            }
+
             // Named type or type keyword: i32, bool, Vec<T>, Tensor<f32>[3,4], path::Type
             _ => {
                 let name = self.parse_type_name()?;
                 let start = token.span.start;
+
+                // Sigma type: `Sigma(n: usize, [f64; n])`
+                if name == "Sigma" && self.at(&TokenKind::LParen) {
+                    self.advance(); // eat `(`
+                    let (fst_name, _) = self.expect_ident()?;
+                    self.expect(&TokenKind::Colon)?;
+                    let fst_type = self.parse_type_expr()?;
+                    self.expect(&TokenKind::Comma)?;
+                    let snd_type = self.parse_type_expr()?;
+                    self.expect(&TokenKind::RParen)?;
+                    let end = self.prev_span().end;
+                    return Ok(TypeExpr::Sigma {
+                        fst_name,
+                        fst_type: Box::new(fst_type),
+                        snd_type: Box::new(snd_type),
+                        span: Span::new(start, end),
+                    });
+                }
+
+                // Pi type: `Pi(n: usize) -> RetType`
+                if name == "Pi" && self.at(&TokenKind::LParen) {
+                    self.advance(); // eat `(`
+                    let (param_name, _) = self.expect_ident()?;
+                    self.expect(&TokenKind::Colon)?;
+                    let param_type = self.parse_type_expr()?;
+                    self.expect(&TokenKind::RParen)?;
+                    self.expect(&TokenKind::Arrow)?;
+                    let return_type = self.parse_type_expr()?;
+                    let end = return_type.span().end;
+                    return Ok(TypeExpr::Pi {
+                        param_name,
+                        param_type: Box::new(param_type),
+                        return_type: Box::new(return_type),
+                        span: Span::new(start, end),
+                    });
+                }
 
                 // Check for generic args: Name<T, U>
                 if self.at(&TokenKind::Lt) {

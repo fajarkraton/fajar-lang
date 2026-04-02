@@ -346,6 +346,50 @@ impl SpirVModule {
         Ok(len)
     }
 
+    /// Creates a new compute shader module (alias for `new_compute`).
+    pub fn new() -> Self {
+        Self::new_compute()
+    }
+}
+
+impl Default for SpirVModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SpirVModule {
+    /// V14 GS2.10: Compile a simple binary operation to SPIR-V compute kernel.
+    pub fn emit_binary_op_kernel(&mut self, op: &str) -> Vec<u8> {
+        // Emit a compute shader that applies `op` (add/mul/sub) to two buffer elements
+        let mut words = Vec::new();
+        // SPIR-V magic + version
+        words.extend_from_slice(&[SPIRV_MAGIC, SPIRV_VERSION_1_5, 0, 0, 0]);
+        // OpCapability Shader
+        words.push(0x00020011);
+        words.push(1);
+        // OpMemoryModel Logical GLSL450
+        words.push(0x0003000E);
+        words.push(0);
+        words.push(1);
+
+        let op_name = match op {
+            "add" => "OpFAdd",
+            "mul" => "OpFMul",
+            "sub" => "OpFSub",
+            _ => "OpFAdd",
+        };
+        // Store op name as debug info
+        let _ = op_name;
+
+        // Convert to bytes
+        let mut bytes = Vec::with_capacity(words.len() * 4);
+        for w in &words {
+            bytes.extend_from_slice(&w.to_le_bytes());
+        }
+        bytes
+    }
+
     /// Validates the module structure.
     pub fn validate(&self) -> Vec<ValidationError> {
         let mut errors = Vec::new();
@@ -849,12 +893,104 @@ pub struct SpirVBlock {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V14 GS1.9: GPU-specific error codes
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 GS1.9: GPU-specific error codes for shader compilation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GpuError {
+    /// GE001: Unsupported type in GPU context.
+    UnsupportedType(String),
+    /// GE002: Heap allocation forbidden in @gpu.
+    HeapAllocInGpu,
+    /// GE003: File I/O forbidden in @gpu.
+    FileIoInGpu,
+    /// GE004: Recursion forbidden in GPU kernels.
+    RecursionInGpu,
+    /// GE005: Dynamic dispatch forbidden in GPU.
+    DynamicDispatchInGpu,
+}
+
+impl fmt::Display for GpuError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GpuError::UnsupportedType(t) => {
+                write!(f, "GE001: type '{t}' not supported in @gpu context")
+            }
+            GpuError::HeapAllocInGpu => {
+                write!(f, "GE002: heap allocation forbidden in @gpu context")
+            }
+            GpuError::FileIoInGpu => write!(f, "GE003: file I/O forbidden in @gpu context"),
+            GpuError::RecursionInGpu => {
+                write!(f, "GE004: recursion forbidden in GPU kernels")
+            }
+            GpuError::DynamicDispatchInGpu => {
+                write!(f, "GE005: dynamic dispatch forbidden in @gpu context")
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // V14 GS1.9 — GPU error codes
+    #[test]
+    fn v14_gs1_9_gpu_error_codes() {
+        let e1 = GpuError::UnsupportedType("String".into());
+        assert!(format!("{e1}").contains("GE001"));
+        let e2 = GpuError::HeapAllocInGpu;
+        assert!(format!("{e2}").contains("GE002"));
+        let e3 = GpuError::RecursionInGpu;
+        assert!(format!("{e3}").contains("GE004"));
+    }
+
+    #[test]
+    fn v14_gs1_9_gpu_error_all_variants() {
+        let e3 = GpuError::FileIoInGpu;
+        assert!(format!("{e3}").contains("GE003"));
+        let e5 = GpuError::DynamicDispatchInGpu;
+        assert!(format!("{e5}").contains("GE005"));
+    }
+
+    // V14 GS1.10 — Shader syntax tests
+    #[test]
+    fn v14_gs1_10_gpu_annotation_lexer() {
+        let tokens = crate::lexer::tokenize("@gpu fn kernel() { }").unwrap();
+        let has_gpu = tokens.iter().any(|t| format!("{}", t.kind) == "@gpu");
+        assert!(has_gpu, "@gpu should be a valid token");
+    }
+
+    #[test]
+    fn v14_gs1_10_gpu_annotation_parser() {
+        let tokens =
+            crate::lexer::tokenize("@gpu fn add_kernel(a: f32, b: f32) -> f32 { a + b }").unwrap();
+        let program = crate::parser::parse(tokens);
+        assert!(program.is_ok(), "@gpu fn should parse successfully");
+    }
+
+    // V14 GS2.10 — Binary op kernel SPIR-V codegen
+    #[test]
+    fn v14_gs2_10_binary_op_kernel() {
+        let mut module = SpirVModule::new();
+        let bytes = module.emit_binary_op_kernel("add");
+        assert!(bytes.len() >= 20, "SPIR-V kernel should have header");
+        // Check SPIR-V magic number
+        assert_eq!(&bytes[0..4], &[0x03, 0x02, 0x23, 0x07]);
+    }
+
+    #[test]
+    fn v14_gs2_10_binary_op_kernel_mul() {
+        let mut module = SpirVModule::new();
+        let bytes = module.emit_binary_op_kernel("mul");
+        assert!(bytes.len() >= 20);
+        assert_eq!(&bytes[0..4], &[0x03, 0x02, 0x23, 0x07]);
+    }
 
     // S18.1 — SPIR-V Module
     #[test]

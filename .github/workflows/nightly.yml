@@ -1,0 +1,78 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  RUST_MIN_STACK: "8388608"
+
+jobs:
+  nightly-test:
+    name: Nightly Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-nightly-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Clippy (nightly)
+        run: cargo clippy -- -D warnings
+
+      - name: Run all tests
+        run: cargo test --lib --bins --tests --examples
+
+  nightly-fuzz:
+    name: Nightly Fuzz (extended)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            fuzz/target
+          key: ${{ runner.os }}-nightly-fuzz-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked || true
+
+      - name: Fuzz lexer (120s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_lexer -- -max_total_time=120
+      - name: Fuzz parser (120s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_parser -- -max_total_time=120
+      - name: Fuzz analyzer (120s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_analyzer -- -max_total_time=120
+      - name: Fuzz interpreter (120s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_interpreter -- -max_total_time=120
+      - name: Fuzz effect (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_effect -- -max_total_time=60
+      - name: Fuzz f-string (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_fstring -- -max_total_time=60
+      - name: Fuzz REPL (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_repl -- -max_total_time=60
+      - name: Fuzz macro (60s)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_macro -- -max_total_time=60

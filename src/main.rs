@@ -69,6 +69,9 @@ enum Command {
         /// V15 B3.5: Parse + analyze without executing. Print "OK" or errors.
         #[arg(long)]
         check_only: bool,
+        /// V14 EF4.9: Print effect usage statistics after execution.
+        #[arg(long)]
+        effect_stats: bool,
     },
     /// Start an interactive REPL.
     Repl,
@@ -201,6 +204,13 @@ enum Command {
         /// Path where the registry directory should be created.
         path: PathBuf,
     },
+    /// V14 PR1.9: Start a local package registry HTTP server.
+    #[command(name = "registry-serve")]
+    RegistryServe {
+        /// Port to listen on (default: 8080).
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    },
     /// Add a dependency to fj.toml.
     Add {
         /// Package name to add (e.g., fj-math).
@@ -308,6 +318,15 @@ enum Command {
     HwInfo,
     /// Output hardware profile as machine-readable JSON.
     HwJson,
+    /// Generate Software Bill of Materials (CycloneDX or SPDX).
+    Sbom {
+        /// Output format: "cyclonedx" (default) or "spdx".
+        #[arg(long, default_value = "cyclonedx")]
+        format: String,
+        /// Output file path (default: stdout).
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
     /// Verify a Fajar Lang source file using formal verification.
     Verify {
         /// Path to the .fj source file.
@@ -378,6 +397,7 @@ fn main_inner() -> ExitCode {
             cluster,
             jit,
             check_only,
+            effect_stats,
         } => {
             let path = match file {
                 Some(f) => f,
@@ -406,6 +426,8 @@ fn main_inner() -> ExitCode {
                 cmd_run_profile(&path, &out)
             } else if strict_ownership {
                 cmd_run_strict(&path)
+            } else if effect_stats {
+                cmd_run_with_effect_stats(&path)
             } else {
                 cmd_run(&path)
             }
@@ -486,46 +508,101 @@ fn main_inner() -> ExitCode {
             if target == "wasm32-wasi-p2" || target == "wasm32-wasip2" {
                 return cmd_build_wasi_p2(&path, output.as_deref(), verbose);
             }
-            // V16 G2.8: SPIR-V compute shader target
-            if target == "spirv" {
-                let out_path = output
-                    .as_deref()
-                    .unwrap_or(std::path::Path::new("output.spv"));
-                let mut module = fajar_lang::gpu_codegen::spirv::SpirVModule::new_compute();
-                match module.emit_compute_to_file(&out_path.display().to_string(), "main") {
-                    Ok(size) => {
-                        println!(
-                            "SPIR-V compute shader written to {} ({} bytes)",
-                            out_path.display(),
-                            size
-                        );
-                        return ExitCode::SUCCESS;
-                    }
-                    Err(e) => {
-                        eprintln!("error: {e}");
-                        return ExitCode::from(EXIT_RUNTIME);
-                    }
-                }
-            }
-            // V16 G3.8: PTX compute shader target
-            if target == "ptx" {
-                let out_path = output
-                    .as_deref()
-                    .unwrap_or(std::path::Path::new("output.ptx"));
-                let mut module = fajar_lang::gpu_codegen::ptx::PtxModule {
-                    ptx_version: 75,
-                    sm_version: 80,
-                    address_size: 64,
-                    kernels: Vec::new(),
-                    shared_decls: Vec::new(),
+            // V14 Phase 1: AST-driven GPU codegen for SPIR-V/PTX/Metal/HLSL.
+            // Reads .fj source, parses it, finds @gpu fns, and generates shader code.
+            // Falls back to hardcoded minimal kernel if no .fj source has @gpu fns.
+            if matches!(target.as_str(), "spirv" | "ptx" | "metal" | "hlsl") {
+                let ext = match target.as_str() {
+                    "spirv" => "spv",
+                    "ptx" => "ptx",
+                    "metal" => "metal",
+                    "hlsl" => "hlsl",
+                    _ => unreachable!(),
                 };
-                module.add_elementwise_add_kernel("main");
-                match module.emit_compute_to_file(&out_path.display().to_string()) {
-                    Ok(size) => {
+                let default_out = format!("output.{ext}");
+                let out_path = output
+                    .as_deref()
+                    .unwrap_or_else(|| std::path::Path::new(&default_out));
+
+                // Try AST-driven codegen: read .fj source → parse → lower → emit
+                let gpu_ir = if path.extension().is_some_and(|e| e == "fj") {
+                    let source = match std::fs::read_to_string(&path) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("error reading {}: {e}", path.display());
+                            return ExitCode::from(EXIT_RUNTIME);
+                        }
+                    };
+                    let tokens = match fajar_lang::lexer::tokenize(&source) {
+                        Ok(t) => t,
+                        Err(errs) => {
+                            for e in &errs {
+                                eprintln!("{e}");
+                            }
+                            return ExitCode::from(EXIT_RUNTIME);
+                        }
+                    };
+                    let program = match fajar_lang::parser::parse(tokens) {
+                        Ok(p) => p,
+                        Err(errs) => {
+                            for e in &errs {
+                                eprintln!("{e}");
+                            }
+                            return ExitCode::from(EXIT_RUNTIME);
+                        }
+                    };
+                    fajar_lang::gpu_codegen::lower_to_gpu_ir(&program).ok()
+                } else {
+                    None
+                };
+
+                let (bytes, label) = if let Some(ir) = gpu_ir {
+                    let kernel = &ir.kernels[0];
+                    match target.as_str() {
+                        "spirv" => (kernel.to_spirv(), "SPIR-V compute shader"),
+                        "ptx" => (kernel.to_ptx().into_bytes(), "PTX assembly"),
+                        "metal" => (kernel.to_metal().into_bytes(), "Metal shader"),
+                        "hlsl" => (kernel.to_hlsl(256).into_bytes(), "HLSL shader"),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    // Fallback: hardcoded minimal kernels (backwards compat)
+                    match target.as_str() {
+                        "spirv" => {
+                            let mut m = fajar_lang::gpu_codegen::spirv::SpirVModule::new_compute();
+                            (m.emit_elementwise_add_shader("main"), "SPIR-V compute shader")
+                        }
+                        "ptx" => {
+                            let mut m = fajar_lang::gpu_codegen::ptx::PtxModule {
+                                ptx_version: 75,
+                                sm_version: 80,
+                                address_size: 64,
+                                kernels: Vec::new(),
+                                shared_decls: Vec::new(),
+                            };
+                            m.add_elementwise_add_kernel("main");
+                            (m.emit().into_bytes(), "PTX assembly")
+                        }
+                        "metal" => {
+                            let mut m = fajar_lang::gpu_codegen::metal::MetalModule::new("main");
+                            m.emit_add_kernel();
+                            (m.source().as_bytes().to_vec(), "Metal shader")
+                        }
+                        "hlsl" => {
+                            let mut m = fajar_lang::gpu_codegen::hlsl::HlslModule::new("CSMain");
+                            m.emit_add_kernel(256);
+                            (m.source().as_bytes().to_vec(), "HLSL shader")
+                        }
+                        _ => unreachable!(),
+                    }
+                };
+
+                match std::fs::write(out_path, &bytes) {
+                    Ok(()) => {
                         println!(
-                            "PTX assembly written to {} ({} bytes)",
+                            "{label} written to {} ({} bytes)",
                             out_path.display(),
-                            size
+                            bytes.len()
                         );
                         return ExitCode::SUCCESS;
                     }
@@ -634,6 +711,7 @@ fn main_inner() -> ExitCode {
             registry: _,
         } => cmd_publish(),
         Command::RegistryInit { path } => cmd_registry_init(&path),
+        Command::RegistryServe { port } => cmd_registry_serve(port),
         Command::Add { package, version } => cmd_add(&package, version.as_deref()),
         Command::Test {
             file,
@@ -716,6 +794,7 @@ fn main_inner() -> ExitCode {
         Command::Gui { file } => cmd_gui(&file),
         Command::HwInfo => cmd_hw_info(),
         Command::HwJson => cmd_hw_json(),
+        Command::Sbom { format, output } => cmd_sbom(&format, output.as_deref()),
         Command::Verify {
             file,
             format,
@@ -1021,6 +1100,62 @@ fn cmd_run(path: &PathBuf) -> ExitCode {
         FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
         return ExitCode::from(EXIT_RUNTIME);
     }
+
+    ExitCode::SUCCESS
+}
+
+/// Runs a Fajar Lang program and prints effect usage statistics after execution.
+fn cmd_run_with_effect_stats(path: &PathBuf) -> ExitCode {
+    let source = match read_source(path) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let filename = path.display().to_string();
+
+    let tokens = match tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    let program = match parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+
+    if let Err(errors) = analyze(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    let mut interp = Interpreter::new();
+    if let Some(parent) = path.parent() {
+        interp.set_source_dir(parent.to_path_buf());
+    }
+    if let Err(e) = interp.eval_program(&program) {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+    if let Err(e) = interp.call_main() {
+        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        return ExitCode::from(EXIT_RUNTIME);
+    }
+
+    // Print effect statistics
+    let stats = interp.effect_stats();
+    eprintln!("\n--- Effect Statistics ---");
+    eprintln!("{}", stats.summary());
 
     ExitCode::SUCCESS
 }
@@ -3802,6 +3937,20 @@ fn cmd_registry_init(path: &PathBuf) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// V14 PR1.9: Start a local package registry HTTP server.
+fn cmd_registry_serve(port: u16) -> ExitCode {
+    use fajar_lang::package::server::RegistryServer;
+
+    let server = RegistryServer::new(port);
+    match server.serve() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: registry server failed: {e}");
+            ExitCode::from(EXIT_RUNTIME)
+        }
+    }
+}
+
 fn cmd_publish() -> ExitCode {
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -4279,6 +4428,83 @@ fn cmd_hw_json() -> ExitCode {
         }
         Err(e) => {
             eprintln!("error: failed to serialize hardware profile: {e}");
+            ExitCode::from(EXIT_RUNTIME)
+        }
+    }
+}
+
+/// V14 H4.9: Generate SBOM from Cargo.lock dependencies.
+fn cmd_sbom(format: &str, output: Option<&std::path::Path>) -> ExitCode {
+    use fajar_lang::package::sbom::{DepInfo, SbomFormat, generate_sbom};
+
+    let sbom_format = match format {
+        "spdx" => SbomFormat::Spdx,
+        _ => SbomFormat::CycloneDx,
+    };
+
+    // Read project name from fj.toml if available
+    let project_name = std::fs::read_to_string("fj.toml")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("name"))
+                .and_then(|l| l.split('=').nth(1))
+                .map(|v| v.trim().trim_matches('"').to_string())
+        })
+        .unwrap_or_else(|| "fajar-project".to_string());
+
+    // Parse Cargo.lock into dependency list
+    let deps: Vec<DepInfo> = std::fs::read_to_string("Cargo.lock")
+        .ok()
+        .map(|lock| {
+            lock.split("[[package]]")
+                .skip(1)
+                .filter_map(|block| {
+                    let name = block
+                        .lines()
+                        .find(|l| l.starts_with("name"))?
+                        .split('"')
+                        .nth(1)?
+                        .to_string();
+                    let version = block
+                        .lines()
+                        .find(|l| l.starts_with("version"))?
+                        .split('"')
+                        .nth(1)?
+                        .to_string();
+                    let checksum = block
+                        .lines()
+                        .find(|l| l.starts_with("checksum"))
+                        .and_then(|l| l.split('"').nth(1))
+                        .unwrap_or("")
+                        .to_string();
+                    Some(DepInfo {
+                        name,
+                        version,
+                        sha256: checksum,
+                        license: None,
+                        dev_only: false,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match generate_sbom(&project_name, &deps, sbom_format) {
+        Ok(json) => {
+            if let Some(path) = output {
+                if std::fs::write(path, &json).is_err() {
+                    eprintln!("error: failed to write SBOM to {}", path.display());
+                    return ExitCode::from(EXIT_RUNTIME);
+                }
+                println!("SBOM written to {}", path.display());
+            } else {
+                println!("{json}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("error: SBOM generation failed: {e}");
             ExitCode::from(EXIT_RUNTIME)
         }
     }

@@ -941,6 +941,26 @@ mod tests {
         assert!(comps.contains("publish"));
     }
 
+    // V14 PR3.10: Shell completions (extended validation)
+    #[test]
+    fn v14_pr3_10_bash_completions() {
+        let script = generate_completions("bash");
+        assert!(script.contains("_fj_completions"));
+        assert!(script.contains("complete -F"));
+    }
+
+    #[test]
+    fn v14_pr3_10_zsh_completions() {
+        let script = generate_completions("zsh");
+        assert!(script.contains("#compdef fj"));
+    }
+
+    #[test]
+    fn v14_pr3_10_fish_completions() {
+        let script = generate_completions("fish");
+        assert!(script.contains("complete -c fj"));
+    }
+
     // PR2.16: Progress indicators
     #[test]
     fn pr2_16_progress() {

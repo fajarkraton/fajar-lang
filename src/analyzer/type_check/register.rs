@@ -1698,6 +1698,111 @@ impl TypeChecker {
             Item::TypeAlias(ta) => {
                 self.register_type_alias(ta);
             }
+            Item::EffectDecl(ed) => {
+                // Register effect declarations in first pass so functions with
+                // `with EffectName` clauses can resolve them in second pass.
+                let kind = crate::analyzer::effects::effect_kind_from_name(&ed.name)
+                    .unwrap_or(crate::analyzer::effects::EffectKind::State);
+                let ops: Vec<crate::analyzer::effects::EffectOp> = ed
+                    .operations
+                    .iter()
+                    .map(|op| {
+                        let param_type_names: Vec<String> = op
+                            .params
+                            .iter()
+                            .map(|(_, ty)| match ty {
+                                crate::parser::ast::TypeExpr::Simple { name, .. } => name.clone(),
+                                other => format!("{other:?}"),
+                            })
+                            .collect();
+                        let ret_type_name =
+                            op.return_type
+                                .as_ref()
+                                .map_or("void".to_string(), |t| match t {
+                                    crate::parser::ast::TypeExpr::Simple { name, .. } => {
+                                        name.clone()
+                                    }
+                                    other => format!("{other:?}"),
+                                });
+                        crate::analyzer::effects::EffectOp::new(
+                            op.name.clone(),
+                            param_type_names,
+                            ret_type_name,
+                        )
+                    })
+                    .collect();
+                let decl =
+                    crate::analyzer::effects::EffectDecl::new(ed.name.clone(), kind, ops);
+                if self.effect_registry.register(decl).is_err() {
+                    self.errors.push(SemanticError::DuplicateEffectDecl {
+                        name: ed.name.clone(),
+                        span: ed.span,
+                    });
+                }
+                // Register each effect operation as a known function symbol.
+                for op in &ed.operations {
+                    let qualified = format!("{}::{}", ed.name, op.name);
+                    let ret_ty = op
+                        .return_type
+                        .as_ref()
+                        .map(|t| self.resolve_type(t))
+                        .unwrap_or(Type::Void);
+                    let param_types: Vec<Type> = op
+                        .params
+                        .iter()
+                        .map(|(_, ty)| self.resolve_type(ty))
+                        .collect();
+                    self.symbols.define(crate::analyzer::scope::Symbol::new(
+                        qualified,
+                        Type::Function {
+                            params: param_types,
+                            ret: Box::new(ret_ty),
+                        },
+                        false,
+                        ed.span,
+                    ));
+                }
+            }
+            Item::EffectComposition(ec) => {
+                // Register composed effects in first pass.
+                let comp = crate::analyzer::effects::EffectComposition::new(
+                    &ec.name,
+                    ec.components.clone(),
+                );
+                match comp.resolve(&self.effect_registry) {
+                    Ok(merged) => {
+                        for op in &merged.operations {
+                            let qualified = format!("{}::{}", ec.name, op.name);
+                            let ret_ty = resolve_type_name(&op.return_type);
+                            let param_types: Vec<Type> = op
+                                .param_types
+                                .iter()
+                                .map(|p| resolve_type_name(p))
+                                .collect();
+                            self.symbols.define(crate::analyzer::scope::Symbol::new(
+                                qualified,
+                                Type::Function {
+                                    params: param_types,
+                                    ret: Box::new(ret_ty),
+                                },
+                                false,
+                                ec.span,
+                            ));
+                        }
+                        let _ = self.effect_registry.register(merged);
+                    }
+                    Err(_) => {
+                        self.errors.push(SemanticError::UndefinedVariable {
+                            name: format!(
+                                "effect composition '{}': component not found",
+                                ec.name
+                            ),
+                            span: ec.span,
+                            suggestion: None,
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -2156,5 +2261,31 @@ impl TypeChecker {
                 }
             }
         }
+    }
+}
+
+/// Maps a type name string to the corresponding `Type`.
+fn resolve_type_name(name: &str) -> Type {
+    match name {
+        "void" => Type::Void,
+        "never" => Type::Never,
+        "bool" => Type::Bool,
+        "i8" => Type::I8,
+        "i16" => Type::I16,
+        "i32" => Type::I32,
+        "i64" => Type::I64,
+        "i128" => Type::I128,
+        "isize" => Type::ISize,
+        "u8" => Type::U8,
+        "u16" => Type::U16,
+        "u32" => Type::U32,
+        "u64" => Type::U64,
+        "u128" => Type::U128,
+        "usize" => Type::USize,
+        "f32" => Type::F32,
+        "f64" => Type::F64,
+        "str" => Type::Str,
+        "char" => Type::Char,
+        other => Type::Named(other.to_string()),
     }
 }

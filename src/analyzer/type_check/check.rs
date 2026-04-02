@@ -70,70 +70,8 @@ impl TypeChecker {
                     }
                 }
             }
-            Item::EffectDecl(ed) => {
-                // Register the effect in the registry
-                let kind = crate::analyzer::effects::effect_kind_from_name(&ed.name)
-                    .unwrap_or(crate::analyzer::effects::EffectKind::State);
-                let ops: Vec<crate::analyzer::effects::EffectOp> = ed
-                    .operations
-                    .iter()
-                    .map(|op| {
-                        let param_type_names: Vec<String> = op
-                            .params
-                            .iter()
-                            .map(|(_, ty)| match ty {
-                                crate::parser::ast::TypeExpr::Simple { name, .. } => name.clone(),
-                                other => format!("{other:?}"),
-                            })
-                            .collect();
-                        let ret_type_name =
-                            op.return_type
-                                .as_ref()
-                                .map_or("void".to_string(), |t| match t {
-                                    crate::parser::ast::TypeExpr::Simple { name, .. } => {
-                                        name.clone()
-                                    }
-                                    other => format!("{other:?}"),
-                                });
-                        crate::analyzer::effects::EffectOp::new(
-                            op.name.clone(),
-                            param_type_names,
-                            ret_type_name,
-                        )
-                    })
-                    .collect();
-                let decl = crate::analyzer::effects::EffectDecl::new(ed.name.clone(), kind, ops);
-                if self.effect_registry.register(decl).is_err() {
-                    self.errors.push(SemanticError::DuplicateEffectDecl {
-                        name: ed.name.clone(),
-                        span: ed.span,
-                    });
-                }
-                // V14: Register each effect operation as a known function symbol.
-                // E.g., `Console::log` becomes a known function in scope so
-                // the semantic analyzer doesn't reject it as undefined.
-                for op in &ed.operations {
-                    let qualified = format!("{}::{}", ed.name, op.name);
-                    let ret_ty = op
-                        .return_type
-                        .as_ref()
-                        .map(|t| self.resolve_type(t))
-                        .unwrap_or(Type::Void);
-                    let param_types: Vec<Type> = op
-                        .params
-                        .iter()
-                        .map(|(_, ty)| self.resolve_type(ty))
-                        .collect();
-                    self.symbols.define(crate::analyzer::scope::Symbol::new(
-                        qualified,
-                        Type::Function {
-                            params: param_types,
-                            ret: Box::new(ret_ty),
-                        },
-                        false,
-                        ed.span,
-                    ));
-                }
+            Item::EffectDecl(_) => {
+                // Already registered in first pass (register_item).
             }
             Item::StructDef(sdef) if sdef.lifetime_params.is_empty() => {
                 // B5: Warn if struct has &T fields but no lifetime params
@@ -150,6 +88,9 @@ impl TypeChecker {
                         span: sdef.span,
                     });
                 }
+            }
+            Item::EffectComposition(_) => {
+                // Already registered in first pass (register_item).
             }
             Item::Stmt(stmt) => {
                 self.check_stmt(stmt);
@@ -2795,6 +2736,22 @@ impl TypeChecker {
                     });
                 }
                 Type::DynTrait(trait_name.clone())
+            }
+            TypeExpr::Refinement {
+                base_type, ..
+            } => {
+                // Resolve the base type; predicate checking deferred to runtime/SMT.
+                self.resolve_type(base_type)
+            }
+            TypeExpr::Pi { return_type, .. } => {
+                // Pi types resolve to their return type for basic type checking.
+                self.resolve_type(return_type)
+            }
+            TypeExpr::Sigma { fst_type, snd_type, .. } => {
+                // Sigma types resolve to a tuple of (fst, snd).
+                let t1 = self.resolve_type(fst_type);
+                let t2 = self.resolve_type(snd_type);
+                Type::Tuple(vec![t1, t2])
             }
         }
     }

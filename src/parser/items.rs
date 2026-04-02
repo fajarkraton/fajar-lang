@@ -61,8 +61,8 @@ impl Parser {
             }
         }
 
-        // Optional effect clause: `with IO, Alloc`
-        let effects = self.parse_effect_clause()?;
+        // Optional effect clause: `with IO, Alloc` or `with IO, ..r`
+        let (effects, effect_row_var) = self.parse_effect_clause()?;
 
         // Body
         let body = Box::new(self.parse_block_expr()?);
@@ -86,6 +86,7 @@ impl Parser {
             requires,
             ensures,
             effects,
+            effect_row_var,
             body,
             span: Span::new(start, end),
         })
@@ -177,18 +178,20 @@ impl Parser {
         })
     }
 
-    /// Parses an optional effect clause: `with IO, Alloc, Console`.
+    /// Parses an optional effect clause: `with IO, Alloc` or `with IO, ..r`.
     ///
-    /// Returns an empty vec if no `with` keyword is present.
-    fn parse_effect_clause(&mut self) -> Result<Vec<String>, ParseError> {
+    /// Returns `(effects, row_var)`. Row variable syntax: `..name` at end.
+    fn parse_effect_clause(&mut self) -> Result<(Vec<String>, Option<String>), ParseError> {
         // `with` is a contextual keyword — check for Ident("with")
         if !matches!(self.peek_kind(), TokenKind::Ident(s) if s == "with") {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
         self.advance(); // consume `with`
 
         let mut effects = Vec::new();
-        // Parse comma-separated effect names
+        let mut row_var = None;
+
+        // Parse comma-separated effect names or row variable
         let (name, _) = self.expect_ident()?;
         effects.push(name);
         while self.eat(&TokenKind::Comma) {
@@ -196,18 +199,46 @@ impl Parser {
             if self.at(&TokenKind::LBrace) {
                 break;
             }
+            // Check for row variable: `..r`
+            if self.eat(&TokenKind::DotDot) {
+                let (rv, _) = self.expect_ident()?;
+                row_var = Some(rv);
+                break;
+            }
             let (name, _) = self.expect_ident()?;
             effects.push(name);
         }
-        Ok(effects)
+        Ok((effects, row_var))
     }
 
-    /// Parses an effect declaration: `effect Name { fn op(params) -> RetType }`.
-    pub(super) fn parse_effect_decl(&mut self, is_pub: bool) -> Result<EffectDeclItem, ParseError> {
+    /// Parses an effect item — either a declaration or a composition.
+    ///
+    /// - `effect Name { fn op(...) -> Type }` — declaration
+    /// - `effect Combined = IO + State` — composition
+    pub(super) fn parse_effect_item(&mut self, is_pub: bool) -> Result<Item, ParseError> {
         let start = self.peek().span.start;
         self.expect(&TokenKind::Effect)?;
         let (name, _) = self.expect_ident()?;
 
+        // Composition syntax: `effect Combined = IO + State`
+        if self.eat(&TokenKind::Eq) {
+            let mut components = Vec::new();
+            let (first, _) = self.expect_ident()?;
+            components.push(first);
+            while self.eat(&TokenKind::Plus) {
+                let (comp, _) = self.expect_ident()?;
+                components.push(comp);
+            }
+            let end = self.prev_span().end;
+            return Ok(Item::EffectComposition(EffectCompositionItem {
+                is_pub,
+                name,
+                components,
+                span: Span::new(start, end),
+            }));
+        }
+
+        // Declaration syntax: `effect Name { fn op(...) -> Type }`
         self.expect(&TokenKind::LBrace)?;
 
         let mut operations = Vec::new();
@@ -219,12 +250,12 @@ impl Parser {
         let end = self.peek().span.end;
         self.expect(&TokenKind::RBrace)?;
 
-        Ok(EffectDeclItem {
+        Ok(Item::EffectDecl(EffectDeclItem {
             is_pub,
             name,
             operations,
             span: Span::new(start, end),
-        })
+        }))
     }
 
     /// Parses a single effect operation: `fn name(params) -> RetType`.
@@ -932,6 +963,7 @@ impl Parser {
             requires: vec![],
             ensures: vec![],
             effects: Vec::new(),
+            effect_row_var: None,
             body,
             span: Span::new(start, end),
         })

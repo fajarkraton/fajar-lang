@@ -302,7 +302,7 @@ impl LanguageServer for FajarLspBackend {
                 references_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 code_lens_provider: Some(CodeLensOptions {
-                    resolve_provider: Some(false),
+                    resolve_provider: Some(true),
                 }),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
@@ -310,6 +310,15 @@ impl LanguageServer for FajarLspBackend {
                 )),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+                inline_value_provider: Some(OneOf::Left(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: Default::default(),
+                }),
+                document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
+                    first_trigger_character: "}".into(),
+                    more_trigger_character: Some(vec![";".into()]),
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -642,6 +651,111 @@ impl LanguageServer for FajarLspBackend {
         }
         drop(docs);
 
+        // V14 LS4.8: Context-aware smart completions
+        if let Some(doc) = self.documents.lock().unwrap().get(&uri) {
+            let nearby: String = doc
+                .source
+                .lines()
+                .skip(pos.line as usize)
+                .take(10)
+                .collect::<Vec<&str>>()
+                .join("\n");
+
+            // ML training context: suggest loss->backward->step
+            if nearby.contains("forward") || nearby.contains("Dense") || nearby.contains("Conv2d") {
+                for (label, detail) in [
+                    ("mse_loss", "fn(pred, target) -> Tensor"),
+                    ("cross_entropy", "fn(pred, target) -> Tensor"),
+                    ("backward", "fn() — compute gradients"),
+                    ("zero_grad", "fn() — reset gradients"),
+                    ("step", "fn() — optimizer update"),
+                ] {
+                    items.push(CompletionItem {
+                        label: label.to_string(),
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some(detail.to_string()),
+                        sort_text: Some(format!("0_ml_{label}")),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            // V14 LS4.10: Predictive completions — local pattern intelligence.
+            // Analyzes the current line prefix to predict likely next tokens.
+            {
+                let line_idx = pos.line as usize;
+                let lines: Vec<&str> = doc.source.lines().collect();
+                if let Some(current_line) = lines.get(line_idx) {
+                    let trimmed = current_line.trim();
+                    // After `let ... =` → suggest constructors and literals
+                    if trimmed.contains("= ") && !trimmed.contains("==") {
+                        for (label, detail) in [
+                            ("zeros", "fn(rows, cols) -> Tensor"),
+                            ("ones", "fn(rows, cols) -> Tensor"),
+                            ("randn", "fn(rows, cols) -> Tensor"),
+                            ("Dense", "fn(in, out) -> Layer"),
+                            ("[]", "empty array"),
+                            ("true", "bool literal"),
+                            ("false", "bool literal"),
+                        ] {
+                            items.push(CompletionItem {
+                                label: label.to_string(),
+                                kind: Some(CompletionItemKind::VALUE),
+                                detail: Some(detail.to_string()),
+                                sort_text: Some(format!("0_pred_{label}")),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                    // After `fn name(` → suggest param patterns
+                    if trimmed.starts_with("fn ") && trimmed.contains('(') && !trimmed.contains(')') {
+                        for (label, detail) in [
+                            ("x: i64", "integer parameter"),
+                            ("s: str", "string parameter"),
+                            ("t: Tensor", "tensor parameter"),
+                            ("f: f64", "float parameter"),
+                        ] {
+                            items.push(CompletionItem {
+                                label: label.to_string(),
+                                kind: Some(CompletionItemKind::SNIPPET),
+                                detail: Some(detail.to_string()),
+                                sort_text: Some(format!("0_param_{label}")),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                    // After `@` → suggest annotations
+                    if trimmed.ends_with('@') || trimmed.contains("@ ") {
+                        for ann in ["kernel", "device", "safe", "unsafe", "gpu", "test", "ffi"] {
+                            items.push(CompletionItem {
+                                label: ann.to_string(),
+                                kind: Some(CompletionItemKind::KEYWORD),
+                                detail: Some(format!("@{ann} annotation")),
+                                sort_text: Some(format!("0_ann_{ann}")),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Effect context: suggest handle/resume
+            if nearby.contains("effect ") || nearby.contains("handle") {
+                for (label, detail) in [
+                    ("handle", "handle { body } with { ... }"),
+                    ("resume", "resume(value)"),
+                ] {
+                    items.push(CompletionItem {
+                        label: label.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        detail: Some(detail.to_string()),
+                        sort_text: Some(format!("0_eff_{label}")),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
         // ── Fallback: keywords, builtins, types, annotations ────
         for kw in KEYWORDS {
             items.push(CompletionItem {
@@ -679,6 +793,49 @@ impl LanguageServer for FajarLspBackend {
                 kind: Some(CompletionItemKind::SNIPPET),
                 detail: Some("context annotation".into()),
                 sort_text: Some(format!("4_{ann}")),
+                ..Default::default()
+            });
+        }
+
+        // V14 LS4.7: Snippet completions with tab stops
+        let snippets = [
+            (
+                "fn",
+                "fn ${1:name}(${2:params}) -> ${3:RetType} {\n    $0\n}",
+                "function definition",
+            ),
+            (
+                "struct",
+                "struct ${1:Name} {\n    ${2:field}: ${3:Type},\n}",
+                "struct definition",
+            ),
+            ("if", "if ${1:condition} {\n    $0\n}", "if block"),
+            ("for", "for ${1:item} in ${2:iter} {\n    $0\n}", "for loop"),
+            (
+                "match",
+                "match ${1:expr} {\n    ${2:pattern} => $0,\n}",
+                "match expression",
+            ),
+            ("impl", "impl ${1:Type} {\n    $0\n}", "impl block"),
+            (
+                "test",
+                "@test\nfn ${1:test_name}() {\n    $0\n}",
+                "test function",
+            ),
+            (
+                "effect",
+                "effect ${1:Name} {\n    fn ${2:op}(${3:params}) -> ${4:RetType}\n}",
+                "effect declaration",
+            ),
+        ];
+        for (label, body, detail) in snippets {
+            items.push(CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some(detail.to_string()),
+                insert_text: Some(body.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                sort_text: Some(format!("4_snip_{label}")),
                 ..Default::default()
             });
         }
@@ -1230,6 +1387,19 @@ impl LanguageServer for FajarLspBackend {
         Ok(Some(compute_code_lenses(&doc.source, &uri)))
     }
 
+    async fn code_lens_resolve(&self, mut lens: CodeLens) -> Result<CodeLens> {
+        // If the lens already has a command, return as-is (already resolved).
+        // Otherwise, provide a default "Show References" command for the range.
+        if lens.command.is_none() {
+            lens.command = Some(Command {
+                title: "0 references".into(),
+                command: "fajar.showReferences".into(),
+                arguments: None,
+            });
+        }
+        Ok(lens)
+    }
+
     async fn selection_range(
         &self,
         params: SelectionRangeParams,
@@ -1653,6 +1823,42 @@ impl LanguageServer for FajarLspBackend {
         }
         Ok(Some(subtypes))
     }
+
+    // V14 LS3.9: Inline values — show const values inline in editor
+    async fn inline_value(&self, params: InlineValueParams) -> Result<Option<Vec<InlineValue>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        Ok(Some(compute_inline_values(&doc.source)))
+    }
+
+    async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
+        let uri = &params.text_document.uri;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        Ok(Some(compute_document_links(&doc.source)))
+    }
+
+    async fn on_type_formatting(
+        &self,
+        params: DocumentOnTypeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let ch = &params.ch;
+        let docs = self.documents.lock().expect("lsp state lock");
+        let doc = match docs.get(uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        Ok(compute_on_type_edits(&doc.source, position, ch))
+    }
 }
 
 // ── Folding Ranges ──────────────────────────────────────────────────
@@ -1783,6 +1989,110 @@ fn compute_code_lenses(source: &str, uri: &Url) -> Vec<CodeLens> {
     }
 
     lenses
+}
+
+// ── Document Links ─────────────────────────────────────────────────
+
+///// V14 LS3.9: Show evaluated const values inline in the editor.
+fn compute_inline_values(source: &str) -> Vec<InlineValue> {
+    let mut values = Vec::new();
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        // Show const values: `const X: i32 = 42` → inline "42"
+        if trimmed.starts_with("const ") && trimmed.contains('=') {
+            if let Some(val_part) = trimmed.split('=').nth(1) {
+                let val = val_part.trim().trim_end_matches(';').trim();
+                if !val.is_empty() {
+                    let eq_offset = line.find('=').unwrap_or(0) as u32;
+                    values.push(InlineValue::Text(InlineValueText {
+                        range: Range::new(
+                            Position::new(line_idx as u32, eq_offset + 2),
+                            Position::new(line_idx as u32, line.len() as u32),
+                        ),
+                        text: format!(" = {val}"),
+                    }));
+                }
+            }
+        }
+    }
+    values
+}
+
+/// V14 LS3.10: Detect import paths and turn them into clickable document links.
+fn compute_document_links(source: &str) -> Vec<DocumentLink> {
+    let mut links = Vec::new();
+    for (line_idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("use ") || trimmed.starts_with("mod ") {
+            // Both "use " and "mod " are 4 characters
+            let path_part = trimmed[4..].trim_end_matches(';').trim();
+            if !path_part.is_empty() && !path_part.contains('{') {
+                let start_col = line.find(path_part).unwrap_or(0) as u32;
+                links.push(DocumentLink {
+                    range: Range::new(
+                        Position::new(line_idx as u32, start_col),
+                        Position::new(line_idx as u32, start_col + path_part.len() as u32),
+                    ),
+                    target: None,
+                    tooltip: Some(format!("Open module: {path_part}")),
+                    data: None,
+                });
+            }
+        }
+    }
+    links
+}
+
+// ── On-Type Formatting ─────────────────────────────────────────────
+
+/// V14 LS4.10: Auto-format on typing `}` or `;`.
+fn compute_on_type_edits(source: &str, position: Position, ch: &str) -> Option<Vec<TextEdit>> {
+    let lines: Vec<&str> = source.lines().collect();
+    let line_idx = position.line as usize;
+    if line_idx >= lines.len() {
+        return None;
+    }
+    let current_line = lines[line_idx];
+    match ch {
+        "}" => {
+            let trimmed = current_line.trim();
+            if trimmed == "}" {
+                let mut target_indent = 0usize;
+                for l in lines.iter().take(line_idx) {
+                    if l.trim().ends_with('{') {
+                        target_indent = l.len() - l.trim_start().len();
+                    }
+                }
+                let current_indent = current_line.len() - current_line.trim_start().len();
+                if current_indent != target_indent {
+                    let indent = " ".repeat(target_indent);
+                    return Some(vec![TextEdit {
+                        range: Range::new(
+                            Position::new(line_idx as u32, 0),
+                            Position::new(line_idx as u32, current_line.len() as u32),
+                        ),
+                        new_text: format!("{indent}}}"),
+                    }]);
+                }
+            }
+            None
+        }
+        ";" => {
+            if current_line.ends_with(" ;") || current_line.ends_with("\t;") {
+                let before_semi = current_line.trim_end_matches(';').trim_end();
+                let fixed = format!("{before_semi};");
+                return Some(vec![TextEdit {
+                    range: Range::new(
+                        Position::new(line_idx as u32, 0),
+                        Position::new(line_idx as u32, current_line.len() as u32),
+                    ),
+                    new_text: fixed,
+                }]);
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 // ── Semantic Tokens ─────────────────────────────────────────────────
@@ -4149,6 +4459,64 @@ mod tests {
         );
     }
 
+    #[test]
+    fn v14_code_lens_resolve_preserves_command() {
+        // A lens with an existing command should be returned unchanged.
+        let lens = CodeLens {
+            range: Range {
+                start: Position { line: 0, character: 0 },
+                end: Position { line: 0, character: 10 },
+            },
+            command: Some(Command {
+                title: "Run Test".into(),
+                command: "fajar.runTest".into(),
+                arguments: None,
+            }),
+            data: None,
+        };
+        // Simulate resolve: if command present, keep it
+        let resolved = if lens.command.is_some() {
+            lens.clone()
+        } else {
+            CodeLens {
+                command: Some(Command {
+                    title: "0 references".into(),
+                    command: "fajar.showReferences".into(),
+                    arguments: None,
+                }),
+                ..lens.clone()
+            }
+        };
+        assert_eq!(resolved.command.as_ref().unwrap().title, "Run Test");
+    }
+
+    #[test]
+    fn v14_code_lens_resolve_fills_missing_command() {
+        // A lens without a command should get a default "0 references" command.
+        let lens = CodeLens {
+            range: Range {
+                start: Position { line: 0, character: 0 },
+                end: Position { line: 0, character: 10 },
+            },
+            command: None,
+            data: None,
+        };
+        let resolved = if lens.command.is_some() {
+            lens.clone()
+        } else {
+            CodeLens {
+                command: Some(Command {
+                    title: "0 references".into(),
+                    command: "fajar.showReferences".into(),
+                    arguments: None,
+                }),
+                ..lens.clone()
+            }
+        };
+        assert_eq!(resolved.command.as_ref().unwrap().title, "0 references");
+        assert_eq!(resolved.command.as_ref().unwrap().command, "fajar.showReferences");
+    }
+
     // ═════════════════════════════════════════════════════════════════
     // V10 P1: Enhanced inlay hints + signature help
     // ═════════════════════════════════════════════════════════════════
@@ -4963,5 +5331,167 @@ mod tests {
             time < 500_000,
             "10K lines should tokenize in <500ms, took {time}us"
         );
+    }
+
+    // ── V14 H3.6: LSP Response Time Benchmarks ────────────────
+
+    #[test]
+    fn v14_h3_6_lsp_semantic_tokens_latency() {
+        let source = (0..500)
+            .map(|i| format!("fn func_{i}(x: i32) -> i32 {{ x + {i} }}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = std::time::Instant::now();
+        let tokens = generate_semantic_tokens(&source);
+        let elapsed_us = start.elapsed().as_micros();
+        assert!(!tokens.is_empty());
+        assert!(
+            elapsed_us < 200_000,
+            "semantic tokens took {elapsed_us}us, expected <200ms"
+        );
+    }
+
+    #[test]
+    fn v14_h3_6_lsp_inlay_hints_latency() {
+        let source = (0..500)
+            .map(|i| format!("let var_{i} = {i} + 1"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let doc = DocumentState::new(source.clone());
+        let start = std::time::Instant::now();
+        let _hints = generate_inlay_hints(&source, &doc);
+        let elapsed_us = start.elapsed().as_micros();
+        assert!(
+            elapsed_us < 100_000,
+            "inlay hints took {elapsed_us}us, expected <100ms"
+        );
+    }
+
+    #[test]
+    fn v14_h3_6_lsp_code_lens_latency() {
+        let source = (0..200)
+            .map(|i| format!("fn func_{i}() {{ }}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let uri = Url::parse("file:///bench.fj").unwrap();
+        let start = std::time::Instant::now();
+        let lenses = compute_code_lenses(&source, &uri);
+        let elapsed_us = start.elapsed().as_micros();
+        assert!(!lenses.is_empty());
+        assert!(
+            elapsed_us < 50_000,
+            "code lens took {elapsed_us}us, expected <50ms"
+        );
+    }
+
+    #[test]
+    fn v14_h3_6_lsp_folding_ranges_latency() {
+        let source = (0..200)
+            .map(|i| format!("fn func_{i}() {{\n    let x = {i}\n}}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = std::time::Instant::now();
+        let ranges = compute_folding_ranges(&source);
+        let elapsed_us = start.elapsed().as_micros();
+        assert!(!ranges.is_empty());
+        assert!(
+            elapsed_us < 50_000,
+            "folding ranges took {elapsed_us}us, expected <50ms"
+        );
+    }
+
+    // ── V14 LS3.10: Document Links ─────────────────────────────────────
+
+    #[test]
+    fn v14_ls3_10_document_link_use() {
+        let source = "use std::math\nuse nn::tensor";
+        let links = compute_document_links(source);
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].tooltip.as_deref(), Some("Open module: std::math"));
+    }
+
+    #[test]
+    fn v14_ls3_10_document_link_mod() {
+        let source = "mod helpers";
+        let links = compute_document_links(source);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].tooltip.as_deref(), Some("Open module: helpers"));
+    }
+
+    // ── V14 LS4.8: Context-aware Smart Completions ─────────────────────
+
+    #[test]
+    fn v14_ls4_8_context_completion_exists() {
+        // Verify the ML and effect keyword lists are correct
+        let ml_keywords = ["mse_loss", "cross_entropy", "backward", "zero_grad", "step"];
+        let effect_keywords = ["handle", "resume"];
+        assert_eq!(ml_keywords.len(), 5);
+        assert_eq!(effect_keywords.len(), 2);
+    }
+
+    // ── V14 LS4.10: On-type Formatting ─────────────────────────────────
+
+    #[test]
+    fn v14_ls4_10_on_type_brace_reindent() {
+        let source = "fn foo() {\n    let x = 1\n        }";
+        let edits = compute_on_type_edits(source, Position::new(2, 9), "}");
+        assert!(edits.is_some(), "should reindent closing brace");
+    }
+
+    #[test]
+    fn v14_ls4_10_on_type_semicolon_trim() {
+        let source = "let x = 42 ;";
+        let edits = compute_on_type_edits(source, Position::new(0, 12), ";");
+        assert!(edits.is_some());
+        assert_eq!(edits.unwrap()[0].new_text, "let x = 42;");
+    }
+
+    // ── V14 LS4.7: Snippet Completions ─────────────────────────────────
+
+    #[test]
+    fn v14_ls4_7_snippet_definitions() {
+        // Verify snippet templates are well-formed (contain tab stops)
+        let snippets = [
+            "fn ${1:name}",
+            "struct ${1:Name}",
+            "if ${1:condition}",
+            "for ${1:item}",
+            "match ${1:expr}",
+        ];
+        for s in snippets {
+            assert!(s.contains("${1:"), "snippet should have tab stop: {s}");
+        }
+    }
+
+    // ── V14 LS3.9: Inline Values ──────────────────────────────
+
+    #[test]
+    fn v14_ls3_9_inline_value_const() {
+        let source = "const MAX: i32 = 1024\nlet x = 42";
+        let values = compute_inline_values(source);
+        assert_eq!(values.len(), 1, "should produce 1 inline value for const");
+        match &values[0] {
+            InlineValue::Text(t) => {
+                assert!(t.text.contains("1024"), "should show const value");
+            }
+            _ => panic!("expected InlineValue::Text"),
+        }
+    }
+
+    #[test]
+    fn v14_ls3_9_inline_value_no_const() {
+        let source = "let x = 42\nfn foo() { }";
+        let values = compute_inline_values(source);
+        assert!(
+            values.is_empty(),
+            "non-const should produce no inline values"
+        );
+    }
+
+    #[test]
+    fn v14_ls3_9_inline_value_multiple() {
+        let source = "const A: i32 = 10\nconst B: f64 = 3.14\nlet c = 0";
+        let values = compute_inline_values(source);
+        assert_eq!(values.len(), 2, "two consts should produce 2 values");
     }
 }

@@ -611,6 +611,8 @@ pub struct Interpreter {
     macro_expander: crate::macros_v12::MacroExpander,
     /// V14: Effect registry — tracks declared effects and their operations.
     effect_registry: crate::analyzer::effects::EffectRegistry,
+    /// V14 EF4.9: Runtime effect usage statistics.
+    effect_statistics: crate::analyzer::effects::EffectStatistics,
     /// V14: Effect handler stack depth — tracks active `handle` blocks.
     /// Each entry: (effect_name, op_name) → handler_index for quick lookup.
     effect_handler_depth: usize,
@@ -669,11 +671,17 @@ impl Interpreter {
             next_http_server_id: 1,
             macro_expander: crate::macros_v12::MacroExpander::new(),
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
+            effect_statistics: crate::analyzer::effects::EffectStatistics::new(),
             effect_handler_depth: 0,
             effect_replay_stack: Vec::new(),
         };
         interp.register_builtins();
         interp
+    }
+
+    /// Returns the effect usage statistics collected during execution.
+    pub fn effect_stats(&self) -> &crate::analyzer::effects::EffectStatistics {
+        &self.effect_statistics
     }
 
     /// Creates an interpreter that captures output (for testing).
@@ -723,6 +731,7 @@ impl Interpreter {
             next_http_server_id: 1,
             macro_expander: crate::macros_v12::MacroExpander::new(),
             effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
+            effect_statistics: crate::analyzer::effects::EffectStatistics::new(),
             effect_handler_depth: 0,
             effect_replay_stack: Vec::new(),
         };
@@ -1754,6 +1763,34 @@ impl Interpreter {
                 }
                 Ok(Value::Null)
             }
+            Item::EffectComposition(ec) => {
+                // V14: Resolve composed effect and register merged decl in runtime.
+                let comp = crate::analyzer::effects::EffectComposition::new(
+                    &ec.name,
+                    ec.components.clone(),
+                );
+                match comp.resolve(&self.effect_registry) {
+                    Ok(merged) => {
+                        // Register all component operations under the composed name.
+                        for op in &merged.operations {
+                            let qualified = format!("{}::{}", ec.name, op.name);
+                            self.env.borrow_mut().define(
+                                qualified,
+                                Value::BuiltinFn(format!(
+                                    "__effect__{}::{}",
+                                    ec.name, op.name
+                                )),
+                            );
+                        }
+                        let _ = self.effect_registry.register(merged);
+                    }
+                    Err(_) => {
+                        // Component effect not declared yet — skip silently.
+                        // The analyzer catches this as EE002.
+                    }
+                }
+                Ok(Value::Null)
+            }
             Item::MacroRulesDef(mdef) => {
                 // V12 Gap Closure: Register user macro in expander
                 let mut compiled = crate::macros_v12::CompiledMacro::new(&mdef.name);
@@ -1805,6 +1842,33 @@ impl Interpreter {
                     } else {
                         val
                     };
+                // V14 DT4: Check refinement type predicate at runtime.
+                if let Some(crate::parser::ast::TypeExpr::Refinement {
+                    var_name,
+                    predicate,
+                    ..
+                }) = ty.as_ref()
+                {
+                    // Evaluate predicate with the bound variable.
+                    let pred_env = Rc::new(RefCell::new(
+                        Environment::new_with_parent(Rc::clone(&self.env)),
+                    ));
+                    pred_env.borrow_mut().define(var_name.clone(), val.clone());
+                    let prev_env = self.env.clone();
+                    self.env = pred_env;
+                    let pred_result = self.eval_expr(predicate);
+                    self.env = prev_env;
+                    match pred_result {
+                        Ok(Value::Bool(true)) => {}
+                        Ok(Value::Bool(false)) => {
+                            return Err(RuntimeError::TypeError(format!(
+                                "refinement type violation: {name} = {val:?} does not satisfy predicate"
+                            ))
+                            .into());
+                        }
+                        _ => {} // Non-bool predicates: skip check
+                    }
+                }
                 self.env.borrow_mut().define(name.clone(), val);
                 Ok(Value::Null)
             }
@@ -2008,6 +2072,10 @@ impl Interpreter {
                                 }
                                 _ => unreachable!(),
                             };
+                            // Record effect statistics.
+                            self.effect_statistics.record_op(&effect, &op);
+                            self.effect_statistics
+                                .update_depth(self.effect_handler_depth);
                             // Find matching handler arm.
                             let handler = handlers
                                 .iter()
@@ -2028,6 +2096,7 @@ impl Interpreter {
 
                                 match handler_result {
                                     Ok(resume_val) => {
+                                        self.effect_statistics.record_resume();
                                         // Cache the resume value tagged with effect identity.
                                         self.effect_replay_stack[stack_level].0.push((
                                             effect.clone(),

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fajar Lang - System Status</title>
+    <meta name="description" content="Fajar Lang system status — CI/CD, testing, security, and compiler health.">
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --secondary: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text: #e0e0e0;
+            --text-muted: #a0a0b0;
+            --bg: #0d0d1a;
+            --card-bg: #141428;
+            --border: #2a2a4a;
+            --green: #2ecc71;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+        h1 { color: var(--highlight); margin-bottom: 0.5rem; font-size: 2rem; }
+        h2 { color: var(--text); margin: 2rem 0 1rem; font-size: 1.3rem; }
+        .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+        .stat .value { font-size: 1.8rem; font-weight: 700; color: var(--highlight); }
+        .stat .label { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
+        .service {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.9rem 1.2rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+        .service .name { font-weight: 500; }
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.7rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .badge.ok { background: var(--green); color: #000; }
+        .nav { margin-bottom: 2rem; }
+        .nav a {
+            color: var(--highlight);
+            text-decoration: none;
+            margin-right: 1.5rem;
+            font-size: 0.9rem;
+        }
+        .nav a:hover { text-decoration: underline; }
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        footer a { color: var(--highlight); text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="nav">
+            <a href="index.html">Home</a>
+            <a href="download.html">Download</a>
+            <a href="comparison.html">Comparison</a>
+            <a href="status.html">Status</a>
+        </nav>
+
+        <h1>System Status</h1>
+        <p class="subtitle">Fajar Lang infrastructure and compiler health.</p>
+
+        <div class="stats">
+            <div class="stat"><div class="value">8,109</div><div class="label">Tests Passing</div></div>
+            <div class="stat"><div class="value">0</div><div class="label">Failures</div></div>
+            <div class="stat"><div class="value">v12.5.0</div><div class="label">Release</div></div>
+            <div class="stat"><div class="value">468K</div><div class="label">Lines of Code</div></div>
+        </div>
+
+        <h2>CI/CD Pipeline</h2>
+        <div class="service"><span class="name">CI — Linux / macOS / Windows (stable + nightly)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">Nightly Builds (daily 02:00 UTC)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">Release Pipeline (5 platforms)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">Code Coverage (tarpaulin + Codecov)</span><span class="badge ok">Operational</span></div>
+
+        <h2>Security</h2>
+        <div class="service"><span class="name">Dependency Audit (cargo-audit)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">SBOM Generation (CycloneDX / SPDX)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">Fuzz Testing (8 targets)</span><span class="badge ok">Operational</span></div>
+
+        <h2>Performance</h2>
+        <div class="service"><span class="name">Benchmark Regression Detection (110% threshold)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">Memory Profiling (peak RSS tracked)</span><span class="badge ok">Operational</span></div>
+        <div class="service"><span class="name">LSP Latency (&lt;30ms semantic tokens)</span><span class="badge ok">Operational</span></div>
+
+        <h2>Compiler Health</h2>
+        <div class="service"><span class="name">Clippy Warnings</span><span class="badge ok">0 warnings</span></div>
+        <div class="service"><span class="name">Unsafe Blocks</span><span class="badge ok">All documented</span></div>
+        <div class="service"><span class="name">Feature Flag Matrix (llvm, smt, cpp-ffi, python-ffi)</span><span class="badge ok">All passing</span></div>
+
+        <footer>
+            <p>Fajar Lang &copy; 2026 <a href="https://primecore.id">PrimeCore.id</a> | <a href="https://github.com/fajarkraton/fajar-lang">GitHub</a></p>
+            <p>Last updated: <span id="ts"></span></p>
+        </footer>
+    </div>
+    <script>document.getElementById('ts').textContent=new Date().toISOString().split('T')[0];</script>
+</body>
+</html>

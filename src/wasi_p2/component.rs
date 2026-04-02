@@ -1376,4 +1376,49 @@ world command {
         assert_eq!(ct.params.len(), 1);
         assert!(ct.result.is_some());
     }
+
+    // ── V14 H3.9: WASI Component Size Benchmark ────────────────
+
+    #[test]
+    fn v14_h3_9_minimal_component_size() {
+        let mut builder = ComponentBuilder::new();
+        let func_type = ComponentFuncType {
+            name: "run".into(),
+            params: vec![],
+            result: None,
+        };
+        let type_idx = builder.add_type(ComponentTypeKind::Func(func_type));
+        builder.add_export("run", ExportKind::Func, type_idx);
+        let bytes = builder.build();
+        // Minimal component: valid WASM magic + component sections
+        assert!(bytes.len() >= 8, "component must have WASM header");
+        assert_eq!(&bytes[0..4], b"\0asm", "must start with WASM magic");
+        // Minimal component should be small (< 1KB)
+        assert!(
+            bytes.len() < 1024,
+            "minimal component should be <1KB, got {} bytes",
+            bytes.len()
+        );
+    }
+
+    #[test]
+    fn v14_h3_9_component_with_imports_size() {
+        let mut builder = ComponentBuilder::new();
+        let func_type = ComponentFuncType {
+            name: "log".into(),
+            params: vec![("msg".into(), ComponentValType::String_)],
+            result: None,
+        };
+        let type_idx = builder.add_type(ComponentTypeKind::Func(func_type));
+        builder.add_import("wasi:cli/stdout", type_idx);
+        builder.add_export("run", ExportKind::Func, type_idx);
+        let bytes = builder.build();
+        assert!(bytes.len() >= 8);
+        // Component with imports should still be small
+        assert!(
+            bytes.len() < 2048,
+            "component with 1 import should be <2KB, got {} bytes",
+            bytes.len()
+        );
+    }
 }

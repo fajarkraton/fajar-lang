@@ -39,3 +39,23 @@ doc = false
 name = "fuzz_interpreter"
 path = "fuzz_targets/fuzz_interpreter.rs"
 doc = false
+
+[[bin]]
+name = "fuzz_effect"
+path = "fuzz_targets/fuzz_effect.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_fstring"
+path = "fuzz_targets/fuzz_fstring.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_repl"
+path = "fuzz_targets/fuzz_repl.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_macro"
+path = "fuzz_targets/fuzz_macro.rs"
+doc = false

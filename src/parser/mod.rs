@@ -534,8 +534,7 @@ impl Parser {
                 Ok(Item::TraitDef(td))
             }
             TokenKind::Effect => {
-                let ed = self.parse_effect_decl(is_pub)?;
-                Ok(Item::EffectDecl(ed))
+                self.parse_effect_item(is_pub)
             }
             TokenKind::Const | TokenKind::Comptime => {
                 // `const fn` or `comptime fn` → const fn
@@ -727,7 +726,39 @@ impl Parser {
                         ("device", cap_param)
                     }
                     TokenKind::AtNpu => ("npu", None),
-                    TokenKind::AtGpu => ("gpu", None),
+                    TokenKind::AtGpu => {
+                        // Parse optional params: @gpu(workgroup=256)
+                        if matches!(self.peek_kind(), TokenKind::LParen) {
+                            self.advance(); // consume '('
+                            let mut params = Vec::new();
+                            while !self.at(&TokenKind::RParen) && !self.at_eof() {
+                                if let TokenKind::Ident(s) = self.peek_kind().clone() {
+                                    self.advance();
+                                    if self.eat(&TokenKind::Eq) {
+                                        if let TokenKind::IntLit(n) = self.peek_kind().clone() {
+                                            self.advance();
+                                            params.push(format!("{s}={n}"));
+                                        }
+                                    } else {
+                                        params.push(s);
+                                    }
+                                }
+                                let _ = self.eat(&TokenKind::Comma);
+                            }
+                            if matches!(self.peek_kind(), TokenKind::RParen) {
+                                self.advance();
+                            }
+                            // Store params in Annotation::params
+                            let span = token.span;
+                            return Some(Annotation {
+                                name: "gpu".to_string(),
+                                param: None,
+                                params,
+                                span,
+                            });
+                        }
+                        ("gpu", None)
+                    }
                     TokenKind::AtSafe => ("safe", None),
                     TokenKind::AtUnsafe => ("unsafe", None),
                     TokenKind::AtFfi => ("ffi", None),

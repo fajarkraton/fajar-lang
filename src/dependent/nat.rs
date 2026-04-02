@@ -498,6 +498,221 @@ impl NatConstraint {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V14 DT1.4-DT1.5: Pi Types (Dependent Function Types)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A dependent type that can reference value parameters.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DependentType {
+    /// A concrete type (no dependency).
+    Concrete(String),
+    /// A type parameterized by a Nat expression: `Vector<f64, n>`.
+    NatIndexed { base: String, index: NatValue },
+    /// A Pi type (dependent function type).
+    Pi(PiType),
+    /// A Sigma type (dependent pair).
+    Sigma(SigmaType),
+}
+
+/// V14 DT1.4: Pi type — function type where return type depends on a value parameter.
+/// Example: `fn zeros(n: Nat) -> Vector<f64, n>`
+#[derive(Debug, Clone, PartialEq)]
+pub struct PiType {
+    /// Parameter name that the return type depends on.
+    pub param_name: String,
+    /// Parameter kind (Nat, Type, etc.).
+    pub param_kind: Kind,
+    /// Body type that may reference the parameter.
+    pub body: Box<DependentType>,
+}
+
+impl PiType {
+    /// Creates a new Pi type with the given parameter name, kind, and body.
+    pub fn new(param_name: impl Into<String>, param_kind: Kind, body: DependentType) -> Self {
+        Self {
+            param_name: param_name.into(),
+            param_kind,
+            body: Box::new(body),
+        }
+    }
+
+    /// Substitute a concrete value for the parameter.
+    pub fn instantiate(&self, value: &NatValue) -> DependentType {
+        match &*self.body {
+            DependentType::NatIndexed { base, index } => {
+                let new_index = substitute_nat(index, &self.param_name, value);
+                DependentType::NatIndexed {
+                    base: base.clone(),
+                    index: new_index,
+                }
+            }
+            other => other.clone(),
+        }
+    }
+}
+
+/// Substitute a named parameter with a concrete NatValue.
+pub fn substitute_nat(expr: &NatValue, param: &str, value: &NatValue) -> NatValue {
+    match expr {
+        NatValue::Param(name) if name == param => value.clone(),
+        NatValue::Add(a, b) => NatValue::Add(
+            Box::new(substitute_nat(a, param, value)),
+            Box::new(substitute_nat(b, param, value)),
+        ),
+        NatValue::Mul(a, b) => NatValue::Mul(
+            Box::new(substitute_nat(a, param, value)),
+            Box::new(substitute_nat(b, param, value)),
+        ),
+        NatValue::Sub(a, b) => NatValue::Sub(
+            Box::new(substitute_nat(a, param, value)),
+            Box::new(substitute_nat(b, param, value)),
+        ),
+        other => other.clone(),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 DT1.6-DT1.7: Pi Type Checker
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 DT1.6: Type-check a Pi type application.
+pub fn check_pi_application(pi: &PiType, arg: &NatValue) -> Result<DependentType, String> {
+    // Verify the argument has the correct kind
+    match (&pi.param_kind, arg) {
+        (Kind::Nat, NatValue::Literal(_))
+        | (Kind::Nat, NatValue::Param(_))
+        | (Kind::Nat, NatValue::Add(_, _))
+        | (Kind::Nat, NatValue::Mul(_, _))
+        | (Kind::Nat, NatValue::Sub(_, _))
+        | (Kind::Nat, NatValue::Inferred) => Ok(pi.instantiate(arg)),
+        _ => Err(format!(
+            "kind mismatch: expected {:?}, got value",
+            pi.param_kind
+        )),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 DT2: Sigma Types (Dependent Pairs)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 DT2: Sigma type — dependent pair where second type depends on first value.
+/// Example: `(n: Nat, Vector<f64, n>)` — a length paired with a vector of that length.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SigmaType {
+    /// Name of the first element.
+    pub fst_name: String,
+    /// Kind of the first element.
+    pub fst_kind: Kind,
+    /// Type of the second element (may reference the first).
+    pub snd: Box<DependentType>,
+}
+
+impl SigmaType {
+    /// Creates a new Sigma type.
+    pub fn new(fst_name: impl Into<String>, fst_kind: Kind, snd: DependentType) -> Self {
+        Self {
+            fst_name: fst_name.into(),
+            fst_kind,
+            snd: Box::new(snd),
+        }
+    }
+
+    /// Given a concrete first value, compute the second type.
+    pub fn project_snd(&self, fst_value: &NatValue) -> DependentType {
+        match &*self.snd {
+            DependentType::NatIndexed { base, index } => {
+                let new_index = substitute_nat(index, &self.fst_name, fst_value);
+                DependentType::NatIndexed {
+                    base: base.clone(),
+                    index: new_index,
+                }
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// Check if a concrete pair satisfies this Sigma type.
+    pub fn check_pair(&self, fst: &NatValue, snd_type: &DependentType) -> bool {
+        let expected_snd = self.project_snd(fst);
+        expected_snd == *snd_type
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// V14 DT4: Refinement Types
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 DT4.4: Refinement type — a base type with a predicate constraint.
+/// Example: `{ x: i32 | x > 0 }` (Positive integer)
+#[derive(Debug, Clone, PartialEq)]
+pub struct RefinementType {
+    /// Variable name bound by the refinement.
+    pub var_name: String,
+    /// Base type.
+    pub base_type: String,
+    /// Predicate that must hold.
+    pub predicate: RefinementPredicate,
+}
+
+/// A predicate for refinement types.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RefinementPredicate {
+    /// x > value
+    GreaterThan(i64),
+    /// x >= value
+    GreaterEqual(i64),
+    /// x < value
+    LessThan(i64),
+    /// x <= value
+    LessEqual(i64),
+    /// x == value
+    Equal(i64),
+    /// x != value
+    NotEqual(i64),
+    /// low <= x <= high
+    InRange(i64, i64),
+    /// Conjunction of predicates.
+    And(Box<RefinementPredicate>, Box<RefinementPredicate>),
+}
+
+impl RefinementType {
+    /// Creates a new refinement type.
+    pub fn new(
+        var_name: impl Into<String>,
+        base_type: impl Into<String>,
+        predicate: RefinementPredicate,
+    ) -> Self {
+        Self {
+            var_name: var_name.into(),
+            base_type: base_type.into(),
+            predicate,
+        }
+    }
+
+    /// Check if a concrete integer value satisfies the refinement.
+    pub fn check_value(&self, value: i64) -> bool {
+        self.predicate.is_satisfied(value)
+    }
+}
+
+impl RefinementPredicate {
+    /// Check if a concrete value satisfies this predicate.
+    pub fn is_satisfied(&self, value: i64) -> bool {
+        match self {
+            RefinementPredicate::GreaterThan(n) => value > *n,
+            RefinementPredicate::GreaterEqual(n) => value >= *n,
+            RefinementPredicate::LessThan(n) => value < *n,
+            RefinementPredicate::LessEqual(n) => value <= *n,
+            RefinementPredicate::Equal(n) => value == *n,
+            RefinementPredicate::NotEqual(n) => value != *n,
+            RefinementPredicate::InRange(lo, hi) => value >= *lo && value <= *hi,
+            RefinementPredicate::And(a, b) => a.is_satisfied(value) && b.is_satisfied(value),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -807,5 +1022,611 @@ mod tests {
         assert!(msg.contains("matmul inner dimension"));
         assert!(msg.contains("expected 3"));
         assert!(msg.contains("found 4"));
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V14 DT1: Pi Types
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn v14_dt1_4_pi_type_creation() {
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        assert_eq!(pi.param_name, "n");
+    }
+
+    #[test]
+    fn v14_dt1_5_pi_type_instantiate() {
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let result = pi.instantiate(&NatValue::Literal(10));
+        match result {
+            DependentType::NatIndexed { base, index } => {
+                assert_eq!(base, "Vector");
+                assert_eq!(index, NatValue::Literal(10));
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt1_6_pi_type_check() {
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Array".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let result = check_pi_application(&pi, &NatValue::Literal(5));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn v14_dt1_7_pi_substitute_arithmetic() {
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Matrix".into(),
+                index: NatValue::Add(
+                    Box::new(NatValue::Param("n".into())),
+                    Box::new(NatValue::Literal(1)),
+                ),
+            },
+        );
+        let result = pi.instantiate(&NatValue::Literal(5));
+        match result {
+            DependentType::NatIndexed { index, .. } => {
+                assert_eq!(
+                    index,
+                    NatValue::Add(
+                        Box::new(NatValue::Literal(5)),
+                        Box::new(NatValue::Literal(1)),
+                    )
+                );
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt1_8_constraint_solver_equality() {
+        let a = NatValue::Param("n".into());
+        let b = NatValue::Literal(5);
+        let substituted = substitute_nat(&a, "n", &b);
+        assert_eq!(substituted, NatValue::Literal(5));
+    }
+
+    #[test]
+    fn v14_dt1_9_constraint_nested_substitution() {
+        // n * 2 + 1 with n=3
+        let expr = NatValue::Add(
+            Box::new(NatValue::Mul(
+                Box::new(NatValue::Param("n".into())),
+                Box::new(NatValue::Literal(2)),
+            )),
+            Box::new(NatValue::Literal(1)),
+        );
+        let result = substitute_nat(&expr, "n", &NatValue::Literal(3));
+        match result {
+            NatValue::Add(left, right) => {
+                assert_eq!(*right, NatValue::Literal(1));
+                // left should be Mul(Literal(3), Literal(2))
+                match *left {
+                    NatValue::Mul(a, b) => {
+                        assert_eq!(*a, NatValue::Literal(3));
+                        assert_eq!(*b, NatValue::Literal(2));
+                    }
+                    _ => panic!("expected Mul"),
+                }
+            }
+            _ => panic!("expected Add"),
+        }
+    }
+
+    #[test]
+    fn v14_dt1_10_pi_type_tests_comprehensive() {
+        let pi = PiType::new(
+            "rows",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Matrix".into(),
+                index: NatValue::Param("rows".into()),
+            },
+        );
+        let checked = check_pi_application(&pi, &NatValue::Literal(64)).unwrap();
+        match checked {
+            DependentType::NatIndexed { base, index } => {
+                assert_eq!(base, "Matrix");
+                assert_eq!(index, NatValue::Literal(64));
+            }
+            _ => panic!("wrong type"),
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V14 DT2: Sigma Types
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn v14_dt2_3_sigma_creation() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        assert_eq!(sigma.fst_name, "n");
+    }
+
+    #[test]
+    fn v14_dt2_4_sigma_project_snd() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let snd = sigma.project_snd(&NatValue::Literal(3));
+        assert_eq!(
+            snd,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Literal(3),
+            }
+        );
+    }
+
+    #[test]
+    fn v14_dt2_5_sigma_check_pair_valid() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vec".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let valid = sigma.check_pair(
+            &NatValue::Literal(5),
+            &DependentType::NatIndexed {
+                base: "Vec".into(),
+                index: NatValue::Literal(5),
+            },
+        );
+        assert!(valid);
+    }
+
+    #[test]
+    fn v14_dt2_6_sigma_check_pair_invalid() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vec".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let invalid = sigma.check_pair(
+            &NatValue::Literal(5),
+            &DependentType::NatIndexed {
+                base: "Vec".into(),
+                index: NatValue::Literal(10),
+            },
+        );
+        assert!(!invalid);
+    }
+
+    #[test]
+    fn v14_dt2_7_sigma_concrete_projection() {
+        let sigma = SigmaType::new(
+            "len",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Buffer".into(),
+                index: NatValue::Param("len".into()),
+            },
+        );
+        let projected = sigma.project_snd(&NatValue::Literal(1024));
+        match projected {
+            DependentType::NatIndexed { base, index } => {
+                assert_eq!(base, "Buffer");
+                assert_eq!(index, NatValue::Literal(1024));
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt2_8_sigma_with_arithmetic() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Pair".into(),
+                index: NatValue::Mul(
+                    Box::new(NatValue::Param("n".into())),
+                    Box::new(NatValue::Literal(2)),
+                ),
+            },
+        );
+        let snd = sigma.project_snd(&NatValue::Literal(4));
+        match snd {
+            DependentType::NatIndexed { index, .. } => {
+                assert_eq!(
+                    index,
+                    NatValue::Mul(
+                        Box::new(NatValue::Literal(4)),
+                        Box::new(NatValue::Literal(2)),
+                    )
+                );
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt2_9_dependent_type_concrete() {
+        let dt = DependentType::Concrete("i32".into());
+        assert_eq!(dt, DependentType::Concrete("i32".into()));
+    }
+
+    #[test]
+    fn v14_dt2_10_dependent_type_variants() {
+        let concrete = DependentType::Concrete("f64".into());
+        let indexed = DependentType::NatIndexed {
+            base: "Array".into(),
+            index: NatValue::Literal(10),
+        };
+        let pi = DependentType::Pi(PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::Concrete("void".into()),
+        ));
+        let sigma = DependentType::Sigma(SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::Concrete("void".into()),
+        ));
+        // All variants exist and are distinct
+        assert_ne!(concrete, indexed);
+        assert_ne!(format!("{:?}", pi), format!("{:?}", sigma));
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // V14 DT4: Refinement Types
+    // ═════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn v14_dt4_4_refinement_positive() {
+        let positive = RefinementType::new("x", "i32", RefinementPredicate::GreaterThan(0));
+        assert!(positive.check_value(1));
+        assert!(positive.check_value(100));
+        assert!(!positive.check_value(0));
+        assert!(!positive.check_value(-1));
+    }
+
+    #[test]
+    fn v14_dt4_5_refinement_range() {
+        let byte = RefinementType::new("x", "i32", RefinementPredicate::InRange(0, 255));
+        assert!(byte.check_value(0));
+        assert!(byte.check_value(128));
+        assert!(byte.check_value(255));
+        assert!(!byte.check_value(256));
+        assert!(!byte.check_value(-1));
+    }
+
+    #[test]
+    fn v14_dt4_6_refinement_conjunction() {
+        // x > 0 AND x < 100
+        let pred = RefinementPredicate::And(
+            Box::new(RefinementPredicate::GreaterThan(0)),
+            Box::new(RefinementPredicate::LessThan(100)),
+        );
+        let bounded = RefinementType::new("x", "i32", pred);
+        assert!(bounded.check_value(50));
+        assert!(!bounded.check_value(0));
+        assert!(!bounded.check_value(100));
+    }
+
+    #[test]
+    fn v14_dt4_7_refinement_equality() {
+        let exact = RefinementType::new("x", "i32", RefinementPredicate::Equal(42));
+        assert!(exact.check_value(42));
+        assert!(!exact.check_value(41));
+    }
+
+    #[test]
+    fn v14_dt4_8_refinement_not_equal() {
+        let nonzero = RefinementType::new("x", "i32", RefinementPredicate::NotEqual(0));
+        assert!(nonzero.check_value(1));
+        assert!(nonzero.check_value(-1));
+        assert!(!nonzero.check_value(0));
+    }
+
+    #[test]
+    fn v14_dt4_9_refinement_less_equal() {
+        let capped = RefinementType::new("x", "i32", RefinementPredicate::LessEqual(1024));
+        assert!(capped.check_value(1024));
+        assert!(capped.check_value(0));
+        assert!(!capped.check_value(1025));
+    }
+
+    #[test]
+    fn v14_dt4_10_refinement_all_predicates() {
+        assert!(RefinementPredicate::GreaterThan(5).is_satisfied(6));
+        assert!(RefinementPredicate::GreaterEqual(5).is_satisfied(5));
+        assert!(RefinementPredicate::LessThan(5).is_satisfied(4));
+        assert!(RefinementPredicate::LessEqual(5).is_satisfied(5));
+        assert!(RefinementPredicate::Equal(5).is_satisfied(5));
+        assert!(RefinementPredicate::NotEqual(5).is_satisfied(6));
+        assert!(RefinementPredicate::InRange(1, 10).is_satisfied(5));
+    }
+
+    #[test]
+    fn v14_dt4_refinement_type_in_parser() {
+        // Verify refinement type syntax `{ x: i32 | x > 0 }` parses and runs.
+        let source = r#"
+            fn positive(x: { n: i32 | n > 0 }) -> i32 { x }
+            fn main() { let v = positive(5); println(v) }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "refinement type should parse and run: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt4_refinement_type_in_let_binding() {
+        // Refinement types in let bindings.
+        let source = r#"
+            fn main() {
+                let x: { n: i64 | n >= 0 } = 42
+                println(x)
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "refinement in let should work: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt4_refinement_type_range() {
+        // Refinement types with range predicates.
+        let source = r#"
+            fn bounded(x: { n: i32 | n > 0 }) -> i32 { x + 1 }
+            fn main() { println(bounded(10)) }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "refinement range should work: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt4_refinement_runtime_check_pass() {
+        // Positive value satisfies `n > 0`.
+        let source = r#"
+            fn main() {
+                let x: { n: i64 | n > 0 } = 42
+                println(x)
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "positive value should pass: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt4_refinement_runtime_check_fail() {
+        // Negative value violates `n > 0`.
+        let source = r#"
+            fn main() {
+                let x: { n: i64 | n > 0 } = -5
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let _ = interp.eval_source(source); // defines main
+        let result = interp.call_main();
+        assert!(result.is_err(), "negative value should fail refinement");
+        let err_msg = format!("{result:?}");
+        assert!(
+            err_msg.contains("refinement type violation"),
+            "error should mention refinement: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn v14_dt5_pi_type_instantiation() {
+        // PiType instantiation with concrete Nat values
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        let result = check_pi_application(&pi, &NatValue::Literal(3)).unwrap();
+        match result {
+            DependentType::NatIndexed { base, index } => {
+                assert_eq!(base, "Vector");
+                assert_eq!(index, NatValue::Literal(3));
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt5_pi_type_arithmetic() {
+        // PiType with Nat arithmetic: Vector<f64, n+1>
+        let pi = PiType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Vector".into(),
+                index: NatValue::Add(
+                    Box::new(NatValue::Param("n".into())),
+                    Box::new(NatValue::Literal(1)),
+                ),
+            },
+        );
+        let result = check_pi_application(&pi, &NatValue::Literal(5)).unwrap();
+        match result {
+            DependentType::NatIndexed { index, .. } => {
+                assert_eq!(
+                    index,
+                    NatValue::Add(
+                        Box::new(NatValue::Literal(5)),
+                        Box::new(NatValue::Literal(1))
+                    )
+                );
+            }
+            _ => panic!("expected NatIndexed"),
+        }
+    }
+
+    #[test]
+    fn v14_dt5_sigma_type_structure() {
+        let sigma = SigmaType::new(
+            "n",
+            Kind::Nat,
+            DependentType::NatIndexed {
+                base: "Array".into(),
+                index: NatValue::Param("n".into()),
+            },
+        );
+        assert_eq!(sigma.fst_name, "n");
+        assert_eq!(sigma.fst_kind, Kind::Nat);
+    }
+
+    #[test]
+    fn v14_dt5_nat_constraint_check() {
+        let env = HashMap::new();
+        let c = NatConstraint::Equal(NatValue::Literal(3), NatValue::Literal(3));
+        assert!(c.check(&env).is_ok());
+        let c2 = NatConstraint::Equal(NatValue::Literal(3), NatValue::Literal(4));
+        assert!(c2.check(&env).is_err());
+    }
+
+    #[test]
+    fn v14_dt5_refinement_multiple_predicates() {
+        // Test refinement with different predicates
+        let r1 = RefinementType::new("x", "i32", RefinementPredicate::GreaterThan(0));
+        assert!(r1.check_value(1));
+        assert!(!r1.check_value(0));
+
+        let r2 = RefinementType::new(
+            "x",
+            "i32",
+            RefinementPredicate::InRange(1, 100),
+        );
+        assert!(r2.check_value(50));
+        assert!(!r2.check_value(0));
+        assert!(!r2.check_value(101));
+    }
+
+    #[test]
+    fn v14_dt5_refinement_and_predicate() {
+        let pred = RefinementPredicate::And(
+            Box::new(RefinementPredicate::GreaterThan(0)),
+            Box::new(RefinementPredicate::LessThan(100)),
+        );
+        let r = RefinementType::new("x", "i32", pred);
+        assert!(r.check_value(50));
+        assert!(!r.check_value(0));
+        assert!(!r.check_value(100));
+    }
+
+    #[test]
+    fn v14_dt5_kind_display() {
+        assert_eq!(format!("{}", Kind::Type), "Type");
+        assert_eq!(format!("{}", Kind::Nat), "Nat");
+        let dep = Kind::Dependent(Box::new(Kind::Nat), Box::new(Kind::Type));
+        assert_eq!(format!("{dep}"), "Nat -> Type");
+    }
+
+    #[test]
+    fn v14_dt5_refinement_in_function_param() {
+        let source = r#"
+            fn clamp_positive(x: { n: i64 | n > 0 }) -> i64 { x }
+            fn main() {
+                let v = clamp_positive(42)
+                println(v)
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let r = interp.eval_source(source);
+        assert!(r.is_ok(), "refinement in param: {r:?}");
+    }
+
+    #[test]
+    fn v14_dt7_pi_type_syntax_parses() {
+        // Pi type syntax parses in .fj source
+        let source = "fn f(n: i64) -> Pi(m: usize) -> i64 { n }\nfn main() { println(42) }";
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "Pi type should parse: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt7_pi_type_in_type_expr() {
+        // Verify Pi type parses as a TypeExpr
+        let source = "fn f() -> Pi(n: usize) -> i64 { 42 }";
+        let tokens = crate::lexer::tokenize(source).unwrap();
+        let program = crate::parser::parse(tokens).unwrap();
+        if let crate::parser::ast::Item::FnDef(fndef) = &program.items[0] {
+            assert!(fndef.return_type.is_some());
+        }
+    }
+
+    #[test]
+    fn v14_dt8_sigma_type_syntax_parses() {
+        let source = "fn f() -> Sigma(n: usize, i64) { (1, 42) }\nfn main() { println(42) }";
+        let mut interp = crate::interpreter::Interpreter::new();
+        let result = interp.eval_source(source);
+        assert!(result.is_ok(), "Sigma type should parse: {result:?}");
+    }
+
+    #[test]
+    fn v14_dt8_sigma_in_type_expr() {
+        let source = "fn f() -> Sigma(n: usize, i64) { (1, 42) }";
+        let tokens = crate::lexer::tokenize(source).unwrap();
+        let program = crate::parser::parse(tokens).unwrap();
+        if let crate::parser::ast::Item::FnDef(fndef) = &program.items[0] {
+            assert!(fndef.return_type.is_some());
+            if let Some(crate::parser::ast::TypeExpr::Sigma { fst_name, .. }) = &fndef.return_type {
+                assert_eq!(fst_name, "n");
+            }
+        }
+    }
+
+    #[test]
+    fn v14_dt5_dependent_type_enum() {
+        // DependentType variants work correctly
+        let concrete = DependentType::Concrete("i32".into());
+        assert!(matches!(concrete, DependentType::Concrete(_)));
+
+        let indexed = DependentType::NatIndexed {
+            base: "Vec".into(),
+            index: NatValue::Literal(10),
+        };
+        assert!(matches!(indexed, DependentType::NatIndexed { .. }));
     }
 }

@@ -546,6 +546,34 @@ impl PagesConfig {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V14 PR2: Package Page and Search Results HTML
+// ═══════════════════════════════════════════════════════════════════════
+
+/// V14 PR2: Generate HTML page for a package.
+pub fn render_package_page(name: &str, version: &str, description: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\n<html><head><title>{name} - Fajar Registry</title></head>\n\
+         <body><h1>{name}</h1><p>Version: {version}</p>\n\
+         <p>{description}</p></body></html>"
+    )
+}
+
+/// Generate HTML search results page.
+pub fn render_search_results(query: &str, results: &[(String, String)]) -> String {
+    let mut html = format!(
+        "<!DOCTYPE html>\n<html><head><title>Search: {query}</title></head>\n<body>\n\
+         <h1>Search results for \"{query}\"</h1>\n<ul>\n"
+    );
+    for (name, version) in results {
+        html.push_str(&format!(
+            "<li><a href=\"/packages/{name}\">{name}</a> v{version}</li>\n"
+        ));
+    }
+    html.push_str("</ul>\n</body></html>");
+    html
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -763,5 +791,33 @@ mod tests {
     fn s28_10_difficulty_display() {
         assert_eq!(format!("{}", Difficulty::Beginner), "Beginner");
         assert_eq!(format!("{}", Difficulty::Advanced), "Advanced");
+    }
+
+    // V14 PR2.1: Package page HTML
+    #[test]
+    fn v14_pr2_1_package_page() {
+        let html = render_package_page("fj-math", "1.0.0", "Math utilities for Fajar Lang");
+        assert!(html.contains("<h1>fj-math</h1>"));
+        assert!(html.contains("Version: 1.0.0"));
+    }
+
+    // V14 PR2.2: Search results page HTML
+    #[test]
+    fn v14_pr2_2_search_results_page() {
+        let results = vec![
+            ("fj-math".into(), "1.0.0".into()),
+            ("fj-nn".into(), "0.5.0".into()),
+        ];
+        let html = render_search_results("math", &results);
+        assert!(html.contains("Search results"));
+        assert!(html.contains("fj-math"));
+    }
+
+    // V14 PR2.3: Empty search results
+    #[test]
+    fn v14_pr2_3_search_empty() {
+        let html = render_search_results("xyz", &[]);
+        assert!(html.contains("Search results"));
+        assert!(html.contains("<ul>"));
     }
 }
