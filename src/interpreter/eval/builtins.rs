@@ -1016,16 +1016,27 @@ impl Interpreter {
                     .into());
                 }
                 match &args[0] {
-                    Value::Str(path) => match std::fs::read_to_string(path) {
-                        Ok(content) => Ok(Value::Enum {
-                            variant: "Ok".into(),
-                            data: Some(Box::new(Value::Str(content))),
-                        }),
-                        Err(e) => Ok(Value::Enum {
-                            variant: "Err".into(),
-                            data: Some(Box::new(Value::Str(e.to_string()))),
-                        }),
-                    },
+                    Value::Str(path) => {
+                        // V15 P3.6: Block path traversal attacks
+                        if path.contains("..") {
+                            return Ok(Value::Enum {
+                                variant: "Err".into(),
+                                data: Some(Box::new(Value::Str(
+                                    "path traversal blocked: '..' not allowed".into(),
+                                ))),
+                            });
+                        }
+                        match std::fs::read_to_string(path) {
+                            Ok(content) => Ok(Value::Enum {
+                                variant: "Ok".into(),
+                                data: Some(Box::new(Value::Str(content))),
+                            }),
+                            Err(e) => Ok(Value::Enum {
+                                variant: "Err".into(),
+                                data: Some(Box::new(Value::Str(e.to_string()))),
+                            }),
+                        }
+                    }
                     _ => Err(
                         RuntimeError::TypeError("read_file() requires a string path".into()).into(),
                     ),
@@ -1041,6 +1052,15 @@ impl Interpreter {
                 }
                 match (&args[0], &args[1]) {
                     (Value::Str(path), Value::Str(content)) => {
+                        // V15 P3.6: Block path traversal
+                        if path.contains("..") {
+                            return Ok(Value::Enum {
+                                variant: "Err".into(),
+                                data: Some(Box::new(Value::Str(
+                                    "path traversal blocked: '..' not allowed".into(),
+                                ))),
+                            });
+                        }
                         match std::fs::write(path, content) {
                             Ok(()) => Ok(Value::Enum {
                                 variant: "Ok".into(),

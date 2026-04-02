@@ -1,0 +1,45 @@
+// JSON Pretty Printer — formats compact JSON with indentation.
+
+fn indent(level: i64) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < level { result = result + "  "; i = i + 1 }
+    result
+}
+
+fn pretty_json(input: str) -> str {
+    let chars = input.split("")
+    let mut result = ""
+    let mut depth: i64 = 0
+    let mut in_string = false
+
+    for ch in chars {
+        if ch == "\"" {
+            in_string = !in_string
+            result = result + ch
+        } else { if in_string {
+            result = result + ch
+        } else { if ch == "{" || ch == "[" {
+            depth = depth + 1
+            result = result + ch + "\n" + indent(depth)
+        } else { if ch == "}" || ch == "]" {
+            depth = depth - 1
+            result = result + "\n" + indent(depth) + ch
+        } else { if ch == "," {
+            result = result + ",\n" + indent(depth)
+        } else { if ch == ":" {
+            result = result + ": "
+        } else { if ch != " " {
+            result = result + ch
+        } } } } } } }
+    }
+    result
+}
+
+fn main() {
+    let compact = "{\"name\":\"fajar\",\"version\":\"12.6.0\",\"ok\":true}"
+    println("Input:")
+    println(compact)
+    println("\nFormatted:")
+    println(pretty_json(compact))
+}

@@ -314,4 +314,43 @@ fn train_test_split(x: &Tensor, ratio: f32) -> (Tensor, Tensor)
 
 ---
 
-*Stdlib Version: 0.1 | Modules: 3 domains, 14 sub-modules*
+---
+
+## V14+ Additions
+
+### Effect System Builtins
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `effect` | `effect Name { fn op(params) -> Ret }` | Declare algebraic effect |
+| `handle` | `handle { body } with { arms }` | Handle effects with continuations |
+| `resume` | `resume(value)` | Resume captured continuation |
+
+### Activation Functions (V14)
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `gelu` | `fn(Tensor) -> Tensor` | Gaussian Error Linear Unit |
+| `leaky_relu` | `fn(Tensor) -> Tensor` | Leaky ReLU (alpha=0.01) |
+
+### Loss Functions (V14)
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `bce_loss` | `fn(pred, target) -> Tensor` | Binary cross-entropy |
+| `l1_loss` | `fn(pred, target) -> Tensor` | L1 / MAE loss |
+
+### Metrics (V14)
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `accuracy` | `fn(pred, target) -> f64` | Classification accuracy |
+| `precision` | `fn(pred, target) -> f64` | Precision score |
+| `recall` | `fn(pred, target) -> f64` | Recall score |
+| `f1_score` | `fn(pred, target) -> f64` | F1 harmonic mean |
+
+### GPU Builtins
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `thread_idx` | `fn() -> i64` | GPU thread index |
+| `block_idx` | `fn() -> i64` | GPU block index |
+| `block_dim` | `fn() -> i64` | GPU block dimension |
+| `gpu_sync` | `fn() -> void` | GPU barrier synchronization |
+
+*Stdlib Version: 0.2 | Modules: 3 domains, 14+ sub-modules | Updated: 2026-04-02*

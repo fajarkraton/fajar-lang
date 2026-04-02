@@ -1,0 +1,57 @@
+// CSV to JSON Converter — reads CSV lines and produces JSON output.
+//
+// Takes CSV data (header + rows) and converts to JSON array of objects.
+
+fn csv_to_json(csv_data: str) -> str {
+    let lines = csv_data.split("\n")
+    if len(lines) < 2 {
+        return "[]"
+    }
+
+    // Parse header
+    let headers = lines[0].split(",")
+    let num_cols = len(headers)
+
+    // Parse rows
+    let mut json = "[\n"
+    let mut row_idx = 1
+    while row_idx < len(lines) {
+        let line = lines[row_idx]
+        if len(line) == 0 {
+            row_idx = row_idx + 1
+            continue
+        }
+        let cols = line.split(",")
+
+        if row_idx > 1 {
+            json = json + ",\n"
+        }
+        json = json + "  {"
+
+        let mut col_idx = 0
+        while col_idx < num_cols && col_idx < len(cols) {
+            if col_idx > 0 {
+                json = json + ", "
+            }
+            let header = headers[col_idx].trim()
+            let value = cols[col_idx].trim()
+            json = json + f"\"{header}\": \"{value}\""
+            col_idx = col_idx + 1
+        }
+
+        json = json + "}"
+        row_idx = row_idx + 1
+    }
+
+    json = json + "\n]"
+    json
+}
+
+fn main() {
+    let csv = "name,age,city\nFajar,30,Jakarta\nAlice,25,Singapore\nBob,35,Tokyo"
+    println("CSV Input:")
+    println(csv)
+    println("\nJSON Output:")
+    let json = csv_to_json(csv)
+    println(json)
+}

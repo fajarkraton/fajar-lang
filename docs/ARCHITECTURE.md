@@ -277,4 +277,57 @@ All errors implement `miette::Diagnostic` for beautiful, Rust-style error output
 
 ---
 
-*Architecture Version: 3.0 | Last Updated: 2026-03-12 (v3.0 — full pipeline with all backends)*
+---
+
+## V14+ Architecture Additions
+
+### Algebraic Effect System
+
+```
+EffectDecl → EffectRegistry (first pass registration)
+    │
+    ▼
+EffectComposition → Merges operations from component effects
+    │
+    ▼
+EffectChecker → Validates with-clause effects, context compatibility
+    │
+    ▼
+HandleEffect (interpreter) → Replay-with-cache execution model:
+    1. Execute body
+    2. On EffectPerformed: find handler arm by (effect, op)
+    3. Run handler body, cache resume value
+    4. Replay body from start — cached effects return immediately
+    5. Repeat until body completes without new effects
+```
+
+### GPU Codegen Pipeline
+
+```
+.fj source → Lexer → Parser → AST
+    │
+    ▼
+lower_to_gpu_ir() → Find @gpu fn → GpuIr (GpuKernel, GpuStmt, GpuExpr)
+    │
+    ├── to_spirv() → SPIR-V binary
+    ├── to_ptx()   → PTX assembly
+    ├── to_metal()  → Metal Shading Language
+    └── to_hlsl()   → HLSL compute shader
+```
+
+### Dependent Type System
+
+```
+TypeExpr::Refinement { var, base, predicate }
+    → Analyzer resolves base type
+    → Interpreter checks predicate at let-binding time
+
+TypeExpr::Pi { param, param_type, return_type }
+    → Analyzer resolves return type
+    → Codegen estimates size from return type
+
+TypeExpr::Sigma { fst, fst_type, snd_type }
+    → Analyzer resolves to Tuple(fst, snd)
+```
+
+*Architecture Version: 4.0 | Last Updated: 2026-04-02 (v14 effects, GPU IR, dependent types)*

@@ -1683,4 +1683,76 @@ Fajar Lang menempati "blue ocean" — tidak ada bahasa lain yang menempati kuadr
 
 *Fajar Lang — Comprehensive Documentation v1.0*
 
-Spec Version: 0.1 | Status: Draft | Next Review: After Phase 2
+---
+
+## 19. V14+ Language Extensions
+
+### 19.1 Algebraic Effects
+
+```fajar
+// Effect declaration
+effect Console {
+    fn log(msg: str) -> void
+    fn read_line() -> str
+}
+
+// Effect composition — merge operations from multiple effects
+effect Combined = Logger + Counter
+
+// Function with effect clause
+fn greet() with Console {
+    Console::log("hello")
+}
+
+// Effect row polymorphism — open row variable
+fn generic_fn() with IO, ..r { }
+
+// Handle expression — intercept and resume effects
+handle { greet() } with {
+    Console::log(msg) => { println(msg); resume(null) }
+    Console::read_line() => { resume("input") }
+}
+```
+
+### 19.2 Refinement Types
+
+```fajar
+// Type with runtime-checked predicate: { var: BaseType | predicate }
+let age: { n: i64 | n > 0 } = 25
+let bounded: { x: i64 | x >= 0 } = 100
+
+// In function parameters
+fn safe_divide(a: i64, b: { n: i64 | n > 0 }) -> i64 { a / b }
+```
+
+### 19.3 Dependent Types
+
+```fajar
+// Pi type — return type depends on parameter value
+fn zeros(n: i64) -> Pi(size: usize) -> i64 { n }
+
+// Sigma type — dependent pair (first value determines second type)
+fn pair() -> Sigma(n: usize, i64) { (10, 42) }
+```
+
+### 19.4 GPU Compute Shaders
+
+```fajar
+// @gpu annotation marks functions for GPU compilation
+@gpu fn vector_add(a: f32, b: f32, result: f32) {
+    let result = a + b
+}
+
+// Custom workgroup size
+@gpu(workgroup=256) fn fast_add(a: f32, b: f32, c: f32) {
+    let c = a + b
+}
+
+// Compile to any backend:
+// fj build input.fj --target spirv -o output.spv
+// fj build input.fj --target metal -o output.metal
+// fj build input.fj --target hlsl -o output.hlsl
+// fj build input.fj --target ptx -o output.ptx
+```
+
+Spec Version: 0.2 | Status: Draft | Updated: 2026-04-02
