@@ -98,24 +98,25 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (v12.6.0, 2026-04-03 — post V17 re-audit)
+### Current Totals (V18 "Integrity", 2026-04-03)
 
 ```
-Tests:     8,317 (8,280 lib + 24 integ + 13 doc) — 0 failures, 0 clippy warnings
-LOC:       473,909 lines of Rust (441 files)
-Examples:  257 .fj programs (93K LOC) | Binary: 13 MB release | MSRV: Rust 1.87
-Modules:   33 production, 1 partial, 18 framework, 3 stub (56 total)
-CLI:       25 production, 8 partial, 2 stub (35 total)
-CI:        6 GitHub Actions workflows (check, features, fuzz, audit, benchmarks, coverage, nightly)
+Tests:     8,412 default (8,280 lib + 132 integ) | 8,565 with LLVM — 0 failures
+LOC:       ~475,000 lines of Rust (441+ files)
+Examples:  263 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
+Modules:   ~38 production, 1 partial, 14 framework, 3 stub (56 total)
+CLI:       27 production, 6 partial, 2 stub (35 total)
+CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
 ```
 
-### V14 Status (~302/500 real [x] — 60%, per V17 audit)
-- Effects: 40/40 ✅ | Dependent Types: 40/40 ✅ | GPU: 40/40 ✅
-- LSP: 40/40 ✅ | Package Registry: 40/40 ✅
-- FajarOS Nova: 97/100 [x] (3 [f] need QEMU/hardware)
-- Validation: 97/100 [x] (3 [f] need external C FFI)
-- **Note:** Many V14 tasks marked [x] were framework-only. V17 audit corrected to ~302 real.
+### V18 "Integrity" (2026-04-03) — 35/37 tasks, 18 new real features
+- Plan: `docs/V18_HONEST_COMPLETION_PLAN.md`
+- New: http_get/post, tcp_connect, dns_resolve, ffi_load_library/call, gen fn + yield,
+  channels, @requires, MultiHeadAttention, fj deploy, fj demo, fj build (ELF),
+  fj bindgen (FFI output), const fn, LLVM backend fixed, LSP v2 completion
+- Context enforcement: 132 integration tests (was 85)
+- Deferred: user macro $x expansion, transitive context enforcement
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): MMU, EL0, IPC, 65+ commands. Verified on Radxa Dragon Q6A.
@@ -688,5 +689,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 12.0 | v12.6.0 — 8,317 tests, 473K LOC, 0 failures | 33/56 modules production (59%) | V17 audited*
+*CLAUDE.md Version: 13.0 | V18 "Integrity" — 8,412 tests, ~475K LOC, 0 failures | ~38/56 modules production (68%) | 18 new features*
 *Last Updated: 2026-04-03*

@@ -652,7 +652,26 @@ fn method_len_ok_in_kernel() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 13. V18 2.7: Generator tests
+// 13. V18 2.12: Transitive context enforcement
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn ke002_transitive_tensor_wrapper() {
+    // fn wrapper calls tensor_zeros → @kernel calling wrapper should error
+    expect_error(
+        "fn wrap() { tensor_zeros(3, 4) }\n@kernel fn bad() { wrap() }",
+        "KE002",
+    );
+}
+
+#[test]
+fn transitive_safe_fn_ok_in_kernel() {
+    // fn that only does arithmetic → ok to call from @kernel
+    expect_ok("fn add(a: i64, b: i64) -> i64 { a + b }\n@kernel fn k() { add(1, 2) }");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 14. V18 2.7: Generator tests
 // ════════════════════════════════════════════════════════════════════════
 
 /// Helper: run source and return captured output.
