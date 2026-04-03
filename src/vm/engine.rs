@@ -623,6 +623,7 @@ impl VM {
                 },
                 is_async: false,
                     is_gen: false,
+                    requires: vec![],
             });
             self.globals.insert(func.name.clone(), fn_val);
         }

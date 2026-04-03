@@ -159,6 +159,8 @@ pub enum LayerValue {
     Dense(crate::runtime::ml::layers::Dense),
     /// 2D convolutional layer.
     Conv2d(crate::runtime::ml::layers::Conv2d),
+    /// V18: Multi-head attention layer.
+    Attention(Box<crate::runtime::ml::layers::MultiHeadAttention>),
 }
 
 /// A runtime value in the Fajar Lang interpreter.
@@ -269,6 +271,8 @@ pub struct FnValue {
     pub is_async: bool,
     /// Whether this is a generator function (`gen fn`).
     pub is_gen: bool,
+    /// V18: @requires precondition expressions (evaluated at call time).
+    pub requires: Vec<Box<crate::parser::ast::Expr>>,
 }
 
 impl PartialEq for Value {
@@ -406,6 +410,7 @@ impl fmt::Display for Value {
             Value::Layer(l) => match l.as_ref() {
                 LayerValue::Dense(_) => write!(f, "<layer Dense>"),
                 LayerValue::Conv2d(_) => write!(f, "<layer Conv2d>"),
+                LayerValue::Attention(_) => write!(f, "<layer MultiHeadAttention>"),
             },
             Value::Iterator(_) => write!(f, "<iterator>"),
             Value::Future { task_id } => write!(f, "<future:{task_id}>"),

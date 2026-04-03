@@ -713,6 +713,7 @@ pub fn scaled_dot_product_attention_tracked(
 ///
 /// Input shapes: Q=[seq_q, d_model], K=[seq_k, d_model], V=[seq_k, d_model]
 /// Output shape: [seq_q, d_model]
+#[derive(Debug, Clone)]
 pub struct MultiHeadAttention {
     /// Number of attention heads.
     pub num_heads: usize,

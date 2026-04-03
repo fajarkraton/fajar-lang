@@ -125,6 +125,17 @@ enum Command {
         /// Demo name: drone, os, network, ffi
         name: String,
     },
+    /// Generate deployment artifacts (Dockerfile, K8s manifests).
+    Deploy {
+        /// Deployment target: container, k8s
+        #[arg(long, default_value = "container")]
+        target: String,
+        /// Source .fj file to deploy
+        file: PathBuf,
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        output: String,
+    },
     /// Create a new Fajar Lang project.
     New {
         /// Name of the project to create.
@@ -460,6 +471,11 @@ fn main_inner() -> ExitCode {
         Command::Pack { output, files } => cmd_pack(&output, &files),
         Command::Playground { output } => cmd_playground(&output),
         Command::Demo { name } => cmd_demo(&name),
+        Command::Deploy {
+            target,
+            file,
+            output,
+        } => cmd_deploy(&target, &file, &output),
         Command::New { name } => cmd_new(&name),
         Command::Build {
             file,
@@ -2322,6 +2338,41 @@ fn cmd_demo(name: &str) -> ExitCode {
         Err(e) => {
             eprintln!("{e}");
             ExitCode::FAILURE
+        }
+    }
+}
+
+/// V18 4.6: Generate deployment artifacts.
+fn cmd_deploy(target: &str, file: &std::path::Path, output: &str) -> ExitCode {
+    let binary_name = file
+        .file_stem()
+        .map(|s: &std::ffi::OsStr| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "app".to_string());
+
+    match target {
+        "container" | "docker" => {
+            let config = fajar_lang::deployment::containers::DockerConfig::new(&binary_name);
+            let dockerfile = fajar_lang::deployment::containers::generate_dockerfile(&config);
+            let out_path = std::path::Path::new(output).join("Dockerfile");
+            match std::fs::write(&out_path, &dockerfile) {
+                Ok(()) => {
+                    println!("Generated: {}", out_path.display());
+                    println!("  Binary: {binary_name}");
+                    println!("  Base image: distroless");
+                    println!("  Port: 8080");
+                    println!("\nBuild: docker build -t {binary_name} .");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: cannot write Dockerfile: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        _ => {
+            eprintln!("Unknown deploy target: '{target}'");
+            eprintln!("Available: container");
+            ExitCode::from(EXIT_USAGE)
         }
     }
 }

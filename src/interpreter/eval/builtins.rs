@@ -865,6 +865,37 @@ impl Interpreter {
                     crate::runtime::ml::layers::Conv2d::new(in_ch, out_ch, kernel, stride, padding),
                 ))))
             }
+            "MultiHeadAttention" | "attention" => {
+                // MultiHeadAttention(d_model, num_heads)
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let d_model = match &args[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "MultiHeadAttention: d_model must be int".into(),
+                        )
+                        .into());
+                    }
+                };
+                let num_heads = match &args[1] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "MultiHeadAttention: num_heads must be int".into(),
+                        )
+                        .into());
+                    }
+                };
+                Ok(Value::Layer(Box::new(LayerValue::Attention(Box::new(
+                    crate::runtime::ml::layers::MultiHeadAttention::new(d_model, num_heads),
+                )))))
+            }
             "layer_forward" | "forward" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
@@ -904,6 +935,13 @@ impl Interpreter {
                             .map_err(|e| RuntimeError::TypeError(format!("forward failed: {e}")))?;
                         Ok(Value::Tensor(output))
                     }
+                    LayerValue::Attention(attn) => {
+                        // Self-attention: Q=K=V=input
+                        let output = attn
+                            .forward(input, input, input)
+                            .map_err(|e| RuntimeError::TypeError(format!("attention forward: {e}")))?;
+                        Ok(Value::Tensor(output))
+                    }
                 }
             }
             "layer_params" => {
@@ -928,6 +966,15 @@ impl Interpreter {
                             let params: Vec<Value> = vec![
                                 Value::Tensor(conv.weight.clone()),
                                 Value::Tensor(conv.bias.clone()),
+                            ];
+                            Ok(Value::Array(params))
+                        }
+                        LayerValue::Attention(attn) => {
+                            let params: Vec<Value> = vec![
+                                Value::Tensor(attn.w_q.clone()),
+                                Value::Tensor(attn.w_k.clone()),
+                                Value::Tensor(attn.w_v.clone()),
+                                Value::Tensor(attn.w_o.clone()),
                             ];
                             Ok(Value::Array(params))
                         }
@@ -5911,6 +5958,7 @@ impl Interpreter {
             closure_env: Rc::clone(&self.env),
             is_async: false,
                     is_gen: false,
+                    requires: vec![],
         }))
     }
 
@@ -6142,6 +6190,7 @@ impl Interpreter {
                 closure_env: Rc::clone(&self.env),
                 is_async: false,
                     is_gen: false,
+                    requires: vec![],
             };
 
             // Check if this is a static method (no `self` param) — also register globally
@@ -6469,6 +6518,7 @@ impl Interpreter {
                         closure_env: Rc::clone(&self.env),
                         is_async: false,
                     is_gen: false,
+                    requires: vec![],
                     };
                     let val = Value::Function(fn_val);
                     mod_symbols.insert(fndef.name.clone(), val.clone());

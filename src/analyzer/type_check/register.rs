@@ -1104,6 +1104,9 @@ impl TypeChecker {
                 Type::Unknown,
             ),
             ("ffi_call", vec![Type::Unknown], Type::Unknown),
+            // V18: ML layers
+            ("MultiHeadAttention", vec![Type::I64, Type::I64], Type::Unknown),
+            ("attention", vec![Type::I64, Type::I64], Type::Unknown),
         ];
         for (name, params, ret) in net_fns {
             self.symbols.define(Symbol {

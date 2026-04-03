@@ -1176,6 +1176,9 @@ impl Interpreter {
             "Dense",
             "layer_conv2d",
             "Conv2d",
+            // V18: Multi-head attention
+            "MultiHeadAttention",
+            "attention",
             "layer_forward",
             "forward",
             "layer_params",
@@ -1663,6 +1666,7 @@ impl Interpreter {
                     closure_env: Rc::clone(&self.env),
                     is_async: fndef.is_async,
                     is_gen: fndef.is_gen,
+                    requires: fndef.requires.clone(),
                 };
                 self.env
                     .borrow_mut()
@@ -1722,6 +1726,7 @@ impl Interpreter {
                         closure_env: std::rc::Rc::clone(&self.env),
                         is_async: false,
                     is_gen: false,
+                    requires: vec![],
                     };
                     self.env
                         .borrow_mut()
@@ -2598,6 +2603,25 @@ impl Interpreter {
         // Save and swap environment
         let prev_env = Rc::clone(&self.env);
         self.env = call_env;
+
+        // V18 4.4: Check @requires preconditions at call time
+        for req_expr in &fv.requires {
+            match self.eval_expr(req_expr) {
+                Ok(Value::Bool(true)) => {} // precondition satisfied
+                Ok(Value::Bool(false)) => {
+                    self.env = prev_env;
+                    self.call_stack.pop();
+                    self.call_depth -= 1;
+                    return Err(RuntimeError::TypeError(format!(
+                        "@requires precondition failed in '{}'",
+                        fv.name
+                    ))
+                    .into());
+                }
+                Ok(_) => {} // non-bool @requires — skip
+                Err(_) => {} // evaluation error — skip
+            }
+        }
 
         let result = match self.eval_expr(&fv.body) {
             Ok(v) => Ok(v),

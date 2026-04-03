@@ -1093,6 +1093,7 @@ impl Compiler {
             },
             is_async: false,
                     is_gen: false,
+                    requires: vec![],
         });
 
         // Copy captured locals to globals so the closure body can access them

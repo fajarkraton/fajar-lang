@@ -92,6 +92,10 @@ impl Interpreter {
                         .forward(input)
                         .map(Value::Tensor)
                         .map_err(|e| RuntimeError::TypeError(format!("forward: {e}")).into()),
+                    LayerValue::Attention(attn) => attn
+                        .forward(input, input, input)
+                        .map(Value::Tensor)
+                        .map_err(|e| RuntimeError::TypeError(format!("attention: {e}")).into()),
                 };
             }
             return Err(RuntimeError::TypeError(format!("no method '{method}' on Layer")).into());
