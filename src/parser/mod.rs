@@ -533,9 +533,7 @@ impl Parser {
                 td.doc_comment = doc_comment;
                 Ok(Item::TraitDef(td))
             }
-            TokenKind::Effect => {
-                self.parse_effect_item(is_pub)
-            }
+            TokenKind::Effect => self.parse_effect_item(is_pub),
             TokenKind::Const | TokenKind::Comptime => {
                 // `const fn` or `comptime fn` → const fn
                 if matches!(self.peek_at(1).kind, TokenKind::Fn) {

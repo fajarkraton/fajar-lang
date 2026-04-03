@@ -829,18 +829,15 @@ fn v14_w11_2_tensor_ones() {
 #[test]
 fn v14_w11_3_tensor_transpose() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let a = ones(2, 3)\nlet b = transpose(a)\nprintln(b)",
-    );
+    let r = interp.eval_source("let a = ones(2, 3)\nlet b = transpose(a)\nprintln(b)");
     assert!(r.is_ok(), "tensor transpose: {r:?}");
 }
 
 #[test]
 fn v14_w11_4_tensor_matmul() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let a = ones(2, 3)\nlet b = ones(3, 2)\nlet c = matmul(a, b)\nprintln(c)",
-    );
+    let r = interp
+        .eval_source("let a = ones(2, 3)\nlet b = ones(3, 2)\nlet c = matmul(a, b)\nprintln(c)");
     assert!(r.is_ok(), "tensor matmul: {r:?}");
 }
 
@@ -926,7 +923,10 @@ fn v14_w12_2_examples_parse() {
             }
         }
     }
-    assert!(parsed >= 5, "at least 5 examples should parse, got {parsed}");
+    assert!(
+        parsed >= 5,
+        "at least 5 examples should parse, got {parsed}"
+    );
 }
 
 #[test]
@@ -1256,8 +1256,6 @@ fn v14_w16_1_sigma_type_syntax() {
 #[test]
 fn v14_w16_2_refinement_validation() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let positive: { n: i64 | n > 0 } = 100\nassert_eq(positive, 100)",
-    );
+    let r = interp.eval_source("let positive: { n: i64 | n > 0 } = 100\nassert_eq(positive, 100)");
     assert!(r.is_ok(), "refinement: {r:?}");
 }

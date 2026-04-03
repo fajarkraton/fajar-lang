@@ -4519,6 +4519,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(body),
             span: dummy_span(),
         }
@@ -4640,6 +4641,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(make_binop(make_ident("x"), BinOp::Add, make_ident("x"))),
             span: dummy_span(),
         };
@@ -4739,6 +4741,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(make_float_lit(3.14)),
             span: dummy_span(),
         };
@@ -4793,6 +4796,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Literal {
                 kind: LiteralKind::String("hello".to_string()),
                 span: dummy_span(),
@@ -4931,6 +4935,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Cast {
                 expr: Box::new(make_int_lit(42)),
                 ty: TypeExpr::Simple {
@@ -5418,6 +5423,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(fib_body),
             span: dummy_span(),
         };
@@ -5493,6 +5499,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(make_binop(
                 make_binop(make_ident("a"), BinOp::Add, make_ident("b")),
                 BinOp::Add,
@@ -5580,6 +5587,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::If {
                 condition: Box::new(make_binop(make_ident("n"), BinOp::Eq, make_int_lit(0))),
                 then_branch: Box::new(make_int_lit(1)),
@@ -5628,6 +5636,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::If {
                 condition: Box::new(make_binop(make_ident("n"), BinOp::Eq, make_int_lit(0))),
                 then_branch: Box::new(make_int_lit(0)),
@@ -6439,6 +6448,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Block {
                 stmts: vec![],
                 expr: Some(Box::new(make_int_lit(0))),
@@ -6754,6 +6764,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Block {
                     stmts: vec![],
                     expr: Some(Box::new(make_int_lit(42))),
@@ -7020,6 +7031,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Binary {
                 left: Box::new(Expr::Ident {
                     name: "a".to_string(),
@@ -7104,6 +7116,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Block {
                     stmts: vec![],
                     expr: Some(Box::new(make_int_lit(0))),
@@ -7224,6 +7237,7 @@ mod tests {
                         requires: vec![],
                         ensures: vec![],
                         effects: vec![],
+                effect_row_var: None,
                         body: Box::new(Expr::Block {
                             stmts: vec![],
                             expr: Some(Box::new(make_int_lit(42))),
@@ -7251,6 +7265,7 @@ mod tests {
                     requires: vec![],
                     ensures: vec![],
                     effects: vec![],
+                effect_row_var: None,
                     body: Box::new(Expr::Block {
                         stmts: vec![],
                         expr: Some(Box::new(make_int_lit(0))),
@@ -7324,6 +7339,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Block {
                 stmts: vec![],
                 expr: Some(Box::new(make_int_lit(0))),
@@ -7499,6 +7515,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Block {
                     stmts: vec![],
                     expr: Some(Box::new(make_int_lit(0))),
@@ -7621,6 +7638,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Match {
                     subject: Box::new(make_int_lit(2)),
                     arms: vec![
@@ -7696,6 +7714,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Match {
                     subject: Box::new(make_int_lit(5)),
                     arms: vec![
@@ -7773,6 +7792,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Binary {
                 left: Box::new(Expr::Ident {
                     name: "x".to_string(),
@@ -7803,6 +7823,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(Expr::Pipe {
                 left: Box::new(make_int_lit(5)),
                 right: Box::new(Expr::Ident {
@@ -7853,6 +7874,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Try {
                     expr: Box::new(make_int_lit(42)),
                     span: dummy_span(),
@@ -7890,6 +7912,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Match {
                     subject: Box::new(make_int_lit(42)),
                     arms: vec![MatchArm {
@@ -7943,6 +7966,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Loop {
                     label: None,
                     body: Box::new(Expr::Block {
@@ -7993,6 +8017,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::For {
                     label: None,
                     variable: "i".to_string(),
@@ -8045,6 +8070,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Match {
                     subject: Box::new(make_int_lit(99)),
                     arms: vec![
@@ -8099,6 +8125,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Match {
                     subject: Box::new(make_int_lit(2)),
                     arms: vec![
@@ -8308,6 +8335,7 @@ mod tests {
                     requires: vec![],
                     ensures: vec![],
                     effects: vec![],
+                effect_row_var: None,
                     body: Box::new(Expr::Block {
                         stmts: vec![],
                         expr: Some(Box::new(make_int_lit(42))),
@@ -8333,6 +8361,7 @@ mod tests {
                     requires: vec![],
                     ensures: vec![],
                     effects: vec![],
+                effect_row_var: None,
                     body: Box::new(Expr::Block {
                         stmts: vec![],
                         expr: Some(Box::new(make_int_lit(0))),
@@ -8489,6 +8518,7 @@ mod tests {
                 requires: vec![],
                 ensures: vec![],
                 effects: vec![],
+                effect_row_var: None,
                 body: Box::new(Expr::Block {
                     stmts: vec![],
                     expr: Some(Box::new(make_int_lit(0))),
@@ -8588,6 +8618,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+                effect_row_var: None,
             body: Box::new(body),
             span: dummy_span(),
         })]
@@ -8670,6 +8701,7 @@ mod tests {
                     requires: vec![],
                     ensures: vec![],
                     effects: vec![],
+                effect_row_var: None,
                     body: Box::new(fib_body),
                     span: dummy_span(),
                 }),
@@ -8691,6 +8723,7 @@ mod tests {
                     requires: vec![],
                     ensures: vec![],
                     effects: vec![],
+                effect_row_var: None,
                     body: Box::new(Expr::Call {
                         callee: Box::new(make_ident("fib")),
                         args: vec![make_call_arg(make_int_lit(10))],

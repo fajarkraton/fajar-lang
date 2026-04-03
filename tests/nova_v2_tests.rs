@@ -12,7 +12,8 @@ use fajar_lang::interpreter::Interpreter;
 #[test]
 fn v14_n1_1_kernel_fn_parses_and_runs() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source("@kernel fn alloc_page(addr: u64) -> bool { true }\nalloc_page(0x1000)");
+    let r =
+        interp.eval_source("@kernel fn alloc_page(addr: u64) -> bool { true }\nalloc_page(0x1000)");
     assert!(r.is_ok(), "@kernel fn should parse, eval, and return value");
     // Verify it returns the expected value
     if let Ok(val) = r {
@@ -121,7 +122,10 @@ fn v14_n1_9_kernel_filesystem_inode() {
     let r = interp.eval_source(
         "@kernel fn create_inode() -> i64 { len(\"hello.txt\") }\nassert_eq(create_inode(), 9)",
     );
-    assert!(r.is_ok(), "filesystem inode should use string length: {r:?}");
+    assert!(
+        r.is_ok(),
+        "filesystem inode should use string length: {r:?}"
+    );
 }
 
 #[test]
@@ -192,7 +196,8 @@ fn v14_n2_5_inline_kernel_function_call() {
 fn v14_n2_6_recursion_depth_limit() {
     let mut interp = Interpreter::new_capturing();
     // Deep recursion should hit limit and NOT crash
-    let r = interp.eval_source("fn deep(n: i32) -> i32 { if n <= 0 { 0 } else { deep(n - 1) } }\ndeep(20)");
+    let r = interp
+        .eval_source("fn deep(n: i32) -> i32 { if n <= 0 { 0 } else { deep(n - 1) } }\ndeep(20)");
     assert!(r.is_ok(), "bounded recursion should work: {r:?}");
 }
 
@@ -319,10 +324,14 @@ fn v14_n3_8_raft_log_entry() {
 fn v14_n3_9_log_replication() {
     let mut log: Vec<fajar_lang::distributed::raft::LogEntry> = Vec::new();
     log.push(fajar_lang::distributed::raft::LogEntry {
-        term: 1, index: 1, command: "set x 42".into(),
+        term: 1,
+        index: 1,
+        command: "set x 42".into(),
     });
     log.push(fajar_lang::distributed::raft::LogEntry {
-        term: 1, index: 2, command: "set y 100".into(),
+        term: 1,
+        index: 2,
+        command: "set y 100".into(),
     });
     assert_eq!(log.len(), 2);
 }
@@ -429,9 +438,7 @@ fn v14_n4_8_kernel_with_loops() {
 #[test]
 fn v14_n4_9_kernel_with_arrays() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let pages = [1, 0, 1, 1, 0]\nassert_eq(len(pages), 5)",
-    );
+    let r = interp.eval_source("let pages = [1, 0, 1, 1, 0]\nassert_eq(len(pages), 5)");
     assert!(r.is_ok(), "kernel with arrays should work: {r:?}");
 }
 
@@ -636,7 +643,10 @@ fn v14_n7_2_fj_programs_exist() {
                 .unwrap_or(false)
         })
         .count();
-    assert!(count >= 10, "should have 10+ example .fj programs, found {count}");
+    assert!(
+        count >= 10,
+        "should have 10+ example .fj programs, found {count}"
+    );
 }
 
 #[test]
@@ -658,8 +668,7 @@ fn v14_n7_4_cargo_toml_valid() {
 #[test]
 fn v14_n7_5_readme_exists() {
     assert!(
-        std::path::Path::new("README.md").exists()
-            || std::path::Path::new("readme.md").exists()
+        std::path::Path::new("README.md").exists() || std::path::Path::new("readme.md").exists()
     );
 }
 
@@ -960,10 +969,7 @@ fn v14_n10_1_formatter_exists() {
 
 #[test]
 fn v14_n10_2_book_exists() {
-    assert!(
-        std::path::Path::new("book").exists()
-            || std::path::Path::new("docs").exists()
-    );
+    assert!(std::path::Path::new("book").exists() || std::path::Path::new("docs").exists());
 }
 
 #[test]
@@ -983,7 +989,8 @@ fn v14_n10_4_assert_ne() {
 #[test]
 fn v14_n10_5_string_interpolation() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(r#"let x = 42; let s = f"value is {x}"; assert_eq(s, "value is 42")"#);
+    let r =
+        interp.eval_source(r#"let x = 42; let s = f"value is {x}"; assert_eq(s, "value is 42")"#);
     assert!(r.is_ok(), "f-string: {r:?}");
 }
 
@@ -1298,9 +1305,8 @@ fn v14_n11_13_effect_in_kernel_context() {
 #[test]
 fn v14_n11_14_refinement_in_kernel() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let page_addr: { n: i64 | n > 0 } = 4096\nassert_eq(page_addr, 4096)",
-    );
+    let r =
+        interp.eval_source("let page_addr: { n: i64 | n > 0 } = 4096\nassert_eq(page_addr, 4096)");
     assert!(r.is_ok(), "refinement + kernel: {r:?}");
 }
 
@@ -1635,9 +1641,7 @@ fn v14_n14_5_kernel_checksum() {
 #[test]
 fn v14_n15_1_refinement_in_kernel_param() {
     let mut interp = Interpreter::new_capturing();
-    let r = interp.eval_source(
-        "let page: { n: i64 | n > 0 } = 4096\nassert_eq(page, 4096)",
-    );
+    let r = interp.eval_source("let page: { n: i64 | n > 0 } = 4096\nassert_eq(page, 4096)");
     assert!(r.is_ok(), "refinement kernel: {r:?}");
 }
 

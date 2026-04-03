@@ -570,7 +570,10 @@ fn main_inner() -> ExitCode {
                     match target.as_str() {
                         "spirv" => {
                             let mut m = fajar_lang::gpu_codegen::spirv::SpirVModule::new_compute();
-                            (m.emit_elementwise_add_shader("main"), "SPIR-V compute shader")
+                            (
+                                m.emit_elementwise_add_shader("main"),
+                                "SPIR-V compute shader",
+                            )
                         }
                         "ptx" => {
                             let mut m = fajar_lang::gpu_codegen::ptx::PtxModule {
@@ -3441,6 +3444,29 @@ fj_rt_bare_memory_fence:
             }
         }
     } else {
+        // Generate C runtime stubs for host-target AOT linking.
+        // These provide printf-based implementations of fj_rt_* symbols.
+        let rt_c_path = obj_path.with_extension("rt.c");
+        let rt_o_path = obj_path.with_extension("rt.o");
+        let rt_source = include_str!("codegen/cranelift/runtime_c.h");
+        let has_rt = if std::fs::write(&rt_c_path, rt_source).is_ok() {
+            let rt_ok = std::process::Command::new("cc")
+                .arg("-c")
+                .arg(&rt_c_path)
+                .arg("-o")
+                .arg(&rt_o_path)
+                .arg("-O2")
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            let _ = std::fs::remove_file(&rt_c_path);
+            rt_ok
+        } else {
+            false
+        };
+        if has_rt {
+            link_cmd.arg(&rt_o_path);
+        }
         link_cmd.arg("-lm");
     }
 
@@ -3455,8 +3481,9 @@ fj_rt_bare_memory_fence:
     }
     let status = link_cmd.status();
 
-    // Clean up object file, startup object, and generated linker script
+    // Clean up object file, runtime stubs, startup object, and generated linker script
     let _ = std::fs::remove_file(&obj_path);
+    let _ = std::fs::remove_file(obj_path.with_extension("rt.o"));
     if let Some(ref so) = startup_obj_path {
         let _ = std::fs::remove_file(so);
     }
@@ -4421,7 +4448,11 @@ fn cmd_hw_info() -> ExitCode {
     println!("\n--- External Libraries ---");
     let libs = fajar_lang::ffi_v2::detect_external_libraries();
     for lib in &libs {
-        let status = if lib.available { "available" } else { "not found" };
+        let status = if lib.available {
+            "available"
+        } else {
+            "not found"
+        };
         let ver = lib
             .version
             .as_deref()
@@ -4794,23 +4825,17 @@ fn cmd_verify(path: &PathBuf, format: &str, verbose: bool, _strict: bool) -> Exi
     // - Entry point presence (@entry or main-like kernel fn)
     if !kernel_fns.is_empty() && verbose {
         println!("\n--- Boot Sequence Analysis ---");
-        let has_mem_init = kernel_fns
-            .iter()
-            .any(|(name, _): &(String, u32)| {
-                let n = name.to_lowercase();
-                n.contains("alloc") || n.contains("map") || n.contains("init") || n.contains("mem")
-            });
-        let has_irq_setup = kernel_fns
-            .iter()
-            .any(|(name, _)| {
-                let n = name.to_lowercase();
-                n.contains("irq") || n.contains("interrupt") || n.contains("handler")
-            });
+        let has_mem_init = kernel_fns.iter().any(|(name, _): &(String, u32)| {
+            let n = name.to_lowercase();
+            n.contains("alloc") || n.contains("map") || n.contains("init") || n.contains("mem")
+        });
+        let has_irq_setup = kernel_fns.iter().any(|(name, _)| {
+            let n = name.to_lowercase();
+            n.contains("irq") || n.contains("interrupt") || n.contains("handler")
+        });
         let has_entry = kernel_fns
             .iter()
-            .any(|(name, _)| {
-                name == "kernel_main" || name == "start" || name == "boot"
-            });
+            .any(|(name, _)| name == "kernel_main" || name == "start" || name == "boot");
         println!(
             "  Memory init functions: {} ({})",
             if has_mem_init { "found" } else { "missing" },
@@ -4826,14 +4851,8 @@ fn cmd_verify(path: &PathBuf, format: &str, verbose: bool, _strict: bool) -> Exi
             if has_entry { "found" } else { "missing" },
             if has_entry { "PASS" } else { "WARN" }
         );
-        println!(
-            "  Total @kernel fns:     {}",
-            kernel_fns.len()
-        );
-        println!(
-            "  Total @device fns:     {}",
-            device_fns.len()
-        );
+        println!("  Total @kernel fns:     {}", kernel_fns.len());
+        println!("  Total @device fns:     {}", device_fns.len());
         let boot_score = [has_mem_init, has_irq_setup, has_entry]
             .iter()
             .filter(|&&b| b)

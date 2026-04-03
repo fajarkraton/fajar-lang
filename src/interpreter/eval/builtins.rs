@@ -3900,7 +3900,7 @@ impl Interpreter {
     }
 
     /// Binary tensor operation: add/sub/mul/div.
-    fn builtin_tensor_binop(&mut self, args: Vec<Value>, op: &str) -> EvalResult {
+    pub(crate) fn builtin_tensor_binop(&mut self, args: Vec<Value>, op: &str) -> EvalResult {
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
                 expected: 2,

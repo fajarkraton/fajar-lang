@@ -1,13 +1,14 @@
 // Collections example — HashMap and String operations
-// Demonstrates Fajar Lang's standard library collections in native codegen.
+// Demonstrates Fajar Lang's standard library collections.
+// Note: map_insert returns a new map (functional API) — reassign the result.
 
 fn main() {
     // === HashMap ===
     println("=== HashMap Demo ===")
-    let scores = map_new()
-    map_insert(scores, "alice", 95)
-    map_insert(scores, "bob", 82)
-    map_insert(scores, "charlie", 91)
+    let mut scores = map_new()
+    scores = map_insert(scores, "alice", 95)
+    scores = map_insert(scores, "bob", 82)
+    scores = map_insert(scores, "charlie", 91)
 
     println("Number of students:")
     println(map_len(scores))

@@ -152,6 +152,7 @@ pub(in crate::codegen::cranelift) fn is_string_producing_expr(expr: &Expr) -> bo
             kind: LiteralKind::String(_) | LiteralKind::RawString(_),
             ..
         } => true,
+        Expr::FString { .. } => true,
         Expr::Block { expr: Some(e), .. } => is_string_producing_expr(e),
         Expr::Block {
             stmts, expr: None, ..
@@ -164,6 +165,23 @@ pub(in crate::codegen::cranelift) fn is_string_producing_expr(expr: &Expr) -> bo
             }
         }
         Expr::If { then_branch, .. } => is_string_producing_expr(then_branch),
+        Expr::Match { arms, .. } => arms.iter().any(|arm| is_string_producing_expr(&arm.body)),
+        Expr::Call { callee, .. } => {
+            if let Expr::Ident { name, .. } = callee.as_ref() {
+                matches!(
+                    name.as_str(),
+                    "to_string"
+                        | "format"
+                        | "str"
+                        | "input"
+                        | "read_file"
+                        | "int_to_string"
+                        | "float_to_string"
+                )
+            } else {
+                false
+            }
+        }
         _ => false,
     }
 }

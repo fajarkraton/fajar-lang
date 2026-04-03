@@ -113,9 +113,9 @@ fn estimate_type_size(ty: &TypeExpr) -> usize {
         TypeExpr::DynTrait { .. } => PTR_SIZE * 2, // fat pointer: data_ptr + vtable_ptr
         TypeExpr::Refinement { base_type, .. } => estimate_type_size(base_type), // same size as base
         TypeExpr::Pi { return_type, .. } => estimate_type_size(return_type),
-        TypeExpr::Sigma { fst_type, snd_type, .. } => {
-            estimate_type_size(fst_type) + estimate_type_size(snd_type)
-        }
+        TypeExpr::Sigma {
+            fst_type, snd_type, ..
+        } => estimate_type_size(fst_type) + estimate_type_size(snd_type),
     }
 }
 

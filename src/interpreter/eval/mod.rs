@@ -1776,10 +1776,7 @@ impl Interpreter {
                             let qualified = format!("{}::{}", ec.name, op.name);
                             self.env.borrow_mut().define(
                                 qualified,
-                                Value::BuiltinFn(format!(
-                                    "__effect__{}::{}",
-                                    ec.name, op.name
-                                )),
+                                Value::BuiltinFn(format!("__effect__{}::{}", ec.name, op.name)),
                             );
                         }
                         let _ = self.effect_registry.register(merged);
@@ -1850,9 +1847,9 @@ impl Interpreter {
                 }) = ty.as_ref()
                 {
                     // Evaluate predicate with the bound variable.
-                    let pred_env = Rc::new(RefCell::new(
-                        Environment::new_with_parent(Rc::clone(&self.env)),
-                    ));
+                    let pred_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                        &self.env,
+                    ))));
                     pred_env.borrow_mut().define(var_name.clone(), val.clone());
                     let prev_env = self.env.clone();
                     self.env = pred_env;
@@ -2236,6 +2233,14 @@ impl Interpreter {
                 result.extend(b.iter().cloned());
                 Ok(Value::Array(result))
             }
+            // Tensor arithmetic: dispatch to tensor_binop builtins
+            (Value::Tensor(_), Value::Tensor(_)) => match op {
+                BinOp::Add => self.builtin_tensor_binop(vec![lv, rv], "add"),
+                BinOp::Sub => self.builtin_tensor_binop(vec![lv, rv], "sub"),
+                BinOp::Mul => self.builtin_tensor_binop(vec![lv, rv], "mul"),
+                BinOp::Div => self.builtin_tensor_binop(vec![lv, rv], "div"),
+                _ => self.eval_comparison(&lv, op, &rv),
+            },
             (Value::Bool(_), Value::Bool(_)) => self.eval_comparison(&lv, op, &rv),
             _ => self.eval_comparison(&lv, op, &rv),
         }

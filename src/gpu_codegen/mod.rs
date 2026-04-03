@@ -111,7 +111,8 @@ pub fn lower_to_gpu_ir(program: &Program) -> Result<GpuIr, GpuLowerError> {
 
     for item in &program.items {
         if let Item::FnDef(fndef) = item {
-            let is_gpu = matches!(&fndef.annotation, Some(Annotation { name, .. }) if name == "gpu");
+            let is_gpu =
+                matches!(&fndef.annotation, Some(Annotation { name, .. }) if name == "gpu");
             if is_gpu {
                 let buffers: Vec<String> = fndef.params.iter().map(|p| p.name.clone()).collect();
                 let body = lower_expr_to_gpu_stmts(&fndef.body, &buffers)?;
@@ -148,10 +149,7 @@ pub fn lower_to_gpu_ir(program: &Program) -> Result<GpuIr, GpuLowerError> {
 }
 
 /// Lower a block expression to GPU statements.
-fn lower_expr_to_gpu_stmts(
-    expr: &Expr,
-    buffers: &[String],
-) -> Result<Vec<GpuStmt>, GpuLowerError> {
+fn lower_expr_to_gpu_stmts(expr: &Expr, buffers: &[String]) -> Result<Vec<GpuStmt>, GpuLowerError> {
     let mut stmts = Vec::new();
 
     match expr {
@@ -245,7 +243,7 @@ fn lower_expr(expr: &Expr, buffers: &[String]) -> Result<GpuExpr, GpuLowerError>
                 _ => {
                     return Err(GpuLowerError {
                         message: format!("unsupported GPU binary operator: {op:?}"),
-                    })
+                    });
                 }
             };
             let l = lower_expr(left, buffers)?;
@@ -347,9 +345,7 @@ impl GpuKernel {
         lines.push(format!("kernel void {}(", self.name));
         for (i, buf) in self.buffers.iter().enumerate() {
             let comma = if i + 1 < self.buffers.len() { "," } else { "" };
-            lines.push(format!(
-                "\tdevice float* {buf} [[buffer({i})]]{comma}"
-            ));
+            lines.push(format!("\tdevice float* {buf} [[buffer({i})]]{comma}"));
         }
         lines.push("\tuint id [[thread_position_in_grid]]".into());
         lines.push(") {".into());
@@ -371,9 +367,7 @@ impl GpuKernel {
     pub fn to_hlsl(&self, thread_group_size: u32) -> String {
         let mut lines = Vec::new();
         for (i, buf) in self.buffers.iter().enumerate() {
-            lines.push(format!(
-                "RWStructuredBuffer<float> {buf} : register(u{i});"
-            ));
+            lines.push(format!("RWStructuredBuffer<float> {buf} : register(u{i});"));
         }
         // Shared memory (groupshared)
         for (name, count) in &self.shared_memory {

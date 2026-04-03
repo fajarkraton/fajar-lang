@@ -1850,27 +1850,40 @@ mod tests {
     #[test]
     fn cov_doc_comment_triple_slash() {
         let (tokens, _) = tokenize_with_comments("/// This is a doc comment\nlet x = 1").unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::DocComment(s) if s.contains("doc comment"))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::DocComment(s) if s.contains("doc comment")))
+        );
     }
 
     #[test]
     fn cov_doc_comment_no_space() {
         let (tokens, _) = tokenize_with_comments("///no space\nlet x = 1").unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::DocComment(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::DocComment(_)))
+        );
     }
 
     #[test]
     fn cov_four_slashes_not_doc() {
         // //// is NOT a doc comment, it's a regular comment
         let (tokens, comments) = tokenize_with_comments("//// not doc\nlet x = 1").unwrap();
-        assert!(!tokens.iter().any(|t| matches!(&t.kind, TokenKind::DocComment(_))));
+        assert!(
+            !tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::DocComment(_)))
+        );
         // Should be a regular comment
         assert!(!comments.is_empty() || tokens.iter().any(|t| matches!(t.kind, TokenKind::Let)));
     }
 
     #[test]
     fn cov_nested_block_comment() {
-        let (tokens, comments) = tokenize_with_comments("/* outer /* inner */ end */ let x = 1").unwrap();
+        let (tokens, comments) =
+            tokenize_with_comments("/* outer /* inner */ end */ let x = 1").unwrap();
         assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::Let)));
         assert!(!comments.is_empty());
     }
@@ -1911,73 +1924,119 @@ mod tests {
     #[test]
     fn cov_raw_string_literal() {
         let tokens = tokenize(r#"r"raw string""#).unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::RawStringLit(s) if s == "raw string")));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::RawStringLit(s) if s == "raw string"))
+        );
     }
 
     #[test]
     fn cov_fstring_nested_braces() {
         let tokens = tokenize(r#"f"hello {x + 1}""#).unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::FStringLit(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::FStringLit(_)))
+        );
     }
 
     #[test]
     fn cov_fstring_nested_curly() {
         // f-string with nested {} inside expression
         let tokens = tokenize(r#"f"val = {if true { 1 } else { 2 }}""#).unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::FStringLit(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::FStringLit(_)))
+        );
     }
 
     #[test]
     fn cov_char_literal_escape() {
         let tokens = tokenize(r"'\n'").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::CharLit('\n'))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::CharLit('\n')))
+        );
     }
 
     #[test]
     fn cov_char_literal_backslash() {
         let tokens = tokenize(r"'\\'").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::CharLit('\\'))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::CharLit('\\')))
+        );
     }
 
     #[test]
     fn cov_hex_literal() {
         let tokens = tokenize("0xFF").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::IntLit(255))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::IntLit(255)))
+        );
     }
 
     #[test]
     fn cov_binary_literal() {
         let tokens = tokenize("0b1010").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::IntLit(10))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::IntLit(10)))
+        );
     }
 
     #[test]
     fn cov_octal_literal() {
         let tokens = tokenize("0o77").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::IntLit(63))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::IntLit(63)))
+        );
     }
 
     #[test]
     fn cov_underscore_in_number() {
         let tokens = tokenize("1_000_000").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::IntLit(1000000))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::IntLit(1000000)))
+        );
     }
 
     #[test]
     fn cov_float_with_exponent() {
         let tokens = tokenize("1.5e10").unwrap();
-        assert!(tokens.iter().any(|t| matches!(t.kind, TokenKind::FloatLit(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(t.kind, TokenKind::FloatLit(_)))
+        );
     }
 
     #[test]
     fn cov_string_escape_sequences() {
         let tokens = tokenize(r#""\t\r\0""#).unwrap();
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::StringLit(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|t| matches!(&t.kind, TokenKind::StringLit(_)))
+        );
     }
 
     #[test]
     fn cov_all_two_char_operators() {
-        for op in ["==", "!=", "<=", ">=", "<<", ">>", "&&", "||", "**", "|>", "=>", "->", "..", "::"] {
+        for op in [
+            "==", "!=", "<=", ">=", "<<", ">>", "&&", "||", "**", "|>", "=>", "->", "..", "::",
+        ] {
             let tokens = tokenize(&format!("1 {op} 2")).unwrap();
             assert!(tokens.len() >= 3, "should tokenize '{op}'");
         }

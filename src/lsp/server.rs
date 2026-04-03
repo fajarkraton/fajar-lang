@@ -488,7 +488,9 @@ impl LanguageServer for FajarLspBackend {
         let pos = params.text_document_position.position;
 
         // V12 I1: Context-aware completion
-        let docs = self.documents.lock().unwrap();
+        let Ok(docs) = self.documents.lock() else {
+            return Ok(None);
+        };
         let trigger_char = params
             .context
             .as_ref()
@@ -652,7 +654,10 @@ impl LanguageServer for FajarLspBackend {
         drop(docs);
 
         // V14 LS4.8: Context-aware smart completions
-        if let Some(doc) = self.documents.lock().unwrap().get(&uri) {
+        let Ok(docs2) = self.documents.lock() else {
+            return Ok(Some(CompletionResponse::Array(items)));
+        };
+        if let Some(doc) = docs2.get(&uri) {
             let nearby: String = doc
                 .source
                 .lines()
@@ -708,7 +713,8 @@ impl LanguageServer for FajarLspBackend {
                         }
                     }
                     // After `fn name(` → suggest param patterns
-                    if trimmed.starts_with("fn ") && trimmed.contains('(') && !trimmed.contains(')') {
+                    if trimmed.starts_with("fn ") && trimmed.contains('(') && !trimmed.contains(')')
+                    {
                         for (label, detail) in [
                             ("x: i64", "integer parameter"),
                             ("s: str", "string parameter"),
@@ -4058,8 +4064,10 @@ fn build_scope_tree(source: &str) -> Vec<ScopeRegion> {
         }
 
         // Count braces to track nesting
-        if trimmed == "}" && !brace_stack.is_empty() {
-            let (start, name) = brace_stack.pop().unwrap();
+        if trimmed == "}" {
+            let Some((start, name)) = brace_stack.pop() else {
+                continue;
+            };
             scopes.push(ScopeRegion {
                 start_line: start,
                 end_line: i,
@@ -4464,8 +4472,14 @@ mod tests {
         // A lens with an existing command should be returned unchanged.
         let lens = CodeLens {
             range: Range {
-                start: Position { line: 0, character: 0 },
-                end: Position { line: 0, character: 10 },
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 10,
+                },
             },
             command: Some(Command {
                 title: "Run Test".into(),
@@ -4495,8 +4509,14 @@ mod tests {
         // A lens without a command should get a default "0 references" command.
         let lens = CodeLens {
             range: Range {
-                start: Position { line: 0, character: 0 },
-                end: Position { line: 0, character: 10 },
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 10,
+                },
             },
             command: None,
             data: None,
@@ -4514,7 +4534,10 @@ mod tests {
             }
         };
         assert_eq!(resolved.command.as_ref().unwrap().title, "0 references");
-        assert_eq!(resolved.command.as_ref().unwrap().command, "fajar.showReferences");
+        assert_eq!(
+            resolved.command.as_ref().unwrap().command,
+            "fajar.showReferences"
+        );
     }
 
     // ═════════════════════════════════════════════════════════════════

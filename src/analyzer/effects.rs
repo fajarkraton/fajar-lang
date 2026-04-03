@@ -2256,7 +2256,10 @@ mod tests {
         "#;
         let mut interp = crate::interpreter::Interpreter::new();
         let result = interp.eval_source(source);
-        assert!(result.is_ok(), "effect composition should parse and run: {result:?}");
+        assert!(
+            result.is_ok(),
+            "effect composition should parse and run: {result:?}"
+        );
     }
 
     #[test]
@@ -2276,7 +2279,10 @@ mod tests {
         "#;
         let mut interp = crate::interpreter::Interpreter::new();
         let result = interp.eval_source(source);
-        assert!(result.is_ok(), "composed effect should register: {result:?}");
+        assert!(
+            result.is_ok(),
+            "composed effect should register: {result:?}"
+        );
     }
 
     #[test]

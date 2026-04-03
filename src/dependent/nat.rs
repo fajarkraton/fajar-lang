@@ -1390,7 +1390,10 @@ mod tests {
         "#;
         let mut interp = crate::interpreter::Interpreter::new();
         let result = interp.eval_source(source);
-        assert!(result.is_ok(), "refinement type should parse and run: {result:?}");
+        assert!(
+            result.is_ok(),
+            "refinement type should parse and run: {result:?}"
+        );
     }
 
     #[test]
@@ -1532,11 +1535,7 @@ mod tests {
         assert!(r1.check_value(1));
         assert!(!r1.check_value(0));
 
-        let r2 = RefinementType::new(
-            "x",
-            "i32",
-            RefinementPredicate::InRange(1, 100),
-        );
+        let r2 = RefinementType::new("x", "i32", RefinementPredicate::InRange(1, 100));
         assert!(r2.check_value(50));
         assert!(!r2.check_value(0));
         assert!(!r2.check_value(101));

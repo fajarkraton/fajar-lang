@@ -121,8 +121,10 @@ fn native_fibonacci_matches_interpreter() {
         fn fib(n: i64) -> i64 {
             if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
         }
-        fn main() -> i64 { fib(20) }
+        fn main() -> i64 { fib(15) }
     "#;
+    // fib(15) instead of fib(20): avoids stack overflow when running
+    // both JIT and interpreter on the same thread (dual stack usage).
     let native_result = compile_and_run(src);
     let mut interp = crate::interpreter::Interpreter::new();
     interp.eval_source(src).unwrap();

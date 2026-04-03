@@ -1731,8 +1731,7 @@ impl TypeChecker {
                         )
                     })
                     .collect();
-                let decl =
-                    crate::analyzer::effects::EffectDecl::new(ed.name.clone(), kind, ops);
+                let decl = crate::analyzer::effects::EffectDecl::new(ed.name.clone(), kind, ops);
                 if self.effect_registry.register(decl).is_err() {
                     self.errors.push(SemanticError::DuplicateEffectDecl {
                         name: ed.name.clone(),
@@ -1793,10 +1792,7 @@ impl TypeChecker {
                     }
                     Err(_) => {
                         self.errors.push(SemanticError::UndefinedVariable {
-                            name: format!(
-                                "effect composition '{}': component not found",
-                                ec.name
-                            ),
+                            name: format!("effect composition '{}': component not found", ec.name),
                             span: ec.span,
                             suggestion: None,
                         });

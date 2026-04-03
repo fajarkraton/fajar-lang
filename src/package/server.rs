@@ -834,13 +834,7 @@ impl RegistryServer {
             versions
                 .iter()
                 .map(|v| {
-                    super::server::sparse_index_entry(
-                        &v.name,
-                        &v.version,
-                        &v.checksum,
-                        false,
-                        &[],
-                    )
+                    super::server::sparse_index_entry(&v.name, &v.version, &v.checksum, false, &[])
                 })
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -933,11 +927,7 @@ impl RegistryServer {
             };
 
             // Extract body (after \r\n\r\n)
-            let body = request
-                .split("\r\n\r\n")
-                .nth(1)
-                .unwrap_or("")
-                .to_string();
+            let body = request.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
 
             let response = if method == "POST" && path == "/api/v1/publish" {
                 self.handle_publish(&body)
@@ -1403,7 +1393,10 @@ mod tests {
     fn v14_pr5_4_api_key_auth() {
         let mut server = RegistryServer::new(8080);
         server.add_api_key("fj-key-12345".into(), "fajar".into());
-        assert_eq!(server.validate_api_key("fj-key-12345"), Some(&"fajar".to_string()));
+        assert_eq!(
+            server.validate_api_key("fj-key-12345"),
+            Some(&"fajar".to_string())
+        );
         assert_eq!(server.validate_api_key("invalid"), None);
     }
 

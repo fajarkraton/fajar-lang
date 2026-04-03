@@ -1103,7 +1103,13 @@ impl TypeChecker {
                 val_type
             }
             Expr::Comptime { body, .. } => self.check_expr(body),
-            Expr::MacroInvocation { .. } => Type::Unknown,
+            Expr::MacroInvocation { name, span, .. } => {
+                // Check context restrictions for heap/memory macros.
+                if matches!(name.as_str(), "alloc" | "vec" | "format" | "box") {
+                    self.check_context_call(name, *span);
+                }
+                Type::Unknown
+            }
             Expr::Yield { value, .. } => {
                 if let Some(v) = value {
                     self.check_expr(v);
@@ -2737,9 +2743,7 @@ impl TypeChecker {
                 }
                 Type::DynTrait(trait_name.clone())
             }
-            TypeExpr::Refinement {
-                base_type, ..
-            } => {
+            TypeExpr::Refinement { base_type, .. } => {
                 // Resolve the base type; predicate checking deferred to runtime/SMT.
                 self.resolve_type(base_type)
             }
@@ -2747,7 +2751,9 @@ impl TypeChecker {
                 // Pi types resolve to their return type for basic type checking.
                 self.resolve_type(return_type)
             }
-            TypeExpr::Sigma { fst_type, snd_type, .. } => {
+            TypeExpr::Sigma {
+                fst_type, snd_type, ..
+            } => {
                 // Sigma types resolve to a tuple of (fst, snd).
                 let t1 = self.resolve_type(fst_type);
                 let t2 = self.resolve_type(snd_type);

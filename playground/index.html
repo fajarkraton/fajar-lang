@@ -1,152 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fajar Lang Playground</title>
-  <meta name="description" content="Write, run, and share Fajar Lang code in your browser. No installation required.">
-  <meta property="og:title" content="Fajar Lang Playground">
-  <meta property="og:description" content="Write, run, and share Fajar Lang code in your browser.">
-  <meta property="og:type" content="website">
-  <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/src/style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fajar Lang Playground</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #1e1e2e; color: #cdd6f4; }
+  .header { background: #181825; padding: 12px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #313244; }
+  .header h1 { font-size: 18px; color: #89b4fa; }
+  .header select, .header button { background: #313244; color: #cdd6f4; border: 1px solid #45475a; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  .header button:hover { background: #45475a; }
+  .header .run-btn { background: #a6e3a1; color: #1e1e2e; font-weight: bold; }
+  .header .share-btn { background: #89b4fa; color: #1e1e2e; }
+  .container { display: flex; height: calc(100vh - 48px); }
+  .editor { flex: 1; padding: 16px; }
+  .output { flex: 1; padding: 16px; background: #11111b; border-left: 1px solid #313244; }
+  textarea { width: 100%; height: 100%; background: #1e1e2e; color: #cdd6f4; border: none; font-family: 'JetBrains Mono', monospace; font-size: 14px; resize: none; outline: none; padding: 8px; tab-size: 4; }
+  .output pre { font-family: 'JetBrains Mono', monospace; font-size: 13px; white-space: pre-wrap; color: #a6e3a1; }
+  .output .error { color: #f38ba8; }
+  .output h3 { color: #89b4fa; margin-bottom: 8px; font-size: 14px; }
+</style>
 </head>
 <body>
-  <!-- Header -->
-  <header id="header">
-    <div class="header-left">
-      <svg class="logo" width="28" height="28" viewBox="0 0 28 28">
-        <circle cx="14" cy="14" r="12" fill="#f85149" opacity="0.9"/>
-        <path d="M8 18 Q14 4 20 18" stroke="#ffd700" stroke-width="2.5" fill="none"/>
-      </svg>
-      <h1>Fajar Lang <span class="version">Playground</span></h1>
+<div class="header">
+    <h1>Fajar Lang Playground</h1>
+    <select id="examples" onchange="loadExample()">
+        <option value="">-- Select Example --</option>
+            <option value="Hello World">Hello World</option>
+            <option value="Fibonacci">Fibonacci</option>
+            <option value="Effect System">Effect System</option>
+            <option value="Comptime">Comptime</option>
+            <option value="Pattern Matching">Pattern Matching</option>
+            <option value="Macros">Macros</option>
+            <option value="Structs">Structs</option>
+            <option value="Context Safety">Context Safety</option>
+    </select>
+    <button class="run-btn" onclick="runCode()">Run</button>
+    <button class="share-btn" onclick="shareCode()">Share</button>
+</div>
+<div class="container">
+    <div class="editor">
+        <textarea id="code" spellcheck="false">fn main() {
+    println("Hello, Fajar Lang!")
+}</textarea>
     </div>
-    <div class="header-center">
-      <select id="example-select">
-        <option value="">Examples...</option>
-      </select>
+    <div class="output">
+        <h3>Output</h3>
+        <pre id="output">Click "Run" to execute your code.</pre>
     </div>
-    <div class="header-right">
-      <button id="btn-shortcuts" title="Keyboard Shortcuts (F1)">Keys</button>
-      <button id="btn-share" title="Share (Ctrl+Shift+S)">Share</button>
-      <button id="btn-theme" title="Toggle theme">Dark</button>
-      <a href="https://github.com/fajarkraton/fajar-lang" target="_blank" class="github-link" title="GitHub">
-        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-        </svg>
-      </a>
-    </div>
-  </header>
+</div>
+<script>
+const EXAMPLES = {};
+EXAMPLES["Hello World"] = `fn main() {
+    println("Hello, Fajar Lang!")
+}`;
+EXAMPLES["Fibonacci"] = `fn fib(n: i64) -> i64 {
+    if n <= 1 { n } else { fib(n-1) + fib(n-2) }
+}
+fn main() {
+    println(fib(20))
+}`;
+EXAMPLES["Effect System"] = `effect Logger {
+    fn log(msg: str) -> void
+}
 
-  <!-- Main content -->
-  <main id="main">
-    <!-- Editor panel -->
-    <div id="editor-panel">
-      <div class="panel-toolbar">
-        <span class="panel-title">Editor</span>
-        <div class="toolbar-actions">
-          <button id="btn-format" title="Format (Ctrl+Shift+F)">Format</button>
-          <button id="btn-run" class="btn-primary" title="Run (Ctrl+Enter)">Run</button>
-        </div>
-      </div>
-      <div id="editor-container"></div>
-    </div>
+fn greet() with IO {
+    println("Hello with effects!")
+}
 
-    <!-- Resize handle -->
-    <div id="resize-handle"></div>
+fn main() { greet() }`;
+EXAMPLES["Comptime"] = `comptime fn factorial(n: i64) -> i64 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
 
-    <!-- Output panel -->
-    <div id="output-panel">
-      <div class="panel-toolbar">
-        <div class="output-tabs">
-          <button class="tab active" data-tab="stdout">Output</button>
-          <button class="tab" data-tab="result">Result</button>
-          <button class="tab" data-tab="errors">Errors</button>
-          <button class="tab" data-tab="ast">AST</button>
-          <button class="tab" data-tab="tokens">Tokens</button>
-        </div>
-        <div class="toolbar-actions">
-          <span id="exec-time"></span>
-          <button id="btn-clear" title="Clear (Ctrl+L)">Clear</button>
-        </div>
-      </div>
-      <div id="output-container">
-        <pre id="output-stdout" class="output-pane active"></pre>
-        <pre id="output-result" class="output-pane"></pre>
-        <pre id="output-errors" class="output-pane"></pre>
-        <div id="output-ast" class="output-pane ast-viewer"></div>
-        <div id="output-tokens" class="output-pane token-viewer"></div>
-      </div>
-    </div>
-  </main>
+fn main() {
+    let result = comptime { factorial(10) }
+    println(result)
+}`;
+EXAMPLES["Pattern Matching"] = `fn describe(n: i64) -> str {
+    match n {
+        0 => "zero",
+        1 => "one",
+        _ => "other"
+    }
+}
+fn main() {
+    println(describe(0))
+    println(describe(42))
+}`;
+EXAMPLES["Macros"] = `fn main() {
+    let arr = vec![1, 2, 3, 4, 5]
+    let msg = concat!("length: ", len(arr))
+    println(msg)
+}`;
+EXAMPLES["Structs"] = `struct Point {
+    x: f64,
+    y: f64
+}
 
-  <!-- Status bar -->
-  <footer id="status-bar">
-    <span id="status-text">Ready</span>
-    <span id="cursor-pos">Ln 1, Col 1</span>
-    <span class="status-sep">|</span>
-    <span>Fajar Lang v5.5.0</span>
-    <span class="status-sep">|</span>
-    <span id="wasm-status">Loading Wasm...</span>
-  </footer>
+fn distance(p: Point) -> f64 {
+    sqrt(p.x * p.x + p.y * p.y)
+}
 
-  <!-- Share modal -->
-  <div id="share-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Share Code</h2>
-        <button class="modal-close" id="share-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <label>Shareable Link</label>
-        <div class="input-group">
-          <input type="text" id="share-url" readonly>
-          <button id="btn-copy-url">Copy</button>
-        </div>
-        <label>Embed (iframe)</label>
-        <div class="input-group">
-          <textarea id="share-embed" readonly rows="3"></textarea>
-          <button id="btn-copy-embed">Copy</button>
-        </div>
-      </div>
-    </div>
-  </div>
+fn main() {
+    let p = Point { x: 3.0, y: 4.0 }
+    println(distance(p))
+}`;
+EXAMPLES["Context Safety"] = `@kernel fn read_hw() -> i64 {
+    // Only hardware ops allowed here
+    0
+}
 
-  <!-- Keyboard shortcuts modal -->
-  <div id="shortcuts-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Keyboard Shortcuts</h2>
-        <button class="modal-close" id="shortcuts-close">&times;</button>
-      </div>
-      <div class="modal-body shortcuts-body">
-        <table class="shortcuts-table">
-          <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
-          <tbody>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Run code</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Format code</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Share code</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Clear output</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>Toggle comment</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Select next occurrence</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd></td><td>Delete line</td></tr>
-            <tr><td><kbd>Alt</kbd>+<kbd>Up/Down</kbd></td><td>Move line up/down</td></tr>
-            <tr><td><kbd>F1</kbd></td><td>Show keyboard shortcuts</td></tr>
-            <tr><td><kbd>Escape</kbd></td><td>Close modal</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+@device fn inference() -> i64 {
+    // Only tensor ops allowed here
+    42
+}
 
-  <!-- Loading overlay -->
-  <div id="loading-overlay">
-    <div class="spinner"></div>
-    <p>Loading Fajar Lang Playground...</p>
-    <p class="loading-sub" id="loading-progress">Downloading Wasm runtime</p>
-  </div>
+@safe fn bridge() -> i64 {
+    // Safest: no hardware, no tensor
+    0
+}
 
-  <script type="module" src="/src/main.js"></script>
+fn main() {
+    println("Context annotations enforce safety!")
+}`;
+function loadExample() {
+    const sel = document.getElementById('examples').value;
+    if (EXAMPLES[sel]) document.getElementById('code').value = EXAMPLES[sel];
+}
+function runCode() {
+    document.getElementById('output').textContent = 'Compiling...\\n(Note: server-side execution required for full compilation)';
+}
+function shareCode() {
+    const code = document.getElementById('code').value;
+    const encoded = encodeURIComponent(code);
+    const url = location.href.split('#')[0] + '#code=' + encoded;
+    navigator.clipboard.writeText(url).then(() => alert('Link copied!'));
+}
+// Load shared code from URL
+if (location.hash.startsWith('#code=')) {
+    document.getElementById('code').value = decodeURIComponent(location.hash.slice(6));
+}
+</script>
 </body>
 </html>

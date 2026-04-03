@@ -816,11 +816,17 @@ mod tests {
         assert!(nat_pattern_matches(&NatPattern::Wildcard, 999));
         assert!(nat_pattern_matches(&NatPattern::Binding("n".into()), 42));
         assert!(nat_pattern_matches(
-            &NatPattern::Range { start: 1, end_inclusive: 10 },
+            &NatPattern::Range {
+                start: 1,
+                end_inclusive: 10
+            },
             5,
         ));
         assert!(!nat_pattern_matches(
-            &NatPattern::Range { start: 1, end_inclusive: 10 },
+            &NatPattern::Range {
+                start: 1,
+                end_inclusive: 10
+            },
             11,
         ));
     }
@@ -828,9 +834,18 @@ mod tests {
     #[test]
     fn v14_dt6_nat_match_arm() {
         let arms = vec![
-            NatMatchArm { pattern: NatPattern::Literal(0), result_type: "Empty".into() },
-            NatMatchArm { pattern: NatPattern::Literal(1), result_type: "Single".into() },
-            NatMatchArm { pattern: NatPattern::Wildcard, result_type: "Array".into() },
+            NatMatchArm {
+                pattern: NatPattern::Literal(0),
+                result_type: "Empty".into(),
+            },
+            NatMatchArm {
+                pattern: NatPattern::Literal(1),
+                result_type: "Single".into(),
+            },
+            NatMatchArm {
+                pattern: NatPattern::Wildcard,
+                result_type: "Array".into(),
+            },
         ];
         let val = 1u64;
         let matched = arms.iter().find(|a| nat_pattern_matches(&a.pattern, val));
@@ -841,10 +856,7 @@ mod tests {
     fn v14_dt6_where_clause_check() {
         use super::super::nat::{NatConstraint, NatValue};
         let wc = WhereClause {
-            constraints: vec![NatConstraint::GreaterThan(
-                NatValue::Param("N".into()),
-                0,
-            )],
+            constraints: vec![NatConstraint::GreaterThan(NatValue::Param("N".into()), 0)],
         };
         let mut env = HashMap::new();
         env.insert("N".to_string(), 5);
