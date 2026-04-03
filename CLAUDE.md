@@ -30,61 +30,59 @@
 Every Claude Code session MUST follow this order:
 
 1. **READ** → `CLAUDE.md` (this file) [auto-loaded]
-2. **READ** → `docs/GAP_ANALYSIS_V2.md` [CRITICAL: honest codebase audit — know what's real vs framework]
-3. **READ** → `docs/V12_TRANSCENDENCE_PLAN.md` [V12 plan — ALL 6 options COMPLETE]
+2. **READ** → `docs/HONEST_AUDIT_V17.md` [CRITICAL: V17 re-audit — true module/CLI status]
+3. **READ** → `docs/GAP_ANALYSIS_V2.md` [module-level gap analysis, corrected by V17]
 4. **READ** → `docs/V1_RULES.md` [coding conventions — still applies]
-5. **ORIENT** → "What does the user want?" V12 is complete — plan next phase or maintain.
+5. **ORIENT** → "What does the user want?" Check V17 audit for what's real vs framework.
 6. **ACT** → Execute per TDD workflow
 7. **VERIFY** → `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check`
 8. **UPDATE** → Mark task `[x]` ONLY if feature works end-to-end. Use `[f]` for framework-only.
 
-### Completion Status (Honest Assessment)
+### Completion Status (Honest Assessment — V17 Re-Audit, 2026-04-03)
 
-**Core Compiler (V1-V05): 100% PRODUCTION REAL — verified by code audit.**
+> **Source of truth:** `docs/HONEST_AUDIT_V17.md` — full re-audit of every module and CLI command.
+> Previous claims (V13-V15 "100% production") were **inflated by 40-55%**. Corrected below.
+
+**Codebase Reality (56 modules):**
+- **33 modules PRODUCTION [x]** — 368K LOC (77%) — user can `fj <command>` and it works
+- **1 module PARTIAL [p]** — analyzer: type checking works, @kernel/@device enforcement broken
+- **18 modules FRAMEWORK [f]** — 56K LOC (12%) — code exists, not wired to CLI
+- **3 modules STUB [s]** — near-empty, superseded or placeholder
+- **25/35 CLI commands** production, 8 partial, 2 stub
+
+**Core Compiler (V1-V05): PRODUCTION — verified by code audit.**
 - v1.0: 506 tasks — lexer, parser, analyzer, Cranelift, ML runtime ✅
 - v0.2: Codegen type system, advanced types ✅
 - v0.3: 739 tasks — concurrency, OS runtime, GPU, ML native, self-hosting, packages ✅
 - v0.4: 40 tasks — generic enums, RAII/Drop, async, MNIST ✅
 - v0.5: 80 tasks — test framework, doc gen, trait objects, iterators, f-strings ✅
 
-**Advanced Features (V06-V10): 100% PRODUCTION — all gaps closed.**
-- V06-V07: All framework gaps closed (real networking, FFI, crypto, stdlib)
-- V08 "Dominion": 810 tasks — gap closure + production ecosystem ✅
-- V09 "Ascension": Real BLE, async, HTTPS, 7,468 tests ✅
-- V10 "Ascension+": Async/await tokio, HTTP framework, regex, LSP ✅
+**Advanced Features (V06-V12): Mixed production + framework.**
+- V06-V07: Core gaps closed, but ~530 tasks were framework-only (types/traits, not E2E)
+- V08-V10: Real networking (BLE, MQTT, WebSocket), async tokio, HTTP, regex, LSP ✅
+- V11: Website, tutorials, VS Code, benchmarks, self-hosting, borrow checker ✅
+- V12: LLVM, package registry, macros, generators, WASI, LSP — 6 options ✅
 
-**V11 "Genesis": COMPLETE — 6 options (website, tutorials, VS Code, benchmarks, self-hosting, borrow checker).**
+**V13 "Beyond" (710 tasks): ~390 real [x] (55%), rest framework.**
+- Const fn, incremental compilation, WASI P2, FFI v2, SMT verification, distributed, self-hosting
 
-**V12 "Transcendence": COMPLETE — 6 options, 600 tasks, 60 sprints, ALL PRODUCTION.**
-- Option 1: LLVM O2/O3 + LTO + PGO (153 tests, JIT verified) ✅
-- Option 2: Package Registry (git/path deps, workspaces, fj update/tree/audit) ✅
-- Option 3: Macro System (token trees, expansion, 14 builtins) ✅
-- Option 4: Async Generators (yield, gen fn, streams, coroutines) ✅
-- Option 5: WASI Deployment (8 P1 syscalls, component model) ✅
-- Option 6: LSP Excellence (type-driven completion, scope-aware rename, 18 features) ✅
+**V14 "Infinity" (500 tasks): ~302 real [x] (60%), not 500/500 as previously claimed.**
+- Effects, dependent types, GPU codegen, LSP, package registry, FajarOS Nova
 
-**V13 "Beyond": COMPLETE — 8 options, 710 tasks, 71 sprints, ALL PRODUCTION.**
-- Phase 1 (Foundation): CI Green + Const Fn + Incremental Compilation (210 tasks) ✅
-- Phase 2 (Ecosystem): WASI P2 Component Model + FFI v2 Full Integration (200 tasks) ✅
-- Phase 3 (Differentiation): SMT Verification + Distributed Runtime + Self-Hosting (300 tasks) ✅
+**V15 "Delivery" (120 tasks): ~55 real [x] (46%), not 120/120 as previously claimed.**
+- Bug fixes, MNIST pipeline, FFI interop, benchmarks, docs
 
-**V14 "Infinity": PARTIALLY COMPLETE — 75/500 [x], 295 [f], 130 [ ]. Honest audit: docs/V14_TASKS.md.**
-
-**V15 "Delivery": COMPLETE — 120 tasks, 46 [x], 74 [f]. Honest audit: docs/V15_TASKS.md.**
-- Option 1 (Bug Fixes): Effect multi-step ✅, ML runtime ✅, Toolchain ✅ — 30/30 [x]
-- Option 2 (Integration): MNIST pipeline ✅, FFI interop ✅, CLI tools ✅ — 16/30 [x], 14 [f]
-- Option 3 (Hardening): Benchmarks recorded ✅, recursion limit verified ✅ — 5/30 [x]
-- Option 4 (Docs/Release): Quality gates pass ✅, examples created ✅ — 6/30 [x]
-- **Remaining gaps:** Dep type syntax (V16), @gpu annotation (V16), live registry (V16), binary I/O (V16)
+**V17 Bug Fixes (9 critical): ALL FIXED.** See `docs/HONEST_AUDIT_V17.md` §4.
 
 ### Key Documents
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/GAP_ANALYSIS_V2.md` | **EVERY SESSION** | Honest audit — all gaps closed (100% production) |
-| `docs/V12_TRANSCENDENCE_PLAN.md` | **V12 plan (COMPLETE)** | 600 tasks, 6 options — all verified production |
-| `docs/V12_GAP_CLOSURE_PLAN.md` | Reference | 40 tasks that wired V12 into pipeline |
+| `docs/HONEST_AUDIT_V17.md` | **EVERY SESSION** | V17 re-audit — 33/56 modules production, 9 bugs fixed |
+| `docs/GAP_ANALYSIS_V2.md` | **EVERY SESSION** | Module-level gap analysis, corrected by V17 |
 | `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules |
+| `docs/V12_TRANSCENDENCE_PLAN.md` | Reference | V12 plan (6 options) |
+| `docs/V12_GAP_CLOSURE_PLAN.md` | Reference | 40 tasks that wired V12 into pipeline |
 | `docs/V05_PLAN.md` | Reference | v0.5 plan (COMPLETE, verified real) |
 | `docs/V04_PLAN.md` | Reference | v0.4 plan (COMPLETE, verified real) |
 | `docs/V03_TASKS.md` | Reference | v0.3 tasks (739, COMPLETE, verified real) |
@@ -100,25 +98,24 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (v12.5.0, 2026-04-02)
+### Current Totals (v12.6.0, 2026-04-03 — post V17 re-audit)
 
 ```
-Tests:     8,475 (0 failures, 0 clippy warnings)
-LOC:       ~486,000 lines of Rust (442 files)
-Examples:  216+ .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
+Tests:     8,317 (8,280 lib + 24 integ + 13 doc) — 0 failures, 0 clippy warnings
+LOC:       473,909 lines of Rust (441 files)
+Examples:  257 .fj programs (93K LOC) | Binary: 13 MB release | MSRV: Rust 1.87
+Modules:   33 production, 1 partial, 18 framework, 3 stub (56 total)
+CLI:       25 production, 8 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows (check, features, fuzz, audit, benchmarks, coverage, nightly)
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
 ```
 
-### V14 Status (494/500 [x] — 99%)
-- Options 1-2 (Release + Hardening): **100/100 ✅**
-- Effects: **40/40 ✅** (composition, row var, `fj run --effect-stats`)
-- Dependent Types: **40/40 ✅** (refinement `{ x: i32 | x > 0 }`, Pi, Sigma in parser)
-- GPU: **40/40 ✅** (AST-driven SPIR-V/PTX/Metal/HLSL, `@gpu(workgroup=N)`)
-- LSP: **40/40 ✅** (predictive completions, code_lens_resolve, inline_value)
-- Package Registry: **40/40 ✅** (async tokio, HMAC-SHA256, rate limiting, search ranking)
-- FajarOS Nova: 97/100 [x] (138 real tests — 3 [f] need QEMU/hardware)
-- Validation: 97/100 [x] (97 real tests — 3 [f] need external C FFI)
+### V14 Status (~302/500 real [x] — 60%, per V17 audit)
+- Effects: 40/40 ✅ | Dependent Types: 40/40 ✅ | GPU: 40/40 ✅
+- LSP: 40/40 ✅ | Package Registry: 40/40 ✅
+- FajarOS Nova: 97/100 [x] (3 [f] need QEMU/hardware)
+- Validation: 97/100 [x] (3 [f] need external C FFI)
+- **Note:** Many V14 tasks marked [x] were framework-only. V17 audit corrected to ~302 real.
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): MMU, EL0, IPC, 65+ commands. Verified on Radxa Dragon Q6A.
@@ -430,7 +427,7 @@ Key errors:
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: 8,195+ tests (lib + integration + fuzz harness)
+### 9.1 Test Suite: 8,317 tests (8,280 lib + 24 integ + 13 doc)
 
 ### 9.2 Test Naming Convention
 
@@ -691,5 +688,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 11.0 | v12.6.0 "Infinity" — 8,475 tests, ~486K LOC, 0 failures | V14: 494/500 [x] (99%) | Auto-loaded by Claude Code*
-*Last Updated: 2026-04-02*
+*CLAUDE.md Version: 12.0 | v12.6.0 — 8,317 tests, 473K LOC, 0 failures | 33/56 modules production (59%) | V17 audited*
+*Last Updated: 2026-04-03*
