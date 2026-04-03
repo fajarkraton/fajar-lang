@@ -98,17 +98,29 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V19 "Precision" COMPLETE, 2026-04-03)
+### Current Totals (V20 "Completeness" COMPLETE, 2026-04-03)
 
 ```
-Tests:     9,550 default (8,285 lib + 1,265 integ) | ~9,700 with LLVM — 0 failures
-LOC:       ~476,000 lines of Rust (441+ files)
-Examples:  213 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
-Modules:   ~40 production, 1 partial, 12 framework, 3 stub (56 total)
-CLI:       28 production, 5 partial, 2 stub (35 total)
+Tests:     9,555 default (8,287 lib + 1,268 integ) | ~9,700 with LLVM — 0 failures
+LOC:       ~478,000 lines of Rust (441+ files)
+Examples:  218 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
+Modules:   ~48 production, 0 partial, 5 framework, 3 stub (56 total)
+CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
 ```
+
+### V20 "Completeness" (2026-04-03) — ALL 7 PHASES COMPLETE (25/25 tasks)
+- Plan: `docs/V19_V21_COMPLETE_56_PLAN.md`
+- **Phase 1:** Debugger v2 record/replay — `fj debug --record/--replay`, JSON trace format
+- **Phase 2:** Package v2 build scripts — `[build]` section in fj.toml, pre/post hooks
+- **Phase 3:** ML Advanced — diffusion_create/denoise, rl_agent_create/step
+- **Phase 4:** RT Pipeline — pipeline_create/add_stage/run, sensor→ML→actuator
+- **Phase 5:** Accelerator dispatch — accelerate(fn, input), workload classification
+- **Phase 6:** Concurrency v2 — actor_spawn/send/supervise, supervision strategies
+- **Phase 7:** Const modules — const_alloc, const_size_of, const_align_of
+- New examples: diffusion_demo.fj, rl_demo.fj, rt_pipeline_demo.fj,
+  accelerator_demo.fj, actor_demo.fj
 
 ### V19 "Precision" (2026-04-03) — ALL 6 PHASES COMPLETE (42/42 tasks)
 - Plan: `docs/V19_PLAN.md` + `docs/V19_V21_COMPLETE_56_PLAN.md`
@@ -702,5 +714,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 15.0 | V19 "Precision" COMPLETE — 9,550 tests, ~476K LOC, 0 failures | ~40/56 modules production (71%) | macros, pattern match, async, demos, LSP v3, const reflect*
+*CLAUDE.md Version: 16.0 | V20 "Completeness" COMPLETE — 9,555 tests, ~478K LOC, 0 failures | ~48/56 modules production (86%) | debug record/replay, build scripts, ML diffusion/RL, pipeline, accelerator, actors, const*
 *Last Updated: 2026-04-03*

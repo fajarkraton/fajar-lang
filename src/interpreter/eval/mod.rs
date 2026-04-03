@@ -1280,6 +1280,20 @@ impl Interpreter {
             // Model export
             "model_save",
             "model_save_quantized",
+            // V20 Phase 4: RT Pipeline
+            "pipeline_create",
+            "pipeline_add_stage",
+            "pipeline_run",
+            // V20 Phase 5: Accelerator
+            "accelerate",
+            // V20 Phase 6: Actors
+            "actor_spawn",
+            "actor_send",
+            "actor_supervise",
+            // V20 Phase 7: Const modules
+            "const_alloc",
+            "const_size_of",
+            "const_align_of",
         ]
     }
 

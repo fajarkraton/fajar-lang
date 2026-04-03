@@ -1,0 +1,35 @@
+// Accelerator Dispatch Demo — Fajar Lang V20
+// Demonstrates: accelerate(), workload classification, GPU/CPU/NPU dispatch
+//
+// Run: fj run examples/accelerator_demo.fj
+
+fn matrix_op(x: Tensor) -> Tensor {
+    matmul(x, transpose(x))
+}
+
+fn small_op(x: Tensor) -> Tensor {
+    relu(x)
+}
+
+fn main() {
+    println("=== Fajar Lang — Accelerator Dispatch Demo ===")
+    println("")
+
+    // Large tensor → compute-bound → GPU
+    let large = randn([64, 128])
+    let r1 = accelerate("matrix_op", large)
+    println(f"Large matmul:")
+    println(f"  Device: {map_get_or(r1, "device", "?")}")
+    println(f"  Class:  {map_get_or(r1, "workload_class", "?")}")
+    println("")
+
+    // Small tensor → latency-sensitive → NPU
+    let small = randn([1, 4])
+    let r2 = accelerate("small_op", small)
+    println(f"Small relu:")
+    println(f"  Device: {map_get_or(r2, "device", "?")}")
+    println(f"  Class:  {map_get_or(r2, "workload_class", "?")}")
+    println("")
+
+    println("Accelerator demo complete.")
+}

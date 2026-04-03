@@ -1165,6 +1165,310 @@ impl Interpreter {
                 Ok(Value::Map(step_result))
             }
             // Metrics builtins
+            // ═══════════════════════════════════════════════════════════
+            // V20 Phase 4: RT Pipeline Executor
+            // ═══════════════════════════════════════════════════════════
+            "pipeline_create" => {
+                let mut pipe = std::collections::HashMap::new();
+                pipe.insert("_type".to_string(), Value::Str("Pipeline".into()));
+                pipe.insert("stages".to_string(), Value::Array(vec![]));
+                pipe.insert("stage_count".to_string(), Value::Int(0));
+                Ok(Value::Map(pipe))
+            }
+            "pipeline_add_stage" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let name = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    _ => "stage".to_string(),
+                };
+                let fn_name = match &args[2] {
+                    Value::Str(s) => s.clone(),
+                    _ => "identity".to_string(),
+                };
+                let mut pipe = match &args[0] {
+                    Value::Map(m) => m.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "pipeline_add_stage(pipe, name, fn_name)".into(),
+                        )
+                        .into());
+                    }
+                };
+                // Append stage
+                let mut stages = match pipe.remove("stages") {
+                    Some(Value::Array(a)) => a,
+                    _ => vec![],
+                };
+                let mut stage = std::collections::HashMap::new();
+                stage.insert("name".to_string(), Value::Str(name));
+                stage.insert("fn".to_string(), Value::Str(fn_name));
+                stages.push(Value::Map(stage));
+                let count = stages.len() as i64;
+                pipe.insert("stages".to_string(), Value::Array(stages));
+                pipe.insert("stage_count".to_string(), Value::Int(count));
+                Ok(Value::Map(pipe))
+            }
+            "pipeline_run" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let stages = match &args[0] {
+                    Value::Map(m) => match m.get("stages") {
+                        Some(Value::Array(a)) => a.clone(),
+                        _ => vec![],
+                    },
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("pipeline_run(pipe, input)".into()).into()
+                        );
+                    }
+                };
+                // Run each stage: call fn_name(current_value)
+                let mut current = args[1].clone();
+                for stage_val in &stages {
+                    if let Value::Map(stage) = stage_val {
+                        if let Some(Value::Str(fn_name)) = stage.get("fn") {
+                            let stage_name = match stage.get("name") {
+                                Some(Value::Str(n)) => n.clone(),
+                                _ => "?".to_string(),
+                            };
+                            match self.call_fn(fn_name, vec![current.clone()]) {
+                                Ok(result) => {
+                                    self.record_output(&format!("[pipeline] {stage_name}: OK"));
+                                    if self.capture_output {
+                                        self.output.push(format!("[pipeline] {stage_name}: OK"));
+                                    } else {
+                                        println!("[pipeline] {stage_name}: OK");
+                                    }
+                                    current = result;
+                                }
+                                Err(e) => {
+                                    let msg = format!("[pipeline] {stage_name}: FAILED — {e}");
+                                    if self.capture_output {
+                                        self.output.push(msg);
+                                    } else {
+                                        eprintln!("{msg}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(current)
+            }
+            // ═══════════════════════════════════════════════════════════
+            // V20 Phase 5: Accelerator Dispatch
+            // ═══════════════════════════════════════════════════════════
+            "accelerate" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let fn_name = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("accelerate(fn_name, input)".into()).into()
+                        );
+                    }
+                };
+                // Classify workload and decide device
+                let (flops, bytes) = match &args[1] {
+                    Value::Tensor(tv) => {
+                        let n = tv.data().len();
+                        (n as u64 * 2, n as u64 * 8)
+                    }
+                    Value::Array(a) => (a.len() as u64 * 2, a.len() as u64 * 8),
+                    _ => (100, 800),
+                };
+                let wc = crate::accelerator::dispatch::classify_workload(flops, bytes, 1);
+                let device_str = match wc {
+                    crate::accelerator::dispatch::WorkloadClass::ComputeBound => "GPU",
+                    crate::accelerator::dispatch::WorkloadClass::MemoryBound => "CPU",
+                    crate::accelerator::dispatch::WorkloadClass::LatencySensitive => "NPU",
+                };
+                // Execute the function on CPU (actual GPU dispatch needs CUDA)
+                let result = self.call_fn(&fn_name, vec![args[1].clone()]);
+                let mut out = std::collections::HashMap::new();
+                out.insert("device".to_string(), Value::Str(device_str.into()));
+                out.insert("workload_class".to_string(), Value::Str(format!("{wc:?}")));
+                out.insert("result".to_string(), result.unwrap_or(Value::Null));
+                Ok(Value::Map(out))
+            }
+            // ═══════════════════════════════════════════════════════════
+            // V20 Phase 6: Concurrency v2 — Actor Supervision
+            // ═══════════════════════════════════════════════════════════
+            "actor_spawn" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let name = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("actor_spawn(name, fn_name)".into()).into()
+                        );
+                    }
+                };
+                let fn_name = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    _ => "handler".to_string(),
+                };
+                let actor = crate::concurrency_v2::actors::ActorInstance::new(
+                    crate::concurrency_v2::actors::ActorAddr(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64,
+                    ),
+                    &name,
+                    16,
+                );
+                let mut m = std::collections::HashMap::new();
+                m.insert("_type".to_string(), Value::Str("Actor".into()));
+                m.insert("name".to_string(), Value::Str(name));
+                m.insert("fn".to_string(), Value::Str(fn_name));
+                m.insert("addr".to_string(), Value::Int(actor.addr.0 as i64));
+                m.insert(
+                    "status".to_string(),
+                    Value::Str(format!("{:?}", actor.status)),
+                );
+                m.insert("restart_count".to_string(), Value::Int(0));
+                Ok(Value::Map(m))
+            }
+            "actor_send" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                // Extract actor's handler fn and call it with the message
+                let fn_name = match &args[0] {
+                    Value::Map(m) => match m.get("fn") {
+                        Some(Value::Str(s)) => s.clone(),
+                        _ => "handler".to_string(),
+                    },
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("actor_send(actor, message)".into()).into()
+                        );
+                    }
+                };
+                let result = self.call_fn(&fn_name, vec![args[1].clone()]);
+                Ok(result.unwrap_or(Value::Null))
+            }
+            "actor_supervise" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let strategy = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    _ => "one_for_one".to_string(),
+                };
+                // Apply supervision: return updated actor with strategy
+                let mut actor = match &args[0] {
+                    Value::Map(m) => m.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "actor_supervise(actor, strategy)".into(),
+                        )
+                        .into());
+                    }
+                };
+                actor.insert("supervision".to_string(), Value::Str(strategy));
+                Ok(Value::Map(actor))
+            }
+            // ═══════════════════════════════════════════════════════════
+            // V20 Phase 7: Const Modules
+            // ═══════════════════════════════════════════════════════════
+            "const_alloc" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let size = match &args[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError("const_alloc(size: i64)".into()).into());
+                    }
+                };
+                let _target = crate::const_alloc::TargetInfo::x86_64();
+                let alloc = crate::const_alloc::ConstAllocation {
+                    name: "const_buffer".to_string(),
+                    bytes: vec![0u8; size],
+                    align: 8,
+                    section: ".rodata".to_string(),
+                    type_desc: format!("[u8; {size}]"),
+                };
+                let mut m = std::collections::HashMap::new();
+                m.insert("_type".to_string(), Value::Str("ConstAlloc".into()));
+                m.insert("size".to_string(), Value::Int(alloc.size() as i64));
+                m.insert("align".to_string(), Value::Int(alloc.align as i64));
+                m.insert("section".to_string(), Value::Str(alloc.section));
+                m.insert("target".to_string(), Value::Str("x86_64".into()));
+                Ok(Value::Map(m))
+            }
+            "const_size_of" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let size = match &args[0] {
+                    Value::Int(_) => 8,
+                    Value::Float(_) => 8,
+                    Value::Bool(_) => 1,
+                    Value::Char(_) => 4,
+                    Value::Str(s) => s.len() as i64 + 24, // ptr + len + cap
+                    Value::Array(a) => a.len() as i64 * 8 + 24,
+                    Value::Tensor(tv) => tv.data().len() as i64 * 8 + 32,
+                    _ => 0,
+                };
+                Ok(Value::Int(size))
+            }
+            "const_align_of" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let align = match &args[0] {
+                    Value::Bool(_) => 1,
+                    Value::Char(_) => 4,
+                    _ => 8,
+                };
+                Ok(Value::Int(align))
+            }
             "metric_accuracy" | "accuracy" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {

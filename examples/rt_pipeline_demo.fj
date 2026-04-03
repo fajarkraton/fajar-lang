@@ -1,0 +1,51 @@
+// RT Pipeline Demo — Fajar Lang V20
+// Demonstrates: pipeline_create, pipeline_add_stage, pipeline_run
+// Simulates a sensor → ML → actuator real-time pipeline
+//
+// Run: fj run examples/rt_pipeline_demo.fj
+
+fn sensor_read(input: i64) -> i64 {
+    // Simulate sensor reading: scale raw ADC value
+    input * 3 + 100
+}
+
+fn normalize(input: i64) -> i64 {
+    // Normalize to 0-100 range
+    input % 100
+}
+
+fn classify(input: i64) -> i64 {
+    // Simple threshold classifier
+    if input > 50 { 1 } else { 0 }
+}
+
+fn actuate(input: i64) -> i64 {
+    // Convert classification to actuator command
+    if input == 1 { 255 } else { 0 }
+}
+
+fn main() {
+    println("=== Fajar Lang — RT Pipeline Demo ===")
+    println("")
+
+    // Build pipeline: sensor → normalize → classify → actuate
+    let pipe = pipeline_create()
+    let pipe = pipeline_add_stage(pipe, "sensor_read", "sensor_read")
+    let pipe = pipeline_add_stage(pipe, "normalize", "normalize")
+    let pipe = pipeline_add_stage(pipe, "classify", "classify")
+    let pipe = pipeline_add_stage(pipe, "actuate", "actuate")
+    println(f"Pipeline stages: {map_get_or(pipe, "stage_count", "0")}")
+    println("")
+
+    // Run pipeline with different inputs
+    let inputs = [10, 25, 50, 75, 100]
+    for i in 0..len(inputs) {
+        let input = inputs[i]
+        println(f"Input: {input}")
+        let output = pipeline_run(pipe, input)
+        println(f"Output: {output}")
+        println("")
+    }
+
+    println("Pipeline demo complete.")
+}

@@ -1364,6 +1364,36 @@ impl TypeChecker {
                 vec![Type::Unknown, Type::I64],
                 Type::Unknown,
             ),
+            // V20 Phase 4: RT Pipeline
+            ("pipeline_create", vec![], Type::Unknown),
+            (
+                "pipeline_add_stage",
+                vec![Type::Unknown, Type::Str, Type::Str],
+                Type::Unknown,
+            ),
+            (
+                "pipeline_run",
+                vec![Type::Unknown, Type::Unknown],
+                Type::Unknown,
+            ),
+            // V20 Phase 5: Accelerator
+            ("accelerate", vec![Type::Str, Type::Unknown], Type::Unknown),
+            // V20 Phase 6: Actors
+            ("actor_spawn", vec![Type::Str, Type::Str], Type::Unknown),
+            (
+                "actor_send",
+                vec![Type::Unknown, Type::Unknown],
+                Type::Unknown,
+            ),
+            (
+                "actor_supervise",
+                vec![Type::Unknown, Type::Str],
+                Type::Unknown,
+            ),
+            // V20 Phase 7: Const modules
+            ("const_alloc", vec![Type::I64], Type::Unknown),
+            ("const_size_of", vec![Type::Unknown], Type::I64),
+            ("const_align_of", vec![Type::Unknown], Type::I64),
         ];
         for (name, params, ret) in layer_fns {
             self.symbols.define(Symbol {
