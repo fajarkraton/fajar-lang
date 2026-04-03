@@ -628,6 +628,13 @@ pub struct Interpreter {
     ffi_manager: crate::interpreter::ffi::FfiManager,
     /// V18: Generator yield collector — when Some, yield pushes here instead of returning.
     generator_yields: Option<Vec<Value>>,
+    /// V18: User-defined macro bodies: name → Vec<(param_names, body)>.
+    #[allow(clippy::type_complexity)]
+    user_macros: HashMap<String, Vec<(Vec<String>, Box<Expr>)>>,
+    /// V18: Channel pairs for actor-style message passing.
+    channels: HashMap<i64, (std::sync::mpsc::Sender<Value>, Option<std::sync::mpsc::Receiver<Value>>)>,
+    /// V18: Next channel ID.
+    next_channel_id: i64,
 }
 
 impl Interpreter {
@@ -685,6 +692,9 @@ impl Interpreter {
             next_tcp_fd: 100,
             ffi_manager: crate::interpreter::ffi::FfiManager::new(),
             generator_yields: None,
+            user_macros: HashMap::new(),
+            channels: HashMap::new(),
+            next_channel_id: 1,
         };
         interp.register_builtins();
         interp
@@ -749,6 +759,9 @@ impl Interpreter {
             next_tcp_fd: 100,
             ffi_manager: crate::interpreter::ffi::FfiManager::new(),
             generator_yields: None,
+            user_macros: HashMap::new(),
+            channels: HashMap::new(),
+            next_channel_id: 1,
         };
         interp.register_builtins();
         interp
@@ -1533,6 +1546,10 @@ impl Interpreter {
             "ffi_load_library",
             "ffi_register",
             "ffi_call",
+            // V18: Channels (actor message passing)
+            "channel_create",
+            "channel_send",
+            "channel_recv",
         ]
     }
 
@@ -1825,7 +1842,31 @@ impl Interpreter {
                 Ok(Value::Null)
             }
             Item::MacroRulesDef(mdef) => {
-                // V12 Gap Closure: Register user macro in expander
+                // V18: Store user macro arms for runtime expansion
+                let mut arms = Vec::new();
+                for arm in &mdef.arms {
+                    // Extract parameter names from pattern: ($x:expr) → ["x"]
+                    let params: Vec<String> = arm
+                        .pattern
+                        .split('$')
+                        .skip(1)
+                        .filter_map(|s| {
+                            let name: String = s
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            if name.is_empty() {
+                                None
+                            } else {
+                                Some(name)
+                            }
+                        })
+                        .collect();
+                    arms.push((params, arm.body.clone()));
+                }
+                self.user_macros.insert(mdef.name.clone(), arms);
+
+                // Also register in expander for compatibility
                 let mut compiled = crate::macros_v12::CompiledMacro::new(&mdef.name);
                 for arm in &mdef.arms {
                     compiled.add_rule(
@@ -2172,23 +2213,32 @@ impl Interpreter {
                 for arg in args {
                     arg_vals.push(self.eval_expr(arg)?);
                 }
-                // V12 Gap Closure: Check user-defined macros first
-                if self.macro_expander.contains(name) {
-                    // User macro found — for now, delegate to builtin handler
-                    // (full expansion requires AST transformation)
-                    match crate::macros::eval_builtin_macro(name, &arg_vals) {
-                        Ok(val) => Ok(val),
-                        Err(_) => {
-                            // User macro: return first arg or Null
-                            Ok(arg_vals.into_iter().next().unwrap_or(Value::Null))
+                // V18: Check user-defined macros first
+                if let Some(arms) = self.user_macros.get(name).cloned() {
+                    // Find first arm where param count matches
+                    for (params, body) in &arms {
+                        if params.len() == arg_vals.len() || params.is_empty() {
+                            // Bind parameters in a new scope
+                            let macro_env = Rc::new(RefCell::new(
+                                Environment::new_with_parent(Rc::clone(&self.env)),
+                            ));
+                            for (param, val) in params.iter().zip(arg_vals.iter()) {
+                                macro_env.borrow_mut().define(param.clone(), val.clone());
+                            }
+                            let prev_env = Rc::clone(&self.env);
+                            self.env = macro_env;
+                            let result = self.eval_expr(body);
+                            self.env = prev_env;
+                            return result;
                         }
                     }
-                } else {
-                    // Dispatch to built-in macro handler
-                    match crate::macros::eval_builtin_macro(name, &arg_vals) {
-                        Ok(val) => Ok(val),
-                        Err(msg) => Err(RuntimeError::TypeError(msg).into()),
-                    }
+                    // No matching arm — return first arg or Null
+                    return Ok(arg_vals.into_iter().next().unwrap_or(Value::Null));
+                }
+                // Dispatch to built-in macro handler
+                match crate::macros::eval_builtin_macro(name, &arg_vals) {
+                    Ok(val) => Ok(val),
+                    Err(msg) => Err(RuntimeError::TypeError(msg).into()),
                 }
             }
             // V12 Gap Closure: Yield expression in generator

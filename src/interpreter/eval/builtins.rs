@@ -1990,6 +1990,69 @@ impl Interpreter {
                     return self.builtin_http_listen(args);
                 }
 
+                // V18 4.5: Channel builtins for actor-style message passing
+                if name == "channel_create" {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    let id = self.next_channel_id;
+                    self.next_channel_id += 1;
+                    self.channels.insert(id, (tx, Some(rx)));
+                    return Ok(Value::Int(id));
+                }
+                if name == "channel_send" {
+                    if args.len() != 2 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 2,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Int(ch_id) = &args[0] {
+                        if let Some((tx, _)) = self.channels.get(ch_id) {
+                            let val = args[1].clone();
+                            let _ = tx.send(val);
+                            return Ok(Value::Bool(true));
+                        }
+                        return Ok(Value::Bool(false));
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "channel_send(ch: i64, value)".into(),
+                    )
+                    .into());
+                }
+                if name == "channel_recv" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Int(ch_id) = &args[0] {
+                        if let Some((_, Some(rx))) = self.channels.get(ch_id) {
+                            match rx.try_recv() {
+                                Ok(v) => {
+                                    return Ok(Value::Enum {
+                                        variant: "Some".into(),
+                                        data: Some(Box::new(v)),
+                                    });
+                                }
+                                Err(_) => {
+                                    return Ok(Value::Enum {
+                                        variant: "None".into(),
+                                        data: None,
+                                    });
+                                }
+                            }
+                        }
+                        return Ok(Value::Enum {
+                            variant: "None".into(),
+                            data: None,
+                        });
+                    }
+                    return Err(
+                        RuntimeError::TypeError("channel_recv(ch: i64)".into()).into()
+                    );
+                }
                 // V18 2.8: FFI builtins
                 if name == "ffi_load_library" {
                     if args.len() != 1 {

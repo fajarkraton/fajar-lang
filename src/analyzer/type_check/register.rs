@@ -1105,6 +1105,11 @@ impl TypeChecker {
             ),
             ("ffi_call", vec![Type::Unknown], Type::Unknown),
             // V18: ML layers
+            // V18: Channels
+            ("channel_create", vec![], Type::I64),
+            ("channel_send", vec![Type::I64, Type::Unknown], Type::Bool),
+            ("channel_recv", vec![Type::I64], Type::Unknown),
+            // V18: ML layers
             ("MultiHeadAttention", vec![Type::I64, Type::I64], Type::Unknown),
             ("attention", vec![Type::I64, Type::I64], Type::Unknown),
         ];
