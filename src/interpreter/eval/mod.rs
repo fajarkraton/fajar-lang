@@ -621,6 +621,10 @@ pub struct Interpreter {
     /// tracks consumption during replay. When an effect fires, the dispatch walks the stack
     /// from innermost to outermost looking for a cached entry that matches the effect identity.
     effect_replay_stack: Vec<EffectReplayLevel>,
+    /// V18: TCP connections: fd → TcpStream.
+    tcp_connections: HashMap<usize, std::net::TcpStream>,
+    /// V18: Next TCP file descriptor.
+    next_tcp_fd: usize,
 }
 
 impl Interpreter {
@@ -674,6 +678,8 @@ impl Interpreter {
             effect_statistics: crate::analyzer::effects::EffectStatistics::new(),
             effect_handler_depth: 0,
             effect_replay_stack: Vec::new(),
+            tcp_connections: HashMap::new(),
+            next_tcp_fd: 100,
         };
         interp.register_builtins();
         interp
@@ -734,6 +740,8 @@ impl Interpreter {
             effect_statistics: crate::analyzer::effects::EffectStatistics::new(),
             effect_handler_depth: 0,
             effect_replay_stack: Vec::new(),
+            tcp_connections: HashMap::new(),
+            next_tcp_fd: 100,
         };
         interp.register_builtins();
         interp
@@ -1501,6 +1509,14 @@ impl Interpreter {
             "http_start_tls",
             "request_json",
             "response_json",
+            // V18: Synchronous HTTP client
+            "http_get",
+            "http_post",
+            // V18: TCP sockets
+            "tcp_connect",
+            "tcp_send",
+            "tcp_recv",
+            "tcp_close",
         ]
     }
 

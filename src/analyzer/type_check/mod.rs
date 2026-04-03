@@ -1556,6 +1556,22 @@ impl TypeChecker {
             "switch_ttbr0",
             "read_ttbr0",
             "tlbi_va",
+            // Volatile memory access (hardware-level)
+            "volatile_read",
+            "volatile_write",
+            "volatile_read_u8",
+            "volatile_write_u8",
+            "volatile_read_u16",
+            "volatile_write_u16",
+            "volatile_read_u32",
+            "volatile_write_u32",
+            // Note: volatile_read_u64/write_u64 already listed above
+            "read_cr3",
+            "write_cr3",
+            "read_cr2",
+            "memory_fence",
+            "fn_addr",
+            "sleep_ms",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -1605,10 +1621,21 @@ impl TypeChecker {
             safe_blocked_builtins.insert(extra.to_string());
         }
 
-        let heap_builtins: std::collections::HashSet<String> = ["push", "pop", "to_string"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let heap_builtins: std::collections::HashSet<String> = [
+            "push",
+            "pop",
+            "to_string",
+            "map_insert",
+            "map_get",
+            "map_remove",
+            "map_contains",
+            "map_keys",
+            "map_values",
+            "map_len",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
         let tensor_builtins: std::collections::HashSet<String> = [
             "tensor_zeros",

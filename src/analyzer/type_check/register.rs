@@ -1087,6 +1087,28 @@ impl TypeChecker {
             });
         }
 
+        // V18: Networking builtins
+        let net_fns: Vec<(&str, Vec<Type>, Type)> = vec![
+            ("http_get", vec![Type::Str], Type::Unknown),
+            ("http_post", vec![Type::Str, Type::Str], Type::Unknown),
+            ("tcp_connect", vec![Type::Str], Type::Unknown),
+            ("tcp_send", vec![Type::I64, Type::Str], Type::Unknown),
+            ("tcp_recv", vec![Type::I64], Type::Unknown),
+            ("tcp_close", vec![Type::I64], Type::Unknown),
+        ];
+        for (name, params, ret) in net_fns {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
         // File I/O builtins
         let io_fns: Vec<(&str, Vec<Type>, Type)> = vec![
             ("read_file", vec![Type::Str], Type::Unknown),

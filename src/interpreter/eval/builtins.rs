@@ -1861,11 +1861,108 @@ impl Interpreter {
                         data: Some(Box::new(Value::Tuple(args))),
                     });
                 }
+                // V18 1.4: Synchronous HTTP client builtins
+                if name == "http_get" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Str(url) = &args[0] {
+                        return self.builtin_http_get_sync(url);
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "http_get(url: str) -> str".into(),
+                    )
+                    .into());
+                }
+                if name == "http_post" {
+                    if args.len() != 2 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 2,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let (Value::Str(url), Value::Str(body)) = (&args[0], &args[1]) {
+                        return self.builtin_http_post_sync(url, body);
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "http_post(url: str, body: str) -> str".into(),
+                    )
+                    .into());
+                }
                 // TQ12.1: HTTP server builtin
                 if name == "http_listen" {
                     return self.builtin_http_listen(args);
                 }
 
+                // V18 1.6: TCP socket builtins
+                if name == "tcp_connect" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Str(addr) = &args[0] {
+                        return self.builtin_tcp_connect(addr);
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "tcp_connect(addr: str) -> i64".into(),
+                    )
+                    .into());
+                }
+                if name == "tcp_send" {
+                    if args.len() != 2 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 2,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let (Value::Int(fd), Value::Str(data)) = (&args[0], &args[1]) {
+                        return self.builtin_tcp_send(*fd, data);
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "tcp_send(fd: i64, data: str) -> i64".into(),
+                    )
+                    .into());
+                }
+                if name == "tcp_recv" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Int(fd) = &args[0] {
+                        return self.builtin_tcp_recv(*fd);
+                    }
+                    return Err(
+                        RuntimeError::TypeError("tcp_recv(fd: i64) -> str".into()).into()
+                    );
+                }
+                if name == "tcp_close" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Int(fd) = &args[0] {
+                        self.tcp_connections.remove(&(*fd as usize));
+                        return Ok(Value::Null);
+                    }
+                    return Err(
+                        RuntimeError::TypeError("tcp_close(fd: i64)".into()).into()
+                    );
+                }
                 // TQ12.2: Database builtins
                 if name == "db_open" {
                     return self.builtin_db_open(args);
@@ -2089,6 +2186,201 @@ impl Interpreter {
     /// Usage: http_listen(port, max_requests)
     /// Listens on 127.0.0.1:port, accepts max_requests connections,
     /// returns the number of requests served.
+    /// V18 1.4: Synchronous HTTP GET using std::net::TcpStream
+    fn builtin_http_get_sync(&mut self, url: &str) -> EvalResult {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpStream;
+
+        // Parse URL: http://host[:port]/path
+        let url = url.trim();
+        let without_scheme = url
+            .strip_prefix("http://")
+            .unwrap_or(url.strip_prefix("https://").unwrap_or(url));
+        let (host_port, path) = match without_scheme.find('/') {
+            Some(i) => (&without_scheme[..i], &without_scheme[i..]),
+            None => (without_scheme, "/"),
+        };
+        let (host, port) = match host_port.find(':') {
+            Some(i) => (&host_port[..i], host_port[i + 1..].parse::<u16>().unwrap_or(80)),
+            None => (host_port, 80),
+        };
+
+        let addr = format!("{host}:{port}");
+        let mut stream = match TcpStream::connect(&addr) {
+            Ok(s) => s,
+            Err(e) => {
+                return Ok(Value::Enum {
+                    variant: "Err".into(),
+                    data: Some(Box::new(Value::Str(format!("connect failed: {e}")))),
+                });
+            }
+        };
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+
+        let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+        if let Err(e) = stream.write_all(request.as_bytes()) {
+            return Ok(Value::Enum {
+                variant: "Err".into(),
+                data: Some(Box::new(Value::Str(format!("write failed: {e}")))),
+            });
+        }
+
+        let reader = BufReader::new(&stream);
+        let mut body = String::new();
+        let mut in_body = false;
+        for line in reader.lines() {
+            match line {
+                Ok(l) => {
+                    if in_body {
+                        body.push_str(&l);
+                        body.push('\n');
+                    } else if l.is_empty() {
+                        in_body = true;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        Ok(Value::Enum {
+            variant: "Ok".into(),
+            data: Some(Box::new(Value::Str(body))),
+        })
+    }
+
+    /// V18 1.4: Synchronous HTTP POST using std::net::TcpStream
+    fn builtin_http_post_sync(&mut self, url: &str, body: &str) -> EvalResult {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpStream;
+
+        let url = url.trim();
+        let without_scheme = url
+            .strip_prefix("http://")
+            .unwrap_or(url.strip_prefix("https://").unwrap_or(url));
+        let (host_port, path) = match without_scheme.find('/') {
+            Some(i) => (&without_scheme[..i], &without_scheme[i..]),
+            None => (without_scheme, "/"),
+        };
+        let (host, port) = match host_port.find(':') {
+            Some(i) => (&host_port[..i], host_port[i + 1..].parse::<u16>().unwrap_or(80)),
+            None => (host_port, 80),
+        };
+
+        let addr = format!("{host}:{port}");
+        let mut stream = match TcpStream::connect(&addr) {
+            Ok(s) => s,
+            Err(e) => {
+                return Ok(Value::Enum {
+                    variant: "Err".into(),
+                    data: Some(Box::new(Value::Str(format!("connect failed: {e}")))),
+                });
+            }
+        };
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+
+        let request = format!(
+            "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        if let Err(e) = stream.write_all(request.as_bytes()) {
+            return Ok(Value::Enum {
+                variant: "Err".into(),
+                data: Some(Box::new(Value::Str(format!("write failed: {e}")))),
+            });
+        }
+
+        let reader = BufReader::new(&stream);
+        let mut resp_body = String::new();
+        let mut in_body = false;
+        for line in reader.lines() {
+            match line {
+                Ok(l) => {
+                    if in_body {
+                        resp_body.push_str(&l);
+                        resp_body.push('\n');
+                    } else if l.is_empty() {
+                        in_body = true;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        Ok(Value::Enum {
+            variant: "Ok".into(),
+            data: Some(Box::new(Value::Str(resp_body))),
+        })
+    }
+
+    /// V18 1.6: TCP connect — returns file descriptor
+    fn builtin_tcp_connect(&mut self, addr: &str) -> EvalResult {
+        use std::net::TcpStream;
+        match TcpStream::connect(addr) {
+            Ok(stream) => {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+                let fd = self.next_tcp_fd;
+                self.next_tcp_fd += 1;
+                self.tcp_connections.insert(fd, stream);
+                Ok(Value::Enum {
+                    variant: "Ok".into(),
+                    data: Some(Box::new(Value::Int(fd as i64))),
+                })
+            }
+            Err(e) => Ok(Value::Enum {
+                variant: "Err".into(),
+                data: Some(Box::new(Value::Str(format!("tcp connect failed: {e}")))),
+            }),
+        }
+    }
+
+    /// V18 1.6: TCP send — returns bytes written
+    fn builtin_tcp_send(&mut self, fd: i64, data: &str) -> EvalResult {
+        use std::io::Write;
+        let fd = fd as usize;
+        if let Some(stream) = self.tcp_connections.get_mut(&fd) {
+            match stream.write_all(data.as_bytes()) {
+                Ok(()) => Ok(Value::Enum {
+                    variant: "Ok".into(),
+                    data: Some(Box::new(Value::Int(data.len() as i64))),
+                }),
+                Err(e) => Ok(Value::Enum {
+                    variant: "Err".into(),
+                    data: Some(Box::new(Value::Str(format!("tcp send failed: {e}")))),
+                }),
+            }
+        } else {
+            Ok(Value::Enum {
+                variant: "Err".into(),
+                data: Some(Box::new(Value::Str("invalid fd".into()))),
+            })
+        }
+    }
+
+    /// V18 1.6: TCP recv — returns received string
+    fn builtin_tcp_recv(&mut self, fd: i64) -> EvalResult {
+        use std::io::Read;
+        let fd = fd as usize;
+        if let Some(stream) = self.tcp_connections.get_mut(&fd) {
+            let mut buf = vec![0u8; 4096];
+            match stream.read(&mut buf) {
+                Ok(n) => {
+                    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    Ok(Value::Enum {
+                        variant: "Ok".into(),
+                        data: Some(Box::new(Value::Str(s))),
+                    })
+                }
+                Err(e) => Ok(Value::Enum {
+                    variant: "Err".into(),
+                    data: Some(Box::new(Value::Str(format!("tcp recv failed: {e}")))),
+                }),
+            }
+        } else {
+            Ok(Value::Enum {
+                variant: "Err".into(),
+                data: Some(Box::new(Value::Str("invalid fd".into()))),
+            })
+        }
+    }
+
     fn builtin_http_listen(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() < 2 {
             return Err(RuntimeError::ArityMismatch {

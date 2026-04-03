@@ -345,21 +345,182 @@ fn kernel_if_else() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 6. @kernel CANNOT use tensor ops
-// ════════════════════════════════════════════════════════════════════════
+// 6. @kernel CANNOT use tensor ops — KE002 comprehensive
+// ════��═══════════════════════════════════════════════════════════════════
 
+// Full-name tensor builtins
 #[test]
-fn ke002_kernel_tensor() {
+fn ke002_tensor_zeros() {
     expect_error("@kernel fn f() { tensor_zeros(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_tensor_ones() {
+    expect_error("@kernel fn f() { tensor_ones(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_tensor_randn() {
+    expect_error("@kernel fn f() { tensor_randn(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_tensor_matmul() {
+    expect_error("@kernel fn f() { tensor_matmul(0, 0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_relu() {
+    expect_error("@kernel fn f() { tensor_relu(0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_sigmoid() {
+    expect_error("@kernel fn f() { tensor_sigmoid(0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_softmax() {
+    expect_error("@kernel fn f() { tensor_softmax(0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_tanh() {
+    expect_error("@kernel fn f() { tensor_tanh(0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_mse_loss() {
+    expect_error("@kernel fn f() { tensor_mse_loss(0, 0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_cross_entropy() {
+    expect_error("@kernel fn f() { tensor_cross_entropy(0, 0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_transpose() {
+    expect_error("@kernel fn f() { tensor_transpose(0) }", "KE002");
+}
+#[test]
+fn ke002_tensor_reshape() {
+    expect_error("@kernel fn f() { tensor_reshape(0, 0) }", "KE002");
+}
+
+// Short aliases — must also be blocked
+#[test]
+fn ke002_zeros() {
+    expect_error("@kernel fn f() { zeros(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_ones() {
+    expect_error("@kernel fn f() { ones(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_randn() {
+    expect_error("@kernel fn f() { randn(3, 4) }", "KE002");
+}
+#[test]
+fn ke002_matmul() {
+    expect_error("@kernel fn f() { matmul(0, 0) }", "KE002");
+}
+#[test]
+fn ke002_relu() {
+    expect_error("@kernel fn f() { relu(0) }", "KE002");
+}
+#[test]
+fn ke002_sigmoid() {
+    expect_error("@kernel fn f() { sigmoid(0) }", "KE002");
+}
+#[test]
+fn ke002_softmax() {
+    expect_error("@kernel fn f() { softmax(0) }", "KE002");
+}
+#[test]
+fn ke002_backward() {
+    expect_error("@kernel fn f() { backward(0) }", "KE002");
+}
+#[test]
+fn ke002_grad() {
+    expect_error("@kernel fn f() { grad(0) }", "KE002");
+}
+#[test]
+fn ke002_dense() {
+    expect_error("@kernel fn f() { Dense(784, 128) }", "KE002");
+}
+#[test]
+fn ke002_adam() {
+    expect_error("@kernel fn f() { Adam(0.001) }", "KE002");
+}
+#[test]
+fn ke002_sgd() {
+    expect_error("@kernel fn f() { SGD(0.01) }", "KE002");
+}
+#[test]
+fn ke002_conv2d() {
+    expect_error("@kernel fn f() { Conv2d(3, 16, 3) }", "KE002");
+}
+#[test]
+fn ke002_batchnorm() {
+    expect_error("@kernel fn f() { BatchNorm(16) }", "KE002");
+}
+#[test]
+fn ke002_dropout() {
+    expect_error("@kernel fn f() { Dropout(0.5) }", "KE002");
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 7. @device CANNOT access hardware
+// 6b. @kernel CANNOT use heap-allocating builtins — KE001
+// ════════════���═══════════════════════════════════════════════════════════
+
+#[test]
+fn ke001_push() {
+    expect_error("@kernel fn f() { let a = [1]\n push(a, 2) }", "KE001");
+}
+#[test]
+fn ke001_to_string() {
+    expect_error("@kernel fn f() { to_string(42) }", "KE001");
+}
+#[test]
+fn ke001_map_insert() {
+    expect_error(
+        r#"@kernel fn f() { let m = {} map_insert(m, "k", 1) }"#,
+        "KE001",
+    );
+}
+#[test]
+fn ke001_map_get() {
+    expect_error(
+        r#"@kernel fn f() { let m = {} map_get(m, "k") }"#,
+        "KE001",
+    );
+}
+#[test]
+fn ke001_map_remove() {
+    expect_error(
+        r#"@kernel fn f() { let m = {} map_remove(m, "k") }"#,
+        "KE001",
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 7. @device CANNOT access hardware — DE001 comprehensive
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn de001_device_port_outb() {
     expect_error("@device fn f() { port_outb(0x3F8, 65) }", "DE001");
+}
+#[test]
+fn de001_device_mem_alloc() {
+    expect_error("@device fn f() { mem_alloc(4096) }", "DE001");
+}
+#[test]
+fn de001_device_mem_free() {
+    expect_error("@device fn f() { mem_free(0x1000) }", "DE001");
+}
+#[test]
+fn de001_device_irq_register() {
+    expect_error("@device fn f() { irq_register(0, 0) }", "DE001");
+}
+#[test]
+fn de001_device_volatile_read() {
+    expect_error("@device fn f() { volatile_read(0x1000) }", "DE001");
+}
+#[test]
+fn de001_device_page_map() {
+    expect_error("@device fn f() { page_map(0, 0, 0) }", "DE001");
 }
 
 // ════════════════════════════════════════════════════════════════════════
