@@ -1635,6 +1635,7 @@ impl TypeChecker {
             "to_string",
             "map_insert",
             "map_get",
+            "map_get_or",
             "map_remove",
             "map_contains",
             "map_keys",

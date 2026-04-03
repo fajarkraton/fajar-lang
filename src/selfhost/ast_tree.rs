@@ -296,6 +296,8 @@ pub enum Expr {
         value: Option<Box<Expr>>,
         span: AstSpan,
     },
+    /// Macro metavariable reference: `$x`
+    MacroVar { name: String, span: AstSpan },
 }
 
 impl Expr {
@@ -329,7 +331,8 @@ impl Expr {
             | Expr::Path { span, .. }
             | Expr::EnumVariant { span, .. }
             | Expr::FString { span, .. }
-            | Expr::Yield { span, .. } => *span,
+            | Expr::Yield { span, .. }
+            | Expr::MacroVar { span, .. } => *span,
         }
     }
 
@@ -364,6 +367,7 @@ impl Expr {
             Expr::EnumVariant { .. } => "enum_variant",
             Expr::FString { .. } => "f_string",
             Expr::Yield { .. } => "yield",
+            Expr::MacroVar { .. } => "macro_var",
         }
     }
 }
@@ -1154,7 +1158,8 @@ pub fn walk_expr(visitor: &mut dyn AstVisitor, expr: &Expr) {
         | Expr::CharLit { .. }
         | Expr::NullLit { .. }
         | Expr::Ident { .. }
-        | Expr::Path { .. } => {}
+        | Expr::Path { .. }
+        | Expr::MacroVar { .. } => {}
     }
 }
 

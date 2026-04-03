@@ -583,6 +583,9 @@ impl Compiler {
             Expr::Yield { .. } => {
                 // Yield is not supported in VM mode.
             }
+            Expr::MacroVar { .. } => {
+                // Macro vars are resolved at expansion time, not in VM.
+            }
         }
     }
 
@@ -1092,8 +1095,8 @@ impl Compiler {
                 Rc::new(RefCell::new(Environment::new()))
             },
             is_async: false,
-                    is_gen: false,
-                    requires: vec![],
+            is_gen: false,
+            requires: vec![],
         });
 
         // Copy captured locals to globals so the closure body can access them

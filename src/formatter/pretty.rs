@@ -825,6 +825,10 @@ impl<'src> Formatter<'src> {
                     self.format_expr(v);
                 }
             }
+            Expr::MacroVar { name, .. } => {
+                self.push("$");
+                self.push(name);
+            }
         }
     }
 

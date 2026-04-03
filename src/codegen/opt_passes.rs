@@ -271,6 +271,7 @@ fn intern_strings_in_expr(expr: &Expr, interner: &mut StringInterner) {
         // Leaf nodes with no strings
         Expr::Ident { .. } | Expr::Path { .. } | Expr::Range { .. } | Expr::InlineAsm { .. } => {}
         Expr::Yield { .. } => {}
+        Expr::MacroVar { .. } => {}
     }
 }
 

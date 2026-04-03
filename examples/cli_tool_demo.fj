@@ -1,0 +1,142 @@
+// CLI Tool Demo — Fajar Lang V19
+// Demonstrates: String methods, HashMap, arrays, f-strings, functions
+//
+// Run: fj run examples/cli_tool_demo.fj
+//   or fj demo cli
+
+// ── Table Formatter ──────────────────────────────────────────────
+
+fn pad_right(s: str, width: i64) -> str {
+    let mut result = s
+    while len(result) < width {
+        result = result + " "
+    }
+    result
+}
+
+fn table_separator(widths: [i64]) -> str {
+    let mut line = "+"
+    for i in 0..len(widths) {
+        let w = widths[i]
+        for j in 0..w + 2 {
+            line = line + "-"
+        }
+        line = line + "+"
+    }
+    line
+}
+
+fn table_row(cells: [str], widths: [i64]) -> str {
+    let mut line = "| "
+    for i in 0..len(cells) {
+        let cell = cells[i]
+        let w = widths[i]
+        line = line + pad_right(cell, w) + " | "
+    }
+    line
+}
+
+fn print_table(headers: [str], rows: [[str]], widths: [i64]) {
+    let sep = table_separator(widths)
+    println(sep)
+    println(table_row(headers, widths))
+    println(sep)
+    for i in 0..len(rows) {
+        println(table_row(rows[i], widths))
+    }
+    println(sep)
+}
+
+// ── Progress Bar ─────────────────────────────────────────────────
+
+fn progress_bar(current: i64, total: i64, width: i64) -> str {
+    let filled = current * width / total
+    let mut bar = "["
+    for i in 0..width {
+        if i < filled {
+            bar = bar + "#"
+        } else {
+            bar = bar + "."
+        }
+    }
+    let pct = current * 100 / total
+    f"{bar}] {pct}%"
+}
+
+// ── Status Formatting ────────────────────────────────────────────
+
+fn status_pass(msg: str) -> str {
+    f"[PASS] {msg}"
+}
+
+fn status_warn(msg: str) -> str {
+    f"[WARN] {msg}"
+}
+
+fn status_fail(msg: str) -> str {
+    f"[FAIL] {msg}"
+}
+
+// ── Main ─────────────────────────────────────────────────────────
+
+fn demo_args() {
+    println("-- Argument Parser --")
+    // Simulate parsed args using a map
+    let args = map_new()
+    let args = map_insert(args, "output", "build")
+    let args = map_insert(args, "verbose", "true")
+    let args = map_insert(args, "format", "json")
+    println(f"  Input: --output build --verbose --format json")
+    println(f"  output:  {map_get_or(args, "output", "default")}")
+    println(f"  verbose: {map_get_or(args, "verbose", "false")}")
+    println(f"  format:  {map_get_or(args, "format", "text")}")
+}
+
+fn demo_table() {
+    println("-- Table Formatter --")
+    let headers = ["Name", "Status", "Size"]
+    let rows = [
+        ["main.fj", "compiled", "2.4 KB"],
+        ["lib.fj", "compiled", "1.8 KB"],
+        ["test.fj", "pending", "0.9 KB"],
+    ]
+    let widths = [12, 10, 8]
+    print_table(headers, rows, widths)
+}
+
+fn demo_progress() {
+    println("-- Progress Bar --")
+    let steps = [0, 2, 5, 7, 10]
+    for i in 0..len(steps) {
+        let step = steps[i]
+        println(f"  {progress_bar(step, 10, 20)}")
+    }
+}
+
+fn demo_status() {
+    println("-- Build Status --")
+    println(f"  {status_pass("main.fj compiled successfully")}")
+    println(f"  {status_pass("lib.fj compiled successfully")}")
+    println(f"  {status_warn("test.fj has unused variable")}")
+    println(f"  {status_fail("broken.fj type mismatch at line 42")}")
+    println(f"  Summary: 2 passed, 1 warning, 1 failed")
+}
+
+fn main() {
+    println("=== Fajar Lang — CLI Tool Demo ===")
+    println("")
+
+    demo_args()
+    println("")
+
+    demo_table()
+    println("")
+
+    demo_progress()
+    println("")
+
+    demo_status()
+    println("")
+
+    println("CLI tool demo complete.")
+}

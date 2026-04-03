@@ -481,10 +481,7 @@ fn ke001_map_insert() {
 }
 #[test]
 fn ke001_map_get() {
-    expect_error(
-        r#"@kernel fn f() { let m = {} map_get(m, "k") }"#,
-        "KE001",
-    );
+    expect_error(r#"@kernel fn f() { let m = {} map_get(m, "k") }"#, "KE001");
 }
 #[test]
 fn ke001_map_remove() {
@@ -720,4 +717,152 @@ fn gen_fn_for_loop_iteration() {
         for x in nums() { println(x) }",
     );
     assert!(out.contains("1") && out.contains("2"), "got: {out}");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// V19: User macro_rules! with $x metavariable
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn macro_single_arg_double() {
+    let out = run_capture(
+        "macro_rules! double { ($x:expr) => { $x * 2 } }
+         println(double!(21))",
+    );
+    assert_eq!(out.trim(), "42");
+}
+
+#[test]
+fn macro_single_arg_square() {
+    let out = run_capture(
+        "macro_rules! square { ($x:expr) => { $x * $x } }
+         println(square!(5))",
+    );
+    assert_eq!(out.trim(), "25");
+}
+
+#[test]
+fn macro_multi_arg_add() {
+    let out = run_capture(
+        "macro_rules! add { ($a:expr, $b:expr) => { $a + $b } }
+         println(add!(10, 20))",
+    );
+    assert_eq!(out.trim(), "30");
+}
+
+#[test]
+fn macro_multi_arg_max() {
+    let out = run_capture(
+        "macro_rules! max { ($a:expr, $b:expr) => { if $a > $b { $a } else { $b } } }
+         println(max!(3, 7))",
+    );
+    assert_eq!(out.trim(), "7");
+}
+
+#[test]
+fn macro_nested_invocation() {
+    let out = run_capture(
+        "macro_rules! double { ($x:expr) => { $x * 2 } }
+         macro_rules! add { ($a:expr, $b:expr) => { $a + $b } }
+         println(double!(add!(3, 4)))",
+    );
+    assert_eq!(out.trim(), "14");
+}
+
+#[test]
+fn macro_in_expression_context() {
+    let out = run_capture(
+        "macro_rules! square { ($x:expr) => { $x * $x } }
+         macro_rules! double { ($x:expr) => { $x * 2 } }
+         let result = square!(6) + double!(7)
+         println(result)",
+    );
+    assert_eq!(out.trim(), "50");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// V19: Pattern match destructuring (Ok/Err/Some/None)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn pattern_match_ok_destructure() {
+    let out = run_capture(
+        "let r = Ok(42)
+         match r { Ok(val) => println(val), Err(e) => println(e) }",
+    );
+    assert_eq!(out.trim(), "42");
+}
+
+#[test]
+fn pattern_match_err_destructure() {
+    let out = run_capture(
+        r#"let r = Err("oops")
+         match r { Ok(val) => println(val), Err(e) => println(e) }"#,
+    );
+    assert_eq!(out.trim(), "oops");
+}
+
+#[test]
+fn pattern_match_some_destructure() {
+    let out = run_capture(
+        r#"let m = Some("hello")
+         match m { Some(v) => println(v), None => println("none") }"#,
+    );
+    assert_eq!(out.trim(), "hello");
+}
+
+#[test]
+fn pattern_match_none_destructure() {
+    let out = run_capture(
+        r#"let m = None
+         match m { Some(v) => println(v), None => println("none") }"#,
+    );
+    assert_eq!(out.trim(), "none");
+}
+
+#[test]
+fn pattern_match_as_expression() {
+    let out = run_capture(
+        "let doubled = match Ok(50) { Ok(n) => n * 2, Err(e) => 0 }
+         println(doubled)",
+    );
+    assert_eq!(out.trim(), "100");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// V19: Real async I/O (async_sleep, async_spawn, async_join)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn async_sleep_blocks_then_continues() {
+    let out = run_capture(
+        r#"async_sleep(50)
+         println("done")"#,
+    );
+    assert_eq!(out.trim(), "done");
+}
+
+#[test]
+fn async_spawn_join_user_function() {
+    let out = run_capture(
+        "fn compute() -> i64 { 42 }
+         let t = async_spawn(\"compute\")
+         let r = async_join(t)
+         println(r)",
+    );
+    assert_eq!(out.trim(), "42");
+}
+
+#[test]
+fn async_spawn_join_multiple_tasks() {
+    let out = run_capture(
+        "fn task_a() -> i64 { 10 }
+         fn task_b() -> i64 { 20 }
+         let t1 = async_spawn(\"task_a\")
+         let t2 = async_spawn(\"task_b\")
+         let r1 = async_join(t1)
+         let r2 = async_join(t2)
+         println(r1 + r2)",
+    );
+    assert_eq!(out.trim(), "30");
 }

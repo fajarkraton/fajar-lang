@@ -106,7 +106,11 @@ fn h3_1_tokenize_1000_lines_under_200ms() {
 
 #[test]
 fn h3_2_fibonacci_20_under_200ms() {
-    let src = r#"
+    // Run in a thread with a larger stack to avoid overflow in debug mode.
+    let result = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let src = r#"
 fn fib(n: i64) -> i64 {
     if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }
 }
@@ -114,20 +118,24 @@ fn main() -> void {
     println(fib(20))
 }
 "#;
-    let mut interp = Interpreter::new_capturing();
-    interp.eval_source(src).expect("eval_source failed");
+            let mut interp = Interpreter::new_capturing();
+            interp.eval_source(src).expect("eval_source failed");
 
-    let start = Instant::now();
-    interp.call_main().expect("call_main failed");
-    let elapsed = start.elapsed();
+            let start = Instant::now();
+            interp.call_main().expect("call_main failed");
+            let elapsed = start.elapsed();
 
-    let output = interp.get_output();
-    assert_eq!(output.last().expect("no output"), "6765");
-    assert!(
-        elapsed.as_millis() < 200,
-        "fibonacci(20) took {}ms, expected < 200ms",
-        elapsed.as_millis()
-    );
+            let output = interp.get_output();
+            assert_eq!(output.last().expect("no output"), "6765");
+            assert!(
+                elapsed.as_millis() < 200,
+                "fibonacci(20) took {}ms, expected < 200ms",
+                elapsed.as_millis()
+            );
+        })
+        .expect("thread spawn failed")
+        .join();
+    result.expect("fibonacci test panicked");
 }
 
 #[test]

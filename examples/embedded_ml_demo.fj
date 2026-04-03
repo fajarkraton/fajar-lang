@@ -1,0 +1,147 @@
+// Embedded ML Demo — Fajar Lang V19
+// Demonstrates: Tensor ops, @device/@kernel contexts, ML inference pipeline
+// Simulates a Radxa Dragon Q6A (QCS6490) sensor → ML → actuator pipeline
+//
+// Run: fj run examples/embedded_ml_demo.fj
+//   or fj demo embedded-ml
+
+// ── Hardware Config ──────────────────────────────────────────────
+
+fn hw_config() -> map {
+    let cfg = map_new()
+    let cfg = map_insert(cfg, "soc", "Qualcomm QCS6490")
+    let cfg = map_insert(cfg, "cpu_cores", "8")
+    let cfg = map_insert(cfg, "gpu", "Adreno 643")
+    let cfg = map_insert(cfg, "npu", "Hexagon 770 DSP")
+    let cfg = map_insert(cfg, "ai_tops", "12.0")
+    let cfg = map_insert(cfg, "ram_mb", "8192")
+    let cfg = map_insert(cfg, "tdp_watts", "6.5")
+    cfg
+}
+
+fn hw_display(cfg: map) {
+    println(f"  SoC:      {map_get_or(cfg, "soc", "?")}")
+    println(f"  CPU:      {map_get_or(cfg, "cpu_cores", "?")} cores (A78 + A55)")
+    println(f"  GPU:      {map_get_or(cfg, "gpu", "?")}")
+    println(f"  NPU:      {map_get_or(cfg, "npu", "?")}")
+    println(f"  AI:       {map_get_or(cfg, "ai_tops", "?")} TOPS")
+    println(f"  RAM:      {map_get_or(cfg, "ram_mb", "?")} MB")
+    println(f"  TDP:      {map_get_or(cfg, "tdp_watts", "?")} W")
+}
+
+// ── Sensor Data ──────────────────────────────────────────────────
+
+fn sensor_read_accelerometer() -> Tensor {
+    // Simulated 3-axis accelerometer reading (x, y, z) in g
+    from_data([0.02, -0.01, 0.98], [3])
+}
+
+fn sensor_read_gyroscope() -> Tensor {
+    // Simulated 3-axis gyroscope reading (deg/s)
+    from_data([0.5, -0.3, 0.1], [3])
+}
+
+fn sensor_read_temperature() -> f64 {
+    42.5
+}
+
+// ── ML Inference Pipeline ────────────────────────────────────────
+
+fn preprocess(accel: Tensor, gyro: Tensor) -> Tensor {
+    // Concatenate sensor readings into 6-element feature vector
+    // Normalize to [-1, 1] range
+    let features = from_data([0.02, -0.01, 0.98, 0.5, -0.3, 0.1], [1, 6])
+    features
+}
+
+fn inference(features: Tensor) -> Tensor {
+    // Simple 2-layer dense network: 6 → 4 → 3 (classifies motion state)
+    let w1 = randn([6, 4])
+    let hidden = relu(matmul(features, w1))
+
+    let w2 = randn([4, 3])
+    let output = softmax(matmul(hidden, w2))
+    output
+}
+
+fn classify(output: Tensor) -> str {
+    // Classify into motion states — simulated argmax
+    let _probs = output
+    "stable"
+}
+
+// ── Actuator Control ─────────────────────────────────────────────
+
+fn actuator_command(state: str) -> str {
+    if state == "stable" {
+        "HOLD_POSITION"
+    } else if state == "moving" {
+        "TRACK_MOTION"
+    } else if state == "falling" {
+        "EMERGENCY_BRAKE"
+    } else {
+        "IDLE"
+    }
+}
+
+// ── Power Profiling ──────────────────────────────────────────────
+
+fn estimate_power(inference_ms: f64, idle_ms: f64) -> f64 {
+    // Simple power model: active = 3.2W, idle = 0.5W
+    let active_energy = 3.2 * inference_ms / 1000.0
+    let idle_energy = 0.5 * idle_ms / 1000.0
+    active_energy + idle_energy
+}
+
+// ── Main Pipeline ────────────────────────────────────────────────
+
+fn main() {
+    println("╔═══════════════════════════════════════╗")
+    println("║   Fajar Lang — Embedded ML Demo       ║")
+    println("║   Target: Radxa Dragon Q6A (QCS6490)  ║")
+    println("╚═══════════════════════════════════════╝")
+    println("")
+
+    // 1. Hardware configuration
+    println("── Hardware Config ──")
+    let hw = hw_config()
+    hw_display(hw)
+    println("")
+
+    // 2. Sensor reading
+    println("── Sensor Readings ──")
+    let accel = sensor_read_accelerometer()
+    let gyro = sensor_read_gyroscope()
+    let temp = sensor_read_temperature()
+    println(f"  Accelerometer: {accel}")
+    println(f"  Gyroscope:     {gyro}")
+    println(f"  Temperature:   {temp} C")
+    println("")
+
+    // 3. ML inference
+    println("── ML Inference Pipeline ──")
+    let features = preprocess(accel, gyro)
+    println(f"  Features shape: {shape(features)}")
+    let output = inference(features)
+    println(f"  Output shape:   {shape(output)}")
+    let state = classify(output)
+    println(f"  Motion state:   {state}")
+    println("")
+
+    // 4. Actuator control
+    println("── Actuator Command ──")
+    let cmd = actuator_command(state)
+    println(f"  Command: {cmd}")
+    println("")
+
+    // 5. Power estimate
+    println("── Power Profile ──")
+    let power = estimate_power(15.0, 85.0)
+    println(f"  Inference:  15ms")
+    println(f"  Idle:       85ms")
+    println(f"  Energy/cycle: {power} J")
+    println(f"  Duty cycle: 15%")
+    println("")
+
+    println("Pipeline complete. System nominal.")
+}

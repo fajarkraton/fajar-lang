@@ -1116,6 +1116,10 @@ impl TypeChecker {
                 }
                 Type::Void
             }
+            Expr::MacroVar { .. } => {
+                // Macro vars are resolved at macro expansion time.
+                Type::Unknown
+            }
         }
     }
 

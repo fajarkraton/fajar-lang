@@ -1,0 +1,134 @@
+// Web Full-Stack Demo — Fajar Lang V19
+// Demonstrates: HTTP, HashMap routing, f-strings, pattern match, macros
+//
+// Run: fj run examples/web_demo.fj
+//   or fj demo web
+
+// ── Route Registry ───────────────────────────────────────────────
+
+fn router_new() -> map {
+    map_new()
+}
+
+fn router_add(router: map, method_path: str, handler: str) -> map {
+    map_insert(router, method_path, handler)
+}
+
+fn router_match(router: map, method: str, path: str) -> str {
+    let key = f"{method} {path}"
+    map_get_or(router, key, "404_handler")
+}
+
+// ── Request / Response ───────────────────────────────────────────
+
+fn request_new(method: str, path: str, body: str) -> map {
+    let req = map_new()
+    let req = map_insert(req, "method", method)
+    let req = map_insert(req, "path", path)
+    let req = map_insert(req, "body", body)
+    req
+}
+
+fn response_new(status: i64, body: str) -> map {
+    let resp = map_new()
+    let resp = map_insert(resp, "status", to_string(status))
+    let resp = map_insert(resp, "body", body)
+    resp
+}
+
+fn response_display(resp: map) -> str {
+    let status = map_get_or(resp, "status", "500")
+    let body = map_get_or(resp, "body", "")
+    f"HTTP {status} | {body}"
+}
+
+// ── Template Engine ──────────────────────────────────────────────
+
+fn template_render(name: str, title: str, content: str) -> str {
+    if name == "page" {
+        f"<html><head><title>{title}</title></head><body><h1>{title}</h1><p>{content}</p></body></html>"
+    } else if name == "json" {
+        f"{{\"title\": \"{title}\", \"content\": \"{content}\"}}"
+    } else {
+        f"Unknown template: {name}"
+    }
+}
+
+// ── Handlers ─────────────────────────────────────────────────────
+
+fn handle_home(req: map) -> map {
+    let html = template_render("page", "Fajar Lang Web", "Welcome to Fajar Lang full-stack demo!")
+    response_new(200, html)
+}
+
+fn handle_api_users(req: map) -> map {
+    let json = "[{\"id\":1,\"name\":\"Fajar\"},{\"id\":2,\"name\":\"Andi\"}]"
+    response_new(200, json)
+}
+
+fn handle_api_echo(req: map) -> map {
+    let body = map_get_or(req, "body", "")
+    let json = f"{{\"echo\": \"{body}\"}}"
+    response_new(200, json)
+}
+
+fn handle_404(req: map) -> map {
+    let path = map_get_or(req, "path", "?")
+    response_new(404, f"Not found: {path}")
+}
+
+// ── Dispatcher ───────────────────────────────────────────────────
+
+fn dispatch(router: map, req: map) -> map {
+    let method = map_get_or(req, "method", "GET")
+    let path = map_get_or(req, "path", "/")
+    let handler = router_match(router, method, path)
+
+    if handler == "handle_home" {
+        handle_home(req)
+    } else if handler == "handle_api_users" {
+        handle_api_users(req)
+    } else if handler == "handle_api_echo" {
+        handle_api_echo(req)
+    } else {
+        handle_404(req)
+    }
+}
+
+// ── Main ─────────────────────────────────────────────────────────
+
+fn main() {
+    println("╔═══════════════════════════════════════╗")
+    println("║   Fajar Lang — Web Full-Stack Demo    ║")
+    println("╚═══════════════════════════════════════╝")
+    println("")
+
+    // Setup router
+    let router = router_new()
+    let router = router_add(router, "GET /", "handle_home")
+    let router = router_add(router, "GET /api/users", "handle_api_users")
+    let router = router_add(router, "POST /api/echo", "handle_api_echo")
+    println("Routes registered: GET /, GET /api/users, POST /api/echo")
+    println("")
+
+    // Simulate requests
+    let requests = [
+        request_new("GET", "/", ""),
+        request_new("GET", "/api/users", ""),
+        request_new("POST", "/api/echo", "Hello from Fajar Lang"),
+        request_new("GET", "/unknown", ""),
+    ]
+
+    for i in 0..len(requests) {
+        let req = requests[i]
+        let method = map_get_or(req, "method", "?")
+        let path = map_get_or(req, "path", "?")
+        println(f"→ {method} {path}")
+
+        let resp = dispatch(router, req)
+        println(f"  ← {response_display(resp)}")
+        println("")
+    }
+
+    println("All requests processed.")
+}

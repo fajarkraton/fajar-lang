@@ -120,10 +120,13 @@ enum Command {
         #[arg(short, long, default_value = "playground")]
         output: String,
     },
-    /// Run a built-in demo (drone, os, network, ffi).
+    /// Run a built-in demo (drone, os, network, ffi, database, web, embedded-ml, cli, ...).
     Demo {
-        /// Demo name: drone, os, network, ffi
-        name: String,
+        /// Demo name (omit to list all demos)
+        name: Option<String>,
+        /// List all available demos
+        #[arg(long)]
+        list: bool,
     },
     /// Generate deployment artifacts (Dockerfile, K8s manifests).
     Deploy {
@@ -470,7 +473,13 @@ fn main_inner() -> ExitCode {
         Command::Lsp => cmd_lsp(),
         Command::Pack { output, files } => cmd_pack(&output, &files),
         Command::Playground { output } => cmd_playground(&output),
-        Command::Demo { name } => cmd_demo(&name),
+        Command::Demo { name, list } => {
+            if list || name.is_none() {
+                cmd_demo_list()
+            } else {
+                cmd_demo(name.as_deref().unwrap_or(""))
+            }
+        }
         Command::Deploy {
             target,
             file,
@@ -2319,27 +2328,127 @@ fn cmd_pack(output: &str, files: &[PathBuf]) -> ExitCode {
     }
 }
 
-/// V18 3.8: Run a built-in demo by name.
-fn cmd_demo(name: &str) -> ExitCode {
-    let demo_source = match name {
-        "drone" => include_str!("../examples/drone_demo.fj"),
-        "os" => include_str!("../examples/mini_os_demo.fj"),
-        "network" | "net" => include_str!("../examples/http_echo_server.fj"),
-        "ffi" => include_str!("../examples/ffi_libc.fj"),
-        _ => {
-            eprintln!("Unknown demo: '{name}'");
-            eprintln!("Available demos: drone, os, network, ffi");
-            return ExitCode::from(EXIT_USAGE);
-        }
-    };
-    let mut interp = fajar_lang::interpreter::Interpreter::new();
-    match interp.eval_source(demo_source) {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{e}");
-            ExitCode::FAILURE
+/// All built-in demos: (name, aliases, description, source).
+fn demo_registry() -> Vec<(
+    &'static str,
+    &'static [&'static str],
+    &'static str,
+    &'static str,
+)> {
+    vec![
+        (
+            "drone",
+            &[],
+            "PID controller + thrust simulation",
+            include_str!("../examples/drone_demo.fj"),
+        ),
+        (
+            "os",
+            &[],
+            "Kernel boot, process table, scheduler",
+            include_str!("../examples/mini_os_demo.fj"),
+        ),
+        (
+            "network",
+            &["net"],
+            "HTTP echo server, DNS, TCP",
+            include_str!("../examples/http_echo_server.fj"),
+        ),
+        (
+            "ffi",
+            &[],
+            "FFI to libc (getpid, abs)",
+            include_str!("../examples/ffi_libc.fj"),
+        ),
+        (
+            "database",
+            &["db"],
+            "Connection pool, query builder, schema",
+            include_str!("../examples/database_demo.fj"),
+        ),
+        (
+            "web",
+            &["fullstack"],
+            "HTTP routing, templates, REST API",
+            include_str!("../examples/web_demo.fj"),
+        ),
+        (
+            "embedded-ml",
+            &["ml", "embedded"],
+            "Sensor → tensor → inference pipeline",
+            include_str!("../examples/embedded_ml_demo.fj"),
+        ),
+        (
+            "cli",
+            &[],
+            "Arg parser, table formatter, progress bar",
+            include_str!("../examples/cli_tool_demo.fj"),
+        ),
+        (
+            "macros",
+            &["macro"],
+            "User macro_rules! with metavariables",
+            include_str!("../examples/macros.fj"),
+        ),
+        (
+            "pattern-match",
+            &["match", "patterns"],
+            "Ok/Err/Some/None destructuring",
+            include_str!("../examples/pattern_match.fj"),
+        ),
+        (
+            "async",
+            &[],
+            "async_sleep, async_spawn, async_join",
+            include_str!("../examples/async_demo.fj"),
+        ),
+        (
+            "test-framework",
+            &["test"],
+            "@test, @should_panic, @ignore annotations",
+            include_str!("../examples/test_framework.fj"),
+        ),
+        (
+            "iterator",
+            &["iter"],
+            "Iterators, map, filter, fold",
+            include_str!("../examples/iterator_demo.fj"),
+        ),
+    ]
+}
+
+/// V19 5.5: List all available demos.
+fn cmd_demo_list() -> ExitCode {
+    println!("Available demos:\n");
+    for (name, aliases, desc, _) in demo_registry() {
+        if aliases.is_empty() {
+            println!("  {name:<16} {desc}");
+        } else {
+            let alias_str = aliases.join(", ");
+            println!("  {name:<16} {desc}  (aliases: {alias_str})");
         }
     }
+    println!("\nUsage: fj demo <name>");
+    ExitCode::SUCCESS
+}
+
+/// V18 3.8: Run a built-in demo by name.
+fn cmd_demo(name: &str) -> ExitCode {
+    for (demo_name, aliases, _, source) in demo_registry() {
+        if name == demo_name || aliases.contains(&name) {
+            let mut interp = fajar_lang::interpreter::Interpreter::new();
+            return match interp.eval_source(source) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
+            };
+        }
+    }
+    eprintln!("Unknown demo: '{name}'");
+    eprintln!("Run 'fj demo --list' to see available demos.");
+    ExitCode::from(EXIT_USAGE)
 }
 
 /// V18 4.6: Generate deployment artifacts.
@@ -5267,15 +5376,9 @@ fn cmd_bindgen(
                 .collect();
             if !fn_name.is_empty() {
                 // Count params
-                let param_count = binding
-                    .fajar_source
-                    .matches(':')
-                    .count()
-                    .saturating_sub(0); // rough param count
+                let param_count = binding.fajar_source.matches(':').count().saturating_sub(0); // rough param count
                 println!("// Register: {fn_name}");
-                println!(
-                    "ffi_register(0, \"{fn_name}\", \"{fn_name}\", {param_count})"
-                );
+                println!("ffi_register(0, \"{fn_name}\", \"{fn_name}\", {param_count})");
             }
         }
         println!("{}", binding.fajar_source);

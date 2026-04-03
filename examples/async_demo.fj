@@ -1,0 +1,17 @@
+// Async I/O demo - Fajar Lang V19
+// Demonstrates real async_sleep, async_spawn, and async_join.
+
+// 1. Direct sleep (blocks for real)
+println("Sleeping 100ms...")
+async_sleep(100)
+println("Awake!")
+
+// 2. Spawn parallel tasks
+fn task_a() -> i64 { 10 }
+fn task_b() -> i64 { 20 }
+
+let t1 = async_spawn("task_a")
+let t2 = async_spawn("task_b")
+let r1 = async_join(t1)
+let r2 = async_join(t2)
+println(r1 + r2)

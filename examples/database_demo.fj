@@ -1,0 +1,142 @@
+// Database Client Demo — Fajar Lang V19
+// Demonstrates: HashMap, f-strings, functions, arrays
+//
+// Run: fj run examples/database_demo.fj
+//   or fj demo database
+
+// ── Query Builder ────────────────────────────────────────────────
+
+fn query_select(table: str, columns: str) -> str {
+    f"SELECT {columns} FROM {table}"
+}
+
+fn query_where(base: str, condition: str) -> str {
+    f"{base} WHERE {condition}"
+}
+
+fn query_order(base: str, col: str, dir: str) -> str {
+    f"{base} ORDER BY {col} {dir}"
+}
+
+fn query_limit(base: str, n: i64) -> str {
+    f"{base} LIMIT {to_string(n)}"
+}
+
+// ── Row Mapper ───────────────────────────────────────────────────
+
+fn row_set(row: map, key: str, val: str) -> map {
+    map_insert(row, key, val)
+}
+
+fn row_display(row: map) -> str {
+    let keys = map_keys(row)
+    let mut result = "{ "
+    for i in 0..len(keys) {
+        let k = keys[i]
+        let v = map_get_or(row, k, "null")
+        if i > 0 {
+            result = result + ", "
+        }
+        result = f"{result}{k}: {v}"
+    }
+    result + " }"
+}
+
+// ── Schema Introspection ─────────────────────────────────────────
+
+fn schema_describe(table: str) -> map {
+    let schema = map_new()
+    if table == "users" {
+        let schema = map_insert(schema, "id", "INTEGER PRIMARY KEY")
+        let schema = map_insert(schema, "name", "TEXT NOT NULL")
+        let schema = map_insert(schema, "email", "TEXT UNIQUE")
+        let schema = map_insert(schema, "created_at", "TIMESTAMP DEFAULT NOW")
+        schema
+    } else if table == "posts" {
+        let schema = map_insert(schema, "id", "INTEGER PRIMARY KEY")
+        let schema = map_insert(schema, "user_id", "INTEGER REFERENCES users(id)")
+        let schema = map_insert(schema, "title", "TEXT NOT NULL")
+        let schema = map_insert(schema, "body", "TEXT")
+        schema
+    } else {
+        schema
+    }
+}
+
+// ── Connection Pool ──────────────────────────────────────────────
+
+fn pool_demo(url: str, max_conns: i64) {
+    println(f"  Pool: {url} (max {max_conns})")
+    let mut active = 0
+    // Checkout 4 connections (max is 3)
+    for i in 0..4 {
+        if active < max_conns {
+            active = active + 1
+            println(f"  [pool] Checkout OK ({active}/{max_conns})")
+        } else {
+            println(f"  [pool] ERROR: Pool exhausted ({active}/{max_conns})")
+        }
+    }
+    // Return one
+    active = active - 1
+    println(f"  [pool] Returned. Active: {active}/{max_conns}")
+}
+
+// ── Main ─────────────────────────────────────────────────────────
+
+fn main() {
+    println("=== Fajar Lang — Database Client Demo ===")
+    println("")
+
+    // 1. Connection pool
+    println("-- Connection Pool --")
+    pool_demo("postgres://localhost/mydb", 3)
+    println("")
+
+    // 2. Query builder (fluent API)
+    println("-- Query Builder --")
+    let q = query_select("users", "id, name, email")
+    let q = query_where(q, "active = true")
+    let q = query_order(q, "name", "ASC")
+    let q = query_limit(q, 25)
+    println(f"  SQL: {q}")
+    println("")
+
+    // 3. Row mapping
+    println("-- Row Mapper --")
+    let row1 = map_new()
+    let row1 = row_set(row1, "id", "1")
+    let row1 = row_set(row1, "name", "Fajar")
+    let row1 = row_set(row1, "email", "fajar@primecore.id")
+    println(f"  Row: {row_display(row1)}")
+
+    let row2 = map_new()
+    let row2 = row_set(row2, "id", "2")
+    let row2 = row_set(row2, "name", "Andi")
+    let row2 = row_set(row2, "email", "andi@example.com")
+    println(f"  Row: {row_display(row2)}")
+    println("")
+
+    // 4. Schema introspection
+    println("-- Schema: users --")
+    let schema = schema_describe("users")
+    let cols = map_keys(schema)
+    for i in 0..len(cols) {
+        let col = cols[i]
+        let typ = map_get_or(schema, col, "?")
+        println(f"  {col}: {typ}")
+    }
+    println("")
+
+    println("-- Schema: posts --")
+    let schema = schema_describe("posts")
+    let cols = map_keys(schema)
+    for i in 0..len(cols) {
+        let col = cols[i]
+        let typ = map_get_or(schema, col, "?")
+        println(f"  {col}: {typ}")
+    }
+    println("")
+
+    println("Done. All queries simulated successfully.")
+}

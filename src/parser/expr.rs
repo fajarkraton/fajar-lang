@@ -393,6 +393,17 @@ impl Parser {
                 }
             }
 
+            // V19: Macro metavariable `$x` — only valid inside macro_rules! body
+            TokenKind::Dollar if self.in_macro_body => {
+                let start = token.span.start;
+                self.advance(); // eat `$`
+                let (name, name_span) = self.expect_ident()?;
+                Ok(Expr::MacroVar {
+                    name,
+                    span: Span::new(start, name_span.end),
+                })
+            }
+
             _ => Err(ParseError::ExpectedExpression {
                 line: token.line,
                 col: token.col,
@@ -681,6 +692,11 @@ impl Parser {
                 }
                 TokenKind::Fn | TokenKind::Struct | TokenKind::Union | TokenKind::Enum => {
                     let item = self.parse_item_or_stmt()?;
+                    stmts.push(Stmt::Item(Box::new(item)));
+                }
+                // V19: macro_rules! inside blocks
+                TokenKind::Ident(name) if name == "macro_rules" => {
+                    let item = self.parse_macro_rules_def()?;
                     stmts.push(Stmt::Item(Box::new(item)));
                 }
                 _ => {

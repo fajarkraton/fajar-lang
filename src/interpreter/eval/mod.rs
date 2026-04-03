@@ -632,7 +632,13 @@ pub struct Interpreter {
     #[allow(clippy::type_complexity)]
     user_macros: HashMap<String, Vec<(Vec<String>, Box<Expr>)>>,
     /// V18: Channel pairs for actor-style message passing.
-    channels: HashMap<i64, (std::sync::mpsc::Sender<Value>, Option<std::sync::mpsc::Receiver<Value>>)>,
+    channels: HashMap<
+        i64,
+        (
+            std::sync::mpsc::Sender<Value>,
+            Option<std::sync::mpsc::Receiver<Value>>,
+        ),
+    >,
     /// V18: Next channel ID.
     next_channel_id: i64,
 }
@@ -1004,6 +1010,8 @@ impl Interpreter {
             "println",
             "len",
             "type_of",
+            "const_type_name",
+            "const_field_names",
             "push",
             "pop",
             "to_string",
@@ -1068,6 +1076,7 @@ impl Interpreter {
             "map_new",
             "map_insert",
             "map_get",
+            "map_get_or",
             "map_remove",
             "map_contains_key",
             "map_keys",
@@ -1742,8 +1751,8 @@ impl Interpreter {
                         body: handler.body.clone(),
                         closure_env: std::rc::Rc::clone(&self.env),
                         is_async: false,
-                    is_gen: false,
-                    requires: vec![],
+                        is_gen: false,
+                        requires: vec![],
                     };
                     self.env
                         .borrow_mut()
@@ -1846,20 +1855,19 @@ impl Interpreter {
                 let mut arms = Vec::new();
                 for arm in &mdef.arms {
                     // Extract parameter names from pattern: ($x:expr) → ["x"]
+                    // Pattern is stored as raw string with spaces between tokens,
+                    // e.g. "$ x : expr" — so trim leading whitespace after splitting on $.
                     let params: Vec<String> = arm
                         .pattern
                         .split('$')
                         .skip(1)
                         .filter_map(|s| {
-                            let name: String = s
+                            let trimmed = s.trim_start();
+                            let name: String = trimmed
                                 .chars()
                                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                                 .collect();
-                            if name.is_empty() {
-                                None
-                            } else {
-                                Some(name)
-                            }
+                            if name.is_empty() { None } else { Some(name) }
                         })
                         .collect();
                     arms.push((params, arm.body.clone()));
@@ -2219,9 +2227,9 @@ impl Interpreter {
                     for (params, body) in &arms {
                         if params.len() == arg_vals.len() || params.is_empty() {
                             // Bind parameters in a new scope
-                            let macro_env = Rc::new(RefCell::new(
-                                Environment::new_with_parent(Rc::clone(&self.env)),
-                            ));
+                            let macro_env = Rc::new(RefCell::new(Environment::new_with_parent(
+                                Rc::clone(&self.env),
+                            )));
                             for (param, val) in params.iter().zip(arg_vals.iter()) {
                                 macro_env.borrow_mut().define(param.clone(), val.clone());
                             }
@@ -2257,6 +2265,12 @@ impl Interpreter {
                 // Outside generator — just return the value
                 Ok(val)
             }
+            // V19: Macro metavariable — look up in environment (bound during macro expansion)
+            Expr::MacroVar { name, .. } => self
+                .env
+                .borrow()
+                .lookup(name)
+                .ok_or_else(|| RuntimeError::UndefinedVariable(format!("${name}")).into()),
         }
     }
 
@@ -2668,7 +2682,7 @@ impl Interpreter {
                     ))
                     .into());
                 }
-                Ok(_) => {} // non-bool @requires — skip
+                Ok(_) => {}  // non-bool @requires — skip
                 Err(_) => {} // evaluation error — skip
             }
         }

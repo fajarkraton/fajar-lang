@@ -1,0 +1,35 @@
+// Pattern match destructuring - Fajar Lang V19
+// Demonstrates Ok/Err/Some/None destructuring in match expressions.
+
+// Result destructuring
+let success = Ok(42)
+match success {
+    Ok(val) => println(val),
+    Err(e) => println(e),
+}
+
+let failure = Err("file not found")
+match failure {
+    Ok(val) => println(val),
+    Err(e) => println(e),
+}
+
+// Option destructuring
+let present = Some("hello")
+match present {
+    Some(v) => println(v),
+    None => println("nothing"),
+}
+
+let absent = None
+match absent {
+    Some(v) => println(v),
+    None => println("got none"),
+}
+
+// Match as expression
+let doubled = match Ok(50) {
+    Ok(n) => n * 2,
+    Err(e) => 0,
+}
+println(doubled)

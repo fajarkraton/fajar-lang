@@ -278,7 +278,8 @@ fn analyze_expr(
         | Expr::InlineAsm { .. }
         | Expr::FString { .. }
         | Expr::MacroInvocation { .. }
-        | Expr::Yield { .. } => {}
+        | Expr::Yield { .. }
+        | Expr::MacroVar { .. } => {}
     }
 }
 

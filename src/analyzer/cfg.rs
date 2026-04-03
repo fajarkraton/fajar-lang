@@ -282,6 +282,7 @@ impl UseCollector {
             }
             Expr::MacroInvocation { .. } => {}
             Expr::Yield { .. } => {}
+            Expr::MacroVar { .. } => {}
         }
     }
 

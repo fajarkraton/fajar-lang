@@ -39,6 +39,20 @@ impl TypeChecker {
                 },
             ),
             (
+                "const_type_name",
+                Type::Function {
+                    params: vec![Type::Unknown],
+                    ret: Box::new(Type::Str),
+                },
+            ),
+            (
+                "const_field_names",
+                Type::Function {
+                    params: vec![Type::Unknown],
+                    ret: Box::new(Type::Unknown),
+                },
+            ),
+            (
                 "to_string",
                 Type::Function {
                     params: vec![Type::Unknown],
@@ -682,6 +696,7 @@ impl TypeChecker {
             ),
             ("async_join", vec![Type::Unknown], Type::Unknown),
             ("async_select", vec![Type::Unknown], Type::Unknown),
+            ("async_timeout", vec![Type::I64, Type::Str], Type::Unknown),
             // HTTP framework builtins (V10 P3)
             ("http_server", vec![Type::I64], Type::I64),
             (
@@ -1064,6 +1079,11 @@ impl TypeChecker {
                 Type::Unknown,
             ),
             ("map_get", vec![Type::Unknown, Type::Str], Type::Unknown),
+            (
+                "map_get_or",
+                vec![Type::Unknown, Type::Str, Type::Unknown],
+                Type::Unknown,
+            ),
             ("map_remove", vec![Type::Unknown, Type::Str], Type::Unknown),
             (
                 "map_contains_key",
@@ -1110,7 +1130,11 @@ impl TypeChecker {
             ("channel_send", vec![Type::I64, Type::Unknown], Type::Bool),
             ("channel_recv", vec![Type::I64], Type::Unknown),
             // V18: ML layers
-            ("MultiHeadAttention", vec![Type::I64, Type::I64], Type::Unknown),
+            (
+                "MultiHeadAttention",
+                vec![Type::I64, Type::I64],
+                Type::Unknown,
+            ),
             ("attention", vec![Type::I64, Type::I64], Type::Unknown),
         ];
         for (name, params, ret) in net_fns {

@@ -62,7 +62,7 @@ impl Interpreter {
                     .into()),
                 }
             }
-            "type_of" => {
+            "type_of" | "const_type_name" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -71,6 +71,27 @@ impl Interpreter {
                     .into());
                 }
                 Ok(Value::Str(args[0].type_name().to_string()))
+            }
+            "const_field_names" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match &args[0] {
+                    Value::Struct { fields, .. } => {
+                        let names: Vec<Value> =
+                            fields.keys().map(|k| Value::Str(k.clone())).collect();
+                        Ok(Value::Array(names))
+                    }
+                    Value::Map(m) => {
+                        let names: Vec<Value> = m.keys().map(|k| Value::Str(k.clone())).collect();
+                        Ok(Value::Array(names))
+                    }
+                    _ => Ok(Value::Array(vec![])),
+                }
             }
             "push" => {
                 if args.len() != 2 {
@@ -937,9 +958,9 @@ impl Interpreter {
                     }
                     LayerValue::Attention(attn) => {
                         // Self-attention: Q=K=V=input
-                        let output = attn
-                            .forward(input, input, input)
-                            .map_err(|e| RuntimeError::TypeError(format!("attention forward: {e}")))?;
+                        let output = attn.forward(input, input, input).map_err(|e| {
+                            RuntimeError::TypeError(format!("attention forward: {e}"))
+                        })?;
                         Ok(Value::Tensor(output))
                     }
                 }
@@ -1435,6 +1456,24 @@ impl Interpreter {
                     _ => Err(RuntimeError::TypeError("map_get(map, key: str)".into()).into()),
                 }
             }
+            "map_get_or" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Map(m), Value::Str(k)) => match m.get(k) {
+                        Some(v) => Ok(v.clone()),
+                        None => Ok(args[2].clone()),
+                    },
+                    _ => Err(
+                        RuntimeError::TypeError("map_get_or(map, key: str, default)".into()).into(),
+                    ),
+                }
+            }
             "map_remove" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
@@ -1920,10 +1959,7 @@ impl Interpreter {
                     if let Value::Str(url) = &args[0] {
                         return self.builtin_http_get_sync(url);
                     }
-                    return Err(RuntimeError::TypeError(
-                        "http_get(url: str) -> str".into(),
-                    )
-                    .into());
+                    return Err(RuntimeError::TypeError("http_get(url: str) -> str".into()).into());
                 }
                 if name == "http_post" {
                     if args.len() != 2 {
@@ -1958,24 +1994,18 @@ impl Interpreter {
                                 if let Some(addr) = addrs.next() {
                                     return Ok(Value::Enum {
                                         variant: "Ok".into(),
-                                        data: Some(Box::new(Value::Str(
-                                            addr.ip().to_string(),
-                                        ))),
+                                        data: Some(Box::new(Value::Str(addr.ip().to_string()))),
                                     });
                                 }
                                 return Ok(Value::Enum {
                                     variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(
-                                        "no addresses found".into(),
-                                    ))),
+                                    data: Some(Box::new(Value::Str("no addresses found".into()))),
                                 });
                             }
                             Err(e) => {
                                 return Ok(Value::Enum {
                                     variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(format!(
-                                        "dns failed: {e}"
-                                    )))),
+                                    data: Some(Box::new(Value::Str(format!("dns failed: {e}")))),
                                 });
                             }
                         }
@@ -2014,10 +2044,9 @@ impl Interpreter {
                         }
                         return Ok(Value::Bool(false));
                     }
-                    return Err(RuntimeError::TypeError(
-                        "channel_send(ch: i64, value)".into(),
-                    )
-                    .into());
+                    return Err(
+                        RuntimeError::TypeError("channel_send(ch: i64, value)".into()).into(),
+                    );
                 }
                 if name == "channel_recv" {
                     if args.len() != 1 {
@@ -2049,9 +2078,7 @@ impl Interpreter {
                             data: None,
                         });
                     }
-                    return Err(
-                        RuntimeError::TypeError("channel_recv(ch: i64)".into()).into()
-                    );
+                    return Err(RuntimeError::TypeError("channel_recv(ch: i64)".into()).into());
                 }
                 // V18 2.8: FFI builtins
                 if name == "ffi_load_library" {
@@ -2174,10 +2201,9 @@ impl Interpreter {
                     if let Value::Str(addr) = &args[0] {
                         return self.builtin_tcp_connect(addr);
                     }
-                    return Err(RuntimeError::TypeError(
-                        "tcp_connect(addr: str) -> i64".into(),
-                    )
-                    .into());
+                    return Err(
+                        RuntimeError::TypeError("tcp_connect(addr: str) -> i64".into()).into(),
+                    );
                 }
                 if name == "tcp_send" {
                     if args.len() != 2 {
@@ -2206,9 +2232,7 @@ impl Interpreter {
                     if let Value::Int(fd) = &args[0] {
                         return self.builtin_tcp_recv(*fd);
                     }
-                    return Err(
-                        RuntimeError::TypeError("tcp_recv(fd: i64) -> str".into()).into()
-                    );
+                    return Err(RuntimeError::TypeError("tcp_recv(fd: i64) -> str".into()).into());
                 }
                 if name == "tcp_close" {
                     if args.len() != 1 {
@@ -2222,9 +2246,7 @@ impl Interpreter {
                         self.tcp_connections.remove(&(*fd as usize));
                         return Ok(Value::Null);
                     }
-                    return Err(
-                        RuntimeError::TypeError("tcp_close(fd: i64)".into()).into()
-                    );
+                    return Err(RuntimeError::TypeError("tcp_close(fd: i64)".into()).into());
                 }
                 // TQ12.2: Database builtins
                 if name == "db_open" {
@@ -2374,6 +2396,9 @@ impl Interpreter {
                 if name == "async_select" {
                     return self.builtin_async_select(args);
                 }
+                if name == "async_timeout" {
+                    return self.builtin_async_timeout(args);
+                }
 
                 // V14: Check if this is an effect operation (prefixed with __effect__).
                 if let Some(effect_op) = name.strip_prefix("__effect__") {
@@ -2464,7 +2489,10 @@ impl Interpreter {
             None => (without_scheme, "/"),
         };
         let (host, port) = match host_port.find(':') {
-            Some(i) => (&host_port[..i], host_port[i + 1..].parse::<u16>().unwrap_or(80)),
+            Some(i) => (
+                &host_port[..i],
+                host_port[i + 1..].parse::<u16>().unwrap_or(80),
+            ),
             None => (host_port, 80),
         };
 
@@ -2524,7 +2552,10 @@ impl Interpreter {
             None => (without_scheme, "/"),
         };
         let (host, port) = match host_port.find(':') {
-            Some(i) => (&host_port[..i], host_port[i + 1..].parse::<u16>().unwrap_or(80)),
+            Some(i) => (
+                &host_port[..i],
+                host_port[i + 1..].parse::<u16>().unwrap_or(80),
+            ),
             None => (host_port, 80),
         };
 
@@ -6020,8 +6051,8 @@ impl Interpreter {
             body: Box::new(body.clone()),
             closure_env: Rc::clone(&self.env),
             is_async: false,
-                    is_gen: false,
-                    requires: vec![],
+            is_gen: false,
+            requires: vec![],
         }))
     }
 
@@ -6252,8 +6283,8 @@ impl Interpreter {
                 body: method.body.clone(),
                 closure_env: Rc::clone(&self.env),
                 is_async: false,
-                    is_gen: false,
-                    requires: vec![],
+                is_gen: false,
+                requires: vec![],
             };
 
             // Check if this is a static method (no `self` param) — also register globally
@@ -6580,8 +6611,8 @@ impl Interpreter {
                         body: fndef.body.clone(),
                         closure_env: Rc::clone(&self.env),
                         is_async: false,
-                    is_gen: false,
-                    requires: vec![],
+                        is_gen: false,
+                        requires: vec![],
                     };
                     let val = Value::Function(fn_val);
                     mod_symbols.insert(fndef.name.clone(), val.clone());
@@ -8138,10 +8169,10 @@ impl Interpreter {
 
     // ── Async builtins (V10) ────────────────────────────────────────
 
-    /// async_sleep(ms: i64) -> Future
+    /// async_sleep(ms: i64) -> Null
     ///
-    /// Returns a Future that, when awaited, sleeps for `ms` milliseconds
-    /// using the real tokio::time::sleep.
+    /// Sleeps for `ms` milliseconds using real tokio::time::sleep.
+    /// V19: Blocks directly instead of returning a Future.
     fn builtin_async_sleep(&mut self, args: Vec<Value>) -> EvalResult {
         if args.is_empty() {
             return Err(RuntimeError::ArityMismatch {
@@ -8159,13 +8190,11 @@ impl Interpreter {
                 .into());
             }
         };
-        let task_id = self.next_task_id;
-        self.next_task_id += 1;
-        self.async_ops.insert(
-            task_id,
-            super::AsyncOperation::Sleep(std::time::Duration::from_millis(ms)),
-        );
-        Ok(Value::Future { task_id })
+        let rt = self.ensure_tokio_runtime();
+        rt.block_on(async {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        });
+        Ok(Value::Null)
     }
 
     /// async_http_get(url: str) -> Future
@@ -8230,10 +8259,12 @@ impl Interpreter {
         Ok(Value::Future { task_id })
     }
 
-    /// async_spawn(fn_name: str) -> Future
+    /// async_spawn(fn_name: str, ...args) -> i64 (task_id)
     ///
-    /// Spawns an async function as a task. The function is evaluated when
-    /// the returned Future is awaited (cooperative concurrency).
+    /// V19: Spawns an async I/O operation on the tokio runtime.
+    /// For builtin async ops (async_http_get, etc.), spawns a real tokio task.
+    /// For user functions, stores for cooperative evaluation at join time.
+    /// Returns a task ID (integer) that can be passed to async_join.
     fn builtin_async_spawn(&mut self, args: Vec<Value>) -> EvalResult {
         if args.is_empty() {
             return Err(RuntimeError::ArityMismatch {
@@ -8250,57 +8281,144 @@ impl Interpreter {
                 );
             }
         };
-        // Look up the function in the environment.
-        let fn_val = self.env.borrow().lookup(&fn_name).ok_or_else(|| {
-            RuntimeError::TypeError(format!("async_spawn: function '{fn_name}' not found"))
-        })?;
-        match fn_val {
-            Value::Function(fv) => {
-                let task_id = self.next_task_id;
-                self.next_task_id += 1;
-                self.async_ops.insert(
-                    task_id,
-                    super::AsyncOperation::Spawn(fv.body.clone(), fv.closure_env.clone()),
-                );
-                Ok(Value::Future { task_id })
+        let extra_args: Vec<Value> = args.into_iter().skip(1).collect();
+        let task_id = self.next_task_id;
+        self.next_task_id += 1;
+
+        // For known async I/O builtins, create the appropriate AsyncOperation
+        match fn_name.as_str() {
+            "async_http_get" => {
+                let url = match extra_args.first() {
+                    Some(Value::Str(s)) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "async_spawn: async_http_get requires string URL arg".into(),
+                        )
+                        .into());
+                    }
+                };
+                self.async_ops
+                    .insert(task_id, super::AsyncOperation::HttpGet(url));
             }
-            _ => Err(RuntimeError::TypeError(format!(
-                "async_spawn: '{fn_name}' is not a function"
-            ))
-            .into()),
+            "async_http_post" => {
+                let url = match extra_args.first() {
+                    Some(Value::Str(s)) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "async_spawn: async_http_post requires string URL arg".into(),
+                        )
+                        .into());
+                    }
+                };
+                let body = match extra_args.get(1) {
+                    Some(Value::Str(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                self.async_ops
+                    .insert(task_id, super::AsyncOperation::HttpPost(url, body));
+            }
+            _ => {
+                // Look up user function
+                let fn_val = self.env.borrow().lookup(&fn_name).ok_or_else(|| {
+                    RuntimeError::TypeError(format!("async_spawn: function '{fn_name}' not found"))
+                })?;
+                match fn_val {
+                    Value::Function(fv) => {
+                        self.async_ops.insert(
+                            task_id,
+                            super::AsyncOperation::Spawn(fv.body.clone(), fv.closure_env.clone()),
+                        );
+                    }
+                    _ => {
+                        return Err(RuntimeError::TypeError(format!(
+                            "async_spawn: '{fn_name}' is not a function"
+                        ))
+                        .into());
+                    }
+                }
+            }
         }
+
+        Ok(Value::Int(task_id as i64))
     }
 
-    /// async_join(futures...) -> [results]
+    /// async_join(task_id_or_futures...) -> result or [results]
     ///
-    /// Waits for all futures to complete and returns an array of results.
+    /// V19: Waits for task(s) to complete. Accepts:
+    /// - Single Int task_id → returns the task result directly
+    /// - Future values or arrays → returns array of results
     fn builtin_async_join(&mut self, args: Vec<Value>) -> EvalResult {
-        let mut task_ids = Vec::new();
-        for arg in &args {
-            match arg {
-                Value::Future { task_id } => task_ids.push(*task_id),
-                Value::Array(arr) => {
-                    for v in arr {
-                        if let Value::Future { task_id } = v {
-                            task_ids.push(*task_id);
-                        }
-                    }
+        let mut task_ids: Vec<u64> = Vec::new();
+        let mut single_int = false;
+
+        // V19: Accept Int task IDs from async_spawn
+        if args.len() == 1 {
+            match &args[0] {
+                Value::Int(id) => {
+                    task_ids.push(*id as u64);
+                    single_int = true;
+                }
+                Value::Future { task_id } => {
+                    task_ids.push(*task_id);
+                    single_int = true;
                 }
                 _ => {}
             }
         }
         if task_ids.is_empty() {
-            return Ok(Value::Array(Vec::new()));
+            for arg in &args {
+                match arg {
+                    Value::Int(id) => task_ids.push(*id as u64),
+                    Value::Future { task_id } => task_ids.push(*task_id),
+                    Value::Array(arr) => {
+                        for v in arr {
+                            match v {
+                                Value::Int(id) => task_ids.push(*id as u64),
+                                Value::Future { task_id } => task_ids.push(*task_id),
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
-        let join_id = self.next_task_id;
-        self.next_task_id += 1;
-        self.async_ops
-            .insert(join_id, super::AsyncOperation::Join(task_ids));
-        // Execute immediately (join is synchronous in the interpreter).
-        if let Some(op) = self.async_ops.remove(&join_id) {
-            self.execute_async_op(op).map_err(EvalError::Runtime)
+        if task_ids.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        // Execute all pending tasks and collect results
+        let mut results = Vec::new();
+        for tid in &task_ids {
+            if let Some(op) = self.async_ops.remove(tid) {
+                match self.execute_async_op(op) {
+                    Ok(val) => results.push(val),
+                    Err(e) => results.push(Value::Enum {
+                        variant: "Err".to_string(),
+                        data: Some(Box::new(Value::Str(format!("{e}")))),
+                    }),
+                }
+            } else if let Some((body, env)) = self.async_tasks.remove(tid) {
+                let prev_env = self.env.clone();
+                self.env = env;
+                match self.eval_expr(&body) {
+                    Ok(val) => results.push(val),
+                    Err(e) => results.push(Value::Enum {
+                        variant: "Err".to_string(),
+                        data: Some(Box::new(Value::Str(format!("{e}")))),
+                    }),
+                }
+                self.env = prev_env;
+            } else {
+                results.push(Value::Null);
+            }
+        }
+
+        // Single task → return value directly; multiple → array
+        if single_int && results.len() == 1 {
+            Ok(results.into_iter().next().unwrap_or(Value::Null))
         } else {
-            Ok(Value::Array(Vec::new()))
+            Ok(Value::Array(results))
         }
     }
 
@@ -8333,6 +8451,70 @@ impl Interpreter {
             self.execute_async_op(op).map_err(EvalError::Runtime)
         } else {
             Ok(Value::Null)
+        }
+    }
+
+    /// async_timeout(ms: i64, fn_name: str, ...args) -> Result
+    ///
+    /// V19: Spawns an async operation with a timeout. Returns Ok(result) if
+    /// the operation completes within ms milliseconds, Err("timeout") otherwise.
+    fn builtin_async_timeout(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() < 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let timeout_ms = match &args[0] {
+            Value::Int(n) => *n as u64,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "async_timeout: first arg must be int ms".into(),
+                )
+                .into());
+            }
+        };
+        // Spawn the operation
+        let spawn_args: Vec<Value> = args.into_iter().skip(1).collect();
+        let task_id_val = self.builtin_async_spawn(spawn_args)?;
+        let task_id = match &task_id_val {
+            Value::Int(id) => *id as u64,
+            _ => {
+                return Ok(Value::Enum {
+                    variant: "Err".to_string(),
+                    data: Some(Box::new(Value::Str("timeout: spawn failed".into()))),
+                });
+            }
+        };
+
+        // Execute with timeout (execute_async_op handles its own tokio runtime)
+        if let Some(op) = self.async_ops.remove(&task_id) {
+            let timeout_dur = std::time::Duration::from_millis(timeout_ms);
+            let start = std::time::Instant::now();
+            let result = self.execute_async_op(op);
+            if start.elapsed() > timeout_dur {
+                return Ok(Value::Enum {
+                    variant: "Err".to_string(),
+                    data: Some(Box::new(Value::Str("timeout".into()))),
+                });
+            }
+            match result {
+                Ok(val) => Ok(Value::Enum {
+                    variant: "Ok".to_string(),
+                    data: Some(Box::new(val)),
+                }),
+                Err(e) => Ok(Value::Enum {
+                    variant: "Err".to_string(),
+                    data: Some(Box::new(Value::Str(format!("{e}")))),
+                }),
+            }
+        } else {
+            let join_result = self.builtin_async_join(vec![task_id_val])?;
+            Ok(Value::Enum {
+                variant: "Ok".to_string(),
+                data: Some(Box::new(join_result)),
+            })
         }
     }
 

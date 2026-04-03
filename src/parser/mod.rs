@@ -210,6 +210,8 @@ struct Parser {
     errors: Vec<ParseError>,
     /// Pending statements to inject after the current statement (for desugaring).
     pending_stmts: Vec<Stmt>,
+    /// V19: True when parsing a macro_rules! body — enables `$x` as MacroVar.
+    in_macro_body: bool,
 }
 
 impl Parser {
@@ -220,6 +222,7 @@ impl Parser {
             pos: 0,
             errors: Vec::new(),
             pending_stmts: Vec::new(),
+            in_macro_body: false,
         }
     }
 

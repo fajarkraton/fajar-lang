@@ -343,7 +343,11 @@ impl Parser {
 
             // => { template }
             self.expect(&TokenKind::FatArrow)?;
+            // V19: Enable $x metavariable parsing inside macro body
+            let prev_macro_body = self.in_macro_body;
+            self.in_macro_body = true;
             let body = self.parse_block_expr()?;
+            self.in_macro_body = prev_macro_body;
             let arm_end = body.span().end;
 
             arms.push(MacroArm {

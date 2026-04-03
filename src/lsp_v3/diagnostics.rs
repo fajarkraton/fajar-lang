@@ -359,6 +359,99 @@ pub fn deprecated_diagnostic(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// L3.11: Suggest Cast for SE004 (Type Mismatch)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Suggests a cast/conversion for a type mismatch between `expected` and `found`.
+/// Returns `(title, replacement_suffix)` if a conversion exists, e.g.:
+///   ("Convert with `to_int()`", "to_int({expr})")
+pub fn suggest_cast(expected: &str, found: &str, expr: &str) -> Option<QuickFix> {
+    let (title, new_text) = match (expected, found) {
+        ("i64" | "i32", "str") => (
+            format!("Convert with `to_int({expr})`"),
+            format!("to_int({expr})"),
+        ),
+        ("f64" | "f32", "str") => (
+            format!("Convert with `to_float({expr})`"),
+            format!("to_float({expr})"),
+        ),
+        ("str", "i64" | "i32" | "f64" | "f32" | "bool") => (
+            format!("Convert with `to_string({expr})`"),
+            format!("to_string({expr})"),
+        ),
+        ("f64", "i64" | "i32") | ("f32", "i64" | "i32") => (
+            format!("Cast with `{expr} as {expected}`"),
+            format!("{expr} as {expected}"),
+        ),
+        ("i64", "f64" | "f32") | ("i32", "f64" | "f32") => (
+            format!("Cast with `{expr} as {expected}`"),
+            format!("{expr} as {expected}"),
+        ),
+        ("bool", "i64" | "i32") => (format!("Compare: `{expr} != 0`"), format!("{expr} != 0")),
+        _ => return None,
+    };
+
+    Some(QuickFix {
+        title,
+        kind: QuickFixKind::FixTypo {
+            wrong: expr.to_string(),
+            suggestion: new_text,
+            line: 0,
+            start_char: 0,
+            end_char: 0,
+        },
+        is_preferred: true,
+    })
+}
+
+/// Converts a `QuickFixKind` into `(title, new_text, line, start_char, end_char)` for
+/// creating LSP TextEdits. Returns None for kinds that don't produce simple text replacements.
+pub fn quickfix_to_edit(fix: &QuickFix) -> Option<(String, String, u32, u32, u32)> {
+    match &fix.kind {
+        QuickFixKind::FixTypo {
+            suggestion,
+            line,
+            start_char,
+            end_char,
+            ..
+        } => Some((
+            fix.title.clone(),
+            suggestion.clone(),
+            *line,
+            *start_char,
+            *end_char,
+        )),
+        QuickFixKind::ReplaceDeprecated {
+            new_api,
+            line,
+            start_char,
+            end_char,
+            ..
+        } => Some((
+            fix.title.clone(),
+            new_api.clone(),
+            *line,
+            *start_char,
+            *end_char,
+        )),
+        QuickFixKind::RemoveUnused {
+            start_line,
+            end_line,
+        } => Some((fix.title.clone(), String::new(), *start_line, 0, *end_line)),
+        QuickFixKind::MakeMutable {
+            line, character, ..
+        } => Some((
+            fix.title.clone(),
+            "mut ".to_string(),
+            *line,
+            *character,
+            *character,
+        )),
+        _ => None,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -528,5 +621,47 @@ mod tests {
         assert_eq!(format!("{}", DiagnosticSeverity::Error), "error");
         assert_eq!(format!("{}", DiagnosticSeverity::Warning), "warning");
         assert_eq!(format!("{}", DiagnosticSeverity::Hint), "hint");
+    }
+
+    // L3.11: suggest_cast for SE004
+    #[test]
+    fn l3_11_suggest_cast_str_to_int() {
+        let fix = suggest_cast("i64", "str", "x");
+        assert!(fix.is_some());
+        let fix = fix.unwrap();
+        assert!(fix.title.contains("to_int"));
+        assert!(fix.is_preferred);
+    }
+
+    #[test]
+    fn l3_11_suggest_cast_int_to_str() {
+        let fix = suggest_cast("str", "i64", "count");
+        assert!(fix.is_some());
+        let fix = fix.unwrap();
+        assert!(fix.title.contains("to_string"));
+    }
+
+    #[test]
+    fn l3_11_suggest_cast_int_to_float() {
+        let fix = suggest_cast("f64", "i64", "n");
+        assert!(fix.is_some());
+        let fix = fix.unwrap();
+        assert!(fix.title.contains("as f64"));
+    }
+
+    #[test]
+    fn l3_11_suggest_cast_unknown_types() {
+        let fix = suggest_cast("Tensor", "Array", "data");
+        assert!(fix.is_none());
+    }
+
+    #[test]
+    fn l3_11_quickfix_to_edit() {
+        let fix = suggest_cast("i64", "str", "input").unwrap();
+        let edit = quickfix_to_edit(&fix);
+        assert!(edit.is_some());
+        let (title, new_text, _, _, _) = edit.unwrap();
+        assert!(title.contains("to_int"));
+        assert_eq!(new_text, "to_int(input)");
     }
 }

@@ -861,11 +861,14 @@ impl LanguageServer for FajarLspBackend {
                 let col = params.text_document_position.position.character as usize;
                 if let Some(current_line) = context_lines.get(line_idx) {
                     let ctx = crate::lsp_v2::completion::analyze_expected_type(
-                        current_line, col, &context_lines,
+                        current_line,
+                        col,
+                        &context_lines,
                     );
                     let scope_vars: Vec<(&str, &str)> = Vec::new();
                     let synth = crate::lsp_v2::completion::synthesize_expressions(
-                        &ctx.expected_type, &scope_vars,
+                        &ctx.expected_type,
+                        &scope_vars,
                     );
                     for expr in synth {
                         items.push(CompletionItem {
@@ -1119,7 +1122,7 @@ impl LanguageServer for FajarLspBackend {
                     }));
                 }
 
-                // V12 I5: SE004 — Type mismatch → suggest cast
+                // V19 5.7: SE004 — Type mismatch → suggest cast via lsp_v3
                 "SE004" => {
                     if let (Some(expected), Some(found)) = (
                         extract_type_from_msg(&diag.message, "expected"),
@@ -1139,17 +1142,39 @@ impl LanguageServer for FajarLspBackend {
                             .unwrap_or(doc.source.len());
                         if end_offset <= doc.source.len() {
                             let expr_text = &doc.source[start_offset..end_offset];
-                            let edit =
-                                TextEdit::new(diag.range, format!("{expr_text} as {expected}"));
-                            let mut changes = HashMap::new();
-                            changes.insert(uri.clone(), vec![edit]);
-                            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                                title: format!("Cast `{found}` to `{expected}` with `as`"),
-                                kind: Some(CodeActionKind::QUICKFIX),
-                                diagnostics: Some(vec![diag.clone()]),
-                                edit: Some(WorkspaceEdit::new(changes)),
-                                ..Default::default()
-                            }));
+                            // Use lsp_v3 suggest_cast for structured fix
+                            if let Some(fix) = crate::lsp_v3::diagnostics::suggest_cast(
+                                &expected, &found, expr_text,
+                            ) {
+                                if let Some((title, new_text, _, _, _)) =
+                                    crate::lsp_v3::diagnostics::quickfix_to_edit(&fix)
+                                {
+                                    let edit = TextEdit::new(diag.range, new_text);
+                                    let mut changes = HashMap::new();
+                                    changes.insert(uri.clone(), vec![edit]);
+                                    actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title,
+                                        kind: Some(CodeActionKind::QUICKFIX),
+                                        diagnostics: Some(vec![diag.clone()]),
+                                        edit: Some(WorkspaceEdit::new(changes)),
+                                        is_preferred: Some(fix.is_preferred),
+                                        ..Default::default()
+                                    }));
+                                }
+                            } else {
+                                // Fallback: generic `as` cast
+                                let edit =
+                                    TextEdit::new(diag.range, format!("{expr_text} as {expected}"));
+                                let mut changes = HashMap::new();
+                                changes.insert(uri.clone(), vec![edit]);
+                                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: format!("Cast `{found}` to `{expected}` with `as`"),
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: Some(vec![diag.clone()]),
+                                    edit: Some(WorkspaceEdit::new(changes)),
+                                    ..Default::default()
+                                }));
+                            }
                         }
                     }
                 }

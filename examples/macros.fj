@@ -1,0 +1,20 @@
+// User-defined macros - Fajar Lang V19 "Precision"
+// Demonstrates macro_rules! with $x metavariable substitution.
+
+macro_rules! square { ($x:expr) => { $x * $x } }
+macro_rules! max { ($a:expr, $b:expr) => { if $a > $b { $a } else { $b } } }
+macro_rules! double { ($x:expr) => { $x * 2 } }
+macro_rules! add { ($a:expr, $b:expr) => { $a + $b } }
+
+// Single-arg macro
+println(square!(5))
+
+// Two-arg macro with control flow
+println(max!(10, 20))
+
+// Nested macro invocation
+println(double!(add!(3, 4)))
+
+// Macro in expression context
+let result = square!(6) + double!(7)
+println(result)

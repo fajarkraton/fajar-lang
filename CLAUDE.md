@@ -98,17 +98,31 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V18 "Integrity", 2026-04-03)
+### Current Totals (V19 "Precision" COMPLETE, 2026-04-03)
 
 ```
-Tests:     8,412 default (8,280 lib + 132 integ) | 8,565 with LLVM — 0 failures
-LOC:       ~475,000 lines of Rust (441+ files)
-Examples:  263 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
-Modules:   ~38 production, 1 partial, 14 framework, 3 stub (56 total)
-CLI:       27 production, 6 partial, 2 stub (35 total)
+Tests:     9,550 default (8,285 lib + 1,265 integ) | ~9,700 with LLVM — 0 failures
+LOC:       ~476,000 lines of Rust (441+ files)
+Examples:  213 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
+Modules:   ~40 production, 1 partial, 12 framework, 3 stub (56 total)
+CLI:       28 production, 5 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
 ```
+
+### V19 "Precision" (2026-04-03) — ALL 6 PHASES COMPLETE (42/42 tasks)
+- Plan: `docs/V19_PLAN.md` + `docs/V19_V21_COMPLETE_56_PLAN.md`
+- **Phase 1-4:** user macro_rules! with $x metavariable substitution (nested, multi-arg),
+  macro_rules! inside blocks, real async_sleep (tokio), async_spawn/join with user functions,
+  async_timeout, pattern match destructuring verified E2E (Ok/Err/Some/None)
+- **Phase 5:** 4 new .fj demos (database, web, embedded-ml, cli), `fj demo --list` (13 demos),
+  LSP v3 QuickFixKind wired into code_action, suggest_cast for SE004,
+  const_type_name + const_field_names builtins, map_get_or builtin
+- **Phase 6:** fj test verified, fj watch verified, f-strings in all positions
+- Integration tests: 148 context_safety + 15 V19 E2E tests
+- Examples: `examples/macros.fj`, `examples/pattern_match.fj`, `examples/async_demo.fj`,
+  `examples/database_demo.fj`, `examples/web_demo.fj`, `examples/embedded_ml_demo.fj`,
+  `examples/cli_tool_demo.fj`
 
 ### V18 "Integrity" (2026-04-03) — 35/37 tasks, 18 new real features
 - Plan: `docs/V18_HONEST_COMPLETION_PLAN.md`
@@ -116,7 +130,6 @@ Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, regis
   channels, @requires, MultiHeadAttention, fj deploy, fj demo, fj build (ELF),
   fj bindgen (FFI output), const fn, LLVM backend fixed, LSP v2 completion
 - Context enforcement: 132 integration tests (was 85)
-- Deferred: user macro $x expansion, transitive context enforcement
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): MMU, EL0, IPC, 65+ commands. Verified on Radxa Dragon Q6A.
@@ -689,5 +702,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 13.0 | V18 "Integrity" — 8,412 tests, ~475K LOC, 0 failures | ~38/56 modules production (68%) | 18 new features*
+*CLAUDE.md Version: 15.0 | V19 "Precision" COMPLETE — 9,550 tests, ~476K LOC, 0 failures | ~40/56 modules production (71%) | macros, pattern match, async, demos, LSP v3, const reflect*
 *Last Updated: 2026-04-03*

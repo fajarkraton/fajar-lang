@@ -1015,6 +1015,18 @@ pub enum Expr {
         /// Source span.
         span: Span,
     },
+
+    /// V19: Macro metavariable reference — `$x` inside a macro body.
+    ///
+    /// Only valid inside `macro_rules!` body. During macro invocation,
+    /// the interpreter resolves this by looking up the name in the
+    /// substitution environment.
+    MacroVar {
+        /// Variable name (without the `$` prefix).
+        name: String,
+        /// Source span.
+        span: Span,
+    },
 }
 
 /// A single arm in a handle expression.
@@ -1117,7 +1129,8 @@ impl Expr {
             | Expr::ResumeExpr { span, .. }
             | Expr::Comptime { span, .. }
             | Expr::MacroInvocation { span, .. }
-            | Expr::Yield { span, .. } => *span,
+            | Expr::Yield { span, .. }
+            | Expr::MacroVar { span, .. } => *span,
         }
     }
 }
