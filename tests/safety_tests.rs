@@ -384,20 +384,35 @@ fn safety_unwrap_some_succeeds() {
 
 #[test]
 fn safety_stack_overflow_infinite_recursion() {
-    let src = "fn inf(n: i64) -> i64 { inf(n) }\ninf(0)";
-    let err = eval(src).unwrap_err();
-    assert!(matches!(err, RuntimeError::StackOverflow { .. }));
+    // Needs larger stack so interpreter can catch overflow before Rust crashes
+    let result = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let src = "fn inf(n: i64) -> i64 { inf(n) }\ninf(0)";
+            let err = eval(src).unwrap_err();
+            assert!(matches!(err, RuntimeError::StackOverflow { .. }));
+        })
+        .expect("thread spawn")
+        .join();
+    result.expect("test panicked");
 }
 
 #[test]
 fn safety_stack_overflow_mutual_recursion() {
-    let src = r#"
-        fn a(n: i64) -> i64 { b(n) }
-        fn b(n: i64) -> i64 { a(n) }
-        a(0)
-    "#;
-    let err = eval(src).unwrap_err();
-    assert!(matches!(err, RuntimeError::StackOverflow { .. }));
+    let result = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let src = r#"
+                fn a(n: i64) -> i64 { b(n) }
+                fn b(n: i64) -> i64 { a(n) }
+                a(0)
+            "#;
+            let err = eval(src).unwrap_err();
+            assert!(matches!(err, RuntimeError::StackOverflow { .. }));
+        })
+        .expect("thread spawn")
+        .join();
+    result.expect("test panicked");
 }
 
 #[test]

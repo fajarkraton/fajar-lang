@@ -643,6 +643,8 @@ pub struct Interpreter {
     next_channel_id: i64,
     /// V20: Event log for debug recording (None = recording disabled).
     pub record_log: Option<crate::debugger_v2::recording::EventLog>,
+    /// V20.5: Set of simulated builtins that have already printed a warning.
+    sim_warned: HashSet<String>,
 }
 
 impl Interpreter {
@@ -704,6 +706,7 @@ impl Interpreter {
             channels: HashMap::new(),
             next_channel_id: 1,
             record_log: None,
+            sim_warned: HashSet::new(),
         };
         interp.register_builtins();
         interp
@@ -772,6 +775,7 @@ impl Interpreter {
             channels: HashMap::new(),
             next_channel_id: 1,
             record_log: None,
+            sim_warned: HashSet::new(),
         };
         interp.register_builtins();
         interp
@@ -883,6 +887,16 @@ impl Interpreter {
     /// Attaches a debug state to enable debugging (breakpoints, stepping).
     pub fn set_debug_state(&mut self, state: crate::debugger::DebugState) {
         self.debug_state = Some(state);
+    }
+
+    /// V20.5: Print one-time warning for simulated builtin.
+    fn warn_simulated(&mut self, name: &str) {
+        if !self.sim_warned.contains(name) {
+            self.sim_warned.insert(name.to_string());
+            if !self.capture_output {
+                eprintln!("[sim] {name}() is simulated — underlying mechanism is not real");
+            }
+        }
     }
 
     /// V20: Enables event recording for debug record/replay.

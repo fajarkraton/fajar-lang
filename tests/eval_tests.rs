@@ -7843,18 +7843,25 @@ fn effect_poly_multiple_calls() {
 
 #[test]
 fn t3_5_deep_nesting_if() {
-    // 50-level nested if — must not stack overflow or panic
-    let mut src = String::from("fn main() -> void {\n  let mut x: i64 = 0\n");
-    for i in 0..50 {
-        src.push_str(&format!("  if {} < 100 {{\n", i));
-    }
-    src.push_str("  x = 42\n");
-    for _ in 0..50 {
-        src.push_str("  }\n");
-    }
-    src.push_str("  println(x)\n}\n");
-    let out = eval_output(&src);
-    assert_eq!(out, vec!["42"]);
+    // 50-level nested if — needs larger stack in debug mode
+    std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let mut src = String::from("fn main() -> void {\n  let mut x: i64 = 0\n");
+            for i in 0..50 {
+                src.push_str(&format!("  if {} < 100 {{\n", i));
+            }
+            src.push_str("  x = 42\n");
+            for _ in 0..50 {
+                src.push_str("  }\n");
+            }
+            src.push_str("  println(x)\n}\n");
+            let out = eval_output(&src);
+            assert_eq!(out, vec!["42"]);
+        })
+        .expect("thread spawn")
+        .join()
+        .expect("test panicked");
 }
 
 #[test]
@@ -7890,18 +7897,25 @@ fn t3_6_large_array_literal() {
 
 #[test]
 fn t3_7_recursive_fib_deep() {
-    // fib(25) via recursion — tests deep call stack without crash
-    let src = r#"
-        fn fib(n: i64) -> i64 {
-            if n <= 1 { return n }
-            fib(n - 1) + fib(n - 2)
-        }
-        fn main() -> void {
-            println(fib(25))
-        }
-    "#;
-    let out = eval_output(src);
-    assert_eq!(out, vec!["75025"]);
+    // fib(25) via recursion — needs larger stack in debug mode
+    std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            let src = r#"
+                fn fib(n: i64) -> i64 {
+                    if n <= 1 { return n }
+                    fib(n - 1) + fib(n - 2)
+                }
+                fn main() -> void {
+                    println(fib(25))
+                }
+            "#;
+            let out = eval_output(src);
+            assert_eq!(out, vec!["75025"]);
+        })
+        .expect("thread spawn")
+        .join()
+        .expect("test panicked");
 }
 
 #[test]

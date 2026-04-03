@@ -1008,6 +1008,7 @@ impl Interpreter {
             }
             // V20 3.1: Diffusion model creation
             "diffusion_create" => {
+                self.warn_simulated("diffusion_create");
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
@@ -1039,6 +1040,7 @@ impl Interpreter {
             }
             // V20 3.2: Diffusion denoising step
             "diffusion_denoise" => {
+                self.warn_simulated("diffusion_denoise");
                 if args.len() != 3 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 3,
@@ -1080,6 +1082,7 @@ impl Interpreter {
             }
             // V20 3.3: RL agent creation
             "rl_agent_create" => {
+                self.warn_simulated("rl_agent_create");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1122,6 +1125,7 @@ impl Interpreter {
             }
             // V20 3.3b: RL agent step
             "rl_agent_step" => {
+                self.warn_simulated("rl_agent_step");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1253,12 +1257,10 @@ impl Interpreter {
                                     current = result;
                                 }
                                 Err(e) => {
-                                    let msg = format!("[pipeline] {stage_name}: FAILED — {e}");
-                                    if self.capture_output {
-                                        self.output.push(msg);
-                                    } else {
-                                        eprintln!("{msg}");
-                                    }
+                                    return Err(RuntimeError::TypeError(format!(
+                                        "pipeline stage '{stage_name}' failed: {e}"
+                                    ))
+                                    .into());
                                 }
                             }
                         }
@@ -1270,6 +1272,7 @@ impl Interpreter {
             // V20 Phase 5: Accelerator Dispatch
             // ═══════════════════════════════════════════════════════════
             "accelerate" => {
+                self.warn_simulated("accelerate");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1312,6 +1315,7 @@ impl Interpreter {
             // V20 Phase 6: Concurrency v2 — Actor Supervision
             // ═══════════════════════════════════════════════════════════
             "actor_spawn" => {
+                self.warn_simulated("actor_spawn");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1354,6 +1358,7 @@ impl Interpreter {
                 Ok(Value::Map(m))
             }
             "actor_send" => {
+                self.warn_simulated("actor_send");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1377,6 +1382,7 @@ impl Interpreter {
                 Ok(result.unwrap_or(Value::Null))
             }
             "actor_supervise" => {
+                self.warn_simulated("actor_supervise");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1405,6 +1411,7 @@ impl Interpreter {
             // V20 Phase 7: Const Modules
             // ═══════════════════════════════════════════════════════════
             "const_alloc" => {
+                self.warn_simulated("const_alloc");
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
