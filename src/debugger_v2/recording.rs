@@ -207,6 +207,91 @@ impl Default for EventLog {
     }
 }
 
+impl EventLog {
+    /// V20: Export the event log to a JSON string.
+    pub fn to_json(&self) -> String {
+        let mut entries = Vec::new();
+        for event in &self.events {
+            let kind_json = match &event.kind {
+                EventKind::FnEntry { name, location } => {
+                    format!(
+                        r#"{{"type":"fn_entry","name":"{}","location":"{}"}}"#,
+                        json_escape(name),
+                        json_escape(location)
+                    )
+                }
+                EventKind::FnExit { name, return_value } => {
+                    let rv = return_value
+                        .as_deref()
+                        .map(|v| format!(r#","return":"{}""#, json_escape(v)))
+                        .unwrap_or_default();
+                    format!(
+                        r#"{{"type":"fn_exit","name":"{}"{}}}"#,
+                        json_escape(name),
+                        rv
+                    )
+                }
+                EventKind::VarAssign {
+                    name, value, scope, ..
+                } => {
+                    format!(
+                        r#"{{"type":"var_assign","name":"{}","value":"{}","scope":{}}}"#,
+                        json_escape(name),
+                        json_escape(value),
+                        scope
+                    )
+                }
+                EventKind::IoOp { op, data } => {
+                    let op_str = match op {
+                        IoOpKind::StdoutWrite => "stdout",
+                        IoOpKind::StdinRead => "stdin",
+                        IoOpKind::FileRead => "file_read",
+                        IoOpKind::FileWrite => "file_write",
+                        IoOpKind::NetSend => "net_send",
+                        IoOpKind::NetRecv => "net_recv",
+                    };
+                    let text = String::from_utf8_lossy(data);
+                    format!(
+                        r#"{{"type":"io","op":"{}","data":"{}"}}"#,
+                        op_str,
+                        json_escape(&text)
+                    )
+                }
+                EventKind::HeapAlloc { addr, size } => {
+                    format!(r#"{{"type":"heap_alloc","addr":{},"size":{}}}"#, addr, size)
+                }
+                EventKind::HeapFree { addr } => {
+                    format!(r#"{{"type":"heap_free","addr":{}}}"#, addr)
+                }
+                EventKind::ThreadEvent { kind } => {
+                    let k = match kind {
+                        ThreadEventKind::Spawn => "spawn",
+                        ThreadEventKind::Join => "join",
+                        ThreadEventKind::Switch => "switch",
+                        ThreadEventKind::MutexAcquire => "mutex_acquire",
+                        ThreadEventKind::MutexRelease => "mutex_release",
+                    };
+                    format!(r#"{{"type":"thread","kind":"{}"}}"#, k)
+                }
+            };
+            entries.push(format!(
+                r#"  {{"seq":{},"ts":{},"tid":{},"event":{}}}"#,
+                event.seq, event.timestamp_ns, event.thread_id, kind_json
+            ));
+        }
+        format!("[\n{}\n]", entries.join(",\n"))
+    }
+}
+
+/// Escape a string for JSON.
+fn json_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // S25.3: Compact Encoding (Delta Compression)
 // ═══════════════════════════════════════════════════════════════════════

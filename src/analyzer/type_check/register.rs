@@ -1351,6 +1351,19 @@ impl TypeChecker {
             ),
             ("forward", vec![Type::Unknown, Type::Unknown], Type::Unknown),
             ("layer_params", vec![Type::Unknown], Type::Unknown),
+            // V20: ML Advanced — Diffusion + RL
+            ("diffusion_create", vec![Type::I64], Type::Unknown),
+            (
+                "diffusion_denoise",
+                vec![Type::Unknown, Type::Unknown, Type::I64],
+                Type::Unknown,
+            ),
+            ("rl_agent_create", vec![Type::I64, Type::I64], Type::Unknown),
+            (
+                "rl_agent_step",
+                vec![Type::Unknown, Type::I64],
+                Type::Unknown,
+            ),
         ];
         for (name, params, ret) in layer_fns {
             self.symbols.define(Symbol {

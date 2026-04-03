@@ -641,6 +641,8 @@ pub struct Interpreter {
     >,
     /// V18: Next channel ID.
     next_channel_id: i64,
+    /// V20: Event log for debug recording (None = recording disabled).
+    pub record_log: Option<crate::debugger_v2::recording::EventLog>,
 }
 
 impl Interpreter {
@@ -701,6 +703,7 @@ impl Interpreter {
             user_macros: HashMap::new(),
             channels: HashMap::new(),
             next_channel_id: 1,
+            record_log: None,
         };
         interp.register_builtins();
         interp
@@ -768,6 +771,7 @@ impl Interpreter {
             user_macros: HashMap::new(),
             channels: HashMap::new(),
             next_channel_id: 1,
+            record_log: None,
         };
         interp.register_builtins();
         interp
@@ -879,6 +883,65 @@ impl Interpreter {
     /// Attaches a debug state to enable debugging (breakpoints, stepping).
     pub fn set_debug_state(&mut self, state: crate::debugger::DebugState) {
         self.debug_state = Some(state);
+    }
+
+    /// V20: Enables event recording for debug record/replay.
+    pub fn enable_recording(&mut self) {
+        self.record_log = Some(crate::debugger_v2::recording::EventLog::new());
+    }
+
+    /// V20: Records a function entry event if recording is enabled.
+    pub fn record_fn_entry(&mut self, name: &str) {
+        if let Some(ref mut log) = self.record_log {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            log.record(
+                ts,
+                0,
+                crate::debugger_v2::recording::EventKind::FnEntry {
+                    name: name.to_string(),
+                    location: String::new(),
+                },
+            );
+        }
+    }
+
+    /// V20: Records a function exit event if recording is enabled.
+    pub fn record_fn_exit(&mut self, name: &str, return_val: Option<&str>) {
+        if let Some(ref mut log) = self.record_log {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            log.record(
+                ts,
+                0,
+                crate::debugger_v2::recording::EventKind::FnExit {
+                    name: name.to_string(),
+                    return_value: return_val.map(|s| s.to_string()),
+                },
+            );
+        }
+    }
+
+    /// V20: Records an output (println) event if recording is enabled.
+    pub fn record_output(&mut self, text: &str) {
+        if let Some(ref mut log) = self.record_log {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            log.record(
+                ts,
+                0,
+                crate::debugger_v2::recording::EventKind::IoOp {
+                    op: crate::debugger_v2::recording::IoOpKind::StdoutWrite,
+                    data: text.as_bytes().to_vec(),
+                },
+            );
+        }
     }
 
     /// Returns a mutable reference to the debug state (if debugging is enabled).
@@ -1204,6 +1267,11 @@ impl Interpreter {
             "layer_forward",
             "forward",
             "layer_params",
+            // V20: ML Advanced — Diffusion + RL
+            "diffusion_create",
+            "diffusion_denoise",
+            "rl_agent_create",
+            "rl_agent_step",
             // Metrics
             "metric_accuracy",
             "metric_precision",
@@ -2653,6 +2721,8 @@ impl Interpreter {
         if let Some(ref mut session) = self.profile_session {
             session.enter_fn(&fn_name, "", 0);
         }
+        // V20: Record function entry for debug recording.
+        self.record_fn_entry(&fn_name);
 
         // Create new scope with closure's environment as parent
         let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
@@ -2704,6 +2774,11 @@ impl Interpreter {
         // Record function exit in profiling session (if active).
         if let Some(ref mut session) = self.profile_session {
             session.exit_fn();
+        }
+        // V20: Record function exit for debug recording.
+        {
+            let ret_str = result.as_ref().ok().map(|v| format!("{v}"));
+            self.record_fn_exit(&fn_name, ret_str.as_deref());
         }
 
         result

@@ -804,6 +804,7 @@ mod tests {
             dev_dependencies: std::collections::HashMap::new(),
             kernel: None,
             service: vec![],
+            build: None,
         }
     }
 

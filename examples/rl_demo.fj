@@ -1,0 +1,35 @@
+// Reinforcement Learning Demo — Fajar Lang V20
+// Demonstrates: rl_agent_create, rl_agent_step, reward tracking
+//
+// Run: fj run examples/rl_demo.fj
+
+fn main() {
+    println("=== Fajar Lang — RL Agent Demo ===")
+    println("")
+
+    // Create agent with 4-dim state, 3 actions
+    let agent = rl_agent_create(4, 3)
+    println(f"Agent: {map_get_or(agent, "_type", "?")}")
+    println(f"State dim: {map_get_or(agent, "state_dim", "?")}")
+    println(f"Action dim: {map_get_or(agent, "action_dim", "?")}")
+    println("")
+
+    // Run 10 episodes of 5 steps each
+    println("-- Training episodes --")
+    let mut total_reward = 0.0
+    for episode in 0..5 {
+        let mut ep_reward = 0.0
+        for step in 0..5 {
+            let action = step % 3
+            let result = rl_agent_step(agent, action)
+            let reward = map_get_or(result, "reward", "0.0")
+            ep_reward = ep_reward + to_float(reward)
+        }
+        total_reward = total_reward + ep_reward
+        println(f"  Episode {episode}: reward = {ep_reward}")
+    }
+    println("")
+    println(f"Total reward across 5 episodes: {total_reward}")
+    println("")
+    println("RL demo complete.")
+}

@@ -206,3 +206,76 @@ fn debug_state_step_modes() {
     state.set_step_mode(StepMode::StepOut, 2);
     assert_eq!(state.step_mode(), StepMode::StepOut);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 6. V20: Debug Recording — record → replay round-trip
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn debug_record_replay_round_trip() {
+    use fajar_lang::interpreter::Interpreter;
+
+    let src = r#"
+fn greet(name: str) -> str {
+    f"Hello, {name}!"
+}
+println(greet("Fajar"))
+println(greet("World"))
+"#;
+    let mut interp = Interpreter::new_capturing();
+    interp.enable_recording();
+    interp.eval_source(src).expect("eval failed");
+
+    // Verify output
+    let output = interp.get_output();
+    assert_eq!(output, &["Hello, Fajar!", "Hello, World!"]);
+
+    // Verify recording captured events
+    let log = interp.record_log.as_ref().expect("no recording");
+    assert!(
+        log.len() >= 6,
+        "expected at least 6 events, got {}",
+        log.len()
+    );
+
+    // Export to JSON and verify it parses
+    let json = log.to_json();
+    assert!(json.contains("fn_entry"));
+    assert!(json.contains("fn_exit"));
+    assert!(json.contains("stdout"));
+    assert!(json.contains("Hello, Fajar!"));
+    assert!(json.contains("Hello, World!"));
+    assert!(json.contains("greet"));
+}
+
+#[test]
+fn debug_record_captures_function_calls() {
+    use fajar_lang::interpreter::Interpreter;
+
+    let src = r#"
+fn add(a: i64, b: i64) -> i64 { a + b }
+println(add(10, 20))
+"#;
+    let mut interp = Interpreter::new_capturing();
+    interp.enable_recording();
+    interp.eval_source(src).expect("eval failed");
+
+    let log = interp.record_log.as_ref().expect("no recording");
+    let json = log.to_json();
+
+    // Should have: output event, fn_entry(add), fn_exit(add), output event
+    assert!(json.contains(r#""name":"add""#));
+    assert!(json.contains(r#""return":"30""#));
+    assert!(json.contains(r#""data":"30""#));
+}
+
+#[test]
+fn debug_record_empty_when_disabled() {
+    use fajar_lang::interpreter::Interpreter;
+
+    let mut interp = Interpreter::new_capturing();
+    // Do NOT enable recording
+    interp.eval_source("println(42)").expect("eval failed");
+
+    assert!(interp.record_log.is_none());
+}

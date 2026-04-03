@@ -283,6 +283,12 @@ enum Command {
         /// Use DAP protocol (for IDE integration).
         #[arg(long)]
         dap: bool,
+        /// Record execution trace to a JSON file.
+        #[arg(long)]
+        record: Option<PathBuf>,
+        /// Replay execution trace from a JSON file.
+        #[arg(long)]
+        replay: Option<PathBuf>,
     },
     /// Search the package registry for packages.
     Search {
@@ -790,8 +796,15 @@ fn main_inner() -> ExitCode {
             };
             cmd_bench(&path, filter.as_deref())
         }
-        Command::Debug { file, dap } => {
-            if dap {
+        Command::Debug {
+            file,
+            dap,
+            record,
+            replay,
+        } => {
+            if let Some(trace_path) = replay {
+                cmd_debug_replay(&trace_path)
+            } else if dap {
                 cmd_debug_dap()
             } else {
                 let path = match file {
@@ -804,12 +817,19 @@ fn main_inner() -> ExitCode {
                         }
                     },
                 };
-                eprintln!(
-                    "Interactive debugger for '{}' not yet implemented.",
-                    path.display()
-                );
-                eprintln!("hint: use `fj debug --dap` for IDE integration via DAP protocol");
-                ExitCode::from(EXIT_USAGE)
+                if let Some(trace_path) = record {
+                    cmd_debug_record(&path, &trace_path)
+                } else {
+                    eprintln!(
+                        "Interactive debugger for '{}' not yet implemented.",
+                        path.display()
+                    );
+                    eprintln!("hint: use `fj debug --dap` for IDE integration via DAP protocol");
+                    eprintln!(
+                        "hint: use `fj debug --record trace.json <file>` to record execution"
+                    );
+                    ExitCode::from(EXIT_USAGE)
+                }
             }
         }
         Command::Search { query, limit } => cmd_search(&query, limit),
@@ -3174,6 +3194,50 @@ fn cmd_build_native(
     lint: bool,
     opt_level: u8,
 ) -> ExitCode {
+    // V20 2.1-2.3: Run pre-build hook from fj.toml [build] section.
+    if let Some(project_dir) = path.parent() {
+        let toml_path = project_dir.join("fj.toml");
+        if toml_path.exists() {
+            if let Ok(toml_str) = std::fs::read_to_string(&toml_path) {
+                if let Ok(config) =
+                    toml::from_str::<fajar_lang::package::manifest::ProjectConfig>(&toml_str)
+                {
+                    if let Some(ref build) = config.build {
+                        // Set env vars
+                        for (k, v) in &build.env {
+                            std::env::set_var(k, v);
+                        }
+                        // Run pre-build
+                        if let Some(ref cmd) = build.pre_build {
+                            println!("[build] pre-build: {cmd}");
+                            let status = std::process::Command::new("sh")
+                                .arg("-c")
+                                .arg(cmd)
+                                .current_dir(project_dir)
+                                .status();
+                            match status {
+                                Ok(s) if s.success() => {
+                                    println!("[build] pre-build OK");
+                                }
+                                Ok(s) => {
+                                    eprintln!(
+                                        "[build] pre-build FAILED (exit {})",
+                                        s.code().unwrap_or(-1)
+                                    );
+                                    return ExitCode::FAILURE;
+                                }
+                                Err(e) => {
+                                    eprintln!("[build] pre-build error: {e}");
+                                    return ExitCode::FAILURE;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let source = match read_source(path) {
         Ok(s) => s,
         Err(code) => return code,
@@ -3694,6 +3758,29 @@ fj_rt_bare_memory_fence:
             } else {
                 println!("Built: {}", bin_path.display());
             }
+            // V20 2.3: Run post-build hook from fj.toml [build] section.
+            if let Some(project_dir) = path.parent() {
+                let toml_path = project_dir.join("fj.toml");
+                if toml_path.exists() {
+                    if let Ok(toml_str) = std::fs::read_to_string(&toml_path) {
+                        if let Ok(config) = toml::from_str::<
+                            fajar_lang::package::manifest::ProjectConfig,
+                        >(&toml_str)
+                        {
+                            if let Some(ref build) = config.build {
+                                if let Some(ref cmd) = build.post_build {
+                                    println!("[build] post-build: {cmd}");
+                                    let _ = std::process::Command::new("sh")
+                                        .arg("-c")
+                                        .arg(cmd)
+                                        .current_dir(project_dir)
+                                        .status();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             ExitCode::SUCCESS
         }
         Ok(s) => {
@@ -3742,6 +3829,160 @@ fn cmd_debug_dap() -> ExitCode {
     let _record_config = fajar_lang::debugger_v2::recording::RecordConfig::default();
     fajar_lang::debugger::dap_server::run_dap_server(std::io::stdin(), std::io::stdout());
     ExitCode::SUCCESS
+}
+
+/// V20 1.1-1.2: Record execution trace to a JSON file.
+fn cmd_debug_record(path: &std::path::Path, trace_path: &std::path::Path) -> ExitCode {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read '{}': {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let filename = path.display().to_string();
+    // Lex + Parse + Analyze (same as cmd_run)
+    let tokens = match fajar_lang::lexer::tokenize(&source) {
+        Ok(t) => t,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+    let program = match fajar_lang::parser::parse(tokens) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in &errors {
+                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
+            }
+            return ExitCode::from(EXIT_COMPILE);
+        }
+    };
+    if let Err(errors) = fajar_lang::analyzer::analyze(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
+    let mut interp = fajar_lang::interpreter::Interpreter::new();
+    interp.enable_recording();
+    if let Some(parent) = path.parent() {
+        interp.set_source_dir(parent.to_path_buf());
+    }
+    println!(
+        "Recording execution of '{}' → '{}'",
+        path.display(),
+        trace_path.display()
+    );
+    // Evaluate program (defines functions) then call main()
+    if let Err(e) = interp.eval_program(&program) {
+        eprintln!("{e}");
+    }
+    if let Err(e) = interp.call_main() {
+        eprintln!("{e}");
+    }
+    // Write trace
+    if let Some(ref log) = interp.record_log {
+        let json = log.to_json();
+        let event_count = log.len();
+        match std::fs::write(trace_path, &json) {
+            Ok(()) => {
+                println!(
+                    "Trace written: {} events, {} bytes → {}",
+                    event_count,
+                    json.len(),
+                    trace_path.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("error: cannot write trace: {e}");
+                ExitCode::FAILURE
+            }
+        }
+    } else {
+        eprintln!("error: no recording data");
+        ExitCode::FAILURE
+    }
+}
+
+/// V20 1.3-1.4: Replay execution trace from a JSON file.
+fn cmd_debug_replay(trace_path: &std::path::Path) -> ExitCode {
+    let json = match std::fs::read_to_string(trace_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read '{}': {e}", trace_path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("Replaying trace from '{}'", trace_path.display());
+    println!();
+    // Parse the JSON array of events and replay stdout events
+    // Simple JSON parser: look for "type":"io","op":"stdout","data":"..."
+    let mut event_count = 0u64;
+    let mut fn_stack: Vec<String> = Vec::new();
+    // Walk through each line looking for event objects
+    for line in json.lines() {
+        let line = line.trim().trim_matches(',');
+        if !line.starts_with('{') {
+            continue;
+        }
+        event_count += 1;
+        // Extract event type
+        if let Some(event_start) = line.find(r#""event":"#) {
+            let event_json = &line[event_start + 8..];
+            if event_json.contains(r#""type":"fn_entry""#) {
+                if let Some(name) = extract_json_field(event_json, "name") {
+                    fn_stack.push(name.clone());
+                    println!("  → enter {name}");
+                }
+            } else if event_json.contains(r#""type":"fn_exit""#) {
+                if let Some(name) = extract_json_field(event_json, "name") {
+                    let ret = extract_json_field(event_json, "return")
+                        .unwrap_or_else(|| "void".to_string());
+                    fn_stack.pop();
+                    println!("  ← exit  {name} = {ret}");
+                }
+            } else if event_json.contains(r#""type":"io""#)
+                && event_json.contains(r#""op":"stdout""#)
+            {
+                if let Some(data) = extract_json_field(event_json, "data") {
+                    let indent = "  ".repeat(fn_stack.len().min(4));
+                    println!("{indent}[out] {data}");
+                }
+            }
+        }
+    }
+    println!();
+    println!(
+        "Replay complete: {event_count} events from '{}'",
+        trace_path.display()
+    );
+    ExitCode::SUCCESS
+}
+
+/// Extract a JSON string field value: "key":"value" → value.
+fn extract_json_field(json: &str, key: &str) -> Option<String> {
+    let pattern = format!(r#""{key}":""#);
+    let start = json.find(&pattern)?;
+    let value_start = start + pattern.len();
+    let rest = &json[value_start..];
+    // Find closing quote (handle escaped quotes)
+    let mut end = 0;
+    let chars: Vec<char> = rest.chars().collect();
+    while end < chars.len() {
+        if chars[end] == '\\' {
+            end += 2; // skip escaped char
+        } else if chars[end] == '"' {
+            break;
+        } else {
+            end += 1;
+        }
+    }
+    Some(rest[..end].to_string())
 }
 
 /// Dumps parser AST for a file.

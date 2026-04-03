@@ -1,0 +1,34 @@
+// Diffusion Model Demo — Fajar Lang V20
+// Demonstrates: diffusion_create, diffusion_denoise, tensor ops
+//
+// Run: fj run examples/diffusion_demo.fj
+
+fn main() {
+    println("=== Fajar Lang — Diffusion Model Demo ===")
+    println("")
+
+    // Create diffusion model with 100 timesteps
+    let model = diffusion_create(100)
+    println(f"Model: {map_get_or(model, "_type", "?")}")
+    println(f"Steps: {map_get_or(model, "steps", "?")}")
+    println(f"Schedule: {map_get_or(model, "schedule", "?")}")
+    println("")
+
+    // Start with noise
+    let noisy = randn([1, 8])
+    println(f"Initial noise: {shape(noisy)}")
+
+    // Denoise progressively
+    println("")
+    println("-- Denoising steps --")
+    let steps = [10, 30, 50, 70, 90]
+    let mut current = noisy
+    for i in 0..len(steps) {
+        let step = steps[i]
+        current = diffusion_denoise(model, current, step)
+        println(f"  Step {step}/100: denoised {shape(current)}")
+    }
+
+    println("")
+    println("Diffusion demo complete.")
+}

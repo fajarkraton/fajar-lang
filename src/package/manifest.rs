@@ -23,6 +23,23 @@ pub struct ProjectConfig {
     /// The `[[service]]` array for microkernel services (optional).
     #[serde(default)]
     pub service: Vec<ServiceConfig>,
+    /// The `[build]` section for pre/post build hooks (optional).
+    #[serde(default)]
+    pub build: Option<BuildSection>,
+}
+
+/// Build hooks configuration for `[build]` section.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BuildSection {
+    /// Shell command to run before compilation.
+    #[serde(default)]
+    pub pre_build: Option<String>,
+    /// Shell command to run after compilation.
+    #[serde(default)]
+    pub post_build: Option<String>,
+    /// Environment variables to set during build.
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
 }
 
 /// Kernel build configuration for `[kernel]` section.
@@ -645,5 +662,39 @@ name = "simple"
 "#;
         let config = ProjectConfig::parse(toml).unwrap();
         assert!(config.dev_dependencies.is_empty());
+    }
+
+    #[test]
+    fn parse_manifest_build_section() {
+        let toml = r#"
+[package]
+name = "build-test"
+version = "0.1.0"
+entry = "main.fj"
+
+[build]
+pre_build = "echo generating config"
+post_build = "echo done"
+
+[build.env]
+BUILD_MODE = "release"
+VERSION = "1.0.0"
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        let build = config.build.expect("build section missing");
+        assert_eq!(build.pre_build.as_deref(), Some("echo generating config"));
+        assert_eq!(build.post_build.as_deref(), Some("echo done"));
+        assert_eq!(build.env["BUILD_MODE"], "release");
+        assert_eq!(build.env["VERSION"], "1.0.0");
+    }
+
+    #[test]
+    fn parse_manifest_no_build_section() {
+        let toml = r#"
+[package]
+name = "no-build"
+"#;
+        let config = ProjectConfig::parse(toml).unwrap();
+        assert!(config.build.is_none());
     }
 }

@@ -35,6 +35,7 @@ impl Interpreter {
             "println" => {
                 let text: Vec<String> = args.iter().map(|a| format!("{a}")).collect();
                 let output = text.join(" ");
+                self.record_output(&output);
                 if self.capture_output {
                     self.output.push(output);
                 } else {
@@ -1004,6 +1005,164 @@ impl Interpreter {
                         Err(RuntimeError::TypeError("layer_params requires a layer".into()).into())
                     }
                 }
+            }
+            // V20 3.1: Diffusion model creation
+            "diffusion_create" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let steps = match &args[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("diffusion_create(steps: i64)".into()).into(),
+                        );
+                    }
+                };
+                let schedule = crate::ml_advanced::diffusion::linear_schedule(steps, 0.0001, 0.02);
+                let mut model = std::collections::HashMap::new();
+                model.insert("_type".to_string(), Value::Str("DiffusionModel".into()));
+                model.insert("steps".to_string(), Value::Int(steps as i64));
+                model.insert(
+                    "schedule".to_string(),
+                    Value::Str(format!("{}", schedule.schedule_type)),
+                );
+                model.insert(
+                    "alpha_cumprod_last".to_string(),
+                    Value::Float(*schedule.alpha_cumprod.last().unwrap_or(&0.0)),
+                );
+                Ok(Value::Map(model))
+            }
+            // V20 3.2: Diffusion denoising step
+            "diffusion_denoise" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let steps = match &args[0] {
+                    Value::Map(m) => match m.get("steps") {
+                        Some(Value::Int(n)) => *n as usize,
+                        _ => 100,
+                    },
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "diffusion_denoise(model, tensor, step)".into(),
+                        )
+                        .into());
+                    }
+                };
+                let step = match &args[2] {
+                    Value::Int(n) => *n as usize,
+                    _ => 0,
+                };
+                // Apply simple denoising: scale noise down by step progress
+                match &args[1] {
+                    Value::Tensor(tv) => {
+                        let progress = step as f64 / steps.max(1) as f64;
+                        let scale = 1.0 - progress * 0.5;
+                        let denoised = tv.data().mapv(|x| x * scale);
+                        Ok(Value::Tensor(
+                            crate::runtime::ml::tensor::TensorValue::from_ndarray(denoised),
+                        ))
+                    }
+                    _ => Err(RuntimeError::TypeError(
+                        "diffusion_denoise: second arg must be tensor".into(),
+                    )
+                    .into()),
+                }
+            }
+            // V20 3.3: RL agent creation
+            "rl_agent_create" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let state_dim = match &args[0] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "rl_agent_create(state_dim, action_dim)".into(),
+                        )
+                        .into());
+                    }
+                };
+                let action_dim = match &args[1] {
+                    Value::Int(n) => *n as usize,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "rl_agent_create(state_dim, action_dim)".into(),
+                        )
+                        .into());
+                    }
+                };
+                let env = crate::ml_advanced::reinforcement::Environment::new(
+                    "agent", state_dim, action_dim, 200,
+                );
+                let mut agent = std::collections::HashMap::new();
+                agent.insert("_type".to_string(), Value::Str("RLAgent".into()));
+                agent.insert("state_dim".to_string(), Value::Int(state_dim as i64));
+                agent.insert("action_dim".to_string(), Value::Int(action_dim as i64));
+                agent.insert(
+                    "state".to_string(),
+                    Value::Array(env.state.iter().map(|s| Value::Float(*s)).collect()),
+                );
+                agent.insert("step".to_string(), Value::Int(0));
+                agent.insert("total_reward".to_string(), Value::Float(0.0));
+                Ok(Value::Map(agent))
+            }
+            // V20 3.3b: RL agent step
+            "rl_agent_step" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let (state_dim, action_dim) = match &args[0] {
+                    Value::Map(m) => {
+                        let sd = match m.get("state_dim") {
+                            Some(Value::Int(n)) => *n as usize,
+                            _ => 4,
+                        };
+                        let ad = match m.get("action_dim") {
+                            Some(Value::Int(n)) => *n as usize,
+                            _ => 2,
+                        };
+                        (sd, ad)
+                    }
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("rl_agent_step(agent, action)".into()).into(),
+                        );
+                    }
+                };
+                let action = match &args[1] {
+                    Value::Int(n) => *n as usize,
+                    _ => 0,
+                };
+                let mut env = crate::ml_advanced::reinforcement::Environment::new(
+                    "agent", state_dim, action_dim, 200,
+                );
+                let result = env.step(action);
+                let mut step_result = std::collections::HashMap::new();
+                step_result.insert(
+                    "state".to_string(),
+                    Value::Array(result.state.iter().map(|s| Value::Float(*s)).collect()),
+                );
+                step_result.insert("reward".to_string(), Value::Float(result.reward));
+                step_result.insert("done".to_string(), Value::Bool(result.done));
+                Ok(Value::Map(step_result))
             }
             // Metrics builtins
             "metric_accuracy" | "accuracy" => {
