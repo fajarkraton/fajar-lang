@@ -846,6 +846,40 @@ impl LanguageServer for FajarLspBackend {
             });
         }
 
+        // V18 3.1: Enhance with lsp_v2 type-driven completions
+        {
+            let source_copy = {
+                let Ok(docs) = self.documents.lock() else {
+                    return Ok(Some(CompletionResponse::Array(items)));
+                };
+                docs.get(&params.text_document_position.text_document.uri)
+                    .map(|d| d.source.clone())
+            };
+            if let Some(source) = source_copy {
+                let context_lines: Vec<&str> = source.lines().collect();
+                let line_idx = params.text_document_position.position.line as usize;
+                let col = params.text_document_position.position.character as usize;
+                if let Some(current_line) = context_lines.get(line_idx) {
+                    let ctx = crate::lsp_v2::completion::analyze_expected_type(
+                        current_line, col, &context_lines,
+                    );
+                    let scope_vars: Vec<(&str, &str)> = Vec::new();
+                    let synth = crate::lsp_v2::completion::synthesize_expressions(
+                        &ctx.expected_type, &scope_vars,
+                    );
+                    for expr in synth {
+                        items.push(CompletionItem {
+                            label: expr.label.clone(),
+                            kind: Some(CompletionItemKind::VALUE),
+                            detail: Some(format!("type: {}", expr.result_type)),
+                            sort_text: Some(format!("1_type_{}", expr.label)),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+
         Ok(Some(CompletionResponse::Array(items)))
     }
 

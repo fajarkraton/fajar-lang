@@ -120,6 +120,11 @@ enum Command {
         #[arg(short, long, default_value = "playground")]
         output: String,
     },
+    /// Run a built-in demo (drone, os, network, ffi).
+    Demo {
+        /// Demo name: drone, os, network, ffi
+        name: String,
+    },
     /// Create a new Fajar Lang project.
     New {
         /// Name of the project to create.
@@ -454,6 +459,7 @@ fn main_inner() -> ExitCode {
         Command::Lsp => cmd_lsp(),
         Command::Pack { output, files } => cmd_pack(&output, &files),
         Command::Playground { output } => cmd_playground(&output),
+        Command::Demo { name } => cmd_demo(&name),
         Command::New { name } => cmd_new(&name),
         Command::Build {
             file,
@@ -2293,6 +2299,29 @@ fn cmd_pack(output: &str, files: &[PathBuf]) -> ExitCode {
         Err(e) => {
             eprintln!("error: cannot write '{}': {e}", output);
             ExitCode::from(EXIT_USAGE)
+        }
+    }
+}
+
+/// V18 3.8: Run a built-in demo by name.
+fn cmd_demo(name: &str) -> ExitCode {
+    let demo_source = match name {
+        "drone" => include_str!("../examples/drone_demo.fj"),
+        "os" => include_str!("../examples/mini_os_demo.fj"),
+        "network" | "net" => include_str!("../examples/http_echo_server.fj"),
+        "ffi" => include_str!("../examples/ffi_libc.fj"),
+        _ => {
+            eprintln!("Unknown demo: '{name}'");
+            eprintln!("Available demos: drone, os, network, ffi");
+            return ExitCode::from(EXIT_USAGE);
+        }
+    };
+    let mut interp = fajar_lang::interpreter::Interpreter::new();
+    match interp.eval_source(demo_source) {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
         }
     }
 }

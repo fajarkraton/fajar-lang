@@ -242,6 +242,7 @@ fn build_closure_info(
         is_pub: false,
         is_const: false,
         is_async: false,
+        is_gen: false,
         is_test: false,
         should_panic: false,
         is_ignored: false,

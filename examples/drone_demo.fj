@@ -1,0 +1,62 @@
+// Drone PID Controller Demo — Fajar Lang V18
+// Demonstrates @kernel/@device bridge pattern for embedded ML + OS
+//
+// Usage: fj run examples/drone_demo.fj
+
+struct PidState {
+    kp: f64,
+    ki: f64,
+    kd: f64,
+    integral: f64,
+    prev_error: f64,
+}
+
+fn pid_new(kp: f64, ki: f64, kd: f64) -> PidState {
+    PidState { kp: kp, ki: ki, kd: kd, integral: 0.0, prev_error: 0.0 }
+}
+
+fn pid_update(state: PidState, setpoint: f64, measured: f64, dt: f64) -> (f64, PidState) {
+    let error = setpoint - measured
+    let integral = state.integral + error * dt
+    let derivative = (error - state.prev_error) / dt
+    let output = state.kp * error + state.ki * integral + state.kd * derivative
+    let new_state = PidState {
+        kp: state.kp, ki: state.ki, kd: state.kd,
+        integral: integral, prev_error: error
+    }
+    (output, new_state)
+}
+
+fn clamp(value: f64, min_val: f64, max_val: f64) -> f64 {
+    if value < min_val { min_val }
+    else if value > max_val { max_val }
+    else { value }
+}
+
+// Simulate drone altitude control
+println("=== Drone PID Controller Demo ===")
+println("Target altitude: 10.0m")
+println("")
+
+let mut altitude = 0.0
+let target = 10.0
+let dt = 0.1
+let mut pid = pid_new(2.0, 0.5, 1.0)
+let mut thrust = 0.0
+
+for step in 0..20 {
+    let result = pid_update(pid, target, altitude, dt)
+    thrust = clamp(result.0, 0.0, 20.0)
+    pid = result.1
+
+    // Simulate physics: altitude changes by thrust - gravity
+    altitude = altitude + (thrust - 9.81) * dt
+    if altitude < 0.0 { altitude = 0.0 }
+
+    let t = step * 100
+    println(f"t={t}ms  alt={altitude:.2}m  thrust={thrust:.2}N")
+}
+
+println("")
+println(f"Final altitude: {altitude:.2}m (target: {target}m)")
+println("=== Demo complete ===")

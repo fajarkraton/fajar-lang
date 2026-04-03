@@ -1,0 +1,64 @@
+// Mini OS Demo — Fajar Lang V18
+// Demonstrates kernel simulation with processes and ML bridge.
+//
+// Usage: fj run examples/mini_os_demo.fj
+
+println("=== FajarOS Mini Kernel Demo ===")
+println("")
+
+// Boot sequence
+println("[BOOT] Initializing kernel...")
+println("[BOOT] CPU: x86_64 (simulated)")
+println("[BOOT] RAM: 256 MB")
+println("")
+
+// Process table
+println("[PROC] Creating processes...")
+struct Process {
+    pid: i64,
+    name: str,
+    state: str,
+}
+
+let procs = [
+    Process { pid: 1, name: "init", state: "running" },
+    Process { pid: 2, name: "shell", state: "ready" },
+    Process { pid: 3, name: "logger", state: "sleeping" },
+    Process { pid: 4, name: "ml-infer", state: "ready" },
+]
+
+for p in procs {
+    println(f"  PID {p.pid}: {p.name} [{p.state}]")
+}
+println(f"  Total: {len(procs)} processes")
+println("")
+
+// Scheduler simulation
+println("[SCHED] Round-robin scheduling...")
+let schedule = ["init", "shell", "ml-infer", "shell", "logger", "init"]
+for i in 0..len(schedule) {
+    println(f"  Tick {i}: running '{schedule[i]}'")
+}
+println("")
+
+// ML bridge: sensor → inference → action
+println("[BRIDGE] Sensor → ML → Actuator pipeline")
+let sensor_data = [0.5, 0.3, 0.8, 0.1]
+println(f"  Sensor readings: {sensor_data}")
+
+let input = tensor_zeros(1, 4)
+let weights = tensor_randn(4, 2)
+let output = tensor_matmul(input, weights)
+println(f"  ML inference output: {output}")
+println(f"  Action: adjust motors")
+println("")
+
+// System stats
+println("[STAT] System status:")
+println("  Uptime: 1.2s")
+println(f"  Processes: {len(procs)}")
+println("  IRQs handled: 120")
+println("  ML inferences: 1")
+
+println("")
+println("=== Demo complete ===")
