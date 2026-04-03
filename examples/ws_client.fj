@@ -1,0 +1,40 @@
+// WebSocket Client Example — Fajar Lang V18
+// Demonstrates WebSocket connection and messaging.
+//
+// Usage: fj run examples/ws_client.fj
+// Note: Uses simulation mode. For real WebSocket: cargo run --features websocket -- run examples/ws_client.fj
+
+println("=== WebSocket Client Demo ===")
+println("")
+
+// Connect to a WebSocket echo server
+println("1. Connecting to WebSocket server...")
+let ws = ws_connect("ws://echo.websocket.org")
+println(f"   Connection handle: {ws}")
+
+// Send messages
+println("")
+println("2. Sending messages...")
+ws_send(ws, "Hello from Fajar Lang!")
+println("   Sent: Hello from Fajar Lang!")
+
+ws_send(ws, "WebSocket works!")
+println("   Sent: WebSocket works!")
+
+// Receive response
+println("")
+println("3. Receiving messages...")
+let msg1 = ws_recv(ws)
+println(f"   Received: {msg1}")
+
+let msg2 = ws_recv(ws)
+println(f"   Received: {msg2}")
+
+// Close connection
+println("")
+println("4. Closing connection...")
+ws_close(ws)
+println("   Connection closed.")
+
+println("")
+println("=== WebSocket demo complete! ===")

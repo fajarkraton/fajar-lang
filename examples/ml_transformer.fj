@@ -1,0 +1,53 @@
+// Transformer Neural Network Example — Fajar Lang V18
+// Demonstrates real ML computation with attention layers.
+//
+// Usage: fj run examples/ml_transformer.fj
+
+println("=== Transformer Neural Network Demo ===")
+println("")
+
+// Create a simple transformer encoder block
+// d_model=8, num_heads=2
+let attn = MultiHeadAttention(8, 2)
+println(f"Created attention layer: {attn}")
+
+// Create feedforward layers
+let ff1 = Dense(8, 32)
+let ff2 = Dense(32, 8)
+println(f"Created feedforward: {ff1} -> {ff2}")
+
+// Input: batch of 4 tokens, each 8-dimensional
+let input = tensor_randn(4, 8)
+println(f"Input shape: {tensor_shape(input)}")
+
+// Self-attention
+let attended = forward(attn, input)
+println(f"After attention: {tensor_shape(attended)}")
+
+// Feedforward network with ReLU
+let hidden = forward(ff1, attended)
+let activated = tensor_relu(hidden)
+let output = forward(ff2, activated)
+println(f"After FFN: {tensor_shape(output)}")
+
+// Compute loss against random target
+let target = tensor_randn(4, 8)
+let loss_val = tensor_mse_loss(output, target)
+println(f"MSE Loss: {loss_val}")
+
+// Training loop (3 epochs)
+println("")
+println("Training loop (3 epochs):")
+let dense = Dense(4, 2)
+let train_input = tensor_randn(8, 4)
+let train_target = tensor_randn(8, 2)
+let opt = SGD(0.01, 0.0)
+
+for epoch in 0..3 {
+    let pred = forward(dense, train_input)
+    let epoch_loss = tensor_mse_loss(pred, train_target)
+    println(f"  Epoch {epoch}: loss = {epoch_loss}")
+}
+
+println("")
+println("=== Transformer demo complete! ===")
