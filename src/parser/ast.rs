@@ -190,6 +190,8 @@ pub struct FnDef {
     pub is_const: bool,
     /// Whether the function is declared `async`.
     pub is_async: bool,
+    /// Whether the function is a generator (`gen fn`).
+    pub is_gen: bool,
     /// Whether this function is a test (`@test`).
     pub is_test: bool,
     /// Whether this test should expect a panic (`@should_panic`).
@@ -2300,6 +2302,7 @@ mod tests {
             is_pub: false,
             is_const: false,
             is_async: false,
+            is_gen: false,
             is_test: false,
             should_panic: false,
             is_ignored: false,

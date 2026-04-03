@@ -15,7 +15,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::generators_v12;
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, Value};
 use crate::parser::ast::{
@@ -625,6 +624,10 @@ pub struct Interpreter {
     tcp_connections: HashMap<usize, std::net::TcpStream>,
     /// V18: Next TCP file descriptor.
     next_tcp_fd: usize,
+    /// V18: FFI manager for loading shared libraries and calling C functions.
+    ffi_manager: crate::interpreter::ffi::FfiManager,
+    /// V18: Generator yield collector — when Some, yield pushes here instead of returning.
+    generator_yields: Option<Vec<Value>>,
 }
 
 impl Interpreter {
@@ -680,6 +683,8 @@ impl Interpreter {
             effect_replay_stack: Vec::new(),
             tcp_connections: HashMap::new(),
             next_tcp_fd: 100,
+            ffi_manager: crate::interpreter::ffi::FfiManager::new(),
+            generator_yields: None,
         };
         interp.register_builtins();
         interp
@@ -742,6 +747,8 @@ impl Interpreter {
             effect_replay_stack: Vec::new(),
             tcp_connections: HashMap::new(),
             next_tcp_fd: 100,
+            ffi_manager: crate::interpreter::ffi::FfiManager::new(),
+            generator_yields: None,
         };
         interp.register_builtins();
         interp
@@ -1517,6 +1524,12 @@ impl Interpreter {
             "tcp_send",
             "tcp_recv",
             "tcp_close",
+            // V18: DNS
+            "dns_resolve",
+            // V18: FFI
+            "ffi_load_library",
+            "ffi_register",
+            "ffi_call",
         ]
     }
 
@@ -1649,6 +1662,7 @@ impl Interpreter {
                     body: fndef.body.clone(),
                     closure_env: Rc::clone(&self.env),
                     is_async: fndef.is_async,
+                    is_gen: fndef.is_gen,
                 };
                 self.env
                     .borrow_mut()
@@ -1707,6 +1721,7 @@ impl Interpreter {
                         body: handler.body.clone(),
                         closure_env: std::rc::Rc::clone(&self.env),
                         is_async: false,
+                    is_gen: false,
                     };
                     self.env
                         .borrow_mut()
@@ -2179,9 +2194,12 @@ impl Interpreter {
                 } else {
                     Value::Null
                 };
-                // Track yield via generators_v12 GeneratorState for state machine semantics.
-                // When a generator is active, mark it as Yielded.
-                let _state = generators_v12::GeneratorState::Yielded;
+                // V18: If inside a generator call, collect the yielded value
+                if let Some(ref mut yields) = self.generator_yields {
+                    yields.push(val);
+                    return Ok(Value::Null); // Continue execution
+                }
+                // Outside generator — just return the value
                 Ok(val)
             }
         }
@@ -2509,6 +2527,38 @@ impl Interpreter {
             self.async_tasks
                 .insert(task_id, (fv.body.clone(), call_env));
             return Ok(Value::Future { task_id });
+        }
+
+        // V18: If gen fn, eagerly collect all yielded values into an array
+        if fv.is_gen {
+            let prev_yields = self.generator_yields.take();
+            self.generator_yields = Some(Vec::new());
+
+            // Execute the generator body in a new scope
+            self.call_depth += 1;
+            let fn_name = if fv.name.is_empty() {
+                "<gen>".to_string()
+            } else {
+                fv.name.clone()
+            };
+            self.call_stack.push(fn_name.clone());
+
+            let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                &fv.closure_env,
+            ))));
+            for (param, val) in fv.params.iter().zip(args) {
+                call_env.borrow_mut().define(param.name.clone(), val);
+            }
+            let prev_env = std::mem::replace(&mut self.env, call_env);
+            let _ = self.eval_expr(&fv.body); // ignore final return value
+            self.env = prev_env;
+
+            self.call_stack.pop();
+            self.call_depth -= 1;
+
+            let yields = self.generator_yields.take().unwrap_or_default();
+            self.generator_yields = prev_yields;
+            return Ok(Value::Array(yields));
         }
 
         self.call_depth += 1;

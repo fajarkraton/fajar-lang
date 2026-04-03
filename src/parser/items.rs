@@ -14,8 +14,9 @@ impl Parser {
             self.peek().span.start
         };
 
-        // Optional `async` keyword before `fn`
+        // Optional `async` or `gen` keyword before `fn`
         let is_async = self.eat(&TokenKind::Async);
+        let is_gen = self.eat(&TokenKind::Gen);
 
         self.expect(&TokenKind::Fn)?;
         let (name, _) = self.expect_ident()?;
@@ -72,6 +73,7 @@ impl Parser {
             is_pub,
             is_const: false,
             is_async,
+            is_gen,
             is_test: false,
             should_panic: false,
             is_ignored: false,
@@ -949,6 +951,7 @@ impl Parser {
             is_pub: false,
             is_const: false,
             is_async,
+            is_gen: false,
             is_test: false,
             should_panic: false,
             is_ignored: false,

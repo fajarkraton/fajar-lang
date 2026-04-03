@@ -1095,6 +1095,15 @@ impl TypeChecker {
             ("tcp_send", vec![Type::I64, Type::Str], Type::Unknown),
             ("tcp_recv", vec![Type::I64], Type::Unknown),
             ("tcp_close", vec![Type::I64], Type::Unknown),
+            ("dns_resolve", vec![Type::Str], Type::Unknown),
+            // V18: FFI builtins
+            ("ffi_load_library", vec![Type::Str], Type::Unknown),
+            (
+                "ffi_register",
+                vec![Type::I64, Type::Str, Type::Str, Type::I64],
+                Type::Unknown,
+            ),
+            ("ffi_call", vec![Type::Unknown], Type::Unknown),
         ];
         for (name, params, ret) in net_fns {
             self.symbols.define(Symbol {

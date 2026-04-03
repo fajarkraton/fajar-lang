@@ -1092,6 +1092,7 @@ impl Compiler {
                 Rc::new(RefCell::new(Environment::new()))
             },
             is_async: false,
+                    is_gen: false,
         });
 
         // Copy captured locals to globals so the closure body can access them

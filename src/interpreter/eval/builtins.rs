@@ -1894,11 +1894,164 @@ impl Interpreter {
                     )
                     .into());
                 }
+                // V18 2.2: DNS resolve
+                if name == "dns_resolve" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Str(hostname) = &args[0] {
+                        use std::net::ToSocketAddrs;
+                        let addr_str = format!("{hostname}:0");
+                        match addr_str.to_socket_addrs() {
+                            Ok(mut addrs) => {
+                                if let Some(addr) = addrs.next() {
+                                    return Ok(Value::Enum {
+                                        variant: "Ok".into(),
+                                        data: Some(Box::new(Value::Str(
+                                            addr.ip().to_string(),
+                                        ))),
+                                    });
+                                }
+                                return Ok(Value::Enum {
+                                    variant: "Err".into(),
+                                    data: Some(Box::new(Value::Str(
+                                        "no addresses found".into(),
+                                    ))),
+                                });
+                            }
+                            Err(e) => {
+                                return Ok(Value::Enum {
+                                    variant: "Err".into(),
+                                    data: Some(Box::new(Value::Str(format!(
+                                        "dns failed: {e}"
+                                    )))),
+                                });
+                            }
+                        }
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "dns_resolve(hostname: str) -> str".into(),
+                    )
+                    .into());
+                }
                 // TQ12.1: HTTP server builtin
                 if name == "http_listen" {
                     return self.builtin_http_listen(args);
                 }
 
+                // V18 2.8: FFI builtins
+                if name == "ffi_load_library" {
+                    if args.len() != 1 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let Value::Str(path) = &args[0] {
+                        match self
+                            .ffi_manager
+                            .load_library(std::path::Path::new(path.as_str()))
+                        {
+                            Ok(idx) => {
+                                return Ok(Value::Enum {
+                                    variant: "Ok".into(),
+                                    data: Some(Box::new(Value::Int(idx as i64))),
+                                });
+                            }
+                            Err(e) => {
+                                return Ok(Value::Enum {
+                                    variant: "Err".into(),
+                                    data: Some(Box::new(Value::Str(e))),
+                                });
+                            }
+                        }
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "ffi_load_library(path: str) -> Result".into(),
+                    )
+                    .into());
+                }
+                if name == "ffi_register" {
+                    // ffi_register(lib_index, name, symbol, param_types, ret_type)
+                    if args.len() < 3 {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 3,
+                            got: args.len(),
+                        }
+                        .into());
+                    }
+                    if let (Value::Int(lib_idx), Value::Str(fn_name), Value::Str(symbol)) =
+                        (&args[0], &args[1], &args[2])
+                    {
+                        // Default: all params i64, return i64
+                        use crate::interpreter::ffi::FfiType;
+                        let param_count = if args.len() > 3 {
+                            if let Value::Int(n) = &args[3] {
+                                *n as usize
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        let param_types = vec![FfiType::I64; param_count];
+                        let ret_type = FfiType::I64;
+                        match self.ffi_manager.register_function(
+                            fn_name,
+                            *lib_idx as usize,
+                            symbol,
+                            param_types,
+                            ret_type,
+                        ) {
+                            Ok(()) => return Ok(Value::Bool(true)),
+                            Err(e) => {
+                                return Ok(Value::Enum {
+                                    variant: "Err".into(),
+                                    data: Some(Box::new(Value::Str(e))),
+                                });
+                            }
+                        }
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "ffi_register(lib: i64, name: str, symbol: str, param_count: i64)".into(),
+                    )
+                    .into());
+                }
+                if name == "ffi_call" {
+                    if args.is_empty() {
+                        return Err(RuntimeError::ArityMismatch {
+                            expected: 1,
+                            got: 0,
+                        }
+                        .into());
+                    }
+                    if let Value::Str(fn_name) = &args[0] {
+                        let call_args = args[1..].to_vec();
+                        match self.ffi_manager.call(fn_name, &call_args) {
+                            Ok(v) => {
+                                return Ok(Value::Enum {
+                                    variant: "Ok".into(),
+                                    data: Some(Box::new(v)),
+                                });
+                            }
+                            Err(e) => {
+                                return Ok(Value::Enum {
+                                    variant: "Err".into(),
+                                    data: Some(Box::new(Value::Str(e))),
+                                });
+                            }
+                        }
+                    }
+                    return Err(RuntimeError::TypeError(
+                        "ffi_call(name: str, ...args) -> Result".into(),
+                    )
+                    .into());
+                }
                 // V18 1.6: TCP socket builtins
                 if name == "tcp_connect" {
                     if args.len() != 1 {
@@ -5757,6 +5910,7 @@ impl Interpreter {
             body: Box::new(body.clone()),
             closure_env: Rc::clone(&self.env),
             is_async: false,
+                    is_gen: false,
         }))
     }
 
@@ -5987,6 +6141,7 @@ impl Interpreter {
                 body: method.body.clone(),
                 closure_env: Rc::clone(&self.env),
                 is_async: false,
+                    is_gen: false,
             };
 
             // Check if this is a static method (no `self` param) — also register globally
@@ -6313,6 +6468,7 @@ impl Interpreter {
                         body: fndef.body.clone(),
                         closure_env: Rc::clone(&self.env),
                         is_async: false,
+                    is_gen: false,
                     };
                     let val = Value::Function(fn_val);
                     mod_symbols.insert(fndef.name.clone(), val.clone());

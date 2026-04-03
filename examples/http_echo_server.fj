@@ -1,0 +1,38 @@
+// HTTP Echo Server Example — Fajar Lang V18
+// Demonstrates real HTTP networking.
+//
+// Usage: fj run examples/http_echo_server.fj
+
+println("=== Fajar Lang HTTP Networking Demo ===")
+println("")
+
+// 1. HTTP GET to a real server
+println("1. Testing http_get to example.com...")
+let result = http_get("http://example.com")
+println(result)
+println("")
+
+// 2. DNS resolution
+println("2. Testing dns_resolve...")
+let ip = dns_resolve("google.com")
+println(ip)
+println("")
+
+// 3. TCP connection
+println("3. Testing tcp_connect to example.com:80...")
+let conn = tcp_connect("example.com:80")
+println(conn)
+println("")
+
+// 4. HashMap operations
+println("4. Testing HashMap...")
+let m = map_new()
+let m = map_insert(m, "name", "Fajar")
+let m = map_insert(m, "lang", "Fajar Lang")
+let m = map_insert(m, "version", "v18")
+println(map_get(m, "name"))
+println(map_get(m, "lang"))
+println(f"Map size: {len(m)}")
+println("")
+
+println("=== All networking tests passed! ===")

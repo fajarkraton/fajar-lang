@@ -606,3 +606,99 @@ fn no_annotation_println() {
 fn no_annotation_arithmetic() {
     expect_ok("fn f() -> i64 { 2 + 3 }");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 11. V18 2.10: FFI blocked in @safe context
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn se020_ffi_load_library() {
+    expect_error(r#"@safe fn f() { ffi_load_library("libc.so") }"#, "SE020");
+}
+#[test]
+fn se020_ffi_call() {
+    expect_error("@safe fn f() { ffi_call(0, 0, 0) }", "SE020");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 12. V18 2.11: Method calls respect context
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn ke002_method_reshape_in_kernel() {
+    // t.reshape() is a tensor method — blocked in @kernel
+    expect_error("@kernel fn f() { let t = 0\n t.reshape(0) }", "KE002");
+}
+#[test]
+fn ke002_method_relu_in_kernel() {
+    expect_error("@kernel fn f() { let t = 0\n t.relu() }", "KE002");
+}
+#[test]
+fn ke002_method_softmax_in_kernel() {
+    expect_error("@kernel fn f() { let t = 0\n t.softmax() }", "KE002");
+}
+#[test]
+fn ke002_method_backward_in_kernel() {
+    expect_error("@kernel fn f() { let t = 0\n t.backward() }", "KE002");
+}
+#[test]
+fn de001_method_mem_alloc_in_device() {
+    expect_error("@device fn f() { let x = 0\n x.mem_alloc() }", "DE001");
+}
+#[test]
+fn method_len_ok_in_kernel() {
+    // .len() is safe in @kernel
+    expect_ok("@kernel fn f() { let a = [1, 2]\n a.len() }");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 13. V18 2.7: Generator tests
+// ════════════════════════════════════════════════════════════════════════
+
+/// Helper: run source and return captured output.
+fn run_capture(source: &str) -> String {
+    let tokens = fajar_lang::lexer::tokenize(source).expect("lex failed");
+    let program = fajar_lang::parser::parse(tokens).expect("parse failed");
+    let _ = fajar_lang::analyzer::analyze(&program); // ignore warnings
+    let mut interp = fajar_lang::interpreter::Interpreter::new_capturing();
+    interp.eval_program(&program).expect("eval failed");
+    interp.get_output().join("\n")
+}
+
+#[test]
+fn gen_fn_range_produces_array() {
+    let out = run_capture(
+        "gen fn range(n: i64) -> i64 {
+            let mut i = 0
+            while i < n { yield i\n i = i + 1 }
+        }
+        let v = range(4)
+        println(v)",
+    );
+    assert!(out.contains("[0, 1, 2, 3]"), "got: {out}");
+}
+
+#[test]
+fn gen_fn_yields_collected() {
+    let out = run_capture(
+        "gen fn triple() {
+            yield 10
+            yield 20
+            yield 30
+        }
+        println(triple())",
+    );
+    assert!(out.contains("[10, 20, 30]"), "got: {out}");
+}
+
+#[test]
+fn gen_fn_for_loop_iteration() {
+    let out = run_capture(
+        "gen fn nums() {
+            yield 1
+            yield 2
+        }
+        for x in nums() { println(x) }",
+    );
+    assert!(out.contains("1") && out.contains("2"), "got: {out}");
+}

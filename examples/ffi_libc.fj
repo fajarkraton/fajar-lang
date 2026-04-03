@@ -1,0 +1,33 @@
+// FFI Example — Call C functions from Fajar Lang
+// Demonstrates loading libc.so.6 and calling C functions.
+//
+// Usage: fj run examples/ffi_libc.fj
+
+println("=== Fajar Lang FFI Demo ===")
+println("")
+
+// Load libc
+let lib = ffi_load_library("libc.so.6")
+println(f"Loaded libc: {lib}")
+
+// Register C functions
+ffi_register(0, "c_getpid", "getpid", 0)
+ffi_register(0, "c_getuid", "getuid", 0)
+ffi_register(0, "c_getgid", "getgid", 0)
+ffi_register(0, "c_abs", "abs", 1)
+
+// Call them
+let pid = ffi_call("c_getpid")
+println(f"getpid() = {pid}")
+
+let uid = ffi_call("c_getuid")
+println(f"getuid() = {uid}")
+
+let gid = ffi_call("c_getgid")
+println(f"getgid() = {gid}")
+
+let result = ffi_call("c_abs", -42)
+println(f"abs(-42) = {result}")
+
+println("")
+println("=== FFI demo complete! ===")

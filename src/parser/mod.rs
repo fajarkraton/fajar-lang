@@ -491,6 +491,15 @@ impl Parser {
                 fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }
+            TokenKind::Gen => {
+                // `gen fn` → generator function def
+                let mut fndef = self.parse_fn_def(is_pub, annotation)?;
+                fndef.is_test = is_test;
+                fndef.should_panic = should_panic;
+                fndef.is_ignored = is_ignored;
+                fndef.doc_comment = doc_comment;
+                Ok(Item::FnDef(fndef))
+            }
             TokenKind::Async => {
                 // Peek ahead: `async fn` → function def, `async {` → expression statement
                 if self.pos + 1 < self.tokens.len()

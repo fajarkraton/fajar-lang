@@ -1617,6 +1617,10 @@ impl TypeChecker {
             "acpi_get_cpu_count",
             "acpi_shutdown",
             "sleep_ms",
+            // V18 2.10: FFI builtins — unsafe by nature
+            "ffi_load_library",
+            "ffi_call",
+            "ffi_close",
         ] {
             safe_blocked_builtins.insert(extra.to_string());
         }

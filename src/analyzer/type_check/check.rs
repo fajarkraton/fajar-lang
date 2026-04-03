@@ -2582,6 +2582,9 @@ impl TypeChecker {
             self.check_expr(&arg.value);
         }
 
+        // V18 2.11: Enforce @kernel/@device context for method calls
+        self.check_context_call(method, _span);
+
         match (&obj_ty, method) {
             // String methods
             (Type::Str, "len") => Type::I64,

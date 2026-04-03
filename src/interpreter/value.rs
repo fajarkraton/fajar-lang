@@ -267,6 +267,8 @@ pub struct FnValue {
     pub closure_env: Rc<RefCell<Environment>>,
     /// Whether this is an async function (returns Future on call).
     pub is_async: bool,
+    /// Whether this is a generator function (`gen fn`).
+    pub is_gen: bool,
 }
 
 impl PartialEq for Value {
