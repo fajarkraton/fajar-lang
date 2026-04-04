@@ -3005,6 +3005,72 @@ fn cmd_build_bsp(path: &PathBuf, board_name: &str, output: Option<&std::path::Pa
     ExitCode::SUCCESS
 }
 
+/// C runtime for LLVM AOT-compiled Fajar Lang programs.
+///
+/// Provides implementations of `fj_rt_*` functions that the LLVM codegen
+/// declares as external. These are the same operations as
+/// `src/codegen/cranelift/runtime_fns.rs` but in C for static linking.
+#[cfg(feature = "llvm")]
+const FJ_LLVM_RUNTIME_C: &str = r#"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+/* ── Print (stdout, with newline) ── */
+void fj_rt_println_int(int64_t val) { printf("%lld\n", (long long)val); }
+void fj_rt_println_str(const char* ptr, int64_t len) {
+    fwrite(ptr, 1, (size_t)len, stdout); putchar('\n');
+}
+void fj_rt_println_f64(double val) { printf("%.4f\n", val); }
+void fj_rt_println_bool(int64_t val) { printf("%s\n", val ? "true" : "false"); }
+
+/* ── Print (stdout, no newline) ── */
+void fj_rt_print_int(int64_t val) { printf("%lld", (long long)val); }
+void fj_rt_print_str(const char* ptr, int64_t len) {
+    fwrite(ptr, 1, (size_t)len, stdout);
+}
+void fj_rt_print_f64(double val) { printf("%.4f", val); }
+void fj_rt_print_bool(int64_t val) { printf("%s", val ? "true" : "false"); }
+
+/* ── Eprint (stderr, with newline) ── */
+void fj_rt_eprintln_int(int64_t val) { fprintf(stderr, "%lld\n", (long long)val); }
+void fj_rt_eprintln_str(const char* ptr, int64_t len) {
+    fwrite(ptr, 1, (size_t)len, stderr); fputc('\n', stderr);
+}
+void fj_rt_eprintln_f64(double val) { fprintf(stderr, "%.4f\n", val); }
+void fj_rt_eprintln_bool(int64_t val) { fprintf(stderr, "%s\n", val ? "true" : "false"); }
+
+/* ── Eprint (stderr, no newline) ── */
+void fj_rt_eprint_int(int64_t val) { fprintf(stderr, "%lld", (long long)val); }
+void fj_rt_eprint_str(const char* ptr, int64_t len) {
+    fwrite(ptr, 1, (size_t)len, stderr);
+}
+void fj_rt_eprint_f64(double val) { fprintf(stderr, "%.4f", val); }
+void fj_rt_eprint_bool(int64_t val) { fprintf(stderr, "%s", val ? "true" : "false"); }
+
+/* ── String operations ── */
+int64_t fj_rt_str_len(const char* ptr, int64_t len) { (void)ptr; return len; }
+char* fj_rt_str_concat(const char* a, int64_t a_len, const char* b, int64_t b_len) {
+    int64_t total = a_len + b_len;
+    char* out = (char*)malloc((size_t)total + 1);
+    if (out) { memcpy(out, a, (size_t)a_len); memcpy(out + a_len, b, (size_t)b_len); out[total] = 0; }
+    return out;
+}
+
+/* ── Assert ── */
+void fj_rt_assert(int64_t cond) {
+    if (!cond) { fprintf(stderr, "assertion failed\n"); exit(1); }
+}
+void fj_rt_assert_eq(int64_t a, int64_t b) {
+    if (a != b) { fprintf(stderr, "assertion failed: %lld != %lld\n", (long long)a, (long long)b); exit(1); }
+}
+
+/* ── Memory ── */
+void* fj_rt_alloc(int64_t size) { return malloc((size_t)size); }
+void fj_rt_free(void* ptr, int64_t size) { (void)size; free(ptr); }
+"#;
+
 /// Builds a Fajar Lang program to a native object/binary via LLVM backend.
 #[cfg(feature = "llvm")]
 #[allow(clippy::too_many_arguments)]
@@ -3182,13 +3248,36 @@ fn cmd_build_llvm(
         obj_path
     };
 
+    // Compile the Fajar Lang C runtime (fj_rt_* function implementations)
+    let rt_c_path = obj_path.with_file_name("fj_runtime.c");
+    let rt_o_path = obj_path.with_file_name("fj_runtime.o");
+    std::fs::write(&rt_c_path, FJ_LLVM_RUNTIME_C).unwrap_or_else(|e| {
+        eprintln!("warning: cannot write runtime.c: {e}");
+    });
+    let rt_compiled = std::process::Command::new("cc")
+        .args(["-c", "-O2", "-o"])
+        .arg(&rt_o_path)
+        .arg(&rt_c_path)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !rt_compiled {
+        eprintln!(
+            "warning: failed to compile fj_runtime.c — linking may fail for programs using println/print"
+        );
+    }
+
     // Link to binary
     let bin_path = output
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| path.with_extension(""));
 
     let mut link_cmd = std::process::Command::new("cc");
-    link_cmd.arg(&obj_path).arg("-o").arg(&bin_path).arg("-lm");
+    link_cmd.arg(&obj_path);
+    if rt_compiled {
+        link_cmd.arg(&rt_o_path);
+    }
+    link_cmd.arg("-o").arg(&bin_path).arg("-lm");
 
     // PGO linker flags: instrumented builds need the profiling runtime
     if pgo_mode.is_generate() {
@@ -3217,8 +3306,10 @@ fn cmd_build_llvm(
     }
     let status = link_cmd.status();
 
-    // Clean up intermediate file
+    // Clean up intermediate files
     let _ = std::fs::remove_file(&obj_path);
+    let _ = std::fs::remove_file(&rt_c_path);
+    let _ = std::fs::remove_file(&rt_o_path);
 
     let lto_suffix = if lto_mode.is_enabled() {
         format!(", LTO={lto}")
