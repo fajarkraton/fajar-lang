@@ -502,8 +502,11 @@ impl Parser {
             });
         }
 
-        // Handle asm!(...) — inline assembly macro
+        // Handle asm!(...) and asm(...) — inline assembly
         if name == "asm" && self.at(&TokenKind::Bang) {
+            return self.parse_inline_asm(start);
+        }
+        if name == "asm" && self.at(&TokenKind::LParen) {
             return self.parse_inline_asm(start);
         }
 
@@ -1076,7 +1079,8 @@ impl Parser {
     ///
     /// Called after `asm` has been consumed. Expects `!` and `(` next.
     fn parse_inline_asm(&mut self, start: usize) -> Result<Expr, ParseError> {
-        self.expect(&TokenKind::Bang)?;
+        // Accept both asm!(...) and asm(...)
+        self.eat(&TokenKind::Bang);
         self.expect(&TokenKind::LParen)?;
 
         // First argument must be a string template
@@ -1101,12 +1105,12 @@ impl Parser {
         // Parse optional operands, options, and clobber_abi after comma
         let mut operands = Vec::new();
         let mut options = Vec::new();
-        let mut clobber_abi = None;
+        let mut clobber_abi: Vec<String> = Vec::new();
         while self.eat(&TokenKind::Comma) {
             if self.at(&TokenKind::RParen) {
                 break;
             }
-            // Check for `options(...)` or `clobber_abi("...")`
+            // Check for `options(...)`, `clobber_abi("...")`, `clobber("...")`, or bare `volatile`
             if let TokenKind::Ident(name) = self.peek_kind() {
                 if name == "options" {
                     self.advance();
@@ -1122,9 +1126,10 @@ impl Parser {
                                 "preserves_flags" => options.push(AsmOption::PreservesFlags),
                                 "pure" => options.push(AsmOption::Pure),
                                 "att_syntax" => options.push(AsmOption::AttSyntax),
+                                "volatile" => options.push(AsmOption::Volatile),
                                 _ => {
                                     return Err(ParseError::UnexpectedToken {
-                                        expected: "asm option (nomem, nostack, readonly, preserves_flags, pure, att_syntax)".into(),
+                                        expected: "asm option (nomem, nostack, readonly, preserves_flags, pure, att_syntax, volatile)".into(),
                                         found: opt,
                                         line: self.peek().line,
                                         col: self.peek().col,
@@ -1140,23 +1145,33 @@ impl Parser {
                     }
                     self.expect(&TokenKind::RParen)?;
                     continue;
-                } else if name == "clobber_abi" {
+                } else if name == "clobber_abi" || name == "clobber" {
                     self.advance();
                     self.expect(&TokenKind::LParen)?;
-                    if let TokenKind::StringLit(abi) = self.peek_kind() {
-                        clobber_abi = Some(abi.clone());
-                        self.advance();
-                    } else {
-                        let tok = self.peek().clone();
-                        return Err(ParseError::UnexpectedToken {
-                            expected: "ABI string (e.g. \"C\")".into(),
-                            found: format!("{}", tok.kind),
-                            line: tok.line,
-                            col: tok.col,
-                            span: tok.span,
-                        });
+                    // Parse one or more comma-separated string args
+                    loop {
+                        if let TokenKind::StringLit(s) = self.peek_kind() {
+                            clobber_abi.push(s.clone());
+                            self.advance();
+                        } else {
+                            let tok = self.peek().clone();
+                            return Err(ParseError::UnexpectedToken {
+                                expected: "clobber register string".into(),
+                                found: format!("{}", tok.kind),
+                                line: tok.line,
+                                col: tok.col,
+                                span: tok.span,
+                            });
+                        }
+                        if !self.eat(&TokenKind::Comma) {
+                            break;
+                        }
                     }
                     self.expect(&TokenKind::RParen)?;
+                    continue;
+                } else if name == "volatile" {
+                    self.advance();
+                    options.push(AsmOption::Volatile);
                     continue;
                 }
             }
@@ -1275,7 +1290,20 @@ impl Parser {
                     _ => "reg".to_string(),
                 };
                 self.expect(&TokenKind::RParen)?;
-                let expr = Box::new(self.parse_expr(0)?);
+                // For out/lateout, allow `-> type` syntax (FajarOS convention)
+                let expr = if self.at(&TokenKind::Arrow) {
+                    let arrow_start = self.peek().span.start;
+                    self.advance(); // consume `->`
+                    let _ty = self.parse_type_expr()?;
+                    let arrow_end = self.tokens[self.pos.saturating_sub(1)].span.end;
+                    // Use a placeholder ident "_" to represent typed output
+                    Box::new(Expr::Ident {
+                        name: "_".to_string(),
+                        span: Span::new(arrow_start, arrow_end),
+                    })
+                } else {
+                    Box::new(self.parse_expr(0)?)
+                };
                 match direction.as_str() {
                     "in" => Ok(AsmOperand::In { constraint, expr }),
                     "out" => Ok(AsmOperand::Out { constraint, expr }),

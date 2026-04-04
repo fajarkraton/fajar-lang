@@ -669,14 +669,17 @@ fn scan_number(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<To
                 }
                 return match i64::from_str_radix(&clean, 16) {
                     Ok(v) => Some(TokenKind::IntLit(v)),
-                    Err(_) => {
-                        errors.push(LexError::NumberOverflow {
-                            line: start_line,
-                            col: start_col,
-                            span: Span::new(start, cursor.pos()),
-                        });
-                        None
-                    }
+                    Err(_) => match u64::from_str_radix(&clean, 16) {
+                        Ok(v) => Some(TokenKind::IntLit(v as i64)),
+                        Err(_) => {
+                            errors.push(LexError::NumberOverflow {
+                                line: start_line,
+                                col: start_col,
+                                span: Span::new(start, cursor.pos()),
+                            });
+                            None
+                        }
+                    },
                 };
             }
             Some('b' | 'B') => {
@@ -694,14 +697,17 @@ fn scan_number(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<To
                 }
                 return match i64::from_str_radix(&clean, 2) {
                     Ok(v) => Some(TokenKind::IntLit(v)),
-                    Err(_) => {
-                        errors.push(LexError::NumberOverflow {
-                            line: start_line,
-                            col: start_col,
-                            span: Span::new(start, cursor.pos()),
-                        });
-                        None
-                    }
+                    Err(_) => match u64::from_str_radix(&clean, 2) {
+                        Ok(v) => Some(TokenKind::IntLit(v as i64)),
+                        Err(_) => {
+                            errors.push(LexError::NumberOverflow {
+                                line: start_line,
+                                col: start_col,
+                                span: Span::new(start, cursor.pos()),
+                            });
+                            None
+                        }
+                    },
                 };
             }
             Some('o' | 'O') => {
@@ -719,14 +725,17 @@ fn scan_number(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<To
                 }
                 return match i64::from_str_radix(&clean, 8) {
                     Ok(v) => Some(TokenKind::IntLit(v)),
-                    Err(_) => {
-                        errors.push(LexError::NumberOverflow {
-                            line: start_line,
-                            col: start_col,
-                            span: Span::new(start, cursor.pos()),
-                        });
-                        None
-                    }
+                    Err(_) => match u64::from_str_radix(&clean, 8) {
+                        Ok(v) => Some(TokenKind::IntLit(v as i64)),
+                        Err(_) => {
+                            errors.push(LexError::NumberOverflow {
+                                line: start_line,
+                                col: start_col,
+                                span: Span::new(start, cursor.pos()),
+                            });
+                            None
+                        }
+                    },
                 };
             }
             _ => {}
@@ -783,14 +792,17 @@ fn scan_number(cursor: &mut Cursor<'_>, errors: &mut Vec<LexError>) -> Option<To
     } else {
         match clean.parse::<i64>() {
             Ok(v) => Some(TokenKind::IntLit(v)),
-            Err(_) => {
-                errors.push(LexError::NumberOverflow {
-                    line: start_line,
-                    col: start_col,
-                    span: Span::new(start, cursor.pos()),
-                });
-                None
-            }
+            Err(_) => match clean.parse::<u64>() {
+                Ok(v) => Some(TokenKind::IntLit(v as i64)),
+                Err(_) => {
+                    errors.push(LexError::NumberOverflow {
+                        line: start_line,
+                        col: start_col,
+                        span: Span::new(start, cursor.pos()),
+                    });
+                    None
+                }
+            },
         }
     }
 }
@@ -1764,7 +1776,24 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_u64_range_decimal_reinterprets_as_i64() {
+        // 9223372036854775808 = i64::MAX + 1 = 0x8000000000000000
+        // Should reinterpret as i64::MIN via u64 bit cast
+        let tokens = tokenize("9223372036854775808").unwrap();
+        assert_eq!(tokens.len(), 2); // IntLit + EOF
+        assert!(matches!(tokens[0].kind, TokenKind::IntLit(i64::MIN)));
+    }
+
+    #[test]
+    fn tokenize_u64_range_hex_reinterprets_as_i64() {
+        let tokens = tokenize("0xFFFFFFFFFFFFFFFF").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::IntLit(-1)));
+    }
+
+    #[test]
     fn tokenize_reports_number_overflow() {
+        // Exceeds both i64 and u64 range
         let err = tokenize("99999999999999999999").unwrap_err();
         assert_eq!(err.len(), 1);
         assert!(matches!(&err[0], LexError::NumberOverflow { .. }));

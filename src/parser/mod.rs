@@ -341,6 +341,7 @@ impl Parser {
                 | TokenKind::Layer
                 | TokenKind::Model
                 | TokenKind::Grad
+                | TokenKind::Gen
         )
     }
 
@@ -495,13 +496,20 @@ impl Parser {
                 Ok(Item::FnDef(fndef))
             }
             TokenKind::Gen => {
-                // `gen fn` → generator function def
-                let mut fndef = self.parse_fn_def(is_pub, annotation)?;
-                fndef.is_test = is_test;
-                fndef.should_panic = should_panic;
-                fndef.is_ignored = is_ignored;
-                fndef.doc_comment = doc_comment;
-                Ok(Item::FnDef(fndef))
+                // Peek ahead: `gen fn` → generator function def, otherwise expression statement
+                if self.pos + 1 < self.tokens.len()
+                    && self.tokens[self.pos + 1].kind == TokenKind::Fn
+                {
+                    let mut fndef = self.parse_fn_def(is_pub, annotation)?;
+                    fndef.is_test = is_test;
+                    fndef.should_panic = should_panic;
+                    fndef.is_ignored = is_ignored;
+                    fndef.doc_comment = doc_comment;
+                    Ok(Item::FnDef(fndef))
+                } else {
+                    let stmt = self.parse_stmt()?;
+                    Ok(Item::Stmt(stmt))
+                }
             }
             TokenKind::Async => {
                 // Peek ahead: `async fn` → function def, `async {` → expression statement
@@ -2443,7 +2451,7 @@ mod tests {
         let expr = parse_expr_ok("asm!(\"syscall\", clobber_abi(\"C\"))");
         match expr {
             Expr::InlineAsm { clobber_abi, .. } => {
-                assert_eq!(clobber_abi, Some("C".to_string()));
+                assert_eq!(clobber_abi, vec!["C".to_string()]);
             }
             _ => panic!("expected InlineAsm"),
         }
@@ -2497,7 +2505,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(operands.len(), 1);
-                assert_eq!(clobber_abi, Some("C".to_string()));
+                assert_eq!(clobber_abi, vec!["C".to_string()]);
                 assert_eq!(options.len(), 1);
                 assert_eq!(options[0], AsmOption::Nostack);
             }

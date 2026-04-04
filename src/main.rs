@@ -3290,7 +3290,7 @@ fn cmd_build_llvm(
             eprintln!("error: bare-metal LLVM builds require `native` feature");
             eprintln!("hint: rebuild with `cargo build --features llvm,native`");
             let _ = std::fs::remove_file(&obj_path);
-            return ExitCode::from(EXIT_COMPILE);
+            ExitCode::from(EXIT_COMPILE)
         }
 
         #[cfg(feature = "native")]

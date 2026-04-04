@@ -953,8 +953,8 @@ pub enum Expr {
         operands: Vec<AsmOperand>,
         /// Assembly options (`options(nomem, nostack)`).
         options: Vec<AsmOption>,
-        /// Clobber ABI specification (`clobber_abi("C")`).
-        clobber_abi: Option<String>,
+        /// Clobber specifications (`clobber_abi("C")` or `clobber("eax", "edx")`).
+        clobber_abi: Vec<String>,
         /// Source span.
         span: Span,
     },
@@ -1089,6 +1089,8 @@ pub enum AsmOption {
     Pure,
     /// `att_syntax` — use AT&T syntax instead of Intel.
     AttSyntax,
+    /// `volatile` — prevent reordering or elimination.
+    Volatile,
 }
 
 impl Expr {

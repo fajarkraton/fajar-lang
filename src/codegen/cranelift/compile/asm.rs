@@ -27,7 +27,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
     template: &str,
     operands: &[crate::parser::ast::AsmOperand],
     _options: &[crate::parser::ast::AsmOption],
-    _clobber_abi: &Option<String>,
+    _clobber_abi: &[String],
 ) -> Result<ClifValue, CodegenError> {
     use crate::parser::ast::AsmOperand;
     let tmpl = template.trim();
@@ -118,7 +118,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
     // Since we lower asm! to Cranelift IR operations, Cranelift's register allocator
     // automatically handles register pressure and spilling. The fence instruction ensures
     // that no reordering occurs across the asm block boundary.
-    if _clobber_abi.is_some() {
+    if !_clobber_abi.is_empty() {
         builder.ins().fence();
     }
 
@@ -532,7 +532,7 @@ pub(crate) fn compile_inline_asm<M: Module>(
     };
 
     // Post-asm clobber fence: ensures no reordering across asm boundary
-    if _clobber_abi.is_some() {
+    if !_clobber_abi.is_empty() {
         builder.ins().fence();
     }
 

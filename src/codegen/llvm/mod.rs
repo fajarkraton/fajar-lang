@@ -44,8 +44,8 @@ use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
-    BinOp, CallArg, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program, Stmt,
-    StructDef, TypeExpr, UnaryOp,
+    BinOp, CallArg, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program,
+    StaticDef, Stmt, StructDef, TypeExpr, UnaryOp,
 };
 
 use self::types::{fj_type_to_llvm, fj_type_to_metadata};
@@ -734,6 +734,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "hlt"
                 | "rdtsc"
                 | "rdrand"
+                | "spin_lock"
+                | "spin_unlock"
         )
     }
 
@@ -1348,6 +1350,43 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             // rdrand() -> i64 — hardware random number
             "rdrand" => self.compile_rdrand().map(Some),
+
+            // spin_lock(addr) — busy-wait until lock acquired (volatile CAS loop)
+            "spin_lock" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "spin_lock() requires 1 argument (address)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("spin_lock addr produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_spin_lock(addr)?;
+                Ok(Some(zero.into()))
+            }
+
+            // spin_unlock(addr) — release lock (volatile store 0)
+            "spin_unlock" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "spin_unlock() requires 1 argument (address)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("spin_unlock addr produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_volatile_store(
+                    addr,
+                    self.context.i64_type().const_zero(),
+                )?;
+                Ok(Some(zero.into()))
+            }
 
             _ => Ok(None),
         }
@@ -2243,6 +2282,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
+        // Pass 0.3: compile static variable definitions as LLVM globals
+        for item in &program.items {
+            if let Item::StaticDef(sdef) = item {
+                self.compile_static_def(sdef)?;
+            }
+        }
+
         // Pass 0.5: register impl block methods
         for item in &program.items {
             if let Item::ImplBlock(ib) = item {
@@ -2419,6 +2465,27 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let attr = self.context.create_enum_attribute(attr_kind, 0);
                     function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
                 }
+                "interrupt" => {
+                    // @interrupt → naked + noinline (handler needs manual prologue/epilogue)
+                    let naked_kind =
+                        inkwell::attributes::Attribute::get_named_enum_kind_id("naked");
+                    let naked_attr = self.context.create_enum_attribute(naked_kind, 0);
+                    function
+                        .add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
+                    let noinline_kind =
+                        inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+                    let noinline_attr = self.context.create_enum_attribute(noinline_kind, 0);
+                    function
+                        .add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+                    // Place in .text.interrupt section
+                    function.set_section(Some(".text.interrupt"));
+                }
+                "section" => {
+                    // @section(".text.boot") → set ELF section
+                    if let Some(ref section_name) = ann.param {
+                        function.set_section(Some(section_name));
+                    }
+                }
                 _ => {}
             }
         }
@@ -2468,6 +2535,60 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 function.add_attribute(inkwell::attributes::AttributeLoc::Return, nonnull_attr);
             }
         }
+    }
+
+    /// Compiles a `static [mut] NAME: TYPE = VALUE` as an LLVM global variable.
+    fn compile_static_def(&mut self, sdef: &StaticDef) -> Result<(), CodegenError> {
+        let type_name = type_expr_to_string(&sdef.ty);
+        let llvm_type = fj_type_to_llvm(self.context, &type_name);
+
+        // Evaluate initial value as a constant
+        let initial_value: inkwell::values::BasicValueEnum<'ctx> = match &*sdef.value {
+            Expr::Literal { kind, .. } => match kind {
+                LiteralKind::Int(v) => self.context.i64_type().const_int(*v as u64, true).into(),
+                LiteralKind::Float(v) => self.context.f64_type().const_float(*v).into(),
+                LiteralKind::Bool(v) => self
+                    .context
+                    .bool_type()
+                    .const_int(u64::from(*v), false)
+                    .into(),
+                _ => llvm_type.into_int_type().const_zero().into(),
+            },
+            Expr::Unary { op: UnaryOp::Neg, operand, .. } => {
+                if let Expr::Literal { kind: LiteralKind::Int(v), .. } = operand.as_ref() {
+                    self.context.i64_type().const_int((*v).wrapping_neg() as u64, true).into()
+                } else {
+                    llvm_type.into_int_type().const_zero().into()
+                }
+            }
+            _ => {
+                // Non-constant initializer: zero-init, will be set at runtime
+                llvm_type.into_int_type().const_zero().into()
+            }
+        };
+
+        let global = self.module.add_global(llvm_type, None, &sdef.name);
+        global.set_initializer(&initial_value);
+
+        if !sdef.is_mut {
+            global.set_constant(true);
+        }
+
+        // Apply @section annotation
+        if let Some(ref ann) = sdef.annotation {
+            if ann.name == "section" {
+                if let Some(ref section_name) = ann.param {
+                    global.set_section(Some(section_name));
+                }
+            }
+        }
+
+        // Register as a variable pointer so function bodies can load/store
+        self.variables
+            .insert(sdef.name.clone(), global.as_pointer_value());
+        self.var_types.insert(sdef.name.clone(), llvm_type);
+
+        Ok(())
     }
 
     /// Compiles a function body to LLVM IR.
@@ -4530,6 +4651,53 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
         // Mark as volatile
         store.set_volatile(true).ok();
+
+        Ok(())
+    }
+
+    /// Compiles a spinlock acquire: volatile busy-wait loop.
+    ///
+    /// ```text
+    /// loop:
+    ///   val = volatile_load(addr)
+    ///   if val == 0 { volatile_store(addr, 1); break }
+    /// ```
+    fn compile_spin_lock(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+    ) -> Result<(), CodegenError> {
+        let func = self
+            .builder
+            .get_insert_block()
+            .and_then(|bb| bb.get_parent())
+            .ok_or_else(|| CodegenError::Internal("no current function".into()))?;
+
+        let loop_bb = self.context.append_basic_block(func, "spin_loop");
+        let done_bb = self.context.append_basic_block(func, "spin_done");
+
+        self.builder
+            .build_unconditional_branch(loop_bb)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        // Loop: volatile load, check if zero
+        self.builder.position_at_end(loop_bb);
+        let val = self.compile_volatile_load(addr)?.into_int_value();
+        let is_zero = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                val,
+                self.context.i64_type().const_zero(),
+                "is_unlocked",
+            )
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        self.builder
+            .build_conditional_branch(is_zero, done_bb, loop_bb)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        // Done: store 1 (acquire)
+        self.builder.position_at_end(done_bb);
+        self.compile_volatile_store(addr, self.context.i64_type().const_int(1, false))?;
 
         Ok(())
     }

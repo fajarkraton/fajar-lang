@@ -2848,7 +2848,7 @@ impl Interpreter {
     fn eval_unary(&mut self, op: UnaryOp, operand: &Expr) -> EvalResult {
         let val = self.eval_expr(operand)?;
         match (op, &val) {
-            (UnaryOp::Neg, Value::Int(v)) => Ok(Value::Int(-v)),
+            (UnaryOp::Neg, Value::Int(v)) => Ok(Value::Int(v.wrapping_neg())),
             (UnaryOp::Neg, Value::Float(v)) => Ok(Value::Float(-v)),
             (UnaryOp::Not, Value::Bool(v)) => Ok(Value::Bool(!v)),
             (UnaryOp::Not, _) => Ok(Value::Bool(!val.is_truthy())),
