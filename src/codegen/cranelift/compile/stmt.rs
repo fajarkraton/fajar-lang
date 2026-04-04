@@ -435,6 +435,9 @@ pub(in crate::codegen::cranelift) fn compile_stmt<M: Module>(
                             | Expr::MethodCall { .. }
                             | Expr::If { .. }
                             | Expr::Index { .. }
+                            | Expr::Match { .. }
+                            | Expr::FString { .. }
+                            | Expr::Block { .. }
                     ) || matches!(value.as_ref(), Expr::Ident { name: vn, .. } if cx.string_lens.contains_key(vn))
                         || matches!(value.as_ref(), Expr::Binary { op: BinOp::Add, .. });
                     if is_string_rhs {

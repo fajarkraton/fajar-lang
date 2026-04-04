@@ -5851,6 +5851,39 @@ fn native_match_string_len() {
 }
 
 #[test]
+fn native_match_string_to_variable() {
+    // Regression: match returning string lost length tracking when assigned
+    // to a variable, causing println to output pointer garbage.
+    let src = r#"
+        fn main() -> i64 {
+            let x = 1
+            let result = match x {
+                1 => "hello",
+                2 => "world",
+                _ => "other",
+            }
+            len(result)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 5); // "hello".len() == 5
+}
+
+#[test]
+fn native_match_string_default_arm() {
+    let src = r#"
+        fn main() -> i64 {
+            let x = 99
+            let result = match x {
+                1 => "hi",
+                _ => "default",
+            }
+            len(result)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 7); // "default".len() == 7
+}
+
+#[test]
 fn native_multiple_params_function() {
     let src = r#"
         fn sum4(a: i64, b: i64, c: i64, d: i64) -> i64 {
