@@ -123,7 +123,7 @@ fn main() {
     // Simulate command sequence
     let commands = ["sysinfo", "ps", "temp", "mem", "net", "uptime", "gpio96", "help"]
     let count = len(commands)
-    let mut i: usize = 0
+    let mut i = 0
     while i < count {
         print_prompt()
         let cmd = commands[i]

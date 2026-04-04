@@ -4918,9 +4918,11 @@ fn main() {
         out.iter().any(|l| l.contains("tensor")),
         "expected tensor from gpu_matmul, got: {out:?}"
     );
+    // Tensor display shows 2x2 matrix (two rows of two values)
+    let joined = out.join("\n");
     assert!(
-        out.iter().any(|l| l.contains("shape=[2, 2]")),
-        "expected shape=[2, 2] from gpu_matmul, got: {out:?}"
+        joined.contains("[[") && joined.contains("]]"),
+        "expected 2x2 matrix from gpu_matmul, got: {out:?}"
     );
 }
 
@@ -4942,9 +4944,11 @@ fn main() {
         out.iter().any(|l| l.contains("tensor")),
         "expected tensor from gpu_add, got: {out:?}"
     );
+    // Tensor display shows 2x2 matrix with value 2.0 (1+1)
+    let joined = out.join("\n");
     assert!(
-        out.iter().any(|l| l.contains("shape=[2, 2]")),
-        "expected shape=[2, 2] from gpu_add, got: {out:?}"
+        joined.contains("2.0") && joined.contains("[["),
+        "expected 2x2 tensor with 2.0 values from gpu_add, got: {out:?}"
     );
 }
 

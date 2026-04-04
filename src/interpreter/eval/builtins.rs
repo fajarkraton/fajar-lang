@@ -9735,10 +9735,13 @@ impl Interpreter {
         for arg in &args {
             match arg {
                 Value::Future { task_id } => task_ids.push(*task_id),
+                Value::Int(id) => task_ids.push(*id as u64),
                 Value::Array(arr) => {
                     for v in arr {
-                        if let Value::Future { task_id } = v {
-                            task_ids.push(*task_id);
+                        match v {
+                            Value::Future { task_id } => task_ids.push(*task_id),
+                            Value::Int(id) => task_ids.push(*id as u64),
+                            _ => {}
                         }
                     }
                 }
