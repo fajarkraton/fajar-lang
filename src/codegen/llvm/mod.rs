@@ -2089,8 +2089,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 }
             }
             None => {
-                // Default return: i64
-                self.context.i64_type().fn_type(&param_types, false)
+                // No return type annotation = void function
+                self.context.void_type().fn_type(&param_types, false)
             }
         };
 
@@ -2243,12 +2243,18 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .is_some_and(|b| b.get_terminator().is_none());
 
         if needs_ret {
-            if let Some(val) = body_val {
+            let is_void = function.get_type().get_return_type().is_none();
+            if is_void {
+                // Void function — discard any body value, return void
+                self.builder
+                    .build_return(None)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            } else if let Some(val) = body_val {
                 self.builder
                     .build_return(Some(&val))
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
             } else {
-                // void return or implicit return 0
+                // Non-void function but no body value — implicit return 0
                 let zero = self.context.i64_type().const_int(0, false);
                 self.builder
                     .build_return(Some(&zero))
@@ -8644,7 +8650,10 @@ mod tests {
             lifetime_params: vec![],
             generic_params: vec![],
             params: vec![],
-            return_type: None,
+            return_type: Some(crate::parser::ast::TypeExpr::Simple {
+                name: "i64".to_string(),
+                span: dummy_span(),
+            }),
             where_clauses: vec![],
             requires: vec![],
             ensures: vec![],
@@ -8751,7 +8760,10 @@ mod tests {
                     lifetime_params: vec![],
                     generic_params: vec![],
                     params: vec![],
-                    return_type: None,
+                    return_type: Some(TypeExpr::Simple {
+                        name: "i64".to_string(),
+                        span: dummy_span(),
+                    }),
                     where_clauses: vec![],
                     requires: vec![],
                     ensures: vec![],
