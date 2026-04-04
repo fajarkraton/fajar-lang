@@ -6622,7 +6622,7 @@ impl ObjectCompiler {
     pub fn new(name: &str) -> Result<Self, CodegenError> {
         let mut flag_builder = settings::builder();
         flag_builder
-            .set("is_pic", "false")
+            .set("is_pic", "true")
             .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
         let isa_builder = cranelift_native::builder()
