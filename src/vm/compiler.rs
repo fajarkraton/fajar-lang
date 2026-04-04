@@ -1090,9 +1090,8 @@ impl Compiler {
             body: Box::new(body.clone()),
             closure_env: {
                 use crate::interpreter::env::Environment;
-                use std::cell::RefCell;
-                use std::rc::Rc;
-                Rc::new(RefCell::new(Environment::new()))
+                use std::sync::{Arc, Mutex};
+                Arc::new(Mutex::new(Environment::new()))
             },
             is_async: false,
             is_gen: false,

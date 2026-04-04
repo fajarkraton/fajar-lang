@@ -1,0 +1,22 @@
+.version 7.5
+.target sm_80
+.address_size 64
+
+.visible .entry vecadd(
+	.param .u64 .ptr .global .align 4 param_a,
+	.param .u64 .ptr .global .align 4 param_b
+)
+{{
+	.reg .u32 %tid;
+	.reg .u64 %addr;
+	.reg .f32 %f<6>;
+
+	mov.u32 %tid, %ctaid.x;
+	ld.param.u64 %addr, [param_a];
+	ld.global.f32 %f0, [%addr];
+	ld.param.u64 %addr, [param_b];
+	add.f32 %f2, %f0, %f1;
+	ld.param.u64 %addr, [param_b];
+	st.global.f32 [%addr], %f2;
+	ret;
+}}

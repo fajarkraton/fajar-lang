@@ -1,25 +1,27 @@
 //! Environment — scope chain for variable bindings.
 //!
-//! Uses `Rc<RefCell<>>` for closures that need shared mutable access to parent scope.
+//! Uses `Arc<Mutex<>>` for thread-safe closures and real actor threading.
 //! Each environment frame holds a `HashMap<String, Value>` and an optional parent pointer.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::interpreter::value::Value;
+
+/// Thread-safe reference to an environment (shared across actors/threads).
+pub type EnvRef = Arc<Mutex<Environment>>;
 
 /// A single environment frame in the scope chain.
 ///
 /// Variables are looked up in the current frame first, then in parent frames.
 /// Closures capture a reference to their defining environment, enabling
-/// lexical scoping.
+/// lexical scoping. Thread-safe via Arc<Mutex<>> for actor support.
 #[derive(Debug)]
 pub struct Environment {
     /// Variable bindings in this scope.
     bindings: HashMap<String, Value>,
     /// Parent scope (None for the global scope).
-    parent: Option<Rc<RefCell<Environment>>>,
+    parent: Option<EnvRef>,
 }
 
 impl Environment {
@@ -34,7 +36,7 @@ impl Environment {
     /// Creates a new child environment with the given parent scope.
     ///
     /// Used when entering a new block, function call, or loop body.
-    pub fn new_with_parent(parent: Rc<RefCell<Environment>>) -> Self {
+    pub fn new_with_parent(parent: EnvRef) -> Self {
         Environment {
             bindings: HashMap::new(),
             parent: Some(parent),
@@ -49,7 +51,7 @@ impl Environment {
         self.bindings.insert(name, value);
     }
 
-    /// Looks up a variable by name, walking up the scope chain.
+    /// Looks up a variable by name, walking up the scope chain iteratively.
     ///
     /// Returns `Some(value)` if found, `None` if the variable is not
     /// defined in any enclosing scope.
@@ -57,23 +59,34 @@ impl Environment {
         if let Some(val) = self.bindings.get(name) {
             return Some(val.clone());
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().lookup(name);
+        let mut current = self.parent.clone();
+        while let Some(parent_ref) = current {
+            let guard = parent_ref.lock().expect("env lock");
+            if let Some(val) = guard.bindings.get(name) {
+                return Some(val.clone());
+            }
+            current = guard.parent.clone();
         }
         None
     }
 
     /// Assigns a new value to an existing variable in the nearest scope.
     ///
-    /// Walks up the scope chain to find the variable. Returns `true` if
-    /// the variable was found and updated, `false` if it does not exist.
+    /// Walks up the scope chain iteratively to find the variable. Returns
+    /// `true` if the variable was found and updated, `false` if not.
     pub fn assign(&mut self, name: &str, value: Value) -> bool {
         if self.bindings.contains_key(name) {
             self.bindings.insert(name.to_string(), value);
             return true;
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow_mut().assign(name, value);
+        let mut current = self.parent.clone();
+        while let Some(parent_ref) = current {
+            let mut guard = parent_ref.lock().expect("env lock");
+            if guard.bindings.contains_key(name) {
+                guard.bindings.insert(name.to_string(), value);
+                return true;
+            }
+            current = guard.parent.clone();
         }
         false
     }
@@ -123,8 +136,11 @@ impl Environment {
     /// Used to inform the analyzer about names defined in prior REPL rounds.
     pub fn all_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.bindings.keys().cloned().collect();
-        if let Some(parent) = &self.parent {
-            names.extend(parent.borrow().all_names());
+        let mut current = self.parent.clone();
+        while let Some(parent_ref) = current {
+            let guard = parent_ref.lock().expect("env lock");
+            names.extend(guard.bindings.keys().cloned());
+            current = guard.parent.clone();
         }
         names
     }
@@ -171,22 +187,31 @@ mod tests {
 
     #[test]
     fn child_scope_shadows_parent() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(1));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(1));
 
-        let mut child = Environment::new_with_parent(Rc::clone(&parent));
+        let mut child = Environment::new_with_parent(Arc::clone(&parent));
         child.define("x".into(), Value::Int(2));
 
         assert_eq!(child.lookup("x"), Some(Value::Int(2)));
-        assert_eq!(parent.borrow().lookup("x"), Some(Value::Int(1)));
+        assert_eq!(
+            parent.lock().expect("env lock").lookup("x"),
+            Some(Value::Int(1))
+        );
     }
 
     #[test]
     fn child_scope_reads_parent() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(42));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(42));
 
-        let child = Environment::new_with_parent(Rc::clone(&parent));
+        let child = Environment::new_with_parent(Arc::clone(&parent));
         assert_eq!(child.lookup("x"), Some(Value::Int(42)));
     }
 
@@ -200,12 +225,18 @@ mod tests {
 
     #[test]
     fn assign_updates_parent_scope() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(1));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(1));
 
-        let mut child = Environment::new_with_parent(Rc::clone(&parent));
+        let mut child = Environment::new_with_parent(Arc::clone(&parent));
         assert!(child.assign("x", Value::Int(99)));
-        assert_eq!(parent.borrow().lookup("x"), Some(Value::Int(99)));
+        assert_eq!(
+            parent.lock().expect("env lock").lookup("x"),
+            Some(Value::Int(99))
+        );
     }
 
     #[test]
@@ -216,18 +247,20 @@ mod tests {
 
     #[test]
     fn nested_three_levels() {
-        let global = Rc::new(RefCell::new(Environment::new()));
+        let global = Arc::new(Mutex::new(Environment::new()));
         global
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("g".into(), Value::Str("global".into()));
 
-        let mid = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+        let mid = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
             &global,
         ))));
-        mid.borrow_mut()
+        mid.lock()
+            .expect("env lock")
             .define("m".into(), Value::Str("mid".into()));
 
-        let inner = Environment::new_with_parent(Rc::clone(&mid));
+        let inner = Environment::new_with_parent(Arc::clone(&mid));
 
         assert_eq!(inner.lookup("g"), Some(Value::Str("global".into())));
         assert_eq!(inner.lookup("m"), Some(Value::Str("mid".into())));
@@ -236,26 +269,35 @@ mod tests {
 
     #[test]
     fn has_local_only_checks_current_scope() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(1));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(1));
 
-        let child = Environment::new_with_parent(Rc::clone(&parent));
+        let child = Environment::new_with_parent(Arc::clone(&parent));
         assert!(!child.has_local("x"));
-        assert!(parent.borrow().has_local("x"));
+        assert!(parent.lock().expect("env lock").has_local("x"));
     }
 
     #[test]
     fn assign_prefers_nearest_scope() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(1));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(1));
 
-        let mut child = Environment::new_with_parent(Rc::clone(&parent));
+        let mut child = Environment::new_with_parent(Arc::clone(&parent));
         child.define("x".into(), Value::Int(2));
 
         assert!(child.assign("x", Value::Int(99)));
         assert_eq!(child.lookup("x"), Some(Value::Int(99)));
         // Parent unchanged
-        assert_eq!(parent.borrow().lookup("x"), Some(Value::Int(1)));
+        assert_eq!(
+            parent.lock().expect("env lock").lookup("x"),
+            Some(Value::Int(1))
+        );
     }
 
     #[test]
@@ -272,18 +314,24 @@ mod tests {
 
     #[test]
     fn closure_captures_environment() {
-        let outer = Rc::new(RefCell::new(Environment::new()));
-        outer.borrow_mut().define("captured".into(), Value::Int(42));
+        let outer = Arc::new(Mutex::new(Environment::new()));
+        outer
+            .lock()
+            .expect("env lock")
+            .define("captured".into(), Value::Int(42));
 
         // Simulate closure capturing the outer environment
-        let closure_env = Rc::clone(&outer);
+        let closure_env = Arc::clone(&outer);
 
         // Later, in a different scope, the closure accesses the captured var
         let inner = Environment::new_with_parent(closure_env);
         assert_eq!(inner.lookup("captured"), Some(Value::Int(42)));
 
         // Mutation through the captured env is visible
-        outer.borrow_mut().assign("captured", Value::Int(100));
+        outer
+            .lock()
+            .expect("env lock")
+            .assign("captured", Value::Int(100));
         assert_eq!(inner.lookup("captured"), Some(Value::Int(100)));
     }
 
@@ -330,16 +378,22 @@ mod tests {
 
     #[test]
     fn drop_locals_does_not_affect_parent() {
-        let parent = Rc::new(RefCell::new(Environment::new()));
-        parent.borrow_mut().define("x".into(), Value::Int(42));
+        let parent = Arc::new(Mutex::new(Environment::new()));
+        parent
+            .lock()
+            .expect("env lock")
+            .define("x".into(), Value::Int(42));
 
-        let mut child = Environment::new_with_parent(Rc::clone(&parent));
+        let mut child = Environment::new_with_parent(Arc::clone(&parent));
         child.define("y".into(), Value::Int(99));
         child.drop_locals();
 
         // Child's y is nullified
         assert_eq!(child.lookup("y"), Some(Value::Null));
         // Parent's x is untouched
-        assert_eq!(parent.borrow().lookup("x"), Some(Value::Int(42)));
+        assert_eq!(
+            parent.lock().expect("env lock").lookup("x"),
+            Some(Value::Int(42))
+        );
     }
 }

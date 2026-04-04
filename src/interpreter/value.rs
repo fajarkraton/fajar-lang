@@ -3,12 +3,10 @@
 //! Defines the [`Value`] enum representing all possible runtime values,
 //! and [`FnValue`] for function closures.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use crate::interpreter::env::Environment;
 use crate::parser::ast::{Expr, Param};
 use crate::runtime::ml::TensorValue;
 
@@ -226,7 +224,7 @@ pub enum Value {
     /// A layer handle (ML runtime, boxed for size).
     Layer(Box<LayerValue>),
     /// A lazy iterator value.
-    Iterator(Rc<RefCell<IteratorValue>>),
+    Iterator(Arc<Mutex<IteratorValue>>),
     /// An async future value (result of calling an async fn).
     Future {
         /// Unique task ID for the executor.
@@ -266,7 +264,7 @@ pub struct FnValue {
     /// Function body expression (typically a Block).
     pub body: Box<Expr>,
     /// Captured environment at the point of definition.
-    pub closure_env: Rc<RefCell<Environment>>,
+    pub closure_env: crate::interpreter::env::EnvRef,
     /// Whether this is an async function (returns Future on call).
     pub is_async: bool,
     /// Whether this is a generator function (`gen fn`).

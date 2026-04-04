@@ -10,10 +10,9 @@
 mod builtins;
 mod methods;
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, Value};
@@ -262,7 +261,10 @@ pub enum AsyncOperation {
     /// HTTP POST request to the given URL with body.
     HttpPost(String, String),
     /// Spawn: execute a function body as a concurrent task.
-    Spawn(Box<crate::parser::ast::Expr>, Rc<RefCell<Environment>>),
+    Spawn(
+        Box<crate::parser::ast::Expr>,
+        crate::interpreter::env::EnvRef,
+    ),
     /// Join: wait for multiple futures to complete.
     Join(Vec<u64>),
     /// Select: wait for the first future to complete.
@@ -535,7 +537,7 @@ impl std::error::Error for EvalError {}
 /// Tree-walking interpreter for Fajar Lang.
 ///
 /// Evaluates a parsed AST (`Program`) and produces runtime `Value`s.
-/// Uses an environment chain (`Rc<RefCell<Environment>>`) for scoping.
+/// Uses an environment chain (`crate::interpreter::env::EnvRef`) for scoping.
 /// V15: A single level in the effect replay stack.
 /// `(cache_entries, current_index)` where each cache entry is
 /// `(effect_name, op_name, resume_value)`.
@@ -543,7 +545,7 @@ type EffectReplayLevel = (Vec<(String, String, Value)>, usize);
 
 pub struct Interpreter {
     /// The global environment.
-    env: Rc<RefCell<Environment>>,
+    env: crate::interpreter::env::EnvRef,
     /// Current call depth for recursion protection.
     call_depth: usize,
     /// Maximum recursion depth (configurable, default 64).
@@ -595,7 +597,7 @@ pub struct Interpreter {
     /// Inference result cache: key (string) → cached result (string).
     inference_cache: HashMap<String, String>,
     /// Async task queue: task_id → (function body expr, captured env).
-    async_tasks: HashMap<u64, (Box<Expr>, Rc<RefCell<Environment>>)>,
+    async_tasks: HashMap<u64, (Box<Expr>, crate::interpreter::env::EnvRef)>,
     /// Real async operations pending execution (V10).
     async_ops: HashMap<u64, AsyncOperation>,
     /// Next async task ID.
@@ -674,7 +676,7 @@ pub struct Interpreter {
 impl Interpreter {
     /// Creates a new interpreter with a fresh global environment.
     pub fn new() -> Self {
-        let env = Rc::new(RefCell::new(Environment::new()));
+        let env = Arc::new(Mutex::new(Environment::new()));
         let mut interp = Interpreter {
             env,
             call_depth: 0,
@@ -755,7 +757,7 @@ impl Interpreter {
 
     /// Creates an interpreter that captures output (for testing).
     pub fn new_capturing() -> Self {
-        let env = Rc::new(RefCell::new(Environment::new()));
+        let env = Arc::new(Mutex::new(Environment::new()));
         let mut interp = Interpreter {
             env,
             call_depth: 0,
@@ -1098,12 +1100,13 @@ impl Interpreter {
 
         for name in &all {
             self.env
-                .borrow_mut()
+                .lock()
+                .expect("env lock")
                 .define(name.to_string(), Value::BuiltinFn(name.to_string()));
         }
 
         // Register Option/Result constructors
-        self.env.borrow_mut().define(
+        self.env.lock().expect("env lock").define(
             "None".to_string(),
             Value::Enum {
                 variant: "None".to_string(),
@@ -1111,21 +1114,26 @@ impl Interpreter {
             },
         );
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("Some".to_string(), Value::BuiltinFn("Some".to_string()));
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("Ok".to_string(), Value::BuiltinFn("Ok".to_string()));
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("Err".to_string(), Value::BuiltinFn("Err".to_string()));
 
         // Math constants
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("PI".to_string(), Value::Float(std::f64::consts::PI));
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define("E".to_string(), Value::Float(std::f64::consts::E));
 
         // Cross-check: validate that stdlib builtin catalogs are registered.
@@ -1822,7 +1830,7 @@ impl Interpreter {
         let tokens = crate::lexer::tokenize(source)?;
         let program = crate::parser::parse(tokens)?;
         // Run semantic analysis with known names from the environment
-        let known_names = self.env.borrow().all_names();
+        let known_names = self.env.lock().expect("env lock").all_names();
         if let Err(errors) = crate::analyzer::analyze_with_known(&program, &known_names) {
             let real_errors: Vec<_> = errors.into_iter().filter(|e| !e.is_warning()).collect();
             if !real_errors.is_empty() {
@@ -1842,7 +1850,8 @@ impl Interpreter {
     pub fn call_fn(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RuntimeError> {
         let func = self
             .env
-            .borrow()
+            .lock()
+            .expect("env lock")
             .lookup(name)
             .ok_or_else(|| RuntimeError::UndefinedVariable(name.to_string()))?;
         match func {
@@ -1864,7 +1873,7 @@ impl Interpreter {
     /// This is called after `eval_program` to run the program's entry point.
     /// If no `main` function is defined, this is a no-op.
     pub fn call_main(&mut self) -> Result<Value, RuntimeError> {
-        let main_fn = self.env.borrow().lookup("main");
+        let main_fn = self.env.lock().expect("env lock").lookup("main");
         match main_fn {
             Some(Value::Function(fv)) => match self.call_function(&fv, vec![]) {
                 Ok(v) => Ok(v),
@@ -1887,24 +1896,31 @@ impl Interpreter {
                     name: fndef.name.clone(),
                     params: fndef.params.clone(),
                     body: fndef.body.clone(),
-                    closure_env: Rc::clone(&self.env),
+                    closure_env: Arc::clone(&self.env),
                     is_async: fndef.is_async,
                     is_gen: fndef.is_gen,
                     requires: fndef.requires.clone(),
                 };
                 self.env
-                    .borrow_mut()
+                    .lock()
+                    .expect("env lock")
                     .define(fndef.name.clone(), Value::Function(fn_val));
                 Ok(Value::Null)
             }
             Item::StructDef(sdef) => {
                 // Store struct name for later use with StructInit
                 // In Phase 1, structs are duck-typed — just store the name
-                self.env.borrow_mut().define(sdef.name.clone(), Value::Null);
+                self.env
+                    .lock()
+                    .expect("env lock")
+                    .define(sdef.name.clone(), Value::Null);
                 Ok(Value::Null)
             }
             Item::UnionDef(udef) => {
-                self.env.borrow_mut().define(udef.name.clone(), Value::Null);
+                self.env
+                    .lock()
+                    .expect("env lock")
+                    .define(udef.name.clone(), Value::Null);
                 Ok(Value::Null)
             }
             Item::EnumDef(edef) => {
@@ -1912,7 +1928,7 @@ impl Interpreter {
                 for variant in &edef.variants {
                     if variant.fields.is_empty() {
                         // Unit variant — register as enum value
-                        self.env.borrow_mut().define(
+                        self.env.lock().expect("env lock").define(
                             variant.name.clone(),
                             Value::Enum {
                                 variant: variant.name.clone(),
@@ -1921,7 +1937,7 @@ impl Interpreter {
                         );
                     } else {
                         // Tuple variant — register as builtin constructor
-                        self.env.borrow_mut().define(
+                        self.env.lock().expect("env lock").define(
                             variant.name.clone(),
                             Value::BuiltinFn(format!("__enum_{}_{}", edef.name, variant.name)),
                         );
@@ -1931,13 +1947,19 @@ impl Interpreter {
             }
             Item::ConstDef(cdef) => {
                 let val = self.eval_expr(&cdef.value)?;
-                self.env.borrow_mut().define(cdef.name.clone(), val);
+                self.env
+                    .lock()
+                    .expect("env lock")
+                    .define(cdef.name.clone(), val);
                 Ok(Value::Null)
             }
             Item::StaticDef(sdef) => {
                 // Static mut: define as mutable global variable
                 let val = self.eval_expr(&sdef.value)?;
-                self.env.borrow_mut().define(sdef.name.clone(), val);
+                self.env
+                    .lock()
+                    .expect("env lock")
+                    .define(sdef.name.clone(), val);
                 Ok(Value::Null)
             }
             Item::ServiceDef(svc) => {
@@ -1947,13 +1969,14 @@ impl Interpreter {
                         name: handler.name.clone(),
                         params: handler.params.clone(),
                         body: handler.body.clone(),
-                        closure_env: std::rc::Rc::clone(&self.env),
+                        closure_env: Arc::clone(&self.env),
                         is_async: false,
                         is_gen: false,
                         requires: vec![],
                     };
                     self.env
-                        .borrow_mut()
+                        .lock()
+                        .expect("env lock")
                         .define(handler.name.clone(), Value::Function(fn_val));
                 }
                 Ok(Value::Null)
@@ -1974,7 +1997,7 @@ impl Interpreter {
             Item::ExternFn(efn) => {
                 // Register extern function as a builtin placeholder.
                 // Actual dynamic loading happens via ffi.rs (S7.2).
-                self.env.borrow_mut().define(
+                self.env.lock().expect("env lock").define(
                     efn.name.clone(),
                     Value::BuiltinFn(format!("__ffi_{}", efn.name)),
                 );
@@ -2016,7 +2039,7 @@ impl Interpreter {
                 // by the nearest enclosing `handle` expression.
                 for op in &ed.operations {
                     let qualified = format!("{}::{}", ed.name, op.name);
-                    self.env.borrow_mut().define(
+                    self.env.lock().expect("env lock").define(
                         qualified,
                         Value::BuiltinFn(format!("__effect__{}::{}", ed.name, op.name)),
                     );
@@ -2034,7 +2057,7 @@ impl Interpreter {
                         // Register all component operations under the composed name.
                         for op in &merged.operations {
                             let qualified = format!("{}::{}", ec.name, op.name);
-                            self.env.borrow_mut().define(
+                            self.env.lock().expect("env lock").define(
                                 qualified,
                                 Value::BuiltinFn(format!("__effect__{}::{}", ec.name, op.name)),
                             );
@@ -2130,10 +2153,13 @@ impl Interpreter {
                 }) = ty.as_ref()
                 {
                     // Evaluate predicate with the bound variable.
-                    let pred_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                    let pred_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                         &self.env,
                     ))));
-                    pred_env.borrow_mut().define(var_name.clone(), val.clone());
+                    pred_env
+                        .lock()
+                        .expect("env lock")
+                        .define(var_name.clone(), val.clone());
                     let prev_env = self.env.clone();
                     self.env = pred_env;
                     let pred_result = self.eval_expr(predicate);
@@ -2149,12 +2175,12 @@ impl Interpreter {
                         _ => {} // Non-bool predicates: skip check
                     }
                 }
-                self.env.borrow_mut().define(name.clone(), val);
+                self.env.lock().expect("env lock").define(name.clone(), val);
                 Ok(Value::Null)
             }
             Stmt::Const { name, value, .. } => {
                 let val = self.eval_expr(value)?;
-                self.env.borrow_mut().define(name.clone(), val);
+                self.env.lock().expect("env lock").define(name.clone(), val);
                 Ok(Value::Null)
             }
             Stmt::Expr { expr, .. } => self.eval_expr(expr),
@@ -2257,7 +2283,7 @@ impl Interpreter {
             Expr::Path { segments, .. } => {
                 // Try qualified name first (e.g., "Point::new"), then last segment
                 let qualified = segments.join("::");
-                if let Some(val) = self.env.borrow().lookup(&qualified) {
+                if let Some(val) = self.env.lock().expect("env lock").lookup(&qualified) {
                     return Ok(val);
                 }
                 let name = segments.last().map_or("", |s| s.as_str());
@@ -2378,13 +2404,16 @@ impl Interpreter {
                             if let Some(arm) = handler {
                                 // Bind parameters in a new scope.
                                 let prev_env = self.env.clone();
-                                let handler_env = Rc::new(RefCell::new(
-                                    Environment::new_with_parent(Rc::clone(&self.env)),
+                                let handler_env = Arc::new(Mutex::new(
+                                    Environment::new_with_parent(Arc::clone(&self.env)),
                                 ));
                                 self.env = handler_env;
                                 for (i, pname) in arm.param_names.iter().enumerate() {
                                     let val = args.get(i).cloned().unwrap_or(Value::Null);
-                                    self.env.borrow_mut().define(pname.clone(), val);
+                                    self.env
+                                        .lock()
+                                        .expect("env lock")
+                                        .define(pname.clone(), val);
                                 }
                                 let handler_result = self.eval_expr(&arm.body);
                                 self.env = prev_env;
@@ -2440,13 +2469,16 @@ impl Interpreter {
                     for (params, body) in &arms {
                         if params.len() == arg_vals.len() || params.is_empty() {
                             // Bind parameters in a new scope
-                            let macro_env = Rc::new(RefCell::new(Environment::new_with_parent(
-                                Rc::clone(&self.env),
+                            let macro_env = Arc::new(Mutex::new(Environment::new_with_parent(
+                                Arc::clone(&self.env),
                             )));
                             for (param, val) in params.iter().zip(arg_vals.iter()) {
-                                macro_env.borrow_mut().define(param.clone(), val.clone());
+                                macro_env
+                                    .lock()
+                                    .expect("env lock")
+                                    .define(param.clone(), val.clone());
                             }
-                            let prev_env = Rc::clone(&self.env);
+                            let prev_env = Arc::clone(&self.env);
                             self.env = macro_env;
                             let result = self.eval_expr(body);
                             self.env = prev_env;
@@ -2481,7 +2513,8 @@ impl Interpreter {
             // V19: Macro metavariable — look up in environment (bound during macro expansion)
             Expr::MacroVar { name, .. } => self
                 .env
-                .borrow()
+                .lock()
+                .expect("env lock")
                 .lookup(name)
                 .ok_or_else(|| RuntimeError::UndefinedVariable(format!("${name}")).into()),
         }
@@ -2502,7 +2535,8 @@ impl Interpreter {
     /// Evaluates an identifier by looking it up in the environment.
     fn eval_ident(&self, name: &str) -> EvalResult {
         self.env
-            .borrow()
+            .lock()
+            .expect("env lock")
             .lookup(name)
             .ok_or_else(|| RuntimeError::UndefinedVariable(name.to_string()).into())
     }
@@ -2817,11 +2851,14 @@ impl Interpreter {
             let task_id = self.next_task_id;
             self.next_task_id += 1;
             // Create a new environment with arguments bound
-            let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+            let call_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                 &fv.closure_env,
             ))));
             for (param, val) in fv.params.iter().zip(args) {
-                call_env.borrow_mut().define(param.name.clone(), val);
+                call_env
+                    .lock()
+                    .expect("env lock")
+                    .define(param.name.clone(), val);
             }
             self.async_tasks
                 .insert(task_id, (fv.body.clone(), call_env));
@@ -2842,11 +2879,14 @@ impl Interpreter {
             };
             self.call_stack.push(fn_name.clone());
 
-            let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+            let call_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                 &fv.closure_env,
             ))));
             for (param, val) in fv.params.iter().zip(args) {
-                call_env.borrow_mut().define(param.name.clone(), val);
+                call_env
+                    .lock()
+                    .expect("env lock")
+                    .define(param.name.clone(), val);
             }
             let prev_env = std::mem::replace(&mut self.env, call_env);
             let _ = self.eval_expr(&fv.body); // ignore final return value
@@ -2887,17 +2927,20 @@ impl Interpreter {
         self.record_fn_entry(&fn_name);
 
         // Create new scope with closure's environment as parent
-        let call_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+        let call_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
             &fv.closure_env,
         ))));
 
         // Bind parameters
         for (param, val) in fv.params.iter().zip(args) {
-            call_env.borrow_mut().define(param.name.clone(), val);
+            call_env
+                .lock()
+                .expect("env lock")
+                .define(param.name.clone(), val);
         }
 
         // Save and swap environment
-        let prev_env = Rc::clone(&self.env);
+        let prev_env = Arc::clone(&self.env);
         self.env = call_env;
 
         // V18 4.4: Check @requires preconditions at call time

@@ -617,9 +617,8 @@ impl VM {
                     span: crate::lexer::token::Span::new(0, 0),
                 }),
                 closure_env: {
-                    use std::cell::RefCell;
-                    use std::rc::Rc;
-                    Rc::new(RefCell::new(crate::interpreter::env::Environment::new()))
+                    use std::sync::{Arc, Mutex};
+                    Arc::new(Mutex::new(crate::interpreter::env::Environment::new()))
                 },
                 is_async: false,
                 is_gen: false,

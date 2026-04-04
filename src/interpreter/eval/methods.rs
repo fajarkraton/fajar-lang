@@ -3,8 +3,7 @@
 //! Contains `eval_method_call()` and all method dispatch for strings, arrays,
 //! maps, tensors, iterators, GPU builtins, and system methods.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::interpreter::value::{IteratorValue, LayerValue, Value};
 use crate::parser::ast::{CallArg, Expr};
@@ -121,7 +120,7 @@ impl Interpreter {
                     .into());
                 }
             };
-            return Ok(Value::Iterator(Rc::new(RefCell::new(iter_val))));
+            return Ok(Value::Iterator(Arc::new(Mutex::new(iter_val))));
         }
 
         // Iterator combinator/consumer methods
@@ -1609,7 +1608,8 @@ impl Interpreter {
         });
         // Store the Arc in a global map so kick/stop can access it
         self.env
-            .borrow_mut()
+            .lock()
+            .expect("env lock")
             .define(format!("__watchdog_{id}"), Value::Int(id));
         // Store alive flag pointer for kick/stop
         // We leak the Arc intentionally — it's cleaned up on stop

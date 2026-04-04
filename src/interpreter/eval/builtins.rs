@@ -3,10 +3,9 @@
 //! Contains `call_builtin()` dispatch and all `builtin_*` implementation functions
 //! for OS/HAL, tensor, GPU, timing, file I/O, and FajarOS Phase 3-8 builtins.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, IteratorValue, LayerValue, OptimizerValue, Value};
@@ -1118,7 +1117,7 @@ impl Interpreter {
                         };
                         match unet.forward(&input, step) {
                             Ok(result) => Ok(Value::Tensor(result)),
-                            Err(e) => {
+                            Err(_e) => {
                                 // Fallback to scaling if UNet shape doesn't match
                                 let progress = step as f64 / steps.max(1) as f64;
                                 let scale = 1.0 - progress * 0.5;
@@ -6415,10 +6414,10 @@ impl Interpreter {
         tail_expr: &Option<Box<Expr>>,
     ) -> EvalResult {
         // Create a new scope
-        let block_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+        let block_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
             &self.env,
         ))));
-        let prev_env = Rc::clone(&self.env);
+        let prev_env = Arc::clone(&self.env);
         self.env = block_env;
 
         // Evaluate statements
@@ -6433,7 +6432,7 @@ impl Interpreter {
         };
 
         // Drop owned locals at scope exit (simulates destructors)
-        self.env.borrow_mut().drop_locals();
+        self.env.lock().expect("env lock").drop_locals();
 
         // Restore scope
         self.env = prev_env;
@@ -6561,12 +6560,15 @@ impl Interpreter {
         };
 
         for item in items {
-            let loop_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+            let loop_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                 &self.env,
             ))));
-            loop_env.borrow_mut().define(variable.to_string(), item);
+            loop_env
+                .lock()
+                .expect("env lock")
+                .define(variable.to_string(), item);
 
-            let prev_env = Rc::clone(&self.env);
+            let prev_env = Arc::clone(&self.env);
             self.env = loop_env;
 
             let result = self.eval_expr(body);
@@ -6606,7 +6608,7 @@ impl Interpreter {
     fn for_loop_iterator(
         &mut self,
         variable: &str,
-        iter_rc: Rc<RefCell<IteratorValue>>,
+        iter_rc: Arc<Mutex<IteratorValue>>,
         body: &Expr,
         label: Option<&str>,
     ) -> EvalResult {
@@ -6617,12 +6619,15 @@ impl Interpreter {
                 None => break,
             };
 
-            let loop_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+            let loop_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                 &self.env,
             ))));
-            loop_env.borrow_mut().define(variable.to_string(), item);
+            loop_env
+                .lock()
+                .expect("env lock")
+                .define(variable.to_string(), item);
 
-            let prev_env = Rc::clone(&self.env);
+            let prev_env = Arc::clone(&self.env);
             self.env = loop_env;
 
             let result = self.eval_expr(body);
@@ -6660,19 +6665,19 @@ impl Interpreter {
     /// Advances an iterator, handling combinators that need function calls.
     fn iter_next(
         &mut self,
-        iter_rc: &Rc<RefCell<IteratorValue>>,
+        iter_rc: &Arc<Mutex<IteratorValue>>,
     ) -> Result<Option<Value>, EvalError> {
-        let mut iter = iter_rc.borrow_mut();
+        let mut iter = iter_rc.lock().expect("iter lock");
         match &mut *iter {
             IteratorValue::MappedIter { inner, func } => {
                 let inner_clone = inner.clone();
                 let func_clone = func.clone();
-                drop(iter); // Release borrow before calling function
-                let inner_rc = Rc::new(RefCell::new(*inner_clone));
+                drop(iter); // Release lock before calling function
+                let inner_rc = Arc::new(Mutex::new(*inner_clone));
                 let val = self.iter_next(&inner_rc)?;
                 // Write back the advanced inner iterator
-                let advanced = inner_rc.borrow().clone();
-                let mut iter = iter_rc.borrow_mut();
+                let advanced = inner_rc.lock().expect("iter lock").clone();
+                let mut iter = iter_rc.lock().expect("iter lock");
                 if let IteratorValue::MappedIter { inner, .. } = &mut *iter {
                     **inner = advanced;
                 }
@@ -6689,12 +6694,12 @@ impl Interpreter {
                 let inner_clone = inner.clone();
                 let func_clone = func.clone();
                 drop(iter);
-                let inner_rc = Rc::new(RefCell::new(*inner_clone));
+                let inner_rc = Arc::new(Mutex::new(*inner_clone));
                 loop {
                     let val = self.iter_next(&inner_rc)?;
                     // Write back
-                    let advanced = inner_rc.borrow().clone();
-                    let mut iter = iter_rc.borrow_mut();
+                    let advanced = inner_rc.lock().expect("iter lock").clone();
+                    let mut iter = iter_rc.lock().expect("iter lock");
                     if let IteratorValue::FilterIter { inner, .. } = &mut *iter {
                         **inner = advanced.clone();
                     }
@@ -6706,9 +6711,9 @@ impl Interpreter {
                                 return Ok(Some(v));
                             }
                             // Update inner_rc for next iteration
-                            let iter = iter_rc.borrow();
+                            let iter = iter_rc.lock().expect("iter lock");
                             if let IteratorValue::FilterIter { inner, .. } = &*iter {
-                                *inner_rc.borrow_mut() = *inner.clone();
+                                *inner_rc.lock().expect("iter lock") = *inner.clone();
                             }
                         }
                         None => return Ok(None),
@@ -6731,7 +6736,7 @@ impl Interpreter {
                     let old = self.eval_ident(name)?;
                     self.apply_compound_assign(&old, op, &new_val)?
                 };
-                if !self.env.borrow_mut().assign(name, final_val) {
+                if !self.env.lock().expect("env lock").assign(name, final_val) {
                     return Err(RuntimeError::UndefinedVariable(name.clone()).into());
                 }
                 Ok(Value::Null)
@@ -6760,7 +6765,12 @@ impl Interpreter {
                         new_arr[idx] = final_val;
                         // Re-assign the whole array back
                         if let Expr::Ident { name, .. } = object.as_ref() {
-                            if !self.env.borrow_mut().assign(name, Value::Array(new_arr)) {
+                            if !self
+                                .env
+                                .lock()
+                                .expect("env lock")
+                                .assign(name, Value::Array(new_arr))
+                            {
                                 return Err(RuntimeError::UndefinedVariable(name.clone()).into());
                             }
                         }
@@ -6794,7 +6804,7 @@ impl Interpreter {
                                 name: sname,
                                 fields,
                             };
-                            if !self.env.borrow_mut().assign(name, new_struct) {
+                            if !self.env.lock().expect("env lock").assign(name, new_struct) {
                                 return Err(RuntimeError::UndefinedVariable(name.clone()).into());
                             }
                         }
@@ -6855,13 +6865,16 @@ impl Interpreter {
                 // Check guard if present
                 if let Some(guard) = &arm.guard {
                     // Create scope with bindings for guard evaluation
-                    let guard_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                    let guard_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                         &self.env,
                     ))));
                     for (k, v) in &bindings {
-                        guard_env.borrow_mut().define(k.clone(), v.clone());
+                        guard_env
+                            .lock()
+                            .expect("env lock")
+                            .define(k.clone(), v.clone());
                     }
-                    let prev = Rc::clone(&self.env);
+                    let prev = Arc::clone(&self.env);
                     self.env = guard_env;
                     let guard_val = self.eval_expr(guard)?;
                     self.env = prev;
@@ -6871,13 +6884,13 @@ impl Interpreter {
                 }
 
                 // Create scope with pattern bindings and evaluate body
-                let arm_env = Rc::new(RefCell::new(Environment::new_with_parent(Rc::clone(
+                let arm_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
                     &self.env,
                 ))));
                 for (k, v) in bindings {
-                    arm_env.borrow_mut().define(k, v);
+                    arm_env.lock().expect("env lock").define(k, v);
                 }
-                let prev = Rc::clone(&self.env);
+                let prev = Arc::clone(&self.env);
                 self.env = arm_env;
                 let result = self.eval_expr(&arm.body);
                 self.env = prev;
@@ -6900,7 +6913,7 @@ impl Interpreter {
                 if let Some(Value::Enum {
                     variant,
                     data: None,
-                }) = self.env.borrow().lookup(name)
+                }) = self.env.lock().expect("env lock").lookup(name)
                 {
                     // Compare as unit variant match
                     return if let Value::Enum {
@@ -7317,7 +7330,7 @@ impl Interpreter {
             name: String::new(),
             params: closure_params,
             body: Box::new(body.clone()),
-            closure_env: Rc::clone(&self.env),
+            closure_env: Arc::clone(&self.env),
             is_async: false,
             is_gen: false,
             requires: vec![],
@@ -7549,7 +7562,7 @@ impl Interpreter {
                 name: method.name.clone(),
                 params: method.params.clone(),
                 body: method.body.clone(),
-                closure_env: Rc::clone(&self.env),
+                closure_env: Arc::clone(&self.env),
                 is_async: false,
                 is_gen: false,
                 requires: vec![],
@@ -7561,7 +7574,8 @@ impl Interpreter {
                 // Register as `TypeName::method_name` in global env for path access
                 let qualified = format!("{}::{}", type_name, method.name);
                 self.env
-                    .borrow_mut()
+                    .lock()
+                    .expect("env lock")
                     .define(qualified, Value::Function(fn_val.clone()));
             }
 
@@ -7574,7 +7588,7 @@ impl Interpreter {
     /// Evaluates a method call on an iterator value.
     pub(super) fn eval_iterator_method(
         &mut self,
-        iter_rc: Rc<RefCell<IteratorValue>>,
+        iter_rc: Arc<Mutex<IteratorValue>>,
         method: &str,
         args: Vec<Value>,
     ) -> EvalResult {
@@ -7602,12 +7616,12 @@ impl Interpreter {
                         .into());
                     }
                 };
-                let inner = iter_rc.borrow().clone();
+                let inner = iter_rc.lock().expect("iter lock").clone();
                 let mapped = IteratorValue::MappedIter {
                     inner: Box::new(inner),
                     func,
                 };
-                Ok(Value::Iterator(Rc::new(RefCell::new(mapped))))
+                Ok(Value::Iterator(Arc::new(Mutex::new(mapped))))
             }
             "filter" => {
                 let func = match args.into_iter().next() {
@@ -7619,12 +7633,12 @@ impl Interpreter {
                         .into());
                     }
                 };
-                let inner = iter_rc.borrow().clone();
+                let inner = iter_rc.lock().expect("iter lock").clone();
                 let filtered = IteratorValue::FilterIter {
                     inner: Box::new(inner),
                     func,
                 };
-                Ok(Value::Iterator(Rc::new(RefCell::new(filtered))))
+                Ok(Value::Iterator(Arc::new(Mutex::new(filtered))))
             }
             "take" => {
                 let n = match args.first() {
@@ -7636,20 +7650,20 @@ impl Interpreter {
                         .into());
                     }
                 };
-                let inner = iter_rc.borrow().clone();
+                let inner = iter_rc.lock().expect("iter lock").clone();
                 let taken = IteratorValue::TakeIter {
                     inner: Box::new(inner),
                     remaining: n,
                 };
-                Ok(Value::Iterator(Rc::new(RefCell::new(taken))))
+                Ok(Value::Iterator(Arc::new(Mutex::new(taken))))
             }
             "enumerate" => {
-                let inner = iter_rc.borrow().clone();
+                let inner = iter_rc.lock().expect("iter lock").clone();
                 let enumerated = IteratorValue::EnumerateIter {
                     inner: Box::new(inner),
                     index: 0,
                 };
-                Ok(Value::Iterator(Rc::new(RefCell::new(enumerated))))
+                Ok(Value::Iterator(Arc::new(Mutex::new(enumerated))))
             }
             "collect" => {
                 let mut result = Vec::new();
@@ -7877,7 +7891,7 @@ impl Interpreter {
                         name: fndef.name.clone(),
                         params: fndef.params.clone(),
                         body: fndef.body.clone(),
-                        closure_env: Rc::clone(&self.env),
+                        closure_env: Arc::clone(&self.env),
                         is_async: false,
                         is_gen: false,
                         requires: vec![],
@@ -7888,7 +7902,7 @@ impl Interpreter {
                         pub_items.insert(fndef.name.clone());
                     }
                     let qualified = format!("{}::{}", mod_name, fndef.name);
-                    self.env.borrow_mut().define(qualified, val);
+                    self.env.lock().expect("env lock").define(qualified, val);
                 }
                 Item::StructDef(sdef) => {
                     let val = Value::Str(format!("struct:{}", sdef.name));
@@ -7904,7 +7918,7 @@ impl Interpreter {
                         pub_items.insert(cdef.name.clone());
                     }
                     let qualified = format!("{}::{}", mod_name, cdef.name);
-                    self.env.borrow_mut().define(qualified, val);
+                    self.env.lock().expect("env lock").define(qualified, val);
                 }
                 Item::ModDecl(inner_mod) => {
                     // Nested module: evaluate and store with nested qualified names
@@ -7913,7 +7927,10 @@ impl Interpreter {
                         let nested_name = format!("{}::{}", mod_name, inner_mod.name);
                         for (sym_name, sym_val) in &inner_symbols {
                             let qualified = format!("{}::{}", nested_name, sym_name);
-                            self.env.borrow_mut().define(qualified, sym_val.clone());
+                            self.env
+                                .lock()
+                                .expect("env lock")
+                                .define(qualified, sym_val.clone());
                         }
                         self.modules.insert(nested_name, inner_symbols);
                     }
@@ -7932,7 +7949,7 @@ impl Interpreter {
                             };
                             mod_symbols.insert(variant.name.clone(), val.clone());
                             let qualified = format!("{}::{}", mod_name, variant.name);
-                            self.env.borrow_mut().define(qualified, val);
+                            self.env.lock().expect("env lock").define(qualified, val);
                         }
                     }
                 }
@@ -8004,13 +8021,21 @@ impl Interpreter {
                         .into());
                     }
                     let qualified = format!("{}::{}", mod_path, item_name);
-                    let resolved = self.env.borrow().lookup(&qualified).or_else(|| {
-                        self.modules
-                            .get(&mod_path)
-                            .and_then(|m| m.get(item_name).cloned())
-                    });
+                    let resolved = self
+                        .env
+                        .lock()
+                        .expect("env lock")
+                        .lookup(&qualified)
+                        .or_else(|| {
+                            self.modules
+                                .get(&mod_path)
+                                .and_then(|m| m.get(item_name).cloned())
+                        });
                     if let Some(val) = resolved {
-                        self.env.borrow_mut().define(item_name.clone(), val);
+                        self.env
+                            .lock()
+                            .expect("env lock")
+                            .define(item_name.clone(), val);
                     }
                 }
                 Ok(Value::Null)
@@ -8021,7 +8046,7 @@ impl Interpreter {
                 if let Some(mod_syms) = self.modules.get(&mod_path).cloned() {
                     for (name, val) in mod_syms {
                         if self.is_item_visible(&mod_path, &name) {
-                            self.env.borrow_mut().define(name, val);
+                            self.env.lock().expect("env lock").define(name, val);
                         }
                     }
                 }
@@ -8039,17 +8064,22 @@ impl Interpreter {
                         .into());
                     }
                     let qualified = format!("{}::{}", mod_path, name);
-                    let resolved = self.env.borrow().lookup(&qualified).or_else(|| {
-                        self.modules
-                            .get(&mod_path)
-                            .and_then(|m| m.get(name).cloned())
-                    });
+                    let resolved = self
+                        .env
+                        .lock()
+                        .expect("env lock")
+                        .lookup(&qualified)
+                        .or_else(|| {
+                            self.modules
+                                .get(&mod_path)
+                                .and_then(|m| m.get(name).cloned())
+                        });
                     if let Some(val) = resolved {
                         imports.push((name.clone(), val));
                     }
                 }
                 for (name, val) in imports {
-                    self.env.borrow_mut().define(name, val);
+                    self.env.lock().expect("env lock").define(name, val);
                 }
                 Ok(Value::Null)
             }
@@ -9587,9 +9617,16 @@ impl Interpreter {
             }
             _ => {
                 // Look up user function
-                let fn_val = self.env.borrow().lookup(&fn_name).ok_or_else(|| {
-                    RuntimeError::TypeError(format!("async_spawn: function '{fn_name}' not found"))
-                })?;
+                let fn_val = self
+                    .env
+                    .lock()
+                    .expect("env lock")
+                    .lookup(&fn_name)
+                    .ok_or_else(|| {
+                        RuntimeError::TypeError(format!(
+                            "async_spawn: function '{fn_name}' not found"
+                        ))
+                    })?;
                 match fn_val {
                     Value::Function(fv) => {
                         self.async_ops.insert(

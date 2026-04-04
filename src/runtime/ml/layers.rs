@@ -98,7 +98,7 @@ impl GroupNorm {
     /// Create a new GroupNorm layer.
     pub fn new(num_groups: usize, num_channels: usize) -> Self {
         assert!(
-            num_channels % num_groups == 0,
+            num_channels.is_multiple_of(num_groups),
             "channels ({num_channels}) must be divisible by groups ({num_groups})"
         );
         let mut gamma = TensorValue::from_data(vec![1.0; num_channels], &[1, num_channels])
