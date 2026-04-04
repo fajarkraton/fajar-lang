@@ -22,7 +22,19 @@
 ```
 Before V20.5:  48 [x], 0 [sim], 5 [f], 3 [s]  <- INFLATED
 After V20.5:   42 [x], 6 [sim], 5 [f], 3 [s]  <- HONEST
+After V21:     47 [x], 1 [sim], 5 [f], 3 [s]  <- 5 sim→x upgrades
 ```
+
+### V21 Upgrades (6 [sim] → 5 [x] + 1 [sim])
+
+| Builtin | V20.5 | V21 | Reason |
+|---------|-------|-----|--------|
+| actor_spawn/send/supervise | [sim] | **[x]** | Real std::thread + mpsc channels |
+| accelerate | [sim] | **[x]** | Real workload classification + GPU detection + CPU dispatch |
+| pipeline_run | [sim] | **[x]** | Real sequential composition with error propagation |
+| diffusion_create/denoise | [sim] | **[x]** | Real UNet neural network (forward/train/sample) |
+| rl_agent_create/step | [sim] | **[x]** | Real DQN + CartPole physics environment |
+| const_alloc | [sim] | [sim] | Creates descriptor but no .rodata emission |
 
 ---
 
@@ -78,33 +90,27 @@ Total:             ~10,645
 
 | Builtin | What's Real | What's Faked | Tests |
 |---------|-----------|-------------|-------|
-| accelerate(fn, input) | Workload classification (ComputeBound/MemoryBound/LatencySensitive) | GPU/NPU dispatch (always runs on CPU) | 2 |
-| actor_spawn(name, fn) | Creates actor map with address | Threading (synchronous call_fn) | 2 |
-| actor_send(actor, msg) | Calls handler function with message | Async mailbox (synchronous) | 2 |
-| actor_supervise(actor, strategy) | Stores supervision strategy in map | Restart/monitoring (no-op) | 2 |
-| diffusion_create(steps) | Noise schedule math (linear beta schedule) | UNet architecture (HashMap model) | 2 |
-| diffusion_denoise(model, tensor, step) | Progress-based scaling operation | Real denoising process | 2 |
-| rl_agent_create(state_dim, action_dim) | Creates environment with state vector | Neural network agent (simple env.step) | 2 |
-| rl_agent_step(agent, action) | Returns state/reward/done from env.step | Real RL training (random-walk) | 2 |
-| pipeline_run(pipe, input) | Calls functions sequentially, propagates errors | Real-time scheduling/deadlines | 2 |
 | const_alloc(size) | Creates allocation descriptor with size/align/section | Actual .rodata placement (HashMap) | 2 |
+
+All other previously-simulated builtins have been upgraded to production [x] in V21. See V21 Upgrades table above.
 
 ## Framework [f] Modules — Code Exists, Not Callable from .fj
 
 | Module | Lines | Wire Planned |
 |--------|-------|-------------|
-| rtos/ | 8,043 | V21 Hardware |
-| iot/ | 5,033 | V21 Hardware |
 | const_* (8 modules) | 4,531 | Future |
 | demos/ | 16,257 | Archive candidate |
+
+*Note: rtos/ (8K) and iot/ (5K) were removed in V20.8 dead code cleanup.*
 
 ## Stub [s] Modules
 
 | Module | Status |
 |--------|--------|
-| stdlib/ | Empty re-exports |
 | generators_v12 | Superseded by V18 generators |
 | wasi_v12 | Superseded by wasi_p2 |
+
+*Note: stdlib/ (95 LOC) was removed in V20.8 dead code cleanup.*
 
 ---
 
