@@ -13,6 +13,7 @@ mod methods;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 
 use crate::interpreter::env::Environment;
 use crate::interpreter::value::{FnValue, Value};
@@ -542,6 +543,26 @@ impl std::error::Error for EvalError {}
 /// `(effect_name, op_name, resume_value)`.
 type EffectReplayLevel = (Vec<(String, String, Value)>, usize);
 
+/// Handle to a real OS-threaded actor (V21).
+///
+/// Each actor runs in its own `std::thread`, receiving messages via an
+/// `mpsc::Sender<Value>`. Dropping the sender signals the actor to shut down.
+#[allow(dead_code)]
+struct ActorHandle {
+    /// Actor name (for debugging/status).
+    name: String,
+    /// Channel sender — messages are delivered to the actor's thread (bounded).
+    tx: std::sync::mpsc::SyncSender<Value>,
+    /// Thread join handle — used for graceful shutdown and supervision.
+    join: Option<JoinHandle<()>>,
+    /// Supervision strategy (from concurrency_v2).
+    strategy: crate::concurrency_v2::actors::SupervisionStrategy,
+    /// Handler function name (for restart).
+    handler_fn: String,
+    /// Handler function's closure environment (for restart).
+    handler_env: crate::interpreter::env::EnvRef,
+}
+
 pub struct Interpreter {
     /// The global environment.
     env: crate::interpreter::env::EnvRef,
@@ -670,6 +691,10 @@ pub struct Interpreter {
     last_error_span: Option<crate::lexer::token::Span>,
     /// V20.7: Strict mode — reject simulated builtins with an error.
     strict_mode: bool,
+    /// V21: Real threaded actor registry: actor_id → ActorHandle.
+    actor_registry: HashMap<i64, ActorHandle>,
+    /// V21: Next actor ID counter.
+    next_actor_id: i64,
 }
 
 impl Interpreter {
@@ -734,6 +759,78 @@ impl Interpreter {
             sim_warned: HashSet::new(),
             last_error_span: None,
             strict_mode: false,
+            actor_registry: HashMap::new(),
+            next_actor_id: 1,
+        };
+        interp.register_builtins();
+        interp
+    }
+
+    /// Creates an interpreter with a given environment as its root scope.
+    ///
+    /// Used by actor threads — each actor gets a fresh interpreter sharing
+    /// the handler function's closure environment. Output goes to stdout.
+    pub fn new_from_env(env: crate::interpreter::env::EnvRef) -> Self {
+        let mut interp = Interpreter {
+            env,
+            call_depth: 0,
+            max_recursion_depth: DEFAULT_MAX_RECURSION_DEPTH,
+            call_stack: Vec::new(),
+            output: Vec::new(),
+            capture_output: false,
+            os: OsRuntime::new(),
+            impl_methods: HashMap::new(),
+            trait_defs: HashMap::new(),
+            trait_impls: HashSet::new(),
+            modules: HashMap::new(),
+            module_pub_items: HashMap::new(),
+            tape: Tape::new(),
+            last_grads: HashMap::new(),
+            source_dir: None,
+            loading_modules: HashSet::new(),
+            debug_state: None,
+            debug_source: String::new(),
+            debug_file: String::new(),
+            gpio_pins: HashMap::new(),
+            uart_ports: HashMap::new(),
+            pwm_channels: HashMap::new(),
+            spi_buses: HashMap::new(),
+            npu_models: HashMap::new(),
+            qnn_buffers: HashMap::new(),
+            inference_cache: HashMap::new(),
+            async_tasks: HashMap::new(),
+            async_ops: HashMap::new(),
+            next_task_id: 1,
+            tokio_runtime: None,
+            db_manager: crate::stdlib_v3::database::DbManager::new(),
+            profile_session: None,
+            ws_connections: std::collections::HashMap::new(),
+            next_ws_id: 1,
+            mqtt_clients: std::collections::HashMap::new(),
+            mqtt_broker: MqttBroker::new(),
+            next_mqtt_id: 1,
+            ble_adapter: BleAdapter::new(),
+            gui_state: GuiState::default(),
+            http_servers: HashMap::new(),
+            next_http_server_id: 1,
+            macro_expander: crate::macros_v12::MacroExpander::new(),
+            effect_registry: crate::analyzer::effects::EffectRegistry::with_builtins(),
+            effect_statistics: crate::analyzer::effects::EffectStatistics::new(),
+            effect_handler_depth: 0,
+            effect_replay_stack: Vec::new(),
+            tcp_connections: HashMap::new(),
+            next_tcp_fd: 100,
+            ffi_manager: crate::interpreter::ffi::FfiManager::new(),
+            generator_yields: None,
+            user_macros: HashMap::new(),
+            channels: HashMap::new(),
+            next_channel_id: 1,
+            record_log: None,
+            sim_warned: HashSet::new(),
+            last_error_span: None,
+            strict_mode: false,
+            actor_registry: HashMap::new(),
+            next_actor_id: 1,
         };
         interp.register_builtins();
         interp
@@ -815,6 +912,8 @@ impl Interpreter {
             sim_warned: HashSet::new(),
             last_error_span: None,
             strict_mode: false,
+            actor_registry: HashMap::new(),
+            next_actor_id: 1,
         };
         interp.register_builtins();
         interp
@@ -931,13 +1030,11 @@ impl Interpreter {
     /// V20.5: Print one-time warning for simulated builtin.
     /// List of builtin names that are simulated (not backed by real hardware/threading).
     const SIMULATED_BUILTINS: &'static [&'static str] = &[
-        // accelerate: upgraded to real GPU detection in V21
-        // diffusion: upgraded to real UNet in V21
-        // rl_agent: upgraded to real CartPole+DQN in V21
-        "actor_spawn",
-        "actor_send",
-        "actor_supervise",
-        "pipeline_run",
+        // V21: actor_spawn/send/supervise — upgraded to real std::thread + mpsc
+        // V21: accelerate — real workload classification + CPU dispatch
+        // V21: diffusion — real UNet neural network
+        // V21: rl_agent — real DQN + CartPole environment
+        // V21: pipeline_run — real sequential composition with error propagation
         "const_alloc",
     ];
 
@@ -1366,10 +1463,12 @@ impl Interpreter {
             "pipeline_run",
             // V20 Phase 5: Accelerator
             "accelerate",
-            // V20 Phase 6: Actors
+            // V21: Real threaded actors
             "actor_spawn",
             "actor_send",
             "actor_supervise",
+            "actor_stop",
+            "actor_status",
             // V20 Phase 7: Const modules
             "const_alloc",
             "const_size_of",

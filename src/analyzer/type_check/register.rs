@@ -1436,18 +1436,12 @@ impl TypeChecker {
             ),
             // V20 Phase 5: Accelerator
             ("accelerate", vec![Type::Str, Type::Unknown], Type::Unknown),
-            // V20 Phase 6: Actors
-            ("actor_spawn", vec![Type::Str, Type::Str], Type::Unknown),
-            (
-                "actor_send",
-                vec![Type::Unknown, Type::Unknown],
-                Type::Unknown,
-            ),
-            (
-                "actor_supervise",
-                vec![Type::Unknown, Type::Str],
-                Type::Unknown,
-            ),
+            // V21: Real threaded actors
+            ("actor_spawn", vec![Type::Str, Type::Str], Type::I64),
+            ("actor_send", vec![Type::I64, Type::Unknown], Type::Bool),
+            ("actor_supervise", vec![Type::I64, Type::Str], Type::Str),
+            ("actor_stop", vec![Type::I64], Type::Unknown),
+            ("actor_status", vec![Type::I64], Type::Str),
             // V20 Phase 7: Const modules
             ("const_alloc", vec![Type::I64], Type::Unknown),
             ("const_size_of", vec![Type::Unknown], Type::I64),

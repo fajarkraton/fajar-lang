@@ -1393,8 +1393,8 @@ impl Interpreter {
             // ═══════════════════════════════════════════════════════════
             // V20 Phase 6: Concurrency v2 — Actor Supervision
             // ═══════════════════════════════════════════════════════════
+            // ── V21: Real threaded actors (std::thread + mpsc) ──
             "actor_spawn" => {
-                self.warn_simulated("actor_spawn");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1412,79 +1412,189 @@ impl Interpreter {
                 };
                 let fn_name = match &args[1] {
                     Value::Str(s) => s.clone(),
-                    _ => "handler".to_string(),
-                };
-                let actor = crate::concurrency_v2::actors::ActorInstance::new(
-                    crate::concurrency_v2::actors::ActorAddr(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_nanos() as u64,
-                    ),
-                    &name,
-                    16,
-                );
-                let mut m = std::collections::HashMap::new();
-                m.insert("_type".to_string(), Value::Str("Actor".into()));
-                m.insert("name".to_string(), Value::Str(name));
-                m.insert("fn".to_string(), Value::Str(fn_name));
-                m.insert("addr".to_string(), Value::Int(actor.addr.0 as i64));
-                m.insert(
-                    "status".to_string(),
-                    Value::Str(format!("{:?}", actor.status)),
-                );
-                m.insert("restart_count".to_string(), Value::Int(0));
-                Ok(Value::Map(m))
-            }
-            "actor_send" => {
-                self.warn_simulated("actor_send");
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArityMismatch {
-                        expected: 2,
-                        got: args.len(),
-                    }
-                    .into());
-                }
-                // Extract actor's handler fn and call it with the message
-                let fn_name = match &args[0] {
-                    Value::Map(m) => match m.get("fn") {
-                        Some(Value::Str(s)) => s.clone(),
-                        _ => "handler".to_string(),
-                    },
-                    _ => {
-                        return Err(
-                            RuntimeError::TypeError("actor_send(actor, message)".into()).into()
-                        );
-                    }
-                };
-                let result = self.call_fn(&fn_name, vec![args[1].clone()])?;
-                Ok(result)
-            }
-            "actor_supervise" => {
-                self.warn_simulated("actor_supervise");
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArityMismatch {
-                        expected: 2,
-                        got: args.len(),
-                    }
-                    .into());
-                }
-                let strategy = match &args[1] {
-                    Value::Str(s) => s.clone(),
-                    _ => "one_for_one".to_string(),
-                };
-                // Apply supervision: return updated actor with strategy
-                let mut actor = match &args[0] {
-                    Value::Map(m) => m.clone(),
                     _ => {
                         return Err(RuntimeError::TypeError(
-                            "actor_supervise(actor, strategy)".into(),
+                            "actor_spawn: second arg must be fn name".into(),
                         )
                         .into());
                     }
                 };
-                actor.insert("supervision".to_string(), Value::Str(strategy));
-                Ok(Value::Map(actor))
+                // Look up the handler function in the current environment
+                let handler = self
+                    .env
+                    .lock()
+                    .expect("env lock")
+                    .lookup(&fn_name)
+                    .ok_or_else(|| {
+                        RuntimeError::TypeError(format!(
+                            "actor_spawn: function '{fn_name}' not found"
+                        ))
+                    })?;
+                let handler_fv = match handler {
+                    Value::Function(fv) => fv,
+                    _ => {
+                        return Err(RuntimeError::TypeError(format!(
+                            "actor_spawn: '{fn_name}' is not a function"
+                        ))
+                        .into());
+                    }
+                };
+                // Create bounded mpsc channel
+                let (tx, rx) = std::sync::mpsc::sync_channel::<Value>(16);
+                let handler_env = handler_fv.closure_env.clone();
+                let handler_clone = handler_fv.clone();
+                let actor_name = name.clone();
+                // Spawn real OS thread running the actor message loop
+                let join = std::thread::Builder::new()
+                    .name(format!("actor-{name}"))
+                    .stack_size(16 * 1024 * 1024)
+                    .spawn(move || {
+                        let mut interp = super::Interpreter::new_from_env(handler_env);
+                        while let Ok(msg) = rx.recv() {
+                            if let Err(e) = interp.call_function(&handler_clone, vec![msg]) {
+                                eprintln!("[actor {actor_name}] handler error: {e}");
+                                break;
+                            }
+                        }
+                    })
+                    .map_err(|e| {
+                        RuntimeError::TypeError(format!("actor_spawn: thread failed: {e}"))
+                    })?;
+                let id = self.next_actor_id;
+                self.next_actor_id += 1;
+                self.actor_registry.insert(
+                    id,
+                    super::ActorHandle {
+                        name: name.clone(),
+                        tx,
+                        join: Some(join),
+                        strategy: crate::concurrency_v2::actors::SupervisionStrategy::OneForOne,
+                        handler_fn: fn_name,
+                        handler_env: handler_fv.closure_env.clone(),
+                    },
+                );
+                Ok(Value::Int(id))
+            }
+            "actor_send" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let actor_id = match &args[0] {
+                    Value::Int(id) => *id,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "actor_send(actor_id, message)".into(),
+                        )
+                        .into());
+                    }
+                };
+                let message = args[1].clone();
+                if let Some(handle) = self.actor_registry.get(&actor_id) {
+                    match handle.tx.send(message) {
+                        Ok(()) => Ok(Value::Bool(true)),
+                        Err(_) => Ok(Value::Bool(false)), // actor thread has stopped
+                    }
+                } else {
+                    Err(
+                        RuntimeError::TypeError(format!("actor_send: no actor with id {actor_id}"))
+                            .into(),
+                    )
+                }
+            }
+            "actor_supervise" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let actor_id = match &args[0] {
+                    Value::Int(id) => *id,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "actor_supervise(actor_id, strategy)".into(),
+                        )
+                        .into());
+                    }
+                };
+                let strategy_str = match &args[1] {
+                    Value::Str(s) => s.as_str(),
+                    _ => "one_for_one",
+                };
+                let strategy = match strategy_str {
+                    "all_for_one" => crate::concurrency_v2::actors::SupervisionStrategy::AllForOne,
+                    "rest_for_one" => {
+                        crate::concurrency_v2::actors::SupervisionStrategy::RestForOne
+                    }
+                    _ => crate::concurrency_v2::actors::SupervisionStrategy::OneForOne,
+                };
+                if let Some(handle) = self.actor_registry.get_mut(&actor_id) {
+                    handle.strategy = strategy;
+                    Ok(Value::Str(format!("supervised: {strategy_str}")))
+                } else {
+                    Err(RuntimeError::TypeError(format!(
+                        "actor_supervise: no actor with id {actor_id}"
+                    ))
+                    .into())
+                }
+            }
+            "actor_stop" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let actor_id = match &args[0] {
+                    Value::Int(id) => *id,
+                    _ => {
+                        return Err(RuntimeError::TypeError("actor_stop(actor_id)".into()).into());
+                    }
+                };
+                if let Some(mut handle) = self.actor_registry.remove(&actor_id) {
+                    // Drop sender to signal shutdown, then join the thread
+                    drop(handle.tx);
+                    if let Some(join) = handle.join.take() {
+                        let _ = join.join();
+                    }
+                    Ok(Value::Null)
+                } else {
+                    Err(
+                        RuntimeError::TypeError(format!("actor_stop: no actor with id {actor_id}"))
+                            .into(),
+                    )
+                }
+            }
+            "actor_status" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let actor_id = match &args[0] {
+                    Value::Int(id) => *id,
+                    _ => {
+                        return Err(RuntimeError::TypeError("actor_status(actor_id)".into()).into());
+                    }
+                };
+                if let Some(handle) = self.actor_registry.get(&actor_id) {
+                    let status = if handle.join.as_ref().is_some_and(|j| !j.is_finished()) {
+                        "running"
+                    } else {
+                        "stopped"
+                    };
+                    Ok(Value::Str(status.to_string()))
+                } else {
+                    Ok(Value::Str("not_found".to_string()))
+                }
             }
             // ═══════════════════════════════════════════════════════════
             // V20 Phase 7: Const Modules
