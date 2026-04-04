@@ -1076,6 +1076,7 @@ mod tests {
     #[test]
     fn pr2_e2e_publish_install_roundtrip() {
         let dir = std::env::temp_dir().join("fj_cli_test");
+        let _ = std::fs::remove_dir_all(&dir); // clean stale state
         let _ = std::fs::create_dir_all(&dir);
         let reg_dir = dir.join("registry");
         let storage_dir = reg_dir.join("storage");
@@ -1122,6 +1123,7 @@ mod tests {
     #[test]
     fn pr2_4_search_via_registry() {
         let dir = std::env::temp_dir().join("fj_search_test");
+        let _ = std::fs::remove_dir_all(&dir); // clean stale state
         let reg_dir = dir.join("registry");
         let storage_dir = reg_dir.join("storage");
         let _ = std::fs::create_dir_all(&storage_dir);

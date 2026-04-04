@@ -1572,7 +1572,116 @@ impl Interpreter {
                     &preds, &labels, class,
                 )))
             }
+            // String free functions (also available as methods)
+            "split" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(sep)) => {
+                        let parts: Vec<Value> = s
+                            .split(sep.as_str())
+                            .map(|p| Value::Str(p.to_string()))
+                            .collect();
+                        Ok(Value::Array(parts))
+                    }
+                    _ => Err(RuntimeError::TypeError("split(string, separator)".into()).into()),
+                }
+            }
+            "trim" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match &args[0] {
+                    Value::Str(s) => Ok(Value::Str(s.trim().to_string())),
+                    _ => Err(RuntimeError::TypeError("trim(string)".into()).into()),
+                }
+            }
+            "contains" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(sub)) => Ok(Value::Bool(s.contains(sub.as_str()))),
+                    _ => Err(RuntimeError::TypeError("contains(string, substring)".into()).into()),
+                }
+            }
+            "starts_with" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(prefix)) => {
+                        Ok(Value::Bool(s.starts_with(prefix.as_str())))
+                    }
+                    _ => Err(RuntimeError::TypeError("starts_with(string, prefix)".into()).into()),
+                }
+            }
+            "ends_with" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(suffix)) => {
+                        Ok(Value::Bool(s.ends_with(suffix.as_str())))
+                    }
+                    _ => Err(RuntimeError::TypeError("ends_with(string, suffix)".into()).into()),
+                }
+            }
+            "replace" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::Str(s), Value::Str(from), Value::Str(to)) => {
+                        Ok(Value::Str(s.replace(from.as_str(), to.as_str())))
+                    }
+                    _ => Err(RuntimeError::TypeError("replace(string, from, to)".into()).into()),
+                }
+            }
             // File I/O builtins
+            "read_file_text" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match &args[0] {
+                    Value::Str(path) => match std::fs::read_to_string(path) {
+                        Ok(content) => Ok(Value::Str(content)),
+                        Err(e) => {
+                            Err(RuntimeError::TypeError(format!("read_file_text: {e}")).into())
+                        }
+                    },
+                    _ => Err(RuntimeError::TypeError("read_file_text(path: str)".into()).into()),
+                }
+            }
             "read_file" => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
@@ -5077,14 +5186,66 @@ impl Interpreter {
                 .into());
             }
         };
+        // Auto-reshape 1D → 2D for convenience: [N] → [1,N] for first, [N] → [N,1] for second
+        // If both are 1D, compute dot product instead
+        if a.ndim() == 1 && b.ndim() == 1 {
+            // 1D × 1D = dot product (scalar)
+            let dot_val = tensor_ops::dot(&a, &b);
+            return Ok(Value::Float(dot_val));
+        }
+        let a_2d = if a.ndim() == 1 {
+            let n = a.numel();
+            TensorValue::from_ndarray(
+                a.data()
+                    .clone()
+                    .into_shape_with_order(ndarray::IxDyn(&[1, n]))
+                    .unwrap_or_else(|_| a.data().clone()),
+            )
+        } else {
+            a.clone()
+        };
+        let b_2d = if b.ndim() == 1 {
+            let n = b.numel();
+            TensorValue::from_ndarray(
+                b.data()
+                    .clone()
+                    .into_shape_with_order(ndarray::IxDyn(&[n, 1]))
+                    .unwrap_or_else(|_| b.data().clone()),
+            )
+        } else {
+            b.clone()
+        };
         let use_tracked = (a.requires_grad() || b.requires_grad()) && self.tape.is_recording();
         let result = if use_tracked {
-            tensor_ops::matmul_tracked(&a, &b, &mut self.tape)
+            tensor_ops::matmul_tracked(&a_2d, &b_2d, &mut self.tape)
         } else {
-            tensor_ops::matmul(&a, &b)
+            tensor_ops::matmul(&a_2d, &b_2d)
         };
         match result {
-            Ok(t) => Ok(Value::Tensor(t)),
+            Ok(t) => {
+                // If original inputs were 1D, flatten result back
+                if a.ndim() == 1 && b.ndim() == 2 {
+                    // [1,N] × [N,M] → [1,M] → flatten to [M]
+                    let flat = TensorValue::from_ndarray(
+                        t.data()
+                            .clone()
+                            .into_shape_with_order(ndarray::IxDyn(&[t.numel()]))
+                            .unwrap_or_else(|_| t.data().clone()),
+                    );
+                    Ok(Value::Tensor(flat))
+                } else if a.ndim() == 2 && b.ndim() == 1 {
+                    // [M,N] × [N,1] → [M,1] → flatten to [M]
+                    let flat = TensorValue::from_ndarray(
+                        t.data()
+                            .clone()
+                            .into_shape_with_order(ndarray::IxDyn(&[t.numel()]))
+                            .unwrap_or_else(|_| t.data().clone()),
+                    );
+                    Ok(Value::Tensor(flat))
+                } else {
+                    Ok(Value::Tensor(t))
+                }
+            }
             Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
         }
     }

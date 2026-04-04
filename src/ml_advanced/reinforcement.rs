@@ -64,7 +64,8 @@ impl Environment {
         for (i, s) in self.state.iter_mut().enumerate() {
             *s += (action as f64 - self.action_dim as f64 / 2.0) * 0.1 * (i + 1) as f64;
         }
-        let reward = -self.state.iter().map(|s| s * s).sum::<f64>().sqrt();
+        let raw_reward = -self.state.iter().map(|s| s * s).sum::<f64>().sqrt();
+        let reward = if raw_reward == 0.0 { 0.0 } else { raw_reward }; // normalize -0.0
         let done = self.step_count >= self.max_steps;
 
         StepResult {

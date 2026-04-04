@@ -852,6 +852,14 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64],
                 Type::Unknown,
             ),
+            // String free functions
+            ("split", vec![Type::Str, Type::Str], Type::Unknown),
+            ("trim", vec![Type::Str], Type::Str),
+            ("contains", vec![Type::Str, Type::Str], Type::Bool),
+            ("starts_with", vec![Type::Str, Type::Str], Type::Bool),
+            ("ends_with", vec![Type::Str, Type::Str], Type::Bool),
+            ("replace", vec![Type::Str, Type::Str, Type::Str], Type::Str),
+            ("read_file_text", vec![Type::Str], Type::Str),
             // Loss functions → return dynamic tensor
             (
                 "tensor_mse_loss",

@@ -280,15 +280,59 @@ impl TensorValue {
 
 impl fmt::Display for TensorValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let n = self.numel();
         if self.ndim() == 0 {
             // Scalar tensor
             write!(f, "tensor({})", self.data.iter().next().unwrap_or(&0.0))
-        } else if self.ndim() == 1 && self.numel() <= 10 {
+        } else if self.ndim() == 1 && n <= 10 {
             // Small 1D: show all elements
             let vals: Vec<String> = self.data.iter().map(|v| format!("{v:.4}")).collect();
             write!(f, "tensor([{}])", vals.join(", "))
+        } else if self.ndim() == 1 {
+            // Large 1D: show first 4 + ... + last 2
+            let data: Vec<f64> = self.data.iter().copied().collect();
+            let head: Vec<String> = data[..4].iter().map(|v| format!("{v:.4}")).collect();
+            let tail: Vec<String> = data[n - 2..].iter().map(|v| format!("{v:.4}")).collect();
+            write!(
+                f,
+                "tensor([{}, ..., {}], shape=[{n}])",
+                head.join(", "),
+                tail.join(", ")
+            )
+        } else if self.ndim() == 2 && n <= 50 {
+            // Small 2D: show as matrix
+            let shape = self.shape();
+            let rows = shape[0];
+            let cols = shape[1];
+            let data: Vec<f64> = self.data.iter().copied().collect();
+            write!(f, "tensor([")?;
+            for r in 0..rows {
+                if r > 0 {
+                    write!(f, "        ")?;
+                }
+                write!(f, "[")?;
+                for c in 0..cols {
+                    if c > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:.4}", data[r * cols + c])?;
+                }
+                write!(f, "]")?;
+                if r < rows - 1 {
+                    writeln!(f, ",")?;
+                }
+            }
+            write!(f, "])")
         } else {
-            write!(f, "tensor(shape={:?})", self.shape())
+            // Large multi-dimensional: show first 6 values + shape
+            let data: Vec<f64> = self.data.iter().copied().collect();
+            let preview: Vec<String> = data.iter().take(6).map(|v| format!("{v:.4}")).collect();
+            write!(
+                f,
+                "tensor([{}, ...], shape={:?})",
+                preview.join(", "),
+                self.shape()
+            )
         }
     }
 }
@@ -424,7 +468,13 @@ mod tests {
     #[test]
     fn display_large_tensor() {
         let t = TensorValue::zeros(&[10, 20]);
-        assert_eq!(format!("{t}"), "tensor(shape=[10, 20])");
+        // Large 2D (200 elements > 50): shows first 6 values + shape
+        let display = format!("{t}");
+        assert!(
+            display.contains("shape=[10, 20]"),
+            "should show shape: {display}"
+        );
+        assert!(display.contains("0.0000"), "should show values: {display}");
     }
 
     #[test]

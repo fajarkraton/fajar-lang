@@ -1195,8 +1195,16 @@ impl Interpreter {
             "clamp",
             "min",
             "max",
+            // String free functions
+            "split",
+            "trim",
+            "contains",
+            "starts_with",
+            "ends_with",
+            "replace",
             // File I/O
             "read_file",
+            "read_file_text",
             "write_file",
             "append_file",
             "read_binary",
