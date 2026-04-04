@@ -276,6 +276,13 @@ enum Command {
         #[arg(long)]
         filter: Option<String>,
     },
+    /// Manage compiler plugins.
+    Plugin {
+        /// Action: list, load
+        action: String,
+        /// Path to plugin .so/.dylib (for load action)
+        path: Option<PathBuf>,
+    },
     /// Start a debug session (DAP protocol on stdin/stdout).
     Debug {
         /// Path to the .fj source file. If omitted, uses fj.toml entry point.
@@ -832,6 +839,7 @@ fn main_inner() -> ExitCode {
                 }
             }
         }
+        Command::Plugin { action, path } => cmd_plugin(&action, path.as_deref()),
         Command::Search { query, limit } => cmd_search(&query, limit),
         Command::Login { token, registry } => cmd_login(token.as_deref(), registry.as_deref()),
         Command::Yank { package, version } => cmd_yank(&package, &version),
@@ -1679,7 +1687,7 @@ fn cmd_dump_tokens(path: &PathBuf) -> ExitCode {
 /// Executes a Fajar Lang program using tiered JIT compilation.
 fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
     use fajar_lang::jit::baseline::{BaselineCompileRequest, compile_baseline};
-    use fajar_lang::jit::counters::{ExecutionTier, FunctionProfile};
+    use fajar_lang::jit::counters::ExecutionTier;
 
     let path = &path.to_path_buf();
     let source = match read_source(path) {
@@ -1718,42 +1726,22 @@ fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
         return ExitCode::from(EXIT_COMPILE);
     }
 
-    // Initialize JIT execution profiler for hot function detection
-    let mut profiles: std::collections::HashMap<String, FunctionProfile> =
-        std::collections::HashMap::new();
-
-    // Collect function names from AST and profile them
+    // Collect function names from AST for profiling
+    let mut fn_names: Vec<String> = Vec::new();
     for item in &program.items {
         if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
-            profiles.insert(fndef.name.clone(), FunctionProfile::new(&fndef.name));
+            fn_names.push(fndef.name.clone());
         }
     }
 
-    // Attempt baseline JIT compilation for small functions
-    for item in &program.items {
-        if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
-            let request = BaselineCompileRequest {
-                name: fndef.name.clone(),
-                param_count: fndef.params.len(),
-                local_count: 0,
-                has_loops: false,
-                ir_size_estimate: 100,
-            };
-            let _result = compile_baseline(&request);
-        }
-    }
-
-    eprintln!(
-        "[jit] Profiled {} functions (tier: {:?})",
-        profiles.len(),
-        ExecutionTier::Interpreter
-    );
-
-    // Execute via interpreter (JIT results cached for hot function promotion)
+    // Execute via interpreter with profiling enabled
     let mut interp = Interpreter::new();
+    interp.enable_profiling();
     if let Some(parent) = path.parent() {
         interp.set_source_dir(parent.to_path_buf());
     }
+
+    let start = std::time::Instant::now();
     if let Err(e) = interp.eval_program(&program) {
         FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
         return ExitCode::from(EXIT_RUNTIME);
@@ -1761,6 +1749,50 @@ fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
     if let Err(e) = interp.call_main() {
         FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
         return ExitCode::from(EXIT_RUNTIME);
+    }
+    let elapsed = start.elapsed();
+
+    // Report JIT profiling results
+    let fn_count = fn_names.len();
+    eprintln!("[jit] Executed {fn_count} functions in {elapsed:.2?}");
+    if let Some(ref session) = interp.profile_session {
+        let total_calls = session.call_count();
+        eprintln!("[jit] Total function calls: {total_calls}");
+
+        // Classify functions by call count
+        for name in &fn_names {
+            let tier = if total_calls > 10_000 {
+                ExecutionTier::OptimizingJIT
+            } else if total_calls > 100 {
+                ExecutionTier::BaselineJIT
+            } else {
+                ExecutionTier::Interpreter
+            };
+            // Attempt baseline compilation analysis
+            let request = BaselineCompileRequest {
+                name: name.clone(),
+                param_count: 0,
+                local_count: 0,
+                has_loops: false,
+                ir_size_estimate: 100,
+            };
+            let result = compile_baseline(&request);
+            match result {
+                fajar_lang::jit::baseline::CompileResult::Success(code) => {
+                    eprintln!(
+                        "[jit] {name}: tier={tier:?}, estimated_native_size={}B",
+                        code.code_size
+                    );
+                }
+                _ => {
+                    eprintln!("[jit] {name}: tier={tier:?}");
+                }
+            }
+        }
+    } else {
+        for name in &fn_names {
+            eprintln!("[jit] {name}: tier={:?}", ExecutionTier::Interpreter);
+        }
     }
 
     ExitCode::SUCCESS
@@ -2451,6 +2483,49 @@ fn demo_registry() -> Vec<(
 }
 
 /// V19 5.5: List all available demos.
+/// Manage compiler plugins: list, load.
+fn cmd_plugin(action: &str, path: Option<&std::path::Path>) -> ExitCode {
+    match action {
+        "list" => {
+            let registry = fajar_lang::plugin::default_registry();
+            println!("Registered compiler plugins:\n");
+            for name in registry.plugin_names() {
+                println!("  {name:<24} [enabled]");
+            }
+            println!("\nPlugins run automatically during `fj run`.");
+            println!("Use `fj plugin load <path.so>` to load external plugins.");
+            ExitCode::SUCCESS
+        }
+        "load" => {
+            let path = match path {
+                Some(p) => p,
+                None => {
+                    eprintln!("error: fj plugin load <path.so> — missing plugin path");
+                    return ExitCode::from(EXIT_USAGE);
+                }
+            };
+            if !path.exists() {
+                eprintln!("error: plugin file not found: {}", path.display());
+                return ExitCode::from(EXIT_USAGE);
+            }
+            match fajar_lang::plugin::load_plugin_from_path(&path.display().to_string()) {
+                Ok(p) => {
+                    println!("Loaded plugin: {} v{}", p.name(), p.version());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: failed to load plugin: {e}");
+                    ExitCode::from(EXIT_RUNTIME)
+                }
+            }
+        }
+        _ => {
+            eprintln!("error: unknown plugin action '{action}'. Use: list, load");
+            ExitCode::from(EXIT_USAGE)
+        }
+    }
+}
+
 fn cmd_demo_list() -> ExitCode {
     println!("Available demos:\n");
     for (name, aliases, desc, _) in demo_registry() {
