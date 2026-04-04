@@ -21,7 +21,6 @@ use crate::parser::ast::{
 };
 use crate::runtime::ml::Tape;
 use crate::runtime::os::OsRuntime;
-use crate::stdlib;
 
 /// Async HTTP GET using tokio::net::TcpStream (no external HTTP crate needed).
 async fn async_http_get_impl(url: &str) -> Result<String, String> {
@@ -1135,17 +1134,6 @@ impl Interpreter {
             .lock()
             .expect("env lock")
             .define("E".to_string(), Value::Float(std::f64::consts::E));
-
-        // Cross-check: validate that stdlib builtin catalogs are registered.
-        // The stdlib module is the authoritative list of ML/OS builtins.
-        debug_assert!(
-            stdlib::nn::ML_BUILTINS.iter().all(|b| all.contains(b)),
-            "stdlib::nn::ML_BUILTINS contains unregistered builtins"
-        );
-        debug_assert!(
-            stdlib::os::OS_BUILTINS.iter().all(|b| all.contains(b)),
-            "stdlib::os::OS_BUILTINS contains unregistered builtins"
-        );
     }
 
     /// I/O, math, error, integer overflow, file I/O, collections, cache/env builtins.

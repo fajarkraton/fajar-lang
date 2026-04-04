@@ -628,19 +628,8 @@ impl LanguageServer for FajarLspBackend {
                 }
 
                 // ── Snippet completions ─────────────────────────────
-                let context_lines: Vec<&str> = lines
-                    .iter()
-                    .skip(line_idx.saturating_sub(5))
-                    .take(10)
-                    .copied()
-                    .collect();
-                let cursor_ctx = crate::lsp_v2::completion::analyze_expected_type(
-                    current_line,
-                    col,
-                    &context_lines,
-                );
-
-                if cursor_ctx.in_match_arm {
+                // Match arm wildcard snippet (simple heuristic).
+                if current_line.trim().ends_with("=>") || current_line.contains("match ") {
                     items.push(CompletionItem {
                         label: "_ => ".to_string(),
                         kind: Some(CompletionItemKind::SNIPPET),
@@ -855,32 +844,9 @@ impl LanguageServer for FajarLspBackend {
                 docs.get(&params.text_document_position.text_document.uri)
                     .map(|d| d.source.clone())
             };
-            if let Some(source) = source_copy {
-                let context_lines: Vec<&str> = source.lines().collect();
-                let line_idx = params.text_document_position.position.line as usize;
-                let col = params.text_document_position.position.character as usize;
-                if let Some(current_line) = context_lines.get(line_idx) {
-                    let ctx = crate::lsp_v2::completion::analyze_expected_type(
-                        current_line,
-                        col,
-                        &context_lines,
-                    );
-                    let scope_vars: Vec<(&str, &str)> = Vec::new();
-                    let synth = crate::lsp_v2::completion::synthesize_expressions(
-                        &ctx.expected_type,
-                        &scope_vars,
-                    );
-                    for expr in synth {
-                        items.push(CompletionItem {
-                            label: expr.label.clone(),
-                            kind: Some(CompletionItemKind::VALUE),
-                            detail: Some(format!("type: {}", expr.result_type)),
-                            sort_text: Some(format!("1_type_{}", expr.label)),
-                            ..Default::default()
-                        });
-                    }
-                }
-            }
+            // Type-aware expression synthesis removed (was lsp_v2).
+            // lsp_v3 provides this via its own completion engine.
+            let _ = source_copy;
         }
 
         Ok(Some(CompletionResponse::Array(items)))

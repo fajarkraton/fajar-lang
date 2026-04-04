@@ -36,6 +36,13 @@ fuzz/Cargo.lock
 # MNIST data (downloaded separately)
 data/
 
+# Generated codegen artifacts
+output.ptx
+output.spv
+
+# Generated doc HTML (regenerable via cargo run -- doc)
+docs/api/*.html
+
 # Binary artifacts (not tracked)
 models/
 release/

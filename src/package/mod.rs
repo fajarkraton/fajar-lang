@@ -29,9 +29,6 @@ pub use resolver::{LockFile, resolve_full};
 // Re-export deployment utilities (containers, observability, runtime mgmt, security).
 pub use crate::deployment;
 
-// Re-export package v2 features (workspaces, build scripts, conditional compilation).
-pub use crate::package_v2;
-
 /// Returns the list of deployment subsystem names.
 pub fn deployment_subsystems() -> Vec<&'static str> {
     vec!["containers", "observability", "runtime_mgmt", "security"]
