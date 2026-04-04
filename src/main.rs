@@ -3218,7 +3218,12 @@ fn cmd_build_native(
                     if let Some(ref build) = config.build {
                         // Set env vars
                         for (k, v) in &build.env {
-                            std::env::set_var(k, v);
+                            // SAFETY: build script env vars are set before any
+                            // multi-threaded work; this is the standard pattern
+                            // for build-time configuration.
+                            unsafe {
+                                std::env::set_var(k, v);
+                            }
                         }
                         // Run pre-build
                         if let Some(ref cmd) = build.pre_build {
