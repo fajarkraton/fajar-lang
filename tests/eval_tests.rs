@@ -16681,3 +16681,122 @@ fn v11_selfhost_lexer_tokenizes_fj_code() {
         "selfhost lexer test should pass, got: {output:?}"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// V21: Real Threaded Actor Tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn actor_real_spawn_send() {
+    // Spawn actor, send messages, verify handler processes them
+    let src = r#"
+        fn handler(msg: str) {
+            println("handled: " + msg)
+        }
+        fn main() {
+            let a = actor_spawn("w1", "handler")
+            actor_send(a, "alpha")
+            actor_send(a, "beta")
+            actor_send(a, "gamma")
+            // Busy-wait for actor thread to process
+            let mut i = 0
+            while i < 500000 { i = i + 1 }
+            actor_stop(a)
+            println("done")
+        }
+    "#;
+    let out = eval_output(src);
+    assert!(out.contains(&"done".to_string()), "main completed: {out:?}");
+}
+
+#[test]
+fn actor_real_stop() {
+    // Graceful shutdown: send, stop, verify completes without hang
+    let src = r#"
+        fn echo(msg: str) {
+            println(msg)
+        }
+        fn main() {
+            let a = actor_spawn("echo", "echo")
+            actor_send(a, "ping")
+            let mut i = 0
+            while i < 500000 { i = i + 1 }
+            actor_stop(a)
+            println("stopped")
+        }
+    "#;
+    let out = eval_output(src);
+    assert!(
+        out.contains(&"stopped".to_string()),
+        "actor stopped cleanly: {out:?}"
+    );
+}
+
+#[test]
+fn actor_real_status() {
+    // actor_status returns "running" for live actor, "not_found" after stop
+    let src = r#"
+        fn noop(msg: str) { }
+        fn main() {
+            let a = actor_spawn("noop", "noop")
+            let s1 = actor_status(a)
+            println(s1)
+            actor_stop(a)
+            let s2 = actor_status(a)
+            println(s2)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "running", "live actor is running: {out:?}");
+    assert_eq!(out[1], "not_found", "stopped actor is not_found: {out:?}");
+}
+
+#[test]
+fn actor_supervise_strategy() {
+    // actor_supervise stores strategy
+    let src = r#"
+        fn handler(msg: str) { }
+        fn main() {
+            let a = actor_spawn("sup", "handler")
+            let result = actor_supervise(a, "all_for_one")
+            println(result)
+            actor_stop(a)
+        }
+    "#;
+    let out = eval_output(src);
+    assert!(
+        out[0].contains("supervised"),
+        "supervise returns strategy: {out:?}"
+    );
+}
+
+#[test]
+fn actor_send_returns_bool() {
+    // actor_send returns true on success
+    let src = r#"
+        fn handler(msg: str) { }
+        fn main() {
+            let a = actor_spawn("b", "handler")
+            let ok = actor_send(a, "test")
+            println(ok)
+            actor_stop(a)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "true", "actor_send returns true: {out:?}");
+}
+
+#[test]
+fn actor_spawn_returns_int_id() {
+    // actor_spawn returns integer actor ID
+    let src = r#"
+        fn handler(msg: str) { }
+        fn main() {
+            let a = actor_spawn("id_test", "handler")
+            println(type_of(a))
+            actor_stop(a)
+        }
+    "#;
+    let out = eval_output(src);
+    assert_eq!(out[0], "i64", "actor_spawn returns i64: {out:?}");
+}

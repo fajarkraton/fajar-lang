@@ -1,44 +1,52 @@
-// Actor Supervision Demo — Fajar Lang V20
-// Demonstrates: actor_spawn, actor_send, actor_supervise
+// Actor Demo — Fajar Lang V21 (Real Threaded Actors)
+// Demonstrates: actor_spawn, actor_send, actor_supervise, actor_status, actor_stop
 //
+// Each actor runs in its own OS thread with a bounded message channel.
 // Run: fj run examples/actor_demo.fj
 
-fn echo_handler(msg: str) -> str {
-    f"Echo: {msg}"
+fn echo_handler(msg: str) {
+    println("  [echo] " + msg)
 }
 
-fn counter_handler(msg: str) -> str {
-    f"Counted: {len(msg)} chars"
+fn counter_handler(msg: str) {
+    println("  [counter] " + to_string(len(msg)) + " chars: " + msg)
 }
 
 fn main() {
-    println("=== Fajar Lang — Actor Supervision Demo ===")
+    println("=== Fajar Lang — Real Threaded Actor Demo ===")
     println("")
 
-    // Spawn actors
+    // Spawn real OS-threaded actors
     let echo = actor_spawn("echo-actor", "echo_handler")
     let counter = actor_spawn("counter-actor", "counter_handler")
-    println(f"Spawned: {map_get_or(echo, "name", "?")} ({map_get_or(echo, "status", "?")})")
-    println(f"Spawned: {map_get_or(counter, "name", "?")} ({map_get_or(counter, "status", "?")})")
+    println("Spawned echo actor (id=" + to_string(echo) + ")")
+    println("Spawned counter actor (id=" + to_string(counter) + ")")
+    println("Status: " + actor_status(echo))
     println("")
 
-    // Send messages
+    // Send messages (delivered via mpsc channel to actor threads)
     let messages = ["hello", "world", "fajar lang"]
-    for i in 0..len(messages) {
+    let mut i = 0
+    while i < len(messages) {
         let msg = messages[i]
-        let r1 = actor_send(echo, msg)
-        let r2 = actor_send(counter, msg)
-        println(f"  echo:    {r1}")
-        println(f"  counter: {r2}")
+        actor_send(echo, msg)
+        actor_send(counter, msg)
+        i = i + 1
     }
+
+    // Give actor threads time to process
+    let mut j = 0
+    while j < 500000 { j = j + 1 }
     println("")
 
-    // Apply supervision
-    let echo = actor_supervise(echo, "one_for_one")
-    let counter = actor_supervise(counter, "all_for_one")
-    println(f"Supervision: {map_get_or(echo, "name", "?")} = {map_get_or(echo, "supervision", "?")}")
-    println(f"Supervision: {map_get_or(counter, "name", "?")} = {map_get_or(counter, "supervision", "?")}")
+    // Apply supervision strategy
+    let result = actor_supervise(echo, "one_for_one")
+    println("Supervision: " + result)
     println("")
 
+    // Graceful shutdown
+    actor_stop(echo)
+    actor_stop(counter)
+    println("All actors stopped.")
     println("Actor demo complete.")
 }
