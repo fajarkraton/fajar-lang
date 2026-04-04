@@ -930,7 +930,7 @@ impl Interpreter {
     /// V20.5: Print one-time warning for simulated builtin.
     /// List of builtin names that are simulated (not backed by real hardware/threading).
     const SIMULATED_BUILTINS: &'static [&'static str] = &[
-        "accelerate",
+        // accelerate: upgraded to real GPU detection in V21
         "actor_spawn",
         "actor_send",
         "actor_supervise",
@@ -1364,6 +1364,8 @@ impl Interpreter {
             // Model export
             "model_save",
             "model_save_quantized",
+            // GPU discovery
+            "gpu_discover",
             // V20 Phase 4: RT Pipeline
             "pipeline_create",
             "pipeline_add_stage",

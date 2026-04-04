@@ -480,6 +480,8 @@ impl Interpreter {
             "gamma" => self.builtin_gamma(args),
             "clamp_tensor" => self.builtin_clamp_tensor(args),
             "where_tensor" => self.builtin_where_tensor(args),
+            // GPU discovery
+            "gpu_discover" => self.builtin_gpu_discover(args),
             // TurboQuant (FajarQuant Phase 1)
             "turboquant_create" => self.builtin_turboquant_create(args),
             "turboquant_encode" => self.builtin_turboquant_encode(args),
@@ -1300,7 +1302,6 @@ impl Interpreter {
             // V20 Phase 5: Accelerator Dispatch
             // ═══════════════════════════════════════════════════════════
             "accelerate" => {
-                self.warn_simulated("accelerate");
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -1316,7 +1317,7 @@ impl Interpreter {
                         );
                     }
                 };
-                // Classify workload and decide device
+                // Classify workload
                 let (flops, bytes) = match &args[1] {
                     Value::Tensor(tv) => {
                         let n = tv.data().len();
@@ -1326,16 +1327,30 @@ impl Interpreter {
                     _ => (100, 800),
                 };
                 let wc = crate::accelerator::dispatch::classify_workload(flops, bytes, 1);
-                let device_str = match wc {
-                    crate::accelerator::dispatch::WorkloadClass::ComputeBound => "GPU",
-                    crate::accelerator::dispatch::WorkloadClass::MemoryBound => "CPU",
-                    crate::accelerator::dispatch::WorkloadClass::LatencySensitive => "NPU",
-                };
-                // Execute the function on CPU (actual GPU dispatch needs CUDA)
+                // Real GPU detection via CUDA driver API
+                let gpu_info = crate::hw::gpu::GpuDiscovery::detect();
+                let (device_str, gpu_name) =
+                    if gpu_info.cuda_available && !gpu_info.devices.is_empty() {
+                        let dev = &gpu_info.devices[0];
+                        match wc {
+                            crate::accelerator::dispatch::WorkloadClass::ComputeBound => {
+                                ("GPU".to_string(), dev.name.clone())
+                            }
+                            _ => ("CPU".to_string(), format!("fallback (GPU: {})", dev.name)),
+                        }
+                    } else {
+                        ("CPU".to_string(), "no GPU detected".to_string())
+                    };
+                // Execute the function on CPU (kernel launch deferred to future)
                 let result = self.call_fn(&fn_name, vec![args[1].clone()])?;
                 let mut out = std::collections::HashMap::new();
-                out.insert("device".to_string(), Value::Str(device_str.into()));
+                out.insert("device".to_string(), Value::Str(device_str));
+                out.insert("gpu".to_string(), Value::Str(gpu_name));
                 out.insert("workload_class".to_string(), Value::Str(format!("{wc:?}")));
+                out.insert(
+                    "cuda_available".to_string(),
+                    Value::Bool(gpu_info.cuda_available),
+                );
                 out.insert("result".to_string(), result);
                 Ok(Value::Map(out))
             }
@@ -6096,6 +6111,55 @@ impl Interpreter {
     // ═══════════════════════════════════════════════════════════════════════
     // FajarQuant Phase 2: Adaptive rotation comparison
     // ═══════════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // GPU Discovery + Info
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Discover available GPUs: gpu_discover() -> map.
+    fn builtin_gpu_discover(&mut self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let discovery = crate::hw::gpu::GpuDiscovery::detect();
+        let mut result = std::collections::HashMap::new();
+        result.insert(
+            "cuda_available".to_string(),
+            Value::Bool(discovery.cuda_available),
+        );
+        result.insert(
+            "device_count".to_string(),
+            Value::Int(discovery.devices.len() as i64),
+        );
+        let devices: Vec<Value> = discovery
+            .devices
+            .iter()
+            .map(|d| {
+                let mut dev = std::collections::HashMap::new();
+                dev.insert("name".to_string(), Value::Str(d.name.clone()));
+                dev.insert(
+                    "compute_capability".to_string(),
+                    Value::Str(d.compute_capability_str()),
+                );
+                dev.insert(
+                    "vram_mb".to_string(),
+                    Value::Int((d.vram_total_bytes / (1024 * 1024)) as i64),
+                );
+                dev.insert("sm_count".to_string(), Value::Int(d.sm_count as i64));
+                dev.insert("cuda_cores".to_string(), Value::Int(d.cuda_cores as i64));
+                Value::Map(dev)
+            })
+            .collect();
+        result.insert("devices".to_string(), Value::Array(devices));
+        if let Some(ver) = discovery.driver_version {
+            result.insert("driver_version".to_string(), Value::Int(ver as i64));
+        }
+        Ok(Value::Map(result))
+    }
 
     /// Compare adaptive vs random quantization: fajarquant_compare(dim, bits, n_samples).
     fn builtin_fajarquant_compare(&mut self, args: Vec<Value>) -> EvalResult {

@@ -860,6 +860,8 @@ impl TypeChecker {
             ("ends_with", vec![Type::Str, Type::Str], Type::Bool),
             ("replace", vec![Type::Str, Type::Str, Type::Str], Type::Str),
             ("read_file_text", vec![Type::Str], Type::Str),
+            // GPU discovery
+            ("gpu_discover", vec![], Type::Unknown),
             // Loss functions → return dynamic tensor
             (
                 "tensor_mse_loss",
