@@ -2,6 +2,7 @@
 //! reinforcement learning, and model serving.
 
 pub mod diffusion;
+pub mod diffusion_unet;
 pub mod reinforcement;
 pub mod serving;
 pub mod transformer;

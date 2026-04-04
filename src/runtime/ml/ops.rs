@@ -5,7 +5,7 @@
 
 use ndarray::ArrayD;
 
-use super::autograd::Tape;
+use super::autograd::{Tape, TensorId};
 use super::tensor::{TensorError, TensorValue};
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -686,6 +686,164 @@ pub fn tanh_tracked(a: &TensorValue, tape: &mut Tape) -> TensorValue {
         );
     }
     out
+}
+
+/// SiLU (Swish) activation: x * sigmoid(x), element-wise.
+pub fn silu(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(|x| x / (1.0 + (-x).exp()));
+    TensorValue::new(result, a.requires_grad())
+}
+
+/// Tracked SiLU: d(silu)/dx = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
+pub fn silu_tracked(a: &TensorValue, tape: &mut Tape) -> TensorValue {
+    let sig = a.data().mapv(|x| 1.0 / (1.0 + (-x).exp()));
+    let result_data = a.data() * &sig;
+    let mut out = TensorValue::new(result_data, a.requires_grad());
+    if out.requires_grad() {
+        let out_id = tape.fresh_id();
+        out.set_id(out_id);
+        let a_id = a.id().unwrap_or_else(|| tape.fresh_id());
+        let a_data = a.data().clone();
+        tape.record(
+            out_id,
+            vec![a_id],
+            Box::new(move |g| {
+                let sig = a_data.mapv(|x| 1.0 / (1.0 + (-x).exp()));
+                let dsilu = &sig * &(1.0 + &a_data * &(1.0 - &sig));
+                vec![g * &dsilu]
+            }),
+        );
+    }
+    out
+}
+
+/// 2x nearest-neighbor upsample for 4D tensors [B, C, H, W] -> [B, C, 2H, 2W].
+pub fn upsample_nearest_2x(a: &TensorValue) -> Result<TensorValue, TensorError> {
+    let shape = a.shape();
+    if shape.len() != 4 {
+        return Err(TensorError::ShapeMismatch {
+            expected: vec![0, 0, 0, 0],
+            got: shape.to_vec(),
+        });
+    }
+    let (b, c, h, w) = (shape[0], shape[1], shape[2], shape[3]);
+    let data = a.data();
+    let mut out = ndarray::ArrayD::zeros(ndarray::IxDyn(&[b, c, h * 2, w * 2]));
+    for bi in 0..b {
+        for ci in 0..c {
+            for hi in 0..h {
+                for wi in 0..w {
+                    let v = data[[bi, ci, hi, wi]];
+                    out[[bi, ci, hi * 2, wi * 2]] = v;
+                    out[[bi, ci, hi * 2, wi * 2 + 1]] = v;
+                    out[[bi, ci, hi * 2 + 1, wi * 2]] = v;
+                    out[[bi, ci, hi * 2 + 1, wi * 2 + 1]] = v;
+                }
+            }
+        }
+    }
+    Ok(TensorValue::new(out, a.requires_grad()))
+}
+
+/// Tracked 2x upsample. Backward: sum each 2x2 output block back to source pixel.
+pub fn upsample_nearest_2x_tracked(
+    a: &TensorValue,
+    tape: &mut Tape,
+) -> Result<TensorValue, TensorError> {
+    let mut out = upsample_nearest_2x(a)?;
+    if out.requires_grad() {
+        let out_id = tape.fresh_id();
+        out.set_id(out_id);
+        let a_id = a.id().unwrap_or_else(|| tape.fresh_id());
+        let a_shape = a.shape().to_vec();
+        tape.record(
+            out_id,
+            vec![a_id],
+            Box::new(move |g| {
+                let (b, c, h, w) = (a_shape[0], a_shape[1], a_shape[2], a_shape[3]);
+                let mut grad = ndarray::ArrayD::zeros(ndarray::IxDyn(&a_shape));
+                for bi in 0..b {
+                    for ci in 0..c {
+                        for hi in 0..h {
+                            for wi in 0..w {
+                                grad[[bi, ci, hi, wi]] = g[[bi, ci, hi * 2, wi * 2]]
+                                    + g[[bi, ci, hi * 2, wi * 2 + 1]]
+                                    + g[[bi, ci, hi * 2 + 1, wi * 2]]
+                                    + g[[bi, ci, hi * 2 + 1, wi * 2 + 1]];
+                            }
+                        }
+                    }
+                }
+                vec![grad]
+            }),
+        );
+    }
+    Ok(out)
+}
+
+/// Tracked concatenation along a given axis. Backward: split gradient back.
+pub fn concat_tracked(
+    tensors: &[TensorValue],
+    axis: usize,
+    tape: &mut Tape,
+) -> Result<TensorValue, TensorError> {
+    if tensors.is_empty() {
+        return Err(TensorError::ShapeMismatch {
+            expected: vec![],
+            got: vec![],
+        });
+    }
+    let result = concat_along_axis(tensors, axis)?;
+    let mut out = result;
+    if out.requires_grad() {
+        let out_id = tape.fresh_id();
+        out.set_id(out_id);
+        let input_ids: Vec<TensorId> = tensors
+            .iter()
+            .map(|t| t.id().unwrap_or_else(|| tape.fresh_id()))
+            .collect();
+        let split_sizes: Vec<usize> = tensors.iter().map(|t| t.shape()[axis]).collect();
+        let ax = axis;
+        tape.record(
+            out_id,
+            input_ids,
+            Box::new(move |g| {
+                // Split gradient along the concat axis
+                let mut grads = Vec::new();
+                let mut offset = 0;
+                for &sz in &split_sizes {
+                    let slice = g
+                        .slice_axis(ndarray::Axis(ax), ndarray::Slice::from(offset..offset + sz))
+                        .to_owned();
+                    grads.push(slice);
+                    offset += sz;
+                }
+                grads
+            }),
+        );
+    }
+    Ok(out)
+}
+
+/// Concatenate tensors along a given axis (untracked).
+pub fn concat_along_axis(tensors: &[TensorValue], axis: usize) -> Result<TensorValue, TensorError> {
+    if tensors.is_empty() {
+        return Err(TensorError::ShapeMismatch {
+            expected: vec![],
+            got: vec![],
+        });
+    }
+    let views: Vec<ndarray::ArrayViewD<f64>> = tensors.iter().map(|t| t.data().view()).collect();
+    let result = ndarray::concatenate(ndarray::Axis(axis), &views).map_err(|_| {
+        TensorError::ShapeMismatch {
+            expected: tensors[0].shape().to_vec(),
+            got: vec![0], // generic error
+        }
+    })?;
+    Ok(TensorValue::new(
+        result,
+        tensors.iter().any(|t| t.requires_grad()),
+    ))
 }
 
 /// Tracked sum: records gradient function on tape.

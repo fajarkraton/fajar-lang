@@ -46,6 +46,16 @@ impl Dense {
         ops::add(&xw, &self.bias)
     }
 
+    /// Forward pass with autograd tape recording: `x @ W + b` (tracked).
+    pub fn forward_tracked(
+        &self,
+        x: &TensorValue,
+        tape: &mut crate::runtime::ml::autograd::Tape,
+    ) -> Result<TensorValue, TensorError> {
+        let xw = ops::matmul_tracked(x, &self.weight, tape)?;
+        ops::add_tracked(&xw, &self.bias, tape)
+    }
+
     /// Returns all learnable parameters (weight and bias).
     pub fn parameters(&self) -> Vec<&TensorValue> {
         vec![&self.weight, &self.bias]
@@ -59,6 +69,111 @@ impl Dense {
     /// Returns the number of learnable parameters.
     pub fn param_count(&self) -> usize {
         self.weight.numel() + self.bias.numel()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// GroupNorm
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Group normalization: normalizes within channel groups over spatial dims.
+///
+/// Input: `[batch, channels, ...]` (any spatial dims after channels)
+/// Normalizes over spatial dimensions within each group of channels.
+#[derive(Debug, Clone)]
+pub struct GroupNorm {
+    /// Number of groups.
+    pub num_groups: usize,
+    /// Number of channels.
+    pub num_channels: usize,
+    /// Learnable scale parameter (initialized to 1).
+    pub gamma: TensorValue,
+    /// Learnable shift parameter (initialized to 0).
+    pub beta: TensorValue,
+    /// Epsilon for numerical stability.
+    eps: f64,
+}
+
+impl GroupNorm {
+    /// Create a new GroupNorm layer.
+    pub fn new(num_groups: usize, num_channels: usize) -> Self {
+        assert!(
+            num_channels % num_groups == 0,
+            "channels ({num_channels}) must be divisible by groups ({num_groups})"
+        );
+        let mut gamma = TensorValue::from_data(vec![1.0; num_channels], &[1, num_channels])
+            .expect("gamma init");
+        gamma.set_requires_grad(true);
+        let mut beta = TensorValue::zeros(&[1, num_channels]);
+        beta.set_requires_grad(true);
+        Self {
+            num_groups,
+            num_channels,
+            gamma,
+            beta,
+            eps: 1e-5,
+        }
+    }
+
+    /// Forward pass: normalize over spatial dims within each channel group.
+    ///
+    /// For 4D input [B, C, H, W]: reshape to [B, G, C/G, H, W], normalize over (2,3,4).
+    pub fn forward(&self, x: &TensorValue) -> Result<TensorValue, TensorError> {
+        let shape = x.shape();
+        let b = shape[0];
+        let c = shape[1];
+        let spatial: usize = shape[2..].iter().product();
+        let g = self.num_groups;
+        let cpg = c / g; // channels per group
+
+        let data = x.data();
+        let mut out_data = data.clone();
+
+        // Normalize per (batch, group)
+        for bi in 0..b {
+            for gi in 0..g {
+                let ch_start = gi * cpg;
+                let ch_end = ch_start + cpg;
+                // Collect all values in this group
+                let mut vals = Vec::with_capacity(cpg * spatial);
+                for ci in ch_start..ch_end {
+                    for si in 0..spatial {
+                        let idx = bi * c * spatial + ci * spatial + si;
+                        vals.push(data.as_slice().unwrap_or(&[])[idx]);
+                    }
+                }
+                let n = vals.len() as f64;
+                let mean: f64 = vals.iter().sum::<f64>() / n;
+                let var: f64 = vals.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / n;
+                let std = (var + self.eps).sqrt();
+                // Normalize and apply gamma/beta
+                for ci in ch_start..ch_end {
+                    let gamma_c = self.gamma.data().as_slice().unwrap_or(&[1.0])[ci];
+                    let beta_c = self.beta.data().as_slice().unwrap_or(&[0.0])[ci];
+                    for si in 0..spatial {
+                        let idx = bi * c * spatial + ci * spatial + si;
+                        let slice = out_data.as_slice_mut().unwrap();
+                        slice[idx] = (slice[idx] - mean) / std * gamma_c + beta_c;
+                    }
+                }
+            }
+        }
+        Ok(TensorValue::new(out_data, x.requires_grad()))
+    }
+
+    /// Parameters: gamma + beta.
+    pub fn parameters(&self) -> Vec<&TensorValue> {
+        vec![&self.gamma, &self.beta]
+    }
+
+    /// Mutable parameters.
+    pub fn parameters_mut(&mut self) -> Vec<&mut TensorValue> {
+        vec![&mut self.gamma, &mut self.beta]
+    }
+
+    /// Parameter count.
+    pub fn param_count(&self) -> usize {
+        self.num_channels * 2
     }
 }
 
