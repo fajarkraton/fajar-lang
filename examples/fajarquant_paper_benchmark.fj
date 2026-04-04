@@ -1,0 +1,47 @@
+// fajarquant_paper_benchmark.fj — Publication-quality benchmark suite
+//
+// Generates Table 1 data for the FajarQuant paper.
+// Run: cargo run --release -- run examples/fajarquant_paper_benchmark.fj
+
+fn main() -> void {
+    println("TABLE 1: MSE Distortion — Adaptive vs Random Rotation")
+    println("═══════════════════════════════════════════════════════")
+    println("dim\tbits\tadaptive_mse\trandom_mse\timprovement%")
+    println("───\t────\t───────────\t──────────\t───────────")
+
+    // d=16
+    let r = fajarquant_compare(16, 1, 500)
+    println("16\t1\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(16, 2, 500)
+    println("16\t2\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(16, 3, 500)
+    println("16\t3\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(16, 4, 500)
+    println("16\t4\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+
+    // d=32
+    let r = fajarquant_compare(32, 1, 300)
+    println("32\t1\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(32, 2, 300)
+    println("32\t2\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(32, 3, 300)
+    println("32\t3\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+    let r = fajarquant_compare(32, 4, 300)
+    println("32\t4\t" + to_string(map_get_or(r, "adaptive_mse", 0.0)) + "\t" + to_string(map_get_or(r, "random_mse", 0.0)) + "\t" + to_string(map_get_or(r, "improvement_pct", 0.0)))
+
+    println("")
+    println("TABLE 2: Memory Savings (Analytical)")
+    println("═════════════════════════════════════")
+    println("seq_len\td\tFP64_bytes\tquant_b3_bytes\tcompression")
+    let dim = 128
+    println("1K\t128\t" + to_string(1000 * dim * 2 * 8) + "\t" + to_string(1000 * dim * 2) + "\t8x")
+    println("4K\t128\t" + to_string(4000 * dim * 2 * 8) + "\t" + to_string(4000 * dim * 2) + "\t8x")
+    println("16K\t128\t" + to_string(16000 * dim * 2 * 8) + "\t" + to_string(16000 * dim * 2) + "\t8x")
+
+    println("")
+    println("TABLE 3: Hierarchical Budget (10K tokens, d=128)")
+    println("════════════════════════════════════════════════")
+    println("Flat 3-bit: " + to_string(10000 * 3) + " total bits")
+    println("Tier 4b×256 + 3b×768 + 2b×3072 + 1b×5904 = " + to_string(256*4 + 768*3 + 3072*2 + 5904*1) + " bits")
+    println("Savings: 48.7%")
+}
