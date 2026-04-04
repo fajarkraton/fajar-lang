@@ -7,7 +7,6 @@ pub mod backend;
 pub mod bf16;
 pub mod compression;
 pub mod custom_grad;
-pub mod data;
 pub mod dataloader;
 pub mod distillation;
 pub mod distributed;

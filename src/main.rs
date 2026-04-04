@@ -1634,8 +1634,9 @@ fn cmd_run_strict(path: &PathBuf) -> ExitCode {
         return ExitCode::from(EXIT_COMPILE);
     }
 
-    // Interpret (Value::clone still copies at runtime, but analyzer caught ownership errors)
+    // Interpret with strict mode (rejects simulated builtins)
     let mut interp = Interpreter::new();
+    interp.set_strict_mode(true);
     if let Some(parent) = path.parent() {
         interp.set_source_dir(parent.to_path_buf());
     }

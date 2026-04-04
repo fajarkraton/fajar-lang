@@ -667,6 +667,8 @@ pub struct Interpreter {
     sim_warned: HashSet<String>,
     /// V20.5: Source span from the last runtime error (for diagnostic display).
     last_error_span: Option<crate::lexer::token::Span>,
+    /// V20.7: Strict mode — reject simulated builtins with an error.
+    strict_mode: bool,
 }
 
 impl Interpreter {
@@ -730,6 +732,7 @@ impl Interpreter {
             record_log: None,
             sim_warned: HashSet::new(),
             last_error_span: None,
+            strict_mode: false,
         };
         interp.register_builtins();
         interp
@@ -743,6 +746,11 @@ impl Interpreter {
     /// Returns the source span from the last runtime error, if available.
     pub fn last_error_span(&self) -> Option<crate::lexer::token::Span> {
         self.last_error_span
+    }
+
+    /// Enable strict mode: simulated builtins are rejected with an error.
+    pub fn set_strict_mode(&mut self, strict: bool) {
+        self.strict_mode = strict;
     }
 
     /// Creates an interpreter that captures output (for testing).
@@ -805,6 +813,7 @@ impl Interpreter {
             record_log: None,
             sim_warned: HashSet::new(),
             last_error_span: None,
+            strict_mode: false,
         };
         interp.register_builtins();
         interp
@@ -919,9 +928,33 @@ impl Interpreter {
     }
 
     /// V20.5: Print one-time warning for simulated builtin.
+    /// List of builtin names that are simulated (not backed by real hardware/threading).
+    const SIMULATED_BUILTINS: &'static [&'static str] = &[
+        "accelerate",
+        "actor_spawn",
+        "actor_send",
+        "actor_supervise",
+        "diffusion_create",
+        "diffusion_denoise",
+        "rl_agent_create",
+        "rl_agent_step",
+        "pipeline_run",
+        "const_alloc",
+    ];
+
+    /// Check if a builtin name is simulated.
+    pub fn is_simulated(name: &str) -> bool {
+        Self::SIMULATED_BUILTINS.contains(&name)
+    }
+
     fn warn_simulated(&mut self, name: &str) {
         if !self.sim_warned.contains(name) {
             self.sim_warned.insert(name.to_string());
+            if self.strict_mode {
+                // In strict mode, simulated builtins are recorded but execution continues
+                // (the error is returned by the builtin dispatch)
+                return;
+            }
             if !self.capture_output {
                 eprintln!("[sim] {name}() is simulated — underlying mechanism is not real");
             }

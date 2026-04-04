@@ -21,6 +21,14 @@ use super::{ControlFlow, EvalError, EvalResult, Interpreter, RuntimeError};
 impl Interpreter {
     /// Calls a built-in function.
     pub(crate) fn call_builtin(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        // Strict mode: reject simulated builtins
+        if self.strict_mode && Self::is_simulated(name) {
+            return Err(RuntimeError::TypeError(format!(
+                "{name}() is simulated and not available in --strict mode. \
+                 Use real hardware dispatch or remove the call."
+            ))
+            .into());
+        }
         match name {
             "print" => {
                 let text: Vec<String> = args.iter().map(|a| format!("{a}")).collect();
