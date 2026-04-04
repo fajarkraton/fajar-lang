@@ -2088,15 +2088,15 @@ pub const PTE_TABLE: i64 = 0x3;
 /// In hosted mode, this simulates COM1 serial output.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_outb(port: i64, value: i64) -> i64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        // On real x86_64 host, we can use the actual instruction
-        // (only works in ring 0 or with ioperm — skip for simulation)
-    }
-
-    // Simulation: if writing to COM1 data register, output to UART
+    // Simulation: map common ports to host I/O
     if port == 0x3F8 {
-        uart_putc(value as u8);
+        uart_putc(value as u8); // COM1 data → host serial output
+    }
+    // Bare-metal: real `out` instruction (requires ring 0)
+    // SAFETY: only invoked from @kernel context, port range checked by caller
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    unsafe {
+        std::arch::asm!("out dx, al", in("dx") port as u16, in("al") value as u8, options(nomem, nostack));
     }
     0
 }
@@ -2105,15 +2105,27 @@ pub extern "C" fn fj_rt_bare_port_outb(port: i64, value: i64) -> i64 {
 /// In hosted mode, returns simulated values.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_inb(port: i64) -> i64 {
+    // Bare-metal: real `in` instruction (requires ring 0)
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    {
+        let result: u8;
+        // SAFETY: only invoked from @kernel context
+        unsafe {
+            std::arch::asm!("in al, dx", in("dx") port as u16, out("al") result, options(nomem, nostack));
+        }
+        return result as i64;
+    }
     // Simulation: COM1 LSR (0x3FD) — TX empty + TX holding empty
-    if port == 0x3FD {
-        return 0x60; // bits 5+6 set = transmitter empty
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    {
+        if port == 0x3FD {
+            return 0x60; // bits 5+6 set = transmitter empty
+        }
+        if port == 0x3F8 {
+            return 0;
+        }
+        0
     }
-    // Simulation: COM1 data register — no data
-    if port == 0x3F8 {
-        return 0;
-    }
-    0
 }
 
 /// x86_64 serial init: initialize 16550 UART at standard COM port.
@@ -2188,10 +2200,31 @@ pub extern "C" fn fj_rt_bare_fxrstor(_buf: i64) {
 }
 
 /// Return a hardware random number via RDRAND.
-/// On hosted targets: returns a pseudo-random value.
+/// On x86_64 with RDRAND support: uses real hardware RNG.
+/// On other targets: returns a pseudo-random LCG value.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_rdrand() -> i64 {
-    // Use a simple LCG on hosted targets
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Try RDRAND (non-privileged instruction, needs CPU support)
+        let result: u64;
+        let success: u8;
+        // SAFETY: RDRAND is safe on CPUs that support it; CF=1 on success
+        unsafe {
+            std::arch::asm!(
+                "rdrand {0}",
+                "setc {1}",
+                out(reg) result,
+                out(reg_byte) success,
+                options(nomem, nostack),
+            );
+        }
+        if success != 0 {
+            return result as i64;
+        }
+        // Fallback to LCG if RDRAND fails (e.g., entropy exhaustion)
+    }
+    // LCG fallback for non-x86_64 or RDRAND failure
     static SEED: AtomicU64 = AtomicU64::new(0x5DEE_CE66_D1A4_F87D);
     let old = SEED.load(Ordering::Relaxed);
     let next = old
@@ -2269,16 +2302,39 @@ pub extern "C" fn fj_rt_bare_read_cr2() -> i64 {
 }
 
 /// Invalidate TLB entry for a specific virtual address (INVLPG).
-/// On hosted targets: no-op stub.
+/// On hosted targets: no-op.
+/// On bare-metal: real `invlpg` instruction.
 #[unsafe(no_mangle)]
-pub extern "C" fn fj_rt_bare_invlpg(_addr: i64) {}
+pub extern "C" fn fj_rt_bare_invlpg(addr: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only, addr is a valid virtual address
+    unsafe {
+        std::arch::asm!("invlpg [{}]", in(reg) addr as usize, options(nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    let _ = addr;
+}
 
 /// Read timestamp counter (RDTSC).
-/// On hosted targets: returns monotonic counter.
+/// On x86_64: reads real hardware TSC (non-privileged instruction).
+/// On other architectures: returns monotonic counter.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_rdtsc() -> i64 {
-    static TSC: AtomicU64 = AtomicU64::new(0);
-    TSC.fetch_add(1, Ordering::Relaxed) as i64
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: RDTSC is a non-privileged instruction on x86_64
+        unsafe {
+            let lo: u64;
+            let hi: u64;
+            std::arch::asm!("rdtsc", out("eax") lo, out("edx") hi, options(nomem, nostack));
+            ((hi << 32) | lo) as i64
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        static TSC: AtomicU64 = AtomicU64::new(0);
+        TSC.fetch_add(1, Ordering::Relaxed) as i64
+    }
 }
 
 /// Read CR0 control register.
@@ -2311,23 +2367,37 @@ pub extern "C" fn fj_rt_bare_write_msr(_msr: i64, _val: i64) -> i64 {
 /// On bare-metal: `asm!("hlt")`.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_hlt() {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: halts CPU until next interrupt (ring 0 only)
+    unsafe {
+        std::arch::asm!("hlt", options(nomem, nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
     std::thread::yield_now();
 }
 
 /// Disable interrupts (clear IF flag).
 /// On hosted targets: no-op.
-/// On bare-metal: `asm!("cli")`.
+/// On bare-metal: real `cli` instruction.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_cli() {
-    // no-op on hosted targets
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only
+    unsafe {
+        std::arch::asm!("cli", options(nomem, nostack));
+    }
 }
 
 /// Enable interrupts (set IF flag).
 /// On hosted targets: no-op.
-/// On bare-metal: `asm!("sti")`.
+/// On bare-metal: real `sti` instruction.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_sti() {
-    // no-op on hosted targets
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only
+    unsafe {
+        std::arch::asm!("sti", options(nomem, nostack));
+    }
 }
 
 /// Query CPU features via CPUID instruction.
@@ -2430,32 +2500,68 @@ pub extern "C" fn fj_rt_bare_cpuid_edx(leaf: i64) -> i64 {
 // ═══════════════════════════════════════════════════════════════════════
 
 /// x86_64 port input: read a 16-bit word from an I/O port.
-/// On hosted targets: returns 0.
+/// On bare-metal: real `in` instruction. On hosted: returns 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_inw(port: i64) -> i64 {
-    let _ = port;
-    0
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    {
+        let result: u16;
+        // SAFETY: ring 0 only
+        unsafe {
+            std::arch::asm!("in ax, dx", in("dx") port as u16, out("ax") result, options(nomem, nostack));
+        }
+        return result as i64;
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    {
+        let _ = port;
+        0
+    }
 }
 
 /// x86_64 port input: read a 32-bit dword from an I/O port.
-/// On hosted targets: returns 0.
+/// On bare-metal: real `in` instruction. On hosted: returns 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_ind(port: i64) -> i64 {
-    let _ = port;
-    0
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    {
+        let result: u32;
+        // SAFETY: ring 0 only
+        unsafe {
+            std::arch::asm!("in eax, dx", in("dx") port as u16, out("eax") result, options(nomem, nostack));
+        }
+        return result as i64;
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    {
+        let _ = port;
+        0
+    }
 }
 
 /// x86_64 port output: write a 16-bit word to an I/O port.
-/// On hosted targets: no-op.
+/// On bare-metal: real `out` instruction. On hosted: no-op.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_outw(port: i64, value: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only
+    unsafe {
+        std::arch::asm!("out dx, ax", in("dx") port as u16, in("ax") value as u16, options(nomem, nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
     let _ = (port, value);
 }
 
 /// x86_64 port output: write a 32-bit dword to an I/O port.
-/// On hosted targets: no-op.
+/// On bare-metal: real `out` instruction. On hosted: no-op.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_port_outd(port: i64, value: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only
+    unsafe {
+        std::arch::asm!("out dx, eax", in("dx") port as u16, in("eax") value as u32, options(nomem, nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
     let _ = (port, value);
 }
 
@@ -2467,24 +2573,86 @@ pub extern "C" fn fj_rt_bare_ltr(_selector: i64) {
 }
 
 /// Load GDT from memory pointer (LGDT instruction).
-/// On hosted targets: no-op.
+/// On bare-metal: real `lgdt` instruction. On hosted: no-op.
 #[unsafe(no_mangle)]
-pub extern "C" fn fj_rt_bare_lgdt_mem(_addr: i64) {
-    // Bare-metal: `lgdt [rdi]`
+pub extern "C" fn fj_rt_bare_lgdt_mem(addr: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only, addr must point to valid GDT descriptor
+    unsafe {
+        std::arch::asm!("lgdt [{}]", in(reg) addr as usize, options(nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    let _ = addr;
 }
 
 /// Load IDT from memory pointer (LIDT instruction).
-/// On hosted targets: no-op.
+/// On bare-metal: real `lidt` instruction. On hosted: no-op.
 #[unsafe(no_mangle)]
-pub extern "C" fn fj_rt_bare_lidt_mem(_addr: i64) {
-    // Bare-metal: `lidt [rdi]`
+pub extern "C" fn fj_rt_bare_lidt_mem(addr: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only, addr must point to valid IDT descriptor
+    unsafe {
+        std::arch::asm!("lidt [{}]", in(reg) addr as usize, options(nostack));
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    let _ = addr;
 }
 
 /// Swap GS base register (kernel <-> user).
-/// On hosted targets: no-op.
+/// On bare-metal: real `swapgs` instruction. On hosted: no-op.
 #[unsafe(no_mangle)]
 pub extern "C" fn fj_rt_bare_swapgs() {
-    // Bare-metal: `swapgs`
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only
+    unsafe {
+        std::arch::asm!("swapgs", options(nomem, nostack));
+    }
+}
+
+/// Read Model-Specific Register (RDMSR).
+/// On x86_64: reads real MSR. On other targets: returns 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_rdmsr(index: i64) -> i64 {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    {
+        let lo: u32;
+        let hi: u32;
+        // SAFETY: ring 0 only, index must be a valid MSR
+        unsafe {
+            std::arch::asm!(
+                "rdmsr",
+                in("ecx") index as u32,
+                out("eax") lo,
+                out("edx") hi,
+                options(nomem, nostack),
+            );
+        }
+        return ((hi as i64) << 32) | (lo as i64);
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    {
+        let _ = index;
+        0
+    }
+}
+
+/// Write Model-Specific Register (WRMSR).
+/// On bare-metal: real `wrmsr` instruction. On hosted: no-op.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_wrmsr(index: i64, value: i64) {
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+    // SAFETY: ring 0 only, index must be a valid MSR
+    unsafe {
+        std::arch::asm!(
+            "wrmsr",
+            in("ecx") index as u32,
+            in("eax") (value & 0xFFFF_FFFF) as u32,
+            in("edx") ((value >> 32) & 0xFFFF_FFFF) as u32,
+            options(nomem, nostack),
+        );
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+    let _ = (index, value);
 }
 
 /// Software interrupt (INT N).

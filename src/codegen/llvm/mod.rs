@@ -40,7 +40,7 @@ use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
@@ -714,6 +714,26 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "assert_eq"
                 | "len"
                 | "type_of"
+                // Bare-metal OS builtins (Phase 1)
+                | "volatile_read"
+                | "volatile_write"
+                | "volatile_read_u8"
+                | "volatile_read_u16"
+                | "volatile_read_u32"
+                | "volatile_write_u8"
+                | "volatile_write_u16"
+                | "volatile_write_u32"
+                | "port_inb"
+                | "port_outb"
+                | "port_inw"
+                | "port_outw"
+                | "port_ind"
+                | "port_outd"
+                | "cli"
+                | "sti"
+                | "hlt"
+                | "rdtsc"
+                | "rdrand"
         )
     }
 
@@ -1076,6 +1096,258 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 // dbg returns its argument.
                 Ok(Some(val))
             }
+
+            // ── Bare-metal OS builtins (Phase 1) ─────────────────
+
+            // volatile_read(addr) -> i64
+            "volatile_read" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "volatile_read() requires 1 argument (address)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_read addr produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_volatile_load(addr).map(Some)
+            }
+
+            // volatile_read_u8/u16/u32(addr) -> i64 (zero-extended)
+            "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(format!(
+                        "{name}() requires 1 argument (address)"
+                    )));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal(format!("{name} addr produced no value"))
+                    })?
+                    .into_int_value();
+                let load_ty = match name {
+                    "volatile_read_u8" => self.context.i8_type().into(),
+                    "volatile_read_u16" => self.context.i16_type().into(),
+                    _ => self.context.i32_type().into(),
+                };
+                let val = self.compile_volatile_load_sized(addr, load_ty)?;
+                // Zero-extend to i64 for uniform ABI.
+                let ext = self
+                    .builder
+                    .build_int_z_extend(val.into_int_value(), self.context.i64_type(), "vol_zext")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(ext.into()))
+            }
+
+            // volatile_write(addr, value)
+            "volatile_write" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "volatile_write() requires 2 arguments (address, value)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write addr produced no value".into())
+                    })?
+                    .into_int_value();
+                let value = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write value produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_volatile_store(addr, value)?;
+                Ok(Some(zero.into()))
+            }
+
+            // volatile_write_u8/u16/u32(addr, value)
+            "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(format!(
+                        "{name}() requires 2 arguments (address, value)"
+                    )));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal(format!("{name} addr produced no value"))
+                    })?
+                    .into_int_value();
+                let value = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal(format!("{name} value produced no value"))
+                    })?
+                    .into_int_value();
+                // Truncate i64 to target width.
+                let trunc_ty = match name {
+                    "volatile_write_u8" => self.context.i8_type(),
+                    "volatile_write_u16" => self.context.i16_type(),
+                    _ => self.context.i32_type(),
+                };
+                let truncated = self
+                    .builder
+                    .build_int_truncate(value, trunc_ty, "vol_trunc")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                // Volatile store at proper width.
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                let ptr = self
+                    .builder
+                    .build_int_to_ptr(addr, ptr_ty, "vol_ptr")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let store = self
+                    .builder
+                    .build_store(ptr, truncated)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                store.set_volatile(true).ok();
+                Ok(Some(zero.into()))
+            }
+
+            // port_inb(port) -> i64 (zero-extended byte)
+            "port_inb" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "port_inb() requires 1 argument (port)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_inb port produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_in(port, 8).map(Some)
+            }
+
+            // port_inw(port) -> i64
+            "port_inw" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "port_inw() requires 1 argument (port)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_inw port produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_in(port, 16).map(Some)
+            }
+
+            // port_ind(port) -> i64
+            "port_ind" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "port_ind() requires 1 argument (port)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_ind port produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_in(port, 32).map(Some)
+            }
+
+            // port_outb(port, value)
+            "port_outb" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "port_outb() requires 2 arguments (port, value)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outb port produced no value".into())
+                    })?
+                    .into_int_value();
+                let value = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outb value produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_out(port, value, 8)?;
+                Ok(Some(zero.into()))
+            }
+
+            // port_outw(port, value)
+            "port_outw" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "port_outw() requires 2 arguments (port, value)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outw port produced no value".into())
+                    })?
+                    .into_int_value();
+                let value = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outw value produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_out(port, value, 16)?;
+                Ok(Some(zero.into()))
+            }
+
+            // port_outd(port, value)
+            "port_outd" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "port_outd() requires 2 arguments (port, value)".into(),
+                    ));
+                }
+                let port = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outd port produced no value".into())
+                    })?
+                    .into_int_value();
+                let value = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("port_outd value produced no value".into())
+                    })?
+                    .into_int_value();
+                self.compile_port_out(port, value, 32)?;
+                Ok(Some(zero.into()))
+            }
+
+            // cli() — disable interrupts
+            "cli" => {
+                self.compile_zero_operand_asm("cli")?;
+                Ok(Some(zero.into()))
+            }
+
+            // sti() — enable interrupts
+            "sti" => {
+                self.compile_zero_operand_asm("sti")?;
+                Ok(Some(zero.into()))
+            }
+
+            // hlt() — halt CPU until next interrupt
+            "hlt" => {
+                self.compile_zero_operand_asm("hlt")?;
+                Ok(Some(zero.into()))
+            }
+
+            // rdtsc() -> i64 — read timestamp counter
+            "rdtsc" => self.compile_rdtsc().map(Some),
+
+            // rdrand() -> i64 — hardware random number
+            "rdrand" => self.compile_rdrand().map(Some),
 
             _ => Ok(None),
         }
@@ -4203,14 +4475,21 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
     }
 
-    /// Compiles a volatile load from a memory address.
-    #[allow(dead_code)]
+    /// Compiles a volatile load from a memory address (i64 width).
     fn compile_volatile_load(
         &mut self,
         addr: inkwell::values::IntValue<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        self.compile_volatile_load_sized(addr, self.context.i64_type().into())
+    }
+
+    /// Compiles a volatile load of arbitrary integer width from a memory address.
+    fn compile_volatile_load_sized(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+        load_ty: inkwell::types::BasicTypeEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
-        let i64_ty = self.context.i64_type();
 
         let ptr = self
             .builder
@@ -4219,18 +4498,19 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
         let load = self
             .builder
-            .build_load(i64_ty, ptr, "vol_load")
+            .build_load(load_ty, ptr, "vol_load")
             .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
-        // The load is volatile by nature — inkwell's build_load returns the value
-        // For true volatile marking, use the instruction directly via LLVM-C
-        // (inkwell doesn't expose set_volatile on BasicValueEnum directly).
-        // The load is safe: address comes from @kernel context.
+        // Mark the load as volatile so LLVM won't optimize it away.
+        // SAFETY: address comes from @kernel context.
+        if let Some(inst) = load.as_instruction_value() {
+            inst.set_volatile(true).ok();
+        }
+
         Ok(load)
     }
 
     /// Compiles a volatile store to a memory address.
-    #[allow(dead_code)]
     fn compile_volatile_store(
         &mut self,
         addr: inkwell::values::IntValue<'ctx>,
@@ -4252,6 +4532,227 @@ impl<'ctx> LlvmCompiler<'ctx> {
         store.set_volatile(true).ok();
 
         Ok(())
+    }
+
+    // ── Bare-metal inline asm helpers (Phase 1) ───────────────────────
+
+    /// Compiles a port I/O read (inb/inw/inl) via inline asm.
+    /// `bits` is 8, 16, or 32. Returns the value zero-extended to i64.
+    fn compile_port_in(
+        &mut self,
+        port: inkwell::values::IntValue<'ctx>,
+        bits: u32,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i16_ty = self.context.i16_type();
+        let i64_ty = self.context.i64_type();
+
+        // Truncate port to i16 (x86 port range is 0-65535).
+        let port16 = self
+            .builder
+            .build_int_truncate(port, i16_ty, "port16")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        let (result_ty, template, constraint) = match bits {
+            8 => (
+                self.context.i8_type().as_basic_type_enum(),
+                "inb %dx, %al",
+                "={al},{dx}",
+            ),
+            16 => (
+                self.context.i16_type().as_basic_type_enum(),
+                "inw %dx, %ax",
+                "={ax},{dx}",
+            ),
+            32 => (
+                self.context.i32_type().as_basic_type_enum(),
+                "inl %dx, %eax",
+                "={eax},{dx}",
+            ),
+            _ => {
+                return Err(CodegenError::Internal(format!(
+                    "unsupported port_in width: {bits}"
+                )));
+            }
+        };
+
+        let asm_fn_ty = result_ty.fn_type(&[i16_ty.into()], false);
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            template.to_string(),
+            constraint.to_string(),
+            true,  // side effects
+            false, // align stack
+            None,
+            false,
+        );
+
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &[port16.into()], "port_in")
+            .map_err(|e| CodegenError::Internal(format!("port_in asm error: {e}")))?;
+
+        let raw = match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => v,
+            inkwell::values::ValueKind::Instruction(_) => {
+                return Err(CodegenError::Internal("port_in produced no value".into()));
+            }
+        };
+
+        // Zero-extend to i64.
+        let ext = self
+            .builder
+            .build_int_z_extend(raw.into_int_value(), i64_ty, "port_in_zext")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        Ok(ext.into())
+    }
+
+    /// Compiles a port I/O write (outb/outw/outl) via inline asm.
+    fn compile_port_out(
+        &mut self,
+        port: inkwell::values::IntValue<'ctx>,
+        value: inkwell::values::IntValue<'ctx>,
+        bits: u32,
+    ) -> Result<(), CodegenError> {
+        let i16_ty = self.context.i16_type();
+        let void_ty = self.context.void_type();
+
+        // Truncate port to i16.
+        let port16 = self
+            .builder
+            .build_int_truncate(port, i16_ty, "port16")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        let (val_ty, template, constraint) = match bits {
+            8 => {
+                let t = self.context.i8_type();
+                (t.as_basic_type_enum(), "outb %al, %dx", "{al},{dx}")
+            }
+            16 => {
+                let t = self.context.i16_type();
+                (t.as_basic_type_enum(), "outw %ax, %dx", "{ax},{dx}")
+            }
+            32 => {
+                let t = self.context.i32_type();
+                (t.as_basic_type_enum(), "outl %eax, %dx", "{eax},{dx}")
+            }
+            _ => {
+                return Err(CodegenError::Internal(format!(
+                    "unsupported port_out width: {bits}"
+                )));
+            }
+        };
+
+        // Truncate value to target width.
+        let truncated = self
+            .builder
+            .build_int_truncate(value, val_ty.into_int_type(), "val_trunc")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        let asm_fn_ty = void_ty.fn_type(&[val_ty.into(), i16_ty.into()], false);
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            template.to_string(),
+            constraint.to_string(),
+            true,  // side effects
+            false, // align stack
+            None,
+            false,
+        );
+
+        self.builder
+            .build_indirect_call(
+                asm_fn_ty,
+                inline_asm,
+                &[truncated.into(), port16.into()],
+                "port_out",
+            )
+            .map_err(|e| CodegenError::Internal(format!("port_out asm error: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Compiles a zero-operand privileged instruction (cli, sti, hlt).
+    fn compile_zero_operand_asm(&mut self, mnemonic: &str) -> Result<(), CodegenError> {
+        let void_ty = self.context.void_type();
+        let asm_fn_ty = void_ty.fn_type(&[], false);
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            mnemonic.to_string(),
+            String::new(), // no constraints
+            true,          // side effects
+            false,         // align stack
+            None,
+            false,
+        );
+
+        self.builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &[], mnemonic)
+            .map_err(|e| CodegenError::Internal(format!("{mnemonic} asm error: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Compiles `rdtsc` — reads the 64-bit timestamp counter.
+    /// Uses `rdtsc` which puts low 32 bits in EAX, high 32 bits in EDX.
+    /// We combine them: (EDX << 32) | EAX.
+    fn compile_rdtsc(&mut self) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[], false);
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            "rdtsc\n\tshlq $$32, %rdx\n\torq %rdx, %rax".to_string(),
+            "={rax},~{rdx}".to_string(),
+            true,  // side effects
+            false, // align stack
+            None,
+            false,
+        );
+
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &[], "rdtsc")
+            .map_err(|e| CodegenError::Internal(format!("rdtsc asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("rdtsc produced no value".into()))
+            }
+        }
+    }
+
+    /// Compiles `rdrand` — hardware random number generator.
+    /// Returns a 64-bit random value in RAX.
+    fn compile_rdrand(&mut self) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[], false);
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            "rdrand %rax".to_string(),
+            "={rax}".to_string(),
+            true,  // side effects
+            false, // align stack
+            None,
+            false,
+        );
+
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &[], "rdrand")
+            .map_err(|e| CodegenError::Internal(format!("rdrand asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("rdrand produced no value".into()))
+            }
+        }
     }
 
     /// Constructs the optimization pass pipeline string, incorporating PGO if active.

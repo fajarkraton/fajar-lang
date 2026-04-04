@@ -1,0 +1,31 @@
+// Bare-metal kernel: write "Hello" to VGA buffer at 0xB8000
+// Build: fj build --backend llvm --target x86_64-none examples/bare_metal_hello.fj
+// Boot:  qemu-system-x86_64 -kernel bare_metal_hello.elf -nographic
+
+@kernel
+fn kernel_main() -> i64 {
+    // VGA text mode: each character is 2 bytes (char + attribute)
+    // attribute 0x0F = white on black
+    volatile_write_u8(0xB8000, 72)    // 'H'
+    volatile_write_u8(0xB8001, 15)    // white on black
+    volatile_write_u8(0xB8002, 101)   // 'e'
+    volatile_write_u8(0xB8003, 15)
+    volatile_write_u8(0xB8004, 108)   // 'l'
+    volatile_write_u8(0xB8005, 15)
+    volatile_write_u8(0xB8006, 108)   // 'l'
+    volatile_write_u8(0xB8007, 15)
+    volatile_write_u8(0xB8008, 111)   // 'o'
+    volatile_write_u8(0xB8009, 15)
+
+    // Write to serial port 0x3F8 (COM1)
+    port_outb(0x3F8, 72)   // 'H'
+    port_outb(0x3F8, 101)  // 'e'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 108)  // 'l'
+    port_outb(0x3F8, 111)  // 'o'
+    port_outb(0x3F8, 10)   // newline
+
+    // Halt
+    hlt()
+    0
+}

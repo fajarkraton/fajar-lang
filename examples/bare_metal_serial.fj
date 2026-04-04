@@ -1,0 +1,44 @@
+// Bare-metal kernel: serial I/O with rdtsc + rdrand
+// Build: fj build --backend llvm --target x86_64-none examples/bare_metal_serial.fj
+// Boot:  qemu-system-x86_64 -cdrom <iso> -serial stdio
+
+@kernel
+fn kernel_main() -> i64 {
+    // Initialize serial port (COM1 = 0x3F8)
+    port_outb(0x3FA, 0)     // disable FIFO
+    port_outb(0x3FB, 128)   // enable DLAB
+    port_outb(0x3F8, 1)     // baud divisor low (115200)
+    port_outb(0x3F9, 0)     // baud divisor high
+    port_outb(0x3FB, 3)     // 8N1, disable DLAB
+
+    // Print "FJ-LLVM\n"
+    port_outb(0x3F8, 70)    // 'F'
+    port_outb(0x3F8, 74)    // 'J'
+    port_outb(0x3F8, 45)    // '-'
+    port_outb(0x3F8, 76)    // 'L'
+    port_outb(0x3F8, 76)    // 'L'
+    port_outb(0x3F8, 86)    // 'V'
+    port_outb(0x3F8, 77)    // 'M'
+    port_outb(0x3F8, 10)    // '\n'
+
+    // Read TSC and print a digit
+    let tsc = rdtsc()
+    let digit = tsc % 10
+    port_outb(0x3F8, 48 + digit)  // '0'-'9'
+    port_outb(0x3F8, 10)
+
+    // Read hardware random
+    let rnd = rdrand()
+    let rdigit = rnd % 10
+    port_outb(0x3F8, 48 + rdigit)
+    port_outb(0x3F8, 10)
+
+    // VGA: write "OK" at top-left
+    volatile_write_u8(0xB8000, 79)   // 'O'
+    volatile_write_u8(0xB8001, 10)   // green on black
+    volatile_write_u8(0xB8002, 75)   // 'K'
+    volatile_write_u8(0xB8003, 10)
+
+    hlt()
+    0
+}

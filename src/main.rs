@@ -690,6 +690,10 @@ fn main_inner() -> ExitCode {
                     &code_model,
                     &effective_lto,
                     &pgo,
+                    &target,
+                    no_std,
+                    ls.as_deref(),
+                    linker.as_deref(),
                     verbose,
                 )
             } else {
@@ -3073,7 +3077,7 @@ void fj_rt_free(void* ptr, int64_t size) { (void)size; free(ptr); }
 
 /// Builds a Fajar Lang program to a native object/binary via LLVM backend.
 #[cfg(feature = "llvm")]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, unused_variables)]
 fn cmd_build_llvm(
     path: &PathBuf,
     output: Option<&std::path::Path>,
@@ -3084,8 +3088,24 @@ fn cmd_build_llvm(
     code_model: &str,
     lto: &str,
     pgo: &str,
+    target_str: &str,
+    no_std: bool,
+    linker_script: Option<&str>,
+    linker_override: Option<&str>,
     verbose: bool,
 ) -> ExitCode {
+    // Parse target triple for bare-metal detection
+    #[cfg(feature = "native")]
+    let target = fajar_lang::codegen::target::TargetConfig::from_triple(target_str).ok();
+    #[cfg(feature = "native")]
+    let is_bare_metal = target.as_ref().is_some_and(|t| t.is_bare_metal) || no_std;
+    #[cfg(not(feature = "native"))]
+    let is_bare_metal = no_std;
+
+    if verbose && is_bare_metal {
+        eprintln!("[verbose] Bare-metal mode: target={target_str}, no_std={no_std}");
+    }
+
     let source = match read_source(path) {
         Ok(s) => s,
         Err(code) => return code,
@@ -3184,6 +3204,11 @@ fn cmd_build_llvm(
     }
     compiler.set_target_config(target_config);
 
+    // Enable no_std for bare-metal targets
+    if is_bare_metal {
+        compiler.set_no_std(true);
+    }
+
     // Configure LTO
     let lto_mode = match fajar_lang::codegen::llvm::LtoMode::parse_from(lto) {
         Ok(m) => m,
@@ -3248,101 +3273,246 @@ fn cmd_build_llvm(
         obj_path
     };
 
-    // Compile the Fajar Lang C runtime (fj_rt_* function implementations)
-    let rt_c_path = obj_path.with_file_name("fj_runtime.c");
-    let rt_o_path = obj_path.with_file_name("fj_runtime.o");
-    std::fs::write(&rt_c_path, FJ_LLVM_RUNTIME_C).unwrap_or_else(|e| {
-        eprintln!("warning: cannot write runtime.c: {e}");
-    });
-    let rt_compiled = std::process::Command::new("cc")
-        .args(["-c", "-O2", "-o"])
-        .arg(&rt_o_path)
-        .arg(&rt_c_path)
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if !rt_compiled {
-        eprintln!(
-            "warning: failed to compile fj_runtime.c — linking may fail for programs using println/print"
-        );
-    }
-
     // Link to binary
-    let bin_path = output
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| path.with_extension(""));
-
-    let mut link_cmd = std::process::Command::new("cc");
-    link_cmd.arg(&obj_path);
-    if rt_compiled {
-        link_cmd.arg(&rt_o_path);
-    }
-    link_cmd.arg("-o").arg(&bin_path).arg("-lm");
-
-    // PGO linker flags: instrumented builds need the profiling runtime
-    if pgo_mode.is_generate() {
-        link_cmd.arg("-fprofile-generate");
-    }
-
-    // LTO linker flags
-    if lto_mode.is_enabled() {
-        // Use -flto for clang/gcc to process bitcode
-        let lto_flag = match lto_mode {
-            fajar_lang::codegen::llvm::LtoMode::Thin => "-flto=thin",
-            fajar_lang::codegen::llvm::LtoMode::Full => "-flto",
-            fajar_lang::codegen::llvm::LtoMode::None => "",
-        };
-        if !lto_flag.is_empty() {
-            link_cmd.arg(lto_flag);
+    let bin_path = output.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+        if is_bare_metal {
+            path.with_extension("elf")
+        } else {
+            path.with_extension("")
         }
-        // Prefer lld for LTO (faster and better LTO support)
-        link_cmd.arg("-fuse-ld=lld");
-    }
+    });
 
-    if cfg!(target_os = "macos") {
-        link_cmd.arg("-Wl,-dead_strip");
-    } else {
-        link_cmd.arg("-Wl,--gc-sections");
-    }
-    let status = link_cmd.status();
-
-    // Clean up intermediate files
-    let _ = std::fs::remove_file(&obj_path);
-    let _ = std::fs::remove_file(&rt_c_path);
-    let _ = std::fs::remove_file(&rt_o_path);
-
-    let lto_suffix = if lto_mode.is_enabled() {
-        format!(", LTO={lto}")
-    } else {
-        String::new()
-    };
-    let pgo_suffix = if pgo_mode.is_generate() {
-        ", PGO=generate".to_string()
-    } else if pgo_mode.is_use() {
-        ", PGO=use".to_string()
-    } else {
-        String::new()
-    };
-
-    match status {
-        Ok(s) if s.success() => {
-            println!(
-                "Built: {} (LLVM O{opt_level}{lto_suffix}{pgo_suffix})",
-                bin_path.display()
-            );
-            ExitCode::SUCCESS
+    if is_bare_metal {
+        // ── Bare-metal build pipeline ─────────────────────────────────
+        // Requires `native` feature for linker script + startup generation.
+        #[cfg(not(feature = "native"))]
+        {
+            eprintln!("error: bare-metal LLVM builds require `native` feature");
+            eprintln!("hint: rebuild with `cargo build --features llvm,native`");
+            let _ = std::fs::remove_file(&obj_path);
+            return ExitCode::from(EXIT_COMPILE);
         }
-        Ok(s) => {
+
+        #[cfg(feature = "native")]
+        {
+            let mut cleanup_files: Vec<std::path::PathBuf> = vec![obj_path.clone()];
+            // 1. Generate or use linker script
+            let script_path = if let Some(ls) = linker_script {
+                std::path::PathBuf::from(ls)
+            } else if let Some(ref t) = target {
+                let config = fajar_lang::codegen::linker::LinkerConfig::for_target(t);
+                let script = if t.arch == fajar_lang::codegen::target::Arch::X86_64 {
+                    fajar_lang::codegen::linker::generate_x86_64_linker_script(&config)
+                } else {
+                    fajar_lang::codegen::linker::generate_linker_script(&config)
+                };
+                match script {
+                    Ok(s) => {
+                        let sp = obj_path.with_extension("ld");
+                        if let Err(e) = std::fs::write(&sp, &s) {
+                            eprintln!("error: cannot write linker script: {e}");
+                            let _ = std::fs::remove_file(&obj_path);
+                            return ExitCode::from(EXIT_COMPILE);
+                        }
+                        cleanup_files.push(sp.clone());
+                        if verbose {
+                            eprintln!("[verbose] Generated linker script: {}", sp.display());
+                        }
+                        sp
+                    }
+                    Err(e) => {
+                        eprintln!("error: cannot generate linker script: {e}");
+                        let _ = std::fs::remove_file(&obj_path);
+                        return ExitCode::from(EXIT_COMPILE);
+                    }
+                }
+            } else {
+                // Fallback: minimal x86_64 linker script
+                let sp = obj_path.with_extension("ld");
+                let minimal = "ENTRY(_start)\nSECTIONS {\n  . = 0x100000;\n  \
+                               .text : { *(.multiboot_header) *(.text*) }\n  \
+                               .rodata : { *(.rodata*) }\n  \
+                               .data : { *(.data*) }\n  \
+                               __bss_start = .;\n  .bss : { *(.bss*) }\n  \
+                               __bss_end = .;\n}\n";
+                if let Err(e) = std::fs::write(&sp, minimal) {
+                    eprintln!("error: cannot write linker script: {e}");
+                    let _ = std::fs::remove_file(&obj_path);
+                    return ExitCode::from(EXIT_COMPILE);
+                }
+                cleanup_files.push(sp.clone());
+                sp
+            };
+
+            // 2. Generate startup assembly
+            let entry_fn = "kernel_main";
+            let startup_s = obj_path.with_extension("start.S");
+            let startup_o = obj_path.with_extension("start.o");
+            let startup_asm = fajar_lang::codegen::linker::generate_x86_64_startup(entry_fn);
+
+            let startup_ok = if !startup_asm.is_empty() {
+                if let Err(e) = std::fs::write(&startup_s, &startup_asm) {
+                    eprintln!("warning: cannot write startup assembly: {e}");
+                    false
+                } else {
+                    let ok = std::process::Command::new("as")
+                        .arg("--64")
+                        .arg(&startup_s)
+                        .arg("-o")
+                        .arg(&startup_o)
+                        .status()
+                        .map(|s| s.success())
+                        .unwrap_or(false);
+                    cleanup_files.push(startup_s.clone());
+                    if ok {
+                        cleanup_files.push(startup_o.clone());
+                        if verbose {
+                            eprintln!("[verbose] Assembled startup: {}", startup_o.display());
+                        }
+                    } else {
+                        eprintln!("warning: cannot assemble startup.S — kernel may not boot");
+                    }
+                    ok
+                }
+            } else {
+                false
+            };
+
+            // 3. Link with ld (bare-metal: no libc)
+            let linker_bin = linker_override.unwrap_or("ld");
+            let mut link_cmd = std::process::Command::new(linker_bin);
+            link_cmd.arg("-T").arg(&script_path).arg("-nostdlib");
+            if startup_ok {
+                link_cmd.arg(&startup_o);
+            }
+            link_cmd
+                .arg(&obj_path)
+                .arg("-o")
+                .arg(&bin_path)
+                .arg("--gc-sections");
+
+            if verbose {
+                eprintln!("[verbose] Link: {:?}", link_cmd);
+            }
+            let status = link_cmd.status();
+
+            // Cleanup
+            for f in &cleanup_files {
+                let _ = std::fs::remove_file(f);
+            }
+
+            match status {
+                Ok(s) if s.success() => {
+                    println!(
+                        "Built: {} (LLVM O{opt_level}, bare-metal)",
+                        bin_path.display()
+                    );
+                    ExitCode::SUCCESS
+                }
+                Ok(s) => {
+                    eprintln!(
+                        "error: linker failed with exit code {}",
+                        s.code().unwrap_or(-1)
+                    );
+                    ExitCode::from(EXIT_COMPILE)
+                }
+                Err(e) => {
+                    eprintln!("error: cannot run linker '{linker_bin}': {e}");
+                    eprintln!("hint: ensure 'ld' or 'ld.lld' is installed");
+                    ExitCode::from(EXIT_USAGE)
+                }
+            }
+        }
+    } else {
+        // ── Hosted build pipeline (original path) ─────────────────────
+        let rt_c_path = obj_path.with_file_name("fj_runtime.c");
+        let rt_o_path = obj_path.with_file_name("fj_runtime.o");
+        std::fs::write(&rt_c_path, FJ_LLVM_RUNTIME_C).unwrap_or_else(|e| {
+            eprintln!("warning: cannot write runtime.c: {e}");
+        });
+        let rt_compiled = std::process::Command::new("cc")
+            .args(["-c", "-O2", "-o"])
+            .arg(&rt_o_path)
+            .arg(&rt_c_path)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !rt_compiled {
             eprintln!(
-                "error: linker failed with exit code {}",
-                s.code().unwrap_or(-1)
+                "warning: failed to compile fj_runtime.c — linking may fail for programs using println/print"
             );
-            ExitCode::from(EXIT_COMPILE)
         }
-        Err(e) => {
-            eprintln!("error: cannot run linker: {e}");
-            eprintln!("hint: ensure a C compiler is installed (gcc, clang)");
-            ExitCode::from(EXIT_USAGE)
+
+        let mut link_cmd = std::process::Command::new(linker_override.unwrap_or("cc"));
+        link_cmd.arg(&obj_path);
+        if rt_compiled {
+            link_cmd.arg(&rt_o_path);
+        }
+        link_cmd.arg("-o").arg(&bin_path).arg("-lm");
+
+        // PGO linker flags
+        if pgo_mode.is_generate() {
+            link_cmd.arg("-fprofile-generate");
+        }
+
+        // LTO linker flags
+        if lto_mode.is_enabled() {
+            let lto_flag = match lto_mode {
+                fajar_lang::codegen::llvm::LtoMode::Thin => "-flto=thin",
+                fajar_lang::codegen::llvm::LtoMode::Full => "-flto",
+                fajar_lang::codegen::llvm::LtoMode::None => "",
+            };
+            if !lto_flag.is_empty() {
+                link_cmd.arg(lto_flag);
+            }
+            link_cmd.arg("-fuse-ld=lld");
+        }
+
+        if cfg!(target_os = "macos") {
+            link_cmd.arg("-Wl,-dead_strip");
+        } else {
+            link_cmd.arg("-Wl,--gc-sections");
+        }
+        let status = link_cmd.status();
+
+        // Cleanup
+        let _ = std::fs::remove_file(&obj_path);
+        let _ = std::fs::remove_file(&rt_c_path);
+        let _ = std::fs::remove_file(&rt_o_path);
+
+        let lto_suffix = if lto_mode.is_enabled() {
+            format!(", LTO={lto}")
+        } else {
+            String::new()
+        };
+        let pgo_suffix = if pgo_mode.is_generate() {
+            ", PGO=generate".to_string()
+        } else if pgo_mode.is_use() {
+            ", PGO=use".to_string()
+        } else {
+            String::new()
+        };
+
+        match status {
+            Ok(s) if s.success() => {
+                println!(
+                    "Built: {} (LLVM O{opt_level}{lto_suffix}{pgo_suffix})",
+                    bin_path.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(s) => {
+                eprintln!(
+                    "error: linker failed with exit code {}",
+                    s.code().unwrap_or(-1)
+                );
+                ExitCode::from(EXIT_COMPILE)
+            }
+            Err(e) => {
+                eprintln!("error: cannot run linker: {e}");
+                eprintln!("hint: ensure a C compiler is installed (gcc, clang)");
+                ExitCode::from(EXIT_USAGE)
+            }
         }
     }
 }
@@ -3360,6 +3530,10 @@ fn cmd_build_llvm(
     _code_model: &str,
     _lto: &str,
     _pgo: &str,
+    _target_str: &str,
+    _no_std: bool,
+    _linker_script: Option<&str>,
+    _linker_override: Option<&str>,
     _verbose: bool,
 ) -> ExitCode {
     eprintln!("error: LLVM backend not available");
