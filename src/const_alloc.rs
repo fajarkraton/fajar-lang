@@ -330,7 +330,10 @@ impl ConstAllocRegistry {
     pub fn register(&mut self, name: &str, value: &ComptimeValue) -> &ConstAllocation {
         let alloc = serialize_const(name, value, &self.target);
         self.allocations.insert(name.to_string(), alloc);
-        self.allocations.get(name).unwrap()
+        // SAFETY: just inserted above, key is guaranteed to exist.
+        self.allocations
+            .get(name)
+            .expect("just-inserted allocation")
     }
 
     /// K4.6: Promotes a temporary const expression to static storage.

@@ -316,7 +316,7 @@ pub fn closest_match<'a>(
     for &candidate in candidates {
         let dist = edit_distance(name, candidate);
         if dist <= max_distance {
-            if best.is_none() || dist < best.unwrap().1 {
+            if best.is_none_or(|(_, d)| dist < d) {
                 best = Some((candidate, dist));
             }
         }

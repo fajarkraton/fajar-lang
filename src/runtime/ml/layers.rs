@@ -152,7 +152,7 @@ impl GroupNorm {
                     let beta_c = self.beta.data().as_slice().unwrap_or(&[0.0])[ci];
                     for si in 0..spatial {
                         let idx = bi * c * spatial + ci * spatial + si;
-                        let slice = out_data.as_slice_mut().unwrap();
+                        let slice = out_data.as_slice_mut().expect("contiguous ndarray");
                         slice[idx] = (slice[idx] - mean) / std * gamma_c + beta_c;
                     }
                 }

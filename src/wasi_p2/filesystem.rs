@@ -315,7 +315,10 @@ impl WasiFilesystem {
         if parts.is_empty() {
             return Err(FsError::Invalid);
         }
-        let name = parts.last().unwrap().to_string();
+        let name = parts
+            .last()
+            .expect("non-empty after is_empty check")
+            .to_string();
         if parts.len() == 1 {
             return Ok((dir_idx, name));
         }
