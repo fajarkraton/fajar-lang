@@ -5,10 +5,12 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v12.1.0](https://img.shields.io/badge/release-v12.1.0_Delivery-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v12.1.0)
-[![Tests](https://img.shields.io/badge/tests-8%2C092_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![LOC](https://img.shields.io/badge/LOC-400K_Rust-informational)]()
-[![Production](https://img.shields.io/badge/status-100%25_Production-success)]()
+[![Release v20.8.0](https://img.shields.io/badge/release-v20.8.0_Perfection-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v20.8.0)
+[![Tests](https://img.shields.io/badge/tests-10%2C400%2B_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![LOC](https://img.shields.io/badge/LOC-459K_Rust-informational)]()
+[![Production](https://img.shields.io/badge/audit-100%25_Pass-success)]()
+[![FajarQuant](https://img.shields.io/badge/FajarQuant-49--86%25_better-orange)]()
+[![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
@@ -511,9 +513,13 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | ~400,000 Rust across 420+ files |
-| Tests | 8,092 (0 failures, 0 clippy warnings) |
-| Examples | 240+ `.fj` programs |
+| Compiler LOC | ~459,000 Rust across 435+ files |
+| Tests | 10,400+ (0 failures, 0 clippy warnings) |
+| Audit | 131/131 features verified E2E (100% pass rate) |
+| Examples | 221+ `.fj` programs |
+| FajarQuant | 49-86% lower MSE than TurboQuant (adaptive PCA rotation) |
+| JIT | 76x speedup on fib(30) via Cranelift native compilation |
+| GPU | Real CUDA detection (RTX 4090: 9,728 cores, 16 GB VRAM) |
 | Error codes | 80+ across 10 categories |
 | Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
 | Built-in macros | 14 (`vec!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `dbg!`, `todo!`, `env!`, `stringify!`, `concat!`, `assert!`, `include_str!`, `line!`) |
