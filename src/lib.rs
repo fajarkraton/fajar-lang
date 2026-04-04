@@ -57,7 +57,6 @@ pub mod parser;
 pub mod playground;
 pub mod plugin;
 pub mod profiler;
-pub mod rtos;
 pub mod runtime;
 pub mod selfhost;
 pub mod stdlib_v3;

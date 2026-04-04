@@ -63,9 +63,6 @@ pub use syscall::{SyscallError, SyscallTable};
 pub use timer::{TimerController, TimerError};
 pub use vga::VgaBuffer;
 
-// Re-export RTOS integration (FreeRTOS, Zephyr, real-time analysis).
-pub use crate::rtos;
-
 /// Returns the number of RTOS backends available (FreeRTOS + Zephyr).
 pub fn rtos_backend_count() -> usize {
     // FreeRTOS and Zephyr are the two supported RTOS backends.
