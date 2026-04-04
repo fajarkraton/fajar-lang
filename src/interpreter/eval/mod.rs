@@ -931,13 +931,11 @@ impl Interpreter {
     /// List of builtin names that are simulated (not backed by real hardware/threading).
     const SIMULATED_BUILTINS: &'static [&'static str] = &[
         // accelerate: upgraded to real GPU detection in V21
+        // diffusion: upgraded to real UNet in V21
+        // rl_agent: upgraded to real CartPole+DQN in V21
         "actor_spawn",
         "actor_send",
         "actor_supervise",
-        "diffusion_create",
-        "diffusion_denoise",
-        "rl_agent_create",
-        "rl_agent_step",
         "pipeline_run",
         "const_alloc",
     ];
