@@ -4430,6 +4430,107 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .create_jit_execution_engine(self.opt_level.to_inkwell())
             .map_err(|e| CodegenError::Internal(format!("LLVM JIT creation error: {e}")))?;
 
+        // Map runtime functions to their Rust implementations.
+        // These are the same functions used by the Cranelift backend
+        // (defined in src/codegen/cranelift/runtime_fns.rs).
+        #[cfg(feature = "native")]
+        {
+            use crate::codegen::cranelift::runtime_fns;
+            macro_rules! map_rt {
+                ($ee:expr, $module:expr, $name:expr, $fn:expr) => {
+                    if let Some(func) = $module.get_function($name) {
+                        $ee.add_global_mapping(&func, $fn as *const () as usize);
+                    }
+                };
+            }
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_str",
+                runtime_fns::fj_rt_println_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_str",
+                runtime_fns::fj_rt_print_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_int",
+                runtime_fns::fj_rt_print_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_int",
+                runtime_fns::fj_rt_print_i64_no_newline
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_f64",
+                runtime_fns::fj_rt_println_f64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_f64",
+                runtime_fns::fj_rt_print_f64_no_newline
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_bool",
+                runtime_fns::fj_rt_println_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_bool",
+                runtime_fns::fj_rt_print_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_int",
+                runtime_fns::fj_rt_eprintln_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_str",
+                runtime_fns::fj_rt_eprintln_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_f64",
+                runtime_fns::fj_rt_eprintln_f64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_bool",
+                runtime_fns::fj_rt_eprintln_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_int",
+                runtime_fns::fj_rt_eprint_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_str",
+                runtime_fns::fj_rt_eprint_str
+            );
+            map_rt!(ee, self.module, "fj_rt_alloc", runtime_fns::fj_rt_alloc);
+            map_rt!(ee, self.module, "fj_rt_free", runtime_fns::fj_rt_free);
+        }
+
         // SAFETY: We're calling into JIT-compiled code that has been verified
         // by the LLVM module verifier. The function signature matches main() -> i64.
         unsafe {
