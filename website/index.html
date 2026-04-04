@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fajar Lang - Systems Programming for Embedded ML & OS Development</title>
-    <meta name="description" content="Fajar Lang (fj) — a statically-typed systems programming language for embedded ML and OS development. 459K LOC compiler, 10,400+ tests, algebraic effects, dependent types, GPU shaders, formal verification. Made in Indonesia.">
+    <meta name="description" content="Fajar Lang (fj) — a statically-typed systems programming language for embedded ML and OS development. 439K LOC compiler, 9,900+ tests, algebraic effects, dependent types, GPU shaders, formal verification. Made in Indonesia.">
     <meta property="og:title" content="Fajar Lang — Embedded ML + OS in One Language">
     <meta property="og:description" content="The only language where an OS kernel and a neural network share the same codebase, type system, and compiler — with formal verification and distributed runtime.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://fajarkraton.github.io/fajar-lang/">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Fajar Lang — Systems Programming Language">
-    <meta name="twitter:description" content="459K LOC, 10,400+ tests, algebraic effects, dependent types, GPU shaders, WASI P2, FFI v2, SMT verification. 100% production.">
+    <meta name="twitter:description" content="439K LOC, 9,900+ tests, algebraic effects, dependent types, GPU shaders, WASI P2, FFI v2, SMT verification. 48/56 production modules.">
     <style>
         :root {
             --primary: #1a1a2e;
@@ -347,6 +347,21 @@
             <p>LSP with 18 features, VS Code extension, formatter,
                debugger (DAP), test framework, package manager, playground.</p>
         </div>
+        <div class="feature-card">
+            <h3>Real Threaded Actors</h3>
+            <p>Spawn lightweight actors on real OS threads with std::thread + mpsc channels.
+               Supervision strategies, message passing, and fault isolation built in.</p>
+        </div>
+        <div class="feature-card">
+            <h3>LLVM JIT &amp; AOT Backend</h3>
+            <p>Full LLVM backend alongside Cranelift -- JIT for rapid prototyping,
+               AOT for production ELF/Mach-O binaries with link-time optimization.</p>
+        </div>
+        <div class="feature-card">
+            <h3>48 Production Builtins</h3>
+            <p>48 built-in functions verified end-to-end with zero simulated stubs.
+               From tensor ops to OS primitives, every builtin works in production.</p>
+        </div>
     </div>
 </section>
 
@@ -354,28 +369,28 @@
     <h2 style="font-size: 2rem; margin-bottom: 2rem;">By the Numbers</h2>
     <div style="display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; max-width: 900px; margin: 0 auto;">
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #e94560;">459K</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e94560;">439K</div>
             <div style="color: #a0a0b0;">Lines of Rust</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #61afef;">10,400+</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #61afef;">9,900+</div>
             <div style="color: #a0a0b0;">Tests Passing</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #98c379;">221</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #98c379;">281</div>
             <div style="color: #a0a0b0;">Example Programs</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #e5c07b;">435</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #e5c07b;">392</div>
             <div style="color: #a0a0b0;">Source Files</div>
         </div>
         <div>
-            <div style="font-size: 2.5rem; font-weight: 700; color: #c678dd;">100%</div>
-            <div style="color: #a0a0b0;">Production Ready</div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #c678dd;">48/56</div>
+            <div style="color: #a0a0b0;">Production Modules</div>
         </div>
     </div>
     <p style="color: #a0a0b0; margin-top: 2rem; font-size: 0.9rem;">
-        v20.8.0 "Perfection" — Algebraic effects, dependent types, GPU shaders, LSP v4, package registry
+        v21.0.0 "Production" — Algebraic effects, dependent types, GPU shaders, LSP v4, package registry
     </p>
 </section>
 
@@ -463,7 +478,7 @@
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CONTRIBUTING.md">Contributing</a>
         <a href="https://github.com/fajarkraton/fajar-lang/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>
     </div>
-    <p>Fajar Lang is open source under the MIT License. v20.8.0 "Perfection"</p>
+    <p>Fajar Lang is open source under the MIT License. v21.0.0 "Production"</p>
     <p>Created by <a href="https://github.com/fajarkraton">Muhamad Fajar Putranto</a> (TaxPrime / PrimeCore.id) - Made in Indonesia</p>
 </footer>
 
