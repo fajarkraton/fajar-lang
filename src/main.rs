@@ -1686,7 +1686,6 @@ fn cmd_dump_tokens(path: &PathBuf) -> ExitCode {
 
 /// Executes a Fajar Lang program using tiered JIT compilation.
 fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
-    use fajar_lang::jit::baseline::{BaselineCompileRequest, compile_baseline};
     use fajar_lang::jit::counters::ExecutionTier;
 
     let path = &path.to_path_buf();
@@ -1726,15 +1725,43 @@ fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
         return ExitCode::from(EXIT_COMPILE);
     }
 
-    // Collect function names from AST for profiling
+    // Collect function names
     let mut fn_names: Vec<String> = Vec::new();
+    let has_main = program
+        .items
+        .iter()
+        .any(|i| matches!(i, fajar_lang::parser::ast::Item::FnDef(f) if f.name == "main"));
     for item in &program.items {
         if let fajar_lang::parser::ast::Item::FnDef(fndef) = item {
             fn_names.push(fndef.name.clone());
         }
     }
 
-    // Execute via interpreter with profiling enabled
+    // Try native JIT compilation first (requires --features native)
+    if has_main {
+        match fajar_lang::jit::runtime::compile_and_run(&program, "main", &[]) {
+            Ok(result) => {
+                eprintln!(
+                    "[jit] Native compilation: {} functions in {}µs",
+                    result.functions_compiled, result.compile_time_us
+                );
+                for name in &fn_names {
+                    eprintln!("[jit] {name}: tier={:?}", ExecutionTier::OptimizingJIT);
+                }
+                // main() returned a value — if it's a void function, value is 0
+                if result.value != 0 {
+                    println!("{}", result.value);
+                }
+                return ExitCode::SUCCESS;
+            }
+            Err(e) => {
+                eprintln!("[jit] Native compilation unavailable: {e}");
+                eprintln!("[jit] Falling back to interpreter with profiling...");
+            }
+        }
+    }
+
+    // Fallback: interpreter with profiling
     let mut interp = Interpreter::new();
     interp.enable_profiling();
     if let Some(parent) = path.parent() {
@@ -1768,26 +1795,7 @@ fn cmd_run_jit(path: &std::path::Path) -> ExitCode {
             } else {
                 ExecutionTier::Interpreter
             };
-            // Attempt baseline compilation analysis
-            let request = BaselineCompileRequest {
-                name: name.clone(),
-                param_count: 0,
-                local_count: 0,
-                has_loops: false,
-                ir_size_estimate: 100,
-            };
-            let result = compile_baseline(&request);
-            match result {
-                fajar_lang::jit::baseline::CompileResult::Success(code) => {
-                    eprintln!(
-                        "[jit] {name}: tier={tier:?}, estimated_native_size={}B",
-                        code.code_size
-                    );
-                }
-                _ => {
-                    eprintln!("[jit] {name}: tier={tier:?}");
-                }
-            }
+            eprintln!("[jit] {name}: tier={tier:?}, calls={total_calls}");
         }
     } else {
         for name in &fn_names {
