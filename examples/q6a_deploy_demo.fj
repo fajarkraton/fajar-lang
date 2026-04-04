@@ -30,7 +30,7 @@ fn read_mem_avail_mb() -> i64 {
     if raw == "" { return -1 }
     let lines = raw.split("\n")
     let mut result = -1
-    let mut i: usize = 0
+    let mut i = 0
     while i < len(lines) {
         if lines[i].contains("MemAvailable") {
             let parts = lines[i].split(":")

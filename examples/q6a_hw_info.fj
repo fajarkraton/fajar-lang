@@ -21,7 +21,7 @@ fn read_meminfo_kb(field: str) -> i64 {
     if raw == "N/A" { return -1 }
     let lines = raw.split("\n")
     let mut result = -1
-    let mut i: usize = 0
+    let mut i = 0
     while i < len(lines) {
         if lines[i].contains(field) {
             let parts = lines[i].split(":")
@@ -53,7 +53,7 @@ fn main() -> i64 {
     if cpuinfo_raw != "N/A" {
         let lines = cpuinfo_raw.split("\n")
         let mut cores = 0
-        let mut i: usize = 0
+        let mut i = 0
         while i < len(lines) {
             if lines[i].starts_with("processor") {
                 cores = cores + 1
@@ -178,7 +178,7 @@ fn main() -> i64 {
     // I2C
     println("=== I2C Buses ===")
     let buses = [0, 2, 6, 10, 13, 20]
-    let mut b: usize = 0
+    let mut b = 0
     while b < len(buses) {
         let bus_path = "/dev/i2c-" + to_string(buses[b])
         if file_exists(bus_path) {

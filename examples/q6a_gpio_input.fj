@@ -86,7 +86,7 @@ fn main() -> i64 {
 
     // Simulate transitions
     let transitions = [0, 1, 1, 0, 1, 0]
-    let mut t: usize = 0
+    let mut t = 0
     while t < len(transitions) {
         let curr = transitions[t]
         gpio_set_direction(btn_pin, "out")
