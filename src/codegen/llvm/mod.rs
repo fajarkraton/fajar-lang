@@ -4531,14 +4531,28 @@ impl<'ctx> LlvmCompiler<'ctx> {
             map_rt!(ee, self.module, "fj_rt_free", runtime_fns::fj_rt_free);
         }
 
-        // SAFETY: We're calling into JIT-compiled code that has been verified
-        // by the LLVM module verifier. The function signature matches main() -> i64.
-        unsafe {
-            let main_fn = ee
-                .get_function::<unsafe extern "C" fn() -> i64>("main")
-                .map_err(|e| CodegenError::UndefinedFunction(format!("main not found: {e}")))?;
+        // Check if main returns void or i64
+        let main_func = self
+            .module
+            .get_function("main")
+            .ok_or_else(|| CodegenError::UndefinedFunction("main".into()))?;
+        let is_void = main_func.get_type().get_return_type().is_none();
 
-            Ok(main_fn.call())
+        // SAFETY: We're calling into JIT-compiled code that has been verified
+        // by the LLVM module verifier.
+        unsafe {
+            if is_void {
+                let main_fn = ee
+                    .get_function::<unsafe extern "C" fn()>("main")
+                    .map_err(|e| CodegenError::UndefinedFunction(format!("main not found: {e}")))?;
+                main_fn.call();
+                Ok(0)
+            } else {
+                let main_fn = ee
+                    .get_function::<unsafe extern "C" fn() -> i64>("main")
+                    .map_err(|e| CodegenError::UndefinedFunction(format!("main not found: {e}")))?;
+                Ok(main_fn.call())
+            }
         }
     }
 }
