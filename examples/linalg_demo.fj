@@ -1,0 +1,57 @@
+// linalg_demo.fj — V20.5 Tier 4: New tensor/scalar operations demo
+//
+// Run: cargo run -- run examples/linalg_demo.fj
+
+fn main() -> void {
+    println("=== Fajar Lang Linear Algebra Demo ===")
+    println("")
+
+    // 1. sign — element-wise sign
+    let v = from_data([-3.0, 0.0, 5.0, -1.0], [4])
+    println("sign([-3, 0, 5, -1]):")
+    println(sign(v))
+
+    // 2. argmin — index of minimum
+    let scores = from_data([0.8, 0.2, 0.5, 0.1, 0.9], [5])
+    println("argmin([0.8, 0.2, 0.5, 0.1, 0.9]): " + to_string(argmin(scores)))
+
+    // 3. norm — L2 (Euclidean) norm
+    let vec3 = from_data([3.0, 4.0], [2])
+    println("norm([3, 4]): " + to_string(norm(vec3)))
+
+    // 4. dot — inner product
+    let a = from_data([1.0, 2.0, 3.0], [3])
+    let b = from_data([4.0, 5.0, 6.0], [3])
+    println("dot([1,2,3], [4,5,6]): " + to_string(dot(a, b)))
+
+    // 5. exp_tensor — element-wise e^x
+    let small = from_data([0.0, 1.0, 2.0], [3])
+    println("exp_tensor([0, 1, 2]):")
+    println(exp_tensor(small))
+
+    // 6. log_tensor — element-wise ln(x)
+    let vals = from_data([1.0, 2.718281828, 10.0], [3])
+    println("log_tensor([1, e, 10]):")
+    println(log_tensor(vals))
+
+    // 7. sqrt_tensor — element-wise sqrt
+    let squares = from_data([1.0, 4.0, 9.0, 16.0], [4])
+    println("sqrt_tensor([1, 4, 9, 16]):")
+    println(sqrt_tensor(squares))
+
+    // 8. abs_tensor — element-wise absolute value
+    let mixed = from_data([-2.5, 3.7, -0.1, 0.0], [4])
+    println("abs_tensor([-2.5, 3.7, -0.1, 0]):")
+    println(abs_tensor(mixed))
+
+    // 9. exp — scalar e^x
+    println("exp(0) = " + to_string(exp(0.0)))
+    println("exp(1) = " + to_string(exp(1.0)))
+
+    // 10. gamma — Gamma function
+    println("gamma(5) = " + to_string(gamma(5.0)) + " (should be 24 = 4!)")
+    println("gamma(0.5) = " + to_string(gamma(0.5)) + " (should be sqrt(pi))")
+
+    println("")
+    println("=== All 10 operations working ===")
+}

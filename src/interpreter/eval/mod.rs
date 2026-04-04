@@ -485,6 +485,8 @@ pub type EvalResult = Result<Value, EvalError>;
 pub enum EvalError {
     /// A runtime error (true error).
     Runtime(RuntimeError),
+    /// A runtime error with source location attached.
+    RuntimeWithSpan(RuntimeError, crate::lexer::token::Span),
     /// A control flow signal (not an error, but needs unwinding).
     Control(Box<ControlFlow>),
 }
@@ -504,8 +506,26 @@ impl From<ControlFlow> for EvalError {
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EvalError::Runtime(e) => write!(f, "{e}"),
+            EvalError::Runtime(e) | EvalError::RuntimeWithSpan(e, _) => write!(f, "{e}"),
             EvalError::Control(_) => write!(f, "unexpected control flow"),
+        }
+    }
+}
+
+impl RuntimeError {
+    /// Attach a source span to this runtime error.
+    pub fn with_span(self, span: crate::lexer::token::Span) -> EvalError {
+        EvalError::RuntimeWithSpan(self, span)
+    }
+}
+
+impl EvalError {
+    /// Extract the runtime error and optional span, if this is a runtime error.
+    pub fn into_runtime(self) -> Option<(RuntimeError, Option<crate::lexer::token::Span>)> {
+        match self {
+            EvalError::Runtime(e) => Some((e, None)),
+            EvalError::RuntimeWithSpan(e, span) => Some((e, Some(span))),
+            EvalError::Control(_) => None,
         }
     }
 }
@@ -645,6 +665,8 @@ pub struct Interpreter {
     pub record_log: Option<crate::debugger_v2::recording::EventLog>,
     /// V20.5: Set of simulated builtins that have already printed a warning.
     sim_warned: HashSet<String>,
+    /// V20.5: Source span from the last runtime error (for diagnostic display).
+    last_error_span: Option<crate::lexer::token::Span>,
 }
 
 impl Interpreter {
@@ -707,6 +729,7 @@ impl Interpreter {
             next_channel_id: 1,
             record_log: None,
             sim_warned: HashSet::new(),
+            last_error_span: None,
         };
         interp.register_builtins();
         interp
@@ -715,6 +738,11 @@ impl Interpreter {
     /// Returns the effect usage statistics collected during execution.
     pub fn effect_stats(&self) -> &crate::analyzer::effects::EffectStatistics {
         &self.effect_statistics
+    }
+
+    /// Returns the source span from the last runtime error, if available.
+    pub fn last_error_span(&self) -> Option<crate::lexer::token::Span> {
+        self.last_error_span
     }
 
     /// Creates an interpreter that captures output (for testing).
@@ -776,6 +804,7 @@ impl Interpreter {
             next_channel_id: 1,
             record_log: None,
             sim_warned: HashSet::new(),
+            last_error_span: None,
         };
         interp.register_builtins();
         interp
@@ -1308,6 +1337,26 @@ impl Interpreter {
             "const_alloc",
             "const_size_of",
             "const_align_of",
+            // V20.5 Tier 4: New tensor/scalar ops
+            "sign",
+            "argmin",
+            "norm",
+            "dot",
+            "exp_tensor",
+            "log_tensor",
+            "sqrt_tensor",
+            "abs_tensor",
+            "exp",
+            "gamma",
+            "clamp_tensor",
+            "where_tensor",
+            // FajarQuant Phase 1: TurboQuant
+            "turboquant_create",
+            "turboquant_encode",
+            "turboquant_decode",
+            "turboquant_inner_product",
+            // FajarQuant Phase 2: Adaptive
+            "fajarquant_compare",
         ]
     }
 
@@ -1691,6 +1740,10 @@ impl Interpreter {
             match self.eval_item(item) {
                 Ok(v) => last = v,
                 Err(EvalError::Runtime(e)) => return Err(e),
+                Err(EvalError::RuntimeWithSpan(e, span)) => {
+                    self.last_error_span = Some(span);
+                    return Err(e);
+                }
                 Err(EvalError::Control(cf)) if matches!(*cf, ControlFlow::Return(_)) => {
                     return Err(RuntimeError::Unsupported(
                         "return outside of function".into(),
@@ -1721,7 +1774,7 @@ impl Interpreter {
     /// use fajar_lang::interpreter::Interpreter;
     ///
     /// let mut interp = Interpreter::new();
-    /// let result = interp.eval_source("1 + 2").unwrap();
+    /// let result = interp.eval_source("1 + 2").expect("eval failed");
     /// assert_eq!(format!("{result}"), "3");
     /// ```
     pub fn eval_source(&mut self, source: &str) -> Result<Value, crate::FjError> {
@@ -1755,6 +1808,10 @@ impl Interpreter {
             Value::Function(fv) => match self.call_function(&fv, args) {
                 Ok(v) => Ok(v),
                 Err(EvalError::Runtime(e)) => Err(e),
+                Err(EvalError::RuntimeWithSpan(e, span)) => {
+                    self.last_error_span = Some(span);
+                    Err(e)
+                }
                 Err(EvalError::Control(_)) => Ok(Value::Null),
             },
             _ => Err(RuntimeError::NotAFunction(name.to_string())),
@@ -1771,6 +1828,10 @@ impl Interpreter {
             Some(Value::Function(fv)) => match self.call_function(&fv, vec![]) {
                 Ok(v) => Ok(v),
                 Err(EvalError::Runtime(e)) => Err(e),
+                Err(EvalError::RuntimeWithSpan(e, span)) => {
+                    self.last_error_span = Some(span);
+                    Err(e)
+                }
                 Err(EvalError::Control(_)) => Ok(Value::Null),
             },
             _ => Ok(Value::Null),
@@ -2081,10 +2142,18 @@ impl Interpreter {
             Expr::Literal { kind, .. } => Ok(self.eval_literal(kind)),
             Expr::Ident { name, .. } => self.eval_ident(name),
             Expr::Binary {
-                left, op, right, ..
-            } => self.eval_binary(left, *op, right),
+                left,
+                op,
+                right,
+                span,
+            } => self.eval_binary(left, *op, right, *span),
             Expr::Unary { op, operand, .. } => self.eval_unary(*op, operand),
-            Expr::Call { callee, args, .. } => self.eval_call(callee, args),
+            Expr::Call { callee, args, span } => {
+                self.eval_call(callee, args).map_err(|e| match e {
+                    EvalError::Runtime(re) => re.with_span(*span),
+                    other => other,
+                })
+            }
             Expr::Block { stmts, expr, .. } => self.eval_block(stmts, expr),
             Expr::If {
                 condition,
@@ -2128,7 +2197,14 @@ impl Interpreter {
             Expr::Pipe { left, right, .. } => self.eval_pipe(left, right),
             Expr::StructInit { name, fields, .. } => self.eval_struct_init(name, fields),
             Expr::Field { object, field, .. } => self.eval_field(object, field),
-            Expr::Index { object, index, .. } => self.eval_index(object, index),
+            Expr::Index {
+                object,
+                index,
+                span,
+            } => self.eval_index(object, index).map_err(|e| match e {
+                EvalError::Runtime(re) => re.with_span(*span),
+                other => other,
+            }),
             Expr::Range {
                 start,
                 end,
@@ -2391,7 +2467,13 @@ impl Interpreter {
     }
 
     /// Evaluates a binary expression.
-    fn eval_binary(&mut self, left: &Expr, op: BinOp, right: &Expr) -> EvalResult {
+    fn eval_binary(
+        &mut self,
+        left: &Expr,
+        op: BinOp,
+        right: &Expr,
+        span: crate::lexer::token::Span,
+    ) -> EvalResult {
         // Short-circuit for logical operators
         if op == BinOp::And {
             let lv = self.eval_expr(left)?;
@@ -2411,11 +2493,22 @@ impl Interpreter {
         let lv = self.eval_expr(left)?;
         let rv = self.eval_expr(right)?;
 
+        // Attach source span to any runtime error from binary operations
+        let attach_span = |r: EvalResult| -> EvalResult {
+            r.map_err(|e| match e {
+                EvalError::Runtime(re) => re.with_span(span),
+                other => other,
+            })
+        };
         match (&lv, &rv) {
-            (Value::Int(a), Value::Int(b)) => self.eval_int_binop(*a, op, *b),
-            (Value::Float(a), Value::Float(b)) => self.eval_float_binop(*a, op, *b),
-            (Value::Int(a), Value::Float(b)) => self.eval_float_binop(*a as f64, op, *b),
-            (Value::Float(a), Value::Int(b)) => self.eval_float_binop(*a, op, *b as f64),
+            (Value::Int(a), Value::Int(b)) => attach_span(self.eval_int_binop(*a, op, *b)),
+            (Value::Float(a), Value::Float(b)) => attach_span(self.eval_float_binop(*a, op, *b)),
+            (Value::Int(a), Value::Float(b)) => {
+                attach_span(self.eval_float_binop(*a as f64, op, *b))
+            }
+            (Value::Float(a), Value::Int(b)) => {
+                attach_span(self.eval_float_binop(*a, op, *b as f64))
+            }
             (Value::Str(a), Value::Str(b)) => self.eval_str_binop(a, op, b),
             // Pointer arithmetic: ptr + offset, offset + ptr, ptr - offset
             (Value::Pointer(addr), Value::Int(offset)) => match op {

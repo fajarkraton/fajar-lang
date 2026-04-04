@@ -971,6 +971,118 @@ pub fn bce_loss_tracked(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// V20.5 Tier 4: New Tensor/Scalar Operations (FajarQuant prerequisites)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Element-wise sign: -1 for negative, 0 for zero, 1 for positive.
+pub fn sign(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(|x| {
+        if x > 0.0 {
+            1.0
+        } else if x < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    });
+    TensorValue::new(result, false)
+}
+
+/// Index of the minimum element (flattened).
+pub fn argmin(a: &TensorValue) -> usize {
+    a.data()
+        .iter()
+        .enumerate()
+        .min_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}
+
+/// L2 norm (Euclidean norm) of the entire tensor.
+pub fn norm(a: &TensorValue) -> f64 {
+    a.data().mapv(|x| x * x).sum().sqrt()
+}
+
+/// Dot product of two tensors (flattened).
+pub fn dot(a: &TensorValue, b: &TensorValue) -> f64 {
+    a.data()
+        .iter()
+        .zip(b.data().iter())
+        .map(|(x, y)| x * y)
+        .sum()
+}
+
+/// Element-wise exponential: e^x.
+pub fn exp_tensor(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(f64::exp);
+    TensorValue::new(result, false)
+}
+
+/// Element-wise natural logarithm: ln(x).
+pub fn log_tensor(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(f64::ln);
+    TensorValue::new(result, false)
+}
+
+/// Element-wise square root.
+pub fn sqrt_tensor(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(f64::sqrt);
+    TensorValue::new(result, false)
+}
+
+/// Element-wise absolute value.
+pub fn abs_tensor(a: &TensorValue) -> TensorValue {
+    let result = a.data().mapv(f64::abs);
+    TensorValue::new(result, false)
+}
+
+/// Element-wise clamp: clamp each element to [min, max].
+pub fn clamp_tensor(a: &TensorValue, min: f64, max: f64) -> TensorValue {
+    let result = a.data().mapv(|x| x.clamp(min, max));
+    TensorValue::new(result, false)
+}
+
+/// Conditional select: where cond > 0, take from x; else take from y.
+pub fn where_tensor(cond: &TensorValue, x: &TensorValue, y: &TensorValue) -> TensorValue {
+    let result = ndarray::Zip::from(cond.data())
+        .and(x.data())
+        .and(y.data())
+        .map_collect(|&c, &xv, &yv| if c > 0.0 { xv } else { yv });
+    TensorValue::new(result, false)
+}
+
+/// Gamma function via Lanczos approximation.
+///
+/// Accurate to ~15 digits for real positive arguments.
+#[allow(clippy::excessive_precision, clippy::inconsistent_digit_grouping)]
+pub fn gamma(x: f64) -> f64 {
+    if x < 0.5 {
+        // Reflection formula: Gamma(1-z) * Gamma(z) = pi / sin(pi*z)
+        std::f64::consts::PI / ((std::f64::consts::PI * x).sin() * gamma(1.0 - x))
+    } else {
+        // Lanczos approximation with g=7
+        let coefficients = [
+            0.999_999_999_999_809_93,
+            676.520_368_121_885_1,
+            -1259.139_216_722_402_8,
+            771.323_428_777_653_1,
+            -176.615_029_162_140_6,
+            12.507_343_278_686_905,
+            -0.138_571_095_265_720_12,
+            9.984_369_578_019_572e-6,
+            1.505_632_735_149_311_6e-7,
+        ];
+        let x = x - 1.0;
+        let mut t = coefficients[0];
+        for (i, &c) in coefficients.iter().enumerate().skip(1) {
+            t += c / (x + i as f64);
+        }
+        let w = x + 7.5; // g + 0.5
+        (2.0 * std::f64::consts::PI).sqrt() * w.powf(x + 0.5) * (-w).exp() * t
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 

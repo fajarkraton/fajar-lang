@@ -12,6 +12,7 @@ pub mod dataloader;
 pub mod distillation;
 pub mod distributed;
 pub mod export;
+pub mod fajarquant;
 pub mod fixed_point;
 pub mod fp4;
 pub mod fp8;
@@ -32,6 +33,7 @@ pub mod stack_tensor;
 pub mod tensor;
 pub mod tflite;
 pub mod transformer;
+pub mod turboquant;
 
 pub use autograd::{Tape, TensorId};
 pub use ops as tensor_ops;

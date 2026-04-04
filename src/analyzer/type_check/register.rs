@@ -804,6 +804,54 @@ impl TypeChecker {
                 vec![dyn_t.clone(), Type::F64],
                 dyn_t.clone(),
             ),
+            // V20.5 Tier 4: New tensor/scalar operations
+            ("sign", vec![dyn_t.clone()], dyn_t.clone()),
+            ("argmin", vec![dyn_t.clone()], Type::I64),
+            ("norm", vec![dyn_t.clone()], Type::F64),
+            ("dot", vec![dyn_t.clone(), dyn_t.clone()], Type::F64),
+            ("exp_tensor", vec![dyn_t.clone()], dyn_t.clone()),
+            ("log_tensor", vec![dyn_t.clone()], dyn_t.clone()),
+            ("sqrt_tensor", vec![dyn_t.clone()], dyn_t.clone()),
+            ("abs_tensor", vec![dyn_t.clone()], dyn_t.clone()),
+            ("exp", vec![Type::F64], Type::F64),
+            ("gamma", vec![Type::F64], Type::F64),
+            (
+                "clamp_tensor",
+                vec![dyn_t.clone(), Type::F64, Type::F64],
+                dyn_t.clone(),
+            ),
+            (
+                "where_tensor",
+                vec![dyn_t.clone(), dyn_t.clone(), dyn_t.clone()],
+                dyn_t.clone(),
+            ),
+            // FajarQuant Phase 1: TurboQuant
+            (
+                "turboquant_create",
+                vec![Type::I64, Type::I64],
+                Type::Unknown,
+            ),
+            (
+                "turboquant_encode",
+                vec![Type::Unknown, dyn_t.clone()],
+                Type::Unknown,
+            ),
+            (
+                "turboquant_decode",
+                vec![Type::Unknown, Type::Unknown],
+                dyn_t.clone(),
+            ),
+            (
+                "turboquant_inner_product",
+                vec![Type::Unknown, dyn_t.clone(), dyn_t.clone()],
+                Type::Unknown,
+            ),
+            // FajarQuant Phase 2: Adaptive
+            (
+                "fajarquant_compare",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::Unknown,
+            ),
             // Loss functions → return dynamic tensor
             (
                 "tensor_mse_loss",

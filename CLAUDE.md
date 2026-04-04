@@ -78,8 +78,9 @@ Every Claude Code session MUST follow this order:
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/HONEST_AUDIT_V17.md` | **EVERY SESSION** | V17 re-audit — 33/56 modules production, 9 bugs fixed |
-| `docs/GAP_ANALYSIS_V2.md` | **EVERY SESSION** | Module-level gap analysis, corrected by V17 |
+| `docs/HONEST_STATUS_V20_5.md` | **EVERY SESSION** | V20.5 per-builtin status — 42 [x], 6 [sim], 5 [f], 3 [s] |
+| `docs/HONEST_AUDIT_V17.md` | Reference | V17 re-audit — 33/56 modules production, 9 bugs fixed |
+| `docs/GAP_ANALYSIS_V2.md` | Reference | Module-level gap analysis, corrected by V17 |
 | `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules |
 | `docs/V12_TRANSCENDENCE_PLAN.md` | Reference | V12 plan (6 options) |
 | `docs/V12_GAP_CLOSURE_PLAN.md` | Reference | 40 tasks that wired V12 into pipeline |
@@ -98,17 +99,31 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V20 "Completeness" COMPLETE, 2026-04-03)
+### Current Totals (V20.5 "Hardening" COMPLETE, 2026-04-04)
 
 ```
-Tests:     9,555 default (8,287 lib + 1,268 integ) | ~9,700 with LLVM — 0 failures
-LOC:       ~478,000 lines of Rust (441+ files)
+Tests:     10,645 default (8,287 lib + 2,358 integ) | ~10,800 with LLVM
+LOC:       ~479,000 lines of Rust (441+ files)
 Examples:  218 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
-Modules:   ~48 production, 0 partial, 5 framework, 3 stub (56 total)
+Modules:   42 production [x], 6 simulated [sim], 5 framework [f], 3 stub [s] (56 total)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
+
+Labeling: [x] = production (tested, works E2E)
+          [sim] = simulated (runs but fakes underlying mechanism)
+          [f] = framework (code exists, not callable from .fj)
+          [s] = stub (near-empty placeholder)
 ```
+
+### V20.5 "Hardening" (2026-04-04) — Stability + Honesty
+- Plan: `docs/FULL_REMEDIATION_PLAN.md` + `docs/V20_5_HARDENING_PLAN.md`
+- Status: `docs/HONEST_STATUS_V20_5.md` — per-builtin [x]/[sim]/[f]/[s] table
+- **Session 1:** 4 crash fixes (16MB thread), pipeline error propagation, [sim] labels
+- **Session 2:** 31 new tests (v20_builtin_tests.rs), 2 unwrap fixes in builtins.rs
+- **Session 3:** RuntimeError source spans (Binary/Call/Index), documentation honesty
+- **Module correction:** 48→42 [x], 0→6 [sim] (accelerator, actors, pipeline, diffusion, RL, debugger_v2)
+- **Env Weak parent:** DEFERRED — real cycle is through closure_env, not parent chain
 
 ### V20 "Completeness" (2026-04-03) — ALL 7 PHASES COMPLETE (25/25 tasks)
 - Plan: `docs/V19_V21_COMPLETE_56_PLAN.md`

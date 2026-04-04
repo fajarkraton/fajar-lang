@@ -385,13 +385,30 @@ impl FjDiagnostic {
         }
     }
 
-    /// Creates a diagnostic from a RuntimeError (no source span).
+    /// Creates a diagnostic from a RuntimeError with optional source span.
     pub fn from_runtime_error(e: &RuntimeError, filename: &str, source: &str) -> Self {
+        Self::from_runtime_error_with_span(e, None, filename, source)
+    }
+
+    /// Creates a diagnostic from a RuntimeError with a source span for display.
+    pub fn from_runtime_error_with_span(
+        e: &RuntimeError,
+        span: Option<Span>,
+        filename: &str,
+        source: &str,
+    ) -> Self {
+        // Extract error code from the error message prefix
+        let code = e.to_string();
+        let error_code = if code.starts_with("RE") {
+            code.split(':').next().map(|s| s.to_string())
+        } else {
+            None
+        };
         FjDiagnostic {
             message: e.to_string(),
-            code: None,
+            code: error_code,
             severity: miette::Severity::Error,
-            span: None,
+            span,
             help: None,
             source_code: miette::NamedSource::new(filename, source.to_string()),
         }

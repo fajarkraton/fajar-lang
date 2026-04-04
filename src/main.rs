@@ -1145,13 +1145,25 @@ fn cmd_run(path: &PathBuf) -> ExitCode {
         interp.set_source_dir(parent.to_path_buf());
     }
     if let Err(e) = interp.eval_program(&program) {
-        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        FjDiagnostic::from_runtime_error_with_span(
+            &e,
+            interp.last_error_span(),
+            &filename,
+            &source,
+        )
+        .eprint();
         return ExitCode::from(EXIT_RUNTIME);
     }
 
     // Call main() if defined
     if let Err(e) = interp.call_main() {
-        FjDiagnostic::from_runtime_error(&e, &filename, &source).eprint();
+        FjDiagnostic::from_runtime_error_with_span(
+            &e,
+            interp.last_error_span(),
+            &filename,
+            &source,
+        )
+        .eprint();
         return ExitCode::from(EXIT_RUNTIME);
     }
 

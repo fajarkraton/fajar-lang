@@ -459,6 +459,26 @@ impl Interpreter {
             "tensor_softmax" | "softmax" => self.builtin_tensor_activation(args, "softmax"),
             "tensor_gelu" | "gelu" => self.builtin_tensor_activation(args, "gelu"),
             "tensor_leaky_relu" | "leaky_relu" => self.builtin_tensor_leaky_relu(args),
+            // V20.5 Tier 4: New tensor/scalar operations
+            "sign" => self.builtin_sign(args),
+            "argmin" => self.builtin_argmin(args),
+            "norm" => self.builtin_norm(args),
+            "dot" => self.builtin_dot(args),
+            "exp_tensor" => self.builtin_exp_tensor(args),
+            "log_tensor" => self.builtin_log_tensor(args),
+            "sqrt_tensor" => self.builtin_sqrt_tensor(args),
+            "abs_tensor" => self.builtin_abs_tensor(args),
+            "exp" => self.builtin_exp_scalar(args),
+            "gamma" => self.builtin_gamma(args),
+            "clamp_tensor" => self.builtin_clamp_tensor(args),
+            "where_tensor" => self.builtin_where_tensor(args),
+            // TurboQuant (FajarQuant Phase 1)
+            "turboquant_create" => self.builtin_turboquant_create(args),
+            "turboquant_encode" => self.builtin_turboquant_encode(args),
+            "turboquant_decode" => self.builtin_turboquant_decode(args),
+            "turboquant_inner_product" => self.builtin_turboquant_inner_product(args),
+            // FajarQuant Phase 2: Adaptive rotation
+            "fajarquant_compare" => self.builtin_fajarquant_compare(args),
             // Loss functions
             "tensor_mse_loss" | "mse_loss" => self.builtin_tensor_loss(args, "mse"),
             "tensor_cross_entropy" | "cross_entropy_loss" | "cross_entropy" => {
@@ -1304,11 +1324,11 @@ impl Interpreter {
                     crate::accelerator::dispatch::WorkloadClass::LatencySensitive => "NPU",
                 };
                 // Execute the function on CPU (actual GPU dispatch needs CUDA)
-                let result = self.call_fn(&fn_name, vec![args[1].clone()]);
+                let result = self.call_fn(&fn_name, vec![args[1].clone()])?;
                 let mut out = std::collections::HashMap::new();
                 out.insert("device".to_string(), Value::Str(device_str.into()));
                 out.insert("workload_class".to_string(), Value::Str(format!("{wc:?}")));
-                out.insert("result".to_string(), result.unwrap_or(Value::Null));
+                out.insert("result".to_string(), result);
                 Ok(Value::Map(out))
             }
             // ═══════════════════════════════════════════════════════════
@@ -1378,8 +1398,8 @@ impl Interpreter {
                         );
                     }
                 };
-                let result = self.call_fn(&fn_name, vec![args[1].clone()]);
-                Ok(result.unwrap_or(Value::Null))
+                let result = self.call_fn(&fn_name, vec![args[1].clone()])?;
+                Ok(result)
             }
             "actor_supervise" => {
                 self.warn_simulated("actor_supervise");
@@ -5464,6 +5484,514 @@ impl Interpreter {
             }
             _ => Err(RuntimeError::TypeError("tensor_scale: expected (tensor, int)".into()).into()),
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // V20.5 Tier 4: New tensor/scalar operations
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Element-wise sign: -1, 0, or 1.
+    fn builtin_sign(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sign(t))),
+            Value::Int(n) => Ok(Value::Int(n.signum())),
+            Value::Float(f) => Ok(Value::Float(if *f > 0.0 {
+                1.0
+            } else if *f < 0.0 {
+                -1.0
+            } else {
+                0.0
+            })),
+            _ => Err(RuntimeError::TypeError("sign(tensor|number)".into()).into()),
+        }
+    }
+
+    /// Index of minimum element.
+    fn builtin_argmin(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Int(tensor_ops::argmin(t) as i64)),
+            Value::Array(a) => {
+                let idx = a
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, x), (_, y)| {
+                        let xf = match x {
+                            Value::Int(n) => *n as f64,
+                            Value::Float(f) => *f,
+                            _ => f64::MAX,
+                        };
+                        let yf = match y {
+                            Value::Int(n) => *n as f64,
+                            Value::Float(f) => *f,
+                            _ => f64::MAX,
+                        };
+                        xf.partial_cmp(&yf).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                Ok(Value::Int(idx as i64))
+            }
+            _ => Err(RuntimeError::TypeError("argmin(tensor|array)".into()).into()),
+        }
+    }
+
+    /// L2 norm (Euclidean).
+    fn builtin_norm(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Float(tensor_ops::norm(t))),
+            _ => Err(RuntimeError::TypeError("norm(tensor)".into()).into()),
+        }
+    }
+
+    /// Dot product of two tensors/arrays.
+    fn builtin_dot(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(a), Value::Tensor(b)) => Ok(Value::Float(tensor_ops::dot(a, b))),
+            _ => Err(RuntimeError::TypeError("dot(tensor, tensor)".into()).into()),
+        }
+    }
+
+    /// Element-wise e^x for tensors.
+    fn builtin_exp_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::exp_tensor(t))),
+            _ => Err(RuntimeError::TypeError("exp_tensor(tensor)".into()).into()),
+        }
+    }
+
+    /// Element-wise ln(x) for tensors.
+    fn builtin_log_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::log_tensor(t))),
+            _ => Err(RuntimeError::TypeError("log_tensor(tensor)".into()).into()),
+        }
+    }
+
+    /// Element-wise sqrt for tensors.
+    fn builtin_sqrt_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sqrt_tensor(t))),
+            _ => Err(RuntimeError::TypeError("sqrt_tensor(tensor)".into()).into()),
+        }
+    }
+
+    /// Element-wise absolute value for tensors.
+    fn builtin_abs_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::abs_tensor(t))),
+            _ => Err(RuntimeError::TypeError("abs_tensor(tensor)".into()).into()),
+        }
+    }
+
+    /// Scalar e^x.
+    fn builtin_exp_scalar(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Float(f) => Ok(Value::Float(f.exp())),
+            Value::Int(n) => Ok(Value::Float((*n as f64).exp())),
+            _ => Err(RuntimeError::TypeError("exp(number)".into()).into()),
+        }
+    }
+
+    /// Gamma function.
+    fn builtin_gamma(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Float(f) => Ok(Value::Float(tensor_ops::gamma(*f))),
+            Value::Int(n) => Ok(Value::Float(tensor_ops::gamma(*n as f64))),
+            _ => Err(RuntimeError::TypeError("gamma(number)".into()).into()),
+        }
+    }
+
+    /// Element-wise clamp to [min, max].
+    fn builtin_clamp_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let min_val = match &args[1] {
+            Value::Float(f) => *f,
+            Value::Int(n) => *n as f64,
+            _ => return Err(RuntimeError::TypeError("clamp_tensor(t, min, max)".into()).into()),
+        };
+        let max_val = match &args[2] {
+            Value::Float(f) => *f,
+            Value::Int(n) => *n as f64,
+            _ => return Err(RuntimeError::TypeError("clamp_tensor(t, min, max)".into()).into()),
+        };
+        match &args[0] {
+            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::clamp_tensor(t, min_val, max_val))),
+            _ => Err(RuntimeError::TypeError("clamp_tensor(tensor, min, max)".into()).into()),
+        }
+    }
+
+    /// Conditional select: where cond > 0, take x; else take y.
+    fn builtin_where_tensor(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Tensor(cond), Value::Tensor(x), Value::Tensor(y)) => {
+                Ok(Value::Tensor(tensor_ops::where_tensor(cond, x, y)))
+            }
+            _ => Err(RuntimeError::TypeError(
+                "where_tensor(cond_tensor, x_tensor, y_tensor)".into(),
+            )
+            .into()),
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FajarQuant Phase 1: TurboQuant builtins
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Create a TurboQuant configuration: turboquant_create(dim, bits).
+    fn builtin_turboquant_create(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let dim = match &args[0] {
+            Value::Int(n) => *n as usize,
+            _ => return Err(RuntimeError::TypeError("turboquant_create(dim, bits)".into()).into()),
+        };
+        let bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => return Err(RuntimeError::TypeError("turboquant_create(dim, bits)".into()).into()),
+        };
+        if dim == 0 || bits == 0 || bits > 8 {
+            return Err(RuntimeError::TypeError(
+                "turboquant_create: dim > 0 and 1 <= bits <= 8".into(),
+            )
+            .into());
+        }
+        let mut m = std::collections::HashMap::new();
+        m.insert("_type".to_string(), Value::Str("TurboQuantConfig".into()));
+        m.insert("dim".to_string(), Value::Int(dim as i64));
+        m.insert("bits".to_string(), Value::Int(bits as i64));
+        m.insert("codebook_size".to_string(), Value::Int(1i64 << bits));
+        Ok(Value::Map(m))
+    }
+
+    /// Encode a vector: turboquant_encode(config, tensor) -> map.
+    fn builtin_turboquant_encode(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let (dim, bits) = match &args[0] {
+            Value::Map(m) => {
+                let d = match m.get("dim") {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                let b = match m.get("bits") {
+                    Some(Value::Int(n)) => *n as u8,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                (d, b)
+            }
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("turboquant_encode(config, tensor)".into()).into(),
+                );
+            }
+        };
+        let data = match &args[1] {
+            Value::Tensor(tv) => tv.data().iter().cloned().collect::<Vec<f64>>(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "turboquant_encode: arg 2 must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        // Pad or truncate to match dim
+        let mut x_vec = data;
+        x_vec.resize(dim, 0.0);
+        let x = ndarray::Array1::from_vec(x_vec);
+        let config = crate::runtime::ml::turboquant::create_config(dim, bits);
+        let qv = crate::runtime::ml::turboquant::quant_mse(&x, &config);
+        let mut result = std::collections::HashMap::new();
+        result.insert("_type".to_string(), Value::Str("QuantizedVector".into()));
+        result.insert(
+            "indices".to_string(),
+            Value::Array(qv.indices.iter().map(|&i| Value::Int(i as i64)).collect()),
+        );
+        result.insert("norm".to_string(), Value::Float(qv.norm));
+        result.insert("dim".to_string(), Value::Int(dim as i64));
+        result.insert("bits".to_string(), Value::Int(bits as i64));
+        Ok(Value::Map(result))
+    }
+
+    /// Decode a quantized vector: turboquant_decode(config, encoded) -> tensor.
+    fn builtin_turboquant_decode(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let (dim, bits) = match &args[0] {
+            Value::Map(m) => {
+                let d = match m.get("dim") {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                let b = match m.get("bits") {
+                    Some(Value::Int(n)) => *n as u8,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                (d, b)
+            }
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("turboquant_decode(config, encoded)".into()).into(),
+                );
+            }
+        };
+        let indices = match &args[1] {
+            Value::Map(m) => match m.get("indices") {
+                Some(Value::Array(arr)) => arr
+                    .iter()
+                    .map(|v| match v {
+                        Value::Int(n) => *n as u8,
+                        _ => 0,
+                    })
+                    .collect::<Vec<u8>>(),
+                _ => return Err(RuntimeError::TypeError("invalid encoded data".into()).into()),
+            },
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("turboquant_decode(config, encoded)".into()).into(),
+                );
+            }
+        };
+        let config = crate::runtime::ml::turboquant::create_config(dim, bits);
+        let qv = crate::runtime::ml::turboquant::QuantizedVector {
+            indices,
+            norm: 0.0,
+            rotation_id: 0,
+        };
+        let decoded = crate::runtime::ml::turboquant::dequant_mse(&qv, &config);
+        let tv = crate::runtime::ml::tensor::TensorValue::from_ndarray(
+            decoded
+                .into_shape_with_order(ndarray::IxDyn(&[dim]))
+                .unwrap_or_else(|_| ndarray::ArrayD::zeros(ndarray::IxDyn(&[dim]))),
+        );
+        Ok(Value::Tensor(tv))
+    }
+
+    /// Compute inner product via quantized representations.
+    fn builtin_turboquant_inner_product(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        // turboquant_inner_product(config, x_tensor, y_tensor)
+        let (dim, bits) = match &args[0] {
+            Value::Map(m) => {
+                let d = match m.get("dim") {
+                    Some(Value::Int(n)) => *n as usize,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                let b = match m.get("bits") {
+                    Some(Value::Int(n)) => *n as u8,
+                    _ => return Err(RuntimeError::TypeError("invalid config".into()).into()),
+                };
+                (d, b)
+            }
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "turboquant_inner_product(config, x, y)".into(),
+                )
+                .into());
+            }
+        };
+        let x_data = match &args[1] {
+            Value::Tensor(tv) => tv.data().iter().cloned().collect::<Vec<f64>>(),
+            _ => return Err(RuntimeError::TypeError("arg 2 must be tensor".into()).into()),
+        };
+        let y_data = match &args[2] {
+            Value::Tensor(tv) => tv.data().iter().cloned().collect::<Vec<f64>>(),
+            _ => return Err(RuntimeError::TypeError("arg 3 must be tensor".into()).into()),
+        };
+        let mut x = x_data;
+        x.resize(dim, 0.0);
+        let mut y = y_data;
+        y.resize(dim, 0.0);
+        let x_arr = ndarray::Array1::from_vec(x);
+        let y_arr = ndarray::Array1::from_vec(y);
+        // True inner product
+        let true_ip: f64 = x_arr.iter().zip(y_arr.iter()).map(|(a, b)| a * b).sum();
+        // Quantized inner product via encode-decode
+        let config = crate::runtime::ml::turboquant::create_config(dim, bits);
+        let qx = crate::runtime::ml::turboquant::quant_mse(&x_arr, &config);
+        let x_hat = crate::runtime::ml::turboquant::dequant_mse(&qx, &config);
+        let approx_ip: f64 = x_hat.iter().zip(y_arr.iter()).map(|(a, b)| a * b).sum();
+        let mut result = std::collections::HashMap::new();
+        result.insert("true_ip".to_string(), Value::Float(true_ip));
+        result.insert("approx_ip".to_string(), Value::Float(approx_ip));
+        result.insert(
+            "error".to_string(),
+            Value::Float((true_ip - approx_ip).abs()),
+        );
+        Ok(Value::Map(result))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FajarQuant Phase 2: Adaptive rotation comparison
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Compare adaptive vs random quantization: fajarquant_compare(dim, bits, n_samples).
+    fn builtin_fajarquant_compare(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let dim = match &args[0] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fajarquant_compare(dim, bits, n_samples)".into(),
+                )
+                .into());
+            }
+        };
+        let bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fajarquant_compare(dim, bits, n_samples)".into(),
+                )
+                .into());
+            }
+        };
+        let n_samples = match &args[2] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fajarquant_compare(dim, bits, n_samples)".into(),
+                )
+                .into());
+            }
+        };
+        // Generate structured (low-rank) test data
+        let mut rng: u64 = 42;
+        let data: Vec<ndarray::Array1<f64>> = (0..n_samples)
+            .map(|_| {
+                let mut v = ndarray::Array1::zeros(dim);
+                // Strong signal in first 25% of dimensions
+                let strong = dim / 4;
+                for i in 0..dim {
+                    let u1 = crate::runtime::ml::turboquant::lcg_next_f64(&mut rng);
+                    let u2 = crate::runtime::ml::turboquant::lcg_next_f64(&mut rng);
+                    let g = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+                    v[i] = if i < strong { g * 1.0 } else { g * 0.05 };
+                }
+                v
+            })
+            .collect();
+        let (adaptive_mse, random_mse) =
+            crate::runtime::ml::fajarquant::adaptive::compare_adaptive_vs_random(&data, dim, bits);
+        let improvement = if random_mse > 1e-15 {
+            (1.0 - adaptive_mse / random_mse) * 100.0
+        } else {
+            0.0
+        };
+        let mut result = std::collections::HashMap::new();
+        result.insert("adaptive_mse".to_string(), Value::Float(adaptive_mse));
+        result.insert("random_mse".to_string(), Value::Float(random_mse));
+        result.insert("improvement_pct".to_string(), Value::Float(improvement));
+        Ok(Value::Map(result))
     }
 
     /// Unary activation function: relu/sigmoid/tanh/softmax/gelu.

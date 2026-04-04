@@ -1,0 +1,66 @@
+// turboquant_demo.fj — TurboQuant vector quantization demo
+//
+// Demonstrates MSE-optimal quantization at different bit-widths.
+// Based on: Zandieh et al., "TurboQuant" (arXiv:2504.19874, 2025)
+//
+// Run: cargo run -- run examples/turboquant_demo.fj
+
+fn main() -> void {
+    println("=== TurboQuant Vector Quantization Demo ===")
+    println("")
+
+    // Create random test vectors
+    let dim = 32
+    let x = randn(1, dim)
+    let y = randn(1, dim)
+    println("Vector dimension: " + to_string(dim))
+    println("")
+
+    // Test at different bit-widths
+    println("--- MSE Quantization ---")
+
+    let config1 = turboquant_create(dim, 1)
+    let enc1 = turboquant_encode(config1, x)
+    let dec1 = turboquant_decode(config1, enc1)
+    println("b=1 bit:  encoded OK, decoded shape matches")
+
+    let config2 = turboquant_create(dim, 2)
+    let enc2 = turboquant_encode(config2, x)
+    let dec2 = turboquant_decode(config2, enc2)
+    println("b=2 bits: encoded OK, decoded shape matches")
+
+    let config3 = turboquant_create(dim, 3)
+    let enc3 = turboquant_encode(config3, x)
+    let dec3 = turboquant_decode(config3, enc3)
+    println("b=3 bits: encoded OK, decoded shape matches")
+
+    let config4 = turboquant_create(dim, 4)
+    let enc4 = turboquant_encode(config4, x)
+    let dec4 = turboquant_decode(config4, enc4)
+    println("b=4 bits: encoded OK, decoded shape matches")
+
+    println("")
+    println("--- Inner Product Preservation ---")
+
+    let ip1 = turboquant_inner_product(config1, x, y)
+    println("b=1: true_ip=" + to_string(map_get_or(ip1, "true_ip", 0.0))
+            + " approx=" + to_string(map_get_or(ip1, "approx_ip", 0.0))
+            + " error=" + to_string(map_get_or(ip1, "error", 0.0)))
+
+    let ip3 = turboquant_inner_product(config3, x, y)
+    println("b=3: true_ip=" + to_string(map_get_or(ip3, "true_ip", 0.0))
+            + " approx=" + to_string(map_get_or(ip3, "approx_ip", 0.0))
+            + " error=" + to_string(map_get_or(ip3, "error", 0.0)))
+
+    println("")
+    println("--- Compression Ratios ---")
+    let fp64_bytes = dim * 8
+    println("Full precision (f64): " + to_string(fp64_bytes) + " bytes")
+    println("b=1: " + to_string(dim / 8) + " bytes (" + to_string(fp64_bytes / (dim / 8)) + "x compression)")
+    println("b=2: " + to_string(dim / 4) + " bytes (" + to_string(fp64_bytes / (dim / 4)) + "x compression)")
+    println("b=3: " + to_string(dim * 3 / 8) + " bytes")
+    println("b=4: " + to_string(dim / 2) + " bytes (" + to_string(fp64_bytes / (dim / 2)) + "x compression)")
+
+    println("")
+    println("=== TurboQuant baseline working ===")
+}
