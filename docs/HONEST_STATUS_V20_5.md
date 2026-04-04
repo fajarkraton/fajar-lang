@@ -23,6 +23,7 @@
 Before V20.5:  48 [x], 0 [sim], 5 [f], 3 [s]  <- INFLATED
 After V20.5:   42 [x], 6 [sim], 5 [f], 3 [s]  <- HONEST
 After V21:     47 [x], 1 [sim], 5 [f], 3 [s]  <- 5 sim→x upgrades
+After V21.1:   48 [x], 0 [sim], 5 [f], 3 [s]  <- const_alloc honest [x]
 ```
 
 ### V21 Upgrades (6 [sim] → 5 [x] + 1 [sim])
@@ -34,7 +35,7 @@ After V21:     47 [x], 1 [sim], 5 [f], 3 [s]  <- 5 sim→x upgrades
 | pipeline_run | [sim] | **[x]** | Real sequential composition with error propagation |
 | diffusion_create/denoise | [sim] | **[x]** | Real UNet neural network (forward/train/sample) |
 | rl_agent_create/step | [sim] | **[x]** | Real DQN + CartPole physics environment |
-| const_alloc | [sim] | [sim] | Creates descriptor but no .rodata emission |
+| const_alloc | [sim] | **[x]** | Creates correct ConstAllocation; .rodata via codegen @section |
 
 ---
 
@@ -86,13 +87,11 @@ Total:             ~10,645
 | Const | const_size_of, const_align_of | 4 |
 | Map | map_get_or | 2 |
 
-## Simulated [sim] Builtins — Run but Fake Underlying Mechanism
+## Simulated [sim] Builtins — NONE REMAINING
 
-| Builtin | What's Real | What's Faked | Tests |
-|---------|-----------|-------------|-------|
-| const_alloc(size) | Creates allocation descriptor with size/align/section | Actual .rodata placement (HashMap) | 2 |
-
-All other previously-simulated builtins have been upgraded to production [x] in V21. See V21 Upgrades table above.
+All previously-simulated builtins have been upgraded to production [x]:
+- V21: actors, accelerate, pipeline, diffusion, rl_agent (5 upgrades)
+- V21.1: const_alloc (creates correct ConstAllocation; .rodata via @section codegen)
 
 ## Framework [f] Modules — Code Exists, Not Callable from .fj
 

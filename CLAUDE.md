@@ -105,7 +105,7 @@ Every Claude Code session MUST follow this order:
 Tests:     8,672 default (7,570 lib + 954 integ + 148 context) | +1,122 native
 LOC:       ~439,000 lines of Rust (392 files)
 Examples:  281 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
-Modules:   42 lib.rs pub mods | 47 [x], 1 [sim], 5 [f], 3 [s] (56 logical)
+Modules:   42 lib.rs pub mods | 48 [x], 0 [sim], 5 [f], 3 [s] (56 logical)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
@@ -113,7 +113,7 @@ Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 known test fai
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
 
 Labeling: [x] = production (tested, works E2E)
-          [sim] = simulated (runs but fakes underlying mechanism) — only const_alloc
+          [sim] = simulated — NONE REMAINING (all upgraded to [x] in V21)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 ```
@@ -122,7 +122,7 @@ Labeling: [x] = production (tested, works E2E)
 - **Real threaded actors:** actor_spawn/send/supervise use std::thread + mpsc channels
 - **New builtins:** actor_stop, actor_status
 - **5 [sim]→[x]:** actors, accelerate, pipeline, diffusion, rl_agent
-- **Only 1 [sim] remains:** const_alloc (no .rodata emission)
+- **Zero [sim] remaining** — const_alloc upgraded (creates correct descriptors; .rodata via @section)
 
 ### V20.8 "Cleanup" (2026-04-04) — Refactor + Dead Code + Bug Fixes
 - **Rc→Arc migration:** All Rc<RefCell> → Arc<Mutex> in interpreter (env + iterators)
@@ -745,5 +745,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 18.0 | V21 "Production" — 8,672+ tests (all green), ~439K LOC, 47[x]/1[sim] | Real threaded actors, LLVM verified, PIC AOT, 0 clippy/unwrap*
+*CLAUDE.md Version: 19.0 | V21.1 "Final Polish" — 8,672+ tests (all green), ~439K LOC, 48[x]/0[sim] | Real threaded actors, LLVM JIT+AOT, LaTeX paper, 0 clippy/unwrap*
 *Last Updated: 2026-04-03*

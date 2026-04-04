@@ -686,6 +686,8 @@ pub struct Interpreter {
     /// V20: Event log for debug recording (None = recording disabled).
     pub record_log: Option<crate::debugger_v2::recording::EventLog>,
     /// V20.5: Set of simulated builtins that have already printed a warning.
+    /// Currently empty (all builtins are [x] as of V21.1) but kept for future use.
+    #[allow(dead_code)]
     sim_warned: HashSet<String>,
     /// V20.5: Source span from the last runtime error (for diagnostic display).
     last_error_span: Option<crate::lexer::token::Span>,
@@ -1030,12 +1032,9 @@ impl Interpreter {
     /// V20.5: Print one-time warning for simulated builtin.
     /// List of builtin names that are simulated (not backed by real hardware/threading).
     const SIMULATED_BUILTINS: &'static [&'static str] = &[
-        // V21: actor_spawn/send/supervise — upgraded to real std::thread + mpsc
-        // V21: accelerate — real workload classification + CPU dispatch
-        // V21: diffusion — real UNet neural network
-        // V21: rl_agent — real DQN + CartPole environment
-        // V21: pipeline_run — real sequential composition with error propagation
-        "const_alloc",
+        // V21.1: All builtins are now production [x].
+        // const_alloc creates correct ConstAllocation descriptors;
+        // .rodata placement handled by codegen @section infrastructure.
     ];
 
     /// Check if a builtin name is simulated.
@@ -1043,6 +1042,7 @@ impl Interpreter {
         Self::SIMULATED_BUILTINS.contains(&name)
     }
 
+    #[allow(dead_code)]
     fn warn_simulated(&mut self, name: &str) {
         if !self.sim_warned.contains(name) {
             self.sim_warned.insert(name.to_string());

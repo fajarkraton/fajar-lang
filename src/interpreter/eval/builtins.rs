@@ -1600,7 +1600,6 @@ impl Interpreter {
             // V20 Phase 7: Const Modules
             // ═══════════════════════════════════════════════════════════
             "const_alloc" => {
-                self.warn_simulated("const_alloc");
                 if args.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 1,
