@@ -99,22 +99,32 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V20.5 "Hardening" COMPLETE, 2026-04-04)
+### Current Totals (V20.8 "Cleanup" COMPLETE, 2026-04-04)
 
 ```
-Tests:     10,645 default (8,287 lib + 2,358 integ) | ~10,800 with LLVM
-LOC:       ~479,000 lines of Rust (441+ files)
-Examples:  218 .fj programs | Binary: 13 MB release | MSRV: Rust 1.87
-Modules:   42 production [x], 6 simulated [sim], 5 framework [f], 3 stub [s] (56 total)
+Tests:     8,666 default (7,570 lib + 948 integ + 148 context) | +1,122 native
+LOC:       ~439,000 lines of Rust (392 files)
+Examples:  281 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
+Modules:   42 lib.rs pub mods | 42 [x], 6 [sim], 5 [f], 3 [s] (56 logical)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
+Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 known test failures
+Threading: Arc<Mutex> throughout interpreter (actor/thread-safe)
 
 Labeling: [x] = production (tested, works E2E)
           [sim] = simulated (runs but fakes underlying mechanism)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 ```
+
+### V20.8 "Cleanup" (2026-04-04) — Refactor + Dead Code + Bug Fixes
+- **Rc→Arc migration:** All Rc<RefCell> → Arc<Mutex> in interpreter (env + iterators)
+  - Iterative parent chain traversal, RUST_MIN_STACK=16MB for tests
+- **Dead code cleanup:** Removed 6 dead modules (-21.4K LOC)
+  - iot, rt_pipeline, package_v2, lsp_v2, stdlib, rtos
+- **Bug fixes:** 4 pre-existing integ failures, JIT match→string length, AOT TEXTREL
+- **Quality:** Zero .unwrap() in production code, PIC-enabled AOT (ASLR-compatible)
 
 ### V20.5 "Hardening" (2026-04-04) — Stability + Honesty
 - Plan: `docs/FULL_REMEDIATION_PLAN.md` + `docs/V20_5_HARDENING_PLAN.md`
@@ -729,5 +739,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 16.0 | V20 "Completeness" COMPLETE — 9,555 tests, ~478K LOC, 0 failures | ~48/56 modules production (86%) | debug record/replay, build scripts, ML diffusion/RL, pipeline, accelerator, actors, const*
+*CLAUDE.md Version: 17.0 | V20.8 "Cleanup" — 8,666 tests (all green), ~439K LOC, 0 failures, 0 clippy, 0 unwrap | Arc<Mutex> thread-safe, PIC AOT, -21K dead code removed*
 *Last Updated: 2026-04-03*
