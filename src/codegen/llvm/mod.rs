@@ -846,7 +846,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         }
                     } else {
                         // Integer — use fj_rt_bare_print_i64
-                        let f_name = if is_ln { "fj_rt_bare_print_i64" } else { "fj_rt_bare_print_i64" };
+                        let f_name = "fj_rt_bare_print_i64";
                         let func = if let Some(f) = self.module.get_function(f_name) {
                             f
                         } else {
@@ -1497,7 +1497,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     CodegenError::Internal("volatile_read_u64 addr no value".into())
                 })?.into_int_value();
                 let val = self.compile_volatile_load(addr)?;
-                Ok(Some(val.into()))
+                Ok(Some(val))
             }
 
             "volatile_write_u64" => {
@@ -1529,7 +1529,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 let ptr = self.builder.build_int_to_ptr(
                     addr,
-                    self.context.i32_type().ptr_type(inkwell::AddressSpace::default()),
+                    self.context.ptr_type(inkwell::AddressSpace::default()),
                     "addr_ptr",
                 ).map_err(|e| CodegenError::Internal(e.to_string()))?;
                 let store = self.builder.build_store(ptr, trunc)
@@ -3350,7 +3350,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         let i64_ty = self.context.i64_type();
                         let ptr = self.builder.build_int_to_ptr(
                             base,
-                            i64_ty.ptr_type(inkwell::AddressSpace::default()),
+                            self.context.ptr_type(inkwell::AddressSpace::default()),
                             "idx_base",
                         ).map_err(|e| CodegenError::Internal(e.to_string()))?;
                         // SAFETY: bare-metal pointer arithmetic
@@ -3557,15 +3557,6 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     return Ok(Some(func.as_global_value().as_pointer_value().into()));
                 }
                 Err(CodegenError::UndefinedVariable(full_name))
-            }
-
-            // Tuple literal: `(a, b, c)` — compile first element (simplified)
-            Expr::Tuple { elements, .. } => {
-                if elements.is_empty() {
-                    Ok(Some(self.context.i64_type().const_int(0, false).into()))
-                } else {
-                    self.compile_expr(&elements[0])
-                }
             }
 
             _ => Err(CodegenError::NotImplemented(format!(
