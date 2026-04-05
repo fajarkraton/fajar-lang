@@ -190,6 +190,9 @@ enum Command {
         /// Override linker binary (e.g., aarch64-linux-gnu-ld, ld.lld).
         #[arg(long)]
         linker: Option<String>,
+        /// Extra object files to link (e.g., runtime stubs for bare-metal).
+        #[arg(long, name = "extra-objects", value_delimiter = ',')]
+        extra_objects: Vec<String>,
         /// Verbose codegen output (function count, DCE stats, compile time).
         #[arg(long, short)]
         verbose: bool,
@@ -515,6 +518,7 @@ fn main_inner() -> ExitCode {
             pgo,
             board,
             linker,
+            extra_objects,
             verbose,
             incremental,
             all,
@@ -694,6 +698,7 @@ fn main_inner() -> ExitCode {
                     no_std,
                     ls.as_deref(),
                     linker.as_deref(),
+                    &extra_objects,
                     verbose,
                 )
             } else {
@@ -3092,6 +3097,7 @@ fn cmd_build_llvm(
     no_std: bool,
     linker_script: Option<&str>,
     linker_override: Option<&str>,
+    extra_objects: &[String],
     verbose: bool,
 ) -> ExitCode {
     // Parse target triple for bare-metal detection
@@ -3386,7 +3392,12 @@ fn cmd_build_llvm(
                 link_cmd.arg(&startup_o);
             }
             link_cmd
-                .arg(&obj_path)
+                .arg(&obj_path);
+            // Add extra object files (e.g., runtime stubs for bare-metal)
+            for extra in extra_objects {
+                link_cmd.arg(extra);
+            }
+            link_cmd
                 .arg("-o")
                 .arg(&bin_path)
                 .arg("--gc-sections");
@@ -3534,6 +3545,7 @@ fn cmd_build_llvm(
     _no_std: bool,
     _linker_script: Option<&str>,
     _linker_override: Option<&str>,
+    _extra_objects: &[String],
     _verbose: bool,
 ) -> ExitCode {
     eprintln!("error: LLVM backend not available");

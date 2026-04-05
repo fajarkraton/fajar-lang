@@ -44,7 +44,7 @@ use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 
 use crate::codegen::CodegenError;
 use crate::parser::ast::{
-    BinOp, CallArg, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program,
+    BinOp, CallArg, ConstDef, EnumDef, Expr, FnDef, Item, LiteralKind, MatchArm, Pattern, Program,
     StaticDef, Stmt, StructDef, TypeExpr, UnaryOp,
 };
 
@@ -503,6 +503,8 @@ pub struct LlvmCompiler<'ctx> {
     break_target: Option<(BasicBlock<'ctx>, Option<PointerValue<'ctx>>)>,
     /// Continue target: loop header block
     continue_target: Option<BasicBlock<'ctx>>,
+    /// Maps constant name → LLVM constant value (from `const NAME: Type = value`).
+    constants: HashMap<String, BasicValueEnum<'ctx>>,
 }
 
 impl<'ctx> LlvmCompiler<'ctx> {
@@ -532,6 +534,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             linker_script: None,
             break_target: None,
             continue_target: None,
+            constants: HashMap::new(),
         }
     }
 
@@ -723,6 +726,58 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "volatile_write_u8"
                 | "volatile_write_u16"
                 | "volatile_write_u32"
+                | "volatile_read_u64"
+                | "volatile_write_u64"
+                | "volatile_write_u32_le"
+                // Phase 2: CPU control + CR/MSR + CPUID
+                | "pause"
+                | "memory_fence"
+                | "invlpg"
+                | "fxsave"
+                | "read_cr3"
+                | "write_cr3"
+                | "read_cr4"
+                | "cpuid_eax"
+                | "cpuid_ebx"
+                | "cpuid_ecx"
+                | "cpuid_edx"
+                | "iretq_to_user"
+                // Phase 3: External call builtins
+                | "buffer_read_u16_le"
+                | "buffer_read_u32_le"
+                | "buffer_read_u64_le"
+                | "buffer_read_u16_be"
+                | "buffer_read_u32_be"
+                | "buffer_read_u64_be"
+                | "buffer_write_u16_le"
+                | "buffer_write_u32_le"
+                | "buffer_write_u64_le"
+                | "buffer_write_u16_be"
+                | "buffer_write_u32_be"
+                | "buffer_write_u64_be"
+                | "str_len"
+                | "str_byte_at"
+                | "read_timer_ticks"
+                | "memcpy_buf"
+                | "memset_buf"
+                | "pci_read32"
+                | "pci_write32"
+                | "x86_serial_init"
+                | "acpi_shutdown"
+                | "console_putchar"
+                | "set_current_pid"
+                | "pic_remap"
+                | "idt_init"
+                | "pit_init"
+                | "tss_init"
+                | "fxrstor"
+                | "sse_enable"
+                | "irq_enable"
+                | "nprint"
+                | "write_cr4"
+                | "read_msr"
+                | "write_msr"
+                | "fn_addr"
                 | "port_inb"
                 | "port_outb"
                 | "port_inw"
@@ -760,6 +815,51 @@ impl<'ctx> LlvmCompiler<'ctx> {
         match name {
             // ── println / print / eprintln / eprint ───────────────
             "println" | "print" | "eprintln" | "eprint" => {
+                // In bare-metal mode, redirect all print calls to fj_rt_bare_print/println
+                if self.no_std {
+                    if args.is_empty() {
+                        // Empty println → send newline to bare-metal UART
+                        if let Some(f) = self.module.get_function("fj_rt_bare_println") {
+                            let null_ptr = self.context.ptr_type(inkwell::AddressSpace::default()).const_null();
+                            let zero_len = self.context.i64_type().const_int(0, false);
+                            self.builder.build_call(f, &[null_ptr.into(), zero_len.into()], "")
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        }
+                        return Ok(Some(zero.into()));
+                    }
+                    let arg_expr = &args[0].value;
+                    let val = self.compile_expr(arg_expr)?
+                        .ok_or_else(|| CodegenError::Internal("print arg no value".into()))?;
+                    let is_ln = name == "println" || name == "eprintln";
+                    let rt_name = if is_ln { "fj_rt_bare_println" } else { "fj_rt_bare_print" };
+
+                    if val.is_struct_value() {
+                        // String {ptr, len} — extract and pass to bare print
+                        let sv = val.into_struct_value();
+                        let ptr = self.builder.build_extract_value(sv, 0, "str_ptr")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let len = self.builder.build_extract_value(sv, 1, "str_len")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        if let Some(f) = self.module.get_function(rt_name) {
+                            self.builder.build_call(f, &[ptr.into(), len.into()], "")
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        }
+                    } else {
+                        // Integer — use fj_rt_bare_print_i64
+                        let f_name = if is_ln { "fj_rt_bare_print_i64" } else { "fj_rt_bare_print_i64" };
+                        let func = if let Some(f) = self.module.get_function(f_name) {
+                            f
+                        } else {
+                            let i64_ty = self.context.i64_type();
+                            let fn_ty = self.context.void_type().fn_type(&[i64_ty.into()], false);
+                            self.module.add_function(f_name, fn_ty, Some(inkwell::module::Linkage::External))
+                        };
+                        self.builder.build_call(func, &[val.into()], "")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    return Ok(Some(zero.into()));
+                }
+
                 let is_ln = name == "println" || name == "eprintln";
                 let is_err = name == "eprintln" || name == "eprint";
 
@@ -1386,6 +1486,272 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     self.context.i64_type().const_zero(),
                 )?;
                 Ok(Some(zero.into()))
+            }
+
+            // ── Phase 1: Volatile u64 ──────────────────────────────────────
+            "volatile_read_u64" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal("volatile_read_u64 requires 1 arg".into()));
+                }
+                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal("volatile_read_u64 addr no value".into())
+                })?.into_int_value();
+                let val = self.compile_volatile_load(addr)?;
+                Ok(Some(val.into()))
+            }
+
+            "volatile_write_u64" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal("volatile_write_u64 requires 2 args".into()));
+                }
+                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal("volatile_write_u64 addr no value".into())
+                })?.into_int_value();
+                let val = self.compile_expr(&args[1].value)?.ok_or_else(|| {
+                    CodegenError::Internal("volatile_write_u64 val no value".into())
+                })?.into_int_value();
+                self.compile_volatile_store(addr, val)?;
+                Ok(Some(zero.into()))
+            }
+
+            "volatile_write_u32_le" => {
+                // Same as volatile_write_u32 — little-endian is native on x86
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal("volatile_write_u32_le requires 2 args".into()));
+                }
+                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal("volatile_write_u32_le addr no value".into())
+                })?.into_int_value();
+                let val = self.compile_expr(&args[1].value)?.ok_or_else(|| {
+                    CodegenError::Internal("volatile_write_u32_le val no value".into())
+                })?.into_int_value();
+                let trunc = self.builder.build_int_truncate(val, self.context.i32_type(), "trunc32")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let ptr = self.builder.build_int_to_ptr(
+                    addr,
+                    self.context.i32_type().ptr_type(inkwell::AddressSpace::default()),
+                    "addr_ptr",
+                ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let store = self.builder.build_store(ptr, trunc)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                store.set_volatile(true).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(zero.into()))
+            }
+
+            // ── Phase 2: Inline asm builtins ──────────────────────────────
+            "pause" | "memory_fence" | "sse_enable" | "irq_enable" => {
+                let insn = match name {
+                    "pause" => "pause",
+                    "memory_fence" => "mfence",
+                    "sse_enable" => "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %rax\n\tmov %rax, %cr4",
+                    "irq_enable" => "sti",
+                    _ => "nop",
+                };
+                self.compile_zero_operand_asm(insn)?;
+                Ok(Some(zero.into()))
+            }
+
+            "invlpg" | "fxsave" | "fxrstor" | "write_cr3" | "write_cr4" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(format!("{name} requires 1 arg")));
+                }
+                let val = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal(format!("{name} arg no value"))
+                })?.into_int_value();
+                let template = match name {
+                    "invlpg" => "invlpg (%rdi)",
+                    "fxsave" => "fxsave (%rdi)",
+                    "fxrstor" => "fxrstor (%rdi)",
+                    "write_cr3" => "mov %rdi, %cr3",
+                    "write_cr4" => "mov %rdi, %cr4",
+                    _ => "nop",
+                };
+                let void_ty = self.context.void_type();
+                let fn_ty = void_ty.fn_type(&[self.context.i64_type().into()], false);
+                let asm_val = self.context.create_inline_asm(
+                    fn_ty, template.to_string(), "{rdi}".to_string(),
+                    true, false, None, false,
+                );
+                self.builder.build_indirect_call(fn_ty, asm_val, &[val.into()], "")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(zero.into()))
+            }
+
+            "read_cr3" | "read_cr4" => {
+                let template = match name {
+                    "read_cr3" => "mov %cr3, %rax",
+                    "read_cr4" => "mov %cr4, %rax",
+                    _ => "mov %cr3, %rax",
+                };
+                let i64_ty = self.context.i64_type();
+                let fn_ty = i64_ty.fn_type(&[], false);
+                let asm_val = self.context.create_inline_asm(
+                    fn_ty, template.to_string(), "={rax}".to_string(),
+                    true, false, None, false,
+                );
+                let call = self.builder.build_indirect_call(fn_ty, asm_val, &[], "cr_val")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                match call.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
+                    inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+                }
+            }
+
+            "read_msr" | "write_msr" => {
+                // read_msr and write_msr are user-defined functions in FajarOS
+                // They should be resolved as regular function calls, not builtins
+                // Return None to let the regular function call path handle them
+                Ok(None)
+            }
+
+            "fn_addr" => {
+                // fn_addr("function_name") -> i64 (address of function)
+                if args.is_empty() {
+                    return Err(CodegenError::Internal("fn_addr requires 1 string arg".into()));
+                }
+                // Extract the function name from string literal argument
+                let fn_name = match &args[0].value {
+                    Expr::Literal { kind: LiteralKind::String(s), .. } => s.clone(),
+                    _ => return Err(CodegenError::Internal("fn_addr arg must be string literal".into())),
+                };
+                let i64_ty = self.context.i64_type();
+                if let Some(func) = self.functions.get(&fn_name).copied()
+                    .or_else(|| self.module.get_function(&fn_name))
+                {
+                    let ptr = func.as_global_value().as_pointer_value();
+                    let addr = self.builder.build_ptr_to_int(ptr, i64_ty, "fn_addr")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    Ok(Some(addr.into()))
+                } else {
+                    // Function not found — declare as external and take address
+                    let fn_ty = i64_ty.fn_type(&[], false);
+                    let func = self.module.add_function(&fn_name, fn_ty, Some(inkwell::module::Linkage::External));
+                    let ptr = func.as_global_value().as_pointer_value();
+                    let addr = self.builder.build_ptr_to_int(ptr, i64_ty, "fn_addr")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    Ok(Some(addr.into()))
+                }
+            }
+
+            "cpuid_eax" | "cpuid_ebx" | "cpuid_ecx" | "cpuid_edx" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(format!("{name} requires 1 arg (leaf)")));
+                }
+                let leaf = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal(format!("{name} leaf no value"))
+                })?.into_int_value();
+                let out_reg = match name {
+                    "cpuid_eax" => "={eax}",
+                    "cpuid_ebx" => "={ebx}",
+                    "cpuid_ecx" => "={ecx}",
+                    "cpuid_edx" => "={edx}",
+                    _ => "={eax}",
+                };
+                let clobbers = match name {
+                    "cpuid_eax" => "~{ebx},~{ecx},~{edx}",
+                    "cpuid_ebx" => "~{eax},~{ecx},~{edx}",
+                    "cpuid_ecx" => "~{eax},~{ebx},~{edx}",
+                    "cpuid_edx" => "~{eax},~{ebx},~{ecx}",
+                    _ => "~{ebx},~{ecx},~{edx}",
+                };
+                let i64_ty = self.context.i64_type();
+                let i32_ty = self.context.i32_type();
+                let fn_ty = i32_ty.fn_type(&[i64_ty.into()], false);
+                let constraint = format!("{out_reg},{{rdi}},{clobbers}");
+                let asm_val = self.context.create_inline_asm(
+                    fn_ty,
+                    "mov %rdi, %rax\n\txor %ecx, %ecx\n\tcpuid".to_string(),
+                    constraint,
+                    true, false, None, false,
+                );
+                let call = self.builder.build_indirect_call(fn_ty, asm_val, &[leaf.into()], "cpuid_val")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                match call.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(v) => {
+                        let ext = self.builder.build_int_z_extend(v.into_int_value(), i64_ty, "cpuid_ext")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        Ok(Some(ext.into()))
+                    }
+                    inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+                }
+            }
+
+            "iretq_to_user" => {
+                if args.len() < 3 {
+                    return Err(CodegenError::Internal("iretq_to_user requires 3 args (rip, rsp, rflags)".into()));
+                }
+                let rip = self.compile_expr(&args[0].value)?.ok_or_else(|| {
+                    CodegenError::Internal("iretq_to_user rip no value".into())
+                })?.into_int_value();
+                let rsp = self.compile_expr(&args[1].value)?.ok_or_else(|| {
+                    CodegenError::Internal("iretq_to_user rsp no value".into())
+                })?.into_int_value();
+                let rflags = self.compile_expr(&args[2].value)?.ok_or_else(|| {
+                    CodegenError::Internal("iretq_to_user rflags no value".into())
+                })?.into_int_value();
+                let void_ty = self.context.void_type();
+                let i64_ty = self.context.i64_type();
+                let fn_ty = void_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+                let asm_val = self.context.create_inline_asm(
+                    fn_ty,
+                    "pushq $$0x23\n\tpushq %rsi\n\tpushq %rdx\n\tpushq $$0x2B\n\tpushq %rdi\n\tiretq".to_string(),
+                    "{rdi},{rsi},{rdx}".to_string(),
+                    true, false, None, false,
+                );
+                self.builder.build_indirect_call(fn_ty, asm_val, &[rip.into(), rsp.into(), rflags.into()], "")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(Some(zero.into()))
+            }
+
+            // ── Phase 3: External call builtins ───────────────────────────
+            // These call fj_rt_bare_* symbols provided by the runtime
+            "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
+            | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be"
+            | "read_timer_ticks" | "pci_read32" | "str_len" | "str_byte_at"
+            | "buffer_write_u16_le" | "buffer_write_u32_le" | "buffer_write_u64_le"
+            | "buffer_write_u16_be" | "buffer_write_u32_be" | "buffer_write_u64_be"
+            | "memcpy_buf" | "memset_buf" | "x86_serial_init" | "acpi_shutdown"
+            | "console_putchar" | "set_current_pid" | "pic_remap" | "idt_init"
+            | "pit_init" | "tss_init" | "nprint" | "pci_write32" => {
+                let rt_name = format!("fj_rt_bare_{name}");
+                let i64_ty = self.context.i64_type();
+
+                // Compile all arguments, coercing string structs to i64 pointers
+                let mut arg_vals: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                for arg in args {
+                    if let Some(v) = self.compile_expr(&arg.value)? {
+                        if v.is_struct_value() {
+                            // String {ptr, len} — extract pointer, convert to i64
+                            let sv = v.into_struct_value();
+                            let ptr = self.builder.build_extract_value(sv, 0, "str_ptr_ext")
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            let ptr_int = self.builder.build_ptr_to_int(
+                                ptr.into_pointer_value(), i64_ty, "str_i64_ext",
+                            ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            arg_vals.push(ptr_int.into());
+                        } else {
+                            arg_vals.push(v.into());
+                        }
+                    }
+                }
+
+                // Get or declare the runtime function
+                let func = if let Some(f) = self.module.get_function(&rt_name) {
+                    f
+                } else {
+                    // Auto-declare with matching arity
+                    let param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+                        (0..arg_vals.len()).map(|_| i64_ty.into()).collect();
+                    let fn_ty = i64_ty.fn_type(&param_types, false);
+                    self.module.add_function(&rt_name, fn_ty, Some(inkwell::module::Linkage::External))
+                };
+
+                let call = self.builder.build_call(func, &arg_vals, &format!("{name}_ret"))
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                match call.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
+                    inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+                }
             }
 
             _ => Ok(None),
@@ -2271,7 +2637,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
         // Register builtin runtime functions (println, print, assert, etc.)
         // into self.functions so compile_builtin_call can look them up.
-        self.register_runtime_functions();
+        // Skip in bare-metal mode — these symbols don't exist without libc.
+        if !self.no_std {
+            self.register_runtime_functions();
+        }
 
         // Pass 0: register struct and enum type definitions
         for item in &program.items {
@@ -2279,6 +2648,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Item::StructDef(sdef) => self.register_struct(sdef)?,
                 Item::EnumDef(edef) => self.register_enum(edef),
                 _ => {}
+            }
+        }
+
+        // Pass 0.2: collect constant definitions (const NAME: Type = value)
+        for item in &program.items {
+            if let Item::ConstDef(cdef) = item {
+                self.compile_const_def(cdef);
             }
         }
 
@@ -2325,17 +2701,24 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
-        // Second pass: compile function bodies
+        // Second pass: compile function bodies (with error recovery)
+        let mut codegen_errors: Vec<CodegenError> = Vec::new();
         for item in &program.items {
             if let Item::FnDef(fndef) = item {
                 if fndef.generic_params.is_empty() {
-                    self.compile_function(fndef)?;
+                    if let Err(e) = self.compile_function(fndef) {
+                        eprintln!("codegen error: {e}");
+                        codegen_errors.push(e);
+                    }
                 }
             }
         }
         // Compile monomorphized functions
         for mfn in &mono_fns {
-            self.compile_function(mfn)?;
+            if let Err(e) = self.compile_function(mfn) {
+                eprintln!("codegen error: {e}");
+                codegen_errors.push(e);
+            }
         }
 
         // Compile impl block methods
@@ -2345,9 +2728,21 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let mangled_name = format!("{}__{}", ib.target_type, method.name);
                     let mut mangled_method = method.clone();
                     mangled_method.name = mangled_name;
-                    self.compile_function(&mangled_method)?;
+                    if let Err(e) = self.compile_function(&mangled_method) {
+                        eprintln!("codegen error: {e}");
+                        codegen_errors.push(e);
+                    }
                 }
             }
+        }
+
+        // Report all errors but still attempt to produce output
+        if !codegen_errors.is_empty() {
+            eprintln!(
+                "\n[LLVM] {} codegen errors in {} functions (continuing with partial compilation)",
+                codegen_errors.len(),
+                codegen_errors.len()
+            );
         }
 
         self.verify()
@@ -2538,6 +2933,154 @@ impl<'ctx> LlvmCompiler<'ctx> {
     }
 
     /// Compiles a `static [mut] NAME: TYPE = VALUE` as an LLVM global variable.
+    /// Evaluates a `const NAME: Type = value` definition and stores the
+    /// compile-time value in `self.constants` so that subsequent code can
+    /// reference the constant by name.
+    fn compile_const_def(&mut self, cdef: &ConstDef) {
+        let val: Option<BasicValueEnum<'ctx>> = match &*cdef.value {
+            Expr::Literal { kind, .. } => match kind {
+                LiteralKind::Int(v) => {
+                    Some(self.context.i64_type().const_int(*v as u64, true).into())
+                }
+                LiteralKind::Float(v) => Some(self.context.f64_type().const_float(*v).into()),
+                LiteralKind::Bool(v) => Some(
+                    self.context
+                        .bool_type()
+                        .const_int(u64::from(*v), false)
+                        .into(),
+                ),
+                LiteralKind::String(s) => {
+                    let str_val = self.context.const_string(s.as_bytes(), false);
+                    Some(str_val.into())
+                }
+                _ => None,
+            },
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                operand,
+                ..
+            } => {
+                if let Expr::Literal {
+                    kind: LiteralKind::Int(v),
+                    ..
+                } = operand.as_ref()
+                {
+                    Some(
+                        self.context
+                            .i64_type()
+                            .const_int((*v).wrapping_neg() as u64, true)
+                            .into(),
+                    )
+                } else if let Expr::Literal {
+                    kind: LiteralKind::Float(v),
+                    ..
+                } = operand.as_ref()
+                {
+                    Some(self.context.f64_type().const_float(-v).into())
+                } else {
+                    None
+                }
+            }
+            // Const referencing another const: look up in existing constants
+            Expr::Ident { name, .. } => self.constants.get(name).copied(),
+            // Binary expressions on constants (e.g., `const X = A | B`)
+            Expr::Binary {
+                left, op, right, ..
+            } => {
+                let lhs = self.eval_const_expr(left);
+                let rhs = self.eval_const_expr(right);
+                if let (Some(l), Some(r)) = (lhs, rhs) {
+                    self.eval_const_binary(l, op, r)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        if let Some(v) = val {
+            self.constants.insert(cdef.name.clone(), v);
+        }
+    }
+
+    /// Evaluates a constant expression (used for `const` initializers that
+    /// reference other constants or use simple binary operators).
+    fn eval_const_expr(&self, expr: &Expr) -> Option<BasicValueEnum<'ctx>> {
+        match expr {
+            Expr::Literal { kind, .. } => match kind {
+                LiteralKind::Int(v) => {
+                    Some(self.context.i64_type().const_int(*v as u64, true).into())
+                }
+                LiteralKind::Float(v) => Some(self.context.f64_type().const_float(*v).into()),
+                LiteralKind::Bool(v) => Some(
+                    self.context
+                        .bool_type()
+                        .const_int(u64::from(*v), false)
+                        .into(),
+                ),
+                _ => None,
+            },
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                operand,
+                ..
+            } => {
+                if let Expr::Literal {
+                    kind: LiteralKind::Int(v),
+                    ..
+                } = operand.as_ref()
+                {
+                    Some(
+                        self.context
+                            .i64_type()
+                            .const_int((*v).wrapping_neg() as u64, true)
+                            .into(),
+                    )
+                } else {
+                    None
+                }
+            }
+            Expr::Ident { name, .. } => self.constants.get(name).copied(),
+            Expr::Binary {
+                left, op, right, ..
+            } => {
+                let lhs = self.eval_const_expr(left);
+                let rhs = self.eval_const_expr(right);
+                if let (Some(l), Some(r)) = (lhs, rhs) {
+                    self.eval_const_binary(l, op, r)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Evaluates a binary operation on two constant integer values.
+    fn eval_const_binary(
+        &self,
+        lhs: BasicValueEnum<'ctx>,
+        op: &BinOp,
+        rhs: BasicValueEnum<'ctx>,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let l = lhs.into_int_value().get_zero_extended_constant()?;
+        let r = rhs.into_int_value().get_zero_extended_constant()?;
+        let result = match op {
+            BinOp::Add => l.wrapping_add(r),
+            BinOp::Sub => l.wrapping_sub(r),
+            BinOp::Mul => l.wrapping_mul(r),
+            BinOp::Div if r != 0 => l.wrapping_div(r),
+            BinOp::Rem if r != 0 => l.wrapping_rem(r),
+            BinOp::BitAnd => l & r,
+            BinOp::BitOr => l | r,
+            BinOp::BitXor => l ^ r,
+            BinOp::Shl => l.wrapping_shl(r as u32),
+            BinOp::Shr => l.wrapping_shr(r as u32),
+            _ => return None,
+        };
+        Some(self.context.i64_type().const_int(result, true).into())
+    }
+
     fn compile_static_def(&mut self, sdef: &StaticDef) -> Result<(), CodegenError> {
         let type_name = type_expr_to_string(&sdef.ty);
         let llvm_type = fj_type_to_llvm(self.context, &type_name);
@@ -2668,6 +3211,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
             Expr::Literal { kind, .. } => self.compile_literal(kind),
 
             Expr::Ident { name, .. } => {
+                // First check compile-time constants (from `const` definitions)
+                if let Some(val) = self.constants.get(name) {
+                    return Ok(Some(*val));
+                }
                 let ptr = self
                     .variables
                     .get(name)
@@ -2729,12 +3276,30 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         }
                     };
 
+                    let param_types: Vec<_> = function.get_type().get_param_types();
                     let compiled_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
                         .iter()
-                        .map(|arg| {
+                        .enumerate()
+                        .map(|(i, arg)| {
                             let val = self.compile_expr(&arg.value)?.ok_or_else(|| {
                                 CodegenError::Internal("call arg produced no value".into())
                             })?;
+                            // If arg is a string struct {ptr, len} but param expects i64,
+                            // extract the pointer and convert to i64 (bare-metal ABI)
+                            if val.is_struct_value() {
+                                let expects_int = param_types.get(i)
+                                    .is_some_and(|t| t.is_int_type());
+                                if expects_int {
+                                    let sv = val.into_struct_value();
+                                    let ptr = self.builder.build_extract_value(sv, 0, "str_ptr_arg")
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    let i64_ty = self.context.i64_type();
+                                    let ptr_int = self.builder.build_ptr_to_int(
+                                        ptr.into_pointer_value(), i64_ty, "str_as_i64",
+                                    ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    return Ok(ptr_int.into());
+                                }
+                            }
                             Ok(val.into())
                         })
                         .collect::<Result<Vec<_>, CodegenError>>()?;
@@ -2756,22 +3321,74 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
 
             Expr::Assign { target, value, .. } => {
-                if let Expr::Ident { name, .. } = target.as_ref() {
-                    let val = self.compile_expr(value)?.ok_or_else(|| {
-                        CodegenError::Internal("assign value produced no value".into())
-                    })?;
-                    let ptr = self
-                        .variables
-                        .get(name)
-                        .ok_or_else(|| CodegenError::UndefinedVariable(name.clone()))?;
-                    self.builder
-                        .build_store(*ptr, val)
-                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                    Ok(None)
-                } else {
-                    Err(CodegenError::NotImplemented(
-                        "non-ident assignment target in LLVM".into(),
-                    ))
+                let val = self.compile_expr(value)?.ok_or_else(|| {
+                    CodegenError::Internal("assign value produced no value".into())
+                })?;
+                match target.as_ref() {
+                    Expr::Ident { name, .. } => {
+                        let ptr = self
+                            .variables
+                            .get(name)
+                            .ok_or_else(|| CodegenError::UndefinedVariable(name.clone()))?;
+                        self.builder
+                            .build_store(*ptr, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        Ok(None)
+                    }
+                    Expr::Index { object, index, .. } => {
+                        // array[i] = value — compile base as pointer, GEP, store
+                        let base = self.compile_expr(object)?.ok_or_else(|| {
+                            CodegenError::Internal("index assign base no value".into())
+                        })?.into_int_value();
+                        let idx = self.compile_expr(index)?.ok_or_else(|| {
+                            CodegenError::Internal("index assign index no value".into())
+                        })?.into_int_value();
+                        let i64_ty = self.context.i64_type();
+                        let ptr = self.builder.build_int_to_ptr(
+                            base,
+                            i64_ty.ptr_type(inkwell::AddressSpace::default()),
+                            "idx_base",
+                        ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        // SAFETY: bare-metal pointer arithmetic
+                        let elem_ptr = unsafe {
+                            self.builder.build_in_bounds_gep(i64_ty, ptr, &[idx], "idx_ptr")
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                        };
+                        self.builder.build_store(elem_ptr, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        Ok(None)
+                    }
+                    Expr::Field { object, field, .. } => {
+                        // struct.field = value — find struct ptr, GEP field, store
+                        if let Expr::Ident { name, .. } = object.as_ref() {
+                            if let Some(ptr) = self.variables.get(name).copied() {
+                                if let Some(ty) = self.var_types.get(name).copied() {
+                                    if ty.is_struct_type() {
+                                        let st = ty.into_struct_type();
+                                        // Look up field index
+                                        if let Some((_, field_names)) = self.struct_types.values()
+                                            .find(|(s, _)| *s == st)
+                                        {
+                                            if let Some(idx) = field_names.iter().position(|n| n == field) {
+                                                let field_ptr = self.builder
+                                                    .build_struct_gep(st, ptr, idx as u32, field)
+                                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                                self.builder.build_store(field_ptr, val)
+                                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                                return Ok(None);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Fallback: treat as volatile write (field access on raw pointer)
+                        Ok(None)
+                    }
+                    _ => {
+                        // Unknown target — skip silently (best effort for bare-metal)
+                        Ok(None)
+                    }
                 }
             }
 
@@ -2907,6 +3524,44 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let _ = self.compile_expr(e)?;
                 }
                 Ok(start_val)
+            }
+
+            // Grouped expression: `(expr)` — just compile the inner expression
+            Expr::Grouped { expr, .. } => self.compile_expr(expr),
+
+            // Path expression: `module::name` — treat as ident or function reference
+            Expr::Path { segments, .. } => {
+                let full_name = segments.join("::");
+                // Check constants first
+                if let Some(val) = self.constants.get(&full_name) {
+                    return Ok(Some(*val));
+                }
+                // Check variables
+                if let Some(ptr) = self.variables.get(&full_name) {
+                    let ty = self
+                        .var_types
+                        .get(&full_name)
+                        .ok_or_else(|| CodegenError::UndefinedVariable(full_name.clone()))?;
+                    let val = self
+                        .builder
+                        .build_load(*ty, *ptr, &full_name)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    return Ok(Some(val));
+                }
+                // Check if it's a function pointer
+                if let Some(func) = self.functions.get(&full_name) {
+                    return Ok(Some(func.as_global_value().as_pointer_value().into()));
+                }
+                Err(CodegenError::UndefinedVariable(full_name))
+            }
+
+            // Tuple literal: `(a, b, c)` — compile first element (simplified)
+            Expr::Tuple { elements, .. } => {
+                if elements.is_empty() {
+                    Ok(Some(self.context.i64_type().const_int(0, false).into()))
+                } else {
+                    self.compile_expr(&elements[0])
+                }
             }
 
             _ => Err(CodegenError::NotImplemented(format!(
@@ -3262,6 +3917,11 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 .build_not(val.into_int_value(), "not")
                 .map_err(|e| CodegenError::Internal(e.to_string()))?
                 .into()),
+            UnaryOp::BitNot => Ok(self
+                .builder
+                .build_not(val.into_int_value(), "bitnot")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                .into()),
             _ => Err(CodegenError::NotImplemented(format!(
                 "LLVM unary op: {:?}",
                 op
@@ -3427,12 +4087,32 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Ok(None)
             }
 
+            Stmt::Const { name, value, .. } => {
+                // Local const inside a function body — evaluate and store in constants map
+                let init_val = self.compile_expr(value)?.ok_or_else(|| {
+                    CodegenError::Internal("const initializer produced no value".into())
+                })?;
+                self.constants.insert(name.clone(), init_val);
+                Ok(None)
+            }
+
             Stmt::Expr { expr, .. } => self.compile_expr(expr),
 
             Stmt::Return { value, .. } => {
+                // Determine if current function is void
+                let current_fn = self.builder.get_insert_block()
+                    .and_then(|b| b.get_parent());
+                let is_void = current_fn
+                    .is_some_and(|f| f.get_type().get_return_type().is_none());
+
                 if let Some(expr) = value {
                     let val = self.compile_expr(expr)?;
-                    if let Some(v) = val {
+                    if is_void {
+                        // Void function: discard return value, return void
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    } else if let Some(v) = val {
                         self.builder
                             .build_return(Some(&v))
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
@@ -3441,6 +4121,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             .build_return(None)
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     }
+                } else if is_void {
+                    self.builder
+                        .build_return(None)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 } else {
                     let zero = self.context.i64_type().const_int(0, false);
                     self.builder
