@@ -3233,6 +3233,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
             Expr::Binary {
                 left, op, right, ..
             } => {
+                // Short-circuit evaluation for && and ||
+                if matches!(op, BinOp::And | BinOp::Or) {
+                    return self.compile_short_circuit(left, op, right);
+                }
                 let lhs = self
                     .compile_expr(left)?
                     .ok_or_else(|| CodegenError::Internal("binary LHS produced no value".into()))?;
@@ -3746,9 +3750,24 @@ impl<'ctx> LlvmCompiler<'ctx> {
             return Ok(result.into());
         }
 
-        // Integer operations
-        let l = lhs.into_int_value();
-        let r = rhs.into_int_value();
+        // Integer operations — harmonize types (i1 ↔ i64)
+        let i64_ty = self.context.i64_type();
+        let l_raw = lhs.into_int_value();
+        let r_raw = rhs.into_int_value();
+        let l = if l_raw.get_type().get_bit_width() < 64 {
+            self.builder
+                .build_int_z_extend(l_raw, i64_ty, "lext")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+        } else {
+            l_raw
+        };
+        let r = if r_raw.get_type().get_bit_width() < 64 {
+            self.builder
+                .build_int_z_extend(r_raw, i64_ty, "rext")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+        } else {
+            r_raw
+        };
 
         let result: BasicValueEnum<'ctx> = match op {
             BinOp::Add => self
@@ -3930,6 +3949,126 @@ impl<'ctx> LlvmCompiler<'ctx> {
     }
 
     /// Compiles an if/else expression.
+    /// Compiles short-circuit `&&` and `||` with proper control flow.
+    /// `a && b` only evaluates `b` if `a` is truthy.
+    /// `a || b` only evaluates `b` if `a` is falsy.
+    fn compile_short_circuit(
+        &mut self,
+        left: &Expr,
+        op: &BinOp,
+        right: &Expr,
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let current_fn = self
+            .builder
+            .get_insert_block()
+            .and_then(|b| b.get_parent())
+            .ok_or_else(|| CodegenError::Internal("no current function".into()))?;
+
+        // Evaluate LHS
+        let lhs = self
+            .compile_expr(left)?
+            .ok_or_else(|| CodegenError::Internal("short-circuit LHS no value".into()))?;
+        let lhs_int = lhs.into_int_value();
+        // If LHS is already i1 (bool from comparison), use directly; otherwise compare != 0
+        let lhs_bool = if lhs_int.get_type().get_bit_width() == 1 {
+            lhs_int
+        } else {
+            self.builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    lhs_int,
+                    i64_ty.const_zero(),
+                    "lhs_bool",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+        };
+
+        // Create basic blocks
+        let rhs_bb = self.context.append_basic_block(current_fn, "sc_rhs");
+        let merge_bb = self.context.append_basic_block(current_fn, "sc_merge");
+        let lhs_bb = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::Internal("no insert block".into())
+        })?;
+
+        // Branch based on operator
+        match op {
+            BinOp::And => {
+                // a && b: if a is false, skip b (result = false)
+                self.builder
+                    .build_conditional_branch(lhs_bool, rhs_bb, merge_bb)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            }
+            BinOp::Or => {
+                // a || b: if a is true, skip b (result = true)
+                self.builder
+                    .build_conditional_branch(lhs_bool, merge_bb, rhs_bb)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            }
+            _ => unreachable!(),
+        }
+
+        // Evaluate RHS
+        self.builder.position_at_end(rhs_bb);
+        let rhs = self
+            .compile_expr(right)?
+            .ok_or_else(|| CodegenError::Internal("short-circuit RHS no value".into()))?;
+        let rhs_int = rhs.into_int_value();
+        let rhs_bool = if rhs_int.get_type().get_bit_width() == 1 {
+            rhs_int
+        } else {
+            self.builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    rhs_int,
+                    i64_ty.const_zero(),
+                    "rhs_bool",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+        };
+        let rhs_end_bb = self.builder.get_insert_block().ok_or_else(|| {
+            CodegenError::Internal("no insert block after rhs".into())
+        })?;
+        self.builder
+            .build_unconditional_branch(merge_bb)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        // Merge with phi node
+        self.builder.position_at_end(merge_bb);
+        let phi = self
+            .builder
+            .build_phi(self.context.bool_type(), "sc_result")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        match op {
+            BinOp::And => {
+                // From LHS block (false path): result = false
+                // From RHS block: result = rhs_bool
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_zero(), lhs_bb),
+                    (&rhs_bool, rhs_end_bb),
+                ]);
+            }
+            BinOp::Or => {
+                // From LHS block (true path): result = true
+                // From RHS block: result = rhs_bool
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_int(1, false), lhs_bb),
+                    (&rhs_bool, rhs_end_bb),
+                ]);
+            }
+            _ => unreachable!(),
+        }
+
+        // Zero-extend bool (i1) to i64 for uniform ABI
+        let result = self
+            .builder
+            .build_int_z_extend(phi.as_basic_value().into_int_value(), i64_ty, "sc_i64")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+        Ok(Some(result.into()))
+    }
+
     fn compile_if(
         &mut self,
         condition: &Expr,
