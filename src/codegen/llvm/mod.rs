@@ -1817,6 +1817,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
 
             "iretq_to_user" => {
+                // Call fj_rt_bare_iretq_to_user(rip, rsp, rflags) — a real CALL
+                // so SYS_EXIT's `mov rsp, [0x652020]; ret` returns here.
+                // Inline asm won't work because there's no return address on stack.
                 if args.len() < 3 {
                     return Err(CodegenError::Internal(
                         "iretq_to_user requires 3 args (rip, rsp, rflags)".into(),
@@ -1824,48 +1827,24 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 }
                 let rip = self
                     .compile_expr(&args[0].value)?
-                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rip no value".into()))?
-                    .into_int_value();
-                let rsp = self
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rip no value".into()))?;
+                let rsp_val = self
                     .compile_expr(&args[1].value)?
-                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rsp no value".into()))?
-                    .into_int_value();
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rsp no value".into()))?;
                 let rflags = self
                     .compile_expr(&args[2].value)?
-                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rflags no value".into()))?
-                    .into_int_value();
-                let void_ty = self.context.void_type();
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rflags no value".into()))?;
                 let i64_ty = self.context.i64_type();
-                let fn_ty = void_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
-                let asm_val = self.context.create_inline_asm(
-                    fn_ty,
-                    concat!(
-                        "movq %rsp, 0x652020\n\t",      // save kernel RSP for SYS_EXIT return
-                        "movq $$0, 0x652038\n\t",        // clear user_exited flag
-                        "pushq $$0x1B\n\t",              // SS = User Data (0x18 | RPL=3)
-                        "pushq %rsi\n\t",                // RSP = user stack
-                        "pushq %rdx\n\t",                // RFLAGS
-                        "pushq $$0x23\n\t",              // CS = User Code (0x20 | RPL=3)
-                        "pushq %rdi\n\t",                // RIP = entry point
-                        "xor %eax, %eax\n\t",            // clear registers (security)
-                        "xor %ebx, %ebx\n\t",
-                        "xor %ecx, %ecx\n\t",
-                        "xor %edx, %edx\n\t",
-                        "xor %esi, %esi\n\t",
-                        "xor %edi, %edi\n\t",
-                        "xor %ebp, %ebp\n\t",
-                        "iretq",
-                    ).to_string(),
-                    "{rdi},{rsi},{rdx}".to_string(),
-                    true, false, None, false,
+                let fn_ty = i64_ty.fn_type(
+                    &[i64_ty.into(), i64_ty.into(), i64_ty.into()],
+                    false,
                 );
+                let func = self.module.get_function("fj_rt_bare_iretq_to_user")
+                    .unwrap_or_else(|| {
+                        self.module.add_function("fj_rt_bare_iretq_to_user", fn_ty, None)
+                    });
                 self.builder
-                    .build_indirect_call(
-                        fn_ty,
-                        asm_val,
-                        &[rip.into(), rsp.into(), rflags.into()],
-                        "",
-                    )
+                    .build_call(func, &[rip.into(), rsp_val.into(), rflags.into()], "")
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 Ok(Some(zero.into()))
             }
