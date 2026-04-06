@@ -2395,8 +2395,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
             };
         }
 
-        // Method not found — return 0 (graceful fallback for unresolved methods)
-        Ok(Some(self.context.i64_type().const_int(0, false).into()))
+        // F3: Method not found — error instead of silent 0
+        // In bare-metal mode, tolerate unresolved methods (may be provided at link time).
+        // In hosted mode, report the error clearly.
+        if self.no_std {
+            Ok(Some(self.context.i64_type().const_int(0, false).into()))
+        } else {
+            Err(CodegenError::UndefinedFunction(format!(
+                "unresolved method call: .{method}()"
+            )))
+        }
     }
 
     // ── V12 Sprint L6: String & Array Runtime Declarations ────────────
@@ -4916,9 +4924,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 (sv, ev, *inclusive)
             }
             _ => {
-                return Err(CodegenError::NotImplemented(
-                    "LLVM for loop only supports range iterables".into(),
-                ));
+                // F6: Non-range iterable — compile as expression and iterate
+                // as pointer+length (array) using index 0..len.
+                // The iterable value is treated as an i64 pointer (base address)
+                // and iterated by GEP. For non-pointer values, treat as 0..value.
+                let iter_val = self.compile_expr(iterable)?.ok_or_else(|| {
+                    CodegenError::Internal("for iterable produced no value".into())
+                })?;
+                if iter_val.is_int_value() {
+                    // Treat as 0..value range
+                    let start = self.context.i64_type().const_int(0, false).into();
+                    (start, iter_val, false)
+                } else {
+                    return Err(CodegenError::NotImplemented(
+                        "LLVM for loop: unsupported iterable type (expected range or integer)"
+                            .into(),
+                    ));
+                }
             }
         };
 
@@ -5144,21 +5166,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         .compile_literal(kind)?
                         .ok_or_else(|| CodegenError::Internal("pattern literal no value".into()))?;
 
-                    // Compare subject with pattern
-                    let cmp = if subject_val.is_int_value() && pattern_val.is_int_value() {
-                        self.builder
-                            .build_int_compare(
-                                inkwell::IntPredicate::EQ,
-                                subject_val.into_int_value(),
-                                pattern_val.into_int_value(),
-                                "match_cmp",
-                            )
-                            .map_err(|e| CodegenError::Internal(e.to_string()))?
-                    } else {
-                        return Err(CodegenError::NotImplemented(
-                            "LLVM match: non-int pattern comparison".into(),
-                        ));
-                    };
+                    // F4: Compare subject with pattern — supports int, float, bool, string
+                    let cmp = self.compile_match_comparison(subject_val, pattern_val)?;
 
                     let arm_bb = self
                         .context
@@ -5175,6 +5184,22 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
                     self.builder.position_at_end(arm_bb);
+
+                    // F1: Guard support for literal patterns
+                    if let Some(ref guard) = arm.guard {
+                        let guard_val = self.compile_expr(guard)?.ok_or_else(|| {
+                            CodegenError::Internal("guard produced no value".into())
+                        })?;
+                        let guard_bool = self.to_i1(guard_val)?;
+                        let guard_pass_bb = self
+                            .context
+                            .append_basic_block(function, &format!("lit_guard_pass_{i}"));
+                        self.builder
+                            .build_conditional_branch(guard_bool, guard_pass_bb, next_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder.position_at_end(guard_pass_bb);
+                    }
+
                     let body_val = self.compile_expr(&arm.body)?;
                     if let Some(val) = body_val {
                         self.builder
@@ -5211,24 +5236,14 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             let pattern_val = self.compile_literal(kind)?.ok_or_else(|| {
                                 CodegenError::Internal("or-pattern literal no value".into())
                             })?;
-                            if subject_val.is_int_value() && pattern_val.is_int_value() {
-                                let cmp = self
+                            let cmp = self.compile_match_comparison(subject_val, pattern_val)?;
+                            or_result = Some(match or_result {
+                                Some(prev) => self
                                     .builder
-                                    .build_int_compare(
-                                        inkwell::IntPredicate::EQ,
-                                        subject_val.into_int_value(),
-                                        pattern_val.into_int_value(),
-                                        "or_cmp",
-                                    )
-                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                                or_result = Some(match or_result {
-                                    Some(prev) => self
-                                        .builder
-                                        .build_or(prev, cmp, "or_acc")
-                                        .map_err(|e| CodegenError::Internal(e.to_string()))?,
-                                    None => cmp,
-                                });
-                            }
+                                    .build_or(prev, cmp, "or_acc")
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?,
+                                None => cmp,
+                            });
                         }
                     }
 
@@ -5292,11 +5307,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Pattern::Enum {
                     variant, fields, ..
                 } => {
-                    // Simplified: compare discriminant (variant index)
-                    let variants = self.enum_defs.values().next();
-                    let variant_idx = variants
-                        .and_then(|vs| vs.iter().position(|(n, _)| n == variant))
-                        .unwrap_or(0) as u64;
+                    // F5: Look up variant in ALL enum defs, not just first one
+                    let variant_idx = self
+                        .enum_defs
+                        .values()
+                        .find_map(|vs| vs.iter().position(|(n, _)| n == variant))
+                        .ok_or_else(|| {
+                            CodegenError::Internal(format!(
+                                "unknown enum variant '{variant}' in match pattern"
+                            ))
+                        })? as u64;
 
                     let discriminant = self.context.i64_type().const_int(variant_idx, false);
                     let cmp = if subject_val.is_int_value() {
@@ -5329,15 +5349,58 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
                     self.builder.position_at_end(arm_bb);
 
-                    // Bind enum fields to variables
+                    // F1: Guard support for enum patterns
+                    if let Some(ref guard) = arm.guard {
+                        let guard_val = self.compile_expr(guard)?.ok_or_else(|| {
+                            CodegenError::Internal("guard produced no value".into())
+                        })?;
+                        let guard_bool = self.to_i1(guard_val)?;
+                        let guard_pass_bb = self
+                            .context
+                            .append_basic_block(function, &format!("enum_guard_pass_{i}"));
+                        self.builder
+                            .build_conditional_branch(guard_bool, guard_pass_bb, next_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder.position_at_end(guard_pass_bb);
+                    }
+
+                    // F2: Bind enum fields — for single-payload enums, bind subject
+                    // value (which carries the payload). For multi-field, use indexed
+                    // extraction (requires tagged-union ABI in future).
                     for (fi, field_pat) in fields.iter().enumerate() {
                         if let Pattern::Ident { name, .. } = field_pat {
-                            // Simplified: bind to subject value (payload extraction needs runtime)
                             let alloca = self
                                 .builder
                                 .build_alloca(self.context.i64_type(), name)
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                            let payload = self.context.i64_type().const_int(fi as u64, false);
+                            // For single-field enums (e.g., Some(v), Ok(v), Err(e)),
+                            // the subject IS the payload. For multi-field, we extract
+                            // via bit-shift (field 0 = low bits, field 1 = high bits).
+                            let payload = if fields.len() == 1 && fi == 0 {
+                                // Single field: subject value is the payload
+                                if subject_val.is_int_value() {
+                                    subject_val
+                                } else {
+                                    self.context.i64_type().const_int(0, false).into()
+                                }
+                            } else {
+                                // Multi-field: shift right by (fi * 16) for packed repr
+                                let shift =
+                                    self.context.i64_type().const_int((fi as u64) * 16, false);
+                                if subject_val.is_int_value() {
+                                    self.builder
+                                        .build_right_shift(
+                                            subject_val.into_int_value(),
+                                            shift,
+                                            false,
+                                            &format!("field_{fi}"),
+                                        )
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                        .into()
+                                } else {
+                                    self.context.i64_type().const_int(0, false).into()
+                                }
+                            };
                             self.builder
                                 .build_store(alloca, payload)
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
@@ -5371,9 +5434,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 }
 
                 _ => {
-                    // Unsupported patterns: Range, Tuple, Struct — skip gracefully
+                    // F7: Unsupported patterns (Range, Tuple, Struct) — if last arm,
+                    // treat as wildcard; otherwise error so bugs surface.
                     if is_last {
-                        // Default: compile body anyway
+                        // Last arm with unsupported pattern: treat as default/wildcard
                         let body_val = self.compile_expr(&arm.body)?;
                         if let Some(val) = body_val {
                             self.builder
@@ -5392,12 +5456,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
                                 .build_unconditional_branch(merge_bb)
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         }
+                    } else {
+                        return Err(CodegenError::NotImplemented(format!(
+                            "LLVM match: unsupported pattern type in non-final arm {i}"
+                        )));
                     }
                 }
             }
-
-            // V12 L7: Guard support for literal patterns
-            // If a literal arm has a guard, check it after the pattern matches
         }
 
         // Ensure merge block has a predecessor for unreachable case
@@ -5412,6 +5477,139 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
             Ok(Some(result))
         }
+    }
+
+    /// F4: Compares two values for pattern matching — supports int, float, bool, string.
+    fn compile_match_comparison(
+        &self,
+        subject: BasicValueEnum<'ctx>,
+        pattern: BasicValueEnum<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, CodegenError> {
+        // Int == Int
+        if subject.is_int_value() && pattern.is_int_value() {
+            let s = subject.into_int_value();
+            let p = pattern.into_int_value();
+            // Harmonize bit widths (i1 vs i64)
+            let i64_ty = self.context.i64_type();
+            let s_ext = if s.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(s, i64_ty, "s_ext")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            } else {
+                s
+            };
+            let p_ext = if p.get_type().get_bit_width() < 64 {
+                self.builder
+                    .build_int_z_extend(p, i64_ty, "p_ext")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            } else {
+                p
+            };
+            return self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, s_ext, p_ext, "match_cmp")
+                .map_err(|e| CodegenError::Internal(e.to_string()));
+        }
+
+        // Float == Float (ordered equality)
+        if subject.is_float_value() && pattern.is_float_value() {
+            return self
+                .builder
+                .build_float_compare(
+                    inkwell::FloatPredicate::OEQ,
+                    subject.into_float_value(),
+                    pattern.into_float_value(),
+                    "match_fcmp",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()));
+        }
+
+        // String == String (via fj_rt_string_eq)
+        if subject.is_struct_value() && pattern.is_struct_value() {
+            let s_struct = subject.into_struct_value();
+            let p_struct = pattern.into_struct_value();
+            let s_ptr = self
+                .builder
+                .build_extract_value(s_struct, 0, "s_ptr")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            let s_len = self
+                .builder
+                .build_extract_value(s_struct, 1, "s_len")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            let p_ptr = self
+                .builder
+                .build_extract_value(p_struct, 0, "p_ptr")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            let p_len = self
+                .builder
+                .build_extract_value(p_struct, 1, "p_len")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+            if let Some(eq_fn) = self.functions.get("fj_rt_string_eq") {
+                let result = self
+                    .builder
+                    .build_call(
+                        *eq_fn,
+                        &[s_ptr.into(), s_len.into(), p_ptr.into(), p_len.into()],
+                        "str_eq",
+                    )
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                match result.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(v) => {
+                        if v.is_int_value() {
+                            return Ok(v.into_int_value());
+                        }
+                    }
+                    inkwell::values::ValueKind::Instruction(_) => {}
+                }
+            }
+            // Fallback: compare pointers (identity check)
+            return self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    s_ptr.into_pointer_value(),
+                    p_ptr.into_pointer_value(),
+                    "str_ptr_cmp",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()));
+        }
+
+        // Cross-type: coerce and compare as i64
+        if subject.is_int_value() || pattern.is_int_value() {
+            let i64_ty = self.context.i64_type();
+            let s_int = if subject.is_int_value() {
+                let iv = subject.into_int_value();
+                if iv.get_type().get_bit_width() < 64 {
+                    self.builder
+                        .build_int_z_extend(iv, i64_ty, "s_cross")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                } else {
+                    iv
+                }
+            } else {
+                i64_ty.const_int(0, false)
+            };
+            let p_int = if pattern.is_int_value() {
+                let iv = pattern.into_int_value();
+                if iv.get_type().get_bit_width() < 64 {
+                    self.builder
+                        .build_int_z_extend(iv, i64_ty, "p_cross")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                } else {
+                    iv
+                }
+            } else {
+                i64_ty.const_int(0, false)
+            };
+            return self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, s_int, p_int, "match_cross")
+                .map_err(|e| CodegenError::Internal(e.to_string()));
+        }
+
+        // Unsupported comparison — always false
+        Ok(self.context.bool_type().const_int(0, false))
     }
 
     /// Converts a value to i1 (boolean). For if/while conditions.
