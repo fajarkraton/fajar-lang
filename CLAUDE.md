@@ -102,14 +102,14 @@ Every Claude Code session MUST follow this order:
 ### Current Totals (V21 "Production" IN PROGRESS, 2026-04-04)
 
 ```
-Tests:     8,672 default (7,570 lib + 954 integ + 148 context) | +1,122 native
-LOC:       ~439,000 lines of Rust (392 files)
+Tests:     11,373 total (8,891 lib + 954 integ + 148 context + 38 LLVM E2E + 1,342 native) | 0 failures
+LOC:       ~442,000 lines of Rust (392 files)
 Examples:  281 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 48 [x], 0 [sim], 5 [f], 3 [s] (56 logical)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
-Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry
-Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 known test failures
+Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry
+Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 test failures (11,373/11,373)
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
 
 Labeling: [x] = production (tested, works E2E)
@@ -117,6 +117,19 @@ Labeling: [x] = production (tested, works E2E)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 ```
+
+### V22 "Hardened" (2026-04-06) — 30 LLVM Enhancements + Zero Test Failures
+- **LLVM backend:** 30 enhancements across 5 batches (E1-I6)
+  - E1-E5: Hardening — universal builtin override, asm constraint parser, silent error audit, type coercion, pre-link verification
+  - F1-F7: Correctness — match guards all patterns, enum payload extraction, method dispatch, string/float/bool patterns
+  - G1-G6: Features — float pow/rem, deref/ref operators, nested field access, bool/ptr casts, closure captures, indirect calls
+  - H1-H6: Completeness — Stmt::Item, yield, tuple.0 access, range/struct/tuple/array/binding patterns in match
+  - I1-I6: Final gaps — chained field assign, int power, float range patterns, better diagnostics
+- **Bug fixes:** 4 codegen bugs found by testing (bool cast, implicit return coercion, closure builder, var-as-fn-ptr)
+- **DCE fix:** kernel_main + @kernel annotated functions preserved (was eliminated as dead code)
+- **Actor API:** actor_spawn returns Map, actor_send returns handler result (synchronous dispatch)
+- **Tests:** 11,373 total, 0 failures | 38 LLVM E2E tests (was 15)
+- **FajarOS:** compiles to 1.02MB ELF with 1,840 functions, boots in QEMU (16 init stages before runtime exception)
 
 ### V21 "Production" (2026-04-04) — Real Actors + LLVM Hardening
 - **Real threaded actors:** actor_spawn/send/supervise use std::thread + mpsc channels
@@ -745,5 +758,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 19.0 | V21.1 "Final Polish" — 8,672+ tests (all green), ~439K LOC, 48[x]/0[sim] | Real threaded actors, LLVM JIT+AOT, LaTeX paper, 0 clippy/unwrap*
-*Last Updated: 2026-04-03*
+*CLAUDE.md Version: 20.0 | V22 "Hardened" — 11,373 tests (0 failures), ~442K LOC, 48[x]/0[sim] | 30 LLVM enhancements, DCE fix, actor Map API, FajarOS boots*
+*Last Updated: 2026-04-06*
