@@ -7139,7 +7139,12 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 crate::parser::ast::AsmOperand::InOut {
                     constraint, expr, ..
                 } => {
-                    constraints.push(Self::format_asm_constraint_in(constraint));
+                    // InOut needs BOTH output + tied input constraints.
+                    // Output: "=r" or "={rax}" — tells LLVM this register is written
+                    // Input: "0" (tied to output index) — same register provides input
+                    let out_index = constraints.len();
+                    constraints.push(Self::format_asm_constraint_out(constraint));
+                    constraints.push(format!("{out_index}"));
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
