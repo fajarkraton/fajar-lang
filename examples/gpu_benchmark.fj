@@ -1,0 +1,42 @@
+// GPU Benchmark — Fajar Lang
+// Detects RTX 4090 and runs CPU matmul benchmark
+// GPU kernel dispatch requires CUDA FFI (future)
+
+fn main() {
+    println("=== Fajar Lang GPU Benchmark ===")
+    println("")
+
+    // Detect GPU
+    let info = gpu_discover()
+    println(info)
+    println("")
+
+    // CPU matmul benchmarks
+    println("CPU Matrix Multiply (ndarray backend):")
+
+    let a1 = randn(64, 64)
+    let b1 = randn(64, 64)
+    let _r1 = matmul(a1, b1)
+    println("  64x64:   done")
+
+    let a2 = randn(128, 128)
+    let b2 = randn(128, 128)
+    let _r2 = matmul(a2, b2)
+    println("  128x128: done")
+
+    let a3 = randn(256, 256)
+    let b3 = randn(256, 256)
+    let _r3 = matmul(a3, b3)
+    println("  256x256: done")
+
+    println("")
+    println("RTX 4090 specs:")
+    println("  FP32:  82.6 TFLOPS")
+    println("  TF32:  165 TFLOPS")
+    println("  FP16:  330 TFLOPS")
+    println("  INT8:  660 TOPS")
+    println("  BF16:  330 TFLOPS (Ada Lovelace Tensor Cores)")
+    println("")
+    println("PTX target: sm_89 (Ada Lovelace)")
+    println("Fajar Lang types: FP32, FP16, BF16, FP8 (E4M3/E5M2)")
+}
