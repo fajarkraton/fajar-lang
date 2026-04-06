@@ -3385,8 +3385,13 @@ fn cmd_build_llvm(
                     // User-mode println: SYS_WRITE(fd=1, buf=rdi, len=rsi)
                     ".global fj_rt_bare_println\n.type fj_rt_bare_println, @function\n",
                     "fj_rt_bare_println:\n",
+                    // SYS_WRITE includes the newline in the kernel handler — no I/O in Ring 3
+                    "    push rdi\n    push rsi\n",
                     "    mov rax, 1\n    mov rdx, rsi\n    mov rsi, rdi\n    mov rdi, 1\n    syscall\n",
-                    "    mov dx, 0x3F8\n    mov al, 0x0A\n    out dx, al\n    ret\n",
+                    // Now send newline via another SYS_WRITE
+                    "    lea rsi, [rip + .Lnewline]\n    mov rdi, 1\n    mov rdx, 1\n    mov rax, 1\n    syscall\n",
+                    "    pop rsi\n    pop rdi\n    ret\n",
+                    ".Lnewline: .byte 0x0A\n",
                     ".size fj_rt_bare_println, . - fj_rt_bare_println\n",
                     // User-mode print (same as println without newline)
                     ".global fj_rt_bare_print\n.type fj_rt_bare_print, @function\n",
