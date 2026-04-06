@@ -538,6 +538,42 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
     }
 
+    /// Creates an alloca in the current function's entry block.
+    /// Entry-block allocas have fixed stack frame offsets and survive
+    /// LLVM's optimization passes (mem2reg, SROA). This is critical for
+    /// stack arrays that are accessed through ptr_to_int/int_to_ptr.
+    ///
+    /// Uses a separate builder to avoid disturbing the main builder's position.
+    fn build_entry_block_alloca(
+        &self,
+        ty: inkwell::types::BasicTypeEnum<'ctx>,
+        name: &str,
+    ) -> Result<inkwell::values::PointerValue<'ctx>, CodegenError> {
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| CodegenError::Internal("no current block".into()))?;
+        let function = current_block
+            .get_parent()
+            .ok_or_else(|| CodegenError::Internal("no current function".into()))?;
+        let entry = function
+            .get_first_basic_block()
+            .ok_or_else(|| CodegenError::Internal("no entry block".into()))?;
+
+        // Use a temporary builder to insert in entry block without moving main builder
+        let entry_builder = self.context.create_builder();
+        // Position at the start of the entry block (before any existing instructions)
+        if let Some(first_instr) = entry.get_first_instruction() {
+            entry_builder.position_before(&first_instr);
+        } else {
+            entry_builder.position_at_end(entry);
+        }
+        let alloca = entry_builder
+            .build_alloca(ty, name)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(alloca)
+    }
+
     /// Sets the optimization level for compilation.
     pub fn set_opt_level(&mut self, level: LlvmOptLevel) {
         self.opt_level = level;
@@ -5082,10 +5118,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
         let elem_type = compiled[0].get_type();
         let array_type = elem_type.array_type(elements.len() as u32);
 
-        let alloca = self
-            .builder
-            .build_alloca(array_type, "arr")
-            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        // Allocate array in the function's entry block so it survives
+        // LLVM optimization passes (prevents dangling stack pointer).
+        let alloca = self.build_entry_block_alloca(array_type.into(), "arr")?;
 
         // Store each element via GEP
         for (i, val) in compiled.iter().enumerate() {
@@ -7120,31 +7155,29 @@ impl<'ctx> LlvmCompiler<'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
         let i64_ty = self.context.i64_type();
 
-        // Build constraint strings
-        let mut constraints = Vec::new();
+        // Build constraint strings — LLVM requires outputs first, then inputs.
+        let mut output_constraints: Vec<String> = Vec::new();
+        let mut input_constraints: Vec<String> = Vec::new();
         let mut input_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
 
         for op in operands {
             match op {
                 crate::parser::ast::AsmOperand::In { constraint, expr } => {
-                    // E2: Proper constraint classification
-                    constraints.push(Self::format_asm_constraint_in(constraint));
+                    input_constraints.push(Self::format_asm_constraint_in(constraint));
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
                 }
                 crate::parser::ast::AsmOperand::Out { constraint, .. } => {
-                    constraints.push(Self::format_asm_constraint_out(constraint));
+                    output_constraints.push(Self::format_asm_constraint_out(constraint));
                 }
                 crate::parser::ast::AsmOperand::InOut {
                     constraint, expr, ..
                 } => {
-                    // InOut needs BOTH output + tied input constraints.
-                    // Output: "=r" or "={rax}" — tells LLVM this register is written
-                    // Input: "0" (tied to output index) — same register provides input
-                    let out_index = constraints.len();
-                    constraints.push(Self::format_asm_constraint_out(constraint));
-                    constraints.push(format!("{out_index}"));
+                    // InOut: output constraint + tied input referencing the output index
+                    let out_index = output_constraints.len();
+                    output_constraints.push(Self::format_asm_constraint_out(constraint));
+                    input_constraints.push(format!("{out_index}"));
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
@@ -7153,7 +7186,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
-        let constraint_str = constraints.join(",");
+        // LLVM constraint string: outputs first, then inputs
+        let mut all_constraints = output_constraints.clone();
+        all_constraints.extend(input_constraints);
+        let constraint_str = all_constraints.join(",");
 
         // Determine side effects from options
         let has_side_effects = !options
@@ -7165,7 +7201,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .any(|o| matches!(o, crate::parser::ast::AsmOption::Nostack));
 
         // Build LLVM inline asm
-        let asm_ty = if constraints.iter().any(|c| c.starts_with('=')) {
+        let asm_ty = if !output_constraints.is_empty() {
             i64_ty.fn_type(
                 &input_vals
                     .iter()
