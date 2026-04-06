@@ -3872,6 +3872,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Err(CodegenError::UndefinedVariable(full_name))
             }
 
+            // H2: Yield — in LLVM backend, compile as returning the value.
+            // Full coroutine/generator support would need LLVM coroutine
+            // intrinsics; this simplified version treats yield as a return
+            // expression (the value is produced to the caller).
+            Expr::Yield { value, .. } => {
+                if let Some(expr) = value {
+                    self.compile_expr(expr)
+                } else {
+                    Ok(Some(self.context.i64_type().const_int(0, false).into()))
+                }
+            }
+
+            // MacroVar — should be expanded before codegen
+            Expr::MacroVar { name, .. } => Err(CodegenError::Internal(format!(
+                "unexpanded macro variable ${name} in codegen"
+            ))),
+
             _ => Err(CodegenError::NotImplemented(format!(
                 "LLVM expr: {:?}",
                 std::mem::discriminant(expr)
@@ -4691,10 +4708,39 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Ok(None)
             }
 
-            _ => Err(CodegenError::NotImplemented(format!(
-                "LLVM stmt: {:?}",
-                std::mem::discriminant(stmt)
-            ))),
+            // H1: Nested item definitions (fn/struct/enum/impl inside blocks)
+            Stmt::Item(item) => {
+                match item.as_ref() {
+                    Item::FnDef(fndef) => {
+                        self.declare_function(fndef)?;
+                        self.compile_function(fndef)?;
+                    }
+                    Item::StructDef(sdef) => {
+                        self.register_struct(sdef)?;
+                    }
+                    Item::EnumDef(edef) => {
+                        self.register_enum(edef);
+                    }
+                    Item::ImplBlock(ib) => {
+                        self.register_impl_block(ib);
+                        for method in &ib.methods {
+                            let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                            let mut mangled_method = method.clone();
+                            mangled_method.name = mangled_name;
+                            self.declare_function(&mangled_method)?;
+                            self.compile_function(&mangled_method)?;
+                        }
+                    }
+                    Item::ConstDef(cdef) => {
+                        self.compile_const_def(cdef);
+                    }
+                    Item::StaticDef(sdef) => {
+                        self.compile_static_def(sdef)?;
+                    }
+                    _ => {} // TraitDef, Use, etc. — no codegen needed
+                }
+                Ok(None)
+            }
         }
     }
 
@@ -4877,6 +4923,21 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         return Ok(Some(val));
                     }
+                }
+            }
+        }
+
+        // H3: Tuple field access — numeric field names (.0, .1, etc.)
+        if let Ok(idx) = field.parse::<u32>() {
+            let obj_val = self.compile_expr(object)?;
+            if let Some(val) = obj_val {
+                if val.is_struct_value() {
+                    let sv = val.into_struct_value();
+                    let result = self
+                        .builder
+                        .build_extract_value(sv, idx, &format!("tuple_{idx}"))
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    return Ok(Some(result));
                 }
             }
         }
@@ -5689,11 +5750,257 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     }
                 }
 
+                // H4: Range pattern — `1..10 => body` or `1..=10 => body`
+                Pattern::Range {
+                    start: range_start,
+                    end: range_end,
+                    inclusive,
+                    ..
+                } => {
+                    let start_val = self.compile_expr(range_start)?.ok_or_else(|| {
+                        CodegenError::Internal("range pattern start no value".into())
+                    })?;
+                    let end_val = self.compile_expr(range_end)?.ok_or_else(|| {
+                        CodegenError::Internal("range pattern end no value".into())
+                    })?;
+
+                    if subject_val.is_int_value()
+                        && start_val.is_int_value()
+                        && end_val.is_int_value()
+                    {
+                        let s = subject_val.into_int_value();
+                        let lo = start_val.into_int_value();
+                        let hi = end_val.into_int_value();
+                        let ge_lo = self
+                            .builder
+                            .build_int_compare(inkwell::IntPredicate::SGE, s, lo, "range_ge")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let hi_pred = if *inclusive {
+                            inkwell::IntPredicate::SLE
+                        } else {
+                            inkwell::IntPredicate::SLT
+                        };
+                        let le_hi = self
+                            .builder
+                            .build_int_compare(hi_pred, s, hi, "range_le")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let cmp = self
+                            .builder
+                            .build_and(ge_lo, le_hi, "range_cmp")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        let arm_bb = self
+                            .context
+                            .append_basic_block(function, &format!("match_range_{i}"));
+                        let next_bb = if is_last {
+                            merge_bb
+                        } else {
+                            self.context
+                                .append_basic_block(function, &format!("match_next_{i}"))
+                        };
+
+                        self.builder
+                            .build_conditional_branch(cmp, arm_bb, next_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder.position_at_end(arm_bb);
+
+                        if let Some(ref guard) = arm.guard {
+                            let gv = self
+                                .compile_expr(guard)?
+                                .ok_or_else(|| CodegenError::Internal("guard no value".into()))?;
+                            let gb = self.to_i1(gv)?;
+                            let gp_bb = self
+                                .context
+                                .append_basic_block(function, &format!("range_guard_{i}"));
+                            self.builder
+                                .build_conditional_branch(gb, gp_bb, next_bb)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            self.builder.position_at_end(gp_bb);
+                        }
+
+                        let body_val = self.compile_expr(&arm.body)?;
+                        if let Some(val) = body_val {
+                            self.builder
+                                .build_store(result_alloca, val)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            if let Some(exit_bb) = self.builder.get_insert_block() {
+                                incoming.push((val, exit_bb));
+                            }
+                        }
+                        if self
+                            .builder
+                            .get_insert_block()
+                            .is_some_and(|b| b.get_terminator().is_none())
+                        {
+                            self.builder
+                                .build_unconditional_branch(merge_bb)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        }
+                        if !is_last {
+                            self.builder.position_at_end(next_bb);
+                        }
+                    } else {
+                        return Err(CodegenError::NotImplemented(
+                            "LLVM match: range pattern requires integer operands".into(),
+                        ));
+                    }
+                }
+
+                // H6: Tuple pattern — `(a, b) => body`
+                Pattern::Tuple { elements, .. } => {
+                    // Destructure: bind each element to the corresponding
+                    // extract_value from the subject (which must be a struct value).
+                    let arm_bb = self
+                        .context
+                        .append_basic_block(function, &format!("match_tuple_{i}"));
+                    // Tuple patterns always match (they're destructuring, not testing)
+                    self.builder
+                        .build_unconditional_branch(arm_bb)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    self.builder.position_at_end(arm_bb);
+
+                    if subject_val.is_struct_value() {
+                        let sv = subject_val.into_struct_value();
+                        for (ei, elem_pat) in elements.iter().enumerate() {
+                            if let Pattern::Ident { name, .. } = elem_pat {
+                                let extracted = self
+                                    .builder
+                                    .build_extract_value(sv, ei as u32, name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(self.context.i64_type(), name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.builder
+                                    .build_store(alloca, extracted)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.variables.insert(name.clone(), alloca);
+                                self.var_types
+                                    .insert(name.clone(), self.context.i64_type().into());
+                            }
+                            // Wildcard in tuple: skip binding
+                        }
+                    } else if subject_val.is_int_value() {
+                        // Single-element: bind first ident to subject
+                        if let Some(Pattern::Ident { name, .. }) = elements.first() {
+                            let alloca = self
+                                .builder
+                                .build_alloca(self.context.i64_type(), name)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            self.builder
+                                .build_store(alloca, subject_val)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            self.variables.insert(name.clone(), alloca);
+                            self.var_types
+                                .insert(name.clone(), self.context.i64_type().into());
+                        }
+                    }
+
+                    let body_val = self.compile_expr(&arm.body)?;
+                    if let Some(val) = body_val {
+                        self.builder
+                            .build_store(result_alloca, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        if let Some(exit_bb) = self.builder.get_insert_block() {
+                            incoming.push((val, exit_bb));
+                        }
+                    }
+                    if self
+                        .builder
+                        .get_insert_block()
+                        .is_some_and(|b| b.get_terminator().is_none())
+                    {
+                        self.builder
+                            .build_unconditional_branch(merge_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    break; // Tuple pattern is exhaustive (destructuring)
+                }
+
+                // H5: Struct pattern — `Point { x, y } => body`
+                Pattern::Struct {
+                    name: struct_name,
+                    fields: field_pats,
+                    ..
+                } => {
+                    let arm_bb = self
+                        .context
+                        .append_basic_block(function, &format!("match_struct_{i}"));
+                    // Struct patterns always match if the type matches
+                    // (type checking done by analyzer)
+                    self.builder
+                        .build_unconditional_branch(arm_bb)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    self.builder.position_at_end(arm_bb);
+
+                    // Look up struct field names
+                    if let Some((stype, field_names)) = self.struct_types.get(struct_name).cloned()
+                    {
+                        if subject_val.is_struct_value() {
+                            let sv = subject_val.into_struct_value();
+                            for fp in field_pats {
+                                if let Some(idx) = field_names.iter().position(|n| n == &fp.name) {
+                                    let extracted = self
+                                        .builder
+                                        .build_extract_value(sv, idx as u32, &fp.name)
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    // Bind the field — shorthand `{ x }` binds to x,
+                                    // `{ x: pattern }` would need pattern matching
+                                    let bind_name =
+                                        if let Some(Pattern::Ident { name, .. }) = &fp.pattern {
+                                            name.clone()
+                                        } else {
+                                            fp.name.clone()
+                                        };
+                                    let alloca = self
+                                        .builder
+                                        .build_alloca(
+                                            stype
+                                                .get_field_type_at_index(idx as u32)
+                                                .unwrap_or(self.context.i64_type().into()),
+                                            &bind_name,
+                                        )
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    self.builder
+                                        .build_store(alloca, extracted)
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    self.variables.insert(bind_name.clone(), alloca);
+                                    self.var_types.insert(
+                                        bind_name,
+                                        stype
+                                            .get_field_type_at_index(idx as u32)
+                                            .unwrap_or(self.context.i64_type().into()),
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    let body_val = self.compile_expr(&arm.body)?;
+                    if let Some(val) = body_val {
+                        self.builder
+                            .build_store(result_alloca, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        if let Some(exit_bb) = self.builder.get_insert_block() {
+                            incoming.push((val, exit_bb));
+                        }
+                    }
+                    if self
+                        .builder
+                        .get_insert_block()
+                        .is_some_and(|b| b.get_terminator().is_none())
+                    {
+                        self.builder
+                            .build_unconditional_branch(merge_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    break; // Struct pattern is exhaustive
+                }
+
                 _ => {
-                    // F7: Unsupported patterns (Range, Tuple, Struct) — if last arm,
-                    // treat as wildcard; otherwise error so bugs surface.
+                    // Remaining unsupported patterns (Array, Binding) — if last arm,
+                    // treat as wildcard; otherwise error.
                     if is_last {
-                        // Last arm with unsupported pattern: treat as default/wildcard
                         let body_val = self.compile_expr(&arm.body)?;
                         if let Some(val) = body_val {
                             self.builder
