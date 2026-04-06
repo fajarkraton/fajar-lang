@@ -75,9 +75,9 @@ fn main() {
     bench_gpu(1024)
     println("")
 
-    println("Note: GPU time includes tensor f64->f32 + upload + kernel + download + f32->f64")
-    println("      CUDA device is cached after first call (no re-init overhead)")
-    println("      PTX kernels are JIT-compiled per call (cacheable in future)")
+    println("Note: GPU time includes f64->f32 + async upload + kernel + async download + f32->f64")
+    println("      CUDA device + compiled kernels cached (no re-init or re-JIT)")
+    println("      Async stream pipeline: upload → kernel → download → sync")
     println("")
     println("RTX 4090 Laptop: 76 SMs, 9728 CUDA cores, 16GB GDDR6X")
     println("Tiled kernel: 16x16 shared memory, sm_89 Ada Lovelace")

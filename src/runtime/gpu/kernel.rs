@@ -88,7 +88,7 @@ impl Default for WorkgroupSize {
 }
 
 /// A compiled GPU compute kernel, ready for dispatch.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GpuKernel {
     /// Unique kernel identifier.
     id: u64,

@@ -368,8 +368,13 @@ pub struct CudaDevice {
     info: GpuDeviceInfo,
     _lib: Library,
     context: *mut c_void,
+    /// CUDA stream for async operations (upload→compute→download pipeline).
+    stream: *mut c_void,
     /// Loaded kernels, keyed by GpuKernel::id().
     kernels: Mutex<HashMap<u64, CudaKernelData>>,
+    /// Compiled kernel cache: BuiltinKernel → cached GpuKernel.
+    /// Avoids re-JIT-compiling the same PTX on every call.
+    kernel_cache: Mutex<HashMap<u8, GpuKernel>>,
 }
 
 // SAFETY: CUDA context is thread-safe when used with cuCtxSetCurrent
@@ -470,6 +475,18 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
             continue;
         }
 
+        // Create a CUDA stream for async operations
+        // SAFETY: cuStreamCreate is safe after cuCtxCreate succeeds
+        let mut stream: *mut c_void = std::ptr::null_mut();
+        let cu_stream_create: Result<
+            Symbol<unsafe extern "C" fn(*mut *mut c_void, u32) -> i32>,
+            _,
+        > = unsafe { lib.get(b"cuStreamCreate") };
+        if let Ok(create_fn) = cu_stream_create {
+            // flags=0 = default stream behavior
+            let _ = unsafe { create_fn(&mut stream, 0) };
+        }
+
         let info = GpuDeviceInfo {
             name,
             memory: total_mem as u64,
@@ -485,7 +502,9 @@ pub fn enumerate_devices() -> Result<Vec<Box<dyn GpuDevice>>, GpuError> {
             _lib: unsafe { Library::new("libcuda.so") }
                 .map_err(|e| GpuError::BackendError(e.to_string()))?,
             context,
+            stream,
             kernels: Mutex::new(HashMap::new()),
+            kernel_cache: Mutex::new(HashMap::new()),
         }));
     }
 
@@ -579,11 +598,8 @@ impl CudaDevice {
         > = unsafe { lib.get(b"cuLaunchKernel") }
             .map_err(|e| GpuError::BackendError(format!("cuLaunchKernel not found: {e}")))?;
 
-        let cu_ctx_synchronize: Symbol<unsafe extern "C" fn() -> i32> =
-            unsafe { lib.get(b"cuCtxSynchronize") }
-                .map_err(|e| GpuError::BackendError(format!("cuCtxSynchronize not found: {e}")))?;
-
         // SAFETY: function is a valid CUfunction, args point to valid kernel parameters
+        // Launch on our stream (or default if stream is null)
         let r = unsafe {
             cu_launch_kernel(
                 function,
@@ -594,7 +610,7 @@ impl CudaDevice {
                 block.1,
                 block.2,
                 0,                    // shared memory bytes
-                std::ptr::null_mut(), // default stream
+                self.stream,          // our stream (null = default)
                 args.as_mut_ptr(),    // kernel arguments
                 std::ptr::null_mut(), // extra (unused)
             )
@@ -605,13 +621,20 @@ impl CudaDevice {
             )));
         }
 
-        // Wait for kernel to complete
-        // SAFETY: synchronizes the current CUDA context
-        let r = unsafe { cu_ctx_synchronize() };
-        if r != 0 {
-            return Err(GpuError::DispatchFailed(format!(
-                "cuCtxSynchronize failed: error {r}"
-            )));
+        // If using a stream, kernel runs async — sync happens in download().
+        // If no stream (fallback), synchronize the context now.
+        if self.stream.is_null() {
+            let cu_ctx_synchronize: Symbol<unsafe extern "C" fn() -> i32> = unsafe {
+                lib.get(b"cuCtxSynchronize")
+            }
+            .map_err(|e| GpuError::BackendError(format!("cuCtxSynchronize not found: {e}")))?;
+            // SAFETY: synchronizes the current CUDA context
+            let r = unsafe { cu_ctx_synchronize() };
+            if r != 0 {
+                return Err(GpuError::DispatchFailed(format!(
+                    "cuCtxSynchronize failed: error {r}"
+                )));
+            }
         }
 
         Ok(())
@@ -657,13 +680,32 @@ impl GpuDevice for CudaDevice {
             .as_handle()
             .ok_or_else(|| GpuError::BackendError("not a CUDA buffer".into()))?;
 
-        // SAFETY: loading and calling cuMemcpyHtoD_v2
+        // SAFETY: loading CUDA driver API symbols
         let lib = unsafe { Library::new("libcuda.so") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
+
+        // Use async memcpy on the device stream (no sync needed — kernel ordering handles it)
+        if !self.stream.is_null() {
+            let cu_memcpy_async: Result<
+                Symbol<unsafe extern "C" fn(u64, *const u8, usize, *mut c_void) -> i32>,
+                _,
+            > = unsafe { lib.get(b"cuMemcpyHtoDAsync_v2") };
+            if let Ok(memcpy_fn) = cu_memcpy_async {
+                // SAFETY: async copy host→device on our stream
+                let r = unsafe { memcpy_fn(dev_ptr, data.as_ptr(), data.len(), self.stream) };
+                if r != 0 {
+                    return Err(GpuError::BackendError(format!(
+                        "cuMemcpyHtoDAsync failed: {r}"
+                    )));
+                }
+                return Ok(());
+            }
+        }
+
+        // Fallback: synchronous memcpy
         let cu_memcpy: Symbol<unsafe extern "C" fn(u64, *const u8, usize) -> i32> =
             unsafe { lib.get(b"cuMemcpyHtoD_v2") }
                 .map_err(|e| GpuError::BackendError(e.to_string()))?;
-
         // SAFETY: copying host data to device — valid pointers and size
         let r = unsafe { cu_memcpy(dev_ptr, data.as_ptr(), data.len()) };
         if r != 0 {
@@ -685,13 +727,42 @@ impl GpuDevice for CudaDevice {
             .as_handle()
             .ok_or_else(|| GpuError::BackendError("not a CUDA buffer".into()))?;
 
-        // SAFETY: loading and calling cuMemcpyDtoH_v2
+        // SAFETY: loading CUDA driver API symbols
         let lib = unsafe { Library::new("libcuda.so") }
             .map_err(|e| GpuError::BackendError(e.to_string()))?;
+
+        // Use async memcpy + stream sync (single synchronization point)
+        if !self.stream.is_null() {
+            let cu_memcpy_async: Result<
+                Symbol<unsafe extern "C" fn(*mut u8, u64, usize, *mut c_void) -> i32>,
+                _,
+            > = unsafe { lib.get(b"cuMemcpyDtoHAsync_v2") };
+            let cu_stream_sync: Result<Symbol<unsafe extern "C" fn(*mut c_void) -> i32>, _> =
+                unsafe { lib.get(b"cuStreamSynchronize") };
+
+            if let (Ok(memcpy_fn), Ok(sync_fn)) = (cu_memcpy_async, cu_stream_sync) {
+                // SAFETY: async copy device→host on our stream
+                let r = unsafe { memcpy_fn(dst.as_mut_ptr(), dev_ptr, dst.len(), self.stream) };
+                if r != 0 {
+                    return Err(GpuError::BackendError(format!(
+                        "cuMemcpyDtoHAsync failed: {r}"
+                    )));
+                }
+                // SAFETY: wait for all stream operations to complete
+                let r = unsafe { sync_fn(self.stream) };
+                if r != 0 {
+                    return Err(GpuError::BackendError(format!(
+                        "cuStreamSynchronize failed: {r}"
+                    )));
+                }
+                return Ok(());
+            }
+        }
+
+        // Fallback: synchronous memcpy
         let cu_memcpy: Symbol<unsafe extern "C" fn(*mut u8, u64, usize) -> i32> =
             unsafe { lib.get(b"cuMemcpyDtoH_v2") }
                 .map_err(|e| GpuError::BackendError(e.to_string()))?;
-
         // SAFETY: copying device data to host — valid pointers and size
         let r = unsafe { cu_memcpy(dst.as_mut_ptr(), dev_ptr, dst.len()) };
         if r != 0 {
@@ -717,6 +788,18 @@ impl GpuDevice for CudaDevice {
     }
 
     fn compile_kernel(&self, source: &KernelSource) -> Result<GpuKernel, GpuError> {
+        // Check cache for builtin kernels (avoids re-JIT-compiling same PTX)
+        if let KernelSource::Builtin(builtin) = source {
+            let cache_key = *builtin as u8;
+            let cache = self
+                .kernel_cache
+                .lock()
+                .map_err(|e| GpuError::BackendError(format!("cache lock poisoned: {e}")))?;
+            if let Some(cached) = cache.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+
         let (entry_name, ptx_source, kind, num_bindings, workgroup_size) = match source {
             KernelSource::Ptx(ptx) => {
                 // User-supplied PTX — extract entry name from first .entry directive
@@ -784,6 +867,13 @@ impl GpuDevice for CudaDevice {
             .lock()
             .map_err(|e| GpuError::BackendError(format!("kernel lock poisoned: {e}")))?;
         kernels.insert(kernel.id(), data);
+
+        // Cache builtin kernels for reuse
+        if let KernelSource::Builtin(builtin) = source {
+            if let Ok(mut cache) = self.kernel_cache.lock() {
+                cache.insert(*builtin as u8, kernel.clone());
+            }
+        }
 
         Ok(kernel)
     }
@@ -954,6 +1044,18 @@ impl Drop for CudaDevice {
                             unsafe { cu_module_unload(kdata._module) };
                         }
                     }
+                }
+            }
+        }
+
+        // Destroy CUDA stream
+        if !self.stream.is_null() {
+            // SAFETY: destroying CUDA stream we created
+            if let Ok(lib) = unsafe { Library::new("libcuda.so") } {
+                if let Ok(cu_stream_destroy) = unsafe {
+                    lib.get::<unsafe extern "C" fn(*mut c_void) -> i32>(b"cuStreamDestroy_v2")
+                } {
+                    unsafe { cu_stream_destroy(self.stream) };
                 }
             }
         }
