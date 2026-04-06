@@ -3930,14 +3930,23 @@ fj_rt_bare_print:
     ret
 .size fj_rt_bare_print, . - fj_rt_bare_print
 
+/* User-mode _start: calls main() then SYS_EXIT(0) */
+.global _start
+.type _start, @function
+_start:
+    call    main
+    xor     edi, edi        /* exit code 0 */
+    /* fall through to fj_user_exit */
+
 /* User-mode exit: SYS_EXIT(code=rdi) */
 .global fj_user_exit
 .type fj_user_exit, @function
 fj_user_exit:
-    mov     rax, 60         /* SYS_EXIT */
+    mov     rax, 0          /* SYS_EXIT = 0 (FajarOS, not Linux 60) */
     syscall
-    /* never returns */
+    hlt
 .size fj_user_exit, . - fj_user_exit
+.size _start, . - _start
 
 /* User-mode getpid: SYS_GETPID() -> rax */
 .global fj_user_getpid
@@ -3947,7 +3956,6 @@ fj_user_getpid:
     syscall
     ret
 .size fj_user_getpid, . - fj_user_getpid
-.size fj_user_exit, . - fj_user_exit
 
 /* User-mode memory fence (no-op in user space) */
 .global fj_rt_bare_memory_fence
