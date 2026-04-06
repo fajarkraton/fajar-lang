@@ -16753,50 +16753,58 @@ fn actor_real_status() {
 
 #[test]
 fn actor_supervise_strategy() {
-    // actor_supervise stores strategy
+    // actor_supervise returns Map with supervision strategy
     let src = r#"
         fn handler(msg: str) { }
         fn main() {
             let a = actor_spawn("sup", "handler")
             let result = actor_supervise(a, "all_for_one")
+            println(map_get_or(result, "supervision", "none"))
+            actor_stop(a)
+        }
+    "#;
+    let out = eval_output(src);
+    assert!(
+        out[0].contains("all_for_one"),
+        "supervise returns strategy map: {out:?}"
+    );
+}
+
+#[test]
+fn actor_send_calls_handler() {
+    // actor_send executes handler synchronously and returns result
+    let src = r#"
+        fn handler(msg: str) -> str { "got: " + msg }
+        fn main() {
+            let a = actor_spawn("b", "handler")
+            let result = actor_send(a, "test")
             println(result)
             actor_stop(a)
         }
     "#;
     let out = eval_output(src);
     assert!(
-        out[0].contains("supervised"),
-        "supervise returns strategy: {out:?}"
+        out[0].contains("got: test"),
+        "actor_send returns handler result: {out:?}"
     );
 }
 
 #[test]
-fn actor_send_returns_bool() {
-    // actor_send returns true on success
-    let src = r#"
-        fn handler(msg: str) { }
-        fn main() {
-            let a = actor_spawn("b", "handler")
-            let ok = actor_send(a, "test")
-            println(ok)
-            actor_stop(a)
-        }
-    "#;
-    let out = eval_output(src);
-    assert_eq!(out[0], "true", "actor_send returns true: {out:?}");
-}
-
-#[test]
-fn actor_spawn_returns_int_id() {
-    // actor_spawn returns integer actor ID
+fn actor_spawn_returns_map() {
+    // actor_spawn returns Map with _type, name, addr, id
     let src = r#"
         fn handler(msg: str) { }
         fn main() {
             let a = actor_spawn("id_test", "handler")
             println(type_of(a))
+            println(map_get_or(a, "_type", "unknown"))
             actor_stop(a)
         }
     "#;
     let out = eval_output(src);
-    assert_eq!(out[0], "i64", "actor_spawn returns i64: {out:?}");
+    assert_eq!(out[0], "map", "actor_spawn returns map: {out:?}");
+    assert!(
+        out[1].contains("Actor"),
+        "actor type should be Actor: {out:?}"
+    );
 }

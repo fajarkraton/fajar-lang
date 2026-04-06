@@ -1473,7 +1473,13 @@ impl Interpreter {
                         handler_env: handler_fv.closure_env.clone(),
                     },
                 );
-                Ok(Value::Int(id))
+                // Return actor handle as Map with metadata
+                let mut actor_map = std::collections::HashMap::new();
+                actor_map.insert("_type".to_string(), Value::Str("Actor".to_string()));
+                actor_map.insert("name".to_string(), Value::Str(name));
+                actor_map.insert("addr".to_string(), Value::Int(id));
+                actor_map.insert("id".to_string(), Value::Int(id));
+                Ok(Value::Map(actor_map))
             }
             "actor_send" => {
                 if args.len() != 2 {
@@ -1483,20 +1489,47 @@ impl Interpreter {
                     }
                     .into());
                 }
+                // Accept both Int(id) and Map({ id: N }) as actor handle
                 let actor_id = match &args[0] {
                     Value::Int(id) => *id,
+                    Value::Map(m) => match m.get("id").or_else(|| m.get("addr")) {
+                        Some(Value::Int(id)) => *id,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "actor_send: map must have 'id' or 'addr' field".into(),
+                            )
+                            .into());
+                        }
+                    },
                     _ => {
-                        return Err(RuntimeError::TypeError(
-                            "actor_send(actor_id, message)".into(),
-                        )
-                        .into());
+                        return Err(
+                            RuntimeError::TypeError("actor_send(actor, message)".into()).into()
+                        );
                     }
                 };
                 let message = args[1].clone();
                 if let Some(handle) = self.actor_registry.get(&actor_id) {
-                    match handle.tx.send(message) {
-                        Ok(()) => Ok(Value::Bool(true)),
-                        Err(_) => Ok(Value::Bool(false)), // actor thread has stopped
+                    // Execute handler synchronously to get return value
+                    // Look up handler function by name
+                    let fn_name = handle.handler_fn.clone();
+                    let handler_fn = self
+                        .env
+                        .lock()
+                        .expect("env lock")
+                        .lookup(&fn_name)
+                        .ok_or_else(|| {
+                            RuntimeError::TypeError(format!(
+                                "actor_send: handler '{fn_name}' not found"
+                            ))
+                        })?;
+                    if let Value::Function(fv) = handler_fn {
+                        self.call_function(&fv, vec![message])
+                    } else {
+                        // Fallback: send to actor thread asynchronously
+                        match handle.tx.send(message) {
+                            Ok(()) => Ok(Value::Bool(true)),
+                            Err(_) => Ok(Value::Bool(false)),
+                        }
                     }
                 } else {
                     Err(
@@ -1513,20 +1546,30 @@ impl Interpreter {
                     }
                     .into());
                 }
+                // Accept both Int(id) and Map({ id: N }) as actor handle
                 let actor_id = match &args[0] {
                     Value::Int(id) => *id,
+                    Value::Map(m) => match m.get("id").or_else(|| m.get("addr")) {
+                        Some(Value::Int(id)) => *id,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "actor_supervise: map must have 'id' or 'addr' field".into(),
+                            )
+                            .into());
+                        }
+                    },
                     _ => {
                         return Err(RuntimeError::TypeError(
-                            "actor_supervise(actor_id, strategy)".into(),
+                            "actor_supervise(actor, strategy)".into(),
                         )
                         .into());
                     }
                 };
                 let strategy_str = match &args[1] {
-                    Value::Str(s) => s.as_str(),
-                    _ => "one_for_one",
+                    Value::Str(s) => s.clone(),
+                    _ => "one_for_one".to_string(),
                 };
-                let strategy = match strategy_str {
+                let strategy = match strategy_str.as_str() {
                     "all_for_one" => crate::concurrency_v2::actors::SupervisionStrategy::AllForOne,
                     "rest_for_one" => {
                         crate::concurrency_v2::actors::SupervisionStrategy::RestForOne
@@ -1535,7 +1578,14 @@ impl Interpreter {
                 };
                 if let Some(handle) = self.actor_registry.get_mut(&actor_id) {
                     handle.strategy = strategy;
-                    Ok(Value::Str(format!("supervised: {strategy_str}")))
+                    // Return Map with supervision metadata
+                    let mut result_map = std::collections::HashMap::new();
+                    result_map.insert("_type".to_string(), Value::Str("Actor".to_string()));
+                    result_map.insert("name".to_string(), Value::Str(handle.name.clone()));
+                    result_map.insert("addr".to_string(), Value::Int(actor_id));
+                    result_map.insert("id".to_string(), Value::Int(actor_id));
+                    result_map.insert("supervision".to_string(), Value::Str(strategy_str));
+                    Ok(Value::Map(result_map))
                 } else {
                     Err(RuntimeError::TypeError(format!(
                         "actor_supervise: no actor with id {actor_id}"
@@ -1553,8 +1603,17 @@ impl Interpreter {
                 }
                 let actor_id = match &args[0] {
                     Value::Int(id) => *id,
+                    Value::Map(m) => match m.get("id").or_else(|| m.get("addr")) {
+                        Some(Value::Int(id)) => *id,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "actor_stop: map must have 'id'".into(),
+                            )
+                            .into());
+                        }
+                    },
                     _ => {
-                        return Err(RuntimeError::TypeError("actor_stop(actor_id)".into()).into());
+                        return Err(RuntimeError::TypeError("actor_stop(actor)".into()).into());
                     }
                 };
                 if let Some(mut handle) = self.actor_registry.remove(&actor_id) {
@@ -1581,8 +1640,17 @@ impl Interpreter {
                 }
                 let actor_id = match &args[0] {
                     Value::Int(id) => *id,
+                    Value::Map(m) => match m.get("id").or_else(|| m.get("addr")) {
+                        Some(Value::Int(id)) => *id,
+                        _ => {
+                            return Err(RuntimeError::TypeError(
+                                "actor_status: map must have 'id'".into(),
+                            )
+                            .into());
+                        }
+                    },
                     _ => {
-                        return Err(RuntimeError::TypeError("actor_status(actor_id)".into()).into());
+                        return Err(RuntimeError::TypeError("actor_status(actor)".into()).into());
                     }
                 };
                 if let Some(handle) = self.actor_registry.get(&actor_id) {
