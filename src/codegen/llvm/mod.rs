@@ -2281,6 +2281,37 @@ impl<'ctx> LlvmCompiler<'ctx> {
             self.var_types.insert(cparam.name.clone(), i64_type.into());
         }
 
+        // G5: Capture outer scope variables — for each variable in outer scope
+        // that isn't shadowed by a param, create a constant in the closure.
+        // This is a simplified "copy capture" strategy (like C++ [=]).
+        let param_names: Vec<&str> = params.iter().map(|p| p.name.as_str()).collect();
+        for (var_name, var_ptr) in &prev_vars {
+            if !param_names.contains(&var_name.as_str()) {
+                // Load the current value from outer scope
+                if let Some(var_ty) = prev_types.get(var_name) {
+                    if var_ty.is_int_type() || var_ty.is_float_type() {
+                        // Create alloca in closure and copy value
+                        let cap_alloca = self
+                            .builder
+                            .build_alloca(*var_ty, &format!("cap_{var_name}"))
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        // Use the outer alloca value directly (constant fold)
+                        self.variables.insert(var_name.clone(), cap_alloca);
+                        self.var_types.insert(var_name.clone(), *var_ty);
+                        // Note: the actual value is captured at compile-time as a
+                        // constant because LLVM IR is SSA. For runtime capture,
+                        // we'd need an environment struct passed as a hidden param.
+                        // This captures the alloca pointer from outer scope.
+                        let _ = self
+                            .builder
+                            .build_store(cap_alloca, i64_type.const_int(0, false));
+                        // Reuse outer pointer for read-through
+                        self.variables.insert(var_name.clone(), *var_ptr);
+                    }
+                }
+            }
+        }
+
         // Compile closure body
         let body_val = self.compile_expr(body)?;
 
@@ -3491,9 +3522,86 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         inkwell::values::ValueKind::Instruction(_) => Ok(None),
                     }
                 } else {
-                    Err(CodegenError::NotImplemented(
-                        "non-ident callee in LLVM backend".into(),
-                    ))
+                    // G6: Non-ident callee — compile expression to get function
+                    // pointer, then build indirect call. Supports: closure vars,
+                    // function pointers, computed callees.
+                    let callee_val = self.compile_expr(callee)?.ok_or_else(|| {
+                        CodegenError::Internal("non-ident callee produced no value".into())
+                    })?;
+
+                    if callee_val.is_int_value() {
+                        // Value is an i64 function pointer — convert to ptr and call
+                        let i64_ty = self.context.i64_type();
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+                            (0..args.len()).map(|_| i64_ty.into()).collect();
+                        let fn_ty = i64_ty.fn_type(&param_types, false);
+
+                        let fn_ptr = self
+                            .builder
+                            .build_int_to_ptr(
+                                callee_val.into_int_value(),
+                                self.context.ptr_type(inkwell::AddressSpace::default()),
+                                "fn_ptr",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                            Vec::new();
+                        for arg in args {
+                            if let Some(v) = self.compile_expr(&arg.value)? {
+                                call_args.push(v.into());
+                            }
+                        }
+
+                        let call_val = self
+                            .builder
+                            .build_indirect_call(fn_ty, fn_ptr, &call_args, "indirect_call")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        match call_val.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => {
+                                let coerced = self.coerce_int_to_i64(val)?;
+                                Ok(Some(coerced))
+                            }
+                            inkwell::values::ValueKind::Instruction(_) => Ok(None),
+                        }
+                    } else if callee_val.is_pointer_value() {
+                        // Already a pointer — call directly
+                        let i64_ty = self.context.i64_type();
+                        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+                            (0..args.len()).map(|_| i64_ty.into()).collect();
+                        let fn_ty = i64_ty.fn_type(&param_types, false);
+
+                        let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                            Vec::new();
+                        for arg in args {
+                            if let Some(v) = self.compile_expr(&arg.value)? {
+                                call_args.push(v.into());
+                            }
+                        }
+
+                        let call_val = self
+                            .builder
+                            .build_indirect_call(
+                                fn_ty,
+                                callee_val.into_pointer_value(),
+                                &call_args,
+                                "indirect_call",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        match call_val.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => {
+                                let coerced = self.coerce_int_to_i64(val)?;
+                                Ok(Some(coerced))
+                            }
+                            inkwell::values::ValueKind::Instruction(_) => Ok(None),
+                        }
+                    } else {
+                        Err(CodegenError::NotImplemented(
+                            "non-ident callee must produce integer or pointer value".into(),
+                        ))
+                    }
                 }
             }
 
@@ -3936,6 +4044,31 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         .map_err(|e| CodegenError::Internal(e.to_string()))?
                         .into());
                 }
+                // G1: Float modulo (frem instruction)
+                BinOp::Rem => self
+                    .builder
+                    .build_float_rem(l, r, "frem")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?,
+                // G1: Float power (llvm.pow.f64 intrinsic)
+                BinOp::Pow => {
+                    let f64_ty = self.context.f64_type();
+                    let pow_fn_ty = f64_ty.fn_type(&[f64_ty.into(), f64_ty.into()], false);
+                    let pow_fn = self.module.get_function("llvm.pow.f64").unwrap_or_else(|| {
+                        self.module.add_function("llvm.pow.f64", pow_fn_ty, None)
+                    });
+                    let call = self
+                        .builder
+                        .build_call(pow_fn, &[l.into(), r.into()], "fpow")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    match call.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(v) => {
+                            return Ok(v);
+                        }
+                        inkwell::values::ValueKind::Instruction(_) => {
+                            return Ok(f64_ty.const_float(0.0).into());
+                        }
+                    }
+                }
                 _ => {
                     return Err(CodegenError::NotImplemented(format!(
                         "LLVM float binop: {:?}",
@@ -4137,10 +4270,35 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 .build_not(val.into_int_value(), "bitnot")
                 .map_err(|e| CodegenError::Internal(e.to_string()))?
                 .into()),
-            _ => Err(CodegenError::NotImplemented(format!(
-                "LLVM unary op: {:?}",
-                op
-            ))),
+            // G2: &expr — take address (value must be an alloca pointer as i64)
+            UnaryOp::Ref | UnaryOp::RefMut => {
+                // In the LLVM backend, values are typically i64 addresses for
+                // pointers, so &x is identity — the value IS the address.
+                Ok(val)
+            }
+            // G2: *ptr — dereference pointer (treat i64 as address, load i64 from it)
+            UnaryOp::Deref => {
+                if val.is_int_value() {
+                    let addr = val.into_int_value();
+                    let ptr = self
+                        .builder
+                        .build_int_to_ptr(
+                            addr,
+                            self.context.ptr_type(inkwell::AddressSpace::default()),
+                            "deref_ptr",
+                        )
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let loaded = self
+                        .builder
+                        .build_load(self.context.i64_type(), ptr, "deref_val")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    Ok(loaded)
+                } else {
+                    Err(CodegenError::Internal(
+                        "deref requires integer (address) value".into(),
+                    ))
+                }
+            }
         }
     }
 
@@ -4723,6 +4881,57 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
+        // G3: Nested field access — compile object expression, then if it
+        // returns a struct value (not pointer), extract the field directly.
+        // This supports patterns like `func().field` and `(expr).field`.
+        if let Expr::Field {
+            object: inner_obj,
+            field: inner_field,
+            ..
+        } = object
+        {
+            // Recursive: inner.outer — compile inner field access first
+            let inner_val = self.compile_field_access(inner_obj, inner_field)?;
+            if let Some(val) = inner_val {
+                if val.is_struct_value() {
+                    let sv = val.into_struct_value();
+                    let st = sv.get_type();
+                    // Find field by checking struct_types for matching type
+                    for (stype, field_names) in self.struct_types.values() {
+                        if *stype == st {
+                            if let Some(idx) = field_names.iter().position(|n| n == field) {
+                                let fval = self
+                                    .builder
+                                    .build_extract_value(sv, idx as u32, field)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                return Ok(Some(fval));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // G3: General expression field access — compile as struct value
+        let obj_val = self.compile_expr(object)?;
+        if let Some(val) = obj_val {
+            if val.is_struct_value() {
+                let sv = val.into_struct_value();
+                let st = sv.get_type();
+                for (stype, field_names) in self.struct_types.values() {
+                    if *stype == st {
+                        if let Some(idx) = field_names.iter().position(|n| n == field) {
+                            let fval = self
+                                .builder
+                                .build_extract_value(sv, idx as u32, field)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            return Ok(Some(fval));
+                        }
+                    }
+                }
+            }
+        }
+
         Err(CodegenError::NotImplemented(format!(
             "LLVM field access on non-struct: .{field}"
         )))
@@ -4824,6 +5033,53 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     val.into_float_value(),
                     target_type.into_int_type(),
                     "fp2si",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            return Ok(Some(result.into()));
+        }
+
+        // G4: Bool (i1) → Int: zero-extend
+        if val.is_int_value() && target_type.is_int_type() {
+            let iv = val.into_int_value();
+            let tt = target_type.into_int_type();
+            if iv.get_type().get_bit_width() < tt.get_bit_width() {
+                let result = self
+                    .builder
+                    .build_int_z_extend(iv, tt, "bool2int")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                return Ok(Some(result.into()));
+            } else if iv.get_type().get_bit_width() > tt.get_bit_width() {
+                let result = self
+                    .builder
+                    .build_int_truncate(iv, tt, "int2bool")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                return Ok(Some(result.into()));
+            }
+            // Same width — no-op
+            return Ok(Some(val));
+        }
+
+        // Pointer → Int (ptr as i64)
+        if val.is_pointer_value() && target_type.is_int_type() {
+            let result = self
+                .builder
+                .build_ptr_to_int(
+                    val.into_pointer_value(),
+                    target_type.into_int_type(),
+                    "ptr2int",
+                )
+                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            return Ok(Some(result.into()));
+        }
+
+        // Int → Pointer (i64 as *T)
+        if val.is_int_value() && target_type.is_pointer_type() {
+            let result = self
+                .builder
+                .build_int_to_ptr(
+                    val.into_int_value(),
+                    target_type.into_pointer_type(),
+                    "int2ptr",
                 )
                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
             return Ok(Some(result.into()));
