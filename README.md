@@ -5,11 +5,12 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v20.8.0](https://img.shields.io/badge/release-v20.8.0_Perfection-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v20.8.0)
-[![Tests](https://img.shields.io/badge/tests-10%2C400%2B_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![LOC](https://img.shields.io/badge/LOC-459K_Rust-informational)]()
-[![Production](https://img.shields.io/badge/audit-100%25_Pass-success)]()
-[![FajarQuant](https://img.shields.io/badge/FajarQuant-49--86%25_better-orange)]()
+[![Release v23.0.0](https://img.shields.io/badge/release-v23.0.0_Boot-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v23.0.0)
+[![Tests](https://img.shields.io/badge/tests-7%2C572_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![LOC](https://img.shields.io/badge/LOC-442K_Rust-informational)]()
+[![FajarOS](https://img.shields.io/badge/FajarOS-boots_to_shell-success)]()
+[![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
+[![FajarQuant](https://img.shields.io/badge/FajarQuant-kernel_native-orange)]()
 [![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -335,23 +336,24 @@ Two complete operating systems are written 100% in Fajar Lang, demonstrating the
 
 ### FajarOS Nova (x86_64)
 
-A bare-metal x86_64 operating system. The kernel is a single 20,176-line Fajar Lang file compiled to a bootable ELF binary.
+A bare-metal x86_64 operating system written 100% in Fajar Lang. Boots to an interactive shell with 105 working commands, Ring 3 user-mode programs, NVMe storage, and kernel-native FajarQuant quantization.
 
 | Feature | Details |
 |---------|---------|
-| Kernel | 20,176 LOC, 757 `@kernel` functions |
-| Shell | 240+ commands |
-| Scheduler | Preemptive multitasking (timer-driven, round-robin) |
-| Memory | Copy-on-Write fork, 4-level page tables, refcounting |
-| Ring 3 | 5 user programs via `SYSCALL` instruction |
-| Syscalls | 34 via table dispatch (EXIT through GPU_DISPATCH) |
-| Storage | NVMe + FAT32 + ext2 + USB + ramdisk + journaling |
+| Kernel | 41,400+ LOC (154 `.fj` files), 1.15 MB LLVM O2 ELF |
+| Shell | 105 commands tested (90/90 automated, 0 crashes) |
+| Boot | 61 init stages via GRUB Multiboot2, boots to `nova>` prompt |
+| Ring 3 | User-mode ELF via IRETQ + SYSCALL/SYSRETQ (SYS_EXIT returns to shell) |
+| FajarQuant | Lloyd-Max 2-bit/4-bit quantization in `@kernel` context — `quant` command |
+| Scheduler | Preemptive multitasking (PIT 100Hz, round-robin) |
+| Memory | 128MB identity-mapped, frame allocator (hardware BSF/POPCNT), 4-level paging |
+| ACPI | RSDP/XSDT/MADT parsing, CPU enumeration, page-mapped tables |
+| Storage | NVMe (QEMU NVMe Ctrl 64MB) + ramdisk fallback |
 | VFS | `/`, `/dev`, `/proc`, `/mnt` + symlinks + hardlinks |
-| Network | TCP (RFC 793) + UDP + HTTP server + socket API |
-| GPU | VirtIO-GPU framebuffer (320x200) + compute dispatch |
-| Users | Multi-user (16 accounts), login/logout, chmod/chown |
-| Services | Init system (16 services), runlevels, syslogd, crond |
-| Packages | `pkg install/remove/list/search/update/upgrade` |
+| Network | TCP (RFC 793) + UDP + HTTP + socket API |
+| GPU | VirtIO-GPU + Multiboot2 framebuffer (1024x768x32) |
+| Desktop | Compositor + animations + virtual desktops + 5 apps |
+| Interrupts | PIC IRQ handlers (32-47), LAPIC spurious (255), 6 exception vectors |
 | SMP | Multi-core boot (INIT-SIPI-SIPI) |
 | ELF | ELF64 loader, PT_LOAD, exec from FAT32/ramfs |
 | Processes | fork(CoW)/exec/waitpid, signals, job control |
@@ -537,7 +539,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
 | Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |
 | Documentation | 55+ docs, 14 tutorials, 26 references, 15 guides |
-| FajarOS Nova (x86_64) | 21,396 LOC, 835 functions, 270+ commands, 34 syscalls |
+| FajarOS Nova (x86_64) | 41,400+ LOC, 154 files, 105 commands (90 auto-tested), Ring 3, NVMe, FajarQuant |
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
 | FFI v2 | C++ templates/STL/smart-ptr, Python async/NumPy, Rust traits, `fj bindgen` |
