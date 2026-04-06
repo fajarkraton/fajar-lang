@@ -3270,6 +3270,47 @@ fj_rt_bare_idt_init:
     lea     rbx, [rip + __idt_table + 33*16]
     call    .Lidt_set_entry
 
+    /* Vectors 34-39: PIC master IRQ2-7 — send EOI and return */
+    lea     rax, [rip + __isr_pic_master]
+    lea     r13, [rip + __idt_table + 34*16]
+    mov     rbx, r13
+    call    .Lidt_set_entry         /* 34 */
+    lea     rbx, [r13 + 16]
+    call    .Lidt_set_entry         /* 35 */
+    lea     rbx, [r13 + 32]
+    call    .Lidt_set_entry         /* 36 — COM1/IRQ4 */
+    lea     rbx, [r13 + 48]
+    call    .Lidt_set_entry         /* 37 */
+    lea     rbx, [r13 + 64]
+    call    .Lidt_set_entry         /* 38 */
+    lea     rbx, [r13 + 80]
+    call    .Lidt_set_entry         /* 39 */
+
+    /* Vectors 40-47: PIC slave IRQ8-15 — send EOI to both PICs and return */
+    lea     rax, [rip + __isr_pic_slave]
+    lea     r13, [rip + __idt_table + 40*16]
+    mov     rbx, r13
+    call    .Lidt_set_entry         /* 40 */
+    lea     rbx, [r13 + 16]
+    call    .Lidt_set_entry         /* 41 */
+    lea     rbx, [r13 + 32]
+    call    .Lidt_set_entry         /* 42 */
+    lea     rbx, [r13 + 48]
+    call    .Lidt_set_entry         /* 43 */
+    lea     rbx, [r13 + 64]
+    call    .Lidt_set_entry         /* 44 */
+    lea     rbx, [r13 + 80]
+    call    .Lidt_set_entry         /* 45 */
+    lea     rbx, [r13 + 96]
+    call    .Lidt_set_entry         /* 46 */
+    lea     rbx, [r13 + 112]
+    call    .Lidt_set_entry         /* 47 */
+
+    /* Vector 255: LAPIC Spurious Interrupt — just ignore and return */
+    lea     rax, [rip + __isr_spurious]
+    lea     rbx, [rip + __idt_table + 255*16]
+    call    .Lidt_set_entry
+
     /* Load IDT */
     sub     rsp, 16
     mov     WORD PTR [rsp], 4095        /* limit = 256*16 - 1 */
@@ -3347,6 +3388,27 @@ __isr_default:
     push    0               /* dummy error code */
     push    0xFF            /* vector = unknown */
     jmp     __isr_common
+
+/* PIC master IRQ (vectors 34-39): send EOI to master PIC, return */
+__isr_pic_master:
+    push    rax
+    mov     al, 0x20
+    out     0x20, al            /* EOI to master PIC */
+    pop     rax
+    iretq
+
+/* PIC slave IRQ (vectors 40-47): send EOI to both PICs, return */
+__isr_pic_slave:
+    push    rax
+    mov     al, 0x20
+    out     0xA0, al            /* EOI to slave PIC */
+    out     0x20, al            /* EOI to master PIC */
+    pop     rax
+    iretq
+
+/* Vector 255: LAPIC Spurious Interrupt — silently ignore */
+__isr_spurious:
+    iretq
 
 /* Vector 0: #DE Divide Error (no error code) */
 __isr_0:
