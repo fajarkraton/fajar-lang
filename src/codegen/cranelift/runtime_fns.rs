@@ -3475,17 +3475,23 @@ pub extern "C" fn fj_rt_tensor_save(
     let cols = t.ncols() as u64;
     let mut file = match std::fs::File::create(path) {
         Ok(f) => f,
-        Err(_) => return 0,
+        Err(e) => {
+            eprintln!("[fj_rt_tensor_save] failed to create '{path}': {e}");
+            return 0;
+        }
     };
     use std::io::Write;
-    if file.write_all(&rows.to_le_bytes()).is_err() {
+    if let Err(e) = file.write_all(&rows.to_le_bytes()) {
+        eprintln!("[fj_rt_tensor_save] write error: {e}");
         return 0;
     }
-    if file.write_all(&cols.to_le_bytes()).is_err() {
+    if let Err(e) = file.write_all(&cols.to_le_bytes()) {
+        eprintln!("[fj_rt_tensor_save] write error: {e}");
         return 0;
     }
     for &val in t.iter() {
-        if file.write_all(&val.to_le_bytes()).is_err() {
+        if let Err(e) = file.write_all(&val.to_le_bytes()) {
+            eprintln!("[fj_rt_tensor_save] write error: {e}");
             return 0;
         }
     }
@@ -3561,31 +3567,31 @@ pub extern "C" fn fj_rt_checkpoint_save(
     };
     let mut file = match std::fs::File::create(path) {
         Ok(f) => f,
-        Err(_) => return 0,
+        Err(e) => {
+            eprintln!("[fj_rt_checkpoint_save] failed to create '{path}': {e}");
+            return 0;
+        }
     };
     use std::io::Write;
     let magic: u32 = 0x464A_434B; // "FJCK"
-    if file.write_all(&magic.to_le_bytes()).is_err() {
-        return 0;
+    // Macro to reduce repetition in write error handling
+    macro_rules! write_or_fail {
+        ($data:expr) => {
+            if let Err(e) = file.write_all($data) {
+                eprintln!("[fj_rt_checkpoint_save] write error: {e}");
+                return 0;
+            }
+        };
     }
-    if file.write_all(&(epoch as u64).to_le_bytes()).is_err() {
-        return 0;
-    }
-    if file.write_all(&(loss_bits as u64).to_le_bytes()).is_err() {
-        return 0;
-    }
+    write_or_fail!(&magic.to_le_bytes());
+    write_or_fail!(&(epoch as u64).to_le_bytes());
+    write_or_fail!(&(loss_bits as u64).to_le_bytes());
     let rows = t.nrows() as u64;
     let cols = t.ncols() as u64;
-    if file.write_all(&rows.to_le_bytes()).is_err() {
-        return 0;
-    }
-    if file.write_all(&cols.to_le_bytes()).is_err() {
-        return 0;
-    }
+    write_or_fail!(&rows.to_le_bytes());
+    write_or_fail!(&cols.to_le_bytes());
     for &val in t.iter() {
-        if file.write_all(&val.to_le_bytes()).is_err() {
-            return 0;
-        }
+        write_or_fail!(&val.to_le_bytes());
     }
     1
 }
