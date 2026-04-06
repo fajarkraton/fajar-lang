@@ -1,9 +1,46 @@
-// GPU Benchmark — Fajar Lang
-// Detects RTX 4090 and runs CPU matmul benchmark
-// GPU kernel dispatch requires CUDA FFI (future)
+// GPU vs CPU Benchmark — Fajar Lang
+// Compares RTX 4090 CUDA matmul vs CPU ndarray matmul
+// Requires: cargo run --release --features cuda -- run examples/gpu_benchmark.fj
+
+fn bench_cpu(size: i32) {
+    let n = size
+    let a = randn(n, n)
+    let b = randn(n, n)
+    let t0 = timer_get_ticks()
+    let _r = matmul(a, b)
+    let t1 = timer_get_ticks()
+    let us = (t1 - t0) / 1000
+    print("  CPU  ")
+    print(n)
+    print("x")
+    print(n)
+    print(": ")
+    print(us)
+    println(" us")
+}
+
+fn bench_gpu(size: i32) {
+    let n = size
+    let a = randn(n, n)
+    let b = randn(n, n)
+    let t0 = timer_get_ticks()
+    let _r = gpu_matmul(a, b)
+    let t1 = timer_get_ticks()
+    let us = (t1 - t0) / 1000
+    print("  GPU  ")
+    print(n)
+    print("x")
+    print(n)
+    print(": ")
+    print(us)
+    println(" us")
+}
 
 fn main() {
-    println("=== Fajar Lang GPU Benchmark ===")
+    println("╔══════════════════════════════════════════════════╗")
+    println("║  Fajar Lang — GPU vs CPU Benchmark              ║")
+    println("║  RTX 4090 CUDA vs ndarray CPU                   ║")
+    println("╚══════════════════════════════════════════════════╝")
     println("")
 
     // Detect GPU
@@ -11,32 +48,38 @@ fn main() {
     println(info)
     println("")
 
-    // CPU matmul benchmarks
-    println("CPU Matrix Multiply (ndarray backend):")
-
-    let a1 = randn(64, 64)
-    let b1 = randn(64, 64)
-    let _r1 = matmul(a1, b1)
-    println("  64x64:   done")
-
-    let a2 = randn(128, 128)
-    let b2 = randn(128, 128)
-    let _r2 = matmul(a2, b2)
-    println("  128x128: done")
-
-    let a3 = randn(256, 256)
-    let b3 = randn(256, 256)
-    let _r3 = matmul(a3, b3)
-    println("  256x256: done")
-
+    // Warmup: first GPU call pays CUDA init + PTX JIT (~100ms one-time cost)
+    println("Warming up CUDA (init + PTX JIT compile)...")
+    let w = randn(4, 4)
+    let _warmup = gpu_matmul(w, w)
+    println("Done.")
     println("")
-    println("RTX 4090 specs:")
-    println("  FP32:  82.6 TFLOPS")
-    println("  TF32:  165 TFLOPS")
-    println("  FP16:  330 TFLOPS")
-    println("  INT8:  660 TOPS")
-    println("  BF16:  330 TFLOPS (Ada Lovelace Tensor Cores)")
+
+    // CPU benchmarks
+    println("=== CPU Matrix Multiply (ndarray BLAS) ===")
+    bench_cpu(32)
+    bench_cpu(64)
+    bench_cpu(128)
+    bench_cpu(256)
+    bench_cpu(512)
+    bench_cpu(1024)
     println("")
-    println("PTX target: sm_89 (Ada Lovelace)")
-    println("Fajar Lang types: FP32, FP16, BF16, FP8 (E4M3/E5M2)")
+
+    // GPU benchmarks (after warmup — CUDA already initialized)
+    println("=== GPU Matrix Multiply (CUDA PTX sm_89, tiled 16x16) ===")
+    bench_gpu(32)
+    bench_gpu(64)
+    bench_gpu(128)
+    bench_gpu(256)
+    bench_gpu(512)
+    bench_gpu(1024)
+    println("")
+
+    println("Note: GPU time includes tensor f64->f32 + upload + kernel + download + f32->f64")
+    println("      CUDA device is cached after first call (no re-init overhead)")
+    println("      PTX kernels are JIT-compiled per call (cacheable in future)")
+    println("")
+    println("RTX 4090 Laptop: 76 SMs, 9728 CUDA cores, 16GB GDDR6X")
+    println("Tiled kernel: 16x16 shared memory, sm_89 Ada Lovelace")
+    println("Pipeline: .fj → PTX → cuModuleLoadData → cuLaunchKernel")
 }

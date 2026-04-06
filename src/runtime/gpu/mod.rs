@@ -31,7 +31,11 @@ mod cuda_backend;
 #[cfg(feature = "cuda")]
 pub use cuda_backend::CudaDevice;
 
+use std::sync::{Arc, Mutex, OnceLock};
 use thiserror::Error;
+
+/// Cached GPU device for reuse across calls (avoids re-creating CUDA context).
+static CACHED_BEST_DEVICE: OnceLock<Mutex<Option<Arc<dyn GpuDevice>>>> = OnceLock::new();
 
 /// GPU compute error codes.
 #[derive(Debug, Error)]
@@ -97,15 +101,25 @@ pub fn available_devices() -> Vec<Box<dyn GpuDevice>> {
 }
 
 /// Get the best available GPU device, preferring real GPU over CPU fallback.
-pub fn best_device() -> Box<dyn GpuDevice> {
-    let devices = available_devices();
-    // Return first non-CPU device, or CPU fallback
-    for device in devices {
-        if device.info().backend != GpuBackend::CpuFallback {
-            return device;
-        }
+///
+/// The result is cached after the first call to avoid re-creating the CUDA context
+/// on every operation (~100ms overhead per cuCtxCreate).
+pub fn best_device() -> Arc<dyn GpuDevice> {
+    let cache = CACHED_BEST_DEVICE.get_or_init(|| Mutex::new(None));
+    let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref device) = *guard {
+        return Arc::clone(device);
     }
-    Box::new(CpuFallbackDevice::new())
+
+    let devices = available_devices();
+    let chosen: Box<dyn GpuDevice> = devices
+        .into_iter()
+        .find(|d| d.info().backend != GpuBackend::CpuFallback)
+        .unwrap_or_else(|| Box::new(CpuFallbackDevice::new()));
+
+    let arc: Arc<dyn GpuDevice> = Arc::from(chosen);
+    *guard = Some(Arc::clone(&arc));
+    arc
 }
 
 #[cfg(test)]

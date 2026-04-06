@@ -75,6 +75,14 @@ pub trait GpuDevice: Send + Sync {
         buffers: &[&GpuBuffer],
     ) -> Result<(), GpuError>;
 
+    /// Free a device buffer's GPU memory.
+    ///
+    /// Implementations should call the backend-specific free (e.g., cuMemFree).
+    /// Default: no-op (CPU fallback doesn't need explicit free).
+    fn free_buffer(&self, _buffer: &GpuBuffer) {
+        // Default no-op for backends that don't need explicit free
+    }
+
     /// Execute a compute kernel with explicit workgroup size.
     fn execute_with_workgroup_size(
         &self,

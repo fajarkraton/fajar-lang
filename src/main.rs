@@ -3378,7 +3378,7 @@ fn cmd_build_llvm(
                     ".global _start\n.type _start, @function\n",
                     "_start:\n",
                     "    call main\n",
-                    "    xor eax, eax\n",     // SYS_EXIT = 0
+                    "    xor eax, eax\n", // SYS_EXIT = 0
                     "    syscall\n",
                     "    hlt\n",
                     ".size _start, . - _start\n",

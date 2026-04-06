@@ -43,6 +43,11 @@ impl GpuTensor {
     }
 }
 
+/// Free GPU memory held by a GpuTensor.
+pub fn free_gpu_tensor(device: &dyn GpuDevice, tensor: &GpuTensor) {
+    device.free_buffer(&tensor.buffer);
+}
+
 /// Upload a CPU TensorValue to GPU, returning a GpuTensor.
 ///
 /// Converts f64 -> f32 for GPU computation.
@@ -229,8 +234,8 @@ pub fn gpu_softmax(device: &dyn GpuDevice, input: &GpuTensor) -> Result<GpuTenso
 
 /// Auto device selection: prefer GPU, fall back to CPU.
 ///
-/// Returns the best available device.
-pub fn auto_device() -> Box<dyn GpuDevice> {
+/// Returns the best available device (cached after first call).
+pub fn auto_device() -> std::sync::Arc<dyn GpuDevice> {
     super::best_device()
 }
 

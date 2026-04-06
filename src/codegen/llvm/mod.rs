@@ -1831,17 +1831,17 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let rsp_val = self
                     .compile_expr(&args[1].value)?
                     .ok_or_else(|| CodegenError::Internal("iretq_to_user rsp no value".into()))?;
-                let rflags = self
-                    .compile_expr(&args[2].value)?
-                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rflags no value".into()))?;
+                let rflags = self.compile_expr(&args[2].value)?.ok_or_else(|| {
+                    CodegenError::Internal("iretq_to_user rflags no value".into())
+                })?;
                 let i64_ty = self.context.i64_type();
-                let fn_ty = i64_ty.fn_type(
-                    &[i64_ty.into(), i64_ty.into(), i64_ty.into()],
-                    false,
-                );
-                let func = self.module.get_function("fj_rt_bare_iretq_to_user")
+                let fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+                let func = self
+                    .module
+                    .get_function("fj_rt_bare_iretq_to_user")
                     .unwrap_or_else(|| {
-                        self.module.add_function("fj_rt_bare_iretq_to_user", fn_ty, None)
+                        self.module
+                            .add_function("fj_rt_bare_iretq_to_user", fn_ty, None)
                     });
                 self.builder
                     .build_call(func, &[rip.into(), rsp_val.into(), rflags.into()], "")

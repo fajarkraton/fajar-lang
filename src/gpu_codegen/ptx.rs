@@ -526,12 +526,12 @@ impl PtxModule {
     /// Creates a module targeting the given compute capability.
     pub fn for_compute(sm: u32) -> Self {
         let ptx_ver = match sm {
-            89 => 83, // Ada Lovelace
+            89 => 83,      // Ada Lovelace
             86 | 87 => 75, // Ampere
-            80 => 75, // A100
-            75 => 65, // Turing
-            70 => 60, // Volta
-            _ => 75,  // default
+            80 => 75,      // A100
+            75 => 65,      // Turing
+            70 => 60,      // Volta
+            _ => 75,       // default
         };
         Self {
             ptx_version: ptx_ver,

@@ -1237,7 +1237,7 @@ impl Interpreter {
 
     /// `gpu_matmul(a: Tensor, b: Tensor) -> Tensor` — GPU-accelerated matrix multiply.
     ///
-    /// Falls back to CPU tensor_matmul when OpenCL is unavailable.
+    /// Priority: CUDA (RTX 4090) → Vulkan (Radxa Q6A) → CPU fallback.
     pub(super) fn builtin_gpu_matmul(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
@@ -1263,7 +1263,28 @@ impl Interpreter {
                 .into());
             }
         };
-        // Try Vulkan GPU first, fall back to CPU
+        // Try CUDA GPU first (RTX 4090)
+        #[cfg(feature = "cuda")]
+        {
+            use crate::runtime::gpu::tensor_bridge;
+            let device = crate::runtime::gpu::best_device();
+            if device.info().backend == crate::runtime::gpu::GpuBackend::Cuda {
+                if let Ok(ga) = tensor_bridge::tensor_to_gpu(device.as_ref(), &a) {
+                    if let Ok(gb) = tensor_bridge::tensor_to_gpu(device.as_ref(), &b) {
+                        if let Ok(gc) = tensor_bridge::gpu_matmul(device.as_ref(), &ga, &gb) {
+                            let result = tensor_bridge::tensor_to_cpu(device.as_ref(), &gc);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &ga);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &gb);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &gc);
+                            if let Ok(val) = result {
+                                return Ok(Value::Tensor(val));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Try Vulkan GPU (Radxa Q6A)
         #[cfg(feature = "vulkan")]
         {
             if let Ok(vk) = crate::bsp::dragon_q6a::vulkan::VulkanCompute::new() {
@@ -1298,7 +1319,7 @@ impl Interpreter {
 
     /// `gpu_add(a: Tensor, b: Tensor) -> Tensor` — GPU-accelerated element-wise add.
     ///
-    /// Falls back to CPU tensor_add when OpenCL is unavailable.
+    /// Priority: CUDA → CPU fallback.
     pub(super) fn builtin_gpu_add(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 2 {
             return Err(RuntimeError::ArityMismatch {
@@ -1323,7 +1344,26 @@ impl Interpreter {
                 );
             }
         };
-        // CPU fallback — delegates to existing tensor_add
+        #[cfg(feature = "cuda")]
+        {
+            use crate::runtime::gpu::tensor_bridge;
+            let device = crate::runtime::gpu::best_device();
+            if device.info().backend == crate::runtime::gpu::GpuBackend::Cuda {
+                if let Ok(ga) = tensor_bridge::tensor_to_gpu(device.as_ref(), &a) {
+                    if let Ok(gb) = tensor_bridge::tensor_to_gpu(device.as_ref(), &b) {
+                        if let Ok(gc) = tensor_bridge::gpu_add(device.as_ref(), &ga, &gb) {
+                            let result = tensor_bridge::tensor_to_cpu(device.as_ref(), &gc);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &ga);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &gb);
+                            tensor_bridge::free_gpu_tensor(device.as_ref(), &gc);
+                            if let Ok(val) = result {
+                                return Ok(Value::Tensor(val));
+                            }
+                        }
+                    }
+                }
+            }
+        }
         match tensor_ops::add(&a, &b) {
             Ok(t) => Ok(Value::Tensor(t)),
             Err(e) => Err(RuntimeError::TypeError(e.to_string()).into()),
@@ -1332,7 +1372,7 @@ impl Interpreter {
 
     /// `gpu_relu(t: Tensor) -> Tensor` — GPU-accelerated ReLU activation.
     ///
-    /// Falls back to CPU tensor_relu when OpenCL is unavailable.
+    /// Priority: CUDA → CPU fallback.
     pub(super) fn builtin_gpu_relu(&self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -1341,15 +1381,33 @@ impl Interpreter {
             }
             .into());
         }
-        match &args[0] {
-            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::relu(t))),
-            _ => Err(RuntimeError::TypeError("gpu_relu: arg must be tensor".into()).into()),
+        let t = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => return Err(RuntimeError::TypeError("gpu_relu: arg must be tensor".into()).into()),
+        };
+        #[cfg(feature = "cuda")]
+        {
+            use crate::runtime::gpu::tensor_bridge;
+            let device = crate::runtime::gpu::best_device();
+            if device.info().backend == crate::runtime::gpu::GpuBackend::Cuda {
+                if let Ok(gt) = tensor_bridge::tensor_to_gpu(device.as_ref(), &t) {
+                    if let Ok(gr) = tensor_bridge::gpu_relu(device.as_ref(), &gt) {
+                        let result = tensor_bridge::tensor_to_cpu(device.as_ref(), &gr);
+                        tensor_bridge::free_gpu_tensor(device.as_ref(), &gt);
+                        tensor_bridge::free_gpu_tensor(device.as_ref(), &gr);
+                        if let Ok(val) = result {
+                            return Ok(Value::Tensor(val));
+                        }
+                    }
+                }
+            }
         }
+        Ok(Value::Tensor(tensor_ops::relu(&t)))
     }
 
     /// `gpu_sigmoid(t: Tensor) -> Tensor` — GPU-accelerated sigmoid activation.
     ///
-    /// Falls back to CPU tensor_sigmoid when OpenCL is unavailable.
+    /// Priority: CUDA → CPU fallback.
     pub(super) fn builtin_gpu_sigmoid(&self, args: Vec<Value>) -> EvalResult {
         if args.len() != 1 {
             return Err(RuntimeError::ArityMismatch {
@@ -1358,10 +1416,32 @@ impl Interpreter {
             }
             .into());
         }
-        match &args[0] {
-            Value::Tensor(t) => Ok(Value::Tensor(tensor_ops::sigmoid(t))),
-            _ => Err(RuntimeError::TypeError("gpu_sigmoid: arg must be tensor".into()).into()),
+        let t = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_sigmoid: arg must be tensor".into()).into(),
+                );
+            }
+        };
+        #[cfg(feature = "cuda")]
+        {
+            use crate::runtime::gpu::tensor_bridge;
+            let device = crate::runtime::gpu::best_device();
+            if device.info().backend == crate::runtime::gpu::GpuBackend::Cuda {
+                if let Ok(gt) = tensor_bridge::tensor_to_gpu(device.as_ref(), &t) {
+                    if let Ok(gr) = tensor_bridge::gpu_sigmoid(device.as_ref(), &gt) {
+                        let result = tensor_bridge::tensor_to_cpu(device.as_ref(), &gr);
+                        tensor_bridge::free_gpu_tensor(device.as_ref(), &gt);
+                        tensor_bridge::free_gpu_tensor(device.as_ref(), &gr);
+                        if let Ok(val) = result {
+                            return Ok(Value::Tensor(val));
+                        }
+                    }
+                }
+            }
         }
+        Ok(Value::Tensor(tensor_ops::sigmoid(&t)))
     }
 
     /// `gpu_mul(a, b) -> Tensor` — Element-wise multiply (CPU fallback).

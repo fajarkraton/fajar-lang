@@ -1,28 +1,70 @@
-// GPU Compute Shaders — write @gpu functions, compile to SPIR-V/PTX/Metal/HLSL.
-//
-// Usage:
-//   fj build examples/gpu_compute.fj --target spirv -o output.spv
-//   fj build examples/gpu_compute.fj --target metal -o output.metal
-//   fj build examples/gpu_compute.fj --target hlsl -o output.hlsl
-//   fj build examples/gpu_compute.fj --target ptx -o output.ptx
-//
-// The @gpu annotation marks functions for GPU compilation.
-// Parameters become buffer bindings, body becomes the kernel.
-
-@gpu fn vector_add(a: f32, b: f32, result: f32) {
-    let result = a + b
-}
-
-@gpu fn vector_mul(x: f32, y: f32, out: f32) {
-    let out = x * y
-}
-
-// Custom workgroup size: @gpu(workgroup=256)
-@gpu(workgroup=256) fn fast_add(a: f32, b: f32, c: f32) {
-    let c = a + b
-}
+// GPU Compute — Fajar Lang + RTX 4090 CUDA
+// Real GPU kernel dispatch: PTX JIT → cuLaunchKernel → result
+// Requires: cargo run --features cuda -- run examples/gpu_compute.fj
 
 fn main() {
-    println("GPU compute shader examples")
-    println("Compile with: fj build examples/gpu_compute.fj --target metal")
+    println("=== Fajar Lang — GPU Compute (CUDA) ===")
+    println("")
+
+    // 1. Detect GPU hardware
+    let info = gpu_discover()
+    println(info)
+    println("")
+
+    // 2. GPU matmul — dispatched to RTX 4090 via PTX kernel
+    println("--- Matrix Multiply (gpu_matmul) ---")
+
+    let a = from_data([[1.0, 2.0, 3.0],
+                       [4.0, 5.0, 6.0],
+                       [7.0, 8.0, 9.0]])
+
+    let b = from_data([[9.0, 8.0, 7.0],
+                       [6.0, 5.0, 4.0],
+                       [3.0, 2.0, 1.0]])
+
+    let c = gpu_matmul(a, b)
+    println("A @ B =")
+    println(c)
+    // Expected: [[30, 24, 18], [84, 69, 54], [138, 114, 90]]
+    println("")
+
+    // 3. GPU element-wise add
+    println("--- Element-wise Add (gpu_add) ---")
+    let x = from_data([[1.0, 2.0], [3.0, 4.0]])
+    let y = from_data([[10.0, 20.0], [30.0, 40.0]])
+    let z = gpu_add(x, y)
+    println("X + Y =")
+    println(z)
+    println("")
+
+    // 4. GPU ReLU activation
+    println("--- ReLU Activation (gpu_relu) ---")
+    let t = from_data([[-3.0, -1.0, 0.0, 2.0, 5.0]])
+    let r = gpu_relu(t)
+    println("relu([-3, -1, 0, 2, 5]) =")
+    println(r)
+    println("")
+
+    // 5. GPU sigmoid activation
+    println("--- Sigmoid Activation (gpu_sigmoid) ---")
+    let s = from_data([[-2.0, 0.0, 2.0]])
+    let sig = gpu_sigmoid(s)
+    println("sigmoid([-2, 0, 2]) =")
+    println(sig)
+    println("")
+
+    // 6. Larger matmul benchmark
+    println("--- Benchmark: 128x128 matmul ---")
+    let big_a = randn(128, 128)
+    let big_b = randn(128, 128)
+    let big_c = gpu_matmul(big_a, big_b)
+    let shape = tensor_shape(big_c)
+    println("Result shape: ")
+    println(shape)
+
+    println("")
+    println("Pipeline: .fj → PTX (sm_89) → cuModuleLoadData → cuLaunchKernel → result")
+    println("Backend: NVIDIA CUDA Driver API (libcuda.so)")
+    println("Target: RTX 4090 Laptop — 76 SMs, 9728 cores, Compute 8.9")
+    println("=== Done ===")
 }
