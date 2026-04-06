@@ -1599,7 +1599,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     "pause" => "pause",
                     "memory_fence" => "mfence",
                     "sse_enable" => {
-                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %rax\n\tmov %rax, %cr4"
+                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %eax\n\tmov %rax, %cr4"
                     }
                     "irq_enable" => "sti",
                     _ => "nop",

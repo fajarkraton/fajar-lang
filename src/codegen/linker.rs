@@ -2223,8 +2223,12 @@ fj_rt_bare_sse_enable:
     or      ax, 0x0002      /* Set CR0.MP (bit 1) */
     mov     cr0, rax
     mov     rax, cr4
-    or      ax, (3 << 9)    /* Set CR4.OSFXSR (bit 9) + OSXMMEXCPT (bit 10) */
+    or      eax, (1 << 9) | (1 << 10) | (1 << 18)  /* OSFXSR + OSXMMEXCPT + OSXSAVE */
     mov     cr4, rax
+    xor     ecx, ecx        /* XCR0 index */
+    xgetbv
+    or      eax, 0x7         /* Enable x87 (0) + SSE (1) + AVX (2) */
+    xsetbv
     ret
 .size fj_rt_bare_sse_enable, . - fj_rt_bare_sse_enable
 

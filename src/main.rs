@@ -3391,16 +3391,12 @@ fn cmd_build_llvm(
             if startup_ok {
                 link_cmd.arg(&startup_o);
             }
-            link_cmd
-                .arg(&obj_path);
+            link_cmd.arg(&obj_path);
             // Add extra object files (e.g., runtime stubs for bare-metal)
             for extra in extra_objects {
                 link_cmd.arg(extra);
             }
-            link_cmd
-                .arg("-o")
-                .arg(&bin_path)
-                .arg("--gc-sections");
+            link_cmd.arg("-o").arg(&bin_path).arg("--gc-sections");
 
             if verbose {
                 eprintln!("[verbose] Link: {:?}", link_cmd);
