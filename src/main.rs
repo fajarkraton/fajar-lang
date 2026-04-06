@@ -3288,8 +3288,9 @@ fn cmd_build_llvm(
         }
     });
 
-    if is_bare_metal {
-        // ── Bare-metal build pipeline ─────────────────────────────────
+    let is_user_target = target.as_ref().is_some_and(|t| t.is_user_mode);
+    if is_bare_metal || is_user_target {
+        // ── Bare-metal / user-mode build pipeline ─────────────────────
         // Requires `native` feature for linker script + startup generation.
         #[cfg(not(feature = "native"))]
         {
@@ -3302,6 +3303,7 @@ fn cmd_build_llvm(
         #[cfg(feature = "native")]
         {
             let mut cleanup_files: Vec<std::path::PathBuf> = vec![obj_path.clone()];
+            let is_user = target.as_ref().is_some_and(|t| t.is_user_mode);
             // 1. Generate or use linker script
             let script_path = if let Some(ls) = linker_script {
                 std::path::PathBuf::from(ls)
@@ -3332,8 +3334,24 @@ fn cmd_build_llvm(
                         return ExitCode::from(EXIT_COMPILE);
                     }
                 }
+            } else if is_user {
+                // User-mode: start at 0x400000 (no Multiboot2)
+                let sp = obj_path.with_extension("ld");
+                let minimal = "ENTRY(_start)\nSECTIONS {\n  . = 0x400000;\n  \
+                               .text : { *(.text*) }\n  \
+                               .rodata : { *(.rodata*) }\n  \
+                               .data : { *(.data*) }\n  \
+                               __bss_start = .;\n  .bss : { *(.bss*) }\n  \
+                               __bss_end = .;\n}\n";
+                if let Err(e) = std::fs::write(&sp, minimal) {
+                    eprintln!("error: cannot write linker script: {e}");
+                    let _ = std::fs::remove_file(&obj_path);
+                    return ExitCode::from(EXIT_COMPILE);
+                }
+                cleanup_files.push(sp.clone());
+                sp
             } else {
-                // Fallback: minimal x86_64 linker script
+                // Fallback: minimal x86_64 bare-metal linker script
                 let sp = obj_path.with_extension("ld");
                 let minimal = "ENTRY(_start)\nSECTIONS {\n  . = 0x100000;\n  \
                                .text : { *(.multiboot_header) *(.text*) }\n  \
@@ -3351,10 +3369,53 @@ fn cmd_build_llvm(
             };
 
             // 2. Generate startup assembly
-            let entry_fn = "kernel_main";
             let startup_s = obj_path.with_extension("start.S");
             let startup_o = obj_path.with_extension("start.o");
-            let startup_asm = fajar_lang::codegen::linker::generate_x86_64_startup(entry_fn);
+            let startup_asm = if is_user {
+                // User-mode: _start calls main() then SYS_EXIT(0)
+                String::from(concat!(
+                    ".intel_syntax noprefix\n.text\n",
+                    ".global _start\n.type _start, @function\n",
+                    "_start:\n",
+                    "    call main\n",
+                    "    xor eax, eax\n",     // SYS_EXIT = 0
+                    "    syscall\n",
+                    "    hlt\n",
+                    ".size _start, . - _start\n",
+                    // User-mode println: SYS_WRITE(fd=1, buf=rdi, len=rsi)
+                    ".global fj_rt_bare_println\n.type fj_rt_bare_println, @function\n",
+                    "fj_rt_bare_println:\n",
+                    "    mov rax, 1\n    mov rdx, rsi\n    mov rsi, rdi\n    mov rdi, 1\n    syscall\n",
+                    "    mov dx, 0x3F8\n    mov al, 0x0A\n    out dx, al\n    ret\n",
+                    ".size fj_rt_bare_println, . - fj_rt_bare_println\n",
+                    // User-mode print (same as println without newline)
+                    ".global fj_rt_bare_print\n.type fj_rt_bare_print, @function\n",
+                    "fj_rt_bare_print:\n",
+                    "    mov rax, 1\n    mov rdx, rsi\n    mov rsi, rdi\n    mov rdi, 1\n    syscall\n    ret\n",
+                    ".size fj_rt_bare_print, . - fj_rt_bare_print\n",
+                    // User-mode print_i64
+                    ".global fj_rt_bare_print_i64\n.type fj_rt_bare_print_i64, @function\n",
+                    "fj_rt_bare_print_i64:\n    xor eax, eax\n    ret\n",
+                    ".size fj_rt_bare_print_i64, . - fj_rt_bare_print_i64\n",
+                    // println_str alias (LLVM codegen uses this name)
+                    ".global fj_rt_println_str\n.type fj_rt_println_str, @function\n",
+                    "fj_rt_println_str:\n    jmp fj_rt_bare_println\n",
+                    ".size fj_rt_println_str, . - fj_rt_println_str\n",
+                    ".global fj_rt_print_str\n.type fj_rt_print_str, @function\n",
+                    "fj_rt_print_str:\n    jmp fj_rt_bare_print\n",
+                    ".size fj_rt_print_str, . - fj_rt_print_str\n",
+                    // Stubs
+                    ".global fj_rt_bare_halt\n.type fj_rt_bare_halt, @function\n",
+                    "fj_rt_bare_halt:\n    hlt\n    jmp fj_rt_bare_halt\n",
+                    ".size fj_rt_bare_halt, . - fj_rt_bare_halt\n",
+                    ".global fj_rt_bare_memory_fence\n.type fj_rt_bare_memory_fence, @function\n",
+                    "fj_rt_bare_memory_fence:\n    mfence\n    ret\n",
+                    ".size fj_rt_bare_memory_fence, . - fj_rt_bare_memory_fence\n",
+                ))
+            } else {
+                let entry_fn = "kernel_main";
+                fajar_lang::codegen::linker::generate_x86_64_startup(entry_fn)
+            };
 
             let startup_ok = if !startup_asm.is_empty() {
                 if let Err(e) = std::fs::write(&startup_s, &startup_asm) {
