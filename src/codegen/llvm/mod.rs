@@ -760,8 +760,6 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "read_timer_ticks"
                 | "memcpy_buf"
                 | "memset_buf"
-                | "pci_read32"
-                | "pci_write32"
                 | "x86_serial_init"
                 | "acpi_shutdown"
                 | "console_putchar"
@@ -777,6 +775,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "write_cr4"
                 | "read_msr"
                 | "write_msr"
+                | "pci_read32"
+                | "pci_write32"
                 | "fn_addr"
                 | "port_inb"
                 | "port_outb"
@@ -1707,12 +1707,46 @@ impl<'ctx> LlvmCompiler<'ctx> {
             // These call fj_rt_bare_* symbols provided by the runtime
             "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
             | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be"
-            | "read_timer_ticks" | "pci_read32" | "str_len" | "str_byte_at"
+            | "read_timer_ticks" | "str_len" | "str_byte_at"
             | "buffer_write_u16_le" | "buffer_write_u32_le" | "buffer_write_u64_le"
             | "buffer_write_u16_be" | "buffer_write_u32_be" | "buffer_write_u64_be"
             | "memcpy_buf" | "memset_buf" | "x86_serial_init" | "acpi_shutdown"
             | "console_putchar" | "set_current_pid" | "pic_remap" | "idt_init"
-            | "pit_init" | "tss_init" | "nprint" | "pci_write32" => {
+            | "pit_init" | "tss_init" | "nprint" | "pci_read32" | "pci_write32" => {
+                // PREFER user-defined function over external stub
+                if let Some(user_fn) = self.functions.get(name).copied() {
+                    let param_types: Vec<_> = user_fn.get_type().get_param_types();
+                    let compiled_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| {
+                            let val = self.compile_expr(&arg.value)?.ok_or_else(|| {
+                                CodegenError::Internal("builtin arg no value".into())
+                            })?;
+                            if val.is_struct_value() {
+                                let expects_int = param_types.get(i).is_some_and(|t| t.is_int_type());
+                                if expects_int {
+                                    let sv = val.into_struct_value();
+                                    let ptr = self.builder.build_extract_value(sv, 0, "s_ptr")
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    let i64_ty = self.context.i64_type();
+                                    let ptr_int = self.builder.build_ptr_to_int(
+                                        ptr.into_pointer_value(), i64_ty, "s_i64",
+                                    ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    return Ok(ptr_int.into());
+                                }
+                            }
+                            Ok(val.into())
+                        })
+                        .collect::<Result<Vec<_>, CodegenError>>()?;
+                    let call = self.builder.build_call(user_fn, &compiled_args, &format!("{name}_ret"))
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    return match call.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
+                        inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+                    };
+                }
+                // Fallback: external runtime stub
                 let rt_name = format!("fj_rt_bare_{name}");
                 let i64_ty = self.context.i64_type();
 
@@ -5336,18 +5370,34 @@ impl<'ctx> LlvmCompiler<'ctx> {
         for op in operands {
             match op {
                 crate::parser::ast::AsmOperand::In { constraint, expr } => {
-                    constraints.push(constraint.clone());
+                    // LLVM requires {reg} syntax for physical registers
+                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
+                        format!("{{{constraint}}}")
+                    } else {
+                        constraint.clone()
+                    };
+                    constraints.push(c);
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
                 }
                 crate::parser::ast::AsmOperand::Out { constraint, .. } => {
-                    constraints.push(format!("={constraint}"));
+                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
+                        format!("={{{constraint}}}")
+                    } else {
+                        format!("={constraint}")
+                    };
+                    constraints.push(c);
                 }
                 crate::parser::ast::AsmOperand::InOut {
                     constraint, expr, ..
                 } => {
-                    constraints.push(constraint.clone());
+                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
+                        format!("{{{constraint}}}")
+                    } else {
+                        constraint.clone()
+                    };
+                    constraints.push(c);
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
