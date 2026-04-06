@@ -693,15 +693,18 @@ fn safety_tensor_matmul_inner_dim_mismatch() {
 }
 
 #[test]
-fn safety_tensor_matmul_rank1_error() {
-    // matmul requires rank 2
+fn safety_tensor_matmul_rank1_dot_product() {
+    // 1D × 1D auto-promotes to dot product (14.0 = 1*1 + 2*2 + 3*3)
     let src = r#"
         let a = tensor_from_data([1.0, 2.0, 3.0], [3])
         let b = tensor_from_data([1.0, 2.0, 3.0], [3])
         tensor_matmul(a, b)
     "#;
-    let err = eval(src);
-    assert!(err.is_err());
+    let result = eval(src).expect("dot product should succeed");
+    match result {
+        Value::Float(f) => assert!((f - 14.0).abs() < 1e-6, "expected 14.0, got {f}"),
+        _ => panic!("expected Float, got {result:?}"),
+    }
 }
 
 #[test]
