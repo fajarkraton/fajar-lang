@@ -2249,6 +2249,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
         let closure_name = self.next_closure_name();
         let i64_type = self.context.i64_type();
 
+        // Save builder position — closure compilation switches to a new function
+        let saved_block = self.builder.get_insert_block();
+
         // Build closure function type: (captured..., params...) -> i64
         // For simplicity, all captures and params are i64
         let param_count = params.len();
@@ -2345,6 +2348,11 @@ impl<'ctx> LlvmCompiler<'ctx> {
         self.variables = prev_vars;
         self.var_types = prev_types;
         self.functions.insert(closure_name, function);
+
+        // Restore builder position to the caller's block
+        if let Some(block) = saved_block {
+            self.builder.position_at_end(block);
+        }
 
         // Return function pointer as i64 (simplified representation)
         let fn_ptr = function.as_global_value().as_pointer_value();
@@ -3379,8 +3387,40 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .build_return(None)
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
             } else if let Some(val) = body_val {
+                // Coerce implicit return value to match fn signature (e.g., i1→i64)
+                let coerced = if let Some(ret_ty) = function.get_type().get_return_type() {
+                    if ret_ty.is_int_type() && val.is_int_value() {
+                        let ret_w = ret_ty.into_int_type().get_bit_width();
+                        let val_w = val.into_int_value().get_type().get_bit_width();
+                        if val_w < ret_w {
+                            self.builder
+                                .build_int_z_extend(
+                                    val.into_int_value(),
+                                    ret_ty.into_int_type(),
+                                    "impl_ret_ext",
+                                )
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                .into()
+                        } else if val_w > ret_w {
+                            self.builder
+                                .build_int_truncate(
+                                    val.into_int_value(),
+                                    ret_ty.into_int_type(),
+                                    "impl_ret_trunc",
+                                )
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                .into()
+                        } else {
+                            val
+                        }
+                    } else {
+                        val
+                    }
+                } else {
+                    val
+                };
                 self.builder
-                    .build_return(Some(&val))
+                    .build_return(Some(&coerced))
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
             } else {
                 // Non-void function but no body value — implicit return 0
@@ -3469,7 +3509,61 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             .map(|(_, v)| *v);
                         match mono_fn {
                             Some(f) => f,
-                            None => return Err(CodegenError::UndefinedFunction(name.clone())),
+                            None => {
+                                // Not a known function — try as variable holding fn pointer
+                                if let Some(var_ptr) = self.variables.get(name) {
+                                    if let Some(var_ty) = self.var_types.get(name) {
+                                        let fn_ptr_val = self
+                                            .builder
+                                            .build_load(*var_ty, *var_ptr, name)
+                                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                        // Delegate to indirect call path
+                                        let i64_ty = self.context.i64_type();
+                                        let param_types: Vec<
+                                            inkwell::types::BasicMetadataTypeEnum<'ctx>,
+                                        > = (0..args.len()).map(|_| i64_ty.into()).collect();
+                                        let fn_ty = i64_ty.fn_type(&param_types, false);
+                                        let ptr = if fn_ptr_val.is_int_value() {
+                                            self.builder
+                                                .build_int_to_ptr(
+                                                    fn_ptr_val.into_int_value(),
+                                                    self.context
+                                                        .ptr_type(inkwell::AddressSpace::default()),
+                                                    "var_fn_ptr",
+                                                )
+                                                .map_err(|e| {
+                                                    CodegenError::Internal(e.to_string())
+                                                })?
+                                        } else if fn_ptr_val.is_pointer_value() {
+                                            fn_ptr_val.into_pointer_value()
+                                        } else {
+                                            return Err(CodegenError::UndefinedFunction(
+                                                name.clone(),
+                                            ));
+                                        };
+                                        let mut call_args: Vec<
+                                            inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                        > = Vec::new();
+                                        for arg in args {
+                                            if let Some(v) = self.compile_expr(&arg.value)? {
+                                                call_args.push(v.into());
+                                            }
+                                        }
+                                        let call_val = self
+                                            .builder
+                                            .build_indirect_call(fn_ty, ptr, &call_args, "var_call")
+                                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                        return match call_val.try_as_basic_value() {
+                                            inkwell::values::ValueKind::Basic(val) => {
+                                                let coerced = self.coerce_int_to_i64(val)?;
+                                                Ok(Some(coerced))
+                                            }
+                                            inkwell::values::ValueKind::Instruction(_) => Ok(None),
+                                        };
+                                    }
+                                }
+                                return Err(CodegenError::UndefinedFunction(name.clone()));
+                            }
                         }
                     };
 
@@ -5267,12 +5361,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
         let target_name = type_expr_to_string(ty);
         let target_type = fj_type_to_llvm(self.context, &target_name);
 
-        // Int → Int
+        // Int → Int (use zero-extend for widening, truncate for narrowing)
         if val.is_int_value() && target_type.is_int_type() {
-            let result = self
-                .builder
-                .build_int_cast(val.into_int_value(), target_type.into_int_type(), "icast")
-                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+            let iv = val.into_int_value();
+            let tt = target_type.into_int_type();
+            let src_width = iv.get_type().get_bit_width();
+            let dst_width = tt.get_bit_width();
+            let result = if src_width < dst_width {
+                self.builder
+                    .build_int_z_extend(iv, tt, "icast_zext")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            } else if src_width > dst_width {
+                self.builder
+                    .build_int_truncate(iv, tt, "icast_trunc")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            } else {
+                iv
+            };
             return Ok(Some(result.into()));
         }
 
