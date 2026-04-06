@@ -3661,7 +3661,6 @@ impl<'ctx> LlvmCompiler<'ctx> {
                                 if let Some(ty) = self.var_types.get(name).copied() {
                                     if ty.is_struct_type() {
                                         let st = ty.into_struct_type();
-                                        // Look up field index
                                         if let Some((_, field_names)) =
                                             self.struct_types.values().find(|(s, _)| *s == st)
                                         {
@@ -3684,8 +3683,89 @@ impl<'ctx> LlvmCompiler<'ctx> {
                                 }
                             }
                         }
-                        // E3: Field assignment on non-struct or unknown field —
-                        // in bare-metal mode, treat as no-op (raw pointer field access);
+                        // I1: Chained field assignment — a.inner.field = val
+                        // Recursively resolve the nested field to get a GEP pointer.
+                        if let Expr::Field {
+                            object: inner_obj,
+                            field: inner_field,
+                            ..
+                        } = object.as_ref()
+                        {
+                            if let Expr::Ident { name, .. } = inner_obj.as_ref() {
+                                if let Some(base_ptr) = self.variables.get(name).copied() {
+                                    if let Some(base_ty) = self.var_types.get(name).copied() {
+                                        if base_ty.is_struct_type() {
+                                            let base_st = base_ty.into_struct_type();
+                                            if let Some((_, base_fields)) = self
+                                                .struct_types
+                                                .values()
+                                                .find(|(s, _)| *s == base_st)
+                                            {
+                                                if let Some(inner_idx) = base_fields
+                                                    .iter()
+                                                    .position(|n| n == inner_field)
+                                                {
+                                                    let inner_ptr = self
+                                                        .builder
+                                                        .build_struct_gep(
+                                                            base_st,
+                                                            base_ptr,
+                                                            inner_idx as u32,
+                                                            inner_field,
+                                                        )
+                                                        .map_err(|e| {
+                                                            CodegenError::Internal(e.to_string())
+                                                        })?;
+                                                    // Get the inner struct type
+                                                    if let Some(inner_ty) = base_st
+                                                        .get_field_type_at_index(inner_idx as u32)
+                                                    {
+                                                        if inner_ty.is_struct_type() {
+                                                            let inner_st =
+                                                                inner_ty.into_struct_type();
+                                                            if let Some((_, inner_fields)) = self
+                                                                .struct_types
+                                                                .values()
+                                                                .find(|(s, _)| *s == inner_st)
+                                                            {
+                                                                if let Some(field_idx) =
+                                                                    inner_fields
+                                                                        .iter()
+                                                                        .position(|n| n == field)
+                                                                {
+                                                                    let field_ptr = self
+                                                                        .builder
+                                                                        .build_struct_gep(
+                                                                            inner_st,
+                                                                            inner_ptr,
+                                                                            field_idx as u32,
+                                                                            field,
+                                                                        )
+                                                                        .map_err(|e| {
+                                                                            CodegenError::Internal(
+                                                                                e.to_string(),
+                                                                            )
+                                                                        })?;
+                                                                    self.builder
+                                                                        .build_store(field_ptr, val)
+                                                                        .map_err(|e| {
+                                                                            CodegenError::Internal(
+                                                                                e.to_string(),
+                                                                            )
+                                                                        })?;
+                                                                    return Ok(None);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Fallback: in bare-metal mode, treat as no-op;
                         // in hosted mode, report the issue.
                         if self.no_std {
                             Ok(None)
@@ -3889,10 +3969,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 "unexpanded macro variable ${name} in codegen"
             ))),
 
-            _ => Err(CodegenError::NotImplemented(format!(
-                "LLVM expr: {:?}",
-                std::mem::discriminant(expr)
-            ))),
+            // I5: Better diagnostics for unhandled expressions
+            _ => {
+                let expr_name = match expr {
+                    Expr::MacroVar { name, .. } => format!("macro variable ${name}"),
+                    _ => format!("expression variant {:?}", std::mem::discriminant(expr)),
+                };
+                Err(CodegenError::NotImplemented(format!(
+                    "LLVM expr: {expr_name}"
+                )))
+            }
         }
     }
 
@@ -4086,6 +4172,62 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         }
                     }
                 }
+                // Float logical: convert to bool first
+                BinOp::And => {
+                    let l_bool = self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::ONE,
+                            l,
+                            l.get_type().const_float(0.0),
+                            "fl_bool",
+                        )
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let r_bool = self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::ONE,
+                            r,
+                            r.get_type().const_float(0.0),
+                            "fr_bool",
+                        )
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    return Ok(self
+                        .builder
+                        .build_and(l_bool, r_bool, "fland")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                        .into());
+                }
+                BinOp::Or => {
+                    let l_bool = self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::ONE,
+                            l,
+                            l.get_type().const_float(0.0),
+                            "fl_bool",
+                        )
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    let r_bool = self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::ONE,
+                            r,
+                            r.get_type().const_float(0.0),
+                            "fr_bool",
+                        )
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    return Ok(self
+                        .builder
+                        .build_or(l_bool, r_bool, "flor")
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                        .into());
+                }
+                BinOp::MatMul => {
+                    return Err(CodegenError::Internal(
+                        "matrix multiply (@) not supported on scalar floats".into(),
+                    ));
+                }
                 _ => {
                     return Err(CodegenError::NotImplemented(format!(
                         "LLVM float binop: {:?}",
@@ -4245,11 +4387,85 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .map_err(|e| CodegenError::Internal(e.to_string()))?
                     .into()
             }
-            _ => {
-                return Err(CodegenError::NotImplemented(format!(
-                    "LLVM int binop: {:?}",
-                    op
-                )));
+            // I2: Integer power — compute via repeated multiplication loop
+            BinOp::Pow => {
+                let function = self
+                    .builder
+                    .get_insert_block()
+                    .and_then(|b| b.get_parent())
+                    .ok_or_else(|| CodegenError::Internal("no current function for ipow".into()))?;
+                let i64_ty = self.context.i64_type();
+                let result_alloca = self
+                    .builder
+                    .build_alloca(i64_ty, "pow_result")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let counter_alloca = self
+                    .builder
+                    .build_alloca(i64_ty, "pow_counter")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_store(result_alloca, i64_ty.const_int(1, false))
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_store(counter_alloca, i64_ty.const_int(0, false))
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                let cond_bb = self.context.append_basic_block(function, "pow_cond");
+                let body_bb = self.context.append_basic_block(function, "pow_body");
+                let done_bb = self.context.append_basic_block(function, "pow_done");
+
+                self.builder
+                    .build_unconditional_branch(cond_bb)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                self.builder.position_at_end(cond_bb);
+                let cnt = self
+                    .builder
+                    .build_load(i64_ty, counter_alloca, "cnt")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                    .into_int_value();
+                let cmp = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::SLT, cnt, r, "pow_cmp")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_conditional_branch(cmp, body_bb, done_bb)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                self.builder.position_at_end(body_bb);
+                let cur = self
+                    .builder
+                    .build_load(i64_ty, result_alloca, "cur")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                    .into_int_value();
+                let new_val = self
+                    .builder
+                    .build_int_mul(cur, l, "pow_mul")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_store(result_alloca, new_val)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let next_cnt = self
+                    .builder
+                    .build_int_add(cnt, i64_ty.const_int(1, false), "pow_inc")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_store(counter_alloca, next_cnt)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                self.builder
+                    .build_unconditional_branch(cond_bb)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                self.builder.position_at_end(done_bb);
+                self.builder
+                    .build_load(i64_ty, result_alloca, "pow_val")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+            }
+            // MatMul requires tensor runtime — not applicable for scalar ints
+            BinOp::MatMul => {
+                return Err(CodegenError::Internal(
+                    "matrix multiply (@) not supported on scalar integers".into(),
+                ));
             }
         };
         Ok(result)
@@ -5839,9 +6055,71 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         if !is_last {
                             self.builder.position_at_end(next_bb);
                         }
+                    } else if subject_val.is_float_value()
+                        && start_val.is_float_value()
+                        && end_val.is_float_value()
+                    {
+                        // I6: Float range pattern
+                        let s = subject_val.into_float_value();
+                        let lo = start_val.into_float_value();
+                        let hi = end_val.into_float_value();
+                        let ge_lo = self
+                            .builder
+                            .build_float_compare(inkwell::FloatPredicate::OGE, s, lo, "frange_ge")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let hi_pred = if *inclusive {
+                            inkwell::FloatPredicate::OLE
+                        } else {
+                            inkwell::FloatPredicate::OLT
+                        };
+                        let le_hi = self
+                            .builder
+                            .build_float_compare(hi_pred, s, hi, "frange_le")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let cmp = self
+                            .builder
+                            .build_and(ge_lo, le_hi, "frange_cmp")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+
+                        let arm_bb = self
+                            .context
+                            .append_basic_block(function, &format!("match_frange_{i}"));
+                        let next_bb = if is_last {
+                            merge_bb
+                        } else {
+                            self.context
+                                .append_basic_block(function, &format!("match_next_{i}"))
+                        };
+
+                        self.builder
+                            .build_conditional_branch(cmp, arm_bb, next_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder.position_at_end(arm_bb);
+
+                        let body_val = self.compile_expr(&arm.body)?;
+                        if let Some(val) = body_val {
+                            self.builder
+                                .build_store(result_alloca, val)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            if let Some(exit_bb) = self.builder.get_insert_block() {
+                                incoming.push((val, exit_bb));
+                            }
+                        }
+                        if self
+                            .builder
+                            .get_insert_block()
+                            .is_some_and(|b| b.get_terminator().is_none())
+                        {
+                            self.builder
+                                .build_unconditional_branch(merge_bb)
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        }
+                        if !is_last {
+                            self.builder.position_at_end(next_bb);
+                        }
                     } else {
                         return Err(CodegenError::NotImplemented(
-                            "LLVM match: range pattern requires integer operands".into(),
+                            "LLVM match: range pattern requires integer or float operands".into(),
                         ));
                     }
                 }
@@ -5997,34 +6275,206 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     break; // Struct pattern is exhaustive
                 }
 
-                _ => {
-                    // Remaining unsupported patterns (Array, Binding) — if last arm,
-                    // treat as wildcard; otherwise error.
-                    if is_last {
-                        let body_val = self.compile_expr(&arm.body)?;
-                        if let Some(val) = body_val {
+                // I4: Binding pattern — `name @ pattern => body`
+                // Bind subject to name, then check inner pattern.
+                Pattern::Binding {
+                    name,
+                    pattern: inner_pat,
+                    ..
+                } => {
+                    // Bind subject to variable first
+                    if subject_val.is_int_value() {
+                        let alloca = self
+                            .builder
+                            .build_alloca(self.context.i64_type(), name)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.builder
+                            .build_store(alloca, subject_val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        self.variables.insert(name.clone(), alloca);
+                        self.var_types
+                            .insert(name.clone(), self.context.i64_type().into());
+                    }
+                    // Check inner pattern — if it's a literal, do comparison
+                    match inner_pat.as_ref() {
+                        Pattern::Wildcard { .. } => {
+                            // Always matches — compile body
+                            let body_val = self.compile_expr(&arm.body)?;
+                            if let Some(val) = body_val {
+                                self.builder
+                                    .build_store(result_alloca, val)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                if let Some(exit_bb) = self.builder.get_insert_block() {
+                                    incoming.push((val, exit_bb));
+                                }
+                            }
+                            if self
+                                .builder
+                                .get_insert_block()
+                                .is_some_and(|b| b.get_terminator().is_none())
+                            {
+                                self.builder
+                                    .build_unconditional_branch(merge_bb)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            }
+                            break;
+                        }
+                        Pattern::Literal { kind, .. } => {
+                            let pattern_val = self.compile_literal(kind)?.ok_or_else(|| {
+                                CodegenError::Internal("binding literal no value".into())
+                            })?;
+                            let cmp = self.compile_match_comparison(subject_val, pattern_val)?;
+                            let arm_bb = self
+                                .context
+                                .append_basic_block(function, &format!("match_binding_{i}"));
+                            let next_bb = if is_last {
+                                merge_bb
+                            } else {
+                                self.context
+                                    .append_basic_block(function, &format!("match_next_{i}"))
+                            };
                             self.builder
-                                .build_store(result_alloca, val)
+                                .build_conditional_branch(cmp, arm_bb, next_bb)
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                            if let Some(exit_bb) = self.builder.get_insert_block() {
-                                incoming.push((val, exit_bb));
+                            self.builder.position_at_end(arm_bb);
+                            let body_val = self.compile_expr(&arm.body)?;
+                            if let Some(val) = body_val {
+                                self.builder
+                                    .build_store(result_alloca, val)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                if let Some(exit_bb) = self.builder.get_insert_block() {
+                                    incoming.push((val, exit_bb));
+                                }
+                            }
+                            if self
+                                .builder
+                                .get_insert_block()
+                                .is_some_and(|b| b.get_terminator().is_none())
+                            {
+                                self.builder
+                                    .build_unconditional_branch(merge_bb)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            }
+                            if !is_last {
+                                self.builder.position_at_end(next_bb);
                             }
                         }
-                        if self
-                            .builder
-                            .get_insert_block()
-                            .is_some_and(|b| b.get_terminator().is_none())
-                        {
-                            self.builder
-                                .build_unconditional_branch(merge_bb)
-                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        _ => {
+                            // Other inner patterns: treat as wildcard with binding
+                            let body_val = self.compile_expr(&arm.body)?;
+                            if let Some(val) = body_val {
+                                self.builder
+                                    .build_store(result_alloca, val)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                if let Some(exit_bb) = self.builder.get_insert_block() {
+                                    incoming.push((val, exit_bb));
+                                }
+                            }
+                            if self
+                                .builder
+                                .get_insert_block()
+                                .is_some_and(|b| b.get_terminator().is_none())
+                            {
+                                self.builder
+                                    .build_unconditional_branch(merge_bb)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            }
+                            break;
                         }
-                    } else {
-                        return Err(CodegenError::NotImplemented(format!(
-                            "LLVM match: unsupported pattern type in non-final arm {i}"
-                        )));
                     }
                 }
+
+                // I3: Array pattern — `[a, b, c] => body`
+                Pattern::Array { elements, .. } => {
+                    // Destructure: bind each element by indexing into the subject
+                    let arm_bb = self
+                        .context
+                        .append_basic_block(function, &format!("match_array_{i}"));
+                    self.builder
+                        .build_unconditional_branch(arm_bb)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    self.builder.position_at_end(arm_bb);
+
+                    if subject_val.is_int_value() {
+                        // Subject is a pointer to array data
+                        let i64_ty = self.context.i64_type();
+                        let base_addr = subject_val.into_int_value();
+                        let ptr = self
+                            .builder
+                            .build_int_to_ptr(
+                                base_addr,
+                                self.context.ptr_type(inkwell::AddressSpace::default()),
+                                "arr_base",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        for (ei, elem_pat) in elements.iter().enumerate() {
+                            if let Pattern::Ident { name, .. } = elem_pat {
+                                let idx = i64_ty.const_int(ei as u64, false);
+                                // SAFETY: bare-metal array indexing
+                                let elem_ptr = unsafe {
+                                    self.builder
+                                        .build_in_bounds_gep(i64_ty, ptr, &[idx], "arr_elem")
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                };
+                                let val = self
+                                    .builder
+                                    .build_load(i64_ty, elem_ptr, name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(i64_ty, name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.builder
+                                    .build_store(alloca, val)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.variables.insert(name.clone(), alloca);
+                                self.var_types.insert(name.clone(), i64_ty.into());
+                            }
+                        }
+                    } else if subject_val.is_struct_value() {
+                        // Subject is a struct (tuple-like array)
+                        let sv = subject_val.into_struct_value();
+                        for (ei, elem_pat) in elements.iter().enumerate() {
+                            if let Pattern::Ident { name, .. } = elem_pat {
+                                let extracted = self
+                                    .builder
+                                    .build_extract_value(sv, ei as u32, name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(self.context.i64_type(), name)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.builder
+                                    .build_store(alloca, extracted)
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                self.variables.insert(name.clone(), alloca);
+                                self.var_types
+                                    .insert(name.clone(), self.context.i64_type().into());
+                            }
+                        }
+                    }
+
+                    let body_val = self.compile_expr(&arm.body)?;
+                    if let Some(val) = body_val {
+                        self.builder
+                            .build_store(result_alloca, val)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        if let Some(exit_bb) = self.builder.get_insert_block() {
+                            incoming.push((val, exit_bb));
+                        }
+                    }
+                    if self
+                        .builder
+                        .get_insert_block()
+                        .is_some_and(|b| b.get_terminator().is_none())
+                    {
+                        self.builder
+                            .build_unconditional_branch(merge_bb)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    break; // Array pattern is exhaustive (destructuring)
+                } // All 10 Pattern variants now covered:
+                  // Literal, Ident, Wildcard, Or, Enum, Range, Tuple, Struct, Array, Binding
             }
         }
 
