@@ -1839,7 +1839,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let fn_ty = void_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
                 let asm_val = self.context.create_inline_asm(
                     fn_ty,
-                    "pushq $$0x23\n\tpushq %rsi\n\tpushq %rdx\n\tpushq $$0x2B\n\tpushq %rdi\n\tiretq".to_string(),
+                    concat!(
+                        "movq %rsp, 0x652020\n\t",      // save kernel RSP for SYS_EXIT return
+                        "movq $$0, 0x652038\n\t",        // clear user_exited flag
+                        "pushq $$0x1B\n\t",              // SS = User Data (0x18 | RPL=3)
+                        "pushq %rsi\n\t",                // RSP = user stack
+                        "pushq %rdx\n\t",                // RFLAGS
+                        "pushq $$0x23\n\t",              // CS = User Code (0x20 | RPL=3)
+                        "pushq %rdi\n\t",                // RIP = entry point
+                        "xor %eax, %eax\n\t",            // clear registers (security)
+                        "xor %ebx, %ebx\n\t",
+                        "xor %ecx, %ecx\n\t",
+                        "xor %edx, %edx\n\t",
+                        "xor %esi, %esi\n\t",
+                        "xor %edi, %edi\n\t",
+                        "xor %ebp, %ebp\n\t",
+                        "iretq",
+                    ).to_string(),
                     "{rdi},{rsi},{rdx}".to_string(),
                     true, false, None, false,
                 );
