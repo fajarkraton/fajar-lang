@@ -4967,10 +4967,33 @@ impl CraneliftCompiler {
                 dce_entry_points.push(fndef.name.clone());
             }
             if let Some(ref ann) = fndef.annotation {
-                if ann.name == "entry" || ann.name == "panic_handler" {
+                if ann.name == "entry"
+                    || ann.name == "panic_handler"
+                    || ann.name == "kernel"
+                    || ann.name == "unsafe"
+                {
                     dce_entry_points.push(fndef.name.clone());
                 }
             }
+            // K1: Bare-metal entry points — these are called from assembly/linker,
+            // not from .fj code, so they appear dead to call-graph analysis.
+            if self.no_std
+                && (fndef.name == "kernel_main"
+                    || fndef.name == "_start"
+                    || fndef.name == "fj_exception_sync"
+                    || fndef.name == "fj_exception_irq")
+            {
+                dce_entry_points.push(fndef.name.clone());
+            }
+            // Public functions are always reachable (library exports)
+            if fndef.is_pub {
+                dce_entry_points.push(fndef.name.clone());
+            }
+        }
+        // K1: Scan for fn_addr("name") calls — these reference functions by string,
+        // invisible to normal call-graph DCE.
+        for fndef in &concrete_fns {
+            crate::codegen::cranelift::scan_fn_addr_targets(&fndef.body, &mut dce_entry_points);
         }
         // If no explicit entry points, keep all functions (library mode)
         let mut reachable = if dce_entry_points.is_empty() {

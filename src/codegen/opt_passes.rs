@@ -2461,11 +2461,30 @@ pub fn find_dead_functions(program: &Program) -> Vec<String> {
         return Vec::new();
     }
 
-    // Entry points: main, pub, test
+    // Entry points: main, pub, test, kernel, annotated entry points
     let mut reachable: HashSet<String> = HashSet::new();
     let mut worklist: Vec<String> = functions
         .iter()
-        .filter(|f| f.name == "main" || f.is_pub || f.is_test)
+        .filter(|f| {
+            // Always keep: main, public, test functions
+            f.name == "main"
+                || f.is_pub
+                || f.is_test
+                // K2: Bare-metal entry points (called from asm/linker, not .fj code)
+                || f.name == "kernel_main"
+                || f.name == "_start"
+                || f.name == "fj_exception_sync"
+                || f.name == "fj_exception_irq"
+                // K2: Annotated entry points
+                || f.annotation
+                    .as_ref()
+                    .is_some_and(|a| {
+                        a.name == "entry"
+                            || a.name == "panic_handler"
+                            || a.name == "kernel"
+                            || a.name == "unsafe"
+                    })
+        })
         .map(|f| f.name.clone())
         .collect();
 
